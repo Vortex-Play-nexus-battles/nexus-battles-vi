@@ -1,0 +1,60 @@
+# ============================================
+# The Nexus Battles VI - Empresa A
+# .gitignore base, independiente del lenguaje.
+# La Fase 2 anadira las secciones del stack elegido.
+# ============================================
+
+# --- Secretos y configuracion local (CRITICO) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+credentials.json
+secrets.yml
+secrets.yaml
+
+# --- Sistema operativo ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Editores e IDE ---
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# --- Artefactos de compilacion y dependencias ---
+build/
+dist/
+out/
+target/
+bin/
+obj/
+node_modules/
+__pycache__/
+*.pyc
+*.class
+*.jar
+*.war
+
+# --- Logs y temporales ---
+logs/
+*.log
+tmp/
+temp/
+*.tmp
+
+# --- Reportes de pruebas y cobertura ---
+coverage/
+.coverage
+htmlcov/
+.nyc_output/
+test-results/
+*.lcov
