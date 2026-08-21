@@ -1,0 +1,121 @@
+# ============================================================================
+# CODEOWNERS - The Nexus Battles VI - Empresa A
+# Organizacion: Vortex-Play-nexus-battles
+# ============================================================================
+# REGLA CRITICA: gana la ULTIMA linea que coincide.
+# Por eso este archivo va de lo GENERAL a lo ESPECIFICO. No reordenar.
+#
+# Mapa de equipos (verificado en GitHub):
+#   grupo-omega   -> Grupo de Simon    (49 RF)  SM: @Sgonzalez09
+#   grupo-alpha   -> Grupo de Thomas   (57 RF)  SM: @Nicolayyy
+#   grupo-beta    -> Grupo de Santiago (84 RF)  SM: @CristianCamiloChaparro
+#   scrum-masters -> los 3 SM + @SimonP0607
+#
+# ADMINISTRADORES: a fecha de este commit la organizacion tiene UN solo Owner,
+# @SimonP0607 (Administrador 1). La guia exige dos. Cuando la Empresa A designe
+# al Administrador 2, anadir su username junto a @SimonP0607 en las lineas de:
+# /.gitignore  /.env.example  /.github/  /docs/gobierno/  /infrastructure/
+# ============================================================================
+
+
+# --- 1. POR DEFECTO ---------------------------------------------------------
+*                                   @Vortex-Play-nexus-battles/scrum-masters
+
+
+# --- 2. ARCHIVOS DE LA RAIZ -------------------------------------------------
+/README.md                          @Vortex-Play-nexus-battles/scrum-masters @SimonP0607
+/CONTRIBUTING.md                    @Vortex-Play-nexus-battles/scrum-masters @SimonP0607
+/.gitignore                         @SimonP0607
+/.env.example                       @SimonP0607
+
+
+# --- 3. CONFIGURACION DE GITHUB ---------------------------------------------
+/.github/                           @SimonP0607
+/.github/CODEOWNERS                 @SimonP0607
+/.github/workflows/                 @SimonP0607
+/.github/ISSUE_TEMPLATE/            @SimonP0607 @Vortex-Play-nexus-battles/scrum-masters
+/.github/pull_request_template.md   @SimonP0607 @Vortex-Play-nexus-battles/scrum-masters
+
+
+# --- 4. CONTRATOS ENTRE SERVICIOS -------------------------------------------
+/contracts/                         @Vortex-Play-nexus-battles/scrum-masters
+/contracts/openapi/                 @Vortex-Play-nexus-battles/scrum-masters
+/contracts/eventos/                 @Vortex-Play-nexus-battles/scrum-masters
+/contracts/websocket/               @Vortex-Play-nexus-battles/scrum-masters
+/contracts/esquemas/                @Vortex-Play-nexus-battles/scrum-masters
+
+
+# --- 5. CODIGO COMPARTIDO ---------------------------------------------------
+/shared/                            @Vortex-Play-nexus-battles/scrum-masters
+
+
+# --- 6. INFRAESTRUCTURA (lidera grupo-omega + administrador) ----------------
+/infrastructure/                    @Sgonzalez09 @SimonP0607
+
+
+# --- 7. DOCUMENTACION -------------------------------------------------------
+/docs/                              @Vortex-Play-nexus-battles/scrum-masters
+/docs/arquitectura/                 @Vortex-Play-nexus-battles/scrum-masters
+/docs/requisitos/                   @Vortex-Play-nexus-battles/scrum-masters
+/docs/pruebas/                      @Vortex-Play-nexus-battles/scrum-masters
+/docs/sprints/                      @Vortex-Play-nexus-battles/scrum-masters
+/docs/gobierno/                     @SimonP0607
+/docs/infraestructura/              @Sgonzalez09 @SimonP0607
+
+
+# --- 8. PRUEBAS QUE CRUZAN SERVICIOS ----------------------------------------
+/tests/                             @Vortex-Play-nexus-battles/scrum-masters
+/tests/contratos/                   @Vortex-Play-nexus-battles/scrum-masters
+/tests/integracion/                 @Vortex-Play-nexus-battles/scrum-masters
+/tests/aceptacion/                  @Vortex-Play-nexus-battles/scrum-masters
+/tests/rendimiento/                 @Sgonzalez09
+
+
+# --- 9. SCRIPTS -------------------------------------------------------------
+/scripts/                           @Vortex-Play-nexus-battles/scrum-masters
+
+
+# ============================================================================
+# 10. AREAS PROPIAS DE CADA GRUPO
+#     Van al final: son las reglas mas especificas y deben prevalecer.
+# ============================================================================
+
+# --- grupo-omega / Grupo de Simon - Tiempo real, comunidad y plataforma -----
+/services/plataforma/                       @Sgonzalez09
+/services/plataforma/salas-partidas/        @Sgonzalez09
+/services/plataforma/torneos/               @Sgonzalez09
+/services/plataforma/comentarios/           @Sgonzalez09
+/services/plataforma/moderacion-sanciones/  @Sgonzalez09
+/services/plataforma/correo/                @Sgonzalez09
+/services/plataforma/notificaciones/        @Sgonzalez09
+/services/plataforma/metricas-plataforma/   @Sgonzalez09
+/services/plataforma/admin-parametros/      @Sgonzalez09
+/frontend/app-web/src/plataforma/           @Sgonzalez09
+
+# --- grupo-alpha / Grupo de Thomas - Contenido, simulacion y progresion -----
+/services/contenido/                        @Nicolayyy
+/services/contenido/productos/              @Nicolayyy
+/services/contenido/inventario/             @Nicolayyy
+/services/contenido/heroes/                 @Nicolayyy
+/services/contenido/motor-combate/          @Nicolayyy
+/services/contenido/misiones/               @Nicolayyy
+/services/contenido/progresion-jugador/     @Nicolayyy
+/frontend/app-web/src/contenido/            @Nicolayyy
+
+# --- grupo-beta / Grupo de Santiago - Cuentas, cumplimiento y economia ------
+/services/cuentas/                          @CristianCamiloChaparro
+/services/cuentas/identidad-acceso/         @CristianCamiloChaparro
+/services/cuentas/rbac/                     @CristianCamiloChaparro
+/services/cuentas/perfiles-usuario/         @CristianCamiloChaparro
+/services/cuentas/carro-compras/            @CristianCamiloChaparro
+/services/cuentas/pagos-creditos/           @CristianCamiloChaparro
+/services/cuentas/subastas/                 @CristianCamiloChaparro
+/services/cuentas/chatbot/                  @CristianCamiloChaparro
+/services/cuentas/auditoria/                @CristianCamiloChaparro
+/services/cuentas/privacidad/               @CristianCamiloChaparro
+/services/cuentas/metricas-negocio/         @CristianCamiloChaparro
+/services/cuentas/soporte-disputas/         @CristianCamiloChaparro
+/frontend/app-web/src/cuentas/              @CristianCamiloChaparro
+
+# --- Frontend comun ---------------------------------------------------------
+/frontend/app-web/src/comun/                @Vortex-Play-nexus-battles/scrum-masters
