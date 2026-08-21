@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Preguntas sobre el proceso de trabajo
+    url: https://github.com/Vortex-Play-nexus-battles/nexus-battles-vi/blob/main/CONTRIBUTING.md
+    about: Lee primero la guia de contribucion. Si sigue sin resolverse, pregunta a tu Scrum Master.
+  - name: Product Backlog y Scrum Board
+    url: https://github.com/orgs/Vortex-Play-nexus-battles/projects/1
+    about: Consulta el estado del backlog en el GitHub Project.
