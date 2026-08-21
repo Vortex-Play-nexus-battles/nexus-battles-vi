@@ -1,0 +1,127 @@
+name: Historia de usuario
+description: Elemento del Product Backlog. Migrado desde Jira o creado nuevo.
+title: "HU-XXX-000 · "
+labels: ["historia"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Historia de usuario
+        Si migras desde Jira: **copia literalmente**. No cambies el texto,
+        los criterios de aceptacion ni los puntos de historia.
+
+  - type: input
+    id: jira-id
+    attributes:
+      label: ID Jira
+      description: Clave original en Jira. Nunca se deja vacio.
+      placeholder: SCRUM-22
+    validations:
+      required: true
+
+  - type: input
+    id: id-historia
+    attributes:
+      label: ID de la historia
+      description: Identificador funcional del proyecto.
+      placeholder: HU-AUT-001
+    validations:
+      required: true
+
+  - type: input
+    id: epica
+    attributes:
+      label: Epica
+      description: Epica a la que pertenece en el backlog.
+      placeholder: E-EMP-17 Seguridad
+    validations:
+      required: true
+
+  - type: dropdown
+    id: grupo
+    attributes:
+      label: Grupo
+      options:
+        - Simon (grupo-omega) - Tiempo real, comunidad y plataforma
+        - Thomas (grupo-alpha) - Contenido, simulacion y progresion
+        - Santiago (grupo-beta) - Cuentas, cumplimiento y economia
+        - Compartido - contracts / shared / infrastructure
+    validations:
+      required: true
+
+  - type: input
+    id: requisito
+    attributes:
+      label: Requisito relacionado
+      description: Identificador del SRS. Varios separados por coma.
+      placeholder: RF-AUT-001
+    validations:
+      required: true
+
+  - type: textarea
+    id: historia
+    attributes:
+      label: Historia de usuario
+      description: Formato obligatorio. Copiar literal desde Jira.
+      value: |
+        **Como** [actor]
+        **quiero** [funcionalidad]
+        **para** [beneficio].
+    validations:
+      required: true
+
+  - type: textarea
+    id: criterios
+    attributes:
+      label: Criterios de aceptacion
+      description: Uno por linea. Se traducen en pruebas automatizadas (TDD).
+      placeholder: |
+        - Dado que ... cuando ... entonces ...
+        - Dado que ... cuando ... entonces ...
+    validations:
+      required: true
+
+  - type: input
+    id: dependencias
+    attributes:
+      label: Dependencias
+      description: Requisitos o Issues previos. Escribir "ninguna" si no hay.
+      placeholder: RF-COR-002, #78
+    validations:
+      required: true
+
+  - type: input
+    id: puntos
+    attributes:
+      label: Story Points
+      description: Valor exacto de Jira. NO recalcular.
+      placeholder: "8"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: sprint
+    attributes:
+      label: Sprint
+      options:
+        - Sprint 1
+        - Sprint 2
+        - Sprint 3
+        - Sin asignar (backlog)
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidencia
+    attributes:
+      label: Evidencia esperada
+      description: Que debe existir para considerarla terminada.
+      value: |
+        - [ ] Pruebas unitarias
+        - [ ] Pruebas de integracion
+        - [ ] Pruebas de aceptacion
+        - [ ] Cobertura del area >= 80 %
+        - [ ] Contrato publicado en `contracts/` (si expone API)
+        - [ ] Documentacion actualizada
+    validations:
+      required: true
