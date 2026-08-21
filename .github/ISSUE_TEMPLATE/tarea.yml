@@ -1,0 +1,91 @@
+name: Tarea
+description: Descomposicion tecnica de una historia de usuario.
+title: "[Tarea] "
+labels: ["tarea"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Tarea
+        Despues de crearla, enlazala como **sub-issue** de su historia padre:
+        abre la historia -> seccion `Sub-issues` -> `Add existing issue`.
+
+  - type: input
+    id: historia-padre
+    attributes:
+      label: Historia padre
+      description: Numero del Issue de la historia a la que pertenece.
+      placeholder: "#45"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: tipo-tarea
+    attributes:
+      label: Tipo de tarea
+      options:
+        - Backend
+        - Frontend
+        - Base de datos
+        - Pruebas
+        - Integracion
+        - Documentacion
+        - Contrato de API
+        - Infraestructura
+    validations:
+      required: true
+
+  - type: dropdown
+    id: grupo
+    attributes:
+      label: Grupo
+      options:
+        - Simon (grupo-omega) - Tiempo real, comunidad y plataforma
+        - Thomas (grupo-alpha) - Contenido, simulacion y progresion
+        - Santiago (grupo-beta) - Cuentas, cumplimiento y economia
+        - Compartido - contracts / shared / infrastructure
+    validations:
+      required: true
+
+  - type: input
+    id: servicio
+    attributes:
+      label: Servicio o directorio afectado
+      placeholder: services/cuentas/identidad-acceso/
+    validations:
+      required: true
+
+  - type: textarea
+    id: descripcion
+    attributes:
+      label: Que hay que hacer
+      description: Concreto y verificable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: terminado
+    attributes:
+      label: Cuando se considera terminada
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: input
+    id: dependencias
+    attributes:
+      label: Dependencias
+      description: Escribir "ninguna" si no hay.
+      placeholder: "#46"
+    validations:
+      required: true
+
+  - type: input
+    id: puntos
+    attributes:
+      label: Story Points
+      placeholder: "3"
+    validations:
+      required: false
