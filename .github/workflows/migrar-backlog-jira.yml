@@ -1,0 +1,55 @@
+name: Migrar backlog de Jira
+
+# Crea en GitHub los Issues del backlog volcado desde Jira y los da de alta en
+# el Project de la organizacion con todos sus campos.
+#
+# Se lanza a mano desde la pestana Actions. Ejecutar SIEMPRE primero en modo
+# simulacion para revisar el plan en el registro antes de escribir nada.
+#
+# Requiere el secreto TOKEN_MIGRACION: un token de acceso personal con permiso
+# de escritura sobre Issues del repositorio y sobre los proyectos de la
+# organizacion. El token nunca aparece en el registro de ejecucion.
+
+on:
+  workflow_dispatch:
+    inputs:
+      simulacion:
+        description: "Simulacion (no crea nada, solo muestra el plan)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  migrar:
+    name: Crear Issues y poblar el Project
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Comprobar que existe el secreto
+        env:
+          TOKEN: ${{ secrets.TOKEN_MIGRACION }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::Falta el secreto TOKEN_MIGRACION. Crealo en Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          echo "Secreto presente."
+
+      - name: Ejecutar la migracion
+        env:
+          TOKEN: ${{ secrets.TOKEN_MIGRACION }}
+          REPO: ${{ github.repository }}
+          ORG: ${{ github.repository_owner }}
+          PROJECT_NUMBER: "1"
+          DATOS: docs/gobierno/backlog
+          DRY_RUN: ${{ inputs.simulacion }}
+        run: node scripts/migrar-backlog.mjs
