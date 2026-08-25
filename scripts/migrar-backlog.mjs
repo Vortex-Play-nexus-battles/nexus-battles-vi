@@ -1,4 +1,4 @@
-// Migra historias de usuario desde Jira hacia Issues de GitHub y las da de alta
+// Migra historias y tareas desde Jira hacia Issues de GitHub y las da de alta
 // en el Project v2 de la organizacion con todos sus campos.
 //
 //   node scripts/migrar-backlog.mjs
@@ -18,12 +18,12 @@
 //   SPRINT_PROJECT  titulo de la iteracion del Project, por ejemplo "Sprint 1"
 //   DRY_RUN         "true" para no escribir nada
 //
-// Idempotente: omite toda historia cuya clave de Jira ya aparezca en el cuerpo
+// Idempotente: omite toda incidencia cuya clave de Jira ya aparezca en el cuerpo
 // de un Issue del repositorio. Relanzarlo no duplica.
 
 const {
   JIRA_SITE, JIRA_EMAIL, JIRA_TOKEN, GH_TOKEN, ORG,
-  JQL = 'project = SCRUM AND issuetype = Historia AND sprint IS NOT EMPTY ORDER BY key ASC',
+  JQL = 'project = SCRUM AND issuetype in (Historia, Tarea) AND sprint IS NOT EMPTY ORDER BY key ASC',
   SPRINT_PROJECT = 'Sprint 1',
 } = process.env;
 const [OWNER, REPO_NAME] = (process.env.REPO || '').split('/');
@@ -49,16 +49,30 @@ const MODULO = {
   'HU-PAG': 'Pagos',                     'HU-SUB': 'Subastas',
   'HU-CHA': 'Chatbot',                   'HU-PRI': 'Privacidad',
   'HU-MET': 'Métricas y analítica',
+  // Tareas de plataforma. La equivalencia con "Infraestructura" es un criterio
+  // nuestro, no un dato de Jira: portabilidad, rendimiento y disponibilidad no
+  // tienen modulo propio en el Project.
+  'HU-CICD': 'CI/CD',                    'HU-POR': 'Infraestructura',
+  'HU-REN': 'Infraestructura',           'HU-DIS': 'Infraestructura',
 };
 // Etiqueta de grupo en Jira -> equipo y carpeta del monorepo.
 const EQUIPO  = { 'Grupo-2': 'Thomas', 'Grupo-4': 'Santiago', 'Grupo-6': 'Simón' };
 const CARPETA = { 'Grupo-2': 'services/contenido/', 'Grupo-4': 'services/cuentas/', 'Grupo-6': 'services/plataforma/' };
+// Tipo de incidencia en Jira -> opcion del campo "Tipo" del Project.
+const TIPO = { Historia: 'Historia de usuario', Tarea: 'Tarea', Error: 'Bug', Bug: 'Bug', Epic: 'Épica' };
+const ETIQUETA_TIPO = { Historia: 'historia-usuario', Tarea: 'tarea', Error: 'bug', Bug: 'bug', Epic: 'epica' };
 const PRIORIDAD = { Highest: 'Alta', High: 'Alta', Medium: 'Media', Low: 'Baja', Lowest: 'Baja' };
 const ESTADO = { 'Por hacer': 'Backlog', 'En curso': 'In progress', 'En revisión': 'In review', 'Finalizado': 'Done' };
 const ETIQUETA_COLOR = {
   'historia-usuario': '1D76DB', 'grupo-2': '5319E7', 'grupo-4': '0E8A16',
-  'grupo-6': 'B60205', 'migrado-jira': 'C5DEF5',
+  'grupo-6': 'B60205', 'migrado-jira': 'C5DEF5', 'tarea': '0052CC', 'bug': 'D93F0B',
 };
+
+// Jira devuelve el tipo de enlace en ingles; se traduce solo para mostrarlo.
+const RELACION = { 'blocks': 'bloquea a', 'is blocked by': 'bloqueada por',
+  'relates to': 'se relaciona con', 'duplicates': 'duplica a', 'is duplicated by': 'esta duplicada por',
+  'clones': 'clona a', 'is cloned by': 'esta clonada por' };
+const rel = (t) => RELACION[t] || t;
 
 const dormir = (ms) => new Promise(r => setTimeout(r, ms));
 const norm = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -139,7 +153,7 @@ do {
   crudas.push(...(p.issues || []));
   token = p.isLast ? null : p.nextPageToken;
 } while (token);
-console.log(`${crudas.length} historias leidas de Jira\n`);
+console.log(`${crudas.length} incidencias leidas de Jira\n`);
 
 const historias = crudas.map(it => {
   const f = it.fields;
@@ -150,8 +164,11 @@ const historias = crudas.map(it => {
   const m = titulo.match(/^(HU-[A-Z]+)/);
   const prefijo = m ? m[1] : null;
   const descripcion = limpiar(adf(f.description));
+  const tipoJira = f.issuetype ? f.issuetype.name : null;
   return {
     jiraId: it.key,
+    tipoJira,
+    tipo: TIPO[tipoJira] || null,
     jiraUrl: `https://${JIRA_SITE}/browse/${it.key}`,
     titulo,
     grupo,
@@ -173,8 +190,8 @@ const historias = crudas.map(it => {
     descripcion,
     subtareas: (f.subtasks || []).map(s => ({ key: s.key, titulo: s.fields.summary, estado: s.fields.status.name })),
     dependencias: (f.issuelinks || []).flatMap(l => {
-      if (l.outwardIssue) return [{ rel: l.type.outward, key: l.outwardIssue.key, titulo: l.outwardIssue.fields.summary }];
-      if (l.inwardIssue)  return [{ rel: l.type.inward,  key: l.inwardIssue.key,  titulo: l.inwardIssue.fields.summary }];
+      if (l.outwardIssue) return [{ rel: rel(l.type.outward), key: l.outwardIssue.key, titulo: l.outwardIssue.fields.summary }];
+      if (l.inwardIssue)  return [{ rel: rel(l.type.inward),  key: l.inwardIssue.key,  titulo: l.inwardIssue.fields.summary }];
       return [];
     }),
   };
@@ -185,6 +202,7 @@ for (const h of historias) {
   if (!h.grupo)  console.warn(`  ! ${h.jiraId} sin etiqueta de grupo`);
   if (!h.modulo) console.warn(`  ! ${h.jiraId} sin modulo reconocido a partir del prefijo`);
   if (!h.estado) console.warn(`  ! ${h.jiraId} estado "${h.estadoJira}" sin equivalencia`);
+  if (!h.tipo)   console.warn(`  ! ${h.jiraId} tipo "${h.tipoJira}" sin equivalencia`);
 }
 
 // ---------------------------------------------------------- 2. cuerpo del Issue
@@ -194,7 +212,8 @@ function cuerpo(h) {
   b.push('### Épica', h.epica ? `${h.epicaKey} — ${h.epica}` : '_Sin épica en Jira_', '');
   b.push('### Grupo', h.grupo ? `${h.grupo} · ${h.equipo} · \`${h.carpeta}\`` : '_Sin grupo en Jira_', '');
   b.push('### Requisito', h.requisitos.length ? h.requisitos.join(', ') : '_No declarado en Jira_', '');
-  b.push('### Historia y criterios de aceptación', h.descripcion || '_Sin descripción en Jira_', '');
+  b.push(h.tipoJira === 'Historia' ? '### Historia y criterios de aceptación' : '### Descripción',
+         h.descripcion || '_Sin descripción en Jira_', '');
   if (h.subtareas.length) {
     b.push(`### Subtareas (${h.subtareas.length})`);
     for (const s of h.subtareas) b.push(`- [${s.estado === 'Finalizado' ? 'x' : ' '}] ${s.key} — ${s.titulo}`);
@@ -204,6 +223,7 @@ function cuerpo(h) {
   if (h.dependencias.length) for (const d of h.dependencias) b.push(`- ${d.rel} **${d.key}** — ${d.titulo}`);
   else b.push('_Ninguna declarada en Jira_');
   b.push('', '### Metadatos migrados desde Jira', '', '| Campo | Valor |', '|---|---|');
+  b.push(`| Tipo (Jira) | ${h.tipoJira} |`);
   b.push(`| Story Points | ${h.puntos ?? 'sin estimar'} |`);
   b.push(`| Prioridad (Jira) | ${h.prioridadJira} |`);
   b.push(`| Estado (Jira) | ${h.estadoJira} |`);
@@ -243,7 +263,7 @@ for (let p = 1; ; p++) {
   for (const i of lote) { const m = String(i.body || '').match(/SCRUM-\d+/); if (m) yaMigradas.add(m[0]); }
   if (lote.length < 100) break;
 }
-console.log(`\n${yaMigradas.size} historias ya presentes en el repositorio`);
+console.log(`\n${yaMigradas.size} incidencias ya presentes en el repositorio`);
 
 // ---------------------------------------------------------------- 5. etiquetas
 if (!DRY_RUN) {
@@ -263,11 +283,13 @@ let creadas = 0, omitidas = 0, avisos = 0;
 for (const h of historias) {
   if (yaMigradas.has(h.jiraId)) { console.log(`= ${h.jiraId} ya migrada`); omitidas++; continue; }
   if (DRY_RUN) {
-    console.log(`~ ${h.jiraId} | ${h.equipo || '?'} | ${h.modulo || '?'} | ${h.puntos ?? '?'} pts | ${h.estado || '?'} | ${h.titulo}`);
+    console.log(`~ ${h.jiraId} | ${h.tipo || '?'} | ${h.equipo || '?'} | ${h.modulo || '?'} | ${h.puntos ?? '?'} pts | ${h.estado || '?'} | ${h.titulo}`);
     creadas++; continue;
   }
 
-  const etiquetas = ['historia-usuario', 'migrado-jira'];
+  const etiquetas = ['migrado-jira'];
+  const et = ETIQUETA_TIPO[h.tipoJira];
+  if (et) etiquetas.push(et);
   if (h.grupo) etiquetas.push(h.grupo.toLowerCase());
   const issue = await rest('POST', `/repos/${OWNER}/${REPO_NAME}/issues`,
     { title: h.titulo, body: cuerpo(h), labels: etiquetas });
@@ -284,7 +306,7 @@ for (const h of historias) {
     'Story Points': h.puntos,
     'Equipo': h.equipo,
     'Prioridad': h.prioridad,
-    'Tipo': 'Historia de usuario',
+    'Tipo': h.tipo,
     'Módulo': h.modulo,
     'Status': h.estado,
     'Sprint': SPRINT_PROJECT,
