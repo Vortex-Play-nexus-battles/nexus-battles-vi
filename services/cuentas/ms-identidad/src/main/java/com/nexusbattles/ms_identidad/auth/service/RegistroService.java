@@ -2,6 +2,7 @@ package com.nexusbattles.ms_identidad.auth.service;
 
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
+import com.nexusbattles.ms_identidad.rbac.model.Role;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -45,7 +46,11 @@ public class RegistroService {
         String passwordCifrada = passwordEncoder.encode(nuevoUsuario.getPassword());
         nuevoUsuario.setPassword(passwordCifrada);
 
-        // 6. Guardar el usuario en la base de datos
+        // 6. ASIGNAR EL ROL POR DEFECTO — ahora es obligatorio hacerlo aquí explícitamente,
+        // porque Role (enum de Andrés) ya no trae un valor por defecto como sí tenía el String anterior.
+        nuevoUsuario.setRol(Role.JUGADOR);
+
+        // 7. Guardar el usuario en la base de datos
         Usuario usuarioGuardado = usuarioRepository.save(nuevoUsuario);
 
         // TODO [INTEGRACIÓN FUTURA]: Disparar la integración con el módulo de correo corporativo
