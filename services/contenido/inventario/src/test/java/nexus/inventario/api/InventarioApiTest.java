@@ -124,4 +124,24 @@ class InventarioApiTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.title").value("Elemento no encontrado"));
     }
+
+    @Test
+    @DisplayName("una escritura fallida responde 503 y conserva el estado completo anterior")
+    void escrituraFallidaEsAtomica() throws Exception {
+        ElementoInventario creado = gestion.crear(
+                "jugador-A", "producto-1", TipoElementoInventario.ITEM, "Amuleto original");
+        repositorio.fallarSiguienteGuardado();
+
+        mvc.perform(patch("/api/v1/inventario/elementos/{elementoId}", creado.id())
+                        .header("X-User-Name", "jugador-A")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nombrePropio\":\"Amuleto incompleto\"}"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.title").value("Inventario no disponible"));
+
+        ElementoInventario persistido = repositorio.buscarPorPropietario("jugador-A")
+                .orElseThrow().elemento(creado.id());
+        assertEquals("Amuleto original", persistido.nombrePropio());
+        assertEquals("producto-1", persistido.productoId());
+    }
 }

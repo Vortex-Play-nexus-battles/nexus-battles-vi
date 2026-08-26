@@ -33,6 +33,8 @@ paths:
           $ref: "#/components/responses/SolicitudInvalida"
         "401":
           $ref: "#/components/responses/IdentidadRequerida"
+        "503":
+          $ref: "#/components/responses/PersistenciaNoDisponible"
   /api/v1/inventario/elementos/{elementoId}:
     patch:
       summary: Modifica el nombre propio de un elemento del jugador autenticado
@@ -72,6 +74,8 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/DetalleDeProblema"
+        "503":
+          $ref: "#/components/responses/PersistenciaNoDisponible"
 components:
   securitySchemes:
     IdentidadTemporal:
@@ -130,6 +134,12 @@ components:
             $ref: "#/components/schemas/DetalleDeProblema"
     IdentidadRequerida:
       description: No se recibio la identidad autenticada del jugador
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/DetalleDeProblema"
+    PersistenciaNoDisponible:
+      description: La escritura atomica no pudo completarse y no se aplicaron cambios parciales
       content:
         application/problem+json:
           schema:

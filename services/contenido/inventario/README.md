@@ -63,8 +63,19 @@ Incluido en `SCRUM-327`:
 - contrato OpenAPI y pruebas de aplicacion, API y persistencia.
 
 La visualizacion completa en vitrina sigue dependiendo de `HU-INV-001`. La
-atomicidad ante fallos de persistencia se valida de forma explicita en
-`SCRUM-328`.
+integracion con esa vitrina no forma parte de estas subtareas.
+
+## Atomicidad
+
+`SCRUM-328` conserva todos los elementos de un propietario dentro de un unico
+documento MongoDB. Crear o renombrar produce una nueva version inmutable del
+agregado y el adaptador la guarda mediante una sola operacion `save`; MongoDB
+garantiza que una escritura sobre un documento es atomica.
+
+Si Spring Data informa un fallo, la API responde `503` sin exponer detalles de
+MongoDB. Como no existe una escritura previa sobre otra coleccion ni se modifica
+el agregado persistido en memoria, el inventario conserva su estado completo
+anterior y no quedan elementos parcialmente actualizados.
 
 ## Pruebas
 

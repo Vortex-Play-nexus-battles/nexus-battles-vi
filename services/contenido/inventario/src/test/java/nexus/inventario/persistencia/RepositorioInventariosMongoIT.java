@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.List;
 import nexus.inventario.dominio.ElementoInventario;
+import nexus.inventario.dominio.FalloPersistenciaInventarioException;
 import nexus.inventario.dominio.Inventario;
 import nexus.inventario.dominio.RepositorioDeInventarios;
 import nexus.inventario.dominio.TipoElementoInventario;
@@ -15,7 +16,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.mongodb.test.autoconfigure.DataMongoTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Import;
-import org.springframework.dao.DuplicateKeyException;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -62,7 +62,7 @@ class RepositorioInventariosMongoIT {
     void propietarioUnico() {
         repositorio.guardar(Inventario.vacio("jugador-A"));
 
-        assertThrows(DuplicateKeyException.class,
+        assertThrows(FalloPersistenciaInventarioException.class,
                 () -> repositorio.guardar(Inventario.vacio("jugador-A")));
     }
 
