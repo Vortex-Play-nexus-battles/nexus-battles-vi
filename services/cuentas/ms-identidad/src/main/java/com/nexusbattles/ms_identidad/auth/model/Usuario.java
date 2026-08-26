@@ -1,16 +1,22 @@
 package com.nexusbattles.ms_identidad.auth.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.nexusbattles.ms_identidad.rbac.model.Role;   // <- el enum de Andrés
+import com.nexusbattles.ms_identidad.rbac.model.Role;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "usuarios", uniqueConstraints = {
         @UniqueConstraint(columnNames = "apodo"),
         @UniqueConstraint(columnNames = "email")
 })
+@Getter
+@Setter
+@NoArgsConstructor
 public class Usuario {
 
     @Id
@@ -34,9 +40,7 @@ public class Usuario {
     @Column(nullable = false)
     private String estado = "ACTIVO";
 
-    @Enumerated(EnumType.STRING)                 // <- ya no @ManyToOne
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private Role rol;
-
-    // getters y setters (rol: getRol/setRol devuelven/reciben Role, no RolEntity)
 }
