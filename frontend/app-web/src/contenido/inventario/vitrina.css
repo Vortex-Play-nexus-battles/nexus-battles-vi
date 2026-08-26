@@ -4,20 +4,42 @@
  * 4 columnas x 4 filas = los 16 productos que exige el criterio 1 de
  * HU-INV-001. Sin consultas de medios a proposito: la reorganizacion en
  * resoluciones inferiores es SCRUM-320.
+ *
+ * Dos deudas declaradas contra la pila aprobada:
+ *
+ * 1. La pila fija la paleta y la tipografia de la propuesta de diseno como
+ *    variables CSS, con Rajdhani e Inter autoalojadas. Esa propuesta todavia
+ *    no esta en el repositorio, asi que los valores de abajo son
+ *    provisionales y viven en un solo bloque para sustituirlos de una vez.
+ * 2. La pila declara la tarjeta y la paginacion de dieciseis elementos
+ *    componentes compartidos de shared/ui-kit, que hoy esta vacio. Cuando
+ *    exista, .vitrina__producto se muda alli y este archivo se queda solo
+ *    con la rejilla.
  */
 
 .vitrina-pagina {
+  /* Rejilla de referencia. */
   --vitrina-columnas: 4;
   --vitrina-separacion: 20px;
   --vitrina-margen: 24px;
+
+  /* Tema provisional: sustituir por las variables de shared/ui-kit. */
+  --color-fondo: #14161c;
+  --color-texto: #e8eaf0;
+  --color-texto-tenue: #8f9ab5;
+  --color-superficie: #1d212b;
+  --color-superficie-baja: #191c25;
+  --color-borde: #2b3040;
+  --tipografia-titulo: 'Rajdhani', system-ui, 'Segoe UI', sans-serif;
+  --tipografia-texto: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
 
   box-sizing: border-box;
   min-height: 100vh;
   margin: 0;
   padding: var(--vitrina-margen);
-  background: #14161c;
-  color: #e8eaf0;
-  font-family: system-ui, "Segoe UI", Roboto, sans-serif;
+  background: var(--color-fondo);
+  color: var(--color-texto);
+  font-family: var(--tipografia-texto);
 }
 
 .vitrina-pagina *,
@@ -28,6 +50,7 @@
 
 .vitrina-titulo {
   margin: 0 0 var(--vitrina-separacion);
+  font-family: var(--tipografia-titulo);
   font-size: 1.25rem;
   font-weight: 600;
   letter-spacing: 0.01em;
@@ -53,9 +76,10 @@
   min-width: 0;
   min-height: 145px;
   padding: 14px 16px;
-  border: 1px solid #2b3040;
+  border: 1px solid var(--color-borde);
   border-radius: 10px;
-  background: linear-gradient(160deg, #1d212b 0%, #191c25 100%);
+  background: linear-gradient(
+    160deg, var(--color-superficie) 0%, var(--color-superficie-baja) 100%);
 }
 
 .vitrina__nombre {
@@ -69,9 +93,10 @@
 
 .vitrina__tipo {
   margin: 0;
+  font-family: var(--tipografia-titulo);
   font-size: 0.75rem;
   font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #8f9ab5;
+  color: var(--color-texto-tenue);
 }

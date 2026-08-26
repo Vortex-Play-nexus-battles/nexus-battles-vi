@@ -29,6 +29,17 @@ El tercer caso desborda a lo alto pero nunca a lo ancho: el nombre se parte con
 `overflow-wrap`. El criterio de aceptacion solo prohibe el desplazamiento
 horizontal.
 
+## Deudas contra la pila aprobada
+
+- La tarjeta y la paginacion de dieciseis son **componentes de `shared/ui-kit`**
+  segun la pila; ese directorio esta vacio, asi que viven aqui provisionalmente.
+- El tema de `vitrina.css` es provisional: la paleta y las tipografias
+  autoalojadas (Rajdhani e Inter) salen de la propuesta de diseno, que aun no
+  esta en el repositorio.
+- `RNF-USA-003` exige los cuatro estados —carga, error, exito y vacio— en toda
+  vista que consulte datos. La subtarea `SCRUM-320` esta titulada solo sobre el
+  estado vacio: su alcance real es mayor.
+
 ## Identidad
 
 El `propietarioId` viaja hoy como parametro. La validacion contra la identidad
