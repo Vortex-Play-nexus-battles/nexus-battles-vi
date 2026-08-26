@@ -23,8 +23,20 @@ Incluido en `SCRUM-320`:
   la consola. Regla del cliente del 2026-08-13, *"uno como usuario jamas
   deberia ver un status de HTML"*.
 
-Pendiente en otras subtareas: las pruebas de aceptacion en navegador real, con
-la medida de "sin desplazamiento horizontal y todo legible", son `SCRUM-321`.
+Incluido en `SCRUM-321`:
+
+- los cuatro escenarios de `HU-INV-001-vitrina-del-inventario.feature`
+  traducidos uno a uno a Playwright sobre Chromium, con el esquema del
+  criterio 2 expandido a sus tres resoluciones;
+- el servicio de SCRUM-318 respondido por intercepcion de red, para que la
+  prueba mida la vista y no la disponibilidad del backend;
+- "sin desplazamiento horizontal" medido como `scrollWidth > clientWidth`
+  sobre el documento;
+- "todo texto permanece legible" medido como fuente por encima de 12 px y
+  ningun texto recortado por su caja.
+
+El `.feature` vive junto a la prueba a proposito: los criterios de aceptacion
+**son** las pruebas, y tenerlos al lado hace visible cualquier divergencia.
 
 ## Medidas verificadas a 1360 x 768
 
@@ -61,6 +73,17 @@ horizontal.
 - Los cuatro estados de `RNF-USA-003` ya existen en `estados-vista.js`, pero la
   pila los quiere **centralizados para los veinte modulos**. Su hogar es
   `shared/ui-kit`; se mudan sin cambiar la interfaz.
+
+## Pruebas
+
+```bash
+npm install
+npm test              # unitarias, sobre jsdom
+npm run test:aceptacion   # aceptacion, sobre Chromium real
+```
+
+Las de aceptacion levantan su propio servidor estatico; no hace falta el
+backend, porque la respuesta del servicio se intercepta.
 
 ## Identidad
 
