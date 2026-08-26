@@ -23,4 +23,9 @@ public class RepositorioInventariosMongo implements RepositorioDeInventarios {
     public Optional<Inventario> buscarPorPropietario(String propietarioId) {
         return documentos.findByPropietarioId(propietarioId).map(InventarioDocumento::aDominio);
     }
+
+    @Override
+    public Optional<Inventario> buscarPorElementoId(String elementoId) {
+        return documentos.findByElementosId(elementoId).map(InventarioDocumento::aDominio);
+    }
 }

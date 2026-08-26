@@ -16,6 +16,10 @@ public record ElementoInventario(
         exigirTexto(nombrePropio, "nombrePropio");
     }
 
+    public ElementoInventario renombrar(String nuevoNombre) {
+        return new ElementoInventario(id, productoId, tipo, nuevoNombre);
+    }
+
     private static void exigirTexto(String valor, String campo) {
         if (valor == null || valor.isBlank()) {
             throw new IllegalArgumentException(campo + " no puede estar vacio");

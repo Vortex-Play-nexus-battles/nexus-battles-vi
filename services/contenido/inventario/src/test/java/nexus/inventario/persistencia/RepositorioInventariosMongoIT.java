@@ -71,4 +71,18 @@ class RepositorioInventariosMongoIT {
     void propietarioSinInventario() {
         assertEquals(List.of(), repositorio.buscarPorPropietario("jugador-inexistente").stream().toList());
     }
+
+    @Test
+    @DisplayName("recupera el inventario propietario a partir de un elemento anidado")
+    void buscarPorElemento() {
+        Inventario inventario = Inventario.vacio("jugador-A")
+                .agregar(new ElementoInventario(
+                        "elemento-1", "item-1", TipoElementoInventario.ITEM, "Amuleto"));
+        repositorio.guardar(inventario);
+
+        Inventario recuperado = repositorio.buscarPorElementoId("elemento-1").orElseThrow();
+
+        assertEquals("jugador-A", recuperado.propietarioId());
+        assertEquals("elemento-1", recuperado.elementos().getFirst().id());
+    }
 }
