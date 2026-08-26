@@ -15,9 +15,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -34,12 +33,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class CatalogoEnMongoIT {
 
     @Container
+    @ServiceConnection
     static MongoDBContainer mongo = new MongoDBContainer("mongo:8");
-
-    @DynamicPropertySource
-    static void propiedades(DynamicPropertyRegistry registro) {
-        registro.add("spring.data.mongodb.uri", mongo::getReplicaSetUrl);
-    }
 
     @Autowired
     private CatalogoDeHeroes catalogo;
