@@ -19,6 +19,19 @@ public record Heroe(Prototipo prototipo, int nivel, double experiencia, Estadist
     }
 
     /**
+     * HU-HER-004: "La derrota de un enemigo no jugador otorga 10 x 1,2^(1d8)
+     * puntos de experiencia" (seccion 6.1.1, p. 26, con su nota del proyecto).
+     * Recibe el resultado del dado para ser determinista y probable; el
+     * lanzamiento aleatorio lo hace la mecanica del combate.
+     */
+    public static double experienciaPorEnemigoDerrotado(int resultadoDelDado) {
+        if (resultadoDelDado < 1 || resultadoDelDado > 8) {
+            throw new IllegalArgumentException("El resultado de un 1d8 está entre 1 y 8.");
+        }
+        return 10 * Math.pow(1.2, resultadoDelDado);
+    }
+
+    /**
      * HU-HER-008: "el nivel actua como factor multiplicador en las demas
      * estadisticas" (seccion 6.1.1, p. 26). Ejemplo textual del cliente: un mago
      * de fuego de nivel 3 posee un ataque base de 30. Se multiplican las bases;
