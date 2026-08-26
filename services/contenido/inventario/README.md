@@ -1,6 +1,6 @@
 # Servicio de inventario
 
-Base de persistencia de `HU-INV-003`, subtarea `SCRUM-326`. El servicio usa
+Servicio de inventario de `HU-INV-003`, subtareas `SCRUM-326` y `SCRUM-327`. Usa
 Java 21, Spring Boot 4.1 y Spring Data MongoDB.
 
 ## Modelo
@@ -26,6 +26,22 @@ El agregado es inmutable y se guarda como un documento por propietario. Esta
 decision permite que los cambios de una instancia se persistan atomicamente y
 sirve como base para la prueba de escritura fallida de `SCRUM-328`.
 
+## API de elementos propios
+
+La API deriva el propietario de `X-User-Name`, la convencion temporal de
+`ms-identidad`. El cliente nunca envia ni puede elegir `propietarioId`. Cuando
+`HU-AUT-004` publique JWT, este encabezado se reemplazara por el `subject` del
+token sin cambiar las reglas de propiedad de la aplicacion.
+
+```text
+POST  /api/v1/inventario/elementos
+PATCH /api/v1/inventario/elementos/{elementoId}
+```
+
+`PATCH` solo permite modificar elementos del inventario autenticado. Intentar
+modificar el de otro jugador responde `403` y no altera los datos. El contrato
+completo esta en `contracts/openapi/inventario.yaml`.
+
 ## Alcance actual
 
 Incluido en `SCRUM-326`:
@@ -38,9 +54,17 @@ Incluido en `SCRUM-326`:
 - compuerta JaCoCo de cobertura minima del 80 %;
 - imagen Docker multietapa.
 
-La API REST, la identidad autenticada, la autorizacion por propietario y los
-casos de creacion y modificacion pertenecen a `SCRUM-327` y no se implementan
-en esta subtarea.
+Incluido en `SCRUM-327`:
+
+- API REST para crear y renombrar elementos;
+- propietario derivado exclusivamente de la identidad autenticada;
+- autorizacion de modificaciones por propietario;
+- errores RFC 9457 para solicitudes invalidas y acceso denegado;
+- contrato OpenAPI y pruebas de aplicacion, API y persistencia.
+
+La visualizacion completa en vitrina sigue dependiendo de `HU-INV-001`. La
+atomicidad ante fallos de persistencia se valida de forma explicita en
+`SCRUM-328`.
 
 ## Pruebas
 

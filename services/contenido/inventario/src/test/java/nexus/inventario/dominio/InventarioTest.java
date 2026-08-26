@@ -59,6 +59,31 @@ class InventarioTest {
     }
 
     @Test
+    @DisplayName("renombrar un elemento conserva su identidad y referencia al catalogo")
+    void renombrarElemento() {
+        ElementoInventario original = new ElementoInventario(
+                "elemento-1", "producto-1", TipoElementoInventario.ITEM, "Amuleto");
+        Inventario inventario = Inventario.vacio("jugador-A").agregar(original);
+
+        Inventario actualizado = inventario.renombrarElemento("elemento-1", "Amuleto de Bruma");
+
+        ElementoInventario renombrado = actualizado.elemento("elemento-1");
+        assertEquals("elemento-1", renombrado.id());
+        assertEquals("producto-1", renombrado.productoId());
+        assertEquals("Amuleto de Bruma", renombrado.nombrePropio());
+        assertEquals("Amuleto", inventario.elemento("elemento-1").nombrePropio());
+    }
+
+    @Test
+    @DisplayName("renombrar un elemento inexistente se rechaza")
+    void renombrarElementoInexistente() {
+        Inventario inventario = Inventario.vacio("jugador-A");
+
+        assertThrows(ElementoNoEncontradoException.class,
+                () -> inventario.renombrarElemento("elemento-inexistente", "Otro nombre"));
+    }
+
+    @Test
     @DisplayName("la coleccion interna no cambia desde fuera del agregado")
     void copiaDefensiva() {
         List<ElementoInventario> elementos = new ArrayList<>();

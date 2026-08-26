@@ -33,4 +33,24 @@ public record Inventario(
         actualizados.add(elemento);
         return new Inventario(id, propietarioId, actualizados);
     }
+
+    public Inventario renombrarElemento(String elementoId, String nuevoNombre) {
+        boolean existe = elementos.stream().anyMatch(elemento -> elemento.id().equals(elementoId));
+        if (!existe) {
+            throw new ElementoNoEncontradoException();
+        }
+        List<ElementoInventario> actualizados = elementos.stream()
+                .map(elemento -> elemento.id().equals(elementoId)
+                        ? elemento.renombrar(nuevoNombre)
+                        : elemento)
+                .toList();
+        return new Inventario(id, propietarioId, actualizados);
+    }
+
+    public ElementoInventario elemento(String elementoId) {
+        return elementos.stream()
+                .filter(elemento -> elemento.id().equals(elementoId))
+                .findFirst()
+                .orElseThrow(ElementoNoEncontradoException::new);
+    }
 }
