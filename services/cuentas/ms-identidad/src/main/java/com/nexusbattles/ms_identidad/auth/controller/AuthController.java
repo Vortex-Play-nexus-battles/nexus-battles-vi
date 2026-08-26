@@ -19,6 +19,10 @@ public class AuthController {
     public ResponseEntity<?> registrarUsuario(@Valid @RequestBody Usuario nuevoUsuario) {
         try {
             Usuario usuarioRegistrado = registroService.registrarUsuario(nuevoUsuario);
+
+            // SEGURIDAD: Limpiamos la contraseña (hash) para que NUNCA viaje en la respuesta HTTP
+            usuarioRegistrado.setPassword(null);
+
             return ResponseEntity.status(HttpStatus.CREATED).body(usuarioRegistrado);
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());

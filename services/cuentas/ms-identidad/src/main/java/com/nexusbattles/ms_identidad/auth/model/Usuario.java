@@ -1,70 +1,46 @@
 package com.nexusbattles.ms_identidad.auth.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.nexusbattles.ms_identidad.rbac.model.Role;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
-@Table(name = "usuarios")
+@Table(name = "usuarios", uniqueConstraints = {
+        @UniqueConstraint(columnNames = "apodo"),
+        @UniqueConstraint(columnNames = "email")
+})
+@Getter
+@Setter
+@NoArgsConstructor
 public class Usuario {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @NotBlank(message = "El nombre es obligatorio")
-    private String nombres;
+    @NotBlank
+    @Column(nullable = false, length = 50)
+    private String apodo;
 
-    @NotBlank(message = "El apellido es obligatorio")
-    private String apellidos;
-
-    @Email(message = "Debe ser un correo válido")
-    @Column(unique = true)
+    @Email
+    @NotBlank
+    @Column(nullable = false, length = 100)
     private String email;
 
     @NotBlank
-    @Size(min = 9, message = "La contraseña debe tener más de 8 caracteres")
+    @Column(nullable = false)
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String password;
 
-    @NotBlank
-    @Column(unique = true)
-    private String apodo;
+    @Column(nullable = false)
+    private String estado = "ACTIVO";
 
-    private String avatar;
-
-    private String rol = "Jugador"; // Por defecto según tu HU
-
-    private String estado = "activo"; // Por defecto según tu HU
-
-    // Constructor vacío obligatorio para JPA
-    public Usuario() {}
-
-    // Getters y Setters (puedes generarlos en IntelliJ con Alt + Insert -> Getter and Setter)
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
-
-    public String getNombres() { return nombres; }
-    public void setNombres(String nombres) { this.nombres = nombres; }
-
-    public String getApellidos() { return apellidos; }
-    public void setApellidos(String apellidos) { this.apellidos = apellidos; }
-
-    public String getEmail() { return email; }
-    public void setEmail(String email) { this.email = email; }
-
-    public String getPassword() { return password; }
-    public void setPassword(String password) { this.password = password; }
-
-    public String getApodo() { return apodo; }
-    public void setApodo(String apodo) { this.apodo = apodo; }
-
-    public String getAvatar() { return avatar; }
-    public void setAvatar(String avatar) { this.avatar = avatar; }
-
-    public String getRol() { return rol; }
-    public void setRol(String rol) { this.rol = rol; }
-
-    public String getEstado() { return estado; }
-    public void setEstado(String estado) { this.estado = estado; }
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    private Role rol;
 }
