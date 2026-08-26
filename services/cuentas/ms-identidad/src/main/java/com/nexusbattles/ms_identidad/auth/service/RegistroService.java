@@ -1,9 +1,15 @@
 package com.nexusbattles.ms_identidad.auth.service;
 
+import com.nexusbattles.ms_identidad.auth.dto.RegistroRequest;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
+import com.nexusbattles.ms_identidad.auth.validation.ApodoBlacklistValidator;
+import com.nexusbattles.ms_identidad.perfiles.service.PerfilUsuarioService;
+import com.nexusbattles.ms_identidad.rbac.model.Role;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class RegistroService {
@@ -11,31 +17,66 @@ public class RegistroService {
     @Autowired
     private UsuarioRepository usuarioRepository;
 
-    public Usuario registrarUsuario(Usuario nuevoUsuario) {
+    @Autowired
+    private ApodoBlacklistValidator apodoBlacklistValidator;
+
+    @Autowired
+    private PerfilUsuarioService perfilUsuarioService;
+
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
+    @Transactional
+    public Usuario registrarUsuario(RegistroRequest datos) {
 
         // 1. Validar si el correo electrónico ya se encuentra registrado
-        if (usuarioRepository.findByEmail(nuevoUsuario.getEmail()).isPresent()) {
+        if (usuarioRepository.findByEmail(datos.getEmail()).isPresent()) {
             throw new RuntimeException("El correo electrónico ya está registrado.");
         }
 
-        // 2. Validar si el apodo ya existe en la base de datos de usuarios
-        if (usuarioRepository.findByApodo(nuevoUsuario.getApodo()).isPresent()) {
+        // 2. Validar si el apodo ya existe en la base de datos
+        if (usuarioRepository.findByApodo(datos.getApodo()).isPresent()) {
             throw new RuntimeException("El apodo ya está en uso.");
         }
 
-        // TODO [INTEGRACIÓN FUTURA]: Validar el apodo contra el servicio de Lista Negra
-        // que entregará el otro equipo (HU-AUT-003 / RF-AUT-003)[cite: 2].
+        // 3. Validar el apodo contra la lista negra (componente compartido con Sanabria)
+        apodoBlacklistValidator.validar(datos.getApodo());
 
-        // TODO [INTEGRACIÓN FUTURA]: Validar la política estricta de la contraseña
-        // (longitud > 8, mayúsculas, minúsculas, números y símbolos - HU-AUT-002)[cite: 2].
+        // 4. Validar la política estricta de la contraseña (HU-AUT-002)
+        validarPoliticaContrasena(datos.getPassword());
 
-        // 3. Guardar el usuario en la base de datos con rol "Jugador" y estado "activo" por defecto
+        // 5. Armar el Usuario con los datos propios de auth
+        Usuario nuevoUsuario = new Usuario();
+        nuevoUsuario.setApodo(datos.getApodo());
+        nuevoUsuario.setEmail(datos.getEmail());
+        nuevoUsuario.setPassword(passwordEncoder.encode(datos.getPassword()));
+        nuevoUsuario.setEstado("ACTIVO");
+        nuevoUsuario.setRol(Role.JUGADOR);
+
+        // 6. Guardar el usuario en la base de datos
         Usuario usuarioGuardado = usuarioRepository.save(nuevoUsuario);
 
+        // 7. Crear el perfil asociado (contrato con Sanabria) con los datos del formulario
+        perfilUsuarioService.crearPerfil(
+                usuarioGuardado, datos.getNombres(), datos.getApellidos(), datos.getAvatar()
+        );
+
         // TODO [INTEGRACIÓN FUTURA]: Disparar la integración con el módulo de correo corporativo
-        // para el mensaje de bienvenida (HU-COR-002 / Grupo de Simón)[cite: 2].
-        // Si el correo falla, la cuenta se crea igual y el reenvío queda encolado[cite: 2].
+        // para el mensaje de bienvenida (confirmar si es Grupo de Felipe o Grupo de Simón).
 
         return usuarioGuardado;
+    }
+
+    private void validarPoliticaContrasena(String password) {
+        if (password == null || password.length() <= 8) {
+            throw new RuntimeException("La contraseña debe tener una longitud superior a 8 caracteres.");
+        }
+        boolean tieneMayuscula = password.chars().anyMatch(Character::isUpperCase);
+        boolean tieneMinuscula = password.chars().anyMatch(Character::isLowerCase);
+        boolean tieneNumero = password.chars().anyMatch(Character::isDigit);
+        boolean tieneSimbolo = password.chars().anyMatch(ch -> !Character.isLetterOrDigit(ch));
+
+        if (!tieneMayuscula || !tieneMinuscula || !tieneNumero || !tieneSimbolo) {
+            throw new RuntimeException("La contraseña debe contener al menos una mayúscula, una minúscula, un número y un símbolo.");
+        }
     }
 }

@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_identidad.auth.controller;
 
+import com.nexusbattles.ms_identidad.auth.dto.RegistroRequest;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.service.RegistroService;
 import jakarta.validation.Valid;
@@ -16,9 +17,9 @@ public class AuthController {
     private RegistroService registroService;
 
     @PostMapping("/registro")
-    public ResponseEntity<?> registrarUsuario(@Valid @RequestBody Usuario nuevoUsuario) {
+    public ResponseEntity<?> registrarUsuario(@Valid @RequestBody RegistroRequest datos) {
         try {
-            Usuario usuarioRegistrado = registroService.registrarUsuario(nuevoUsuario);
+            Usuario usuarioRegistrado = registroService.registrarUsuario(datos);
             return ResponseEntity.status(HttpStatus.CREATED).body(usuarioRegistrado);
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
