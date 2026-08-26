@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Repositorio de la matriz de permisos versionada conforme a la Tabla 24.
+ * Repositorio de la matriz de permisos versionada conforme a la Tabla 24 (Extendida).
  */
 @Repository
 public class RbacMatrixRepository {
@@ -38,6 +38,7 @@ public class RbacMatrixRepository {
         set(Role.JUGADOR, Action.BANEAR_DEFINITIVAMENTE, PermissionType.DENIED);
         set(Role.JUGADOR, Action.CREAR_ADMIN_MODERADOR, PermissionType.DENIED);
         set(Role.JUGADOR, Action.GESTIONAR_PRODUCTOS, PermissionType.DENIED);
+        set(Role.JUGADOR, Action.ASIGNAR_ROL, PermissionType.DENIED);
 
         // --- 2. MODERADOR ---
         set(Role.MODERADOR, Action.CREAR_CUENTA_JUGADOR, PermissionType.DENIED);
@@ -50,6 +51,7 @@ public class RbacMatrixRepository {
         set(Role.MODERADOR, Action.BANEAR_DEFINITIVAMENTE, PermissionType.DENIED);
         set(Role.MODERADOR, Action.CREAR_ADMIN_MODERADOR, PermissionType.DENIED);
         set(Role.MODERADOR, Action.GESTIONAR_PRODUCTOS, PermissionType.DENIED);
+        set(Role.MODERADOR, Action.ASIGNAR_ROL, PermissionType.DENIED);
 
         // --- 3. ADMINISTRADOR ---
         set(Role.ADMINISTRADOR, Action.CREAR_CUENTA_JUGADOR, PermissionType.DENIED);
@@ -62,6 +64,7 @@ public class RbacMatrixRepository {
         set(Role.ADMINISTRADOR, Action.BANEAR_DEFINITIVAMENTE, PermissionType.GRANTED);
         set(Role.ADMINISTRADOR, Action.CREAR_ADMIN_MODERADOR, PermissionType.DENIED);
         set(Role.ADMINISTRADOR, Action.GESTIONAR_PRODUCTOS, PermissionType.GRANTED);
+        set(Role.ADMINISTRADOR, Action.ASIGNAR_ROL, PermissionType.DENIED);
 
         // --- 4. SUPER_ADMINISTRADOR ---
         set(Role.SUPER_ADMINISTRADOR, Action.CREAR_CUENTA_JUGADOR, PermissionType.DENIED);
@@ -74,6 +77,7 @@ public class RbacMatrixRepository {
         set(Role.SUPER_ADMINISTRADOR, Action.BANEAR_DEFINITIVAMENTE, PermissionType.GRANTED);
         set(Role.SUPER_ADMINISTRADOR, Action.CREAR_ADMIN_MODERADOR, PermissionType.GRANTED);
         set(Role.SUPER_ADMINISTRADOR, Action.GESTIONAR_PRODUCTOS, PermissionType.GRANTED);
+        set(Role.SUPER_ADMINISTRADOR, Action.ASIGNAR_ROL, PermissionType.GRANTED);
     }
 
     private void set(Role role, Action action, PermissionType permission) {
