@@ -19,6 +19,21 @@ public record Heroe(Prototipo prototipo, int nivel, double experiencia, Estadist
     }
 
     /**
+     * HU-HER-008: "el nivel actua como factor multiplicador en las demas
+     * estadisticas" (seccion 6.1.1, p. 26). Ejemplo textual del cliente: un mago
+     * de fuego de nivel 3 posee un ataque base de 30. Se multiplican las bases;
+     * los dados no se escalan.
+     */
+    public Estadisticas estadisticasActuales() {
+        return prototipo.estadisticasNivel1().escaladaPor(nivel);
+    }
+
+    /** HU-HER-007: el efecto de las acciones especiales se multiplica por el nivel. */
+    public int multiplicadorDeEfecto() {
+        return nivel;
+    }
+
+    /**
      * Acumula experiencia y sube de nivel cada vez que se alcanza el umbral del
      * nivel actual. El sobrante se conserva para el siguiente nivel (el documento
      * define el umbral por nivel; la conservacion del sobrante es decision de

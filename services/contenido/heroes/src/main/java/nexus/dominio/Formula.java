@@ -14,6 +14,11 @@ public record Formula(int base, int cantidadDados, int carasDado) {
         }
     }
 
+    /** Escalado por nivel: solo la base se multiplica; el dado queda igual. */
+    public Formula conBaseMultiplicadaPor(int factor) {
+        return new Formula(base * factor, cantidadDados, carasDado);
+    }
+
     public String texto() {
         if (cantidadDados == 0) {
             return String.valueOf(base);
