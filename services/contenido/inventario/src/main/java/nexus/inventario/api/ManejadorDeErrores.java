@@ -3,6 +3,7 @@ package nexus.inventario.api;
 import nexus.inventario.aplicacion.IdentidadRequeridaException;
 import nexus.inventario.aplicacion.InventarioAjenoException;
 import nexus.inventario.dominio.ElementoNoEncontradoException;
+import nexus.inventario.dominio.FalloPersistenciaInventarioException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -26,6 +27,14 @@ public class ManejadorDeErrores {
     @ExceptionHandler(ElementoNoEncontradoException.class)
     public ProblemDetail elementoNoEncontrado(ElementoNoEncontradoException error) {
         return problema(HttpStatus.NOT_FOUND, "Elemento no encontrado", error.getMessage());
+    }
+
+    @ExceptionHandler(FalloPersistenciaInventarioException.class)
+    public ProblemDetail persistenciaNoDisponible() {
+        return problema(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "Inventario no disponible",
+                "No fue posible completar la escritura. Intenta nuevamente.");
     }
 
     @ExceptionHandler({
