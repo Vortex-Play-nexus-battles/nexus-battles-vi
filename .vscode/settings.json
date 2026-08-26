@@ -1,0 +1,99 @@
+{
+  // Ajustes del espacio de trabajo de la Empresa A.
+  // Se aplican a quien abra este repositorio, sin tocar su configuracion personal.
+
+  // ---------------------------------------------------------------- archivos
+  "files.encoding": "utf8",
+  "files.eol": "\n",
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "files.trimFinalNewlines": true,
+  "files.exclude": {
+    "**/.gradle": true,
+    "**/build": true,
+    "**/bin": true,
+    "**/node_modules": true
+  },
+  "search.exclude": {
+    "**/build": true,
+    "**/node_modules": true,
+    "**/.gradle": true
+  },
+
+  // ----------------------------------------------------------------- editor
+  "editor.formatOnSave": true,
+  "editor.rulers": [100],
+  "editor.tabSize": 2,
+  "editor.insertSpaces": true,
+  "editor.detectIndentation": false,
+  "editor.bracketPairColorization.enabled": true,
+  "editor.linkedEditing": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+
+  // Formateador por lenguaje. Prettier para la web, el de Java para Java.
+  "[html]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[css]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[javascript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[json]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[jsonc]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[yaml]": { "editor.defaultFormatter": "redhat.vscode-yaml" },
+  "[markdown]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[java]": {
+    "editor.defaultFormatter": "redhat.java",
+    "editor.tabSize": 4
+  },
+
+  // -------------------------------------------------------------------- Java
+  // Cada quien apunta a su instalacion; el nombre "JavaSE-21" es el que importa.
+  "java.configuration.updateBuildConfiguration": "automatic",
+  "java.compile.nullAnalysis.mode": "automatic",
+  "java.saveActions.organizeImports": true,
+  "java.completion.importOrder": ["java", "javax", "jakarta", "org", "com", ""],
+
+  // ------------------------------------------------------- interfaz web (JS)
+  // El proyecto no usa framework: HTML, CSS y JavaScript. La verificacion de
+  // tipos la hace VS Code a partir de jsconfig.json y los comentarios JSDoc.
+  "javascript.validate.enable": true,
+  "javascript.preferences.quoteStyle": "single",
+  "javascript.updateImportsOnFileMove.enabled": "always",
+  "html.format.wrapLineLength": 100,
+  "emmet.includeLanguages": { "html": "html" },
+  "liveServer.settings.root": "/frontend/app-web",
+  "liveServer.settings.port": 5500,
+  "eslint.workingDirectories": ["frontend/app-web"],
+  "eslint.validate": ["javascript"],
+
+  // ------------------------------------------------------------------- Git
+  // Avisa si alguien intenta confirmar directamente sobre main. El ruleset del
+  // repositorio ya lo impide en el servidor; esto lo avisa antes de intentarlo.
+  "git.branchProtection": ["main"],
+  "git.branchProtectionPrompt": "alwaysPrompt",
+  "git.inputValidation": true,
+  "git.inputValidationSubjectLength": 72,
+  "git.inputValidationLength": 100,
+  "git.autofetch": true,
+  "git.pruneOnFetch": true,
+  "git.branchPrefix": "feature/",
+
+  // Plantilla de mensaje de confirmacion segun Conventional Commits.
+  "conventionalCommits.scopes": [
+    "repo", "backlog", "gobierno", "contratos", "infra",
+    "cuentas", "contenido", "plataforma", "web", "compartido"
+  ],
+
+  // --------------------------------------------------------------- ortografia
+  "cSpell.language": "es,en",
+  "cSpell.words": [
+    "batallas", "nexus", "battles", "backlog", "monorepo", "Keycloak",
+    "Testcontainers", "springdoc", "Flyway", "RabbitMQ", "Rajdhani",
+    "subastas", "sanciones", "torneos", "heroes", "chatbot", "moderacion"
+  ],
+
+  // ------------------------------------------------------------------ varios
+  "yaml.schemas": {
+    "https://json.schemastore.org/github-workflow.json": ".github/workflows/*.yml"
+  },
+  "terminal.integrated.defaultProfile.windows": "Git Bash"
+}
