@@ -8,15 +8,23 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 @Entity
-@Table(name = "usuarios")
+@Table(name = "usuarios", uniqueConstraints = {
+        @UniqueConstraint(columnNames = "apodo"),
+        @UniqueConstraint(columnNames = "email")
+})
 public class Usuario {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Email(message = "Debe ser un correo válido")
-    @Column(unique = true, nullable = false)
+    @NotBlank
+    @Column(nullable = false, length = 50)
+    private String apodo;
+
+    @Email
+    @NotBlank
+    @Column(nullable = false, length = 100)
     private String email;
 
     @NotBlank
@@ -25,21 +33,20 @@ public class Usuario {
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String password;
 
-    @NotBlank
-    @Column(unique = true, nullable = false)
-    private String apodo;
+    @Column(nullable = false)
+    private String estado = "ACTIVO";
 
     @ManyToOne(fetch = FetchType.EAGER, optional = false)
     @JoinColumn(name = "rol_id", nullable = false)
     private RolEntity rol;
 
-    @Column(nullable = false)
-    private String estado = "ACTIVO"; 
-
     public Usuario() {}
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
+
+    public String getApodo() { return apodo; }
+    public void setApodo(String apodo) { this.apodo = apodo; }
 
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
@@ -47,12 +54,9 @@ public class Usuario {
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
 
-    public String getApodo() { return apodo; }
-    public void setApodo(String apodo) { this.apodo = apodo; }
+    public String getEstado() { return estado; }
+    public void setEstado(String estado) { this.estado = estado; }
 
     public RolEntity getRol() { return rol; }
     public void setRol(RolEntity rol) { this.rol = rol; }
-
-    public String getEstado() { return estado; }
-    public void setEstado(String estado) { this.estado = estado; }
 }
