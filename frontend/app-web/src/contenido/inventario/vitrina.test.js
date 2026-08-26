@@ -81,6 +81,15 @@ describe('Cuadricula de la vitrina a 1360 x 768', () => {
     expect(nombre.textContent).toBe('<img src=x onerror="robar()">');
   });
 
+  test('un tipo que el catalogo agregue despues se muestra tal cual llega', () => {
+    const pagina = paginaCon(1);
+    pagina.elementos[0].tipo = 'MONTURA';
+
+    const vitrina = construirVitrina(pagina);
+
+    expect(vitrina.querySelector('.vitrina__tipo').textContent).toBe('MONTURA');
+  });
+
   test('rechaza una pagina que exceda el tamano acordado en vez de recortarla', () => {
     const excedida = paginaCon(17, 40);
 

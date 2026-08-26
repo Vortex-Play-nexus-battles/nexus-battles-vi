@@ -64,6 +64,15 @@ describe('Cliente de la consulta paginada', () => {
     expect(llamado).toBe(false);
   });
 
+  test('rechaza un propietario vacio sin llamar al servicio', async () => {
+    let llamado = false;
+    const fetchFalso = async () => { llamado = true; return respuesta({}); };
+
+    await expect(consultarPagina('   ', 0, { fetchImpl: fetchFalso }))
+      .rejects.toThrow(/propietarioId/);
+    expect(llamado).toBe(false);
+  });
+
   test('convierte una respuesta fallida en un error con su estado', async () => {
     const fetchFalso = async () => respuesta(null, false, 503);
 
