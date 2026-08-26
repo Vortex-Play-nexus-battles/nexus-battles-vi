@@ -8,6 +8,7 @@ import nexus.inventario.dominio.ElementoInventario;
 import nexus.inventario.dominio.Inventario;
 import nexus.inventario.dominio.RepositorioDeInventarios;
 import nexus.inventario.dominio.TipoElementoInventario;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,6 +31,14 @@ class RepositorioInventariosMongoIT {
 
     @Autowired
     private RepositorioDeInventarios repositorio;
+
+    @Autowired
+    private RepositorioInventariosSpringData documentos;
+
+    @BeforeEach
+    void limpiarColeccion() {
+        documentos.deleteAll();
+    }
 
     @Test
     @DisplayName("guarda y recupera el inventario completo por propietario")
