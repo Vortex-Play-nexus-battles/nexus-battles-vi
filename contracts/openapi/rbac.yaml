@@ -1,0 +1,147 @@
+openapi: 3.1.0
+info:
+  title: Nexus Battles VI - RBAC & Authorization Service (ms-identidad)
+  description: API de Control de Acceso Basado en Roles (RBAC) conforme a la Tabla 24.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8081/api/v1
+    description: Entorno local de desarrollo
+paths:
+  /rbac/authorize:
+    post:
+      summary: Evaluar permiso de un rol sobre una acción
+      operationId: evaluatePermission
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorizationRequest'
+      responses:
+        '200':
+          description: Resultado de la evaluación de autorización
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorizationResponse'
+        '403':
+          description: Acceso denegado (Fail-Closed)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /rbac/roles:
+    get:
+      summary: Obtener catálogo de roles del sistema
+      operationId: getRoles
+      responses:
+        '200':
+          description: Lista de roles disponibles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RoleDescriptor'
+
+  /rbac/matrix:
+    get:
+      summary: Obtener la matriz de permisos versionada (Tabla 24)
+      operationId: getMatrix
+      responses:
+        '200':
+          description: Matriz completa de permisos por rol y acción
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionMatrixResponse'
+
+components:
+  schemas:
+    AuthorizationRequest:
+      type: object
+      required:
+        - role
+        - action
+      properties:
+        role:
+          type: string
+          enum: [JUGADOR, MODERADOR, ADMINISTRADOR, SUPER_ADMINISTRADOR]
+        action:
+          type: string
+          enum:
+            - CREAR_CUENTA_JUGADOR
+            - MODIFICAR_PERFIL_PROPIO
+            - PUBLICAR_COMENTARIOS
+            - ELIMINAR_COMENTARIO_PROPIO
+            - MODERAR_COMENTARIOS
+            - EMITIR_ADVERTENCIAS
+            - SUSPENDER_USUARIOS
+            - BANEAR_DEFINITIVAMENTE
+            - CREAR_ADMIN_MODERADOR
+            - GESTIONAR_PRODUCTOS
+
+    AuthorizationResponse:
+      type: object
+      required:
+        - permitted
+        - permissionType
+        - role
+        - action
+      properties:
+        permitted:
+          type: boolean
+        permissionType:
+          type: string
+          enum: [GRANTED, DENIED, TEMPORARY]
+        role:
+          type: string
+        action:
+          type: string
+        reason:
+          type: string
+
+    RoleDescriptor:
+      type: object
+      required:
+        - role
+        - name
+        - description
+      properties:
+        role:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+
+    PermissionMatrixResponse:
+      type: object
+      required:
+        - version
+        - matrix
+      properties:
+        version:
+          type: string
+        matrix:
+          type: object
+
+    ProblemDetail:
+      type: object
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
