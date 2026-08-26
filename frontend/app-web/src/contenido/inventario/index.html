@@ -11,22 +11,19 @@
   <div id="contenedor-vitrina"></div>
 
   <!--
-    Raiz de composicion de SCRUM-319: pide la pagina y pinta la rejilla.
-    El estado vacio y el aviso de error son SCRUM-320; el propietario
-    autenticado llega con HU-INF-009.
+    Raiz de composicion: resuelve el propietario y delega en montarVitrina,
+    que decide entre carga, exito, vacio y error (RNF-USA-003).
+    El propietario autenticado llega con HU-INF-009.
   -->
   <script type="module">
-    import { consultarPagina } from './cliente-inventario.js';
-    import { construirVitrina } from './vitrina.js';
+    import { montarVitrina } from './pagina-inventario.js';
 
+    const parametros = new URLSearchParams(location.search);
     const contenedor = document.getElementById('contenedor-vitrina');
-    const propietarioId = new URLSearchParams(location.search).get('propietario');
-    const numeroPagina = Number(
-      new URLSearchParams(location.search).get('pagina') ?? 0);
+    const propietarioId = parametros.get('propietario');
+    const numeroPagina = Number(parametros.get('pagina') ?? 0);
 
-    consultarPagina(propietarioId, numeroPagina)
-      .then((pagina) => contenedor.replaceChildren(construirVitrina(pagina)))
-      .catch((error) => console.error('No se pudo cargar la vitrina', error));
+    montarVitrina(contenedor, propietarioId, numeroPagina);
   </script>
 </body>
 </html>

@@ -100,3 +100,81 @@
   text-transform: uppercase;
   color: var(--color-texto-tenue);
 }
+
+/* ---------------------------------------------------------------------------
+ * SCRUM-320 - Reorganizacion en resoluciones inferiores.
+ *
+ * Criterio 2 de HU-INV-001: el contenido se reorganiza para caber en el ancho
+ * disponible, sin desplazamiento horizontal y sin perder legibilidad. Por eso
+ * bajan las columnas y los margenes, pero **el tamano del texto no**: encoger
+ * la letra para que quepa seria justo lo que el criterio prohibe.
+ * ------------------------------------------------------------------------- */
+
+/* Portatiles y tabletas apaisadas: 3 columnas. Cubre 1024 x 768. */
+@media (max-width: 1279px) {
+  .vitrina-pagina { --vitrina-columnas: 3; }
+}
+
+/* Tabletas en vertical: 2 columnas. Cubre 768 x 1024. */
+@media (max-width: 899px) {
+  .vitrina-pagina {
+    --vitrina-columnas: 2;
+    --vitrina-separacion: 16px;
+    --vitrina-margen: 16px;
+  }
+}
+
+/* Telefonos: una sola columna y tarjetas mas bajas. Cubre 375 x 812. */
+@media (max-width: 599px) {
+  .vitrina-pagina {
+    --vitrina-columnas: 1;
+    --vitrina-separacion: 12px;
+    --vitrina-margen: 12px;
+  }
+
+  .vitrina__producto {
+    min-height: 96px;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * SCRUM-320 - Los cuatro estados.
+ * ------------------------------------------------------------------------- */
+
+.estado {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 240px;
+  padding: 32px 24px;
+  border: 1px dashed var(--color-borde);
+  border-radius: 10px;
+  text-align: center;
+}
+
+.estado__mensaje {
+  margin: 0;
+  font-family: var(--tipografia-titulo);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.estado__detalle {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--color-texto-tenue);
+}
+
+/* El estado vacio no es un error y no debe parecerlo: mismo tono que la
+   vitrina, sin color de alarma. */
+.estado-carga,
+.estado-vacio {
+  color: var(--color-texto);
+}
+
+.estado-error {
+  border-style: solid;
+  border-color: #6b3b3b;
+}

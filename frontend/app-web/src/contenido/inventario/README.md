@@ -13,8 +13,17 @@ Incluido en `SCRUM-319`:
 - rechazo ruidoso de una pagina que exceda los 16 elementos acordados;
 - cliente HTTP de la consulta paginada, con `fetch` inyectable.
 
-Pendiente en otras subtareas: la reorganizacion en resoluciones inferiores y el
-estado vacio son `SCRUM-320`; las pruebas de aceptacion en navegador real, con
+Incluido en `SCRUM-320`:
+
+- reorganizacion de la rejilla en resoluciones inferiores, sin encoger el texto;
+- los cuatro estados de `RNF-USA-003` —carga, error, exito y vacio— en
+  `estados-vista.js`, con `pagina-inventario.js` decidiendo cual mostrar;
+- estado vacio explicativo que no parece un error;
+- ningun codigo del protocolo a la vista del jugador: el detalle tecnico va a
+  la consola. Regla del cliente del 2026-08-13, *"uno como usuario jamas
+  deberia ver un status de HTML"*.
+
+Pendiente en otras subtareas: las pruebas de aceptacion en navegador real, con
 la medida de "sin desplazamiento horizontal y todo legible", son `SCRUM-321`.
 
 ## Medidas verificadas a 1360 x 768
@@ -24,6 +33,19 @@ la medida de "sin desplazamiento horizontal y todo legible", son `SCRUM-321`.
 | 16 productos | 16 | 4 | 768 px | no |
 | 7 productos | 7 | 2 | 768 px | no |
 | nombre de 300 caracteres | 16 | 4 | 877 px | no |
+
+## Medidas verificadas en resoluciones inferiores
+
+| Ventana | Columnas | Ancho de tarjeta | Tamano del texto | Scroll horizontal |
+|---|---|---|---|---|
+| 1360 x 768 | 4 | 313 px | 15,2 px | no |
+| 1024 x 768 | 3 | 307 px | 15,2 px | no |
+| 768 x 1024 | 2 | 353 px | 15,2 px | no |
+| 375 x 812 | 1 | ancho completo | 15,2 px | no |
+
+**El tamano del texto no cambia en ningun corte.** Encoger la letra para que
+quepa seria exactamente lo que el criterio 2 prohibe: lo que baja es el numero
+de columnas y los margenes, nunca la legibilidad.
 
 El tercer caso desborda a lo alto pero nunca a lo ancho: el nombre se parte con
 `overflow-wrap`. El criterio de aceptacion solo prohibe el desplazamiento
@@ -36,9 +58,9 @@ horizontal.
 - El tema de `vitrina.css` es provisional: la paleta y las tipografias
   autoalojadas (Rajdhani e Inter) salen de la propuesta de diseno, que aun no
   esta en el repositorio.
-- `RNF-USA-003` exige los cuatro estados —carga, error, exito y vacio— en toda
-  vista que consulte datos. La subtarea `SCRUM-320` esta titulada solo sobre el
-  estado vacio: su alcance real es mayor.
+- Los cuatro estados de `RNF-USA-003` ya existen en `estados-vista.js`, pero la
+  pila los quiere **centralizados para los veinte modulos**. Su hogar es
+  `shared/ui-kit`; se mudan sin cambiar la interfaz.
 
 ## Identidad
 
