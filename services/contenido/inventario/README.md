@@ -77,6 +77,19 @@ MongoDB. Como no existe una escritura previa sobre otra coleccion ni se modifica
 el agregado persistido en memoria, el inventario conserva su estado completo
 anterior y no quedan elementos parcialmente actualizados.
 
+## Prueba de aceptacion de propiedad
+
+`SCRUM-329` ejecuta la API Spring completa contra MongoDB 8 con Testcontainers.
+El escenario crea inventarios separados para los jugadores A y B, comprueba que
+cada alta se asocia exclusivamente a la identidad autenticada y hace que A
+intente modificar un elemento de B. La respuesta debe ser `403` y el documento
+de B, consultado nuevamente desde MongoDB, debe ser exactamente igual al estado
+anterior al intento.
+
+Con esto quedan cubiertos en backend la creacion, modificacion, propiedad y
+atomicidad de `HU-INV-003`. La comprobacion visual final sigue pendiente hasta
+que `HU-INV-001` publique la vitrina del inventario.
+
 ## Pruebas
 
 En Windows, con `JAVA_HOME` apuntando a un JDK 21:
