@@ -1,0 +1,52 @@
+{
+  // Tareas del espacio de trabajo. Se ejecutan con Ctrl+Shift+P > "Tasks: Run Task".
+  //
+  // Nota: las tareas de Gradle y de Docker Compose llegan con el siguiente pull
+  // request, cuando existan el wrapper y los archivos de composicion.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Web: revisar formato",
+      "detail": "Comprueba que el HTML, CSS y JavaScript cumplen el formato acordado, sin modificar nada.",
+      "type": "shell",
+      "command": "npm run format:check",
+      "options": { "cwd": "${workspaceFolder}/frontend/app-web" },
+      "problemMatcher": [],
+      "group": "test"
+    },
+    {
+      "label": "Web: corregir formato",
+      "detail": "Aplica el formato acordado a todo el frontend.",
+      "type": "shell",
+      "command": "npm run format",
+      "options": { "cwd": "${workspaceFolder}/frontend/app-web" },
+      "problemMatcher": [],
+      "group": "build"
+    },
+    {
+      "label": "Web: analizar con ESLint",
+      "detail": "Busca errores de JavaScript que no tiene compilador que los detecte.",
+      "type": "shell",
+      "command": "npm run lint",
+      "options": { "cwd": "${workspaceFolder}/frontend/app-web" },
+      "problemMatcher": ["$eslint-stylish"],
+      "group": { "kind": "test", "isDefault": true }
+    },
+    {
+      "label": "Web: instalar herramientas",
+      "detail": "Instala ESLint y Prettier. Solo hace falta la primera vez y cuando cambien las versiones.",
+      "type": "shell",
+      "command": "npm install",
+      "options": { "cwd": "${workspaceFolder}/frontend/app-web" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Comprobar entorno",
+      "detail": "Muestra las versiones instaladas de Java, Node, Git y Docker para verificar que coinciden con la pila.",
+      "type": "shell",
+      "command": "java -version; node --version; npm --version; git --version; docker --version",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "new" }
+    }
+  ]
+}
