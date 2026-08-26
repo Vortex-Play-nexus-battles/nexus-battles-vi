@@ -36,7 +36,7 @@ public class PerfilUsuarioService {
 
     // HU-USR-001: consultar mi propio perfil
     public PerfilUsuario obtenerPorUsuarioId(Long usuarioId) {
-        return perfilUsuarioRepository.findById(usuarioId)
+        return perfilUsuarioRepository.findByIdConUsuario(usuarioId)
                 .orElseThrow(() -> new IllegalStateException("No existe perfil para el usuario " + usuarioId));
     }
 

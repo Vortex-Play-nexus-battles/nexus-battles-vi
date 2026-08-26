@@ -51,7 +51,7 @@ public class PerfilController {
                     usuarioId, datos.getNombres(), datos.getApellidos(), datos.getAvatar(),
                     datos.getBiografia(), datos.getPreferencias(), datos.getApodo());
             return ResponseEntity.ok(PerfilUsuarioResponse.from(actualizado));
-        } catch (RuntimeException e) {
+        } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
         }
     }
@@ -67,7 +67,7 @@ public class PerfilController {
     private void verificarDueno(PerfilUsuario perfil, HttpServletRequest request) {
         String solicitante = request.getHeader("X-User-Name");
         String dueno = perfil.getUsuario().getApodo();
-        if (solicitante == null || !solicitante.equals(dueno)) {
+        if (solicitante == null || !solicitante.equalsIgnoreCase(dueno)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No puedes acceder al perfil de otro usuario.");
         }
     }
