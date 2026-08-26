@@ -25,9 +25,9 @@ public class ConsultarInventarioPaginado {
             throw new IllegalArgumentException("numeroPagina no puede ser negativo");
         }
 
-        Inventario inventario = repositorio.buscarPorPropietario(propietarioId)
-                .orElseGet(() -> Inventario.vacio(propietarioId));
-        List<ElementoInventario> todos = inventario.elementos();
+        List<ElementoInventario> todos = repositorio.buscarPorPropietario(propietarioId)
+                .map(Inventario::elementos)
+                .orElseGet(List::of);
         int totalElementos = todos.size();
         int totalPaginas = totalElementos == 0
                 ? 0

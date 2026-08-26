@@ -19,15 +19,17 @@ repositories {
 }
 
 dependencies {
-	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 	implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
-	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-data-mongodb-test'
 	testImplementation 'org.springframework.boot:spring-boot-testcontainers'
 	testImplementation platform('org.testcontainers:testcontainers-bom:1.21.4')
 	testImplementation 'org.testcontainers:junit-jupiter'
 	testImplementation 'org.testcontainers:mongodb'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+	// SCRUM-318: API REST de la vitrina y su prueba con MockMvc.
+	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 }
 
 jacocoTestReport {
