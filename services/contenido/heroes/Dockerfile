@@ -4,9 +4,9 @@ FROM eclipse-temurin:21-jdk AS construccion
 WORKDIR /app
 COPY gradlew build.gradle settings.gradle ./
 COPY gradle gradle
-RUN ./gradlew --no-daemon dependencies > /dev/null 2>&1 || true
+RUN sh gradlew --no-daemon dependencies > /dev/null 2>&1 || true
 COPY src src
-RUN ./gradlew --no-daemon bootJar
+RUN sh gradlew --no-daemon bootJar
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app

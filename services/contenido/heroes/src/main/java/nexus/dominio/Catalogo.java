@@ -11,7 +11,7 @@ import java.util.Locale;
  * del contenido: la administracion (crear/modificar productos tipo heroe)
  * pertenece al modulo de productos, seccion 7.2.
  */
-public class Catalogo {
+public class Catalogo implements CatalogoDeHeroes {
 
     private final List<Prototipo> prototipos = new ArrayList<>();
 
@@ -21,6 +21,7 @@ public class Catalogo {
         return catalogo;
     }
 
+    @Override
     public void registrar(Prototipo prototipo) {
         boolean yaExiste = prototipos.stream()
                 .anyMatch(p -> normalizar(p.nombre()).equals(normalizar(prototipo.nombre())));
@@ -31,10 +32,12 @@ public class Catalogo {
         prototipos.add(prototipo);
     }
 
+    @Override
     public List<Prototipo> listar() {
         return List.copyOf(prototipos);
     }
 
+    @Override
     public Prototipo fichaDe(String nombre) {
         return prototipos.stream()
                 .filter(p -> normalizar(p.nombre()).equals(normalizar(nombre)))

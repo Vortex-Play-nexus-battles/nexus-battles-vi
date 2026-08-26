@@ -1,0 +1,49 @@
+# CI del servicio de heroes (grupo Thomas / contenido).
+# Temporal: cubre solo services/contenido/heroes/** mientras el equipo de
+# plataforma publica los flujos reutilizables comprometidos en la seccion 14
+# de la pila. Cuando existan, este archivo se reemplaza por la plantilla comun.
+name: heroes-ci
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/contenido/heroes/**"
+      - ".github/workflows/heroes-ci.yml"
+  pull_request:
+    paths:
+      - "services/contenido/heroes/**"
+      - ".github/workflows/heroes-ci.yml"
+
+jobs:
+  pruebas:
+    name: Pruebas y compuerta de cobertura (80%)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/contenido/heroes
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - name: Pruebas unitarias e integracion (Testcontainers usa el Docker del runner)
+        run: |
+          chmod +x gradlew
+          ./gradlew test jacocoTestCoverageVerification --no-daemon --console=plain
+      - name: Publicar reporte de cobertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura-jacoco
+          path: services/contenido/heroes/build/reports/jacoco/test/html
+
+  imagen:
+    name: Construccion de la imagen Docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker build
+        run: docker build -t servicio-heroes services/contenido/heroes

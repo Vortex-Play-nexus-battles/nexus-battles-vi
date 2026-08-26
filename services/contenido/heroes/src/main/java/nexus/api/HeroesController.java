@@ -2,7 +2,7 @@ package nexus.api;
 
 import java.util.List;
 import nexus.dominio.Accion;
-import nexus.dominio.Catalogo;
+import nexus.dominio.CatalogoDeHeroes;
 import nexus.dominio.Estadisticas;
 import nexus.dominio.Prototipo;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,9 +19,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/heroes")
 public class HeroesController {
 
-    private final Catalogo catalogo;
+    private final CatalogoDeHeroes catalogo;
 
-    public HeroesController(Catalogo catalogo) {
+    public HeroesController(CatalogoDeHeroes catalogo) {
         this.catalogo = catalogo;
     }
 

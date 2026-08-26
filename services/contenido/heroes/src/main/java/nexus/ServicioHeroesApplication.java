@@ -13,12 +13,23 @@ public class ServicioHeroesApplication {
 	}
 
 	/**
-	 * Catalogo en memoria con los ocho prototipos iniciales. Cuando la plataforma
-	 * entregue MongoDB, este bean se sustituye por el repositorio documental sin
-	 * tocar el dominio ni el controlador.
+	 * Catalogo en memoria (perfil por defecto): sirve la demo sin infraestructura.
 	 */
 	@Bean
-	public Catalogo catalogo() {
+	@org.springframework.context.annotation.Profile("!mongo")
+	public nexus.dominio.CatalogoDeHeroes catalogoEnMemoria() {
 		return Catalogo.conPrototiposIniciales();
+	}
+
+	/**
+	 * Catalogo en MongoDB (perfil "mongo"): la persistencia no relacional que
+	 * exige la seccion 8. Se activa con SPRING_PROFILES_ACTIVE=mongo y la
+	 * cadena de conexion SPRING_DATA_MONGODB_URI cuando plataforma aprovisione.
+	 */
+	@Bean
+	@org.springframework.context.annotation.Profile("mongo")
+	public nexus.dominio.CatalogoDeHeroes catalogoEnMongo(
+			org.springframework.data.mongodb.core.MongoTemplate mongo) {
+		return new nexus.persistencia.CatalogoEnMongo(mongo);
 	}
 }
