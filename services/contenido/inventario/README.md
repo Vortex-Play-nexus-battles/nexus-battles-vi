@@ -42,6 +42,25 @@ La API REST, la identidad autenticada, la autorizacion por propietario y los
 casos de creacion y modificacion pertenecen a `SCRUM-327` y no se implementan
 en esta subtarea.
 
+Incluido en `SCRUM-318`:
+
+- consulta del inventario por propietario en paginas de 16 elementos;
+- metadatos `numero`, `tamanio`, `totalElementos`, `totalPaginas` y `ultima`;
+- respuesta vacia con HTTP 200 cuando el jugador aun no tiene productos;
+- rechazo con HTTP 400 de numeros de pagina negativos.
+
+### Consulta para la vitrina
+
+```http
+GET /api/v1/inventarios/{propietarioId}/elementos?pagina=0
+```
+
+El tamano de pagina es fijo porque HU-INV-001 exige 16 productos en la vista de
+referencia. El `propietarioId` es por ahora una entrada del caso de uso; la
+validacion contra la identidad autenticada se conectara cuando el grupo de
+plataforma publique el contrato de identidad (`HU-INF-009`). El endpoint no
+debe exponerse fuera del entorno interno sin esa integracion.
+
 ## Pruebas
 
 En Windows, con `JAVA_HOME` apuntando a un JDK 21:
