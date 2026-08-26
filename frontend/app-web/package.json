@@ -1,0 +1,14 @@
+{
+  "name": "nexus-battles-app-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Aplicacion web de THE NEXUS BATTLES VI. HTML, CSS y JavaScript plano, sin framework, segun la pila aprobada por el cliente el 2026-08-24.",
+  "scripts": {
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
+  },
+  "devDependencies": {
+    "jest": "^30.2.0",
+    "jest-environment-jsdom": "^30.2.0"
+  }
+}
