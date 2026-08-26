@@ -21,8 +21,10 @@ export default defineConfig({
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
   ],
   webServer: {
-    command: `npx http-server src/contenido/inventario -p ${PUERTO} -c-1 --silent`,
-    url: `http://127.0.0.1:${PUERTO}/index.html`,
+    // Se sirve `src` completo: la pagina importa modulos de otras carpetas
+    // hermanas (la barra de HU-INV-004 vive en `contenido/navegacion/`).
+    command: `npx http-server src -p ${PUERTO} -c-1 --silent`,
+    url: `http://127.0.0.1:${PUERTO}/contenido/inventario/index.html`,
     reuseExistingServer: true,
     timeout: 60000,
   },

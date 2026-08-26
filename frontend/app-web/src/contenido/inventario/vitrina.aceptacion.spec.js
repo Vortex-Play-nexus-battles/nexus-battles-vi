@@ -48,7 +48,8 @@ async function conInventarioDe(page, totalElementos) {
 }
 
 async function abrirVitrina(page) {
-  await page.goto(`/index.html?propietario=${PROPIETARIO}`);
+  await page.goto(
+    `/contenido/inventario/index.html?propietario=${PROPIETARIO}`);
   await page.waitForFunction(
     () => !document.querySelector('.estado-carga'));
 }

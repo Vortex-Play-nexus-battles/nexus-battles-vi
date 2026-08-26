@@ -5,8 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Vitrina del inventario</title>
   <link rel="stylesheet" href="./vitrina.css">
+  <link rel="stylesheet" href="../navegacion/barra-navegacion.css">
 </head>
 <body class="vitrina-pagina">
+  <div id="contenedor-barra"></div>
   <h1 class="vitrina-titulo">Mi inventario</h1>
   <div id="contenedor-vitrina"></div>
 
@@ -17,11 +19,15 @@
   -->
   <script type="module">
     import { montarVitrina } from './pagina-inventario.js';
+    import { construirBarra } from '../navegacion/barra-navegacion.js';
 
     const parametros = new URLSearchParams(location.search);
     const contenedor = document.getElementById('contenedor-vitrina');
     const propietarioId = parametros.get('propietario');
     const numeroPagina = Number(parametros.get('pagina') ?? 0);
+
+    document.getElementById('contenedor-barra')
+      .replaceChildren(construirBarra({ seccionActiva: 'inventario' }));
 
     montarVitrina(contenedor, propietarioId, numeroPagina);
   </script>
