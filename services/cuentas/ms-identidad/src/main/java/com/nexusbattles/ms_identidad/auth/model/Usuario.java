@@ -1,5 +1,7 @@
 package com.nexusbattles.ms_identidad.auth.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.nexusbattles.ms_identidad.rbac.model.RolEntity;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -13,42 +15,31 @@ public class Usuario {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @NotBlank(message = "El nombre es obligatorio")
-    private String nombres;
-
-    @NotBlank(message = "El apellido es obligatorio")
-    private String apellidos;
-
     @Email(message = "Debe ser un correo válido")
-    @Column(unique = true)
+    @Column(unique = true, nullable = false)
     private String email;
 
     @NotBlank
     @Size(min = 9, message = "La contraseña debe tener más de 8 caracteres")
+    @Column(nullable = false)
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String password;
 
     @NotBlank
-    @Column(unique = true)
+    @Column(unique = true, nullable = false)
     private String apodo;
 
-    private String avatar;
+    @ManyToOne(fetch = FetchType.EAGER, optional = false)
+    @JoinColumn(name = "rol_id", nullable = false)
+    private RolEntity rol;
 
-    private String rol = "Jugador"; // Por defecto según tu HU
+    @Column(nullable = false)
+    private String estado = "ACTIVO"; 
 
-    private String estado = "activo"; // Por defecto según tu HU
-
-    // Constructor vacío obligatorio para JPA
     public Usuario() {}
 
-    // Getters y Setters (puedes generarlos en IntelliJ con Alt + Insert -> Getter and Setter)
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
-
-    public String getNombres() { return nombres; }
-    public void setNombres(String nombres) { this.nombres = nombres; }
-
-    public String getApellidos() { return apellidos; }
-    public void setApellidos(String apellidos) { this.apellidos = apellidos; }
 
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
@@ -59,11 +50,8 @@ public class Usuario {
     public String getApodo() { return apodo; }
     public void setApodo(String apodo) { this.apodo = apodo; }
 
-    public String getAvatar() { return avatar; }
-    public void setAvatar(String avatar) { this.avatar = avatar; }
-
-    public String getRol() { return rol; }
-    public void setRol(String rol) { this.rol = rol; }
+    public RolEntity getRol() { return rol; }
+    public void setRol(RolEntity rol) { this.rol = rol; }
 
     public String getEstado() { return estado; }
     public void setEstado(String estado) { this.estado = estado; }
