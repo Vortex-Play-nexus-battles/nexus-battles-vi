@@ -1,0 +1,94 @@
+plugins {
+	id 'java'
+	id 'jacoco'
+	id 'org.springframework.boot' version '4.1.1'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+// Compuerta de calidad de la empresa: cobertura medida en cada corrida de pruebas.
+jacocoTestReport {
+	reports {
+		xml.required = true
+		html.required = true
+	}
+
+}
+tasks.named('test') {
+	finalizedBy jacocoTestReport
+}
+
+jacocoTestCoverageVerification {
+        dependsOn tasks.named('test')
+
+        violationRules {
+                rule {
+                        limit {
+                                counter = 'LINE'
+                                value = 'COVEREDRATIO'
+                                minimum = 0.80
+                        }
+                }
+        }
+}
+
+tasks.named('check') {
+        dependsOn jacocoTestCoverageVerification
+}
+
+group = 'nexus'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+        // API REST con Spring Web MVC.
+        implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+
+        // Validación de campos obligatorios, precios, tiraje y atributos.
+        implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+        // Persistencia documental de productos en MongoDB.
+        implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
+
+        // Validación de los tokens JWT emitidos por Keycloak.
+        implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
+
+		        // Puntos de salud y métricas requeridos por la plataforma.
+        implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+        // Exportación de métricas para Prometheus.
+        runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+
+        // Pruebas de controladores y endpoints REST.
+        testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+
+        // Pruebas de repositorios y persistencia MongoDB.
+        testImplementation 'org.springframework.boot:spring-boot-starter-data-mongodb-test'
+
+        // Pruebas de permisos con usuarios y tokens simulados.
+        testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
+
+        // Integración de Spring Boot con contenedores de prueba.
+        testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+
+        // MongoDB real y temporal para las pruebas de integración.
+        testImplementation 'org.testcontainers:testcontainers-mongodb'
+        testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+
+        // Pruebas de las interfaces REST.
+        testImplementation 'io.rest-assured:rest-assured:6.0.1'
+
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+        useJUnitPlatform()
+}
