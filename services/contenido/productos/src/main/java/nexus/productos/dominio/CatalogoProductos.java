@@ -2,7 +2,7 @@ package nexus.productos.dominio;
 
 import java.util.Objects;
 
-/** Casos de uso del tiraje disponible en el catálogo. */
+/** Casos de uso de tiraje, suspensión y reactivación del catálogo. */
 public final class CatalogoProductos {
 
     private final RepositorioDisponibilidadProductos repositorio;
@@ -24,6 +24,18 @@ public final class CatalogoProductos {
 
     public ResultadoAdquisicion adquirir(String productoId) {
         return repositorio.adquirirUnaUnidad(productoId);
+    }
+
+    public DisponibilidadProducto suspender(String productoId) {
+        DisponibilidadProducto suspendido = consultar(productoId).suspender();
+        repositorio.guardar(suspendido);
+        return suspendido;
+    }
+
+    public DisponibilidadProducto reactivar(String productoId) {
+        DisponibilidadProducto reactivado = consultar(productoId).reactivar();
+        repositorio.guardar(reactivado);
+        return reactivado;
     }
 
 }

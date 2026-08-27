@@ -3,7 +3,7 @@ package nexus.productos.dominio;
 import java.util.Objects;
 
 /**
- * Proyección del producto que gobierna su tiraje.
+ * Proyección del producto que gobierna su tiraje y su ciclo de disponibilidad.
  *
  * <p>Se mantiene separada del modelo completo de HU-PRD-001 para que pueda
  * integrarse con ese contrato sin duplicar nombre, precios ni atributos por
@@ -16,11 +16,13 @@ public final class DisponibilidadProducto {
     private final String productoId;
     private final int unidadesDisponibles;
     private final EstadoProducto estado;
+    private final EstadoProducto estadoAlReactivar;
 
     private DisponibilidadProducto(
             String productoId,
             int unidadesDisponibles,
-            EstadoProducto estado) {
+            EstadoProducto estado,
+            EstadoProducto estadoAlReactivar) {
         if (productoId == null || productoId.isBlank()) {
             throw new IllegalArgumentException("El identificador del producto es obligatorio");
         }
@@ -30,6 +32,9 @@ public final class DisponibilidadProducto {
         this.productoId = productoId;
         this.unidadesDisponibles = unidadesDisponibles;
         this.estado = Objects.requireNonNull(estado, "El estado del producto es obligatorio");
+        this.estadoAlReactivar = Objects.requireNonNull(
+                estadoAlReactivar,
+                "El estado de reactivación es obligatorio");
     }
 
     /** Registra el tiraje inicial exigido por HU-PRD-002. */
@@ -41,7 +46,10 @@ public final class DisponibilidadProducto {
             throw new IllegalArgumentException(
                     "El tiraje debe ser -1 o un número entero positivo");
         }
-        return new DisponibilidadProducto(productoId, tiraje, estadoInicial);
+        if (estadoInicial == EstadoProducto.SUSPENDIDO) {
+            throw new IllegalArgumentException("Un producto nuevo no puede iniciar suspendido");
+        }
+        return new DisponibilidadProducto(productoId, tiraje, estadoInicial, estadoInicial);
     }
 
     public String productoId() {
@@ -54,6 +62,10 @@ public final class DisponibilidadProducto {
 
     public EstadoProducto estado() {
         return estado;
+    }
+
+    public EstadoProducto estadoAlReactivar() {
+        return estadoAlReactivar;
     }
 
     public boolean esIlimitado() {
@@ -74,6 +86,29 @@ public final class DisponibilidadProducto {
         return new DisponibilidadProducto(
                 productoId,
                 unidadesDisponibles - 1,
+                estado,
+                estadoAlReactivar);
+    }
+
+    public DisponibilidadProducto suspender() {
+        if (estado == EstadoProducto.SUSPENDIDO) {
+            return this;
+        }
+        return new DisponibilidadProducto(
+                productoId,
+                unidadesDisponibles,
+                EstadoProducto.SUSPENDIDO,
                 estado);
+    }
+
+    public DisponibilidadProducto reactivar() {
+        if (estado != EstadoProducto.SUSPENDIDO) {
+            return this;
+        }
+        return new DisponibilidadProducto(
+                productoId,
+                unidadesDisponibles,
+                estadoAlReactivar,
+                estadoAlReactivar);
     }
 }
