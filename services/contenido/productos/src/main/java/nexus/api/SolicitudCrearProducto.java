@@ -1,6 +1,7 @@
 package nexus.api;
 
 import java.math.BigDecimal;
+import java.util.Set;
 
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.DecimalMax;
@@ -10,6 +11,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import nexus.dominio.TipoProducto;
+import jakarta.validation.constraints.Pattern;
 
 public record SolicitudCrearProducto(
 
@@ -37,6 +39,23 @@ public record SolicitudCrearProducto(
         @NotNull
         Boolean premium,
 
+        String prototipo,
+
+        @Pattern(
+                regexp = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+                message = "El identificador del héroe debe tener formato UUID")
+        String heroe,
+
+
+        @Positive
+        Integer costoPoder,
+
+        @DecimalMin(value = "0.0", inclusive = false)
+        BigDecimal multiplicadorNivel,
+
+        @PositiveOrZero
+        Integer turnosCarga,
+
         @Positive
         Integer poderDeAtaque,
 
@@ -44,7 +63,17 @@ public record SolicitudCrearProducto(
         @DecimalMax("100.0")
         BigDecimal tasaDeCaida) {
 
-                @AssertTrue(message = "El tiraje debe ser -1 o un entero mayor que cero")
+        private static final Set<String> PROTOTIPOS_VALIDOS = Set.of(
+                "Guerrero Tanque",
+                "Guerrero Armas",
+                "Mago Fuego",
+                "Mago Hielo",
+                "Pícaro Veneno",
+                "Pícaro Machete",
+                "Chamán",
+                "Médico");
+
+        @AssertTrue(message = "El tiraje debe ser -1 o un entero mayor que cero")
         public boolean isTirajeValido() {
                 return tiraje == null || tiraje == -1 || tiraje > 0;
         }
@@ -69,9 +98,18 @@ public record SolicitudCrearProducto(
                 }
 
                 return switch (tipo) {
-                        case ARMA -> poderDeAtaque != null && tasaDeCaida != null;
+                        case HEROE ->
+                                prototipo != null
+                                        && PROTOTIPOS_VALIDOS.contains(prototipo);
+                        case HABILIDAD ->
+                                heroe != null
+                                        && costoPoder != null
+                                        && multiplicadorNivel != null
+                                        && turnosCarga != null;
+                        case ARMA ->
+                                poderDeAtaque != null
+                                        && tasaDeCaida != null;
                         default -> true;
                 };
         }
-
 }

@@ -36,6 +36,35 @@ class ProductosApiTest {
                 }
                 """;
 
+        private static final String PRODUCTO_HEROE_VALIDO = """
+                {
+                  "nombre": "Heroe de prueba",
+                  "imagen": "productos/heroe-prueba.webp",
+                  "descripcion": "Heroe creado para verificar el contrato",
+                  "tipo": "HEROE",
+                  "tiraje": -1,
+                  "precioCreditos": 1000,
+                  "premium": false,
+                  "prototipo": "Guerrero Tanque"
+                }
+                """;
+
+        private static final String PRODUCTO_HABILIDAD_VALIDO = """
+                {
+                  "nombre": "Habilidad de prueba",
+                  "imagen": "productos/habilidad-prueba.webp",
+                  "descripcion": "Habilidad creada para verificar el contrato",
+                  "tipo": "HABILIDAD",
+                  "tiraje": 50,
+                  "precioCreditos": 800,
+                  "premium": false,
+                  "heroe": "550e8400-e29b-41d4-a716-446655440000",
+                  "costoPoder": 3,
+                  "multiplicadorNivel": 1.5,
+                  "turnosCarga": 2
+                }
+                """;
+
         @Autowired
         private MockMvc mvc;
         @MockitoBean
@@ -149,6 +178,98 @@ class ProductosApiTest {
                 publicarComo(
                         "ROLE_ADMINISTRADOR",
                         sinCampo(PRODUCTO_VALIDO, "tasaDeCaida"))
+                        .andExpect(status().isBadRequest());
+        }
+
+                @Test
+        @DisplayName("permite crear un heroe con prototipo valido")
+        void permiteCrearHeroeConPrototipoValido() throws Exception {
+                publicarComo("ROLE_ADMINISTRADOR", PRODUCTO_HEROE_VALIDO)
+                        .andExpect(status().isCreated());
+        }
+
+        @Test
+        @DisplayName("un heroe exige un prototipo")
+        void heroeExigePrototipo() throws Exception {
+                publicarComo(
+                        "ROLE_ADMINISTRADOR",
+                        sinCampo(PRODUCTO_HEROE_VALIDO, "prototipo"))
+                        .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("rechaza un prototipo de heroe no permitido")
+        void rechazaPrototipoNoPermitido() throws Exception {
+                String solicitud = PRODUCTO_HEROE_VALIDO.replace(
+                        "\"prototipo\": \"Guerrero Tanque\"",
+                        "\"prototipo\": \"Nigromante\"");
+
+                publicarComo("ROLE_ADMINISTRADOR", solicitud)
+                        .andExpect(status().isBadRequest());
+        }
+
+                @Test
+        @DisplayName("permite crear una habilidad con atributos validos")
+        void permiteCrearHabilidadValida() throws Exception {
+                publicarComo("ROLE_ADMINISTRADOR", PRODUCTO_HABILIDAD_VALIDO)
+                        .andExpect(status().isCreated());
+        }
+
+        @ParameterizedTest(name = "una habilidad exige el campo {0}")
+        @ValueSource(strings = {
+                "heroe",
+                "costoPoder",
+                "multiplicadorNivel",
+                "turnosCarga"
+        })
+        void habilidadExigeSusAtributos(String campo) throws Exception {
+                publicarComo(
+                        "ROLE_ADMINISTRADOR",
+                        sinCampo(PRODUCTO_HABILIDAD_VALIDO, campo))
+                        .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("una habilidad exige un identificador de heroe valido")
+        void habilidadRechazaHeroeSinUuid() throws Exception {
+                String solicitud = PRODUCTO_HABILIDAD_VALIDO.replace(
+                        "\"heroe\": \"550e8400-e29b-41d4-a716-446655440000\"",
+                        "\"heroe\": \"identificador-invalido\"");
+
+                publicarComo("ROLE_ADMINISTRADOR", solicitud)
+                        .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("una habilidad exige costo de poder mayor que cero")
+        void habilidadRechazaCostoPoderCero() throws Exception {
+                String solicitud = PRODUCTO_HABILIDAD_VALIDO.replace(
+                        "\"costoPoder\": 3",
+                        "\"costoPoder\": 0");
+
+                publicarComo("ROLE_ADMINISTRADOR", solicitud)
+                        .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("una habilidad exige multiplicador mayor que cero")
+        void habilidadRechazaMultiplicadorCero() throws Exception {
+                String solicitud = PRODUCTO_HABILIDAD_VALIDO.replace(
+                        "\"multiplicadorNivel\": 1.5",
+                        "\"multiplicadorNivel\": 0");
+
+                publicarComo("ROLE_ADMINISTRADOR", solicitud)
+                        .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("una habilidad no permite turnos de carga negativos")
+        void habilidadRechazaTurnosCargaNegativos() throws Exception {
+                String solicitud = PRODUCTO_HABILIDAD_VALIDO.replace(
+                        "\"turnosCarga\": 2",
+                        "\"turnosCarga\": -1");
+
+                publicarComo("ROLE_ADMINISTRADOR", solicitud)
                         .andExpect(status().isBadRequest());
         }
 
