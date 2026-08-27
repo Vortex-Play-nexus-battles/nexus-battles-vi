@@ -74,6 +74,21 @@ test.describe('Vitrina del inventario', () => {
       expect(await hayDesplazamientoHorizontal(page)).toBe(false);
     });
 
+  test('La vitrina se ve completa: los dieciseis caben en la pantalla de referencia',
+    async ({ page }) => {
+      await page.setViewportSize({ width: 1360, height: 768 });
+      await conInventarioDe(page, 40);
+      await abrirVitrina(page);
+
+      // "la vitrina se ve completa": nada de lo que la historia pide mostrar
+      // queda por debajo del pliegue, ni siquiera con la barra de HU-INV-004.
+      const desborda = await page.evaluate(() => {
+        const raiz = document.documentElement;
+        return raiz.scrollHeight > raiz.clientHeight;
+      });
+      expect(desborda).toBe(false);
+    });
+
   test('La vitrina no rellena huecos cuando hay menos de dieciseis productos',
     async ({ page }) => {
       await page.setViewportSize({ width: 1360, height: 768 });
