@@ -1,5 +1,6 @@
 plugins {
     id 'java'
+    id 'jacoco'
     id 'org.springframework.boot'
     id 'io.spring.dependency-management'
 }
@@ -17,4 +18,23 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}
+
+// HU-CICD-001: cobertura de pruebas centralizada aqui para que los 8
+// servicios de services/plataforma/* (y cualquiera que se sume despues a
+// settings.gradle) la hereden automaticamente, sin repetir configuracion
+// JaCoCo servicio por servicio.
+jacoco {
+    toolVersion = '0.8.12'
+}
+
+jacocoTestReport {
+    reports {
+        xml.required = true
+        html.required = true
+    }
+}
+
+tasks.named('test') {
+    finalizedBy jacocoTestReport
 }
