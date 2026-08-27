@@ -1,0 +1,10 @@
+rootProject.name = 'nexus-battles-vi'
+
+include 'services:plataforma:comentarios'
+include 'services:plataforma:correo'
+include 'services:plataforma:torneos'
+include 'services:plataforma:salas-partidas'
+include 'services:plataforma:notificaciones'
+include 'services:plataforma:moderacion-sanciones'
+include 'services:plataforma:metricas-plataforma'
+include 'services:plataforma:admin-parametros'

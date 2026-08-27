@@ -6,7 +6,6 @@ import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
 import com.nexusbattles.ms_identidad.auth.validation.ApodoBlacklistValidator;
 import com.nexusbattles.ms_identidad.auth.validation.PasswordPolicyValidator;
 import com.nexusbattles.ms_identidad.perfiles.service.PerfilUsuarioService;
-import com.nexusbattles.ms_identidad.rbac.model.RolEntity;
 import com.nexusbattles.ms_identidad.rbac.service.RolService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -58,7 +57,7 @@ public class RegistroService {
         Usuario usuarioGuardado = usuarioRepository.save(nuevoUsuario);
 
         perfilUsuarioService.crearPerfil(
-                usuarioGuardado, datos.getNombres(), datos.getApellidos(), datos.getAvatar()
+            usuarioGuardado, datos.getNombres(), datos.getApellidos(), datos.getAvatar()
         );
 
         // TODO [INTEGRACIÓN FUTURA]: Disparar la integración con el módulo de correo corporativo

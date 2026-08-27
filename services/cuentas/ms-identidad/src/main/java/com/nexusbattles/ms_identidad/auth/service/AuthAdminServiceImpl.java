@@ -86,7 +86,7 @@ public class AuthAdminServiceImpl implements AuthAdminService {
     public void actualizarEstadoCuenta(Long usuarioId, String nuevoEstado) {
         if (!ESTADOS_VALIDOS.contains(nuevoEstado)) {
             throw new IllegalArgumentException(
-                    "Estado inválido. Valores permitidos: " + ESTADOS_VALIDOS);
+                "Estado inválido. Valores permitidos: " + ESTADOS_VALIDOS);
         }
         Usuario usuario = buscarOFallar(usuarioId);
         usuario.setEstado(nuevoEstado);
@@ -107,7 +107,7 @@ public class AuthAdminServiceImpl implements AuthAdminService {
 
     private Usuario buscarOFallar(Long usuarioId) {
         return usuarioRepository.findById(usuarioId)
-                .orElseThrow(() -> new IllegalStateException("No existe el usuario " + usuarioId));
+            .orElseThrow(() -> new IllegalStateException("No existe el usuario " + usuarioId));
     }
 
     private String generarPasswordTemporal() {
