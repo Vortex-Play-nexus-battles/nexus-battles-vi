@@ -4,33 +4,44 @@ import com.nexusbattles.ms_identidad.admin.dto.CrearCuentaAdminRequest;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.service.AuthAdminService;
 import com.nexusbattles.ms_identidad.perfiles.service.PerfilUsuarioService;
-import com.nexusbattles.ms_identidad.rbac.model.Role;
+import com.nexusbattles.ms_identidad.rbac.model.RolEntity;
+import com.nexusbattles.ms_identidad.rbac.service.RolService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 @Service
 public class AdminCuentaService {
 
+    private static final List<String> ROLES_PERMITIDOS = List.of("MODERADOR", "ADMINISTRADOR");
+
     private final AuthAdminService authAdminService;
+    private final RolService rolService;
     private final PerfilUsuarioService perfilUsuarioService;
 
     public AdminCuentaService(AuthAdminService authAdminService,
+                              RolService rolService,
                               PerfilUsuarioService perfilUsuarioService) {
         this.authAdminService = authAdminService;
+        this.rolService = rolService;
         this.perfilUsuarioService = perfilUsuarioService;
     }
 
     @Transactional
     public Usuario crearCuentaAdministrativa(CrearCuentaAdminRequest datos) {
 
-        if (datos.getRol() != Role.MODERADOR && datos.getRol() != Role.ADMINISTRADOR) {
+        String rolSolicitado = datos.getRolNombre().toUpperCase();
+        if (!ROLES_PERMITIDOS.contains(rolSolicitado)) {
             throw new IllegalArgumentException(
                     "Solo se pueden crear cuentas con rol MODERADOR o ADMINISTRADOR desde este endpoint.");
         }
 
+        RolEntity rolEntity = rolService.obtenerRolPorNombre(rolSolicitado);
+
         Usuario usuarioCreado = authAdminService.crearCuentaConRol(
                 datos.getNombres(), datos.getApellidos(), datos.getEmail(),
-                datos.getApodo(), datos.getAvatar(), datos.getRol()
+                datos.getApodo(), datos.getAvatar(), rolEntity
         );
 
         perfilUsuarioService.crearPerfil(
@@ -42,10 +53,7 @@ public class AdminCuentaService {
         //    contraseña temporal. Confirmar si esto es lo deseado.
         // 2. estado queda "ACTIVA" (decisión dentro de crearCuentaConRol), pero el
         //    criterio de HU-USR-002 pide "inactivo hasta la primera autenticación".
-        //    Ni siquiera existe un estado "INACTIVO" válido en AuthAdminServiceImpl.
         //    Conflicto real entre el contrato compartido y el criterio de la HU.
-        // 3. PasswordPolicyValidator ya no se usa aquí — confirmar si sigue
-        //    siendo necesario en algún otro flujo.
 
         return usuarioCreado;
     }

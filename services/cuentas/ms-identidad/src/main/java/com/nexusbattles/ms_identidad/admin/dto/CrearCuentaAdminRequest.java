@@ -1,9 +1,7 @@
 package com.nexusbattles.ms_identidad.admin.dto;
 
-import com.nexusbattles.ms_identidad.rbac.model.Role;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 
 public class CrearCuentaAdminRequest {
 
@@ -25,8 +23,9 @@ public class CrearCuentaAdminRequest {
 
     private String avatar;
 
-    @NotNull
-    private Role rol;
+    // El frontend manda el nombre del rol como texto: "MODERADOR" o "ADMINISTRADOR"
+    @NotBlank
+    private String rolNombre;
 
     public String getNombres() { return nombres; }
     public void setNombres(String nombres) { this.nombres = nombres; }
@@ -40,6 +39,6 @@ public class CrearCuentaAdminRequest {
     public void setApodo(String apodo) { this.apodo = apodo; }
     public String getAvatar() { return avatar; }
     public void setAvatar(String avatar) { this.avatar = avatar; }
-    public Role getRol() { return rol; }
-    public void setRol(Role rol) { this.rol = rol; }
+    public String getRolNombre() { return rolNombre; }
+    public void setRolNombre(String rolNombre) { this.rolNombre = rolNombre; }
 }

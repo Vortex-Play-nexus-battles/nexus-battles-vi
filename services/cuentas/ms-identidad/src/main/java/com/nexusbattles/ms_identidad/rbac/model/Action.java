@@ -10,7 +10,8 @@ public enum Action {
     SUSPENDER_USUARIOS("Suspender usuarios"),
     BANEAR_DEFINITIVAMENTE("Banear definitivamente"),
     CREAR_ADMIN_MODERADOR("Crear cuentas Administrador/Moderador"),
-    GESTIONAR_PRODUCTOS("Gestionar productos de la tienda");
+    GESTIONAR_PRODUCTOS("Gestionar productos de la tienda"),
+    ASIGNAR_ROL("Asignar un rol a un usuario existente");
 
     private final String description;
 
