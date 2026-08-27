@@ -17,4 +17,16 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// Sin esta configuracion, Gradle ejecuta las pruebas con el motor de JUnit 4,
+// que no reconoce las anotaciones de JUnit 5 y no descubre ninguna prueba.
+// En Gradle 9 eso ya no es un aviso: rompe la compilacion con el mensaje
+// "the test task did not discover any tests to execute".
+//
+// Estaba declarado a mano en tres modulos de services/contenido y faltaba en
+// todos los demas. Al ponerlo aqui lo heredan los veinte.
+tasks.named('test') {
+    useJUnitPlatform()
 }

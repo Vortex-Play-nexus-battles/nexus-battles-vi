@@ -1,0 +1,54 @@
+# Normalizacion de finales de linea.
+#
+# El equipo trabaja en Windows y en Linux. Sin este archivo, un mismo archivo
+# editado en dos sistemas aparece como "todas las lineas cambiadas" en el diff
+# del pull request y la revision se vuelve imposible. Con esto, Git guarda
+# siempre LF en el repositorio y cada quien ve lo que le corresponde en su disco.
+
+* text=auto eol=lf
+
+# Texto explicito
+*.java      text
+*.gradle    text
+*.kts       text
+*.js        text
+*.mjs       text
+*.json      text
+*.html      text
+*.css       text
+*.md        text
+*.yml       text
+*.yaml      text
+*.xml       text
+*.sql       text
+*.properties text
+*.env.example text
+
+# Scripts que exigen un final de linea concreto
+*.sh        text eol=lf
+gradlew     text eol=lf
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+
+# Binarios: nunca se normalizan ni se muestran como diff de texto
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.webp      binary
+*.svg       text
+*.woff      binary
+*.woff2     binary
+*.ttf       binary
+*.pdf       binary
+*.docx      binary
+*.xlsx      binary
+*.pptx      binary
+*.zip       binary
+*.jar       binary
+
+# Clasificacion en las estadisticas de lenguaje de GitHub
+docs/**             linguist-documentation
+contracts/**        linguist-documentation
+infrastructure/**   linguist-vendored=false
