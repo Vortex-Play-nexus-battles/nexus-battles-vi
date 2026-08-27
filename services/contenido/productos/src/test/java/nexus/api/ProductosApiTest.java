@@ -1,5 +1,10 @@
 package nexus.api;
 
+import static org.hamcrest.Matchers.matchesPattern;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -17,6 +22,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import nexus.dominio.Producto;
+import nexus.persistencia.ProductoRepository;
+import org.junit.jupiter.api.BeforeEach;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -112,6 +120,17 @@ class ProductosApiTest {
         private MockMvc mvc;
         @MockitoBean
         private JwtDecoder jwtDecoder;
+
+        @MockitoBean
+        private ProductoRepository productoRepository;
+
+        @BeforeEach
+        void simularPersistencia() {
+                when(productoRepository.save(any(Producto.class)))
+                        .thenAnswer(invocacion ->
+                                invocacion.getArgument(0, Producto.class));
+        }
+
 
         @Test
         @DisplayName("rechaza la creacion cuando no se envia un token")
@@ -473,6 +492,31 @@ class ProductosApiTest {
 
                 publicarComo("ROLE_ADMINISTRADOR", solicitud)
                         .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("responde el producto creado y su ubicacion")
+        void respondeProductoCreado() throws Exception {
+                publicarComo("ROLE_ADMINISTRADOR", PRODUCTO_VALIDO)
+                        .andExpect(status().isCreated())
+                        .andExpect(header().string(
+                                "Location",
+                                matchesPattern(
+                                        "^/api/v1/productos/"
+                                                + "[0-9a-fA-F]{8}-"
+                                                + "[0-9a-fA-F]{4}-"
+                                                + "[0-9a-fA-F]{4}-"
+                                                + "[0-9a-fA-F]{4}-"
+                                                + "[0-9a-fA-F]{12}$")))
+                        .andExpect(jsonPath("$.id").isString())
+                        .andExpect(jsonPath("$.nombre").value("Arma de prueba"))
+                        .andExpect(jsonPath("$.tipo").value("ARMA"))
+                        .andExpect(jsonPath("$.prototipo").doesNotExist())
+                        .andExpect(jsonPath("$.heroe").doesNotExist())
+                        .andExpect(jsonPath("$.estado").value("ACTIVO"))
+                        .andExpect(jsonPath("$.version").value(1))
+                        .andExpect(jsonPath("$.creadoEn").exists())
+                        .andExpect(jsonPath("$.modificadoEn").exists());
         }
 
 
