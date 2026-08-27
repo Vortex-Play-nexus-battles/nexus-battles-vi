@@ -58,3 +58,9 @@ htmlcov/
 .nyc_output/
 test-results/
 *.lcov
+
+
+# --- Wrapper de Gradle: SI se versiona ---
+# La regla *.jar de arriba lo excluia por error, y sin este archivo el comando
+# ./gradlew falla en toda maquina recien clonada con "Unable to access jarfile".
+!gradle/wrapper/gradle-wrapper.jar
