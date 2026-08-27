@@ -10,6 +10,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
+import nexus.dominio.ParteArmadura;
 import nexus.dominio.TipoProducto;
 import jakarta.validation.constraints.Pattern;
 
@@ -55,6 +56,22 @@ public record SolicitudCrearProducto(
 
         @PositiveOrZero
         Integer turnosCarga,
+
+
+        @PositiveOrZero
+        Integer turnosRecarga,
+
+        String efectoGeneral,
+
+        String efectoPotenciado,
+
+        @Positive
+        Integer defensa,
+
+        ParteArmadura parte,
+
+        String efecto,
+
 
         @Positive
         Integer poderDeAtaque,
@@ -109,6 +126,21 @@ public record SolicitudCrearProducto(
                         case ARMA ->
                                 poderDeAtaque != null
                                         && tasaDeCaida != null;
+                        case ARMADURA ->
+                                defensa != null
+                                        && parte != null
+                                        && tasaDeCaida != null;
+                                                case ITEM ->
+                                efecto != null
+                                        && !efecto.isBlank()
+                                        && tasaDeCaida != null;
+                        case EPICA ->
+                                heroe != null
+                                        && turnosRecarga != null
+                                        && efectoGeneral != null
+                                        && !efectoGeneral.isBlank()
+                                        && efectoPotenciado != null
+                                        && !efectoPotenciado.isBlank();
                         default -> true;
                 };
         }

@@ -65,6 +65,49 @@ class ProductosApiTest {
                 }
                 """;
 
+        private static final String PRODUCTO_ARMADURA_VALIDO = """
+                {
+                  "nombre": "Armadura de prueba",
+                  "imagen": "productos/armadura-prueba.webp",
+                  "descripcion": "Armadura creada para verificar el contrato",
+                  "tipo": "ARMADURA",
+                  "tiraje": 75,
+                  "precioCreditos": 1200,
+                  "premium": false,
+                  "defensa": 30,
+                  "parte": "PECHO",
+                  "tasaDeCaida": 12.5
+                }
+                """;
+        private static final String PRODUCTO_ITEM_VALIDO = """
+                {
+                  "nombre": "Pocion de prueba",
+                  "imagen": "productos/pocion-prueba.webp",
+                  "descripcion": "Item creado para verificar el contrato",
+                  "tipo": "ITEM",
+                  "tiraje": 200,
+                  "precioCreditos": 250,
+                  "premium": false,
+                  "efecto": "Recupera 20 puntos de vida",
+                  "tasaDeCaida": 35.0
+                }
+                """;
+        private static final String PRODUCTO_EPICA_VALIDO = """
+                {
+                  "nombre": "Epica de prueba",
+                  "imagen": "productos/epica-prueba.webp",
+                  "descripcion": "Habilidad epica creada para verificar el contrato",
+                  "tipo": "EPICA",
+                  "tiraje": 25,
+                  "precioCreditos": 5000,
+                  "premium": false,
+                  "heroe": "550e8400-e29b-41d4-a716-446655440000",
+                  "turnosRecarga": 4,
+                  "efectoGeneral": "Aumenta el poder de todo el equipo",
+                  "efectoPotenciado": "Duplica el poder durante dos turnos"
+                }
+                """;
+
         @Autowired
         private MockMvc mvc;
         @MockitoBean
@@ -181,7 +224,7 @@ class ProductosApiTest {
                         .andExpect(status().isBadRequest());
         }
 
-                @Test
+        @Test
         @DisplayName("permite crear un heroe con prototipo valido")
         void permiteCrearHeroeConPrototipoValido() throws Exception {
                 publicarComo("ROLE_ADMINISTRADOR", PRODUCTO_HEROE_VALIDO)
@@ -208,7 +251,7 @@ class ProductosApiTest {
                         .andExpect(status().isBadRequest());
         }
 
-                @Test
+        @Test
         @DisplayName("permite crear una habilidad con atributos validos")
         void permiteCrearHabilidadValida() throws Exception {
                 publicarComo("ROLE_ADMINISTRADOR", PRODUCTO_HABILIDAD_VALIDO)
@@ -272,6 +315,166 @@ class ProductosApiTest {
                 publicarComo("ROLE_ADMINISTRADOR", solicitud)
                         .andExpect(status().isBadRequest());
         }
+
+                @Test
+        @DisplayName("permite crear una armadura con atributos validos")
+        void permiteCrearArmaduraValida() throws Exception {
+                publicarComo("ROLE_ADMINISTRADOR", PRODUCTO_ARMADURA_VALIDO)
+                        .andExpect(status().isCreated());
+        }
+
+        @ParameterizedTest(name = "una armadura exige el campo {0}")
+        @ValueSource(strings = {
+                "defensa",
+                "parte",
+                "tasaDeCaida"
+        })
+        void armaduraExigeSusAtributos(String campo) throws Exception {
+                publicarComo(
+                        "ROLE_ADMINISTRADOR",
+                        sinCampo(PRODUCTO_ARMADURA_VALIDO, campo))
+                        .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("una armadura exige defensa mayor que cero")
+        void armaduraRechazaDefensaCero() throws Exception {
+                String solicitud = PRODUCTO_ARMADURA_VALIDO.replace(
+                        "\"defensa\": 30",
+                        "\"defensa\": 0");
+
+                publicarComo("ROLE_ADMINISTRADOR", solicitud)
+                        .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("una armadura rechaza una parte no permitida")
+        void armaduraRechazaParteNoPermitida() throws Exception {
+                String solicitud = PRODUCTO_ARMADURA_VALIDO.replace(
+                        "\"parte\": \"PECHO\"",
+                        "\"parte\": \"CAPA\"");
+
+                publicarComo("ROLE_ADMINISTRADOR", solicitud)
+                        .andExpect(status().isBadRequest());
+        }
+
+        @ParameterizedTest(name = "una armadura rechaza la tasa de caida {0}")
+        @ValueSource(strings = {"-0.1", "100.1"})
+        void armaduraRechazaTasaFueraDeRango(String tasa) throws Exception {
+                String solicitud = PRODUCTO_ARMADURA_VALIDO.replace(
+                        "\"tasaDeCaida\": 12.5",
+                        "\"tasaDeCaida\": " + tasa);
+
+                publicarComo("ROLE_ADMINISTRADOR", solicitud)
+                        .andExpect(status().isBadRequest());
+        }
+
+                @Test
+        @DisplayName("permite crear un item con atributos validos")
+        void permiteCrearItemValido() throws Exception {
+                publicarComo("ROLE_ADMINISTRADOR", PRODUCTO_ITEM_VALIDO)
+                        .andExpect(status().isCreated());
+        }
+
+        @ParameterizedTest(name = "un item exige el campo {0}")
+        @ValueSource(strings = {
+                "efecto",
+                "tasaDeCaida"
+        })
+        void itemExigeSusAtributos(String campo) throws Exception {
+                publicarComo(
+                        "ROLE_ADMINISTRADOR",
+                        sinCampo(PRODUCTO_ITEM_VALIDO, campo))
+                        .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("un item rechaza un efecto vacio")
+        void itemRechazaEfectoVacio() throws Exception {
+                String solicitud = PRODUCTO_ITEM_VALIDO.replace(
+                        "\"efecto\": \"Recupera 20 puntos de vida\"",
+                        "\"efecto\": \"   \"");
+
+                publicarComo("ROLE_ADMINISTRADOR", solicitud)
+                        .andExpect(status().isBadRequest());
+        }
+
+        @ParameterizedTest(name = "un item rechaza la tasa de caida {0}")
+        @ValueSource(strings = {"-0.1", "100.1"})
+        void itemRechazaTasaFueraDeRango(String tasa) throws Exception {
+                String solicitud = PRODUCTO_ITEM_VALIDO.replace(
+                        "\"tasaDeCaida\": 35.0",
+                        "\"tasaDeCaida\": " + tasa);
+
+                publicarComo("ROLE_ADMINISTRADOR", solicitud)
+                        .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("permite crear una epica con atributos validos")
+        void permiteCrearEpicaValida() throws Exception {
+                publicarComo("ROLE_ADMINISTRADOR", PRODUCTO_EPICA_VALIDO)
+                        .andExpect(status().isCreated());
+        }
+
+        @ParameterizedTest(name = "una epica exige el campo {0}")
+        @ValueSource(strings = {
+                "heroe",
+                "turnosRecarga",
+                "efectoGeneral",
+                "efectoPotenciado"
+        })
+        void epicaExigeSusAtributos(String campo) throws Exception {
+                publicarComo(
+                        "ROLE_ADMINISTRADOR",
+                        sinCampo(PRODUCTO_EPICA_VALIDO, campo))
+                        .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("una epica exige un identificador de heroe valido")
+        void epicaRechazaHeroeSinUuid() throws Exception {
+                String solicitud = PRODUCTO_EPICA_VALIDO.replace(
+                        "\"heroe\": \"550e8400-e29b-41d4-a716-446655440000\"",
+                        "\"heroe\": \"identificador-invalido\"");
+
+                publicarComo("ROLE_ADMINISTRADOR", solicitud)
+                        .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("una epica no permite turnos de recarga negativos")
+        void epicaRechazaTurnosRecargaNegativos() throws Exception {
+                String solicitud = PRODUCTO_EPICA_VALIDO.replace(
+                        "\"turnosRecarga\": 4",
+                        "\"turnosRecarga\": -1");
+
+                publicarComo("ROLE_ADMINISTRADOR", solicitud)
+                        .andExpect(status().isBadRequest());
+        }
+
+        @ParameterizedTest(name = "una epica rechaza el campo vacio {0}")
+        @ValueSource(strings = {
+                "efectoGeneral",
+                "efectoPotenciado"
+        })
+        void epicaRechazaEfectosVacios(String campo) throws Exception {
+                String solicitud;
+
+                if (campo.equals("efectoGeneral")) {
+                        solicitud = PRODUCTO_EPICA_VALIDO.replace(
+                                "\"efectoGeneral\": \"Aumenta el poder de todo el equipo\"",
+                                "\"efectoGeneral\": \"   \"");
+                } else {
+                        solicitud = PRODUCTO_EPICA_VALIDO.replace(
+                                "\"efectoPotenciado\": \"Duplica el poder durante dos turnos\"",
+                                "\"efectoPotenciado\": \"   \"");
+                }
+
+                publicarComo("ROLE_ADMINISTRADOR", solicitud)
+                        .andExpect(status().isBadRequest());
+        }
+
 
         private ResultActions publicarComo(String autoridad, String cuerpo) throws Exception {
                 return mvc.perform(post("/api/v1/productos")
