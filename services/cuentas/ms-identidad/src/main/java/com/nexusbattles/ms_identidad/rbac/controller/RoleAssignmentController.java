@@ -1,7 +1,8 @@
 package com.nexusbattles.ms_identidad.rbac.controller;
 
-import com.nexusbattles.ms_identidad.auth.model.Usuario;
-import com.nexusbattles.ms_identidad.rbac.dto.ChangeRoleRequest;
+import com.nexusbattles.ms_identidad.rbac.dto.AsignarRolRequest;
+import com.nexusbattles.ms_identidad.rbac.model.Action;
+import com.nexusbattles.ms_identidad.rbac.security.RequirePermission;
 import com.nexusbattles.ms_identidad.rbac.service.RoleAssignmentService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -10,8 +11,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/v1/rbac/users")
-@CrossOrigin(origins = "*")
+@RequestMapping("/api/v1/rbac/usuarios")
 public class RoleAssignmentController {
 
     private final RoleAssignmentService roleAssignmentService;
@@ -20,32 +20,19 @@ public class RoleAssignmentController {
         this.roleAssignmentService = roleAssignmentService;
     }
 
-    @PutMapping("/{idUsuario}/role")
-    public ResponseEntity<?> cambiarRol(
-            @PathVariable Long idUsuario,
-            @Valid @RequestBody ChangeRoleRequest request) {
+    @PutMapping("/{usuarioId}/rol")
+    @RequirePermission(Action.ASIGNAR_ROL)
+    public ResponseEntity<?> asignarRol(
+            @PathVariable Long usuarioId,
+            @Valid @RequestBody AsignarRolRequest datos) {
 
-        try {
-            Usuario usuarioActualizado = roleAssignmentService.cambiarRol(
-                    request.getIdSolicitante(),
-                    idUsuario,
-                    request.getNuevoRol()
-            );
+        roleAssignmentService.asignarRol(
+                usuarioId,
+                datos.getNuevoRol()
+        );
 
-            return ResponseEntity.ok(
-                    Map.of(
-                            "mensaje", "Rol actualizado correctamente",
-                            "usuarioId", usuarioActualizado.getId(),
-                            "nuevoRol", usuarioActualizado.getRol()
-                    )
-            );
-
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(
-                    Map.of(
-                            "error", e.getMessage()
-                    )
-            );
-        }
+        return ResponseEntity.ok(
+                Map.of("mensaje", "Rol actualizado correctamente")
+        );
     }
 }

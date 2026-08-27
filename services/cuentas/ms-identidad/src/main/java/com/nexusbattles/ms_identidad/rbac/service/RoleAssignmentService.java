@@ -1,75 +1,41 @@
 package com.nexusbattles.ms_identidad.rbac.service;
 
-import com.nexusbattles.ms_identidad.auth.model.Usuario;
-import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
+import com.nexusbattles.ms_identidad.auth.service.AuthAdminService;
 import com.nexusbattles.ms_identidad.rbac.model.Role;
 import org.springframework.stereotype.Service;
 
 @Service
 public class RoleAssignmentService {
 
-    private final UsuarioRepository usuarioRepository;
+    private final AuthAdminService authAdminService;
 
-    public RoleAssignmentService(UsuarioRepository usuarioRepository) {
-        this.usuarioRepository = usuarioRepository;
+    public RoleAssignmentService(AuthAdminService authAdminService) {
+        this.authAdminService = authAdminService;
     }
 
-    public Usuario cambiarRol(
-            Long idSolicitante,
-            Long idUsuarioObjetivo,
-            Role nuevoRol) {
+    public void asignarRol(Long usuarioId, Role nuevoRol) {
 
-        Usuario solicitante = usuarioRepository.findById(idSolicitante)
-                .orElseThrow(() ->
-                        new RuntimeException("El usuario solicitante no existe."));
+        Role rolActual = authAdminService.obtenerRolDeUsuario(usuarioId);
 
-        Usuario usuarioObjetivo = usuarioRepository.findById(idUsuarioObjetivo)
-                .orElseThrow(() ->
-                        new RuntimeException("El usuario objetivo no existe."));
+        // Regla: no dejar el sistema sin ningún Super Administrador.
+        if (rolActual == Role.SUPER_ADMINISTRADOR
+                && nuevoRol != Role.SUPER_ADMINISTRADOR) {
 
-        // Solo un Super Administrador puede modificar roles.
-        if (!Role.SUPER_ADMINISTRADOR.getDisplayName()
-                .equals(solicitante.getRol())) {
+            long totalSuperAdministradores =
+                    authAdminService.contarPorRol(Role.SUPER_ADMINISTRADOR);
 
-            throw new RuntimeException(
-                    "Solo un Super Administrador puede modificar roles.");
+            if (totalSuperAdministradores <= 1) {
+                throw new IllegalStateException(
+                        "No se puede quitar el rol Super Administrador: es el único que queda en el sistema.");
+            }
         }
 
-        boolean objetivoEsSuperAdministrador =
-                Role.SUPER_ADMINISTRADOR.getDisplayName()
-                        .equals(usuarioObjetivo.getRol());
+        authAdminService.actualizarRol(usuarioId, nuevoRol);
 
-        boolean dejaraDeSerSuperAdministrador =
-                nuevoRol != Role.SUPER_ADMINISTRADOR;
+        // TODO [INTEGRACIÓN FUTURA - HU-AUT-004]:
+        // Invalidar las sesiones activas de la cuenta afectada.
 
-        long cantidadSuperAdministradores =
-                usuarioRepository.countByRol(
-                        Role.SUPER_ADMINISTRADOR.getDisplayName());
-
-        // Impide dejar el sistema sin ningún Super Administrador.
-        if (objetivoEsSuperAdministrador
-                && dejaraDeSerSuperAdministrador
-                && cantidadSuperAdministradores <= 1) {
-
-            throw new RuntimeException(
-                    "No se puede modificar el rol del último Super Administrador.");
-        }
-
-        String rolAnterior = usuarioObjetivo.getRol();
-
-        usuarioObjetivo.setRol(nuevoRol.getDisplayName());
-
-        Usuario usuarioActualizado =
-                usuarioRepository.save(usuarioObjetivo);
-
-        // TODO HU-RBAC-003:
-        // Invalidar las sesiones activas del usuario afectado
-        // cuando el módulo de sesiones esté disponible.
-
-        // TODO HU-RBAC-003:
-        // Registrar en auditoría el solicitante, usuario afectado,
-        // rol anterior y rol nuevo cuando el módulo esté disponible.
-
-        return usuarioActualizado;
+        // TODO [INTEGRACIÓN FUTURA - HU-AUD-001]:
+        // Registrar el cambio de rol con valor anterior y nuevo.
     }
 }

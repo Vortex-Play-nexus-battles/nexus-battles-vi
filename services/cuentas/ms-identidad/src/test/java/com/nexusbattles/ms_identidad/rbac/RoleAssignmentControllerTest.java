@@ -1,78 +1,95 @@
 package com.nexusbattles.ms_identidad.rbac;
 
-import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.rbac.controller.RoleAssignmentController;
-import com.nexusbattles.ms_identidad.rbac.dto.ChangeRoleRequest;
-import com.nexusbattles.ms_identidad.rbac.model.Role;
+import com.nexusbattles.ms_identidad.rbac.repository.RbacMatrixRepository;
+import com.nexusbattles.ms_identidad.rbac.security.SecurityInterceptor;
+import com.nexusbattles.ms_identidad.rbac.service.RbacAuthorizationService;
 import com.nexusbattles.ms_identidad.rbac.service.RoleAssignmentService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
-import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class RoleAssignmentControllerTest {
 
     @Mock
     private RoleAssignmentService roleAssignmentService;
 
-    private RoleAssignmentController controller;
+    private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        controller = new RoleAssignmentController(roleAssignmentService);
+
+        RbacMatrixRepository repository =
+                new RbacMatrixRepository();
+
+        RbacAuthorizationService authorizationService =
+                new RbacAuthorizationService(repository);
+
+        SecurityInterceptor interceptor =
+                new SecurityInterceptor(authorizationService);
+
+        RoleAssignmentController controller =
+                new RoleAssignmentController(roleAssignmentService);
+
+        mockMvc = MockMvcBuilders
+                .standaloneSetup(controller)
+                .addInterceptors(interceptor)
+                .build();
     }
 
     @Test
-    void debeRetornarOkCuandoCambioDeRolEsExitoso() {
+    void debeRechazarAsignacionCuandoSolicitanteNoEsSuperAdministrador()
+            throws Exception {
 
-        ChangeRoleRequest request = new ChangeRoleRequest();
-        request.setIdSolicitante(1L);
-        request.setNuevoRol(Role.MODERADOR);
+        mockMvc.perform(
+                        put("/api/v1/rbac/usuarios/2/rol")
+                                .header("X-User-Name", "admin_sin_permiso")
+                                .header("X-User-Role", "ADMINISTRADOR")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                        {
+                                          "nuevoRol": "MODERADOR"
+                                        }
+                                        """)
+                )
+                .andExpect(status().isForbidden());
 
-        Usuario usuario = new Usuario();
-        usuario.setId(2L);
-        usuario.setRol(Role.MODERADOR.getDisplayName());
-
-        when(roleAssignmentService.cambiarRol(
-                1L,
-                2L,
-                Role.MODERADOR))
-                .thenReturn(usuario);
-
-        ResponseEntity<?> response =
-                controller.cambiarRol(2L, request);
-
-        assertEquals(200, response.getStatusCode().value());
-
-        verify(roleAssignmentService)
-                .cambiarRol(1L, 2L, Role.MODERADOR);
+        verify(roleAssignmentService, never())
+                .asignarRol(anyLong(), any());
     }
 
     @Test
-    void debeRetornarBadRequestCuandoCambioEsRechazado() {
+    void debePermitirAsignacionCuandoSolicitanteEsSuperAdministrador()
+            throws Exception {
 
-        ChangeRoleRequest request = new ChangeRoleRequest();
-        request.setIdSolicitante(3L);
-        request.setNuevoRol(Role.MODERADOR);
-
-        when(roleAssignmentService.cambiarRol(
-                3L,
-                2L,
-                Role.MODERADOR))
-                .thenThrow(new RuntimeException(
-                        "Solo un Super Administrador puede modificar roles."));
-
-        ResponseEntity<?> response =
-                controller.cambiarRol(2L, request);
-
-        assertEquals(400, response.getStatusCode().value());
+        mockMvc.perform(
+                        put("/api/v1/rbac/usuarios/2/rol")
+                                .header("X-User-Name", "super_admin")
+                                .header("X-User-Role", "SUPER_ADMINISTRADOR")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                        {
+                                          "nuevoRol": "MODERADOR"
+                                        }
+                                        """)
+                )
+                .andExpect(status().isOk())
+                .andExpect(
+                        jsonPath("$.mensaje")
+                                .value("Rol actualizado correctamente")
+                );
 
         verify(roleAssignmentService)
-                .cambiarRol(3L, 2L, Role.MODERADOR);
+                .asignarRol(2L, com.nexusbattles.ms_identidad.rbac.model.Role.MODERADOR);
     }
 }
