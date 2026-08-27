@@ -14,7 +14,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class RbacMatrix40CombinationsTest {
+public class RbacMatrix44CombinationsTest {
 
     private RbacAuthorizationService rbacService;
 
@@ -25,8 +25,8 @@ public class RbacMatrix40CombinationsTest {
     }
 
     @Test
-    @DisplayName("Verificar exactamente las 40 combinaciones de la Tabla 24 (4 Roles x 10 Acciones)")
-    void testAll40CombinationsExactMatch() {
+    @DisplayName("Verificar exactamente las 44 combinaciones de la Tabla (4 Roles x 11 Acciones)")
+    void testAll44CombinationsExactMatch() {
         Map<Role, Map<Action, PermissionType>> expected = new EnumMap<>(Role.class);
         for (Role r : Role.values()) {
             expected.put(r, new EnumMap<>(Action.class));
@@ -43,6 +43,7 @@ public class RbacMatrix40CombinationsTest {
         expected.get(Role.JUGADOR).put(Action.BANEAR_DEFINITIVAMENTE, PermissionType.DENIED);
         expected.get(Role.JUGADOR).put(Action.CREAR_ADMIN_MODERADOR, PermissionType.DENIED);
         expected.get(Role.JUGADOR).put(Action.GESTIONAR_PRODUCTOS, PermissionType.DENIED);
+        expected.get(Role.JUGADOR).put(Action.ASIGNAR_ROL, PermissionType.DENIED);
 
         // --- 2. MODERADOR ---
         expected.get(Role.MODERADOR).put(Action.CREAR_CUENTA_JUGADOR, PermissionType.DENIED);
@@ -55,6 +56,7 @@ public class RbacMatrix40CombinationsTest {
         expected.get(Role.MODERADOR).put(Action.BANEAR_DEFINITIVAMENTE, PermissionType.DENIED);
         expected.get(Role.MODERADOR).put(Action.CREAR_ADMIN_MODERADOR, PermissionType.DENIED);
         expected.get(Role.MODERADOR).put(Action.GESTIONAR_PRODUCTOS, PermissionType.DENIED);
+        expected.get(Role.MODERADOR).put(Action.ASIGNAR_ROL, PermissionType.DENIED);
 
         // --- 3. ADMINISTRADOR ---
         expected.get(Role.ADMINISTRADOR).put(Action.CREAR_CUENTA_JUGADOR, PermissionType.DENIED);
@@ -67,6 +69,7 @@ public class RbacMatrix40CombinationsTest {
         expected.get(Role.ADMINISTRADOR).put(Action.BANEAR_DEFINITIVAMENTE, PermissionType.GRANTED);
         expected.get(Role.ADMINISTRADOR).put(Action.CREAR_ADMIN_MODERADOR, PermissionType.DENIED);
         expected.get(Role.ADMINISTRADOR).put(Action.GESTIONAR_PRODUCTOS, PermissionType.GRANTED);
+        expected.get(Role.ADMINISTRADOR).put(Action.ASIGNAR_ROL, PermissionType.DENIED);
 
         // --- 4. SUPER_ADMINISTRADOR ---
         expected.get(Role.SUPER_ADMINISTRADOR).put(Action.CREAR_CUENTA_JUGADOR, PermissionType.DENIED);
@@ -79,6 +82,7 @@ public class RbacMatrix40CombinationsTest {
         expected.get(Role.SUPER_ADMINISTRADOR).put(Action.BANEAR_DEFINITIVAMENTE, PermissionType.GRANTED);
         expected.get(Role.SUPER_ADMINISTRADOR).put(Action.CREAR_ADMIN_MODERADOR, PermissionType.GRANTED);
         expected.get(Role.SUPER_ADMINISTRADOR).put(Action.GESTIONAR_PRODUCTOS, PermissionType.GRANTED);
+        expected.get(Role.SUPER_ADMINISTRADOR).put(Action.ASIGNAR_ROL, PermissionType.GRANTED);
 
         int count = 0;
         for (Role role : Role.values()) {
@@ -89,7 +93,7 @@ public class RbacMatrix40CombinationsTest {
                 count++;
             }
         }
-        assertEquals(40, count, "Deben haberse evaluado exactamente 40 combinaciones");
+        assertEquals(44, count, "Deben haberse evaluado exactamente 44 combinaciones");
     }
 
     @Test

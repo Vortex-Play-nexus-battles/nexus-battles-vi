@@ -6,6 +6,7 @@ import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
 import com.nexusbattles.ms_identidad.auth.validation.ApodoBlacklistValidator;
 import com.nexusbattles.ms_identidad.perfiles.service.PerfilUsuarioService;
 import com.nexusbattles.ms_identidad.rbac.model.Role;
+import com.nexusbattles.ms_identidad.rbac.service.RolService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,9 @@ public class RegistroService {
 
     @Autowired
     private PerfilUsuarioService perfilUsuarioService;
+
+    @Autowired
+    private RolService rolService;
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -50,7 +54,7 @@ public class RegistroService {
         nuevoUsuario.setEmail(datos.getEmail());
         nuevoUsuario.setPassword(passwordEncoder.encode(datos.getPassword()));
         nuevoUsuario.setEstado("ACTIVO");
-        nuevoUsuario.setRol(Role.JUGADOR);
+        nuevoUsuario.setRol(rolService.obtenerRolPorNombre(Role.JUGADOR.name()));
 
         // 6. Guardar el usuario en la base de datos
         Usuario usuarioGuardado = usuarioRepository.save(nuevoUsuario);
