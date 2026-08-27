@@ -4,6 +4,7 @@ import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
 import com.nexusbattles.ms_identidad.auth.validation.ApodoBlacklistValidator;
 import com.nexusbattles.ms_identidad.rbac.model.Role;
+import com.nexusbattles.ms_identidad.rbac.service.RolService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -15,32 +16,35 @@ public class AuthAdminServiceImpl implements AuthAdminService {
 
     private final UsuarioRepository usuarioRepository;
     private final ApodoBlacklistValidator apodoBlacklistValidator;
+    private final RolService rolService;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     private static final List<String> ESTADOS_VALIDOS = List.of("ACTIVA", "SUSPENDIDA", "BANEADA");
 
     public AuthAdminServiceImpl(UsuarioRepository usuarioRepository,
-                                ApodoBlacklistValidator apodoBlacklistValidator) {
+                                ApodoBlacklistValidator apodoBlacklistValidator,
+                                RolService rolService) {
         this.usuarioRepository = usuarioRepository;
         this.apodoBlacklistValidator = apodoBlacklistValidator;
+        this.rolService = rolService;
     }
 
     // ---------- Para Edwin (HU-RBAC-003) ----------
 
     @Override
     public Role obtenerRolDeUsuario(Long usuarioId) {
-        return buscarOFallar(usuarioId).getRol();
+        return Role.valueOf(buscarOFallar(usuarioId).getRol().getNombre());
     }
 
     @Override
     public long contarPorRol(Role rol) {
-        return usuarioRepository.countByRol(rol);
+        return usuarioRepository.countByRol(rolService.obtenerRolPorNombre(rol.name()));
     }
 
     @Override
     public void actualizarRol(Long usuarioId, Role nuevoRol) {
         Usuario usuario = buscarOFallar(usuarioId);
-        usuario.setRol(nuevoRol);
+        usuario.setRol(rolService.obtenerRolPorNombre(nuevoRol.name()));
         usuarioRepository.save(usuario);
     }
 
@@ -61,8 +65,8 @@ public class AuthAdminServiceImpl implements AuthAdminService {
         Usuario nuevoUsuario = new Usuario();
         nuevoUsuario.setApodo(apodo);
         nuevoUsuario.setEmail(email);
-        nuevoUsuario.setEstado("ACTIVA");
-        nuevoUsuario.setRol(rol);
+        nuevoUsuario.setEstado("INACTIVO");
+        nuevoUsuario.setRol(rolService.obtenerRolPorNombre(rol.name()));
 
         String passwordTemporal = generarPasswordTemporal();
         nuevoUsuario.setPassword(passwordEncoder.encode(passwordTemporal));
