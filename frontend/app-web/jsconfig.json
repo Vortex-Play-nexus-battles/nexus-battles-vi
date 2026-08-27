@@ -1,0 +1,25 @@
+{
+  // Verificacion de tipos sobre JavaScript plano.
+  //
+  // El proyecto no usa TypeScript ni ningun paso de compilacion: el navegador
+  // carga los .js tal cual. Pero VS Code puede revisar tipos igualmente a partir
+  // de este archivo y de los comentarios JSDoc. Detecta llamadas con el numero
+  // equivocado de argumentos, propiedades mal escritas y variables inexistentes.
+  //
+  // "strict" esta desactivado a proposito: con 18 personas empezando, activarlo
+  // de golpe llena el editor de avisos y la gente los ignora. Se sube cuando el
+  // equipo tenga rodaje.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "checkJs": true,
+    "strict": false,
+    "noEmit": true,
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/**/*.js"],
+  "exclude": ["node_modules", "**/node_modules/*"]
+}
