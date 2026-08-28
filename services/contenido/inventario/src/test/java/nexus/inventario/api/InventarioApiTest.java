@@ -1,11 +1,13 @@
 package nexus.inventario.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import nexus.inventario.aplicacion.ConsultarInventarioPaginado;
 import nexus.inventario.aplicacion.GestionarInventario;
 import nexus.inventario.aplicacion.RepositorioInventariosEnMemoria;
 import nexus.inventario.dominio.ElementoInventario;
@@ -27,7 +29,9 @@ class InventarioApiTest {
     void preparar() {
         repositorio = new RepositorioInventariosEnMemoria();
         gestion = new GestionarInventario(repositorio);
-        mvc = MockMvcBuilders.standaloneSetup(new InventarioController(gestion))
+        mvc = MockMvcBuilders.standaloneSetup(
+                        new InventarioController(
+                                gestion, new ConsultarInventarioPaginado(repositorio)))
                 .setControllerAdvice(new ManejadorDeErrores())
                 .build();
     }
@@ -143,5 +147,49 @@ class InventarioApiTest {
                 .orElseThrow().elemento(creado.id());
         assertEquals("Amuleto original", persistido.nombrePropio());
         assertEquals("producto-1", persistido.productoId());
+    }
+
+    @Test
+    @DisplayName("GET entrega la vitrina en paginas de dieciseis del inventario propio")
+    void consultarPaginaDeLaVitrina() throws Exception {
+        for (int i = 0; i < 20; i++) {
+            gestion.crear("jugador-A", "producto-" + i,
+                    TipoElementoInventario.ARMA, "Espada " + i);
+        }
+
+        mvc.perform(get("/api/v1/inventario/elementos")
+                        .header("X-User-Name", "jugador-A")
+                        .param("pagina", "0"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.elementos.length()").value(16))
+                .andExpect(jsonPath("$.totalElementos").value(20))
+                .andExpect(jsonPath("$.totalPaginas").value(2))
+                .andExpect(jsonPath("$.ultima").value(false));
+    }
+
+    @Test
+    @DisplayName("GET de un jugador sin inventario responde 200 con la pagina vacia")
+    void consultarSinInventario() throws Exception {
+        mvc.perform(get("/api/v1/inventario/elementos")
+                        .header("X-User-Name", "jugador-nuevo"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.elementos.length()").value(0))
+                .andExpect(jsonPath("$.totalElementos").value(0));
+    }
+
+    @Test
+    @DisplayName("GET sin identidad no expone ningun inventario")
+    void consultarSinIdentidad() throws Exception {
+        mvc.perform(get("/api/v1/inventario/elementos"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("GET con una pagina negativa es una solicitud invalida")
+    void consultarPaginaNegativa() throws Exception {
+        mvc.perform(get("/api/v1/inventario/elementos")
+                        .header("X-User-Name", "jugador-A")
+                        .param("pagina", "-1"))
+                .andExpect(status().isBadRequest());
     }
 }
