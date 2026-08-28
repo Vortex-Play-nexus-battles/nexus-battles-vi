@@ -4,7 +4,13 @@
  * El servicio identifica al jugador por la cabecera `X-User-Name`, la misma
  * que usan las operaciones de creacion y modificacion. Cuando llegue el
  * contrato de identidad (HU-INF-009) esa cabecera la pondra la sesion.
+ *
+ * Las peticiones salen por el envoltorio comun de `src/comun/`, no por `fetch`
+ * pelado: asi el manejo de Problem Details es el mismo en los veinte modulos.
+ * Sigue siendo inyectable para que las pruebas no dependan de la red.
  */
+
+import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
 
 const RUTA = '/api/v1/inventario/elementos';
 
@@ -19,7 +25,7 @@ const RUTA = '/api/v1/inventario/elementos';
 export async function consultarPagina(
   identidad,
   numeroPagina = 0,
-  { fetchImpl = globalThis.fetch } = {},
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
 ) {
   if (typeof identidad !== 'string' || identidad.trim() === '') {
     throw new TypeError('La identidad no puede estar vacia');

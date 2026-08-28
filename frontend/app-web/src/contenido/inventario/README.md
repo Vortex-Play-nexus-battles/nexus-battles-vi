@@ -86,6 +86,13 @@ npm run test:aceptacion   # aceptacion, sobre Chromium real
 Las de aceptacion levantan su propio servidor estatico; no hace falta el
 backend, porque la respuesta del servicio se intercepta.
 
+## Peticiones
+
+Las peticiones salen por `fetchWithHttpErrorInterceptor`, el envoltorio comun de
+`src/comun/interceptors/`, y no por `fetch` pelado: asi el manejo de Problem
+Details (RFC 7807) es el mismo en los veinte modulos. El envoltorio sigue siendo
+inyectable en `consultarPagina`, para que las pruebas no dependan de la red.
+
 ## Identidad
 
 El jugador se identifica por la cabecera `X-User-Name`, la misma que usan la
