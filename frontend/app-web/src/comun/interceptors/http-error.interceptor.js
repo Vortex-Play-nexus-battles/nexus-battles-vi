@@ -51,6 +51,12 @@ function mostrarMensajeAccesoDenegado(mensaje) {
     detail: { message: mensaje }
   }));
 
-  // Notificación fallback en consola y alerta visual
+  const banner = document.getElementById('nexus-rbac-forbidden');
+  if (banner) {
+    banner.hidden = false;
+    banner.textContent = mensaje;
+    return;
+  }
+
   alert(`⛔ Acceso Denegado: ${mensaje}`);
 }
