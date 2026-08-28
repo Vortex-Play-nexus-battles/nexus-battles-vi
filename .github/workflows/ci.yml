@@ -25,10 +25,8 @@ env:
   JAVA_VERSION: "21"
   JAVA_DISTRIBUTION: "temurin"
   SONAR_HOST_URL: "https://sonarcloud.io"
-  # TODO(equipo 6): reemplazar por el organization key real de SonarQube Cloud
-  # antes de fusionar. Mientras tanto, el paso de Sonar fallara explicitamente
-  # con este valor para que sea imposible pasarlo por alto en la revision.
-  SONAR_ORGANIZATION: "TODO_SONAR_ORG"
+  # Organization key de SonarQube Cloud (Vortex-Play-nexus-battles).
+  SONAR_ORGANIZATION: "vortex-play-nexus-battles"
 
 jobs:
   # ---------------------------------------------------------------------
