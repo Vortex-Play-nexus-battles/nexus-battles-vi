@@ -1,0 +1,11 @@
+plugins {
+    id 'nexus.spring-conventions'
+}
+
+group = 'nexus'
+version = '0.0.1-SNAPSHOT'
+
+// La version de Spring Boot, la de Java, los repositorios, el starter webmvc,
+// las dependencias de prueba, JUnit 5 y jacoco vienen del plugin de convenciones
+// (buildSrc/src/main/groovy/nexus.spring-conventions.gradle).
+// Aqui solo va lo que sea propio de este servicio.
