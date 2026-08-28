@@ -26,7 +26,7 @@ import nexus.dominio.Producto;
 import nexus.persistencia.ProductoRepository;
 import org.junit.jupiter.api.BeforeEach;
 
-@SpringBootTest
+@SpringBootTest(properties = "KEYCLOAK_JWK_SET_URI=http://localhost/prueba/jwks")
 @AutoConfigureMockMvc
 class ProductosApiTest {
 
