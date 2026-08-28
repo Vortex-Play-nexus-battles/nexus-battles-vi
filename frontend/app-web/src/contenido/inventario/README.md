@@ -1,7 +1,8 @@
 # Vitrina del inventario
 
 Vista de `HU-INV-001`. Consume la consulta paginada del servicio de inventario
-(`SCRUM-318`): `GET /api/v1/inventarios/{propietarioId}/elementos?pagina=N`.
+`GET /api/v1/inventario/elementos?pagina=N`, con la identidad en la cabecera
+`X-User-Name`.
 
 ## Alcance actual
 
@@ -87,6 +88,7 @@ backend, porque la respuesta del servicio se intercepta.
 
 ## Identidad
 
-El `propietarioId` viaja hoy como parametro. La validacion contra la identidad
-autenticada llega con `HU-INF-009`; sin ella el endpoint no debe exponerse
-fuera del entorno interno.
+El jugador se identifica por la cabecera `X-User-Name`, la misma que usan la
+creacion y la modificacion. **La identidad nunca viaja en la ruta**, asi que
+nadie puede pedir el inventario ajeno cambiando la URL. Cuando llegue el
+contrato de identidad (`HU-INF-009`), esa cabecera la pondra la sesion.

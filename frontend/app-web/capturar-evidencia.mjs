@@ -29,7 +29,7 @@ const navegador = await chromium.launch();
 async function capturar(nombre, { ancho, alto, total }) {
   const ctx = await navegador.newContext({ viewport: { width: ancho, height: alto } });
   const page = await ctx.newPage();
-  await page.route('**/api/v1/inventarios/**', (r) => r.fulfill({
+  await page.route('**/api/v1/inventario/elementos*', (r) => r.fulfill({
     status: 200, contentType: 'application/json', body: JSON.stringify(pagina(total)),
   }));
   await page.goto(BASE);

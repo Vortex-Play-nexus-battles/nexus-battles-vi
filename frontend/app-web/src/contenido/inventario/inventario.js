@@ -13,14 +13,14 @@ import { construirCarga, construirVacio, construirError } from './estados-vista.
  * Pinta el inventario de un jugador dentro de `contenedor`.
  *
  * @param {HTMLElement} contenedor donde se monta la vista.
- * @param {string} propietarioId jugador cuyo inventario se consulta.
+ * @param {string} identidad jugador autenticado, que viaja en la cabecera.
  * @param {number} numeroPagina pagina pedida, desde cero.
  * @param {{consultar?: Function}} opciones inyeccion para las pruebas.
  * @returns {Promise<void>} resuelve cuando la vista quedo en su estado final.
  */
 export async function montarVitrina(
   contenedor,
-  propietarioId,
+  identidad,
   numeroPagina = 0,
   { consultar = consultarPagina } = {},
 ) {
@@ -28,7 +28,7 @@ export async function montarVitrina(
 
   let pagina;
   try {
-    pagina = await consultar(propietarioId, numeroPagina);
+    pagina = await consultar(identidad, numeroPagina);
   } catch (fallo) {
     // El detalle tecnico es para el equipo; al jugador se le habla en su idioma.
     console.error('No se pudo cargar la vitrina del inventario', fallo);
