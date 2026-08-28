@@ -31,6 +31,7 @@ desktop.ini
 *~
 
 # --- Artefactos de compilacion y dependencias ---
+.gradle/
 build/
 dist/
 out/
