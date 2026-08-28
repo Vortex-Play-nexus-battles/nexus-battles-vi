@@ -1,0 +1,103 @@
+/*
+ * HU-INV-004 - Barra superior de navegacion.
+ *
+ * Usa las mismas variables de tema que la vitrina. Cuando la propuesta de
+ * diseno entre al repositorio, ambas cambian en un solo sitio.
+ *
+ * En anchos pequenos los accesos se envuelven en varias filas en vez de
+ * salirse: la barra no puede ser la que introduzca el desplazamiento
+ * horizontal que HU-INV-001 prohibe.
+ */
+
+.barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--color-borde);
+}
+
+.barra__busqueda {
+  flex: 1 1 220px;
+  min-width: 0;
+  order: 2;
+}
+
+.barra__busqueda input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--color-borde);
+  border-radius: 8px;
+  background: var(--color-superficie-baja);
+  color: var(--color-texto);
+  font: inherit;
+  font-size: 0.9rem;
+}
+
+.barra__accesos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  order: 1;
+}
+
+.barra__acceso {
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--color-texto-tenue);
+  font-family: var(--tipografia-titulo);
+  /* No baja de aqui: la legibilidad la mide HU-INV-001. */
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.barra__acceso:hover {
+  color: var(--color-texto);
+}
+
+.barra__acceso--activo {
+  border-color: var(--color-borde);
+  background: var(--color-superficie);
+  color: var(--color-texto);
+}
+
+.barra__panel-cuenta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  order: 3;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--color-borde);
+  border-radius: 8px;
+  background: var(--color-superficie);
+}
+
+.barra__panel-cuenta[hidden] {
+  display: none;
+}
+
+.barra__opcion-cuenta {
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--color-texto);
+  font: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.barra__opcion-cuenta:hover {
+  background: var(--color-superficie-baja);
+}

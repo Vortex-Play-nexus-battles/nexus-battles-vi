@@ -5,8 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Vitrina del inventario</title>
     <link rel="stylesheet" href="./vitrina.css" />
+    <link rel="stylesheet" href="../../comun/barra-navegacion.css" />
   </head>
   <body class="vitrina-pagina">
+    <div id="contenedor-barra"></div>
     <main id="inventario-app"></main>
 
     <!--
@@ -16,11 +18,16 @@
   -->
     <script type="module">
       import { montarInventario } from './inventario.js';
+      import { construirBarra } from '../../comun/barra-navegacion.js';
 
       const parametros = new URLSearchParams(location.search);
       const contenedor = document.getElementById('inventario-app');
       const identidad = parametros.get('jugador');
       const numeroPagina = Number(parametros.get('pagina') ?? 0);
+
+      document
+        .getElementById('contenedor-barra')
+        .replaceChildren(construirBarra({ seccionActiva: 'inventario' }));
 
       montarInventario(contenedor, identidad, numeroPagina);
     </script>
