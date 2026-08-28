@@ -3,7 +3,8 @@ info:
   title: Servicio de inventario
   version: 1.0.0
   description: >
-    Creacion y modificacion de elementos propios del jugador para HU-INV-003.
+    Consulta paginada de la vitrina para HU-INV-001, y creacion y modificacion
+    de elementos propios del jugador para HU-INV-003.
     La identidad temporal sigue la convencion X-User-Name de ms-identidad hasta
     que HU-AUT-004 publique el subject del token.
 servers:
@@ -13,6 +14,36 @@ security:
   - IdentidadTemporal: []
 paths:
   /api/v1/inventario/elementos:
+    get:
+      summary: Consulta la vitrina del jugador autenticado en paginas de dieciseis
+      description: >
+        HU-INV-001. El tamano de pagina es fijo en dieciseis porque el criterio
+        de aceptacion exige ese numero de productos en la vista de referencia
+        de 1360 x 768. La identidad viaja en la cabecera y nunca en la ruta:
+        un jugador no puede consultar el inventario de otro.
+      operationId: consultarInventarioPaginado
+      parameters:
+        - name: pagina
+          in: query
+          required: false
+          description: Numero de pagina, desde cero.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: >
+            Pagina del inventario. Un jugador sin productos recibe una pagina
+            vacia con este mismo estado: no tener nada no es un error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginaInventario"
+        "400":
+          $ref: "#/components/responses/SolicitudInvalida"
+        "401":
+          $ref: "#/components/responses/IdentidadRequerida"
     post:
       summary: Crea un elemento en el inventario del jugador autenticado
       operationId: crearElementoPropio
@@ -118,6 +149,31 @@ components:
           type: string
           enum: [HEROE, HABILIDAD, ARMA, ARMADURA, ITEM, EPICA]
         nombrePropio: { type: string }
+    PaginaInventario:
+      type: object
+      required: [elementos, numero, tamanio, totalElementos, totalPaginas, ultima]
+      properties:
+        elementos:
+          type: array
+          maxItems: 16
+          items:
+            $ref: "#/components/schemas/ElementoInventario"
+        numero:
+          type: integer
+          minimum: 0
+          description: Pagina devuelta, desde cero.
+        tamanio:
+          type: integer
+          const: 16
+          description: Productos por pagina, fijo por el criterio de HU-INV-001.
+        totalElementos:
+          type: integer
+          minimum: 0
+        totalPaginas:
+          type: integer
+          minimum: 0
+        ultima:
+          type: boolean
     DetalleDeProblema:
       type: object
       description: Formato estandar de detalles de problema RFC 9457.
