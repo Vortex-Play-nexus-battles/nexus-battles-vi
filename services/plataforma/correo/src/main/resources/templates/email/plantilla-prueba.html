@@ -1,0 +1,13 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{email/layout-corporativo}">
+<body>
+  <tbody layout:fragment="contenido">
+    <tr>
+      <td style="direction:ltr;font-size:16px;padding:32px 24px;text-align:left;font-family:Arial, Helvetica, sans-serif;color:#111726;" th:text="${mensaje}">
+        Contenido de prueba
+      </td>
+    </tr>
+  </tbody>
+</body>
+</html>

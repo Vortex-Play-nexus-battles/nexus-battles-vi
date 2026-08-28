@@ -1,2 +1,7 @@
 server:
   port: 8082
+
+spring:
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:1025}

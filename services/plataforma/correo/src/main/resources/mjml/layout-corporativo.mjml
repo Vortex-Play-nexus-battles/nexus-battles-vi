@@ -1,0 +1,50 @@
+<mjml>
+  <mj-head>
+    <mj-title>The Nexus Battles VI</mj-title>
+    <mj-attributes>
+      <mj-all font-family="Arial, Helvetica, sans-serif" />
+      <mj-text font-size="16px" color="#111726" line-height="24px" />
+    </mj-attributes>
+    <mj-style>
+      .footer-link { color: #D7DEED !important; text-decoration: none; }
+    </mj-style>
+  </mj-head>
+  <mj-body background-color="#D7DEED">
+
+    <!-- Encabezado: logo sobre fondo Cromo -->
+    <mj-section background-color="#1C2340" padding="24px 0">
+      <mj-column>
+        <!-- TODO: reemplazar por la URL pública real del logo antes de producción -->
+        <mj-text align="center" color="#FFFFFF" font-size="22px" font-weight="700">
+          THE NEXUS BATTLES VI
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Bloque dinámico: aquí se inyecta el contenido específico de cada correo -->
+    <mj-section background-color="#FFFFFF" padding="32px 24px">
+      <mj-column>
+        <mj-raw><!-- CONTENIDO_DINAMICO_INICIO --></mj-raw>
+        <mj-text>
+          Contenido del correo.
+        </mj-text>
+        <mj-raw><!-- CONTENIDO_DINAMICO_FIN --></mj-raw>
+      </mj-column>
+    </mj-section>
+
+    <!-- Pie de página: marca y redes sociales -->
+    <mj-section background-color="#1C2340" padding="24px">
+      <mj-column>
+        <mj-text align="center" color="#9FABC9" font-size="13px">
+          © 2026 The Nexus Battles VI · Todos los derechos reservados
+        </mj-text>
+        <mj-social font-size="13px" icon-size="20px" mode="horizontal" align="center">
+          <mj-social-element name="instagram" href="https://instagram.com/thenexusbattles" css-class="footer-link" />
+          <mj-social-element name="x" href="https://x.com/thenexusbattles" css-class="footer-link" />
+          <mj-social-element name="youtube" href="https://youtube.com/@thenexusbattles" css-class="footer-link" />
+        </mj-social>
+      </mj-column>
+    </mj-section>
+
+  </mj-body>
+</mjml>
