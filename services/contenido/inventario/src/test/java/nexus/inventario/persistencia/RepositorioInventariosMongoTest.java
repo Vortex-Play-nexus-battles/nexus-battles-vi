@@ -1,6 +1,7 @@
 package nexus.inventario.persistencia;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -8,10 +9,12 @@ import static org.mockito.Mockito.when;
 
 import java.util.List;
 import java.util.Optional;
+import nexus.inventario.dominio.FalloPersistenciaInventarioException;
 import nexus.inventario.dominio.Inventario;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessResourceFailureException;
 
 class RepositorioInventariosMongoTest {
 
@@ -35,6 +38,15 @@ class RepositorioInventariosMongoTest {
 
         assertEquals("inventario-1", guardado.id());
         assertEquals("jugador-A", guardado.propietarioId());
+    }
+
+    @Test
+    @DisplayName("un fallo de Spring Data se traduce sin exponer detalles de Mongo")
+    void traducirFalloDeEscritura() {
+        when(documentos.save(any())).thenThrow(new DataAccessResourceFailureException("Mongo no disponible"));
+
+        assertThrows(FalloPersistenciaInventarioException.class,
+                () -> repositorio.guardar(Inventario.vacio("jugador-A")));
     }
 
     @Test
