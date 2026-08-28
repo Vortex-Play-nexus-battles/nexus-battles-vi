@@ -11,6 +11,12 @@ services:
       POSTGRES_PASSWORD: ${DB_PASS}
       POSTGRES_DB: plataformadb
 
+  plataforma-cache:
+    image: redis:8-alpine
+    container_name: plataforma-cache
+    ports:
+      - "6379:6379"
+
   srv-comentarios:
     build:
       context: ./services/plataforma/comentarios
@@ -82,6 +88,7 @@ services:
       - .env
     depends_on:
       - plataforma-db
+      - plataforma-cache
 
   srv-metricas-plataforma:
     build:

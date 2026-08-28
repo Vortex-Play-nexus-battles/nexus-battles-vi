@@ -1,2 +1,29 @@
 server:
   port: 8086
+
+spring:
+  mvc:
+    problemdetails:
+      enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${DIRECTORIO_ACTIVO_URL:http://localhost:8180/realms/nexus-battles}
+  cache:
+    type: redis
+  data:
+    redis:
+      url: ${DB_MEMORIA_URL:redis://localhost:6379}
+  datasource:
+    url: ${DB_RELACIONAL_URL:jdbc:postgresql://localhost:5432/plataformadb}
+    username: ${DB_USER:usuario_nexus}
+    password: ${DB_PASS:password_secreta_123}
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        default_schema: moderacion_sanciones
+  flyway:
+    schemas: moderacion_sanciones
+    default-schema: moderacion_sanciones
