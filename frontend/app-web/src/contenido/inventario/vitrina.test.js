@@ -68,6 +68,19 @@ describe('Cuadricula de la vitrina a 1360 x 768', () => {
 
     expect(tarjeta.querySelector('.vitrina__nombre').textContent).toBe('Espada 0');
     expect(tarjeta.querySelector('.vitrina__tipo').textContent).toBe('Arma');
+    expect(tarjeta.dataset.elementoId).toBe('elemento-0');
+  });
+
+  test('permite solicitar la edicion del elemento desde su tarjeta', () => {
+    const editados = [];
+    const pagina = paginaCon(1);
+    const vitrina = construirVitrina(pagina, {
+      alEditar: (elementoSeleccionado) => editados.push(elementoSeleccionado),
+    });
+
+    vitrina.querySelector('.vitrina__editar').click();
+
+    expect(editados).toEqual([pagina.elementos[0]]);
   });
 
   test('el nombre propio del jugador se escribe como texto y nunca como marcado', () => {
