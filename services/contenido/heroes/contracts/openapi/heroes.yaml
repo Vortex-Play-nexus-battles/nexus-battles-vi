@@ -95,6 +95,8 @@ components:
       type: object
       description: Formato estándar de detalles de problema (RFC 9457) de la plataforma.
       properties:
+        type: { type: string, example: about:blank, description: URI que identifica el tipo de problema }
         title: { type: string, example: Héroe no disponible }
         status: { type: integer, example: 404 }
         detail: { type: string, example: El héroe solicitado no está disponible en el catálogo. }
+        instance: { type: string, example: /api/v1/heroes/Nigromante, description: Ruta que produjo el problema }
