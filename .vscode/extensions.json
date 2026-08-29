@@ -1,0 +1,48 @@
+{
+  // Extensiones recomendadas de la Empresa A.
+  // VS Code las ofrece automaticamente al abrir el repositorio por primera vez.
+  // Tambien se instalan todas desde la paleta: "Extensions: Show Recommended Extensions".
+  "recommendations": [
+    // --- Formato y convenciones comunes a los tres equipos ---
+    "editorconfig.editorconfig",
+    "esbenp.prettier-vscode",
+    "dbaeumer.vscode-eslint",
+
+    // --- Java y Spring Boot ---
+    "vscjava.vscode-java-pack",
+    "vmware.vscode-boot-dev-pack",
+    "vscjava.vscode-gradle",
+
+    // --- Interfaz web: HTML, CSS y JavaScript ---
+    "bradlc.vscode-tailwindcss",
+    "ritwickdey.liveserver",
+    "formulahendry.auto-rename-tag",
+    "naumovs.color-highlight",
+
+    // --- Contratos, contenedores y datos ---
+    "redhat.vscode-yaml",
+    "42crunch.vscode-openapi",
+    "ms-azuretools.vscode-docker",
+    "humao.rest-client",
+
+    // --- Calidad y pruebas ---
+    "sonarsource.sonarlint-vscode",
+    "ms-playwright.playwright",
+
+    // --- Git y GitHub ---
+    "eamodio.gitlens",
+    "github.vscode-pull-request-github",
+    "vivaxy.vscode-conventional-commits",
+
+    // --- Ortografia en espanol e ingles ---
+    "streetsidesoftware.code-spell-checker",
+    "streetsidesoftware.code-spell-checker-spanish"
+  ],
+
+  // Extensiones que conviene NO tener activas en este repositorio porque
+  // chocan con el formateo acordado.
+  "unwantedRecommendations": [
+    "hookyqr.beautify",
+    "ms-vscode.vscode-typescript-tslint-plugin"
+  ]
+}

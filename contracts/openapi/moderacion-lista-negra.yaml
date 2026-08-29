@@ -1,0 +1,153 @@
+openapi: 3.1.0
+info:
+  title: Nexus Battles VI - Moderacion y Sanciones (lista negra de terminos)
+  description: >
+    API para verificar texto contra la lista negra de terminos prohibidos,
+    administrable por moderadores (HU-ADM-002).
+  version: 1.0.0
+servers:
+  - url: http://localhost:8086/api/v1
+    description: Entorno local de desarrollo
+paths:
+  /lista-negra/verificar:
+    post:
+      summary: Verificar si un texto contiene terminos de la lista negra
+      operationId: verificarListaNegra
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerificacionListaNegraRequest'
+      responses:
+        '200':
+          description: Resultado de la verificacion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificacionListaNegraResponse'
+        '400':
+          description: Solicitud invalida (ej. texto vacio)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /lista-negra/terminos:
+    get:
+      summary: Listar los terminos prohibidos configurados (uso administrativo)
+      operationId: listarTerminos
+      responses:
+        '200':
+          description: Lista de terminos prohibidos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+    post:
+      summary: Agregar un termino a la lista negra (uso administrativo)
+      operationId: agregarTermino
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TerminoRequest'
+      responses:
+        '201':
+          description: Termino agregado
+
+  /lista-negra/terminos/{termino}:
+    put:
+      summary: Editar un termino existente de la lista negra (uso administrativo)
+      operationId: editarTermino
+      parameters:
+        - name: termino
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TerminoRequest'
+      responses:
+        '200':
+          description: Termino actualizado
+        '404':
+          description: El termino indicado no existe
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+    delete:
+      summary: Eliminar un termino de la lista negra (uso administrativo)
+      operationId: eliminarTermino
+      parameters:
+        - name: termino
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Termino eliminado
+        '404':
+          description: El termino indicado no existe
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+components:
+  schemas:
+    VerificacionListaNegraRequest:
+      type: object
+      required:
+        - texto
+      properties:
+        texto:
+          type: string
+          description: Texto a verificar (apodo, comentario, nombre de sala, etc.)
+
+    VerificacionListaNegraResponse:
+      type: object
+      required:
+        - aprobado
+      properties:
+        aprobado:
+          type: boolean
+        motivo:
+          type: string
+          description: Presente solo cuando aprobado es false
+
+    TerminoRequest:
+      type: object
+      required:
+        - termino
+      properties:
+        termino:
+          type: string
+
+    ProblemDetail:
+      type: object
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string

@@ -1,0 +1,15 @@
+services:
+  db-identidad:
+    image: postgres:16
+    container_name: db-ms-identidad
+    environment:
+      POSTGRES_DB: ms_identidad
+      POSTGRES_USER: nexus_dev
+      POSTGRES_PASSWORD: nexus_dev_local
+    ports:
+      - "5433:5432"
+    volumes:
+      - db_identidad_data:/var/lib/postgresql/data
+
+volumes:
+  db_identidad_data:

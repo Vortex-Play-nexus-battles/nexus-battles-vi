@@ -1,7 +1,16 @@
 package com.nexusbattles.ms_identidad.auth.controller;
 
+import com.nexusbattles.ms_identidad.auth.dto.LoginRequest;
+import com.nexusbattles.ms_identidad.auth.dto.LoginResponse;
+import com.nexusbattles.ms_identidad.auth.dto.RegistroRequest;
+import com.nexusbattles.ms_identidad.auth.exception.CredencialesInvalidasException;
+import com.nexusbattles.ms_identidad.auth.exception.CuentaBaneadaException;
+import com.nexusbattles.ms_identidad.auth.exception.CuentaBloqueadaException;
+import com.nexusbattles.ms_identidad.auth.exception.CuentaSuspendidaException;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
+import com.nexusbattles.ms_identidad.auth.service.LoginService;
 import com.nexusbattles.ms_identidad.auth.service.RegistroService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -15,17 +24,45 @@ public class AuthController {
     @Autowired
     private RegistroService registroService;
 
+    @Autowired
+    private LoginService loginService;
+
     @PostMapping("/registro")
-    public ResponseEntity<?> registrarUsuario(@Valid @RequestBody Usuario nuevoUsuario) {
+    public ResponseEntity<?> registrarUsuario(@Valid @RequestBody RegistroRequest datos) {
         try {
-            Usuario usuarioRegistrado = registroService.registrarUsuario(nuevoUsuario);
-
-            // SEGURIDAD: Limpiamos la contraseña (hash) para que NUNCA viaje en la respuesta HTTP
-            usuarioRegistrado.setPassword(null);
-
+            Usuario usuarioRegistrado = registroService.registrarUsuario(datos);
             return ResponseEntity.status(HttpStatus.CREATED).body(usuarioRegistrado);
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
         }
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<?> iniciarSesion(@Valid @RequestBody LoginRequest datos,
+                                           HttpServletRequest request) {
+        try {
+            String ip = obtenerIpCliente(request);
+            String userAgent = request.getHeader("User-Agent");
+
+            LoginResponse respuesta = loginService.iniciarSesion(datos, ip, userAgent);
+            return ResponseEntity.ok(respuesta);
+
+        } catch (CredencialesInvalidasException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
+        } catch (CuentaBaneadaException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());
+        } catch (CuentaSuspendidaException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());
+        } catch (CuentaBloqueadaException e) {
+            return ResponseEntity.status(HttpStatus.LOCKED).body(e.getMessage());
+        }
+    }
+
+    private String obtenerIpCliente(HttpServletRequest request) {
+        String ip = request.getHeader("X-Forwarded-For");
+        if (ip == null || ip.isBlank()) {
+            ip = request.getRemoteAddr();
+        }
+        return ip;
     }
 }

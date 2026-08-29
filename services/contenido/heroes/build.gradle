@@ -1,58 +1,26 @@
 plugins {
-	id 'java'
-	id 'jacoco'
-	id 'org.springframework.boot' version '4.1.1'
-	id 'io.spring.dependency-management' version '1.1.7'
-}
-
-// Compuerta de calidad de la empresa: cobertura medida en cada corrida de pruebas
-// y verificacion dura del 80% minimo (RNF-PRU-003) — rompe la compilacion si baja.
-jacocoTestReport {
-	reports {
-		xml.required = true
-		html.required = true
-	}
-}
-jacocoTestCoverageVerification {
-	violationRules {
-		rule {
-			limit {
-				counter = 'LINE'
-				minimum = 0.80
-			}
-		}
-	}
-}
-// La verificacion dura corre en CI (donde Docker permite las pruebas de
-// integracion y la cobertura es completa): ./gradlew jacocoTestCoverageVerification
-tasks.named('test') {
-	finalizedBy jacocoTestReport
+    id 'nexus.spring-conventions'
 }
 
 group = 'nexus'
 version = '0.0.1-SNAPSHOT'
 
-java {
-	toolchain {
-		languageVersion = JavaLanguageVersion.of(21)
-	}
-}
-
-repositories {
-	mavenCentral()
-}
-
+// La pila comun (Boot 4.1.1, Java 21, webmvc, actuator, JUnit 5 y jacoco)
+// baja del plugin de convenciones (buildSrc). Aqui solo lo propio del
+// servicio: la persistencia MongoDB del catalogo y sus pruebas de
+// integracion contra un contenedor real.
 dependencies {
-	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
-	implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
-	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
-	testImplementation 'org.springframework.boot:spring-boot-testcontainers'
-	testImplementation platform('org.testcontainers:testcontainers-bom:1.21.4')
-	testImplementation 'org.testcontainers:junit-jupiter'
-	testImplementation 'org.testcontainers:mongodb'
-	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
+
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation platform('org.testcontainers:testcontainers-bom:1.21.4')
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:mongodb'
 }
 
-tasks.named('test') {
-	useJUnitPlatform()
+// Este modulo ya tiene pruebas reales, asi que la compuerta del 80% que las
+// convenciones dejan declarada (y sin enganchar, para no romper los modulos
+// en andamiaje) se activa aqui solo para este servicio.
+tasks.named('check') {
+    dependsOn tasks.named('jacocoTestCoverageVerification')
 }
