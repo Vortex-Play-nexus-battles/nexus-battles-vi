@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_cumplimiento.auditoria.service;
 
+import com.nexusbattles.ms_cumplimiento.auditoria.dto.RegistrarAuditoriaRequest;
 import com.nexusbattles.ms_cumplimiento.auditoria.exception.AuditWriteException;
 import com.nexusbattles.ms_cumplimiento.auditoria.model.AuditActionType;
 import com.nexusbattles.ms_cumplimiento.auditoria.model.AuditLog;
@@ -63,5 +64,25 @@ public class AuditLogService {
                 .and(conTipoAccion(tipoAccion))
                 .and(entreFechas(desde, hasta));
         return repository.findAll(spec, pageable);
+    }
+
+    public AuditLog registrarDesdeSolicitud(RegistrarAuditoriaRequest solicitud) {
+        AuditActionType tipoAccion;
+        try {
+            tipoAccion = AuditActionType.valueOf(solicitud.tipoAccion());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException(
+                    "tipoAccion inválido: " + solicitud.tipoAccion()
+                            + ". Valores permitidos: " + java.util.Arrays.toString(AuditActionType.values()));
+        }
+        return registrar(
+                tipoAccion,
+                solicitud.administradorId(),
+                solicitud.afectado(),
+                solicitud.valorAnterior(),
+                solicitud.valorNuevo(),
+                solicitud.motivo(),
+                solicitud.ipOrigen()
+        );
     }
 }
