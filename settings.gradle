@@ -1,10 +1,41 @@
 rootProject.name = 'nexus-battles-vi'
 
+// -----------------------------------------------------------------------
+// Un servicio que no este declarado aqui NO lo compila nadie: ni ./gradlew
+// build en local ni el flujo de integracion continua. Al crear un servicio
+// nuevo, anadirlo a este archivo es parte de crearlo, no un paso opcional.
+// El workflow guardia-monorepo.yml falla el pull request si se olvida.
+// -----------------------------------------------------------------------
+
+// --- Plataforma: tiempo real, comunidad y plataforma (Equipo 6) ---
+include 'services:plataforma:admin-parametros'
 include 'services:plataforma:comentarios'
 include 'services:plataforma:correo'
-include 'services:plataforma:torneos'
-include 'services:plataforma:salas-partidas'
-include 'services:plataforma:notificaciones'
-include 'services:plataforma:moderacion-sanciones'
 include 'services:plataforma:metricas-plataforma'
-include 'services:plataforma:admin-parametros'
+include 'services:plataforma:moderacion-sanciones'
+include 'services:plataforma:notificaciones'
+include 'services:plataforma:salas-partidas'
+include 'services:plataforma:torneos'
+
+// --- Contenido y juego ---
+include 'services:contenido:heroes'
+include 'services:contenido:inventario'
+include 'services:contenido:motor-combate'
+
+// --- Pendientes de incorporar ---
+//
+// Sin build.gradle todavia: la carpeta existe pero no hay nada que compilar.
+// Descomentar en cuanto el servicio tenga su build.gradle y su primera clase.
+//
+// include 'services:contenido:misiones'
+// include 'services:contenido:productos'
+// include 'services:contenido:progresion-jugador'
+// include 'services:cuentas:ms-chatbot'
+// include 'services:cuentas:ms-finanzas'
+// include 'services:cuentas:ms-subastas'
+//
+// Todavia en Maven (pom.xml). Migrarlos a Gradle y descomentar aqui:
+//
+// include 'services:cuentas:ms-identidad'
+// include 'services:cuentas:ms-cumplimiento'
+// include 'services:cuentas:ms-ecommerce'

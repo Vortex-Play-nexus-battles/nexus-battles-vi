@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Demo RBAC local — Nexus Battles VI</title>
+    <link rel="stylesheet" href="./demo-rbac.css" />
+  </head>
+  <body>
+    <header class="cromo">
+      <h1>Demo RBAC (local)</h1>
+      <p>HU-RBAC-001 / HU-RBAC-004 · no subir · no reemplaza las pantallas de cuentas</p>
+    </header>
+
+    <main>
+      <p class="aviso">
+        Esta vista es solo para demostrar selector de rol, ocultar acciones y el 403 del servidor.
+        Ábrela por HTTP (no como archivo). El API por defecto es
+        <code>http://localhost:8081/api/v1</code>.
+      </p>
+
+      <div id="nexus-rbac-forbidden" hidden role="alert"></div>
+
+      <section class="tarjeta">
+        <h2>Rol activo</h2>
+        <div class="fila">
+          <label>
+            API
+            <input id="api-base" type="url" value="http://localhost:8081/api/v1" />
+          </label>
+          <label>
+            Rol
+            <select id="selector-rol"></select>
+          </label>
+          <button id="btn-cargar" class="btn-contorno" type="button">Cargar roles del servidor</button>
+        </div>
+        <p id="descripcion-rol" class="descripcion"></p>
+        <span id="estado-roles" class="estado carga">Cargando catálogo de roles…</span>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Acciones visibles según el rol</h2>
+        <p class="ayuda">
+          Los botones con <code>data-has-permission</code> se ocultan si el rol no los tiene. Eso es
+          la UI; el servidor igual rechaza si se llama a mano.
+        </p>
+        <div class="acciones" id="acciones-ui">
+          <button type="button" class="btn-contorno" data-has-permission="CREAR_CUENTA_JUGADOR">
+            Crear cuenta jugador
+          </button>
+          <button type="button" class="btn-contorno" data-has-permission="MODIFICAR_PERFIL_PROPIO">
+            Modificar perfil propio
+          </button>
+          <button type="button" class="btn-contorno" data-has-permission="PUBLICAR_COMENTARIOS">
+            Publicar comentarios
+          </button>
+          <button type="button" class="btn-contorno" data-has-permission="ELIMINAR_COMENTARIO_PROPIO">
+            Eliminar comentario propio
+          </button>
+          <button type="button" class="btn-contorno" data-has-permission="MODERAR_COMENTARIOS">
+            Moderar comentarios
+          </button>
+          <button type="button" class="btn-contorno" data-has-permission="EMITIR_ADVERTENCIAS">
+            Emitir advertencias
+          </button>
+          <button type="button" class="btn-contorno" data-has-permission="SUSPENDER_USUARIOS">
+            Suspender usuarios
+            <span class="temporal"> (temporal en Moderador)</span>
+          </button>
+          <button type="button" class="btn-primario" data-has-permission="BANEAR_DEFINITIVAMENTE">
+            Banear definitivamente
+          </button>
+          <button type="button" class="btn-contorno" data-has-permission="GESTIONAR_PRODUCTOS">
+            Gestionar productos
+          </button>
+          <button type="button" class="btn-contorno" data-has-permission="CREAR_ADMIN_MODERADOR">
+            Crear admin / moderador
+          </button>
+          <button type="button" class="btn-acento" data-has-permission="ASIGNAR_ROL">
+            Asignar rol
+          </button>
+        </div>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Intento directo al servidor</h2>
+        <p class="ayuda">
+          Estas llamadas van siempre, aunque la UI las oculte. Mandan
+          <code>X-User-Role</code> (mientras no exista login). El interceptor muestra el 403 aquí,
+          sin <code>alert</code>.
+        </p>
+        <div class="fila">
+          <label>
+            Usuario destino (asignar rol)
+            <input id="usuario-id" type="text" value="2" />
+          </label>
+          <button id="btn-ban" class="btn-primario" type="button">POST /admin/ban</button>
+          <button id="btn-asignar" class="btn-acento" type="button">PUT asignar rol</button>
+        </div>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Respuesta</h2>
+        <pre id="log" class="log">Aún no hay llamadas.</pre>
+      </section>
+    </main>
+
+    <script type="module" src="./demo-rbac.js"></script>
+  </body>
+</html>

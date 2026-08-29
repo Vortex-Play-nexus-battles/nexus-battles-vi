@@ -10,10 +10,12 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDateTime;
+
 @Entity
 @Table(name = "usuarios", uniqueConstraints = {
-        @UniqueConstraint(columnNames = "apodo"),
-        @UniqueConstraint(columnNames = "email")
+    @UniqueConstraint(columnNames = "apodo"),
+    @UniqueConstraint(columnNames = "email")
 })
 @Getter
 @Setter
@@ -45,4 +47,13 @@ public class Usuario {
     @ManyToOne(fetch = FetchType.EAGER, optional = false)
     @JoinColumn(name = "rol_id", nullable = false)
     private RolEntity rol;
+
+    @Column(nullable = false)
+    private int intentosFallidos = 0;
+
+    @Column
+    private LocalDateTime bloqueadoHasta;
+
+    @Column
+    private LocalDateTime suspendidoHasta;
 }
