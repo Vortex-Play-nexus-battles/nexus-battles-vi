@@ -39,6 +39,7 @@ public class RbacMatrixRepository {
         set(Role.JUGADOR, Action.CREAR_ADMIN_MODERADOR, PermissionType.DENIED);
         set(Role.JUGADOR, Action.GESTIONAR_PRODUCTOS, PermissionType.DENIED);
         set(Role.JUGADOR, Action.ASIGNAR_ROL, PermissionType.DENIED);
+        set(Role.JUGADOR, Action.GESTIONAR_CUENTAS, PermissionType.DENIED);
 
         // --- 2. MODERADOR ---
         set(Role.MODERADOR, Action.CREAR_CUENTA_JUGADOR, PermissionType.DENIED);
@@ -52,6 +53,7 @@ public class RbacMatrixRepository {
         set(Role.MODERADOR, Action.CREAR_ADMIN_MODERADOR, PermissionType.DENIED);
         set(Role.MODERADOR, Action.GESTIONAR_PRODUCTOS, PermissionType.DENIED);
         set(Role.MODERADOR, Action.ASIGNAR_ROL, PermissionType.DENIED);
+        set(Role.MODERADOR, Action.GESTIONAR_CUENTAS, PermissionType.DENIED);
 
         // --- 3. ADMINISTRADOR ---
         set(Role.ADMINISTRADOR, Action.CREAR_CUENTA_JUGADOR, PermissionType.DENIED);
@@ -65,6 +67,7 @@ public class RbacMatrixRepository {
         set(Role.ADMINISTRADOR, Action.CREAR_ADMIN_MODERADOR, PermissionType.DENIED);
         set(Role.ADMINISTRADOR, Action.GESTIONAR_PRODUCTOS, PermissionType.GRANTED);
         set(Role.ADMINISTRADOR, Action.ASIGNAR_ROL, PermissionType.DENIED);
+        set(Role.ADMINISTRADOR, Action.GESTIONAR_CUENTAS, PermissionType.GRANTED);
 
         // --- 4. SUPER_ADMINISTRADOR ---
         set(Role.SUPER_ADMINISTRADOR, Action.CREAR_CUENTA_JUGADOR, PermissionType.DENIED);
@@ -78,6 +81,7 @@ public class RbacMatrixRepository {
         set(Role.SUPER_ADMINISTRADOR, Action.CREAR_ADMIN_MODERADOR, PermissionType.GRANTED);
         set(Role.SUPER_ADMINISTRADOR, Action.GESTIONAR_PRODUCTOS, PermissionType.GRANTED);
         set(Role.SUPER_ADMINISTRADOR, Action.ASIGNAR_ROL, PermissionType.GRANTED);
+        set(Role.SUPER_ADMINISTRADOR, Action.GESTIONAR_CUENTAS, PermissionType.GRANTED);
     }
 
     private void set(Role role, Action action, PermissionType permission) {
