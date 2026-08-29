@@ -8,6 +8,7 @@ import com.nexusbattles.ms_identidad.rbac.service.RolService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -65,7 +66,7 @@ public class AuthAdminServiceImpl implements AuthAdminService {
         Usuario nuevoUsuario = new Usuario();
         nuevoUsuario.setApodo(apodo);
         nuevoUsuario.setEmail(email);
-        nuevoUsuario.setEstado("ACTIVA");
+        nuevoUsuario.setEstado("INACTIVO");
         nuevoUsuario.setRol(rolService.obtenerRolPorNombre(rol.name()));
 
         String passwordTemporal = generarPasswordTemporal();
@@ -83,13 +84,20 @@ public class AuthAdminServiceImpl implements AuthAdminService {
     // ---------- Para Sanabria (HU-USR-003) ----------
 
     @Override
-    public void actualizarEstadoCuenta(Long usuarioId, String nuevoEstado) {
+    public void actualizarEstadoCuenta(Long usuarioId, String nuevoEstado, LocalDateTime suspendidoHasta) {
         if (!ESTADOS_VALIDOS.contains(nuevoEstado)) {
             throw new IllegalArgumentException(
-                    "Estado inválido. Valores permitidos: " + ESTADOS_VALIDOS);
+                "Estado inválido. Valores permitidos: " + ESTADOS_VALIDOS);
         }
         Usuario usuario = buscarOFallar(usuarioId);
         usuario.setEstado(nuevoEstado);
+
+        if ("SUSPENDIDA".equals(nuevoEstado)) {
+            usuario.setSuspendidoHasta(suspendidoHasta);
+        } else {
+            usuario.setSuspendidoHasta(null);
+        }
+
         usuarioRepository.save(usuario);
     }
 
@@ -107,7 +115,7 @@ public class AuthAdminServiceImpl implements AuthAdminService {
 
     private Usuario buscarOFallar(Long usuarioId) {
         return usuarioRepository.findById(usuarioId)
-                .orElseThrow(() -> new IllegalStateException("No existe el usuario " + usuarioId));
+            .orElseThrow(() -> new IllegalStateException("No existe el usuario " + usuarioId));
     }
 
     private String generarPasswordTemporal() {

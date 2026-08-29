@@ -47,4 +47,15 @@ export default [
       'no-script-url': 'error',
     },
   },
+  {
+    // Las pruebas unitarias corren sobre jsdom con los globales de Jest.
+    // Se declaran aqui para que `no-undef` siga siendo un error real en el
+    // codigo de produccion y no haya que apagarlo en todo el proyecto.
+    files: ['src/**/*.test.js'],
+    languageOptions: {
+      globals: {
+        ...globals.jest,
+      },
+    },
+  },
 ];

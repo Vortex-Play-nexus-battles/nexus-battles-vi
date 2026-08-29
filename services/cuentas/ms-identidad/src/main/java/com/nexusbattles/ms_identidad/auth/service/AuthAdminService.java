@@ -3,6 +3,8 @@ package com.nexusbattles.ms_identidad.auth.service;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.rbac.model.Role;
 
+import java.time.LocalDateTime;
+
 public interface AuthAdminService {
 
     // Usado por Edwin (HU-RBAC-003)
@@ -15,6 +17,6 @@ public interface AuthAdminService {
                               String apodo, String avatar, Role rol);
 
     // Usado por Sanabria (HU-USR-003)
-    void actualizarEstadoCuenta(Long usuarioId, String nuevoEstado);
+    void actualizarEstadoCuenta(Long usuarioId, String nuevoEstado, LocalDateTime suspendidoHasta);
     void restablecerContrasena(Long usuarioId);
 }

@@ -29,6 +29,10 @@ public class SecurityInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            return true;
+        }
+
         if (!(handler instanceof HandlerMethod handlerMethod)) {
             return true;
         }
@@ -80,6 +84,8 @@ public class SecurityInterceptor implements HandlerInterceptor {
     private void sendForbidden(HttpServletResponse response, String uri) throws Exception {
         response.setStatus(HttpStatus.FORBIDDEN.value());
         response.setContentType("application/problem+json");
+        response.setHeader("Access-Control-Allow-Origin", "*");
+        response.setHeader("Access-Control-Allow-Headers", "*");
         response.getWriter().write(String.format(
             "{\"type\": \"https://nexusbattles.upb.edu.co/errors/forbidden\", \"title\": \"Acceso denegado\", \"status\": 403, \"detail\": \"No tienes permiso para esta acción\", \"instance\": \"%s\"}",
             uri
