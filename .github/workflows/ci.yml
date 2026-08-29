@@ -189,7 +189,7 @@ jobs:
             --init-script .github/workflows/sonar-init.gradle \
             -Dsonar.organization=${{ env.SONAR_ORGANIZATION }} \
             -Dsonar.host.url=${{ env.SONAR_HOST_URL }} \
-            -Dsonar.token=${{ secrets.SONAR_TOKEN }} \
+            -Dsonar.token=$SONAR_TOKEN \
             -Dsonar.projectKey=${{ matrix.sonarProjectKey }} \
             -Dsonar.projectBaseDir=${{ matrix.ruta }} \
             -Dsonar.coverage.jacoco.xmlReportPaths=${{ matrix.ruta }}/build/reports/jacoco/test/jacocoTestReport.xml \
@@ -235,7 +235,7 @@ jobs:
           ./mvnw -B org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121:sonar \
             -Dsonar.organization=${{ env.SONAR_ORGANIZATION }} \
             -Dsonar.host.url=${{ env.SONAR_HOST_URL }} \
-            -Dsonar.token=${{ secrets.SONAR_TOKEN }} \
+            -Dsonar.token=$SONAR_TOKEN \
             -Dsonar.projectKey=${{ matrix.sonarProjectKey }} \
             -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
             -Dsonar.qualitygate.wait=true
