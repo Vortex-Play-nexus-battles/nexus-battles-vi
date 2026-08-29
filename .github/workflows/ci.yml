@@ -185,7 +185,7 @@ jobs:
         # sonar.qualitygate.wait=true hace que esta tarea falle si el Quality
         # Gate de SonarQube Cloud queda en rojo (cubre CA-03: cobertura < 80%).
         run: |
-          ./gradlew sonar --no-daemon \
+          ./gradlew sonar --no-daemon --refresh-dependencies \
             --init-script .github/workflows/sonar-init.gradle \
             -Dsonar.organization=${{ env.SONAR_ORGANIZATION }} \
             -Dsonar.host.url=${{ env.SONAR_HOST_URL }} \
