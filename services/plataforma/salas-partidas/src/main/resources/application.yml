@@ -1,2 +1,54 @@
+# Salas y partidas — HU-SAL-001 a HU-SAL-005.
+#
+# Mismas convenciones que moderacion-sanciones: un solo PostgreSQL para la
+# plataforma y un esquema por servicio, para cumplir la regla 7 sin pagar una
+# instancia por microservicio.
+#
+# Regla 10: ningun valor real vive aqui. Todo baja de variable de entorno; lo
+# que aparece detras de los dos puntos son los valores de desarrollo local que
+# levanta el docker-compose de la raiz.
+
 server:
   port: 8084
+
+spring:
+  application:
+    name: salas-partidas
+
+  # Regla 4: los errores salen en formato problem details (RFC 7807).
+  # La correspondencia con la interfaz esta en shared/ui-kit/MAPEO-ERRORES.md.
+  mvc:
+    problemdetails:
+      enabled: true
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${DIRECTORIO_ACTIVO_URL:http://localhost:8180/realms/nexus-battles}
+
+  datasource:
+    url: ${DB_RELACIONAL_URL:jdbc:postgresql://localhost:5432/plataformadb}
+    username: ${DB_USER:usuario_nexus}
+    password: ${DB_PASS:password_secreta_123}
+
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        default_schema: salas_partidas
+
+  flyway:
+    schemas: salas_partidas
+    default-schema: salas_partidas
+
+# Regla 3: todo servicio expone salud y metricas.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
