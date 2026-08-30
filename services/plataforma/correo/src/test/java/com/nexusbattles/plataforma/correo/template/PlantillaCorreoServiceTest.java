@@ -38,4 +38,32 @@ class PlantillaCorreoServiceTest {
 
         assertThat(html).doesNotContain("CONTENIDO_DINAMICO");
     }
+
+    @Test
+    void referenciaElLogoCorporativoComoImagenIncrustada() {
+        String html = service.renderizar("email/plantilla-prueba", Map.of("mensaje", "Hola Mundo"));
+
+        assertThat(html)
+                .as("el logo debe ir incrustado (cid:), no como URL ni en base64")
+                .contains("src=\"cid:logo-nexus\"");
+    }
+
+    @Test
+    void conservaElTextoDeMarcaAunqueElClienteBloqueeImagenes() {
+        String html = service.renderizar("email/plantilla-prueba", Map.of("mensaje", "Hola Mundo"));
+
+        assertThat(html)
+                .as("muchos clientes bloquean imágenes; sin el texto el encabezado queda vacío")
+                .contains("THE NEXUS BATTLES VI");
+        assertThat(html)
+                .as("el texto alternativo es lo único que se ve si la imagen no carga")
+                .contains("alt=\"The Nexus Battles VI\"");
+    }
+
+    @Test
+    void elArchivoDelLogoExisteEnElClasspath() {
+        assertThat(getClass().getResourceAsStream("/imagenes/logo-nexus.png"))
+                .as("EnviadorCorreoService lo adjunta desde ahí; si falta, todo correo falla")
+                .isNotNull();
+    }
 }

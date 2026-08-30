@@ -1,4 +1,9 @@
 <!doctype html>
+<!--
+  ARCHIVO GENERADO — NO EDITAR A MANO.
+  Fuente: src/main/resources/mjml/layout-corporativo.mjml
+  Regenerar: ./gradlew :services:plataforma:correo:compilarPlantillas
+-->
 <html lang="und" dir="auto" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout">
 
 <head>
@@ -71,6 +76,17 @@
     }
   </style>
   <style type="text/css">
+    @media only screen and (max-width:479px) {
+      table.mj-full-width-mobile {
+        width: 100% !important;
+      }
+
+      td.mj-full-width-mobile {
+        width: auto !important;
+      }
+    }
+  </style>
+  <style type="text/css">
     .footer-link {
       color: #D7DEED !important;
       text-decoration: none;
@@ -80,7 +96,15 @@
 
 <body style="word-spacing:normal;background-color:#D7DEED;">
   <div aria-label="The Nexus Battles VI" aria-roledescription="email" role="article" lang="und" dir="auto" style="word-spacing:normal;background-color:#D7DEED;">
-    <!-- Encabezado: logo sobre fondo Cromo -->
+    <!-- Encabezado: logo sobre fondo Cromo.
+
+         El logo va incrustado en el propio mensaje (cid:), no como URL: el
+         proyecto todavía no tiene alojamiento público, y las imágenes en base64
+         las bloquean Gmail y Outlook. EnviadorCorreoService adjunta el archivo
+         imagenes/logo-nexus.png con ese Content-ID.
+
+         El texto se conserva a propósito: muchos clientes bloquean las imágenes
+         por defecto, y sin él el encabezado quedaría vacío. -->
     <!--[if mso | IE]><table align="center" border="0" cellpadding="0" cellspacing="0" class="" role="presentation" style="width:600px;" width="600" bgcolor="#1C2340" ><tr><td style="line-height:0px;font-size:0px;mso-line-height-rule:exactly;"><![endif]-->
     <div style="background:#1C2340;background-color:#1C2340;margin:0px auto;max-width:600px;">
       <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background:#1C2340;background-color:#1C2340;width:100%;">
@@ -91,7 +115,19 @@
               <div class="mj-column-per-100 mj-outlook-group-fix" style="font-size:0px;text-align:left;direction:ltr;display:inline-block;vertical-align:top;width:100%;">
                 <table border="0" cellpadding="0" cellspacing="0" role="presentation" style="vertical-align:top;" width="100%">
                   <tbody>
-                    <!-- TODO: reemplazar por la URL pública real del logo antes de producción -->
+                    <tr>
+                      <td align="center" style="font-size:0px;padding:0 0 12px 0;word-break:break-word;">
+                        <table border="0" cellpadding="0" cellspacing="0" role="presentation" style="border-collapse:collapse;border-spacing:0px;">
+                          <tbody>
+                            <tr>
+                              <td style="width:80px;">
+                                <img alt="The Nexus Battles VI" src="cid:logo-nexus" style="border:0;display:block;outline:none;text-decoration:none;height:auto;width:100%;font-size:13px;" width="80" height="auto" />
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
                     <tr>
                       <td align="center" style="font-size:0px;padding:10px 25px;word-break:break-word;">
                         <div style="font-family:Arial, Helvetica, sans-serif;font-size:22px;font-weight:700;line-height:24px;text-align:center;color:#FFFFFF;">THE NEXUS BATTLES VI</div>
@@ -107,14 +143,28 @@
       </table>
     </div>
     <!--[if mso | IE]></td></tr></table><![endif]-->
-    <!-- Bloque dinámico: cada correo específico sobreescribe este fragmento -->
+    <!-- Bloque dinámico: cada correo concreto sobreescribe este fragmento.
+         Va dentro de mj-raw para que MJML lo emita tal cual y la marca de
+         Thymeleaf quede dentro del andamiaje compatible con Outlook. -->
     <!--[if mso | IE]><table align="center" border="0" cellpadding="0" cellspacing="0" class="" role="presentation" style="width:600px;" width="600" bgcolor="#FFFFFF" ><tr><td style="line-height:0px;font-size:0px;mso-line-height-rule:exactly;"><![endif]-->
     <div style="background:#FFFFFF;background-color:#FFFFFF;margin:0px auto;max-width:600px;">
       <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background:#FFFFFF;background-color:#FFFFFF;width:100%;">
-        <tbody layout:fragment="contenido">
+        <tbody>
           <tr>
-            <td style="direction:ltr;font-size:16px;padding:32px 24px;text-align:left;font-family:Arial, Helvetica, sans-serif;color:#111726;">
-              Contenido del correo.
+            <td style="direction:ltr;font-size:0px;padding:32px 24px;text-align:center;">
+              <!--[if mso | IE]><table role="presentation" border="0" cellpadding="0" cellspacing="0"><tr><td class="" style="vertical-align:top;width:552px;" ><![endif]-->
+              <div class="mj-column-per-100 mj-outlook-group-fix" style="font-size:0px;text-align:left;direction:ltr;display:inline-block;vertical-align:top;width:100%;">
+                <table border="0" cellpadding="0" cellspacing="0" role="presentation" style="vertical-align:top;" width="100%">
+                  <tbody>
+                    <tr layout:fragment="contenido">
+                      <td align="left" style="font-size:0px;padding:10px 25px;word-break:break-word;">
+                        <div style="font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:24px;text-align:left;color:#111726;">Contenido del correo.</div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <!--[if mso | IE]></td></tr></table><![endif]-->
             </td>
           </tr>
         </tbody>
