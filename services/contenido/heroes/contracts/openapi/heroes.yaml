@@ -84,6 +84,25 @@ components:
         ataque: { type: [string, "null"], example: 10 + 1d6, description: Ausente en sanadores }
         dano: { type: [string, "null"], example: 1d4, description: Ausente en sanadores }
         sanar: { type: [string, "null"], example: 6 + 1d6, description: Exclusiva de sanadores }
+        ataqueDetalle:
+          $ref: "#/components/schemas/FormulaDetalle"
+        danoDetalle:
+          $ref: "#/components/schemas/FormulaDetalle"
+        sanarDetalle:
+          $ref: "#/components/schemas/FormulaDetalle"
+    FormulaDetalle:
+      type: object
+      description: >
+        La formula como datos, para consumidores que calculan (motor de combate,
+        HU-JUE-003): base + cantidadDados dados de N caras. El campo de texto
+        homonimo (ataque/dano/sanar) es la misma formula en su presentacion de
+        la Tabla 6; este detalle evita parsear ese texto. Ausente cuando la
+        estadistica no aplica al prototipo.
+      required: [base, cantidadDados, caras]
+      properties:
+        base: { type: integer, example: 10 }
+        cantidadDados: { type: integer, example: 1 }
+        caras: { type: integer, example: 6 }
     Accion:
       type: object
       required: [nombre, costo, efecto]
@@ -95,6 +114,8 @@ components:
       type: object
       description: Formato estándar de detalles de problema (RFC 9457) de la plataforma.
       properties:
+        type: { type: string, example: about:blank, description: URI que identifica el tipo de problema }
         title: { type: string, example: Héroe no disponible }
         status: { type: integer, example: 404 }
         detail: { type: string, example: El héroe solicitado no está disponible en el catálogo. }
+        instance: { type: string, example: /api/v1/heroes/Nigromante, description: Ruta que produjo el problema }

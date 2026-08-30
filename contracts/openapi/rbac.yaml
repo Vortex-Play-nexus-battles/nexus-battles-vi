@@ -1,8 +1,10 @@
 openapi: 3.1.0
 info:
   title: Nexus Battles VI - RBAC & Authorization Service (ms-identidad)
-  description: API de Control de Acceso Basado en Roles (RBAC) conforme a la Tabla 24.
-  version: 1.0.0
+  description: >-
+    API de Control de Acceso Basado en Roles (RBAC) conforme a la Tabla 24,
+    extendida con las acciones requeridas por HU-RBAC-003 y HU-USR-003.
+  version: 1.1.0
 servers:
   - url: http://localhost:8081/api/v1
     description: Entorno local de desarrollo
@@ -47,7 +49,7 @@ paths:
 
   /rbac/matrix:
     get:
-      summary: Obtener la matriz de permisos versionada (Tabla 24)
+      summary: Obtener la matriz de permisos versionada (Tabla 24 extendida)
       operationId: getMatrix
       responses:
         '200':
@@ -69,18 +71,27 @@ components:
           type: string
           enum: [JUGADOR, MODERADOR, ADMINISTRADOR, SUPER_ADMINISTRADOR]
         action:
-          type: string
-          enum:
-            - CREAR_CUENTA_JUGADOR
-            - MODIFICAR_PERFIL_PROPIO
-            - PUBLICAR_COMENTARIOS
-            - ELIMINAR_COMENTARIO_PROPIO
-            - MODERAR_COMENTARIOS
-            - EMITIR_ADVERTENCIAS
-            - SUSPENDER_USUARIOS
-            - BANEAR_DEFINITIVAMENTE
-            - CREAR_ADMIN_MODERADOR
-            - GESTIONAR_PRODUCTOS
+          $ref: '#/components/schemas/RbacAction'
+
+    RbacAction:
+      type: string
+      description: >-
+        Acción protegida por RBAC. La matriz extendida contiene doce acciones:
+        diez de la Tabla 24, ASIGNAR_ROL (HU-RBAC-003) y
+        GESTIONAR_CUENTAS (HU-USR-003).
+      enum:
+        - CREAR_CUENTA_JUGADOR
+        - MODIFICAR_PERFIL_PROPIO
+        - PUBLICAR_COMENTARIOS
+        - ELIMINAR_COMENTARIO_PROPIO
+        - MODERAR_COMENTARIOS
+        - EMITIR_ADVERTENCIAS
+        - SUSPENDER_USUARIOS
+        - BANEAR_DEFINITIVAMENTE
+        - CREAR_ADMIN_MODERADOR
+        - GESTIONAR_PRODUCTOS
+        - ASIGNAR_ROL
+        - GESTIONAR_CUENTAS
 
     AuthorizationResponse:
       type: object
@@ -93,8 +104,7 @@ components:
         permitted:
           type: boolean
         permissionType:
-          type: string
-          enum: [GRANTED, DENIED, TEMPORARY]
+          $ref: '#/components/schemas/PermissionType'
         role:
           type: string
         action:
@@ -126,6 +136,14 @@ components:
           type: string
         matrix:
           type: object
+          additionalProperties:
+            type: object
+            additionalProperties:
+              $ref: '#/components/schemas/PermissionType'
+
+    PermissionType:
+      type: string
+      enum: [GRANTED, DENIED, TEMPORARY]
 
     ProblemDetail:
       type: object
