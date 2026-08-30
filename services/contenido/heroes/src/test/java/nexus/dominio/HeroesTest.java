@@ -103,7 +103,8 @@ class HeroesTest {
         HeroeNoDisponibleException error =
                 assertThrows(HeroeNoDisponibleException.class, () -> catalogo.fichaDe("Nigromante"));
         assertTrue(error.getMessage().contains("no está disponible"));
-        assertFalse(error.getMessage().matches(".*(404|500|[Hh][Tt][Tt][Pp]).*"));
+        String mensaje = error.getMessage().toLowerCase();
+        assertFalse(mensaje.contains("404") || mensaje.contains("500") || mensaje.contains("http"));
     }
 
     // ---- HU-HER-002 — Estadisticas base del heroe ----

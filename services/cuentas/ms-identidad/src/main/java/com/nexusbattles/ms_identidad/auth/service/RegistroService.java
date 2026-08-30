@@ -1,13 +1,16 @@
 package com.nexusbattles.ms_identidad.auth.service;
 
+import com.nexusbattles.ms_identidad.auth.dto.RegistroRequest;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
-import com.nexusbattles.ms_identidad.rbac.model.Role;
+import com.nexusbattles.ms_identidad.auth.validation.ApodoBlacklistValidator;
+import com.nexusbattles.ms_identidad.auth.validation.PasswordPolicyValidator;
+import com.nexusbattles.ms_identidad.perfiles.service.PerfilUsuarioService;
+import com.nexusbattles.ms_identidad.rbac.service.RolService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
-
-import java.util.List;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class RegistroService {
@@ -15,73 +18,51 @@ public class RegistroService {
     @Autowired
     private UsuarioRepository usuarioRepository;
 
+    @Autowired
+    private ApodoBlacklistValidator apodoBlacklistValidator;
+
+    @Autowired
+    private PasswordPolicyValidator passwordPolicyValidator;
+
+    @Autowired
+    private RolService rolService;
+
+    @Autowired
+    private PerfilUsuarioService perfilUsuarioService;
+
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
-    // Lista negra temporal en memoria mientras el equipo de Felipe expone el servicio definitivo (HU-ADM-002)
-    private static final List<String> APODOS_PROHIBIDOS_TEMPORAL = List.of(
-            "admin", "root", "system", "moderador", "sex", "hack"
-    );
+    @Transactional
+    public Usuario registrarUsuario(RegistroRequest datos) {
 
-    public Usuario registrarUsuario(Usuario nuevoUsuario) {
-
-        // 1. Validar si el correo electrónico ya se encuentra registrado
-        if (usuarioRepository.findByEmail(nuevoUsuario.getEmail()).isPresent()) {
+        if (usuarioRepository.findByEmail(datos.getEmail()).isPresent()) {
             throw new RuntimeException("El correo electrónico ya está registrado.");
         }
 
-        // 2. Validar si el apodo ya existe en la base de datos local
-        if (usuarioRepository.findByApodo(nuevoUsuario.getApodo()).isPresent()) {
+        if (usuarioRepository.findByApodo(datos.getApodo()).isPresent()) {
             throw new RuntimeException("El apodo ya está en uso.");
         }
 
-        // 3. Validar el apodo contra la lista negra temporal (Placeholder)
-        validarListaNegraApodo(nuevoUsuario.getApodo());
-        // TODO [INTEGRACIÓN FUTURA]: Reemplazar esta validación local por la llamada al servicio
-        // de Lista Negra de términos prohibidos del equipo de Felipe (HU-ADM-002 / RF-ADM-002).
+        apodoBlacklistValidator.validar(datos.getApodo());
 
-        // 4. Validar la política estricta de la contraseña (HU-AUT-002)
-        validarPoliticaContrasena(nuevoUsuario.getPassword());
+        passwordPolicyValidator.validar(datos.getPassword());
 
-        // 5. CIFRAR LA CONTRASEÑA antes de guardarla
-        String passwordCifrada = passwordEncoder.encode(nuevoUsuario.getPassword());
-        nuevoUsuario.setPassword(passwordCifrada);
+        Usuario nuevoUsuario = new Usuario();
+        nuevoUsuario.setApodo(datos.getApodo());
+        nuevoUsuario.setEmail(datos.getEmail());
+        nuevoUsuario.setPassword(passwordEncoder.encode(datos.getPassword()));
+        nuevoUsuario.setEstado("ACTIVO");
+        nuevoUsuario.setRol(rolService.obtenerRolPorNombre("JUGADOR"));
 
-        // 6. ASIGNAR EL ROL POR DEFECTO — ahora es obligatorio hacerlo aquí explícitamente,
-        // porque Role (enum de Andrés) ya no trae un valor por defecto como sí tenía el String anterior.
-        nuevoUsuario.setRol(Role.JUGADOR);
-
-        // 7. Guardar el usuario en la base de datos
         Usuario usuarioGuardado = usuarioRepository.save(nuevoUsuario);
 
+        perfilUsuarioService.crearPerfil(
+            usuarioGuardado, datos.getNombres(), datos.getApellidos(), datos.getAvatar()
+        );
+
         // TODO [INTEGRACIÓN FUTURA]: Disparar la integración con el módulo de correo corporativo
-        // para el mensaje de bienvenida (HU-COR-002 / Grupo de Felipe).
+        // para el mensaje de bienvenida (confirmar si es Grupo de Felipe o Grupo de Simón).
 
         return usuarioGuardado;
-    }
-
-    // Método auxiliar para validar la lista negra temporal
-    private void validarListaNegraApodo(String apodo) {
-        if (apodo == null) return;
-        String apodoNormalizado = apodo.toLowerCase().trim();
-        for (String prohibido : APODOS_PROHIBIDOS_TEMPORAL) {
-            if (apodoNormalizado.contains(prohibido)) {
-                throw new RuntimeException("El apodo contiene términos prohibidos por la política de la comunidad.");
-            }
-        }
-    }
-
-    // Método auxiliar para validar la política estricta de la contraseña
-    private void validarPoliticaContrasena(String password) {
-        if (password == null || password.length() <= 8) {
-            throw new RuntimeException("La contraseña debe tener una longitud superior a 8 caracteres.");
-        }
-        boolean tieneMayuscula = password.chars().anyMatch(Character::isUpperCase);
-        boolean tieneMinuscula = password.chars().anyMatch(Character::isLowerCase);
-        boolean tieneNumero = password.chars().anyMatch(Character::isDigit);
-        boolean tieneSimbolo = password.chars().anyMatch(ch -> !Character.isLetterOrDigit(ch));
-
-        if (!tieneMayuscula || !tieneMinuscula || !tieneNumero || !tieneSimbolo) {
-            throw new RuntimeException("La contraseña debe contener al menos una mayúscula, una minúscula, un número y un símbolo.");
-        }
     }
 }

@@ -25,7 +25,7 @@ on:
       jql:
         description: "Consulta de Jira"
         type: string
-        default: "project = SCRUM AND issuetype = Historia AND sprint IS NOT EMPTY ORDER BY key ASC"
+        default: "project = SCRUM AND issuetype in (Historia, Tarea) AND sprint IS NOT EMPTY ORDER BY key ASC"
       sprint:
         description: "Iteracion del Project a la que se asignan las historias"
         type: string

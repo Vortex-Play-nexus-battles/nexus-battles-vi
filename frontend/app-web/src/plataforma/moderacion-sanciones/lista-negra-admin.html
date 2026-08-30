@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lista negra de términos — The Nexus Battles VI</title>
+    <style>
+      :root {
+        --color-fondo: #d7deed;
+        --color-superficie: #ffffff;
+        --color-cromo: #1c2340;
+        --color-borde-decorativo: #9fabc9;
+        --color-borde-interactivo: #6f7994;
+        --color-accion: #2244bf;
+        --color-accion-relleno: #1e3f88;
+        --color-error: #b81a1a;
+        --color-error-fondo: #fbe4e4;
+        --color-exito: #086b31;
+        --color-exito-fondo: #e4f5e9;
+        --color-texto-principal: #111726;
+        --color-texto-secundario: #48536a;
+      }
+
+      body {
+        margin: 0;
+        background: var(--color-fondo);
+        color: var(--color-texto-principal);
+        font-family: 'Inter', Arial, Helvetica, sans-serif;
+        min-width: 1360px;
+      }
+
+      header {
+        background: var(--color-cromo);
+        color: #ffffff;
+        padding: 16px 32px;
+        font-family: 'Rajdhani', Arial, Helvetica, sans-serif;
+        font-weight: 700;
+        font-size: 20px;
+      }
+
+      main {
+        max-width: 720px;
+        margin: 32px auto;
+        padding: 0 24px;
+      }
+
+      .tarjeta {
+        background: var(--color-superficie);
+        border: 1px solid var(--color-borde-decorativo);
+        border-radius: 8px;
+        padding: 24px;
+        margin-bottom: 24px;
+      }
+
+      form {
+        display: flex;
+        gap: 12px;
+      }
+
+      input[type='text'] {
+        flex: 1;
+        padding: 10px 12px;
+        border: 1px solid var(--color-borde-interactivo);
+        border-radius: 6px;
+        font-size: 16px;
+      }
+
+      button {
+        background: var(--color-accion-relleno);
+        color: #ffffff;
+        border: none;
+        border-radius: 6px;
+        padding: 0 20px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      #estado-error,
+      #estado-vacio,
+      #estado-carga,
+      #estado-exito {
+        display: none;
+        padding: 12px 16px;
+        border-radius: 6px;
+        font-size: 14px;
+      }
+
+      #estado-error {
+        background: var(--color-error-fondo);
+        color: var(--color-error);
+      }
+
+      #estado-exito {
+        background: var(--color-exito-fondo);
+        color: var(--color-exito);
+        margin-bottom: 16px;
+      }
+
+      #estado-vacio {
+        color: var(--color-texto-secundario);
+      }
+
+      ul#lista-terminos {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+
+      ul#lista-terminos li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--color-borde-decorativo);
+        font-size: 16px;
+      }
+
+      ul#lista-terminos li:last-child {
+        border-bottom: none;
+      }
+
+      .acciones-termino {
+        display: flex;
+        gap: 8px;
+      }
+
+      .acciones-termino button {
+        padding: 4px 12px;
+        font-size: 13px;
+      }
+
+      .boton-eliminar {
+        background: var(--color-error);
+      }
+    </style>
+  </head>
+  <body>
+    <header>Panel de administración — Lista negra de términos</header>
+
+    <main>
+      <section class="tarjeta">
+        <form id="form-agregar-termino">
+          <input
+            type="text"
+            id="input-termino"
+            placeholder="Nuevo término prohibido"
+            required
+            aria-label="Nuevo término prohibido"
+          />
+          <button type="submit" id="boton-agregar">Agregar</button>
+        </form>
+      </section>
+
+      <div id="estado-exito" role="status"></div>
+
+      <section class="tarjeta">
+        <div id="estado-carga">Cargando términos...</div>
+        <div id="estado-error" role="alert"></div>
+        <div id="estado-vacio">Todavía no hay términos en la lista negra.</div>
+        <ul id="lista-terminos"></ul>
+      </section>
+    </main>
+
+    <script type="module" src="./lista-negra-admin.js"></script>
+  </body>
+</html>

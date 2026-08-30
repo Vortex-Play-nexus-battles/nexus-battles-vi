@@ -1,0 +1,24 @@
+// Init script usado SOLO por el pipeline de CI (ci.yml) para poder correr el
+// analisis de SonarQube Cloud sin declarar el plugin en ningun build.gradle
+// versionado. La cobertura (JaCoCo) ya no se maneja aqui: vive en
+// buildSrc/nexus.spring-conventions.gradle, heredada por los 8 servicios de
+// services/plataforma/*. Este archivo se limita unicamente al plugin de
+// SonarQube, cuya organizacion/token son propios de cada entorno de CI y por
+// eso no se fijan en un archivo compartido del repo.
+//
+// Aplica el plugin org.sonarqube unicamente a la corrida de Gradle que se
+// lanza con "--init-script sonar-init.gradle"; no modifica nada persistido
+// en el repositorio.
+
+initscript {
+    repositories {
+        maven { url 'https://plugins.gradle.org/m2/' }
+    }
+    dependencies {
+        classpath 'org.sonarsource.scanner.gradle:sonarqube-gradle-plugin:7.4.0.8496'
+    }
+}
+
+rootProject {
+    apply plugin: org.sonarqube.gradle.SonarQubePlugin
+}

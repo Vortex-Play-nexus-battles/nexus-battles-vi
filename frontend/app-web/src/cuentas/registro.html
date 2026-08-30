@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Crear cuenta — NEXUS BATTLES VI</title>
+  <link rel="stylesheet" href="./registro.css">
+</head>
+<body>
+<main class="pagina-auth">
+  <section class="tarjeta">
+    <h1 class="titulo-grande">NEXUS BATTLES VI</h1>
+    <p class="titulo-mediano">Crea tu cuenta de jugador</p>
+
+    <p class="estado" id="estadoRegistro" hidden role="status"></p>
+
+    <form id="formRegistro" novalidate>
+      <label>
+        Nombres
+        <input type="text" id="nombres" name="nombres" required autocomplete="given-name">
+      </label>
+
+      <label>
+        Apellidos
+        <input type="text" id="apellidos" name="apellidos" required autocomplete="family-name">
+      </label>
+
+      <label>
+        Apodo
+        <input type="text" id="apodo" name="apodo" required autocomplete="nickname">
+      </label>
+      <p class="ayuda">Será tu nombre visible en las salas y comentarios.</p>
+
+      <label>
+        Correo electrónico
+        <input type="email" id="email" name="email" required autocomplete="email">
+      </label>
+      <p class="ayuda">Te enviaremos novedades importantes de tu cuenta.</p>
+
+      <label>
+        Contraseña
+        <input type="password" id="password" name="password" required autocomplete="new-password" minlength="9">
+      </label>
+      <p class="ayuda">Mínimo 9 caracteres, con mayúscula, minúscula, número y símbolo.</p>
+
+      <label>
+        Repetir contraseña
+        <input type="password" id="confirmarPassword" name="confirmarPassword" required autocomplete="new-password">
+      </label>
+      <p class="ayuda error-campo" id="ayudaConfirmar" hidden>Las contraseñas no coinciden.</p>
+
+      <fieldset class="selector-avatar">
+        <legend>Avatar</legend>
+        <button type="button" id="botonAbrirAvatar" class="avatar-boton-abrir">
+          <span class="avatar-resumen-placeholder" id="resumenAvatar">Selecciona tu avatar</span>
+        </button>
+
+        <dialog id="dialogoAvatar" class="dialogo-avatar">
+          <div class="dialogo-avatar-cabecera">
+            <h2>Elige tu avatar</h2>
+            <button type="button" class="dialogo-avatar-cerrar" id="botonCerrarAvatar" aria-label="Cerrar">✕</button>
+          </div>
+          <div class="rejilla-avatares">
+            <label class="avatar-opcion">
+              <input type="radio" name="avatar" value="alquimista-picaro-veneno.jpg" required>
+              <img src="./avatares/alquimista-picaro-veneno.jpg" alt="Alquimista Pícaro Veneno">
+              <span>Alquimista Pícaro Veneno</span>
+            </label>
+            <label class="avatar-opcion">
+              <input type="radio" name="avatar" value="arquero-cazador.jpg" required>
+              <img src="./avatares/arquero-cazador.jpg" alt="Arquero Cazador">
+              <span>Arquero Cazador</span>
+            </label>
+            <label class="avatar-opcion">
+              <input type="radio" name="avatar" value="chaman-sanador.jpg" required>
+              <img src="./avatares/chaman-sanador.jpg" alt="Chamán Sanador">
+              <span>Chamán Sanador</span>
+            </label>
+            <label class="avatar-opcion">
+              <input type="radio" name="avatar" value="comandante-con-casco.jpg" required>
+              <img src="./avatares/comandante-con-casco.jpg" alt="Comandante Con Casco">
+              <span>Comandante Con Casco</span>
+            </label>
+            <label class="avatar-opcion">
+              <input type="radio" name="avatar" value="gran-mago-sabio.jpg" required>
+              <img src="./avatares/gran-mago-sabio.jpg" alt="Gran Mago Sabio">
+              <span>Gran Mago Sabio</span>
+            </label>
+            <label class="avatar-opcion">
+              <input type="radio" name="avatar" value="guerrero-berserker.jpg" required>
+              <img src="./avatares/guerrero-berserker.jpg" alt="Guerrero Berserker">
+              <span>Guerrero Berserker</span>
+            </label>
+            <label class="avatar-opcion">
+              <input type="radio" name="avatar" value="guerrero-tanque.jpg" required>
+              <img src="./avatares/guerrero-tanque.jpg" alt="Guerrero Tanque">
+              <span>Guerrero Tanque</span>
+            </label>
+            <label class="avatar-opcion">
+              <input type="radio" name="avatar" value="mago-de-fuego.jpg" required>
+              <img src="./avatares/mago-de-fuego.jpg" alt="Mago De Fuego">
+              <span>Mago De Fuego</span>
+            </label>
+            <label class="avatar-opcion">
+              <input type="radio" name="avatar" value="mago-de-hielo.jpg" required>
+              <img src="./avatares/mago-de-hielo.jpg" alt="Mago De Hielo">
+              <span>Mago De Hielo</span>
+            </label>
+            <label class="avatar-opcion">
+              <input type="radio" name="avatar" value="picaro-asesino.jpg" required>
+              <img src="./avatares/picaro-asesino.jpg" alt="Pícaro Asesino">
+              <span>Pícaro Asesino</span>
+            </label>
+          </div>
+        </dialog>
+      </fieldset>
+
+      <button type="submit" class="btn-primario" id="botonEnviar">Crear cuenta</button>
+    </form>
+
+    <a class="enlace-secundario" href="./login.html">¿Ya tienes cuenta? Inicia sesión</a>
+  </section>
+</main>
+
+<script type="module" src="./registro.js"></script>
+</body>
+</html>
