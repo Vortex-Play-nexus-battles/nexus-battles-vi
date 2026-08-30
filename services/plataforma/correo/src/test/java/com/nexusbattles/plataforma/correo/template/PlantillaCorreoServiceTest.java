@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class PlantillaCorreoServiceTest {
 
@@ -65,5 +66,21 @@ class PlantillaCorreoServiceTest {
         assertThat(getClass().getResourceAsStream("/imagenes/logo-nexus.png"))
                 .as("EnviadorCorreoService lo adjunta desde ahí; si falta, todo correo falla")
                 .isNotNull();
+    }
+
+    @Test
+    void rechazaUnaPlantillaQueNoEstaEnElRegistro() {
+        // El nombre de la plantilla nunca debe poder venir del usuario: cargar
+        // una arbitraria del classpath permitiria leer plantillas ajenas o
+        // inyectar contenido. Solo se sirven las declaradas.
+        assertThatThrownBy(() -> service.renderizar("email/inventada", Map.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("email/inventada");
+    }
+
+    @Test
+    void rechazaIntentosDeSalirseDeLaCarpetaDePlantillas() {
+        assertThatThrownBy(() -> service.renderizar("../../application", Map.of()))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }
