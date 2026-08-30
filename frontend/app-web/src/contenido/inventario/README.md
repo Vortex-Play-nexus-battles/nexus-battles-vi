@@ -1,8 +1,12 @@
-# Vitrina del inventario
+# Gestión y vitrina del inventario
 
 Vista de `HU-INV-001`. Consume la consulta paginada del servicio de inventario
 `GET /api/v1/inventario/elementos?pagina=N`, con la identidad en la cabecera
 `X-User-Name`.
+
+La integración de `HU-INV-003` añade la creación por `POST` y la edición del
+nombre por `PATCH`. Después de cada escritura, la vista vuelve a consultar el
+inventario persistido y muestra el resultado en la cuadrícula.
 
 ## Alcance actual
 
@@ -13,6 +17,9 @@ Vista de `HU-INV-001`. Consume la consulta paginada del servicio de inventario
 - nombre propio del jugador escrito como texto, nunca como marcado;
 - rechazo ruidoso de una pagina que exceda los 16 elementos acordados;
 - cliente HTTP de la consulta paginada, con `fetch` inyectable.
+- formulario para crear elementos y editar el nombre de elementos propios;
+- actualización de la vitrina después de guardar, incluida la página donde
+  queda el elemento nuevo cuando el inventario supera los 16 elementos.
 
 **Resoluciones inferiores y estados**:
 
@@ -88,7 +95,7 @@ backend, porque la respuesta del servicio se intercepta.
 
 ## Peticiones
 
-Las peticiones salen por `fetchWithHttpErrorInterceptor`, el envoltorio comun de
+Las peticiones `GET`, `POST` y `PATCH` salen por `fetchWithHttpErrorInterceptor`, el envoltorio comun de
 `src/comun/interceptors/`, y no por `fetch` pelado: asi el manejo de Problem
 Details (RFC 7807) es el mismo en los veinte modulos. El envoltorio sigue siendo
 inyectable en `consultarPagina`, para que las pruebas no dependan de la red.
