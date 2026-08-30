@@ -1,0 +1,80 @@
+name: Pruebas de servicios de contenido
+
+on:
+  pull_request:
+    paths:
+      - "services/contenido/**"
+      - ".github/workflows/pruebas-contenido.yml"
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - "services/contenido/**"
+      - ".github/workflows/pruebas-contenido.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pruebas-contenido-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pruebas:
+    name: ${{ matrix.servicio }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        servicio:
+          - heroes
+          - inventario
+          - motor-combate
+          - productos
+
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v7
+
+      - name: Comprobar que el módulo existe
+        id: modulo
+        shell: bash
+        run: |
+          ruta="services/contenido/${{ matrix.servicio }}/build.gradle"
+          if [[ -f "$ruta" ]]; then
+            echo "presente=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "presente=false" >> "$GITHUB_OUTPUT"
+            echo "El módulo ${{ matrix.servicio }} aún no existe en esta rama; se omite."
+          fi
+
+      - name: Preparar Java 21
+        if: steps.modulo.outputs.presente == 'true'
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Preparar Gradle 9.7.1
+        if: steps.modulo.outputs.presente == 'true'
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "9.7.1"
+
+      - name: Ejecutar pruebas y compuertas de calidad
+        if: steps.modulo.outputs.presente == 'true'
+        run: gradle --no-daemon -p "services/contenido/${{ matrix.servicio }}" check
+
+      - name: Publicar evidencia de pruebas y cobertura
+        if: always() && steps.modulo.outputs.presente == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: reportes-${{ matrix.servicio }}
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            services/contenido/${{ matrix.servicio }}/build/reports/tests/
+            services/contenido/${{ matrix.servicio }}/build/reports/jacoco/

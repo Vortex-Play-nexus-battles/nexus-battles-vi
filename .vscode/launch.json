@@ -1,0 +1,33 @@
+{
+  // Configuraciones de depuracion.
+  //
+  // La depuracion de los servicios de Spring Boot se anade con el siguiente pull
+  // request, cuando exista el primer servicio. Por ahora solo la interfaz web.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Web: depurar en Chrome (Live Server)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5500",
+      "webRoot": "${workspaceFolder}/frontend/app-web",
+      "sourceMaps": true,
+      "presentation": {
+        "group": "1-web",
+        "order": 1
+      }
+    },
+    {
+      "name": "Web: depurar en Chrome (servida por Spring)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:8080",
+      "webRoot": "${workspaceFolder}/frontend/app-web",
+      "sourceMaps": true,
+      "presentation": {
+        "group": "1-web",
+        "order": 2
+      }
+    }
+  ]
+}

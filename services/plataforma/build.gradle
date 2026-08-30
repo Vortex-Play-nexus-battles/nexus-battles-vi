@@ -1,0 +1,7 @@
+plugins {
+    id 'nexus.spring-conventions'
+}
+
+bootJar {
+    enabled = false
+}

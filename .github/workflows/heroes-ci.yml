@@ -1,0 +1,29 @@
+# CI del servicio de heroes (grupo Thomas / contenido).
+# Las pruebas y la compuerta de cobertura corren en el flujo comun
+# pruebas-contenido.yml (matriz de servicios de contenido). Aqui queda solo
+# lo que ese flujo no cubre: la construccion de la imagen Docker.
+name: heroes-ci
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "services/contenido/heroes/**"
+      - ".github/workflows/heroes-ci.yml"
+  pull_request:
+    paths:
+      - "services/contenido/heroes/**"
+      - ".github/workflows/heroes-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  imagen:
+    name: Construccion de la imagen Docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construir la imagen (contexto raiz, build unificado de Gradle)
+        run: docker build -f services/contenido/heroes/Dockerfile -t servicio-heroes:ci .

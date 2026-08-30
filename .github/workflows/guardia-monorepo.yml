@@ -1,0 +1,90 @@
+name: Guardia del monorepo
+
+# Impide que se repita lo que paso en el Sprint 1: servicios que existian en el
+# repositorio pero que ningun build compilaba, porque nadie los declaro en
+# settings.gradle o porque traian su propio sistema de construccion.
+#
+# Falla el pull request antes de fusionar. No revisa codigo, solo estructura.
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+jobs:
+  estructura:
+    name: Comprobar estructura del monorepo
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Ningun servicio con su propio Gradle
+        run: |
+          hallazgos=$(find services -mindepth 3 \
+            \( -name gradlew -o -name gradlew.bat -o -name settings.gradle \) \
+            -not -path "*/build/*" 2>/dev/null || true)
+          if [ -n "$hallazgos" ]; then
+            echo "::error::Hay servicios con su propio Gradle. Deben ser modulos del build raiz."
+            echo "$hallazgos"
+            echo ""
+            echo "Como se arregla: borra el gradlew, el gradlew.bat, la carpeta"
+            echo "gradle/wrapper y el settings.gradle del servicio, y declara el"
+            echo "modulo en el settings.gradle de la raiz."
+            exit 1
+          fi
+          echo "OK: ningun servicio trae su propio wrapper de Gradle."
+
+      - name: Ningun servicio nuevo en Maven
+        run: |
+          # Excepciones temporales: servicios que nacieron en Maven y siguen
+          # pendientes de migrar. Esta lista solo puede encoger, nunca crecer.
+          conocidos="services/cuentas/ms-identidad/pom.xml
+          services/cuentas/ms-cumplimiento/pom.xml
+          services/cuentas/ms-ecommerce/pom.xml"
+
+          # Se excluyen las carpetas de salida: Maven deja target/ y Gradle deja
+          # build/, y dentro de build/ el agente de JaCoCo desempaqueta su propio
+          # pom.xml. Sin esta exclusion la comprobacion falla siempre.
+          nuevos=""
+          for p in $(find services -name pom.xml \
+              -not -path "*/target/*" \
+              -not -path "*/build/*" \
+              -not -path "*/.gradle/*" 2>/dev/null || true); do
+            if ! echo "$conocidos" | tr -d ' ' | grep -qx "$p"; then
+              nuevos="$nuevos $p"
+            fi
+          done
+
+          if [ -n "$nuevos" ]; then
+            echo "::error::Hay pom.xml nuevos. La pila tecnologica de la empresa es Gradle."
+            echo "$nuevos"
+            exit 1
+          fi
+          echo "OK: no hay servicios nuevos en Maven."
+
+      - name: Todo servicio con codigo esta declarado en settings.gradle
+        run: |
+          faltan=""
+          for dir in services/*/*/; do
+            dir=${dir%/}
+            # Solo interesan los que ya tienen codigo Java y no son Maven.
+            [ -d "$dir/src/main/java" ] || continue
+            [ -f "$dir/pom.xml" ] && continue
+
+            ruta=$(echo "$dir" | tr '/' ':')
+            if ! grep -q "^[[:space:]]*include[[:space:]]\+'$ruta'" settings.gradle; then
+              faltan="$faltan\n  $dir  ->  falta:  include '$ruta'"
+            fi
+          done
+
+          if [ -n "$faltan" ]; then
+            echo "::error::Hay servicios con codigo que no estan en settings.gradle. Nadie los compila."
+            printf "$faltan\n"
+            exit 1
+          fi
+          echo "OK: todos los servicios con codigo estan declarados."
