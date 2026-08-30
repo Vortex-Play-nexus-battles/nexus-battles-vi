@@ -1,15 +1,19 @@
 package com.nexusbattles.ms_identidad.auth.controller;
 
+import com.nexusbattles.ms_identidad.auth.dto.CanjearTokenRequest;
 import com.nexusbattles.ms_identidad.auth.dto.LoginRequest;
 import com.nexusbattles.ms_identidad.auth.dto.LoginResponse;
 import com.nexusbattles.ms_identidad.auth.dto.RegistroRequest;
 import com.nexusbattles.ms_identidad.auth.exception.CredencialesInvalidasException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaBaneadaException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaBloqueadaException;
+import com.nexusbattles.ms_identidad.auth.exception.CuentaInactivaException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaSuspendidaException;
+import com.nexusbattles.ms_identidad.auth.exception.TokenInvalidoException;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.service.LoginService;
 import com.nexusbattles.ms_identidad.auth.service.RegistroService;
+import com.nexusbattles.ms_identidad.auth.service.TokenCredencialService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,6 +30,9 @@ public class AuthController {
 
     @Autowired
     private LoginService loginService;
+
+    @Autowired
+    private TokenCredencialService tokenCredencialService;
 
     @PostMapping("/registro")
     public ResponseEntity<?> registrarUsuario(@Valid @RequestBody RegistroRequest datos) {
@@ -53,8 +60,23 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());
         } catch (CuentaSuspendidaException e) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());
+        } catch (CuentaInactivaException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());
         } catch (CuentaBloqueadaException e) {
             return ResponseEntity.status(HttpStatus.LOCKED).body(e.getMessage());
+        }
+    }
+
+    // Nuevo (corrige el hallazgo de Sanabria, punto 1): el usuario llega
+    // aquí desde el link de su correo (bienvenida o restablecimiento) para
+    // definir su contraseña real y activar/recuperar el acceso a su cuenta.
+    @PostMapping("/restablecer/confirmar")
+    public ResponseEntity<?> canjearToken(@Valid @RequestBody CanjearTokenRequest datos) {
+        try {
+            tokenCredencialService.canjearToken(datos.getToken(), datos.getNuevaPassword());
+            return ResponseEntity.ok("Contraseña actualizada correctamente. Ya puedes iniciar sesión.");
+        } catch (TokenInvalidoException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
         }
     }
 

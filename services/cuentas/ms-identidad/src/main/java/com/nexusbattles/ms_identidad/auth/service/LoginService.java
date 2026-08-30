@@ -5,6 +5,7 @@ import com.nexusbattles.ms_identidad.auth.dto.LoginResponse;
 import com.nexusbattles.ms_identidad.auth.exception.CredencialesInvalidasException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaBaneadaException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaBloqueadaException;
+import com.nexusbattles.ms_identidad.auth.exception.CuentaInactivaException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaSuspendidaException;
 import com.nexusbattles.ms_identidad.auth.model.DispositivoConocido;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
@@ -53,6 +54,15 @@ public class LoginService {
             throw new CuentaBaneadaException("Esta cuenta ha sido baneada permanentemente.");
         }
 
+        // Corregido (hallazgo de Sanabria, punto 2): antes una cuenta recién
+        // creada por un admin (estado INACTIVO, sin contraseña conocida por
+        // nadie) podía intentar autenticarse igual, sin ningún bloqueo aquí.
+        if ("INACTIVO".equals(usuario.getEstado())) {
+            auditLog.info("LOGIN_RECHAZADO email={} ip={} motivo=INACTIVO", datos.getEmail(), direccionIp);
+            throw new CuentaInactivaException(
+                "Esta cuenta aún no ha sido activada. Revisa tu correo para completar el proceso.");
+        }
+
         if ("SUSPENDIDA".equals(usuario.getEstado())) {
             LocalDateTime hasta = usuario.getSuspendidoHasta();
             if (hasta != null && LocalDateTime.now().isBefore(hasta)) {
@@ -62,9 +72,6 @@ public class LoginService {
                 throw new CuentaSuspendidaException(
                     "Cuenta suspendida. Tiempo restante: " + minutosRestantes + " minutos.");
             }
-            // TODO [COORDINAR CON SANABRIA]: definir si al vencer suspendidoHasta el
-            // estado vuelve a ACTIVO automáticamente aquí, o si lo gestiona
-            // exclusivamente su HU-USR-003 con un proceso aparte.
         }
 
         // --- Bloqueo por intentos fallidos (RF-AUT-009) ---
@@ -95,9 +102,7 @@ public class LoginService {
 
         if (dispositivoNuevo) {
             // TODO [INTEGRACIÓN FUTURA]: disparar notificación por correo
-            // (plataforma/correo) y alerta dentro de la app
-            // (plataforma/notificaciones). Ninguno de los 2 contratos existe
-            // todavía — se deja registrado en auditoría mientras tanto.
+            // (plataforma/correo). Contrato aún no publicado por Santiago.
             auditLog.info("DISPOSITIVO_NUEVO usuarioId={} ip={}", usuario.getId(), direccionIp);
         }
 
@@ -135,8 +140,6 @@ public class LoginService {
             }
             return sb.toString();
         } catch (Exception e) {
-            // Si el hash falla por cualquier motivo, se trata como dispositivo
-            // siempre nuevo antes que dejar caer el login completo.
             return userAgent + "|" + ip;
         }
     }
