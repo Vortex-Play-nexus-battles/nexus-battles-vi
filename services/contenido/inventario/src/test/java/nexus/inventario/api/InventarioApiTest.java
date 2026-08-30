@@ -76,6 +76,35 @@ class InventarioApiTest {
     }
 
     @Test
+    @DisplayName("crear y modificar se reflejan al consultar la vitrina")
+    void escriturasSeReflejanEnLaVitrina() throws Exception {
+        mvc.perform(post("/api/v1/inventario/elementos")
+                        .header("X-User-Name", "jugador-A")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"productoId":"producto-1","tipo":"ITEM","nombrePropio":"Amuleto de Niebla"}
+                                """))
+                .andExpect(status().isCreated());
+
+        ElementoInventario creado = repositorio.buscarPorPropietario("jugador-A")
+                .orElseThrow().elementos().getFirst();
+
+        mvc.perform(patch("/api/v1/inventario/elementos/{elementoId}", creado.id())
+                        .header("X-User-Name", "jugador-A")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nombrePropio\":\"Amuleto de Bruma\"}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/api/v1/inventario/elementos")
+                        .header("X-User-Name", "jugador-A")
+                        .param("pagina", "0"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.elementos.length()").value(1))
+                .andExpect(jsonPath("$.elementos[0].id").value(creado.id()))
+                .andExpect(jsonPath("$.elementos[0].nombrePropio").value("Amuleto de Bruma"));
+    }
+
+    @Test
     @DisplayName("PATCH rechaza modificar el elemento de otro jugador y conserva sus datos")
     void rechazarModificacionAjena() throws Exception {
         ElementoInventario elementoDeB = gestion.crear(

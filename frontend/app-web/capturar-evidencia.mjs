@@ -26,7 +26,7 @@ function pagina(total) {
 //   python -m http.server 4399 --directory src --bind 127.0.0.1
 const navegador = await chromium.launch();
 
-async function capturar(nombre, { ancho, alto, total }) {
+async function capturar(nombre, { ancho, alto, total, mostrarEditor = false }) {
   const ctx = await navegador.newContext({ viewport: { width: ancho, height: alto } });
   const page = await ctx.newPage();
   await page.route('**/api/v1/inventario/elementos*', (r) => r.fulfill({
@@ -34,6 +34,9 @@ async function capturar(nombre, { ancho, alto, total }) {
   }));
   await page.goto(BASE);
   await page.waitForFunction(() => !document.querySelector('.estado-carga'));
+  if (mostrarEditor) {
+    await page.getByRole('button', { name: 'Agregar elemento' }).click();
+  }
   await page.screenshot({ path: `${SALIDA}/${nombre}.png` });
   await ctx.close();
   console.log(`  ${nombre}.png  (${ancho}x${alto})`);
@@ -45,6 +48,8 @@ await capturar('vitrina-1024x768', { ancho: 1024, alto: 768, total: 40 });
 await capturar('vitrina-768x1024', { ancho: 768, alto: 1024, total: 40 });
 await capturar('vitrina-375x812', { ancho: 375, alto: 812, total: 40 });
 await capturar('estado-vacio-1360x768', { ancho: 1360, alto: 768, total: 0 });
+await capturar('editor-1360x768', { ancho: 1360, alto: 768, total: 7, mostrarEditor: true });
+await capturar('editor-375x812', { ancho: 375, alto: 812, total: 3, mostrarEditor: true });
 
 await navegador.close();
 process.exit(0);
