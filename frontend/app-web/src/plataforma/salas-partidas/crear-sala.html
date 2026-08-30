@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Crear sala de batalla · The Nexus Battles VI</title>
+
+    <!-- Sistema de diseno compartido. Ningun estilo propio de esta vista. -->
+    <link rel="stylesheet" href="/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="/ui-kit/css/componentes.css" />
+  </head>
+
+  <body>
+    <main class="contenido">
+      <h1>Crear sala de batalla</h1>
+
+      <form id="formulario-crear-sala" novalidate>
+        <!-- Zona del aviso. Vacia y oculta hasta que hay algo que decir. -->
+        <div data-zona="aviso" hidden></div>
+
+        <div class="campo">
+          <label class="campo__etiqueta" for="nombre">Nombre de la sala</label>
+          <input class="campo__control" id="nombre" name="nombre" type="text"
+                 maxlength="60" autocomplete="off" />
+          <p class="campo__pista">Entre 3 y 60 caracteres.</p>
+        </div>
+
+        <div class="campo">
+          <label class="campo__etiqueta" for="maximoParticipantes">Numero de participantes</label>
+          <input class="campo__control" id="maximoParticipantes" name="maximoParticipantes"
+                 type="number" min="2" max="6" value="4" inputmode="numeric" />
+          <p class="campo__pista">Entre 2 y 6 jugadores.</p>
+        </div>
+
+        <div class="campo">
+          <label class="campo__etiqueta" for="recompensaCreditos">Recompensa en creditos</label>
+          <input class="campo__control" id="recompensaCreditos" name="recompensaCreditos"
+                 type="number" min="0" value="0" inputmode="numeric" />
+          <p class="campo__pista">
+            Apostar es libre. Las salas con recompensa todavia no estan disponibles.
+          </p>
+        </div>
+
+        <!--
+          RF-JUE-004. Botones de radio reales dentro de una tarjeta: la regla de
+          accesibilidad del proyecto prohibe las tarjetas con clic sin input.
+        -->
+        <fieldset>
+          <legend class="campo__etiqueta">Modalidad de juego</legend>
+          <div class="modalidades">
+            <div class="modalidad">
+              <input class="modalidad__entrada" type="radio" name="modalidad"
+                     id="modalidad-duelo" value="UNO_CONTRA_UNO" />
+              <label class="modalidad__cara" for="modalidad-duelo">
+                <span class="modalidad__titulo">1 contra 1</span>
+                <span class="modalidad__detalle">Duelo directo entre dos heroes.</span>
+              </label>
+            </div>
+
+            <div class="modalidad">
+              <input class="modalidad__entrada" type="radio" name="modalidad"
+                     id="modalidad-ia" value="CONTRA_IA" />
+              <label class="modalidad__cara" for="modalidad-ia">
+                <span class="modalidad__titulo">Contra la IA</span>
+                <span class="modalidad__detalle">Enfrentate a un rival controlado por la maquina.</span>
+              </label>
+            </div>
+
+            <div class="modalidad">
+              <input class="modalidad__entrada" type="radio" name="modalidad"
+                     id="modalidad-seis" value="HASTA_SEIS" checked />
+              <label class="modalidad__cara" for="modalidad-seis">
+                <span class="modalidad__titulo">Hasta seis</span>
+                <span class="modalidad__detalle">Combate multiple, todos contra todos.</span>
+              </label>
+            </div>
+          </div>
+        </fieldset>
+
+        <label class="casilla">
+          <input class="casilla__entrada" type="checkbox" name="incluirHeroeIA" />
+          <span class="casilla__etiqueta">
+            Incluir un heroe aleatorio controlado por la IA
+            <small class="campo__pista">Se anadira un combatiente mas a la sala.</small>
+          </span>
+        </label>
+
+        <label class="casilla">
+          <input class="casilla__entrada" type="checkbox" name="privada" />
+          <span class="casilla__etiqueta">
+            Sala privada
+            <small class="campo__pista">Solo accesible por invitacion; no aparece en el listado.</small>
+          </span>
+        </label>
+
+        <button class="boton boton--primario boton--grande" type="submit">Crear sala</button>
+      </form>
+    </main>
+
+    <script type="module">
+      import { montarCrearSala } from './crear-sala.js';
+      montarCrearSala(document.getElementById('formulario-crear-sala'));
+    </script>
+  </body>
+</html>
