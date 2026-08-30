@@ -36,6 +36,14 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
+// HU-CICD-001: cobertura de pruebas centralizada aqui para que los 8
+// servicios de services/plataforma/* (y cualquiera que se sume despues a
+// settings.gradle) la hereden automaticamente, sin repetir configuracion
+// JaCoCo servicio por servicio.
+jacoco {
+    toolVersion = '0.8.12'
+}
+
 tasks.named('test') {
     useJUnitPlatform()
     finalizedBy tasks.named('jacocoTestReport')
