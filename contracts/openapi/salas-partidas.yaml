@@ -1,0 +1,651 @@
+openapi: 3.1.0
+
+# =============================================================================
+# Nexus Battles VI — Salas y partidas (modulo de plataforma, Grupo 6)
+#
+# Regla 1 de plataforma: contrato primero. Este documento se acuerda ANTES de
+# implementar y es la referencia para el backend, el frontend y las pruebas de
+# contrato (Pact JVM).
+#
+# Cada operacion y cada campo esta anclado a un requisito de
+# REQUISITOS_GRUPO_6_EMPRESA_A.pdf. No hay campos inventados: si algo no
+# aparece en un RF o en una pantalla ya aprobada del archivo de Figma, no esta
+# aqui.
+#
+# Trazabilidad:
+#   RF-JUE-001  Creacion de sala de batalla
+#   RF-JUE-002  Ingreso a una sala existente
+#   RF-JUE-003  Exigencia de personaje equipado
+#   RF-JUE-004  Modalidades de partida
+#   RF-JUE-009  Barra de progreso de vida
+#   RF-JUE-014  Apuesta de creditos en batallas
+#   RF-JUE-017  Diseno de la interfaz de combate
+#
+# Historias de usuario: HU-SAL-001 a HU-SAL-005 (Simon Perez Gomez)
+# Canal en tiempo real: contracts/websocket/salas-partidas.yaml
+# =============================================================================
+
+info:
+  title: Nexus Battles VI — Salas y partidas (salas-partidas)
+  description: |
+    API de creacion, listado e ingreso a salas de batalla, y de consulta del
+    estado de una partida en curso.
+
+    El avance del combate turno a turno NO viaja por esta API: viaja por el
+    canal WebSocket descrito en `contracts/websocket/salas-partidas.yaml`.
+    Esta API cubre el ciclo de vida de la sala hasta el inicio del combate, y
+    la consulta puntual de estado para reconexion.
+
+    Errores: todos los errores se devuelven en formato problem details
+    (RFC 7807) con `Content-Type: application/problem+json`, identico en los 20
+    modulos (regla 4 de plataforma). La correspondencia entre este formato y el
+    componente `Aviso` de la interfaz esta en
+    `shared/ui-kit/MAPEO-ERRORES.md`.
+
+    Trazas: toda peticion propaga `traceparent` (regla 5 de plataforma).
+  version: 1.0.0
+  contact:
+    name: Grupo 6 — Tiempo real, comunidad y plataforma
+  license:
+    name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
+
+servers:
+  - url: http://localhost:8084/api/v1
+    description: Entorno local de desarrollo
+  - url: https://api.nexusbattles.local/salas-partidas/api/v1
+    description: Entorno desplegado
+
+tags:
+  - name: Salas
+    description: Ciclo de vida de la sala de batalla
+  - name: Partidas
+    description: Estado de la partida en curso
+
+paths:
+
+  # ---------------------------------------------------------------------------
+  # RF-JUE-001 · HU-SAL-001 — Creacion de sala de batalla
+  # RF-JUE-014 — Apuesta de creditos
+  # ---------------------------------------------------------------------------
+  /salas:
+    post:
+      tags: [Salas]
+      summary: Crear una sala de batalla
+      description: |
+        Crea una sala indicando cuantos jugadores participaran, la recompensa
+        en juego y si se incluye un heroe controlado por la inteligencia
+        artificial (RF-JUE-001).
+
+        Los creditos de la recompensa quedan comprometidos al crear la sala
+        (RF-JUE-014). Si el jugador no tiene saldo suficiente la operacion se
+        rechaza con `422` y el `detail` indica cuantos creditos tiene y cuantos
+        hacen falta — el requisito exige comunicar el MOTIVO del rechazo, no
+        solo que fallo.
+      operationId: crearSala
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrearSalaRequest'
+      responses:
+        '201':
+          description: Sala creada. El creador queda dentro como anfitrion.
+          headers:
+            Location:
+              description: URI de la sala creada
+              schema: { type: string, format: uri }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sala'
+        '400':
+          $ref: '#/components/responses/ParametrosInvalidos'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '422':
+          description: |
+            Creditos insuficientes para comprometer la recompensa.
+            `detail` incluye el saldo actual y el requerido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+              example:
+                type: 'https://nexusbattles.local/errores/creditos-insuficientes'
+                title: 'Creditos insuficientes'
+                status: 422
+                detail: 'Tienes 240 creditos y necesitas 400 para crear esta sala.'
+                instance: '/api/v1/salas'
+
+    # -------------------------------------------------------------------------
+    # RF-JUE-002 · HU-SAL-002 — Listado de salas creadas por otros jugadores
+    # -------------------------------------------------------------------------
+    get:
+      tags: [Salas]
+      summary: Listar salas disponibles
+      description: |
+        Devuelve la lista de salas creadas por otros jugadores para que el
+        jugador seleccione una e ingrese (RF-JUE-002).
+
+        La paginacion es de 16 elementos por pagina, valor fijado en el sistema
+        de diseno (`--elementos-por-pagina`). Las salas privadas no aparecen en
+        el listado: se accede a ellas por codigo de invitacion.
+      operationId: listarSalas
+      parameters:
+        - name: pagina
+          in: query
+          description: Numero de pagina, base 0
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: tamano
+          in: query
+          description: Elementos por pagina. El valor de diseno es 16.
+          schema: { type: integer, minimum: 1, maximum: 50, default: 16 }
+        - name: modalidad
+          in: query
+          description: Filtro por modalidad de partida (RF-JUE-004)
+          schema:
+            $ref: '#/components/schemas/Modalidad'
+        - name: estado
+          in: query
+          description: Filtro por estado de la sala
+          schema:
+            $ref: '#/components/schemas/EstadoSala'
+        - name: busqueda
+          in: query
+          description: Busqueda por nombre de sala
+          schema: { type: string, maxLength: 60 }
+      responses:
+        '200':
+          description: Pagina de salas disponibles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaDeSalas'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+
+  /salas/{idSala}:
+    parameters:
+      - $ref: '#/components/parameters/IdSala'
+    get:
+      tags: [Salas]
+      summary: Consultar una sala
+      operationId: obtenerSala
+      responses:
+        '200':
+          description: Detalle de la sala
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sala'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '404':
+          $ref: '#/components/responses/SalaNoEncontrada'
+
+    delete:
+      tags: [Salas]
+      summary: Cancelar una sala
+      description: |
+        Solo el anfitrion puede cancelar. Los creditos comprometidos por los
+        participantes se devuelven. Emite el evento `sala.cancelada` por el
+        canal en tiempo real para que quienes esten dentro salgan de la vista
+        de espera.
+      operationId: cancelarSala
+      responses:
+        '204':
+          description: Sala cancelada y creditos devueltos
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          description: Solo el anfitrion puede cancelar la sala
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '404':
+          $ref: '#/components/responses/SalaNoEncontrada'
+        '409':
+          description: La partida ya comenzo; no se puede cancelar
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+
+  # ---------------------------------------------------------------------------
+  # RF-JUE-002 + RF-JUE-003 · HU-SAL-002 / HU-SAL-003 — Ingreso con validacion
+  # ---------------------------------------------------------------------------
+  /salas/{idSala}/participantes:
+    parameters:
+      - $ref: '#/components/parameters/IdSala'
+    post:
+      tags: [Salas]
+      summary: Ingresar a una sala
+      description: |
+        Ingresa al jugador autenticado en la sala seleccionada (RF-JUE-002).
+
+        Antes de admitirlo, el sistema exige que tenga su personaje equipado
+        (RF-JUE-003) y que ese heroe no este comprometido en otra partida. Los
+        dos rechazos posibles se distinguen por `type`, porque la interfaz
+        muestra un dialogo distinto para cada uno:
+
+          - `heroe-no-equipado`  → invita a ir al inventario
+          - `heroe-ocupado`      → nombra la sala donde esta y ofrece cambiarlo
+
+        Al ingresar se comprometen los creditos de la apuesta (RF-JUE-014).
+      operationId: ingresarASala
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngresoRequest'
+      responses:
+        '200':
+          description: Ingreso aceptado. Devuelve la sala con el participante dentro.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sala'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          description: Sala privada y codigo de invitacion ausente o invalido
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '404':
+          $ref: '#/components/responses/SalaNoEncontrada'
+        '409':
+          description: La sala esta llena o la partida ya comenzo
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '422':
+          description: |
+            El jugador no cumple los requisitos para entrar. Distinguir por `type`:
+            heroe no equipado, heroe ocupado en otra partida, o creditos
+            insuficientes para la apuesta.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+              examples:
+                heroeNoEquipado:
+                  summary: RF-JUE-003 — sin personaje equipado
+                  value:
+                    type: 'https://nexusbattles.local/errores/heroe-no-equipado'
+                    title: 'No tienes un heroe equipado'
+                    status: 422
+                    detail: 'Equipa un heroe en tu inventario antes de entrar a una batalla.'
+                    instance: '/api/v1/salas/8f2a/participantes'
+                heroeOcupado:
+                  summary: RF-JUE-003 — heroe comprometido en otra partida
+                  value:
+                    type: 'https://nexusbattles.local/errores/heroe-ocupado'
+                    title: 'Tu heroe esta en otra partida'
+                    status: 422
+                    detail: 'Sombra de Vael esta combatiendo en Cacería nocturna. Elige otro heroe.'
+                    instance: '/api/v1/salas/8f2a/participantes'
+
+    delete:
+      tags: [Salas]
+      summary: Abandonar la sala
+      description: |
+        Saca al jugador autenticado de la sala antes de que comience la
+        partida y le devuelve los creditos comprometidos. Una vez iniciado el
+        combate, abandonar cuenta como derrota y no hay devolucion.
+      operationId: abandonarSala
+      responses:
+        '204':
+          description: Jugador retirado de la sala
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '404':
+          $ref: '#/components/responses/SalaNoEncontrada'
+
+  # ---------------------------------------------------------------------------
+  # HU-SAL-003 — Verificacion previa, sin efectos secundarios
+  # ---------------------------------------------------------------------------
+  /salas/{idSala}/verificacion-heroe:
+    parameters:
+      - $ref: '#/components/parameters/IdSala'
+    get:
+      tags: [Salas]
+      summary: Verificar el heroe antes de intentar ingresar
+      description: |
+        Comprueba si el jugador puede entrar, SIN ingresarlo ni comprometer
+        creditos. La interfaz la usa para mostrar el dialogo de validacion de
+        heroe antes de pulsar Entrar (RF-JUE-003), de modo que el jugador no
+        descubra el problema despues de la accion.
+      operationId: verificarHeroe
+      responses:
+        '200':
+          description: Resultado de la verificacion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificacionHeroe'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '404':
+          $ref: '#/components/responses/SalaNoEncontrada'
+
+  # ---------------------------------------------------------------------------
+  # RF-JUE-017 — Estado de la partida, para pintar la vista y para reconectar
+  # ---------------------------------------------------------------------------
+  /partidas/{idPartida}:
+    parameters:
+      - name: idPartida
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Partidas]
+      summary: Consultar el estado de una partida
+      description: |
+        Devuelve el estado completo del combate: participantes con su vida,
+        turno en curso y efectos activos.
+
+        Se consulta al entrar al combate y al reconectar tras una caida del
+        canal en tiempo real. Durante el juego normal el estado llega por
+        WebSocket, no por esta ruta.
+      operationId: obtenerPartida
+      responses:
+        '200':
+          description: Estado de la partida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Partida'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '404':
+          description: Partida no encontrada
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+
+components:
+
+  parameters:
+    IdSala:
+      name: idSala
+      in: path
+      required: true
+      description: Identificador de la sala
+      schema: { type: string, format: uuid }
+
+  responses:
+    NoAutenticado:
+      description: Falta el token o esta caducado
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+    SalaNoEncontrada:
+      description: La sala no existe o ya fue cerrada
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+    ParametrosInvalidos:
+      description: |
+        Parametros fuera de rango. `errores` detalla campo por campo para que
+        la interfaz marque el campo concreto, no solo el formulario.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+
+  schemas:
+
+    # -- Formato de error comun a los 20 modulos (regla 4) --------------------
+    ProblemDetail:
+      type: object
+      description: |
+        Problem details RFC 7807. Identico en los 20 modulos.
+        Correspondencia con la interfaz en `shared/ui-kit/MAPEO-ERRORES.md`.
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: Identificador estable del tipo de error. La interfaz decide por aqui, nunca por el texto.
+        title:
+          type: string
+          description: Titulo corto. Va al titulo del componente Aviso.
+        status:
+          type: integer
+          description: Codigo HTTP. Determina el tono del Aviso.
+        detail:
+          type: string
+          description: Explicacion legible para el jugador. Va al cuerpo del Aviso.
+        instance:
+          type: string
+          description: Ruta que produjo el error.
+        errores:
+          type: array
+          description: Errores por campo, presente solo en validaciones de formulario.
+          items:
+            type: object
+            required: [campo, mensaje]
+            properties:
+              campo: { type: string }
+              mensaje: { type: string }
+
+    # -- Enumeraciones ---------------------------------------------------------
+    Modalidad:
+      type: string
+      description: |
+        Modalidades admitidas (RF-JUE-004): uno contra uno, uno contra la
+        inteligencia artificial, y partidas de hasta seis jugadores.
+      enum: [UNO_CONTRA_UNO, CONTRA_IA, HASTA_SEIS]
+
+    EstadoSala:
+      type: string
+      description: |
+        Estado de la sala. Se corresponde uno a uno con las variantes del
+        componente `Insignia` en el sistema de diseno.
+      enum: [ABIERTA, LLENA, EN_JUEGO, PRIVADA, CANCELADA, FINALIZADA]
+
+    ResultadoVerificacion:
+      type: string
+      description: |
+        Resultado de la verificacion de heroe (RF-JUE-003). Cada valor
+        corresponde a una variante del dialogo de validacion.
+      enum: [DISPONIBLE, SIN_HEROE_EQUIPADO, HEROE_OCUPADO, CREDITOS_INSUFICIENTES]
+
+    # -- Peticiones ------------------------------------------------------------
+    CrearSalaRequest:
+      type: object
+      description: Parametros de creacion de sala (RF-JUE-001, RF-JUE-004, RF-JUE-014).
+      required: [nombre, maximoParticipantes, modalidad, recompensaCreditos]
+      properties:
+        nombre:
+          type: string
+          minLength: 3
+          maxLength: 60
+          description: Nombre visible de la sala.
+          examples: ['Duelo en el Nexo']
+        maximoParticipantes:
+          type: integer
+          minimum: 2
+          maximum: 6
+          description: |
+            Cuantos jugadores participaran (RF-JUE-001). El maximo de seis lo
+            fija RF-JUE-004.
+        modalidad:
+          $ref: '#/components/schemas/Modalidad'
+        recompensaCreditos:
+          type: integer
+          minimum: 0
+          description: |
+            Creditos puestos en juego (RF-JUE-001, RF-JUE-014). Se comprometen
+            al crear la sala.
+        incluirHeroeIA:
+          type: boolean
+          default: false
+          description: Incluir un heroe aleatorio controlado por la IA (RF-JUE-001).
+        privada:
+          type: boolean
+          default: false
+          description: |
+            Si es privada no aparece en el listado publico y solo se entra con
+            el codigo de invitacion.
+        tamanoEquipo:
+          type: integer
+          minimum: 1
+          maximum: 3
+          description: |
+            Integrantes por equipo en modo cooperativo. RF-JUE-004 fija el
+            maximo en tres. Solo aplica con modalidad HASTA_SEIS.
+
+    IngresoRequest:
+      type: object
+      properties:
+        codigoInvitacion:
+          type: string
+          description: Obligatorio unicamente si la sala es privada.
+
+    # -- Respuestas ------------------------------------------------------------
+    Sala:
+      type: object
+      required: [id, nombre, estado, modalidad, maximoParticipantes, participantes, recompensaCreditos, anfitrion]
+      properties:
+        id: { type: string, format: uuid }
+        nombre: { type: string }
+        estado: { $ref: '#/components/schemas/EstadoSala' }
+        modalidad: { $ref: '#/components/schemas/Modalidad' }
+        maximoParticipantes: { type: integer, minimum: 2, maximum: 6 }
+        recompensaCreditos: { type: integer, minimum: 0 }
+        incluirHeroeIA: { type: boolean }
+        privada: { type: boolean }
+        tamanoEquipo: { type: integer, minimum: 1, maximum: 3 }
+        anfitrion: { $ref: '#/components/schemas/ResumenJugador' }
+        participantes:
+          type: array
+          items: { $ref: '#/components/schemas/Participante' }
+        idPartida:
+          type: [string, 'null']
+          format: uuid
+          description: Presente solo cuando la partida ya comenzo.
+        creadaEn: { type: string, format: date-time }
+
+    PaginaDeSalas:
+      type: object
+      required: [contenido, pagina, tamano, totalElementos, totalPaginas]
+      properties:
+        contenido:
+          type: array
+          items: { $ref: '#/components/schemas/Sala' }
+        pagina: { type: integer }
+        tamano: { type: integer, description: 'El valor de diseno es 16.' }
+        totalElementos: { type: integer }
+        totalPaginas: { type: integer }
+
+    ResumenJugador:
+      type: object
+      required: [id, apodo]
+      properties:
+        id: { type: string, format: uuid }
+        apodo: { type: string }
+        avatarUrl: { type: [string, 'null'], format: uri }
+        rango: { type: [string, 'null'] }
+
+    Participante:
+      type: object
+      required: [jugador, heroe, esIA, listo]
+      properties:
+        jugador: { $ref: '#/components/schemas/ResumenJugador' }
+        heroe: { $ref: '#/components/schemas/HeroeEnPartida' }
+        esIA:
+          type: boolean
+          description: Verdadero si lo controla la inteligencia artificial (RF-JUE-001, RF-JUE-004).
+        listo: { type: boolean }
+        equipo:
+          type: [integer, 'null']
+          description: Numero de equipo en modo cooperativo.
+        creditosApostados: { type: integer, minimum: 0 }
+
+    HeroeEnPartida:
+      type: object
+      description: |
+        Datos del heroe que la sala y el combate necesitan mostrar. El detalle
+        completo del heroe pertenece al modulo de contenido: aqui solo viaja
+        lo que la vista de batalla pinta.
+      required: [id, nombre, vidaActual, vidaMaxima]
+      properties:
+        id: { type: string, format: uuid }
+        nombre: { type: string }
+        retratoUrl: { type: [string, 'null'], format: uri }
+        nivel: { type: [integer, 'null'] }
+        vidaActual:
+          type: integer
+          minimum: 0
+          description: |
+            Vida actual. La barra muestra SIEMPRE el valor numerico junto al
+            color (RF-JUE-009): el color nunca es el unico indicador.
+        vidaMaxima:
+          type: integer
+          minimum: 1
+          description: |
+            Vida maxima. El porcentaje se calcula en el cliente. Los umbrales
+            de color son 60 % y 40 % (RF-JUE-009) y viven en el sistema de
+            diseno como `--vida-umbral-alto` y `--vida-umbral-medio`; el
+            servidor NO envia color.
+        efectosActivos:
+          type: array
+          description: Efectos en curso. Cada uno se representa con icono (RF-JUE-017).
+          items:
+            type: object
+            required: [codigo, nombre]
+            properties:
+              codigo: { type: string }
+              nombre: { type: string }
+              turnosRestantes: { type: [integer, 'null'] }
+
+    VerificacionHeroe:
+      type: object
+      required: [resultado, puedeIngresar]
+      properties:
+        resultado: { $ref: '#/components/schemas/ResultadoVerificacion' }
+        puedeIngresar: { type: boolean }
+        heroe:
+          oneOf:
+            - $ref: '#/components/schemas/HeroeEnPartida'
+            - type: 'null'
+        salaQueLoOcupa:
+          type: [string, 'null']
+          description: |
+            Nombre de la sala donde el heroe esta comprometido. Presente solo
+            si el resultado es HEROE_OCUPADO, porque el dialogo debe nombrarla.
+        creditosDisponibles: { type: [integer, 'null'] }
+        creditosRequeridos: { type: [integer, 'null'] }
+
+    Partida:
+      type: object
+      description: Estado del combate (RF-JUE-017).
+      required: [id, idSala, estado, participantes, turnoActual]
+      properties:
+        id: { type: string, format: uuid }
+        idSala: { type: string, format: uuid }
+        estado:
+          type: string
+          enum: [EN_CURSO, FINALIZADA]
+        participantes:
+          type: array
+          items: { $ref: '#/components/schemas/Participante' }
+        turnoActual:
+          type: object
+          required: [idJugador, numeroTurno]
+          properties:
+            idJugador: { type: string, format: uuid }
+            numeroTurno: { type: integer, minimum: 1 }
+            segundosRestantes: { type: [integer, 'null'] }
+        recompensaEnJuego: { type: integer, minimum: 0 }
+        iniciadaEn: { type: string, format: date-time }
+
+  securitySchemes:
+    keycloak:
+      type: openIdConnect
+      openIdConnectUrl: /realms/nexus-battles/.well-known/openid-configuration
+      description: Identidad emitida por Keycloak 26.
+
+security:
+  - keycloak: []

@@ -1,0 +1,483 @@
+asyncapi: 3.0.0
+
+# =============================================================================
+# Nexus Battles VI — Canal en tiempo real de salas y partidas
+#
+# Regla 1 de plataforma: contrato primero. Este documento describe los destinos
+# STOMP sobre WebSocket por los que viaja el combate turno a turno.
+#
+# Lo que NO esta aqui: la creacion, el listado y el ingreso a la sala, que son
+# peticiones HTTP y viven en contracts/openapi/salas-partidas.yaml.
+#
+# Trazabilidad:
+#   RF-JUE-004  Modalidades de partida
+#   RF-JUE-009  Barra de progreso de vida con valor numerico y umbrales 60/40
+#   RF-JUE-015  Chat de salas y de vista general   → ver AVISO DE PROPIEDAD
+#   RF-JUE-017  Interfaz de combate: turno en curso, efectos por icono
+#
+# Salidas exigidas por el PDF de requisitos, seccion 3.1:
+#   "Sala creada o unida, orden de turnos, barra de vida actualizada con su
+#    codigo de color, turno en curso, resultado de la partida, creditos
+#    repartidos y cofres otorgados."
+#
+# ---------------------------------------------------------------------------
+# AVISO DE PROPIEDAD — leer antes de implementar el chat
+#
+# Los destinos de chat (`/tema/salas/{idSala}/chat` y `/app/salas/{idSala}/chat`)
+# corresponden a HU-JUE-015, cuyo responsable es Alexander Nino, no a las
+# historias HU-SAL-001..005. Se documentan aqui porque comparten la sala y el
+# mismo broker STOMP, pero su esquema definitivo lo fija su dueno.
+#
+# NO fusionar cambios a esos dos destinos sin aprobacion de Alexander Nino.
+# Lo aqui escrito es una propuesta de encaje, no un contrato cerrado.
+# ---------------------------------------------------------------------------
+# =============================================================================
+
+info:
+  title: Nexus Battles VI — Canal de salas y partidas
+  version: 1.0.0
+  description: |
+    Canal WebSocket + STOMP del modulo `salas-partidas`.
+
+    Convenciones:
+      - Prefijo de suscripcion (servidor → cliente): `/tema`
+      - Prefijo de envio (cliente → servidor):       `/app`
+      - Cola privada de un usuario:                  `/usuario/cola`
+
+    Todo mensaje propaga el identificador de traza en la cabecera `traceparent`
+    (regla 5 de plataforma).
+
+    Los errores que viajan por el canal usan el mismo formato problem details
+    que la API HTTP (regla 4), para que la interfaz los pinte con el mismo
+    componente `Aviso`. Ver `shared/ui-kit/MAPEO-ERRORES.md`.
+  license:
+    name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
+
+servers:
+  local:
+    host: localhost:8084
+    protocol: ws
+    pathname: /ws
+    description: Entorno local de desarrollo
+  desplegado:
+    host: api.nexusbattles.local
+    protocol: wss
+    pathname: /salas-partidas/ws
+    description: Entorno desplegado
+    security:
+      - $ref: '#/components/securitySchemes/keycloak'
+
+channels:
+
+  salaEstado:
+    address: '/tema/salas/{idSala}'
+    title: Estado de la sala
+    description: |
+      Cambios en la sala mientras se llena y antes de comenzar: quien entra,
+      quien sale, quien esta listo, y la cancelacion por el anfitrion.
+      Alimenta la vista de sala de espera.
+    parameters:
+      idSala:
+        description: Identificador de la sala
+    messages:
+      participanteIngreso:
+        $ref: '#/components/messages/ParticipanteIngreso'
+      participanteSalio:
+        $ref: '#/components/messages/ParticipanteSalio'
+      salaCancelada:
+        $ref: '#/components/messages/SalaCancelada'
+      partidaIniciada:
+        $ref: '#/components/messages/PartidaIniciada'
+
+  partidaEstado:
+    address: '/tema/partidas/{idPartida}'
+    title: Avance del combate
+    description: |
+      Estado del combate turno a turno. Es el canal que pinta la vista de
+      batalla: vida, turno en curso y efectos activos.
+    parameters:
+      idPartida:
+        description: Identificador de la partida
+    messages:
+      turnoCambiado:
+        $ref: '#/components/messages/TurnoCambiado'
+      accionResuelta:
+        $ref: '#/components/messages/AccionResuelta'
+      partidaFinalizada:
+        $ref: '#/components/messages/PartidaFinalizada'
+
+  accionDelJugador:
+    address: '/app/partidas/{idPartida}/acciones'
+    title: Accion del jugador
+    description: |
+      Envio de la accion del turno. El servidor valida que sea el turno de
+      quien envia; si no lo es, responde por la cola privada con un error en
+      formato problem details.
+    parameters:
+      idPartida:
+        description: Identificador de la partida
+    messages:
+      ejecutarAccion:
+        $ref: '#/components/messages/EjecutarAccion'
+
+  colaPrivada:
+    address: '/usuario/cola/salas'
+    title: Respuestas dirigidas a un solo jugador
+    description: |
+      Errores y confirmaciones que solo conciernen a quien envio la accion.
+      No se difunden al resto de la sala.
+    messages:
+      errorDeCanal:
+        $ref: '#/components/messages/ErrorDeCanal'
+
+  # ---------------------------------------------------------------------------
+  # PROPIEDAD DE HU-JUE-015 — Alexander Nino. Propuesta de encaje, no cerrada.
+  # ---------------------------------------------------------------------------
+  chatDeSala:
+    address: '/tema/salas/{idSala}/chat'
+    title: Chat de la sala (HU-JUE-015)
+    description: |
+      Mensajes del chat de la sala (RF-JUE-015). El PDF exige entregar los
+      mensajes a los participantes, conservar el historial y filtrar el
+      contenido segun las politicas — el filtrado se apoya en la lista negra
+      de HU-ADM-002.
+
+      Dueno: Alexander Nino. Esquema pendiente de acordar con el.
+    parameters:
+      idSala:
+        description: Identificador de la sala
+    messages:
+      mensajeDeChat:
+        $ref: '#/components/messages/MensajeDeChat'
+
+  enviarChat:
+    address: '/app/salas/{idSala}/chat'
+    title: Envio de mensaje de chat (HU-JUE-015)
+    description: 'Dueno: Alexander Nino. Esquema pendiente de acordar con el.'
+    parameters:
+      idSala:
+        description: Identificador de la sala
+    messages:
+      enviarMensaje:
+        $ref: '#/components/messages/EnviarMensaje'
+
+operations:
+
+  recibirEstadoDeSala:
+    action: receive
+    channel:
+      $ref: '#/channels/salaEstado'
+    summary: El cliente se suscribe al estado de la sala mientras espera
+
+  recibirEstadoDePartida:
+    action: receive
+    channel:
+      $ref: '#/channels/partidaEstado'
+    summary: El cliente se suscribe al avance del combate
+
+  enviarAccion:
+    action: send
+    channel:
+      $ref: '#/channels/accionDelJugador'
+    summary: El cliente envia su accion cuando es su turno
+
+  recibirErrores:
+    action: receive
+    channel:
+      $ref: '#/channels/colaPrivada'
+    summary: El cliente recibe los errores que solo le conciernen
+
+  recibirChat:
+    action: receive
+    channel:
+      $ref: '#/channels/chatDeSala'
+    summary: 'HU-JUE-015 — dueno Alexander Nino'
+
+  enviarMensajeDeChat:
+    action: send
+    channel:
+      $ref: '#/channels/enviarChat'
+    summary: 'HU-JUE-015 — dueno Alexander Nino'
+
+components:
+
+  securitySchemes:
+    keycloak:
+      type: openIdConnect
+      openIdConnectUrl: /realms/nexus-battles/.well-known/openid-configuration
+      description: |
+        El token viaja en la cabecera `Authorization` del CONNECT de STOMP.
+        Si caduca durante la partida el servidor emite `errorDeCanal` con
+        `type` de sesion caducada y cierra la conexion.
+
+  messages:
+
+    ParticipanteIngreso:
+      name: participanteIngreso
+      title: Un jugador entro a la sala
+      payload:
+        type: object
+        required: [tipo, idSala, participante, ocupacion]
+        properties:
+          tipo: { const: 'sala.participante.ingreso' }
+          idSala: { type: string, format: uuid }
+          participante: { $ref: '#/components/schemas/Participante' }
+          ocupacion: { $ref: '#/components/schemas/Ocupacion' }
+
+    ParticipanteSalio:
+      name: participanteSalio
+      title: Un jugador abandono la sala
+      payload:
+        type: object
+        required: [tipo, idSala, idJugador, ocupacion]
+        properties:
+          tipo: { const: 'sala.participante.salio' }
+          idSala: { type: string, format: uuid }
+          idJugador: { type: string, format: uuid }
+          ocupacion: { $ref: '#/components/schemas/Ocupacion' }
+
+    SalaCancelada:
+      name: salaCancelada
+      title: El anfitrion cancelo la sala
+      description: |
+        La interfaz saca a todos de la sala de espera y devuelve al listado,
+        informando del motivo. Los creditos comprometidos se devuelven.
+      payload:
+        type: object
+        required: [tipo, idSala, motivo]
+        properties:
+          tipo: { const: 'sala.cancelada' }
+          idSala: { type: string, format: uuid }
+          motivo:
+            type: string
+            enum: [CANCELADA_POR_ANFITRION, INACTIVIDAD, ERROR_DEL_SISTEMA]
+          creditosDevueltos: { type: integer, minimum: 0 }
+
+    PartidaIniciada:
+      name: partidaIniciada
+      title: La sala se lleno y comenzo el combate
+      description: |
+        Trae el orden de turnos, que el PDF exige como salida, y la posicion
+        de cada heroe en el campo — RF-JUE-017 la fija aleatoria, la decide el
+        servidor y el cliente solo la pinta.
+      payload:
+        type: object
+        required: [tipo, idSala, idPartida, ordenDeTurnos, participantes]
+        properties:
+          tipo: { const: 'sala.partida.iniciada' }
+          idSala: { type: string, format: uuid }
+          idPartida: { type: string, format: uuid }
+          ordenDeTurnos:
+            type: array
+            description: Identificadores de jugador en el orden en que jugaran.
+            items: { type: string, format: uuid }
+          participantes:
+            type: array
+            items: { $ref: '#/components/schemas/Participante' }
+
+    TurnoCambiado:
+      name: turnoCambiado
+      title: Cambio el turno
+      payload:
+        type: object
+        required: [tipo, idPartida, idJugador, numeroTurno]
+        properties:
+          tipo: { const: 'partida.turno.cambiado' }
+          idPartida: { type: string, format: uuid }
+          idJugador: { type: string, format: uuid }
+          numeroTurno: { type: integer, minimum: 1 }
+          segundosParaJugar:
+            type: [integer, 'null']
+            description: Cuenta atras del turno, si la modalidad la impone.
+
+    AccionResuelta:
+      name: accionResuelta
+      title: Se resolvio una accion de combate
+      description: |
+        Lleva la vida resultante de cada heroe afectado. La barra de vida
+        muestra siempre el valor numerico junto al color (RF-JUE-009): por eso
+        viajan `vidaActual` y `vidaMaxima`, y NUNCA un color. El umbral de
+        color lo aplica el cliente con `--vida-umbral-alto` (60) y
+        `--vida-umbral-medio` (40).
+      payload:
+        type: object
+        required: [tipo, idPartida, idEjecutor, accion, afectados]
+        properties:
+          tipo: { const: 'partida.accion.resuelta' }
+          idPartida: { type: string, format: uuid }
+          idEjecutor: { type: string, format: uuid }
+          accion:
+            type: object
+            required: [codigo, nombre]
+            properties:
+              codigo: { type: string }
+              nombre: { type: string }
+              icono:
+                type: [string, 'null']
+                description: Todos los efectos y controles se representan con icono (RF-JUE-017).
+          afectados:
+            type: array
+            items:
+              type: object
+              required: [idJugador, vidaActual, vidaMaxima]
+              properties:
+                idJugador: { type: string, format: uuid }
+                vidaActual: { type: integer, minimum: 0 }
+                vidaMaxima: { type: integer, minimum: 1 }
+                diferencia:
+                  type: integer
+                  description: Negativo si es dano, positivo si es curacion.
+                efectosActivos:
+                  type: array
+                  items: { $ref: '#/components/schemas/Efecto' }
+
+    PartidaFinalizada:
+      name: partidaFinalizada
+      title: Termino la partida
+      description: |
+        Cubre las salidas que exige el PDF: resultado de la partida, creditos
+        repartidos y cofres otorgados. Alimenta la vista de resultado, que
+        RF-JUE-017 pide de alto impacto.
+      payload:
+        type: object
+        required: [tipo, idPartida, ganadores, reparto]
+        properties:
+          tipo: { const: 'partida.finalizada' }
+          idPartida: { type: string, format: uuid }
+          ganadores:
+            type: array
+            items: { type: string, format: uuid }
+          reparto:
+            type: array
+            items:
+              type: object
+              required: [idJugador, creditos]
+              properties:
+                idJugador: { type: string, format: uuid }
+                creditos:
+                  type: integer
+                  description: Creditos repartidos. Negativo si perdio lo apostado.
+                experiencia: { type: [integer, 'null'] }
+                cofre:
+                  type: [object, 'null']
+                  description: Cofre otorgado, si corresponde.
+                  properties:
+                    id: { type: string }
+                    nombre: { type: string }
+                    rareza: { type: string }
+
+    EjecutarAccion:
+      name: ejecutarAccion
+      title: El jugador ejecuta su accion
+      payload:
+        type: object
+        required: [codigoAccion]
+        properties:
+          codigoAccion: { type: string }
+          idObjetivo:
+            type: [string, 'null']
+            format: uuid
+            description: Objetivo de la accion, si la accion lo requiere.
+
+    ErrorDeCanal:
+      name: errorDeCanal
+      title: Error dirigido a un solo jugador
+      description: |
+        Mismo formato que los errores HTTP (regla 4). La interfaz lo pinta con
+        el componente `Aviso` aplicando `shared/ui-kit/MAPEO-ERRORES.md`.
+      payload:
+        $ref: '#/components/schemas/ProblemDetail'
+
+    # -- HU-JUE-015 · dueno Alexander Nino · propuesta -------------------------
+    MensajeDeChat:
+      name: mensajeDeChat
+      title: Mensaje del chat de la sala (HU-JUE-015)
+      payload:
+        type: object
+        required: [tipo, idSala, autor, texto, enviadoEn]
+        properties:
+          tipo: { const: 'sala.chat.mensaje' }
+          idSala: { type: string, format: uuid }
+          autor: { $ref: '#/components/schemas/ResumenJugador' }
+          texto: { type: string }
+          enviadoEn: { type: string, format: date-time }
+          filtrado:
+            type: boolean
+            description: |
+              Verdadero si la lista negra de HU-ADM-002 censuro parte del
+              contenido. El PDF exige entregar el contenido filtrado segun las
+              politicas.
+
+    EnviarMensaje:
+      name: enviarMensaje
+      title: Envio de un mensaje al chat (HU-JUE-015)
+      payload:
+        type: object
+        required: [texto]
+        properties:
+          texto: { type: string, minLength: 1, maxLength: 500 }
+
+  schemas:
+
+    ProblemDetail:
+      type: object
+      description: Problem details RFC 7807, identico al de la API HTTP.
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+
+    Ocupacion:
+      type: object
+      description: Cuantos hay dentro sobre el maximo, para la tarjeta de sala.
+      required: [actual, maximo]
+      properties:
+        actual: { type: integer, minimum: 0 }
+        maximo: { type: integer, minimum: 2, maximum: 6 }
+
+    ResumenJugador:
+      type: object
+      required: [id, apodo]
+      properties:
+        id: { type: string, format: uuid }
+        apodo: { type: string }
+        avatarUrl: { type: [string, 'null'], format: uri }
+        rango: { type: [string, 'null'] }
+
+    Efecto:
+      type: object
+      required: [codigo, nombre]
+      properties:
+        codigo: { type: string }
+        nombre: { type: string }
+        icono: { type: [string, 'null'] }
+        turnosRestantes: { type: [integer, 'null'] }
+
+    Participante:
+      type: object
+      required: [jugador, heroe, esIA]
+      properties:
+        jugador: { $ref: '#/components/schemas/ResumenJugador' }
+        heroe:
+          type: object
+          required: [id, nombre, vidaActual, vidaMaxima]
+          properties:
+            id: { type: string, format: uuid }
+            nombre: { type: string }
+            retratoUrl: { type: [string, 'null'], format: uri }
+            nivel: { type: [integer, 'null'] }
+            vidaActual: { type: integer, minimum: 0 }
+            vidaMaxima: { type: integer, minimum: 1 }
+            efectosActivos:
+              type: array
+              items: { $ref: '#/components/schemas/Efecto' }
+        esIA: { type: boolean }
+        equipo: { type: [integer, 'null'] }
+        posicionEnCampo:
+          type: [integer, 'null']
+          description: |
+            Casilla asignada en el campo. RF-JUE-017 exige que la ubicacion
+            sea aleatoria; la decide el servidor, el cliente solo la pinta.
