@@ -1,0 +1,106 @@
+/* =======================================================================
+   Base — normalizacion y tipografia
+   Depende de tokens.css. Cargar siempre en este orden:
+     tokens.css -> base.css -> componentes.css -> css de la vista
+   ======================================================================= */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: var(--t-cuerpo-familia);
+  font-size: var(--t-cuerpo-tam);
+  font-weight: var(--t-cuerpo-peso);
+  line-height: var(--t-cuerpo-alto);
+}
+
+/* --- Titulos ------------------------------------------------------- */
+
+h1, .t-titulo {
+  margin: 0;
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-titulo-tam);
+  font-weight: var(--t-titulo-peso);
+  line-height: var(--t-titulo-alto);
+  color: var(--texto);
+}
+
+h2, .t-subtitulo {
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  font-weight: var(--t-subtitulo-peso);
+  line-height: var(--t-subtitulo-alto);
+  color: var(--texto);
+}
+
+.t-etiqueta {
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  line-height: var(--t-etiqueta-alto);
+}
+
+.t-cuerpo {
+  font-family: var(--t-cuerpo-familia);
+  font-size: var(--t-cuerpo-tam);
+  font-weight: var(--t-cuerpo-peso);
+  line-height: var(--t-cuerpo-alto);
+}
+
+.t-meta {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-meta-peso);
+  line-height: var(--t-meta-alto);
+  color: var(--texto-3);
+}
+
+p { margin: 0 0 var(--e-3); }
+p:last-child { margin-bottom: 0; }
+
+/* --- Enlaces ------------------------------------------------------- */
+
+a {
+  color: var(--primaria);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+a:hover { color: var(--primaria-relleno); }
+
+/* --- Foco ---------------------------------------------------------- */
+/* Un unico estilo de foco, y solo cuando se navega con teclado.       */
+
+:focus-visible {
+  outline: 2px solid var(--primaria);
+  outline-offset: 2px;
+  box-shadow: var(--anillo-foco);
+  border-radius: var(--radio-chico);
+}
+
+/* --- Utilidad de accesibilidad ------------------------------------- */
+/* Texto que solo leen los lectores de pantalla. Se usa, por ejemplo,
+   para dar contexto a una barra de vida o a un icono sin etiqueta.    */
+
+.solo-lectores {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
