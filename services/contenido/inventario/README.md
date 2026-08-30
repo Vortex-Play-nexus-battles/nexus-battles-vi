@@ -1,7 +1,7 @@
 # Servicio de inventario
 
-Servicio de inventario de `HU-INV-003`, subtareas `SCRUM-326` y `SCRUM-327`. Usa
-Java 21, Spring Boot 4.1 y Spring Data MongoDB.
+Servicio de inventario de `HU-INV-003` y equipamiento con limites de
+`HU-INV-005`. Usa Java 21, Spring Boot 4.1 y Spring Data MongoDB.
 
 ## Modelo
 
@@ -16,6 +16,12 @@ Inventario
    |- productoId      referencia al catalogo de productos
    |- tipo            HEROE, HABILIDAD, ARMA, ARMADURA, ITEM o EPICA
    `- nombrePropio     dato editable de la instancia
+`- equipamientos
+   |- heroeId           instancia HEROE del mismo inventario
+   |- armas             maximo dos identificadores de elemento
+   |- armaduras         una por CASCO, PECHO, GUANTES, BRAZALETES,
+   |                    PANTALON y ZAPATOS
+   `- items             maximo dos identificadores de elemento
 ```
 
 El inventario conserva referencias al catalogo y no copia imagenes,
@@ -41,6 +47,34 @@ PATCH /api/v1/inventario/elementos/{elementoId}
 `PATCH` solo permite modificar elementos del inventario autenticado. Intentar
 modificar el de otro jugador responde `403` y no altera los datos. El contrato
 completo esta en `contracts/openapi/inventario.yaml`.
+
+## Equipamiento con limites
+
+`HU-INV-005` guarda el equipamiento en el mismo documento del inventario para
+que ocupar o liberar una ranura sea una escritura atomica. El destino debe ser
+una instancia `HEROE` propia y el elemento debe existir en el mismo inventario.
+Una instancia no puede estar equipada simultaneamente en dos heroes.
+
+```text
+GET    /api/v1/inventario/heroes/{heroeId}/equipamiento
+PUT    /api/v1/inventario/heroes/{heroeId}/equipamiento/{elementoId}
+DELETE /api/v1/inventario/heroes/{heroeId}/equipamiento/{elementoId}
+```
+
+### Estado de las dependencias
+
+- `HU-HER-001` esta disponible. Su contrato publica prototipos de heroe por
+  nombre (`GET /api/v1/heroes`), no instancias poseidas por un jugador. Por ese
+  limite de contrato, inventario no importa sus clases: `heroeId` identifica la
+  instancia propia almacenada en inventario y `productoId` conserva la
+  referencia al catalogo.
+- `HU-PRD-001` aun no esta disponible en `develop` y no se inventa un endpoint
+  que no existe. Temporalmente se conserva en el elemento el tipo y, para
+  armaduras, la parte que define la ranura. Cuando productos publique su
+  consulta por identificador, la entrada debera obtener esos metadatos del
+  catalogo y dejar de aceptar `tipo` y `parteArmadura` como datos declarados por
+  el cliente. Las reglas de dos armas, seis partes y dos items no dependen de
+  ese cambio.
 
 ## Alcance actual
 

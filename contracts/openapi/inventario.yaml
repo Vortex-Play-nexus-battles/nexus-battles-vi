@@ -4,7 +4,8 @@ info:
   version: 1.0.0
   description: >
     Consulta paginada de la vitrina para HU-INV-001, y creacion y modificacion
-    de elementos propios del jugador para HU-INV-003.
+    de elementos propios del jugador para HU-INV-003, y equipamiento de
+    heroes con limites para HU-INV-005.
     La identidad temporal sigue la convencion X-User-Name de ms-identidad hasta
     que HU-AUT-004 publique el subject del token.
 servers:
@@ -107,6 +108,69 @@ paths:
                 $ref: "#/components/schemas/DetalleDeProblema"
         "503":
           $ref: "#/components/responses/PersistenciaNoDisponible"
+  /api/v1/inventario/heroes/{heroeId}/equipamiento:
+    get:
+      summary: Consulta las ranuras equipadas de un heroe propio
+      operationId: consultarEquipamientoPropio
+      parameters:
+        - $ref: "#/components/parameters/HeroeId"
+      responses:
+        "200":
+          description: Armas, armaduras e items equipados actualmente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EquipamientoHeroe"
+        "401":
+          $ref: "#/components/responses/IdentidadRequerida"
+        "403":
+          $ref: "#/components/responses/InventarioAjeno"
+        "404":
+          $ref: "#/components/responses/ElementoNoEncontrado"
+  /api/v1/inventario/heroes/{heroeId}/equipamiento/{elementoId}:
+    parameters:
+      - $ref: "#/components/parameters/HeroeId"
+      - $ref: "#/components/parameters/ElementoId"
+    put:
+      summary: Equipa un arma, armadura o item propio en un heroe propio
+      operationId: equiparElementoPropio
+      responses:
+        "200":
+          description: Equipamiento completo despues de ocupar la ranura
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EquipamientoHeroe"
+        "400":
+          $ref: "#/components/responses/ElementoNoEquipable"
+        "401":
+          $ref: "#/components/responses/IdentidadRequerida"
+        "403":
+          $ref: "#/components/responses/InventarioAjeno"
+        "404":
+          $ref: "#/components/responses/ElementoNoEncontrado"
+        "409":
+          $ref: "#/components/responses/LimiteEquipamiento"
+        "503":
+          $ref: "#/components/responses/PersistenciaNoDisponible"
+    delete:
+      summary: Desequipa un elemento de un heroe propio
+      operationId: desequiparElementoPropio
+      responses:
+        "200":
+          description: Equipamiento completo despues de liberar la ranura
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EquipamientoHeroe"
+        "401":
+          $ref: "#/components/responses/IdentidadRequerida"
+        "403":
+          $ref: "#/components/responses/InventarioAjeno"
+        "404":
+          $ref: "#/components/responses/ElementoNoEncontrado"
+        "503":
+          $ref: "#/components/responses/PersistenciaNoDisponible"
 components:
   securitySchemes:
     IdentidadTemporal:
@@ -120,6 +184,10 @@ components:
     CrearElemento:
       type: object
       additionalProperties: false
+      description: >
+        Contrato temporal mientras HU-PRD-001 no publica una consulta de
+        producto por identificador. Cuando este disponible, tipo y
+        parteArmadura se resolveran en servidor desde productoId.
       required: [productoId, tipo, nombrePropio]
       properties:
         productoId:
@@ -131,6 +199,8 @@ components:
         nombrePropio:
           type: string
           minLength: 1
+        parteArmadura:
+          $ref: "#/components/schemas/ParteArmadura"
     ModificarElemento:
       type: object
       additionalProperties: false
@@ -149,6 +219,36 @@ components:
           type: string
           enum: [HEROE, HABILIDAD, ARMA, ARMADURA, ITEM, EPICA]
         nombrePropio: { type: string }
+        parteArmadura:
+          oneOf:
+            - $ref: "#/components/schemas/ParteArmadura"
+            - type: "null"
+    ParteArmadura:
+      type: string
+      enum: [CASCO, PECHO, GUANTES, BRAZALETES, PANTALON, ZAPATOS]
+    EquipamientoHeroe:
+      type: object
+      additionalProperties: false
+      required: [heroeId, armas, armaduras, items]
+      properties:
+        heroeId:
+          type: string
+        armas:
+          type: array
+          maxItems: 2
+          uniqueItems: true
+          items: { type: string }
+        armaduras:
+          type: object
+          maxProperties: 6
+          propertyNames:
+            $ref: "#/components/schemas/ParteArmadura"
+          additionalProperties: { type: string }
+        items:
+          type: array
+          maxItems: 2
+          uniqueItems: true
+          items: { type: string }
     PaginaInventario:
       type: object
       required: [elementos, numero, tamanio, totalElementos, totalPaginas, ultima]
@@ -200,3 +300,38 @@ components:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/DetalleDeProblema"
+    InventarioAjeno:
+      description: El heroe o elemento pertenece al inventario de otro jugador
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/DetalleDeProblema"
+    ElementoNoEncontrado:
+      description: El heroe o elemento no existe
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/DetalleDeProblema"
+    ElementoNoEquipable:
+      description: El destino no es un heroe o el tipo no ocupa una ranura
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/DetalleDeProblema"
+    LimiteEquipamiento:
+      description: La ranura esta ocupada o se excede el maximo permitido
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/DetalleDeProblema"
+  parameters:
+    HeroeId:
+      name: heroeId
+      in: path
+      required: true
+      schema: { type: string }
+    ElementoId:
+      name: elementoId
+      in: path
+      required: true
+      schema: { type: string }
