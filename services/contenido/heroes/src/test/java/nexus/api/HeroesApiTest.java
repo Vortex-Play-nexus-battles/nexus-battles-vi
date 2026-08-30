@@ -46,6 +46,32 @@ class HeroesApiTest {
     }
 
     @Test
+    @DisplayName("la ficha expone la formula estructurada para el motor de combate")
+    void formulaEstructuradaParaElMotor() throws Exception {
+        // Pedida por el consumidor (motor, HU-JUE-003): las piezas de la
+        // formula como datos, para calcular sin parsear el texto de la Tabla 6.
+        mvc.perform(get("/api/v1/heroes/{nombre}", "Guerrero Tanque"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estadisticasNivel1.ataqueDetalle.base").value(10))
+                .andExpect(jsonPath("$.estadisticasNivel1.ataqueDetalle.cantidadDados").value(1))
+                .andExpect(jsonPath("$.estadisticasNivel1.ataqueDetalle.caras").value(6))
+                .andExpect(jsonPath("$.estadisticasNivel1.danoDetalle.base").value(0))
+                .andExpect(jsonPath("$.estadisticasNivel1.danoDetalle.caras").value(4))
+                .andExpect(jsonPath("$.estadisticasNivel1.sanarDetalle").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("el detalle estructurado de un sanador trae sanar y omite ataque y dano")
+    void formulaEstructuradaDeSanador() throws Exception {
+        mvc.perform(get("/api/v1/heroes/{nombre}", "Chamán"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estadisticasNivel1.sanarDetalle.base").value(6))
+                .andExpect(jsonPath("$.estadisticasNivel1.sanarDetalle.cantidadDados").value(1))
+                .andExpect(jsonPath("$.estadisticasNivel1.sanarDetalle.caras").value(6))
+                .andExpect(jsonPath("$.estadisticasNivel1.ataqueDetalle").doesNotExist());
+    }
+
+    @Test
     @DisplayName("la busqueda tolera tildes y mayusculas")
     void busquedaToleranteATildes() throws Exception {
         mvc.perform(get("/api/v1/heroes/{nombre}", "picaro veneno"))
