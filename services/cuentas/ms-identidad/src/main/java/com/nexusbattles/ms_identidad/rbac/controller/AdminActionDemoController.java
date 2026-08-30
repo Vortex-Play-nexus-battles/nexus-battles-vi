@@ -9,6 +9,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/admin")
+@CrossOrigin(origins = "*")
 public class AdminActionDemoController {
 
     @PostMapping("/ban")

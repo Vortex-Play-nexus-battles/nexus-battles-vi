@@ -1,0 +1,121 @@
+openapi: 3.1.0
+info:
+  title: Servicio de héroes
+  version: 1.0.0
+  description: >
+    Catálogo de prototipos de héroe de THE NEXUS BATTLES VI (HU-HER-001, HU-HER-002).
+    Contrato publicado antes de consumir, conforme a la regla de plataforma
+    "contrato primero". Los datos provienen de las Tablas 5, 6 y 7 del documento
+    del cliente. El catálogo no fija la cantidad de prototipos.
+paths:
+  /api/v1/heroes:
+    get:
+      summary: Lista los prototipos de héroe disponibles en este momento
+      operationId: listarHeroes
+      responses:
+        "200":
+          description: Catálogo actual (la cantidad no está fijada de antemano)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ResumenHeroe"
+  /api/v1/heroes/{nombre}:
+    get:
+      summary: Ficha completa de un prototipo
+      operationId: fichaDeHeroe
+      parameters:
+        - name: nombre
+          in: path
+          required: true
+          description: Nombre del prototipo. La búsqueda tolera tildes y mayúsculas.
+          schema:
+            type: string
+          example: Chamán
+      responses:
+        "200":
+          description: Ficha con descripción, estadísticas de nivel 1 y las tres acciones
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FichaHeroe"
+        "404":
+          description: >
+            Prototipo no disponible. El campo detail lleva el mensaje apto para el
+            usuario final; la interfaz muestra ese texto, nunca el código de estado.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+components:
+  schemas:
+    ResumenHeroe:
+      type: object
+      required: [nombre, tipo, esSanador]
+      properties:
+        nombre: { type: string, example: Guerrero Tanque }
+        tipo: { type: string, example: Guerrero }
+        esSanador: { type: boolean, example: false }
+    FichaHeroe:
+      type: object
+      required: [nombre, tipo, descripcion, esSanador, estadisticasNivel1, acciones]
+      properties:
+        nombre: { type: string }
+        tipo: { type: string }
+        descripcion: { type: string }
+        esSanador: { type: boolean }
+        estadisticasNivel1:
+          $ref: "#/components/schemas/Estadisticas"
+        acciones:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items:
+            $ref: "#/components/schemas/Accion"
+    Estadisticas:
+      type: object
+      description: Valores de nivel 1 según la Tabla 6. Las fórmulas usan la notación NdM del documento.
+      required: [poder, vida, defensa]
+      properties:
+        poder: { type: integer, example: 10 }
+        vida: { type: integer, example: 44 }
+        defensa: { type: integer, example: 11 }
+        ataque: { type: [string, "null"], example: 10 + 1d6, description: Ausente en sanadores }
+        dano: { type: [string, "null"], example: 1d4, description: Ausente en sanadores }
+        sanar: { type: [string, "null"], example: 6 + 1d6, description: Exclusiva de sanadores }
+        ataqueDetalle:
+          $ref: "#/components/schemas/FormulaDetalle"
+        danoDetalle:
+          $ref: "#/components/schemas/FormulaDetalle"
+        sanarDetalle:
+          $ref: "#/components/schemas/FormulaDetalle"
+    FormulaDetalle:
+      type: object
+      description: >
+        La formula como datos, para consumidores que calculan (motor de combate,
+        HU-JUE-003): base + cantidadDados dados de N caras. El campo de texto
+        homonimo (ataque/dano/sanar) es la misma formula en su presentacion de
+        la Tabla 6; este detalle evita parsear ese texto. Ausente cuando la
+        estadistica no aplica al prototipo.
+      required: [base, cantidadDados, caras]
+      properties:
+        base: { type: integer, example: 10 }
+        cantidadDados: { type: integer, example: 1 }
+        caras: { type: integer, example: 6 }
+    Accion:
+      type: object
+      required: [nombre, costo, efecto]
+      properties:
+        nombre: { type: string, example: Golpe con escudo }
+        costo: { type: string, example: 2 puntos de poder }
+        efecto: { type: string, example: +2 al ataque }
+    DetalleDeProblema:
+      type: object
+      description: Formato estándar de detalles de problema (RFC 9457) de la plataforma.
+      properties:
+        type: { type: string, example: about:blank, description: URI que identifica el tipo de problema }
+        title: { type: string, example: Héroe no disponible }
+        status: { type: integer, example: 404 }
+        detail: { type: string, example: El héroe solicitado no está disponible en el catálogo. }
+        instance: { type: string, example: /api/v1/heroes/Nigromante, description: Ruta que produjo el problema }

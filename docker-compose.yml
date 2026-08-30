@@ -1,0 +1,115 @@
+version: '3.8'
+
+services:
+  plataforma-db:
+    image: postgres:15-alpine
+    container_name: plataforma-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_DB: plataformadb
+
+  plataforma-cache:
+    image: redis:8-alpine
+    container_name: plataforma-cache
+    ports:
+      - "6379:6379"
+
+  srv-comentarios:
+    build:
+      context: ./services/plataforma/comentarios
+      dockerfile: Dockerfile
+    container_name: srv-comentarios
+    ports:
+      - "8081:8081"
+    env_file:
+      - .env
+    depends_on:
+      - plataforma-db
+
+  srv-correo:
+    build:
+      context: ./services/plataforma/correo
+      dockerfile: Dockerfile
+    container_name: srv-correo
+    ports:
+      - "8082:8082"
+    env_file:
+      - .env
+    depends_on:
+      - plataforma-db
+
+  srv-torneos:
+    build:
+      context: ./services/plataforma/torneos
+      dockerfile: Dockerfile
+    container_name: srv-torneos
+    ports:
+      - "8083:8083"
+    env_file:
+      - .env
+    depends_on:
+      - plataforma-db
+
+  srv-salas-partidas:
+    build:
+      context: ./services/plataforma/salas-partidas
+      dockerfile: Dockerfile
+    container_name: srv-salas-partidas
+    ports:
+      - "8084:8084"
+    env_file:
+      - .env
+    depends_on:
+      - plataforma-db
+
+  srv-notificaciones:
+    build:
+      context: ./services/plataforma/notificaciones
+      dockerfile: Dockerfile
+    container_name: srv-notificaciones
+    ports:
+      - "8085:8085"
+    env_file:
+      - .env
+    depends_on:
+      - plataforma-db
+
+  srv-moderacion-sanciones:
+    build:
+      context: ./services/plataforma/moderacion-sanciones
+      dockerfile: Dockerfile
+    container_name: srv-moderacion-sanciones
+    ports:
+      - "8086:8086"
+    env_file:
+      - .env
+    depends_on:
+      - plataforma-db
+      - plataforma-cache
+
+  srv-metricas-plataforma:
+    build:
+      context: ./services/plataforma/metricas-plataforma
+      dockerfile: Dockerfile
+    container_name: srv-metricas-plataforma
+    ports:
+      - "8087:8087"
+    env_file:
+      - .env
+    depends_on:
+      - plataforma-db
+
+  srv-admin-parametros:
+    build:
+      context: ./services/plataforma/admin-parametros
+      dockerfile: Dockerfile
+    container_name: srv-admin-parametros
+    ports:
+      - "8088:8088"
+    env_file:
+      - .env
+    depends_on:
+      - plataforma-db

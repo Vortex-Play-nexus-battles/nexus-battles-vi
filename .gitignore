@@ -31,6 +31,7 @@ desktop.ini
 *~
 
 # --- Artefactos de compilacion y dependencias ---
+.gradle/
 build/
 dist/
 out/
@@ -58,3 +59,23 @@ htmlcov/
 .nyc_output/
 test-results/
 *.lcov
+
+
+# --- Wrapper de Gradle: SI se versiona ---
+# La regla *.jar de arriba lo excluia por error, y sin este archivo el comando
+# ./gradlew falla en toda maquina recien clonada con "Unable to access jarfile".
+!gradle/wrapper/gradle-wrapper.jar
+
+
+# --- Cache local de Gradle: NUNCA se versiona ---
+# Es estado binario de la maquina de cada quien. Si se versiona, los dieciocho
+# ven "modified" en cuanto abren el proyecto y se producen conflictos absurdos.
+.gradle/
+**/.gradle/
+
+# --- Configuracion de VS Code que SI se comparte ---
+# La regla .vscode/* de arriba excluia tambien estos tres, que son el entorno
+# comun de la empresa y tienen que llegarle a todo el mundo.
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json

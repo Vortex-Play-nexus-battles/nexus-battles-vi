@@ -1,0 +1,78 @@
+name: Migrar backlog de Jira
+
+# Lee historias de usuario de Jira y las crea como Issues, dandolas de alta en
+# el Project de la organizacion con todos sus campos.
+#
+# Se lanza a mano desde la pestana Actions. Ejecutar SIEMPRE primero en modo
+# simulacion: el registro muestra la consulta, los campos detectados en el
+# Project y la lista completa de lo que se crearia, sin escribir nada.
+#
+# Secretos necesarios (Settings > Secrets and variables > Actions):
+#   JIRA_EMAIL       correo de la cuenta de Atlassian
+#   JIRA_TOKEN       token de API de Atlassian
+#   TOKEN_MIGRACION  token de GitHub con escritura de Issues del repositorio
+#                    y de proyectos de la organizacion
+#
+# Ningun secreto se imprime en el registro.
+
+on:
+  workflow_dispatch:
+    inputs:
+      simulacion:
+        description: "Simulacion: no crea nada, solo muestra el plan"
+        type: boolean
+        default: true
+      jql:
+        description: "Consulta de Jira"
+        type: string
+        default: "project = SCRUM AND issuetype in (Historia, Tarea) AND sprint IS NOT EMPTY ORDER BY key ASC"
+      sprint:
+        description: "Iteracion del Project a la que se asignan las historias"
+        type: string
+        default: "Sprint 1"
+
+permissions:
+  contents: read
+
+jobs:
+  migrar:
+    name: Crear Issues y poblar el Project
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Comprobar que existen los secretos
+        env:
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+          GH_TOKEN: ${{ secrets.TOKEN_MIGRACION }}
+        run: |
+          faltan=""
+          [ -z "$JIRA_EMAIL" ] && faltan="$faltan JIRA_EMAIL"
+          [ -z "$JIRA_TOKEN" ] && faltan="$faltan JIRA_TOKEN"
+          [ -z "$GH_TOKEN" ] && faltan="$faltan TOKEN_MIGRACION"
+          if [ -n "$faltan" ]; then
+            echo "::error::Faltan estos secretos:$faltan. Crealos en Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          echo "Los tres secretos estan configurados."
+
+      - name: Ejecutar la migracion
+        env:
+          JIRA_SITE: proyectonexusbattles.atlassian.net
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+          JQL: ${{ inputs.jql }}
+          GH_TOKEN: ${{ secrets.TOKEN_MIGRACION }}
+          REPO: ${{ github.repository }}
+          ORG: ${{ github.repository_owner }}
+          PROJECT_NUMBER: "1"
+          SPRINT_PROJECT: ${{ inputs.sprint }}
+          DRY_RUN: ${{ inputs.simulacion }}
+        run: node scripts/migrar-backlog.mjs

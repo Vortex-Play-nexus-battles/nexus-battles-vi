@@ -1,0 +1,29 @@
+openapi: 3.1.0
+info:
+  title: Contrato desviado (control negativo de las pruebas de contrato)
+  version: 1.0.0
+  description: >
+    NO es el contrato real. Exige un campo que el servicio no responde, para
+    probar que el validador de contratos detecta desviaciones de verdad.
+    El contrato real vive en contracts/openapi/heroes.yaml.
+paths:
+  /api/v1/heroes/{nombre}:
+    get:
+      operationId: fichaDesviada
+      parameters:
+        - name: nombre
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Exige un identificador numerico que el servicio no expone
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [identificador]
+                properties:
+                  identificador:
+                    type: integer

@@ -1,0 +1,297 @@
+/*
+ * SCRUM-319 - Cuadricula de 16 productos a la resolucion de referencia.
+ *
+ * 4 columnas x 4 filas = los 16 productos que exige el criterio 1 de
+ * HU-INV-001. Sin consultas de medios a proposito: la reorganizacion en
+ * resoluciones inferiores es SCRUM-320.
+ *
+ * Dos deudas declaradas contra la pila aprobada:
+ *
+ * 1. La pila fija la paleta y la tipografia de la propuesta de diseno como
+ *    variables CSS, con Rajdhani e Inter autoalojadas. Esa propuesta todavia
+ *    no esta en el repositorio, asi que los valores de abajo son
+ *    provisionales y viven en un solo bloque para sustituirlos de una vez.
+ * 2. La pila declara la tarjeta y la paginacion de dieciseis elementos
+ *    componentes compartidos de shared/ui-kit, que hoy esta vacio. Cuando
+ *    exista, .vitrina__producto se muda alli y este archivo se queda solo
+ *    con la rejilla.
+ */
+
+.vitrina-pagina {
+  /* Rejilla de referencia. */
+  --vitrina-columnas: 4;
+  --vitrina-separacion: 20px;
+  --vitrina-margen: 24px;
+
+  /* Tema provisional: sustituir por las variables de shared/ui-kit. */
+  --color-fondo: #14161c;
+  --color-texto: #e8eaf0;
+  --color-texto-tenue: #8f9ab5;
+  --color-superficie: #1d212b;
+  --color-superficie-baja: #191c25;
+  --color-borde: #2b3040;
+  --tipografia-titulo: 'Rajdhani', system-ui, 'Segoe UI', sans-serif;
+  --tipografia-texto: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
+
+  box-sizing: border-box;
+  min-height: 100vh;
+  margin: 0;
+  padding: var(--vitrina-margen);
+  background: var(--color-fondo);
+  color: var(--color-texto);
+  font-family: var(--tipografia-texto);
+}
+
+.vitrina-pagina *,
+.vitrina-pagina *::before,
+.vitrina-pagina *::after {
+  box-sizing: inherit;
+}
+
+.vitrina-titulo {
+  margin: 0;
+  font-family: var(--tipografia-titulo);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.inventario-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: var(--vitrina-separacion);
+}
+
+.inventario__nuevo,
+.inventario-editor__guardar,
+.inventario-editor__cancelar,
+.vitrina__editar {
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid var(--color-borde);
+  border-radius: 6px;
+  color: var(--color-texto);
+  background: var(--color-superficie);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.inventario__nuevo:hover,
+.inventario-editor__guardar:hover,
+.inventario-editor__cancelar:hover,
+.vitrina__editar:hover {
+  border-color: var(--color-texto-tenue);
+}
+
+.inventario-editor {
+  margin-bottom: var(--vitrina-separacion);
+  padding: 16px;
+  border: 1px solid var(--color-borde);
+  border-radius: 8px;
+  background: var(--color-superficie-baja);
+}
+
+.inventario-editor__titulo {
+  margin: 0 0 12px;
+  font-family: var(--tipografia-titulo);
+  font-size: 1rem;
+}
+
+.inventario-editor__formulario {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.inventario-editor__campo {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.inventario-editor__etiqueta {
+  font-size: 0.8rem;
+  color: var(--color-texto-tenue);
+}
+
+.inventario-editor__control {
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid var(--color-borde);
+  border-radius: 4px;
+  color: var(--color-texto);
+  background: var(--color-fondo);
+  font: inherit;
+}
+
+.inventario-editor__acciones {
+  display: flex;
+  gap: 8px;
+}
+
+.inventario__mensaje {
+  min-height: 20px;
+  margin: calc(var(--vitrina-separacion) * -0.5) 0 calc(var(--vitrina-separacion) * 0.5);
+  font-size: 0.85rem;
+  color: var(--color-texto-tenue);
+}
+
+.vitrina {
+  display: grid;
+  grid-template-columns: repeat(var(--vitrina-columnas), 1fr);
+  gap: var(--vitrina-separacion);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  /* La rejilla nunca excede el ancho disponible: de ahi sale el criterio
+     de "se ve completa sin desplazamiento horizontal". */
+  max-width: 100%;
+}
+
+.vitrina__producto {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+  /* Las cuatro filas mas la barra y el titulo tienen que caber en 768 px:
+     el criterio 1 pide que la vitrina "se vea completa". Ver la prueba de
+     aceptacion que fija que no hay desplazamiento vertical a 1360 x 768. */
+  min-height: 132px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-borde);
+  border-radius: 10px;
+  background: linear-gradient(
+    160deg,
+    var(--color-superficie) 0%,
+    var(--color-superficie-baja) 100%
+  );
+}
+
+.vitrina__editar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  min-height: 30px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+}
+
+.vitrina__nombre {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.3;
+  /* Un nombre propio largo se parte en vez de ensanchar la rejilla. */
+  overflow-wrap: anywhere;
+}
+
+.vitrina__tipo {
+  margin: 0;
+  font-family: var(--tipografia-titulo);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-texto-tenue);
+}
+
+/* ---------------------------------------------------------------------------
+ * SCRUM-320 - Reorganizacion en resoluciones inferiores.
+ *
+ * Criterio 2 de HU-INV-001: el contenido se reorganiza para caber en el ancho
+ * disponible, sin desplazamiento horizontal y sin perder legibilidad. Por eso
+ * bajan las columnas y los margenes, pero **el tamano del texto no**: encoger
+ * la letra para que quepa seria justo lo que el criterio prohibe.
+ * ------------------------------------------------------------------------- */
+
+/* Portatiles y tabletas apaisadas: 3 columnas. Cubre 1024 x 768. */
+@media (max-width: 1279px) {
+  .vitrina-pagina {
+    --vitrina-columnas: 3;
+  }
+}
+
+/* Tabletas en vertical: 2 columnas. Cubre 768 x 1024. */
+@media (max-width: 899px) {
+  .vitrina-pagina {
+    --vitrina-columnas: 2;
+    --vitrina-separacion: 16px;
+    --vitrina-margen: 16px;
+  }
+}
+
+/* Telefonos: una sola columna y tarjetas mas bajas. Cubre 375 x 812. */
+@media (max-width: 599px) {
+  .vitrina-pagina {
+    --vitrina-columnas: 1;
+    --vitrina-separacion: 12px;
+    --vitrina-margen: 12px;
+  }
+
+  .vitrina__producto {
+    min-height: 96px;
+  }
+
+  .inventario-cabecera {
+    align-items: flex-start;
+  }
+
+  .inventario-editor__formulario {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 600px) and (max-width: 899px) {
+  .inventario-editor__formulario {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * SCRUM-320 - Los cuatro estados.
+ * ------------------------------------------------------------------------- */
+
+.estado {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 240px;
+  padding: 32px 24px;
+  border: 1px dashed var(--color-borde);
+  border-radius: 10px;
+  text-align: center;
+}
+
+.estado__mensaje {
+  margin: 0;
+  font-family: var(--tipografia-titulo);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.estado__detalle {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--color-texto-tenue);
+}
+
+/* El estado vacio no es un error y no debe parecerlo: mismo tono que la
+   vitrina, sin color de alarma. */
+.estado-carga,
+.estado-vacio {
+  color: var(--color-texto);
+}
+
+.estado-error {
+  border-style: solid;
+  border-color: #6b3b3b;
+}

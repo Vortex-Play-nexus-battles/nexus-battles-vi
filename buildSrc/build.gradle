@@ -1,0 +1,15 @@
+plugins {
+    id 'groovy-gradle-plugin'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Version unica de Spring Boot para todo el monorepo.
+    // 4.1.1 es la que ya usaban heroes, inventario y los servicios de cuentas;
+    // el 3.3.3 anterior estaba fuera de soporte desde 2025.
+    implementation 'org.springframework.boot:spring-boot-gradle-plugin:4.1.1'
+    implementation 'io.spring.gradle:dependency-management-plugin:1.1.7'
+}

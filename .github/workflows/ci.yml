@@ -1,0 +1,257 @@
+name: CI - Integracion continua
+
+# HU-CICD-001 (SCRUM-164): compila, prueba, analiza y publica cobertura de cada
+# servicio modificado en un push o pull request contra develop. No toca ningun
+# pom.xml ni build.gradle de otros equipos: cada servicio se compila/prueba con
+# su propia herramienta (gradlew de la raiz para Gradle, mvnw propio para Maven).
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [develop]
+
+# Permiso minimo: el pipeline solo necesita leer el repo para compilar/probar.
+permissions:
+  contents: read
+
+# Si llega un push nuevo a la misma rama/PR mientras una corrida anterior sigue
+# activa, cancela la anterior en vez de acumular corridas redundantes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: "21"
+  JAVA_DISTRIBUTION: "temurin"
+  SONAR_HOST_URL: "https://sonarcloud.io"
+  # Organization key de SonarQube Cloud (Vortex-Play-nexus-battles).
+  SONAR_ORGANIZATION: "vortex-play-nexus-battles"
+
+jobs:
+  # ---------------------------------------------------------------------
+  # Job 1: detecta que servicios cambiaron en este push/PR y con que
+  # herramienta de build se compilan (Gradle o Maven), comparando contra el
+  # commit padre (push) o contra la base del PR. El resto del pipeline
+  # SOLO corre para esos servicios, nunca para los ~20 del monorepo.
+  # ---------------------------------------------------------------------
+  detectar-servicios:
+    name: Detectar servicios modificados
+    runs-on: ubuntu-latest
+    outputs:
+      servicios: ${{ steps.detectar.outputs.servicios }}
+      hay_servicios: ${{ steps.detectar.outputs.hay_servicios }}
+    steps:
+      - name: Descargar el repositorio con historial completo
+        uses: actions/checkout@v4
+        with:
+          # fetch-depth 0 trae todo el historial: lo necesitamos para poder
+          # diferenciar contra el commit padre o contra la base del PR.
+          fetch-depth: 0
+
+      - name: Calcular servicios modificados y su herramienta de build
+        id: detectar
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # 1) Resolver el rango de commits a comparar segun el tipo de evento.
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+            ZERO="0000000000000000000000000000000000000000"
+            if [ "$BASE" = "$ZERO" ] || [ -z "$BASE" ]; then
+              # Push del primer commit de la rama (no hay "before" real):
+              # comparamos contra el padre del commit actual si existe, o
+              # contra el arbol vacio de git si es el primer commit del repo.
+              if git rev-parse "$HEAD^" >/dev/null 2>&1; then
+                BASE=$(git rev-parse "$HEAD^")
+              else
+                BASE="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+              fi
+            fi
+          fi
+
+          echo "Comparando $BASE..$HEAD"
+
+          # 2) Listar archivos modificados y quedarnos con las carpetas de
+          # servicio de tercer nivel: services/<equipo>/<servicio>/...
+          ARCHIVOS=$(git diff --name-only "$BASE" "$HEAD")
+          CARPETAS=$(echo "$ARCHIVOS" | grep -E '^services/[^/]+/[^/]+/' | awk -F'/' '{print $1"/"$2"/"$3}' | sort -u || true)
+
+          # 3) Para cada carpeta, decidir la herramienta de build mirando si
+          # existe build.gradle (Gradle) o pom.xml (Maven) ahi mismo. Una
+          # carpeta sin ninguno de los dos (servicio aun no inicializado, solo
+          # con README.md) se omite: no hay nada que compilar todavia.
+          MATRIZ="[]"
+          for carpeta in $CARPETAS; do
+            if [ -f "$carpeta/build.gradle" ]; then
+              herramienta="gradle"
+              # Ruta de proyecto Gradle, ej: services/plataforma/correo -> :services:plataforma:correo
+              ruta_gradle=":$(echo "$carpeta" | tr '/' ':')"
+            elif [ -f "$carpeta/pom.xml" ]; then
+              herramienta="maven"
+              ruta_gradle=""
+            else
+              echo "Se omite $carpeta: no tiene build.gradle ni pom.xml"
+              continue
+            fi
+
+            servicio_slug=$(echo "$carpeta" | sed 's#^services/##' | tr '/' '-')
+            sonar_project_key="nexus-battles-vi_${servicio_slug}"
+
+            MATRIZ=$(echo "$MATRIZ" | jq -c \
+              --arg ruta "$carpeta" \
+              --arg herramienta "$herramienta" \
+              --arg rutaGradle "$ruta_gradle" \
+              --arg servicio "$servicio_slug" \
+              --arg sonarProjectKey "$sonar_project_key" \
+              '. + [{ruta:$ruta, herramienta:$herramienta, rutaGradle:$rutaGradle, servicio:$servicio, sonarProjectKey:$sonarProjectKey}]')
+          done
+
+          echo "Servicios detectados: $MATRIZ"
+          echo "servicios=$MATRIZ" >> "$GITHUB_OUTPUT"
+
+          CANTIDAD=$(echo "$MATRIZ" | jq 'length')
+          if [ "$CANTIDAD" -gt 0 ]; then
+            echo "hay_servicios=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "hay_servicios=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ---------------------------------------------------------------------
+  # Job 2: por cada servicio detectado (uno por entrada de la matriz),
+  # ejecuta en orden: compilar -> pruebas unitarias -> analisis estatico ->
+  # publicar cobertura. fail-fast:false para que la falla de un servicio no
+  # cancele la corrida de los demas servicios modificados en el mismo push.
+  # ---------------------------------------------------------------------
+  ci:
+    name: CI - ${{ matrix.servicio }}
+    needs: detectar-servicios
+    if: needs.detectar-servicios.outputs.hay_servicios == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.detectar-servicios.outputs.servicios) }}
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          # setup-java cachea el repositorio local de dependencias segun la
+          # herramienta usada, para no descargar todo en cada corrida.
+          cache: ${{ matrix.herramienta }}
+
+      # -------------------- Rama Gradle --------------------
+      # Los servicios Gradle son subproyectos del build raiz (ver
+      # settings.gradle), por eso se invocan con el gradlew de la raiz del
+      # repo y la ruta de proyecto calculada en el job anterior
+      # (ej: :services:plataforma:correo).
+
+      - name: (Gradle) Dar permiso de ejecucion al wrapper
+        if: matrix.herramienta == 'gradle'
+        run: chmod +x ./gradlew
+
+      - name: (Gradle) Compilar
+        if: matrix.herramienta == 'gradle'
+        run: ./gradlew ${{ matrix.rutaGradle }}:compileJava ${{ matrix.rutaGradle }}:compileTestJava --no-daemon
+
+      - name: (Gradle) Ejecutar pruebas unitarias
+        if: matrix.herramienta == 'gradle'
+        # jacoco se configura una sola vez en buildSrc/nexus.spring-conventions.gradle
+        # (finalizedBy jacocoTestReport, con xml.required=true), asi que correr
+        # "test" ya genera el reporte de cobertura en la ruta fija
+        # build/reports/jacoco/test/jacocoTestReport.xml, sin pasos adicionales.
+        run: ./gradlew ${{ matrix.rutaGradle }}:test --no-daemon
+
+      - name: (Gradle) Analisis estatico con SonarQube Cloud
+        if: matrix.herramienta == 'gradle'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        # El plugin de Sonar no esta declarado en build.gradle (no debemos
+        # tocar ese archivo), asi que se inyecta solo para esta corrida de CI
+        # mediante un init script (ver sonar-init.gradle en esta misma carpeta).
+        # La ruta del reporte XML es la que fija explicitamente
+        # buildSrc/nexus.spring-conventions.gradle (xml.required = true), no
+        # una ruta por defecto asumida.
+        # sonar.qualitygate.wait=true hace que esta tarea falle si el Quality
+        # Gate de SonarQube Cloud queda en rojo (cubre CA-03: cobertura < 80%).
+        run: |
+          ./gradlew sonar --no-daemon --refresh-dependencies \
+            --init-script .github/workflows/sonar-init.gradle \
+            -Dsonar.organization=${{ env.SONAR_ORGANIZATION }} \
+            -Dsonar.host.url=${{ env.SONAR_HOST_URL }} \
+            -Dsonar.token=$SONAR_TOKEN \
+            -Dsonar.projectKey=${{ matrix.sonarProjectKey }} \
+            -Dsonar.projectBaseDir=${{ matrix.ruta }} \
+            -Dsonar.sources=${{ matrix.ruta }}/src/main \
+            -Dsonar.tests=${{ matrix.ruta }}/src/test \
+            -Dsonar.coverage.jacoco.xmlReportPaths=${{ matrix.ruta }}/build/reports/jacoco/test/jacocoTestReport.xml \
+            -Dsonar.qualitygate.wait=true
+
+      - name: (Gradle) Publicar reporte de cobertura
+        if: matrix.herramienta == 'gradle' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura-${{ matrix.servicio }}
+          path: ${{ matrix.ruta }}/build/reports/jacoco/test/
+          if-no-files-found: warn
+
+      # -------------------- Rama Maven --------------------
+      # Los servicios Maven son proyectos independientes con su propio
+      # wrapper (mvnw), por eso se ejecutan parados dentro de su carpeta.
+
+      - name: (Maven) Dar permiso de ejecucion al wrapper
+        if: matrix.herramienta == 'maven'
+        run: chmod +x ${{ matrix.ruta }}/mvnw
+
+      - name: (Maven) Compilar
+        if: matrix.herramienta == 'maven'
+        working-directory: ${{ matrix.ruta }}
+        run: ./mvnw -B compile
+
+      - name: (Maven) Ejecutar pruebas unitarias
+        if: matrix.herramienta == 'maven'
+        working-directory: ${{ matrix.ruta }}
+        # jacoco-maven-plugin tiene el goal "report" atado a la fase test,
+        # entonces "mvn test" ya deja el reporte de cobertura en target/site/jacoco.
+        run: ./mvnw -B test
+
+      - name: (Maven) Analisis estatico con SonarQube Cloud
+        if: matrix.herramienta == 'maven'
+        working-directory: ${{ matrix.ruta }}
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        # Se invoca el plugin de Sonar por sus coordenadas completas, sin
+        # declararlo en el pom.xml (ese archivo no se toca). Misma logica de
+        # Quality Gate que en la rama Gradle: falla si la cobertura < 80%.
+        run: |
+          ./mvnw -B org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121:sonar \
+            -Dsonar.organization=${{ env.SONAR_ORGANIZATION }} \
+            -Dsonar.host.url=${{ env.SONAR_HOST_URL }} \
+            -Dsonar.token=$SONAR_TOKEN \
+            -Dsonar.projectKey=${{ matrix.sonarProjectKey }} \
+            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
+            -Dsonar.qualitygate.wait=true
+
+      - name: (Maven) Publicar reporte de cobertura
+        if: matrix.herramienta == 'maven' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura-${{ matrix.servicio }}
+          path: ${{ matrix.ruta }}/target/site/jacoco/
+          if-no-files-found: warn
+
+# Nota sobre CA-02 (notificacion inmediata ante falla): no se configura ningun
+# webhook aqui a proposito (Discord/Slack quedan pendientes de decision de
+# equipo). GitHub ya envia por defecto un correo a los autores de los commits
+# y observadores del repo cuando un workflow run falla; eso cubre el criterio
+# de aceptacion sin trabajo adicional en este archivo.
