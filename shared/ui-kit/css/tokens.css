@@ -1,0 +1,278 @@
+/* =======================================================================
+   The Nexus Battles VI — Fichas de diseño (design tokens)
+   Empresa A · UPB Bucaramanga
+   -----------------------------------------------------------------------
+   FUENTE DE VERDAD: «Propuesta de diseño de interfaz y arquitectura de
+   frontend, Grupo 6», secciones 1 y 2. Cada color de este archivo tiene su
+   contraste calculado según WCAG 2.2 en ese documento.
+
+   Estos mismos valores están declarados como variables en el archivo de
+   Figma «Nexus Battles VI — Sistema de diseño», con el nombre CSS de aquí
+   anotado en cada una. Documento, Figma y código dicen lo mismo.
+
+   OJO: el archivo de Figma antiguo, el de la auditoría UX, tiene cuatro
+   valores desactualizados. No lo uses como fuente.
+
+   Regla: NINGUN archivo CSS del proyecto escribe un color en hexadecimal.
+   Todos usan var(--...).
+   ======================================================================= */
+
+:root {
+
+  /* --- Superficies ------------------------------------------------- */
+  --fondo:            #D7DEED;  /* fondo general, con tinte             */
+  --superficie:       #FFFFFF;  /* tarjetas y paneles de lectura        */
+  --cromo:            #1C2340;  /* barra de navegación y cabecera del
+                                   combate. Único remanente oscuro      */
+  --pista:            #CBD4E6;  /* riel de la barra de vida y de las
+                                   barras de progreso                   */
+
+  /* --- Bordes ------------------------------------------------------ */
+  --borde:            #9FABC9;  /* separadores y líneas de tabla, no
+                                   interactivos                         */
+  --borde-int:        #6F7994;  /* campos y botones delineados.
+                                   3,22:1 sobre fondo — supera el
+                                   mínimo de 3:1 que WCAG pide a los
+                                   componentes interactivos             */
+
+  /* --- Acción ------------------------------------------------------ */
+  --primaria:         #2244BF;  /* enlaces e iconos. 5,88:1 sobre fondo */
+  --primaria-relleno: #1E3FB8;  /* botón sólido con texto blanco. 8,54:1 */
+  --acento-relleno:   #5B27B4;  /* botón sólido con texto blanco. 8,77:1 */
+
+  /* =====================================================================
+     Estados
+     Los tres primeros son los que exige el requisito de la barra de vida
+     (RF-JUE-009, RN-COM-005) y se reutilizan en toda la interfaz, para que
+     verde, ámbar y rojo signifiquen siempre lo mismo.
+
+     Regla de las insignias: el color saturado va como TEXTO sobre el fondo
+     tenue del mismo color. Nunca fondo sólido con texto blanco.
+     ===================================================================== */
+
+  --exito:                 #0B6B31;  /* vida sobre el 60 %             */
+  --exito-insignia:        #DFF1E6;
+  --advertencia:           #8A4A00;  /* vida entre el 60 % y el 40 %   */
+  --advertencia-insignia:  #FBF0DE;
+  --error:                 #B81A1A;  /* vida bajo el 40 %              */
+  --error-insignia:        #FBE5E5;
+  --info:                  #095E8C;
+  --info-insignia:         #DFEEF8;
+
+  /* --- Texto ------------------------------------------------------- */
+  --texto:             #111726;  /* títulos y cuerpo. 13,25:1, nivel AAA */
+  --texto-2:           #48536A;  /* descripciones, fechas, apodos. 5,72:1 */
+  --texto-3:           #57627A;  /* metadatos. 4,53:1                    */
+  --texto-sobre-color: #FFFFFF;  /* texto encima de los rellenos sólidos */
+
+  /* =====================================================================
+     Tipografía — sección 2 del documento
+     Rajdhani para títulos, por sus formas angulares; Inter para todo lo
+     que se lee de verdad. Ambas bajo licencia SIL Open Font License.
+
+     En producción van AUTOALOJADAS en el propio despliegue, no servidas
+     desde un proveedor externo.
+     ===================================================================== */
+
+  --fuente-titulo: 'Rajdhani', 'Segoe UI', system-ui, sans-serif;
+  --fuente-texto:  'Inter', 'Segoe UI', system-ui, sans-serif;
+
+  /* Título grande — 28 px Rajdhani 700 · encabezado de pantalla */
+  --t-titulo-familia: var(--fuente-titulo);
+  --t-titulo-tam:     1.75rem;
+  --t-titulo-peso:    700;
+  --t-titulo-alto:    1.2;
+
+  /* Título mediano — 20 px Rajdhani 600 · encabezado de sección o tarjeta */
+  --t-subtitulo-familia: var(--fuente-titulo);
+  --t-subtitulo-tam:     1.25rem;
+  --t-subtitulo-peso:    600;
+  --t-subtitulo-alto:    1.25;
+
+  /* Cuerpo — 16 px Inter 400 a 500 · texto general, listados, formularios */
+  --t-cuerpo-familia: var(--fuente-texto);
+  --t-cuerpo-tam:     1rem;
+  --t-cuerpo-peso:    400;
+  --t-cuerpo-alto:    1.5;
+  --t-cuerpo-peso-enfasis: 500;
+
+  /* Texto pequeño — 13 px Inter 400 · etiquetas, metadatos, fechas */
+  --t-meta-familia: var(--fuente-texto);
+  --t-meta-tam:     0.8125rem;
+  --t-meta-peso:    400;
+  --t-meta-alto:    1.4;
+
+  /* Texto de botón — 14 px Inter 600 */
+  --t-etiqueta-familia: var(--fuente-texto);
+  --t-etiqueta-tam:     0.875rem;
+  --t-etiqueta-peso:    600;
+  --t-etiqueta-alto:    1.2;
+
+  /* Cifras alineadas en tablas de créditos, calificaciones y métricas */
+  --cifras-tabulares: tabular-nums;
+
+  /* =====================================================================
+     Alturas de componente — sección 2 del documento
+     ===================================================================== */
+
+  --boton-grande:  48px;  /* acciones principales: Atacar, Confirmar, Pagar */
+  --boton-mediano: 40px;  /* acciones secundarias del formulario            */
+  --boton-pequeno: 32px;  /* barras de acciones compactas                   */
+  --campo-alto:    40px;  /* formularios, chat y buscadores                 */
+  --icono:         24px;  /* controles e indicadores de estado (20 a 24)    */
+
+  /* --- Espaciado, escala de 4 en 4 --------------------------------- */
+  --e-1:  0.25rem;   /*  4px */
+  --e-2:  0.5rem;    /*  8px */
+  --e-3:  0.75rem;   /* 12px */
+  --e-4:  1rem;      /* 16px */
+  --e-5:  1.25rem;   /* 20px */
+  --e-6:  1.5rem;    /* 24px */
+  --e-8:  2rem;      /* 32px */
+  --e-16: 4rem;      /* 64px */
+
+  /* --- Radios ------------------------------------------------------ */
+  --radio-chico:   5px;   /* elementos internos y barras                */
+  --radio:         8px;   /* tarjetas, campos y botones                 */
+  --radio-pildora: 999px; /* insignias                                  */
+
+  /* --- Sombras ----------------------------------------------------- */
+  --sombra-1: 0 1px 2px rgba(17, 23, 38, 0.08);
+  --sombra-2: 0 4px 12px rgba(17, 23, 38, 0.12);
+
+  /* --- Foco -------------------------------------------------------- */
+  /* RNF-ACC-002: el foco es siempre visible. Un solo estilo en toda la
+     aplicación, para que se reconozca sin pensar.                      */
+  --anillo-foco: 0 0 0 3px rgba(34, 68, 191, 0.35);
+
+  /* =====================================================================
+     Reglas de negocio que la interfaz tiene que respetar
+     Viven aquí, y no repartidas por el JavaScript, para que cambiarlas
+     sea tocar un número y no buscar por veinte archivos.
+     ===================================================================== */
+
+  /* RF-JUE-009 y RN-COM-005 — umbrales de la barra de vida */
+  --vida-umbral-alto:  60;   /* por encima  -> --exito       */
+  --vida-umbral-medio: 40;   /* entre medio -> --advertencia */
+                             /* por debajo  -> --error       */
+
+  /* RNF-USA-001 — paginación obligatoria en vitrinas y listados */
+  --elementos-por-pagina: 16;
+
+  /* =====================================================================
+     Rareza de héroes y objetos
+     Escala propia, separada de los estados a propósito: verde y rojo
+     significan salud, nunca calidad. Todos verificados a 4,5:1 o mejor.
+     ===================================================================== */
+
+  --rareza-comun:             #57627A;
+  --rareza-comun-insignia:    #E7EAF0;
+  --rareza-rara:              #095E8C;
+  --rareza-rara-insignia:     #DFEEF8;
+  --rareza-epica:             #5B27B4;
+  --rareza-epica-insignia:    #EDE5FA;
+  --rareza-legendaria:        #9A6800;
+  --rareza-legendaria-insignia: #FBF0DE;
+
+  /* --- Interacción -------------------------------------------------- */
+  --interaccion-foco-anillo:  #2244BF;
+  --interaccion-velo-hover:   rgba(17, 23, 38, 0.06);
+  --interaccion-velo-pulsado: rgba(17, 23, 38, 0.12);
+  --interaccion-velo-modal:   rgba(17, 23, 38, 0.45);
+
+  /* --- Escala display ----------------------------------------------- */
+  /* Solo para picos emocionales: VICTORIA, DERROTA, nombre de sala al
+     entrar. Nunca para texto de interfaz.                              */
+  --t-display-tam:  3.5rem;   /* 56px Rajdhani 700 */
+  --t-display-alto: 1.05;
+  --t-titulo-xl-tam:  2.5rem; /* 40px Rajdhani 700 */
+  --t-titulo-xl-alto: 1.1;
+
+  /* --- Iconos ------------------------------------------------------- */
+  --icono-chico:  20px;
+  --icono-grande: 32px;
+  --foco-grosor:  3px;
+
+  /* --- Punto de quiebre --------------------------------------------- */
+  --ancho-estrecho: 1024px;   /* RNF-USA-001, adaptable hacia abajo */
+
+  /* =====================================================================
+     Sombras por capa
+     La capa dice qué tan lejos del plano está el elemento. Nada se pone
+     por encima de la capa 3 salvo el aviso emergente del sistema.
+     ===================================================================== */
+
+  --sombra-1: 0 1px 2px  rgba(17, 23, 38, 0.08);  /* reposo    */
+  --sombra-2: 0 4px 12px rgba(17, 23, 38, 0.12);  /* elevada   */
+  --sombra-3: 0 8px 24px rgba(17, 23, 38, 0.20);  /* emergente */
+  --sombra-4: 0 10px 30px rgba(17, 23, 38, 0.25); /* modal     */
+
+  /* =====================================================================
+     Movimiento
+     La sensación de juego se construye en el feedback de cada pulsación.
+     ===================================================================== */
+
+  --duracion-instantaneo: 80ms;   /* respuesta al pulsar            */
+  --duracion-rapido:      120ms;  /* hover, foco                    */
+  --duracion-normal:      200ms;  /* panel, pestaña, barra de vida  */
+  --duracion-pausado:     320ms;  /* diálogo, aviso emergente       */
+  --duracion-turno:       600ms;  /* transición entre turnos        */
+
+  --curva-salida:   cubic-bezier(0, 0, 0.2, 1);
+  --curva-entrada:  cubic-bezier(0.4, 0, 1, 1);
+  --curva-estandar: cubic-bezier(0.4, 0, 0.2, 1);
+  --curva-impulso:  cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --transicion: var(--duracion-rapido) var(--curva-estandar);
+}
+
+/* =======================================================================
+   Movimiento reducido
+   Si el sistema operativo lo pide, las duraciones pasan a cero y los
+   desplazamientos desaparecen. Los cambios de color se mantienen porque
+   comunican estado, no decoran.
+   ======================================================================= */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duracion-instantaneo: 0ms;
+    --duracion-rapido:      0ms;
+    --duracion-normal:      0ms;
+    --duracion-pausado:     0ms;
+    --duracion-turno:       0ms;
+    --transicion:           0ms linear;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* =======================================================================
+   Alto contraste
+   Segundo modo del sistema. Los mismos nombres de variable, valores más
+   oscuros. Todos los pares críticos por encima de 7:1.
+   ======================================================================= */
+@media (prefers-contrast: more) {
+  :root {
+    --fondo:            #F5F7FB;
+    --cromo:            #111726;
+    --pista:            #9FABC9;
+    --borde:            #6F7994;
+    --borde-int:        #111726;
+    --primaria:         #16296E;
+    --primaria-relleno: #16296E;
+    --acento-relleno:   #3A1873;
+    --exito:            #064420;
+    --advertencia:      #5C3100;
+    --error:            #7A1010;
+    --info:             #063D5C;
+    --exito-insignia:        #FFFFFF;
+    --advertencia-insignia:  #FFFFFF;
+    --error-insignia:        #FFFFFF;
+    --info-insignia:         #FFFFFF;
+    --texto-2:          #2B3346;
+    --texto-3:          #48536A;
+  }
+}
