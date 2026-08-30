@@ -1,0 +1,162 @@
+@import url('./tema-cuentas.css');
+
+.selector-avatar {
+  border: none;
+  padding: 0;
+  margin: 0 0 20px;
+}
+.selector-avatar legend {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--texto-secundario);
+  padding: 0;
+  margin-bottom: 10px;
+}
+
+/* Botón que abre el modal */
+.avatar-boton-abrir {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--borde-interactivo);
+  border-radius: 8px;
+  background: var(--superficie);
+  font: inherit;
+  font-weight: 600;
+  color: var(--texto);
+  cursor: pointer;
+  text-align: left;
+}
+.avatar-boton-abrir:hover { border-color: var(--accion); }
+.avatar-boton-abrir:focus-visible {
+  outline: 3px solid #9bb0e8;
+  outline-offset: 2px;
+}
+.avatar-boton-abrir::after {
+  content: 'Elegir ›';
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accion);
+}
+
+.avatar-resumen-placeholder {
+  color: var(--texto-terciario);
+  font-weight: 400;
+}
+.avatar-resumen-elegido {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.avatar-resumen-elegido img {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--accion);
+}
+
+/* La ventana modal en sí */
+.dialogo-avatar {
+  border: none;
+  border-radius: 16px;
+  padding: 0;
+  width: min(560px, 92vw);
+  max-height: 85vh;
+  box-shadow: 0 20px 50px rgba(28, 35, 64, 0.28);
+}
+.dialogo-avatar::backdrop {
+  background: rgba(17, 23, 38, 0.55);
+}
+
+.dialogo-avatar-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--borde-decorativo);
+}
+.dialogo-avatar-cabecera h2 {
+  margin: 0;
+  font-family: Rajdhani, 'Trebuchet MS', sans-serif;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--texto);
+}
+.dialogo-avatar-cerrar {
+  border: none;
+  background: none;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--texto-secundario);
+  cursor: pointer;
+  min-height: auto;
+  padding: 6px;
+  border-radius: 6px;
+}
+.dialogo-avatar-cerrar:hover { background: var(--fondo); }
+.dialogo-avatar-cerrar:focus-visible {
+  outline: 3px solid #9bb0e8;
+  outline-offset: 2px;
+}
+
+.dialogo-avatar .rejilla-avatares {
+  padding: 24px;
+  overflow-y: auto;
+  max-height: calc(85vh - 70px);
+}
+
+.rejilla-avatares {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+@media (max-width: 480px) {
+  .rejilla-avatares { grid-template-columns: repeat(2, 1fr); }
+}
+
+.avatar-opcion {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  border-radius: 10px;
+  padding: 8px;
+}
+.avatar-opcion:hover { background: var(--fondo); }
+
+.avatar-opcion input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.avatar-opcion img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid var(--borde-decorativo);
+}
+.avatar-opcion:hover img { border-color: var(--accion); }
+.avatar-opcion input:checked + img {
+  border-color: var(--accion);
+  box-shadow: 0 0 0 4px rgba(34, 68, 191, 0.18);
+}
+.avatar-opcion input:focus-visible + img {
+  outline: 3px solid #9bb0e8;
+  outline-offset: 2px;
+}
+
+.avatar-opcion span {
+  font-size: 12px;
+  text-align: center;
+  color: var(--texto-terciario);
+  line-height: 1.2;
+}
