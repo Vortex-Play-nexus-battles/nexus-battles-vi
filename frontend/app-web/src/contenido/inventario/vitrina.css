@@ -67,7 +67,11 @@
 .inventario__nuevo,
 .inventario-editor__guardar,
 .inventario-editor__cancelar,
-.vitrina__editar {
+.vitrina__editar,
+.vitrina__equipo,
+.inventario-equipo__cerrar,
+.inventario-equipo__equipar,
+.inventario-equipo__desequipar {
   min-height: 36px;
   padding: 7px 12px;
   border: 1px solid var(--color-borde);
@@ -82,7 +86,11 @@
 .inventario__nuevo:hover,
 .inventario-editor__guardar:hover,
 .inventario-editor__cancelar:hover,
-.vitrina__editar:hover {
+.vitrina__editar:hover,
+.vitrina__equipo:hover,
+.inventario-equipo__cerrar:hover,
+.inventario-equipo__equipar:hover,
+.inventario-equipo__desequipar:hover {
   border-color: var(--color-texto-tenue);
 }
 
@@ -102,7 +110,7 @@
 
 .inventario-editor__formulario {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
   align-items: end;
   gap: 12px;
 }
@@ -141,6 +149,59 @@
   color: var(--color-texto-tenue);
 }
 
+.inventario-equipo {
+  margin-bottom: var(--vitrina-separacion);
+  padding: 16px 0;
+  border-top: 1px solid var(--color-borde);
+  border-bottom: 1px solid var(--color-borde);
+}
+
+.inventario-equipo__cabecera,
+.inventario-equipo__elemento {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.inventario-equipo__titulo,
+.inventario-equipo__resumen {
+  margin: 0;
+}
+
+.inventario-equipo__titulo {
+  font-family: var(--tipografia-titulo);
+  font-size: 1rem;
+}
+
+.inventario-equipo__resumen {
+  padding: 12px 0;
+  color: var(--color-texto-tenue);
+  font-size: 0.85rem;
+}
+
+.inventario-equipo__lista {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inventario-equipo__elemento {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--color-borde);
+  border-radius: 6px;
+}
+
+.inventario-equipo__nombre {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.82rem;
+}
+
 .vitrina {
   display: grid;
   grid-template-columns: repeat(var(--vitrina-columnas), 1fr);
@@ -174,10 +235,16 @@
   );
 }
 
-.vitrina__editar {
+.vitrina__acciones {
   position: absolute;
   top: 10px;
   right: 10px;
+  display: flex;
+  gap: 6px;
+}
+
+.vitrina__editar,
+.vitrina__equipo {
   min-height: 30px;
   padding: 4px 8px;
   font-size: 0.75rem;
@@ -246,10 +313,18 @@
   .inventario-editor__formulario {
     grid-template-columns: 1fr;
   }
+
+  .inventario-equipo__lista {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (min-width: 600px) and (max-width: 899px) {
   .inventario-editor__formulario {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inventario-equipo__lista {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
