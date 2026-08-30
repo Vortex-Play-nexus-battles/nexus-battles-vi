@@ -5,7 +5,22 @@ plugins {
 group = 'nexus'
 version = '0.0.1-SNAPSHOT'
 
-// La version de Spring Boot, la de Java, los repositorios, el starter webmvc,
-// las dependencias de prueba, JUnit 5 y jacoco vienen del plugin de convenciones
-// (buildSrc/src/main/groovy/nexus.spring-conventions.gradle).
-// Aqui solo va lo que sea propio de este servicio.
+// La pila comun (Boot 4.1.1, Java 21, webmvc, actuator, JUnit 5 y jacoco)
+// baja del plugin de convenciones (buildSrc). Aqui solo lo propio del
+// servicio: la persistencia MongoDB del catalogo y sus pruebas de
+// integracion contra un contenedor real.
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
+
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation platform('org.testcontainers:testcontainers-bom:1.21.4')
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:mongodb'
+}
+
+// Este modulo ya tiene pruebas reales, asi que la compuerta del 80% que las
+// convenciones dejan declarada (y sin enganchar, para no romper los modulos
+// en andamiaje) se activa aqui solo para este servicio.
+tasks.named('check') {
+    dependsOn tasks.named('jacocoTestCoverageVerification')
+}

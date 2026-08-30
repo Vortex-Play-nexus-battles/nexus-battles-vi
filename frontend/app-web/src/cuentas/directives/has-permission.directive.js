@@ -3,7 +3,7 @@
  * Directiva / Helper de Permisos RBAC en JavaScript Estándar (HU-RBAC-001 / 003 / 004)
  * Pila Tecnológica: Vanilla JS ES2022 (Sin Angular / Sin TypeScript)
  * 
- * Evalúa la matriz de 44 combinaciones y oculta/muestra elementos del DOM
+ * Evalúa la matriz de 48 combinaciones y oculta/muestra elementos del DOM
  * que contengan el atributo [data-has-permission="ACCION"].
  * ==========================================================================
  */
@@ -32,7 +32,8 @@ export const RBAC_PERMISSION_MATRIX = {
     'EMITIR_ADVERTENCIAS',
     'SUSPENDER_USUARIOS',
     'BANEAR_DEFINITIVAMENTE',
-    'GESTIONAR_PRODUCTOS'
+    'GESTIONAR_PRODUCTOS',
+    'GESTIONAR_CUENTAS'
   ],
   'SUPER_ADMINISTRADOR': [
     'CREAR_CUENTA_JUGADOR',
@@ -45,7 +46,8 @@ export const RBAC_PERMISSION_MATRIX = {
     'BANEAR_DEFINITIVAMENTE',
     'CREAR_ADMIN_MODERADOR',
     'GESTIONAR_PRODUCTOS',
-    'ASIGNAR_ROL' // Exclusivo de Super Administrador (HU-RBAC-003)
+    'ASIGNAR_ROL', // Exclusivo de Super Administrador (HU-RBAC-003)
+    'GESTIONAR_CUENTAS'
   ]
 };
 
