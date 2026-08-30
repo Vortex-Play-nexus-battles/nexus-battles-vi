@@ -1,0 +1,16 @@
+// Biblioteca de seguridad compartida por los servicios de la plataforma.
+//
+// Aqui vive lo que todos los servicios necesitan igual: como se traducen los
+// roles que emite Keycloak y como se arma la parte no negociable de la cadena
+// de filtros. Las reglas de rutas NO estan aqui: son de cada dominio.
+
+plugins {
+    id 'nexus.libreria-spring-conventions'
+}
+
+dependencies {
+    // 'api' y no 'implementation': quien consuma esta biblioteca necesita ver
+    // estos tipos para escribir su propio SecurityConfig.
+    api 'org.springframework.boot:spring-boot-starter-security'
+    api 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
+}

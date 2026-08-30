@@ -1,3 +1,48 @@
 plugins {
     id 'nexus.spring-conventions'
+    id 'nexus.persistencia-conventions'
+    id 'nexus.seguridad-conventions'
+}
+
+dependencies {
+    // Formato de error comun a los 20 modulos (regla 4 de plataforma).
+    implementation project(':shared:libs:plataforma-comun')
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+
+    // En Spring Boot 4 cada porcion de prueba viaja en su propio artefacto:
+    // sin esta linea @DataJpaTest no existe. Es el mismo motivo por el que
+    // inventario declara spring-boot-starter-data-mongodb-test.
+    testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
+
+    // Pruebas de integracion contra una PostgreSQL real. Mismo patron y misma
+    // version del BOM que ya usan heroes e inventario con MongoDB.
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation platform('org.testcontainers:testcontainers-bom:1.21.4')
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:postgresql'
+}
+
+// Una prueba omitida no es una prueba que pasa: es una que no se ejecuto.
+// Un build verde que las esconde miente sobre el estado del servicio, y eso es
+// exactamente lo que paso con las cinco de integracion contra PostgreSQL.
+//
+// Local a este servicio a proposito. Extenderlo a los veinte modulos pondria en
+// rojo el trabajo de otros equipos y es una decision suya, no nuestra.
+def pruebasOmitidas = new java.util.concurrent.atomic.AtomicLong(0)
+
+tasks.named('test') {
+    afterSuite { descriptor, resultado ->
+        if (descriptor.parent == null) {
+            pruebasOmitidas.set(resultado.skippedTestCount)
+        }
+    }
+    doLast {
+        if (pruebasOmitidas.get() > 0) {
+            throw new GradleException(
+                    "Se omitieron ${pruebasOmitidas.get()} pruebas en salas-partidas. " +
+                    "Si son las de integracion, Docker no esta disponible: revisalo en vez de " +
+                    "dar el build por bueno.")
+        }
+    }
 }
