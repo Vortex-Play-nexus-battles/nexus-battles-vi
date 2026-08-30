@@ -1,101 +1,37 @@
 plugins {
-	id 'java'
-	id 'jacoco'
-	id 'org.springframework.boot' version '4.1.1'
-	id 'io.spring.dependency-management' version '1.1.7'
-}
-
-// Compuerta de calidad de la empresa: cobertura medida en cada corrida de pruebas.
-jacocoTestReport {
-	reports {
-		xml.required = true
-		html.required = true
-	}
-
-}
-tasks.named('test') {
-	finalizedBy jacocoTestReport
-}
-
-jacocoTestCoverageVerification {
-        dependsOn tasks.named('test')
-
-        violationRules {
-                rule {
-                        limit {
-                                counter = 'LINE'
-                                value = 'COVEREDRATIO'
-                                minimum = 0.80
-                        }
-                }
-        }
-}
-
-tasks.named('check') {
-        dependsOn jacocoTestCoverageVerification
+    id 'nexus.spring-conventions'
 }
 
 group = 'nexus'
 version = '0.0.1-SNAPSHOT'
 
-java {
-	toolchain {
-		languageVersion = JavaLanguageVersion.of(21)
-	}
-}
-
-repositories {
-	mavenCentral()
-}
-
+// Web MVC, Actuator, Java 21, JUnit 5 y JaCoCo provienen de la convención.
+// Aquí se declaran únicamente las dependencias propias de Productos.
 dependencies {
-        // API REST con Spring Web MVC.
-        implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-api:3.1.0'
 
-        // Validación de campos obligatorios, precios, tiraje y atributos.
-        implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.mapstruct:mapstruct:1.6.3'
+    annotationProcessor 'org.mapstruct:mapstruct-processor:1.6.3'
 
-        // Persistencia documental de productos en MongoDB.
-        implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
+    runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
 
-        // Validación de los tokens JWT emitidos por Keycloak.
-        implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
-
-		        // Puntos de salud y métricas requeridos por la plataforma.
-        implementation 'org.springframework.boot:spring-boot-starter-actuator'
-
-        // Exportación de métricas para Prometheus.
-        runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
-
-        // Contrato OpenAPI generado y publicado por el servicio.
-        implementation 'org.springdoc:springdoc-openapi-starter-webmvc-api:3.1.0'
-
-        // Mapeo tipado entre DTOs y el dominio, sin conversiones manuales.
-        implementation 'org.mapstruct:mapstruct:1.6.3'
-        annotationProcessor 'org.mapstruct:mapstruct-processor:1.6.3'
-
-        // Pruebas de controladores y endpoints REST.
-        testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
-
-        // Pruebas de repositorios y persistencia MongoDB.
-        testImplementation 'org.springframework.boot:spring-boot-starter-data-mongodb-test'
-
-        // Pruebas de permisos con usuarios y tokens simulados.
-        testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
-
-        // Integración de Spring Boot con contenedores de prueba.
-        testImplementation 'org.springframework.boot:spring-boot-testcontainers'
-
-        // MongoDB real y temporal para las pruebas de integración.
-        testImplementation 'org.testcontainers:testcontainers-mongodb'
-        testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
-
-        // Pruebas de las interfaces REST.
-        testImplementation 'io.rest-assured:rest-assured:6.0.1'
-
-        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation 'org.springframework.boot:spring-boot-starter-data-mongodb-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'org.testcontainers:testcontainers-mongodb'
+    testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+    testImplementation 'io.rest-assured:rest-assured:6.0.1'
 }
 
-tasks.named('test') {
-        useJUnitPlatform()
+// Productos ya cuenta con pruebas suficientes, por eso activa desde ahora
+// la compuerta corporativa del 80 % definida en nexus.spring-conventions.
+tasks.named('jacocoTestCoverageVerification') {
+    dependsOn tasks.named('test')
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('jacocoTestCoverageVerification')
 }

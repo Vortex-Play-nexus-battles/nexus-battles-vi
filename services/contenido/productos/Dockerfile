@@ -1,26 +1,22 @@
-# Construccion multietapa con Java 21 y Gradle Wrapper.
+# La imagen se construye desde la raíz del monorepo:
+# docker build -f services/contenido/productos/Dockerfile .
 FROM eclipse-temurin:21-jdk AS construccion
 
-WORKDIR /app
+WORKDIR /repo
 
-COPY gradlew build.gradle settings.gradle ./
+COPY gradlew settings.gradle build.gradle gradle.properties ./
 COPY gradle gradle
+COPY buildSrc buildSrc
+COPY services services
 
-# El repositorio conserva gradlew como 100644; el contenedor habilita su ejecucion.
-RUN chmod +x gradlew
-RUN ./gradlew --no-daemon dependencies > /dev/null 2>&1 || true
+RUN sh gradlew --no-daemon :services:contenido:productos:bootJar
 
-COPY src src
-RUN ./gradlew --no-daemon bootJar
-
-# Imagen final reducida: solo contiene el JRE y el servicio compilado.
 FROM eclipse-temurin:21-jre
 
 WORKDIR /app
 
-COPY --from=construccion /app/build/libs/*.jar servicio-productos.jar
+COPY --from=construccion /repo/services/contenido/productos/build/libs/*.jar servicio-productos.jar
 
-# Limite de memoria definido por la pila tecnologica.
 ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75"
 
 EXPOSE 8080
