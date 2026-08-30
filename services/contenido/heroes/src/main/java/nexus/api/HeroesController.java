@@ -59,13 +59,29 @@ public class HeroesController {
         }
     }
 
-    public record EstadisticasVista(int poder, int vida, int defensa, String ataque, String dano, String sanar) {
+    public record EstadisticasVista(
+            int poder, int vida, int defensa,
+            String ataque, String dano, String sanar,
+            FormulaVista ataqueDetalle, FormulaVista danoDetalle, FormulaVista sanarDetalle) {
         static EstadisticasVista de(Estadisticas e) {
             return new EstadisticasVista(
                     e.poder(), e.vida(), e.defensa(),
                     e.ataque() == null ? null : e.ataque().texto(),
                     e.dano() == null ? null : e.dano().texto(),
-                    e.sanar() == null ? null : e.sanar().texto());
+                    e.sanar() == null ? null : e.sanar().texto(),
+                    FormulaVista.de(e.ataque()),
+                    FormulaVista.de(e.dano()),
+                    FormulaVista.de(e.sanar()));
+        }
+    }
+
+    /**
+     * La formula como datos, pedida por el motor de combate (HU-JUE-003) para
+     * calcular sin parsear el texto. El texto sigue siendo la presentacion.
+     */
+    public record FormulaVista(int base, int cantidadDados, int caras) {
+        static FormulaVista de(nexus.dominio.Formula f) {
+            return f == null ? null : new FormulaVista(f.base(), f.cantidadDados(), f.carasDado());
         }
     }
 

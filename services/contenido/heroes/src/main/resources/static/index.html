@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Catálogo de héroes — demo del servicio</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: #12151c; color: #e8e6e0;
+    min-height: 100vh; padding: 2rem 1.5rem;
+  }
+  header { max-width: 1080px; margin: 0 auto 1.5rem; }
+  h1 { font-size: 1.6rem; letter-spacing: .03em; }
+  h1 span { color: #d8a63e; }
+  .nota { color: #8b8fa3; font-size: .85rem; margin-top: .3rem; }
+  .buscador { max-width: 1080px; margin: 0 auto 1.5rem; display: flex; gap: .6rem; }
+  .buscador input {
+    flex: 1; padding: .6rem .9rem; border-radius: .5rem;
+    border: 1px solid #2c3140; background: #1a1e28; color: inherit; font-size: 1rem;
+  }
+  .buscador button {
+    padding: .6rem 1.1rem; border-radius: .5rem; border: 0;
+    background: #d8a63e; color: #1a1405; font-weight: 600; cursor: pointer;
+  }
+  .error {
+    max-width: 1080px; margin: 0 auto 1.5rem; padding: .8rem 1rem;
+    background: #3a1f24; border: 1px solid #7a3742; border-radius: .5rem; display: none;
+  }
+  .rejilla {
+    max-width: 1080px; margin: 0 auto;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem;
+  }
+  .carta {
+    background: #1a1e28; border: 1px solid #2c3140; border-radius: .75rem;
+    padding: 1rem 1.1rem; cursor: pointer; transition: transform .12s, border-color .12s;
+  }
+  .carta:hover { transform: translateY(-3px); border-color: #d8a63e; }
+  .carta h2 { font-size: 1.05rem; }
+  .tipo { font-size: .78rem; color: #8b8fa3; text-transform: uppercase; letter-spacing: .08em; }
+  .sanador { color: #7fc78a; }
+  dialog {
+    background: #1a1e28; color: inherit; border: 1px solid #3a4154; border-radius: .9rem;
+    max-width: 560px; width: 92%; padding: 1.4rem 1.6rem;
+  }
+  dialog::backdrop { background: rgba(0,0,0,.65); }
+  dialog p.desc { color: #b9bdc9; font-size: .9rem; margin: .6rem 0 1rem; line-height: 1.45; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; font-size: .9rem; }
+  td { padding: .3rem .2rem; border-bottom: 1px solid #262b38; }
+  td:first-child { color: #8b8fa3; }
+  .accion { padding: .45rem 0; border-bottom: 1px solid #262b38; font-size: .9rem; }
+  .accion b { color: #d8a63e; }
+  .accion small { color: #8b8fa3; }
+  .cerrar { margin-top: 1rem; background: #2c3140; color: inherit; border: 0;
+    padding: .5rem 1rem; border-radius: .5rem; cursor: pointer; }
+</style>
+</head>
+<body>
+<header>
+  <h1>THE NEXUS BATTLES VI — <span>Catálogo de héroes</span></h1>
+  <p class="nota">Página de demostración del servicio de héroes (HU-HER-001/002/006). Consume la API real:
+  <code>/api/v1/heroes</code>. La interfaz definitiva pertenece a la aplicación web de la empresa.</p>
+</header>
+
+<div class="buscador">
+  <input id="nombre" placeholder="Busca un héroe — prueba con tildes o sin ellas: chaman, Pícaro Veneno…">
+  <button id="buscar">Ver ficha</button>
+</div>
+<div class="error" id="error"></div>
+<div class="rejilla" id="rejilla"></div>
+
+<dialog id="ficha"></dialog>
+
+<script>
+const rejilla = document.getElementById("rejilla");
+const cajaError = document.getElementById("error");
+const dialogo = document.getElementById("ficha");
+
+async function cargarCatalogo() {
+  const r = await fetch("/api/v1/heroes");
+  const heroes = await r.json();
+  rejilla.innerHTML = "";
+  for (const h of heroes) {
+    const carta = document.createElement("div");
+    carta.className = "carta";
+    carta.innerHTML = `<p class="tipo ${h.esSanador ? "sanador" : ""}">${h.tipo}</p>
+      <h2>${h.nombre}</h2>`;
+    carta.onclick = () => verFicha(h.nombre);
+    rejilla.appendChild(carta);
+  }
+}
+
+async function verFicha(nombre) {
+  cajaError.style.display = "none";
+  const r = await fetch("/api/v1/heroes/" + encodeURIComponent(nombre));
+  const cuerpo = await r.json();
+  if (!r.ok) {
+    // Regla del cliente: al usuario se le muestra el mensaje, jamás el código.
+    cajaError.textContent = cuerpo.detail;
+    cajaError.style.display = "block";
+    return;
+  }
+  const e = cuerpo.estadisticasNivel1;
+  const filas = [
+    ["Poder", e.poder], ["Vida", e.vida], ["Defensa", e.defensa],
+    ["Ataque", e.ataque], ["Daño", e.dano], ["Sanar", e.sanar],
+  ].filter(([, v]) => v !== null && v !== undefined);
+  dialogo.innerHTML = `
+    <p class="tipo">${cuerpo.tipo}</p>
+    <h2>${cuerpo.nombre}</h2>
+    <p class="desc">${cuerpo.descripcion}</p>
+    <table>${filas.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("")}</table>
+    <div>${cuerpo.acciones.map(a =>
+      `<div class="accion"><b>${a.nombre}</b> — ${a.efecto}<br><small>${a.costo}</small></div>`).join("")}</div>
+    <button class="cerrar" onclick="this.closest('dialog').close()">Cerrar</button>`;
+  dialogo.showModal();
+}
+
+document.getElementById("buscar").onclick = () => {
+  const nombre = document.getElementById("nombre").value.trim();
+  if (nombre) verFicha(nombre);
+};
+document.getElementById("nombre").addEventListener("keydown", ev => {
+  if (ev.key === "Enter") document.getElementById("buscar").click();
+});
+
+cargarCatalogo();
+</script>
+</body>
+</html>
