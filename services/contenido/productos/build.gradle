@@ -67,6 +67,13 @@ dependencies {
         // Exportación de métricas para Prometheus.
         runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
 
+        // Contrato OpenAPI generado y publicado por el servicio.
+        implementation 'org.springdoc:springdoc-openapi-starter-webmvc-api:3.1.0'
+
+        // Mapeo tipado entre DTOs y el dominio, sin conversiones manuales.
+        implementation 'org.mapstruct:mapstruct:1.6.3'
+        annotationProcessor 'org.mapstruct:mapstruct-processor:1.6.3'
+
         // Pruebas de controladores y endpoints REST.
         testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 

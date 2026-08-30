@@ -144,4 +144,82 @@ public record SolicitudCrearProducto(
                         default -> true;
                 };
         }
+
+        @AssertTrue(message = "La solicitud contiene atributos que no corresponden al tipo de producto")
+        public boolean isSinAtributosIncompatibles() {
+                if (tipo == null) {
+                        return true;
+                }
+
+                return switch (tipo) {
+                        case HEROE ->
+                                heroe == null
+                                        && costoPoder == null
+                                        && multiplicadorNivel == null
+                                        && turnosCarga == null
+                                        && turnosRecarga == null
+                                        && efectoGeneral == null
+                                        && efectoPotenciado == null
+                                        && defensa == null
+                                        && parte == null
+                                        && efecto == null
+                                        && poderDeAtaque == null
+                                        && tasaDeCaida == null;
+                        case HABILIDAD ->
+                                prototipo == null
+                                        && turnosRecarga == null
+                                        && efectoGeneral == null
+                                        && efectoPotenciado == null
+                                        && defensa == null
+                                        && parte == null
+                                        && efecto == null
+                                        && poderDeAtaque == null
+                                        && tasaDeCaida == null;
+                        case ARMA ->
+                                prototipo == null
+                                        && heroe == null
+                                        && costoPoder == null
+                                        && multiplicadorNivel == null
+                                        && turnosCarga == null
+                                        && turnosRecarga == null
+                                        && efectoGeneral == null
+                                        && efectoPotenciado == null
+                                        && defensa == null
+                                        && parte == null
+                                        && efecto == null;
+                        case ARMADURA ->
+                                prototipo == null
+                                        && heroe == null
+                                        && costoPoder == null
+                                        && multiplicadorNivel == null
+                                        && turnosCarga == null
+                                        && turnosRecarga == null
+                                        && efectoGeneral == null
+                                        && efectoPotenciado == null
+                                        && efecto == null
+                                        && poderDeAtaque == null;
+                        case ITEM ->
+                                prototipo == null
+                                        && heroe == null
+                                        && costoPoder == null
+                                        && multiplicadorNivel == null
+                                        && turnosCarga == null
+                                        && turnosRecarga == null
+                                        && efectoGeneral == null
+                                        && efectoPotenciado == null
+                                        && defensa == null
+                                        && parte == null
+                                        && poderDeAtaque == null;
+                        case EPICA ->
+                                prototipo == null
+                                        && costoPoder == null
+                                        && multiplicadorNivel == null
+                                        && turnosCarga == null
+                                        && defensa == null
+                                        && parte == null
+                                        && efecto == null
+                                        && poderDeAtaque == null
+                                        && tasaDeCaida == null;
+                };
+        }
 }

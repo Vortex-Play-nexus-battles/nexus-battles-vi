@@ -1,12 +1,18 @@
 package nexus.configuracion;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Map;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -32,12 +38,32 @@ public class SeguridadConfig {
                                 .requestMatchers(
                                         "/actuator/health/**",
                                         "/actuator/info",
-                                        "/actuator/prometheus")
+                                        "/actuator/prometheus",
+                                        "/v3/api-docs/**")
                                 .permitAll()
                                 .requestMatchers(HttpMethod.POST, "/api/v1/productos")
                                 .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
                                 .anyRequest()
                                 .authenticated())
+                        .exceptionHandling(excepciones -> excepciones
+                                .authenticationEntryPoint((solicitud, respuesta, excepcion) -> {
+                                        respuesta.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
+                                        escribirProblema(
+                                                solicitud,
+                                                respuesta,
+                                                HttpServletResponse.SC_UNAUTHORIZED,
+                                                "No autenticado",
+                                                "Se requiere un token Bearer válido",
+                                                "urn:nexus:problema:no-autenticado");
+                                })
+                                .accessDeniedHandler((solicitud, respuesta, excepcion) ->
+                                        escribirProblema(
+                                                solicitud,
+                                                respuesta,
+                                                HttpServletResponse.SC_FORBIDDEN,
+                                                "Acceso denegado",
+                                                "No tienes permiso para realizar esta acción",
+                                                "urn:nexus:problema:acceso-denegado")))
                         .oauth2ResourceServer(oauth2 -> oauth2
                                 .jwt(jwt -> jwt
                                         .jwtAuthenticationConverter(convertidorRoles)));
@@ -78,5 +104,26 @@ public class SeguridadConfig {
                 });
 
                 return convertidor;
+        }
+
+        private static void escribirProblema(
+                        HttpServletRequest solicitud,
+                        HttpServletResponse respuesta,
+                        int estado,
+                        String titulo,
+                        String detalle,
+                        String tipo) throws IOException {
+
+                respuesta.setStatus(estado);
+                respuesta.setCharacterEncoding(StandardCharsets.UTF_8.name());
+                respuesta.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+                respuesta.getWriter().write("""
+                        {"type":"%s","title":"%s","status":%d,"detail":"%s","instance":"%s"}
+                        """.formatted(
+                                tipo,
+                                titulo,
+                                estado,
+                                detalle,
+                                solicitud.getRequestURI()));
         }
 }

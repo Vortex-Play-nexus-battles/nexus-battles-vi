@@ -4,6 +4,7 @@ import java.net.URI;
 
 import jakarta.validation.Valid;
 import nexus.aplicacion.CrearProductoServicio;
+import nexus.aplicacion.ProductoMapper;
 import nexus.dominio.Producto;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -16,9 +17,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProductosController {
 
         private final CrearProductoServicio servicio;
+        private final ProductoMapper mapper;
 
-        public ProductosController(CrearProductoServicio servicio) {
+        public ProductosController(
+                        CrearProductoServicio servicio,
+                        ProductoMapper mapper) {
                 this.servicio = servicio;
+                this.mapper = mapper;
         }
 
         @PostMapping
@@ -26,8 +31,7 @@ public class ProductosController {
         @Valid @RequestBody SolicitudCrearProducto solicitud) {
 
                 Producto producto = servicio.crear(solicitud);
-                ProductoCreado respuesta =
-                        ProductoCreado.desde(producto);
+                ProductoCreado respuesta = mapper.aRespuesta(producto);
                 URI ubicacion = URI.create(
                         "/api/v1/productos/" + producto.id());
 

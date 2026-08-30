@@ -177,6 +177,7 @@ components:
             required: [precioCreditos]
 
     SolicitudCrearHeroe:
+      unevaluatedProperties: false
       allOf:
         - $ref: "#/components/schemas/CamposComunesDeCreacion"
         - type: object
@@ -200,6 +201,7 @@ components:
                 - Médico
 
     SolicitudCrearHabilidad:
+      unevaluatedProperties: false
       allOf:
         - $ref: "#/components/schemas/CamposComunesDeCreacion"
         - type: object
@@ -222,6 +224,7 @@ components:
               minimum: 0
 
     SolicitudCrearArma:
+      unevaluatedProperties: false
       allOf:
         - $ref: "#/components/schemas/CamposComunesDeCreacion"
         - type: object
@@ -238,6 +241,7 @@ components:
               maximum: 100
 
     SolicitudCrearArmadura:
+      unevaluatedProperties: false
       allOf:
         - $ref: "#/components/schemas/CamposComunesDeCreacion"
         - type: object
@@ -263,6 +267,7 @@ components:
               maximum: 100
 
     SolicitudCrearItem:
+      unevaluatedProperties: false
       allOf:
         - $ref: "#/components/schemas/CamposComunesDeCreacion"
         - type: object
@@ -279,6 +284,7 @@ components:
               maximum: 100
 
     SolicitudCrearEpica:
+      unevaluatedProperties: false
       allOf:
         - $ref: "#/components/schemas/CamposComunesDeCreacion"
         - type: object

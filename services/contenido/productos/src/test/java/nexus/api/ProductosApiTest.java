@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -25,6 +27,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import nexus.dominio.Producto;
 import nexus.persistencia.ProductoRepository;
 import org.junit.jupiter.api.BeforeEach;
+import java.util.stream.Stream;
 
 @SpringBootTest(properties = "KEYCLOAK_JWK_SET_URI=http://localhost/prueba/jwks")
 @AutoConfigureMockMvc
@@ -138,14 +141,24 @@ class ProductosApiTest {
                 mvc.perform(post("/api/v1/productos")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(PRODUCTO_VALIDO))
-                        .andExpect(status().isUnauthorized());
+                        .andExpect(status().isUnauthorized())
+                        .andExpect(content().contentTypeCompatibleWith(
+                                MediaType.APPLICATION_PROBLEM_JSON))
+                        .andExpect(jsonPath("$.type")
+                                .value("urn:nexus:problema:no-autenticado"))
+                        .andExpect(jsonPath("$.status").value(401));
         }
 
         @Test
         @DisplayName("rechaza un jugador autenticado sin permiso administrativo")
         void rechazaUsuarioSinPermiso() throws Exception {
                 publicarComo("ROLE_JUGADOR", PRODUCTO_VALIDO)
-                        .andExpect(status().isForbidden());
+                        .andExpect(status().isForbidden())
+                        .andExpect(content().contentTypeCompatibleWith(
+                                MediaType.APPLICATION_PROBLEM_JSON))
+                        .andExpect(jsonPath("$.type")
+                                .value("urn:nexus:problema:acceso-denegado"))
+                        .andExpect(jsonPath("$.status").value(403));
         }
 
         @ParameterizedTest(name = "permite crear productos con {0}")
@@ -180,7 +193,53 @@ class ProductosApiTest {
                         "\"tipo\": \"POCION\"");
 
                 publicarComo("ROLE_ADMINISTRADOR", solicitud)
-                        .andExpect(status().isBadRequest());
+                        .andExpect(status().isBadRequest())
+                        .andExpect(content().contentTypeCompatibleWith(
+                                MediaType.APPLICATION_PROBLEM_JSON))
+                        .andExpect(jsonPath("$.type")
+                                .value("urn:nexus:problema:solicitud-invalida"))
+                        .andExpect(jsonPath("$.title").value("Solicitud inválida"))
+                        .andExpect(jsonPath("$.status").value(400))
+                        .andExpect(jsonPath("$.detail").isNotEmpty())
+                        .andExpect(jsonPath("$.instance")
+                                .value("/api/v1/productos"));
+        }
+
+        @ParameterizedTest(name = "rechaza atributos incompatibles en {0}")
+        @MethodSource("productosConAtributoIncompatible")
+        void rechazaAtributosIncompatibles(String tipo, String solicitud) throws Exception {
+                publicarComo("ROLE_ADMINISTRADOR", solicitud)
+                        .andExpect(status().isBadRequest())
+                        .andExpect(content().contentTypeCompatibleWith(
+                                MediaType.APPLICATION_PROBLEM_JSON));
+        }
+
+        private static Stream<Object[]> productosConAtributoIncompatible() {
+                return Stream.of(
+                        new Object[] {
+                                "HEROE",
+                                agregarCampo(PRODUCTO_HEROE_VALIDO, "\"poderDeAtaque\": 5")
+                        },
+                        new Object[] {
+                                "HABILIDAD",
+                                agregarCampo(PRODUCTO_HABILIDAD_VALIDO, "\"defensa\": 5")
+                        },
+                        new Object[] {
+                                "ARMA",
+                                agregarCampo(PRODUCTO_VALIDO, "\"efecto\": \"No corresponde\"")
+                        },
+                        new Object[] {
+                                "ARMADURA",
+                                agregarCampo(PRODUCTO_ARMADURA_VALIDO, "\"costoPoder\": 1")
+                        },
+                        new Object[] {
+                                "ITEM",
+                                agregarCampo(PRODUCTO_ITEM_VALIDO, "\"turnosRecarga\": 1")
+                        },
+                        new Object[] {
+                                "EPICA",
+                                agregarCampo(PRODUCTO_EPICA_VALIDO, "\"tasaDeCaida\": 1")
+                        });
         }
 
         @Test
@@ -527,13 +586,17 @@ class ProductosApiTest {
                         .content(cuerpo));
         }
 
-        private static String sinCampo(String json, String campo) {
+    private static String sinCampo(String json, String campo) {
         String resultado = json.replaceFirst(
                 "(?m)^\\s*\"" + campo + "\"\\s*:\\s*.*\\R",
                 "");
 
         return resultado.replaceFirst(",\\s*}", "\n}");
 
+    }
+
+    private static String agregarCampo(String json, String campo) {
+        return json.replaceFirst("\\s*}\\s*$", ",\\n  " + campo + "\\n}");
     }
 
 }

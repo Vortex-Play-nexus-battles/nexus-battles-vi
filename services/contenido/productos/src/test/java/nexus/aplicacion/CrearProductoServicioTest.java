@@ -19,6 +19,7 @@ import nexus.dominio.TipoProducto;
 import nexus.persistencia.ProductoRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mapstruct.factory.Mappers;
 
 class CrearProductoServicioTest {
 
@@ -32,7 +33,9 @@ class CrearProductoServicioTest {
                                 invocacion.getArgument(0, Producto.class));
 
                 CrearProductoServicio servicio =
-                        new CrearProductoServicio(repositorio);
+                        new CrearProductoServicio(
+                                repositorio,
+                                Mappers.getMapper(ProductoMapper.class));
 
                 SolicitudCrearProducto solicitud = new SolicitudCrearProducto(
                         "Espada solar",
