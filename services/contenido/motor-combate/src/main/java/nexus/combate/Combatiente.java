@@ -1,6 +1,5 @@
 package nexus.combate;
 
-/** Estado mínimo de un héroe durante una partida. */
 public record Combatiente(String id, String equipoId, int vida, boolean participa) {
 
     public Combatiente {

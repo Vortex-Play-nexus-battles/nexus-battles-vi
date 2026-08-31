@@ -9,7 +9,6 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/** Estado de una partida y sus condiciones de cierre por supervivencia. */
 public final class Partida {
 
     private static final AlCerrarPartida SIN_REACCION_DE_CIERRE = resultado -> { };
