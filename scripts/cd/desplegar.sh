@@ -17,6 +17,14 @@
 #   DIRECTORIO_ACTIVO_CLIENT_ID, DIRECTORIO_ACTIVO_CLIENT_SECRET, SMTP_HOST,
 #   SMTP_USER, SMTP_PASSWORD, PASARELA_PAGOS_API_KEY, WEBSOCKET_URL,
 #   DB_USER, DB_PASS).
+#   PENDIENTE (TODO_*, ver cd.yml): 5 variables especificas de ms-identidad
+#   -- MS_IDENTIDAD_DB_URL, MS_IDENTIDAD_DB_USER, MS_IDENTIDAD_DB_PASSWORD,
+#   LISTA_NEGRA_URL, MS_IDENTIDAD_SPRING_PROFILES_ACTIVE (esta ultima solo
+#   llega puesta cuando el ambiente es produccion). Nombres CON PREFIJO
+#   "MS_IDENTIDAD_" a proposito: los nombres "DB_USER"/"DB_PASS" ya existen
+#   en el .env de plataforma (los usa plataforma-db) -- si los reusamos aqui
+#   se pisarian entre si. Ver docker-compose.cuentas.yml para el mapeo a los
+#   nombres que Spring realmente espera (DB_URL, DB_USER, DB_PASSWORD).
 #
 # Este script NUNCA decide si hay que revertir: eso lo hace un step aparte en
 # cd.yml (solo en el job de produccion) leyendo el archivo
@@ -29,6 +37,11 @@ set -euo pipefail
 DIRECTORIO=/opt/nexus
 COMPOSE_BASE="$DIRECTORIO/docker-compose.yml"
 COMPOSE_DEPLOY="$DIRECTORIO/docker-compose.deploy.yml"
+# Override de ms-identidad (Maven, equipo Cuentas). Se copia siempre al
+# servidor por SCP, pero solo se agrega al comando de "docker compose" mas
+# abajo si ms-identidad viene en SERVICIOS_PUERTOS de esta corrida -- si
+# nadie toco cuentas en este push, este archivo ni se menciona.
+COMPOSE_CUENTAS="$DIRECTORIO/docker-compose.cuentas.yml"
 INTENTOS_SALUD=12
 ESPERA_ENTRE_INTENTOS=5
 
@@ -57,6 +70,11 @@ PASARELA_PAGOS_API_KEY=${PASARELA_PAGOS_API_KEY:-}
 WEBSOCKET_URL=${WEBSOCKET_URL:-}
 DB_USER=${DB_USER:-}
 DB_PASS=${DB_PASS:-}
+MS_IDENTIDAD_DB_URL=${MS_IDENTIDAD_DB_URL:-}
+MS_IDENTIDAD_DB_USER=${MS_IDENTIDAD_DB_USER:-}
+MS_IDENTIDAD_DB_PASSWORD=${MS_IDENTIDAD_DB_PASSWORD:-}
+LISTA_NEGRA_URL=${LISTA_NEGRA_URL:-}
+MS_IDENTIDAD_SPRING_PROFILES_ACTIVE=${MS_IDENTIDAD_SPRING_PROFILES_ACTIVE:-}
 EOF
 chmod 600 .env
 
@@ -80,17 +98,46 @@ done
 echo "== 3) Desplegando TAG=$TAG para: $SERVICIOS_PUERTOS =="
 export TAG
 SERVICIOS_COMPOSE=""
+INCLUYE_CUENTAS=0
 for par in $SERVICIOS_PUERTOS; do
   servicio="${par%%:*}"
   SERVICIOS_COMPOSE="$SERVICIOS_COMPOSE srv-${servicio}"
+  if [ "$servicio" = "ms-identidad" ]; then
+    INCLUYE_CUENTAS=1
+  fi
 done
 
-# Siempre los DOS archivos combinados: el base (de desarrollo local, con
-# "build:") nunca se usa solo para desplegar. El de despliegue solo agrega
-# "image:", y como aqui no pasamos --build, Compose usa esa imagen ya
+# Si ms-identidad esta en esta corrida, sus 3 secrets de base de datos son
+# obligatorios -- application-prod.properties de ms-identidad YA lee
+# ${DB_URL}/${DB_USER}/${DB_PASSWORD} literalmente, asi que desplegar con
+# alguno vacio no es "degradado", es un contenedor que no arranca. Mismo
+# patron de fallo visible que SONAR_ORGANIZATION en ci.yml: preferimos
+# frenar aqui con un mensaje claro a que se entere por un CrashLoopBackOff
+# en el healthcheck de mas abajo.
+if [ "$INCLUYE_CUENTAS" -eq 1 ]; then
+  FALTANTES=""
+  [ -n "${MS_IDENTIDAD_DB_URL:-}" ] || FALTANTES="$FALTANTES TODO_DB_URL_MS_IDENTIDAD"
+  [ -n "${MS_IDENTIDAD_DB_USER:-}" ] || FALTANTES="$FALTANTES TODO_DB_USER_MS_IDENTIDAD"
+  [ -n "${MS_IDENTIDAD_DB_PASSWORD:-}" ] || FALTANTES="$FALTANTES TODO_DB_PASSWORD_MS_IDENTIDAD"
+  if [ -n "$FALTANTES" ]; then
+    echo "Faltan secrets de GitHub para ms-identidad, crealos en Settings > Environments:$FALTANTES"
+    exit 1
+  fi
+fi
+
+# Siempre el base + el de despliegue de plataforma combinados: el base (de
+# desarrollo local, con "build:") nunca se usa solo. El de despliegue solo
+# agrega "image:", y como aqui no pasamos --build, Compose usa esa imagen ya
 # publicada en ghcr.io en vez de intentar construir nada en el servidor.
-docker compose -f "$COMPOSE_BASE" -f "$COMPOSE_DEPLOY" pull $SERVICIOS_COMPOSE
-docker compose -f "$COMPOSE_BASE" -f "$COMPOSE_DEPLOY" up -d $SERVICIOS_COMPOSE
+# El tercer archivo (ms-identidad) solo se agrega si de verdad esta entre
+# los servicios de esta corrida -- si no, ni se menciona en el comando.
+ARCHIVOS_COMPOSE=(-f "$COMPOSE_BASE" -f "$COMPOSE_DEPLOY")
+if [ "$INCLUYE_CUENTAS" -eq 1 ]; then
+  ARCHIVOS_COMPOSE+=(-f "$COMPOSE_CUENTAS")
+fi
+
+docker compose "${ARCHIVOS_COMPOSE[@]}" pull $SERVICIOS_COMPOSE
+docker compose "${ARCHIVOS_COMPOSE[@]}" up -d $SERVICIOS_COMPOSE
 
 echo "== 4) Verificando /actuator/health de cada servicio desplegado (con reintentos) =="
 > ultimo-fallo.txt
