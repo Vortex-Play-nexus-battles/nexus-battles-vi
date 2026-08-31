@@ -12,7 +12,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-/** Pruebas de aceptación de HU-JUE-007. */
 class LimitesTemporalesPartidaTest {
 
     private static final Instant INICIO = Instant.parse("2026-08-26T15:00:00Z");
