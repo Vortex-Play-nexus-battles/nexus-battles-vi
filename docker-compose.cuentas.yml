@@ -1,0 +1,60 @@
+# HU-CICD-002 (SCRUM-165): override de despliegue para services/cuentas/ms-identidad.
+#
+# Mismo patron que docker-compose.deploy.yml (Equipo 6, plataforma): solo
+# declara "image:", nunca "build:" -- el jar se compila y la imagen se
+# publica en ghcr.io en el job "construir-y-publicar" de cd.yml, nunca en el
+# servidor. Se combina siempre con docker-compose.yml (nunca solo), y SOLO
+# cuando ms-identidad esta entre los servicios modificados de esa corrida:
+#   docker compose -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.cuentas.yml pull|up -d
+#
+# Archivo separado de docker-compose.deploy.yml (no se agrega ahi) porque
+# ms-identidad es de otro equipo (Cuentas), no de plataforma -- mantenerlo
+# aparte deja claro quien es dueño de que, igual que ya separamos
+# services/plataforma de services/cuentas en el resto del repo.
+#
+# Puerto: 8089 tanto en el host como en el contenedor.
+# PENDIENTE DE CONFIRMAR: originalmente el Dockerfile de ms-identidad
+# exponia 8081 (mismo puerto interno que srv-comentarios de plataforma), y
+# aqui se mapeaba a un puerto de host distinto (8091) para evitar el choque.
+# Cristian va a mover el puerto REAL del servicio (Dockerfile EXPOSE y
+# server.port) de 8081 a 8089, con lo cual host y contenedor ya coinciden y
+# el mapeo distinto deja de hacer falta. Este archivo YA asume ese cambio,
+# pero Cristian todavia no confirmo que este hecho y probado de su lado --
+# no desplegar hasta que confirme (si su Dockerfile sigue en 8081, este
+# mapeo 8089:8089 apunta a un puerto que el contenedor no expone).
+#
+# ${TAG} lo exporta scripts/cd/desplegar.sh antes de invocar "docker compose"
+# (mismo sha corto de esta corrida que usan las imagenes de plataforma).
+#
+# Variables de entorno (todas PENDIENTES, ver los secrets TODO_* en cd.yml):
+# el lado IZQUIERDO de cada linea es el nombre que Spring realmente lee
+# (confirmado en application-prod.properties de ms-identidad: ${DB_URL},
+# ${DB_USER}, ${DB_PASSWORD}). El lado DERECHO (${MS_IDENTIDAD_...}) es la
+# variable que desplegar.sh deja en el .env del servidor -- con el prefijo
+# "MS_IDENTIDAD_" a proposito, porque el .env es compartido con plataforma
+# y ya existen DB_USER/DB_PASS ahi (los usa plataforma-db); si este archivo
+# leyera ${DB_USER} directo se pisarian entre si.
+#
+# LISTA_NEGRA_URL: application-prod.properties de ms-identidad TODAVIA NO
+# tiene una propiedad "app.lista-negra.url" (solo existe hardcodeada en
+# application-dev.properties). Esta variable queda inyectada para cuando
+# Cristian agregue "app.lista-negra.url=${LISTA_NEGRA_URL:http://localhost:8086/api/v1/lista-negra/verificar}"
+# -- hasta que el haga ese cambio, esto no tiene ningun efecto (Spring
+# simplemente no la lee todavia).
+#
+# SPRING_PROFILES_ACTIVE: solo llega con valor en el despliegue a
+# produccion (cd.yml la deja vacia en dev/test a proposito, hasta que
+# Cristian confirme como quiere manejar los perfiles ahi). Vacia, Spring
+# usa el default declarado en application.properties (spring.profiles.active=dev).
+
+services:
+  srv-ms-identidad:
+    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-ms-identidad:${TAG}
+    ports:
+      - "8089:8089"
+    environment:
+      DB_URL: ${MS_IDENTIDAD_DB_URL}
+      DB_USER: ${MS_IDENTIDAD_DB_USER}
+      DB_PASSWORD: ${MS_IDENTIDAD_DB_PASSWORD}
+      LISTA_NEGRA_URL: ${LISTA_NEGRA_URL}
+      SPRING_PROFILES_ACTIVE: ${MS_IDENTIDAD_SPRING_PROFILES_ACTIVE}
