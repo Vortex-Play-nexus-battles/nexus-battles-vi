@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-/** Pruebas de aceptación de HU-PRD-004. */
 class SuspensionProductoTest {
 
     @Test
