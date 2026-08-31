@@ -206,6 +206,7 @@ jobs:
             -Dsonar.host.url=${{ env.SONAR_HOST_URL }} \
             -Dsonar.token=$SONAR_TOKEN \
             -Dsonar.projectKey=${{ matrix.sonarProjectKey }} \
+            -DmoduloObjetivo=${{ matrix.rutaGradle }} \
             -Dsonar.qualitygate.wait=true
 
       - name: (Gradle) Publicar reporte de cobertura
