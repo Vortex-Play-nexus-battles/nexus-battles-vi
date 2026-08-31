@@ -24,7 +24,6 @@ import java.util.UUID;
 public final class Sala {
 
     private final UUID id;
-    private final String nombre;
     private final EstadoSala estado;
     private final Modalidad modalidad;
     private final int maximoParticipantes;
@@ -36,12 +35,11 @@ public final class Sala {
     private final int ocupacion;
     private final Instant creadaEn;
 
-    private Sala(UUID id, String nombre, EstadoSala estado, Modalidad modalidad,
+    private Sala(UUID id, EstadoSala estado, Modalidad modalidad,
                  int maximoParticipantes, int recompensaCreditos, boolean incluirHeroeIA,
                  boolean privada, Integer tamanoEquipo, UUID idAnfitrion, int ocupacion,
                  Instant creadaEn) {
         this.id = id;
-        this.nombre = nombre;
         this.estado = estado;
         this.modalidad = modalidad;
         this.maximoParticipantes = maximoParticipantes;
@@ -61,29 +59,27 @@ public final class Sala {
      * {@link #crear} el dia que se guardaron. Volver a validarlos haria que un
      * cambio futuro de las reglas dejara ilegibles las salas antiguas.
      *
-     * <p>Uso exclusivo de la capa de persistencia. Ningun caso de uso deberia
-     * llamarla: para crear una sala esta {@link #crear}.
+     * <p>Uso exclusivo de la capa de persistencia.
      */
-    public static Sala rehidratar(UUID id, String nombre, EstadoSala estado, Modalidad modalidad,
+    public static Sala rehidratar(UUID id, EstadoSala estado, Modalidad modalidad,
                                   int maximoParticipantes, int recompensaCreditos,
                                   boolean incluirHeroeIA, boolean privada, Integer tamanoEquipo,
                                   UUID idAnfitrion, int ocupacion, Instant creadaEn) {
-        return new Sala(id, nombre, estado, modalidad, maximoParticipantes, recompensaCreditos,
+        return new Sala(id, estado, modalidad, maximoParticipantes, recompensaCreditos,
                 incluirHeroeIA, privada, tamanoEquipo, idAnfitrion, ocupacion, creadaEn);
     }
 
     /**
-     * Crea una sala validada, con el anfitrion dentro y sus creditos comprometidos.
+     * Crea una sala validada, con el anfitrion dentro.
      *
      * <p>Se acumulan TODOS los errores de parametros antes de rechazar, en vez de
      * parar en el primero: el requisito obliga a decir el motivo, y decir de uno en
-     * uno obliga a la persona a enviar el formulario cinco veces para enterarse.
+     * uno obliga a la persona a enviar el formulario varias veces para enterarse.
      *
      * <p>NO comprueba el saldo. Con reserva atomica, «me alcanza» no es una
      * pregunta que se pueda responder aqui: solo el modulo de creditos puede
-     * comprobar y descontar en la misma operacion, y cualquier comprobacion
-     * previa quedaria obsoleta en el instante siguiente. Esa parte vive en el
-     * caso de uso, contra su puerto.
+     * comprobar y descontar en la misma operacion. Esa parte vive en el caso de
+     * uso, contra su puerto.
      *
      * @param parametros  parametros elegidos por el jugador
      * @param idAnfitrion jugador que crea la sala
@@ -95,7 +91,6 @@ public final class Sala {
         Objects.requireNonNull(parametros.modalidad(), "Una sala necesita una modalidad.");
 
         List<ErrorDeCampo> errores = new ArrayList<>();
-        validarNombre(parametros.nombre(), errores);
         validarParticipantes(parametros, errores);
         validarEquipo(parametros, errores);
         validarRecompensa(parametros.recompensaCreditos(), errores);
@@ -106,7 +101,6 @@ public final class Sala {
 
         return new Sala(
                 UUID.randomUUID(),
-                parametros.nombre().strip(),
                 parametros.privada() ? EstadoSala.PRIVADA : EstadoSala.ABIERTA,
                 parametros.modalidad(),
                 parametros.maximoParticipantes(),
@@ -117,19 +111,6 @@ public final class Sala {
                 idAnfitrion,
                 1, // al crearla solo esta el anfitrion
                 Instant.now());
-    }
-
-    private static void validarNombre(String nombre, List<ErrorDeCampo> errores) {
-        if (nombre == null || nombre.isBlank()) {
-            errores.add(new ErrorDeCampo("nombre", "Ponle un nombre a la sala."));
-            return;
-        }
-        int longitud = nombre.strip().length();
-        if (longitud < ParametrosDeSala.NOMBRE_MINIMO || longitud > ParametrosDeSala.NOMBRE_MAXIMO) {
-            errores.add(new ErrorDeCampo("nombre",
-                    "El nombre va de " + ParametrosDeSala.NOMBRE_MINIMO + " a "
-                            + ParametrosDeSala.NOMBRE_MAXIMO + " caracteres."));
-        }
     }
 
     /** RF-JUE-004: cada modalidad admite un rango distinto de participantes. */
@@ -172,10 +153,6 @@ public final class Sala {
 
     public UUID id() {
         return id;
-    }
-
-    public String nombre() {
-        return nombre;
     }
 
     public EstadoSala estado() {

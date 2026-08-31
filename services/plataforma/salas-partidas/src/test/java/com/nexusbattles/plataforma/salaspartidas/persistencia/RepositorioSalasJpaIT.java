@@ -56,15 +56,13 @@ class RepositorioSalasJpaIT {
     @Test
     @DisplayName("guarda una sala y la recupera igual que se guardo")
     void guardaYRecupera() {
-        Sala sala = Sala.crear(new ParametrosDeSala("Duelo en el Nexo", 4, Modalidad.HASTA_SEIS,
-                400, true, false, 2), ANFITRION);
+        Sala sala = Sala.crear(new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 400, true, false, 2), ANFITRION);
 
         repositorio.guardar(sala);
         Sala recuperada = repositorio.buscarPorId(sala.id()).orElseThrow();
 
         assertAll(
                 () -> assertEquals(sala.id(), recuperada.id()),
-                () -> assertEquals("Duelo en el Nexo", recuperada.nombre()),
                 () -> assertEquals(EstadoSala.ABIERTA, recuperada.estado()),
                 () -> assertEquals(Modalidad.HASTA_SEIS, recuperada.modalidad()),
                 () -> assertEquals(4, recuperada.maximoParticipantes()),
@@ -78,8 +76,7 @@ class RepositorioSalasJpaIT {
     @Test
     @DisplayName("una sala privada se recupera privada")
     void salaPrivada() {
-        Sala sala = Sala.crear(new ParametrosDeSala("Solo invitados", 2, Modalidad.UNO_CONTRA_UNO,
-                0, false, true, null), ANFITRION);
+        Sala sala = Sala.crear(new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, true, null), ANFITRION);
 
         repositorio.guardar(sala);
 
@@ -92,8 +89,7 @@ class RepositorioSalasJpaIT {
     @Test
     @DisplayName("el tamano de equipo nulo se guarda y vuelve nulo")
     void sinEquipo() {
-        Sala sala = Sala.crear(new ParametrosDeSala("Amistosa", 2, Modalidad.CONTRA_IA,
-                0, false, false, null), ANFITRION);
+        Sala sala = Sala.crear(new ParametrosDeSala(2, Modalidad.CONTRA_IA, 0, false, false, null), ANFITRION);
 
         repositorio.guardar(sala);
 
@@ -103,8 +99,7 @@ class RepositorioSalasJpaIT {
     @Test
     @DisplayName("el momento de creacion sobrevive al viaje de ida y vuelta")
     void conservaLaFecha() {
-        Sala sala = Sala.crear(new ParametrosDeSala("Con fecha", 2, Modalidad.UNO_CONTRA_UNO,
-                0, false, false, null), ANFITRION);
+        Sala sala = Sala.crear(new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, false, null), ANFITRION);
 
         repositorio.guardar(sala);
         Sala recuperada = repositorio.buscarPorId(sala.id()).orElseThrow();

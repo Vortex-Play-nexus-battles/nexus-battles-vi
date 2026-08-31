@@ -18,11 +18,6 @@ const HTML = `
     <div data-zona="aviso" hidden></div>
 
     <div class="campo">
-      <label class="campo__etiqueta" for="nombre">Nombre</label>
-      <input class="campo__control" id="nombre" name="nombre" value="Duelo en el Nexo" />
-    </div>
-
-    <div class="campo">
       <label class="campo__etiqueta" for="maximoParticipantes">Participantes</label>
       <input class="campo__control" id="maximoParticipantes" name="maximoParticipantes"
              type="number" value="4" />
@@ -56,7 +51,6 @@ describe('leerFormulario', () => {
     const formulario = preparar();
 
     expect(leerFormulario(formulario)).toEqual({
-      nombre: 'Duelo en el Nexo',
       maximoParticipantes: 4,
       modalidad: 'HASTA_SEIS',
       recompensaCreditos: 0,
@@ -88,7 +82,9 @@ describe('tonoPara', () => {
 describe('montarCrearSala', () => {
   test('al crear la sala muestra un aviso de exito y limpia el formulario', async () => {
     const formulario = preparar();
-    const crearSalaImpl = jest.fn().mockResolvedValue({ id: 'a1', nombre: 'Duelo en el Nexo' });
+    const crearSalaImpl = jest
+      .fn()
+      .mockResolvedValue({ id: 'a1', maximoParticipantes: 4, recompensaCreditos: 0 });
     montarCrearSala(formulario, { crearSalaImpl });
 
     formulario.dispatchEvent(new Event('submit'));
@@ -96,7 +92,7 @@ describe('montarCrearSala', () => {
 
     const aviso = document.querySelector('.aviso');
     expect(aviso.className).toContain('aviso--exito');
-    expect(aviso.textContent).toContain('Duelo en el Nexo');
+    expect(aviso.textContent).toContain('4 participantes');
     expect(document.querySelector('[data-zona="aviso"]').hidden).toBe(false);
   });
 
@@ -114,7 +110,7 @@ describe('montarCrearSala', () => {
     expect(boton.getAttribute('aria-busy')).toBe('true');
     expect(boton.textContent).toMatch(/creando/i);
 
-    resolver({ id: 'a1', nombre: 'X' });
+    resolver({ id: 'a1', maximoParticipantes: 4, recompensaCreditos: 0 });
     await asentar();
 
     expect(boton.disabled).toBe(false);
@@ -130,7 +126,9 @@ describe('montarCrearSala', () => {
           title: 'Revisa los datos de la sala',
           status: 400,
           detail: 'Hay 1 campo que corregir.',
-          errores: [{ campo: 'nombre', mensaje: 'El nombre va de 3 a 60 caracteres.' }],
+          errores: [
+            { campo: 'maximoParticipantes', mensaje: 'Esta modalidad admite entre 2 y 6 jugadores.' },
+          ],
         },
         400,
       ),
@@ -140,10 +138,10 @@ describe('montarCrearSala', () => {
     formulario.dispatchEvent(new Event('submit'));
     await asentar();
 
-    const control = formulario.querySelector('[name="nombre"]');
+    const control = formulario.querySelector('[name="maximoParticipantes"]');
     expect(control.closest('.campo').classList.contains('campo--invalido')).toBe(true);
     expect(control.getAttribute('aria-invalid')).toBe('true');
-    expect(formulario.querySelector('.campo__error').textContent).toContain('3 a 60');
+    expect(formulario.querySelector('.campo__error').textContent).toContain('2 y 6');
     expect(document.querySelector('.aviso')).toBeNull();
     expect(document.activeElement).toBe(control);
   });
@@ -151,13 +149,13 @@ describe('montarCrearSala', () => {
   test('los errores de campo anteriores se limpian antes del siguiente intento', async () => {
     const formulario = preparar();
     const conError = new ErrorDeApi(
-      { status: 400, errores: [{ campo: 'nombre', mensaje: 'Muy corto.' }] },
+      { status: 400, errores: [{ campo: 'maximoParticipantes', mensaje: 'Fuera de rango.' }] },
       400,
     );
     const crearSalaImpl = jest
       .fn()
       .mockRejectedValueOnce(conError)
-      .mockResolvedValueOnce({ id: 'a1', nombre: 'Duelo en el Nexo' });
+      .mockResolvedValueOnce({ id: 'a1', maximoParticipantes: 4, recompensaCreditos: 0 });
     montarCrearSala(formulario, { crearSalaImpl });
 
     formulario.dispatchEvent(new Event('submit'));

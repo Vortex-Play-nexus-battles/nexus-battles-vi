@@ -13,7 +13,6 @@ import { jest } from '@jest/globals';
 import { crearSala, ErrorDeApi } from './cliente-salas.js';
 
 const PARAMETROS = {
-  nombre: 'Duelo en el Nexo',
   maximoParticipantes: 4,
   modalidad: 'HASTA_SEIS',
   recompensaCreditos: 0,
@@ -37,7 +36,7 @@ function respuesta(estado, cuerpo) {
 
 describe('crearSala', () => {
   test('envia el cuerpo al contrato y devuelve la sala creada', async () => {
-    const sala = { id: 'abc', nombre: 'Duelo en el Nexo', estado: 'ABIERTA' };
+    const sala = { id: 'abc', estado: 'ABIERTA', maximoParticipantes: 4 };
     const fetchImpl = jest.fn().mockResolvedValue(respuesta(201, sala));
 
     const resultado = await crearSala(PARAMETROS, { fetchImpl });
@@ -67,7 +66,7 @@ describe('crearSala', () => {
         status: 400,
         detail: 'Hay 2 campos que corregir.',
         errores: [
-          { campo: 'nombre', mensaje: 'Muy corto.' },
+          { campo: 'maximoParticipantes', mensaje: 'Fuera de rango.' },
           { campo: 'recompensaCreditos', mensaje: 'No puede ser negativa.' },
         ],
       }),
@@ -78,7 +77,7 @@ describe('crearSala', () => {
     expect(error).toBeInstanceOf(ErrorDeApi);
     expect(error.esDeFormulario).toBe(true);
     expect(error.errores).toHaveLength(2);
-    expect(error.errores[0].campo).toBe('nombre');
+    expect(error.errores[0].campo).toBe('maximoParticipantes');
     expect(error.estado).toBe(400);
   });
 

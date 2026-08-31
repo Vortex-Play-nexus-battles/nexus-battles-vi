@@ -48,7 +48,7 @@ export class ErrorDeApi extends Error {
 /**
  * Crea una sala de batalla.
  *
- * @param {{nombre: string, maximoParticipantes: number, modalidad: string,
+ * @param {{maximoParticipantes: number, modalidad: string,
  *          recompensaCreditos: number, incluirHeroeIA: boolean,
  *          privada: boolean, tamanoEquipo?: number|null}} parametros
  * @param {{fetchImpl?: Function}} [opciones] inyeccion para las pruebas

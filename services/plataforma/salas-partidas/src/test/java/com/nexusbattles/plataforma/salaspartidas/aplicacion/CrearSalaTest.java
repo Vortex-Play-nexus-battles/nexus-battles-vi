@@ -86,8 +86,7 @@ class CrearSalaTest {
     }
 
     private static ParametrosDeSala validos() {
-        return new ParametrosDeSala("Duelo en el Nexo", 4, Modalidad.HASTA_SEIS,
-                400, false, false, null);
+        return new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 400, false, false, null);
     }
 
     @Test
@@ -123,8 +122,7 @@ class CrearSalaTest {
     @Test
     @DisplayName("una sala sin recompensa no molesta al modulo de creditos")
     void sinRecompensaNoReserva() {
-        ParametrosDeSala gratis = new ParametrosDeSala("Amistosa", 4, Modalidad.HASTA_SEIS,
-                0, false, false, null);
+        ParametrosDeSala gratis = new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null);
 
         crearSala.ejecutar(gratis, ANFITRION);
 
@@ -136,8 +134,7 @@ class CrearSalaTest {
     @Test
     @DisplayName("con parametros invalidos no reserva ni escribe nada")
     void parametrosInvalidos() {
-        ParametrosDeSala invalidos = new ParametrosDeSala("ab", 9, Modalidad.HASTA_SEIS,
-                -5, false, false, null);
+        ParametrosDeSala invalidos = new ParametrosDeSala(9, Modalidad.HASTA_SEIS, -5, false, false, null);
 
         assertThrows(ParametrosInvalidos.class, () -> crearSala.ejecutar(invalidos, ANFITRION));
 
@@ -150,14 +147,13 @@ class CrearSalaTest {
     @Test
     @DisplayName("acumula todos los errores de parametros en un solo rechazo")
     void acumulaLosErrores() {
-        ParametrosDeSala invalidos = new ParametrosDeSala("ab", 9, Modalidad.HASTA_SEIS,
-                -5, false, false, null);
+        ParametrosDeSala invalidos = new ParametrosDeSala(9, Modalidad.HASTA_SEIS, -5, false, false, null);
 
         ParametrosInvalidos error = assertThrows(ParametrosInvalidos.class,
                 () -> crearSala.ejecutar(invalidos, ANFITRION));
 
-        assertEquals(3, error.errores().size(),
-                "nombre, maximoParticipantes y recompensaCreditos, de una sola vez");
+        assertEquals(2, error.errores().size(),
+                "maximoParticipantes y recompensaCreditos, de una sola vez");
     }
 
     @Test

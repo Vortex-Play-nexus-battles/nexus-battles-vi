@@ -23,6 +23,9 @@ export function tonoPara(estado) {
 /**
  * Lee el formulario y arma el cuerpo del contrato.
  *
+ * Las tres entradas de RF-JUE-001 mas las dos opciones de sus flujos
+ * alternativos. Las salas no tienen nombre: ningun requisito lo pide.
+ *
  * `tamanoEquipo` solo viaja en la modalidad que admite equipos: mandarlo en un
  * duelo seria un parametro que el servicio va a rechazar (RF-JUE-004).
  */
@@ -32,7 +35,6 @@ export function leerFormulario(formulario) {
   const tamano = datos.get('tamanoEquipo');
 
   return {
-    nombre: (datos.get('nombre') ?? '').toString().trim(),
     maximoParticipantes: Number(datos.get('maximoParticipantes')),
     modalidad,
     recompensaCreditos: Number(datos.get('recompensaCreditos') || 0),
@@ -135,7 +137,9 @@ export function montarCrearSala(formulario, { crearSalaImpl = crearSala, alCrear
       pintarAviso(zonaAviso, {
         tono: 'exito',
         titulo: 'Sala creada',
-        detalle: `«${sala.nombre}» ya esta abierta y esperando jugadores.`,
+        detalle:
+          `Tu sala esta abierta y esperando jugadores: ${sala.maximoParticipantes} ` +
+          `participantes${sala.recompensaCreditos ? `, ${sala.recompensaCreditos} creditos en juego` : ''}.`,
       });
       formulario.reset();
       if (alCrear) alCrear(sala);

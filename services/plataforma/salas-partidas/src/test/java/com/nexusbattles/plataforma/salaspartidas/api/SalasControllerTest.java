@@ -42,7 +42,6 @@ class SalasControllerTest {
 
     private static final String CUERPO = """
             {
-              "nombre": "Duelo en el Nexo",
               "maximoParticipantes": 4,
               "modalidad": "HASTA_SEIS",
               "recompensaCreditos": 0,
@@ -58,8 +57,7 @@ class SalasControllerTest {
     private CrearSala crearSala;
 
     private static Sala salaDeEjemplo() {
-        return Sala.crear(new ParametrosDeSala("Duelo en el Nexo", 4, Modalidad.HASTA_SEIS,
-                0, false, false, null), JUGADOR);
+        return Sala.crear(new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null), JUGADOR);
     }
 
     private static org.springframework.test.web.servlet.request.RequestPostProcessor jugador() {
@@ -81,7 +79,6 @@ class SalasControllerTest {
                         .content(CUERPO))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location", "/api/v1/salas/" + sala.id()))
-                .andExpect(jsonPath("$.nombre").value("Duelo en el Nexo"))
                 .andExpect(jsonPath("$.estado").value("ABIERTA"))
                 .andExpect(jsonPath("$.anfitrion.id").value(JUGADOR.toString()))
                 .andExpect(jsonPath("$.anfitrion.apodo").value("Simon_P"))
@@ -174,7 +171,6 @@ class SalasControllerTest {
 
         String cuerpoConIntruso = """
                 {
-                  "nombre": "Duelo en el Nexo",
                   "maximoParticipantes": 4,
                   "modalidad": "HASTA_SEIS",
                   "recompensaCreditos": 0,
@@ -206,7 +202,7 @@ class SalasControllerTest {
     @DisplayName("una lista de errores de campo viaja entera")
     void variosErroresDeCampo() throws Exception {
         when(crearSala.ejecutar(any(), any())).thenThrow(new ParametrosInvalidos(List.of(
-                new com.nexusbattles.comun.error.ErrorDeCampo("nombre", "Muy corto."),
+                new com.nexusbattles.comun.error.ErrorDeCampo("maximoParticipantes", "Fuera de rango."),
                 new com.nexusbattles.comun.error.ErrorDeCampo("recompensaCreditos", "No puede ser negativa."))));
 
         mockMvc.perform(post("/api/v1/salas")

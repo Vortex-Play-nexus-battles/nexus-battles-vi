@@ -31,9 +31,6 @@ class SalaEntidad {
     @Id
     private UUID id;
 
-    @Column(nullable = false, length = 60)
-    private String nombre;
-
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private EstadoSala estado;
@@ -73,7 +70,6 @@ class SalaEntidad {
     static SalaEntidad desde(Sala sala) {
         SalaEntidad entidad = new SalaEntidad();
         entidad.id = sala.id();
-        entidad.nombre = sala.nombre();
         entidad.estado = sala.estado();
         entidad.modalidad = sala.modalidad();
         entidad.maximoParticipantes = (short) sala.maximoParticipantes();
@@ -90,7 +86,6 @@ class SalaEntidad {
     Sala aDominio() {
         return Sala.rehidratar(
                 id,
-                nombre,
                 estado,
                 modalidad,
                 maximoParticipantes,
