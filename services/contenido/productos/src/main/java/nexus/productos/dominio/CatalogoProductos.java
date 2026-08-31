@@ -2,7 +2,6 @@ package nexus.productos.dominio;
 
 import java.util.Objects;
 
-/** Casos de uso del tiraje disponible en el catálogo. */
 public final class CatalogoProductos {
 
     private final RepositorioDisponibilidadProductos repositorio;

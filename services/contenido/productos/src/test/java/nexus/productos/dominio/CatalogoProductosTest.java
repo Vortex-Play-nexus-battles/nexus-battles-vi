@@ -13,7 +13,6 @@ import java.util.concurrent.Future;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-/** Pruebas de aceptación de HU-PRD-002. */
 class CatalogoProductosTest {
 
     @Test
