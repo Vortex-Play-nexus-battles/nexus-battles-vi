@@ -596,7 +596,15 @@ class ProductosApiTest {
     }
 
     private static String agregarCampo(String json, String campo) {
-        return json.replaceFirst("\\s*}\\s*$", ",\\n  " + campo + "\\n}");
+        int posicionCierre = json.lastIndexOf('}');
+
+        if (posicionCierre < 0) {
+            throw new IllegalArgumentException(
+                    "El JSON de prueba no contiene una llave de cierre");
+        }
+
+        return json.substring(0, posicionCierre).stripTrailing()
+                + ",\n  " + campo + "\n}";
     }
 
 }

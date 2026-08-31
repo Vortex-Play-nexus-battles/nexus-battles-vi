@@ -21,4 +21,20 @@ initscript {
 
 rootProject {
     apply plugin: org.sonarqube.gradle.SonarQubePlugin
+
+    // El task sonar del proyecto raiz incluye todos los subproyectos Gradle
+    // por defecto. En este monorepo cada servicio tiene un proyecto separado
+    // en SonarQube Cloud, por lo que el pipeline indica cual debe analizarse.
+    def rutaAnalizada = System.getProperty('nexus.sonar.projectPath')
+
+    if (rutaAnalizada) {
+        gradle.projectsEvaluated {
+            subprojects.each { subproyecto ->
+                def extensionSonar = subproyecto.extensions.findByName('sonar')
+                if (extensionSonar != null) {
+                    extensionSonar.skipProject = subproyecto.path != rutaAnalizada
+                }
+            }
+        }
+    }
 }

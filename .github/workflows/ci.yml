@@ -191,9 +191,7 @@ jobs:
             -Dsonar.host.url=${{ env.SONAR_HOST_URL }} \
             -Dsonar.token=$SONAR_TOKEN \
             -Dsonar.projectKey=${{ matrix.sonarProjectKey }} \
-            -Dsonar.projectBaseDir=${{ matrix.ruta }} \
-            -Dsonar.sources=${{ matrix.ruta }}/src/main \
-            -Dsonar.tests=${{ matrix.ruta }}/src/test \
+            -Dnexus.sonar.projectPath=${{ matrix.rutaGradle }} \
             -Dsonar.coverage.jacoco.xmlReportPaths=${{ matrix.ruta }}/build/reports/jacoco/test/jacocoTestReport.xml \
             -Dsonar.qualitygate.wait=true
 
