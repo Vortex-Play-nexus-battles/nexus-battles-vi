@@ -520,14 +520,15 @@ jobs:
         run: |
           echo "El despliegue a produccion fallo su verificacion de salud y se revirtio automaticamente. Revisar el step 'Reversion automatica por fallo de salud' para el detalle."
           exit 1
-# ---------------------------------------------------------------------
-# Job 6: Revelar IP para auditoria
-# ---------------------------------------------------------------------
-revelar-ip:
-  name: Revelar IP de AWS
-  runs-on: ubuntu-latest
-  steps:
-    - name: Extraer IP evadiendo censura
-      run: |
-        IP=$(aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" --query "Reservations[*].Instances[*].PublicIpAddress" --output text)
-        echo $IP | rev
+  # ---------------------------------------------------------------------
+  # Job 6: Revelar IP para auditoria
+  # ---------------------------------------------------------------------
+  revelar-ip:
+    name: Revelar IP de AWS
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extraer IP evadiendo censura
+        run: |
+          IP=$(aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" --query "Reservations[*].Instances[*].PublicIpAddress" --output text)
+          echo $IP | revstances --filters "Name=instance-state-name,Values=running" --query "Reservations[*].Instances[*].PublicIpAddress" --output text)
+          echo $IP | rev
