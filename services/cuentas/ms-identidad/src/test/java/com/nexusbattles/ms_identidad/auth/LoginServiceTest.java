@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_identidad.auth;
 
+import com.nexusbattles.ms_identidad.auth.correo.CorreoClient;
 import com.nexusbattles.ms_identidad.auth.dto.LoginRequest;
 import com.nexusbattles.ms_identidad.auth.dto.LoginResponse;
 import com.nexusbattles.ms_identidad.auth.exception.CredencialesInvalidasException;
@@ -39,6 +40,9 @@ class LoginServiceTest {
 
     @Mock
     private IntentosFallidosService intentosFallidosService;
+
+    @Mock
+    private CorreoClient correoClient;
 
     @InjectMocks
     private LoginService loginService;
@@ -200,6 +204,7 @@ class LoginServiceTest {
         assertNull(usuario.getBloqueadoHasta());
         verify(usuarioRepository).save(usuario);
         verify(dispositivoConocidoRepository).save(any(DispositivoConocido.class));
+        verify(correoClient).enviarAvisoAcceso(any());
     }
 
     @Test
@@ -214,5 +219,6 @@ class LoginServiceTest {
 
         assertFalse(respuesta.isDispositivoNuevo());
         verify(dispositivoConocidoRepository, never()).save(any());
+        verify(correoClient, never()).enviarAvisoAcceso(any());
     }
 }

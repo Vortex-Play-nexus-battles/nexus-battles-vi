@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_identidad.auth;
 
+import com.nexusbattles.ms_identidad.auth.correo.CorreoClient;
 import com.nexusbattles.ms_identidad.auth.dto.RegistroRequest;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
@@ -9,7 +10,6 @@ import com.nexusbattles.ms_identidad.auth.validation.PasswordPolicyValidator;
 import com.nexusbattles.ms_identidad.perfiles.service.PerfilUsuarioService;
 import com.nexusbattles.ms_identidad.rbac.model.RolEntity;
 import com.nexusbattles.ms_identidad.rbac.service.RolService;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -40,6 +40,9 @@ class RegistroServiceTest {
 
     @Mock
     private PerfilUsuarioService perfilUsuarioService;
+
+    @Mock
+    private CorreoClient correoClient;
 
     @InjectMocks
     private RegistroService registroService;
@@ -146,5 +149,6 @@ class RegistroServiceTest {
         verify(perfilUsuarioService).crearPerfil(
             resultado, "Cristian", "Chaparro", "https://ejemplo.com/avatar.png"
         );
+        verify(correoClient).enviarBienvenida(any());
     }
 }
