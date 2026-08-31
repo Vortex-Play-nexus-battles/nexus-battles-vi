@@ -2055,3 +2055,56 @@
 .zona-carga--error .zona-carga__titulo,
 .zona-carga--error .zona-carga__ayuda,
 .zona-carga--error .zona-carga__icono { color: var(--error); }
+
+
+/* =======================================================================
+   Casilla en caja
+   -----------------------------------------------------------------------
+   Variante de Pantalla 1: la casilla vive dentro de una caja con borde que
+   ocupa el ancho, no suelta sobre el fondo. Toda la caja es el area
+   pulsable, que es mas facil de acertar que un cuadrado de 20 px.
+   ======================================================================= */
+
+.casilla--caja {
+  align-items: center;
+  padding: var(--e-3);
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+}
+
+.casilla--caja:hover { border-color: var(--borde-int); }
+
+.casilla--caja:has(.casilla__entrada:focus-visible) {
+  border-color: var(--primaria);
+}
+
+
+/* =======================================================================
+   Chatbot — boton flotante
+   RNF-DIS-002: presente en todas las vistas, sin excepcion.
+   -----------------------------------------------------------------------
+   El componente existia en el sistema de diseno pero su clase nunca se
+   escribio; lo destapo la primera vista construida de verdad.
+   ======================================================================= */
+
+.chatbot-flotante {
+  position: fixed;
+  right: var(--e-6);
+  bottom: var(--e-6);
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--primaria-relleno);
+  color: var(--texto-sobre-color);
+  font-family: var(--t-etiqueta-familia);
+  font-weight: var(--t-etiqueta-peso);
+  box-shadow: var(--sombra-3);
+  cursor: pointer;
+}
+
+.chatbot-flotante:hover { background: var(--acento-relleno); }
