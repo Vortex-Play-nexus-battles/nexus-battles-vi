@@ -24,6 +24,57 @@ body {
   line-height: var(--t-cuerpo-alto);
 }
 
+/* El navegador le pone borde, margen y relleno propios; sin esto, un grupo
+   de opciones de radio se ve con una caja gris que nadie pidio. */
+fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+legend { padding: 0; }
+
+/* --- Disposicion --------------------------------------------------- */
+/* El sistema tenia componentes pero nada que los colocara: la primera vista
+   real lo destapo, con los campos ocupando el ancho entero de la ventana y
+   pegados unos a otros. Dos utilidades, no una rejilla completa. */
+
+/* Contenedor de pagina. 1360 px es la resolucion de referencia del SRS. */
+.pagina {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: var(--e-6) var(--e-5);
+}
+
+/* Pila vertical con ritmo. Lo que le faltaba a los formularios: .campo
+   separa su etiqueta de su control, pero no un campo del siguiente. */
+.pila {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-5);
+}
+
+.pila--compacta { gap: var(--e-3); }
+.pila--amplia   { gap: var(--e-6); }
+
+/* Fila de elementos que reparten el ancho a partes iguales. En Pantalla 1
+   son los dos campos de arriba; a 1024 px se apilan en vez de estrujarse. */
+.fila {
+  display: flex;
+  gap: var(--e-6);
+  flex-wrap: wrap;
+}
+
+.fila > * { flex: 1 1 280px; }
+
+/* Acciones de un formulario: alineadas a la derecha, como en el diseno. */
+.acciones {
+  display: flex;
+  gap: var(--e-3);
+  justify-content: flex-end;
+  align-items: center;
+}
+
 /* --- Titulos ------------------------------------------------------- */
 
 h1, .t-titulo {
