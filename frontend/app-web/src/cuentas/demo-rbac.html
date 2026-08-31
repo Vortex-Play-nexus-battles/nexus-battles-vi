@@ -9,7 +9,7 @@
   <body>
     <header class="cromo">
       <h1>Demo RBAC (local)</h1>
-      <p>HU-RBAC-001 / HU-RBAC-004 · no subir · no reemplaza las pantallas de cuentas</p>
+      <p>HU-RBAC-001 / HU-RBAC-004 · evidencia técnica de autorización</p>
     </header>
 
     <main>
@@ -79,6 +79,9 @@
           <button type="button" class="btn-acento" data-has-permission="ASIGNAR_ROL">
             Asignar rol
           </button>
+          <button type="button" class="btn-acento" data-has-permission="GESTIONAR_CUENTAS">
+            Gestionar cuentas
+          </button>
         </div>
       </section>
 
@@ -86,8 +89,8 @@
         <h2>Intento directo al servidor</h2>
         <p class="ayuda">
           Estas llamadas van siempre, aunque la UI las oculte. Mandan
-          <code>X-User-Role</code> (mientras no exista login). El interceptor muestra el 403 aquí,
-          sin <code>alert</code>.
+          <code>X-User-Role</code> como mecanismo temporal de la demo, hasta integrar Keycloak/JWT.
+          El interceptor muestra el 403 aquí, sin <code>alert</code>.
         </p>
         <div class="fila">
           <label>
