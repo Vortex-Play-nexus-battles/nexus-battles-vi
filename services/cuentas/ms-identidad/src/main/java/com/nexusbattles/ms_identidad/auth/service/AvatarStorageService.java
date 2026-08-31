@@ -58,7 +58,7 @@ public class AvatarStorageService {
         }
         if (archivo.getSize() > TAMANO_MAXIMO_BYTES) {
             throw new IllegalArgumentException(
-                "La imagen no debe superar los 5 MB.");
+                "La imagen no debe superar los 500 MB.");
         }
     }
 
