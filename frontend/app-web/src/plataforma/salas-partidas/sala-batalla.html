@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sala en batalla · The Nexus Battles VI</title>
+
+    <!--
+      Sistema de diseno compartido. Ningun estilo propio de esta vista.
+      Rutas relativas, igual que crear-sala.html.
+    -->
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
+  </head>
+
+  <body>
+    <header class="cabecera">
+      <div class="cabecera__nav">
+        <span class="cabecera__marca">NEXUS BATTLES VI</span>
+        <nav class="cabecera__nav" aria-label="Navegacion principal">
+          <a class="cabecera__destino activo" href="#" aria-current="page">Jugar online</a>
+          <a class="cabecera__destino" href="#">Misiones</a>
+          <a class="cabecera__destino" href="#">Torneo</a>
+          <a class="cabecera__destino" href="#">Mi inventario</a>
+          <a class="cabecera__destino" href="#">Subasta</a>
+        </nav>
+      </div>
+
+      <label class="cabecera__buscador">
+        <span class="solo-lectores">Buscar productos</span>
+        <input class="cabecera__buscador-texto" type="search" placeholder="Buscar productos" />
+      </label>
+
+      <div class="cabecera__acciones">
+        <span class="t-etiqueta">240</span>
+        <span class="distintivo distintivo--en-juego">3</span>
+        <span class="t-etiqueta">Simon_P</span>
+      </div>
+    </header>
+
+    <main class="pagina pila">
+      <div class="pila pila--compacta">
+        <h1>Sala en batalla</h1>
+        <p class="t-cuerpo">
+          La vida de cada participante con su valor numerico. El color cambia al 60 % y al 40 %.
+        </p>
+      </div>
+
+      <!--
+        Dice lo que hay de verdad. Mientras no exista el transporte del canal,
+        esta vista NO aparenta estar conectada: lo pinta el script segun reciba
+        o no una funcion de suscripcion.
+      -->
+      <div class="fila">
+        <span class="conexion conexion--sin-conexion" data-zona="conexion" role="status">
+          Canal en tiempo real no conectado
+        </span>
+      </div>
+
+      <!--
+        Estado vacio de RNF-USA-003. Es lo que se ve mientras no haya partida
+        cargada: no se inventan participantes de ejemplo.
+      -->
+      <div class="estado-vista" data-zona="sin-partida">
+        <p class="estado-vista__titulo">No hay ninguna partida cargada</p>
+        <p class="t-meta">
+          Esta vista se pinta con los participantes de una partida en curso. El
+          endpoint que los entrega todavia no existe.
+        </p>
+      </div>
+
+      <section class="tarjeta pila" data-zona="panel" hidden>
+        <h2 class="tarjeta__titulo">Participantes</h2>
+        <div class="pila pila--compacta" data-zona="vidas"></div>
+      </section>
+    </main>
+
+    <!-- RNF-DIS-002: el chatbot esta en todas las vistas, sin excepcion. -->
+    <button class="chatbot-flotante" type="button" aria-label="Abrir el asistente">IA</button>
+
+    <script type="module">
+      import { montarSalaBatalla, leerEstadoInicial } from './sala-batalla.js';
+
+      // El servidor incrustara aqui la partida cuando exista el endpoint. Sin
+      // ese bloque, montarSalaBatalla pinta el estado vacio.
+      const estado = leerEstadoInicial();
+
+      montarSalaBatalla(document, {
+        idPartida: estado?.idPartida,
+        participantes: estado?.participantes,
+        // Sin `suscribir`: no hay transporte del canal todavia y la vista lo dice.
+      });
+    </script>
+  </body>
+</html>
