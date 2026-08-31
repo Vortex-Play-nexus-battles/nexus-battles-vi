@@ -151,10 +151,10 @@ paths:
           description: Filtro por estado de la sala
           schema:
             $ref: '#/components/schemas/EstadoSala'
-        - name: busqueda
-          in: query
-          description: Busqueda por nombre de sala
-          schema: { type: string, maxLength: 60 }
+        # RETIRADO: buscaba por nombre de sala, y las salas no tienen nombre.
+        # Ningun requisito pide buscar en el listado; RF-JUE-002 solo habla de
+        # seleccionar una sala de la lista. Si HU-SAL-002 necesita busqueda,
+        # primero hay que decidir sobre que campo, y eso no esta definido.
       responses:
         '200':
           description: Pagina de salas disponibles
@@ -454,15 +454,20 @@ components:
     # -- Peticiones ------------------------------------------------------------
     CrearSalaRequest:
       type: object
-      description: Parametros de creacion de sala (RF-JUE-001, RF-JUE-004, RF-JUE-014).
-      required: [nombre, maximoParticipantes, modalidad, recompensaCreditos]
+      description: |
+        Parametros de creacion de sala.
+
+        Las entradas son EXACTAMENTE las tres que enumera RF-JUE-001: «Numero de
+        jugadores; recompensa comprometida; inclusion de heroe controlado por
+        inteligencia artificial». No hay nombre de sala: ningun requisito, regla
+        de negocio ni la seccion 7.6 del Proyecto Integrador lo pide, y
+        RF-JUE-002 selecciona la sala por su identificador. Cuando el SRS quiere
+        un nombre lo dice, como en RF-TOR-003 para los equipos de torneo.
+
+        Privada y tamanoEquipo salen de los flujos alternativos de RF-JUE-001 y
+        de RF-JUE-004.
+      required: [maximoParticipantes, modalidad, recompensaCreditos]
       properties:
-        nombre:
-          type: string
-          minLength: 3
-          maxLength: 60
-          description: Nombre visible de la sala.
-          examples: ['Duelo en el Nexo']
         maximoParticipantes:
           type: integer
           minimum: 2
@@ -506,10 +511,17 @@ components:
     # -- Respuestas ------------------------------------------------------------
     Sala:
       type: object
-      required: [id, nombre, estado, modalidad, maximoParticipantes, participantes, recompensaCreditos, anfitrion]
+      description: |
+        Una sala publicada. El listado de RF-JUE-002 muestra lo que exige la
+        seccion 3.1.1 del SRS: «el numero de participantes, la recompensa en
+        juego y si se incluye un heroe controlado por la inteligencia
+        artificial».
+
+        PENDIENTE DE EQUIPO: que texto identifica a una sala en la tarjeta del
+        listado. Ningun documento lo define. No se inventa aqui.
+      required: [id, estado, modalidad, maximoParticipantes, participantes, recompensaCreditos, anfitrion]
       properties:
         id: { type: string, format: uuid }
-        nombre: { type: string }
         estado: { $ref: '#/components/schemas/EstadoSala' }
         modalidad: { $ref: '#/components/schemas/Modalidad' }
         maximoParticipantes: { type: integer, minimum: 2, maximum: 6 }

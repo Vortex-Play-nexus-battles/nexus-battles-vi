@@ -8,18 +8,18 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Reglas de creacion de sala — HU-SAL-001.
  *
  * <p>Cada prueba cita el requisito que la obliga. Si una prueba no puede citar un
- * requisito, sobra: seria alcance inventado.
+ * requisito, sobra: seria alcance inventado. Aqui vivio un tiempo la validacion
+ * del nombre de sala, hasta que se comprobo que RF-JUE-001 no lo pide.
  *
- * <p>Aqui no se prueba el saldo. Con reserva atomica, comprobar si alcanza no es
- * una decision del dominio sino del modulo de creditos, y se prueba en
- * {@code CrearSalaTest} contra su puerto.
+ * <p>Tampoco se prueba el saldo: con reserva atomica eso no lo decide el dominio
+ * sino el modulo de creditos, y se prueba en {@code CrearSalaTest}.
  */
 @DisplayName("Sala · creacion (HU-SAL-001)")
 class SalaTest {
@@ -27,8 +27,7 @@ class SalaTest {
     private static final UUID ANFITRION = UUID.fromString("11111111-1111-1111-1111-111111111111");
 
     private static ParametrosDeSala validos() {
-        return new ParametrosDeSala("Duelo en el Nexo", 4, Modalidad.HASTA_SEIS,
-                400, false, false, null);
+        return new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 400, false, false, null);
     }
 
     @Nested
@@ -42,51 +41,48 @@ class SalaTest {
 
             assertAll(
                     () -> assertEquals(EstadoSala.ABIERTA, sala.estado()),
-                    () -> assertEquals("Duelo en el Nexo", sala.nombre()),
                     () -> assertEquals(4, sala.maximoParticipantes()),
                     () -> assertEquals(400, sala.recompensaCreditos()),
                     () -> assertEquals(ANFITRION, sala.idAnfitrion()),
                     () -> assertEquals(1, sala.ocupacion(), "solo el anfitrion al crearla"),
-                    () -> assertTrue(sala.id() != null, "toda sala nace con identificador"),
-                    () -> assertTrue(sala.creadaEn() != null, "toda sala nace con fecha"));
+                    () -> assertNotNull(sala.id(), "toda sala nace con identificador"),
+                    () -> assertNotNull(sala.creadaEn(), "toda sala nace con fecha"));
         }
 
         @Test
         @DisplayName("guarda si se incluye un heroe controlado por la IA")
         void heroeDeIa() {
-            ParametrosDeSala con = new ParametrosDeSala("Caceria nocturna", 4,
-                    Modalidad.HASTA_SEIS, 0, true, false, null);
+            ParametrosDeSala con = new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, true, false, null);
 
-            assertTrue(Sala.crear(con, ANFITRION).incluirHeroeIA());
+            assertEquals(true, Sala.crear(con, ANFITRION).incluirHeroeIA());
         }
 
         @Test
         @DisplayName("una sala privada nace en estado PRIVADA, fuera del listado publico")
         void salaPrivada() {
-            ParametrosDeSala privada = new ParametrosDeSala("Solo invitados", 4,
-                    Modalidad.HASTA_SEIS, 0, false, true, null);
+            ParametrosDeSala privada = new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, true, null);
 
             assertEquals(EstadoSala.PRIVADA, Sala.crear(privada, ANFITRION).estado());
         }
 
         @Test
-        @DisplayName("el nombre no puede quedarse corto")
-        void nombreCorto() {
-            ParametrosDeSala corto = new ParametrosDeSala("ab", 4, Modalidad.HASTA_SEIS,
-                    0, false, false, null);
-
-            ParametrosInvalidos error = assertThrows(ParametrosInvalidos.class,
-                    () -> Sala.crear(corto, ANFITRION));
-            assertEquals("nombre", error.errores().get(0).campo());
+        @DisplayName("sin parametros no hay sala que crear")
+        void exigeParametros() {
+            assertThrows(NullPointerException.class, () -> Sala.crear(null, ANFITRION));
         }
 
         @Test
-        @DisplayName("el nombre no puede pasar de 60 caracteres")
-        void nombreLargo() {
-            ParametrosDeSala largo = new ParametrosDeSala("x".repeat(61), 4,
-                    Modalidad.HASTA_SEIS, 0, false, false, null);
+        @DisplayName("sin anfitrion la sala no tendria dueno")
+        void exigeAnfitrion() {
+            assertThrows(NullPointerException.class, () -> Sala.crear(validos(), null));
+        }
 
-            assertThrows(ParametrosInvalidos.class, () -> Sala.crear(largo, ANFITRION));
+        @Test
+        @DisplayName("sin modalidad no se sabe cuantos jugadores caben")
+        void exigeModalidad() {
+            ParametrosDeSala sinModalidad = new ParametrosDeSala(4, null, 0, false, false, null);
+
+            assertThrows(NullPointerException.class, () -> Sala.crear(sinModalidad, ANFITRION));
         }
     }
 
@@ -97,8 +93,7 @@ class SalaTest {
         @Test
         @DisplayName("menos de dos participantes no es una partida")
         void menosDeDos() {
-            ParametrosDeSala uno = new ParametrosDeSala("Sala rara", 1, Modalidad.HASTA_SEIS,
-                    0, false, false, null);
+            ParametrosDeSala uno = new ParametrosDeSala(1, Modalidad.HASTA_SEIS, 0, false, false, null);
 
             ParametrosInvalidos error = assertThrows(ParametrosInvalidos.class,
                     () -> Sala.crear(uno, ANFITRION));
@@ -108,8 +103,7 @@ class SalaTest {
         @Test
         @DisplayName("el maximo del juego son seis participantes")
         void masDeSeis() {
-            ParametrosDeSala siete = new ParametrosDeSala("Multitud", 7, Modalidad.HASTA_SEIS,
-                    0, false, false, null);
+            ParametrosDeSala siete = new ParametrosDeSala(7, Modalidad.HASTA_SEIS, 0, false, false, null);
 
             assertThrows(ParametrosInvalidos.class, () -> Sala.crear(siete, ANFITRION));
         }
@@ -117,8 +111,8 @@ class SalaTest {
         @Test
         @DisplayName("uno contra uno son exactamente dos")
         void duelo() {
-            ParametrosDeSala cuatroEnDuelo = new ParametrosDeSala("Duelo", 4,
-                    Modalidad.UNO_CONTRA_UNO, 0, false, false, null);
+            ParametrosDeSala cuatroEnDuelo =
+                    new ParametrosDeSala(4, Modalidad.UNO_CONTRA_UNO, 0, false, false, null);
 
             assertThrows(ParametrosInvalidos.class, () -> Sala.crear(cuatroEnDuelo, ANFITRION));
         }
@@ -126,8 +120,8 @@ class SalaTest {
         @Test
         @DisplayName("contra la IA tambien son exactamente dos")
         void contraIa() {
-            ParametrosDeSala seisContraIa = new ParametrosDeSala("Practica", 6,
-                    Modalidad.CONTRA_IA, 0, false, false, null);
+            ParametrosDeSala seisContraIa =
+                    new ParametrosDeSala(6, Modalidad.CONTRA_IA, 0, false, false, null);
 
             assertThrows(ParametrosInvalidos.class, () -> Sala.crear(seisContraIa, ANFITRION));
         }
@@ -135,8 +129,8 @@ class SalaTest {
         @Test
         @DisplayName("los equipos no pasan de tres integrantes")
         void equipoDemasiadoGrande() {
-            ParametrosDeSala equipoDeCuatro = new ParametrosDeSala("Cooperativo", 6,
-                    Modalidad.HASTA_SEIS, 0, false, false, 4);
+            ParametrosDeSala equipoDeCuatro =
+                    new ParametrosDeSala(6, Modalidad.HASTA_SEIS, 0, false, false, 4);
 
             ParametrosInvalidos error = assertThrows(ParametrosInvalidos.class,
                     () -> Sala.crear(equipoDeCuatro, ANFITRION));
@@ -146,8 +140,8 @@ class SalaTest {
         @Test
         @DisplayName("solo la modalidad de hasta seis admite equipos")
         void equipoEnDuelo() {
-            ParametrosDeSala dueloConEquipo = new ParametrosDeSala("Duelo", 2,
-                    Modalidad.UNO_CONTRA_UNO, 0, false, false, 2);
+            ParametrosDeSala dueloConEquipo =
+                    new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, false, 2);
 
             assertThrows(ParametrosInvalidos.class, () -> Sala.crear(dueloConEquipo, ANFITRION));
         }
@@ -155,8 +149,8 @@ class SalaTest {
         @Test
         @DisplayName("un duelo bien formado se crea sin problema")
         void dueloValido() {
-            ParametrosDeSala duelo = new ParametrosDeSala("Duelo en el Nexo", 2,
-                    Modalidad.UNO_CONTRA_UNO, 0, false, false, null);
+            ParametrosDeSala duelo =
+                    new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, false, null);
 
             assertEquals(Modalidad.UNO_CONTRA_UNO, Sala.crear(duelo, ANFITRION).modalidad());
         }
@@ -169,8 +163,8 @@ class SalaTest {
         @Test
         @DisplayName("la recompensa no puede ser negativa")
         void recompensaNegativa() {
-            ParametrosDeSala negativa = new ParametrosDeSala("Sala", 4, Modalidad.HASTA_SEIS,
-                    -1, false, false, null);
+            ParametrosDeSala negativa =
+                    new ParametrosDeSala(4, Modalidad.HASTA_SEIS, -1, false, false, null);
 
             ParametrosInvalidos error = assertThrows(ParametrosInvalidos.class,
                     () -> Sala.crear(negativa, ANFITRION));
@@ -180,8 +174,8 @@ class SalaTest {
         @Test
         @DisplayName("una sala sin recompensa es valida: apostar es libre")
         void sinRecompensa() {
-            ParametrosDeSala gratis = new ParametrosDeSala("Amistosa", 4, Modalidad.HASTA_SEIS,
-                    0, false, false, null);
+            ParametrosDeSala gratis =
+                    new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null);
 
             assertEquals(0, Sala.crear(gratis, ANFITRION).recompensaCreditos());
         }

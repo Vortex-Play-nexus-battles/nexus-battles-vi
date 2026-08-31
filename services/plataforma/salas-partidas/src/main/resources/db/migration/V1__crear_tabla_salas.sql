@@ -5,10 +5,13 @@
 --
 -- El esquema salas_partidas lo crea Flyway a partir de spring.flyway.schemas.
 -- Regla 7: ningun otro servicio lee ni escribe aqui.
+--
+-- Sin columna de nombre: RF-JUE-001 enumera como entradas «Numero de jugadores;
+-- recompensa comprometida; inclusion de heroe controlado por inteligencia
+-- artificial», y RF-JUE-002 selecciona la sala por su identificador.
 
 CREATE TABLE IF NOT EXISTS salas (
     id                    UUID         PRIMARY KEY,
-    nombre                VARCHAR(60)  NOT NULL,
     estado                VARCHAR(20)  NOT NULL,
     modalidad             VARCHAR(20)  NOT NULL,
     maximo_participantes  SMALLINT     NOT NULL,
@@ -38,10 +41,7 @@ CREATE TABLE IF NOT EXISTS salas (
 
     -- Nunca puede haber dentro mas gente que el maximo declarado.
     CONSTRAINT salas_ocupacion_coherente
-        CHECK (ocupacion >= 0 AND ocupacion <= maximo_participantes),
-
-    CONSTRAINT salas_nombre_con_longitud_minima
-        CHECK (char_length(nombre) >= 3)
+        CHECK (ocupacion >= 0 AND ocupacion <= maximo_participantes)
 );
 
 COMMENT ON TABLE  salas IS 'Salas de batalla. HU-SAL-001, RF-JUE-001/004/014.';

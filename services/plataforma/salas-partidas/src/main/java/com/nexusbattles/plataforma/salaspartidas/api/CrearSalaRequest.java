@@ -18,7 +18,6 @@ import com.nexusbattles.plataforma.salaspartidas.dominio.ParametrosDeSala;
  * {@code false} signifiquen lo mismo.
  */
 public record CrearSalaRequest(
-        String nombre,
         Integer maximoParticipantes,
         Modalidad modalidad,
         Integer recompensaCreditos,
@@ -28,7 +27,6 @@ public record CrearSalaRequest(
 
     ParametrosDeSala aParametros() {
         return new ParametrosDeSala(
-                nombre,
                 maximoParticipantes == null ? 0 : maximoParticipantes,
                 modalidad,
                 recompensaCreditos == null ? 0 : recompensaCreditos,
