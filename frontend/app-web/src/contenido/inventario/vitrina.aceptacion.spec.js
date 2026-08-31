@@ -231,7 +231,7 @@ test.describe('Creacion y edicion del inventario propio', () => {
     await abrirVitrina(page);
 
     await page.getByRole('button', { name: 'Agregar elemento' }).click();
-    await page.getByLabel('Producto').fill('producto-amuleto');
+    await page.getByLabel('Producto', { exact: true }).fill('producto-amuleto');
     await page.getByLabel('Tipo').selectOption('ITEM');
     await page.getByLabel('Nombre').fill('Amuleto de Niebla');
     await page.getByRole('button', { name: 'Guardar' }).click();
