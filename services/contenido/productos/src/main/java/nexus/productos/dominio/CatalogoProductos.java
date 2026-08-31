@@ -2,7 +2,6 @@ package nexus.productos.dominio;
 
 import java.util.Objects;
 
-/** Casos de uso de tiraje, suspensión y reactivación del catálogo. */
 public final class CatalogoProductos {
 
     private final RepositorioDisponibilidadProductos repositorio;

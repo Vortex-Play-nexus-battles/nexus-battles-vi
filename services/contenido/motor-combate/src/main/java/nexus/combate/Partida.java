@@ -11,7 +11,6 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/** Estado de una partida y sus condiciones de cierre. */
 public final class Partida {
 
     public static final Duration DURACION_MAXIMA = Duration.ofMinutes(6);
@@ -59,7 +58,6 @@ public final class Partida {
                 "El procesador de cierre es obligatorio");
     }
 
-    /** Inicio simplificado para cierres por supervivencia. */
     public static Partida iniciar(List<Combatiente> participantes) {
         return iniciar(
                 participantes,
@@ -68,7 +66,6 @@ public final class Partida {
                 SIN_REACCION_DE_CIERRE);
     }
 
-    /** Inicio simplificado para cierres por supervivencia con notificación. */
     public static Partida iniciar(
             List<Combatiente> participantes,
             AlCerrarPartida alCerrarPartida) {
@@ -126,7 +123,6 @@ public final class Partida {
                 "El instante de actividad es obligatorio");
     }
 
-    /** Evalúa primero la inactividad del turno y después la duración total. */
     public void evaluarLimites(Instant momento) {
         Objects.requireNonNull(momento, "El instante de evaluación es obligatorio");
         if (finalizada()) {

@@ -5,13 +5,6 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
-/**
- * Adaptador determinista para pruebas y desarrollo local.
- *
- * <p>{@link ConcurrentHashMap#compute(Object, java.util.function.BiFunction)}
- * serializa la actualización por producto. El adaptador de base de datos que
- * se integre con HU-PRD-001 debe conservar la misma garantía atómica.</p>
- */
 public final class RepositorioDisponibilidadEnMemoria
         implements RepositorioDisponibilidadProductos {
 

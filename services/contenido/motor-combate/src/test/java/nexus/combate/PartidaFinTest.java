@@ -10,7 +10,6 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-/** Pruebas de aceptación de HU-JUE-005. */
 class PartidaFinTest {
 
     @Test

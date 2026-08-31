@@ -2,13 +2,6 @@ package nexus.productos.dominio;
 
 import java.util.Objects;
 
-/**
- * Proyección del producto que gobierna su tiraje y su ciclo de disponibilidad.
- *
- * <p>Se mantiene separada del modelo completo de HU-PRD-001 para que pueda
- * integrarse con ese contrato sin duplicar nombre, precios ni atributos por
- * tipo. El valor {@code -1} representa existencias ilimitadas.</p>
- */
 public final class DisponibilidadProducto {
 
     public static final int TIRAJE_ILIMITADO = -1;
@@ -37,7 +30,6 @@ public final class DisponibilidadProducto {
                 "El estado de reactivación es obligatorio");
     }
 
-    /** Registra el tiraje inicial exigido por HU-PRD-002. */
     public static DisponibilidadProducto nueva(
             String productoId,
             int tiraje,

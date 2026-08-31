@@ -2,7 +2,6 @@ package nexus.productos.dominio;
 
 import java.util.Objects;
 
-/** Respuesta explícita para que la capa de transporte pueda informar el rechazo. */
 public record ResultadoAdquisicion(EstadoAdquisicion estado, String mensaje) {
 
     public ResultadoAdquisicion {
