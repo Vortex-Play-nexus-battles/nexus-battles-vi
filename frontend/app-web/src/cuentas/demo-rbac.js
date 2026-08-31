@@ -1,6 +1,7 @@
 import {
   applyHasPermissionDirective,
   getCurrentRole,
+  setPermissionMatrix,
   setCurrentRole,
 } from './directives/has-permission.directive.js';
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
@@ -166,6 +167,25 @@ async function cargarRoles() {
   }
 }
 
+async function cargarPermisos() {
+  try {
+    const response = await fetchWithHttpErrorInterceptor(`${apiBase()}/rbac/matrix`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const payload = await response.json();
+    setPermissionMatrix(payload?.matrix);
+    setEstado(`Roles y permisos cargados desde ms-identidad (matriz ${payload?.version || 'vigente'}).`, 'exito');
+  } catch (error) {
+    // Sin matriz no se habilita ninguna acción: la UI también aplica default-deny.
+    setPermissionMatrix({});
+    setEstado(
+      `No fue posible cargar permisos; las acciones se mantienen ocultas (${error instanceof Error ? error.message : 'error'}).`,
+      'error',
+    );
+  }
+}
+
 async function intentarBan() {
   ocultarBanner();
   const response = await fetchWithHttpErrorInterceptor(`${apiBase()}/admin/ban`, {
@@ -197,6 +217,7 @@ selectorRol.addEventListener('change', () => {
 
 document.querySelector('#btn-cargar').addEventListener('click', () => {
   cargarRoles();
+  cargarPermisos();
 });
 
 document.querySelector('#btn-ban').addEventListener('click', () => {
@@ -223,3 +244,4 @@ document.querySelector('#acciones-ui').addEventListener('click', (evento) => {
 pintarRoles(ROLES_RESPALDO);
 applyHasPermissionDirective();
 cargarRoles();
+cargarPermisos();
