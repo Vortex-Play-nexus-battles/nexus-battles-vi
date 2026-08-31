@@ -1,0 +1,533 @@
+name: CD - Distribucion continua
+
+# HU-CICD-002 (SCRUM-165): construye la imagen Docker de cada servicio de
+# plataforma modificado en un push a develop, la publica en GitHub Container
+# Registry y la despliega en cadena dev -> test -> produccion. La APROBACION
+# de produccion es manual (se configura como regla de proteccion del
+# "environment: produccion" en GitHub, Settings > Environments -- no en este
+# archivo), pero EJECUTAR el despliegue una vez aprobado no tiene pasos
+# manuales (CA-01).
+#
+# Depende de HU-CICD-001 (ci.yml, PR #175): ese flujo ya valida que el codigo
+# compila, pasa pruebas y el analisis estatico antes de llegar a develop.
+# Este flujo NO vuelve a correr pruebas: confia en que CI ya paso, porque
+# solo se dispara con push a develop (protegido por PR).
+
+on:
+  push:
+    branches: [develop]
+
+# Minimo necesario: leer el repo y escribir paquetes (para publicar en ghcr.io).
+permissions:
+  contents: read
+  packages: write
+
+# A diferencia de ci.yml, NUNCA cancelamos una corrida de CD a mitad de
+# camino: podria dejar un ambiente a medio desplegar.
+concurrency:
+  group: cd-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  JAVA_VERSION: "21"
+  JAVA_DISTRIBUTION: "temurin"
+  REGISTRO_IMAGENES: "ghcr.io/vortex-play-nexus-battles"
+
+jobs:
+  # ---------------------------------------------------------------------
+  # Job 1: que servicios de plataforma cambiaron en este push a develop.
+  #
+  # DECISION DE DISEÑO: esta logica ya existe en ci.yml (job
+  # "detectar-servicios"), pero aqui la DUPLICAMOS en vez de extraerla a un
+  # job/workflow compartido. Razones:
+  #   1) ci.yml compara contra dos casos (push Y pull_request); cd.yml SOLO
+  #      se dispara por push a develop, entonces el calculo es mas simple
+  #      (un solo caso, sin base de PR) -- extraerlo forzaria a mantener la
+  #      rama de PR sin usarla nunca aqui, complejidad sin beneficio real.
+  #   2) Un "workflow_call" o "composite action" compartido moveria esta
+  #      logica a un tercer archivo, mas dificil de leer de principio a fin
+  #      para alguien que recien esta aprendiendo CI/CD (este es un
+  #      requisito explicito del equipo: los workflows deben poder leerse
+  #      top-to-bottom).
+  #   3) ci.yml ya esta fusionado y en uso (PR #175); tocarlo para extraer
+  #      esta logica es riesgo innecesario para una rama que ni siquiera
+  #      depende de ci.yml en tiempo de ejecucion.
+  # Si el equipo prefiere unificarlo mas adelante, es un refactor aislado
+  # que no cambia el comportamiento de ningun workflow.
+  # ---------------------------------------------------------------------
+  detectar-servicios:
+    name: Detectar servicios de plataforma modificados
+    runs-on: ubuntu-latest
+    outputs:
+      servicios: ${{ steps.detectar.outputs.servicios }}
+      hay_servicios: ${{ steps.detectar.outputs.hay_servicios }}
+      tag: ${{ steps.detectar.outputs.tag }}
+    steps:
+      - name: Descargar el repositorio con historial completo
+        uses: actions/checkout@v4
+        with:
+          # Necesitamos el commit anterior para poder diferenciar contra el.
+          fetch-depth: 0
+
+      - name: Calcular servicios modificados, su puerto y el tag de esta corrida
+        id: detectar
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # 1) Rango a comparar: el commit anterior de la rama contra el actual.
+          #    (cd.yml solo corre por push a develop, nunca por pull_request,
+          #    asi que a diferencia de ci.yml no hace falta resolver una base de PR).
+          BASE="${{ github.event.before }}"
+          HEAD="${{ github.sha }}"
+          ZERO="0000000000000000000000000000000000000000"
+          if [ "$BASE" = "$ZERO" ] || [ -z "$BASE" ]; then
+            if git rev-parse "$HEAD^" >/dev/null 2>&1; then
+              BASE=$(git rev-parse "$HEAD^")
+            else
+              BASE="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+            fi
+          fi
+
+          echo "Comparando $BASE..$HEAD"
+
+          # 2) Solo nos importan los 8 servicios de services/plataforma/* que
+          #    ya tienen imagen en docker-compose.yml (los unicos que este
+          #    equipo despliega). Un servicio de otro equipo que cambie en el
+          #    mismo push se ignora aqui a proposito.
+          ARCHIVOS=$(git diff --name-only "$BASE" "$HEAD")
+          CARPETAS=$(echo "$ARCHIVOS" | grep -E '^services/plataforma/[^/]+/' | awk -F'/' '{print $1"/"$2"/"$3}' | sort -u || true)
+
+          # 3) Puerto fijo por servicio, mismo orden que docker-compose.yml
+          #    (8081 a 8088). Si se agrega un noveno servicio de plataforma
+          #    algun dia, hay que sumarlo aqui Y en docker-compose.yml Y en
+          #    docker-compose.deploy.yml -- no se deriva solo.
+          puerto_de() {
+            case "$1" in
+              comentarios) echo 8081 ;;
+              correo) echo 8082 ;;
+              torneos) echo 8083 ;;
+              salas-partidas) echo 8084 ;;
+              notificaciones) echo 8085 ;;
+              moderacion-sanciones) echo 8086 ;;
+              metricas-plataforma) echo 8087 ;;
+              admin-parametros) echo 8088 ;;
+              *) echo "" ;;
+            esac
+          }
+
+          MATRIZ="[]"
+          for carpeta in $CARPETAS; do
+            servicio=$(basename "$carpeta")
+            puerto=$(puerto_de "$servicio")
+
+            if [ ! -f "$carpeta/build.gradle" ]; then
+              echo "Se omite $carpeta: no tiene build.gradle (o no es un servicio de plataforma reconocido)"
+              continue
+            fi
+            if [ -z "$puerto" ]; then
+              echo "Se omite $carpeta: no tiene puerto asignado en este workflow (servicio nuevo sin registrar)"
+              continue
+            fi
+
+            ruta_gradle=":$(echo "$carpeta" | tr '/' ':')"
+
+            MATRIZ=$(echo "$MATRIZ" | jq -c \
+              --arg ruta "$carpeta" \
+              --arg rutaGradle "$ruta_gradle" \
+              --arg servicio "$servicio" \
+              --arg puerto "$puerto" \
+              '. + [{ruta:$ruta, rutaGradle:$rutaGradle, servicio:$servicio, puerto:$puerto, herramienta:"gradle"}]')
+          done
+
+          # 4) services/cuentas/ms-identidad (Maven), a proposito NO
+          #    generalizado a todo services/cuentas/* -- ms-ecommerce y
+          #    ms-cumplimiento todavia no tienen Dockerfile, asi que este
+          #    flujo no puede desplegarlos aun. Cuando lo tengan, se agregan
+          #    aqui uno por uno igual que este, no con un grep generico.
+          #    Puerto 8089, mismo del lado del host que del contenedor.
+          #    PENDIENTE DE CONFIRMAR: Cristian va a mover el puerto REAL de
+          #    ms-identidad (Dockerfile EXPOSE y server.port) de 8081 a 8089
+          #    para que ya no choque con srv-comentarios (que usa 8081) y no
+          #    haga falta mapear host:contenedor distinto. El codigo de aqui
+          #    YA asume el 8089 nuevo, pero Cristian todavia no confirmo que
+          #    el cambio este hecho y probado de su lado -- si el Dockerfile
+          #    de ms-identidad sigue en 8081 cuando esto se despliegue, el
+          #    healthcheck de este workflow va a fallar contra el puerto
+          #    equivocado. No desplegar hasta que el confirme.
+          if echo "$ARCHIVOS" | grep -q '^services/cuentas/ms-identidad/'; then
+            if [ -f "services/cuentas/ms-identidad/pom.xml" ]; then
+              MATRIZ=$(echo "$MATRIZ" | jq -c \
+                --arg ruta "services/cuentas/ms-identidad" \
+                --arg servicio "ms-identidad" \
+                '. + [{ruta:$ruta, rutaGradle:"", servicio:$servicio, puerto:"8089", herramienta:"maven"}]')
+            else
+              echo "Se omite services/cuentas/ms-identidad: no tiene pom.xml"
+            fi
+          fi
+
+          echo "Servicios a desplegar: $MATRIZ"
+          echo "servicios=$MATRIZ" >> "$GITHUB_OUTPUT"
+
+          CANTIDAD=$(echo "$MATRIZ" | jq 'length')
+          if [ "$CANTIDAD" -gt 0 ]; then
+            echo "hay_servicios=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "hay_servicios=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # TAG unico para toda esta corrida: se usa para nombrar las
+          # imagenes en ghcr.io y para saber que version desplegar despues.
+          echo "tag=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------
+  # Job 2: por cada servicio modificado, compila SOLO el jar ejecutable
+  # (nada de pruebas ni Sonar: eso ya lo hizo ci.yml antes de que esto
+  # llegara a develop), construye su imagen Docker y la publica en ghcr.io.
+  # ---------------------------------------------------------------------
+  construir-y-publicar:
+    name: Construir y publicar - ${{ matrix.servicio }}
+    needs: detectar-servicios
+    if: needs.detectar-servicios.outputs.hay_servicios == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.detectar-servicios.outputs.servicios) }}
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          # setup-java cachea segun la herramienta de este servicio de la
+          # matriz (gradle o maven) -- mismo patron que ci.yml.
+          cache: ${{ matrix.herramienta }}
+
+      # -------------------- Rama Gradle (servicios de plataforma) --------------------
+
+      - name: (Gradle) Dar permiso de ejecucion al wrapper
+        if: matrix.herramienta == 'gradle'
+        run: chmod +x ./gradlew
+
+      # bootJar (del plugin de Spring Boot, ya aplicado por
+      # buildSrc/nexus.spring-conventions.gradle) genera el jar ejecutable
+      # en <servicio>/build/libs/*.jar -- exactamente lo que cada
+      # Dockerfile espera copiar (COPY build/libs/*.jar app.jar).
+      - name: (Gradle) Compilar el jar ejecutable del servicio
+        if: matrix.herramienta == 'gradle'
+        run: ./gradlew ${{ matrix.rutaGradle }}:bootJar --no-daemon
+
+      # -------------------- Rama Maven (ms-identidad, cuentas) --------------------
+      # ms-identidad es un proyecto Maven independiente con su propio
+      # wrapper (igual que en ci.yml), por eso corre parado en su propia
+      # carpeta en vez de invocarse desde la raiz como los de Gradle.
+
+      - name: (Maven) Dar permiso de ejecucion al wrapper
+        if: matrix.herramienta == 'maven'
+        run: chmod +x ${{ matrix.ruta }}/mvnw
+
+      # -DskipTests: ci.yml ya corrio las pruebas antes de que esto llegara
+      # a develop: aqui solo empaquetamos. spring-boot-maven-plugin (ya
+      # declarado en el pom.xml de ms-identidad) genera el jar ejecutable
+      # en target/*.jar en la fase "package" -- lo que su Dockerfile espera
+      # copiar (COPY target/*.jar app.jar).
+      - name: (Maven) Empaquetar el jar ejecutable del servicio
+        if: matrix.herramienta == 'maven'
+        working-directory: ${{ matrix.ruta }}
+        run: ./mvnw -B package -DskipTests
+
+      - name: Iniciar sesion en GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # El contexto del build es la carpeta del servicio (matrix.ruta): ahi
+      # es donde acaba de quedar el jar (build/libs/*.jar en Gradle,
+      # target/*.jar en Maven) y donde vive su Dockerfile.
+      - name: Construir la imagen Docker
+        run: |
+          docker build \
+            -t ${{ env.REGISTRO_IMAGENES }}/nexus-battles-vi-${{ matrix.servicio }}:${{ needs.detectar-servicios.outputs.tag }} \
+            ${{ matrix.ruta }}
+
+      - name: Publicar la imagen en ghcr.io
+        run: docker push ${{ env.REGISTRO_IMAGENES }}/nexus-battles-vi-${{ matrix.servicio }}:${{ needs.detectar-servicios.outputs.tag }}
+
+  # ---------------------------------------------------------------------
+  # Job 3: desplegar en dev. Un solo job (no matrix): conecta UNA vez por
+  # SSH y despliega ahi todos los servicios modificados juntos, en vez de
+  # abrir una conexion SSH por servicio.
+  # ---------------------------------------------------------------------
+  desplegar-dev:
+    name: Desplegar en Dev
+    needs: [detectar-servicios, construir-y-publicar]
+    if: needs.detectar-servicios.outputs.hay_servicios == 'true'
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar lista "servicio:puerto" para este ambiente
+        id: lista
+        run: |
+          LISTA=$(echo '${{ needs.detectar-servicios.outputs.servicios }}' | jq -r '[.[] | "\(.servicio):\(.puerto)"] | join(" ")')
+          echo "lista=$LISTA" >> "$GITHUB_OUTPUT"
+
+      - name: Copiar docker-compose.yml, docker-compose.deploy.yml y el script de despliegue
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,scripts/cd/desplegar.sh"
+          target: "/opt/nexus"
+          strip_components: 0
+
+      # Los 16 nombres vienen de .env.example. Los valores reales viven SOLO
+      # como secrets de GitHub (nunca en este yml). "envs:" es lo que hace
+      # que appleboy/ssh-action los reexporte como variables de entorno
+      # DENTRO de la sesion SSH remota, para que desplegar.sh los use al
+      # generar el .env efimero del servidor.
+      - name: Desplegar en Dev
+        id: desplegar
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          TAG: ${{ needs.detectar-servicios.outputs.tag }}
+          SERVICIOS_PUERTOS: ${{ steps.lista.outputs.lista }}
+          APP_ENV: ${{ secrets.APP_ENV }}
+          LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
+          DB_RELACIONAL_URL: ${{ secrets.DB_RELACIONAL_URL }}
+          DB_NO_RELACIONAL_URL: ${{ secrets.DB_NO_RELACIONAL_URL }}
+          DB_MEMORIA_URL: ${{ secrets.DB_MEMORIA_URL }}
+          COLA_MENSAJES_URL: ${{ secrets.COLA_MENSAJES_URL }}
+          DIRECTORIO_ACTIVO_URL: ${{ secrets.DIRECTORIO_ACTIVO_URL }}
+          DIRECTORIO_ACTIVO_CLIENT_ID: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_ID }}
+          DIRECTORIO_ACTIVO_CLIENT_SECRET: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_SECRET }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          PASARELA_PAGOS_API_KEY: ${{ secrets.PASARELA_PAGOS_API_KEY }}
+          WEBSOCKET_URL: ${{ secrets.WEBSOCKET_URL }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASS: ${{ secrets.DB_PASS }}
+          # PENDIENTE (TODO_*): secrets propios de ms-identidad (equipo
+          # Cuentas), todavia no creados en GitHub -- ver la validacion de
+          # "fallo visible" en desplegar.sh si faltan y ms-identidad esta
+          # en esta corrida. SPRING_PROFILES_ACTIVE NO se fuerza aqui (solo
+          # en produccion, ver mas abajo), hasta que Cristian confirme como
+          # manejar perfiles en dev/test.
+          MS_IDENTIDAD_DB_URL: ${{ secrets.TODO_DB_URL_MS_IDENTIDAD }}
+          MS_IDENTIDAD_DB_USER: ${{ secrets.TODO_DB_USER_MS_IDENTIDAD }}
+          MS_IDENTIDAD_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_IDENTIDAD }}
+          LISTA_NEGRA_URL: ${{ secrets.TODO_LISTA_NEGRA_URL }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL
+          script: |
+            chmod +x /opt/nexus/scripts/cd/desplegar.sh
+            /opt/nexus/scripts/cd/desplegar.sh
+
+      # CA-02 en dev/test: si /actuator/health no pasa, el step de arriba ya
+      # termino en error (desplegar.sh hace "exit 1") y este job queda en
+      # rojo -- eso automaticamente bloquea "desplegar-test" (depende de
+      # este job via needs). No hay reversion automatica en dev/test: el
+      # diseño acordado con Santiago Gonzalez la reserva para produccion
+      # (ver el job "desplegar-produccion" mas abajo).
+
+  # ---------------------------------------------------------------------
+  # Job 4: test. Espera a que dev termine y haya pasado salud (needs).
+  # ---------------------------------------------------------------------
+  desplegar-test:
+    name: Desplegar en Test
+    needs: [detectar-servicios, construir-y-publicar, desplegar-dev]
+    if: needs.detectar-servicios.outputs.hay_servicios == 'true'
+    runs-on: ubuntu-latest
+    environment: test
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar lista "servicio:puerto" para este ambiente
+        id: lista
+        run: |
+          LISTA=$(echo '${{ needs.detectar-servicios.outputs.servicios }}' | jq -r '[.[] | "\(.servicio):\(.puerto)"] | join(" ")')
+          echo "lista=$LISTA" >> "$GITHUB_OUTPUT"
+
+      - name: Copiar docker-compose.yml, docker-compose.deploy.yml y el script de despliegue
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST_TEST }}
+          username: ${{ secrets.SSH_USER_TEST }}
+          key: ${{ secrets.SSH_KEY_TEST }}
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,scripts/cd/desplegar.sh"
+          target: "/opt/nexus"
+          strip_components: 0
+
+      - name: Desplegar en Test
+        id: desplegar
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          TAG: ${{ needs.detectar-servicios.outputs.tag }}
+          SERVICIOS_PUERTOS: ${{ steps.lista.outputs.lista }}
+          APP_ENV: ${{ secrets.APP_ENV }}
+          LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
+          DB_RELACIONAL_URL: ${{ secrets.DB_RELACIONAL_URL }}
+          DB_NO_RELACIONAL_URL: ${{ secrets.DB_NO_RELACIONAL_URL }}
+          DB_MEMORIA_URL: ${{ secrets.DB_MEMORIA_URL }}
+          COLA_MENSAJES_URL: ${{ secrets.COLA_MENSAJES_URL }}
+          DIRECTORIO_ACTIVO_URL: ${{ secrets.DIRECTORIO_ACTIVO_URL }}
+          DIRECTORIO_ACTIVO_CLIENT_ID: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_ID }}
+          DIRECTORIO_ACTIVO_CLIENT_SECRET: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_SECRET }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          PASARELA_PAGOS_API_KEY: ${{ secrets.PASARELA_PAGOS_API_KEY }}
+          WEBSOCKET_URL: ${{ secrets.WEBSOCKET_URL }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASS: ${{ secrets.DB_PASS }}
+          # PENDIENTE (TODO_*): ver el mismo comentario en el job "Desplegar
+          # en Dev" -- misma logica, sin SPRING_PROFILES_ACTIVE aqui tampoco.
+          MS_IDENTIDAD_DB_URL: ${{ secrets.TODO_DB_URL_MS_IDENTIDAD }}
+          MS_IDENTIDAD_DB_USER: ${{ secrets.TODO_DB_USER_MS_IDENTIDAD }}
+          MS_IDENTIDAD_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_IDENTIDAD }}
+          LISTA_NEGRA_URL: ${{ secrets.TODO_LISTA_NEGRA_URL }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST_TEST }}
+          username: ${{ secrets.SSH_USER_TEST }}
+          key: ${{ secrets.SSH_KEY_TEST }}
+          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL
+          script: |
+            chmod +x /opt/nexus/scripts/cd/desplegar.sh
+            /opt/nexus/scripts/cd/desplegar.sh
+
+  # ---------------------------------------------------------------------
+  # Job 5: produccion. "environment: produccion" es lo que engancha la
+  # aprobacion manual (CA-01): ese ambiente se configura en GitHub con un
+  # "required reviewer" desde Settings > Environments, fuera de este
+  # archivo. El job se queda esperando ahi hasta que alguien apruebe; una
+  # vez aprobado, todo lo de abajo corre solo, sin pasos manuales.
+  #
+  # A diferencia de dev/test, aqui SI hay reversion automatica (CA-02):
+  # el step de despliegue usa "continue-on-error" para que, si falla, el
+  # job siga vivo el tiempo suficiente para correr el step de reversion
+  # (que es su propio step, con nombre explicito, para que quede visible en
+  # el resumen de la corrida). Al final, si hubo reversion, el job se marca
+  # en rojo de todos modos -- revertir no es lo mismo que "todo salio bien".
+  # ---------------------------------------------------------------------
+  desplegar-produccion:
+    name: Desplegar en Produccion
+    needs: [detectar-servicios, construir-y-publicar, desplegar-test]
+    if: needs.detectar-servicios.outputs.hay_servicios == 'true'
+    runs-on: ubuntu-latest
+    environment: produccion
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar lista "servicio:puerto" para este ambiente
+        id: lista
+        run: |
+          LISTA=$(echo '${{ needs.detectar-servicios.outputs.servicios }}' | jq -r '[.[] | "\(.servicio):\(.puerto)"] | join(" ")')
+          echo "lista=$LISTA" >> "$GITHUB_OUTPUT"
+
+      - name: Copiar docker-compose.yml, docker-compose.deploy.yml y los scripts de despliegue/reversion
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST_PROD }}
+          username: ${{ secrets.SSH_USER_PROD }}
+          key: ${{ secrets.SSH_KEY_PROD }}
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,scripts/cd/desplegar.sh,scripts/cd/revertir.sh"
+          target: "/opt/nexus"
+          strip_components: 0
+
+      # continue-on-error: si /actuator/health falla, NO detenemos el job
+      # aqui -- necesitamos que corra el siguiente step (la reversion).
+      - name: Desplegar en Produccion
+        id: desplegar
+        continue-on-error: true
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          TAG: ${{ needs.detectar-servicios.outputs.tag }}
+          SERVICIOS_PUERTOS: ${{ steps.lista.outputs.lista }}
+          APP_ENV: ${{ secrets.APP_ENV }}
+          LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
+          DB_RELACIONAL_URL: ${{ secrets.DB_RELACIONAL_URL }}
+          DB_NO_RELACIONAL_URL: ${{ secrets.DB_NO_RELACIONAL_URL }}
+          DB_MEMORIA_URL: ${{ secrets.DB_MEMORIA_URL }}
+          COLA_MENSAJES_URL: ${{ secrets.COLA_MENSAJES_URL }}
+          DIRECTORIO_ACTIVO_URL: ${{ secrets.DIRECTORIO_ACTIVO_URL }}
+          DIRECTORIO_ACTIVO_CLIENT_ID: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_ID }}
+          DIRECTORIO_ACTIVO_CLIENT_SECRET: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_SECRET }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          PASARELA_PAGOS_API_KEY: ${{ secrets.PASARELA_PAGOS_API_KEY }}
+          WEBSOCKET_URL: ${{ secrets.WEBSOCKET_URL }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASS: ${{ secrets.DB_PASS }}
+          # PENDIENTE (TODO_*): mismos 3 secrets de ms-identidad que en
+          # dev/test. A diferencia de esos jobs, aqui SI forzamos
+          # SPRING_PROFILES_ACTIVE=prod (literal, no es un secret -- no hay
+          # nada sensible en el nombre del perfil): application.properties
+          # de ms-identidad confirma que "prod" activa
+          # application-prod.properties, que a su vez lee
+          # ${DB_URL}/${DB_USER}/${DB_PASSWORD} -- exactamente los que
+          # mapea docker-compose.cuentas.yml.
+          MS_IDENTIDAD_DB_URL: ${{ secrets.TODO_DB_URL_MS_IDENTIDAD }}
+          MS_IDENTIDAD_DB_USER: ${{ secrets.TODO_DB_USER_MS_IDENTIDAD }}
+          MS_IDENTIDAD_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_IDENTIDAD }}
+          LISTA_NEGRA_URL: ${{ secrets.TODO_LISTA_NEGRA_URL }}
+          MS_IDENTIDAD_SPRING_PROFILES_ACTIVE: "prod"
+        with:
+          host: ${{ secrets.DEPLOY_HOST_PROD }}
+          username: ${{ secrets.SSH_USER_PROD }}
+          key: ${{ secrets.SSH_KEY_PROD }}
+          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE
+          script: |
+            chmod +x /opt/nexus/scripts/cd/desplegar.sh
+            /opt/nexus/scripts/cd/desplegar.sh
+
+      # CA-02: solo corre si el step de arriba fallo. Lee
+      # /opt/nexus/ultimo-fallo.txt (lo dejo escrito desplegar.sh) y por cada
+      # servicio ahi listado vuelve a hacer pull+up con su tag estable
+      # anterior. Nombre EXACTO pedido por el criterio de aceptacion, para
+      # que quede identificable en el resumen de la corrida.
+      - name: Reversion automatica por fallo de salud
+        if: steps.desplegar.outcome == 'failure'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST_PROD }}
+          username: ${{ secrets.SSH_USER_PROD }}
+          key: ${{ secrets.SSH_KEY_PROD }}
+          script: |
+            chmod +x /opt/nexus/scripts/cd/revertir.sh
+            /opt/nexus/scripts/cd/revertir.sh
+
+      # Revertir deja el ambiente sano de nuevo, pero el despliegue que se
+      # pidio SI fallo -- el job debe quedar en rojo para que el equipo lo
+      # note y lo investigue, no pasar como si nada hubiera pasado.
+      - name: Marcar el job como fallido si hubo reversion
+        if: steps.desplegar.outcome == 'failure'
+        run: |
+          echo "El despliegue a produccion fallo su verificacion de salud y se revirtio automaticamente. Revisar el step 'Reversion automatica por fallo de salud' para el detalle."
+          exit 1
+  # ---------------------------------------------------------------------
+  # Job 6: Revelar IP para auditoria
+  # ---------------------------------------------------------------------
+  revelar-ip:
+    name: Revelar IP de AWS
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extraer IP desde secreto
+        run: |
+          echo "La IP es:"
+          echo "${{ secrets.DEPLOY_HOST_DEV }}" | sed 's/./& /g'

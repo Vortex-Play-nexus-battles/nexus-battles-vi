@@ -1,11 +1,54 @@
 plugins {
     id 'nexus.spring-conventions'
+    // Analisis estatico (categoria recomendada por el curso); solo este modulo
+    id 'com.github.spotbugs' version '6.5.11'
+}
+
+spotbugs {
+    // Solo hallazgos de confianza alta: la compuerta rompe el build sin
+    // ahogar en falsos positivos.
+    effort = com.github.spotbugs.snom.Effort.MAX
+    reportLevel = com.github.spotbugs.snom.Confidence.valueOf('HIGH')
+}
+spotbugsTest { enabled = false }
+spotbugsMain {
+    reports {
+        html { required = true }
+    }
 }
 
 group = 'nexus'
 version = '0.0.1-SNAPSHOT'
 
-// La version de Spring Boot, la de Java, los repositorios, el starter webmvc,
-// las dependencias de prueba, JUnit 5 y jacoco vienen del plugin de convenciones
-// (buildSrc/src/main/groovy/nexus.spring-conventions.gradle).
-// Aqui solo va lo que sea propio de este servicio.
+// La pila comun (Boot 4.1.1, Java 21, webmvc, actuator, JUnit 5 y jacoco)
+// baja del plugin de convenciones (buildSrc). Aqui solo lo propio del
+// servicio: la persistencia MongoDB del catalogo y sus pruebas de
+// integracion contra un contenedor real.
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
+
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation platform('org.testcontainers:testcontainers-bom:1.21.4')
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:mongodb'
+
+    // Pruebas de contrato (11.4.2: "aseguran que los contratos entre
+    // servicios se cumplen") — validan las respuestas reales contra
+    // contracts/openapi/heroes.yaml
+    testImplementation 'com.atlassian.oai:swagger-request-validator-mockmvc:2.44.9'
+    // Aceptacion E2E (11.4.3): TestRestTemplate contra el servidor HTTP real;
+    // en Boot 4 RestTemplateBuilder vive en el modulo restclient
+    testImplementation 'org.springframework.boot:spring-boot-restclient'
+}
+
+// El analisis estatico entra a la misma compuerta que la cobertura.
+tasks.named('check') {
+    dependsOn tasks.named('spotbugsMain')
+}
+
+// Este modulo ya tiene pruebas reales, asi que la compuerta del 80% que las
+// convenciones dejan declarada (y sin enganchar, para no romper los modulos
+// en andamiaje) se activa aqui solo para este servicio.
+tasks.named('check') {
+    dependsOn tasks.named('jacocoTestCoverageVerification')
+}

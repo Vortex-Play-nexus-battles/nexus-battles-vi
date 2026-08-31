@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Iniciar sesión — NEXUS BATTLES VI</title>
+  <link rel="stylesheet" href="./login.css">
+</head>
+<body>
+<main class="pagina-auth">
+  <section class="tarjeta">
+    <h1 class="titulo-grande">NEXUS BATTLES VI</h1>
+    <p class="titulo-mediano">Entra al Nexo</p>
+
+    <p class="estado" id="estadoLogin" hidden role="status"></p>
+    <p class="aviso" id="avisoDispositivo" hidden></p>
+
+    <form id="formLogin" novalidate>
+      <label>
+        Correo electrónico
+        <!-- El mockup mostraba "Correo o apodo"; el contrato real de
+             POST /api/v1/auth/login solo acepta "email". -->
+        <input type="email" id="email" name="email" required autocomplete="email">
+      </label>
+
+      <label>
+        Contraseña
+        <input type="password" id="password" name="password" required autocomplete="current-password">
+      </label>
+
+      <button type="submit" class="btn-primario" id="botonEnviar">Iniciar sesión</button>
+    </form>
+
+    <a class="enlace-secundario" href="./registro.html">¿No tienes cuenta? Regístrate</a>
+  </section>
+</main>
+
+<script type="module" src="./login.js"></script>
+</body>
+</html>

@@ -1,10 +1,13 @@
 package com.nexusbattles.ms_identidad.auth.service;
 
+import com.nexusbattles.ms_identidad.auth.correo.CorreoClient;
+import com.nexusbattles.ms_identidad.auth.correo.dto.CorreoAvisoAccesoRequest;
 import com.nexusbattles.ms_identidad.auth.dto.LoginRequest;
 import com.nexusbattles.ms_identidad.auth.dto.LoginResponse;
 import com.nexusbattles.ms_identidad.auth.exception.CredencialesInvalidasException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaBaneadaException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaBloqueadaException;
+import com.nexusbattles.ms_identidad.auth.exception.CuentaInactivaException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaSuspendidaException;
 import com.nexusbattles.ms_identidad.auth.model.DispositivoConocido;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
@@ -18,8 +21,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.MessageDigest;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 @Service
@@ -39,6 +45,9 @@ public class LoginService {
     @Autowired
     private IntentosFallidosService intentosFallidosService;
 
+    @Autowired
+    private CorreoClient correoClient;
+
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     @Transactional
@@ -53,6 +62,12 @@ public class LoginService {
             throw new CuentaBaneadaException("Esta cuenta ha sido baneada permanentemente.");
         }
 
+        if ("INACTIVO".equals(usuario.getEstado())) {
+            auditLog.info("LOGIN_RECHAZADO email={} ip={} motivo=INACTIVO", datos.getEmail(), direccionIp);
+            throw new CuentaInactivaException(
+                "Esta cuenta aún no ha sido activada. Revisa tu correo para completar el proceso.");
+        }
+
         if ("SUSPENDIDA".equals(usuario.getEstado())) {
             LocalDateTime hasta = usuario.getSuspendidoHasta();
             if (hasta != null && LocalDateTime.now().isBefore(hasta)) {
@@ -62,9 +77,6 @@ public class LoginService {
                 throw new CuentaSuspendidaException(
                     "Cuenta suspendida. Tiempo restante: " + minutosRestantes + " minutos.");
             }
-            // TODO [COORDINAR CON SANABRIA]: definir si al vencer suspendidoHasta el
-            // estado vuelve a ACTIVO automáticamente aquí, o si lo gestiona
-            // exclusivamente su HU-USR-003 con un proceso aparte.
         }
 
         // --- Bloqueo por intentos fallidos (RF-AUT-009) ---
@@ -94,10 +106,16 @@ public class LoginService {
         boolean dispositivoNuevo = registrarOVerificarDispositivo(usuario, huella);
 
         if (dispositivoNuevo) {
-            // TODO [INTEGRACIÓN FUTURA]: disparar notificación por correo
-            // (plataforma/correo) y alerta dentro de la app
-            // (plataforma/notificaciones). Ninguno de los 2 contratos existe
-            // todavía — se deja registrado en auditoría mientras tanto.
+            // Integración real con el módulo de correo de Santiago Anaya
+            // (contracts/openapi/correo.yaml). Protegida con Resilience4j:
+            // si el servicio de correo falla, el login se completa igual.
+            String fechaHoraIso = OffsetDateTime.now(ZoneId.systemDefault())
+                .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+
+            correoClient.enviarAvisoAcceso(new CorreoAvisoAccesoRequest(
+                usuario.getEmail(), usuario.getApodo(), direccionIp, fechaHoraIso
+            ));
+
             auditLog.info("DISPOSITIVO_NUEVO usuarioId={} ip={}", usuario.getId(), direccionIp);
         }
 
@@ -135,8 +153,6 @@ public class LoginService {
             }
             return sb.toString();
         } catch (Exception e) {
-            // Si el hash falla por cualquier motivo, se trata como dispositivo
-            // siempre nuevo antes que dejar caer el login completo.
             return userAgent + "|" + ip;
         }
     }

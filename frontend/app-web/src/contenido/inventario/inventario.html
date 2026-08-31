@@ -7,23 +7,22 @@
     <link rel="stylesheet" href="./vitrina.css" />
   </head>
   <body class="vitrina-pagina">
-    <h1 class="vitrina-titulo">Mi inventario</h1>
-    <div id="contenedor-vitrina"></div>
+    <main id="inventario-app"></main>
 
     <!--
-    Raiz de composicion: resuelve el propietario y delega en montarVitrina,
-    que decide entre carga, exito, vacio y error (RNF-USA-003).
+    Raiz de composicion: resuelve el propietario y delega en montarInventario,
+    que integra las escrituras de HU-INV-003 con la vitrina de HU-INV-001.
     El propietario autenticado llega con HU-INF-009.
   -->
     <script type="module">
-      import { montarVitrina } from './inventario.js';
+      import { montarInventario } from './inventario.js';
 
       const parametros = new URLSearchParams(location.search);
-      const contenedor = document.getElementById('contenedor-vitrina');
+      const contenedor = document.getElementById('inventario-app');
       const identidad = parametros.get('jugador');
       const numeroPagina = Number(parametros.get('pagina') ?? 0);
 
-      montarVitrina(contenedor, identidad, numeroPagina);
+      montarInventario(contenedor, identidad, numeroPagina);
     </script>
   </body>
 </html>

@@ -19,4 +19,5 @@ public interface AuthAdminService {
     // Usado por Sanabria (HU-USR-003)
     void actualizarEstadoCuenta(Long usuarioId, String nuevoEstado, LocalDateTime suspendidoHasta);
     void restablecerContrasena(Long usuarioId);
+    String obtenerEstadoCuenta(Long usuarioId);
 }

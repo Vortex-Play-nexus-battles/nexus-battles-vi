@@ -164,3 +164,110 @@ test.describe('Vitrina del inventario', () => {
     expect(texto).not.toMatch(/\b[1-5]\d{2}\b/);
   });
 });
+
+async function conInventarioEditable(page, iniciales = [], { rechazarModificacion = false } = {}) {
+  const elementos = [...iniciales];
+  await page.route('**/api/v1/inventario/elementos**', async (ruta) => {
+    const solicitud = ruta.request();
+    const metodo = solicitud.method();
+    expect(solicitud.headers()['x-user-name']).toBe(JUGADOR);
+
+    if (metodo === 'POST') {
+      const creado = { id: `elemento-${elementos.length + 1}`, ...solicitud.postDataJSON() };
+      elementos.push(creado);
+      await ruta.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify(creado),
+      });
+      return;
+    }
+
+    if (metodo === 'PATCH') {
+      if (rechazarModificacion) {
+        await ruta.fulfill({
+          status: 403,
+          contentType: 'application/problem+json',
+          body: JSON.stringify({
+            title: 'Inventario ajeno',
+            detail: 'No tienes permiso sobre ese inventario.',
+          }),
+        });
+        return;
+      }
+      const id = solicitud.url().split('/').at(-1);
+      const indice = elementos.findIndex((actual) => actual.id === id);
+      elementos[indice] = { ...elementos[indice], ...solicitud.postDataJSON() };
+      await ruta.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(elementos[indice]),
+      });
+      return;
+    }
+
+    const tamanio = 16;
+    const numero = Number(new URL(solicitud.url()).searchParams.get('pagina') ?? 0);
+    const desde = numero * tamanio;
+    const totalPaginas = Math.ceil(elementos.length / tamanio);
+    await ruta.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        elementos: elementos.slice(desde, desde + tamanio),
+        numero,
+        tamanio,
+        totalElementos: elementos.length,
+        totalPaginas,
+        ultima: totalPaginas === 0 || numero >= totalPaginas - 1,
+      }),
+    });
+  });
+}
+
+test.describe('Creacion y edicion del inventario propio', () => {
+  test('Un elemento creado se refleja en la vitrina', async ({ page }) => {
+    await conInventarioEditable(page);
+    await abrirVitrina(page);
+
+    await page.getByRole('button', { name: 'Agregar elemento' }).click();
+    await page.getByLabel('Producto').fill('producto-amuleto');
+    await page.getByLabel('Tipo').selectOption('ITEM');
+    await page.getByLabel('Nombre').fill('Amuleto de Niebla');
+    await page.getByRole('button', { name: 'Guardar' }).click();
+
+    await expect(page.locator('.vitrina__producto')).toHaveCount(1);
+    await expect(page.locator('.vitrina__nombre')).toHaveText('Amuleto de Niebla');
+    await expect(page.locator('.inventario__mensaje')).toHaveText('Elemento creado.');
+  });
+
+  test('Un nombre modificado se refleja en la misma tarjeta', async ({ page }) => {
+    await conInventarioEditable(page, [elemento(0)]);
+    await abrirVitrina(page);
+
+    await page.getByRole('button', { name: /Editar Espada larga de Vorn 0/ }).click();
+    await page.getByLabel('Nombre').fill('Espada de Bruma');
+    const patchEnviado = page.waitForRequest(
+      (solicitud) => solicitud.method() === 'PATCH' && solicitud.url().endsWith('/elemento-0'),
+    );
+    await page.getByRole('button', { name: 'Guardar' }).click();
+    await expect((await patchEnviado).postDataJSON()).toEqual({ nombrePropio: 'Espada de Bruma' });
+
+    await expect(page.locator('.vitrina__producto')).toHaveCount(1);
+    await expect(page.locator('.vitrina__nombre')).toHaveText('Espada de Bruma');
+    await expect(page.locator('.inventario__mensaje')).toHaveText('Elemento actualizado.');
+  });
+
+  test('Una modificacion rechazada conserva la tarjeta e informa el permiso', async ({ page }) => {
+    await conInventarioEditable(page, [elemento(0)], { rechazarModificacion: true });
+    await abrirVitrina(page);
+
+    await page.getByRole('button', { name: /Editar Espada larga de Vorn 0/ }).click();
+    await page.getByLabel('Nombre').fill('Nombre ajeno');
+    await page.getByRole('button', { name: 'Guardar' }).click();
+
+    await expect(page.locator('.vitrina__nombre')).toHaveText('Espada larga de Vorn 0');
+    await expect(page.locator('.inventario__mensaje')).toContainText(/no tienes permiso/i);
+    await expect(page.locator('.inventario__mensaje')).not.toContainText('403');
+  });
+});

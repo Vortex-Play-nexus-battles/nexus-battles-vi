@@ -3,51 +3,14 @@
  * Directiva / Helper de Permisos RBAC en JavaScript Estándar (HU-RBAC-001 / 003 / 004)
  * Pila Tecnológica: Vanilla JS ES2022 (Sin Angular / Sin TypeScript)
  * 
- * Evalúa la matriz de 44 combinaciones y oculta/muestra elementos del DOM
+ * Consume la matriz autorizada por el backend y oculta/muestra elementos del DOM
  * que contengan el atributo [data-has-permission="ACCION"].
  * ==========================================================================
  */
 
-// Matriz de permisos reactiva para la UI según Tabla 24 Extendida (HU-RBAC-001 y HU-RBAC-003)
-export const RBAC_PERMISSION_MATRIX = {
-  'JUGADOR': [
-    'CREAR_CUENTA_JUGADOR',
-    'MODIFICAR_PERFIL_PROPIO',
-    'PUBLICAR_COMENTARIOS',
-    'ELIMINAR_COMENTARIO_PROPIO'
-  ],
-  'MODERADOR': [
-    'MODIFICAR_PERFIL_PROPIO',
-    'PUBLICAR_COMENTARIOS',
-    'ELIMINAR_COMENTARIO_PROPIO',
-    'MODERAR_COMENTARIOS',
-    'EMITIR_ADVERTENCIAS',
-    'SUSPENDER_USUARIOS'
-  ],
-  'ADMINISTRADOR': [
-    'MODIFICAR_PERFIL_PROPIO',
-    'PUBLICAR_COMENTARIOS',
-    'ELIMINAR_COMENTARIO_PROPIO',
-    'MODERAR_COMENTARIOS',
-    'EMITIR_ADVERTENCIAS',
-    'SUSPENDER_USUARIOS',
-    'BANEAR_DEFINITIVAMENTE',
-    'GESTIONAR_PRODUCTOS'
-  ],
-  'SUPER_ADMINISTRADOR': [
-    'CREAR_CUENTA_JUGADOR',
-    'MODIFICAR_PERFIL_PROPIO',
-    'PUBLICAR_COMENTARIOS',
-    'ELIMINAR_COMENTARIO_PROPIO',
-    'MODERAR_COMENTARIOS',
-    'EMITIR_ADVERTENCIAS',
-    'SUSPENDER_USUARIOS',
-    'BANEAR_DEFINITIVAMENTE',
-    'CREAR_ADMIN_MODERADOR',
-    'GESTIONAR_PRODUCTOS',
-    'ASIGNAR_ROL' // Exclusivo de Super Administrador (HU-RBAC-003)
-  ]
-};
+// La UI no conserva una matriz propia: el backend es la única fuente de verdad.
+// Hasta cargarla, el resultado es denegado por defecto (fail-closed).
+let permissionMatrix = {};
 
 /**
  * Rol activo actual del usuario en la interfaz (por defecto 'JUGADOR')
@@ -72,14 +35,23 @@ export function getCurrentRole() {
 }
 
 /**
+ * Configura la matriz obtenida de GET /api/v1/rbac/matrix.
+ * @param {Record<string, Record<string, 'GRANTED'|'DENIED'|'TEMPORARY'>>} matrix
+ */
+export function setPermissionMatrix(matrix) {
+  permissionMatrix = matrix && typeof matrix === 'object' ? matrix : {};
+  applyHasPermissionDirective();
+}
+
+/**
  * Verifica si un rol tiene permiso para ejecutar una acción
  * @param {string} role - Nombre del rol
  * @param {string} action - Nombre de la acción (ej: 'ASIGNAR_ROL')
  * @returns {boolean}
  */
 export function checkPermission(role, action) {
-  const permissions = RBAC_PERMISSION_MATRIX[role] || [];
-  return permissions.includes(action);
+  const permission = permissionMatrix[role]?.[action];
+  return permission === 'GRANTED' || permission === 'TEMPORARY';
 }
 
 /**

@@ -25,9 +25,10 @@ const NOMBRE_DEL_TIPO = {
  * Devuelve la rejilla de una pagina de inventario.
  *
  * @param {{elementos: Array<object>}} pagina respuesta de SCRUM-318.
+ * @param {{alEditar?: Function}} opciones acciones disponibles en cada tarjeta.
  * @returns {HTMLUListElement} rejilla lista para insertar en el documento.
  */
-export function construirVitrina(pagina) {
+export function construirVitrina(pagina, { alEditar } = {}) {
   if (!pagina || !Array.isArray(pagina.elementos)) {
     throw new TypeError('La pagina de inventario debe traer una lista de elementos');
   }
@@ -41,7 +42,7 @@ export function construirVitrina(pagina) {
   const vitrina = document.createElement('ul');
   vitrina.className = 'vitrina';
   for (const elemento of pagina.elementos) {
-    vitrina.appendChild(construirTarjeta(elemento));
+    vitrina.appendChild(construirTarjeta(elemento, alEditar));
   }
   return vitrina;
 }
@@ -50,9 +51,10 @@ export function construirVitrina(pagina) {
  * Una tarjeta de producto. El nombre propio lo escribe el jugador, asi que
  * entra por textContent y nunca por innerHTML.
  */
-function construirTarjeta(elemento) {
+function construirTarjeta(elemento, alEditar) {
   const tarjeta = document.createElement('li');
   tarjeta.className = 'vitrina__producto';
+  tarjeta.dataset.elementoId = elemento.id;
   tarjeta.dataset.productoId = elemento.productoId;
 
   const nombre = document.createElement('p');
@@ -64,5 +66,15 @@ function construirTarjeta(elemento) {
   tipo.textContent = NOMBRE_DEL_TIPO[elemento.tipo] ?? elemento.tipo;
 
   tarjeta.append(nombre, tipo);
+
+  if (typeof alEditar === 'function') {
+    const botonEditar = document.createElement('button');
+    botonEditar.className = 'vitrina__editar';
+    botonEditar.type = 'button';
+    botonEditar.textContent = 'Editar';
+    botonEditar.setAttribute('aria-label', `Editar ${elemento.nombrePropio}`);
+    botonEditar.addEventListener('click', () => alEditar(elemento));
+    tarjeta.appendChild(botonEditar);
+  }
   return tarjeta;
 }

@@ -49,11 +49,96 @@
 }
 
 .vitrina-titulo {
-  margin: 0 0 var(--vitrina-separacion);
+  margin: 0;
   font-family: var(--tipografia-titulo);
   font-size: 1.25rem;
   font-weight: 600;
   letter-spacing: 0.01em;
+}
+
+.inventario-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: var(--vitrina-separacion);
+}
+
+.inventario__nuevo,
+.inventario-editor__guardar,
+.inventario-editor__cancelar,
+.vitrina__editar {
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid var(--color-borde);
+  border-radius: 6px;
+  color: var(--color-texto);
+  background: var(--color-superficie);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.inventario__nuevo:hover,
+.inventario-editor__guardar:hover,
+.inventario-editor__cancelar:hover,
+.vitrina__editar:hover {
+  border-color: var(--color-texto-tenue);
+}
+
+.inventario-editor {
+  margin-bottom: var(--vitrina-separacion);
+  padding: 16px;
+  border: 1px solid var(--color-borde);
+  border-radius: 8px;
+  background: var(--color-superficie-baja);
+}
+
+.inventario-editor__titulo {
+  margin: 0 0 12px;
+  font-family: var(--tipografia-titulo);
+  font-size: 1rem;
+}
+
+.inventario-editor__formulario {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.inventario-editor__campo {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.inventario-editor__etiqueta {
+  font-size: 0.8rem;
+  color: var(--color-texto-tenue);
+}
+
+.inventario-editor__control {
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid var(--color-borde);
+  border-radius: 4px;
+  color: var(--color-texto);
+  background: var(--color-fondo);
+  font: inherit;
+}
+
+.inventario-editor__acciones {
+  display: flex;
+  gap: 8px;
+}
+
+.inventario__mensaje {
+  min-height: 20px;
+  margin: calc(var(--vitrina-separacion) * -0.5) 0 calc(var(--vitrina-separacion) * 0.5);
+  font-size: 0.85rem;
+  color: var(--color-texto-tenue);
 }
 
 .vitrina {
@@ -69,6 +154,7 @@
 }
 
 .vitrina__producto {
+  position: relative;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -86,6 +172,15 @@
     var(--color-superficie) 0%,
     var(--color-superficie-baja) 100%
   );
+}
+
+.vitrina__editar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  min-height: 30px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
 }
 
 .vitrina__nombre {
@@ -142,6 +237,20 @@
 
   .vitrina__producto {
     min-height: 96px;
+  }
+
+  .inventario-cabecera {
+    align-items: flex-start;
+  }
+
+  .inventario-editor__formulario {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 600px) and (max-width: 899px) {
+  .inventario-editor__formulario {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

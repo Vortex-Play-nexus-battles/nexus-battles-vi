@@ -18,16 +18,22 @@ public class AuthAdminServiceImpl implements AuthAdminService {
     private final UsuarioRepository usuarioRepository;
     private final ApodoBlacklistValidator apodoBlacklistValidator;
     private final RolService rolService;
+    private final TokenCredencialService tokenCredencialService;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
-    private static final List<String> ESTADOS_VALIDOS = List.of("ACTIVA", "SUSPENDIDA", "BANEADA");
+    // Corregido: "ACTIVO" (no "ACTIVA") — coincide con el valor real que usa
+    // Usuario.estado por defecto en el auto-registro (RegistroService).
+    // Antes había una inconsistencia de ortografía entre los 2 flujos.
+    private static final List<String> ESTADOS_VALIDOS = List.of("ACTIVO", "SUSPENDIDA", "BANEADA");
 
     public AuthAdminServiceImpl(UsuarioRepository usuarioRepository,
                                 ApodoBlacklistValidator apodoBlacklistValidator,
-                                RolService rolService) {
+                                RolService rolService,
+                                TokenCredencialService tokenCredencialService) {
         this.usuarioRepository = usuarioRepository;
         this.apodoBlacklistValidator = apodoBlacklistValidator;
         this.rolService = rolService;
+        this.tokenCredencialService = tokenCredencialService;
     }
 
     // ---------- Para Edwin (HU-RBAC-003) ----------
@@ -69,14 +75,17 @@ public class AuthAdminServiceImpl implements AuthAdminService {
         nuevoUsuario.setEstado("INACTIVO");
         nuevoUsuario.setRol(rolService.obtenerRolPorNombre(rol.name()));
 
-        String passwordTemporal = generarPasswordTemporal();
-        nuevoUsuario.setPassword(passwordEncoder.encode(passwordTemporal));
+        // Password de relleno: nadie la conoce ni la necesita conocer. Es
+        // solo para satisfacer la restricción NOT NULL de la columna hasta
+        // que el usuario canjee su token y defina su propia contraseña real.
+        nuevoUsuario.setPassword(passwordEncoder.encode(generarValorAleatorio()));
 
         Usuario guardado = usuarioRepository.save(nuevoUsuario);
 
-        // TODO [INTEGRACIÓN FUTURA]: enviar la contraseña temporal por correo
-        // corporativo, en vez de generarla y perderla como ahora. Requiere el
-        // módulo de correo (Grupo de Simón/Felipe, confirmar).
+        // Corregido (hallazgo de Sanabria, punto 1): antes esta contraseña
+        // se perdía sin ninguna forma de que el usuario accediera a su
+        // cuenta. Ahora se genera un token de activación de un solo uso.
+        tokenCredencialService.generarYRegistrarToken(guardado, "ACTIVACION");
 
         return guardado;
     }
@@ -104,11 +113,23 @@ public class AuthAdminServiceImpl implements AuthAdminService {
     @Override
     public void restablecerContrasena(Long usuarioId) {
         Usuario usuario = buscarOFallar(usuarioId);
-        String passwordTemporal = generarPasswordTemporal();
-        usuario.setPassword(passwordEncoder.encode(passwordTemporal));
+
+        // Mismo motivo que en crearCuentaConRol: password de relleno,
+        // inservible, hasta que se canjee el token.
+        usuario.setPassword(passwordEncoder.encode(generarValorAleatorio()));
         usuarioRepository.save(usuario);
 
-        // TODO [INTEGRACIÓN FUTURA]: enviar passwordTemporal por correo al usuario.
+        // Corregido (hallazgo de Sanabria, punto 1): antes esta contraseña
+        // también se perdía. Ahora se genera un token de restablecimiento.
+        tokenCredencialService.generarYRegistrarToken(usuario, "RESTABLECIMIENTO");
+    }
+
+    @Override
+    public String obtenerEstadoCuenta(Long usuarioId) {
+        // Nuevo (hallazgo de Sanabria, punto 3): permite consultar el
+        // estado actual antes de decidir una acción administrativa, por
+        // ejemplo evitar reactivar una cuenta que en realidad está baneada.
+        return buscarOFallar(usuarioId).getEstado();
     }
 
     // ---------- Auxiliares ----------
@@ -118,7 +139,7 @@ public class AuthAdminServiceImpl implements AuthAdminService {
             .orElseThrow(() -> new IllegalStateException("No existe el usuario " + usuarioId));
     }
 
-    private String generarPasswordTemporal() {
-        return "Tmp-" + UUID.randomUUID().toString().substring(0, 8);
+    private String generarValorAleatorio() {
+        return UUID.randomUUID().toString();
     }
 }
