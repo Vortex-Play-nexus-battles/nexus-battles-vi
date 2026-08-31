@@ -28,7 +28,7 @@ const NOMBRE_DEL_TIPO = {
  * @param {{alEditar?: Function}} opciones acciones disponibles en cada tarjeta.
  * @returns {HTMLUListElement} rejilla lista para insertar en el documento.
  */
-export function construirVitrina(pagina, { alEditar } = {}) {
+export function construirVitrina(pagina, { alEditar, alAbrirDetalle } = {}) {
   if (!pagina || !Array.isArray(pagina.elementos)) {
     throw new TypeError('La pagina de inventario debe traer una lista de elementos');
   }
@@ -42,7 +42,7 @@ export function construirVitrina(pagina, { alEditar } = {}) {
   const vitrina = document.createElement('ul');
   vitrina.className = 'vitrina';
   for (const elemento of pagina.elementos) {
-    vitrina.appendChild(construirTarjeta(elemento, alEditar));
+    vitrina.appendChild(construirTarjeta(elemento, alEditar, alAbrirDetalle));
   }
   return vitrina;
 }
@@ -51,7 +51,7 @@ export function construirVitrina(pagina, { alEditar } = {}) {
  * Una tarjeta de producto. El nombre propio lo escribe el jugador, asi que
  * entra por textContent y nunca por innerHTML.
  */
-function construirTarjeta(elemento, alEditar) {
+function construirTarjeta(elemento, alEditar, alAbrirDetalle) {
   const tarjeta = document.createElement('li');
   tarjeta.className = 'vitrina__producto';
   tarjeta.dataset.elementoId = elemento.id;
@@ -66,6 +66,19 @@ function construirTarjeta(elemento, alEditar) {
   tipo.textContent = NOMBRE_DEL_TIPO[elemento.tipo] ?? elemento.tipo;
 
   tarjeta.append(nombre, tipo);
+
+  if (typeof alAbrirDetalle === 'function') {
+    // HU-INV-007: la ficha se abre desde la tarjeta. Es un boton y no la
+    // tarjeta entera para que el teclado lo alcance y para no chocar con
+    // el boton de editar (RNF-ACC-002).
+    const botonDetalle = document.createElement('button');
+    botonDetalle.className = 'vitrina__detalle';
+    botonDetalle.type = 'button';
+    botonDetalle.textContent = 'Ver detalle';
+    botonDetalle.setAttribute('aria-label', `Ver el detalle de ${elemento.nombrePropio}`);
+    botonDetalle.addEventListener('click', () => alAbrirDetalle(elemento));
+    tarjeta.appendChild(botonDetalle);
+  }
 
   if (typeof alEditar === 'function') {
     const botonEditar = document.createElement('button');
