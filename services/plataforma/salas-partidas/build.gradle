@@ -8,6 +8,10 @@ dependencies {
     // Formato de error comun a los 20 modulos (regla 4 de plataforma).
     implementation project(':shared:libs:plataforma-comun')
 
+    // Canal en tiempo real de la sala (HU-SAL-002). Mismo starter que usa
+    // notificaciones para HU-NOT-006, con los mismos prefijos STOMP.
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
+
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 
     // En Spring Boot 4 cada porcion de prueba viaja en su propio artefacto:
