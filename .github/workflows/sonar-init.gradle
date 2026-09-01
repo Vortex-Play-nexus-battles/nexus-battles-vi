@@ -43,7 +43,7 @@ allprojects {
 // funciona con este plugin porque el plugin deriva las fuentes de cada
 // subproyecto desde el modelo de Gradle y pisa esa propiedad. La forma
 // correcta de acotar el analisis a un solo servicio es marcar
-// "isSkipProject = true" en todos los demas subproyectos (sintaxis oficial
+// "skipProject = true" en todos los demas subproyectos (sintaxis oficial
 // de SonarSource, con el prefijo "is" -- "skipProject" sin el prefijo no
 // existe en la extension del plugin).
 //
@@ -63,7 +63,7 @@ rootProject {
             // comportamiento anterior en vez de saltarnos todo por error.
             if (moduloObjetivo != null && project.path != moduloObjetivo) {
                 sonar {
-                    isSkipProject = true
+                    skipProject = true
                 }
             }
         }
