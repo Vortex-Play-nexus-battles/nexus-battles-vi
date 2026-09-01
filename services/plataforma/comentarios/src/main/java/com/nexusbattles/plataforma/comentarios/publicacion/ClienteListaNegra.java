@@ -17,10 +17,12 @@ import com.nexusbattles.plataforma.comentarios.HiloDeComentarios.ResultadoDelFil
  * RestClient que ya usa el equipo de cuentas para validar apodos.
  *
  * <p>Hay una diferencia deliberada con ese cliente. Para los apodos se decidio
- * dejar pasar cuando el servicio no responde. Aqui es al reves: RN-CMT-001
- * exige que todo comentario pase por el filtro antes de publicarse, asi que si
- * el filtro no contesta, publicar sin verificar romperia la regla. Lo unico que
- * no la rompe es retener el comentario en revision y que un moderador decida,
+ * dejar pasar cuando el servicio no responde. Aqui es al reves: la postcondicion
+ * de RF-COM-007 es que el contenido inapropiado no alcance la publicacion sin
+ * revision, y el proceso principal de RF-COM-001 valida todo comentario contra
+ * el filtro, asi que si el filtro no contesta, publicar sin verificar romperia
+ * el requisito. Lo unico que
+ * no lo rompe es retener el comentario en revision y que un moderador decida,
  * y siempre queda constancia en la bitacora, nunca en silencio.
  *
  * <p>El reintento y el cortacircuitos de Resilience4j quedan pendientes: el
@@ -64,7 +66,7 @@ class ClienteListaNegra implements FiltroDeContenido {
     private ResultadoDelFiltro retenerPorFalla(String motivo) {
         log.warn(
                 "Servicio de lista negra no disponible, el comentario queda retenido en revision"
-                        + " para cumplir RN-CMT-001. Motivo: {}",
+                        + " para cumplir RF-COM-007. Motivo: {}",
                 motivo);
         return ResultadoDelFiltro.SENALADO;
     }
