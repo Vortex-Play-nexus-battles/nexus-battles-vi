@@ -10,7 +10,7 @@
 // Misma linea que ya tiene inventario.test.js.
 import { jest } from '@jest/globals';
 
-import { crearSala, ErrorDeApi } from './cliente-salas.js';
+import { crearSala, listarSalas, ingresarASala, ErrorDeApi } from './cliente-salas.js';
 
 const PARAMETROS = {
   maximoParticipantes: 4,
@@ -33,6 +33,102 @@ function respuesta(estado, cuerpo) {
     },
   };
 }
+
+describe('listarSalas', () => {
+  test('sin filtros pide la ruta desnuda: los valores por defecto los pone el servidor', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, { contenido: [] }));
+
+    await listarSalas({}, { fetchImpl });
+
+    expect(fetchImpl.mock.calls[0][0]).toBe('/api/v1/salas');
+  });
+
+  test('traslada los filtros del contrato a la consulta', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, { contenido: [] }));
+
+    await listarSalas(
+      { pagina: 2, tamano: 8, modalidad: 'HASTA_SEIS', estado: 'ABIERTA' },
+      { fetchImpl },
+    );
+
+    const url = new URL(fetchImpl.mock.calls[0][0], 'http://local');
+    expect(url.pathname).toBe('/api/v1/salas');
+    expect(url.searchParams.get('pagina')).toBe('2');
+    expect(url.searchParams.get('tamano')).toBe('8');
+    expect(url.searchParams.get('modalidad')).toBe('HASTA_SEIS');
+    expect(url.searchParams.get('estado')).toBe('ABIERTA');
+  });
+
+  test('un filtro vacio no se manda: no es lo mismo que filtrar por cadena vacia', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, { contenido: [] }));
+
+    await listarSalas({ modalidad: '', estado: null, pagina: 0 }, { fetchImpl });
+
+    const url = new URL(fetchImpl.mock.calls[0][0], 'http://local');
+    expect(url.searchParams.has('modalidad')).toBe(false);
+    expect(url.searchParams.has('estado')).toBe(false);
+    expect(url.searchParams.get('pagina')).toBe('0');
+  });
+
+  test('devuelve la pagina tal cual la da el contrato', async () => {
+    const paginaDelContrato = {
+      contenido: [{ id: 'a', estado: 'ABIERTA' }],
+      pagina: 0,
+      tamano: 16,
+      totalElementos: 1,
+      totalPaginas: 1,
+    };
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, paginaDelContrato));
+
+    expect(await listarSalas({}, { fetchImpl })).toEqual(paginaDelContrato);
+  });
+});
+
+describe('ingresarASala', () => {
+  test('llama a la subruta de participantes sin cuerpo: el jugador sale del token', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, { id: 'abc' }));
+
+    await ingresarASala('abc', { fetchImpl });
+
+    const [url, opciones] = fetchImpl.mock.calls[0];
+    expect(url).toBe('/api/v1/salas/abc/participantes');
+    expect(opciones.method).toBe('POST');
+    expect(opciones.body).toBeUndefined();
+  });
+
+  test('un 403 de sala privada llega con su tipo, para que la vista lo distinga', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(
+      respuesta(403, {
+        type: 'https://nexusbattles.local/errores/sala-privada',
+        title: 'Esta sala es privada',
+        detail: 'Necesitas un codigo de invitacion.',
+        status: 403,
+      }),
+    );
+
+    const error = await ingresarASala('abc', { fetchImpl }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ErrorDeApi);
+    expect(error.tipo).toBe('https://nexusbattles.local/errores/sala-privada');
+    expect(error.estado).toBe(403);
+  });
+
+  test('un 409 de sala llena tambien llega interpretado', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(
+      respuesta(409, {
+        type: 'https://nexusbattles.local/errores/ingreso-no-permitido',
+        title: 'No puedes entrar',
+        detail: 'La sala ya alcanzo su maximo de participantes.',
+        status: 409,
+      }),
+    );
+
+    const error = await ingresarASala('abc', { fetchImpl }).catch((e) => e);
+
+    expect(error.estado).toBe(409);
+    expect(error.detalle).toContain('maximo de participantes');
+  });
+});
 
 describe('crearSala', () => {
   test('envia el cuerpo al contrato y devuelve la sala creada', async () => {
