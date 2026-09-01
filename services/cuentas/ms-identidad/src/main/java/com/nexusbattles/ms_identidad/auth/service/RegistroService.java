@@ -1,5 +1,7 @@
 package com.nexusbattles.ms_identidad.auth.service;
 
+import com.nexusbattles.ms_identidad.auth.correo.CorreoClient;
+import com.nexusbattles.ms_identidad.auth.correo.dto.CorreoBienvenidaRequest;
 import com.nexusbattles.ms_identidad.auth.dto.RegistroRequest;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
@@ -30,6 +32,12 @@ public class RegistroService {
     @Autowired
     private PerfilUsuarioService perfilUsuarioService;
 
+    @Autowired
+    private CorreoClient correoClient;
+
+    @Autowired
+    private AvatarStorageService avatarStorageService;
+
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     @Transactional
@@ -56,12 +64,22 @@ public class RegistroService {
 
         Usuario usuarioGuardado = usuarioRepository.save(nuevoUsuario);
 
+        // El avatar ahora es una foto real subida por el usuario (antes era
+        // una URL fija de una galería predefinida). AvatarStorageService
+        // valida, guarda el archivo en disco, y devuelve la URL con la que
+        // se sirve después.
+        String urlAvatar = avatarStorageService.guardarAvatar(datos.getAvatar());
+
         perfilUsuarioService.crearPerfil(
-            usuarioGuardado, datos.getNombres(), datos.getApellidos(), datos.getAvatar()
+            usuarioGuardado, datos.getNombres(), datos.getApellidos(), urlAvatar
         );
 
-        // TODO [INTEGRACIÓN FUTURA]: Disparar la integración con el módulo de correo corporativo
-        // para el mensaje de bienvenida (confirmar si es Grupo de Felipe o Grupo de Simón).
+        // Integración real con el módulo de correo de Santiago Anaya
+        // (contracts/openapi/correo.yaml). Protegida con Resilience4j: si el
+        // servicio de correo falla, el registro se completa igual (fail-open).
+        correoClient.enviarBienvenida(new CorreoBienvenidaRequest(
+            datos.getEmail(), datos.getApodo(), datos.getNombres(), datos.getApellidos()
+        ));
 
         return usuarioGuardado;
     }

@@ -14,6 +14,7 @@ set -euo pipefail
 DIRECTORIO=/opt/nexus
 COMPOSE_BASE="$DIRECTORIO/docker-compose.yml"
 COMPOSE_DEPLOY="$DIRECTORIO/docker-compose.deploy.yml"
+COMPOSE_CUENTAS="$DIRECTORIO/docker-compose.cuentas.yml"
 ARCHIVO_FALLO="$DIRECTORIO/ultimo-fallo.txt"
 
 cd "$DIRECTORIO"
@@ -33,6 +34,12 @@ while IFS=: read -r servicio tag_fallido tag_anterior; do
 
   echo "Reversion automatica por fallo de salud -> servicio: $servicio | tag fallido: $tag_fallido | revertido a: $tag_anterior"
   export TAG="$tag_anterior"
-  docker compose -f "$COMPOSE_BASE" -f "$COMPOSE_DEPLOY" pull "srv-${servicio}"
-  docker compose -f "$COMPOSE_BASE" -f "$COMPOSE_DEPLOY" up -d "srv-${servicio}"
+
+  ARCHIVOS_COMPOSE=(-f "$COMPOSE_BASE" -f "$COMPOSE_DEPLOY")
+  if [ "$servicio" = "ms-identidad" ]; then
+    ARCHIVOS_COMPOSE+=(-f "$COMPOSE_CUENTAS")
+  fi
+
+  docker compose "${ARCHIVOS_COMPOSE[@]}" pull "srv-${servicio}"
+  docker compose "${ARCHIVOS_COMPOSE[@]}" up -d "srv-${servicio}"
 done < "$ARCHIVO_FALLO"
