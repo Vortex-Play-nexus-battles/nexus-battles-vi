@@ -11,11 +11,13 @@ public final class DisponibilidadProducto {
     private final String productoId;
     private final int unidadesDisponibles;
     private final EstadoProducto estado;
+    private final EstadoProducto estadoAlReactivar;
 
     private DisponibilidadProducto(
             String productoId,
             int unidadesDisponibles,
-            EstadoProducto estado) {
+            EstadoProducto estado,
+            EstadoProducto estadoAlReactivar) {
         if (productoId == null || productoId.isBlank()) {
             throw new IllegalArgumentException("El identificador del producto es obligatorio");
         }
@@ -25,6 +27,9 @@ public final class DisponibilidadProducto {
         this.productoId = productoId;
         this.unidadesDisponibles = unidadesDisponibles;
         this.estado = Objects.requireNonNull(estado, "El estado del producto es obligatorio");
+        this.estadoAlReactivar = Objects.requireNonNull(
+                estadoAlReactivar,
+                "El estado de reactivación es obligatorio");
     }
 
     public static DisponibilidadProducto nueva(
@@ -35,15 +40,28 @@ public final class DisponibilidadProducto {
             throw new IllegalArgumentException(
                     "El tiraje debe ser -1 o un número entero positivo");
         }
-        return new DisponibilidadProducto(productoId, tiraje, estadoInicial);
+        if (estadoInicial == EstadoProducto.SUSPENDIDO) {
+            throw new IllegalArgumentException("Un producto nuevo no puede iniciar suspendido");
+        }
+        return new DisponibilidadProducto(productoId, tiraje, estadoInicial, estadoInicial);
     }
 
     public static DisponibilidadProducto desde(Producto producto) {
+        EstadoProducto estadoReactivacion = producto.estado() == EstadoProducto.SUSPENDIDO
+                ? EstadoProducto.ACTIVO
+                : producto.estado();
+        return desde(producto, estadoReactivacion);
+    }
+
+    public static DisponibilidadProducto desde(
+            Producto producto,
+            EstadoProducto estadoAlReactivar) {
         Objects.requireNonNull(producto, "El producto es obligatorio");
         return new DisponibilidadProducto(
                 producto.id(),
                 producto.tiraje(),
-                producto.estado());
+                producto.estado(),
+                estadoAlReactivar);
     }
 
     public String productoId() {
@@ -56,6 +74,10 @@ public final class DisponibilidadProducto {
 
     public EstadoProducto estado() {
         return estado;
+    }
+
+    public EstadoProducto estadoAlReactivar() {
+        return estadoAlReactivar;
     }
 
     public boolean esIlimitado() {
@@ -76,6 +98,29 @@ public final class DisponibilidadProducto {
         return new DisponibilidadProducto(
                 productoId,
                 unidadesDisponibles - 1,
+                estado,
+                estadoAlReactivar);
+    }
+
+    public DisponibilidadProducto suspender() {
+        if (estado == EstadoProducto.SUSPENDIDO) {
+            return this;
+        }
+        return new DisponibilidadProducto(
+                productoId,
+                unidadesDisponibles,
+                EstadoProducto.SUSPENDIDO,
                 estado);
+    }
+
+    public DisponibilidadProducto reactivar() {
+        if (estado != EstadoProducto.SUSPENDIDO) {
+            return this;
+        }
+        return new DisponibilidadProducto(
+                productoId,
+                unidadesDisponibles,
+                estadoAlReactivar,
+                estadoAlReactivar);
     }
 }
