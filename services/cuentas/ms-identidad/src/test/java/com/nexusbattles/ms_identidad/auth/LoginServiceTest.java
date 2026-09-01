@@ -13,6 +13,7 @@ import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.repository.DispositivoConocidoRepository;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
 import com.nexusbattles.ms_identidad.auth.service.IntentosFallidosService;
+import com.nexusbattles.ms_identidad.auth.service.JwtService;
 import com.nexusbattles.ms_identidad.auth.service.LoginService;
 import com.nexusbattles.ms_identidad.rbac.model.RolEntity;
 import org.junit.jupiter.api.Test;
@@ -43,6 +44,9 @@ class LoginServiceTest {
 
     @Mock
     private CorreoClient correoClient;
+
+    @Mock
+    private JwtService jwtService;
 
     @InjectMocks
     private LoginService loginService;
@@ -161,6 +165,7 @@ class LoginServiceTest {
         when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.of(usuario));
         when(dispositivoConocidoRepository.findByUsuarioAndHuella(eq(usuario), anyString()))
             .thenReturn(Optional.of(new DispositivoConocido()));
+        when(jwtService.generarToken(anyString(), anyString())).thenReturn("token-de-prueba");
 
         LoginResponse respuesta = loginService.iniciarSesion(datosValidos(), "127.0.0.1", "agente");
 
@@ -191,6 +196,7 @@ class LoginServiceTest {
         when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.of(usuario));
         when(dispositivoConocidoRepository.findByUsuarioAndHuella(eq(usuario), anyString()))
             .thenReturn(Optional.empty());
+        when(jwtService.generarToken(anyString(), anyString())).thenReturn("token-de-prueba");
 
         LoginResponse respuesta = loginService.iniciarSesion(datosValidos(), "127.0.0.1", "agente");
 
@@ -199,6 +205,7 @@ class LoginServiceTest {
         assertEquals("cristian@test.com", respuesta.getEmail());
         assertEquals("JUGADOR", respuesta.getRol());
         assertTrue(respuesta.isDispositivoNuevo());
+        assertEquals("token-de-prueba", respuesta.getToken());
 
         assertEquals(0, usuario.getIntentosFallidos());
         assertNull(usuario.getBloqueadoHasta());
@@ -214,6 +221,7 @@ class LoginServiceTest {
         when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.of(usuario));
         when(dispositivoConocidoRepository.findByUsuarioAndHuella(eq(usuario), anyString()))
             .thenReturn(Optional.of(new DispositivoConocido()));
+        when(jwtService.generarToken(anyString(), anyString())).thenReturn("token-de-prueba");
 
         LoginResponse respuesta = loginService.iniciarSesion(datosValidos(), "127.0.0.1", "agente");
 
