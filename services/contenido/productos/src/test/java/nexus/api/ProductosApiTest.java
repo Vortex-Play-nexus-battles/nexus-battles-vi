@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -24,9 +25,15 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import nexus.dominio.EstadoProducto;
 import nexus.dominio.Producto;
+import nexus.dominio.TipoProducto;
 import nexus.persistencia.ProductoRepository;
 import org.junit.jupiter.api.BeforeEach;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Stream;
 
 @SpringBootTest(properties = "KEYCLOAK_JWK_SET_URI=http://localhost/prueba/jwks")
@@ -578,6 +585,69 @@ class ProductosApiTest {
                         .andExpect(jsonPath("$.modificadoEn").exists());
         }
 
+        @Test
+        @DisplayName("consulta un producto existente sin necesitar autenticacion")
+        void consultaProductoExistenteSinAutenticacion() throws Exception {
+                String id = UUID.randomUUID().toString();
+                when(productoRepository.findById(id))
+                        .thenReturn(Optional.of(productoDePrueba(id)));
+
+                mvc.perform(get("/api/v1/productos/" + id))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.id").value(id))
+                        .andExpect(jsonPath("$.nombre").value("Espada solar"))
+                        .andExpect(jsonPath("$.tipo").value("ARMA"))
+                        .andExpect(jsonPath("$.estado").value("ACTIVO"));
+        }
+
+        @Test
+        @DisplayName("responde 404 con Problem Details cuando el producto no existe")
+        void consultaProductoInexistente() throws Exception {
+                String id = UUID.randomUUID().toString();
+                when(productoRepository.findById(id)).thenReturn(Optional.empty());
+
+                mvc.perform(get("/api/v1/productos/" + id))
+                        .andExpect(status().isNotFound())
+                        .andExpect(content().contentTypeCompatibleWith(
+                                MediaType.APPLICATION_PROBLEM_JSON))
+                        .andExpect(jsonPath("$.type")
+                                .value("urn:nexus:problema:producto-no-encontrado"))
+                        .andExpect(jsonPath("$.title").value("Producto no encontrado"))
+                        .andExpect(jsonPath("$.status").value(404))
+                        .andExpect(jsonPath("$.instance")
+                                .value("/api/v1/productos/" + id));
+        }
+
+        private static Producto productoDePrueba(String id) {
+                Instant ahora = Instant.now();
+                return new Producto(
+                        id,
+                        "Espada solar",
+                        "productos/espada-solar.webp",
+                        "Arma creada para verificar la consulta",
+                        TipoProducto.ARMA,
+                        100,
+                        500,
+                        null,
+                        false,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        40,
+                        new BigDecimal("12.5"),
+                        EstadoProducto.ACTIVO,
+                        1,
+                        ahora,
+                        ahora);
+        }
 
         private ResultActions publicarComo(String autoridad, String cuerpo) throws Exception {
                 return mvc.perform(post("/api/v1/productos")
