@@ -3,6 +3,8 @@ package com.nexusbattles.plataforma.salaspartidas.configuracion;
 import com.nexusbattles.comun.observabilidad.FiltroDeTraza;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CreditosDelJugador;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CrearSala;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.IngresarASala;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.ListarSalas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -22,6 +24,16 @@ public class ConfiguracionDelServicio {
     @Bean
     public CrearSala crearSala(RepositorioDeSalas repositorio, CreditosDelJugador creditos) {
         return new CrearSala(repositorio, creditos);
+    }
+
+    @Bean
+    public ListarSalas listarSalas(RepositorioDeSalas repositorio) {
+        return new ListarSalas(repositorio);
+    }
+
+    @Bean
+    public IngresarASala ingresarASala(RepositorioDeSalas repositorio) {
+        return new IngresarASala(repositorio);
     }
 
     /**
