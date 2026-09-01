@@ -3,12 +3,14 @@ package nexus.productos.persistencia;
 import com.mongodb.client.result.UpdateResult;
 import java.time.Instant;
 import java.util.Optional;
+import nexus.dominio.EstadoProducto;
 import nexus.dominio.Producto;
 import nexus.productos.dominio.DisponibilidadProducto;
 import nexus.productos.dominio.EstadoAdquisicion;
 import nexus.productos.dominio.ProductoNoEncontradoException;
 import nexus.productos.dominio.RepositorioDisponibilidadProductos;
 import nexus.productos.dominio.ResultadoAdquisicion;
+import org.bson.Document;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -31,9 +33,15 @@ public class RepositorioDisponibilidadMongo
         Query consulta = Query.query(
                 Criteria.where("_id").is(producto.productoId()));
         Update actualizacion = new Update()
-                .set("tiraje", producto.unidadesDisponibles())
                 .set("estado", producto.estado())
                 .set("modificadoEn", Instant.now());
+        if (producto.estado() == EstadoProducto.SUSPENDIDO) {
+            actualizacion.set(
+                    "estadoAnteriorSuspension",
+                    producto.estadoAlReactivar().name());
+        } else {
+            actualizacion.unset("estadoAnteriorSuspension");
+        }
 
         UpdateResult resultado = mongoTemplate.updateFirst(
                 consulta,
@@ -46,14 +54,20 @@ public class RepositorioDisponibilidadMongo
 
     @Override
     public Optional<DisponibilidadProducto> buscarPorId(String productoId) {
-        return Optional.ofNullable(mongoTemplate.findById(productoId, Producto.class))
-                .map(DisponibilidadProducto::desde);
+        Producto producto = mongoTemplate.findById(productoId, Producto.class);
+        if (producto == null) {
+            return Optional.empty();
+        }
+        return Optional.of(DisponibilidadProducto.desde(
+                producto,
+                estadoAlReactivar(producto)));
     }
 
     @Override
     public ResultadoAdquisicion adquirirUnaUnidad(String productoId) {
         Producto limitado = mongoTemplate.findAndModify(
                 Query.query(Criteria.where("_id").is(productoId)
+                        .and("estado").ne(EstadoProducto.SUSPENDIDO)
                         .and("tiraje").gt(0)),
                 new Update()
                         .inc("tiraje", -1)
@@ -66,6 +80,7 @@ public class RepositorioDisponibilidadMongo
 
         Producto ilimitado = mongoTemplate.findAndModify(
                 Query.query(Criteria.where("_id").is(productoId)
+                        .and("estado").ne(EstadoProducto.SUSPENDIDO)
                         .and("tiraje").is(DisponibilidadProducto.TIRAJE_ILIMITADO)),
                 new Update().set("modificadoEn", Instant.now()),
                 FindAndModifyOptions.options().returnNew(true),
@@ -74,9 +89,13 @@ public class RepositorioDisponibilidadMongo
             return aceptada();
         }
 
-        if (mongoTemplate.exists(
-                Query.query(Criteria.where("_id").is(productoId)),
-                Producto.class)) {
+        Producto existente = mongoTemplate.findById(productoId, Producto.class);
+        if (existente != null && existente.estado() == EstadoProducto.SUSPENDIDO) {
+            return new ResultadoAdquisicion(
+                    EstadoAdquisicion.SUSPENDIDO,
+                    "El producto está suspendido y no se puede adquirir");
+        }
+        if (existente != null) {
             return new ResultadoAdquisicion(
                     EstadoAdquisicion.AGOTADO,
                     "El producto está agotado");
@@ -90,5 +109,27 @@ public class RepositorioDisponibilidadMongo
         return new ResultadoAdquisicion(
                 EstadoAdquisicion.ACEPTADA,
                 "Unidad reservada");
+    }
+
+    private EstadoProducto estadoAlReactivar(Producto producto) {
+        if (producto.estado() != EstadoProducto.SUSPENDIDO) {
+            return producto.estado();
+        }
+        Document documento = mongoTemplate
+                .getCollection(mongoTemplate.getCollectionName(Producto.class))
+                .find(new Document("_id", producto.id()))
+                .first();
+        if (documento == null) {
+            return EstadoProducto.ACTIVO;
+        }
+        String estadoAnterior = documento.getString("estadoAnteriorSuspension");
+        if (estadoAnterior == null) {
+            return EstadoProducto.ACTIVO;
+        }
+        try {
+            return EstadoProducto.valueOf(estadoAnterior);
+        } catch (IllegalArgumentException excepcion) {
+            return EstadoProducto.ACTIVO;
+        }
     }
 }

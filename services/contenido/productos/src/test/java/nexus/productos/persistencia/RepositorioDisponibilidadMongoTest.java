@@ -111,6 +111,36 @@ class RepositorioDisponibilidadMongoTest {
         assertTrue(catalogo.consultar(producto.id()).estaAgotado());
     }
 
+    @Test
+    @DisplayName("suspender y reactivar conserva el tiraje y el estado anterior en MongoDB")
+    void persisteSuspensionYReactivacion() {
+        Producto producto = productos.save(producto(
+                "suspendible",
+                3,
+                EstadoProducto.UNICO));
+        CatalogoProductos catalogo = new CatalogoProductos(disponibilidad);
+
+        catalogo.suspender(producto.id());
+
+        Producto suspendido = productos.findById(producto.id()).orElseThrow();
+        assertEquals(EstadoProducto.SUSPENDIDO, suspendido.estado());
+        assertEquals(3, suspendido.tiraje());
+        assertEquals(
+                EstadoAdquisicion.SUSPENDIDO,
+                catalogo.adquirir(producto.id()).estado());
+
+        assertEquals(
+                EstadoProducto.UNICO,
+                catalogo.reactivar(producto.id()).estado());
+        assertEquals(
+                EstadoAdquisicion.ACEPTADA,
+                catalogo.adquirir(producto.id()).estado());
+
+        Producto reactivado = productos.findById(producto.id()).orElseThrow();
+        assertEquals(EstadoProducto.UNICO, reactivado.estado());
+        assertEquals(2, reactivado.tiraje());
+    }
+
     private static ResultadoAdquisicion adquirir(
             CatalogoProductos catalogo,
             String productoId,
@@ -122,6 +152,13 @@ class RepositorioDisponibilidadMongoTest {
     }
 
     private static Producto producto(String id, int tiraje) {
+        return producto(id, tiraje, EstadoProducto.ACTIVO);
+    }
+
+    private static Producto producto(
+            String id,
+            int tiraje,
+            EstadoProducto estado) {
         Instant ahora = Instant.parse("2026-09-01T18:00:00Z");
         return new Producto(
                 id,
@@ -146,7 +183,7 @@ class RepositorioDisponibilidadMongoTest {
                 null,
                 40,
                 new BigDecimal("12.5"),
-                EstadoProducto.ACTIVO,
+                estado,
                 1,
                 ahora,
                 ahora);

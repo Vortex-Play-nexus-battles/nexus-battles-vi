@@ -47,6 +47,7 @@ public final class DisponibilidadProducto {
     }
 
     public static DisponibilidadProducto desde(Producto producto) {
+        Objects.requireNonNull(producto, "El producto es obligatorio");
         EstadoProducto estadoReactivacion = producto.estado() == EstadoProducto.SUSPENDIDO
                 ? EstadoProducto.ACTIVO
                 : producto.estado();
