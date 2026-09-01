@@ -1,0 +1,16 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{email/layout-corporativo}">
+<body>
+  <table>
+    <tbody>
+      <tr layout:fragment="contenido">
+        <td align="left" style="font-size:0px;padding:10px 25px;word-break:break-word;">
+          <div style="font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:24px;text-align:left;color:#111726;"
+               th:text="${mensaje}">Contenido de prueba</div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>
