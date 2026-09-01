@@ -15,6 +15,7 @@
  */
 
 import { construirCarga, construirError } from './estados-vista.js';
+import { consultarProducto as leerDelCatalogo } from './cliente-productos.js';
 
 /**
  * Atributos visibles de cada tipo, en el orden en que se muestran.
@@ -166,7 +167,7 @@ let abierta = null;
  * @param {HTMLElement} [opciones.origen] elemento al que vuelve el foco.
  * @returns {Promise<void>} resuelve con la ficha en su estado final.
  */
-export async function abrirFicha(productoId, { consultarProducto, origen } = {}) {
+export async function abrirFicha(productoId, { consultarProducto = leerDelCatalogo, origen } = {}) {
   cerrarFicha();
 
   const devolverFocoA = origen ?? document.activeElement;
