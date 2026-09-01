@@ -8,6 +8,7 @@ import nexus.inventario.dominio.Inventario;
 import nexus.inventario.dominio.ParteArmadura;
 import nexus.inventario.dominio.TipoElementoInventario;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.PersistenceCreator;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -17,6 +18,10 @@ record InventarioDocumento(
         @Indexed(unique = true) String propietarioId,
         List<ElementoDocumento> elementos,
         List<EquipamientoDocumento> equipamientos) {
+
+    @PersistenceCreator
+    InventarioDocumento {
+    }
 
     InventarioDocumento(String id, String propietarioId, List<ElementoDocumento> elementos) {
         this(id, propietarioId, elementos, List.of());
