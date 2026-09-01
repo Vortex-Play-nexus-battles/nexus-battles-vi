@@ -5,6 +5,7 @@ import com.nexusbattles.plataforma.salaspartidas.aplicacion.CreditosDelJugador;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CrearSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.IngresarASala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ListarSalas;
+import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDeSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -32,8 +33,8 @@ public class ConfiguracionDelServicio {
     }
 
     @Bean
-    public IngresarASala ingresarASala(RepositorioDeSalas repositorio) {
-        return new IngresarASala(repositorio);
+    public IngresarASala ingresarASala(RepositorioDeSalas repositorio, CanalDeSala canal) {
+        return new IngresarASala(repositorio, canal);
     }
 
     /**

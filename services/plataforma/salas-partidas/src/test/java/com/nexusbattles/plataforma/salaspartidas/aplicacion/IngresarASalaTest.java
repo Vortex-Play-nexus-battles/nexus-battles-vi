@@ -11,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
@@ -43,12 +44,14 @@ class IngresarASalaTest {
     private static final UUID VISITANTE = UUID.fromString("22222222-2222-2222-2222-222222222222");
 
     private RepositorioDeSalasEnMemoria repositorio;
+    private CanalDeSalaEspia canal;
     private IngresarASala ingresarASala;
 
     @BeforeEach
     void preparar() {
         repositorio = new RepositorioDeSalasEnMemoria();
-        ingresarASala = new IngresarASala(repositorio);
+        canal = new CanalDeSalaEspia();
+        ingresarASala = new IngresarASala(repositorio, canal);
     }
 
     private Sala salaAbierta() {
@@ -141,6 +144,76 @@ class IngresarASalaTest {
         assertAll(
                 () -> assertEquals(2, guardada.ocupacion()),
                 () -> assertEquals(EstadoSala.LLENA, guardada.estado()));
+    }
+
+    // =========================================================================
+    // Tercer criterio de aceptacion del issue #30: «el estado de la sala se
+    // actualiza para todos los participantes».
+    //
+    // Lo que se prueba no es que se llame al canal, sino CUANDO: despues de
+    // guardar, y nunca tras un rechazo. Un anuncio antes de persistir contaria
+    // una entrada que todavia podria perderse, y los que ya estan dentro
+    // verian una ocupacion que la base de datos no tiene.
+    // =========================================================================
+
+    @Test
+    @DisplayName("anuncia el ingreso con la sala y la ocupacion ya actualizadas")
+    void anunciaElIngreso() {
+        Sala sala = salaAbierta();
+
+        ingresarASala.ejecutar(sala.id(), VISITANTE);
+
+        assertEquals(List.of(new CanalDeSalaEspia.Anuncio(sala.id(), VISITANTE, 2)),
+                canal.anuncios());
+    }
+
+    @Test
+    @DisplayName("el anuncio va despues de guardar, no antes")
+    void anunciaDespuesDeGuardar() {
+        Sala sala = salaAbierta();
+
+        ingresarASala.ejecutar(sala.id(), VISITANTE);
+
+        // Si el anuncio se hubiera emitido antes de persistir, la ocupacion
+        // anunciada y la guardada podrian no coincidir.
+        Sala guardada = repositorio.buscarPorId(sala.id()).orElseThrow();
+        assertEquals(guardada.ocupacion(), canal.anuncios().get(0).ocupacion());
+    }
+
+    @Test
+    @DisplayName("una sala llena no anuncia nada: no entro nadie")
+    void elRechazoPorAforoNoAnuncia() {
+        Sala sala = Sala.crear(
+                new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, false, null), ANFITRION);
+        sala.unirse(VISITANTE);
+        repositorio.guardar(sala);
+
+        assertThrows(IngresoNoPermitido.class,
+                () -> ingresarASala.ejecutar(sala.id(), UUID.randomUUID()));
+
+        assertTrue(canal.noAnuncioNada());
+    }
+
+    @Test
+    @DisplayName("una sala privada tampoco anuncia nada")
+    void elRechazoPorPrivacidadNoAnuncia() {
+        Sala sala = Sala.crear(
+                new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, true, null), ANFITRION);
+        repositorio.guardar(sala);
+
+        assertThrows(SalaPrivadaSinInvitacion.class,
+                () -> ingresarASala.ejecutar(sala.id(), VISITANTE));
+
+        assertTrue(canal.noAnuncioNada());
+    }
+
+    @Test
+    @DisplayName("una sala que no existe no anuncia nada")
+    void elSalaInexistenteNoAnuncia() {
+        assertThrows(SalaNoEncontrada.class,
+                () -> ingresarASala.ejecutar(UUID.randomUUID(), VISITANTE));
+
+        assertTrue(canal.noAnuncioNada());
     }
 
     @Test
