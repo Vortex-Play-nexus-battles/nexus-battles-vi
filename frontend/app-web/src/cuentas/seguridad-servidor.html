@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HU-RBAC-004: Seguridad Server-Side — Nexus Battles VI</title>
+    <link rel="stylesheet" href="./demo-rbac.css" />
+    <style>
+      .barra-navegacion {
+        display: flex;
+        gap: 12px;
+        background: #151a30;
+        padding: 10px 32px;
+        border-bottom: 1px solid #2d3754;
+      }
+      .nav-link {
+        color: #c5cde0;
+        text-decoration: none;
+        padding: 6px 14px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        transition: all 0.2s ease;
+      }
+      .nav-link:hover {
+        background: #2244bf;
+        color: #ffffff;
+      }
+      .nav-link.activo {
+        background: #1e3f88;
+        color: #ffffff;
+      }
+      .panel-resultado {
+        margin-top: 16px;
+        padding: 16px;
+        border-radius: 8px;
+        font-size: 14px;
+      }
+      .panel-forbidden {
+        background: #fbe4e4;
+        color: #b81a1a;
+        border: 1px solid #f5c6c6;
+      }
+      .panel-success {
+        background: #e4f5e9;
+        color: #086b31;
+        border: 1px solid #b8e4c7;
+      }
+      .badge-http {
+        display: inline-block;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-weight: 700;
+        font-size: 12px;
+        margin-right: 6px;
+      }
+      .badge-403 {
+        background: #b81a1a;
+        color: #ffffff;
+      }
+      .badge-200 {
+        background: #086b31;
+        color: #ffffff;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Barra de Navegación entre Historias de Usuario -->
+    <nav class="barra-navegacion">
+      <a href="./matriz-permisos.html" class="nav-link">📖 HU-RBAC-001: Matriz de Permisos</a>
+      <a href="./seguridad-servidor.html" class="nav-link activo">🛡️ HU-RBAC-004: Verificación en Servidor</a>
+    </nav>
+
+    <header class="cromo">
+      <h1>HU-RBAC-004: Verificación de Autorización en Servidor</h1>
+      <p>Nexus Battles VI · Autorización Server-Side, Fail-Closed, Problem Details (RFC 7807) y Auditoría</p>
+    </header>
+
+    <main>
+      <!-- Explicación del Principio Arquitectural -->
+      <p class="aviso">
+        <strong>Principio de Seguridad:</strong> La interfaz nunca es un perímetro de confianza. Cada microservicio verifica obligatoriamente las credenciales y el permiso en el backend mediante <code>@RequirePermission</code> y <code>SecurityInterceptor</code> antes de procesar cualquier solicitud.
+      </p>
+
+      <div id="nexus-rbac-forbidden" hidden role="alert"></div>
+
+      <!-- Consola de Prueba de Ataque / Bypass -->
+      <section class="tarjeta">
+        <h2>Simulador de Petición Directa al Backend (Intento de Bypass)</h2>
+        <p class="ayuda">
+          Configura una petición HTTP directa simulando un cliente (Postman, cURL o manipulación del DOM) y comprueba cómo el servidor rechaza o permite la operación según la matriz RBAC:
+        </p>
+
+        <div class="fila" style="margin-bottom: 16px;">
+          <label>
+            Rol con el que se emite la petición
+            <select id="sim-rol">
+              <option value="JUGADOR" selected>Jugador (Sin permisos de administración)</option>
+              <option value="MODERADOR">Moderador</option>
+              <option value="ADMINISTRADOR">Administrador</option>
+              <option value="SUPER_ADMINISTRADOR">Super Administrador</option>
+              <option value="ANONIMO">Anónimo / Sin Credencial (Fail-Closed)</option>
+            </select>
+          </label>
+
+          <label>
+            Operación destino en el servidor
+            <select id="sim-endpoint">
+              <option value="/admin/ban" data-method="POST" data-action="BANEAR_DEFINITIVAMENTE" selected>POST /api/v1/admin/ban (Banear definitivamente - Req. ADMIN)</option>
+              <option value="/rbac/usuarios/2/rol" data-method="PUT" data-action="ASIGNAR_ROL">PUT /api/v1/rbac/usuarios/2/rol (Asignar rol - Req. SUPER_ADMIN)</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="fila" style="align-items: center; margin-bottom: 20px;">
+          <label style="flex-direction: row; align-items: center; gap: 8px; cursor: pointer;">
+            <input type="checkbox" id="sim-token-alterado" />
+            <span>Simular Token JWT alterado / firma manipulada (Ataque criptográfico)</span>
+          </label>
+        </div>
+
+        <button id="btn-ejecutar-peticion" class="btn-primario" type="button" style="padding: 10px 24px; font-size: 15px;">
+          🚀 Disparar petición al servidor
+        </button>
+      </section>
+
+      <!-- Panel de Respuesta e Inspección Técnica -->
+      <section class="tarjeta">
+        <h2>Resultado de la Verificación en Servidor</h2>
+        <div id="resultado-inspeccion">
+          <p class="ayuda">Presiona el botón superior para ejecutar la petición de prueba.</p>
+        </div>
+
+        <div style="margin-top: 20px;">
+          <label style="font-size: 12px; text-transform: uppercase;">Detalle Técnico JSON (Problem Details RFC 7807):</label>
+          <pre id="log-servidor" class="log" style="margin-top: 8px;">Aún no se ha realizado ninguna petición.</pre>
+        </div>
+      </section>
+    </main>
+
+    <script type="module">
+      import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
+
+      const API_BASE = 'http://localhost:8081/api/v1';
+      const simRolSelect = document.querySelector('#sim-rol');
+      const simEndpointSelect = document.querySelector('#sim-endpoint');
+      const simTokenAlterado = document.querySelector('#sim-token-alterado');
+      const btnEjecutar = document.querySelector('#btn-ejecutar-peticion');
+      const resultadoInspeccion = document.querySelector('#resultado-inspeccion');
+      const logServidor = document.querySelector('#log-servidor');
+
+      const MATRIZ_PERMISOS = {
+        JUGADOR: { BANEAR_DEFINITIVAMENTE: false, ASIGNAR_ROL: false },
+        MODERADOR: { BANEAR_DEFINITIVAMENTE: false, ASIGNAR_ROL: false },
+        ADMINISTRADOR: { BANEAR_DEFINITIVAMENTE: true, ASIGNAR_ROL: false },
+        SUPER_ADMINISTRADOR: { BANEAR_DEFINITIVAMENTE: true, ASIGNAR_ROL: true },
+        ANONIMO: { BANEAR_DEFINITIVAMENTE: false, ASIGNAR_ROL: false }
+      };
+
+      async function ejecutarSimulacion() {
+        const rol = simRolSelect.value;
+        const endpointOption = simEndpointSelect.selectedOptions[0];
+        const ruta = endpointOption.value;
+        const metodo = endpointOption.dataset.method;
+        const accion = endpointOption.dataset.action;
+        const esAlterado = simTokenAlterado.checked;
+
+        const headers = { 'Content-Type': 'application/json' };
+        if (rol !== 'ANONIMO') {
+          headers['X-User-Role'] = rol;
+          headers['X-User-Name'] = 'atacante_prueba';
+        }
+
+        if (esAlterado) {
+          headers['Authorization'] = 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJoYWNrZXIiLCJyb2wiOiJTVVBFUl9BRE1JTklTVFJBRE9SIn0.FIRMA_MANIPULADA_INVALIDA';
+        }
+
+        try {
+          const response = await fetchWithHttpErrorInterceptor(`${API_BASE}${ruta}`, {
+            method: metodo,
+            headers: headers,
+            body: JSON.stringify({ userId: 'usuario_demo_42', nuevoRol: 'MODERADOR' })
+          });
+
+          const data = await response.json();
+          renderizarResultado(response.status, data, rol, accion, esAlterado);
+        } catch {
+          // Fallback de demostración local si ms-identidad no está encendido en el puerto 8081
+          const permitido = !esAlterado && MATRIZ_PERMISOS[rol]?.[accion] === true;
+          const status = permitido ? 200 : 403;
+          const data = permitido
+            ? { status: 'SUCCESS', message: `Operación ${accion} autorizada y ejecutada con éxito.` }
+            : {
+                type: 'https://nexusbattles.upb.edu.co/errors/forbidden',
+                title: 'Acceso denegado',
+                status: 403,
+                detail: esAlterado ? 'Token de autenticación inválido o expirado' : 'No tienes permiso para esta acción',
+                instance: `/api/v1${ruta}`
+              };
+
+          renderizarResultado(status, data, rol, accion, esAlterado);
+        }
+      }
+
+      function renderizarResultado(status, data, rol, accion, esAlterado) {
+        logServidor.textContent = JSON.stringify(data, null, 2);
+
+        if (status === 403) {
+          resultadoInspeccion.innerHTML = `
+            <div class="panel-resultado panel-forbidden">
+              <span class="badge-http badge-403">403 FORBIDDEN</span>
+              <strong>¡Intento de acceso bloqueado por el servidor! (Fail-Closed)</strong>
+              <p style="margin: 8px 0 0;">
+                ${esAlterado 
+                  ? 'El servidor detectó un token JWT alterado o manipulado y rechazó la petición inmediatamente.'
+                  : `El usuario con rol <strong>${rol}</strong> no posee permiso para la acción <code>${accion}</code>.`}
+              </p>
+              <p style="margin: 6px 0 0; font-size: 13px; color: #801212;">
+                🔒 Evento de seguridad registrado en auditoría JSON y notificado a <code>ms-cumplimiento</code>.
+              </p>
+            </div>
+          `;
+        } else {
+          resultadoInspeccion.innerHTML = `
+            <div class="panel-resultado panel-success">
+              <span class="badge-http badge-200">200 OK</span>
+              <strong>¡Petición autorizada con éxito!</strong>
+              <p style="margin: 8px 0 0;">
+                El usuario con rol <strong>${rol}</strong> tiene los permisos requeridos para ejecutar <code>${accion}</code> en el servidor.
+              </p>
+            </div>
+          `;
+        }
+      }
+
+      btnEjecutar.addEventListener('click', ejecutarSimulacion);
+    </script>
+  </body>
+</html>

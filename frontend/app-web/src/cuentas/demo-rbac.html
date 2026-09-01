@@ -30,17 +30,22 @@
           </label>
           <label>
             Rol
-            <select id="selector-rol"></select>
+            <select id="selector-rol">
+              <option value="JUGADOR" data-description="Usuario estándar con acceso a funciones básicas de juego, comentarios propios y gestión de su perfil." selected>Jugador</option>
+              <option value="MODERADOR" data-description="Usuario con facultades de moderación de contenido, advertencias y suspensiones temporales.">Moderador</option>
+              <option value="ADMINISTRADOR" data-description="Usuario con control administrativo sobre usuarios, productos de tienda y sanciones definitivas.">Administrador</option>
+              <option value="SUPER_ADMINISTRADOR" data-description="Máxima autoridad del sistema con control total y capacidad de nombrar otros administradores.">Super Administrador</option>
+            </select>
           </label>
           <button id="btn-cargar" class="btn-contorno" type="button">Cargar roles del servidor</button>
         </div>
-        <p id="descripcion-rol" class="descripcion"></p>
-        <span id="estado-roles" class="estado carga">Cargando catálogo de roles…</span>
+        <p id="descripcion-rol" class="descripcion">Usuario estándar con acceso a funciones básicas de juego, comentarios propios y gestión de su perfil.</p>
+        <span id="estado-roles" class="estado exito">Catálogo de roles activo</span>
       </section>
 
       <section class="tarjeta matriz-tarjeta" aria-labelledby="titulo-matriz">
         <h2 id="titulo-matriz">Matriz de permisos</h2>
-        <p id="descripcion-matriz" class="ayuda">Cargando la matriz vigente desde el servidor…</p>
+        <p id="descripcion-matriz" class="ayuda">Tabla 24 extendida: 4 roles por 12 acciones. Estos valores son los que aplica el servidor.</p>
         <div class="tabla-responsive">
           <table class="matriz" aria-describedby="descripcion-matriz">
             <thead>
@@ -53,7 +58,90 @@
               </tr>
             </thead>
             <tbody id="matriz-permisos">
-              <tr><td colspan="5">Cargando matriz de permisos…</td></tr>
+              <tr>
+                <th scope="row">Crear cuenta de jugador</th>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia denegado">Denegado</span></td>
+              </tr>
+              <tr>
+                <th scope="row">Modificar perfil propio</th>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+              </tr>
+              <tr>
+                <th scope="row">Publicar comentarios</th>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+              </tr>
+              <tr>
+                <th scope="row">Eliminar comentario propio</th>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+              </tr>
+              <tr>
+                <th scope="row">Moderar comentarios</th>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+              </tr>
+              <tr>
+                <th scope="row">Emitir advertencias</th>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+              </tr>
+              <tr>
+                <th scope="row">Suspender usuarios</th>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia temporal">Temporal</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+              </tr>
+              <tr>
+                <th scope="row">Banear definitivamente</th>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+              </tr>
+              <tr>
+                <th scope="row">Crear admin o moderador</th>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+              </tr>
+              <tr>
+                <th scope="row">Gestionar productos</th>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+              </tr>
+              <tr>
+                <th scope="row">Asignar rol</th>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+              </tr>
+              <tr>
+                <th scope="row">Gestionar cuentas</th>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -65,7 +153,12 @@
           Los botones se construyen desde la matriz del servidor y se ocultan si el rol no tiene el
           permiso. Esto es la UI; el servidor igual rechaza si se llama a mano.
         </p>
-        <div class="acciones" id="acciones-ui" aria-live="polite"></div>
+        <div class="acciones" id="acciones-ui" aria-live="polite">
+          <button type="button" class="btn-contorno" data-has-permission="CREAR_CUENTA_JUGADOR">Crear cuenta de jugador</button>
+          <button type="button" class="btn-contorno" data-has-permission="MODIFICAR_PERFIL_PROPIO">Modificar perfil propio</button>
+          <button type="button" class="btn-contorno" data-has-permission="PUBLICAR_COMENTARIOS">Publicar comentarios</button>
+          <button type="button" class="btn-contorno" data-has-permission="ELIMINAR_COMENTARIO_PROPIO">Eliminar comentario propio</button>
+        </div>
       </section>
 
       <section class="tarjeta">
@@ -91,6 +184,6 @@
       </section>
     </main>
 
-    <script type="module" src="./demo-rbac.js"></script>
+    <script type="module" src="./demo-rbac.js?v=2"></script>
   </body>
 </html>
