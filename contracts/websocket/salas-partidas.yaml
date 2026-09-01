@@ -215,13 +215,28 @@ components:
     ParticipanteIngreso:
       name: participanteIngreso
       title: Un jugador entro a la sala
+      description: |
+        Simetrico con `participanteSalio`: lleva el HECHO —quien entro y cuanta
+        ocupacion queda—, no la ficha del participante. Entrar y salir son la
+        misma accion en espejo y no hay requisito que justifique que una
+        necesite mas identidad que la otra.
+
+        NO usa el esquema `Participante` a proposito. Ese exige `vidaActual` y
+        `vidaMaxima`, que la sala de espera no muestra por ninguna parte y que
+        no existen hasta que empieza el combate (RF-JUE-009, Pantalla 3). Se
+        reutilizaba por comodidad, no por requisito.
+
+        El detalle del roster que si pinta la Pantalla 5 —apodo, nombre del
+        heroe y nivel— llega con HU-SAL-003, que es quien verifica y por tanto
+        conoce el heroe equipado. Hasta entonces el cliente lo resuelve con
+        `GET /salas/{idSala}`.
       payload:
         type: object
-        required: [tipo, idSala, participante, ocupacion]
+        required: [tipo, idSala, idJugador, ocupacion]
         properties:
           tipo: { const: 'sala.participante.ingreso' }
           idSala: { type: string, format: uuid }
-          participante: { $ref: '#/components/schemas/Participante' }
+          idJugador: { type: string, format: uuid }
           ocupacion: { $ref: '#/components/schemas/Ocupacion' }
 
     ParticipanteSalio:
