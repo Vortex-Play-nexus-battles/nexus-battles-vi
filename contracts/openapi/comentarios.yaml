@@ -4,7 +4,8 @@ info:
   description: >
     API para publicar comentarios con texto e imagenes sobre productos, con
     calificacion unica por jugador y filtro automatico de contenido (HU-COM-001,
-    RF-COM-001, RF-COM-002, RN-CMT-001). El filtro se apoya en la lista negra de
+    RF-COM-001, RF-COM-002 y RF-COM-007; el contenido del comentario sigue
+    RN-CMT-001). El filtro se apoya en la lista negra de
     HU-ADM-002, consumida por REST segun contracts/openapi/moderacion-lista-negra.yaml.
     El autor y su apodo viajan en el cuerpo mientras se acuerda con el modulo de
     identidad que claim del token los aporta; al integrar el resource server este
@@ -32,6 +33,11 @@ paths:
           required: true
           schema:
             type: string
+          description: >
+            Identificador del producto comentado. La verificacion de que el
+            producto exista contra el catalogo queda pendiente de integrar
+            cuando el catalogo publique su contrato; mientras tanto el
+            identificador se acepta tal cual.
       requestBody:
         required: true
         content:
@@ -165,3 +171,11 @@ components:
           type: string
         instance:
           type: string
+        motivo:
+          type: string
+          enum:
+            - AUTOR_SILENCIADO
+            - FORMATO_DE_IMAGEN_NO_ADMITIDO
+          description: >
+            Presente solo en los rechazos de publicacion (403 y 422), para que
+            el cliente distinga el motivo sin interpretar el texto del detalle.
