@@ -28,14 +28,42 @@ repositories {
 }
 
 dependencies {
+    // Jackson: parseo del JSON de heroes.yaml en ClienteHeroesHttp.
+    // Se agrega directo (sin Spring) porque este modulo evita el plugin de
+    // convenciones de Spring a proposito (ver comentario arriba).
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.2'
+
     testImplementation platform('org.junit:junit-bom:5.13.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // Testcontainers: pruebas de integracion reales contra el servicio heroes
+    // levantado en Docker (ClienteHeroesHttpIntegracionTest).
+    testImplementation platform('org.testcontainers:testcontainers-bom:1.20.4')
+    testImplementation 'org.testcontainers:testcontainers'
+    testImplementation 'org.testcontainers:junit-jupiter'
+
+    // Binding real de SLF4J solo para test: sin esto Testcontainers registra
+    // "NOP logger" y los WARN de deteccion de Docker (que estrategia probo,
+    // por que fallo) nunca se imprimen, ni con --info.
+    testRuntimeOnly 'org.slf4j:slf4j-simple:2.0.16'
 }
 
 tasks.named('test') {
     useJUnitPlatform()
     finalizedBy jacocoTestReport
+
+    // Docker Desktop reciente rechaza (HTTP 400) cualquier version de la API
+    // de Docker por debajo de su minimo declarado (ver 'docker version' ->
+    // "API version: ... (minimum version: ...)"). El docker-java 3.4.0 que
+    // trae testcontainers-bom:1.20.4 usa como version por defecto la 1.32
+    // cuando no se fija ninguna (ver DockerClientProviderStrategy, cae a
+    // RemoteApiVersion.VERSION_1_32), asi que sin esto Testcontainers no
+    // detecta el daemon aunque 'docker' SI funcione desde la terminal. Se
+    // fija 1.41 por ser una version moderna ampliamente soportada, en vez
+    // de depender de DOCKER_API_VERSION (variable que este docker-java NO
+    // lee) o de tocar la maquina de cada developer.
+    systemProperty 'api.version', '1.41'
 }
 
 jacocoTestReport {
