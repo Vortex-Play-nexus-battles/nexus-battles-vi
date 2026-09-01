@@ -1,11 +1,18 @@
 package com.nexusbattles.plataforma.salaspartidas.api;
 
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CrearSala;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.IngresarASala;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.ListarSalas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CreditosInsuficientes;
+import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Modalidad;
+import com.nexusbattles.plataforma.salaspartidas.dominio.PaginaDeSalas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.ParametrosDeSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.ParametrosInvalidos;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Sala;
+import com.nexusbattles.plataforma.salaspartidas.dominio.SalaNoEncontrada;
+import com.nexusbattles.plataforma.salaspartidas.dominio.SalaPrivadaSinInvitacion;
+import com.nexusbattles.plataforma.salaspartidas.dominio.IngresoNoPermitido;
 import com.nexusbattles.plataforma.salaspartidas.seguridad.SecurityConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,8 +27,10 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -56,6 +65,12 @@ class SalasControllerTest {
     @MockitoBean
     private CrearSala crearSala;
 
+    @MockitoBean
+    private ListarSalas listarSalas;
+
+    @MockitoBean
+    private IngresarASala ingresarASala;
+
     private static Sala salaDeEjemplo() {
         return Sala.crear(new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null), JUGADOR);
     }
@@ -80,8 +95,14 @@ class SalasControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location", "/api/v1/salas/" + sala.id()))
                 .andExpect(jsonPath("$.estado").value("ABIERTA"))
-                .andExpect(jsonPath("$.anfitrion.id").value(JUGADOR.toString()))
-                .andExpect(jsonPath("$.anfitrion.apodo").value("Simon_P"))
+                .andExpect(jsonPath("$.idAnfitrion").value(JUGADOR.toString()))
+                .andExpect(jsonPath("$.ocupacion").value(1))
+                .andExpect(jsonPath("$.maximoParticipantes").value(4))
+                .andExpect(jsonPath("$.recompensaCreditos").value(0))
+                .andExpect(jsonPath("$.incluirHeroeIA").value(false))
+                // El apodo no viaja: pertenece al modulo de cuentas y ninguna
+                // pantalla de HU-SAL-002 lo muestra.
+                .andExpect(jsonPath("$.anfitrion").doesNotExist())
                 .andExpect(jsonPath("$.idPartida").doesNotExist());
     }
 
@@ -183,7 +204,7 @@ class SalasControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(cuerpoConIntruso))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.anfitrion.id").value(JUGADOR.toString()));
+                .andExpect(jsonPath("$.idAnfitrion").value(JUGADOR.toString()));
     }
 
     @Test
@@ -212,5 +233,142 @@ class SalasControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errores.length()").value(2))
                 .andExpect(jsonPath("$.detail").value("Hay 2 campos que corregir."));
+    }
+
+    // =========================================================================
+    // HU-SAL-002 · RF-JUE-002 — listado e ingreso
+    //
+    // Los codigos salen del contrato OpenAPI, que distingue tres rechazos que
+    // la interfaz trata distinto: 404 la sala no existe, 403 es privada, 409
+    // esta llena o la partida empezo.
+    // =========================================================================
+
+    private static final UUID ID_SALA = UUID.fromString("77777777-7777-7777-7777-777777777777");
+
+    private static PaginaDeSalas paginaCon(Sala... salas) {
+        return new PaginaDeSalas(List.of(salas), 0, 16, salas.length, 1);
+    }
+
+    @Test
+    @DisplayName("GET /salas devuelve la pagina con los cinco campos del contrato")
+    void listaSalas() throws Exception {
+        when(listarSalas.ejecutar(any(), any(), any(), any())).thenReturn(paginaCon(salaDeEjemplo()));
+
+        mockMvc.perform(get("/api/v1/salas").with(jugador()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contenido.length()").value(1))
+                .andExpect(jsonPath("$.pagina").value(0))
+                .andExpect(jsonPath("$.tamano").value(16))
+                .andExpect(jsonPath("$.totalElementos").value(1))
+                .andExpect(jsonPath("$.totalPaginas").value(1));
+    }
+
+    @Test
+    @DisplayName("GET /salas sin token responde 401")
+    void listaSalasSinToken() throws Exception {
+        mockMvc.perform(get("/api/v1/salas"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("GET /salas traslada los filtros y la paginacion del contrato")
+    void listaSalasConFiltros() throws Exception {
+        when(listarSalas.ejecutar(any(), any(), any(), any())).thenReturn(paginaCon());
+
+        mockMvc.perform(get("/api/v1/salas")
+                        .param("pagina", "2")
+                        .param("tamano", "8")
+                        .param("modalidad", "HASTA_SEIS")
+                        .param("estado", "ABIERTA")
+                        .with(jugador()))
+                .andExpect(status().isOk());
+
+        verify(listarSalas).ejecutar(2, 8, Modalidad.HASTA_SEIS, EstadoSala.ABIERTA);
+    }
+
+    @Test
+    @DisplayName("GET /salas sin parametros no inventa valores: los decide el caso de uso")
+    void listaSalasSinParametros() throws Exception {
+        when(listarSalas.ejecutar(any(), any(), any(), any())).thenReturn(paginaCon());
+
+        mockMvc.perform(get("/api/v1/salas").with(jugador()))
+                .andExpect(status().isOk());
+
+        verify(listarSalas).ejecutar(null, null, null, null);
+    }
+
+    @Test
+    @DisplayName("POST participantes admite al jugador y devuelve la sala")
+    void ingresa() throws Exception {
+        when(ingresarASala.ejecutar(any(), any())).thenReturn(salaDeEjemplo());
+
+        mockMvc.perform(post("/api/v1/salas/{id}/participantes", ID_SALA).with(jugador()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estado").value("ABIERTA"));
+    }
+
+    @Test
+    @DisplayName("el jugador que entra sale del token, aunque el cuerpo diga otra cosa")
+    void elJugadorSaleDelToken() throws Exception {
+        when(ingresarASala.ejecutar(any(), any())).thenReturn(salaDeEjemplo());
+
+        mockMvc.perform(post("/api/v1/salas/{id}/participantes", ID_SALA)
+                        .with(jugador())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idJugador\": \"99999999-9999-9999-9999-999999999999\"}"))
+                .andExpect(status().isOk());
+
+        verify(ingresarASala).ejecutar(ID_SALA, JUGADOR);
+    }
+
+    @Test
+    @DisplayName("POST participantes sin token responde 401")
+    void ingresaSinToken() throws Exception {
+        mockMvc.perform(post("/api/v1/salas/{id}/participantes", ID_SALA))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("una sala inexistente responde 404 con su tipo")
+    void salaInexistente() throws Exception {
+        when(ingresarASala.ejecutar(any(), any())).thenThrow(new SalaNoEncontrada(ID_SALA));
+
+        mockMvc.perform(post("/api/v1/salas/{id}/participantes", ID_SALA).with(jugador()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.type")
+                        .value("https://nexusbattles.local/errores/sala-no-encontrada"));
+    }
+
+    @Test
+    @DisplayName("una sala privada responde 403, no 409")
+    void salaPrivada() throws Exception {
+        when(ingresarASala.ejecutar(any(), any())).thenThrow(new SalaPrivadaSinInvitacion());
+
+        mockMvc.perform(post("/api/v1/salas/{id}/participantes", ID_SALA).with(jugador()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.type")
+                        .value("https://nexusbattles.local/errores/sala-privada"));
+    }
+
+    @Test
+    @DisplayName("una sala llena responde 409 diciendo el motivo")
+    void salaLlena() throws Exception {
+        when(ingresarASala.ejecutar(any(), any()))
+                .thenThrow(new IngresoNoPermitido("La sala ya alcanzo su maximo de participantes."));
+
+        mockMvc.perform(post("/api/v1/salas/{id}/participantes", ID_SALA).with(jugador()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type")
+                        .value("https://nexusbattles.local/errores/ingreso-no-permitido"))
+                .andExpect(jsonPath("$.detail")
+                        .value("La sala ya alcanzo su maximo de participantes."));
+    }
+
+    @Test
+    @DisplayName("un visitante sin rol de jugador no puede entrar a una sala")
+    void ingresaSinRol() throws Exception {
+        mockMvc.perform(post("/api/v1/salas/{id}/participantes", ID_SALA)
+                        .with(jwt().jwt(t -> t.subject(JUGADOR.toString()))))
+                .andExpect(status().isForbidden());
     }
 }
