@@ -21,9 +21,9 @@ import com.nexusbattles.plataforma.comentarios.HiloDeComentarios.ResultadoDelFil
  * Pruebas del cliente de la lista negra contra el contrato de HU-ADM-002.
  *
  * Lo que mas importa verificar aqui es el respaldo. Para los apodos se decidio
- * dejar pasar cuando el servicio no responde, pero RN-CMT-001 exige que todo
- * comentario pase por el filtro antes de publicarse, asi que publicar sin
- * verificar rompe la regla. Lo unico que no la rompe es retener el comentario
+ * dejar pasar cuando el servicio no responde, pero la postcondicion de RF-COM-007 es que el
+ * contenido inapropiado no alcance la publicacion sin revision, asi que
+ * publicar sin verificar rompe el requisito. Lo unico que no lo rompe es retener el comentario
  * para que lo revise un moderador, y eso es lo que se prueba en los dos casos
  * de falla.
  */
