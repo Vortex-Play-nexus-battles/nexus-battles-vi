@@ -12,6 +12,16 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
 
+    // HU-INV-006: ResolutorDeEstadisticasHeroeHttp parsea el JSON de heroes
+    // a mano con HttpClient (mismo patron que ClienteHeroesHttp en
+    // motor-combate), no via RestClient/RestTemplate de Spring. A
+    // diferencia de motor-combate, jackson-databind NO llega transitivo:
+    // spring-boot-starter-webmvc en Spring Boot 4 no arrastra
+    // spring-boot-starter-json por si sola. Sin version fija: la resuelve
+    // io.spring.dependency-management via el BOM de Spring Boot, igual que
+    // el resto de dependencias de este archivo.
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+
     testImplementation 'org.springframework.boot:spring-boot-starter-data-mongodb-test'
     testImplementation 'org.springframework.boot:spring-boot-testcontainers'
     testImplementation platform('org.testcontainers:testcontainers-bom:1.21.4')
