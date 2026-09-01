@@ -1,0 +1,89 @@
+/**
+ * Nexus Battles VI - UI Kit Design Tokens
+ * 
+ * This file is the SINGLE SOURCE OF TRUTH for all design tokens in the project,
+ * extracted from the Figma design and PaletaDeColoresYPilaTecnologica.pdf.
+ * It contains the WCAG 2.2 AA compliant light theme palette, typography, and sizing variables.
+ * 
+ * ALL views must import this file instead of redefining tokens locally.
+ */
+
+:root {
+  /* Marca - Theme Colors */
+  --fondo: #d7deed;
+  --superficie: #ffffff;
+  --cromo: #1c2340;
+  --borde-decorativo: #9fabc9;
+  --borde-interactivo: #6f7994;
+  --accion: #2244bf;
+  --accion-relleno: #1e3f88;
+  --acento: #582784;
+
+  /* Estado - Feedback Colors */
+  --exito: #086b31;
+  --exito-fondo: #e4f5e9;
+  --advertencia: #8a4a00;
+  --advertencia-fondo: #fbeedd;
+  --error: #b81a1a;
+  --error-fondo: #fbe4e4;
+  --info: #095e8c;
+  --info-fondo: #ddeef7;
+
+  /* Texto - Typography Colors */
+  --texto: #111726;
+  --texto-secundario: #48536a;
+  --texto-terciario: #57627a;
+
+  /* Tipografía - Font Families */
+  --tipografia-titulo: 'Rajdhani', 'Trebuchet MS', sans-serif;
+  --tipografia-texto: 'Inter', 'Segoe UI', system-ui, sans-serif;
+
+  /* Tamaños de Texto - Font Sizes & Weights */
+  --texto-titulo-grande: 28px;
+  --texto-titulo-grande-peso: 700;
+  --texto-titulo-medio: 20px;
+  --texto-titulo-medio-peso: 600;
+  --texto-cuerpo: 16px;
+  --texto-cuerpo-peso: 400; /* o 500 */
+  --texto-pequeno: 13px;
+  --texto-pequeno-peso: 400;
+  --texto-boton: 14px;
+  --texto-boton-peso: 600;
+
+  /* Tamaños de Componentes - Component Sizing */
+  --boton-grande: 48px;
+  --boton-medio: 40px;
+  --boton-pequeno: 32px;
+  --input-alto: 40px;
+  --icono-tamano: 20px; /* 20-24px */
+}
+
+/* Base reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+/* Body defaults */
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--fondo);
+  color: var(--texto);
+  font-family: var(--tipografia-texto);
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+/* Focus style for accessibility */
+select:focus, input:focus, button:focus {
+  outline: 3px solid #9bb0e8;
+  outline-offset: 2px;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}

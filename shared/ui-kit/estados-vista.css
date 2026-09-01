@@ -1,0 +1,54 @@
+.nexus-estado {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 200px;
+  padding: 2rem;
+  border: 2px dashed var(--borde-interactivo, #6F7994);
+  border-radius: 8px;
+  background-color: var(--superficie, #FFFFFF);
+}
+
+.nexus-estado--carga {
+  border-color: var(--info, #095E8C);
+  background-color: var(--info-fondo, #DDEEF7);
+  color: var(--info, #095E8C);
+}
+
+.nexus-estado--vacio {
+  border-color: var(--advertencia, #8A4A00);
+  background-color: var(--advertencia-fondo, #FBEEDD);
+  color: var(--advertencia, #8A4A00);
+}
+
+.nexus-estado--error {
+  border: 2px solid var(--error, #B81A1A);
+  border-style: solid; /* Solid border for error */
+  background-color: var(--error-fondo, #FBE4E4);
+  color: var(--error, #B81A1A);
+}
+
+.nexus-estado--exito {
+  border-color: var(--exito, #086B31);
+  background-color: var(--exito-fondo, #E4F5E9);
+  color: var(--exito, #086B31);
+}
+
+.nexus-estado__mensaje {
+  font-family: var(--tipografia-titulo, "Rajdhani", sans-serif);
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0;
+  margin-bottom: 0.5rem;
+  color: inherit;
+}
+
+.nexus-estado__detalle {
+  font-family: var(--tipografia-cuerpo, "Inter", sans-serif);
+  font-size: 1rem;
+  font-weight: 400;
+  margin: 0;
+  color: var(--texto-secundario, #48536A);
+}
