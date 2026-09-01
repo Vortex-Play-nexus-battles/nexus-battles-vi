@@ -1,0 +1,161 @@
+@startuml SEQ-PL-01-trazado
+' =============================================================================
+'  SEQ-PL-01 · Diagrama de secuencia — Trazado extremo a extremo
+'  Issue #78 (Jira SCRUM-1014) · Subtarea SCRUM-1042 · Sprint 1 · Grupo 6
+'
+'  QUE REPRESENTA
+'  El camino de una peticion desde el cliente hasta el servicio, centrado en el
+'  identificador de traza: como se recibe o se genera, donde se guarda, como
+'  vuelve al cliente y como se limpia. Es el flujo que sostiene la regla 5.
+'
+'  FUENTES (cada participante e interaccion sale de una de estas)
+'   [CODE] shared/libs/plataforma-comun/.../observabilidad/FiltroDeTraza.java
+'   [CONF] services/plataforma/salas-partidas/.../ConfiguracionDelServicio.java
+'   [SEG]  shared/libs/plataforma-seguridad/.../CadenaDeSeguridad.java
+'   [API]  services/plataforma/salas-partidas/.../api/ManejadorDeErrores.java
+'   [R]    .claude/rules/backend-spring.md  — pasarela, pila, identidad
+'   [P]    CLAUDE.md, 12 reglas de plataforma
+'
+'  SE USA salas-partidas COMO EJEMPLO CONCRETO
+'  Es el unico servicio con controlador, seguridad y filtro cableados. El resto
+'  del bloque repite el mismo andamiaje, que es el objetivo de shared/libs.
+'
+'  LO QUE ESTE DIAGRAMA NO AFIRMA
+'   - La pasarela NO existe como servicio: [R] la declara como entrada unica,
+'     pero no hay codigo. Va marcada.
+'   - La bitacora JSON de la regla 6 NO esta configurada en ningun
+'     application.yml todavia. Va marcada.
+'   - El trace id NO viaja hoy en el cuerpo del problem details: se comprobo
+'     ManejadorDeErrores y no lo incluye. No se dibuja lo que no hace.
+'   - El canal en tiempo real es del issue #73 y queda fuera.
+' =============================================================================
+
+skinparam shadowing false
+skinparam sequenceMessageAlign left
+
+title SEQ-PL-01 · Trazado de una peticion extremo a extremo\nRegla 5 de plataforma · Issue #78
+
+actor "Jugador" as USR
+participant "frontend\napp-web" as WEB
+participant "Spring Cloud Gateway" as GW #LightGray
+participant "FiltroDeTraza" as FLT
+participant "Cadena de seguridad\n(Keycloak JWT)" as SEC
+participant "SalasController" as CTL
+participant "ManejadorDeErrores" as ERR
+participant "MDC (slf4j)" as MDC
+participant "stdout" as LOG #LightGray
+
+note over GW
+  [R] "Entrada unica: Spring Cloud Gateway
+  (TLS, enrutamiento, limite de tasa,
+  propagacion de trace id)".
+  Declarado en la pila, SIN implementar.
+end note
+
+note over LOG
+  [P] Regla 6: bitacora en JSON hacia
+  stdout. Hoy ningun application.yml la
+  configura: el MDC ya lleva el dato,
+  falta el formato.
+end note
+
+== Entrada ==
+
+USR -> WEB : crea una sala
+WEB -> GW : POST /api/v1/salas\n(HTTPS)
+note right of WEB
+  [P] Regla 2: todo bajo /api/v1.
+end note
+
+GW -> FLT : reenvia la peticion\ncon traceparent
+
+== Identificador de traza ==
+
+note over FLT
+  [CONF] Registrado con
+  HIGHEST_PRECEDENCE y patron /*:
+  corre antes que la seguridad para
+  que hasta un 401 salga con traza.
+end note
+
+alt la peticion trae traceparent valido
+  FLT -> FLT : extraerTrazaId(cabecera)
+  note right of FLT
+    [CODE] Valido = al menos 3 partes,
+    la segunda de 32 hexadecimales
+    y no todo ceros, que es el valor
+    invalido del estandar W3C.
+  end note
+else falta o esta mal formado
+  FLT -> FLT : nuevoIdentificador(16 bytes)
+  note right of FLT
+    [CODE] 16 bytes de SecureRandom
+    en hexadecimal: 32 caracteres.
+  end note
+end
+
+FLT -> MDC : put("trazaId", traza)
+FLT -> WEB : cabecera de respuesta\ntraceparent = 00-<traza>-<tramo>-01
+note right of FLT
+  [CODE] La traza se reutiliza; el
+  tramo es nuevo en cada salto.
+  Asi quien llamo puede citar el
+  identificador si algo falla.
+end note
+
+== Autorizacion y trabajo ==
+
+FLT -> SEC : sigue la cadena
+note right of SEC
+  [SEG] Sin estado y sin CSRF.
+  El token de Keycloak lo traduce
+  ConversorRolesJwt a roles de Spring.
+end note
+
+alt token valido y con el rol exigido
+  SEC -> CTL : peticion autorizada
+  CTL -> CTL : ejecuta el caso de uso
+  CTL --> WEB : 201 Created
+else token ausente o rol insuficiente
+  SEC --> WEB : 401 / 403
+  note right of SEC
+    Aun asi la respuesta lleva traza:
+    el filtro ya la puso antes.
+  end note
+end
+
+== Error de negocio ==
+
+alt el caso de uso rechaza la peticion
+  CTL -> ERR : lanza el error de negocio
+  ERR --> WEB : problem details (RFC 7807)
+  note right of ERR
+    [P] Regla 4: formato de error
+    identico en los 20 modulos.
+    [API] El cuerpo NO incluye hoy el
+    trace id; solo viaja en la cabecera.
+  end note
+end
+
+== Cierre ==
+
+FLT -> MDC : remove("trazaId")
+note right of FLT
+  [CODE] Siempre en el finally: los
+  hilos se reutilizan y una traza
+  olvidada aparece en la peticion
+  de otra persona.
+end note
+
+MDC -> LOG : el formateador leeria trazaId\n(pendiente, ver nota)
+
+WEB --> USR : resultado
+
+legend right
+  |= Marca |= Significado |
+  | gris | Declarado en la pila, sin implementar todavia |
+  | CODE CONF SEG API | Respaldado por codigo que existe en el repositorio |
+  | R P | Respaldado por reglas o documento de arquitectura |
+endlegend
+
+@enduml

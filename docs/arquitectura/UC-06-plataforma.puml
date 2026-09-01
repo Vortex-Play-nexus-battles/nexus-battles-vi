@@ -1,0 +1,142 @@
+@startuml UC-06-plataforma
+' =============================================================================
+'  UC-06 · Diagrama de casos de uso — Plataforma, canal y observabilidad
+'  Issue #78 (Jira SCRUM-1014) · Subtarea SCRUM-1041 · Sprint 1 · Grupo 6
+'
+'  QUE REPRESENTA
+'  Quien interactua con el modulo de Infraestructura y para que, dentro del
+'  alcance que fija #78: configuracion de parametros, pasarela de API y
+'  metricas tecnicas.
+'
+'  LIMITE DEL SISTEMA
+'  El rectangulo es el modulo de Infraestructura: admin-parametros,
+'  metricas-plataforma y la pasarela. Los otros 18 microservicios NO estan
+'  dentro y tampoco aparecen como actores: ver la nota N_INGESTA.
+'
+'  FUENTES
+'   [CH]   .claude/rules/project-charter.md — interfaces que expone el bloque
+'   [R]    .claude/rules/backend-spring.md — catalogo de roles, pila
+'   [RBAC] contracts/openapi/rbac.yaml — enumeracion de roles y de acciones
+'   [P]    CLAUDE.md, 12 reglas de plataforma
+'
+'  DOS COSAS QUE SE QUITARON TRAS REVISION, POR NO ESTAR RESPALDADAS
+'
+'  1. El caso de uso "Exponer salud y metricas por Actuator" NO pertenece a
+'     este sistema. Cada servicio lo hace dentro de SU propio limite; no es un
+'     objetivo que un actor persiga sobre el modulo de Infraestructura.
+'     Se retiro, y con el su actor.
+'
+'  2. La generalizacion SUPER_ADMINISTRADOR --|> ADMINISTRADOR se retiro: ni
+'     [RBAC] ni [R] ni ms-identidad-registro.md describen jerarquia alguna.
+'     Los cuatro roles aparecen SIEMPRE como enumeracion plana. Dibujar la
+'     herencia habria sido asumirla.
+' =============================================================================
+
+skinparam shadowing false
+left to right direction
+
+title UC-06 · Casos de uso del modulo de Infraestructura\nParametros, entrada unica y metricas · Issue #78
+
+actor "Administrador" as ADM
+actor "Spring Cloud Gateway" as GW #LightGray
+
+rectangle "Modulo de Infraestructura — alcance de #78" {
+  usecase "Configurar parametro\ndel sistema" as UC_PAR
+  usecase "Consultar metricas\ntecnicas" as UC_MET
+  usecase "Consultar estado de salud\nde un servicio" as UC_SAL
+}
+
+ADM --> UC_PAR
+ADM --> UC_MET
+ADM --> UC_SAL
+
+' ------------------------------------------------------------- notas ---
+
+note as N_ACTOR
+  [R] Catalogo de cinco actores como roles
+  de Keycloak. [RBAC] enumera cuatro:
+  JUGADOR, MODERADOR, ADMINISTRADOR y
+  SUPER_ADMINISTRADOR, en plano.
+
+  INFERENCIA DECLARADA: ninguna fuente dice
+  que rol concreto administra parametros o
+  consulta metricas. Se modela Administrador
+  por el nombre del modulo (admin-parametros)
+  y porque Jugador y Moderador no tienen
+  ninguna accion cercana en la matriz.
+  Confirmar con el dueno de ms-identidad.
+end note
+N_ACTOR .. ADM
+
+note as N_SADM
+  SUPER_ADMINISTRADOR no se dibuja.
+
+  Existe en el catalogo, pero no hay fuente
+  que le de un caso de uso propio aqui ni
+  que establezca que herede del
+  Administrador. Un actor sin asociacion y
+  sin generalizacion no aporta: se deja
+  documentado en esta nota en vez de
+  colgarlo del diagrama.
+end note
+N_SADM .. ADM
+
+note as N_PAR
+  [CH] "Configuracion de parametros" figura
+  entre las interfaces que este bloque
+  expone a los demas modulos.
+
+  [CH] Limite duro: los valores numericos de
+  estadisticas, costos, efectos, comisiones,
+  limites y plazos son INALTERABLES. No son
+  parametros de ajuste libre.
+end note
+N_PAR .. UC_PAR
+
+note as N_MET
+  [CH] Las metricas son compromiso de
+  Sprint 3 de este bloque, junto con los
+  informes de latencia, carga y recuperacion.
+  [P] Regla 3: salud y metricas por Actuator.
+end note
+N_MET .. UC_MET
+
+note as N_GW
+  [R] Declarado como entrada unica, sin
+  implementar. No se le asigna caso de uso:
+  sus responsabilidades -TLS, enrutamiento,
+  limite de tasa, propagacion de traza- son
+  comportamiento interno, no objetivos de un
+  actor. Se modelan en SEQ-PL-01.
+end note
+N_GW .. GW
+
+note as N_INGESTA
+  PENDIENTE TECNICO, no parte del diseno:
+
+  Como llegan las metricas de los otros 18
+  servicios a metricas-plataforma NO esta
+  documentado. infrastructure/observabilidad
+  contiene solo un README. Por eso no hay
+  actor "Servicio de la plataforma" ni
+  flecha de ingesta: seria inventarla.
+end note
+N_INGESTA .. UC_MET
+
+note as N_RBAC
+  PENDIENTE TECNICO, no parte del diseno:
+
+  Las doce acciones de [RBAC] no incluyen
+  ninguna sobre parametros ni metricas. Hoy
+  no existe permiso declarado que proteja
+  estos tres casos de uso.
+end note
+N_RBAC .. UC_PAR
+
+legend right
+  |= Marca |= Significado |
+  | gris | Declarado en la arquitectura, sin implementar |
+  | CH R RBAC P | Fuente de cada elemento, ver cabecera |
+endlegend
+
+@enduml

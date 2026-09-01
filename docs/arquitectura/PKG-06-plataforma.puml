@@ -1,0 +1,212 @@
+@startuml PKG-06-plataforma
+' =============================================================================
+'  PKG-06 · Diagrama de paquetes — Plataforma, canal y observabilidad
+'  Issue #78 (Jira SCRUM-1014) · Subtarea SCRUM-1043 · Sprint 1 · Grupo 6
+'
+'  QUE REPRESENTA
+'  La estructura de paquetes del monorepo y sus dependencias permitidas: los
+'  20 servicios agrupados por equipo, las bibliotecas compartidas, los
+'  contratos y la infraestructura, con la pasarela como entrada unica.
+'
+'  FUENTES (todo elemento de este diagrama sale de una de estas)
+'   [S] settings.gradle .................... que modulos compila el build
+'   [E] arbol de services/ ................. las 20 carpetas de servicio
+'   [C] contracts/ ......................... contratos publicados hoy
+'   [I] infrastructure/ .................... subcarpetas reales
+'   [R] .claude/rules/backend-spring.md .... pila, comunicacion y datos
+'   [P] CLAUDE.md, 12 reglas de plataforma . reglas 1..12
+'
+'  FUERA DE ALCANCE
+'  El diseno del canal en tiempo real (salas, partidas, interfaz, chat) es del
+'  issue #73, ya cerrado. Aqui aparece unicamente la carpeta contracts/websocket
+'  como parte de la estructura del repositorio: no se modela su comportamiento.
+'
+'  NOTA DE FIDELIDAD
+'  Los estereotipos <<gradle>>, <<maven>> y <<sin build>> reflejan el estado
+'  REAL del repositorio, no el deseado. Se leen de settings.gradle.
+' =============================================================================
+
+' Sin colores fijados a proposito: con un fondo oscuro (vista previa de VS Code,
+' tema oscuro de StarUML) un color de letra fijo se vuelve ilegible. Se dejan
+' los valores por defecto, que se adaptan al tema.
+skinparam shadowing false
+
+title PKG-06 · Paquetes del monorepo\nThe Nexus Battles VI — Grupo 6 · Issue #78
+
+' ---------------------------------------------------------------- entrada ---
+component "Spring Cloud Gateway" as GW <<entrada unica>>
+note right of GW
+  [R] "Entrada unica: Spring Cloud Gateway
+  (TLS, enrutamiento, limite de tasa,
+  propagacion de trace id)".
+
+  No existe todavia como servicio en el
+  repositorio: esta declarado en la pila,
+  no implementado.
+end note
+
+' --------------------------------------------------------------- contratos ---
+package "contracts" as CONTRACTS {
+  package "openapi" as C_API
+  package "websocket" as C_WS
+  package "eventos" as C_EVT
+  package "esquemas" as C_SCH
+}
+
+' Las notas van sueltas y enlazadas con "..", no con "note bottom of <paquete>":
+' es la forma que PlantUML admite de manera uniforme para cualquier elemento.
+note as N_WS
+  Su contenido pertenece al issue #73.
+  Aqui solo consta que el paquete existe.
+end note
+N_WS .. C_WS
+
+note as N_EVT
+  [C] Hoy solo README. El catalogo de
+  eventos es entregable de Sprint 2.
+end note
+N_EVT .. C_EVT
+
+' --------------------------------------------------------------- shared ---
+package "shared" as SHARED {
+  package "libs" as S_LIBS {
+    component "plataforma-comun" as LIB_COMUN <<gradle>>
+    component "plataforma-seguridad" as LIB_SEG <<gradle>>
+  }
+  package "ui-kit" as S_UI
+  package "config" as S_CFG
+}
+
+note right of LIB_COMUN
+  [P] Reglas 4, 5 y 6: formato de error
+  unico, propagacion del trace id y
+  bitacora JSON, identicos en los 20
+  modulos. Por eso se enlaza, no se copia.
+end note
+
+' -------------------------------------------------------------- servicios ---
+package "services" as SERVICES {
+
+  package "plataforma  (Equipo 6)" as P {
+    component "admin-parametros" as P_PAR <<gradle>>
+    component "metricas-plataforma" as P_MET <<gradle>>
+    component "salas-partidas" as P_SAL <<gradle>>
+    component "moderacion-sanciones" as P_MOD <<gradle>>
+    component "comentarios" as P_COM <<gradle>>
+    component "correo" as P_COR <<gradle>>
+    component "notificaciones" as P_NOT <<gradle>>
+    component "torneos" as P_TOR <<gradle>>
+  }
+
+  package "contenido" as K {
+    component "heroes" as K_HER <<gradle>>
+    component "inventario" as K_INV <<gradle>>
+    component "motor-combate" as K_MOT <<gradle>>
+    component "misiones" as K_MIS <<sin build>>
+    component "productos" as K_PRO <<sin build>>
+    component "progresion-jugador" as K_PRG <<sin build>>
+  }
+
+  package "cuentas" as U {
+    component "ms-identidad" as U_IDE <<maven>>
+    component "ms-cumplimiento" as U_CUM <<maven>>
+    component "ms-ecommerce" as U_ECO <<maven>>
+    component "ms-chatbot" as U_CHA <<sin build>>
+    component "ms-finanzas" as U_FIN <<sin build>>
+    component "ms-subastas" as U_SUB <<sin build>>
+  }
+}
+
+note as N_CUENTAS
+  [S] Ninguno de los seis entra hoy en el
+  build de Gradle: tres siguen en Maven y
+  tres no tienen build. Un servicio que no
+  este en settings.gradle no lo compila
+  nadie, ni en local ni en CI.
+end note
+N_CUENTAS .. U
+
+' --------------------------------------------------------------- datos ---
+database "PostgreSQL 17" as DB_PG
+database "MongoDB 8" as DB_MG
+database "Redis 8" as DB_RD
+
+note bottom of DB_PG
+  [R] Un esquema por servicio.
+  [P] Regla 7: ningun servicio accede a la
+  base de otro. La integracion es siempre
+  por REST o por evento.
+end note
+
+' ------------------------------------------------------ infraestructura ---
+package "infrastructure" as INFRA {
+  package "contenedores" as I_CON
+  package "entornos" as I_ENT
+  package "observabilidad" as I_OBS
+  package "datos" as I_DAT
+  package "red-balanceo" as I_RED
+  package "respaldo-dr" as I_DR
+}
+
+' ============================ dependencias ==================================
+
+' Entrada unica hacia los tres bloques de servicio. [R]
+GW --> P
+GW --> K
+GW --> U
+
+' Contrato primero: el servicio se implementa contra un contrato ya publicado.
+' [P] Regla 1 · [C] contracts/openapi/salas-partidas.yaml existe y precede al
+' codigo de HU-SAL-001.
+P ..> C_API : <<implementa>>
+K ..> C_API : <<implementa>>
+U ..> C_API : <<implementa>>
+
+' Bibliotecas compartidas. Verificado en el build de los servicios que ya
+' tienen codigo: salas-partidas y moderacion-sanciones enlazan ambas. [S]
+P ..> LIB_COMUN : <<usa>>
+P ..> LIB_SEG : <<usa>>
+
+' Persistencia declarada. Hoy solo salas-partidas y moderacion-sanciones tienen
+' origen de datos configurado; el resto es andamiaje. El reparto por motor sale
+' de [R].
+P_SAL --> DB_PG
+P_MOD --> DB_PG
+P_MOD --> DB_RD
+K_HER --> DB_MG
+K_INV --> DB_MG
+
+' Observabilidad. [P] Regla 3: todo servicio expone salud y metricas de
+' Actuator; [R] instrumentacion con Micrometer + Actuator.
+'
+' NO se dibuja una flecha "metricas-plataforma recolecta de los demas": ninguna
+' fuente documenta hoy quien raspa esos endpoints. Lo que si esta documentado es
+' que cada servicio los expone, y eso va en la nota.
+P_MET ..> I_OBS : <<publica>>
+
+note as N_ACT
+  [P] Regla 3: los 20 servicios exponen
+  salud y metricas por Actuator.
+  [R] Instrumentacion con Micrometer.
+end note
+N_ACT .. P_MET
+
+' Configuracion por entorno. [P] Regla 10: solo por variable de entorno, con
+' plantilla en el repo y ningun valor real versionado.
+P_PAR ..> I_ENT : <<parametros por entorno>>
+
+' Empaquetado. [P] Regla 9: definicion de contenedor versionada junto al
+' servicio, sin excepciones.
+SERVICES ..> I_CON : <<Dockerfile por servicio>>
+
+' Los estereotipos se escriben sin las guillas dobles: PlantUML trata "<" como
+' inicio de etiqueta y podria comerse el texto de la celda.
+legend right
+  |= Estereotipo |= Significado |
+  | gradle | Declarado en settings.gradle: lo compila el build |
+  | maven | Proyecto Maven propio, aun sin migrar a Gradle |
+  | sin build | La carpeta existe pero no hay nada que compilar |
+  | S E C I R P | Fuente de cada elemento entre corchetes, ver cabecera |
+endlegend
+
+@enduml

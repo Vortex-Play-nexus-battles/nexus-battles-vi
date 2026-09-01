@@ -1,0 +1,160 @@
+@startuml ACT-PL-01-cambio-parametro
+' =============================================================================
+'  ACT-PL-01 · Diagrama de actividades — Cambio de un parametro del sistema
+'  Issue #78 (Jira SCRUM-1014) · Subtarea SCRUM-1044 · Sprint 1 · Grupo 6
+'
+'  QUE REPRESENTA
+'  El flujo de un cambio de parametro de principio a fin: trazado, autorizacion,
+'  validacion, rechazo de lo inalterable, versionado y persistencia.
+'
+'  QUE NO REPRESENTA, Y POR QUE
+'  La propagacion del cambio a los demas servicios. Ninguna fuente define como
+'  ocurre: no hay evento en contracts/eventos (solo README), ni contrato, ni
+'  requisito que lo describa. Aparece como actividad PENDIENTE, sin inventar
+'  mensajeria, cola ni llamada.
+'
+'  ESTADO DEL FLUJO
+'  Las actividades de trazado y de formato de error se apoyan en codigo que YA
+'  EXISTE. Las de parametros son diseno hacia adelante: admin-parametros no
+'  tiene todavia ninguna clase de dominio. Se distinguen con marcas.
+'
+'  FUENTES
+'   [CODE] FiltroDeTraza y ErrorDeNegocio en shared/libs — implementados
+'   [SEG]  CadenaDeSeguridad — implementado
+'   [CH]   .claude/rules/project-charter.md — valores inalterables, versionado
+'   [P]    CLAUDE.md, 12 reglas de plataforma — reglas 2, 4, 5, 7, 8
+'   [RBAC] contracts/openapi/rbac.yaml — matriz de permisos
+' =============================================================================
+
+skinparam shadowing false
+
+title ACT-PL-01 · Cambio de un parametro del sistema\nDISENO HACIA ADELANTE salvo lo marcado como implementado · Issue #78
+
+start
+
+partition "Administrador" {
+  :Solicita cambiar el valor\nde un parametro;
+  note right
+    [P] Regla 2: la peticion entra
+    bajo /api/v1.
+    Que rol concreto puede hacerlo
+    es INFERENCIA, ver UC-06.
+  end note
+}
+
+partition "admin-parametros" {
+
+  #LightGreen:Asignar o propagar\nel identificador de traza;
+  note right
+    IMPLEMENTADO [CODE]
+    FiltroDeTraza, registrado con
+    HIGHEST_PRECEDENCE: corre antes
+    que la seguridad para que hasta
+    un rechazo salga con traza.
+  end note
+
+  #LightGreen:Validar el token de Keycloak;
+  note right
+    IMPLEMENTADO [SEG]
+    CadenaDeSeguridad: sin estado,
+    sin CSRF, roles traducidos por
+    ConversorRolesJwt.
+
+    PENDIENTE: [RBAC] no define
+    ninguna accion para parametros.
+    No hay permiso que exigir todavia.
+  end note
+
+  if (¿La peticion es valida?) then (no)
+    #Pink:Rechazar con problem details\n(400, errores por campo);
+    note right
+      IMPLEMENTADO [CODE]
+      ErrorDeNegocio + ErrorDeCampo.
+      [P] Regla 4: mismo formato de
+      error en los 20 modulos.
+    end note
+    stop
+  else (si)
+  endif
+
+  if (¿El parametro es ajustable?) then (no)
+    #Pink:Rechazar: valor inalterable;
+    note right
+      [CH] "Los valores numericos de
+      estadisticas, costos, efectos,
+      comisiones, limites y plazos son
+      INALTERABLES. No son parametros
+      de ajuste libre para el
+      desarrollador."
+
+      Es el unico rechazo de negocio
+      que una fuente exige de forma
+      explicita en este flujo.
+    end note
+    stop
+  else (si)
+  endif
+
+  :Registrar una nueva version\ndel valor, con su vigencia;
+  note right
+    PROPUESTA
+    [CH] y [P] regla 8 exigen
+    versionado y trazabilidad del
+    cambio. Por eso se anade una
+    version en vez de sobrescribir.
+
+    PENDIENTE: cuanto historico se
+    conserva. Nadie lo ha fijado.
+  end note
+
+  :Guardar en el esquema propio\ndel servicio;
+  note right
+    PROPUESTA
+    [P] Regla 7: aislamiento de datos.
+    [P] Regla 8: todo cambio de esquema
+    por Flyway, versionado, nunca a mano.
+  end note
+
+  #LightGreen:Responder con la traza\nen la cabecera;
+  note right
+    IMPLEMENTADO [CODE]
+    El filtro devuelve traceparent
+    y limpia el MDC en el finally.
+  end note
+}
+
+partition "Resto de servicios" {
+  #LightGray:PENDIENTE — propagacion\ndel cambio;
+  note right
+    NO SE MODELA EL MECANISMO.
+
+    Ninguna fuente define como llega el
+    cambio a los demas servicios:
+      - contracts/eventos solo tiene
+        README; el catalogo de eventos
+        es entregable de Sprint 2.
+      - Ningun requisito describe
+        recarga en caliente ni difusion.
+      - [R] RabbitMQ existe en la pila,
+        pero que se use aqui seria una
+        suposicion.
+
+    Dibujar una cola, un evento o una
+    llamada seria inventar el diseno de
+    otro sprint. Queda como actividad
+    pendiente, a proposito.
+  end note
+}
+
+stop
+
+legend right
+  |= Color |= Significado |
+  | verde | Apoyado en codigo que ya existe |
+  | rosa | Rechazo exigido por una fuente |
+  | gris | Pendiente: sin definicion, no se inventa |
+  | sin color | Propuesta de diseno hacia adelante |
+  | CODE SEG CH P RBAC | Fuente de cada paso, ver cabecera |
+endlegend
+
+@enduml
