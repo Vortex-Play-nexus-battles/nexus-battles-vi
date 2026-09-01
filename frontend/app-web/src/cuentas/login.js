@@ -67,10 +67,10 @@ function ocultarEstado() {
  * @param {number} status
  * @param {string} [mensajeServidor]
  */
-function mensajeDeError(status, mensajeServidor) {
+export function mensajeDeError(status, mensajeServidor) {
   switch (status) {
     case 401:
-      return mensajeServidor || 'Correo o contraseña incorrectos.';
+      return 'Acceso rechazado. El correo o la contraseña son incorrectos, o estas credenciales no están registradas en este ambiente.';
     case 403:
       return mensajeServidor || 'Esta cuenta no puede iniciar sesión en este momento.';
     case 423:
@@ -125,7 +125,7 @@ form.addEventListener('submit', async (evento) => {
     ocultarEstado();
     // TODO equipo: apuntar a la pantalla real post-login cuando exista.
     window.location.href = './';
-  } catch (error) {
+  } catch {
     setEstado('No pudimos conectar con el servidor. Intenta de nuevo.', 'error');
   } finally {
     botonEnviar.disabled = false;
