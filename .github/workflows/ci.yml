@@ -140,6 +140,8 @@ jobs:
     steps:
       - name: Descargar el repositorio
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Configurar JDK 21 (Temurin)
         uses: actions/setup-java@v4
@@ -179,20 +181,32 @@ jobs:
         # El plugin de Sonar no esta declarado en build.gradle (no debemos
         # tocar ese archivo), asi que se inyecta solo para esta corrida de CI
         # mediante un init script (ver sonar-init.gradle en esta misma carpeta).
-        # La ruta del reporte XML es la que fija explicitamente
-        # buildSrc/nexus.spring-conventions.gradle (xml.required = true), no
-        # una ruta por defecto asumida.
+        #
+        # Se invoca la tarea "sonar" DEL SERVICIO, no la del proyecto raiz
+        # (issue #198). La del raiz analiza el monorepo entero, asi que cada job
+        # subia los 20 modulos a la clave de proyecto de su servicio habiendo
+        # ejecutado las pruebas de uno solo; los otros 19 aportaban cero
+        # cobertura y la compuerta fallaba siempre, con cualquier cobertura real.
+        #
+        # Tampoco se pasan ya projectBaseDir, sources, tests ni la ruta del XML
+        # de JaCoCo: eran relativas a la raiz del repo, pero Sonar las resuelve
+        # contra el directorio base de cada modulo, y ademas se heredaban como
+        # propiedad global en todos ellos. El plugin de Gradle deduce las cuatro
+        # del propio proyecto, y la de JaCoCo la toma de la tarea
+        # jacocoTestReport que ya configura buildSrc/nexus.spring-conventions
+        # (xml.required = true). Asi vale igual para los 20 servicios, sin
+        # ninguna ruta escrita a mano.
+        #
         # sonar.qualitygate.wait=true hace que esta tarea falle si el Quality
         # Gate de SonarQube Cloud queda en rojo (cubre CA-03: cobertura < 80%).
         run: |
-          ./gradlew sonar --no-daemon --refresh-dependencies \
+          ./gradlew ${{ matrix.rutaGradle }}:sonar --no-daemon --refresh-dependencies \
             --init-script .github/workflows/sonar-init.gradle \
             -Dsonar.organization=${{ env.SONAR_ORGANIZATION }} \
             -Dsonar.host.url=${{ env.SONAR_HOST_URL }} \
             -Dsonar.token=$SONAR_TOKEN \
             -Dsonar.projectKey=${{ matrix.sonarProjectKey }} \
-            -Dnexus.sonar.projectPath=${{ matrix.rutaGradle }} \
-            -Dsonar.coverage.jacoco.xmlReportPaths=${{ matrix.ruta }}/build/reports/jacoco/test/jacocoTestReport.xml \
+            -DmoduloObjetivo=${{ matrix.rutaGradle }} \
             -Dsonar.qualitygate.wait=true
 
       - name: (Gradle) Publicar reporte de cobertura

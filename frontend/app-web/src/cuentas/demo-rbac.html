@@ -9,7 +9,7 @@
   <body>
     <header class="cromo">
       <h1>Demo RBAC (local)</h1>
-      <p>HU-RBAC-001 / HU-RBAC-004 · no subir · no reemplaza las pantallas de cuentas</p>
+      <p>HU-RBAC-001 / HU-RBAC-004 · evidencia técnica de autorización</p>
     </header>
 
     <main>
@@ -38,56 +38,46 @@
         <span id="estado-roles" class="estado carga">Cargando catálogo de roles…</span>
       </section>
 
-      <section class="tarjeta">
-        <h2>Acciones visibles según el rol</h2>
-        <p class="ayuda">
-          Los botones con <code>data-has-permission</code> se ocultan si el rol no los tiene. Eso es
-          la UI; el servidor igual rechaza si se llama a mano.
-        </p>
-        <div class="acciones" id="acciones-ui">
-          <button type="button" class="btn-contorno" data-has-permission="CREAR_CUENTA_JUGADOR">
-            Crear cuenta jugador
-          </button>
-          <button type="button" class="btn-contorno" data-has-permission="MODIFICAR_PERFIL_PROPIO">
-            Modificar perfil propio
-          </button>
-          <button type="button" class="btn-contorno" data-has-permission="PUBLICAR_COMENTARIOS">
-            Publicar comentarios
-          </button>
-          <button type="button" class="btn-contorno" data-has-permission="ELIMINAR_COMENTARIO_PROPIO">
-            Eliminar comentario propio
-          </button>
-          <button type="button" class="btn-contorno" data-has-permission="MODERAR_COMENTARIOS">
-            Moderar comentarios
-          </button>
-          <button type="button" class="btn-contorno" data-has-permission="EMITIR_ADVERTENCIAS">
-            Emitir advertencias
-          </button>
-          <button type="button" class="btn-contorno" data-has-permission="SUSPENDER_USUARIOS">
-            Suspender usuarios
-            <span class="temporal"> (temporal en Moderador)</span>
-          </button>
-          <button type="button" class="btn-primario" data-has-permission="BANEAR_DEFINITIVAMENTE">
-            Banear definitivamente
-          </button>
-          <button type="button" class="btn-contorno" data-has-permission="GESTIONAR_PRODUCTOS">
-            Gestionar productos
-          </button>
-          <button type="button" class="btn-contorno" data-has-permission="CREAR_ADMIN_MODERADOR">
-            Crear admin / moderador
-          </button>
-          <button type="button" class="btn-acento" data-has-permission="ASIGNAR_ROL">
-            Asignar rol
-          </button>
+      <section class="tarjeta matriz-tarjeta" aria-labelledby="titulo-matriz">
+        <h2 id="titulo-matriz">Matriz de permisos</h2>
+        <p id="descripcion-matriz" class="ayuda">Cargando la matriz vigente desde el servidor…</p>
+        <div class="tabla-responsive">
+          <table class="matriz" aria-describedby="descripcion-matriz">
+            <thead>
+              <tr>
+                <th scope="col">Acción</th>
+                <th scope="col">Jugador</th>
+                <th scope="col">Moderador</th>
+                <th scope="col">Administrador</th>
+                <th scope="col">Super Admin</th>
+              </tr>
+            </thead>
+            <tbody id="matriz-permisos">
+              <tr><td colspan="5">Cargando matriz de permisos…</td></tr>
+            </tbody>
+          </table>
         </div>
+        <p class="ayuda matriz-nota">
+          Los valores provienen de <code>RbacMatrixRepository</code> a través del servidor. Si la
+          matriz no está disponible, la interfaz no habilita acciones por defecto.
+        </p>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Acciones visibles para el rol activo</h2>
+        <p class="ayuda">
+          Los botones se construyen desde la matriz del servidor y se ocultan si el rol no tiene el
+          permiso. Esto es la UI; el servidor igual rechaza si se llama a mano.
+        </p>
+        <div class="acciones" id="acciones-ui" aria-live="polite"></div>
       </section>
 
       <section class="tarjeta">
         <h2>Intento directo al servidor</h2>
         <p class="ayuda">
           Estas llamadas van siempre, aunque la UI las oculte. Mandan
-          <code>X-User-Role</code> (mientras no exista login). El interceptor muestra el 403 aquí,
-          sin <code>alert</code>.
+          <code>X-User-Role</code> como mecanismo temporal de la demo, hasta integrar Keycloak/JWT.
+          El interceptor muestra el 403 aquí, sin <code>alert</code>.
         </p>
         <div class="fila">
           <label>

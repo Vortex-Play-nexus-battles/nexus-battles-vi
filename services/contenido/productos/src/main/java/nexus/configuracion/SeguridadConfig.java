@@ -14,7 +14,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -31,7 +30,11 @@ public class SeguridadConfig {
                         JwtAuthenticationConverter convertidorRoles) throws Exception {
 
                 http
-                        .csrf(AbstractHttpConfigurer::disable)
+                        // La API usa exclusivamente tokens Bearer en el encabezado y no
+                        // autenticacion basada en cookies. Se excluye solo la API versionada
+                        // y se conserva la proteccion CSRF para cualquier otra superficie web.
+                        .csrf(csrf -> csrf
+                                .ignoringRequestMatchers("/api/v1/**"))
                         .sessionManagement(session -> session
                                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                         .authorizeHttpRequests(autorizacion -> autorizacion
