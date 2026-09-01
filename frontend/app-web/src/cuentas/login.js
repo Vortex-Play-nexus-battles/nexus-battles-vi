@@ -18,6 +18,7 @@ const URL_LOGIN = '/api/v1/auth/login';
 // alguna otra vista o si falta construirla como parte del RBAC real.
 const CLAVE_ROL = 'nexus.rolActual';
 const CLAVE_APODO = 'nexus.apodoActual';
+const CLAVE_TOKEN = 'nexus.token';
 
 /** @type {HTMLFormElement} */
 const form = document.getElementById('formLogin');
@@ -116,6 +117,7 @@ form.addEventListener('submit', async (evento) => {
     setCurrentRole(body.rol);
     sessionStorage.setItem(CLAVE_ROL, body.rol);
     sessionStorage.setItem(CLAVE_APODO, body.apodo);
+    sessionStorage.setItem(CLAVE_TOKEN, body.token);
 
     if (body.dispositivoNuevo) {
       avisoDispositivo.hidden = false;
