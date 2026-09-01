@@ -4,9 +4,11 @@ import java.net.URI;
 
 import jakarta.validation.Valid;
 import nexus.aplicacion.CrearProductoServicio;
+import nexus.aplicacion.ConsultarEstadoCatalogoServicio;
 import nexus.aplicacion.ProductoMapper;
 import nexus.dominio.Producto;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,13 +19,21 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProductosController {
 
         private final CrearProductoServicio servicio;
+        private final ConsultarEstadoCatalogoServicio consultaEstado;
         private final ProductoMapper mapper;
 
         public ProductosController(
                         CrearProductoServicio servicio,
+                        ConsultarEstadoCatalogoServicio consultaEstado,
                         ProductoMapper mapper) {
                 this.servicio = servicio;
+                this.consultaEstado = consultaEstado;
                 this.mapper = mapper;
+        }
+
+        @GetMapping("/estadisticas")
+        public ResumenCatalogo consultarEstado() {
+                return consultaEstado.consultar();
         }
 
         @PostMapping

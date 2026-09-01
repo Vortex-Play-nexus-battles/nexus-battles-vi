@@ -90,5 +90,7 @@ class ProductoRepositoryTest {
                 assertEquals(ahora, recuperado.modificadoEn());
                 assertTrue(repositorio.existsById(producto.id()));
                 assertEquals(1, repositorio.count());
+                assertEquals(1, repositorio.countByTipo(TipoProducto.ARMA));
+                assertEquals(1, repositorio.countByEstado(EstadoProducto.ACTIVO));
         }
 }
