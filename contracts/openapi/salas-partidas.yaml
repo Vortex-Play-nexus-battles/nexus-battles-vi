@@ -129,8 +129,15 @@ paths:
         jugador seleccione una e ingrese (RF-JUE-002).
 
         La paginacion es de 16 elementos por pagina, valor fijado en el sistema
-        de diseno (`--elementos-por-pagina`). Las salas privadas no aparecen en
-        el listado: se accede a ellas por codigo de invitacion.
+        de diseno y confirmado por el componente `Paginacion`, cuya descripcion
+        cita RNF-USA-001: «dieciseis elementos por pagina en vitrinas y
+        listados».
+
+        LAS SALAS PRIVADAS SI APARECEN. La Pantalla 2 del sistema de diseno
+        (nodo 19:29) pinta ocho tarjetas y dos llevan la insignia `Privada`.
+        Aparecer no es poder entrar: el ingreso a una privada sin codigo se
+        rechaza con `403` en `POST /salas/{idSala}/participantes`. Si no
+        aparecieran, ese 403 seria inalcanzable desde el listado.
       operationId: listarSalas
       parameters:
         - name: pagina
@@ -153,8 +160,16 @@ paths:
             $ref: '#/components/schemas/EstadoSala'
         # RETIRADO: buscaba por nombre de sala, y las salas no tienen nombre.
         # Ningun requisito pide buscar en el listado; RF-JUE-002 solo habla de
-        # seleccionar una sala de la lista. Si HU-SAL-002 necesita busqueda,
-        # primero hay que decidir sobre que campo, y eso no esta definido.
+        # seleccionar una sala de la lista.
+        #
+        # RESUELTO EN HU-SAL-002. La Pantalla 2 conservaba un campo «Buscar una
+        # sala por nombre...» que quedo huerfano al retirar `Nombre` de la
+        # tarjeta en HU-SAL-001: ninguna de sus ocho tarjetas mostraba un nombre,
+        # porque la propiedad `Meta` de `Tarjeta de sala` solo lleva
+        # participantes, recompensa y heroe de la IA. El campo se elimino de la
+        # maqueta, no solo del codigo, para que el diseno no prometa una funcion
+        # que no existe. Quedan los dos filtros que si tienen respaldo:
+        # modalidad y estado.
       responses:
         '200':
           description: Pagina de salas disponibles
@@ -491,8 +506,9 @@ components:
           type: boolean
           default: false
           description: |
-            Si es privada no aparece en el listado publico y solo se entra con
-            el codigo de invitacion.
+            Una sala privada aparece en el listado con la insignia `Privada`,
+            pero solo se entra con el codigo de invitacion: sin el, el ingreso
+            se rechaza con `403`.
         tamanoEquipo:
           type: integer
           minimum: 1
@@ -517,22 +533,48 @@ components:
         juego y si se incluye un heroe controlado por la inteligencia
         artificial».
 
-        PENDIENTE DE EQUIPO: que texto identifica a una sala en la tarjeta del
-        listado. Ningun documento lo define. No se inventa aqui.
-      required: [id, estado, modalidad, maximoParticipantes, participantes, recompensaCreditos, anfitrion]
+        La `Tarjeta de sala` del sistema de diseno (conjunto 14:33) confirma esa
+        lista y no anade nada: tiene exactamente dos propiedades, la variante
+        `Estado` -Abierta, Llena, Privada- y un unico texto `Meta` que los ocho
+        ejemplos de la Pantalla 2 resuelven como
+        «4 de 6 jugadores · 320 creditos · Con heroe de la IA».
+
+        Por eso aqui NO viajan ni el apodo del anfitrion, ni el heroe de cada
+        participante, ni un indicador de preparacion: ninguna pantalla los
+        muestra y ningun requisito los pide. Un participante se identifica por
+        su UUID, que es lo unico que este servicio conoce — el apodo pertenece
+        al modulo de cuentas y no se replica aqui (regla 7 de plataforma).
+      required: [id, estado, modalidad, maximoParticipantes, ocupacion, recompensaCreditos, incluirHeroeIA]
       properties:
         id: { type: string, format: uuid }
         estado: { $ref: '#/components/schemas/EstadoSala' }
         modalidad: { $ref: '#/components/schemas/Modalidad' }
         maximoParticipantes: { type: integer, minimum: 2, maximum: 6 }
+        ocupacion:
+          type: integer
+          minimum: 0
+          description: |
+            Cuantos hay dentro. Es el primer numero de «N de M jugadores» en la
+            tarjeta. Se deriva de `participantes`, nunca se almacena aparte.
         recompensaCreditos: { type: integer, minimum: 0 }
-        incluirHeroeIA: { type: boolean }
+        incluirHeroeIA:
+          type: boolean
+          description: |
+            Si la sala incluye un heroe controlado por la IA (RF-JUE-001). La
+            tarjeta lo pinta como el sufijo «· Con heroe de la IA», presente
+            solo cuando es verdadero.
         privada: { type: boolean }
         tamanoEquipo: { type: integer, minimum: 1, maximum: 3 }
-        anfitrion: { $ref: '#/components/schemas/ResumenJugador' }
+        idAnfitrion:
+          type: string
+          format: uuid
+          description: |
+            Quien creo la sala. Solo el puede cancelarla. Ninguna pantalla lo
+            muestra todavia, asi que viaja como identificador, no como perfil.
         participantes:
           type: array
-          items: { $ref: '#/components/schemas/Participante' }
+          description: Identificadores de quienes estan dentro, el anfitrion incluido.
+          items: { type: string, format: uuid }
         idPartida:
           type: [string, 'null']
           format: uuid
