@@ -48,6 +48,9 @@ public class LoginService {
     @Autowired
     private CorreoClient correoClient;
 
+    @Autowired
+    private JwtService jwtService;
+
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     @Transactional
@@ -121,12 +124,18 @@ public class LoginService {
 
         auditLog.info("LOGIN_EXITOSO email={} ip={}", datos.getEmail(), direccionIp);
 
+        // Token JWT firmado — reemplaza la confianza ciega en X-User-Role.
+        // Pendiente: Andrés debe actualizar su SecurityInterceptor para
+        // verificar este token en vez de leer el header directamente.
+        String token = jwtService.generarToken(usuario.getApodo(), usuario.getRol().getNombre());
+
         return new LoginResponse(
             usuario.getId(),
             usuario.getApodo(),
             usuario.getEmail(),
             usuario.getRol().getNombre(),
-            dispositivoNuevo
+            dispositivoNuevo,
+            token
         );
     }
 
