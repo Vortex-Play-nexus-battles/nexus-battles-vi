@@ -83,6 +83,25 @@ describe('Cuadricula de la vitrina a 1360 x 768', () => {
     expect(editados).toEqual([pagina.elementos[0]]);
   });
 
+  test('un heroe permite abrir su equipamiento desde la tarjeta', () => {
+    const seleccionados = [];
+    const pagina = paginaCon(1);
+    pagina.elementos[0].tipo = 'HEROE';
+    const vitrina = construirVitrina(pagina, {
+      alEquipar: (heroe) => seleccionados.push(heroe),
+    });
+
+    vitrina.querySelector('.vitrina__equipo').click();
+
+    expect(seleccionados).toEqual([pagina.elementos[0]]);
+  });
+
+  test('un elemento que no es heroe no muestra la accion de equipo', () => {
+    const vitrina = construirVitrina(paginaCon(1), { alEquipar: () => {} });
+
+    expect(vitrina.querySelector('.vitrina__equipo')).toBeNull();
+  });
+
   test('el nombre propio del jugador se escribe como texto y nunca como marcado', () => {
     const pagina = paginaCon(1);
     pagina.elementos[0].nombrePropio = '<img src=x onerror="robar()">';
