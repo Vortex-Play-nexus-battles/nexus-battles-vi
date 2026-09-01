@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import org.junit.jupiter.api.DisplayName;
@@ -25,6 +26,8 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import nexus.dominio.Producto;
+import nexus.dominio.EstadoProducto;
+import nexus.dominio.TipoProducto;
 import nexus.persistencia.ProductoRepository;
 import org.junit.jupiter.api.BeforeEach;
 import java.util.stream.Stream;
@@ -147,6 +150,33 @@ class ProductosApiTest {
                         .andExpect(jsonPath("$.type")
                                 .value("urn:nexus:problema:no-autenticado"))
                         .andExpect(jsonPath("$.status").value(401));
+        }
+
+        @Test
+        @DisplayName("consulta el total y la distribucion del catalogo")
+        void consultaResumenCatalogo() throws Exception {
+                when(productoRepository.count()).thenReturn(6L);
+                when(productoRepository.countByTipo(TipoProducto.HEROE))
+                        .thenReturn(1L);
+                when(productoRepository.countByTipo(TipoProducto.ARMA))
+                        .thenReturn(2L);
+                when(productoRepository.countByEstado(EstadoProducto.ACTIVO))
+                        .thenReturn(5L);
+                when(productoRepository.countByEstado(EstadoProducto.SUSPENDIDO))
+                        .thenReturn(1L);
+
+                mvc.perform(get("/api/v1/productos/estadisticas")
+                                .with(jwt()))
+                        .andExpect(status().isOk())
+                        .andExpect(content().contentTypeCompatibleWith(
+                                MediaType.APPLICATION_JSON))
+                        .andExpect(jsonPath("$.total").value(6))
+                        .andExpect(jsonPath("$.porTipo.HEROE").value(1))
+                        .andExpect(jsonPath("$.porTipo.ARMA").value(2))
+                        .andExpect(jsonPath("$.porTipo.HABILIDAD").value(0))
+                        .andExpect(jsonPath("$.porEstado.ACTIVO").value(5))
+                        .andExpect(jsonPath("$.porEstado.SUSPENDIDO").value(1))
+                        .andExpect(jsonPath("$.porEstado.UNICO").value(0));
         }
 
         @Test
