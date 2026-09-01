@@ -3,6 +3,7 @@ package com.nexusbattles.plataforma.salaspartidas.aplicacion;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CreditosInsuficientes;
 import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Modalidad;
+import com.nexusbattles.plataforma.salaspartidas.dominio.PaginaDeSalas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.ParametrosDeSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.ParametrosInvalidos;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
@@ -75,6 +76,13 @@ class CrearSalaTest {
         @Override
         public Optional<Sala> buscarPorId(UUID id) {
             return Optional.empty();
+        }
+
+        /** Una base caida tampoco puede listar: falla igual que al guardar. */
+        @Override
+        public PaginaDeSalas listar(Modalidad modalidad, EstadoSala estado,
+                                            int pagina, int tamano) {
+            throw new IllegalStateException("La base de datos no responde.");
         }
     }
 
