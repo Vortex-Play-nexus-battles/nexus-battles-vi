@@ -10,9 +10,14 @@ capa de aplicacion sin acoplarlas a transporte o persistencia.
 |---|---|
 | HU-JUE-001 | Sorteo uniforme del orden inicial, cada participante exactamente una vez, secuencia inmutable durante el combate y avance circular entre rondas |
 | HU-JUE-002 | Una sola accion por turno, avance al resolver o expirar y la misma duracion configurable para todos los participantes |
+| HU-JUE-005 | Fallecimiento al llegar a cero vida, cierre individual o por equipos y rechazo de acciones posteriores |
 
 El sorteo usa Fisher-Yates y `SecureRandom` en produccion. Las pruebas inyectan
 un generador con semilla para que la validacion estadistica sea reproducible.
+
+El cierre produce un único `ResultadoPartida` y pasa por el puerto
+`AlCerrarPartida`, que permite conectar recompensas e historial sin tratar de
+forma distinta los combates individuales y cooperativos.
 
 ## Como correr
 
@@ -25,7 +30,6 @@ La tarea `check` ejecuta JUnit y falla si la cobertura de lineas es inferior al
 
 ## Pendiente
 
-- Integrar `ColaTurnos` y `ControlAccionesTurno` con la entidad `Partida` cuando
-  esta se implemente.
 - Exponer el inicio de partida desde la capa de aplicacion; HU-JUE-001 y
   HU-JUE-002 no exigen por si solas un endpoint.
+- Conectar el daño de HU-JUE-003 con `Partida.aplicarDanio`.
