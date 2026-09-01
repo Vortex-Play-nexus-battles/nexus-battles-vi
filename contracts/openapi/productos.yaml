@@ -1,0 +1,422 @@
+openapi: 3.1.0
+info:
+  title: Servicio de productos
+  version: 1.0.0
+  description: >
+    Creación de productos del catálogo de THE NEXUS BATTLES VI
+    (HU-PRD-001). Contrato publicado antes de la implementación,
+    conforme a la regla de plataforma "contrato primero".
+
+servers:
+  - url: /
+    description: Servicio publicado en el mismo origen configurado por la plataforma.
+
+paths:
+  /api/v1/productos/estadisticas:
+    get:
+      summary: Consulta el estado del catálogo
+      operationId: consultarEstadoCatalogo
+      description: Devuelve el total y la distribución de productos por tipo y estado.
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Resumen actual del catálogo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResumenCatalogo"
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+  /api/v1/productos:
+    post:
+      summary: Crea un producto en el catálogo
+      operationId: crearProducto
+      description: >
+        Operación permitida únicamente a los roles ADMINISTRADOR y
+        SUPER_ADMINISTRADOR. El identificador, el estado inicial ACTIVO,
+        la versión y las fechas son generados por el sistema.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudCrearProducto"
+      responses:
+        "201":
+          description: Producto creado y registrado en el catálogo
+          headers:
+            Location:
+              description: Ubicación del producto creado
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductoCreado"
+        "400":
+          description: >
+            Solicitud inválida por campos obligatorios ausentes, precios
+            negativos, tiraje inválido, tipo no permitido o atributos que
+            no corresponden al tipo seleccionado.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "403":
+          description: El usuario no tiene permiso para crear productos
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "500":
+          description: Error interno al registrar el producto
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Token emitido por Keycloak. La creación de productos requiere el rol
+        ADMINISTRADOR o SUPER_ADMINISTRADOR.
+  schemas:
+    SolicitudCrearProducto:
+      oneOf:
+        - $ref: "#/components/schemas/SolicitudCrearHeroe"
+        - $ref: "#/components/schemas/SolicitudCrearHabilidad"
+        - $ref: "#/components/schemas/SolicitudCrearArma"
+        - $ref: "#/components/schemas/SolicitudCrearArmadura"
+        - $ref: "#/components/schemas/SolicitudCrearItem"
+        - $ref: "#/components/schemas/SolicitudCrearEpica"
+      discriminator:
+        propertyName: tipo
+        mapping:
+          HEROE: "#/components/schemas/SolicitudCrearHeroe"
+          HABILIDAD: "#/components/schemas/SolicitudCrearHabilidad"
+          ARMA: "#/components/schemas/SolicitudCrearArma"
+          ARMADURA: "#/components/schemas/SolicitudCrearArmadura"
+          ITEM: "#/components/schemas/SolicitudCrearItem"
+          EPICA: "#/components/schemas/SolicitudCrearEpica"
+
+    CamposComunesDeCreacion:
+      type: object
+      required:
+        - nombre
+        - imagen
+        - descripcion
+        - tipo
+        - tiraje
+        - premium
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+          description: Nombre visible del producto.
+        imagen:
+          type: string
+          minLength: 1
+          description: >
+            Referencia de la imagen del producto. Su mecanismo de almacenamiento
+            será definido por la plataforma.
+        descripcion:
+          type: string
+          minLength: 1
+          description: Descripción visible del producto.
+        tipo:
+          $ref: "#/components/schemas/TipoProducto"
+        tiraje:
+          description: >
+            -1 representa tiraje ilimitado; un entero mayor que cero
+            representa el total exacto.
+          anyOf:
+            - type: integer
+              const: -1
+            - type: integer
+              minimum: 1
+        precioCreditos:
+          type: integer
+          minimum: 0
+          description: Obligatorio cuando premium es false.
+        precioMonedaReal:
+          type: number
+          minimum: 0
+          description: Obligatorio cuando premium es true.
+        premium:
+          type: boolean
+          description: >
+            Un producto premium se ofrece únicamente en moneda real
+            y no es subastable.
+      allOf:
+        - if:
+             type: object
+             properties:
+              premium:
+                const: true
+             required: [premium]
+          then:
+            type: object
+            properties:
+              precioMonedaReal:
+                type: number
+                minimum: 0
+              precioCreditos:
+                type: integer
+                minimum: 0
+            required: [precioMonedaReal]
+            not:
+              type: object
+              properties:
+                precioCreditos:
+                  type: integer
+              required: [precioCreditos]
+          else:
+            type: object
+            properties:
+              precioCreditos:
+                type: integer
+                minimum: 0
+            required: [precioCreditos]
+
+    SolicitudCrearHeroe:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: "#/components/schemas/CamposComunesDeCreacion"
+        - type: object
+          required: [prototipo]
+          properties:
+            tipo:
+              const: HEROE
+            prototipo:
+              type: string
+              description: >
+                Prototipo existente en el servicio de héroes. Sus estadísticas
+                no se duplican ni se ingresan manualmente en productos.
+              enum:
+                - Guerrero Tanque
+                - Guerrero Armas
+                - Mago Fuego
+                - Mago Hielo
+                - Pícaro Veneno
+                - Pícaro Machete
+                - Chamán
+                - Médico
+
+    SolicitudCrearHabilidad:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: "#/components/schemas/CamposComunesDeCreacion"
+        - type: object
+          required: [heroe, costoPoder, multiplicadorNivel, turnosCarga]
+          properties:
+            tipo:
+              const: HABILIDAD
+            heroe:
+              type: string
+              format: uuid
+              description: Identificador del producto de tipo HÉROE asociado.
+            costoPoder:
+              type: integer
+              minimum: 1
+            multiplicadorNivel:
+              type: number
+              exclusiveMinimum: 0
+            turnosCarga:
+              type: integer
+              minimum: 0
+
+    SolicitudCrearArma:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: "#/components/schemas/CamposComunesDeCreacion"
+        - type: object
+          required: [poderDeAtaque, tasaDeCaida]
+          properties:
+            tipo:
+              const: ARMA
+            poderDeAtaque:
+              type: integer
+              minimum: 1
+            tasaDeCaida:
+              type: number
+              minimum: 0
+              maximum: 100
+
+    SolicitudCrearArmadura:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: "#/components/schemas/CamposComunesDeCreacion"
+        - type: object
+          required: [defensa, parte, tasaDeCaida]
+          properties:
+            tipo:
+              const: ARMADURA
+            defensa:
+              type: integer
+              minimum: 1
+            parte:
+              type: string
+              enum:
+                - CASCO
+                - PECHO
+                - GUANTES
+                - BRAZALETES
+                - PANTALON
+                - ZAPATOS
+            tasaDeCaida:
+              type: number
+              minimum: 0
+              maximum: 100
+
+    SolicitudCrearItem:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: "#/components/schemas/CamposComunesDeCreacion"
+        - type: object
+          required: [efecto, tasaDeCaida]
+          properties:
+            tipo:
+              const: ITEM
+            efecto:
+              type: string
+              minLength: 1
+            tasaDeCaida:
+              type: number
+              minimum: 0
+              maximum: 100
+
+    SolicitudCrearEpica:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: "#/components/schemas/CamposComunesDeCreacion"
+        - type: object
+          required:
+            - heroe
+            - turnosRecarga
+            - efectoGeneral
+            - efectoPotenciado
+          properties:
+            tipo:
+              const: EPICA
+            heroe:
+              type: string
+              format: uuid
+              description: Identificador del producto de tipo HÉROE asociado.
+            turnosRecarga:
+              type: integer
+              minimum: 0
+            efectoGeneral:
+              type: string
+              minLength: 1
+            efectoPotenciado:
+              type: string
+              minLength: 1
+
+    TipoProducto:
+      type: string
+      enum:
+        - HEROE
+        - HABILIDAD
+        - ARMA
+        - ARMADURA
+        - ITEM
+        - EPICA
+
+    EstadoProducto:
+      type: string
+      enum:
+        - ACTIVO
+        - UNICO
+        - SUSPENDIDO
+
+    ResumenCatalogo:
+      type: object
+      required:
+        - total
+        - porTipo
+        - porEstado
+      properties:
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+        porTipo:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+          description: Cantidad de productos para cada tipo, incluidos los tipos con cero.
+        porEstado:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+          description: Cantidad de productos para cada estado, incluidos los estados con cero.
+
+    ProductoCreado:
+      allOf:
+        - $ref: "#/components/schemas/SolicitudCrearProducto"
+        - type: object
+          required:
+            - id
+            - estado
+            - version
+            - creadoEn
+            - modificadoEn
+          properties:
+            id:
+              type: string
+              format: uuid
+              description: UUID v4 generado por el sistema.
+            estado:
+              $ref: "#/components/schemas/EstadoProducto"
+            version:
+              type: integer
+              minimum: 1
+              example: 1
+            creadoEn:
+              type: string
+              format: date-time
+            modificadoEn:
+              type: string
+              format: date-time
+
+    DetalleDeProblema:
+      type: object
+      description: Formato estándar de detalles de problema (RFC 9457).
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - instance
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string

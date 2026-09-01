@@ -1,5 +1,7 @@
 package com.nexusbattles.ms_identidad.auth.service;
 
+import com.nexusbattles.ms_identidad.auth.correo.CorreoClient;
+import com.nexusbattles.ms_identidad.auth.correo.dto.CorreoAvisoAccesoRequest;
 import com.nexusbattles.ms_identidad.auth.dto.LoginRequest;
 import com.nexusbattles.ms_identidad.auth.dto.LoginResponse;
 import com.nexusbattles.ms_identidad.auth.exception.CredencialesInvalidasException;
@@ -19,8 +21,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.MessageDigest;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 @Service
@@ -40,6 +45,12 @@ public class LoginService {
     @Autowired
     private IntentosFallidosService intentosFallidosService;
 
+    @Autowired
+    private CorreoClient correoClient;
+
+    @Autowired
+    private JwtService jwtService;
+
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     @Transactional
@@ -54,9 +65,6 @@ public class LoginService {
             throw new CuentaBaneadaException("Esta cuenta ha sido baneada permanentemente.");
         }
 
-        // Corregido (hallazgo de Sanabria, punto 2): antes una cuenta recién
-        // creada por un admin (estado INACTIVO, sin contraseña conocida por
-        // nadie) podía intentar autenticarse igual, sin ningún bloqueo aquí.
         if ("INACTIVO".equals(usuario.getEstado())) {
             auditLog.info("LOGIN_RECHAZADO email={} ip={} motivo=INACTIVO", datos.getEmail(), direccionIp);
             throw new CuentaInactivaException(
@@ -101,19 +109,33 @@ public class LoginService {
         boolean dispositivoNuevo = registrarOVerificarDispositivo(usuario, huella);
 
         if (dispositivoNuevo) {
-            // TODO [INTEGRACIÓN FUTURA]: disparar notificación por correo
-            // (plataforma/correo). Contrato aún no publicado por Santiago.
+            // Integración real con el módulo de correo de Santiago Anaya
+            // (contracts/openapi/correo.yaml). Protegida con Resilience4j:
+            // si el servicio de correo falla, el login se completa igual.
+            String fechaHoraIso = OffsetDateTime.now(ZoneId.systemDefault())
+                .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+
+            correoClient.enviarAvisoAcceso(new CorreoAvisoAccesoRequest(
+                usuario.getEmail(), usuario.getApodo(), direccionIp, fechaHoraIso
+            ));
+
             auditLog.info("DISPOSITIVO_NUEVO usuarioId={} ip={}", usuario.getId(), direccionIp);
         }
 
         auditLog.info("LOGIN_EXITOSO email={} ip={}", datos.getEmail(), direccionIp);
+
+        // Token JWT firmado — reemplaza la confianza ciega en X-User-Role.
+        // Pendiente: Andrés debe actualizar su SecurityInterceptor para
+        // verificar este token en vez de leer el header directamente.
+        String token = jwtService.generarToken(usuario.getApodo(), usuario.getRol().getNombre());
 
         return new LoginResponse(
             usuario.getId(),
             usuario.getApodo(),
             usuario.getEmail(),
             usuario.getRol().getNombre(),
-            dispositivoNuevo
+            dispositivoNuevo,
+            token
         );
     }
 

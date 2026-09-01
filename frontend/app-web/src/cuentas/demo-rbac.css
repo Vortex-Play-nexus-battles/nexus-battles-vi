@@ -159,6 +159,94 @@ button:focus {
   gap: 12px;
 }
 
+.matriz-tarjeta {
+  padding: 0;
+  overflow: hidden;
+}
+
+.matriz-tarjeta h2,
+.matriz-tarjeta > .ayuda {
+  margin-left: 20px;
+  margin-right: 20px;
+}
+
+.matriz-tarjeta h2 {
+  margin-top: 20px;
+}
+
+.tabla-responsive {
+  overflow-x: auto;
+  border-top: 1px solid var(--borde-decorativo);
+  border-bottom: 1px solid var(--borde-decorativo);
+}
+
+.matriz {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.matriz th,
+.matriz td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #d4dbe9;
+  text-align: center;
+}
+
+.matriz thead th {
+  background: #e3e9f6;
+  color: var(--texto-secundario);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.matriz th:first-child,
+.matriz tbody th {
+  min-width: 300px;
+  text-align: left;
+}
+
+.matriz tbody th {
+  color: var(--texto);
+  font-weight: 600;
+}
+
+.matriz tbody tr:last-child th,
+.matriz tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.insignia {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.insignia.permitido {
+  background: var(--exito-fondo);
+  color: var(--exito);
+}
+
+.insignia.denegado {
+  background: var(--error-fondo);
+  color: var(--error);
+}
+
+.insignia.temporal {
+  background: var(--advertencia-fondo);
+  color: var(--advertencia);
+}
+
+.matriz-nota {
+  margin-top: 12px;
+  margin-bottom: 20px;
+}
+
 button {
   min-height: 40px;
   padding: 8px 16px;

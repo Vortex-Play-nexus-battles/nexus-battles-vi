@@ -1,0 +1,52 @@
+package nexus.api;
+
+import java.net.URI;
+
+import jakarta.validation.Valid;
+import nexus.aplicacion.CrearProductoServicio;
+import nexus.aplicacion.ConsultarEstadoCatalogoServicio;
+import nexus.aplicacion.ProductoMapper;
+import nexus.dominio.Producto;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/v1/productos")
+public class ProductosController {
+
+        private final CrearProductoServicio servicio;
+        private final ConsultarEstadoCatalogoServicio consultaEstado;
+        private final ProductoMapper mapper;
+
+        public ProductosController(
+                        CrearProductoServicio servicio,
+                        ConsultarEstadoCatalogoServicio consultaEstado,
+                        ProductoMapper mapper) {
+                this.servicio = servicio;
+                this.consultaEstado = consultaEstado;
+                this.mapper = mapper;
+        }
+
+        @GetMapping("/estadisticas")
+        public ResumenCatalogo consultarEstado() {
+                return consultaEstado.consultar();
+        }
+
+        @PostMapping
+        public ResponseEntity<ProductoCreado> crear(
+        @Valid @RequestBody SolicitudCrearProducto solicitud) {
+
+                Producto producto = servicio.crear(solicitud);
+                ProductoCreado respuesta = mapper.aRespuesta(producto);
+                URI ubicacion = URI.create(
+                        "/api/v1/productos/" + producto.id());
+
+                return ResponseEntity
+                        .created(ubicacion)
+                        .body(respuesta);
+        }
+}
