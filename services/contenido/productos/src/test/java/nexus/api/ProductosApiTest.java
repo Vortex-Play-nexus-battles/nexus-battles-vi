@@ -157,6 +157,33 @@ class ProductosApiTest {
         }
 
         @Test
+        @DisplayName("consulta el total y la distribucion del catalogo")
+        void consultaResumenCatalogo() throws Exception {
+                when(productoRepository.count()).thenReturn(6L);
+                when(productoRepository.countByTipo(TipoProducto.HEROE))
+                        .thenReturn(1L);
+                when(productoRepository.countByTipo(TipoProducto.ARMA))
+                        .thenReturn(2L);
+                when(productoRepository.countByEstado(EstadoProducto.ACTIVO))
+                        .thenReturn(5L);
+                when(productoRepository.countByEstado(EstadoProducto.SUSPENDIDO))
+                        .thenReturn(1L);
+
+                mvc.perform(get("/api/v1/productos/estadisticas")
+                                .with(jwt()))
+                        .andExpect(status().isOk())
+                        .andExpect(content().contentTypeCompatibleWith(
+                                MediaType.APPLICATION_JSON))
+                        .andExpect(jsonPath("$.total").value(6))
+                        .andExpect(jsonPath("$.porTipo.HEROE").value(1))
+                        .andExpect(jsonPath("$.porTipo.ARMA").value(2))
+                        .andExpect(jsonPath("$.porTipo.HABILIDAD").value(0))
+                        .andExpect(jsonPath("$.porEstado.ACTIVO").value(5))
+                        .andExpect(jsonPath("$.porEstado.SUSPENDIDO").value(1))
+                        .andExpect(jsonPath("$.porEstado.UNICO").value(0));
+        }
+
+        @Test
         @DisplayName("rechaza un jugador autenticado sin permiso administrativo")
         void rechazaUsuarioSinPermiso() throws Exception {
                 publicarComo("ROLE_JUGADOR", PRODUCTO_VALIDO)

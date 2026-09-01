@@ -12,6 +12,26 @@ servers:
     description: Servicio publicado en el mismo origen configurado por la plataforma.
 
 paths:
+  /api/v1/productos/estadisticas:
+    get:
+      summary: Consulta el estado del catálogo
+      operationId: consultarEstadoCatalogo
+      description: Devuelve el total y la distribución de productos por tipo y estado.
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Resumen actual del catálogo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResumenCatalogo"
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
   /api/v1/productos:
     post:
       summary: Crea un producto en el catálogo
@@ -360,6 +380,30 @@ components:
         - ACTIVO
         - UNICO
         - SUSPENDIDO
+
+    ResumenCatalogo:
+      type: object
+      required:
+        - total
+        - porTipo
+        - porEstado
+      properties:
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+        porTipo:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+          description: Cantidad de productos para cada tipo, incluidos los tipos con cero.
+        porEstado:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+          description: Cantidad de productos para cada estado, incluidos los estados con cero.
 
     ProductoCreado:
       allOf:

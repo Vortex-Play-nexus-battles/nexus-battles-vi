@@ -5,6 +5,7 @@ import java.net.URI;
 import jakarta.validation.Valid;
 import nexus.aplicacion.ConsultarProductoServicio;
 import nexus.aplicacion.CrearProductoServicio;
+import nexus.aplicacion.ConsultarEstadoCatalogoServicio;
 import nexus.aplicacion.ProductoMapper;
 import nexus.dominio.Producto;
 import org.springframework.http.ResponseEntity;
@@ -21,15 +22,23 @@ public class ProductosController {
 
         private final CrearProductoServicio servicio;
         private final ConsultarProductoServicio consultarServicio;
+        private final ConsultarEstadoCatalogoServicio consultaEstado;
         private final ProductoMapper mapper;
 
         public ProductosController(
                         CrearProductoServicio servicio,
                         ConsultarProductoServicio consultarServicio,
+                        ConsultarEstadoCatalogoServicio consultaEstado,
                         ProductoMapper mapper) {
                 this.servicio = servicio;
                 this.consultarServicio = consultarServicio;
+                this.consultaEstado = consultaEstado;
                 this.mapper = mapper;
+        }
+
+        @GetMapping("/estadisticas")
+        public ResumenCatalogo consultarEstado() {
+                return consultaEstado.consultar();
         }
 
         @PostMapping
