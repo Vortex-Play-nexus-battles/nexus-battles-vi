@@ -10,6 +10,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import nexus.dominio.EstadoProducto;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

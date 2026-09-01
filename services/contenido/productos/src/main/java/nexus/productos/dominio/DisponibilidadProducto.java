@@ -1,6 +1,8 @@
 package nexus.productos.dominio;
 
 import java.util.Objects;
+import nexus.dominio.EstadoProducto;
+import nexus.dominio.Producto;
 
 public final class DisponibilidadProducto {
 
@@ -34,6 +36,14 @@ public final class DisponibilidadProducto {
                     "El tiraje debe ser -1 o un número entero positivo");
         }
         return new DisponibilidadProducto(productoId, tiraje, estadoInicial);
+    }
+
+    public static DisponibilidadProducto desde(Producto producto) {
+        Objects.requireNonNull(producto, "El producto es obligatorio");
+        return new DisponibilidadProducto(
+                producto.id(),
+                producto.tiraje(),
+                producto.estado());
     }
 
     public String productoId() {

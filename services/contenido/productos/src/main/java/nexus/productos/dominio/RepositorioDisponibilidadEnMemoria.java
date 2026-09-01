@@ -4,6 +4,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
+import nexus.dominio.EstadoProducto;
 
 public final class RepositorioDisponibilidadEnMemoria
         implements RepositorioDisponibilidadProductos {

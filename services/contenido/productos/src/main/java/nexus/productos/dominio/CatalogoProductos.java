@@ -1,7 +1,9 @@
 package nexus.productos.dominio;
 
 import java.util.Objects;
+import org.springframework.stereotype.Service;
 
+@Service
 public final class CatalogoProductos {
 
     private final RepositorioDisponibilidadProductos repositorio;
