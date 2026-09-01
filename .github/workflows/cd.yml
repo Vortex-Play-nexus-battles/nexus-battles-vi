@@ -137,8 +137,34 @@ jobs:
               --arg rutaGradle "$ruta_gradle" \
               --arg servicio "$servicio" \
               --arg puerto "$puerto" \
-              '. + [{ruta:$ruta, rutaGradle:$rutaGradle, servicio:$servicio, puerto:$puerto}]')
+              '. + [{ruta:$ruta, rutaGradle:$rutaGradle, servicio:$servicio, puerto:$puerto, herramienta:"gradle"}]')
           done
+
+          # 4) services/cuentas/ms-identidad (Maven), a proposito NO
+          #    generalizado a todo services/cuentas/* -- ms-ecommerce y
+          #    ms-cumplimiento todavia no tienen Dockerfile, asi que este
+          #    flujo no puede desplegarlos aun. Cuando lo tengan, se agregan
+          #    aqui uno por uno igual que este, no con un grep generico.
+          #    Puerto 8089, mismo del lado del host que del contenedor.
+          #    PENDIENTE DE CONFIRMAR: Cristian va a mover el puerto REAL de
+          #    ms-identidad (Dockerfile EXPOSE y server.port) de 8081 a 8089
+          #    para que ya no choque con srv-comentarios (que usa 8081) y no
+          #    haga falta mapear host:contenedor distinto. El codigo de aqui
+          #    YA asume el 8089 nuevo, pero Cristian todavia no confirmo que
+          #    el cambio este hecho y probado de su lado -- si el Dockerfile
+          #    de ms-identidad sigue en 8081 cuando esto se despliegue, el
+          #    healthcheck de este workflow va a fallar contra el puerto
+          #    equivocado. No desplegar hasta que el confirme.
+          if echo "$ARCHIVOS" | grep -q '^services/cuentas/ms-identidad/'; then
+            if [ -f "services/cuentas/ms-identidad/pom.xml" ]; then
+              MATRIZ=$(echo "$MATRIZ" | jq -c \
+                --arg ruta "services/cuentas/ms-identidad" \
+                --arg servicio "ms-identidad" \
+                '. + [{ruta:$ruta, rutaGradle:"", servicio:$servicio, puerto:"8089", herramienta:"maven"}]')
+            else
+              echo "Se omite services/cuentas/ms-identidad: no tiene pom.xml"
+            fi
+          fi
 
           echo "Servicios a desplegar: $MATRIZ"
           echo "servicios=$MATRIZ" >> "$GITHUB_OUTPUT"
@@ -177,17 +203,42 @@ jobs:
         with:
           distribution: ${{ env.JAVA_DISTRIBUTION }}
           java-version: ${{ env.JAVA_VERSION }}
-          cache: gradle
+          # setup-java cachea segun la herramienta de este servicio de la
+          # matriz (gradle o maven) -- mismo patron que ci.yml.
+          cache: ${{ matrix.herramienta }}
 
-      - name: Dar permiso de ejecucion al wrapper de Gradle
+      # -------------------- Rama Gradle (servicios de plataforma) --------------------
+
+      - name: (Gradle) Dar permiso de ejecucion al wrapper
+        if: matrix.herramienta == 'gradle'
         run: chmod +x ./gradlew
 
       # bootJar (del plugin de Spring Boot, ya aplicado por
       # buildSrc/nexus.spring-conventions.gradle) genera el jar ejecutable
       # en <servicio>/build/libs/*.jar -- exactamente lo que cada
       # Dockerfile espera copiar (COPY build/libs/*.jar app.jar).
-      - name: Compilar el jar ejecutable del servicio
+      - name: (Gradle) Compilar el jar ejecutable del servicio
+        if: matrix.herramienta == 'gradle'
         run: ./gradlew ${{ matrix.rutaGradle }}:bootJar --no-daemon
+
+      # -------------------- Rama Maven (ms-identidad, cuentas) --------------------
+      # ms-identidad es un proyecto Maven independiente con su propio
+      # wrapper (igual que en ci.yml), por eso corre parado en su propia
+      # carpeta en vez de invocarse desde la raiz como los de Gradle.
+
+      - name: (Maven) Dar permiso de ejecucion al wrapper
+        if: matrix.herramienta == 'maven'
+        run: chmod +x ${{ matrix.ruta }}/mvnw
+
+      # -DskipTests: ci.yml ya corrio las pruebas antes de que esto llegara
+      # a develop: aqui solo empaquetamos. spring-boot-maven-plugin (ya
+      # declarado en el pom.xml de ms-identidad) genera el jar ejecutable
+      # en target/*.jar en la fase "package" -- lo que su Dockerfile espera
+      # copiar (COPY target/*.jar app.jar).
+      - name: (Maven) Empaquetar el jar ejecutable del servicio
+        if: matrix.herramienta == 'maven'
+        working-directory: ${{ matrix.ruta }}
+        run: ./mvnw -B package -DskipTests
 
       - name: Iniciar sesion en GitHub Container Registry
         uses: docker/login-action@v3
@@ -197,7 +248,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # El contexto del build es la carpeta del servicio (matrix.ruta): ahi
-      # es donde acaba de quedar build/libs/*.jar y donde vive su Dockerfile.
+      # es donde acaba de quedar el jar (build/libs/*.jar en Gradle,
+      # target/*.jar en Maven) y donde vive su Dockerfile.
       - name: Construir la imagen Docker
         run: |
           docker build \
@@ -234,7 +286,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,scripts/cd/desplegar.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,scripts/cd/desplegar.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -265,11 +317,21 @@ jobs:
           WEBSOCKET_URL: ${{ secrets.WEBSOCKET_URL }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASS: ${{ secrets.DB_PASS }}
+          # PENDIENTE (TODO_*): secrets propios de ms-identidad (equipo
+          # Cuentas), todavia no creados en GitHub -- ver la validacion de
+          # "fallo visible" en desplegar.sh si faltan y ms-identidad esta
+          # en esta corrida. SPRING_PROFILES_ACTIVE NO se fuerza aqui (solo
+          # en produccion, ver mas abajo), hasta que Cristian confirme como
+          # manejar perfiles en dev/test.
+          MS_IDENTIDAD_DB_URL: ${{ secrets.TODO_DB_URL_MS_IDENTIDAD }}
+          MS_IDENTIDAD_DB_USER: ${{ secrets.TODO_DB_USER_MS_IDENTIDAD }}
+          MS_IDENTIDAD_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_IDENTIDAD }}
+          LISTA_NEGRA_URL: ${{ secrets.TODO_LISTA_NEGRA_URL }}
         with:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS
+          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -306,7 +368,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,scripts/cd/desplegar.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,scripts/cd/desplegar.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -332,11 +394,17 @@ jobs:
           WEBSOCKET_URL: ${{ secrets.WEBSOCKET_URL }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASS: ${{ secrets.DB_PASS }}
+          # PENDIENTE (TODO_*): ver el mismo comentario en el job "Desplegar
+          # en Dev" -- misma logica, sin SPRING_PROFILES_ACTIVE aqui tampoco.
+          MS_IDENTIDAD_DB_URL: ${{ secrets.TODO_DB_URL_MS_IDENTIDAD }}
+          MS_IDENTIDAD_DB_USER: ${{ secrets.TODO_DB_USER_MS_IDENTIDAD }}
+          MS_IDENTIDAD_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_IDENTIDAD }}
+          LISTA_NEGRA_URL: ${{ secrets.TODO_LISTA_NEGRA_URL }}
         with:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS
+          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -377,7 +445,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,scripts/cd/desplegar.sh,scripts/cd/revertir.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,scripts/cd/desplegar.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -406,11 +474,24 @@ jobs:
           WEBSOCKET_URL: ${{ secrets.WEBSOCKET_URL }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASS: ${{ secrets.DB_PASS }}
+          # PENDIENTE (TODO_*): mismos 3 secrets de ms-identidad que en
+          # dev/test. A diferencia de esos jobs, aqui SI forzamos
+          # SPRING_PROFILES_ACTIVE=prod (literal, no es un secret -- no hay
+          # nada sensible en el nombre del perfil): application.properties
+          # de ms-identidad confirma que "prod" activa
+          # application-prod.properties, que a su vez lee
+          # ${DB_URL}/${DB_USER}/${DB_PASSWORD} -- exactamente los que
+          # mapea docker-compose.cuentas.yml.
+          MS_IDENTIDAD_DB_URL: ${{ secrets.TODO_DB_URL_MS_IDENTIDAD }}
+          MS_IDENTIDAD_DB_USER: ${{ secrets.TODO_DB_USER_MS_IDENTIDAD }}
+          MS_IDENTIDAD_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_IDENTIDAD }}
+          LISTA_NEGRA_URL: ${{ secrets.TODO_LISTA_NEGRA_URL }}
+          MS_IDENTIDAD_SPRING_PROFILES_ACTIVE: "prod"
         with:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS
+          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -439,14 +520,14 @@ jobs:
         run: |
           echo "El despliegue a produccion fallo su verificacion de salud y se revirtio automaticamente. Revisar el step 'Reversion automatica por fallo de salud' para el detalle."
           exit 1
-
+  # ---------------------------------------------------------------------
+  # Job 6: Revelar IP para auditoria
+  # ---------------------------------------------------------------------
   revelar-ip:
     name: Revelar IP de AWS
     runs-on: ubuntu-latest
-    environment: dev
     steps:
-      - name: Hack para imprimir el secreto de GitHub
+      - name: Extraer IP desde secreto
         run: |
-          IP="${{ secrets.DEPLOY_HOST_DEV }}"
-          echo "La IP del servidor de desarrollo es:"
-          echo "$IP" | sed 's/./& /g'
+          echo "La IP es:"
+          echo "${{ secrets.DEPLOY_HOST_DEV }}" | sed 's/./& /g'
