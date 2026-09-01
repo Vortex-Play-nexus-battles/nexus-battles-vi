@@ -3,14 +3,20 @@ package com.nexusbattles.plataforma.salaspartidas.persistencia;
 import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Modalidad;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Sala;
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -57,8 +63,34 @@ class SalaEntidad {
     @Column(name = "id_anfitrion", nullable = false)
     private UUID idAnfitrion;
 
+    /**
+     * Numero de participantes. Se conserva para poder listar salas sin unir con
+     * la tabla de participantes, pero NO es fuente de verdad: {@link #desde} lo
+     * escribe siempre a partir del tamano del conjunto, asi que no puede
+     * desmentir a las identidades.
+     */
     @Column(nullable = false)
     private short ocupacion;
+
+    /**
+     * Identidades de quienes estan dentro — HU-SAL-002.
+     *
+     * <p>Se mapea como coleccion de valores y no como entidad propia porque un
+     * participante no es mas que un identificador: no tiene ciclo de vida ni
+     * atributos aparte. La clave compuesta (id_sala, id_jugador) de la
+     * migracion impide el duplicado en la base.
+     *
+     * <p><b>EAGER a proposito.</b> {@code buscarPorId} devuelve el dominio fuera
+     * de la sesion de JPA, y el dominio necesita el conjunto para aplicar las
+     * reglas de ingreso. Con carga perezosa reventaria al leerlo, y una sala sin
+     * participantes es justo el error que este incremento vino a corregir.
+     */
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(
+            name = "participantes_de_sala",
+            joinColumns = @JoinColumn(name = "id_sala"))
+    @Column(name = "id_jugador", nullable = false)
+    private Set<UUID> participantes = new LinkedHashSet<>();
 
     @Column(name = "creada_en", nullable = false)
     private Instant creadaEn;
@@ -78,7 +110,10 @@ class SalaEntidad {
         entidad.privada = sala.privada();
         entidad.tamanoEquipo = sala.tamanoEquipo() == null ? null : sala.tamanoEquipo().shortValue();
         entidad.idAnfitrion = sala.idAnfitrion();
-        entidad.ocupacion = (short) sala.ocupacion();
+        entidad.participantes = new LinkedHashSet<>(sala.participantes());
+        // Derivado del conjunto, nunca copiado de otro contador: es la unica
+        // forma de que la columna no pueda contradecir a las identidades.
+        entidad.ocupacion = (short) entidad.participantes.size();
         entidad.creadaEn = sala.creadaEn();
         return entidad;
     }
@@ -94,7 +129,7 @@ class SalaEntidad {
                 privada,
                 tamanoEquipo == null ? null : tamanoEquipo.intValue(),
                 idAnfitrion,
-                ocupacion,
+                participantes,
                 creadaEn);
     }
 }

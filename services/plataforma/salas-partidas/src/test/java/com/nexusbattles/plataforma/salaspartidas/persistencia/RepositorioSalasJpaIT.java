@@ -1,6 +1,7 @@
 package com.nexusbattles.plataforma.salaspartidas.persistencia;
 
 import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoSala;
+import com.nexusbattles.plataforma.salaspartidas.dominio.IngresoNoPermitido;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Modalidad;
 import com.nexusbattles.plataforma.salaspartidas.dominio.ParametrosDeSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
@@ -20,6 +21,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -113,5 +115,96 @@ class RepositorioSalasJpaIT {
     @DisplayName("una sala que no existe no se encuentra")
     void salaInexistente() {
         assertTrue(repositorio.buscarPorId(UUID.randomUUID()).isEmpty());
+    }
+
+    // =========================================================================
+    // HU-SAL-002 · RF-JUE-002 — los participantes tienen que sobrevivir al viaje
+    //
+    // Guardar solo el numero de ocupantes deja el aforo cuadrado pero pierde
+    // QUIEN esta dentro. En cuanto una sala se rehidrata desde PostgreSQL, las
+    // reglas de ingreso dejan de poder aplicarse: no hay contra que comparar.
+    // Estas cinco pruebas fijan las cuatro invariantes que se rompen.
+    // =========================================================================
+
+    private static final UUID ANA = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
+    private static final UUID BRUNO = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002");
+
+    /** Sala de cuatro cupos con el anfitrion y los dos jugadores dentro. */
+    private Sala salaConTresDentro() {
+        Sala sala = Sala.crear(
+                new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null), ANFITRION);
+        sala.unirse(ANA);
+        sala.unirse(BRUNO);
+        return sala;
+    }
+
+    @Test
+    @DisplayName("una sala con varios participantes conserva sus identidades al rehidratarse")
+    void conservaLosParticipantes() {
+        Sala sala = salaConTresDentro();
+
+        repositorio.guardar(sala);
+        Sala recuperada = repositorio.buscarPorId(sala.id()).orElseThrow();
+
+        assertAll(
+                () -> assertEquals(3, recuperada.ocupacion()),
+                () -> assertEquals(3, recuperada.participantes().size()),
+                () -> assertTrue(recuperada.participantes().contains(ANFITRION), "el anfitrion"),
+                () -> assertTrue(recuperada.participantes().contains(ANA), "Ana"),
+                () -> assertTrue(recuperada.participantes().contains(BRUNO), "Bruno"));
+    }
+
+    @Test
+    @DisplayName("tras rehidratar sigue detectando a quien ya esta dentro")
+    void detectaDuplicadosTrasRehidratar() {
+        Sala sala = salaConTresDentro();
+        repositorio.guardar(sala);
+
+        Sala recuperada = repositorio.buscarPorId(sala.id()).orElseThrow();
+
+        assertThrows(IngresoNoPermitido.class, () -> recuperada.unirse(ANA));
+    }
+
+    @Test
+    @DisplayName("tras rehidratar el anfitrion sigue contando como participante")
+    void elAnfitrionSobreviveAlViaje() {
+        Sala sala = Sala.crear(
+                new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null), ANFITRION);
+        repositorio.guardar(sala);
+
+        Sala recuperada = repositorio.buscarPorId(sala.id()).orElseThrow();
+
+        assertThrows(IngresoNoPermitido.class, () -> recuperada.unirse(ANFITRION));
+    }
+
+    @Test
+    @DisplayName("tras rehidratar el ultimo cupo sigue llevando la sala a LLENA")
+    void elAforoSigueCuadrandoTrasRehidratar() {
+        Sala sala = Sala.crear(
+                new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, false, null), ANFITRION);
+        repositorio.guardar(sala);
+
+        Sala recuperada = repositorio.buscarPorId(sala.id()).orElseThrow();
+        recuperada.unirse(ANA);
+
+        assertAll(
+                () -> assertEquals(2, recuperada.ocupacion()),
+                () -> assertEquals(EstadoSala.LLENA, recuperada.estado()),
+                () -> assertTrue(recuperada.participantes().contains(ANA)));
+    }
+
+    @Test
+    @DisplayName("una sala guardada llena sigue rechazando tras rehidratarse")
+    void salaLlenaSigueRechazando() {
+        Sala sala = Sala.crear(
+                new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, false, null), ANFITRION);
+        sala.unirse(ANA);
+        repositorio.guardar(sala);
+
+        Sala recuperada = repositorio.buscarPorId(sala.id()).orElseThrow();
+
+        assertAll(
+                () -> assertEquals(EstadoSala.LLENA, recuperada.estado()),
+                () -> assertThrows(IngresoNoPermitido.class, () -> recuperada.unirse(BRUNO)));
     }
 }
