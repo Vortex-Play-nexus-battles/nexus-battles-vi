@@ -8,6 +8,8 @@ COPY gradlew settings.gradle build.gradle gradle.properties ./
 COPY gradle gradle
 COPY buildSrc buildSrc
 COPY services services
+COPY frontend/app-web/src/comun frontend/app-web/src/comun
+COPY frontend/app-web/src/contenido/productos frontend/app-web/src/contenido/productos
 
 RUN sh gradlew --no-daemon :services:contenido:productos:bootJar
 

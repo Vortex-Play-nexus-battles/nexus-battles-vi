@@ -44,6 +44,12 @@ public class SeguridadConfig {
                                         "/actuator/prometheus",
                                         "/v3/api-docs/**")
                                 .permitAll()
+                                // Los recursos estáticos no contienen datos protegidos. La
+                                // autorización se mantiene obligatoria en la API de creación.
+                                .requestMatchers(
+                                        "/contenido/productos/**",
+                                        "/comun/**")
+                                .permitAll()
                                 .requestMatchers(HttpMethod.POST, "/api/v1/productos")
                                 .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
                                 .requestMatchers(HttpMethod.GET, "/api/v1/productos/estadisticas")
