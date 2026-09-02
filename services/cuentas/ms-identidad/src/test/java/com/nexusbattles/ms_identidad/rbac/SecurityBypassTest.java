@@ -36,8 +36,8 @@ public class SecurityBypassTest {
         AdminActionDemoController controller = new AdminActionDemoController();
 
         this.mockMvc = MockMvcBuilders.standaloneSetup(controller)
-                .addInterceptors(interceptor)
-                .build();
+            .addInterceptors(interceptor)
+            .build();
     }
 
     @Test
@@ -48,9 +48,9 @@ public class SecurityBypassTest {
                 .header("X-User-Role", "JUGADOR")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"userId\": \"target_user_123\"}"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.status").value(403))
-                .andExpect(jsonPath("$.detail").value("No tienes permiso para esta acción"));
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.status").value(403))
+            .andExpect(jsonPath("$.detail").value("No tienes permiso para esta acción"));
     }
 
     @Test
@@ -59,7 +59,7 @@ public class SecurityBypassTest {
         mockMvc.perform(post("/api/v1/admin/ban")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"userId\": \"target_user_123\"}"))
-                .andExpect(status().isForbidden());
+            .andExpect(status().isForbidden());
     }
 
     @Test
@@ -70,49 +70,49 @@ public class SecurityBypassTest {
                 .header("X-User-Role", "ADMINISTRADOR")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"userId\": \"target_user_123\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("SUCCESS"));
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("SUCCESS"));
     }
 
     @Test
     @DisplayName("JWT Válido con rol 'ADMINISTRADOR' -> 200 OK")
     void testValidJwtAdminCanBan() throws Exception {
-        String token = jwtService.generarToken("admin_autenticado", "ADMINISTRADOR");
+        String token = jwtService.generarToken("admin_autenticado", "ADMINISTRADOR", 0);
 
         mockMvc.perform(post("/api/v1/admin/ban")
                 .header("Authorization", "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"userId\": \"target_user_123\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("SUCCESS"));
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("SUCCESS"));
     }
 
     @Test
     @DisplayName("JWT Válido con rol 'JUGADOR' intenta invocar /api/v1/admin/ban -> 403 Forbidden")
     void testValidJwtJugadorCannotBan() throws Exception {
-        String token = jwtService.generarToken("jugador_autenticado", "JUGADOR");
+        String token = jwtService.generarToken("jugador_autenticado", "JUGADOR", 0);
 
         mockMvc.perform(post("/api/v1/admin/ban")
                 .header("Authorization", "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"userId\": \"target_user_123\"}"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.status").value(403))
-                .andExpect(jsonPath("$.detail").value("No tienes permiso para esta acción"));
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.status").value(403))
+            .andExpect(jsonPath("$.detail").value("No tienes permiso para esta acción"));
     }
 
     @Test
     @DisplayName("JWT Alterado/Manipulado -> 403 Forbidden (Fail-Closed)")
     void testTamperedJwtIsForbidden() throws Exception {
-        String token = jwtService.generarToken("hacker", "SUPER_ADMINISTRADOR");
+        String token = jwtService.generarToken("hacker", "SUPER_ADMINISTRADOR", 0);
         String tamperedToken = token.substring(0, token.length() - 2) + "ZZ";
 
         mockMvc.perform(post("/api/v1/admin/ban")
                 .header("Authorization", "Bearer " + tamperedToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"userId\": \"target_user_123\"}"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.status").value(403))
-                .andExpect(jsonPath("$.detail").value("Token de autenticación inválido o expirado"));
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.status").value(403))
+            .andExpect(jsonPath("$.detail").value("Token de autenticación inválido o expirado"));
     }
 }
