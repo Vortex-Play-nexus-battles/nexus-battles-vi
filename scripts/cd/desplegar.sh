@@ -25,6 +25,14 @@
 #   en el .env de plataforma (los usa plataforma-db) -- si los reusamos aqui
 #   se pisarian entre si. Ver docker-compose.cuentas.yml para el mapeo a los
 #   nombres que Spring realmente espera (DB_URL, DB_USER, DB_PASSWORD).
+#   PENDIENTE (TODO_*, ver cd.yml): 5 variables especificas de
+#   ms-cumplimiento -- MS_CUMPLIMIENTO_DB_HOST, MS_CUMPLIMIENTO_DB_PORT,
+#   MS_CUMPLIMIENTO_DB_NAME, MS_CUMPLIMIENTO_DB_USER,
+#   MS_CUMPLIMIENTO_DB_PASSWORD. Mismo prefijo "MS_CUMPLIMIENTO_" a
+#   proposito, por la misma razon: ms-cumplimiento usa un esquema distinto
+#   (DB_HOST/DB_PORT/DB_NAME en vez de DB_URL) para su propia base, no
+#   comparte nada con DB_USER/DB_PASS de plataforma ni con el DB_URL de
+#   ms-identidad. Ver docker-compose.ms-cumplimiento.yml para el mapeo.
 #
 # Este script NUNCA decide si hay que revertir: eso lo hace un step aparte en
 # cd.yml (solo en el job de produccion) leyendo el archivo
@@ -42,6 +50,10 @@ COMPOSE_DEPLOY="$DIRECTORIO/docker-compose.deploy.yml"
 # abajo si ms-identidad viene en SERVICIOS_PUERTOS de esta corrida -- si
 # nadie toco cuentas en este push, este archivo ni se menciona.
 COMPOSE_CUENTAS="$DIRECTORIO/docker-compose.cuentas.yml"
+# Override de ms-cumplimiento (Maven, tambien equipo Cuentas). Mismo patron
+# que COMPOSE_CUENTAS: se copia siempre, solo se agrega al comando si
+# ms-cumplimiento viene en esta corrida.
+COMPOSE_MS_CUMPLIMIENTO="$DIRECTORIO/docker-compose.ms-cumplimiento.yml"
 INTENTOS_SALUD=12
 ESPERA_ENTRE_INTENTOS=5
 
@@ -75,6 +87,11 @@ MS_IDENTIDAD_DB_USER=${MS_IDENTIDAD_DB_USER:-}
 MS_IDENTIDAD_DB_PASSWORD=${MS_IDENTIDAD_DB_PASSWORD:-}
 LISTA_NEGRA_URL=${LISTA_NEGRA_URL:-}
 MS_IDENTIDAD_SPRING_PROFILES_ACTIVE=${MS_IDENTIDAD_SPRING_PROFILES_ACTIVE:-}
+MS_CUMPLIMIENTO_DB_HOST=${MS_CUMPLIMIENTO_DB_HOST:-}
+MS_CUMPLIMIENTO_DB_PORT=${MS_CUMPLIMIENTO_DB_PORT:-}
+MS_CUMPLIMIENTO_DB_NAME=${MS_CUMPLIMIENTO_DB_NAME:-}
+MS_CUMPLIMIENTO_DB_USER=${MS_CUMPLIMIENTO_DB_USER:-}
+MS_CUMPLIMIENTO_DB_PASSWORD=${MS_CUMPLIMIENTO_DB_PASSWORD:-}
 EOF
 chmod 600 .env
 
@@ -99,11 +116,15 @@ echo "== 3) Desplegando TAG=$TAG para: $SERVICIOS_PUERTOS =="
 export TAG
 SERVICIOS_COMPOSE=""
 INCLUYE_CUENTAS=0
+INCLUYE_MS_CUMPLIMIENTO=0
 for par in $SERVICIOS_PUERTOS; do
   servicio="${par%%:*}"
   SERVICIOS_COMPOSE="$SERVICIOS_COMPOSE srv-${servicio}"
   if [ "$servicio" = "ms-identidad" ]; then
     INCLUYE_CUENTAS=1
+  fi
+  if [ "$servicio" = "ms-cumplimiento" ]; then
+    INCLUYE_MS_CUMPLIMIENTO=1
   fi
 done
 
@@ -125,15 +146,37 @@ if [ "$INCLUYE_CUENTAS" -eq 1 ]; then
   fi
 fi
 
+# Mismo patron de "fallo visible" que ms-identidad arriba, para
+# ms-cumplimiento: sus 5 secrets son obligatorios si esta en esta corrida --
+# application.properties lee ${DB_HOST}/${DB_PORT}/${DB_NAME}/${DB_USER}/
+# ${DB_PASSWORD} literalmente (DB_PASSWORD sin default, ni siquiera arranca
+# sin ella).
+if [ "$INCLUYE_MS_CUMPLIMIENTO" -eq 1 ]; then
+  FALTANTES=""
+  [ -n "${MS_CUMPLIMIENTO_DB_HOST:-}" ] || FALTANTES="$FALTANTES TODO_DB_HOST_MS_CUMPLIMIENTO"
+  [ -n "${MS_CUMPLIMIENTO_DB_PORT:-}" ] || FALTANTES="$FALTANTES TODO_DB_PORT_MS_CUMPLIMIENTO"
+  [ -n "${MS_CUMPLIMIENTO_DB_NAME:-}" ] || FALTANTES="$FALTANTES TODO_DB_NAME_MS_CUMPLIMIENTO"
+  [ -n "${MS_CUMPLIMIENTO_DB_USER:-}" ] || FALTANTES="$FALTANTES TODO_DB_USER_MS_CUMPLIMIENTO"
+  [ -n "${MS_CUMPLIMIENTO_DB_PASSWORD:-}" ] || FALTANTES="$FALTANTES TODO_DB_PASSWORD_MS_CUMPLIMIENTO"
+  if [ -n "$FALTANTES" ]; then
+    echo "Faltan secrets de GitHub para ms-cumplimiento, crealos en Settings > Environments:$FALTANTES"
+    exit 1
+  fi
+fi
+
 # Siempre el base + el de despliegue de plataforma combinados: el base (de
 # desarrollo local, con "build:") nunca se usa solo. El de despliegue solo
 # agrega "image:", y como aqui no pasamos --build, Compose usa esa imagen ya
 # publicada en ghcr.io en vez de intentar construir nada en el servidor.
-# El tercer archivo (ms-identidad) solo se agrega si de verdad esta entre
-# los servicios de esta corrida -- si no, ni se menciona en el comando.
+# El tercer/cuarto archivo (ms-identidad, ms-cumplimiento) solo se agrega si
+# de verdad esta entre los servicios de esta corrida -- si no, ni se
+# menciona en el comando.
 ARCHIVOS_COMPOSE=(-f "$COMPOSE_BASE" -f "$COMPOSE_DEPLOY")
 if [ "$INCLUYE_CUENTAS" -eq 1 ]; then
   ARCHIVOS_COMPOSE+=(-f "$COMPOSE_CUENTAS")
+fi
+if [ "$INCLUYE_MS_CUMPLIMIENTO" -eq 1 ]; then
+  ARCHIVOS_COMPOSE+=(-f "$COMPOSE_MS_CUMPLIMIENTO")
 fi
 
 docker compose "${ARCHIVOS_COMPOSE[@]}" pull $SERVICIOS_COMPOSE

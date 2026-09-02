@@ -166,6 +166,23 @@ jobs:
             fi
           fi
 
+          # 5) services/cuentas/ms-cumplimiento (Maven), mismo patron exacto
+          #    que ms-identidad arriba -- bloque especifico, NO generalizado
+          #    a un grep de cuentas/* (ms-ecommerce sigue sin Dockerfile).
+          #    Puerto 8091, mismo del lado del host que del contenedor
+          #    (confirmado en su Dockerfile: EXPOSE 8091, sin el desfase que
+          #    tuvo ms-identidad).
+          if echo "$ARCHIVOS" | grep -q '^services/cuentas/ms-cumplimiento/'; then
+            if [ -f "services/cuentas/ms-cumplimiento/pom.xml" ]; then
+              MATRIZ=$(echo "$MATRIZ" | jq -c \
+                --arg ruta "services/cuentas/ms-cumplimiento" \
+                --arg servicio "ms-cumplimiento" \
+                '. + [{ruta:$ruta, rutaGradle:"", servicio:$servicio, puerto:"8091", herramienta:"maven"}]')
+            else
+              echo "Se omite services/cuentas/ms-cumplimiento: no tiene pom.xml"
+            fi
+          fi
+
           echo "Servicios a desplegar: $MATRIZ"
           echo "servicios=$MATRIZ" >> "$GITHUB_OUTPUT"
 
@@ -286,7 +303,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,scripts/cd/desplegar.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,scripts/cd/desplegar.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -327,11 +344,21 @@ jobs:
           MS_IDENTIDAD_DB_USER: ${{ secrets.TODO_DB_USER_MS_IDENTIDAD }}
           MS_IDENTIDAD_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_IDENTIDAD }}
           LISTA_NEGRA_URL: ${{ secrets.TODO_LISTA_NEGRA_URL }}
+          # PENDIENTE (TODO_*): mismo patron de placeholder que ms-identidad
+          # -- 5 secrets propios de ms-cumplimiento (equipo Cuentas),
+          # todavia no creados en GitHub. Prefijo "MS_CUMPLIMIENTO_" para no
+          # chocar con DB_USER/DB_PASS de plataforma ni con el esquema
+          # DB_URL de ms-identidad (ver docker-compose.ms-cumplimiento.yml).
+          MS_CUMPLIMIENTO_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_USER: ${{ secrets.TODO_DB_USER_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_CUMPLIMIENTO }}
         with:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL
+          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -368,7 +395,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,scripts/cd/desplegar.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,scripts/cd/desplegar.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -400,11 +427,18 @@ jobs:
           MS_IDENTIDAD_DB_USER: ${{ secrets.TODO_DB_USER_MS_IDENTIDAD }}
           MS_IDENTIDAD_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_IDENTIDAD }}
           LISTA_NEGRA_URL: ${{ secrets.TODO_LISTA_NEGRA_URL }}
+          # PENDIENTE (TODO_*): ver el mismo comentario en el job "Desplegar
+          # en Dev" -- misma logica para los 5 secrets de ms-cumplimiento.
+          MS_CUMPLIMIENTO_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_USER: ${{ secrets.TODO_DB_USER_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_CUMPLIMIENTO }}
         with:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL
+          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -445,7 +479,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,scripts/cd/desplegar.sh,scripts/cd/revertir.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,scripts/cd/desplegar.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -487,11 +521,19 @@ jobs:
           MS_IDENTIDAD_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_IDENTIDAD }}
           LISTA_NEGRA_URL: ${{ secrets.TODO_LISTA_NEGRA_URL }}
           MS_IDENTIDAD_SPRING_PROFILES_ACTIVE: "prod"
+          # PENDIENTE (TODO_*): mismos 5 secrets de ms-cumplimiento que en
+          # dev/test -- este servicio no tiene perfiles Spring (un solo
+          # application.properties), asi que no hace falta forzar ninguno.
+          MS_CUMPLIMIENTO_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_USER: ${{ secrets.TODO_DB_USER_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_CUMPLIMIENTO }}
         with:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE
+          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
