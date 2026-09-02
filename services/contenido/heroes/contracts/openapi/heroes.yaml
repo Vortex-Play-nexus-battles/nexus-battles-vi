@@ -48,8 +48,173 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/DetalleDeProblema"
+  /api/v1/heroes/{nombre}/niveles/{nivel}:
+    get:
+      summary: Vista del prototipo en un nivel dado — las reglas de progresión como servicio
+      description: >
+        Función pura de (prototipo, nivel), para que el motor de combate, las misiones y
+        el inventario consulten las reglas en vez de reimplementarlas: estadísticas
+        escaladas (HU-HER-008), acciones desbloqueadas en los niveles 1/4/8 (RC-01),
+        multiplicador de efecto (HU-HER-007), experiencia para subir (HU-HER-003) y la
+        épica afín con sus efectos (HU-HER-009/010). El estado del héroe (nivel y
+        experiencia) lo guarda el inventario; aquí no se persiste nada.
+      operationId: vistaPorNivel
+      parameters:
+        - name: nombre
+          in: path
+          required: true
+          schema: { type: string }
+          example: Mago Fuego
+        - name: nivel
+          in: path
+          required: true
+          description: Entre 1 y 8 (sección 6.1.1)
+          schema: { type: integer, minimum: 1, maximum: 8 }
+          example: 3
+      responses:
+        "200":
+          description: Vista del prototipo en ese nivel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VistaPorNivel"
+        "400":
+          description: Nivel fuera de 1..8; el campo detail lleva el mensaje apto para el usuario
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "404":
+          description: Prototipo no disponible
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+  /api/v1/progresion/niveles:
+    get:
+      summary: Tabla de experiencia requerida por nivel (100 × 1,2^(N−1))
+      operationId: tablaDeNiveles
+      responses:
+        "200":
+          description: Los ocho niveles; el 8 no tiene experiencia para subir
+          content:
+            application/json:
+              schema:
+                type: array
+                minItems: 8
+                maxItems: 8
+                items:
+                  $ref: "#/components/schemas/NivelDeProgresion"
+  /api/v1/progresion/experiencia:
+    post:
+      summary: Aplica experiencia ganada a un estado (nivel, experiencia) y devuelve el nuevo estado
+      description: >
+        Sin estado y sin prototipo: la regla no depende del héroe. El sobrante se conserva,
+        los niveles se encadenan y el 8 es tope. Quien persiste el resultado es el inventario.
+      operationId: progresar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudDeProgreso"
+      responses:
+        "200":
+          description: Nuevo estado de progresión
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Progreso"
+        "400":
+          description: Nivel fuera de rango o puntos negativos
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+  /api/v1/progresion/experiencia-por-enemigo/{dado}:
+    get:
+      summary: Experiencia por derrotar a un enemigo no jugador — 10 × 1,2^(1d8) (HU-HER-004)
+      description: >
+        Recibe el resultado del dado (1..8) porque el lanzamiento aleatorio es de quien
+        ejecuta la misión; el cliente confirmó el 2026-08-27 que la experiencia se obtiene
+        en las misiones, no en el combate en línea.
+      operationId: experienciaPorEnemigo
+      parameters:
+        - name: dado
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1, maximum: 8 }
+          example: 5
+      responses:
+        "200":
+          description: Puntos de experiencia otorgados
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperienciaOtorgada"
+        "400":
+          description: Resultado del dado fuera de 1..8
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
 components:
   schemas:
+    VistaPorNivel:
+      type: object
+      required: [nombre, tipo, esSanador, nivel, estadisticas, accionesDisponibles, multiplicadorDeEfecto, epica]
+      properties:
+        nombre: { type: string, example: Mago Fuego }
+        tipo: { type: string, example: Mago }
+        esSanador: { type: boolean }
+        nivel: { type: integer, example: 3 }
+        estadisticas:
+          $ref: "#/components/schemas/Estadisticas"
+        accionesDisponibles:
+          type: array
+          description: Las desbloqueadas hasta ese nivel, en el orden de la Tabla 7 (1 en nivel 1, 2 desde el 4, 3 desde el 8)
+          items:
+            $ref: "#/components/schemas/Accion"
+        multiplicadorDeEfecto: { type: integer, example: 3, description: Igual al nivel (HU-HER-007) }
+        experienciaParaSubir:
+          type: number
+          description: Puntos para pasar al siguiente nivel; ausente en el nivel 8
+          example: 144
+        epica:
+          $ref: "#/components/schemas/EpicaVista"
+    EpicaVista:
+      type: object
+      required: [nombre]
+      properties:
+        nombre: { type: string, example: Luz cegadora }
+        efectoGeneral: { type: string, description: Ausente cuando la Tabla 20 dice "No aplica", example: +1 a la vida }
+        efectoPotenciado: { type: string, description: Solo para el héroe afín, example: "+2 al daño, +1% de crítico" }
+        turnosDeRecarga: { type: integer, example: 2 }
+    NivelDeProgresion:
+      type: object
+      required: [nivel]
+      properties:
+        nivel: { type: integer, example: 1 }
+        experienciaParaSubir: { type: number, description: Ausente en el nivel 8, example: 100 }
+    SolicitudDeProgreso:
+      type: object
+      required: [nivel, experiencia, puntos]
+      properties:
+        nivel: { type: integer, example: 1 }
+        experiencia: { type: number, example: 0 }
+        puntos: { type: number, example: 250 }
+    Progreso:
+      type: object
+      required: [nivel, experiencia]
+      properties:
+        nivel: { type: integer, example: 3 }
+        experiencia: { type: number, example: 30 }
+    ExperienciaOtorgada:
+      type: object
+      required: [dado, puntos]
+      properties:
+        dado: { type: integer, example: 5 }
+        puntos: { type: number, example: 24.8832 }
     ResumenHeroe:
       type: object
       required: [nombre, tipo, esSanador]

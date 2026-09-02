@@ -177,7 +177,7 @@ class HeroesTest {
         for (Prototipo prototipo : PrototiposIniciales.LISTA) {
             Heroe heroe = Heroe.crear(prototipo);
             assertEquals(1, heroe.nivel());
-            assertEquals(prototipo.estadisticasNivel1(), heroe.estadisticas());
+            assertEquals(prototipo.estadisticasNivel1(), heroe.estadisticasActuales());
         }
     }
 
