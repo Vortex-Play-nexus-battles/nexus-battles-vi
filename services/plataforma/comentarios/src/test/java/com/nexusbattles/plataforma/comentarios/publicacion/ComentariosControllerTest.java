@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -121,5 +122,17 @@ class ComentariosControllerTest {
 
         mvc.perform(post(RUTA).contentType(MediaType.APPLICATION_JSON).content(CUERPO))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("la carrera de dos calificaciones simultaneas responde 409")
+    void carreraDeCalificacionesResponde409() throws Exception {
+        when(servicio.publicar(eq("espada-del-alba"), anyString(), anyString(),
+                anyString(), any(), any()))
+                .thenThrow(new DataIntegrityViolationException("uk_calificacion_unica_por_autor"));
+
+        mvc.perform(post(RUTA).contentType(MediaType.APPLICATION_JSON).content(CUERPO))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409));
     }
 }
