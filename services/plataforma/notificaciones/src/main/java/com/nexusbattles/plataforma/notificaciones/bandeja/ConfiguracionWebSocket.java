@@ -14,7 +14,8 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
  * <p>Se usa el broker simple que trae Spring y no uno externo. El
  * docker-compose.yml del proyecto no levanta ningun broker de mensajes todavia,
  * y elegir uno es una decision de equipo, no de este modulo. El broker simple
- * cumple los tres escenarios de la historia en un solo nodo. Cuando el equipo
+ * cumple los tres escenarios de la historia en un solo nodo. La identidad
+ * de cada conexion la pone el handshake, ver AsignadorDeIdentidadDelHandshake. Cuando el equipo
  * acuerde el broker, se cambia aqui y el contrato no se mueve.
  */
 @Configuration
@@ -40,6 +41,8 @@ class ConfiguracionWebSocket implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registro) {
-        registro.addEndpoint(endpoint).setAllowedOriginPatterns(origenesPermitidos);
+        registro.addEndpoint(endpoint)
+                .setAllowedOriginPatterns(origenesPermitidos)
+                .setHandshakeHandler(new AsignadorDeIdentidadDelHandshake());
     }
 }

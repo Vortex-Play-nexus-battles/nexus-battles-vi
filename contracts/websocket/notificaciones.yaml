@@ -26,8 +26,9 @@ info:
       - Prefijo de envio (cliente -> servidor):       `/app`
       - Cola privada de un usuario:                   `/usuario/cola`
 
-    Todo mensaje propaga el identificador de traza en la cabecera `traceparent`
-    (regla 5 de plataforma).
+    La propagacion del identificador de traza (regla 5 de plataforma) queda
+    pendiente de la libreria comun de trazas y por eso no se declara todavia:
+    este contrato solo promete lo que el codigo ya hace.
 
     Los errores que viajan por el canal usan el mismo formato problem details
     que la API HTTP (regla 4).
@@ -38,7 +39,11 @@ info:
     tiene sin leer. El identificador de sesion de STOMP se renueva en cada
     reconexion, asi que no sirve para eso. Por eso el cliente envia su propio
     identificador estable al registrarse, uno que sobrevive a la reconexion
-    porque lo guarda el navegador. Queda documentado aqui porque es una
+    porque lo guarda el navegador. Ese mismo par viaja tambien en la URL del
+    handshake (`/ws?usuario={usuarioId}&sesion={sesionId}`) mientras OAuth2
+    este diferido: de ahi sale el Principal que resuelve la cola privada y el
+    cierre de la sesion cuando la conexion se cae sin despedirse. Queda
+    documentado aqui porque es una
     decision de diseno, no un detalle de implementacion.
 
     Sobre el origen de los avisos. Este modulo no inventa eventos: los recibe
