@@ -134,4 +134,48 @@ describe('Ficha de detalle del producto', () => {
   test('rechaza construirse sin producto', () => {
     expect(() => construirFicha(null)).toThrow(/producto/i);
   });
+
+  // --- Producto suspendido (RN-27, seccion 7.2.1) --------------------------
+
+  test('un producto suspendido se marca como no disponible para adquisicion', () => {
+    const ficha = construirFicha(producto({ estado: 'SUSPENDIDO' }));
+
+    const aviso = ficha.querySelector('.ficha__no-disponible');
+    expect(aviso).not.toBeNull();
+    expect(aviso.textContent).toMatch(/no disponible/i);
+  });
+
+  test('el aviso explica que el producto sigue siendo tuyo', () => {
+    const ficha = construirFicha(producto({ estado: 'SUSPENDIDO' }));
+
+    // RN-27: los productos suspendidos permanecen en los inventarios de
+    // quienes ya los poseen. El jugador no debe pensar que lo perdio.
+    expect(ficha.querySelector('.ficha__no-disponible').textContent).toMatch(
+      /sigue en tu inventario/i,
+    );
+  });
+
+  test('un producto activo no lleva ningun aviso', () => {
+    const ficha = construirFicha(producto({ estado: 'ACTIVO' }));
+
+    expect(ficha.querySelector('.ficha__no-disponible')).toBeNull();
+  });
+
+  test('un producto unico tampoco lo lleva: unico no es suspendido', () => {
+    const ficha = construirFicha(producto({ estado: 'UNICO' }));
+
+    expect(ficha.querySelector('.ficha__no-disponible')).toBeNull();
+  });
+
+  test('el aviso se anuncia a los lectores de pantalla', () => {
+    const ficha = construirFicha(producto({ estado: 'SUSPENDIDO' }));
+
+    expect(ficha.querySelector('.ficha__no-disponible').getAttribute('role')).toBe('status');
+  });
+
+  test('un producto sin estado no se marca como suspendido', () => {
+    const ficha = construirFicha(producto({ estado: undefined }));
+
+    expect(ficha.querySelector('.ficha__no-disponible')).toBeNull();
+  });
 });
