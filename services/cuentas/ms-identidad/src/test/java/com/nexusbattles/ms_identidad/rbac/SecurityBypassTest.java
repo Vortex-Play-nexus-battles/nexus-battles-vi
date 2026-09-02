@@ -1,5 +1,7 @@
 package com.nexusbattles.ms_identidad.rbac;
 
+import com.nexusbattles.ms_identidad.auth.model.Usuario;
+import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
 import com.nexusbattles.ms_identidad.auth.service.JwtService;
 import com.nexusbattles.ms_identidad.rbac.controller.AdminActionDemoController;
 import com.nexusbattles.ms_identidad.rbac.repository.RbacMatrixRepository;
@@ -14,6 +16,10 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.util.Optional;
+
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -114,5 +120,38 @@ public class SecurityBypassTest {
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.status").value(403))
             .andExpect(jsonPath("$.detail").value("Token de autenticación inválido o expirado"));
+    }
+
+    @Test
+    @DisplayName("JWT con versión de token vieja (rol fue cambiado) -> 403 Forbidden (HU-RBAC-003)")
+    void testRevokedTokenVersionIsForbidden() throws Exception {
+        // Generar un JWT con versión 0 (como si el usuario nunca hubiera cambiado de rol)
+        String tokenViejo = jwtService.generarToken("admin_degradado", "ADMINISTRADOR", 0);
+
+        // Simular que el usuario ahora tiene versionToken=1 (le cambiaron el rol)
+        Usuario usuario = mock(Usuario.class);
+        when(usuario.getVersionToken()).thenReturn(1);
+
+        UsuarioRepository mockRepo = mock(UsuarioRepository.class);
+        when(mockRepo.findByApodo("admin_degradado")).thenReturn(Optional.of(usuario));
+
+        // Construir MockMvc con el interceptor que SÍ tiene UsuarioRepository
+        RbacMatrixRepository repository = new RbacMatrixRepository();
+        RbacAuthorizationService service = new RbacAuthorizationService(repository);
+        AuditoriaEventClient auditoriaClient = new AuditoriaEventClient("http://localhost:8083/api/v1/admin/auditoria/eventos");
+        SecurityInterceptor interceptor = new SecurityInterceptor(service, auditoriaClient, jwtService, mockRepo);
+        AdminActionDemoController controller = new AdminActionDemoController();
+
+        MockMvc mockMvcConRepo = MockMvcBuilders.standaloneSetup(controller)
+                .addInterceptors(interceptor)
+                .build();
+
+        mockMvcConRepo.perform(post("/api/v1/admin/ban")
+                .header("Authorization", "Bearer " + tokenViejo)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"userId\": \"target_user_123\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.detail").value("Token de autenticación inválido o expirado"));
     }
 }
