@@ -1,0 +1,77 @@
+# Servicios de contenido (Grupo 2) para desarrollo local.
+#
+# Uso:
+#   docker compose -f docker-compose.yml -f docker-compose.contenido.yml up -d
+#
+# Levanta los 4 servicios de services/contenido/ junto con MongoDB 8 y la
+# infra comun de plataforma (Postgres, Redis, Mailpit del docker-compose.yml
+# base). Cada servicio se construye desde la raiz del monorepo.
+#
+# Puertos de host: 8090-8093 (plataforma usa 8081-8088, cuentas 8089).
+# Todos los servicios exponen 8080 internamente; el mapeo host:contenedor
+# los diferencia en la maquina del desarrollador.
+
+services:
+
+  # --- Base de datos documental (regla 7: un esquema por servicio) ---
+  contenido-mongo:
+    image: mongo:8.0
+    container_name: contenido-mongo
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: nexus
+      MONGO_INITDB_ROOT_PASSWORD: nexus_local
+    volumes:
+      - contenido-mongo-data:/data/db
+
+  # --- Servicios de contenido ---
+
+  srv-heroes:
+    build:
+      context: .
+      dockerfile: services/contenido/heroes/Dockerfile
+    container_name: srv-heroes
+    ports:
+      - "8090:8080"
+    environment:
+      PUERTO_HEROES: 8080
+      SPRING_PROFILES_ACTIVE: mongo
+      MONGODB_URI: mongodb://nexus:nexus_local@contenido-mongo:27017/heroes?authSource=admin
+    depends_on:
+      - contenido-mongo
+
+  srv-inventario:
+    build:
+      context: .
+      dockerfile: services/contenido/inventario/Dockerfile
+    container_name: srv-inventario
+    ports:
+      - "8091:8080"
+    environment:
+      SPRING_DATA_MONGODB_URI: mongodb://nexus:nexus_local@contenido-mongo:27017/inventario?authSource=admin
+    depends_on:
+      - contenido-mongo
+
+  srv-productos:
+    build:
+      context: .
+      dockerfile: services/contenido/productos/Dockerfile
+    container_name: srv-productos
+    ports:
+      - "8092:8080"
+    environment:
+      MONGODB_URI: mongodb://nexus:nexus_local@contenido-mongo:27017/productos?authSource=admin
+    depends_on:
+      - contenido-mongo
+
+  srv-motor-combate:
+    build:
+      context: .
+      dockerfile: services/contenido/motor-combate/Dockerfile
+    container_name: srv-motor-combate
+    ports:
+      - "8093:8080"
+
+volumes:
+  contenido-mongo-data:

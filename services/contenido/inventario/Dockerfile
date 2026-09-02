@@ -1,4 +1,4 @@
-# La imagen se construye desde la raíz del monorepo:
+# La imagen se construye desde la raiz del monorepo:
 # docker build -f services/contenido/inventario/Dockerfile .
 FROM eclipse-temurin:21-jdk AS construccion
 
