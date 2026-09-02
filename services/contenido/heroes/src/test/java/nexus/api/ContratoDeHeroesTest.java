@@ -13,8 +13,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import org.springframework.http.MediaType;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,6 +42,18 @@ class ContratoDeHeroesTest {
 
     @Autowired
     private MockMvc mvc;
+
+    @Test
+    @DisplayName("la copia publicada en contracts/openapi de la raiz es identica a la del servicio")
+    void copiaPublicadaSinDesviacion() throws Exception {
+        // Regla de plataforma: los contratos entre equipos se publican en la
+        // carpeta raiz. Esta prueba impide que las dos copias se separen.
+        Path raiz = Path.of("../../../contracts/openapi/heroes.yaml");
+        Assumptions.assumeTrue(Files.exists(raiz), "fuera del monorepo no hay copia publicada");
+
+        assertThat(Files.readString(raiz))
+                .isEqualTo(Files.readString(Path.of("contracts/openapi/heroes.yaml")));
+    }
 
     @Test
     @DisplayName("el validador detecta desviaciones del contrato (control negativo)")

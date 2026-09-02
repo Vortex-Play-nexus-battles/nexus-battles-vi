@@ -1,0 +1,41 @@
+# Perfil de dominio "contenido" para levantar el servicio de heroes con su
+# base propia en local (regla de la pila: Compose por perfil de dominio).
+# Uso desde la raiz del monorepo:
+#   docker compose -f services/contenido/heroes/compose.heroes.yml up --build
+# Cuando el compose raiz incorpore el perfil de contenido, este archivo se
+# integra ahi; mientras tanto vive junto al servicio (regla 9: definicion de
+# contenedor versionada con el servicio).
+name: nexus-contenido-heroes
+
+services:
+  heroes:
+    build:
+      context: ../../..
+      dockerfile: services/contenido/heroes/Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: mongo
+      MONGODB_URI: mongodb://heroes-mongo:27017/heroes
+      PUERTO_HEROES: "8080"
+    ports:
+      - "8080:8080"
+    depends_on:
+      heroes-mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  heroes-mongo:
+    image: mongo:8
+    volumes:
+      - heroes-datos:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  heroes-datos:
