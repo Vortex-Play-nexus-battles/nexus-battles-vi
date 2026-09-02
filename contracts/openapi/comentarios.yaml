@@ -72,6 +72,15 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: >
+            Dos solicitudes simultaneas del mismo autor intentaron calificar
+            el mismo producto: la primera quedo y esta recibio el conflicto.
+            Reintentar sin estrellas publica el comentario sin calificacion.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
         '422':
           description: Al menos una imagen viene en un formato que no se admite
           content:
