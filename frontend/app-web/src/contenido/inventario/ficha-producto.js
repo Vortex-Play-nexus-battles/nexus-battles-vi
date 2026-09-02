@@ -101,7 +101,17 @@ export function construirFicha(producto) {
   descripcion.className = 'ficha__descripcion';
   descripcion.textContent = producto.descripcion ?? '';
 
-  ficha.append(imagen, nombre, tipo, descripcion, construirAtributos(producto));
+  ficha.append(imagen, nombre, tipo);
+
+  // RN-27 (seccion 7.2.1): un producto suspendido no admite nuevas
+  // adquisiciones, pero **permanece en los inventarios de quienes ya lo
+  // poseen**. El flujo alternativo de la ficha pide mostrarla con el
+  // indicador de no disponible, no ocultarla ni responder que no existe.
+  if (producto.estado === 'SUSPENDIDO') {
+    ficha.appendChild(construirNoDisponible());
+  }
+
+  ficha.append(descripcion, construirAtributos(producto));
 
   if (producto.tiraje !== undefined) {
     const tiraje = document.createElement('p');
@@ -114,6 +124,24 @@ export function construirFicha(producto) {
   }
 
   return ficha;
+}
+
+/**
+ * Aviso de producto retirado del catalogo.
+ *
+ * Dice las dos cosas que el jugador necesita saber: que ya no se puede
+ * adquirir, y que el suyo no desaparece. Sin la segunda, el aviso se lee
+ * como una perdida.
+ */
+function construirNoDisponible() {
+  const aviso = document.createElement('p');
+  aviso.className = 'ficha__no-disponible';
+  // Se anuncia a los lectores de pantalla sin interrumpir (RNF-ACC-002).
+  aviso.setAttribute('role', 'status');
+  aviso.textContent =
+    'No disponible para nuevas adquisiciones. Sigue en tu inventario ' +
+    'y puedes seguir usandolo.';
+  return aviso;
 }
 
 function construirAtributos(producto) {
