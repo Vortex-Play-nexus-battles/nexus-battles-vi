@@ -600,8 +600,24 @@ button:active {
   font-weight: 700;
   padding: 3px 8px;
   border-radius: 6px;
-  background: #e4f5e9;
-  color: #086b31;
+  background: var(--exito-fondo);
+  color: var(--exito);
+  border: 1px solid var(--exito-borde);
+}
+
+.boton-accion-card .badge-estado--temporal {
+  background: var(--advertencia-fondo);
+  color: var(--advertencia);
+  border: 1px solid var(--advertencia-borde);
+}
+
+.nota-header {
+  display: block;
+  font-size: 11.5px;
+  color: #949daf;
+  margin-top: 4px;
+  font-family: Inter, system-ui, sans-serif;
+  font-style: italic;
 }
 
 .toast-feedback {
@@ -660,4 +676,179 @@ button:active {
   background: #086b31;
   border-color: #0ea84d;
 }
+
+/* ==========================================================================
+   Estilos de Inspección y Consola (Tokens de Figma - Sin Emojis)
+   ========================================================================== */
+.pestanas-inspeccion {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  margin-bottom: 10px;
+}
+
+.pestana-btn {
+  background: transparent;
+  border: 1px solid var(--borde-decorativo);
+  color: var(--texto-secundario);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pestana-btn:hover {
+  background: #edf2fc;
+  color: var(--texto);
+}
+
+.pestana-btn.activa {
+  background: var(--accion-relleno);
+  border-color: var(--accion-relleno);
+  color: #ffffff;
+}
+
+.json-highlight {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #d1d7e5;
+  background: #0f1424;
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid #283354;
+  overflow-x: auto;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.json-clave {
+  color: #79a8f2;
+  font-weight: 600;
+}
+
+.json-string {
+  color: #8de3a7;
+}
+
+.json-numero {
+  color: #f7a260;
+  font-weight: 600;
+}
+
+.json-boolean {
+  color: #e5a4f7;
+  font-weight: 600;
+}
+
+.json-null {
+  color: #949daf;
+  font-style: italic;
+}
+
+.tabla-encabezados {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  margin-top: 4px;
+}
+
+.tabla-encabezados th,
+.tabla-encabezados td {
+  padding: 10px 14px;
+  border: 1px solid #283354;
+  text-align: left;
+}
+
+.tabla-encabezados th {
+  background: #171d34;
+  color: #a3b0cc;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tabla-encabezados td {
+  background: #0f1424;
+  color: #d1d7e5;
+  word-break: break-all;
+}
+
+.encabezado-nombre {
+  color: #79a8f2;
+  font-weight: 600;
+}
+
+.filtro-pildoras {
+  display: inline-flex;
+  gap: 4px;
+  background: #e6edf8;
+  padding: 4px;
+  border-radius: 8px;
+}
+
+.pildora-btn {
+  border: none;
+  background: transparent;
+  color: var(--texto-secundario);
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pildora-btn:hover {
+  color: var(--texto);
+}
+
+.pildora-btn.activa {
+  background: #ffffff;
+  color: var(--accion-relleno);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.indicador-estado-conexion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.punto-estado {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.indicador-conectado {
+  background: var(--exito-fondo);
+  color: var(--exito);
+  border: 1px solid var(--exito-borde);
+}
+
+.indicador-conectado .punto-estado {
+  background: var(--exito);
+}
+
+.indicador-desconectado {
+  background: var(--advertencia-fondo);
+  color: var(--advertencia);
+  border: 1px solid var(--advertencia-borde);
+}
+
+.indicador-desconectado .punto-estado {
+  background: var(--advertencia);
+}
+
 
