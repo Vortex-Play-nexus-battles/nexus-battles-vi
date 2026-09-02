@@ -43,7 +43,7 @@ CREATE TABLE audit_log_tampering_incident (
 CREATE OR REPLACE FUNCTION fn_block_audit_log_tampering()
 RETURNS TRIGGER AS $$
 DECLARE
-v_conn text := 'dbname=' || current_database();
+v_conn text := 'dbname=' || current_database() || ' user=' || current_user;
 BEGIN
   PERFORM dblink_exec(
     v_conn,

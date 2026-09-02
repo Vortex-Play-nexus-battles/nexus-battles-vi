@@ -28,12 +28,10 @@ public class AuditLog {
     @Column(name = "afectado", nullable = false, updatable = false)
     private String afectado;
 
-    @Lob
-    @Column(name = "valor_anterior", updatable = false)
+    @Column(name = "valor_anterior", updatable = false, columnDefinition = "TEXT")
     private String valorAnterior;
 
-    @Lob
-    @Column(name = "valor_nuevo", updatable = false)
+    @Column(name = "valor_nuevo", updatable = false, columnDefinition = "TEXT")
     private String valorNuevo;
 
     @Column(name = "motivo", nullable = false, updatable = false, length = 500)
