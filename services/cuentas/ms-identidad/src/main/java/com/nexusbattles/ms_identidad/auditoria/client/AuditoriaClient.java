@@ -26,9 +26,10 @@ public class AuditoriaClient {
     @Retry(name = "auditoria", fallbackMethod = "registrarConFallback")
     @CircuitBreaker(name = "auditoria")
     public void registrar(String tipoAccion, String administradorId, String afectado,
-                          String valorAnterior, String valorNuevo, String motivo) {
+                          String valorAnterior, String valorNuevo, String motivo,
+                          String ipOrigen) {
         RegistrarAuditoriaRequest solicitud = new RegistrarAuditoriaRequest(
-            tipoAccion, administradorId, afectado, valorAnterior, valorNuevo, motivo, null
+            tipoAccion, administradorId, afectado, valorAnterior, valorNuevo, motivo, ipOrigen
         );
         restClient.post()
             .uri(urlAuditoria)
@@ -39,7 +40,7 @@ public class AuditoriaClient {
 
     private void registrarConFallback(String tipoAccion, String administradorId, String afectado,
                                       String valorAnterior, String valorNuevo, String motivo,
-                                      Throwable ex) {
+                                      String ipOrigen, Throwable ex) {
         log.error("Fallo registrando auditoría ({}, usuario={}): {}. Se cancela la operación.",
             tipoAccion, afectado, ex.getMessage());
         throw new IllegalStateException(

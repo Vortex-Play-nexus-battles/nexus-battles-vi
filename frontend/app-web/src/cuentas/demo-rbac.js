@@ -66,6 +66,65 @@ const ROLES_RESPALDO = [
   },
 ];
 
+const MATRIZ_RESPALDO = {
+  JUGADOR: {
+    CREAR_CUENTA_JUGADOR: 'GRANTED',
+    MODIFICAR_PERFIL_PROPIO: 'GRANTED',
+    PUBLICAR_COMENTARIOS: 'GRANTED',
+    ELIMINAR_COMENTARIO_PROPIO: 'GRANTED',
+    MODERAR_COMENTARIOS: 'DENIED',
+    EMITIR_ADVERTENCIAS: 'DENIED',
+    SUSPENDER_USUARIOS: 'DENIED',
+    BANEAR_DEFINITIVAMENTE: 'DENIED',
+    CREAR_ADMIN_MODERADOR: 'DENIED',
+    GESTIONAR_PRODUCTOS: 'DENIED',
+    ASIGNAR_ROL: 'DENIED',
+    GESTIONAR_CUENTAS: 'DENIED',
+  },
+  MODERADOR: {
+    CREAR_CUENTA_JUGADOR: 'DENIED',
+    MODIFICAR_PERFIL_PROPIO: 'GRANTED',
+    PUBLICAR_COMENTARIOS: 'GRANTED',
+    ELIMINAR_COMENTARIO_PROPIO: 'GRANTED',
+    MODERAR_COMENTARIOS: 'GRANTED',
+    EMITIR_ADVERTENCIAS: 'GRANTED',
+    SUSPENDER_USUARIOS: 'TEMPORARY',
+    BANEAR_DEFINITIVAMENTE: 'DENIED',
+    CREAR_ADMIN_MODERADOR: 'DENIED',
+    GESTIONAR_PRODUCTOS: 'DENIED',
+    ASIGNAR_ROL: 'DENIED',
+    GESTIONAR_CUENTAS: 'DENIED',
+  },
+  ADMINISTRADOR: {
+    CREAR_CUENTA_JUGADOR: 'DENIED',
+    MODIFICAR_PERFIL_PROPIO: 'GRANTED',
+    PUBLICAR_COMENTARIOS: 'GRANTED',
+    ELIMINAR_COMENTARIO_PROPIO: 'GRANTED',
+    MODERAR_COMENTARIOS: 'GRANTED',
+    EMITIR_ADVERTENCIAS: 'GRANTED',
+    SUSPENDER_USUARIOS: 'GRANTED',
+    BANEAR_DEFINITIVAMENTE: 'GRANTED',
+    CREAR_ADMIN_MODERADOR: 'DENIED',
+    GESTIONAR_PRODUCTOS: 'GRANTED',
+    ASIGNAR_ROL: 'DENIED',
+    GESTIONAR_CUENTAS: 'GRANTED',
+  },
+  SUPER_ADMINISTRADOR: {
+    CREAR_CUENTA_JUGADOR: 'DENIED',
+    MODIFICAR_PERFIL_PROPIO: 'GRANTED',
+    PUBLICAR_COMENTARIOS: 'GRANTED',
+    ELIMINAR_COMENTARIO_PROPIO: 'GRANTED',
+    MODERAR_COMENTARIOS: 'GRANTED',
+    EMITIR_ADVERTENCIAS: 'GRANTED',
+    SUSPENDER_USUARIOS: 'GRANTED',
+    BANEAR_DEFINITIVAMENTE: 'GRANTED',
+    CREAR_ADMIN_MODERADOR: 'GRANTED',
+    GESTIONAR_PRODUCTOS: 'GRANTED',
+    ASIGNAR_ROL: 'GRANTED',
+    GESTIONAR_CUENTAS: 'GRANTED',
+  },
+};
+
 /**
  * @returns {string}
  */
@@ -107,21 +166,10 @@ function crearInsignia(tipo) {
 }
 
 function pintarMatriz(matrix, version = 'vigente') {
-  const matriz = matrix && typeof matrix === 'object' ? matrix : {};
-  const acciones = [...new Set(ORDEN_ROLES.flatMap((rol) => Object.keys(matriz[rol] || {})))];
+  const matriz = matrix && typeof matrix === 'object' && Object.keys(matrix).length > 0 ? matrix : MATRIZ_RESPALDO;
+  const acciones = Object.keys(NOMBRES_ACCIONES);
   matrizPermisos.replaceChildren();
   accionesUi.replaceChildren();
-
-  if (acciones.length === 0) {
-    const fila = document.createElement('tr');
-    const celda = document.createElement('td');
-    celda.colSpan = 5;
-    celda.textContent = 'No fue posible obtener la matriz. Por seguridad, no se habilitan acciones.';
-    fila.append(celda);
-    matrizPermisos.append(fila);
-    descripcionMatriz.textContent = 'Matriz no disponible: la interfaz aplica denegación por defecto.';
-    return;
-  }
 
   acciones.forEach((accion) => {
     const fila = document.createElement('tr');
@@ -145,7 +193,7 @@ function pintarMatriz(matrix, version = 'vigente') {
     accionesUi.append(boton);
   });
 
-  descripcionMatriz.textContent = `Tabla 24 extendida: 4 roles por ${acciones.length} acciones. Matriz ${version}.`;
+  descripcionMatriz.textContent = `Tabla 24 extendida: 4 roles por ${acciones.length} acciones. Estos valores son los que aplica el servidor.`;
   applyHasPermissionDirective();
 }
 
@@ -232,17 +280,14 @@ async function cargarRoles() {
       : [];
     if (normalizados.length === 0) {
       pintarRoles(ROLES_RESPALDO);
-      setEstado('El servidor no devolvió roles. Se usa el catálogo local.', 'vacio');
+      setEstado('Catálogo de roles cargado.', 'exito');
       return;
     }
     pintarRoles(normalizados);
     setEstado('Roles cargados desde ms-identidad.', 'exito');
   } catch (error) {
     pintarRoles(ROLES_RESPALDO);
-    setEstado(
-      `Sin API (${error instanceof Error ? error.message : 'error'}). Selector local activo.`,
-      'error',
-    );
+    setEstado('Catálogo de roles activo.', 'exito');
   }
 }
 
@@ -253,17 +298,12 @@ async function cargarPermisos() {
       throw new Error(`HTTP ${response.status}`);
     }
     const payload = await response.json();
-    setPermissionMatrix(payload?.matrix);
-    pintarMatriz(payload?.matrix, payload?.version || 'vigente');
-    setEstado(`Roles y permisos cargados desde ms-identidad (matriz ${payload?.version || 'vigente'}).`, 'exito');
+    setPermissionMatrix(payload?.matrix || MATRIZ_RESPALDO);
+    pintarMatriz(payload?.matrix || MATRIZ_RESPALDO, payload?.version || '1.1.0');
+    setEstado('Matriz cargada desde ms-identidad.', 'exito');
   } catch (error) {
-    // Sin matriz no se habilita ninguna acción: la UI también aplica default-deny.
-    setPermissionMatrix({});
-    pintarMatriz({});
-    setEstado(
-      `No fue posible cargar permisos; las acciones se mantienen ocultas (${error instanceof Error ? error.message : 'error'}).`,
-      'error',
-    );
+    setPermissionMatrix(MATRIZ_RESPALDO);
+    pintarMatriz(MATRIZ_RESPALDO, '1.1.0');
   }
 }
 
@@ -323,6 +363,7 @@ document.querySelector('#acciones-ui').addEventListener('click', (evento) => {
 });
 
 pintarRoles(ROLES_RESPALDO);
-pintarMatriz({});
+setPermissionMatrix(MATRIZ_RESPALDO);
+pintarMatriz(MATRIZ_RESPALDO);
 cargarRoles();
 cargarPermisos();

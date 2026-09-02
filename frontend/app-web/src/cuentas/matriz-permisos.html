@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HU-RBAC-001: Panel de Acceso por Roles — Nexus Battles VI</title>
+    <link rel="stylesheet" href="./demo-rbac.css" />
+    <link rel="stylesheet" href="../comun/barra-navegacion.css" />
+    <style>
+      .barra-navegacion {
+        display: flex;
+        gap: 12px;
+        background: #151a30;
+        padding: 8px 32px;
+        border-bottom: 1px solid #2d3754;
+      }
+      .nav-link {
+        color: #c5cde0;
+        text-decoration: none;
+        padding: 6px 14px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        transition: all 0.2s ease;
+      }
+      .nav-link:hover {
+        background: #2244bf;
+        color: #ffffff;
+      }
+      .nav-link.activo {
+        background: #1e3f88;
+        color: #ffffff;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Barra Superior Compartida Oficial (HU-INV-004) -->
+    <div id="contenedor-barra"></div>
+
+    <!-- Navegación entre Historias de Usuario de Cuentas -->
+    <nav class="barra-navegacion">
+      <a href="./matriz-permisos.html" class="nav-link activo">👤 HU-RBAC-001: Panel de Acceso por Roles</a>
+      <a href="./seguridad-servidor.html" class="nav-link">🛡️ HU-RBAC-004: Verificación en Servidor</a>
+    </nav>
+
+    <header class="cromo">
+      <h1>HU-RBAC-001: Panel de Control de Acceso por Roles</h1>
+      <p>Nexus Battles VI · Interfaz de Gestión de Privilegios y Directiva Reactiva de Permisos</p>
+    </header>
+
+    <main>
+      <!-- Selector Visual de Roles mediante Tarjetas Interactivas -->
+      <section class="tarjeta">
+        <!-- Indicador de Sesión Activa (si existe token) -->
+        <div id="aviso-sesion-activa" class="aviso-sesion" style="display: none;">
+          <span>🔑</span>
+          <span id="texto-sesion-activa">Sesión autenticada detectada.</span>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+          <div>
+            <h2 style="margin: 0 0 4px 0;">Seleccionar Rol para Acceso</h2>
+            <p style="margin: 0; font-size: 13.5px; color: var(--texto-secundario);">
+              Cambia el rol activo para ver en tiempo real los módulos y acciones autorizados en el sistema.
+            </p>
+          </div>
+          <!-- Selector nativo para accesibilidad y sincronización -->
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <label for="selector-rol" style="font-size: 12px; font-weight: 700; text-transform: uppercase;">Rol:</label>
+            <select id="selector-rol" style="padding: 6px 12px; border-radius: 6px; font-weight: 600;">
+              <option value="JUGADOR" selected>🎮 Jugador</option>
+              <option value="MODERADOR">🛡️ Moderador</option>
+              <option value="ADMINISTRADOR">⚡ Administrador</option>
+              <option value="SUPER_ADMINISTRADOR">👑 Super Administrador</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Cuadrícula de 4 Tarjetas de Roles Oficiales -->
+        <div class="cuadricula-roles" id="cuadricula-roles" role="radiogroup" aria-label="Seleccionar rol de acceso">
+          <div class="tarjeta-rol activa" data-rol="JUGADOR" tabindex="0" role="radio" aria-checked="true">
+            <div class="tarjeta-rol__cabecera">
+              <span class="tarjeta-rol__icono">🎮</span>
+              <span class="tarjeta-rol__nivel">Nivel 1</span>
+            </div>
+            <h3 class="tarjeta-rol__nombre">Jugador</h3>
+            <p class="tarjeta-rol__desc">Acceso básico a partidas, gestión de perfil propio y comentarios.</p>
+          </div>
+
+          <div class="tarjeta-rol" data-rol="MODERADOR" tabindex="0" role="radio" aria-checked="false">
+            <div class="tarjeta-rol__cabecera">
+              <span class="tarjeta-rol__icono">🛡️</span>
+              <span class="tarjeta-rol__nivel">Nivel 2</span>
+            </div>
+            <h3 class="tarjeta-rol__nombre">Moderador</h3>
+            <p class="tarjeta-rol__desc">Moderar comentarios, emitir advertencias y suspensiones temporales.</p>
+          </div>
+
+          <div class="tarjeta-rol" data-rol="ADMINISTRADOR" tabindex="0" role="radio" aria-checked="false">
+            <div class="tarjeta-rol__cabecera">
+              <span class="tarjeta-rol__icono">⚡</span>
+              <span class="tarjeta-rol__nivel">Nivel 3</span>
+            </div>
+            <h3 class="tarjeta-rol__nombre">Administrador</h3>
+            <p class="tarjeta-rol__desc">Gestión de usuarios, productos de tienda y baneos permanentes.</p>
+          </div>
+
+          <div class="tarjeta-rol" data-rol="SUPER_ADMINISTRADOR" tabindex="0" role="radio" aria-checked="false">
+            <div class="tarjeta-rol__cabecera">
+              <span class="tarjeta-rol__icono">👑</span>
+              <span class="tarjeta-rol__nivel">Nivel 4</span>
+            </div>
+            <h3 class="tarjeta-rol__nombre">Super Admin</h3>
+            <p class="tarjeta-rol__desc">Control total, nombramiento de administradores y asignación de roles.</p>
+          </div>
+        </div>
+
+        <!-- Resumen de Privilegios del Rol Activo -->
+        <div class="resumen-privilegios">
+          <div>
+            <span style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--texto-secundario);">Capacidad de Autorización:</span>
+            <div id="rol-activo-etiqueta" style="font-size: 15px; font-weight: 700; color: #1c2340; margin-top: 2px;">
+              Rol Activo: Jugador (Nivel 1)
+            </div>
+          </div>
+          <div class="barra-progreso-contenedor">
+            <span id="contador-privilegios" style="font-size: 13px; font-weight: 700; color: #1e3f88;">4 / 12 Acciones</span>
+            <div class="barra-progreso">
+              <div class="barra-progreso__relleno" id="progreso-relleno" style="width: 33.3%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Banner de Toast / Notificación de Acción -->
+        <div id="toast-accion" class="toast-feedback" style="display: none;" role="status">
+          <span id="toast-icono">✓</span>
+          <span id="toast-mensaje">Operación autorizada con éxito.</span>
+        </div>
+      </section>
+
+      <!-- Panel de Acciones por Módulos Funcionales (Directiva has-permission) -->
+      <section class="tarjeta" aria-labelledby="titulo-modulos">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <h2 id="titulo-modulos" style="margin: 0;">Módulos del Sistema y Acciones Disponibles</h2>
+          <span style="font-size: 12px; color: var(--texto-terciario);">Directiva reactiva: <code>[data-has-permission]</code></span>
+        </div>
+        <p style="margin: 0 0 16px 0; font-size: 13.5px; color: var(--texto-secundario);">
+          Haz clic en cualquier acción autorizada para interactuar. Los módulos no permitidos quedan bloqueados o protegidos automáticamente por la directiva RBAC.
+        </p>
+
+        <div class="seccion-modulos">
+          <!-- Módulo 1: Comunidad y Perfil -->
+          <div class="grupo-modulo">
+            <h3 class="grupo-modulo__titulo">
+              <span>👥</span> Comunidad, Jugador y Perfil
+            </h3>
+            <div class="grupo-modulo__grid">
+              <button type="button" class="boton-accion-card" data-has-permission="CREAR_CUENTA_JUGADOR" data-accion-nombre="Crear cuenta de jugador">
+                <span>➕ Crear cuenta de jugador</span>
+                <span class="badge-estado">✓ Habilitado</span>
+              </button>
+              <button type="button" class="boton-accion-card" data-has-permission="MODIFICAR_PERFIL_PROPIO" data-accion-nombre="Modificar perfil propio">
+                <span>✏️ Modificar perfil propio</span>
+                <span class="badge-estado">✓ Habilitado</span>
+              </button>
+              <button type="button" class="boton-accion-card" data-has-permission="PUBLICAR_COMENTARIOS" data-accion-nombre="Publicar comentarios">
+                <span>💬 Publicar comentarios</span>
+                <span class="badge-estado">✓ Habilitado</span>
+              </button>
+              <button type="button" class="boton-accion-card" data-has-permission="ELIMINAR_COMENTARIO_PROPIO" data-accion-nombre="Eliminar comentario propio">
+                <span>🗑️ Eliminar comentario propio</span>
+                <span class="badge-estado">✓ Habilitado</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Módulo 2: Moderación y Sanciones -->
+          <div class="grupo-modulo">
+            <h3 class="grupo-modulo__titulo">
+              <span>⚖️</span> Moderación y Sanciones
+            </h3>
+            <div class="grupo-modulo__grid">
+              <button type="button" class="boton-accion-card" data-has-permission="MODERAR_COMENTARIOS" data-accion-nombre="Moderar comentarios">
+                <span>🛡️ Moderar comentarios</span>
+                <span class="badge-estado">✓ Habilitado</span>
+              </button>
+              <button type="button" class="boton-accion-card" data-has-permission="EMITIR_ADVERTENCIAS" data-accion-nombre="Emitir advertencias">
+                <span>⚠️ Emitir advertencias</span>
+                <span class="badge-estado">✓ Habilitado</span>
+              </button>
+              <button type="button" class="boton-accion-card" data-has-permission="SUSPENDER_USUARIOS" data-accion-nombre="Suspender usuarios">
+                <span>⏳ Suspender usuarios</span>
+                <span class="badge-estado">✓ Habilitado</span>
+              </button>
+              <button type="button" class="boton-accion-card" data-has-permission="BANEAR_DEFINITIVAMENTE" data-accion-nombre="Banear definitivamente">
+                <span>🚫 Banear definitivamente</span>
+                <span class="badge-estado">✓ Habilitado</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Módulo 3: Administración y Economía -->
+          <div class="grupo-modulo">
+            <h3 class="grupo-modulo__titulo">
+              <span>⚙️</span> Administración del Sistema y Tienda
+            </h3>
+            <div class="grupo-modulo__grid">
+              <button type="button" class="boton-accion-card" data-has-permission="GESTIONAR_PRODUCTOS" data-accion-nombre="Gestionar productos">
+                <span>📦 Gestionar productos de tienda</span>
+                <span class="badge-estado">✓ Habilitado</span>
+              </button>
+              <button type="button" class="boton-accion-card" data-has-permission="GESTIONAR_CUENTAS" data-accion-nombre="Gestionar cuentas">
+                <span>📋 Gestionar cuentas de usuario</span>
+                <span class="badge-estado">✓ Habilitado</span>
+              </button>
+              <button type="button" class="boton-accion-card" data-has-permission="ASIGNAR_ROL" data-accion-nombre="Asignar rol">
+                <span>🔑 Asignar roles a usuarios</span>
+                <span class="badge-estado">✓ Habilitado</span>
+              </button>
+              <button type="button" class="boton-accion-card" data-has-permission="CREAR_ADMIN_MODERADOR" data-accion-nombre="Crear admin o moderador">
+                <span>👑 Nombrar administradores</span>
+                <span class="badge-estado">✓ Habilitado</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script type="module">
+      import {
+        applyHasPermissionDirective,
+        setPermissionMatrix,
+        setCurrentRole
+      } from './directives/has-permission.directive.js';
+      import { construirBarra } from '../comun/barra-navegacion.js';
+
+      // Montar la barra superior funcional compartida (HU-INV-004)
+      const token = sessionStorage.getItem('nexus.token');
+      const contenedorBarra = document.getElementById('contenedor-barra');
+      if (contenedorBarra) {
+        contenedorBarra.replaceChildren(
+          construirBarra({
+            seccionActiva: 'cuenta',
+            sesion: { autenticado: Boolean(token) },
+            navegar: (ruta) => {
+              if (ruta === '/inventario') {
+                window.location.href = '../contenido/inventario/inventario.html';
+              } else if (ruta === '/cuenta') {
+                window.location.href = './matriz-permisos.html';
+              } else {
+                alert(`La sección ${ruta} se habilitará en el Sprint 2.`);
+              }
+            }
+          })
+        );
+      }
+
+      const selectorRol = document.querySelector('#selector-rol');
+      const rolActivoEtiqueta = document.querySelector('#rol-activo-etiqueta');
+      const contadorPrivilegios = document.querySelector('#contador-privilegios');
+      const progresoRelleno = document.querySelector('#progreso-relleno');
+      const toastAccion = document.querySelector('#toast-accion');
+      const toastMensaje = document.querySelector('#toast-mensaje');
+      const toastIcono = document.querySelector('#toast-icono');
+      const tarjetasRoles = document.querySelectorAll('.tarjeta-rol');
+      const botonesAccion = document.querySelectorAll('.boton-accion-card');
+      const avisoSesion = document.querySelector('#aviso-sesion-activa');
+      const textoSesion = document.querySelector('#texto-sesion-activa');
+
+      const NOMBRES_ROLES = {
+        JUGADOR: 'Jugador',
+        MODERADOR: 'Moderador',
+        ADMINISTRADOR: 'Administrador',
+        SUPER_ADMINISTRADOR: 'Super Administrador'
+      };
+
+      const NIVELES_ROLES = {
+        JUGADOR: 'Nivel 1',
+        MODERADOR: 'Nivel 2',
+        ADMINISTRADOR: 'Nivel 3',
+        SUPER_ADMINISTRADOR: 'Nivel 4 - Total'
+      };
+
+      const MATRIZ_BASE = {
+        JUGADOR: {
+          CREAR_CUENTA_JUGADOR: 'GRANTED',
+          MODIFICAR_PERFIL_PROPIO: 'GRANTED',
+          PUBLICAR_COMENTARIOS: 'GRANTED',
+          ELIMINAR_COMENTARIO_PROPIO: 'GRANTED',
+          MODERAR_COMENTARIOS: 'DENIED',
+          EMITIR_ADVERTENCIAS: 'DENIED',
+          SUSPENDER_USUARIOS: 'DENIED',
+          BANEAR_DEFINITIVAMENTE: 'DENIED',
+          CREAR_ADMIN_MODERADOR: 'DENIED',
+          GESTIONAR_PRODUCTOS: 'DENIED',
+          ASIGNAR_ROL: 'DENIED',
+          GESTIONAR_CUENTAS: 'DENIED'
+        },
+        MODERADOR: {
+          CREAR_CUENTA_JUGADOR: 'DENIED',
+          MODIFICAR_PERFIL_PROPIO: 'GRANTED',
+          PUBLICAR_COMENTARIOS: 'GRANTED',
+          ELIMINAR_COMENTARIO_PROPIO: 'GRANTED',
+          MODERAR_COMENTARIOS: 'GRANTED',
+          EMITIR_ADVERTENCIAS: 'GRANTED',
+          SUSPENDER_USUARIOS: 'TEMPORARY',
+          BANEAR_DEFINITIVAMENTE: 'DENIED',
+          CREAR_ADMIN_MODERADOR: 'DENIED',
+          GESTIONAR_PRODUCTOS: 'DENIED',
+          ASIGNAR_ROL: 'DENIED',
+          GESTIONAR_CUENTAS: 'DENIED'
+        },
+        ADMINISTRADOR: {
+          CREAR_CUENTA_JUGADOR: 'DENIED',
+          MODIFICAR_PERFIL_PROPIO: 'GRANTED',
+          PUBLICAR_COMENTARIOS: 'GRANTED',
+          ELIMINAR_COMENTARIO_PROPIO: 'GRANTED',
+          MODERAR_COMENTARIOS: 'GRANTED',
+          EMITIR_ADVERTENCIAS: 'GRANTED',
+          SUSPENDER_USUARIOS: 'GRANTED',
+          BANEAR_DEFINITIVAMENTE: 'GRANTED',
+          CREAR_ADMIN_MODERADOR: 'DENIED',
+          GESTIONAR_PRODUCTOS: 'GRANTED',
+          ASIGNAR_ROL: 'DENIED',
+          GESTIONAR_CUENTAS: 'GRANTED'
+        },
+        SUPER_ADMINISTRADOR: {
+          CREAR_CUENTA_JUGADOR: 'DENIED',
+          MODIFICAR_PERFIL_PROPIO: 'GRANTED',
+          PUBLICAR_COMENTARIOS: 'GRANTED',
+          ELIMINAR_COMENTARIO_PROPIO: 'GRANTED',
+          MODERAR_COMENTARIOS: 'GRANTED',
+          EMITIR_ADVERTENCIAS: 'GRANTED',
+          SUSPENDER_USUARIOS: 'GRANTED',
+          BANEAR_DEFINITIVAMENTE: 'GRANTED',
+          CREAR_ADMIN_MODERADOR: 'GRANTED',
+          GESTIONAR_PRODUCTOS: 'GRANTED',
+          ASIGNAR_ROL: 'GRANTED',
+          GESTIONAR_CUENTAS: 'GRANTED'
+        }
+      };
+
+      /**
+       * Decodifica el token JWT de la sesión activa para preseleccionar
+       * el rol real con el que se autenticó el usuario (Paso 4).
+       */
+      function obtenerRolDesdeSesion() {
+        try {
+          if (!token) return null;
+          const partes = token.split('.');
+          if (partes.length !== 3) return null;
+          const payload = JSON.parse(atob(partes[1].replace(/-/g, '+').replace(/_/g, '/')));
+          const rol = payload.rol;
+          if (['JUGADOR', 'MODERADOR', 'ADMINISTRADOR', 'SUPER_ADMINISTRADOR'].includes(rol)) {
+            return { rol, apodo: payload.sub };
+          }
+        } catch {
+          // Si el token es inválido o no existe, retorna null
+        }
+        return null;
+      }
+
+      let timerToast = null;
+      function mostrarToast(mensaje, icono = '✓') {
+        if (timerToast) clearTimeout(timerToast);
+        toastIcono.textContent = icono;
+        toastMensaje.textContent = mensaje;
+        toastAccion.style.display = 'flex';
+        timerToast = setTimeout(() => {
+          toastAccion.style.display = 'none';
+        }, 3200);
+      }
+
+      function actualizarVistaRol() {
+        const rol = selectorRol.value;
+
+        // 1. Sincronizar tarjetas visuales de rol
+        tarjetasRoles.forEach((card) => {
+          const esActiva = card.dataset.rol === rol;
+          card.classList.toggle('activa', esActiva);
+          card.setAttribute('aria-checked', String(esActiva));
+        });
+
+        // 2. Actualizar etiquetas de resumen y barra de privilegios
+        rolActivoEtiqueta.textContent = `Rol Activo: ${NOMBRES_ROLES[rol]} (${NIVELES_ROLES[rol]})`;
+
+        let permitidas = 0;
+        const total = 12;
+        const permisosRol = MATRIZ_BASE[rol] || {};
+        for (const accion of Object.keys(permisosRol)) {
+          if (permisosRol[accion] === 'GRANTED' || permisosRol[accion] === 'TEMPORARY') {
+            permitidas++;
+          }
+        }
+        contadorPrivilegios.textContent = `${permitidas} / ${total} Acciones`;
+        progresoRelleno.style.width = `${(permitidas / total) * 100}%`;
+
+        // 3. Aplicar directiva reactiva de interfaz [data-has-permission]
+        setCurrentRole(rol);
+        applyHasPermissionDirective();
+      }
+
+      // Eventos de selección por tarjetas
+      tarjetasRoles.forEach((card) => {
+        card.addEventListener('click', () => {
+          selectorRol.value = card.dataset.rol;
+          actualizarVistaRol();
+        });
+        card.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            card.click();
+          }
+        });
+      });
+
+      // Evento de selección por dropdown
+      selectorRol.addEventListener('change', actualizarVistaRol);
+
+      // Evento en cada botón de acción para feedback interactivo
+      botonesAccion.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const nombreAccion = btn.dataset.accionNombre || btn.textContent.trim();
+          const rol = selectorRol.value;
+          mostrarToast(`Operación autorizada: "${nombreAccion}" ejecutada con éxito bajo rol ${NOMBRES_ROLES[rol]}.`);
+        });
+      });
+
+      // Inicialización
+      setPermissionMatrix(MATRIZ_BASE);
+
+      // Cargar rol real desde sesión si existe
+      const sesionInfo = obtenerRolDesdeSesion();
+      if (sesionInfo) {
+        selectorRol.value = sesionInfo.rol;
+        avisoSesion.style.display = 'flex';
+        textoSesion.textContent = `Sesión autenticada detectada: Conectado como "${sesionInfo.apodo}" (${NOMBRES_ROLES[sesionInfo.rol]}).`;
+      }
+
+      actualizarVistaRol();
+    </script>
+  </body>
+</html>

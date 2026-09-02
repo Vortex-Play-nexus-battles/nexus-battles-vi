@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Crear cuenta administrativa - Nexus Battles</title>
+
+  <link rel="stylesheet" href="../comun/barra-navegacion.css">
+  <link rel="stylesheet" href="./crear-cuenta-admin.css">
+
+</head>
+
+<body>
+
+<header class="encabezado">
+
+  <div class="encabezado-contenido">
+
+    <div>
+      <h1>Crear cuenta administrativa</h1>
+      <p>Crear cuentas con rol de Moderador o Administrador.</p>
+    </div>
+
+    <button
+      id="btn-volver-header"
+      type="button"
+      class="btn btn-secundario">
+      Volver
+    </button>
+
+  </div>
+
+</header>
+
+<main class="contenedor-principal">
+
+  <!-- =====================================================
+       ACCESO DENEGADO
+       ===================================================== -->
+
+  <section
+    id="acceso-denegado"
+    class="mensaje-error"
+    hidden>
+
+    <div class="tarjeta">
+
+      <h2>Acceso denegado</h2>
+
+      <p>
+        Solo un Super Administrador con el permiso correspondiente
+        puede crear cuentas administrativas.
+      </p>
+
+      <button
+        id="btn-cancelar-acceso"
+        type="button"
+        class="btn btn-secundario">
+        Volver
+      </button>
+
+    </div>
+
+  </section>
+
+
+  <!-- =====================================================
+       FORMULARIO
+       ===================================================== -->
+
+  <section
+    id="formulario-contenedor"
+    class="tarjeta"
+    hidden>
+
+    <div class="tarjeta-cabecera">
+
+      <h2>Nueva cuenta administrativa</h2>
+
+      <p>
+        Completa los datos para crear una cuenta de Moderador
+        o Administrador.
+      </p>
+
+    </div>
+
+
+    <form id="form-crear-cuenta">
+
+
+      <!-- =============================================
+           DATOS PERSONALES
+           ============================================= -->
+
+      <div class="formulario-grid">
+
+        <div class="campo">
+
+          <label for="nombres">
+            Nombres
+          </label>
+
+          <input
+            id="nombres"
+            name="nombres"
+            type="text"
+            autocomplete="given-name"
+            required>
+
+        </div>
+
+
+        <div class="campo">
+
+          <label for="apellidos">
+            Apellidos
+          </label>
+
+          <input
+            id="apellidos"
+            name="apellidos"
+            type="text"
+            autocomplete="family-name"
+            required>
+
+        </div>
+
+
+        <div class="campo">
+
+          <label for="apodo">
+            Apodo
+          </label>
+
+          <input
+            id="apodo"
+            name="apodo"
+            type="text"
+            autocomplete="nickname"
+            required>
+
+        </div>
+
+
+        <div class="campo">
+
+          <label for="email">
+            Correo electrónico
+          </label>
+
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autocomplete="email"
+            required>
+
+        </div>
+
+
+        <div class="campo">
+
+          <label for="password">
+            Contraseña
+          </label>
+
+          <input
+            id="password"
+            name="password"
+            type="password"
+            minlength="9"
+            autocomplete="new-password"
+            required>
+
+          <small>
+            Debe tener al menos 9 caracteres.
+          </small>
+
+        </div>
+
+
+        <div class="campo">
+
+          <label for="rol">
+            Rol
+          </label>
+
+          <select
+            id="rol"
+            name="rol"
+            required>
+
+            <option value="">
+              Selecciona un rol
+            </option>
+
+            <option value="MODERADOR">
+              Moderador
+            </option>
+
+            <option value="ADMINISTRADOR">
+              Administrador
+            </option>
+
+          </select>
+
+        </div>
+
+      </div>
+
+
+      <!-- =============================================
+           PERMISOS
+           ============================================= -->
+
+      <section class="permisos">
+
+        <h3>
+          Permisos asociados
+        </h3>
+
+        <ul
+          id="permisos"
+          class="permisos-lista">
+        </ul>
+
+      </section>
+
+
+      <div class="informacion-importante">
+
+        La cuenta será creada inicialmente como inactiva.
+        El proceso de activación y segundo factor de autenticación
+        corresponde al flujo de seguridad del sistema.
+
+      </div>
+
+
+      <!-- =============================================
+           MENSAJES
+           ============================================= -->
+
+      <div
+        id="mensaje-error"
+        class="mensaje"
+        role="alert"
+        aria-live="assertive"
+        hidden>
+      </div>
+
+
+      <div
+        id="mensaje-exito"
+        class="mensaje"
+        role="status"
+        aria-live="polite"
+        hidden>
+      </div>
+
+
+      <!-- =============================================
+           BOTONES
+           ============================================= -->
+
+      <div class="acciones-formulario">
+
+        <button
+          id="btn-cancelar"
+          type="button"
+          class="btn btn-secundario">
+          Cancelar
+        </button>
+
+        <button
+          id="btn-crear"
+          type="submit"
+          class="btn btn-principal"
+          data-has-permission="CREAR_ADMIN_MODERADOR">
+          Crear cuenta
+        </button>
+
+      </div>
+
+    </form>
+
+  </section>
+
+
+  <!-- =====================================================
+       RESULTADO
+       ===================================================== -->
+
+  <section
+    id="resultado-creacion"
+    class="tarjeta resultado-creacion"
+    hidden>
+
+    <h2>Cuenta creada correctamente</h2>
+
+    <p
+      id="resultado-texto"
+      class="resultado-texto">
+    </p>
+
+    <div class="informacion-importante">
+
+      La cuenta queda sujeta al proceso de activación,
+      autenticación y segundo factor definido por el sistema.
+
+    </div>
+
+    <div class="acciones-formulario">
+
+      <button
+        id="btn-nueva-cuenta"
+        type="button"
+        class="btn btn-principal">
+        Crear otra cuenta
+      </button>
+
+      <button
+        id="btn-volver-resultado"
+        type="button"
+        class="btn btn-secundario">
+        Volver
+      </button>
+
+    </div>
+
+  </section>
+
+</main>
+
+<script
+  type="module"
+  src="./crear-cuenta-admin.js">
+</script>
+
+</body>
+</html>

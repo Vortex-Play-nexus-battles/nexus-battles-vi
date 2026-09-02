@@ -15,6 +15,7 @@ import {
 } from './cliente-inventario.js';
 import { construirVitrina, PRODUCTOS_POR_PAGINA } from './vitrina.js';
 import { construirCarga, construirVacio, construirError } from './estados-vista.js';
+import { abrirFicha } from './ficha-producto.js';
 
 const TIPOS = [
   ['HEROE', 'Héroe'],
@@ -66,7 +67,16 @@ export async function montarVitrina(
     return pagina;
   }
 
-  contenedor.replaceChildren(construirVitrina(pagina, { alEditar, alEquipar }));
+  contenedor.replaceChildren(
+    construirVitrina(pagina, {
+      alEditar,
+      alEquipar,
+      // HU-INV-007: la ficha lee el catalogo por su cuenta; el inventario
+      // solo guarda la referencia (RF-ADM-10).
+      alAbrirDetalle: (elemento) =>
+        abrirFicha(elemento.productoId, { origen: document.activeElement }),
+    }),
+  );
   return pagina;
 }
 
