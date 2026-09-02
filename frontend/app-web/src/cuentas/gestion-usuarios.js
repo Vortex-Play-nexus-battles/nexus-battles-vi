@@ -1,812 +1,934 @@
-```javascript
 import {
-    setCurrentRole,
-    applyHasPermissionDirective
+setCurrentRole,
+getCurrentRole,
+checkPermission,
+applyHasPermissionDirective
 } from './directives/has-permission.directive.js';
 
 import {
-    fetchWithHttpErrorInterceptor
+fetchWithHttpErrorInterceptor
 } from '../comun/interceptors/http-error.interceptor.js';
-
 
 const BASE_API = '/api/admin/usuarios';
 
 const CLAVE_ROL = 'nexus.rolActual';
-const CLAVE_APODO = 'nexus.apodoActual';
+const CLAVE_USUARIO_ID = 'nexus.usuarioId';
 
-const AVATARES_PERMITIDOS = [
-    'alquimista-picaro-veneno.jpg',
-    'arquero-cazador.jpg',
-    'chaman-sanador.jpg',
-    'comandante-con-casco.jpg',
-    'gran-mago-sabio.jpg',
-    'guerrero-berserker.jpg',
-    'guerrero-tanque.jpg',
-    'mago-de-fuego.jpg',
-    'mago-de-hielo.jpg',
-    'picaro-asesino.jpg'
-];
-
+const PERMISO_GESTIONAR = 'GESTIONAR_CUENTAS';
+const PERMISO_SUSPENDER = 'SUSPENDER_USUARIOS';
+const PERMISO_BANEAR = 'BANEAR_DEFINITIVAMENTE';
 
 let usuarioSeleccionado = null;
-let accionPendiente = null;
 
+document.addEventListener('DOMContentLoaded', iniciar);
 
-// ============================================================
-// INICIALIZACIÓN
-// ============================================================
+function iniciar() {
 
-document.addEventListener('DOMContentLoaded', () => {
+```
+const rolActual =
+    sessionStorage.getItem(CLAVE_ROL) || 'JUGADOR';
 
-    const rol = sessionStorage.getItem(CLAVE_ROL);
+setCurrentRole(rolActual);
 
-    if (!rol) {
-        window.location.href = './login.html';
-        return;
-    }
+applyHasPermissionDirective();
 
-    setCurrentRole(rol);
-    applyHasPermissionDirective();
+configurarEventos();
 
-    configurarEventos();
-});
+verificarAcceso();
+```
 
-
-// ============================================================
-// EVENTOS
-// ============================================================
+}
 
 function configurarEventos() {
 
-    document
-        .getElementById('btn-cargar')
-        .addEventListener('click', cargarUsuario);
+```
+const formularioBusqueda =
+    document.getElementById('form-buscar-usuario');
 
-    document
-        .getElementById('form-perfil')
-        .addEventListener('submit', guardarPerfil);
+const formularioPerfil =
+    document.getElementById('formulario-perfil-admin');
 
-    document
-        .getElementById('btn-descartar')
-        .addEventListener('click', cargarDatosEnFormulario);
+const btnVolver =
+    document.getElementById('btn-volver');
 
-    document
-        .getElementById('btn-suspender')
-        .addEventListener('click', confirmarSuspension);
+const btnVolverAcceso =
+    document.getElementById('btn-volver-acceso');
 
-    document
-        .getElementById('btn-banear')
-        .addEventListener('click', confirmarBaneo);
+const btnSuspender =
+    document.getElementById('btn-suspender');
 
-    document
-        .getElementById('btn-reactivar')
-        .addEventListener('click', confirmarReactivacion);
+const btnReactivar =
+    document.getElementById('btn-reactivar');
 
-    document
-        .getElementById('btn-restablecer-password')
-        .addEventListener('click', confirmarRestablecimiento);
+const btnBanear =
+    document.getElementById('btn-banear');
 
-    document
-        .getElementById('dialog-cancelar')
-        .addEventListener('click', cerrarDialogo);
+const btnRestablecerPassword =
+    document.getElementById('btn-restablecer-password');
 
-    document
-        .getElementById('dialog-confirmar')
-        .addEventListener('click', ejecutarAccionConfirmada);
 
-    document
-        .getElementById('btn-volver')
-        .addEventListener('click', () => {
-            window.history.back();
-        });
+if (formularioBusqueda) {
+
+    formularioBusqueda.addEventListener(
+        'submit',
+        buscarUsuario
+    );
+
 }
 
 
-// ============================================================
-// CARGAR USUARIO
-// ============================================================
+if (formularioPerfil) {
 
-async function cargarUsuario() {
+    formularioPerfil.addEventListener(
+        'submit',
+        guardarPerfil
+    );
 
-    const input = document.getElementById('usuario-id');
-    const usuarioId = Number(input.value);
-
-    if (!Number.isInteger(usuarioId) || usuarioId <= 0) {
-        mostrarMensaje(
-            'mensaje-busqueda',
-            'Introduce un ID de usuario válido.',
-            'error'
-        );
-        return;
-    }
-
-    ocultarMensaje('mensaje-busqueda');
-
-    try {
-
-        /*
-         * No existe actualmente un endpoint de consulta administrativa
-         * confirmado en el backend.
-         *
-         * Por eso utilizamos el endpoint de perfil existente.
-         *
-         * IMPORTANTE:
-         * El endpoint /api/v1/perfiles/{usuarioId} exige X-User-Name
-         * y comprueba que sea el dueño del perfil.
-         *
-         * Por tanto, un administrador NO podrá consultar aquí el perfil
-         * de otro usuario con ese endpoint.
-         *
-         * Se deja esta función preparada para conectarla al endpoint
-         * administrativo cuando esté disponible.
-         */
-
-        throw new Error(
-            'El backend actual no tiene un endpoint de consulta administrativa de usuarios. ' +
-            'La edición administrativa ya existe, pero primero necesita recibir el usuario seleccionado.'
-        );
-
-    } catch (error) {
-
-        mostrarMensaje(
-            'mensaje-busqueda',
-            error.message,
-            'error'
-        );
-    }
 }
 
 
-// ============================================================
-// PERFIL
-// ============================================================
+if (btnVolver) {
 
-async function guardarPerfil(event) {
+    btnVolver.addEventListener(
+        'click',
+        volverInicio
+    );
 
-    event.preventDefault();
-
-    if (!usuarioSeleccionado) {
-        mostrarMensaje(
-            'mensaje-perfil',
-            'Primero debes seleccionar un usuario.',
-            'error'
-        );
-        return;
-    }
-
-    const datos = obtenerDatosFormulario();
-
-    if (!validarDatosPerfil(datos)) {
-        return;
-    }
-
-    const cambioApodo =
-        datos.apodo !== usuarioSeleccionado.apodo;
-
-    if (cambioApodo) {
-
-        abrirDialogo(
-            'Cambiar apodo',
-            '¿Estás seguro de cambiar el apodo de este usuario?',
-            async () => {
-                await ejecutarActualizacionPerfil(datos);
-            }
-        );
-
-        return;
-    }
-
-    await ejecutarActualizacionPerfil(datos);
 }
 
 
-async function ejecutarActualizacionPerfil(datos) {
+if (btnVolverAcceso) {
 
-    try {
+    btnVolverAcceso.addEventListener(
+        'click',
+        volverInicio
+    );
 
-        const response = await fetchWithHttpErrorInterceptor(
-            `${BASE_API}/${usuarioSeleccionado.usuarioId}/perfil`,
+}
+
+
+if (btnSuspender) {
+
+    btnSuspender.addEventListener(
+        'click',
+        suspenderUsuario
+    );
+
+}
+
+
+if (btnReactivar) {
+
+    btnReactivar.addEventListener(
+        'click',
+        reactivarUsuario
+    );
+
+}
+
+
+if (btnBanear) {
+
+    btnBanear.addEventListener(
+        'click',
+        banearUsuario
+    );
+
+}
+
+
+if (btnRestablecerPassword) {
+
+    btnRestablecerPassword.addEventListener(
+        'click',
+        restablecerPassword
+    );
+
+}
+```
+
+}
+
+function verificarAcceso() {
+
+```
+const contenedor =
+    document.getElementById('gestion-contenedor');
+
+const accesoDenegado =
+    document.getElementById('acceso-denegado');
+
+
+if (!contenedor || !accesoDenegado) {
+    return;
+}
+
+
+const tienePermiso =
+    checkPermission(PERMISO_GESTIONAR);
+
+
+if (!tienePermiso) {
+
+    contenedor.hidden = true;
+
+    accesoDenegado.hidden = false;
+
+    return;
+}
+
+
+contenedor.hidden = false;
+
+accesoDenegado.hidden = true;
+```
+
+}
+
+async function buscarUsuario(evento) {
+
+```
+evento.preventDefault();
+
+
+limpiarMensajeBusqueda();
+
+
+const input =
+    document.getElementById('usuario-id');
+
+if (!input) {
+    return;
+}
+
+
+const usuarioId =
+    input.value.trim();
+
+
+if (!usuarioId || Number(usuarioId) <= 0) {
+
+    mostrarMensajeBusqueda(
+        'Debes ingresar un ID de usuario válido.'
+    );
+
+    return;
+}
+
+
+/*
+ * Actualmente el backend conocido no expone todavía
+ * un GET administrativo confirmado para consultar
+ * la información completa del usuario.
+ *
+ * Por eso esta función deja seleccionado el ID
+ * y prepara la interfaz para el futuro endpoint.
+ */
+
+usuarioSeleccionado = {
+    id: Number(usuarioId)
+};
+
+
+sessionStorage.setItem(
+    CLAVE_USUARIO_ID,
+    String(usuarioId)
+);
+
+
+mostrarPanelUsuario();
+
+
+limpiarDatosUsuario();
+
+
+mostrarMensajeBusqueda(
+    'Usuario seleccionado. La consulta de sus datos quedará conectada cuando el backend exponga el endpoint administrativo de consulta.'
+);
+```
+
+}
+
+function mostrarPanelUsuario() {
+
+```
+const panel =
+    document.getElementById('panel-usuario');
+
+if (!panel) {
+    return;
+}
+
+
+panel.hidden = false;
+```
+
+}
+
+function limpiarDatosUsuario() {
+
+```
+establecerTexto(
+    'usuario-id-mostrado',
+    usuarioSeleccionado?.id ?? '-'
+);
+
+establecerTexto(
+    'usuario-apodo-mostrado',
+    '-'
+);
+
+establecerTexto(
+    'usuario-email-mostrado',
+    '-'
+);
+
+establecerTexto(
+    'usuario-rol-mostrado',
+    '-'
+);
+
+establecerTexto(
+    'usuario-estado-mostrado',
+    '-'
+);
+
+
+establecerValor('nombres', '');
+establecerValor('apellidos', '');
+establecerValor('apodo', '');
+establecerValor('avatar', '');
+establecerValor('biografia', '');
+establecerValor('preferencias', '');
+establecerValor('estado', 'ACTIVO');
+establecerValor('suspendido-hasta', '');
+```
+
+}
+
+async function guardarPerfil(evento) {
+
+```
+evento.preventDefault();
+
+
+if (!validarUsuarioSeleccionado()) {
+    return;
+}
+
+
+if (!checkPermission(PERMISO_GESTIONAR)) {
+
+    mostrarMensajePerfil(
+        'No tienes permisos para modificar cuentas.'
+    );
+
+    return;
+}
+
+
+const nombres =
+    obtenerValor('nombres');
+
+const apellidos =
+    obtenerValor('apellidos');
+
+const apodo =
+    obtenerValor('apodo');
+
+const avatar =
+    obtenerValor('avatar');
+
+const biografia =
+    obtenerValor('biografia');
+
+const preferencias =
+    obtenerValor('preferencias');
+
+
+if (!nombres) {
+
+    mostrarMensajePerfil(
+        'Los nombres son obligatorios.'
+    );
+
+    return;
+}
+
+
+if (!apellidos) {
+
+    mostrarMensajePerfil(
+        'Los apellidos son obligatorios.'
+    );
+
+    return;
+}
+
+
+if (!apodo) {
+
+    mostrarMensajePerfil(
+        'El apodo es obligatorio.'
+    );
+
+    return;
+}
+
+
+const confirmado =
+    window.confirm(
+        `¿Deseas guardar los cambios del usuario ${usuarioSeleccionado.id}?`
+    );
+
+
+if (!confirmado) {
+    return;
+}
+
+
+const boton =
+    document.getElementById('btn-guardar-perfil');
+
+cambiarEstadoBoton(
+    boton,
+    true,
+    'Guardando...'
+);
+
+
+try {
+
+    const respuesta =
+        await fetchWithHttpErrorInterceptor(
+            `${BASE_API}/${usuarioSeleccionado.id}/perfil`,
             {
                 method: 'PUT',
-                headers: construirHeaders(),
-                body: JSON.stringify(datos)
+
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+
+                body: JSON.stringify({
+                    nombres,
+                    apellidos,
+                    apodo,
+                    avatar,
+                    biografia,
+                    preferencias
+                })
             }
         );
 
-        if (!response.ok) {
-            throw new Error(
-                await obtenerMensajeError(response)
-            );
-        }
 
-        const actualizado = await response.json();
+    if (!respuesta.ok) {
 
-        usuarioSeleccionado = normalizarPerfil(actualizado);
-
-        cargarUsuarioEnPantalla();
-        cargarDatosEnFormulario();
-
-        mostrarMensaje(
-            'mensaje-perfil',
-            'Perfil actualizado correctamente.',
-            'success'
+        throw new Error(
+            await obtenerMensajeError(respuesta)
         );
 
-    } catch (error) {
-
-        mostrarMensaje(
-            'mensaje-perfil',
-            error.message,
-            'error'
-        );
-    }
-}
-
-
-function obtenerDatosFormulario() {
-
-    const avatarSeleccionado =
-        document.querySelector('input[name="avatar"]:checked');
-
-    return {
-        nombres: document.getElementById('nombres').value.trim(),
-        apellidos: document.getElementById('apellidos').value.trim(),
-        avatar: avatarSeleccionado
-            ? avatarSeleccionado.value
-            : null,
-        biografia: document.getElementById('biografia').value.trim(),
-        preferencias: document.getElementById('preferencias').value.trim(),
-        apodo: document.getElementById('apodo').value.trim()
-    };
-}
-
-
-function validarDatosPerfil(datos) {
-
-    if (!datos.nombres) {
-        mostrarMensaje(
-            'mensaje-perfil',
-            'Los nombres son obligatorios.',
-            'error'
-        );
-        return false;
     }
 
-    if (!datos.apellidos) {
-        mostrarMensaje(
-            'mensaje-perfil',
-            'Los apellidos son obligatorios.',
-            'error'
-        );
-        return false;
-    }
 
-    if (!datos.apodo) {
-        mostrarMensaje(
-            'mensaje-perfil',
-            'El apodo es obligatorio.',
-            'error'
-        );
-        return false;
-    }
-
-    if (
-        datos.avatar &&
-        !AVATARES_PERMITIDOS.includes(datos.avatar)
-    ) {
-        mostrarMensaje(
-            'mensaje-perfil',
-            'El avatar seleccionado no es válido.',
-            'error'
-        );
-        return false;
-    }
-
-    return true;
-}
-
-
-function cargarDatosEnFormulario() {
-
-    if (!usuarioSeleccionado) {
-        return;
-    }
-
-    document.getElementById('nombres').value =
-        usuarioSeleccionado.nombres ?? '';
-
-    document.getElementById('apellidos').value =
-        usuarioSeleccionado.apellidos ?? '';
-
-    document.getElementById('apodo').value =
-        usuarioSeleccionado.apodo ?? '';
-
-    document.getElementById('biografia').value =
-        usuarioSeleccionado.biografia ?? '';
-
-    document.getElementById('preferencias').value =
-        usuarioSeleccionado.preferencias ?? '';
-
-    const avatar = usuarioSeleccionado.avatar;
-
-    document
-        .querySelectorAll('input[name="avatar"]')
-        .forEach(input => {
-            input.checked = input.value === avatar;
-        });
-}
-
-
-// ============================================================
-// ESTADO
-// ============================================================
-
-function confirmarSuspension() {
-
-    if (!usuarioSeleccionado) {
-        return;
-    }
-
-    const fecha = document
-        .getElementById('suspendido-hasta')
-        .value;
-
-    if (!fecha) {
-
-        mostrarMensaje(
-            'mensaje-estado',
-            'Debes seleccionar hasta cuándo se suspenderá la cuenta.',
-            'error'
-        );
-
-        return;
-    }
-
-    abrirDialogo(
-        'Suspender cuenta',
-        '¿Estás seguro de suspender esta cuenta?',
-        async () => {
-            await suspenderCuenta(fecha);
-        }
+    mostrarMensajePerfil(
+        'Perfil actualizado correctamente.'
     );
-}
 
 
-async function suspenderCuenta(fecha) {
-
-    try {
-
-        const response =
-            await fetchWithHttpErrorInterceptor(
-                `${BASE_API}/${usuarioSeleccionado.usuarioId}/suspender`,
-                {
-                    method: 'PUT',
-                    headers: construirHeaders(),
-                    body: JSON.stringify({
-                        suspendidoHasta: convertirFecha(fecha)
-                    })
-                }
-            );
-
-        if (!response.ok) {
-            throw new Error(
-                await obtenerMensajeError(response)
-            );
-        }
-
-        mostrarMensaje(
-            'mensaje-estado',
-            'Cuenta suspendida correctamente.',
-            'success'
-        );
-
-        await refrescarEstadoVisual('SUSPENDIDA');
-
-    } catch (error) {
-
-        mostrarMensaje(
-            'mensaje-estado',
-            error.message,
-            'error'
-        );
-    }
-}
+    actualizarResumenUsuario({
+        apodo,
+        avatar
+    });
 
 
-function confirmarBaneo() {
+} catch (error) {
 
-    if (!usuarioSeleccionado) {
-        return;
-    }
-
-    abrirDialogo(
-        'Baneo definitivo',
-        'Esta acción es permanente. ¿Estás seguro de banear esta cuenta?',
-        async () => {
-            await banearCuenta();
-        }
+    console.error(
+        'Error actualizando perfil:',
+        error
     );
-}
 
-
-async function banearCuenta() {
-
-    try {
-
-        const response =
-            await fetchWithHttpErrorInterceptor(
-                `${BASE_API}/${usuarioSeleccionado.usuarioId}/banear`,
-                {
-                    method: 'PUT',
-                    headers: construirHeaders()
-                }
-            );
-
-        if (!response.ok) {
-            throw new Error(
-                await obtenerMensajeError(response)
-            );
-        }
-
-        mostrarMensaje(
-            'mensaje-estado',
-            'Cuenta baneada definitivamente.',
-            'success'
-        );
-
-        await refrescarEstadoVisual('BANEADA');
-
-    } catch (error) {
-
-        mostrarMensaje(
-            'mensaje-estado',
-            error.message,
-            'error'
-        );
-    }
-}
-
-
-function confirmarReactivacion() {
-
-    if (!usuarioSeleccionado) {
-        return;
-    }
-
-    abrirDialogo(
-        'Reactivar cuenta',
-        '¿Estás seguro de reactivar esta cuenta?',
-        async () => {
-            await reactivarCuenta();
-        }
+    mostrarMensajePerfil(
+        error.message ||
+        'No fue posible actualizar el perfil.'
     );
-}
 
+} finally {
 
-async function reactivarCuenta() {
-
-    try {
-
-        const response =
-            await fetchWithHttpErrorInterceptor(
-                `${BASE_API}/${usuarioSeleccionado.usuarioId}/reactivar`,
-                {
-                    method: 'PUT',
-                    headers: construirHeaders()
-                }
-            );
-
-        if (!response.ok) {
-            throw new Error(
-                await obtenerMensajeError(response)
-            );
-        }
-
-        mostrarMensaje(
-            'mensaje-estado',
-            'Cuenta reactivada correctamente.',
-            'success'
-        );
-
-        await refrescarEstadoVisual('ACTIVO');
-
-    } catch (error) {
-
-        mostrarMensaje(
-            'mensaje-estado',
-            error.message,
-            'error'
-        );
-    }
-}
-
-
-// ============================================================
-// PASSWORD
-// ============================================================
-
-function confirmarRestablecimiento() {
-
-    if (!usuarioSeleccionado) {
-        return;
-    }
-
-    abrirDialogo(
-        'Restablecer contraseña',
-        'Se generará un mecanismo de restablecimiento para el usuario. ¿Deseas continuar?',
-        async () => {
-            await restablecerPassword();
-        }
+    cambiarEstadoBoton(
+        boton,
+        false,
+        'Guardar cambios'
     );
+
+}
+```
+
 }
 
+async function suspenderUsuario() {
+
+```
+if (!validarUsuarioSeleccionado()) {
+    return;
+}
+
+
+if (!checkPermission(PERMISO_SUSPENDER)) {
+
+    mostrarMensajePerfil(
+        'No tienes permisos para suspender usuarios.'
+    );
+
+    return;
+}
+
+
+const suspendidoHasta =
+    obtenerValor('suspendido-hasta');
+
+
+if (!suspendidoHasta) {
+
+    mostrarMensajePerfil(
+        'Debes indicar hasta cuándo estará suspendida la cuenta.'
+    );
+
+    return;
+}
+
+
+const confirmado =
+    window.confirm(
+        `¿Deseas suspender al usuario ${usuarioSeleccionado.id}?`
+    );
+
+
+if (!confirmado) {
+    return;
+}
+
+
+await ejecutarAccionEstado(
+    `/suspender`,
+    'SUSPENDIDO',
+    'Cuenta suspendida correctamente.'
+);
+```
+
+}
+
+async function reactivarUsuario() {
+
+```
+if (!validarUsuarioSeleccionado()) {
+    return;
+}
+
+
+if (!checkPermission(PERMISO_SUSPENDER)) {
+
+    mostrarMensajePerfil(
+        'No tienes permisos para reactivar usuarios.'
+    );
+
+    return;
+}
+
+
+const confirmado =
+    window.confirm(
+        `¿Deseas reactivar al usuario ${usuarioSeleccionado.id}?`
+    );
+
+
+if (!confirmado) {
+    return;
+}
+
+
+await ejecutarAccionEstado(
+    `/reactivar`,
+    'ACTIVO',
+    'Cuenta reactivada correctamente.'
+);
+```
+
+}
+
+async function banearUsuario() {
+
+```
+if (!validarUsuarioSeleccionado()) {
+    return;
+}
+
+
+if (!checkPermission(PERMISO_BANEAR)) {
+
+    mostrarMensajePerfil(
+        'No tienes permisos para banear definitivamente a este usuario.'
+    );
+
+    return;
+}
+
+
+const confirmado =
+    window.confirm(
+        `Esta acción es permanente. ¿Deseas banear definitivamente al usuario ${usuarioSeleccionado.id}?`
+    );
+
+
+if (!confirmado) {
+    return;
+}
+
+
+await ejecutarAccionEstado(
+    `/banear`,
+    'BANEADO',
+    'Cuenta baneada definitivamente.'
+);
+```
+
+}
+
+async function ejecutarAccionEstado(
+ruta,
+estado,
+mensajeExito
+) {
+
+```
+try {
+
+    const respuesta =
+        await fetchWithHttpErrorInterceptor(
+            `${BASE_API}/${usuarioSeleccionado.id}${ruta}`,
+            {
+                method: 'PUT'
+            }
+        );
+
+
+    if (!respuesta.ok) {
+
+        throw new Error(
+            await obtenerMensajeError(respuesta)
+        );
+
+    }
+
+
+    establecerValor(
+        'estado',
+        estado
+    );
+
+
+    establecerTexto(
+        'usuario-estado-mostrado',
+        estado
+    );
+
+
+    mostrarMensajePerfil(
+        mensajeExito
+    );
+
+
+} catch (error) {
+
+    console.error(
+        'Error modificando estado:',
+        error
+    );
+
+    mostrarMensajePerfil(
+        error.message ||
+        'No fue posible modificar el estado de la cuenta.'
+    );
+
+}
+```
+
+}
 
 async function restablecerPassword() {
 
-    try {
+```
+if (!validarUsuarioSeleccionado()) {
+    return;
+}
 
-        const response =
-            await fetchWithHttpErrorInterceptor(
-                `${BASE_API}/${usuarioSeleccionado.usuarioId}/restablecer-password`,
-                {
-                    method: 'POST',
-                    headers: construirHeaders()
-                }
-            );
 
-        if (!response.ok) {
-            throw new Error(
-                await obtenerMensajeError(response)
-            );
-        }
+if (!checkPermission(PERMISO_GESTIONAR)) {
 
-        mostrarMensaje(
-            'mensaje-password',
-            'El restablecimiento fue generado correctamente. El usuario deberá completar el proceso mediante el mecanismo de recuperación.',
-            'success'
+    mostrarMensajePerfil(
+        'No tienes permisos para restablecer contraseñas.'
+    );
+
+    return;
+}
+
+
+const confirmado =
+    window.confirm(
+        `¿Deseas restablecer la contraseña del usuario ${usuarioSeleccionado.id}? El usuario deberá completar el mecanismo seguro de restablecimiento.`
+    );
+
+
+if (!confirmado) {
+    return;
+}
+
+
+try {
+
+    const respuesta =
+        await fetchWithHttpErrorInterceptor(
+            `${BASE_API}/${usuarioSeleccionado.id}/restablecer-password`,
+            {
+                method: 'POST'
+            }
         );
 
-    } catch (error) {
 
-        mostrarMensaje(
-            'mensaje-password',
-            error.message,
-            'error'
-        );
-    }
-}
+    if (!respuesta.ok) {
 
-
-// ============================================================
-// INTERFAZ
-// ============================================================
-
-function cargarUsuarioEnPantalla() {
-
-    if (!usuarioSeleccionado) {
-        return;
-    }
-
-    document
-        .getElementById('panel-usuario')
-        .classList.remove('hidden');
-
-    document
-        .getElementById('panel-perfil')
-        .classList.remove('hidden');
-
-    document
-        .getElementById('panel-estado')
-        .classList.remove('hidden');
-
-    document
-        .getElementById('panel-password')
-        .classList.remove('hidden');
-
-    document.getElementById('usuario-apodo').textContent =
-        usuarioSeleccionado.apodo ?? 'Usuario';
-
-    document.getElementById('usuario-apodo-display').textContent =
-        usuarioSeleccionado.apodo ?? '-';
-
-    document.getElementById('usuario-email').textContent =
-        usuarioSeleccionado.email ?? '-';
-
-    document.getElementById('usuario-id-display').textContent =
-        usuarioSeleccionado.usuarioId ?? '-';
-
-    document.getElementById('usuario-nombre-display').textContent =
-        `${usuarioSeleccionado.nombres ?? ''} ${usuarioSeleccionado.apellidos ?? ''}`.trim();
-
-    document.getElementById('usuario-estado').textContent =
-        usuarioSeleccionado.estado ?? '-';
-
-    if (usuarioSeleccionado.avatar) {
-
-        document.getElementById('usuario-avatar').src =
-            `./avatares/${usuarioSeleccionado.avatar}`;
-    }
-
-    cargarDatosEnFormulario();
-}
-
-
-function refrescarEstadoVisual(nuevoEstado) {
-
-    usuarioSeleccionado.estado = nuevoEstado;
-
-    document.getElementById('usuario-estado').textContent =
-        nuevoEstado;
-}
-
-
-// ============================================================
-// NORMALIZACIÓN
-// ============================================================
-
-function normalizarPerfil(perfil) {
-
-    return {
-        usuarioId:
-            perfil.usuarioId ?? perfil.id,
-
-        apodo:
-            perfil.apodo,
-
-        email:
-            perfil.email,
-
-        nombres:
-            perfil.nombres,
-
-        apellidos:
-            perfil.apellidos,
-
-        avatar:
-            perfil.avatar,
-
-        biografia:
-            perfil.biografia,
-
-        preferencias:
-            perfil.preferencias,
-
-        estado:
-            perfil.estado
-    };
-}
-
-
-// ============================================================
-// HEADERS
-// ============================================================
-
-function construirHeaders() {
-
-    const apodo =
-        sessionStorage.getItem(CLAVE_APODO);
-
-    const rol =
-        sessionStorage.getItem(CLAVE_ROL);
-
-    return {
-        'Content-Type': 'application/json',
-        'X-User-Name': apodo ?? '',
-        'X-User-Role': rol ?? ''
-    };
-}
-
-
-// ============================================================
-// FECHAS
-// ============================================================
-
-function convertirFecha(fecha) {
-
-    /*
-     * datetime-local produce:
-     *
-     * 2026-09-01T20:30
-     *
-     * Se mantiene como fecha local porque el backend recibe
-     * LocalDateTime.
-     */
-
-    return fecha;
-}
-
-
-// ============================================================
-// DIÁLOGO
-// ============================================================
-
-function abrirDialogo(titulo, mensaje, accion) {
-
-    const dialog =
-        document.getElementById('dialog-confirmacion');
-
-    document.getElementById('dialog-titulo').textContent =
-        titulo;
-
-    document.getElementById('dialog-mensaje').textContent =
-        mensaje;
-
-    accionPendiente = accion;
-
-    dialog.showModal();
-}
-
-
-function cerrarDialogo() {
-
-    accionPendiente = null;
-
-    document
-        .getElementById('dialog-confirmacion')
-        .close();
-}
-
-
-async function ejecutarAccionConfirmada() {
-
-    const accion = accionPendiente;
-
-    cerrarDialogo();
-
-    if (accion) {
-        await accion();
-    }
-}
-
-
-// ============================================================
-// MENSAJES
-// ============================================================
-
-function mostrarMensaje(id, texto, tipo = '') {
-
-    const elemento = document.getElementById(id);
-
-    elemento.textContent = texto;
-    elemento.classList.remove('hidden', 'error', 'success');
-
-    if (tipo) {
-        elemento.classList.add(tipo);
-    }
-}
-
-
-function ocultarMensaje(id) {
-
-    document
-        .getElementById(id)
-        .classList.add('hidden');
-}
-
-
-// ============================================================
-// ERRORES HTTP
-// ============================================================
-
-async function obtenerMensajeError(response) {
-
-    try {
-
-        const body = await response.json();
-
-        if (typeof body === 'string') {
-            return body;
-        }
-
-        return (
-            body.detail ||
-            body.message ||
-            'La operación no pudo completarse.'
+        throw new Error(
+            await obtenerMensajeError(respuesta)
         );
 
-    } catch {
-
-        return 'La operación no pudo completarse.';
     }
+
+
+    mostrarMensajePerfil(
+        'El restablecimiento de contraseña fue solicitado correctamente.'
+    );
+
+
+} catch (error) {
+
+    console.error(
+        'Error restableciendo contraseña:',
+        error
+    );
+
+    mostrarMensajePerfil(
+        error.message ||
+        'No fue posible restablecer la contraseña.'
+    );
+
 }
 ```
+
+}
+
+function validarUsuarioSeleccionado() {
+
+```
+if (!usuarioSeleccionado?.id) {
+
+    mostrarMensajePerfil(
+        'Primero debes seleccionar un usuario.'
+    );
+
+    return false;
+}
+
+
+return true;
+```
+
+}
+
+function actualizarResumenUsuario(datos) {
+
+```
+if (datos.apodo !== undefined) {
+
+    establecerTexto(
+        'usuario-apodo-mostrado',
+        datos.apodo
+    );
+
+}
+
+
+if (datos.avatar !== undefined) {
+
+    establecerTexto(
+        'usuario-email-mostrado',
+        establecerTexto
+    );
+
+}
+```
+
+}
+
+function obtenerValor(id) {
+
+```
+const elemento =
+    document.getElementById(id);
+
+return elemento
+    ? elemento.value.trim()
+    : '';
+```
+
+}
+
+function establecerValor(id, valor) {
+
+```
+const elemento =
+    document.getElementById(id);
+
+if (elemento) {
+    elemento.value = valor ?? '';
+}
+```
+
+}
+
+function establecerTexto(id, texto) {
+
+```
+const elemento =
+    document.getElementById(id);
+
+if (elemento) {
+    elemento.textContent = String(texto ?? '-');
+}
+```
+
+}
+
+function cambiarEstadoBoton(
+boton,
+deshabilitado,
+texto
+) {
+
+```
+if (!boton) {
+    return;
+}
+
+
+boton.disabled = deshabilitado;
+
+boton.textContent = texto;
+```
+
+}
+
+function mostrarMensajeBusqueda(mensaje) {
+
+```
+const elemento =
+    document.getElementById('mensaje-busqueda');
+
+if (!elemento) {
+    return;
+}
+
+
+elemento.textContent = mensaje;
+
+elemento.hidden = false;
+```
+
+}
+
+function limpiarMensajeBusqueda() {
+
+```
+const elemento =
+    document.getElementById('mensaje-busqueda');
+
+if (!elemento) {
+    return;
+}
+
+
+elemento.textContent = '';
+
+elemento.hidden = true;
+```
+
+}
+
+function mostrarMensajePerfil(mensaje) {
+
+```
+const elemento =
+    document.getElementById('mensaje-perfil');
+
+if (!elemento) {
+    return;
+}
+
+
+elemento.textContent = mensaje;
+
+elemento.hidden = false;
+```
+
+}
+
+async function obtenerMensajeError(respuesta) {
+
+```
+try {
+
+    const datos =
+        await respuesta.clone().json();
+
+
+    if (typeof datos === 'string') {
+        return datos;
+    }
+
+
+    return (
+        datos.detail ||
+        datos.message ||
+        datos.title ||
+        `Error HTTP ${respuesta.status}`
+    );
+
+} catch {
+
+    try {
+
+        const texto =
+            await respuesta.clone().text();
+
+        if (texto) {
+            return texto;
+        }
+
+    } catch {
+        // Se utiliza el mensaje genérico.
+    }
+
+
+    return `Error HTTP ${respuesta.status}`;
+
+}
+```
+
+}
+
+function volverInicio() {
+
+```
+window.location.href = '../index.html';
+```
+
+}

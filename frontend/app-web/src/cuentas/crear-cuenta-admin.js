@@ -15,141 +15,216 @@ const CLAVE_ROL = 'nexus.rolActual';
 
 const PERMISO_CREAR = 'CREAR_ADMIN_MODERADOR';
 
-const RUTA_INICIO = './';
+const ROLES_PERMITIDOS = [
+'MODERADOR',
+'ADMINISTRADOR'
+];
 
-const form = document.getElementById('form-crear-cuenta');
+const PERMISOS_POR_ROL = {
 
-const formularioContenedor =
-document.getElementById('formulario-contenedor');
+```
+MODERADOR: [
+    'GESTIONAR_CUENTAS',
+    'SUSPENDER_USUARIOS'
+],
 
-const accesoDenegado =
-document.getElementById('acceso-denegado');
+ADMINISTRADOR: [
+    'GESTIONAR_CUENTAS',
+    'SUSPENDER_USUARIOS',
+    'BANEAR_DEFINITIVAMENTE'
+]
+```
 
-const resultadoCreacion =
-document.getElementById('resultado-creacion');
+};
 
-const mensajeError =
-document.getElementById('mensaje-error');
+document.addEventListener('DOMContentLoaded', iniciar);
 
-const mensajeExito =
-document.getElementById('mensaje-exito');
+function iniciar() {
 
-const resultadoTexto =
-document.getElementById('resultado-texto');
+```
+const rolGuardado =
+    sessionStorage.getItem(CLAVE_ROL) || 'JUGADOR';
 
-const rolSelect =
-document.getElementById('rol');
+setCurrentRole(rolGuardado);
 
-const permisosContenedor =
-document.getElementById('permisos');
+aplicarDirectivas();
 
-const btnCrear =
-document.getElementById('btn-crear');
+configurarEventos();
+
+verificarAcceso();
+
+actualizarPermisosVisuales();
+```
+
+}
+
+function aplicarDirectivas() {
+
+```
+applyHasPermissionDirective();
+```
+
+}
+
+function configurarEventos() {
+
+```
+const formulario =
+    document.getElementById('form-crear-cuenta');
+
+const selectorRol =
+    document.getElementById('rol');
+
+const btnVolverHeader =
+    document.getElementById('btn-volver-header');
+
+const btnCancelarAcceso =
+    document.getElementById('btn-cancelar-acceso');
 
 const btnCancelar =
-document.getElementById('btn-cancelar');
-
-const btnVolver =
-document.getElementById('btn-volver');
+    document.getElementById('btn-cancelar');
 
 const btnNuevaCuenta =
-document.getElementById('btn-nueva-cuenta');
+    document.getElementById('btn-nueva-cuenta');
 
-/*
+const btnVolverResultado =
+    document.getElementById('btn-volver-resultado');
 
-* Los permisos reales son determinados por RBAC
-* según el rol asignado en backend.
-*
-* Esta información solamente se muestra al Super
-* Administrador; NO se utiliza para otorgar permisos
-* directamente desde el frontend.
-  */
-  const PERMISOS_POR_ROL = {
-  MODERADOR: [
-  {
-  nombre: 'Modificar perfil',
-  descripcion: 'Puede modificar perfiles según las reglas RBAC.'
-  },
-  {
-  nombre: 'Publicar, eliminar y moderar comentarios',
-  descripcion: 'Puede realizar acciones de moderación de comentarios.'
-  },
-  {
-  nombre: 'Emitir advertencias',
-  descripcion: 'Puede emitir advertencias a usuarios.'
-  },
-  {
-  nombre: 'Suspender usuarios',
-  descripcion: 'Permiso temporal según la matriz RBAC.'
-  }
-  ],
 
-  ADMINISTRADOR: [
-  {
-  nombre: 'Modificar perfil',
-  descripcion: 'Puede modificar perfiles según las reglas RBAC.'
-  },
-  {
-  nombre: 'Publicar, eliminar y moderar comentarios',
-  descripcion: 'Puede realizar acciones de moderación de comentarios.'
-  },
-  {
-  nombre: 'Emitir advertencias',
-  descripcion: 'Puede emitir advertencias a usuarios.'
-  },
-  {
-  nombre: 'Suspender usuarios',
-  descripcion: 'Permiso concedido por la matriz RBAC.'
-  },
-  {
-  nombre: 'Banear usuarios',
-  descripcion: 'Puede realizar baneos definitivos.'
-  },
-  {
-  nombre: 'Gestionar productos',
-  descripcion: 'Puede gestionar productos.'
-  },
-  {
-  nombre: 'Gestionar cuentas',
-  descripcion: 'Puede gestionar cuentas administrativas y de usuarios.'
-  }
-  ]
-  };
+if (formulario) {
 
-function mostrar(elemento) {
-elemento.classList.remove('oculto');
+    formulario.addEventListener(
+        'submit',
+        manejarCreacionCuenta
+    );
+
 }
 
-function ocultar(elemento) {
-elemento.classList.add('oculto');
+
+if (selectorRol) {
+
+    selectorRol.addEventListener(
+        'change',
+        actualizarPermisosVisuales
+    );
+
 }
 
-function mostrarError(mensaje) {
-mensajeError.textContent = mensaje;
-mostrar(mensajeError);
+
+if (btnVolverHeader) {
+
+    btnVolverHeader.addEventListener(
+        'click',
+        volverInicio
+    );
+
 }
 
-function limpiarMensajes() {
-ocultar(mensajeError);
-ocultar(mensajeExito);
 
-```
-mensajeError.textContent = '';
-mensajeExito.textContent = '';
+if (btnCancelarAcceso) {
+
+    btnCancelarAcceso.addEventListener(
+        'click',
+        volverInicio
+    );
+
+}
+
+
+if (btnCancelar) {
+
+    btnCancelar.addEventListener(
+        'click',
+        limpiarFormulario
+    );
+
+}
+
+
+if (btnNuevaCuenta) {
+
+    btnNuevaCuenta.addEventListener(
+        'click',
+        mostrarFormularioNuevaCuenta
+    );
+
+}
+
+
+if (btnVolverResultado) {
+
+    btnVolverResultado.addEventListener(
+        'click',
+        volverInicio
+    );
+
+}
 ```
 
 }
 
-function cargarPermisos() {
+function verificarAcceso() {
 
 ```
-const rol = rolSelect.value;
+const accesoDenegado =
+    document.getElementById('acceso-denegado');
 
-permisosContenedor.innerHTML = '';
+const formularioContenedor =
+    document.getElementById('formulario-contenedor');
 
-if (!rol || !PERMISOS_POR_ROL[rol]) {
+if (!accesoDenegado || !formularioContenedor) {
+    return;
+}
 
-    permisosContenedor.innerHTML = `
+
+const rolActual = getCurrentRole();
+
+const tienePermiso =
+    checkPermission(PERMISO_CREAR);
+
+const esSuperAdministrador =
+    rolActual === 'SUPER_ADMINISTRADOR';
+
+
+if (!esSuperAdministrador || !tienePermiso) {
+
+    accesoDenegado.hidden = false;
+
+    formularioContenedor.hidden = true;
+
+    return;
+}
+
+
+accesoDenegado.hidden = true;
+
+formularioContenedor.hidden = false;
+```
+
+}
+
+function actualizarPermisosVisuales() {
+
+```
+const selectorRol =
+    document.getElementById('rol');
+
+const contenedorPermisos =
+    document.getElementById('permisos');
+
+if (!selectorRol || !contenedorPermisos) {
+    return;
+}
+
+
+const rolSeleccionado =
+    selectorRol.value;
+
+
+if (!rolSeleccionado ||
+    !PERMISOS_POR_ROL[rolSeleccionado]) {
+
+    contenedorPermisos.innerHTML = `
         <div class="sin-permisos">
             Selecciona un rol para consultar sus permisos.
         </div>
@@ -158,135 +233,111 @@ if (!rol || !PERMISOS_POR_ROL[rol]) {
     return;
 }
 
-const permisos = PERMISOS_POR_ROL[rol];
 
-for (const permiso of permisos) {
+const permisos =
+    PERMISOS_POR_ROL[rolSeleccionado];
 
-    const elemento = document.createElement('div');
 
-    elemento.className = 'permiso';
-
-    elemento.innerHTML = `
-        <strong>${permiso.nombre}</strong>
-        <span>${permiso.descripcion}</span>
-    `;
-
-    permisosContenedor.appendChild(elemento);
-}
+contenedorPermisos.innerHTML =
+    permisos.map((permiso) => `
+        <div class="permiso">
+            <span>${formatearPermiso(permiso)}</span>
+        </div>
+    `).join('');
 ```
 
 }
 
-function validarFormulario() {
+function formatearPermiso(permiso) {
 
 ```
-const nombres =
-    document.getElementById('nombres').value.trim();
+return permiso
+    .replaceAll('_', ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, letra => letra.toUpperCase());
+```
 
-const apellidos =
-    document.getElementById('apellidos').value.trim();
-
-const apodo =
-    document.getElementById('apodo').value.trim();
-
-const email =
-    document.getElementById('email').value.trim();
-
-const password =
-    document.getElementById('password').value;
-
-const rol =
-    rolSelect.value;
-
-if (!nombres) {
-    mostrarError('Los nombres son obligatorios.');
-    return false;
 }
 
-if (!apellidos) {
-    mostrarError('Los apellidos son obligatorios.');
-    return false;
-}
+async function manejarCreacionCuenta(evento) {
 
-if (!apodo) {
-    mostrarError('El apodo es obligatorio.');
-    return false;
-}
+```
+evento.preventDefault();
 
-if (!email) {
-    mostrarError('El correo electrónico es obligatorio.');
-    return false;
-}
 
-if (!email.includes('@')) {
-    mostrarError('Ingresa un correo electrónico válido.');
-    return false;
-}
+const rolActual =
+    getCurrentRole();
 
-if (!password) {
-    mostrarError('La contraseña es obligatoria.');
-    return false;
-}
+const tienePermiso =
+    checkPermission(PERMISO_CREAR);
 
-if (password.length < 9) {
-    mostrarError(
-        'La contraseña debe tener al menos 9 caracteres.'
-    );
 
-    return false;
-}
-
-if (rol !== 'MODERADOR' && rol !== 'ADMINISTRADOR') {
+if (
+    rolActual !== 'SUPER_ADMINISTRADOR' ||
+    !tienePermiso
+) {
 
     mostrarError(
-        'Solo puedes crear cuentas de Moderador o Administrador.'
+        'No tienes permisos para crear cuentas administrativas.'
     );
 
-    return false;
-}
-
-return true;
-```
-
-}
-
-async function crearCuenta(event) {
-
-```
-event.preventDefault();
-
-limpiarMensajes();
-
-if (!validarFormulario()) {
     return;
 }
 
-btnCrear.disabled = true;
-btnCrear.textContent = 'Creando...';
 
-const datos = {
+const nombres =
+    document.getElementById('nombres')?.value.trim();
 
-    nombres:
-        document.getElementById('nombres').value.trim(),
+const apellidos =
+    document.getElementById('apellidos')?.value.trim();
 
-    apellidos:
-        document.getElementById('apellidos').value.trim(),
+const apodo =
+    document.getElementById('apodo')?.value.trim();
 
-    email:
-        document.getElementById('email').value.trim(),
+const email =
+    document.getElementById('email')?.value.trim();
 
-    password:
-        document.getElementById('password').value,
+const password =
+    document.getElementById('password')?.value;
 
-    apodo:
-        document.getElementById('apodo').value.trim(),
+const rol =
+    document.getElementById('rol')?.value;
 
-    avatar:
-        '',
 
-    rolNombre:
-        rolSelect.value
-};
+const error =
+    validarDatos(
+        nombres,
+        apellidos,
+        apodo,
+        email,
+        password,
+        rol
+    );
+
+
+if (error) {
+
+    mostrarError(error);
+
+    return;
+}
+
+
+const confirmado =
+    window.confirm(
+        `¿Deseas crear la cuenta administrativa para "${apodo}" con rol ${rol}?`
+    );
+
+
+if (!confirmado) {
+    return;
+}
+
+
+ocultarMensajes();
+
+cambiarEstadoBoton(true);
+
 
 try {
 
@@ -297,154 +348,376 @@ try {
                 method: 'POST',
 
                 headers: {
-                    'Content-Type': 'application/json',
-                    'X-User-Role': getCurrentRole()
+                    'Content-Type': 'application/json'
                 },
 
-                body: JSON.stringify(datos)
+                body: JSON.stringify({
+                    nombres,
+                    apellidos,
+                    email,
+                    password,
+                    apodo,
+                    avatar: '',
+                    rolNombre: rol
+                })
             }
         );
 
+
     if (!respuesta.ok) {
 
-        let mensaje =
-            'No fue posible crear la cuenta administrativa.';
-
-        try {
-
-            const body = await respuesta.json();
-
-            if (body.message) {
-                mensaje = body.message;
-            } else if (typeof body === 'string') {
-                mensaje = body;
-            }
-
-        } catch (error) {
-            // Se conserva el mensaje genérico.
-        }
+        const mensaje =
+            await obtenerMensajeError(respuesta);
 
         throw new Error(mensaje);
     }
 
-    const usuario = await respuesta.json();
 
-    mostrarResultado(usuario);
+    const usuarioCreado =
+        await obtenerJsonSeguro(respuesta);
+
+
+    mostrarResultado(
+        usuarioCreado,
+        apodo,
+        rol
+    );
+
 
 } catch (error) {
 
+    console.error(
+        'Error creando cuenta administrativa:',
+        error
+    );
+
     mostrarError(
         error.message ||
-        'Ocurrió un error al crear la cuenta.'
+        'No fue posible crear la cuenta administrativa.'
     );
 
 } finally {
 
-    btnCrear.disabled = false;
-    btnCrear.textContent = 'Crear cuenta';
+    cambiarEstadoBoton(false);
+
+}
+```
+
+}
+
+function validarDatos(
+nombres,
+apellidos,
+apodo,
+email,
+password,
+rol
+) {
+
+```
+if (!nombres) {
+    return 'Debes ingresar los nombres.';
+}
+
+
+if (!apellidos) {
+    return 'Debes ingresar los apellidos.';
+}
+
+
+if (!apodo) {
+    return 'Debes ingresar un apodo.';
+}
+
+
+if (!email) {
+    return 'Debes ingresar un correo electrónico.';
+}
+
+
+if (!validarEmail(email)) {
+    return 'Ingresa un correo electrónico válido.';
+}
+
+
+if (!password) {
+    return 'Debes ingresar una contraseña inicial.';
+}
+
+
+if (password.length < 9) {
+    return 'La contraseña debe tener al menos 9 caracteres.';
+}
+
+
+if (!ROLES_PERMITIDOS.includes(rol)) {
+    return 'Debes seleccionar un rol administrativo válido.';
+}
+
+
+return null;
+```
+
+}
+
+function validarEmail(email) {
+
+```
+return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+```
+
+}
+
+async function obtenerMensajeError(respuesta) {
+
+```
+try {
+
+    const datos =
+        await respuesta.clone().json();
+
+    if (typeof datos === 'string') {
+        return datos;
+    }
+
+    return (
+        datos.detail ||
+        datos.message ||
+        datos.title ||
+        `Error HTTP ${respuesta.status}`
+    );
+
+} catch {
+
+    try {
+
+        const texto =
+            await respuesta.clone().text();
+
+        if (texto) {
+            return texto;
+        }
+
+    } catch {
+        // Se utiliza el mensaje genérico.
+    }
+
+
+    return `Error HTTP ${respuesta.status}`;
+
 }
 ```
 
 }
 
-function mostrarResultado(usuario) {
+async function obtenerJsonSeguro(respuesta) {
 
 ```
-ocultar(formularioContenedor);
-
-mostrar(resultadoCreacion);
-
-const apodo =
-    usuario?.apodo ||
-    document.getElementById('apodo').value.trim();
-
-const rol =
-    usuario?.rol?.nombre ||
-    rolSelect.value;
-
-resultadoTexto.textContent =
-    `La cuenta de ${apodo} fue creada correctamente con el rol ${rol}.`;
+try {
+    return await respuesta.json();
+} catch {
+    return null;
+}
 ```
 
 }
 
-function reiniciarFormulario() {
+function mostrarResultado(
+usuarioCreado,
+apodo,
+rol
+) {
 
 ```
-form.reset();
+const formularioContenedor =
+    document.getElementById('formulario-contenedor');
 
-cargarPermisos();
+const resultado =
+    document.getElementById('resultado-creacion');
 
-limpiarMensajes();
+const resultadoTexto =
+    document.getElementById('resultado-texto');
 
-ocultar(resultadoCreacion);
 
-mostrar(formularioContenedor);
-```
-
-}
-
-function verificarAcceso() {
-
-```
-const rolActual =
-    sessionStorage.getItem(CLAVE_ROL);
-
-if (rolActual) {
-    setCurrentRole(rolActual);
-}
-
-const rol =
-    getCurrentRole();
-
-const autorizado =
-    rol === 'SUPER_ADMINISTRADOR' &&
-    checkPermission(PERMISO_CREAR);
-
-if (!autorizado) {
-
-    ocultar(formularioContenedor);
-
-    mostrar(accesoDenegado);
+if (!formularioContenedor ||
+    !resultado ||
+    !resultadoTexto) {
 
     return;
 }
 
-mostrar(formularioContenedor);
 
-applyHasPermissionDirective();
+let identificador = 'No disponible';
+
+
+if (usuarioCreado) {
+
+    identificador =
+        usuarioCreado.id ??
+        usuarioCreado.usuarioId ??
+        'No disponible';
+
+}
+
+
+resultadoTexto.textContent =
+    `La cuenta "${apodo}" fue creada con el rol ${rol}. ` +
+    `ID de usuario: ${identificador}.`;
+
+
+formularioContenedor.hidden = true;
+
+resultado.hidden = false;
 ```
 
 }
 
-rolSelect.addEventListener(
-'change',
-cargarPermisos
-);
+function limpiarFormulario() {
 
-form.addEventListener(
-'submit',
-crearCuenta
-);
+```
+const formulario =
+    document.getElementById('form-crear-cuenta');
 
-btnCancelar.addEventListener(
-'click',
-() => {
-window.location.href = RUTA_INICIO;
+if (!formulario) {
+    return;
 }
-);
 
-btnVolver.addEventListener(
-'click',
-() => {
-window.location.href = RUTA_INICIO;
+
+formulario.reset();
+
+actualizarPermisosVisuales();
+
+ocultarMensajes();
+```
+
 }
-);
 
-btnNuevaCuenta.addEventListener(
-'click',
-reiniciarFormulario
-);
+function mostrarFormularioNuevaCuenta() {
 
-verificarAcceso();
-cargarPermisos();
+```
+const formularioContenedor =
+    document.getElementById('formulario-contenedor');
+
+const resultado =
+    document.getElementById('resultado-creacion');
+
+
+if (formularioContenedor) {
+    formularioContenedor.hidden = false;
+}
+
+
+if (resultado) {
+    resultado.hidden = true;
+}
+
+
+limpiarFormulario();
+```
+
+}
+
+function cambiarEstadoBoton(cargando) {
+
+```
+const boton =
+    document.getElementById('btn-crear');
+
+if (!boton) {
+    return;
+}
+
+
+boton.disabled = cargando;
+
+boton.textContent =
+    cargando
+        ? 'Creando cuenta...'
+        : 'Crear cuenta';
+```
+
+}
+
+function mostrarError(mensaje) {
+
+```
+const elemento =
+    document.getElementById('mensaje-error');
+
+const exito =
+    document.getElementById('mensaje-exito');
+
+
+if (exito) {
+    exito.hidden = true;
+}
+
+
+if (!elemento) {
+    return;
+}
+
+
+elemento.textContent = mensaje;
+
+elemento.hidden = false;
+```
+
+}
+
+function mostrarExito(mensaje) {
+
+```
+const elemento =
+    document.getElementById('mensaje-exito');
+
+const error =
+    document.getElementById('mensaje-error');
+
+
+if (error) {
+    error.hidden = true;
+}
+
+
+if (!elemento) {
+    return;
+}
+
+
+elemento.textContent = mensaje;
+
+elemento.hidden = false;
+```
+
+}
+
+function ocultarMensajes() {
+
+```
+const error =
+    document.getElementById('mensaje-error');
+
+const exito =
+    document.getElementById('mensaje-exito');
+
+
+if (error) {
+    error.hidden = true;
+}
+
+
+if (exito) {
+    exito.hidden = true;
+}
+```
+
+}
+
+function volverInicio() {
+
+```
+window.location.href = '../index.html';
+```
+
+}

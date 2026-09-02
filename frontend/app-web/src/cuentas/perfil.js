@@ -91,6 +91,10 @@ function obtenerSesionActual() {
         sessionStorage.getItem(CLAVE_ROL);
 
 
+    /*
+     * El rol se mantiene también en memoria para que
+     * data-has-permission funcione correctamente.
+     */
     if (rolPersistido) {
         setCurrentRole(rolPersistido);
     }
@@ -226,7 +230,10 @@ function llenarFormulario(perfil) {
         perfil.preferencias ?? '';
 
 
-    if (perfil.avatar && validarAvatarDelBackend(perfil.avatar)) {
+    if (
+        perfil.avatar &&
+        validarAvatarDelBackend(perfil.avatar)
+    ) {
 
         seleccionarAvatar(perfil.avatar);
 
@@ -260,11 +267,14 @@ function construirCuerpoActualizacion() {
 
     const cuerpo = {
 
-        nombres: campoNombres.value.trim(),
+        nombres:
+            campoNombres.value.trim(),
 
-        apellidos: campoApellidos.value.trim(),
+        apellidos:
+            campoApellidos.value.trim(),
 
-        avatar: avatar,
+        avatar:
+            avatar,
 
         biografia:
             campoBiografia.value.trim(),
@@ -281,6 +291,10 @@ function construirCuerpoActualizacion() {
         campoApodo.value.trim();
 
 
+    /*
+     * El apodo solamente se envía cuando realmente cambió.
+     * La validación de blacklist y unicidad corresponde al backend.
+     */
     if (
         nuevoApodo &&
         nuevoApodo !== apodoActual
@@ -307,6 +321,10 @@ async function cargarPerfil() {
         obtenerSesionActual();
 
 
+    /*
+     * El usuarioId proviene del login y se mantiene
+     * en sessionStorage como nexus.usuarioId.
+     */
     if (!sesion.usuarioId) {
 
         window.location.href = RUTA_LOGIN;
@@ -317,28 +335,48 @@ async function cargarPerfil() {
 
     try {
 
+        /*
+         * No enviamos X-User-Name ni X-User-Role.
+         *
+         * El interceptor agrega automáticamente:
+         *
+         * Authorization: Bearer <token>
+         */
         const respuesta =
             await fetchWithHttpErrorInterceptor(
                 `${BASE_API}/${encodeURIComponent(sesion.usuarioId)}`,
                 {
-                    method: 'GET',
-
-                    headers: {
-                        'X-User-Name':
-                            sesion.apodo ?? '',
-
-                        'X-User-Role':
-                            sesion.rol ?? ''
-                    }
+                    method: 'GET'
                 }
             );
 
 
         if (!respuesta.ok) {
 
-            throw new Error(
-                `No fue posible cargar el perfil. Código ${respuesta.status}.`
-            );
+            let mensaje =
+                `No fue posible cargar el perfil. Código ${respuesta.status}.`;
+
+
+            try {
+
+                const errorBody =
+                    await respuesta.json();
+
+                if (errorBody?.detail) {
+                    mensaje = errorBody.detail;
+                } else if (
+                    typeof errorBody === 'string' &&
+                    errorBody.trim()
+                ) {
+                    mensaje = errorBody;
+                }
+
+            } catch {
+                // La respuesta puede no tener cuerpo JSON.
+            }
+
+
+            throw new Error(mensaje);
         }
 
 
@@ -357,6 +395,19 @@ async function cargarPerfil() {
         perfilOriginal = {
             ...perfil
         };
+
+
+        /*
+         * Si el backend devuelve el apodo actual,
+         * sincronizamos también la sesión.
+         */
+        if (perfil.apodo) {
+
+            sessionStorage.setItem(
+                CLAVE_APODO,
+                perfil.apodo
+            );
+        }
 
 
         llenarFormulario(perfil);
@@ -438,10 +489,15 @@ async function guardarPerfil() {
         perfilOriginal?.apodo ?? '';
 
     const cambioApodo =
-        cuerpo.apodo &&
-        cuerpo.apodo !== apodoOriginal;
+        Boolean(
+            cuerpo.apodo &&
+            cuerpo.apodo !== apodoOriginal
+        );
 
 
+    /*
+     * El cambio de apodo requiere confirmación explícita.
+     */
     if (cambioApodo) {
 
         guardadoPendiente = true;
@@ -475,6 +531,10 @@ async function enviarActualizacion(
 
     try {
 
+        /*
+         * El JWT NO se coloca manualmente.
+         * fetchWithHttpErrorInterceptor lo agrega automáticamente.
+         */
         const respuesta =
             await fetchWithHttpErrorInterceptor(
                 `${BASE_API}/${encodeURIComponent(sesion.usuarioId)}`,
@@ -483,16 +543,11 @@ async function enviarActualizacion(
 
                     headers: {
                         'Content-Type':
-                            'application/json',
-
-                        'X-User-Name':
-                            sesion.apodo ?? '',
-
-                        'X-User-Role':
-                            sesion.rol ?? ''
+                            'application/json'
                     },
 
-                    body: JSON.stringify(cuerpo)
+                    body:
+                        JSON.stringify(cuerpo)
                 }
             );
 
@@ -509,17 +564,21 @@ async function enviarActualizacion(
                     await respuesta.json();
 
                 if (errorBody?.detail) {
+
                     mensaje =
                         errorBody.detail;
+
                 } else if (
-                    typeof errorBody === 'string'
+                    typeof errorBody === 'string' &&
+                    errorBody.trim()
                 ) {
+
                     mensaje =
                         errorBody;
                 }
 
             } catch {
-                // No hay cuerpo JSON.
+                // La respuesta puede no tener cuerpo JSON.
             }
 
 
@@ -536,10 +595,9 @@ async function enviarActualizacion(
         };
 
 
-        campoApodo.value =
-            perfilActualizado.apodo ?? '';
-
-
+        /*
+         * Sincronizamos el apodo actualizado con la sesión.
+         */
         sessionStorage.setItem(
             CLAVE_APODO,
             perfilActualizado.apodo ?? ''
@@ -661,6 +719,18 @@ async function confirmarCambioApodo() {
 
     const sesion =
         obtenerSesionActual();
+
+
+    if (!sesion.usuarioId) {
+
+        dialogoApodo.close();
+
+        guardadoPendiente = false;
+
+        window.location.href = RUTA_LOGIN;
+
+        return;
+    }
 
 
     let cuerpo;
