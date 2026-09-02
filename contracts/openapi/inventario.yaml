@@ -171,6 +171,43 @@ paths:
           $ref: "#/components/responses/ElementoNoEncontrado"
         "503":
           $ref: "#/components/responses/PersistenciaNoDisponible"
+  /api/v1/inventario/heroes/activo:
+    get:
+      summary: Consulta el heroe activo del jugador autenticado, con sus estadisticas equipadas
+      description: >
+        HU-SAL-003. Devuelve el unico heroe del inventario del jugador junto con
+        sus estadisticas ya combinadas con el equipamiento actual (HU-INV-006,
+        ver CalcularEstadisticasEquipadas). nivel viene fijo en 1: heroes.yaml
+        no expone ese campo todavia (su propia descripcion del schema
+        Estadisticas dice "Valores de nivel 1 segun la Tabla 6"), y este sprint
+        no tiene construido ningun sistema de progresion de niveles.
+
+
+        Limitacion conocida: si el jugador tiene mas de un heroe en su
+        inventario, no existe todavia un mecanismo de seleccion explicita de
+        "cual es el heroe activo", asi que este endpoint responde 409 en vez de
+        adivinar cual mostrar. Se resuelve cuando exista esa seleccion
+        explicita en una historia futura.
+      operationId: consultarHeroeActivo
+      responses:
+        "200":
+          description: El jugador tiene exactamente un heroe en su inventario
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HeroeActivo"
+        "204":
+          description: El jugador no tiene ningun heroe en su inventario
+        "401":
+          $ref: "#/components/responses/IdentidadRequerida"
+        "409":
+          description: >
+            El jugador tiene mas de un heroe y no existe todavia un mecanismo
+            de seleccion explicita del heroe activo (limitacion conocida)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
 components:
   securitySchemes:
     IdentidadTemporal:
@@ -250,6 +287,30 @@ components:
           maxItems: 2
           uniqueItems: true
           items: { type: string }
+    HeroeActivo:
+      type: object
+      additionalProperties: false
+      required: [nombre, vida, defensa, nivel]
+      properties:
+        nombre:
+          type: string
+        vida:
+          type: integer
+        ataque:
+          oneOf:
+            - type: integer
+            - type: "null"
+          description: >
+            Base de la formula de ataque equipada. Ausente/null si el heroe
+            es un sanador sin ataqueDetalle (ver heroes.yaml).
+        defensa:
+          type: integer
+        nivel:
+          type: integer
+          const: 1
+          description: >
+            Fijo en 1: heroes.yaml no expone nivel todavia y este sprint no
+            tiene un sistema de progresion de niveles construido.
     PaginaInventario:
       type: object
       required: [elementos, numero, tamanio, totalElementos, totalPaginas, ultima]

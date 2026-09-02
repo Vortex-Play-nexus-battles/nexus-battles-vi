@@ -48,7 +48,7 @@ class CalcularEstadisticasEquipadasTest {
 
         heroes = new ResolutorDeEstadisticasHeroeEnMemoria();
         heroes.registrar("Guerrero Tanque", new EstadisticasHeroe(
-                10, 44, 11,
+                10, 44, 11, 1, // nivel fijo en 1, ver EstadisticasHeroe
                 new FormulaDetalle(10, 1, 6), // ataque: 10 + 1d6, Tabla 6
                 new FormulaDetalle(0, 1, 4),  // daño: 1d4
                 null));                       // sin sanar: no es sanador

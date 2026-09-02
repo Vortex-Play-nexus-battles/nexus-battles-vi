@@ -110,6 +110,10 @@ public class ResolutorDeEstadisticasHeroeHttp implements ResolutorDeEstadisticas
                     estadisticas.poder(),
                     estadisticas.vida(),
                     estadisticas.defensa(),
+                    // heroes.yaml no expone nivel (su propia descripcion dice
+                    // "Valores de nivel 1 segun la Tabla 6"); fijo en 1 porque
+                    // este sprint no tiene progresion de niveles construida.
+                    1,
                     aFormulaDetalle(estadisticas.ataqueDetalle()),
                     aFormulaDetalle(estadisticas.danoDetalle()),
                     aFormulaDetalle(estadisticas.sanarDetalle()));

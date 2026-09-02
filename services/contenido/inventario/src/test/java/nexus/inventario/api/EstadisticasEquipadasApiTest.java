@@ -74,7 +74,7 @@ class EstadisticasEquipadasApiTest {
 
         ResolutorDeEstadisticasHeroeEnMemoria heroes = new ResolutorDeEstadisticasHeroeEnMemoria();
         heroes.registrar("Guerrero Tanque", new EstadisticasHeroe(
-                10, 44, 11,
+                10, 44, 11, 1, // nivel fijo en 1, ver EstadisticasHeroe
                 new FormulaDetalle(10, 1, 6),
                 new FormulaDetalle(0, 1, 4),
                 null));
