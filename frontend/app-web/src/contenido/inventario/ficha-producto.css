@@ -128,3 +128,17 @@
     border-radius: 0;
   }
 }
+
+/*
+ * RN-27: producto suspendido. Es informacion, no un error — el producto sigue
+ * siendo del jugador. Por eso usa el tono de advertencia y no el de error.
+ */
+.ficha__no-disponible {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #fbeedd;
+  color: var(--advertencia, #8a4a00);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
