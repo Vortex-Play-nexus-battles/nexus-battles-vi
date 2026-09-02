@@ -2,21 +2,63 @@
  * ==========================================================================
  * Interceptor de Errores HTTP en JavaScript Estándar (HU-RBAC-004)
  * Pila Tecnológica: Vanilla JS ES2022 (Sin Angular / Sin TypeScript)
- * 
+ *
  * Captura errores 403 Forbidden devueltos por el backend en formato RFC 7807
  * (Problem Details) y muestra el mensaje amigable de acceso denegado.
+ *
+ * También adjunta automáticamente el token de sesión (JWT), cuando existe,
+ * como header Authorization: Bearer <token> — sin que cada página tenga
+ * que hacerlo manualmente. Si no hay token guardado (por ejemplo, antes de
+ * iniciar sesión), la petición sale exactamente igual que antes, sin ese
+ * header.
  * ==========================================================================
  */
 
+const CLAVE_TOKEN = 'nexus.token';
+
 /**
- * Envoltorio para fetch que intercepta errores HTTP 403 y Problem Details
+ * Si hay un token de sesión guardado, devuelve una copia de las opciones
+ * de fetch con el header Authorization agregado — sin sobreescribir uno
+ * que el propio llamador ya haya puesto explícitamente.
+ * @param {RequestInit} options
+ * @returns {RequestInit}
+ */
+function conAuthorizationSiHayToken(options) {
+  const token = sessionStorage.getItem(CLAVE_TOKEN);
+  if (!token) {
+    return options;
+  }
+
+  const headersOriginales = options.headers;
+
+  // Caso: el llamador ya pasó una instancia real de Headers.
+  if (headersOriginales instanceof Headers) {
+    const headers = new Headers(headersOriginales);
+    if (!headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+    return { ...options, headers };
+  }
+
+  // Caso más común en el proyecto: headers como objeto plano.
+  const headers = { ...(headersOriginales || {}) };
+  if (!('Authorization' in headers)) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  return { ...options, headers };
+}
+
+/**
+ * Envoltorio para fetch que intercepta errores HTTP 403 y Problem Details,
+ * y adjunta el token de sesión automáticamente cuando existe.
  * @param {string} url
  * @param {RequestInit} [options={}]
  * @returns {Promise<Response>}
  */
 export async function fetchWithHttpErrorInterceptor(url, options = {}) {
   try {
-    const response = await fetch(url, options);
+    const opcionesConAuth = conAuthorizationSiHayToken(options);
+    const response = await fetch(url, opcionesConAuth);
 
     if (response.status === 403) {
       // Capturar respuesta RFC 7807 (Problem Details)

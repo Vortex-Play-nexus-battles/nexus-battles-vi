@@ -16,6 +16,7 @@ const URL_LOGIN = '/api/v1/auth/login';
 // volver a llamar setCurrentRole() al cargar.
 // TODO equipo: confirmar con Andrés si esa "rehidratación" ya existe en
 // alguna otra vista o si falta construirla como parte del RBAC real.
+const CLAVE_USUARIO_ID = 'nexus.usuarioId';
 const CLAVE_ROL = 'nexus.rolActual';
 const CLAVE_APODO = 'nexus.apodoActual';
 const CLAVE_TOKEN = 'nexus.token';
@@ -85,20 +86,16 @@ form.addEventListener('submit', async (evento) => {
   evento.preventDefault();
   ocultarEstado();
   avisoDispositivo.hidden = true;
-
   if (!form.checkValidity()) {
     form.reportValidity();
     return;
   }
-
   const payload = {
     email: form.email.value.trim(),
     password: form.password.value
   };
-
   botonEnviar.disabled = true;
   setEstado('Verificando tus datos…', 'carga');
-
   try {
     const respuesta = await fetchWithHttpErrorInterceptor(URL_LOGIN, {
       method: 'POST',
@@ -106,15 +103,17 @@ form.addEventListener('submit', async (evento) => {
       body: JSON.stringify(payload)
     });
     const { body } = await cuerpoDe(respuesta);
-
     if (!respuesta.ok) {
       const mensajeServidor = typeof body === 'string' ? body : body?.mensaje;
       setEstado(mensajeDeError(respuesta.status, mensajeServidor), 'error');
       return;
     }
-
-    // Éxito: 200 OK con { usuarioId, apodo, email, rol, dispositivoNuevo }
+    // Éxito: 200 OK con { usuarioId, apodo, email, rol, dispositivoNuevo, token }
     setCurrentRole(body.rol);
+
+    // usuarioId es necesario para HU-USR-001, porque perfil.js consulta
+    // GET /api/v1/perfiles/{usuarioId}.
+    sessionStorage.setItem(CLAVE_USUARIO_ID, String(body.usuarioId));
     sessionStorage.setItem(CLAVE_ROL, body.rol);
     sessionStorage.setItem(CLAVE_APODO, body.apodo);
     sessionStorage.setItem(CLAVE_TOKEN, body.token);
@@ -123,7 +122,6 @@ form.addEventListener('submit', async (evento) => {
       avisoDispositivo.hidden = false;
       avisoDispositivo.textContent = 'Detectamos un inicio de sesión desde un dispositivo nuevo.';
     }
-
     ocultarEstado();
     // TODO equipo: apuntar a la pantalla real post-login cuando exista.
     window.location.href = './';
