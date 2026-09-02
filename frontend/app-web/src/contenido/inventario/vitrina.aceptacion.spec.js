@@ -231,7 +231,7 @@ test.describe('Creacion y edicion del inventario propio', () => {
     await abrirVitrina(page);
 
     await page.getByRole('button', { name: 'Agregar elemento' }).click();
-    await page.getByLabel('Producto').fill('producto-amuleto');
+    await page.getByLabel('Producto', { exact: true }).fill('producto-amuleto');
     await page.getByLabel('Tipo').selectOption('ITEM');
     await page.getByLabel('Nombre').fill('Amuleto de Niebla');
     await page.getByRole('button', { name: 'Guardar' }).click();
@@ -269,5 +269,62 @@ test.describe('Creacion y edicion del inventario propio', () => {
     await expect(page.locator('.vitrina__nombre')).toHaveText('Espada larga de Vorn 0');
     await expect(page.locator('.inventario__mensaje')).toContainText(/no tienes permiso/i);
     await expect(page.locator('.inventario__mensaje')).not.toContainText('403');
+  });
+});
+
+async function conEquipamiento(page, { rechazar = false } = {}) {
+  const equipo = { heroeId: 'heroe-1', armas: [], armaduras: {}, items: [] };
+  await conInventarioEditable(page, [
+    { id: 'heroe-1', productoId: 'producto-heroe', tipo: 'HEROE', nombrePropio: 'Ayla' },
+    { id: 'arma-1', productoId: 'producto-arma', tipo: 'ARMA', nombrePropio: 'Espada' },
+  ]);
+  await page.route('**/api/v1/inventario/heroes/**/equipamiento**', async (ruta) => {
+    const metodo = ruta.request().method();
+    expect(ruta.request().headers()['x-user-name']).toBe(JUGADOR);
+    if (metodo === 'PUT' && rechazar) {
+      await ruta.fulfill({
+        status: 409,
+        contentType: 'application/problem+json',
+        body: JSON.stringify({ title: 'Limite de equipamiento', detail: 'Máximo dos armas' }),
+      });
+      return;
+    }
+    if (metodo === 'PUT') {
+      equipo.armas = ['arma-1'];
+    }
+    if (metodo === 'DELETE') {
+      equipo.armas = [];
+    }
+    await ruta.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(equipo),
+    });
+  });
+}
+
+test.describe('Equipamiento del heroe con limites', () => {
+  test('El jugador equipa y desequipa un arma desde la vitrina', async ({ page }) => {
+    await conEquipamiento(page);
+    await abrirVitrina(page);
+
+    await page.getByRole('button', { name: 'Gestionar equipo de Ayla' }).click();
+    await expect(page.locator('.inventario-equipo__resumen')).toContainText('Armas 0/2');
+    await page.getByRole('button', { name: 'Equipar', exact: true }).click();
+    await expect(page.locator('.inventario-equipo__resumen')).toContainText('Armas 1/2');
+    await page.getByRole('button', { name: 'Desequipar', exact: true }).click();
+    await expect(page.locator('.inventario-equipo__resumen')).toContainText('Armas 0/2');
+  });
+
+  test('Un limite rechazado conserva el equipo y se explica sin codigo', async ({ page }) => {
+    await conEquipamiento(page, { rechazar: true });
+    await abrirVitrina(page);
+
+    await page.getByRole('button', { name: 'Gestionar equipo de Ayla' }).click();
+    await page.getByRole('button', { name: 'Equipar', exact: true }).click();
+
+    await expect(page.locator('.inventario-equipo__resumen')).toContainText('Armas 0/2');
+    await expect(page.locator('.inventario__mensaje')).toContainText(/límites/i);
+    await expect(page.locator('.inventario__mensaje')).not.toContainText('409');
   });
 });

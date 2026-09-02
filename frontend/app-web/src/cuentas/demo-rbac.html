@@ -2,99 +2,10 @@
 <html lang="es">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Demo RBAC local — Nexus Battles VI</title>
-    <link rel="stylesheet" href="./demo-rbac.css" />
+    <meta http-equiv="refresh" content="0; url=./matriz-permisos.html" />
+    <title>Redireccionando a Matriz de Permisos...</title>
   </head>
   <body>
-    <header class="cromo">
-      <h1>Demo RBAC (local)</h1>
-      <p>HU-RBAC-001 / HU-RBAC-004 · evidencia técnica de autorización</p>
-    </header>
-
-    <main>
-      <p class="aviso">
-        Esta vista es solo para demostrar selector de rol, ocultar acciones y el 403 del servidor.
-        Ábrela por HTTP (no como archivo). El API por defecto es
-        <code>http://localhost:8081/api/v1</code>.
-      </p>
-
-      <div id="nexus-rbac-forbidden" hidden role="alert"></div>
-
-      <section class="tarjeta">
-        <h2>Rol activo</h2>
-        <div class="fila">
-          <label>
-            API
-            <input id="api-base" type="url" value="http://localhost:8081/api/v1" />
-          </label>
-          <label>
-            Rol
-            <select id="selector-rol"></select>
-          </label>
-          <button id="btn-cargar" class="btn-contorno" type="button">Cargar roles del servidor</button>
-        </div>
-        <p id="descripcion-rol" class="descripcion"></p>
-        <span id="estado-roles" class="estado carga">Cargando catálogo de roles…</span>
-      </section>
-
-      <section class="tarjeta matriz-tarjeta" aria-labelledby="titulo-matriz">
-        <h2 id="titulo-matriz">Matriz de permisos</h2>
-        <p id="descripcion-matriz" class="ayuda">Cargando la matriz vigente desde el servidor…</p>
-        <div class="tabla-responsive">
-          <table class="matriz" aria-describedby="descripcion-matriz">
-            <thead>
-              <tr>
-                <th scope="col">Acción</th>
-                <th scope="col">Jugador</th>
-                <th scope="col">Moderador</th>
-                <th scope="col">Administrador</th>
-                <th scope="col">Super Admin</th>
-              </tr>
-            </thead>
-            <tbody id="matriz-permisos">
-              <tr><td colspan="5">Cargando matriz de permisos…</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <p class="ayuda matriz-nota">
-          Los valores provienen de <code>RbacMatrixRepository</code> a través del servidor. Si la
-          matriz no está disponible, la interfaz no habilita acciones por defecto.
-        </p>
-      </section>
-
-      <section class="tarjeta">
-        <h2>Acciones visibles para el rol activo</h2>
-        <p class="ayuda">
-          Los botones se construyen desde la matriz del servidor y se ocultan si el rol no tiene el
-          permiso. Esto es la UI; el servidor igual rechaza si se llama a mano.
-        </p>
-        <div class="acciones" id="acciones-ui" aria-live="polite"></div>
-      </section>
-
-      <section class="tarjeta">
-        <h2>Intento directo al servidor</h2>
-        <p class="ayuda">
-          Estas llamadas van siempre, aunque la UI las oculte. Mandan
-          <code>X-User-Role</code> como mecanismo temporal de la demo, hasta integrar Keycloak/JWT.
-          El interceptor muestra el 403 aquí, sin <code>alert</code>.
-        </p>
-        <div class="fila">
-          <label>
-            Usuario destino (asignar rol)
-            <input id="usuario-id" type="text" value="2" />
-          </label>
-          <button id="btn-ban" class="btn-primario" type="button">POST /admin/ban</button>
-          <button id="btn-asignar" class="btn-acento" type="button">PUT asignar rol</button>
-        </div>
-      </section>
-
-      <section class="tarjeta">
-        <h2>Respuesta</h2>
-        <pre id="log" class="log">Aún no hay llamadas.</pre>
-      </section>
-    </main>
-
-    <script type="module" src="./demo-rbac.js"></script>
+    <p>Redireccionando a <a href="./matriz-permisos.html">Matriz de Permisos (HU-RBAC-001)</a>...</p>
   </body>
 </html>

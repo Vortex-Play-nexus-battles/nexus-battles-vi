@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HU-RBAC-001: Matriz de Permisos — Nexus Battles VI</title>
+    <link rel="stylesheet" href="./demo-rbac.css" />
+    <style>
+      .barra-navegacion {
+        display: flex;
+        gap: 12px;
+        background: #151a30;
+        padding: 10px 32px;
+        border-bottom: 1px solid #2d3754;
+      }
+      .nav-link {
+        color: #c5cde0;
+        text-decoration: none;
+        padding: 6px 14px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        transition: all 0.2s ease;
+      }
+      .nav-link:hover {
+        background: #2244bf;
+        color: #ffffff;
+      }
+      .nav-link.activo {
+        background: #1e3f88;
+        color: #ffffff;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Barra de Navegación entre Historias de Usuario -->
+    <nav class="barra-navegacion">
+      <a href="./matriz-permisos.html" class="nav-link activo">📖 HU-RBAC-001: Matriz de Permisos</a>
+      <a href="./seguridad-servidor.html" class="nav-link">🛡️ HU-RBAC-004: Verificación en Servidor</a>
+    </nav>
+
+    <header class="cromo">
+      <h1>HU-RBAC-001: Modelo y Matriz de Permisos</h1>
+      <p>Nexus Battles VI · Catálogo de 4 roles, matriz de 12 acciones y directivas de interfaz</p>
+    </header>
+
+    <main>
+      <!-- Sección de Selector de Rol y Prueba de UI -->
+      <section class="tarjeta">
+        <h2>Simulación de Interfaz por Rol</h2>
+        <p class="ayuda">
+          Selecciona un rol para ver su descripción oficial y comprobar cómo la directiva <code>has-permission</code> habilita u oculta automáticamente los botones de la interfaz:
+        </p>
+        <div class="fila">
+          <label>
+            Rol activo
+            <select id="selector-rol">
+              <option value="JUGADOR" selected>Jugador</option>
+              <option value="MODERADOR">Moderador</option>
+              <option value="ADMINISTRADOR">Administrador</option>
+              <option value="SUPER_ADMINISTRADOR">Super Administrador</option>
+            </select>
+          </label>
+        </div>
+        <p id="descripcion-rol" class="descripcion">
+          Usuario estándar con acceso a funciones básicas de juego, comentarios propios y gestión de su perfil.
+        </p>
+
+        <div style="margin-top: 20px;">
+          <label style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Acciones visibles en pantalla para este rol:</label>
+          <div class="acciones" id="acciones-ui" style="margin-top: 10px;" aria-live="polite">
+            <button type="button" class="btn-contorno" data-has-permission="CREAR_CUENTA_JUGADOR">Crear cuenta de jugador</button>
+            <button type="button" class="btn-contorno" data-has-permission="MODIFICAR_PERFIL_PROPIO">Modificar perfil propio</button>
+            <button type="button" class="btn-contorno" data-has-permission="PUBLICAR_COMENTARIOS">Publicar comentarios</button>
+            <button type="button" class="btn-contorno" data-has-permission="ELIMINAR_COMENTARIO_PROPIO">Eliminar comentario propio</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Sección Principal: La Matriz Oficial (Tabla 24 extendida) -->
+      <section class="tarjeta matriz-tarjeta" aria-labelledby="titulo-matriz">
+        <h2 id="titulo-matriz">Matriz de permisos</h2>
+        <p id="descripcion-matriz" class="ayuda">Tabla 24 extendida: 4 roles por 12 acciones. Estos valores son los que aplica el servidor.</p>
+        <div class="tabla-responsive">
+          <table class="matriz" aria-describedby="descripcion-matriz">
+            <thead>
+              <tr>
+                <th scope="col">Acción</th>
+                <th scope="col">Jugador</th>
+                <th scope="col">Moderador</th>
+                <th scope="col">Administrador</th>
+                <th scope="col">Super Admin</th>
+              </tr>
+            </thead>
+            <tbody id="matriz-permisos">
+              <tr>
+                <th scope="row">Crear cuenta de jugador</th>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia denegado">Denegado</span></td>
+              </tr>
+              <tr>
+                <th scope="row">Modificar perfil propio</th>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+              </tr>
+              <tr>
+                <th scope="row">Publicar comentarios</th>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+              </tr>
+              <tr>
+                <th scope="row">Eliminar comentario propio</th>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+              </tr>
+              <tr>
+                <th scope="row">Moderar comentarios</th>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+              </tr>
+              <tr>
+                <th scope="row">Emitir advertencias</th>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+              </tr>
+              <tr>
+                <th scope="row">Suspender usuarios</th>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia temporal">Temporal</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+              </tr>
+              <tr>
+                <th scope="row">Banear definitivamente</th>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+              </tr>
+              <tr>
+                <th scope="row">Crear admin o moderador</th>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+              </tr>
+              <tr>
+                <th scope="row">Gestionar productos</th>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+              </tr>
+              <tr>
+                <th scope="row">Asignar rol</th>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+              </tr>
+              <tr>
+                <th scope="row">Gestionar cuentas</th>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia denegado">Denegado</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+                <td><span class="insignia permitido">Permitido</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script type="module">
+      import {
+        applyHasPermissionDirective,
+        setPermissionMatrix,
+        setCurrentRole
+      } from './directives/has-permission.directive.js';
+
+      const selectorRol = document.querySelector('#selector-rol');
+      const descripcionRol = document.querySelector('#descripcion-rol');
+      const accionesUi = document.querySelector('#acciones-ui');
+
+      const DESCRIPCIONES = {
+        JUGADOR: 'Usuario estándar con acceso a funciones básicas de juego, comentarios propios y gestión de su perfil.',
+        MODERADOR: 'Usuario con facultades de moderación de contenido, advertencias y suspensiones temporales.',
+        ADMINISTRADOR: 'Usuario con control administrativo sobre usuarios, productos de tienda y sanciones definitivas.',
+        SUPER_ADMINISTRADOR: 'Máxima autoridad del sistema con control total y capacidad de nombrar otros administradores.'
+      };
+
+      const TODAS_ACCIONES = [
+        { id: 'CREAR_CUENTA_JUGADOR', nombre: 'Crear cuenta de jugador' },
+        { id: 'MODIFICAR_PERFIL_PROPIO', nombre: 'Modificar perfil propio' },
+        { id: 'PUBLICAR_COMENTARIOS', nombre: 'Publicar comentarios' },
+        { id: 'ELIMINAR_COMENTARIO_PROPIO', nombre: 'Eliminar comentario propio' },
+        { id: 'MODERAR_COMENTARIOS', nombre: 'Moderar comentarios' },
+        { id: 'EMITIR_ADVERTENCIAS', nombre: 'Emitir advertencias' },
+        { id: 'SUSPENDER_USUARIOS', nombre: 'Suspender usuarios' },
+        { id: 'BANEAR_DEFINITIVAMENTE', nombre: 'Banear definitivamente' },
+        { id: 'CREAR_ADMIN_MODERADOR', nombre: 'Crear admin o moderador' },
+        { id: 'GESTIONAR_PRODUCTOS', nombre: 'Gestionar productos' },
+        { id: 'ASIGNAR_ROL', nombre: 'Asignar rol' },
+        { id: 'GESTIONAR_CUENTAS', nombre: 'Gestionar cuentas' }
+      ];
+
+      const MATRIZ_BASE = {
+        JUGADOR: {
+          CREAR_CUENTA_JUGADOR: 'GRANTED',
+          MODIFICAR_PERFIL_PROPIO: 'GRANTED',
+          PUBLICAR_COMENTARIOS: 'GRANTED',
+          ELIMINAR_COMENTARIO_PROPIO: 'GRANTED',
+          MODERAR_COMENTARIOS: 'DENIED',
+          EMITIR_ADVERTENCIAS: 'DENIED',
+          SUSPENDER_USUARIOS: 'DENIED',
+          BANEAR_DEFINITIVAMENTE: 'DENIED',
+          CREAR_ADMIN_MODERADOR: 'DENIED',
+          GESTIONAR_PRODUCTOS: 'DENIED',
+          ASIGNAR_ROL: 'DENIED',
+          GESTIONAR_CUENTAS: 'DENIED'
+        },
+        MODERADOR: {
+          CREAR_CUENTA_JUGADOR: 'DENIED',
+          MODIFICAR_PERFIL_PROPIO: 'GRANTED',
+          PUBLICAR_COMENTARIOS: 'GRANTED',
+          ELIMINAR_COMENTARIO_PROPIO: 'GRANTED',
+          MODERAR_COMENTARIOS: 'GRANTED',
+          EMITIR_ADVERTENCIAS: 'GRANTED',
+          SUSPENDER_USUARIOS: 'TEMPORARY',
+          BANEAR_DEFINITIVAMENTE: 'DENIED',
+          CREAR_ADMIN_MODERADOR: 'DENIED',
+          GESTIONAR_PRODUCTOS: 'DENIED',
+          ASIGNAR_ROL: 'DENIED',
+          GESTIONAR_CUENTAS: 'DENIED'
+        },
+        ADMINISTRADOR: {
+          CREAR_CUENTA_JUGADOR: 'DENIED',
+          MODIFICAR_PERFIL_PROPIO: 'GRANTED',
+          PUBLICAR_COMENTARIOS: 'GRANTED',
+          ELIMINAR_COMENTARIO_PROPIO: 'GRANTED',
+          MODERAR_COMENTARIOS: 'GRANTED',
+          EMITIR_ADVERTENCIAS: 'GRANTED',
+          SUSPENDER_USUARIOS: 'GRANTED',
+          BANEAR_DEFINITIVAMENTE: 'GRANTED',
+          CREAR_ADMIN_MODERADOR: 'DENIED',
+          GESTIONAR_PRODUCTOS: 'GRANTED',
+          ASIGNAR_ROL: 'DENIED',
+          GESTIONAR_CUENTAS: 'GRANTED'
+        },
+        SUPER_ADMINISTRADOR: {
+          CREAR_CUENTA_JUGADOR: 'DENIED',
+          MODIFICAR_PERFIL_PROPIO: 'GRANTED',
+          PUBLICAR_COMENTARIOS: 'GRANTED',
+          ELIMINAR_COMENTARIO_PROPIO: 'GRANTED',
+          MODERAR_COMENTARIOS: 'GRANTED',
+          EMITIR_ADVERTENCIAS: 'GRANTED',
+          SUSPENDER_USUARIOS: 'GRANTED',
+          BANEAR_DEFINITIVAMENTE: 'GRANTED',
+          CREAR_ADMIN_MODERADOR: 'GRANTED',
+          GESTIONAR_PRODUCTOS: 'GRANTED',
+          ASIGNAR_ROL: 'GRANTED',
+          GESTIONAR_CUENTAS: 'GRANTED'
+        }
+      };
+
+      function renderizarBotonesAccion() {
+        accionesUi.replaceChildren();
+        TODAS_ACCIONES.forEach((acc) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'btn-contorno';
+          btn.dataset.hasPermission = acc.id;
+          btn.textContent = acc.nombre;
+          accionesUi.append(btn);
+        });
+      }
+
+      function actualizarVistaRol() {
+        const rol = selectorRol.value;
+        descripcionRol.textContent = DESCRIPCIONES[rol] || '';
+        setCurrentRole(rol);
+        applyHasPermissionDirective();
+      }
+
+      setPermissionMatrix(MATRIZ_BASE);
+      renderizarBotonesAccion();
+      actualizarVistaRol();
+
+      selectorRol.addEventListener('change', actualizarVistaRol);
+    </script>
+  </body>
+</html>

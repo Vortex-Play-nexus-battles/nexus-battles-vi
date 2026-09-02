@@ -124,10 +124,10 @@ public class LoginService {
 
         auditLog.info("LOGIN_EXITOSO email={} ip={}", datos.getEmail(), direccionIp);
 
-        // Token JWT firmado — reemplaza la confianza ciega en X-User-Role.
-        // Pendiente: Andrés debe actualizar su SecurityInterceptor para
-        // verificar este token en vez de leer el header directamente.
-        String token = jwtService.generarToken(usuario.getApodo(), usuario.getRol().getNombre());
+        // Token JWT firmado, incluyendo la versión vigente (HU-RBAC-003) —
+        // reemplaza la confianza ciega en X-User-Role.
+        String token = jwtService.generarToken(
+            usuario.getApodo(), usuario.getRol().getNombre(), usuario.getVersionToken());
 
         return new LoginResponse(
             usuario.getId(),
