@@ -1,0 +1,456 @@
+```html
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestión de usuarios - Nexus Battles</title>
+  <link rel="stylesheet" href="./gestion-usuarios.css">
+</head>
+
+<body>
+
+<header class="topbar">
+  <div>
+    <h1>Gestión de usuarios</h1>
+    <p>Administración de cuentas de Nexus Battles</p>
+  </div>
+
+  <button id="btn-volver" class="btn btn-secondary">
+    Volver
+  </button>
+</header>
+
+<main class="container">
+
+  <!-- Información del usuario -->
+  <section class="card">
+
+    <div class="section-header">
+      <div>
+        <h2>Seleccionar usuario</h2>
+        <p>Introduce el ID del usuario que deseas administrar.</p>
+      </div>
+    </div>
+
+    <div class="search-row">
+      <label for="usuario-id">ID del usuario</label>
+
+      <div class="search-controls">
+        <input
+          id="usuario-id"
+          type="number"
+          min="1"
+          placeholder="Ej. 15"
+        >
+
+        <button
+          id="btn-cargar"
+          class="btn btn-primary"
+          type="button"
+          data-has-permission="GESTIONAR_CUENTAS">
+          Buscar usuario
+        </button>
+      </div>
+    </div>
+
+    <div id="mensaje-busqueda" class="message hidden"></div>
+
+  </section>
+
+
+  <!-- Datos del usuario -->
+  <section id="panel-usuario" class="card hidden">
+
+    <div class="section-header">
+      <div>
+        <h2 id="usuario-apodo">Usuario</h2>
+        <p id="usuario-email">-</p>
+      </div>
+
+      <span id="usuario-estado" class="status">
+                -
+            </span>
+    </div>
+
+    <div class="user-summary">
+
+      <div class="avatar-container">
+        <img
+          id="usuario-avatar"
+          src="./avatares/guerrero-berserker.jpg"
+          alt="Avatar del usuario">
+      </div>
+
+      <div class="user-info">
+        <div>
+          <span class="label">ID</span>
+          <strong id="usuario-id-display">-</strong>
+        </div>
+
+        <div>
+          <span class="label">Nombre</span>
+          <strong id="usuario-nombre-display">-</strong>
+        </div>
+
+        <div>
+          <span class="label">Apodo</span>
+          <strong id="usuario-apodo-display">-</strong>
+        </div>
+      </div>
+
+    </div>
+
+  </section>
+
+
+  <!-- Edición de perfil -->
+  <section id="panel-perfil" class="card hidden">
+
+    <div class="section-header">
+      <div>
+        <h2>Editar perfil</h2>
+        <p>Modifica la información del perfil del usuario.</p>
+      </div>
+    </div>
+
+    <form id="form-perfil">
+
+      <div class="form-grid">
+
+        <div class="form-group">
+          <label for="nombres">Nombres</label>
+          <input
+            id="nombres"
+            name="nombres"
+            type="text"
+            required>
+        </div>
+
+        <div class="form-group">
+          <label for="apellidos">Apellidos</label>
+          <input
+            id="apellidos"
+            name="apellidos"
+            type="text"
+            required>
+        </div>
+
+        <div class="form-group">
+          <label for="apodo">Apodo</label>
+          <input
+            id="apodo"
+            name="apodo"
+            type="text"
+            required>
+        </div>
+
+        <div class="form-group">
+          <label for="biografia">Biografía</label>
+          <textarea
+            id="biografia"
+            name="biografia"
+            rows="4"
+            placeholder="Biografía del usuario"></textarea>
+        </div>
+
+        <div class="form-group full-width">
+          <label for="preferencias">Preferencias</label>
+          <textarea
+            id="preferencias"
+            name="preferencias"
+            rows="4"
+            placeholder="Preferencias del usuario"></textarea>
+        </div>
+
+      </div>
+
+
+      <div class="avatar-section">
+
+        <h3>Avatar</h3>
+
+        <div class="avatar-grid">
+
+          <label class="avatar-option">
+            <input type="radio" name="avatar" value="alquimista-picaro-veneno.jpg">
+            <img src="./avatares/alquimista-picaro-veneno.jpg" alt="Alquimista pícaro">
+          </label>
+
+          <label class="avatar-option">
+            <input type="radio" name="avatar" value="arquero-cazador.jpg">
+            <img src="./avatares/arquero-cazador.jpg" alt="Arquero cazador">
+          </label>
+
+          <label class="avatar-option">
+            <input type="radio" name="avatar" value="chaman-sanador.jpg">
+            <img src="./avatares/chaman-sanador.jpg" alt="Chamán sanador">
+          </label>
+
+          <label class="avatar-option">
+            <input type="radio" name="avatar" value="comandante-con-casco.jpg">
+            <img src="./avatares/comandante-con-casco.jpg" alt="Comandante">
+          </label>
+
+          <label class="avatar-option">
+            <input type="radio" name="avatar" value="gran-mago-sabio.jpg">
+            <img src="./avatares/gran-mago-sabio.jpg" alt="Gran mago">
+          </label>
+
+          <label class="avatar-option">
+            <input type="radio" name="avatar" value="guerrero-berserker.jpg">
+            <img src="./avatares/guerrero-berserker.jpg" alt="Guerrero berserker">
+          </label>
+
+          <label class="avatar-option">
+            <input type="radio" name="avatar" value="guerrero-tanque.jpg">
+            <img src="./avatares/guerrero-tanque.jpg" alt="Guerrero tanque">
+          </label>
+
+          <label class="avatar-option">
+            <input type="radio" name="avatar" value="mago-de-fuego.jpg">
+            <img src="./avatares/mago-de-fuego.jpg" alt="Mago de fuego">
+          </label>
+
+          <label class="avatar-option">
+            <input type="radio" name="avatar" value="mago-de-hielo.jpg">
+            <img src="./avatares/mago-de-hielo.jpg" alt="Mago de hielo">
+          </label>
+
+          <label class="avatar-option">
+            <input type="radio" name="avatar" value="picaro-asesino.jpg">
+            <img src="./avatares/picaro-asesino.jpg" alt="Pícaro asesino">
+          </label>
+
+        </div>
+
+      </div>
+
+
+      <div class="form-actions">
+
+        <button
+          type="button"
+          id="btn-descartar"
+          class="btn btn-secondary">
+          Descartar
+        </button>
+
+        <button
+          type="submit"
+          class="btn btn-primary"
+          data-has-permission="GESTIONAR_CUENTAS">
+          Guardar cambios
+        </button>
+
+      </div>
+
+    </form>
+
+    <div id="mensaje-perfil" class="message hidden"></div>
+
+  </section>
+
+
+  <!-- Estado de cuenta -->
+  <section id="panel-estado" class="card hidden">
+
+    <div class="section-header">
+      <div>
+        <h2>Estado de cuenta</h2>
+        <p>Administra el estado de la cuenta seleccionada.</p>
+      </div>
+    </div>
+
+    <div class="actions-grid">
+
+      <div class="action-card">
+
+        <h3>Suspender</h3>
+
+        <p>
+          Suspende temporalmente la cuenta hasta una fecha determinada.
+        </p>
+
+        <label for="suspendido-hasta">
+          Fecha y hora de finalización
+        </label>
+
+        <input
+          id="suspendido-hasta"
+          type="datetime-local">
+
+        <button
+          id="btn-suspender"
+          class="btn btn-warning"
+          type="button"
+          data-has-permission="SUSPENDER_USUARIOS">
+          Suspender cuenta
+        </button>
+
+      </div>
+
+
+      <div class="action-card danger">
+
+        <h3>Banear definitivamente</h3>
+
+        <p>
+          Esta acción impide reactivar posteriormente la cuenta.
+        </p>
+
+        <button
+          id="btn-banear"
+          class="btn btn-danger"
+          type="button"
+          data-has-permission="BANEAR_DEFINITIVAMENTE">
+          Banear definitivamente
+        </button>
+
+      </div>
+
+
+      <div class="action-card">
+
+        <h3>Reactivar</h3>
+
+        <p>
+          Reactiva una cuenta suspendida.
+        </p>
+
+        <button
+          id="btn-reactivar"
+          class="btn btn-success"
+          type="button"
+          data-has-permission="SUSPENDER_USUARIOS">
+          Reactivar cuenta
+        </button>
+
+      </div>
+
+    </div>
+
+    <div id="mensaje-estado" class="message hidden"></div>
+
+  </section>
+
+
+  <!-- Contraseña -->
+  <section id="panel-password" class="card hidden">
+
+    <div class="section-header">
+      <div>
+        <h2>Restablecer contraseña</h2>
+        <p>
+          Se generará un mecanismo seguro para que el usuario establezca
+          una nueva contraseña.
+        </p>
+      </div>
+    </div>
+
+    <div class="password-warning">
+      <strong>Importante:</strong>
+      el administrador no podrá conocer la nueva contraseña del usuario.
+    </div>
+
+    <button
+      id="btn-restablecer-password"
+      class="btn btn-primary"
+      type="button"
+      data-has-permission="GESTIONAR_CUENTAS">
+      Restablecer contraseña
+    </button>
+
+    <div id="mensaje-password" class="message hidden"></div>
+
+  </section>
+
+
+  <!-- Funcionalidades pendientes -->
+  <section class="card">
+
+    <div class="section-header">
+      <div>
+        <h2>Otras configuraciones</h2>
+        <p>
+          Estas funciones dependen de endpoints de otros componentes
+          del sistema.
+        </p>
+      </div>
+    </div>
+
+    <div class="pending-grid">
+
+      <div class="pending-card">
+        <h3>🎒 Inventario</h3>
+        <p>
+          La gestión del inventario estará disponible cuando exista
+          el endpoint correspondiente.
+        </p>
+        <span>Pendiente de integración</span>
+      </div>
+
+      <div class="pending-card">
+        <h3>🔒 Privacidad y seguridad</h3>
+        <p>
+          La edición se habilitará cuando exista el servicio
+          correspondiente.
+        </p>
+        <span>Pendiente de integración</span>
+      </div>
+
+      <div class="pending-card">
+        <h3>👑 Rol</h3>
+        <p>
+          El cambio de rol requiere utilizar el endpoint de RBAC
+          correspondiente.
+        </p>
+        <span>Pendiente de integración</span>
+      </div>
+
+    </div>
+
+  </section>
+
+</main>
+
+
+<!-- Modal de confirmación -->
+<dialog id="dialog-confirmacion">
+
+  <div class="dialog-content">
+
+    <h2 id="dialog-titulo">Confirmar acción</h2>
+
+    <p id="dialog-mensaje">
+      ¿Estás seguro de realizar esta acción?
+    </p>
+
+    <div class="dialog-actions">
+
+      <button
+        id="dialog-cancelar"
+        class="btn btn-secondary"
+        type="button">
+        Cancelar
+      </button>
+
+      <button
+        id="dialog-confirmar"
+        class="btn btn-danger"
+        type="button">
+        Confirmar
+      </button>
+
+    </div>
+
+  </div>
+
+</dialog>
+
+
+<script type="module" src="./gestion-usuarios.js"></script>
+
+</body>
+</html>
+```

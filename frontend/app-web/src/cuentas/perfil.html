@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Mi perfil - Nexus Battles</title>
+
+  <link rel="stylesheet" href="./perfil.css">
+</head>
+
+<body>
+
+<header class="encabezado">
+  <div class="encabezado__contenido">
+    <h1>Nexus Battles</h1>
+
+    <nav>
+      <a href="#">Inicio</a>
+      <a href="#" class="activo">Mi perfil</a>
+    </nav>
+  </div>
+</header>
+
+<main class="contenedor">
+
+  <section class="perfil">
+
+    <div class="perfil__encabezado">
+      <div>
+        <h2>Mi perfil</h2>
+        <p>Consulta y modifica tu información personal.</p>
+      </div>
+    </div>
+
+    <!-- Estado de carga -->
+    <div id="estado-carga" class="estado">
+      <p>Cargando perfil...</p>
+    </div>
+
+    <!-- Estado de error -->
+    <div id="estado-error" class="estado estado--error oculto">
+      <p id="mensaje-error"></p>
+      <button type="button" id="btn-reintentar">
+        Reintentar
+      </button>
+    </div>
+
+    <!-- Estado sin perfil -->
+    <div id="estado-vacio" class="estado oculto">
+      <p>No se encontró información del perfil.</p>
+    </div>
+
+    <!-- Formulario -->
+    <form id="formulario-perfil" class="formulario oculto">
+
+      <!-- Apodo -->
+      <div class="campo">
+        <label for="campo-apodo">Apodo</label>
+
+        <input
+          type="text"
+          id="campo-apodo"
+          name="apodo"
+          maxlength="30"
+          autocomplete="nickname"
+          required
+        >
+
+        <small>
+          Cambiar el apodo requiere confirmación.
+        </small>
+      </div>
+
+      <!-- Nombres -->
+      <div class="campo">
+        <label for="campo-nombres">Nombres</label>
+
+        <input
+          type="text"
+          id="campo-nombres"
+          name="nombres"
+          maxlength="100"
+          required
+        >
+      </div>
+
+      <!-- Apellidos -->
+      <div class="campo">
+        <label for="campo-apellidos">Apellidos</label>
+
+        <input
+          type="text"
+          id="campo-apellidos"
+          name="apellidos"
+          maxlength="100"
+          required
+        >
+      </div>
+
+      <!-- Avatar -->
+      <fieldset class="avatar-grupo">
+
+        <legend>Selecciona tu avatar</legend>
+
+        <div
+          id="galeria-avatares"
+          class="galeria-avatares"
+          role="radiogroup"
+          aria-label="Selecciona tu avatar"
+        >
+
+          <label class="avatar-opcion">
+            <input
+              type="radio"
+              name="avatar"
+              value="alquimista-picaro-veneno.jpg"
+              class="avatar-opcion__input"
+            >
+
+            <img
+              src="./avatares/alquimista-picaro-veneno.jpg"
+              alt="Alquimista pícaro del veneno"
+              class="avatar-opcion__imagen"
+            >
+          </label>
+
+          <label class="avatar-opcion">
+            <input
+              type="radio"
+              name="avatar"
+              value="arquero-cazador.jpg"
+              class="avatar-opcion__input"
+            >
+
+            <img
+              src="./avatares/arquero-cazador.jpg"
+              alt="Arquero cazador"
+              class="avatar-opcion__imagen"
+            >
+          </label>
+
+          <label class="avatar-opcion">
+            <input
+              type="radio"
+              name="avatar"
+              value="chaman-sanador.jpg"
+              class="avatar-opcion__input"
+            >
+
+            <img
+              src="./avatares/chaman-sanador.jpg"
+              alt="Chamán sanador"
+              class="avatar-opcion__imagen"
+            >
+          </label>
+
+          <label class="avatar-opcion">
+            <input
+              type="radio"
+              name="avatar"
+              value="comandante-con-casco.jpg"
+              class="avatar-opcion__input"
+            >
+
+            <img
+              src="./avatares/comandante-con-casco.jpg"
+              alt="Comandante con casco"
+              class="avatar-opcion__imagen"
+            >
+          </label>
+
+          <label class="avatar-opcion">
+            <input
+              type="radio"
+              name="avatar"
+              value="gran-mago-sabio.jpg"
+              class="avatar-opcion__input"
+            >
+
+            <img
+              src="./avatares/gran-mago-sabio.jpg"
+              alt="Gran mago sabio"
+              class="avatar-opcion__imagen"
+            >
+          </label>
+
+          <label class="avatar-opcion">
+            <input
+              type="radio"
+              name="avatar"
+              value="guerrero-berserker.jpg"
+              class="avatar-opcion__input"
+            >
+
+            <img
+              src="./avatares/guerrero-berserker.jpg"
+              alt="Guerrero berserker"
+              class="avatar-opcion__imagen"
+            >
+          </label>
+
+          <label class="avatar-opcion">
+            <input
+              type="radio"
+              name="avatar"
+              value="guerrero-tanque.jpg"
+              class="avatar-opcion__input"
+            >
+
+            <img
+              src="./avatares/guerrero-tanque.jpg"
+              alt="Guerrero tanque"
+              class="avatar-opcion__imagen"
+            >
+          </label>
+
+          <label class="avatar-opcion">
+            <input
+              type="radio"
+              name="avatar"
+              value="mago-de-fuego.jpg"
+              class="avatar-opcion__input"
+            >
+
+            <img
+              src="./avatares/mago-de-fuego.jpg"
+              alt="Mago de fuego"
+              class="avatar-opcion__imagen"
+            >
+          </label>
+
+          <label class="avatar-opcion">
+            <input
+              type="radio"
+              name="avatar"
+              value="mago-de-hielo.jpg"
+              class="avatar-opcion__input"
+            >
+
+            <img
+              src="./avatares/mago-de-hielo.jpg"
+              alt="Mago de hielo"
+              class="avatar-opcion__imagen"
+            >
+          </label>
+
+          <label class="avatar-opcion">
+            <input
+              type="radio"
+              name="avatar"
+              value="picaro-asesino.jpg"
+              class="avatar-opcion__input"
+            >
+
+            <img
+              src="./avatares/picaro-asesino.jpg"
+              alt="Pícaro asesino"
+              class="avatar-opcion__imagen"
+            >
+          </label>
+
+        </div>
+
+      </fieldset>
+
+      <!-- Biografía -->
+      <div class="campo">
+        <label for="campo-biografia">Biografía</label>
+
+        <textarea
+          id="campo-biografia"
+          name="biografia"
+          maxlength="500"
+          rows="5"
+          placeholder="Cuéntanos algo sobre ti..."
+        ></textarea>
+      </div>
+
+      <!-- Preferencias -->
+      <div class="campo">
+        <label for="campo-preferencias">Preferencias</label>
+
+        <textarea
+          id="campo-preferencias"
+          name="preferencias"
+          maxlength="500"
+          rows="4"
+          placeholder="Escribe tus preferencias..."
+        ></textarea>
+      </div>
+
+      <!-- Mensaje -->
+      <div
+        id="mensaje-formulario"
+        class="mensaje-formulario oculto"
+        role="alert"
+      ></div>
+
+      <!-- Botones -->
+      <div class="acciones">
+
+        <button
+          type="button"
+          id="btn-descartar"
+          class="boton boton--secundario"
+        >
+          Descartar
+        </button>
+
+        <button
+          type="submit"
+          id="btn-guardar"
+          class="boton boton--principal"
+        >
+          Guardar cambios
+        </button>
+
+      </div>
+
+    </form>
+
+  </section>
+
+</main>
+
+<!-- Confirmación de cambio de apodo -->
+<dialog id="dialogo-apodo">
+
+  <div class="dialogo">
+
+    <h2>Confirmar cambio de apodo</h2>
+
+    <p>
+      Estás a punto de cambiar tu apodo.
+      ¿Quieres continuar?
+    </p>
+
+    <div class="acciones">
+      <button
+        type="button"
+        id="btn-cancelar-apodo"
+        class="boton boton--secundario"
+      >
+        Cancelar
+      </button>
+
+      <button
+        type="button"
+        id="btn-confirmar-apodo"
+        class="boton boton--principal"
+      >
+        Confirmar
+      </button>
+    </div>
+
+  </div>
+
+</dialog>
+
+<script type="module" src="./perfil.js"></script>
+
+</body>
+</html>
