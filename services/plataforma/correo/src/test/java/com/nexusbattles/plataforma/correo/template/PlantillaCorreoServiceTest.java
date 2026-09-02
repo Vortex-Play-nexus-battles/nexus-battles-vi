@@ -83,4 +83,15 @@ class PlantillaCorreoServiceTest {
         assertThatThrownBy(() -> service.renderizar("../../application", Map.of()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void conservaLosAcentosYLaEneAlRenderizar() {
+        String html = service.renderizar("email/recuperacion-clave",
+                Map.of("apodo", "ElGuerrero", "codigo", "482915", "minutosVigencia", 15));
+
+        assertThat(html)
+                .as("si la plantilla se lee con la codificacion equivocada, los correos salen con simbolos raros")
+                .contains("contraseña")
+                .doesNotContain("�");
+    }
 }
