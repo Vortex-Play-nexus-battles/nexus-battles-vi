@@ -8,6 +8,8 @@ applyHasPermissionDirective
 import {
 fetchWithHttpErrorInterceptor
 } from '../comun/interceptors/http-error.interceptor.js';
+import { construirBarra } from '../comun/barra-navegacion.js';
+
 
 const BASE_API = '/api/admin/usuarios';
 
@@ -22,9 +24,49 @@ let usuarioSeleccionado = null;
 
 document.addEventListener('DOMContentLoaded', iniciar);
 
+
+function montarBarraNavegacion() {
+    const rolActual = sessionStorage.getItem(CLAVE_ROL);
+    const barra = construirBarra({
+        seccionActiva: 'cuenta',
+        sesion: { autenticado: !!rolActual },
+        navegar: (ruta) => { location.href = ruta; }
+    });
+    document.body.prepend(barra);
+}
+
+function montarMenuAdmin() {
+    const rolActual = sessionStorage.getItem(CLAVE_ROL);
+    const rolesConAcceso = ['ADMINISTRADOR', 'SUPER_ADMINISTRADOR'];
+
+    if (!rolesConAcceso.includes(rolActual)) {
+        return;
+    }
+
+    const menu = document.createElement('div');
+    menu.className = 'menu-admin';
+
+    const enlaceCrear = document.createElement('a');
+    enlaceCrear.href = './crear-cuenta-admin.html';
+    enlaceCrear.textContent = 'Crear cuenta admin';
+    if (rolActual !== 'SUPER_ADMINISTRADOR') {
+        enlaceCrear.style.display = 'none';
+    }
+
+    const enlaceGestion = document.createElement('a');
+    enlaceGestion.href = './gestion-usuarios.html';
+    enlaceGestion.textContent = 'Gestion de usuarios';
+
+    menu.append(enlaceCrear, enlaceGestion);
+    document.body.insertBefore(menu, document.body.children[1]);
+}
+
 function iniciar() {
 
-```
+montarBarraNavegacion();
+
+montarMenuAdmin();
+
 const rolActual =
     sessionStorage.getItem(CLAVE_ROL) || 'JUGADOR';
 
@@ -35,13 +77,11 @@ applyHasPermissionDirective();
 configurarEventos();
 
 verificarAcceso();
-```
 
 }
 
 function configurarEventos() {
 
-```
 const formularioBusqueda =
     document.getElementById('form-buscar-usuario');
 
@@ -145,13 +185,11 @@ if (btnRestablecerPassword) {
     );
 
 }
-```
 
 }
 
 function verificarAcceso() {
 
-```
 const contenedor =
     document.getElementById('gestion-contenedor');
 
@@ -181,13 +219,11 @@ if (!tienePermiso) {
 contenedor.hidden = false;
 
 accesoDenegado.hidden = true;
-```
 
 }
 
 async function buscarUsuario(evento) {
 
-```
 evento.preventDefault();
 
 
@@ -245,13 +281,11 @@ limpiarDatosUsuario();
 mostrarMensajeBusqueda(
     'Usuario seleccionado. La consulta de sus datos quedará conectada cuando el backend exponga el endpoint administrativo de consulta.'
 );
-```
 
 }
 
 function mostrarPanelUsuario() {
 
-```
 const panel =
     document.getElementById('panel-usuario');
 
@@ -261,13 +295,11 @@ if (!panel) {
 
 
 panel.hidden = false;
-```
 
 }
 
 function limpiarDatosUsuario() {
 
-```
 establecerTexto(
     'usuario-id-mostrado',
     usuarioSeleccionado?.id ?? '-'
@@ -302,13 +334,11 @@ establecerValor('biografia', '');
 establecerValor('preferencias', '');
 establecerValor('estado', 'ACTIVO');
 establecerValor('suspendido-hasta', '');
-```
 
 }
 
 async function guardarPerfil(evento) {
 
-```
 evento.preventDefault();
 
 
@@ -462,13 +492,11 @@ try {
     );
 
 }
-```
 
 }
 
 async function suspenderUsuario() {
 
-```
 if (!validarUsuarioSeleccionado()) {
     return;
 }
@@ -514,13 +542,11 @@ await ejecutarAccionEstado(
     'SUSPENDIDO',
     'Cuenta suspendida correctamente.'
 );
-```
 
 }
 
 async function reactivarUsuario() {
 
-```
 if (!validarUsuarioSeleccionado()) {
     return;
 }
@@ -552,13 +578,11 @@ await ejecutarAccionEstado(
     'ACTIVO',
     'Cuenta reactivada correctamente.'
 );
-```
 
 }
 
 async function banearUsuario() {
 
-```
 if (!validarUsuarioSeleccionado()) {
     return;
 }
@@ -590,7 +614,6 @@ await ejecutarAccionEstado(
     'BANEADO',
     'Cuenta baneada definitivamente.'
 );
-```
 
 }
 
@@ -600,7 +623,6 @@ estado,
 mensajeExito
 ) {
 
-```
 try {
 
     const respuesta =
@@ -651,13 +673,11 @@ try {
     );
 
 }
-```
 
 }
 
 async function restablecerPassword() {
 
-```
 if (!validarUsuarioSeleccionado()) {
     return;
 }
@@ -722,13 +742,11 @@ try {
     );
 
 }
-```
 
 }
 
 function validarUsuarioSeleccionado() {
 
-```
 if (!usuarioSeleccionado?.id) {
 
     mostrarMensajePerfil(
@@ -740,13 +758,11 @@ if (!usuarioSeleccionado?.id) {
 
 
 return true;
-```
 
 }
 
 function actualizarResumenUsuario(datos) {
 
-```
 if (datos.apodo !== undefined) {
 
     establecerTexto(
@@ -765,46 +781,39 @@ if (datos.avatar !== undefined) {
     );
 
 }
-```
 
 }
 
 function obtenerValor(id) {
 
-```
 const elemento =
     document.getElementById(id);
 
 return elemento
     ? elemento.value.trim()
     : '';
-```
 
 }
 
 function establecerValor(id, valor) {
 
-```
 const elemento =
     document.getElementById(id);
 
 if (elemento) {
     elemento.value = valor ?? '';
 }
-```
 
 }
 
 function establecerTexto(id, texto) {
 
-```
 const elemento =
     document.getElementById(id);
 
 if (elemento) {
     elemento.textContent = String(texto ?? '-');
 }
-```
 
 }
 
@@ -814,7 +823,6 @@ deshabilitado,
 texto
 ) {
 
-```
 if (!boton) {
     return;
 }
@@ -823,13 +831,11 @@ if (!boton) {
 boton.disabled = deshabilitado;
 
 boton.textContent = texto;
-```
 
 }
 
 function mostrarMensajeBusqueda(mensaje) {
 
-```
 const elemento =
     document.getElementById('mensaje-busqueda');
 
@@ -841,13 +847,11 @@ if (!elemento) {
 elemento.textContent = mensaje;
 
 elemento.hidden = false;
-```
 
 }
 
 function limpiarMensajeBusqueda() {
 
-```
 const elemento =
     document.getElementById('mensaje-busqueda');
 
@@ -859,13 +863,11 @@ if (!elemento) {
 elemento.textContent = '';
 
 elemento.hidden = true;
-```
 
 }
 
 function mostrarMensajePerfil(mensaje) {
 
-```
 const elemento =
     document.getElementById('mensaje-perfil');
 
@@ -877,13 +879,11 @@ if (!elemento) {
 elemento.textContent = mensaje;
 
 elemento.hidden = false;
-```
 
 }
 
 async function obtenerMensajeError(respuesta) {
 
-```
 try {
 
     const datos =
@@ -921,14 +921,11 @@ try {
     return `Error HTTP ${respuesta.status}`;
 
 }
-```
 
 }
 
 function volverInicio() {
 
-```
 window.location.href = '../index.html';
-```
 
 }

@@ -8,6 +8,8 @@ applyHasPermissionDirective
 import {
 fetchWithHttpErrorInterceptor
 } from '../comun/interceptors/http-error.interceptor.js';
+import { construirBarra } from '../comun/barra-navegacion.js';
+
 
 const BASE_API = '/api/admin/cuentas';
 
@@ -22,7 +24,6 @@ const ROLES_PERMITIDOS = [
 
 const PERMISOS_POR_ROL = {
 
-```
 MODERADOR: [
     'GESTIONAR_CUENTAS',
     'SUSPENDER_USUARIOS'
@@ -33,15 +34,54 @@ ADMINISTRADOR: [
     'SUSPENDER_USUARIOS',
     'BANEAR_DEFINITIVAMENTE'
 ]
-```
 
 };
 
 document.addEventListener('DOMContentLoaded', iniciar);
 
+
+function montarBarraNavegacion() {
+    const rolActual = sessionStorage.getItem(CLAVE_ROL);
+    const barra = construirBarra({
+        seccionActiva: 'cuenta',
+        sesion: { autenticado: !!rolActual },
+        navegar: (ruta) => { location.href = ruta; }
+    });
+    document.body.prepend(barra);
+}
+
+function montarMenuAdmin() {
+    const rolActual = sessionStorage.getItem(CLAVE_ROL);
+    const rolesConAcceso = ['ADMINISTRADOR', 'SUPER_ADMINISTRADOR'];
+
+    if (!rolesConAcceso.includes(rolActual)) {
+        return;
+    }
+
+    const menu = document.createElement('div');
+    menu.className = 'menu-admin';
+
+    const enlaceCrear = document.createElement('a');
+    enlaceCrear.href = './crear-cuenta-admin.html';
+    enlaceCrear.textContent = 'Crear cuenta admin';
+    if (rolActual !== 'SUPER_ADMINISTRADOR') {
+        enlaceCrear.style.display = 'none';
+    }
+
+    const enlaceGestion = document.createElement('a');
+    enlaceGestion.href = './gestion-usuarios.html';
+    enlaceGestion.textContent = 'Gestion de usuarios';
+
+    menu.append(enlaceCrear, enlaceGestion);
+    document.body.insertBefore(menu, document.body.children[1]);
+}
+
 function iniciar() {
 
-```
+montarBarraNavegacion();
+
+montarMenuAdmin();
+
 const rolGuardado =
     sessionStorage.getItem(CLAVE_ROL) || 'JUGADOR';
 
@@ -54,21 +94,17 @@ configurarEventos();
 verificarAcceso();
 
 actualizarPermisosVisuales();
-```
 
 }
 
 function aplicarDirectivas() {
 
-```
 applyHasPermissionDirective();
-```
 
 }
 
 function configurarEventos() {
 
-```
 const formulario =
     document.getElementById('form-crear-cuenta');
 
@@ -159,13 +195,11 @@ if (btnVolverResultado) {
     );
 
 }
-```
 
 }
 
 function verificarAcceso() {
 
-```
 const accesoDenegado =
     document.getElementById('acceso-denegado');
 
@@ -199,13 +233,11 @@ if (!esSuperAdministrador || !tienePermiso) {
 accesoDenegado.hidden = true;
 
 formularioContenedor.hidden = false;
-```
 
 }
 
 function actualizarPermisosVisuales() {
 
-```
 const selectorRol =
     document.getElementById('rol');
 
@@ -244,24 +276,20 @@ contenedorPermisos.innerHTML =
             <span>${formatearPermiso(permiso)}</span>
         </div>
     `).join('');
-```
 
 }
 
 function formatearPermiso(permiso) {
 
-```
 return permiso
     .replaceAll('_', ' ')
     .toLowerCase()
     .replace(/\b\w/g, letra => letra.toUpperCase());
-```
 
 }
 
 async function manejarCreacionCuenta(evento) {
 
-```
 evento.preventDefault();
 
 
@@ -401,7 +429,6 @@ try {
     cambiarEstadoBoton(false);
 
 }
-```
 
 }
 
@@ -414,7 +441,6 @@ password,
 rol
 ) {
 
-```
 if (!nombres) {
     return 'Debes ingresar los nombres.';
 }
@@ -456,21 +482,17 @@ if (!ROLES_PERMITIDOS.includes(rol)) {
 
 
 return null;
-```
 
 }
 
 function validarEmail(email) {
 
-```
 return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-```
 
 }
 
 async function obtenerMensajeError(respuesta) {
 
-```
 try {
 
     const datos =
@@ -506,19 +528,16 @@ try {
     return `Error HTTP ${respuesta.status}`;
 
 }
-```
 
 }
 
 async function obtenerJsonSeguro(respuesta) {
 
-```
 try {
     return await respuesta.json();
 } catch {
     return null;
 }
-```
 
 }
 
@@ -528,7 +547,6 @@ apodo,
 rol
 ) {
 
-```
 const formularioContenedor =
     document.getElementById('formulario-contenedor');
 
@@ -568,13 +586,11 @@ resultadoTexto.textContent =
 formularioContenedor.hidden = true;
 
 resultado.hidden = false;
-```
 
 }
 
 function limpiarFormulario() {
 
-```
 const formulario =
     document.getElementById('form-crear-cuenta');
 
@@ -588,13 +604,11 @@ formulario.reset();
 actualizarPermisosVisuales();
 
 ocultarMensajes();
-```
 
 }
 
 function mostrarFormularioNuevaCuenta() {
 
-```
 const formularioContenedor =
     document.getElementById('formulario-contenedor');
 
@@ -613,13 +627,11 @@ if (resultado) {
 
 
 limpiarFormulario();
-```
 
 }
 
 function cambiarEstadoBoton(cargando) {
 
-```
 const boton =
     document.getElementById('btn-crear');
 
@@ -634,13 +646,11 @@ boton.textContent =
     cargando
         ? 'Creando cuenta...'
         : 'Crear cuenta';
-```
 
 }
 
 function mostrarError(mensaje) {
 
-```
 const elemento =
     document.getElementById('mensaje-error');
 
@@ -661,13 +671,11 @@ if (!elemento) {
 elemento.textContent = mensaje;
 
 elemento.hidden = false;
-```
 
 }
 
 function mostrarExito(mensaje) {
 
-```
 const elemento =
     document.getElementById('mensaje-exito');
 
@@ -688,13 +696,11 @@ if (!elemento) {
 elemento.textContent = mensaje;
 
 elemento.hidden = false;
-```
 
 }
 
 function ocultarMensajes() {
 
-```
 const error =
     document.getElementById('mensaje-error');
 
@@ -710,14 +716,11 @@ if (error) {
 if (exito) {
     exito.hidden = true;
 }
-```
 
 }
 
 function volverInicio() {
 
-```
 window.location.href = '../index.html';
-```
 
 }
