@@ -17,7 +17,7 @@ import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public final class RepositorioDisponibilidadMongo
+public class RepositorioDisponibilidadMongo
         implements RepositorioDisponibilidadProductos {
 
     private final MongoTemplate mongoTemplate;
