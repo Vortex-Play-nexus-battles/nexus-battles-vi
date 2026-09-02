@@ -19,6 +19,25 @@ const usuarioIdInput = document.querySelector('#usuario-id');
 /** @type {HTMLPreElement} */
 const logEl = document.querySelector('#log');
 const banner = document.querySelector('#nexus-rbac-forbidden');
+const matrizPermisos = document.querySelector('#matriz-permisos');
+const descripcionMatriz = document.querySelector('#descripcion-matriz');
+const accionesUi = document.querySelector('#acciones-ui');
+
+const ORDEN_ROLES = ['JUGADOR', 'MODERADOR', 'ADMINISTRADOR', 'SUPER_ADMINISTRADOR'];
+const NOMBRES_ACCIONES = {
+  CREAR_CUENTA_JUGADOR: 'Crear cuenta de jugador',
+  MODIFICAR_PERFIL_PROPIO: 'Modificar perfil propio',
+  PUBLICAR_COMENTARIOS: 'Publicar comentarios',
+  ELIMINAR_COMENTARIO_PROPIO: 'Eliminar comentario propio',
+  MODERAR_COMENTARIOS: 'Moderar comentarios',
+  EMITIR_ADVERTENCIAS: 'Emitir advertencias',
+  SUSPENDER_USUARIOS: 'Suspender usuarios',
+  BANEAR_DEFINITIVAMENTE: 'Banear definitivamente',
+  CREAR_ADMIN_MODERADOR: 'Crear admin o moderador',
+  GESTIONAR_PRODUCTOS: 'Gestionar productos',
+  ASIGNAR_ROL: 'Asignar rol',
+  GESTIONAR_CUENTAS: 'Gestionar cuentas',
+};
 
 const ROLES_RESPALDO = [
   {
@@ -68,6 +87,66 @@ function setEstado(texto, tipo) {
  */
 function escribirLog(valor) {
   logEl.textContent = typeof valor === 'string' ? valor : JSON.stringify(valor, null, 2);
+}
+
+function nombreAccion(accion) {
+  return NOMBRES_ACCIONES[accion] || accion.toLowerCase().replaceAll('_', ' ');
+}
+
+function crearInsignia(tipo) {
+  const insignia = document.createElement('span');
+  const valores = {
+    GRANTED: ['permitido', 'Permitido'],
+    DENIED: ['denegado', 'Denegado'],
+    TEMPORARY: ['temporal', 'Temporal'],
+  };
+  const [clase, texto] = valores[tipo] || valores.DENIED;
+  insignia.className = `insignia ${clase}`;
+  insignia.textContent = texto;
+  return insignia;
+}
+
+function pintarMatriz(matrix, version = 'vigente') {
+  const matriz = matrix && typeof matrix === 'object' ? matrix : {};
+  const acciones = [...new Set(ORDEN_ROLES.flatMap((rol) => Object.keys(matriz[rol] || {})))];
+  matrizPermisos.replaceChildren();
+  accionesUi.replaceChildren();
+
+  if (acciones.length === 0) {
+    const fila = document.createElement('tr');
+    const celda = document.createElement('td');
+    celda.colSpan = 5;
+    celda.textContent = 'No fue posible obtener la matriz. Por seguridad, no se habilitan acciones.';
+    fila.append(celda);
+    matrizPermisos.append(fila);
+    descripcionMatriz.textContent = 'Matriz no disponible: la interfaz aplica denegación por defecto.';
+    return;
+  }
+
+  acciones.forEach((accion) => {
+    const fila = document.createElement('tr');
+    const encabezado = document.createElement('th');
+    encabezado.scope = 'row';
+    encabezado.textContent = nombreAccion(accion);
+    fila.append(encabezado);
+
+    ORDEN_ROLES.forEach((rol) => {
+      const celda = document.createElement('td');
+      celda.append(crearInsignia(matriz[rol]?.[accion]));
+      fila.append(celda);
+    });
+    matrizPermisos.append(fila);
+
+    const boton = document.createElement('button');
+    boton.type = 'button';
+    boton.className = 'btn-contorno';
+    boton.dataset.hasPermission = accion;
+    boton.textContent = nombreAccion(accion);
+    accionesUi.append(boton);
+  });
+
+  descripcionMatriz.textContent = `Tabla 24 extendida: 4 roles por ${acciones.length} acciones. Matriz ${version}.`;
+  applyHasPermissionDirective();
 }
 
 /**
@@ -175,10 +254,12 @@ async function cargarPermisos() {
     }
     const payload = await response.json();
     setPermissionMatrix(payload?.matrix);
+    pintarMatriz(payload?.matrix, payload?.version || 'vigente');
     setEstado(`Roles y permisos cargados desde ms-identidad (matriz ${payload?.version || 'vigente'}).`, 'exito');
   } catch (error) {
     // Sin matriz no se habilita ninguna acción: la UI también aplica default-deny.
     setPermissionMatrix({});
+    pintarMatriz({});
     setEstado(
       `No fue posible cargar permisos; las acciones se mantienen ocultas (${error instanceof Error ? error.message : 'error'}).`,
       'error',
@@ -242,6 +323,6 @@ document.querySelector('#acciones-ui').addEventListener('click', (evento) => {
 });
 
 pintarRoles(ROLES_RESPALDO);
-applyHasPermissionDirective();
+pintarMatriz({});
 cargarRoles();
 cargarPermisos();

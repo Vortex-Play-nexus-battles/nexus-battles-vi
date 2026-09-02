@@ -5,6 +5,7 @@ import com.nexusbattles.ms_identidad.admin.service.AdminCuentaService;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.rbac.model.Action;
 import com.nexusbattles.ms_identidad.rbac.security.RequirePermission;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,9 +23,11 @@ public class AdminCuentasController {
 
     @PostMapping
     @RequirePermission(Action.CREAR_ADMIN_MODERADOR)
-    public ResponseEntity<?> crearCuentaAdministrativa(@Valid @RequestBody CrearCuentaAdminRequest datos) {
+    public ResponseEntity<?> crearCuentaAdministrativa(@Valid @RequestBody CrearCuentaAdminRequest datos,
+                                                       HttpServletRequest request) {
         try {
-            Usuario usuarioCreado = adminCuentaService.crearCuentaAdministrativa(datos);
+            String administradorId = request.getHeader("X-User-Name");
+            Usuario usuarioCreado = adminCuentaService.crearCuentaAdministrativa(datos, administradorId);
             return ResponseEntity.status(HttpStatus.CREATED).body(usuarioCreado);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());

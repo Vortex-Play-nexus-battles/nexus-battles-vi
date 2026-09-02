@@ -36,3 +36,36 @@ initscript {
 allprojects {
     apply plugin: org.sonarqube.gradle.SonarQubePlugin
 }
+
+// -DmoduloObjetivo=<rutaGradle> lo agrega ci.yml (mismo valor que
+// matrix.rutaGradle, ej: ":services:plataforma:comentarios"). Causa raiz
+// real de que Sonar analizara el monorepo entero: -Dsonar.sources NO
+// funciona con este plugin porque el plugin deriva las fuentes de cada
+// subproyecto desde el modelo de Gradle y pisa esa propiedad. La forma
+// correcta de acotar el analisis a un solo servicio es marcar
+// "skipProject = true" en todos los demas subproyectos (sintaxis oficial
+// de SonarSource, con el prefijo "is" -- "skipProject" sin el prefijo no
+// existe en la extension del plugin).
+//
+// rootProject { } es la forma correcta de configurar esto desde un init
+// script: los proyectos todavia no existen cuando el init script se evalua,
+// asi que hace falta esta API que difiere la ejecucion hasta que el
+// proyecto raiz este disponible. allprojects() adentro configura raiz +
+// todos los subproyectos, y afterEvaluate asegura que la extension "sonar"
+// (agregada por el plugin de arriba) ya este lista en cada uno antes de
+// tocarla.
+rootProject {
+    allprojects {
+        afterEvaluate {
+            def moduloObjetivo = System.getProperty('moduloObjetivo')
+            // Sin la propiedad (ej. alguien corre "./gradlew sonar" en
+            // local sin pasarla), no tocamos nada: se mantiene el
+            // comportamiento anterior en vez de saltarnos todo por error.
+            if (moduloObjetivo != null && project.path != moduloObjetivo) {
+                sonar {
+                    skipProject = true
+                }
+            }
+        }
+    }
+}

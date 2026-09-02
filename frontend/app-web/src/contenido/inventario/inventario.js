@@ -5,7 +5,14 @@
  * rejilla (`vitrina.js`) y de como se pide el dato (`cliente-inventario.js`).
  */
 
-import { consultarPagina, crearElemento, modificarElemento } from './cliente-inventario.js';
+import {
+  consultarPagina,
+  crearElemento,
+  modificarElemento,
+  consultarEquipamiento,
+  equiparElemento,
+  desequiparElemento,
+} from './cliente-inventario.js';
 import { construirVitrina, PRODUCTOS_POR_PAGINA } from './vitrina.js';
 import { construirCarga, construirVacio, construirError } from './estados-vista.js';
 import { abrirFicha } from './ficha-producto.js';
@@ -17,6 +24,15 @@ const TIPOS = [
   ['ARMADURA', 'Armadura'],
   ['ITEM', 'Ítem'],
   ['EPICA', 'Épica'],
+];
+
+const PARTES_ARMADURA = [
+  ['CASCO', 'Casco'],
+  ['PECHO', 'Pecho'],
+  ['GUANTES', 'Guantes'],
+  ['BRAZALETES', 'Brazaletes'],
+  ['PANTALON', 'Pantalón'],
+  ['ZAPATOS', 'Zapatos'],
 ];
 
 /**
@@ -32,7 +48,7 @@ export async function montarVitrina(
   contenedor,
   identidad,
   numeroPagina = 0,
-  { consultar = consultarPagina, alEditar } = {},
+  { consultar = consultarPagina, alEditar, alEquipar } = {},
 ) {
   contenedor.replaceChildren(construirCarga());
 
@@ -54,6 +70,7 @@ export async function montarVitrina(
   contenedor.replaceChildren(
     construirVitrina(pagina, {
       alEditar,
+      alEquipar,
       // HU-INV-007: la ficha lee el catalogo por su cuenta; el inventario
       // solo guarda la referencia (RF-ADM-10).
       alAbrirDetalle: (elemento) =>
@@ -108,14 +125,33 @@ function construirGestion() {
     tipo.control.appendChild(opcion);
   }
   const nombre = campoFormulario('Nombre', 'nombrePropio');
+  const parte = campoFormulario('Parte de armadura', 'parteArmadura', 'select');
+  for (const [valor, etiqueta] of PARTES_ARMADURA) {
+    const opcion = document.createElement('option');
+    opcion.value = valor;
+    opcion.textContent = etiqueta;
+    parte.control.appendChild(opcion);
+  }
+  parte.etiqueta.hidden = true;
   const acciones = elementoHtml('div', 'inventario-editor__acciones');
   const botonGuardar = elementoHtml('button', 'inventario-editor__guardar', 'Guardar');
   botonGuardar.type = 'submit';
   const botonCancelar = elementoHtml('button', 'inventario-editor__cancelar', 'Cancelar');
   botonCancelar.type = 'button';
   acciones.append(botonGuardar, botonCancelar);
-  formulario.append(producto.etiqueta, tipo.etiqueta, nombre.etiqueta, acciones);
+  formulario.append(producto.etiqueta, tipo.etiqueta, nombre.etiqueta, parte.etiqueta, acciones);
   editor.append(tituloEditor, formulario);
+
+  const equipo = elementoHtml('section', 'inventario-equipo');
+  equipo.hidden = true;
+  const equipoCabecera = elementoHtml('header', 'inventario-equipo__cabecera');
+  const equipoTitulo = elementoHtml('h2', 'inventario-equipo__titulo', 'Equipamiento');
+  const equipoCerrar = elementoHtml('button', 'inventario-equipo__cerrar', 'Cerrar');
+  equipoCerrar.type = 'button';
+  equipoCabecera.append(equipoTitulo, equipoCerrar);
+  const equipoResumen = elementoHtml('p', 'inventario-equipo__resumen');
+  const equipoLista = elementoHtml('ul', 'inventario-equipo__lista');
+  equipo.append(equipoCabecera, equipoResumen, equipoLista);
 
   const mensaje = elementoHtml('p', 'inventario__mensaje');
   mensaje.id = 'nexus-rbac-forbidden';
@@ -125,7 +161,7 @@ function construirGestion() {
   const contenido = elementoHtml('div', 'inventario__contenido');
 
   return {
-    elementos: [cabecera, editor, mensaje, contenido],
+    elementos: [cabecera, editor, equipo, mensaje, contenido],
     cabecera,
     botonNuevo,
     editor,
@@ -134,8 +170,14 @@ function construirGestion() {
     producto,
     tipo,
     nombre,
+    parte,
     botonGuardar,
     botonCancelar,
+    equipo,
+    equipoTitulo,
+    equipoCerrar,
+    equipoResumen,
+    equipoLista,
     mensaje,
     contenido,
   };
@@ -149,7 +191,14 @@ export async function montarInventario(
   raiz,
   identidad,
   numeroPagina = 0,
-  { consultar = consultarPagina, crear = crearElemento, modificar = modificarElemento } = {},
+  {
+    consultar = consultarPagina,
+    crear = crearElemento,
+    modificar = modificarElemento,
+    consultarEquipo = consultarEquipamiento,
+    equipar = equiparElemento,
+    desequipar = desequiparElemento,
+  } = {},
 ) {
   const vista = construirGestion();
   raiz.replaceChildren(...vista.elementos);
@@ -157,6 +206,8 @@ export async function montarInventario(
   let paginaActual = numeroPagina;
   let paginaMostrada = null;
   let elementoSeleccionado = null;
+  let heroeSeleccionado = null;
+  let equipoActual = null;
 
   function mostrarMensaje(texto, esError = false) {
     vista.mensaje.textContent = texto;
@@ -178,6 +229,7 @@ export async function montarInventario(
     vista.tipo.etiqueta.hidden = false;
     vista.producto.control.disabled = false;
     vista.tipo.control.disabled = false;
+    vista.parte.etiqueta.hidden = true;
     vista.editor.hidden = false;
     mostrarMensaje('');
     vista.producto.control.focus();
@@ -190,10 +242,82 @@ export async function montarInventario(
     vista.tipo.etiqueta.hidden = true;
     vista.producto.control.disabled = true;
     vista.tipo.control.disabled = true;
+    vista.parte.etiqueta.hidden = true;
     vista.nombre.control.value = elemento.nombrePropio;
     vista.editor.hidden = false;
     mostrarMensaje('');
     vista.nombre.control.focus();
+  }
+
+  function idsEquipados(equipo) {
+    return new Set([...equipo.armas, ...Object.values(equipo.armaduras), ...equipo.items]);
+  }
+
+  function pintarEquipo() {
+    const equipados = idsEquipados(equipoActual);
+    vista.equipoResumen.textContent =
+      `Armas ${equipoActual.armas.length}/2 · ` +
+      `Armadura ${Object.keys(equipoActual.armaduras).length}/6 · ` +
+      `Ítems ${equipoActual.items.length}/2`;
+    vista.equipoLista.replaceChildren();
+
+    const disponibles = (paginaMostrada?.elementos ?? []).filter((elemento) =>
+      ['ARMA', 'ARMADURA', 'ITEM'].includes(elemento.tipo),
+    );
+    for (const elemento of disponibles) {
+      const fila = elementoHtml('li', 'inventario-equipo__elemento');
+      const detalle = elementoHtml(
+        'span',
+        'inventario-equipo__nombre',
+        elemento.parteArmadura
+          ? `${elemento.nombrePropio} · ${elemento.parteArmadura}`
+          : elemento.nombrePropio,
+      );
+      const estaEquipado = equipados.has(elemento.id);
+      const boton = elementoHtml(
+        'button',
+        estaEquipado ? 'inventario-equipo__desequipar' : 'inventario-equipo__equipar',
+        estaEquipado ? 'Desequipar' : 'Equipar',
+      );
+      boton.type = 'button';
+      boton.addEventListener('click', async () => {
+        cambiarDisponibilidad(boton, false);
+        try {
+          equipoActual = estaEquipado
+            ? await desequipar(identidad, heroeSeleccionado.id, elemento.id)
+            : await equipar(identidad, heroeSeleccionado.id, elemento.id);
+          pintarEquipo();
+          mostrarMensaje(estaEquipado ? 'Elemento desequipado.' : 'Elemento equipado.');
+        } catch (fallo) {
+          console.error('No se pudo cambiar el equipamiento', fallo);
+          let texto = 'No pudimos cambiar el equipamiento. Inténtalo de nuevo.';
+          if (fallo?.status === 409) {
+            texto = 'Ese cambio supera los límites de equipamiento.';
+          } else if (fallo?.status === 403) {
+            texto = 'No tienes permiso para modificar ese inventario.';
+          }
+          mostrarMensaje(texto, true);
+          cambiarDisponibilidad(boton, true);
+        }
+      });
+      fila.append(detalle, boton);
+      vista.equipoLista.appendChild(fila);
+    }
+  }
+
+  async function abrirEquipamiento(heroe) {
+    heroeSeleccionado = heroe;
+    vista.equipoTitulo.textContent = `Equipamiento de ${heroe.nombrePropio}`;
+    mostrarMensaje('Cargando equipamiento...');
+    try {
+      equipoActual = await consultarEquipo(identidad, heroe.id);
+      vista.equipo.hidden = false;
+      pintarEquipo();
+      mostrarMensaje('');
+    } catch (fallo) {
+      console.error('No se pudo consultar el equipamiento', fallo);
+      mostrarMensaje('No pudimos cargar el equipamiento. Inténtalo de nuevo.', true);
+    }
   }
 
   async function actualizar(numero = paginaActual) {
@@ -201,6 +325,7 @@ export async function montarInventario(
     const consultada = await montarVitrina(vista.contenido, identidad, paginaActual, {
       consultar,
       alEditar: abrirEdicion,
+      alEquipar: abrirEquipamiento,
     });
     if (consultada) {
       paginaMostrada = consultada;
@@ -210,6 +335,15 @@ export async function montarInventario(
 
   vista.botonNuevo.addEventListener('click', abrirCreacion);
   vista.botonCancelar.addEventListener('click', cerrarEditor);
+  vista.equipoCerrar.addEventListener('click', () => {
+    vista.equipo.hidden = true;
+    heroeSeleccionado = null;
+    equipoActual = null;
+  });
+  vista.tipo.control.addEventListener('change', () => {
+    vista.parte.etiqueta.hidden = vista.tipo.control.value !== 'ARMADURA';
+    vista.parte.control.required = vista.tipo.control.value === 'ARMADURA';
+  });
   vista.formulario.addEventListener('submit', async (evento) => {
     evento.preventDefault();
     cambiarDisponibilidad(vista.botonGuardar, false);
@@ -229,6 +363,8 @@ export async function montarInventario(
           productoId: vista.producto.control.value,
           tipo: vista.tipo.control.value,
           nombrePropio: vista.nombre.control.value,
+          parteArmadura:
+            vista.tipo.control.value === 'ARMADURA' ? vista.parte.control.value : undefined,
         });
         cerrarEditor();
         await actualizar(Math.floor(totalAntes / PRODUCTOS_POR_PAGINA));

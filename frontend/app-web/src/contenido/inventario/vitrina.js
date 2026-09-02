@@ -25,10 +25,10 @@ const NOMBRE_DEL_TIPO = {
  * Devuelve la rejilla de una pagina de inventario.
  *
  * @param {{elementos: Array<object>}} pagina respuesta de SCRUM-318.
- * @param {{alEditar?: Function}} opciones acciones disponibles en cada tarjeta.
+ * @param {{alEditar?: Function, alEquipar?: Function}} opciones acciones de cada tarjeta.
  * @returns {HTMLUListElement} rejilla lista para insertar en el documento.
  */
-export function construirVitrina(pagina, { alEditar, alAbrirDetalle } = {}) {
+export function construirVitrina(pagina, { alEditar, alEquipar, alAbrirDetalle } = {}) {
   if (!pagina || !Array.isArray(pagina.elementos)) {
     throw new TypeError('La pagina de inventario debe traer una lista de elementos');
   }
@@ -42,7 +42,7 @@ export function construirVitrina(pagina, { alEditar, alAbrirDetalle } = {}) {
   const vitrina = document.createElement('ul');
   vitrina.className = 'vitrina';
   for (const elemento of pagina.elementos) {
-    vitrina.appendChild(construirTarjeta(elemento, alEditar, alAbrirDetalle));
+    vitrina.appendChild(construirTarjeta(elemento, alEditar, alEquipar, alAbrirDetalle));
   }
   return vitrina;
 }
@@ -51,7 +51,7 @@ export function construirVitrina(pagina, { alEditar, alAbrirDetalle } = {}) {
  * Una tarjeta de producto. El nombre propio lo escribe el jugador, asi que
  * entra por textContent y nunca por innerHTML.
  */
-function construirTarjeta(elemento, alEditar, alAbrirDetalle) {
+function construirTarjeta(elemento, alEditar, alEquipar, alAbrirDetalle) {
   const tarjeta = document.createElement('li');
   tarjeta.className = 'vitrina__producto';
   tarjeta.dataset.elementoId = elemento.id;
@@ -67,17 +67,20 @@ function construirTarjeta(elemento, alEditar, alAbrirDetalle) {
 
   tarjeta.append(nombre, tipo);
 
+  const acciones = document.createElement('div');
+  acciones.className = 'vitrina__acciones';
+
   if (typeof alAbrirDetalle === 'function') {
     // HU-INV-007: la ficha se abre desde la tarjeta. Es un boton y no la
     // tarjeta entera para que el teclado lo alcance y para no chocar con
-    // el boton de editar (RNF-ACC-002).
+    // los demas botones de la tarjeta (RNF-ACC-002).
     const botonDetalle = document.createElement('button');
     botonDetalle.className = 'vitrina__detalle';
     botonDetalle.type = 'button';
     botonDetalle.textContent = 'Ver detalle';
     botonDetalle.setAttribute('aria-label', `Ver el detalle de ${elemento.nombrePropio}`);
     botonDetalle.addEventListener('click', () => alAbrirDetalle(elemento));
-    tarjeta.appendChild(botonDetalle);
+    acciones.appendChild(botonDetalle);
   }
 
   if (typeof alEditar === 'function') {
@@ -87,7 +90,19 @@ function construirTarjeta(elemento, alEditar, alAbrirDetalle) {
     botonEditar.textContent = 'Editar';
     botonEditar.setAttribute('aria-label', `Editar ${elemento.nombrePropio}`);
     botonEditar.addEventListener('click', () => alEditar(elemento));
-    tarjeta.appendChild(botonEditar);
+    acciones.appendChild(botonEditar);
+  }
+  if (elemento.tipo === 'HEROE' && typeof alEquipar === 'function') {
+    const botonEquipo = document.createElement('button');
+    botonEquipo.className = 'vitrina__equipo';
+    botonEquipo.type = 'button';
+    botonEquipo.textContent = 'Equipo';
+    botonEquipo.setAttribute('aria-label', `Gestionar equipo de ${elemento.nombrePropio}`);
+    botonEquipo.addEventListener('click', () => alEquipar(elemento));
+    acciones.appendChild(botonEquipo);
+  }
+  if (acciones.childElementCount > 0) {
+    tarjeta.appendChild(acciones);
   }
   return tarjeta;
 }
