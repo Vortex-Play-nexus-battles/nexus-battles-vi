@@ -12,6 +12,7 @@ import com.nexusbattles.ms_identidad.auth.model.DispositivoConocido;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.repository.DispositivoConocidoRepository;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
+import com.nexusbattles.ms_identidad.auth.service.AuditoriaLoginClient;
 import com.nexusbattles.ms_identidad.auth.service.IntentosFallidosService;
 import com.nexusbattles.ms_identidad.auth.service.JwtService;
 import com.nexusbattles.ms_identidad.auth.service.LoginService;
@@ -47,6 +48,9 @@ class LoginServiceTest {
 
     @Mock
     private JwtService jwtService;
+
+    @Mock
+    private AuditoriaLoginClient auditoriaLoginClient;
 
     @InjectMocks
     private LoginService loginService;
@@ -87,6 +91,11 @@ class LoginServiceTest {
         );
 
         assertEquals("Correo o contraseña incorrectos.", exception.getMessage());
+
+        verify(auditoriaLoginClient).registrarLoginFallido(
+            "cristian@test.com",
+            "127.0.0.1"
+        );
     }
 
     @Test
@@ -104,6 +113,11 @@ class LoginServiceTest {
         );
 
         verify(intentosFallidosService).registrarIntentoFallido(1L);
+
+        verify(auditoriaLoginClient).registrarLoginFallido(
+            "cristian@test.com",
+            "127.0.0.1"
+        );
     }
 
     @Test

@@ -29,7 +29,7 @@ public class AdminCuentaService {
     }
 
     @Transactional
-    public Usuario crearCuentaAdministrativa(CrearCuentaAdminRequest datos, String administradorId) {
+    public Usuario crearCuentaAdministrativa(CrearCuentaAdminRequest datos, String administradorId, String ipOrigen) {
 
         String rolSolicitado = datos.getRolNombre().trim().toUpperCase();
         if (!ROLES_PERMITIDOS.contains(rolSolicitado)) {
@@ -51,7 +51,7 @@ public class AdminCuentaService {
         auditoriaClient.registrar(
             "CREACION", administradorId, usuarioCreado.getApodo(),
             null, "rol=" + rolSolicitado + ", estado=INACTIVO",
-            "Creación de cuenta administrativa"
+            "Creación de cuenta administrativa", ipOrigen
         );
 
         return usuarioCreado;
