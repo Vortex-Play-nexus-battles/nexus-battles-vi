@@ -39,8 +39,8 @@
 
     <!-- Navegación entre Historias de Usuario de Cuentas -->
     <nav class="barra-navegacion">
-      <a href="./matriz-permisos.html" class="nav-link activo">👤 HU-RBAC-001: Panel de Acceso por Roles</a>
-      <a href="./seguridad-servidor.html" class="nav-link">🛡️ HU-RBAC-004: Verificación en Servidor</a>
+      <a href="./matriz-permisos.html" class="nav-link activo">HU-RBAC-001: Panel de Acceso por Roles</a>
+      <a href="./seguridad-servidor.html" class="nav-link">HU-RBAC-004: Verificación en Servidor</a>
     </nav>
 
     <header class="cromo">
@@ -51,9 +51,11 @@
     <main>
       <!-- Selector Visual de Roles mediante Tarjetas Interactivas -->
       <section class="tarjeta">
+        <!-- Estado de conexión con el backend (RNF-USA-003) -->
+        <div id="estado-conexion" class="aviso-sesion" role="status">Verificando conexión con ms-identidad…</div>
+
         <!-- Indicador de Sesión Activa (si existe token) -->
         <div id="aviso-sesion-activa" class="aviso-sesion" style="display: none;">
-          <span>🔑</span>
           <span id="texto-sesion-activa">Sesión autenticada detectada.</span>
         </div>
 
@@ -68,10 +70,10 @@
           <div style="display: flex; align-items: center; gap: 8px;">
             <label for="selector-rol" style="font-size: 12px; font-weight: 700; text-transform: uppercase;">Rol:</label>
             <select id="selector-rol" style="padding: 6px 12px; border-radius: 6px; font-weight: 600;">
-              <option value="JUGADOR" selected>🎮 Jugador</option>
-              <option value="MODERADOR">🛡️ Moderador</option>
-              <option value="ADMINISTRADOR">⚡ Administrador</option>
-              <option value="SUPER_ADMINISTRADOR">👑 Super Administrador</option>
+              <option value="JUGADOR" selected>Jugador</option>
+              <option value="MODERADOR">Moderador</option>
+              <option value="ADMINISTRADOR">Administrador</option>
+              <option value="SUPER_ADMINISTRADOR">Super Administrador</option>
             </select>
           </div>
         </div>
@@ -80,7 +82,6 @@
         <div class="cuadricula-roles" id="cuadricula-roles" role="radiogroup" aria-label="Seleccionar rol de acceso">
           <div class="tarjeta-rol activa" data-rol="JUGADOR" tabindex="0" role="radio" aria-checked="true">
             <div class="tarjeta-rol__cabecera">
-              <span class="tarjeta-rol__icono">🎮</span>
               <span class="tarjeta-rol__nivel">Nivel 1</span>
             </div>
             <h3 class="tarjeta-rol__nombre">Jugador</h3>
@@ -89,7 +90,6 @@
 
           <div class="tarjeta-rol" data-rol="MODERADOR" tabindex="0" role="radio" aria-checked="false">
             <div class="tarjeta-rol__cabecera">
-              <span class="tarjeta-rol__icono">🛡️</span>
               <span class="tarjeta-rol__nivel">Nivel 2</span>
             </div>
             <h3 class="tarjeta-rol__nombre">Moderador</h3>
@@ -98,7 +98,6 @@
 
           <div class="tarjeta-rol" data-rol="ADMINISTRADOR" tabindex="0" role="radio" aria-checked="false">
             <div class="tarjeta-rol__cabecera">
-              <span class="tarjeta-rol__icono">⚡</span>
               <span class="tarjeta-rol__nivel">Nivel 3</span>
             </div>
             <h3 class="tarjeta-rol__nombre">Administrador</h3>
@@ -107,7 +106,6 @@
 
           <div class="tarjeta-rol" data-rol="SUPER_ADMINISTRADOR" tabindex="0" role="radio" aria-checked="false">
             <div class="tarjeta-rol__cabecera">
-              <span class="tarjeta-rol__icono">👑</span>
               <span class="tarjeta-rol__nivel">Nivel 4</span>
             </div>
             <h3 class="tarjeta-rol__nombre">Super Admin</h3>
@@ -133,7 +131,6 @@
 
         <!-- Banner de Toast / Notificación de Acción -->
         <div id="toast-accion" class="toast-feedback" style="display: none;" role="status">
-          <span id="toast-icono">✓</span>
           <span id="toast-mensaje">Operación autorizada con éxito.</span>
         </div>
       </section>
@@ -145,81 +142,75 @@
           <span style="font-size: 12px; color: var(--texto-terciario);">Directiva reactiva: <code>[data-has-permission]</code></span>
         </div>
         <p style="margin: 0 0 16px 0; font-size: 13.5px; color: var(--texto-secundario);">
-          Haz clic en cualquier acción autorizada para interactuar. Los módulos no permitidos quedan bloqueados o protegidos automáticamente por la directiva RBAC.
+          Haz clic en cualquier acción para consultar la autorización en el servidor (<code>POST /api/v1/rbac/authorize</code>). Los módulos no permitidos quedan ocultos por la directiva RBAC.
         </p>
 
         <div class="seccion-modulos">
           <!-- Módulo 1: Comunidad y Perfil -->
           <div class="grupo-modulo">
-            <h3 class="grupo-modulo__titulo">
-              <span>👥</span> Comunidad, Jugador y Perfil
-            </h3>
+            <h3 class="grupo-modulo__titulo">Comunidad, Jugador y Perfil</h3>
             <div class="grupo-modulo__grid">
               <button type="button" class="boton-accion-card" data-has-permission="CREAR_CUENTA_JUGADOR" data-accion-nombre="Crear cuenta de jugador">
-                <span>➕ Crear cuenta de jugador</span>
-                <span class="badge-estado">✓ Habilitado</span>
+                <span>Crear cuenta de jugador</span>
+                <span class="badge-estado">Habilitado</span>
               </button>
               <button type="button" class="boton-accion-card" data-has-permission="MODIFICAR_PERFIL_PROPIO" data-accion-nombre="Modificar perfil propio">
-                <span>✏️ Modificar perfil propio</span>
-                <span class="badge-estado">✓ Habilitado</span>
+                <span>Modificar perfil propio</span>
+                <span class="badge-estado">Habilitado</span>
               </button>
               <button type="button" class="boton-accion-card" data-has-permission="PUBLICAR_COMENTARIOS" data-accion-nombre="Publicar comentarios">
-                <span>💬 Publicar comentarios</span>
-                <span class="badge-estado">✓ Habilitado</span>
+                <span>Publicar comentarios</span>
+                <span class="badge-estado">Habilitado</span>
               </button>
               <button type="button" class="boton-accion-card" data-has-permission="ELIMINAR_COMENTARIO_PROPIO" data-accion-nombre="Eliminar comentario propio">
-                <span>🗑️ Eliminar comentario propio</span>
-                <span class="badge-estado">✓ Habilitado</span>
+                <span>Eliminar comentario propio</span>
+                <span class="badge-estado">Habilitado</span>
               </button>
             </div>
           </div>
 
           <!-- Módulo 2: Moderación y Sanciones -->
           <div class="grupo-modulo">
-            <h3 class="grupo-modulo__titulo">
-              <span>⚖️</span> Moderación y Sanciones
-            </h3>
+            <h3 class="grupo-modulo__titulo">Moderación y Sanciones</h3>
             <div class="grupo-modulo__grid">
               <button type="button" class="boton-accion-card" data-has-permission="MODERAR_COMENTARIOS" data-accion-nombre="Moderar comentarios">
-                <span>🛡️ Moderar comentarios</span>
-                <span class="badge-estado">✓ Habilitado</span>
+                <span>Moderar comentarios</span>
+                <span class="badge-estado">Habilitado</span>
               </button>
               <button type="button" class="boton-accion-card" data-has-permission="EMITIR_ADVERTENCIAS" data-accion-nombre="Emitir advertencias">
-                <span>⚠️ Emitir advertencias</span>
-                <span class="badge-estado">✓ Habilitado</span>
+                <span>Emitir advertencias</span>
+                <span class="badge-estado">Habilitado</span>
               </button>
               <button type="button" class="boton-accion-card" data-has-permission="SUSPENDER_USUARIOS" data-accion-nombre="Suspender usuarios">
-                <span>⏳ Suspender usuarios</span>
-                <span class="badge-estado">✓ Habilitado</span>
+                <span>Suspender usuarios</span>
+                <span class="badge-estado">Habilitado</span>
               </button>
               <button type="button" class="boton-accion-card" data-has-permission="BANEAR_DEFINITIVAMENTE" data-accion-nombre="Banear definitivamente">
-                <span>🚫 Banear definitivamente</span>
-                <span class="badge-estado">✓ Habilitado</span>
+                <span>Banear definitivamente</span>
+                <span class="badge-estado">Habilitado</span>
               </button>
             </div>
           </div>
 
           <!-- Módulo 3: Administración y Economía -->
           <div class="grupo-modulo">
-            <h3 class="grupo-modulo__titulo">
-              <span>⚙️</span> Administración del Sistema y Tienda
-            </h3>
+            <h3 class="grupo-modulo__titulo">Administración del Sistema y Tienda</h3>
             <div class="grupo-modulo__grid">
               <button type="button" class="boton-accion-card" data-has-permission="GESTIONAR_PRODUCTOS" data-accion-nombre="Gestionar productos">
-                <span>📦 Gestionar productos de tienda</span>
-                <span class="badge-estado">✓ Habilitado</span>
+                <span>Gestionar productos de tienda</span>
+                <span class="badge-estado">Habilitado</span>
               </button>
               <button type="button" class="boton-accion-card" data-has-permission="GESTIONAR_CUENTAS" data-accion-nombre="Gestionar cuentas">
-                <span>📋 Gestionar cuentas de usuario</span>
-                <span class="badge-estado">✓ Habilitado</span>
+                <span>Gestionar cuentas de usuario</span>
+                <span class="badge-estado">Habilitado</span>
               </button>
               <button type="button" class="boton-accion-card" data-has-permission="ASIGNAR_ROL" data-accion-nombre="Asignar rol">
-                <span>🔑 Asignar roles a usuarios</span>
-                <span class="badge-estado">✓ Habilitado</span>
+                <span>Asignar roles a usuarios</span>
+                <span class="badge-estado">Habilitado</span>
               </button>
               <button type="button" class="boton-accion-card" data-has-permission="CREAR_ADMIN_MODERADOR" data-accion-nombre="Crear admin o moderador">
-                <span>👑 Nombrar administradores</span>
-                <span class="badge-estado">✓ Habilitado</span>
+                <span>Nombrar administradores</span>
+                <span class="badge-estado">Habilitado</span>
               </button>
             </div>
           </div>
@@ -256,17 +247,23 @@
         );
       }
 
+      // Auto-detección de puerto backend: 8089 (Spring Boot local) y 8081 (Docker Compose)
+      const BASES_BACKEND = [
+        'http://localhost:8089/api/v1',
+        'http://localhost:8081/api/v1'
+      ];
+
       const selectorRol = document.querySelector('#selector-rol');
       const rolActivoEtiqueta = document.querySelector('#rol-activo-etiqueta');
       const contadorPrivilegios = document.querySelector('#contador-privilegios');
       const progresoRelleno = document.querySelector('#progreso-relleno');
       const toastAccion = document.querySelector('#toast-accion');
       const toastMensaje = document.querySelector('#toast-mensaje');
-      const toastIcono = document.querySelector('#toast-icono');
       const tarjetasRoles = document.querySelectorAll('.tarjeta-rol');
       const botonesAccion = document.querySelectorAll('.boton-accion-card');
       const avisoSesion = document.querySelector('#aviso-sesion-activa');
       const textoSesion = document.querySelector('#texto-sesion-activa');
+      const estadoConexion = document.querySelector('#estado-conexion');
 
       const NOMBRES_ROLES = {
         JUGADOR: 'Jugador',
@@ -282,7 +279,9 @@
         SUPER_ADMINISTRADOR: 'Nivel 4 - Total'
       };
 
-      const MATRIZ_BASE = {
+      // Matriz de referencia (Tabla 24). Solo se usa como respaldo si
+      // ms-identidad no responde en ninguno de los puertos candidatos.
+      const MATRIZ_REFERENCIA = {
         JUGADOR: {
           CREAR_CUENTA_JUGADOR: 'GRANTED',
           MODIFICAR_PERFIL_PROPIO: 'GRANTED',
@@ -341,35 +340,74 @@
         }
       };
 
+      // Estado en vivo: matriz vigente y base del backend que respondió.
+      let matrizActiva = MATRIZ_REFERENCIA;
+      let baseActiva = null; // null => modo local (sin conexión)
+
       /**
-       * Decodifica el token JWT de la sesión activa para preseleccionar
-       * el rol real con el que se autenticó el usuario (Paso 4).
+       * Petición con timeout contra un candidato de puerto.
        */
-      function obtenerRolDesdeSesion() {
+      async function pedir(base, ruta, opciones = {}) {
+        const controller = new AbortController();
+        const t = setTimeout(() => controller.abort(), 1500);
         try {
-          if (!token) return null;
-          const partes = token.split('.');
-          if (partes.length !== 3) return null;
-          const payload = JSON.parse(atob(partes[1].replace(/-/g, '+').replace(/_/g, '/')));
-          const rol = payload.rol;
-          if (['JUGADOR', 'MODERADOR', 'ADMINISTRADOR', 'SUPER_ADMINISTRADOR'].includes(rol)) {
-            return { rol, apodo: payload.sub };
-          }
-        } catch {
-          // Si el token es inválido o no existe, retorna null
+          return await fetch(`${base}${ruta}`, { ...opciones, signal: controller.signal });
+        } finally {
+          clearTimeout(t);
         }
-        return null;
+      }
+
+      /**
+       * Carga la matriz oficial (GET /rbac/matrix) y las descripciones de
+       * rol (GET /rbac/roles) desde ms-identidad. Si ningún puerto responde,
+       * se mantiene la matriz de referencia local.
+       */
+      async function cargarMatrizDesdeBackend() {
+        for (const base of BASES_BACKEND) {
+          try {
+            const res = await pedir(base, '/rbac/matrix');
+            if (!res.ok) continue;
+            const payload = await res.json();
+            if (payload && payload.matrix && Object.keys(payload.matrix).length > 0) {
+              matrizActiva = payload.matrix;
+              baseActiva = base;
+
+              // Descripciones oficiales de rol (best-effort)
+              try {
+                const resRoles = await pedir(base, '/rbac/roles');
+                if (resRoles.ok) {
+                  const roles = await resRoles.json();
+                  if (Array.isArray(roles)) {
+                    roles.forEach((r) => {
+                      const clave = r.role || r.name;
+                      if (clave && NOMBRES_ROLES[clave]) NOMBRES_ROLES[clave] = r.name || NOMBRES_ROLES[clave];
+                      const card = document.querySelector(`.tarjeta-rol[data-rol="${clave}"] .tarjeta-rol__desc`);
+                      if (card && r.description) card.textContent = r.description;
+                    });
+                  }
+                }
+              } catch { /* descripciones son opcionales */ }
+
+              const puerto = base.match(/:(\d+)/)?.[1] ?? '?';
+              estadoConexion.textContent = `Conectado a ms-identidad (:${puerto}) — versión ${payload.version || 'RBAC'}. Matriz cargada desde el servidor.`;
+              return;
+            }
+          } catch { /* siguiente candidato de puerto */ }
+        }
+        // Ningún puerto respondió: degradación controlada, avisando (nunca en silencio).
+        matrizActiva = MATRIZ_REFERENCIA;
+        baseActiva = null;
+        estadoConexion.textContent = 'Sin conexión con ms-identidad (:8089 / :8081). Mostrando la matriz de referencia local (Tabla 24).';
       }
 
       let timerToast = null;
-      function mostrarToast(mensaje, icono = '✓') {
+      function mostrarToast(mensaje) {
         if (timerToast) clearTimeout(timerToast);
-        toastIcono.textContent = icono;
         toastMensaje.textContent = mensaje;
         toastAccion.style.display = 'flex';
         timerToast = setTimeout(() => {
           toastAccion.style.display = 'none';
-        }, 3200);
+        }, 4200);
       }
 
       function actualizarVistaRol() {
@@ -387,7 +425,7 @@
 
         let permitidas = 0;
         const total = 12;
-        const permisosRol = MATRIZ_BASE[rol] || {};
+        const permisosRol = matrizActiva[rol] || {};
         for (const accion of Object.keys(permisosRol)) {
           if (permisosRol[accion] === 'GRANTED' || permisosRol[accion] === 'TEMPORARY') {
             permitidas++;
@@ -397,8 +435,42 @@
         progresoRelleno.style.width = `${(permitidas / total) * 100}%`;
 
         // 3. Aplicar directiva reactiva de interfaz [data-has-permission]
+        setPermissionMatrix(matrizActiva);
         setCurrentRole(rol);
         applyHasPermissionDirective();
+      }
+
+      /**
+       * Consulta al servidor si el rol activo puede ejecutar la acción
+       * (POST /rbac/authorize). Si no hay conexión, evalúa contra la
+       * matriz de referencia local.
+       */
+      async function evaluarAccion(accion, nombreAccion) {
+        const rol = selectorRol.value;
+
+        if (baseActiva) {
+          try {
+            const res = await pedir(baseActiva, '/rbac/authorize', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ role: rol, action: accion })
+            });
+            if (res.ok) {
+              const r = await res.json();
+              const veredicto = r.permitted ? 'AUTORIZADA' : 'DENEGADA';
+              mostrarToast(`Servidor: acción "${nombreAccion}" ${veredicto} para ${NOMBRES_ROLES[rol]} (${r.permissionType}). ${r.reason || ''}`);
+              return;
+            }
+            mostrarToast(`El servidor respondió ${res.status} al evaluar "${nombreAccion}".`);
+            return;
+          } catch {
+            mostrarToast(`No se pudo contactar al servidor para evaluar "${nombreAccion}". Se muestra el resultado local.`);
+          }
+        }
+
+        const tipo = (matrizActiva[rol] || {})[accion] || 'DENIED';
+        const permitido = tipo === 'GRANTED' || tipo === 'TEMPORARY';
+        mostrarToast(`Local (sin conexión): "${nombreAccion}" ${permitido ? 'AUTORIZADA' : 'DENEGADA'} para ${NOMBRES_ROLES[rol]} (${tipo}).`);
       }
 
       // Eventos de selección por tarjetas
@@ -418,27 +490,43 @@
       // Evento de selección por dropdown
       selectorRol.addEventListener('change', actualizarVistaRol);
 
-      // Evento en cada botón de acción para feedback interactivo
+      // Cada botón de acción consulta la autorización real en el servidor
       botonesAccion.forEach((btn) => {
         btn.addEventListener('click', () => {
+          const accion = btn.dataset.hasPermission;
           const nombreAccion = btn.dataset.accionNombre || btn.textContent.trim();
-          const rol = selectorRol.value;
-          mostrarToast(`Operación autorizada: "${nombreAccion}" ejecutada con éxito bajo rol ${NOMBRES_ROLES[rol]}.`);
+          evaluarAccion(accion, nombreAccion);
         });
       });
 
-      // Inicialización
-      setPermissionMatrix(MATRIZ_BASE);
+      /**
+       * Decodifica el token JWT de la sesión activa para preseleccionar
+       * el rol real con el que se autenticó el usuario.
+       */
+      function obtenerRolDesdeSesion() {
+        try {
+          if (!token) return null;
+          const partes = token.split('.');
+          if (partes.length !== 3) return null;
+          const payload = JSON.parse(atob(partes[1].replace(/-/g, '+').replace(/_/g, '/')));
+          const rol = payload.rol;
+          if (['JUGADOR', 'MODERADOR', 'ADMINISTRADOR', 'SUPER_ADMINISTRADOR'].includes(rol)) {
+            return { rol, apodo: payload.sub };
+          }
+        } catch { /* token inválido o ausente */ }
+        return null;
+      }
 
-      // Cargar rol real desde sesión si existe
+      // Inicialización: preselección por sesión + carga de matriz del backend.
       const sesionInfo = obtenerRolDesdeSesion();
       if (sesionInfo) {
         selectorRol.value = sesionInfo.rol;
         avisoSesion.style.display = 'flex';
-        textoSesion.textContent = `Sesión autenticada detectada: Conectado como "${sesionInfo.apodo}" (${NOMBRES_ROLES[sesionInfo.rol]}).`;
+        textoSesion.textContent = `Sesión autenticada detectada: conectado como "${sesionInfo.apodo}" (${NOMBRES_ROLES[sesionInfo.rol]}).`;
       }
 
       actualizarVistaRol();
+      cargarMatrizDesdeBackend().then(actualizarVistaRol);
     </script>
   </body>
 </html>

@@ -416,6 +416,18 @@ button:active {
   color: #ffffff;
 }
 
+/* Respuesta no-2xx / no-403: autorización superada pero el servidor falló */
+.panel-vacio {
+  background: var(--advertencia-fondo);
+  color: var(--advertencia);
+  border: 1px solid var(--advertencia-borde);
+}
+
+.badge-vacio {
+  background: var(--advertencia);
+  color: #ffffff;
+}
+
 /* ==========================================================================
    Panel de Control de Acceso por Roles (Sin Matriz Tipo Excel)
    ========================================================================== */
@@ -455,11 +467,7 @@ button:active {
 .tarjeta-rol__cabecera {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-}
-
-.tarjeta-rol__icono {
-  font-size: 24px;
+  justify-content: flex-start;
 }
 
 .tarjeta-rol__nivel {
