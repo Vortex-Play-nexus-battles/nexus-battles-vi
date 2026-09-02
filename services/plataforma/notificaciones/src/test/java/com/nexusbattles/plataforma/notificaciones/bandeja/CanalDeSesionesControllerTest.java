@@ -1,5 +1,6 @@
 package com.nexusbattles.plataforma.notificaciones.bandeja;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.verify;
 
 import org.junit.jupiter.api.DisplayName;
@@ -45,5 +46,15 @@ class CanalDeSesionesControllerTest {
 
         verify(servicio).registrarSesion("jugador-1", "movil");
         verify(servicio).registrarSesion("jugador-1", "escritorio");
+    }
+
+    @Test
+    @DisplayName("un error del canal vuelve como problem details a quien envio")
+    void elErrorDelCanalVuelveComoProblemDetails() {
+        var problema = controlador.manejarErrorDeCanal(
+                new IllegalArgumentException("falta el identificador de la sesion"));
+
+        assertEquals(400, problema.getStatus());
+        assertEquals("falta el identificador de la sesion", problema.getDetail());
     }
 }
