@@ -89,6 +89,40 @@ paths:
               schema:
                 $ref: "#/components/schemas/DetalleDeProblema"
 
+  /api/v1/productos/{id}:
+    get:
+      summary: Consulta un producto del catálogo por su identificador
+      operationId: consultarProducto
+      description: >
+        Endpoint público, sin autenticación: a diferencia de la creación
+        (POST, restringida a ADMINISTRADOR/SUPER_ADMINISTRADOR), este GET
+        lo consumen otros servicios del propio dominio de juego —por
+        ejemplo inventario, para resolver el nombre y tipo de un producto
+        equipado (HU-INV-006)— sin que quien llama sea necesariamente un
+        administrador ni un usuario autenticado. No se expone aquí ningún
+        dato sensible: el mismo detalle que ya devuelve el 201 de creación.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador del producto (UUID v4).
+      responses:
+        "200":
+          description: Producto encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductoCreado"
+        "404":
+          description: No existe ningún producto con ese identificador
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+
 components:
   securitySchemes:
     BearerAuth:

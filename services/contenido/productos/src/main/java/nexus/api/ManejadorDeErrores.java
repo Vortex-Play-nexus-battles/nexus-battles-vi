@@ -5,6 +5,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import jakarta.servlet.http.HttpServletRequest;
+import nexus.dominio.ProductoNoEncontradoException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
@@ -56,6 +57,19 @@ public class ManejadorDeErrores {
                         "Solicitud inválida",
                         "El cuerpo JSON está incompleto, mal formado o contiene un valor no permitido",
                         "urn:nexus:problema:solicitud-invalida",
+                        solicitud);
+        }
+
+        @ExceptionHandler(ProductoNoEncontradoException.class)
+        ResponseEntity<ProblemDetail> manejarProductoNoEncontrado(
+                        ProductoNoEncontradoException excepcion,
+                        HttpServletRequest solicitud) {
+
+                return respuesta(
+                        HttpStatus.NOT_FOUND,
+                        "Producto no encontrado",
+                        excepcion.getMessage(),
+                        "urn:nexus:problema:producto-no-encontrado",
                         solicitud);
         }
 
