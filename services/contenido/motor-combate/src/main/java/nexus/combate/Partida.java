@@ -143,6 +143,30 @@ public final class Partida {
         }
     }
 
+    public void evaluarLimites(
+            ControlAccionesTurno controlTurnos,
+            Instant momento) {
+        Objects.requireNonNull(controlTurnos, "El control de turnos es obligatorio");
+        Objects.requireNonNull(momento, "El instante de evaluación es obligatorio");
+        if (finalizada()) {
+            return;
+        }
+        omitirCombatientesEliminados(controlTurnos);
+        String participanteInactivo = controlTurnos.participanteActivo();
+        Combatiente inactivo = combatiente(participanteInactivo);
+        if (controlTurnos.expirarSiCorresponde()) {
+            eliminarEquipoPorInactividad(inactivo.equipoId());
+            cerrarSiQuedaUnEquipo(MotivoFinPartida.INACTIVIDAD);
+            if (finalizada()) {
+                return;
+            }
+            omitirCombatientesEliminados(controlTurnos);
+        }
+        if (plazoCumplido(iniciadaEn, DURACION_MAXIMA, momento)) {
+            cerrarPorTiempo();
+        }
+    }
+
     public void aplicarResolucionAtaque(
             String combatienteId,
             ResolucionAtaque resolucion) {
@@ -151,6 +175,34 @@ public final class Partida {
         Objects.requireNonNull(resolucion, "La resolución del ataque es obligatoria");
         if (resolucion instanceof ResolucionAtaque.ConEfecto efecto) {
             aplicarDanio(combatienteId, efecto.danoAplicado());
+        }
+    }
+
+    public void ejecutarAtaque(
+            ControlAccionesTurno controlTurnos,
+            String atacanteId,
+            String objetivoId,
+            ResolucionAtaque resolucion) {
+        exigirEnCurso();
+        Combatiente atacante = combatiente(atacanteId);
+        Combatiente objetivo = combatiente(objetivoId);
+        Objects.requireNonNull(controlTurnos, "El control de turnos es obligatorio");
+        Objects.requireNonNull(resolucion, "La resolución del ataque es obligatoria");
+        if (!atacante.participa()) {
+            throw new IllegalArgumentException("El atacante ya no participa en la partida");
+        }
+        if (!objetivo.participa()) {
+            throw new IllegalArgumentException("El objetivo ya no participa en la partida");
+        }
+        if (resolucion instanceof ResolucionAtaque.ConEfecto efecto
+                && efecto.danoAplicado() < 0) {
+            throw new IllegalArgumentException("El daño no puede ser negativo");
+        }
+        omitirCombatientesEliminados(controlTurnos);
+        controlTurnos.ejecutarAccion(atacanteId);
+        aplicarResolucionAtaque(objetivoId, resolucion);
+        if (!finalizada()) {
+            omitirCombatientesEliminados(controlTurnos);
         }
     }
 
@@ -175,6 +227,19 @@ public final class Partida {
                 equipoId.equals(combatiente.equipoId())
                         ? combatiente.perderPorInactividad()
                         : combatiente);
+    }
+
+    private void omitirCombatientesEliminados(ControlAccionesTurno controlTurnos) {
+        int avances = 0;
+        while (!combatiente(controlTurnos.participanteActivo()).participa()) {
+            if (!controlTurnos.expirarSiCorresponde()) {
+                controlTurnos.ejecutarAccion(controlTurnos.participanteActivo());
+            }
+            avances++;
+            if (avances > combatientes.size()) {
+                throw new IllegalStateException("No quedan combatientes habilitados para actuar");
+            }
+        }
     }
 
     private void cerrarSiQuedaUnEquipo(MotivoFinPartida motivo) {
