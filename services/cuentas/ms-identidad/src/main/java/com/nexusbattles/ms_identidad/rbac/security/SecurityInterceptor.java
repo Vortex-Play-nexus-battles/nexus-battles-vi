@@ -47,10 +47,10 @@ public class SecurityInterceptor implements HandlerInterceptor {
 
     @Autowired
     public SecurityInterceptor(
-            RbacAuthorizationService rbacService,
-            AuditoriaEventClient auditoriaClient,
-            @Autowired(required = false) JwtService jwtService,
-            @Autowired(required = false) UsuarioRepository usuarioRepository) {
+        RbacAuthorizationService rbacService,
+        AuditoriaEventClient auditoriaClient,
+        @Autowired(required = false) JwtService jwtService,
+        @Autowired(required = false) UsuarioRepository usuarioRepository) {
         this.rbacService = rbacService;
         this.auditoriaClient = auditoriaClient;
         this.jwtService = jwtService;
@@ -96,11 +96,11 @@ public class SecurityInterceptor implements HandlerInterceptor {
                     if (usuarioRepository != null) {
                         Optional<Usuario> usuario = usuarioRepository.findByApodo(username);
                         if (usuario.isEmpty()
-                                || !jwtService.esVersionVigente(claims, usuario.get().getVersionToken())) {
+                            || !jwtService.esVersionVigente(claims, usuario.get().getVersionToken())) {
                             auditBypass(username, roleName != null ? roleName : "UNKNOWN",
-                                    requiredAction, "TOKEN_VERSION_REVOKED", ipOrigen);
+                                requiredAction, "TOKEN_VERSION_REVOKED", ipOrigen);
                             sendForbidden(response, request.getRequestURI(),
-                                    "Token de autenticación inválido o expirado");
+                                "Token de autenticación inválido o expirado");
                             return false;
                         }
                     }
@@ -137,6 +137,11 @@ public class SecurityInterceptor implements HandlerInterceptor {
                 sendForbidden(response, request.getRequestURI(), "No tienes permiso para esta acción");
                 return false;
             }
+
+            // Exponer la identidad ya validada para que los controllers la usen,
+            // en vez de que cada uno vuelva a leer headers.
+            request.setAttribute("usuarioActual", username);
+            request.setAttribute("rolActual", roleName);
         }
 
         return true;
