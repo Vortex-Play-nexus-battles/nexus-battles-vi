@@ -1,5 +1,7 @@
 package com.nexusbattles.ms_identidad.rbac.security;
 
+import com.nexusbattles.ms_identidad.auth.model.Usuario;
+import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
 import com.nexusbattles.ms_identidad.auth.service.JwtService;
 import com.nexusbattles.ms_identidad.rbac.model.Action;
 import com.nexusbattles.ms_identidad.rbac.model.Role;
@@ -17,6 +19,7 @@ import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import java.time.Instant;
+import java.util.Optional;
 
 /**
  * Interceptor Server-Side con soporte JWT y política Fail-Closed (HU-RBAC-004).
@@ -28,23 +31,30 @@ public class SecurityInterceptor implements HandlerInterceptor {
     private final RbacAuthorizationService rbacService;
     private final AuditoriaEventClient auditoriaClient;
     private final JwtService jwtService;
+    private final UsuarioRepository usuarioRepository;
 
     public SecurityInterceptor(RbacAuthorizationService rbacService) {
-        this(rbacService, null, null);
+        this(rbacService, null, null, null);
     }
 
     public SecurityInterceptor(RbacAuthorizationService rbacService, AuditoriaEventClient auditoriaClient) {
-        this(rbacService, auditoriaClient, null);
+        this(rbacService, auditoriaClient, null, null);
+    }
+
+    public SecurityInterceptor(RbacAuthorizationService rbacService, AuditoriaEventClient auditoriaClient, JwtService jwtService) {
+        this(rbacService, auditoriaClient, jwtService, null);
     }
 
     @Autowired
     public SecurityInterceptor(
             RbacAuthorizationService rbacService,
             AuditoriaEventClient auditoriaClient,
-            @Autowired(required = false) JwtService jwtService) {
+            @Autowired(required = false) JwtService jwtService,
+            @Autowired(required = false) UsuarioRepository usuarioRepository) {
         this.rbacService = rbacService;
         this.auditoriaClient = auditoriaClient;
         this.jwtService = jwtService;
+        this.usuarioRepository = usuarioRepository;
     }
 
     @Override
@@ -79,6 +89,23 @@ public class SecurityInterceptor implements HandlerInterceptor {
                     Claims claims = jwtService.validarYObtenerClaims(token);
                     username = claims.getSubject();
                     roleName = claims.get("rol", String.class);
+
+                    // Verificar que la versión del token coincida con la del
+                    // usuario en BD — si el rol cambió después de emitir este
+                    // JWT, la versión no coincidirá y se rechaza (HU-RBAC-003).
+                    if (usuarioRepository != null) {
+                        Optional<Usuario> usuario = usuarioRepository.findByApodo(username);
+                        if (usuario.isEmpty()
+                                || !jwtService.esVersionVigente(claims, usuario.get().getVersionToken())) {
+                            auditBypass(username, roleName != null ? roleName : "UNKNOWN",
+                                    requiredAction, "TOKEN_VERSION_REVOKED", ipOrigen);
+                            sendForbidden(response, request.getRequestURI(),
+                                    "Token de autenticación inválido o expirado");
+                            return false;
+                        }
+                    }
+
+
                 } catch (JwtException e) {
                     auditBypass(username, "INVALID_JWT", requiredAction, "JWT_INVALID_OR_EXPIRED: " + e.getMessage(), ipOrigen);
                     sendForbidden(response, request.getRequestURI(), "Token de autenticación inválido o expirado");

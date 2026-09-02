@@ -42,7 +42,7 @@ export async function fetchWithHttpErrorInterceptor(url, options = {}) {
 }
 
 /**
- * Muestra el mensaje amigable al usuario (HU-RBAC-004)
+ * Muestra el mensaje amigable al usuario (HU-RBAC-004) sin usar alert()
  * @param {string} mensaje
  */
 function mostrarMensajeAccesoDenegado(mensaje) {
@@ -58,5 +58,39 @@ function mostrarMensajeAccesoDenegado(mensaje) {
     return;
   }
 
-  alert(`⛔ Acceso Denegado: ${mensaje}`);
+  // Notificación flotante moderna (Toast) en lugar de alert()
+  let toast = document.getElementById('nexus-rbac-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'nexus-rbac-toast';
+    toast.setAttribute('role', 'alert');
+    toast.style.position = 'fixed';
+    toast.style.top = '24px';
+    toast.style.right = '24px';
+    toast.style.zIndex = '9999';
+    toast.style.backgroundColor = '#fbe4e4';
+    toast.style.color = '#b81a1a';
+    toast.style.border = '1px solid #f5c6c6';
+    toast.style.borderRadius = '8px';
+    toast.style.padding = '14px 20px';
+    toast.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
+    toast.style.fontFamily = "Inter, 'Segoe UI', system-ui, sans-serif";
+    toast.style.fontSize = '14px';
+    toast.style.fontWeight = '600';
+    toast.style.display = 'flex';
+    toast.style.alignItems = 'center';
+    toast.style.gap = '10px';
+    toast.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+    document.body.appendChild(toast);
+  }
+
+  toast.innerHTML = `<span style="font-size: 16px;">⛔</span> <span>${mensaje}</span>`;
+  toast.style.opacity = '1';
+  toast.style.transform = 'translateY(0)';
+
+  clearTimeout(toast._timeout);
+  toast._timeout = setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(-10px)';
+  }, 4500);
 }
