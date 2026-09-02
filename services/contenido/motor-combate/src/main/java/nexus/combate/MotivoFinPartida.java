@@ -1,5 +1,7 @@
 package nexus.combate;
 
 public enum MotivoFinPartida {
-    SUPERVIVENCIA
+    SUPERVIVENCIA,
+    TIEMPO_MAXIMO,
+    INACTIVIDAD
 }
