@@ -51,5 +51,18 @@ await capturar('estado-vacio-1360x768', { ancho: 1360, alto: 768, total: 0 });
 await capturar('editor-1360x768', { ancho: 1360, alto: 768, total: 7, mostrarEditor: true });
 await capturar('editor-375x812', { ancho: 375, alto: 812, total: 3, mostrarEditor: true });
 
+// Panel de Mi Cuenta para un visitante (HU-INV-004, criterio 3).
+const ctx = await navegador.newContext({ viewport: { width: 1360, height: 768 } });
+const page = await ctx.newPage();
+await page.route('**/api/v1/inventario/elementos*', (r) => r.fulfill({
+  status: 200, contentType: 'application/json', body: JSON.stringify(pagina(40)),
+}));
+await page.goto(BASE);
+await page.waitForFunction(() => !document.querySelector('.estado-carga'));
+await page.locator('.barra__acceso', { hasText: 'Mi Cuenta' }).click();
+await page.screenshot({ path: `${SALIDA}/barra-visitante-mi-cuenta.png` });
+console.log('  barra-visitante-mi-cuenta.png  (1360x768)');
+await ctx.close();
+
 await navegador.close();
 process.exit(0);
