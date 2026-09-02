@@ -5,6 +5,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import jakarta.servlet.http.HttpServletRequest;
+import nexus.dominio.ModificacionProductoInvalidaException;
 import nexus.dominio.ProductoNoEncontradoException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -56,6 +57,19 @@ public class ManejadorDeErrores {
                         HttpStatus.BAD_REQUEST,
                         "Solicitud inválida",
                         "El cuerpo JSON está incompleto, mal formado o contiene un valor no permitido",
+                        "urn:nexus:problema:solicitud-invalida",
+                        solicitud);
+        }
+
+        @ExceptionHandler(ModificacionProductoInvalidaException.class)
+        ResponseEntity<ProblemDetail> manejarModificacionInvalida(
+                        ModificacionProductoInvalidaException excepcion,
+                        HttpServletRequest solicitud) {
+
+                return respuesta(
+                        HttpStatus.BAD_REQUEST,
+                        "Solicitud inválida",
+                        excepcion.getMessage(),
                         "urn:nexus:problema:solicitud-invalida",
                         solicitud);
         }

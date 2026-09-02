@@ -46,6 +46,8 @@ public class SeguridadConfig {
                                 .permitAll()
                                 .requestMatchers(HttpMethod.POST, "/api/v1/productos")
                                 .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(HttpMethod.PATCH, "/api/v1/productos/{id}")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
                                 .requestMatchers(HttpMethod.GET, "/api/v1/productos/{id}")
                                 .permitAll()
                                 .anyRequest()
