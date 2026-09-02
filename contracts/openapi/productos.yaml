@@ -122,6 +122,72 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/DetalleDeProblema"
+    patch:
+      summary: Modifica uno o varios campos de un producto existente
+      operationId: modificarProducto
+      description: >
+        HU-PRD-003. Operación permitida únicamente a los roles ADMINISTRADOR
+        y SUPER_ADMINISTRADOR. El cliente envía solo los campos que quiere
+        cambiar; el servidor los fusiona en memoria sobre el producto
+        existente y valida el resultado completo con las mismas reglas de
+        SolicitudCrearProducto para el tipo ya establecido — tipo no es
+        modificable. Antes de aplicar el cambio se guarda el estado anterior
+        completo del producto como respaldo histórico.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador del producto (UUID v4).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudModificarProducto"
+      responses:
+        "200":
+          description: Producto modificado, con el resultado completo ya fusionado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductoCreado"
+        "400":
+          description: >
+            Solicitud vacía (ningún campo presente), o la combinación
+            resultante de campos no corresponde al tipo del producto.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "403":
+          description: El usuario no tiene permiso para modificar productos
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "404":
+          description: No existe ningún producto con ese identificador
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "500":
+          description: Error interno al registrar el cambio
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
 
 components:
   securitySchemes:
@@ -363,6 +429,94 @@ components:
             efectoPotenciado:
               type: string
               minLength: 1
+
+    SolicitudModificarProducto:
+      type: object
+      description: >
+        Campos opcionales para modificar un producto existente. El servidor
+        fusiona los campos presentes sobre el producto actual y valida el
+        resultado fusionado completo contra las mismas reglas por tipo que
+        SolicitudCrearProducto. tipo no está aquí porque no es modificable.
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+        imagen:
+          type: string
+          minLength: 1
+        descripcion:
+          type: string
+          minLength: 1
+        tiraje:
+          anyOf:
+            - type: integer
+              const: -1
+            - type: integer
+              minimum: 1
+        precioCreditos:
+          type: integer
+          minimum: 0
+        precioMonedaReal:
+          type: number
+          minimum: 0
+        premium:
+          type: boolean
+        prototipo:
+          type: string
+          enum:
+            - Guerrero Tanque
+            - Guerrero Armas
+            - Mago Fuego
+            - Mago Hielo
+            - Pícaro Veneno
+            - Pícaro Machete
+            - Chamán
+            - Médico
+        heroe:
+          type: string
+          format: uuid
+        costoPoder:
+          type: integer
+          minimum: 1
+        multiplicadorNivel:
+          type: number
+          exclusiveMinimum: 0
+        turnosCarga:
+          type: integer
+          minimum: 0
+        turnosRecarga:
+          type: integer
+          minimum: 0
+        efectoGeneral:
+          type: string
+          minLength: 1
+        efectoPotenciado:
+          type: string
+          minLength: 1
+        defensa:
+          type: integer
+          minimum: 1
+        parte:
+          type: string
+          enum:
+            - CASCO
+            - PECHO
+            - GUANTES
+            - BRAZALETES
+            - PANTALON
+            - ZAPATOS
+        efecto:
+          type: string
+          minLength: 1
+        poderDeAtaque:
+          type: integer
+          minimum: 1
+        tasaDeCaida:
+          type: number
+          minimum: 0
+          maximum: 100
 
     TipoProducto:
       type: string
