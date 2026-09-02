@@ -84,6 +84,15 @@ public class RepositorioDeBandejas {
         }
     }
 
+    /**
+     * Borra el registro de la sesion que se desconecto. Las entregas quedan:
+     * gracias a ellas la reconexion recibe solo lo que se perdio y no todo lo
+     * que el jugador tiene sin leer.
+     */
+    public void cerrarSesion(String usuarioId, String sesionId) {
+        sesiones.deleteByUsuarioIdAndSesionId(usuarioId, sesionId);
+    }
+
     /** Marca el aviso como leido para todo el jugador. */
     public void marcarLeida(String usuarioId, String avisoId) {
         avisos.findByUsuarioIdAndAvisoId(usuarioId, avisoId)
