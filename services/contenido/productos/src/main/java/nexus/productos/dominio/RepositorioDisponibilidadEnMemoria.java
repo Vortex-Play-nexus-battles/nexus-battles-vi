@@ -35,6 +35,12 @@ public final class RepositorioDisponibilidadEnMemoria
                         "El producto no existe"));
                 return null;
             }
+            if (producto.estado() == EstadoProducto.SUSPENDIDO) {
+                resultado.set(new ResultadoAdquisicion(
+                        EstadoAdquisicion.SUSPENDIDO,
+                        "El producto está suspendido y no se puede adquirir"));
+                return producto;
+            }
             if (producto.estaAgotado()) {
                 resultado.set(new ResultadoAdquisicion(
                         EstadoAdquisicion.AGOTADO,

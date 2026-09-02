@@ -27,4 +27,16 @@ public class CatalogoProductos {
         return repositorio.adquirirUnaUnidad(productoId);
     }
 
+    public DisponibilidadProducto suspender(String productoId) {
+        DisponibilidadProducto suspendido = consultar(productoId).suspender();
+        repositorio.guardar(suspendido);
+        return suspendido;
+    }
+
+    public DisponibilidadProducto reactivar(String productoId) {
+        DisponibilidadProducto reactivado = consultar(productoId).reactivar();
+        repositorio.guardar(reactivado);
+        return reactivado;
+    }
+
 }
