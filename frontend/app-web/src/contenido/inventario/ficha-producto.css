@@ -137,8 +137,8 @@
   margin: 0 0 12px;
   padding: 8px 12px;
   border-radius: 8px;
-  background: rgb(138 74 0 / 18%);
-  color: #e0b070;
+  background: #fbeedd;
+  color: var(--advertencia, #8a4a00);
   font-size: 0.85rem;
   line-height: 1.4;
 }
