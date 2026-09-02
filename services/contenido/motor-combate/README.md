@@ -12,6 +12,7 @@ capa de aplicacion sin acoplarlas a transporte o persistencia.
 | HU-JUE-002 | Una sola accion por turno, avance al resolver o expirar y la misma duracion configurable para todos los participantes |
 | HU-JUE-005 | Fallecimiento al llegar a cero vida, cierre individual o por equipos y rechazo de acciones posteriores |
 | HU-JUE-007 | Tope de 6 minutos, derrota por 1 minuto de inactividad, vida conservada y estrategia de desempate |
+| HU-JUE-008 | Proteccion contra dano a companeros en combate cooperativo, salvo que la accion permita afectar aliados expresamente
 
 El sorteo usa Fisher-Yates y `SecureRandom` en produccion. Las pruebas inyectan
 un generador con semilla para que la validacion estadistica sea reproducible.
