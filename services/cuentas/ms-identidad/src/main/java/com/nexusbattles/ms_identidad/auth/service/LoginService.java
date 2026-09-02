@@ -51,6 +51,9 @@ public class LoginService {
     @Autowired
     private JwtService jwtService;
 
+    @Autowired
+    private AuditoriaLoginClient auditoriaLoginClient;
+
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     @Transactional
@@ -95,7 +98,6 @@ public class LoginService {
         // --- Verificación de contraseña ---
         if (!passwordEncoder.matches(datos.getPassword(), usuario.getPassword())) {
             intentosFallidosService.registrarIntentoFallido(usuario.getId());
-            auditLog.info("LOGIN_FALLIDO email={} ip={}", datos.getEmail(), direccionIp);
             throw credencialesInvalidas(datos.getEmail(), direccionIp);
         }
 
@@ -167,7 +169,17 @@ public class LoginService {
     }
 
     private CredencialesInvalidasException credencialesInvalidas(String email, String ip) {
-        auditLog.info("LOGIN_FALLIDO email={} ip={} motivo=CREDENCIALES_INVALIDAS", email, ip);
-        return new CredencialesInvalidasException("Correo o contraseña incorrectos.");
+
+        auditLog.info(
+            "LOGIN_FALLIDO email={} ip={} motivo=CREDENCIALES_INVALIDAS_ENTORNO",
+            email,
+            ip
+        );
+
+        auditoriaLoginClient.registrarLoginFallido(email, ip);
+
+        return new CredencialesInvalidasException(
+            "Correo o contraseña incorrectos."
+        );
     }
 }
