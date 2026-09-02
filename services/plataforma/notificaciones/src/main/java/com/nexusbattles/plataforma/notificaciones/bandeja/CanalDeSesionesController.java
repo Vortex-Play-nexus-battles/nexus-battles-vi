@@ -1,6 +1,10 @@
 package com.nexusbattles.plataforma.notificaciones.bandeja;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.messaging.handler.annotation.MessageExceptionHandler;
 import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.simp.annotation.SendToUser;
 import org.springframework.stereotype.Controller;
 
 /**
@@ -23,6 +27,18 @@ class CanalDeSesionesController {
     @MessageMapping("/notificaciones/sesion")
     public void registrarSesion(RegistrarSesion mensaje) {
         servicio.registrarSesion(mensaje.usuarioId(), mensaje.sesionId());
+    }
+
+    /**
+     * Errores del canal de vuelta a quien envio el mensaje, en el mismo
+     * formato problem details de la API HTTP, como declara el mensaje
+     * errorDeCanal del contrato. broadcast en false para que llegue solo a
+     * la conexion que fallo y no a todas las sesiones del jugador.
+     */
+    @MessageExceptionHandler(RuntimeException.class)
+    @SendToUser(destinations = "/cola/notificaciones", broadcast = false)
+    public ProblemDetail manejarErrorDeCanal(RuntimeException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
     /** Cuerpo del alta de sesion, segun el contrato AsyncAPI. */
