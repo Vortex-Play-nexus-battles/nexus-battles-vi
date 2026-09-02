@@ -6,6 +6,7 @@ import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.perfiles.dto.ActualizarPerfilRequest;
 import com.nexusbattles.ms_identidad.perfiles.model.PerfilUsuario;
 import jakarta.servlet.http.HttpServletRequest;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -21,6 +22,8 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class AdminGestionUsuarioControllerTest {
 
+    private static final String IP_ORIGEN = "127.0.0.1";
+
     @Mock
     private AdminGestionUsuarioService adminGestionUsuarioService;
 
@@ -29,6 +32,15 @@ class AdminGestionUsuarioControllerTest {
 
     @Mock
     private PerfilUsuario perfilUsuario;
+
+    @BeforeEach
+    void configurarRequest() {
+        // La identidad ahora la deja SecurityInterceptor en el request
+        // attribute "usuarioActual" (JWT/RBAC), ya no en el header X-User-Name.
+        when(request.getAttribute("usuarioActual")).thenReturn("admin");
+        when(request.getHeader("X-Forwarded-For")).thenReturn(null);
+        when(request.getRemoteAddr()).thenReturn(IP_ORIGEN);
+    }
 
     @Test
     void debeEditarPerfil() {
@@ -49,9 +61,6 @@ class AdminGestionUsuarioControllerTest {
         when(perfilUsuario.getUsuario())
             .thenReturn(usuario);
 
-        when(request.getHeader("X-User-Name"))
-            .thenReturn("admin");
-
         when(adminGestionUsuarioService.editarPerfilDeUsuario(
             1L,
             "Santiago",
@@ -60,7 +69,8 @@ class AdminGestionUsuarioControllerTest {
             "Biografía",
             "preferencias",
             "Santi",
-            "admin"
+            "admin",
+            IP_ORIGEN
         )).thenReturn(perfilUsuario);
 
         ResponseEntity<?> response = controller.editarPerfil(
@@ -79,7 +89,8 @@ class AdminGestionUsuarioControllerTest {
             "Biografía",
             "preferencias",
             "Santi",
-            "admin"
+            "admin",
+            IP_ORIGEN
         );
     }
 
@@ -90,11 +101,9 @@ class AdminGestionUsuarioControllerTest {
 
         ActualizarPerfilRequest datos = new ActualizarPerfilRequest();
 
-        when(request.getHeader("X-User-Name"))
-            .thenReturn("admin");
-
         when(adminGestionUsuarioService.editarPerfilDeUsuario(
             anyLong(),
+            any(),
             any(),
             any(),
             any(),
@@ -121,11 +130,9 @@ class AdminGestionUsuarioControllerTest {
 
         ActualizarPerfilRequest datos = new ActualizarPerfilRequest();
 
-        when(request.getHeader("X-User-Name"))
-            .thenReturn("admin");
-
         when(adminGestionUsuarioService.editarPerfilDeUsuario(
             anyLong(),
+            any(),
             any(),
             any(),
             any(),
@@ -155,9 +162,6 @@ class AdminGestionUsuarioControllerTest {
         LocalDateTime fecha = LocalDateTime.of(2026, 9, 10, 12, 0);
         datos.setSuspendidoHasta(fecha);
 
-        when(request.getHeader("X-User-Name"))
-            .thenReturn("admin");
-
         ResponseEntity<?> response = controller.suspender(
             1L,
             datos,
@@ -169,7 +173,8 @@ class AdminGestionUsuarioControllerTest {
         verify(adminGestionUsuarioService).suspenderCuenta(
             1L,
             fecha,
-            "admin"
+            "admin",
+            IP_ORIGEN
         );
     }
 
@@ -180,12 +185,9 @@ class AdminGestionUsuarioControllerTest {
 
         SuspenderCuentaRequest datos = new SuspenderCuentaRequest();
 
-        when(request.getHeader("X-User-Name"))
-            .thenReturn("admin");
-
         doThrow(new IllegalArgumentException("Fecha inválida"))
             .when(adminGestionUsuarioService)
-            .suspenderCuenta(1L, null, "admin");
+            .suspenderCuenta(1L, null, "admin", IP_ORIGEN);
 
         ResponseEntity<?> response = controller.suspender(
             1L,
@@ -204,12 +206,9 @@ class AdminGestionUsuarioControllerTest {
 
         SuspenderCuentaRequest datos = new SuspenderCuentaRequest();
 
-        when(request.getHeader("X-User-Name"))
-            .thenReturn("admin");
-
         doThrow(new IllegalStateException("Usuario no encontrado"))
             .when(adminGestionUsuarioService)
-            .suspenderCuenta(1L, null, "admin");
+            .suspenderCuenta(1L, null, "admin", IP_ORIGEN);
 
         ResponseEntity<?> response = controller.suspender(
             1L,
@@ -226,9 +225,6 @@ class AdminGestionUsuarioControllerTest {
         AdminGestionUsuarioController controller =
             new AdminGestionUsuarioController(adminGestionUsuarioService);
 
-        when(request.getHeader("X-User-Name"))
-            .thenReturn("admin");
-
         ResponseEntity<?> response = controller.banear(
             1L,
             request
@@ -237,7 +233,7 @@ class AdminGestionUsuarioControllerTest {
         assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
 
         verify(adminGestionUsuarioService)
-            .banearCuenta(1L, "admin");
+            .banearCuenta(1L, "admin", IP_ORIGEN);
     }
 
     @Test
@@ -245,12 +241,9 @@ class AdminGestionUsuarioControllerTest {
         AdminGestionUsuarioController controller =
             new AdminGestionUsuarioController(adminGestionUsuarioService);
 
-        when(request.getHeader("X-User-Name"))
-            .thenReturn("admin");
-
         doThrow(new IllegalArgumentException("No se puede banear"))
             .when(adminGestionUsuarioService)
-            .banearCuenta(1L, "admin");
+            .banearCuenta(1L, "admin", IP_ORIGEN);
 
         ResponseEntity<?> response = controller.banear(
             1L,
@@ -266,12 +259,9 @@ class AdminGestionUsuarioControllerTest {
         AdminGestionUsuarioController controller =
             new AdminGestionUsuarioController(adminGestionUsuarioService);
 
-        when(request.getHeader("X-User-Name"))
-            .thenReturn("admin");
-
         doThrow(new IllegalStateException("Usuario no encontrado"))
             .when(adminGestionUsuarioService)
-            .banearCuenta(1L, "admin");
+            .banearCuenta(1L, "admin", IP_ORIGEN);
 
         ResponseEntity<?> response = controller.banear(
             1L,
@@ -287,9 +277,6 @@ class AdminGestionUsuarioControllerTest {
         AdminGestionUsuarioController controller =
             new AdminGestionUsuarioController(adminGestionUsuarioService);
 
-        when(request.getHeader("X-User-Name"))
-            .thenReturn("admin");
-
         ResponseEntity<?> response = controller.reactivar(
             1L,
             request
@@ -298,7 +285,7 @@ class AdminGestionUsuarioControllerTest {
         assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
 
         verify(adminGestionUsuarioService)
-            .reactivarCuenta(1L, "admin");
+            .reactivarCuenta(1L, "admin", IP_ORIGEN);
     }
 
     @Test
@@ -306,12 +293,9 @@ class AdminGestionUsuarioControllerTest {
         AdminGestionUsuarioController controller =
             new AdminGestionUsuarioController(adminGestionUsuarioService);
 
-        when(request.getHeader("X-User-Name"))
-            .thenReturn("admin");
-
         doThrow(new IllegalArgumentException("Cuenta baneada"))
             .when(adminGestionUsuarioService)
-            .reactivarCuenta(1L, "admin");
+            .reactivarCuenta(1L, "admin", IP_ORIGEN);
 
         ResponseEntity<?> response = controller.reactivar(
             1L,
@@ -327,12 +311,9 @@ class AdminGestionUsuarioControllerTest {
         AdminGestionUsuarioController controller =
             new AdminGestionUsuarioController(adminGestionUsuarioService);
 
-        when(request.getHeader("X-User-Name"))
-            .thenReturn("admin");
-
         doThrow(new IllegalStateException("Usuario no encontrado"))
             .when(adminGestionUsuarioService)
-            .reactivarCuenta(1L, "admin");
+            .reactivarCuenta(1L, "admin", IP_ORIGEN);
 
         ResponseEntity<?> response = controller.reactivar(
             1L,
@@ -348,9 +329,6 @@ class AdminGestionUsuarioControllerTest {
         AdminGestionUsuarioController controller =
             new AdminGestionUsuarioController(adminGestionUsuarioService);
 
-        when(request.getHeader("X-User-Name"))
-            .thenReturn("admin");
-
         ResponseEntity<?> response = controller.restablecerPassword(
             1L,
             request
@@ -359,7 +337,7 @@ class AdminGestionUsuarioControllerTest {
         assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
 
         verify(adminGestionUsuarioService)
-            .restablecerPassword(1L, "admin");
+            .restablecerPassword(1L, "admin", IP_ORIGEN);
     }
 
     @Test
@@ -367,12 +345,9 @@ class AdminGestionUsuarioControllerTest {
         AdminGestionUsuarioController controller =
             new AdminGestionUsuarioController(adminGestionUsuarioService);
 
-        when(request.getHeader("X-User-Name"))
-            .thenReturn("admin");
-
         doThrow(new IllegalStateException("Usuario no encontrado"))
             .when(adminGestionUsuarioService)
-            .restablecerPassword(1L, "admin");
+            .restablecerPassword(1L, "admin", IP_ORIGEN);
 
         ResponseEntity<?> response = controller.restablecerPassword(
             1L,

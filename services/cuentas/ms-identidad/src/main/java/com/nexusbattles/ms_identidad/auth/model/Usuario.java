@@ -56,4 +56,11 @@ public class Usuario {
 
     @Column
     private LocalDateTime suspendidoHasta;
+
+    // Se incrementa cada vez que cambia el rol del usuario (HU-RBAC-003).
+    // Permite invalidar tokens JWT ya emitidos con el rol anterior, sin
+    // necesitar una lista negra de tokens: si la versión del token no
+    // coincide con esta, se rechaza aunque la firma siga siendo válida.
+    @Column(nullable = false)
+    private int versionToken = 0;
 }

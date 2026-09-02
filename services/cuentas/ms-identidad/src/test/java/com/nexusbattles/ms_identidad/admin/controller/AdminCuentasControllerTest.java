@@ -4,6 +4,7 @@ import com.nexusbattles.ms_identidad.admin.dto.CrearCuentaAdminRequest;
 import com.nexusbattles.ms_identidad.admin.service.AdminCuentaService;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import jakarta.servlet.http.HttpServletRequest;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -19,6 +20,8 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class AdminCuentasControllerTest {
 
+    private static final String IP_ORIGEN = "127.0.0.1";
+
     @Mock
     private AdminCuentaService adminCuentaService;
 
@@ -28,6 +31,15 @@ class AdminCuentasControllerTest {
     @InjectMocks
     private AdminCuentasController controller;
 
+    @BeforeEach
+    void configurarRequest() {
+        // La identidad ahora la deja SecurityInterceptor en el request
+        // attribute "usuarioActual" (JWT/RBAC), ya no en el header X-User-Name.
+        when(request.getAttribute("usuarioActual")).thenReturn("admin");
+        when(request.getHeader("X-Forwarded-For")).thenReturn(null);
+        when(request.getRemoteAddr()).thenReturn(IP_ORIGEN);
+    }
+
     @Test
     void debeCrearCuentaAdministrativa() {
         CrearCuentaAdminRequest datos = new CrearCuentaAdminRequest();
@@ -35,10 +47,7 @@ class AdminCuentasControllerTest {
         Usuario usuarioCreado = new Usuario();
         usuarioCreado.setApodo("Santi");
 
-        when(request.getHeader("X-User-Name"))
-            .thenReturn("admin");
-
-        when(adminCuentaService.crearCuentaAdministrativa(datos, "admin"))
+        when(adminCuentaService.crearCuentaAdministrativa(datos, "admin", IP_ORIGEN))
             .thenReturn(usuarioCreado);
 
         ResponseEntity<?> response = controller.crearCuentaAdministrativa(
@@ -51,7 +60,8 @@ class AdminCuentasControllerTest {
 
         verify(adminCuentaService).crearCuentaAdministrativa(
             datos,
-            "admin"
+            "admin",
+            IP_ORIGEN
         );
     }
 
@@ -59,10 +69,7 @@ class AdminCuentasControllerTest {
     void debeRetornarBadRequestCuandoLosDatosSonInvalidos() {
         CrearCuentaAdminRequest datos = new CrearCuentaAdminRequest();
 
-        when(request.getHeader("X-User-Name"))
-            .thenReturn("admin");
-
-        when(adminCuentaService.crearCuentaAdministrativa(datos, "admin"))
+        when(adminCuentaService.crearCuentaAdministrativa(datos, "admin", IP_ORIGEN))
             .thenThrow(new IllegalArgumentException("Rol no permitido"));
 
         ResponseEntity<?> response = controller.crearCuentaAdministrativa(
@@ -75,7 +82,8 @@ class AdminCuentasControllerTest {
 
         verify(adminCuentaService).crearCuentaAdministrativa(
             datos,
-            "admin"
+            "admin",
+            IP_ORIGEN
         );
     }
 }

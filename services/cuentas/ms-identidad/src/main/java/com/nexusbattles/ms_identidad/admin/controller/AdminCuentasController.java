@@ -26,11 +26,20 @@ public class AdminCuentasController {
     public ResponseEntity<?> crearCuentaAdministrativa(@Valid @RequestBody CrearCuentaAdminRequest datos,
                                                        HttpServletRequest request) {
         try {
-            String administradorId = request.getHeader("X-User-Name");
-            Usuario usuarioCreado = adminCuentaService.crearCuentaAdministrativa(datos, administradorId);
+            String administradorId = (String) request.getAttribute("usuarioActual");
+            String ipOrigen = obtenerIpReal(request);
+            Usuario usuarioCreado = adminCuentaService.crearCuentaAdministrativa(datos, administradorId, ipOrigen);
             return ResponseEntity.status(HttpStatus.CREATED).body(usuarioCreado);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
         }
+    }
+
+    private String obtenerIpReal(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 }

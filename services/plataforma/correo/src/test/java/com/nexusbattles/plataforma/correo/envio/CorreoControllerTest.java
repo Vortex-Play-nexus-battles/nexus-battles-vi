@@ -29,6 +29,7 @@ class CorreoControllerTest {
 
     private static final String BIENVENIDA = "/api/v1/correos/bienvenida";
     private static final String AVISO_ACCESO = "/api/v1/correos/aviso-acceso";
+    private static final String RECUPERACION = "/api/v1/correos/recuperacion-clave";
 
     @Autowired
     private MockMvc mockMvc;
@@ -133,5 +134,66 @@ class CorreoControllerTest {
                 .as("debe conservar la hora y el huso originales, no pasarlos a UTC")
                 .contains("14:23")
                 .doesNotContain("19:23");
+    }
+
+    @Test
+    void aceptaUnCorreoDeRecuperacionYLoDespacha() throws Exception {
+        mockMvc.perform(post(RECUPERACION).contentType(MediaType.APPLICATION_JSON).content("""
+                {"email":"jugador@ejemplo.com","apodo":"ElGuerrero",
+                 "codigo":"482915","minutosVigencia":15}
+                """))
+                .andExpect(status().isAccepted());
+
+        verify(enviador).enviar(
+                eq("jugador@ejemplo.com"), anyString(), eq("email/recuperacion-clave"), any());
+    }
+
+    @Test
+    void elCorreoDeRecuperacionLlevaElCodigoYSuVigencia() throws Exception {
+        mockMvc.perform(post(RECUPERACION).contentType(MediaType.APPLICATION_JSON).content("""
+                {"email":"jugador@ejemplo.com","apodo":"ElGuerrero",
+                 "codigo":"482915","minutosVigencia":15}
+                """))
+                .andExpect(status().isAccepted());
+
+        @SuppressWarnings("unchecked")
+        Class<Map<String, Object>> tipo = (Class<Map<String, Object>>) (Class<?>) Map.class;
+        org.mockito.ArgumentCaptor<Map<String, Object>> captor = org.mockito.ArgumentCaptor.forClass(tipo);
+        verify(enviador).enviar(anyString(), anyString(), anyString(), captor.capture());
+
+        assertThat(captor.getValue())
+                .containsEntry("codigo", "482915")
+                .containsEntry("minutosVigencia", 15);
+    }
+
+    @ParameterizedTest(name = "recuperacion rechazada: {0}")
+    @ValueSource(strings = {
+            "{\"apodo\":\"ElGuerrero\",\"codigo\":\"482915\",\"minutosVigencia\":15}",
+            "{\"email\":\"jugador@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"minutosVigencia\":15}",
+            "{\"email\":\"jugador@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"codigo\":\"482915\"}",
+            "{\"email\":\"jugador@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"codigo\":\"  \",\"minutosVigencia\":15}",
+            "{\"email\":\"jugador@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"codigo\":\"482915\",\"minutosVigencia\":0}",
+    })
+    void rechazaRecuperacionConDatosInvalidos(String cuerpo) throws Exception {
+        mockMvc.perform(post(RECUPERACION).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                .andExpect(status().isBadRequest());
+
+        verify(enviador, never()).enviar(anyString(), anyString(), anyString(), any());
+    }
+
+    @Test
+    void losAsuntosEstanBienEscritosEnEspanol() throws Exception {
+        // Un typo en el asunto lo ve cada destinatario y no lo atrapa ninguna
+        // prueba de estructura: solo se nota leyendolo.
+        mockMvc.perform(post(RECUPERACION).contentType(MediaType.APPLICATION_JSON).content("""
+                {"email":"jugador@ejemplo.com","apodo":"ElGuerrero",
+                 "codigo":"482915","minutosVigencia":15}
+                """))
+                .andExpect(status().isAccepted());
+
+        org.mockito.ArgumentCaptor<String> asunto = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(enviador).enviar(anyString(), asunto.capture(), anyString(), any());
+
+        assertThat(asunto.getValue()).isEqualTo("Recupera tu contraseña de The Nexus Battles VI");
     }
 }
