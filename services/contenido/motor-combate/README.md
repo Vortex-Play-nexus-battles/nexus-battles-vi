@@ -32,4 +32,3 @@ La tarea `check` ejecuta JUnit y falla si la cobertura de lineas es inferior al
 
 - Exponer el inicio de partida desde la capa de aplicacion; HU-JUE-001 y
   HU-JUE-002 no exigen por si solas un endpoint.
-- Conectar el daño de HU-JUE-003 con `Partida.aplicarDanio`.

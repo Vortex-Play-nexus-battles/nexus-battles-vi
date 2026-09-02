@@ -59,6 +59,17 @@ public final class Partida {
         cerrarSiQuedaUnEquipo();
     }
 
+    public void aplicarResolucionAtaque(
+            String combatienteId,
+            ResolucionAtaque resolucion) {
+        exigirEnCurso();
+        combatiente(combatienteId);
+        Objects.requireNonNull(resolucion, "La resolución del ataque es obligatoria");
+        if (resolucion instanceof ResolucionAtaque.ConEfecto efecto) {
+            aplicarDanio(combatienteId, efecto.danoAplicado());
+        }
+    }
+
     public Combatiente combatiente(String combatienteId) {
         Combatiente encontrado = combatientes.get(combatienteId);
         if (encontrado == null) {
