@@ -74,8 +74,26 @@ para cuentas administrativas.
 - Docker Compose con perfiles por dominio (levantar solo mi dominio + infra común en local)
 - k3s para orquestación (escalado automático >75% CPU) · OpenTofu para infra como código
 - GitHub Container Registry
-- **Azure for Students** — 100 USD/integrante = 1.800 USD de crédito de empresa; consumo estimado
-  420–630 USD para el semestre. Créditos individuales, no se agrupan — vigilar consumo semanal.
+- **AWS — cuenta normal con el plan gratuito.** Aprobado por el cliente en agosto de 2026, sustituye
+  a Azure for Students. Se descartó **AWS Academy** pese a ser gratuito: sus instancias se detienen al
+  cerrar la sesión del laboratorio, y eso hace imposible HU-DIS-001, que exige monitorizar la
+  disponibilidad de forma continua.
+- **Crédito disponible:** desde el 15 de julio de 2025 AWS entrega 100 USD al abrir cuenta, ampliables
+  a 200 completando cinco tareas de iniciación. El plan gratuito dura 6 meses, plazo que cubre el
+  semestre. Las cuentas creadas antes de esa fecha conservan el modelo antiguo de 12 meses.
+- **Dimensionado:** una instancia `t4g.large` (ARM Graviton, 2 vCPU, 8 GB) con k3s. Es el mínimo donde
+  caben Keycloak y las cuatro bases de datos. Orden de magnitud: 45–50 USD/mes, es decir unos cuatro
+  meses con 200 USD. Comprobar el precio vigente de la región antes de comprometerlo.
+- **Las bases de datos van como contenedores dentro del clúster, nunca gestionadas.** RDS, DocumentDB
+  y ElastiCache agotarían el crédito en semanas. El `docker-compose` local ya las levanta así, con lo
+  que el despliegue en nube es un calco del entorno de desarrollo.
+- **Desplegar por perfil de dominio, no los 20 servicios a la vez.**
+- **Graviton es ARM:** las imágenes con `jlink` deben construirse para `arm64` o ser
+  multiarquitectura. Si el equipo de CI/CD prefiere evitarlo, `t3.large` es x86 y cuesta ~20% más.
+  Es decisión de HU-CICD-001 y HU-CICD-002, no del resto del equipo.
+- **Sobre el objetivo de 99,95% del SRS:** ningún entorno con crédito gratuito lo alcanza. HU-DIS-001
+  pide *monitorizar y registrar* la disponibilidad, no garantizarla: se instrumenta, se mide y se
+  documenta la diferencia con el objetivo. No prometer en la sustentación una cifra que no se tiene.
 
 ## Calidad y pruebas de backend
 - JUnit 5 + Mockito (unitarias) · JaCoCo con **umbral de 80% que rompe el build**
