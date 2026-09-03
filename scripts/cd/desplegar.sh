@@ -33,6 +33,15 @@
 #   (DB_HOST/DB_PORT/DB_NAME en vez de DB_URL) para su propia base, no
 #   comparte nada con DB_USER/DB_PASS de plataforma ni con el DB_URL de
 #   ms-identidad. Ver docker-compose.ms-cumplimiento.yml para el mapeo.
+#   PENDIENTE (TODO_*, ver cd.yml): 5 variables especificas de
+#   ms-ecommerce -- MS_ECOMMERCE_DB_HOST, MS_ECOMMERCE_DB_PORT,
+#   MS_ECOMMERCE_DB_NAME, MS_ECOMMERCE_DB_USER, MS_ECOMMERCE_DB_PASSWORD.
+#   Mismo prefijo por la misma razon que ms-cumplimiento. Ver
+#   docker-compose.ms-ecommerce.yml para el mapeo. OJO: a diferencia de
+#   ms-identidad y ms-cumplimiento, ms-ecommerce tiene
+#   server.servlet.context-path=/api/v1 -- su /actuator/health real vive en
+#   /api/v1/actuator/health, no en /actuator/health. Ver "ruta_salud_de" en
+#   el paso 4 de este script.
 #
 # Este script NUNCA decide si hay que revertir: eso lo hace un step aparte en
 # cd.yml (solo en el job de produccion) leyendo el archivo
@@ -54,6 +63,8 @@ COMPOSE_CUENTAS="$DIRECTORIO/docker-compose.cuentas.yml"
 # que COMPOSE_CUENTAS: se copia siempre, solo se agrega al comando si
 # ms-cumplimiento viene en esta corrida.
 COMPOSE_MS_CUMPLIMIENTO="$DIRECTORIO/docker-compose.ms-cumplimiento.yml"
+# Override de ms-ecommerce (Maven, tambien equipo Cuentas). Mismo patron.
+COMPOSE_MS_ECOMMERCE="$DIRECTORIO/docker-compose.ms-ecommerce.yml"
 INTENTOS_SALUD=12
 ESPERA_ENTRE_INTENTOS=5
 
@@ -92,6 +103,11 @@ MS_CUMPLIMIENTO_DB_PORT=${MS_CUMPLIMIENTO_DB_PORT:-}
 MS_CUMPLIMIENTO_DB_NAME=${MS_CUMPLIMIENTO_DB_NAME:-}
 MS_CUMPLIMIENTO_DB_USER=${MS_CUMPLIMIENTO_DB_USER:-}
 MS_CUMPLIMIENTO_DB_PASSWORD=${MS_CUMPLIMIENTO_DB_PASSWORD:-}
+MS_ECOMMERCE_DB_HOST=${MS_ECOMMERCE_DB_HOST:-}
+MS_ECOMMERCE_DB_PORT=${MS_ECOMMERCE_DB_PORT:-}
+MS_ECOMMERCE_DB_NAME=${MS_ECOMMERCE_DB_NAME:-}
+MS_ECOMMERCE_DB_USER=${MS_ECOMMERCE_DB_USER:-}
+MS_ECOMMERCE_DB_PASSWORD=${MS_ECOMMERCE_DB_PASSWORD:-}
 EOF
 chmod 600 .env
 
@@ -117,6 +133,7 @@ export TAG
 SERVICIOS_COMPOSE=""
 INCLUYE_CUENTAS=0
 INCLUYE_MS_CUMPLIMIENTO=0
+INCLUYE_MS_ECOMMERCE=0
 for par in $SERVICIOS_PUERTOS; do
   servicio="${par%%:*}"
   SERVICIOS_COMPOSE="$SERVICIOS_COMPOSE srv-${servicio}"
@@ -125,6 +142,9 @@ for par in $SERVICIOS_PUERTOS; do
   fi
   if [ "$servicio" = "ms-cumplimiento" ]; then
     INCLUYE_MS_CUMPLIMIENTO=1
+  fi
+  if [ "$servicio" = "ms-ecommerce" ]; then
+    INCLUYE_MS_ECOMMERCE=1
   fi
 done
 
@@ -164,13 +184,30 @@ if [ "$INCLUYE_MS_CUMPLIMIENTO" -eq 1 ]; then
   fi
 fi
 
+# Mismo patron de "fallo visible" para ms-ecommerce: sus 5 secrets son
+# obligatorios si esta en esta corrida -- application.properties lee
+# ${DB_HOST}/${DB_PORT}/${DB_NAME}/${DB_USER}/${DB_PASSWORD} literalmente
+# (DB_PASSWORD sin default, igual que ms-cumplimiento).
+if [ "$INCLUYE_MS_ECOMMERCE" -eq 1 ]; then
+  FALTANTES=""
+  [ -n "${MS_ECOMMERCE_DB_HOST:-}" ] || FALTANTES="$FALTANTES TODO_DB_HOST_MS_ECOMMERCE"
+  [ -n "${MS_ECOMMERCE_DB_PORT:-}" ] || FALTANTES="$FALTANTES TODO_DB_PORT_MS_ECOMMERCE"
+  [ -n "${MS_ECOMMERCE_DB_NAME:-}" ] || FALTANTES="$FALTANTES TODO_DB_NAME_MS_ECOMMERCE"
+  [ -n "${MS_ECOMMERCE_DB_USER:-}" ] || FALTANTES="$FALTANTES TODO_DB_USER_MS_ECOMMERCE"
+  [ -n "${MS_ECOMMERCE_DB_PASSWORD:-}" ] || FALTANTES="$FALTANTES TODO_DB_PASSWORD_MS_ECOMMERCE"
+  if [ -n "$FALTANTES" ]; then
+    echo "Faltan secrets de GitHub para ms-ecommerce, crealos en Settings > Environments:$FALTANTES"
+    exit 1
+  fi
+fi
+
 # Siempre el base + el de despliegue de plataforma combinados: el base (de
 # desarrollo local, con "build:") nunca se usa solo. El de despliegue solo
 # agrega "image:", y como aqui no pasamos --build, Compose usa esa imagen ya
 # publicada en ghcr.io en vez de intentar construir nada en el servidor.
-# El tercer/cuarto archivo (ms-identidad, ms-cumplimiento) solo se agrega si
-# de verdad esta entre los servicios de esta corrida -- si no, ni se
-# menciona en el comando.
+# Los overrides de Cuentas (ms-identidad, ms-cumplimiento, ms-ecommerce)
+# solo se agregan si de verdad estan entre los servicios de esta corrida --
+# si no, ni se mencionan en el comando.
 ARCHIVOS_COMPOSE=(-f "$COMPOSE_BASE" -f "$COMPOSE_DEPLOY")
 if [ "$INCLUYE_CUENTAS" -eq 1 ]; then
   ARCHIVOS_COMPOSE+=(-f "$COMPOSE_CUENTAS")
@@ -178,19 +215,39 @@ fi
 if [ "$INCLUYE_MS_CUMPLIMIENTO" -eq 1 ]; then
   ARCHIVOS_COMPOSE+=(-f "$COMPOSE_MS_CUMPLIMIENTO")
 fi
+if [ "$INCLUYE_MS_ECOMMERCE" -eq 1 ]; then
+  ARCHIVOS_COMPOSE+=(-f "$COMPOSE_MS_ECOMMERCE")
+fi
 
 docker compose "${ARCHIVOS_COMPOSE[@]}" pull $SERVICIOS_COMPOSE
 docker compose "${ARCHIVOS_COMPOSE[@]}" up -d $SERVICIOS_COMPOSE
 
 echo "== 4) Verificando /actuator/health de cada servicio desplegado (con reintentos) =="
+# Ruta de salud por servicio: todos los servicios de plataforma y
+# ms-identidad/ms-cumplimiento NO tienen server.servlet.context-path, asi
+# que su Actuator vive en la raiz (/actuator/health). ms-ecommerce es la
+# UNICA excepcion confirmada hasta ahora: su application.properties declara
+# server.servlet.context-path=/api/v1, entonces Spring monta TODOS sus
+# endpoints (incluido Actuator) bajo ese prefijo -- su salud real esta en
+# /api/v1/actuator/health. Se resuelve por funcion (no con un valor fijo)
+# para no romper el healthcheck generico de los demas servicios, que siguen
+# usando la ruta sin prefijo.
+ruta_salud_de() {
+  case "$1" in
+    ms-ecommerce) echo "/api/v1/actuator/health" ;;
+    *) echo "/actuator/health" ;;
+  esac
+}
+
 > ultimo-fallo.txt
 HUBO_FALLO=0
 for par in $SERVICIOS_PUERTOS; do
   servicio="${par%%:*}"
   puerto="${par##*:}"
+  ruta_salud=$(ruta_salud_de "$servicio")
   ok=0
   for intento in $(seq 1 "$INTENTOS_SALUD"); do
-    if curl -fsS "http://localhost:${puerto}/actuator/health" | grep -q '"status":"UP"'; then
+    if curl -fsS "http://localhost:${puerto}${ruta_salud}" | grep -q '"status":"UP"'; then
       echo "  $servicio (puerto $puerto): saludable en el intento $intento"
       ok=1
       break
