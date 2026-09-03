@@ -183,8 +183,8 @@ form.addEventListener('submit', async (evento) => {
 
     ocultarEstado();
 
-    // Redirección al perfil del usuario autenticado
-    window.location.href = './perfil.html';
+    // Redirección al panel principal de bienvenida con el flujo del grupo
+    window.location.href = './index.html?login=ok';
   } finally {
     botonEnviar.disabled = false;
   }
