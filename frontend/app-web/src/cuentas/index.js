@@ -2,7 +2,6 @@
  * ==========================================================================
  * Controlador del Hub Central de Cuentas (index.html)
  * Pila Tecnológica: Vanilla JS ES2022 (Sin frameworks)
- * Flujo Secuencial E2E del Grupo 4 (Cuentas, Cumplimiento y Comercio)
  * ==========================================================================
  */
 
@@ -13,30 +12,25 @@ const CLAVE_TOKEN = 'nexus.token';
 const CLAVE_ROL = 'nexus.rolActual';
 const CLAVE_APODO = 'nexus.apodoActual';
 
-/**
- * Acciones del hub que no son acciones RBAC directas se mapean a la más
- * cercana que SÍ tiene endpoint en el simulador de seguridad-servidor.html,
- * para que "Comprobar 403" abra la consola ya configurada.
- */
 const ACCION_A_SIMULADOR = {
   GESTIONAR_CUENTAS: 'BANEAR_DEFINITIVAMENTE',
   CREAR_ADMIN_MODERADOR: 'ASIGNAR_ROL',
   ASIGNAR_ROL: 'ASIGNAR_ROL',
   BANEAR_DEFINITIVAMENTE: 'BANEAR_DEFINITIVAMENTE',
-  MODIFICAR_PERFIL_PROPIO: 'MODIFICAR_PERFIL_PROPIO'
+  MODIFICAR_PERFIL_PROPIO: 'MODIFICAR_PERFIL_PROPIO',
+  TEST_SEGURIDAD: 'BANEAR_DEFINITIVAMENTE',
+  CONSULTA_RBAC: 'BANEAR_DEFINITIVAMENTE'
 };
 
 const ESTRUCTURA_FASES = [
   {
     numero: '1',
     titulo: 'Fase 1: Onboarding y Acceso',
-    autor: 'Cristian Camilo Chaparro · HU-AUT-001 / HU-AUT-004',
-    descripcion: 'Punto de entrada al videojuego: creación de cuenta validando correo institucional y autenticación con emisión de token JWT.',
+    autor: 'Cristian Camilo Chaparro',
     pasos: [
       {
         codigo: 'HU-AUT-001',
         titulo: 'Registro de Jugador',
-        descripcion: 'Formulario de alta con validación de requisitos de contraseña, apodo único y subida de avatar oficial.',
         url: './registro.html',
         textoBoton: 'Abrir Registro',
         accionRequerida: 'CREAR_CUENTA_JUGADOR',
@@ -44,8 +38,7 @@ const ESTRUCTURA_FASES = [
       },
       {
         codigo: 'HU-AUT-004',
-        titulo: 'Inicio de Sesión y Emisión JWT',
-        descripcion: 'Verificación criptográfica contra PostgreSQL (puerto 5433), detección de nuevo dispositivo y generación del Bearer Token.',
+        titulo: 'Inicio de Sesión',
         url: './login.html',
         textoBoton: 'Iniciar Sesión',
         accionRequerida: 'AUTENTICAR',
@@ -56,13 +49,11 @@ const ESTRUCTURA_FASES = [
   {
     numero: '2',
     titulo: 'Fase 2: Identidad y Personalización',
-    autor: 'Santiago Sanabria Uribe · HU-PER-001',
-    descripcion: 'Gestión de la ficha del jugador: consulta de datos con el JWT de la sesión y selección de avatar de combate.',
+    autor: 'Santiago Sanabria Uribe',
     pasos: [
       {
         codigo: 'HU-PER-001',
         titulo: 'Mi Perfil de Jugador',
-        descripcion: 'Consulta de estadísticas, edición de biografía y selección de avatar entre los 10 arquetipos de la galería oficial.',
         url: './perfil.html',
         textoBoton: 'Ver Mi Perfil',
         accionRequerida: 'MODIFICAR_PERFIL_PROPIO',
@@ -70,23 +61,37 @@ const ESTRUCTURA_FASES = [
       }
     ]
   },
-  // HU-RBAC-001 y HU-RBAC-004 NO se listan en el hub de cliente:
-  //  · HU-RBAC-004 es 100% backend (SecurityInterceptor + 403 RFC 7807), no tiene
-  //    pantalla; su verificación se demuestra por cURL/Postman o abriendo
-  //    seguridad-servidor.html directamente.
-  //  · HU-RBAC-001 vive como la directiva has-permission integrada en las vistas
-  //    reales; matriz-permisos.html es una consola de referencia, no una vista
-  //    del portal del jugador.
   {
     numero: '3',
-    titulo: 'Fase 3: Gobernanza y Gestión de Cuentas',
-    autor: 'Santiago Sanabria & Edwin · HU-USR-003 / HU-RBAC-003',
-    descripcion: 'Operaciones avanzadas de administración: sanciones disciplinarias, baneo permanente y control de revocación de sesiones.',
+    titulo: 'Fase 3: Control de Acceso y Seguridad',
+    autor: 'Andrés Núñez',
+    pasos: [
+      {
+        codigo: 'HU-RBAC-001',
+        titulo: 'Panel de Permisos RBAC',
+        url: './matriz-permisos.html',
+        textoBoton: 'Inspeccionar Matriz',
+        accionRequerida: 'CONSULTA_RBAC',
+        disponiblePara: ['JUGADOR', 'MODERADOR', 'ADMINISTRADOR', 'SUPER_ADMINISTRADOR']
+      },
+      {
+        codigo: 'HU-RBAC-004',
+        titulo: 'Verificación Server-Side',
+        url: './seguridad-servidor.html',
+        textoBoton: 'Consola Servidor',
+        accionRequerida: 'TEST_SEGURIDAD',
+        disponiblePara: ['JUGADOR', 'MODERADOR', 'ADMINISTRADOR', 'SUPER_ADMINISTRADOR']
+      }
+    ]
+  },
+  {
+    numero: '4',
+    titulo: 'Fase 4: Gobernanza y Sanciones',
+    autor: 'Santiago Sanabria & Edwin',
     pasos: [
       {
         codigo: 'HU-USR-003',
         titulo: 'Gestión de Usuarios y Sanciones',
-        descripcion: 'Búsqueda de cuentas de jugadores, aplicación de suspensiones temporales y ejecución de baneos definitivos.',
         url: './gestion-usuarios.html',
         textoBoton: 'Panel de Gestión Admin',
         accionRequerida: 'GESTIONAR_CUENTAS',
@@ -94,8 +99,7 @@ const ESTRUCTURA_FASES = [
       },
       {
         codigo: 'HU-RBAC-003',
-        titulo: 'Alta de Administradores y Cambio de Rol',
-        descripcion: 'Nombramiento de nuevos administradores y actualización de versiones de token para invalidar sesiones degradadas.',
+        titulo: 'Alta de Administradores',
         url: './crear-cuenta-admin.html',
         textoBoton: 'Crear Cuenta Admin',
         accionRequerida: 'CREAR_ADMIN_MODERADOR',
@@ -105,35 +109,25 @@ const ESTRUCTURA_FASES = [
   }
 ];
 
-// Metadatos descriptivos por rol. El conteo de acciones NO se guarda aquí:
-// se calcula desde matriz-rbac.js para no divergir del panel RBAC.
 const METADATA_ROLES = {
   JUGADOR: {
-    nombre: 'Jugador (Nivel 1)',
-    subtitulo: 'Portal del Jugador · Arena de Combate',
-    descripcion: 'Sesión estándar de jugador. Desde aquí gestionas tu perfil; el control de acceso RBAC actúa de forma transparente en cada acción que realizas.'
+    nombre: 'Jugador (Nivel 1)'
   },
   MODERADOR: {
-    nombre: 'Moderador (Nivel 2)',
-    subtitulo: 'Panel de Supervisión de Comunidad',
-    descripcion: 'Sesión con facultades de moderación de contenido y sanciones disciplinarias temporales. Las operaciones de tienda y baneo definitivo están restringidas.'
+    nombre: 'Moderador (Nivel 2)'
   },
   ADMINISTRADOR: {
-    nombre: 'Administrador (Nivel 3)',
-    subtitulo: 'Consola de Administración del Sistema',
-    descripcion: 'Sesión administrativa plena con control de economía, catálogo de tienda, gestión de usuarios y aplicación de baneos definitivos.'
+    nombre: 'Administrador (Nivel 3)'
   },
   SUPER_ADMINISTRADOR: {
     nombre: 'Super Administrador (Nivel 4)',
-    subtitulo: 'Gobernanza y Control Total de Plataforma',
-    descripcion: 'Máxima autoridad de The Nexus Battles VI. Facultades de nombramiento de administradores, asignación de roles y auditoría global de seguridad.',
-    notaAcciones: '(Default-Deny en Registro)'
+    notaAcciones: '(Default-Deny)'
   }
 };
 
 function etiquetaAcciones(rol) {
   const nota = METADATA_ROLES[rol]?.notaAcciones ? ` ${METADATA_ROLES[rol].notaAcciones}` : '';
-  return `${contarAccionesPermitidas(rol)} / ${TOTAL_ACCIONES} Acciones Autorizadas${nota}`;
+  return `${contarAccionesPermitidas(rol)} / ${TOTAL_ACCIONES} Acciones${nota}`;
 }
 
 function montarBarraOficial() {
@@ -166,15 +160,14 @@ function montarNavegacionContextual(autenticado, rol, apodo) {
   const linkHub = document.createElement('a');
   linkHub.href = './index.html';
   linkHub.className = 'nav-link activo';
-  linkHub.textContent = 'Hub del Flujo';
+  linkHub.textContent = 'Hub';
   linksNav.appendChild(linkHub);
 
   if (autenticado) {
-    // El menú del cliente solo enlaza vistas de usuario. Las consolas RBAC
-    // (matriz-permisos.html / seguridad-servidor.html) son herramientas de
-    // demostración/QA: se abren por URL directa, no van en la navegación.
     const linksAutenticado = [
-      { texto: 'Mi Perfil', url: './perfil.html' }
+      { texto: 'Mi Perfil', url: './perfil.html' },
+      { texto: 'Matriz RBAC', url: './matriz-permisos.html' },
+      { texto: 'Seguridad Servidor', url: './seguridad-servidor.html' }
     ];
 
     if (rol === 'ADMINISTRADOR' || rol === 'SUPER_ADMINISTRADOR') {
@@ -215,29 +208,25 @@ function montarNavegacionContextual(autenticado, rol, apodo) {
     linkRegistro.className = 'nav-link';
     linkRegistro.textContent = 'Registrarse';
 
+    const linkMatriz = document.createElement('a');
+    linkMatriz.href = './matriz-permisos.html';
+    linkMatriz.className = 'nav-link';
+    linkMatriz.textContent = 'Matriz RBAC';
+
+    const linkSeg = document.createElement('a');
+    linkSeg.href = './seguridad-servidor.html';
+    linkSeg.className = 'nav-link';
+    linkSeg.textContent = 'Seguridad Servidor';
+
     linksNav.appendChild(linkLogin);
     linksNav.appendChild(linkRegistro);
+    linksNav.appendChild(linkMatriz);
+    linksNav.appendChild(linkSeg);
 
     const chipAnon = document.createElement('span');
     chipAnon.className = 'chip-usuario';
-    chipAnon.textContent = 'Modo Demostración (Sin sesión)';
+    chipAnon.textContent = 'Modo Demostración';
     chipArea.appendChild(chipAnon);
-  }
-}
-
-/**
- * Ajusta el texto del conmutador para dejar claro si la vista es una
- * simulación (sin login) o refleja la sesión real.
- */
-function actualizarNotaSimulacion(autenticado, rolReal) {
-  const nota = document.getElementById('nota-simulacion');
-  if (!nota) return;
-  if (autenticado) {
-    nota.textContent = `Sesión real activa como ${rolReal}. El conmutador solo previsualiza cómo vería el hub cada uno de los otros roles.`;
-    nota.classList.add('nota-simulacion--real');
-  } else {
-    nota.textContent = 'Vista simulada para la demostración — no representa una sesión autenticada real. Inicia sesión para cargar un JWT verdadero.';
-    nota.classList.remove('nota-simulacion--real');
   }
 }
 
@@ -246,25 +235,22 @@ function renderizarHero(autenticado, rol, apodo) {
 
   const saludoUsuario = document.getElementById('saludo-usuario');
   const heroSubtitulo = document.getElementById('hero-subtitulo');
-  const heroDesc = document.getElementById('hero-desc');
   const heroApodo = document.getElementById('hero-apodo');
   const heroRolBadge = document.getElementById('hero-rol-badge');
   const heroAccionesBadge = document.getElementById('hero-acciones-badge');
   const heroTag = document.getElementById('hero-tag');
 
   if (autenticado) {
-    heroTag.textContent = 'Sesión Activa en ms-identidad';
+    heroTag.textContent = 'Sesión Activa';
     saludoUsuario.textContent = `¡Bienvenido, ${apodo}!`;
-    heroSubtitulo.textContent = `${meta.subtitulo} · ${meta.nombre}`;
-    heroDesc.textContent = meta.descripcion;
+    heroSubtitulo.textContent = meta.nombre;
     heroApodo.textContent = apodo;
     heroRolBadge.textContent = `Rol: ${rol}`;
     heroAccionesBadge.textContent = etiquetaAcciones(rol);
   } else {
-    heroTag.textContent = 'Demostración de Cuentas (Sprint 1)';
-    saludoUsuario.textContent = 'Centro de Demostración E2E · Grupo 4';
-    heroSubtitulo.textContent = 'Flujo de Cuentas, Cumplimiento y Comercio';
-    heroDesc.textContent = 'Inicia sesión con tus credenciales para cargar tu token criptográfico en el flujo, o explora las fases a continuación seleccionando el rol con los botones superiores.';
+    heroTag.textContent = 'Modo Demostración';
+    saludoUsuario.textContent = 'Portal de Cuentas';
+    heroSubtitulo.textContent = meta.nombre;
     heroApodo.textContent = 'Invitado';
     heroRolBadge.textContent = `Rol Simulado: ${rol}`;
     heroAccionesBadge.textContent = etiquetaAcciones(rol);
@@ -286,7 +272,6 @@ function renderizarFases(rolActual) {
         <div class="fase-numero">${fase.numero}</div>
         <div>
           <h2 class="fase-titulo">${fase.titulo}</h2>
-          <p class="fase-descripcion">${fase.descripcion}</p>
         </div>
       </div>
       <span class="fase-autor">${fase.autor}</span>
@@ -309,7 +294,6 @@ function renderizarFases(rolActual) {
               <span class="badge-estado badge-estado--activo">Habilitado</span>
             </div>
             <h3 class="tarjeta-titulo">${paso.titulo}</h3>
-            <p class="tarjeta-desc">${paso.descripcion}</p>
           </div>
           <div class="tarjeta-pie">
             <span class="tarjeta-meta">Permiso: <code>${paso.accionRequerida}</code></span>
@@ -327,14 +311,10 @@ function renderizarFases(rolActual) {
               <span class="badge-estado badge-estado--bloqueado">Restringido</span>
             </div>
             <h3 class="tarjeta-titulo">${paso.titulo}</h3>
-            <p class="tarjeta-desc">
-              ${paso.descripcion}
-              <span class="nota-restriccion">Requiere rol administrativo superior.</span>
-            </p>
           </div>
           <div class="tarjeta-pie">
             <span class="tarjeta-meta">Acción: <code>${paso.accionRequerida}</code></span>
-            <a href="${url403}" class="btn-paso btn-paso--403">Comprobar 403 en servidor</a>
+            <a href="${url403}" class="btn-paso btn-paso--403">Comprobar 403</a>
           </div>
         `;
       }
@@ -355,7 +335,6 @@ function inicializarHub() {
   const rolReal = sessionStorage.getItem(CLAVE_ROL);
   const apodo = sessionStorage.getItem(CLAVE_APODO) || 'Usuario';
 
-  // Con sesión real, arranca en el rol autenticado; sin sesión, en JUGADOR.
   let rolActual = (autenticado && METADATA_ROLES[rolReal]) ? rolReal : 'JUGADOR';
 
   const conmutadores = document.querySelectorAll('.btn-conmutador-rol');
@@ -371,12 +350,10 @@ function inicializarHub() {
     montarNavegacionContextual(autenticado, rolActual, apodo);
     renderizarHero(autenticado, rolActual, apodo);
     renderizarFases(rolActual);
-    actualizarNotaSimulacion(autenticado, autenticado ? (rolReal || rolActual) : rolActual);
   }
 
   conmutadores.forEach((btn) => {
     btn.addEventListener('click', () => {
-      // El conmutador solo cambia la vista; no toca la sesión real.
       if (!autenticado) {
         sessionStorage.setItem(CLAVE_ROL, btn.dataset.rol);
       }
