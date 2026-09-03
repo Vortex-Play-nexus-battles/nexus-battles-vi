@@ -1,0 +1,36 @@
+# Configuracion del servicio de motor de combate.
+#
+# Regla 10 de plataforma: solo variables de entorno, ningun valor real
+# versionado. Cada clave lleva un valor por omision apto para desarrollo local
+# y se sobreescribe en cada entorno.
+
+spring:
+  application:
+    name: motor-combate
+
+server:
+  port: ${SERVER_PORT:8080}
+
+# Regla 3: todo servicio expone salud y metricas.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when-authorized
+
+# Regla 6: bitacora a stdout. El formato JSON de plataforma se conecta cuando
+# exista la biblioteca comun; hoy 'shared/libs/' solo tiene un README.
+logging:
+  level:
+    root: ${LOG_LEVEL:INFO}
+
+# Servicio de heroes que consume ClienteHeroesHttp (HU-JUE-003). No se toca su
+# implementacion: ya es un puerto de salida correcto y respeta la regla 7.
+motor:
+  heroes:
+    url: ${HEROES_URL:http://localhost:8081}

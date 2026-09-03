@@ -7,6 +7,7 @@ import java.util.List;
 import nexus.inventario.dominio.ElementoInventario;
 import nexus.inventario.dominio.FalloPersistenciaInventarioException;
 import nexus.inventario.dominio.Inventario;
+import nexus.inventario.dominio.ParteArmadura;
 import nexus.inventario.dominio.RepositorioDeInventarios;
 import nexus.inventario.dominio.TipoElementoInventario;
 import org.junit.jupiter.api.BeforeEach;
@@ -55,6 +56,25 @@ class RepositorioInventariosMongoIT {
         assertEquals(guardado.id(), recuperado.id());
         assertEquals("jugador-A", recuperado.propietarioId());
         assertEquals(inventario.elementos(), recuperado.elementos());
+    }
+
+    @Test
+    @DisplayName("guarda y recupera las ranuras equipadas dentro del mismo documento")
+    void guardaYRecuperaEquipamiento() {
+        Inventario inventario = Inventario.vacio("jugador-equipo")
+                .agregar(new ElementoInventario(
+                        "heroe-1", "producto-heroe", TipoElementoInventario.HEROE, "Ayla"))
+                .agregar(new ElementoInventario(
+                        "casco-1", "producto-casco", TipoElementoInventario.ARMADURA,
+                        "Casco de Bruma", ParteArmadura.CASCO))
+                .equipar("heroe-1", "casco-1");
+
+        repositorio.guardar(inventario);
+
+        Inventario recuperado = repositorio.buscarPorPropietario("jugador-equipo").orElseThrow();
+        assertEquals("casco-1", recuperado.equipamiento("heroe-1")
+                .armaduras().get(ParteArmadura.CASCO));
+        assertEquals(ParteArmadura.CASCO, recuperado.elemento("casco-1").parteArmadura());
     }
 
     @Test

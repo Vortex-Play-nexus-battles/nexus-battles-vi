@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  db-ecommerce:
+    image: postgres:16-alpine
+    container_name: postgres-ecommerce
+    environment:
+      POSTGRES_DB: ecommerce_db
+      POSTGRES_USER: ecom_user
+      POSTGRES_PASSWORD: ecom_password
+    ports:
+      - "5434:5432"
+    volumes:
+      - pgdata_ecommerce:/var/lib/postgresql/data
+
+volumes:
+  pgdata_ecommerce:

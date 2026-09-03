@@ -62,6 +62,36 @@ class InventarioApiTest {
     }
 
     @Test
+    @DisplayName("POST conserva la parte de una armadura para su ranura")
+    void crearArmaduraConParte() throws Exception {
+        mvc.perform(post("/api/v1/inventario/elementos")
+                        .header("X-User-Name", "jugador-A")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"productoId":"producto-casco","tipo":"ARMADURA",
+                                 "nombrePropio":"Casco de Bruma","parteArmadura":"CASCO"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.parteArmadura").value("CASCO"));
+    }
+
+    @Test
+    @DisplayName("POST rechaza una armadura sin parte mientras productos no resuelve la ranura")
+    void rechazarArmaduraSinParte() throws Exception {
+        mvc.perform(post("/api/v1/inventario/elementos")
+                        .header("X-User-Name", "jugador-A")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"productoId":"producto-armadura","tipo":"ARMADURA",
+                                 "nombrePropio":"Armadura sin parte"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Solicitud invalida"));
+
+        assertEquals(0, repositorio.buscarPorPropietario("jugador-A").stream().count());
+    }
+
+    @Test
     @DisplayName("PATCH permite al propietario modificar su elemento")
     void modificarElementoPropio() throws Exception {
         ElementoInventario creado = gestion.crear(

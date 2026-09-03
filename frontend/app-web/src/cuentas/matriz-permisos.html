@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HU-RBAC-001: Panel de Acceso por Roles — Nexus Battles VI</title>
+    <link rel="stylesheet" href="./demo-rbac.css" />
+    <link rel="stylesheet" href="../comun/barra-navegacion.css" />
+    <style>
+      .barra-navegacion {
+        display: flex;
+        gap: 12px;
+        background: #151a30;
+        padding: 8px 32px;
+        border-bottom: 1px solid #2d3754;
+      }
+      .nav-link {
+        color: #c5cde0;
+        text-decoration: none;
+        padding: 6px 14px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        transition: all 0.2s ease;
+      }
+      .nav-link:hover {
+        background: #2244bf;
+        color: #ffffff;
+      }
+      .nav-link.activo {
+        background: #1e3f88;
+        color: #ffffff;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Barra Superior Compartida Oficial (HU-INV-004) -->
+    <div id="contenedor-barra"></div>
+
+    <!-- Navegación entre Historias de Usuario de Cuentas -->
+    <nav class="barra-navegacion">
+      <a href="./matriz-permisos.html" class="nav-link activo">HU-RBAC-001: Panel de Acceso por Roles</a>
+      <a href="./seguridad-servidor.html" class="nav-link">HU-RBAC-004: Verificación en Servidor</a>
+    </nav>
+
+    <header class="cromo">
+      <h1>HU-RBAC-001: Panel de Control de Acceso por Roles</h1>
+      <p>Nexus Battles VI · Interfaz de Gestión de Privilegios y Directiva Reactiva de Permisos</p>
+    </header>
+
+    <main>
+      <!-- Selector Visual de Roles mediante Tarjetas Interactivas -->
+      <section class="tarjeta">
+        <!-- Estado de conexión con el backend (Diseño limpio Figma) -->
+        <div id="estado-conexion" class="indicador-estado-conexion indicador-desconectado" role="status">
+          <span class="punto-estado"></span>
+          <span id="texto-estado-conexion">Verificando conexión con ms-identidad…</span>
+        </div>
+
+        <!-- Indicador de Sesión Activa (si existe token) -->
+        <div id="aviso-sesion-activa" class="aviso-sesion" style="display: none;">
+          <span id="texto-sesion-activa">Sesión autenticada detectada.</span>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+          <div>
+            <h2 style="margin: 0 0 4px 0;">Seleccionar Rol para Acceso</h2>
+            <p style="margin: 0; font-size: 13.5px; color: var(--texto-secundario);">
+              Cambia el rol activo para ver en tiempo real los módulos y acciones autorizados en el sistema.
+            </p>
+          </div>
+          <!-- Selector nativo para accesibilidad y sincronización -->
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <label for="selector-rol" style="font-size: 12px; font-weight: 700; text-transform: uppercase;">Rol:</label>
+            <select id="selector-rol" style="padding: 6px 12px; border-radius: 6px; font-weight: 600;">
+              <option value="JUGADOR" selected>Jugador</option>
+              <option value="MODERADOR">Moderador</option>
+              <option value="ADMINISTRADOR">Administrador</option>
+              <option value="SUPER_ADMINISTRADOR">Super Administrador</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Cuadrícula de 4 Tarjetas de Roles Oficiales -->
+        <div class="cuadricula-roles" id="cuadricula-roles" role="radiogroup" aria-label="Seleccionar rol de acceso">
+          <div class="tarjeta-rol activa" data-rol="JUGADOR" tabindex="0" role="radio" aria-checked="true">
+            <div class="tarjeta-rol__cabecera">
+              <span class="tarjeta-rol__nivel">Nivel 1</span>
+            </div>
+            <h3 class="tarjeta-rol__nombre">Jugador</h3>
+            <p class="tarjeta-rol__desc">Acceso básico a partidas, gestión de perfil propio y comentarios.</p>
+          </div>
+
+          <div class="tarjeta-rol" data-rol="MODERADOR" tabindex="0" role="radio" aria-checked="false">
+            <div class="tarjeta-rol__cabecera">
+              <span class="tarjeta-rol__nivel">Nivel 2</span>
+            </div>
+            <h3 class="tarjeta-rol__nombre">Moderador</h3>
+            <p class="tarjeta-rol__desc">Moderar comentarios, emitir advertencias y suspensiones temporales.</p>
+          </div>
+
+          <div class="tarjeta-rol" data-rol="ADMINISTRADOR" tabindex="0" role="radio" aria-checked="false">
+            <div class="tarjeta-rol__cabecera">
+              <span class="tarjeta-rol__nivel">Nivel 3</span>
+            </div>
+            <h3 class="tarjeta-rol__nombre">Administrador</h3>
+            <p class="tarjeta-rol__desc">Gestión de usuarios, productos de tienda y baneos permanentes.</p>
+          </div>
+
+          <div class="tarjeta-rol" data-rol="SUPER_ADMINISTRADOR" tabindex="0" role="radio" aria-checked="false">
+            <div class="tarjeta-rol__cabecera">
+              <span class="tarjeta-rol__nivel">Nivel 4</span>
+            </div>
+            <h3 class="tarjeta-rol__nombre">Super Admin</h3>
+            <p class="tarjeta-rol__desc">Control total, nombramiento de administradores y asignación de roles.</p>
+          </div>
+        </div>
+
+        <!-- Resumen de Privilegios del Rol Activo -->
+        <div class="resumen-privilegios">
+          <div>
+            <span style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--texto-secundario);">Capacidad de Autorización:</span>
+            <div id="rol-activo-etiqueta" style="font-size: 15px; font-weight: 700; color: #1c2340; margin-top: 2px;">
+              Rol Activo: Jugador (Nivel 1)
+            </div>
+          </div>
+          <div class="barra-progreso-contenedor">
+            <span id="contador-privilegios" style="font-size: 13px; font-weight: 700; color: #1e3f88;">4 / 12 Acciones</span>
+            <div class="barra-progreso">
+              <div class="barra-progreso__relleno" id="progreso-relleno" style="width: 33.3%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Banner de Toast / Notificación de Acción -->
+        <div id="toast-accion" class="toast-feedback" style="display: none;" role="status">
+          <span id="toast-mensaje">Operación autorizada con éxito.</span>
+        </div>
+      </section>
+
+      <!-- Panel de Acciones por Módulos Funcionales (Directiva has-permission) -->
+      <section class="tarjeta" aria-labelledby="titulo-modulos">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <h2 id="titulo-modulos" style="margin: 0;">Módulos del Sistema y Acciones Disponibles</h2>
+          <span style="font-size: 12px; color: var(--texto-terciario);">Directiva reactiva: <code>[data-has-permission]</code></span>
+        </div>
+        <p style="margin: 0 0 16px 0; font-size: 13.5px; color: var(--texto-secundario);">
+          Haz clic en cualquier acción autorizada para consultar la evaluación en el servidor (<code>POST /api/v1/rbac/authorize</code>). Los módulos y acciones no permitidos quedan ocultos automáticamente por la directiva <code>has-permission</code>.
+        </p>
+
+        <div class="seccion-modulos">
+          <!-- Módulo 1: Comunidad y Perfil -->
+          <div class="grupo-modulo">
+            <h3 class="grupo-modulo__titulo">Comunidad, Jugador y Perfil</h3>
+            <div class="grupo-modulo__grid">
+              <button type="button" class="boton-accion-card" data-has-permission="CREAR_CUENTA_JUGADOR" data-accion-nombre="Crear cuenta de jugador">
+                <span>Crear cuenta de jugador</span>
+                <span class="badge-estado">Habilitado</span>
+              </button>
+              <button type="button" class="boton-accion-card" data-has-permission="MODIFICAR_PERFIL_PROPIO" data-accion-nombre="Modificar perfil propio">
+                <span>Modificar perfil propio</span>
+                <span class="badge-estado">Habilitado</span>
+              </button>
+              <button type="button" class="boton-accion-card" data-has-permission="PUBLICAR_COMENTARIOS" data-accion-nombre="Publicar comentarios">
+                <span>Publicar comentarios</span>
+                <span class="badge-estado">Habilitado</span>
+              </button>
+              <button type="button" class="boton-accion-card" data-has-permission="ELIMINAR_COMENTARIO_PROPIO" data-accion-nombre="Eliminar comentario propio">
+                <span>Eliminar comentario propio</span>
+                <span class="badge-estado">Habilitado</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Módulo 2: Moderación y Sanciones -->
+          <div class="grupo-modulo">
+            <h3 class="grupo-modulo__titulo">Moderación y Sanciones</h3>
+            <div class="grupo-modulo__grid">
+              <button type="button" class="boton-accion-card" data-has-permission="MODERAR_COMENTARIOS" data-accion-nombre="Moderar comentarios">
+                <span>Moderar comentarios</span>
+                <span class="badge-estado">Habilitado</span>
+              </button>
+              <button type="button" class="boton-accion-card" data-has-permission="EMITIR_ADVERTENCIAS" data-accion-nombre="Emitir advertencias">
+                <span>Emitir advertencias</span>
+                <span class="badge-estado">Habilitado</span>
+              </button>
+              <button type="button" class="boton-accion-card" data-has-permission="SUSPENDER_USUARIOS" data-accion-nombre="Suspender usuarios">
+                <span>Suspender usuarios</span>
+                <span class="badge-estado">Habilitado</span>
+              </button>
+              <button type="button" class="boton-accion-card" data-has-permission="BANEAR_DEFINITIVAMENTE" data-accion-nombre="Banear definitivamente">
+                <span>Banear definitivamente</span>
+                <span class="badge-estado">Habilitado</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Módulo 3: Administración y Economía -->
+          <div class="grupo-modulo">
+            <h3 class="grupo-modulo__titulo">Administración del Sistema y Tienda</h3>
+            <div class="grupo-modulo__grid">
+              <button type="button" class="boton-accion-card" data-has-permission="GESTIONAR_PRODUCTOS" data-accion-nombre="Gestionar productos">
+                <span>Gestionar productos de tienda</span>
+                <span class="badge-estado">Habilitado</span>
+              </button>
+              <button type="button" class="boton-accion-card" data-has-permission="GESTIONAR_CUENTAS" data-accion-nombre="Gestionar cuentas">
+                <span>Gestionar cuentas de usuario</span>
+                <span class="badge-estado">Habilitado</span>
+              </button>
+              <button type="button" class="boton-accion-card" data-has-permission="ASIGNAR_ROL" data-accion-nombre="Asignar rol">
+                <span>Asignar roles a usuarios</span>
+                <span class="badge-estado">Habilitado</span>
+              </button>
+              <button type="button" class="boton-accion-card" data-has-permission="CREAR_ADMIN_MODERADOR" data-accion-nombre="Crear admin o moderador">
+                <span>Nombrar administradores</span>
+                <span class="badge-estado">Habilitado</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Script modular externo según regla de plataforma (matriz-permisos.html + matriz-permisos.js) -->
+    <script type="module" src="./matriz-permisos.js"></script>
+  </body>
+</html>

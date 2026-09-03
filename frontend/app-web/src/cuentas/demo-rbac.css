@@ -2,22 +2,30 @@
   --fondo: #d7deed;
   --superficie: #ffffff;
   --cromo: #1c2340;
-  --borde-decorativo: #9fabc9;
-  --borde-interactivo: #6f7994;
+  --cromo-borde: #2d3754;
+  --borde-decorativo: #bac6df;
+  --borde-interactivo: #8a96b2;
   --accion: #2244bf;
   --accion-relleno: #1e3f88;
+  --accion-hover: #2950ab;
   --acento: #582784;
   --exito: #086b31;
   --exito-fondo: #e4f5e9;
+  --exito-borde: #b8e4c7;
   --advertencia: #8a4a00;
   --advertencia-fondo: #fbeedd;
+  --advertencia-borde: #f3d2ae;
   --error: #b81a1a;
   --error-fondo: #fbe4e4;
+  --error-borde: #f5c6c6;
   --info: #095e8c;
   --info-fondo: #ddeef7;
+  --info-borde: #b8d9ea;
   --texto: #111726;
   --texto-secundario: #48536a;
-  --texto-terciario: #57627a;
+  --texto-terciario: #68748e;
+  --sombra-tarjeta: 0 4px 20px -2px rgba(28, 35, 64, 0.07), 0 2px 6px -1px rgba(28, 35, 64, 0.04);
+  --sombra-flotante: 0 10px 25px -3px rgba(28, 35, 64, 0.12);
 }
 
 * {
@@ -27,73 +35,135 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: var(--fondo);
+  background-color: var(--fondo);
   color: var(--texto);
-  font-family: Inter, 'Segoe UI', system-ui, sans-serif;
-  font-size: 16px;
-  line-height: 1.45;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
+/* ==========================================================================
+   Barra de Navegación Superior (Tabs)
+   ========================================================================== */
+.barra-navegacion {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #14192d;
+  padding: 12px 32px;
+  border-bottom: 1px solid var(--cromo-borde);
+}
+
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #a3b0cc;
+  text-decoration: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.nav-link:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.nav-link.activo {
+  background: var(--accion-relleno);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(30, 63, 136, 0.4);
+}
+
+/* ==========================================================================
+   Header Cromo Institucional
+   ========================================================================== */
 .cromo {
   background: var(--cromo);
   color: #ffffff;
-  padding: 20px 32px;
+  padding: 24px 32px;
+  border-bottom: 1px solid var(--cromo-borde);
 }
 
 .cromo h1 {
   margin: 0 0 6px;
-  font-family: Rajdhani, 'Trebuchet MS', sans-serif;
-  font-size: 28px;
+  font-family: 'Rajdhani', 'Trebuchet MS', sans-serif;
+  font-size: 30px;
   font-weight: 700;
+  letter-spacing: -0.5px;
 }
 
 .cromo p {
   margin: 0;
-  color: #c5cde0;
-  font-size: 13px;
+  color: #bac6df;
+  font-size: 14px;
+  font-weight: 400;
 }
 
+/* ==========================================================================
+   Contenedor Principal
+   ========================================================================== */
 main {
-  max-width: 1100px;
+  max-width: 1120px;
   margin: 0 auto;
-  padding: 24px 32px 48px;
+  padding: 28px 24px 60px;
+}
+
+/* ==========================================================================
+   Tarjetas y Superficies
+   ========================================================================== */
+.tarjeta {
+  background: var(--superficie);
+  border: 1px solid var(--borde-decorativo);
+  border-radius: 14px;
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: var(--sombra-tarjeta);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.tarjeta h2 {
+  margin: 0 0 8px;
+  font-family: 'Rajdhani', 'Trebuchet MS', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: #1c2340;
 }
 
 .aviso {
   background: var(--info-fondo);
   color: var(--info);
-  border: 1px solid var(--borde-decorativo);
-  border-radius: 8px;
-  padding: 12px 16px;
-  margin-bottom: 20px;
-}
-
-.tarjeta {
-  background: var(--superficie);
-  border: 1px solid var(--borde-decorativo);
+  border: 1px solid var(--info-borde);
   border-radius: 10px;
-  padding: 20px;
-  margin-bottom: 20px;
+  padding: 14px 20px;
+  margin-bottom: 24px;
+  font-size: 14px;
 }
 
-.tarjeta h2 {
-  margin: 0 0 12px;
-  font-family: Rajdhani, 'Trebuchet MS', sans-serif;
-  font-size: 20px;
-  font-weight: 600;
+.ayuda {
+  margin: 4px 0 16px;
+  color: var(--texto-secundario);
+  font-size: 13.5px;
 }
 
+/* ==========================================================================
+   Controles de Formulario e Inputs
+   ========================================================================== */
 .fila {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 20px;
   align-items: flex-end;
 }
 
 label {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   font-size: 13px;
   font-weight: 600;
   color: var(--texto-secundario);
@@ -102,165 +172,64 @@ label {
 select,
 input[type='text'],
 input[type='url'] {
-  min-width: 240px;
-  height: 40px;
-  padding: 0 12px;
+  min-width: 260px;
+  height: 42px;
+  padding: 0 14px;
   border: 1px solid var(--borde-interactivo);
-  border-radius: 6px;
-  font: inherit;
+  border-radius: 8px;
+  font-size: 14px;
   color: var(--texto);
   background: var(--superficie);
+  transition: all 0.2s ease;
 }
 
 select:focus,
 input:focus,
 button:focus {
-  outline: 3px solid #9bb0e8;
-  outline-offset: 2px;
+  outline: none;
+  border-color: var(--accion);
+  box-shadow: 0 0 0 3px rgba(34, 68, 191, 0.18);
 }
 
 .descripcion {
   margin: 12px 0 0;
   color: var(--texto-secundario);
+  font-size: 14px;
+  line-height: 1.45;
 }
 
-.estado {
-  display: inline-block;
-  margin-top: 12px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.estado.carga {
-  background: var(--info-fondo);
-  color: var(--info);
-}
-
-.estado.error {
-  background: var(--error-fondo);
-  color: var(--error);
-}
-
-.estado.exito {
-  background: var(--exito-fondo);
-  color: var(--exito);
-}
-
-.estado.vacio {
-  background: var(--advertencia-fondo);
-  color: var(--advertencia);
-}
-
-.acciones {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 12px;
-}
-
-.matriz-tarjeta {
-  padding: 0;
-  overflow: hidden;
-}
-
-.matriz-tarjeta h2,
-.matriz-tarjeta > .ayuda {
-  margin-left: 20px;
-  margin-right: 20px;
-}
-
-.matriz-tarjeta h2 {
-  margin-top: 20px;
-}
-
-.tabla-responsive {
-  overflow-x: auto;
-  border-top: 1px solid var(--borde-decorativo);
-  border-bottom: 1px solid var(--borde-decorativo);
-}
-
-.matriz {
-  width: 100%;
-  min-width: 760px;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.matriz th,
-.matriz td {
-  padding: 10px 12px;
-  border-bottom: 1px solid #d4dbe9;
-  text-align: center;
-}
-
-.matriz thead th {
-  background: #e3e9f6;
-  color: var(--texto-secundario);
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.matriz th:first-child,
-.matriz tbody th {
-  min-width: 300px;
-  text-align: left;
-}
-
-.matriz tbody th {
-  color: var(--texto);
-  font-weight: 600;
-}
-
-.matriz tbody tr:last-child th,
-.matriz tbody tr:last-child td {
-  border-bottom: 0;
-}
-
-.insignia {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.insignia.permitido {
-  background: var(--exito-fondo);
-  color: var(--exito);
-}
-
-.insignia.denegado {
-  background: var(--error-fondo);
-  color: var(--error);
-}
-
-.insignia.temporal {
-  background: var(--advertencia-fondo);
-  color: var(--advertencia);
-}
-
-.matriz-nota {
-  margin-top: 12px;
-  margin-bottom: 20px;
-}
-
+/* ==========================================================================
+   Botones
+   ========================================================================== */
 button {
-  min-height: 40px;
-  padding: 8px 16px;
+  min-height: 42px;
+  padding: 9px 20px;
   border: 0;
-  border-radius: 6px;
-  font: inherit;
+  border-radius: 8px;
+  font-family: inherit;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+button:active {
+  transform: scale(0.98);
 }
 
 .btn-primario {
   background: var(--accion-relleno);
   color: #ffffff;
+  box-shadow: 0 2px 6px rgba(30, 63, 136, 0.25);
+}
+
+.btn-primario:hover {
+  background: var(--accion-hover);
+  box-shadow: 0 4px 12px rgba(30, 63, 136, 0.35);
 }
 
 .btn-acento {
@@ -270,41 +239,616 @@ button {
 
 .btn-contorno {
   background: var(--superficie);
-  color: var(--accion);
-  border: 1px solid var(--borde-interactivo);
+  color: var(--accion-relleno);
+  border: 1px solid var(--borde-decorativo);
 }
 
-.ayuda {
-  margin: 8px 0 16px;
-  color: var(--texto-terciario);
-  font-size: 13px;
+.btn-contorno:hover {
+  background: #f4f7fc;
+  border-color: var(--accion);
 }
 
-#nexus-rbac-forbidden {
-  background: var(--error-fondo);
-  color: var(--error);
-  border: 1px solid #e3a0a0;
-  border-radius: 8px;
+/* ==========================================================================
+   Grid de Acciones UI (Directiva has-permission)
+   ========================================================================== */
+.acciones {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+/* ==========================================================================
+   Matriz de Permisos (Tabla 24 Extendida)
+   ========================================================================== */
+.matriz-tarjeta {
+  padding: 0;
+  overflow: hidden;
+}
+
+.matriz-tarjeta h2,
+.matriz-tarjeta > .ayuda {
+  margin-left: 24px;
+  margin-right: 24px;
+}
+
+.matriz-tarjeta h2 {
+  margin-top: 24px;
+}
+
+.tabla-responsive {
+  overflow-x: auto;
+  border-top: 1px solid var(--borde-decorativo);
+}
+
+.matriz {
+  width: 100%;
+  min-width: 780px;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.matriz th,
+.matriz td {
   padding: 12px 16px;
-  margin-bottom: 20px;
+  border-bottom: 1px solid #e2e8f2;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.matriz thead th {
+  background: #ebf0f9;
+  color: var(--texto-secundario);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.matriz th:first-child,
+.matriz tbody th {
+  min-width: 280px;
+  text-align: left;
+}
+
+.matriz tbody th {
+  color: var(--texto);
   font-weight: 600;
 }
 
+.matriz tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.matriz tbody tr:hover {
+  background-color: #f8fafd;
+}
+
+.matriz tbody tr:last-child th,
+.matriz tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* ==========================================================================
+   Insignias de Estado (Badges de la Matriz)
+   ========================================================================== */
+.insignia {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+}
+
+.insignia.permitido {
+  background: var(--exito-fondo);
+  color: var(--exito);
+  border: 1px solid var(--exito-borde);
+}
+
+.insignia.denegado {
+  background: var(--error-fondo);
+  color: var(--error);
+  border: 1px solid var(--error-borde);
+}
+
+.insignia.temporal {
+  background: var(--advertencia-fondo);
+  color: var(--advertencia);
+  border: 1px solid var(--advertencia-borde);
+}
+
+/* ==========================================================================
+   Visor de Logs y Resultados de Servidor
+   ========================================================================== */
 .log {
   margin: 0;
-  max-height: 280px;
+  max-height: 320px;
   overflow: auto;
-  padding: 12px;
-  border-radius: 6px;
-  background: #f4f6fb;
-  border: 1px solid var(--borde-decorativo);
+  padding: 16px;
+  border-radius: 8px;
+  background: #181d33;
+  color: #93b5ff;
+  border: 1px solid var(--cromo-borde);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 13px;
+  line-height: 1.5;
   white-space: pre-wrap;
+}
+
+.panel-resultado {
+  margin-top: 16px;
+  padding: 18px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.panel-forbidden {
+  background: var(--error-fondo);
+  color: var(--error);
+  border: 1px solid var(--error-borde);
+}
+
+.panel-success {
+  background: var(--exito-fondo);
+  color: var(--exito);
+  border: 1px solid var(--exito-borde);
+}
+
+.badge-http {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 5px;
+  font-weight: 700;
+  font-size: 12px;
+  margin-right: 8px;
+}
+
+.badge-403 {
+  background: var(--error);
+  color: #ffffff;
+}
+
+.badge-200 {
+  background: var(--exito);
+  color: #ffffff;
+}
+
+/* Respuesta no-2xx / no-403: autorización superada pero el servidor falló */
+.panel-vacio {
+  background: var(--advertencia-fondo);
+  color: var(--advertencia);
+  border: 1px solid var(--advertencia-borde);
+}
+
+.badge-vacio {
+  background: var(--advertencia);
+  color: #ffffff;
+}
+
+/* ==========================================================================
+   Panel de Control de Acceso por Roles (Sin Matriz Tipo Excel)
+   ========================================================================== */
+.cuadricula-roles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.tarjeta-rol {
+  background: #ffffff;
+  border: 2px solid #dde3f0;
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+  text-align: left;
+}
+
+.tarjeta-rol:hover {
+  transform: translateY(-2px);
+  border-color: #9ab4f0;
+  box-shadow: 0 6px 16px rgba(34, 68, 191, 0.08);
+}
+
+.tarjeta-rol.activa {
+  border-color: #2244bf;
+  background: #f4f7ff;
+  box-shadow: 0 0 0 1px #2244bf, 0 6px 20px rgba(34, 68, 191, 0.12);
+}
+
+.tarjeta-rol__cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.tarjeta-rol__nivel {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e6edf8;
+  color: #1e3f88;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tarjeta-rol.activa .tarjeta-rol__nivel {
+  background: #1e3f88;
+  color: #ffffff;
+}
+
+.tarjeta-rol__nombre {
+  font-size: 16px;
+  font-weight: 700;
+  color: #111726;
+  margin: 0;
+}
+
+.tarjeta-rol__desc {
+  font-size: 12px;
+  color: #48536a;
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* Barra de Resumen de Privilegios */
+.resumen-privilegios {
+  margin-top: 20px;
+  padding: 14px 20px;
+  background: #f8fafd;
+  border: 1px solid #dde3f0;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.barra-progreso-contenedor {
+  flex: 1 1 240px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.barra-progreso {
+  flex: 1;
+  height: 8px;
+  background: #e2e8f2;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.barra-progreso__relleno {
+  height: 100%;
+  background: linear-gradient(90deg, #2244bf, #086b31);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+/* Grupos de Módulos */
+.seccion-modulos {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.grupo-modulo {
+  background: #ffffff;
+  border: 1px solid #e2e8f2;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+}
+
+.grupo-modulo__titulo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 16px 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #1c2340;
+  border-bottom: 1px solid #f0f4fc;
+  padding-bottom: 10px;
+}
+
+.grupo-modulo__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.boton-accion-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #ffffff;
+  border: 1px solid #dde3f0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #1e3f88;
+  width: 100%;
+  text-align: left;
+  min-height: auto;
+}
+
+.boton-accion-card:hover {
+  background: #f4f7ff;
+  border-color: #2244bf;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(34, 68, 191, 0.1);
+}
+
+.boton-accion-card .badge-estado {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--exito-fondo);
+  color: var(--exito);
+  border: 1px solid var(--exito-borde);
+}
+
+.boton-accion-card .badge-estado--temporal {
+  background: var(--advertencia-fondo);
+  color: var(--advertencia);
+  border: 1px solid var(--advertencia-borde);
+}
+
+.nota-header {
+  display: block;
+  font-size: 11.5px;
+  color: #949daf;
+  margin-top: 4px;
+  font-family: Inter, system-ui, sans-serif;
+  font-style: italic;
+}
+
+.toast-feedback {
+  margin-top: 16px;
+  padding: 14px 18px;
+  border-radius: 8px;
+  background: #1c2340;
+  color: #ffffff;
+  font-size: 13.5px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  animation: fadeInScale 0.2s ease-out;
+}
+
+.aviso-sesion {
+  background: #eef4ff;
+  border: 1px solid #b8d0f8;
+  color: #1e3f88;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.contenedor-log {
+  position: relative;
+}
+
+.btn-copiar-json {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: #2b3352;
+  color: #ffffff;
+  border: 1px solid #3d4973;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 5;
+}
+
+.btn-copiar-json:hover {
+  background: #3e4b78;
+}
+
+.btn-copiar-json.copiado {
+  background: #086b31;
+  border-color: #0ea84d;
+}
+
+/* ==========================================================================
+   Estilos de Inspección y Consola (Tokens de Figma - Sin Emojis)
+   ========================================================================== */
+.pestanas-inspeccion {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  margin-bottom: 10px;
+}
+
+.pestana-btn {
+  background: transparent;
+  border: 1px solid var(--borde-decorativo);
+  color: var(--texto-secundario);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pestana-btn:hover {
+  background: #edf2fc;
   color: var(--texto);
 }
 
-.temporal {
+.pestana-btn.activa {
+  background: var(--accion-relleno);
+  border-color: var(--accion-relleno);
+  color: #ffffff;
+}
+
+.json-highlight {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: 13px;
-  color: var(--advertencia);
+  line-height: 1.6;
+  color: #d1d7e5;
+  background: #0f1424;
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid #283354;
+  overflow-x: auto;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.json-clave {
+  color: #79a8f2;
   font-weight: 600;
 }
+
+.json-string {
+  color: #8de3a7;
+}
+
+.json-numero {
+  color: #f7a260;
+  font-weight: 600;
+}
+
+.json-boolean {
+  color: #e5a4f7;
+  font-weight: 600;
+}
+
+.json-null {
+  color: #949daf;
+  font-style: italic;
+}
+
+.tabla-encabezados {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  margin-top: 4px;
+}
+
+.tabla-encabezados th,
+.tabla-encabezados td {
+  padding: 10px 14px;
+  border: 1px solid #283354;
+  text-align: left;
+}
+
+.tabla-encabezados th {
+  background: #171d34;
+  color: #a3b0cc;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tabla-encabezados td {
+  background: #0f1424;
+  color: #d1d7e5;
+  word-break: break-all;
+}
+
+.encabezado-nombre {
+  color: #79a8f2;
+  font-weight: 600;
+}
+
+.filtro-pildoras {
+  display: inline-flex;
+  gap: 4px;
+  background: #e6edf8;
+  padding: 4px;
+  border-radius: 8px;
+}
+
+.pildora-btn {
+  border: none;
+  background: transparent;
+  color: var(--texto-secundario);
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pildora-btn:hover {
+  color: var(--texto);
+}
+
+.pildora-btn.activa {
+  background: #ffffff;
+  color: var(--accion-relleno);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.indicador-estado-conexion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.punto-estado {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.indicador-conectado {
+  background: var(--exito-fondo);
+  color: var(--exito);
+  border: 1px solid var(--exito-borde);
+}
+
+.indicador-conectado .punto-estado {
+  background: var(--exito);
+}
+
+.indicador-desconectado {
+  background: var(--advertencia-fondo);
+  color: var(--advertencia);
+  border: 1px solid var(--advertencia-borde);
+}
+
+.indicador-desconectado .punto-estado {
+  background: var(--advertencia);
+}
+
+
