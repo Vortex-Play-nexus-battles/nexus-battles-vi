@@ -1,0 +1,373 @@
+{
+  "info": {
+    "name": "Servicio de inventario - HU-INV-003 y HU-INV-005",
+    "_postman_id": "7c1e4b02-inventario-inv-003-005",
+    "description": "Validacion contra el servicio en ejecucion de HU-INV-003 (creacion y edicion de elementos propios, propiedad, 403 sobre inventario ajeno) y HU-INV-005 (equipamiento con limites: dos armas, seis partes de armadura, dos items). Las peticiones estan encadenadas: cada una guarda los identificadores que usan las siguientes, asi que se corre la coleccion completa y en orden (Run collection o Newman). La identidad viaja en X-User-Name, la convencion temporal hasta HU-AUT-004.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+      "if (!pm.collectionVariables.get('jugadorA')) {",
+      "  const sufijo = Date.now();",
+      "  pm.collectionVariables.set('jugadorA', 'jugador-a-' + sufijo);",
+      "  pm.collectionVariables.set('jugadorB', 'jugador-b-' + sufijo);",
+      "}"
+    ] } }
+  ],
+  "item": [
+    {
+      "name": "1. HU-INV-003 Creacion y edicion de elementos propios",
+      "item": [
+        {
+          "name": "Sin identidad no se puede crear (401)",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos",
+            "body": { "mode": "raw", "raw": "{\"productoId\":\"prototipo-guerrero-tanque\",\"tipo\":\"HEROE\",\"nombrePropio\":\"Sin dueno\"}" } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 401', () => pm.response.to.have.status(401));",
+            "pm.test('formato de error estandar (RFC 9457)', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'));",
+            "pm.test('titulo Identidad requerida', () => pm.expect(pm.response.json().title).to.eql('Identidad requerida'));"
+          ] } }]
+        },
+        {
+          "name": "A crea su heroe (201)",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-User-Name", "value": "{{jugadorA}}" }],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos",
+            "body": { "mode": "raw", "raw": "{\"productoId\":\"prototipo-guerrero-tanque\",\"tipo\":\"HEROE\",\"nombrePropio\":\"Mi tanque\"}" } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const e = pm.response.json();",
+            "pm.test('responde 201', () => pm.response.to.have.status(201));",
+            "pm.test('Location apunta al elemento creado', () => pm.expect(pm.response.headers.get('Location')).to.include('/api/v1/inventario/elementos/' + e.id));",
+            "pm.test('el elemento queda con id, producto, tipo y nombre', () => {",
+            "  pm.expect(e.id).to.be.a('string').that.is.not.empty;",
+            "  pm.expect(e.productoId).to.eql('prototipo-guerrero-tanque');",
+            "  pm.expect(e.tipo).to.eql('HEROE');",
+            "  pm.expect(e.nombrePropio).to.eql('Mi tanque');",
+            "});",
+            "pm.collectionVariables.set('heroeId', e.id);"
+          ] } }]
+        },
+        {
+          "name": "A renombra su heroe (200): el cambio queda persistido",
+          "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-User-Name", "value": "{{jugadorA}}" }],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos/{{heroeId}}",
+            "body": { "mode": "raw", "raw": "{\"nombrePropio\":\"Tanque de Cesar\"}" } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('nombre modificado', () => pm.expect(pm.response.json().nombrePropio).to.eql('Tanque de Cesar'));"
+          ] } }]
+        },
+        {
+          "name": "La vitrina de A refleja el cambio (HU-INV-001, pagina de 16)",
+          "request": { "method": "GET", "header": [{ "key": "X-User-Name", "value": "{{jugadorA}}" }], "url": "{{baseUrl}}/api/v1/inventario/elementos" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const p = pm.response.json();",
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('pagina de dieciseis', () => pm.expect(p.tamanio).to.eql(16));",
+            "pm.test('el heroe renombrado aparece en la vitrina', () => {",
+            "  const h = p.elementos.find(x => x.id === pm.collectionVariables.get('heroeId'));",
+            "  pm.expect(h).to.not.be.undefined; pm.expect(h.nombrePropio).to.eql('Tanque de Cesar');",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "Solicitud invalida: sin nombre propio (400)",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-User-Name", "value": "{{jugadorA}}" }],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos",
+            "body": { "mode": "raw", "raw": "{\"productoId\":\"espada-corta\",\"tipo\":\"ARMA\"}" } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 400', () => pm.response.to.have.status(400));",
+            "pm.test('detalle legible, sin codigos', () => { const p = pm.response.json(); pm.expect(p.title).to.eql('Solicitud invalida'); pm.expect(p.detail).to.not.match(/400|500/); });"
+          ] } }]
+        },
+        {
+          "name": "B crea un elemento en SU inventario (201)",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-User-Name", "value": "{{jugadorB}}" }],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos",
+            "body": { "mode": "raw", "raw": "{\"productoId\":\"espada-corta\",\"tipo\":\"ARMA\",\"nombrePropio\":\"Espada de B\"}" } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 201', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('elementoDeB', pm.response.json().id);"
+          ] } }]
+        },
+        {
+          "name": "A intenta renombrar el elemento de B: no se permite (403)",
+          "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-User-Name", "value": "{{jugadorA}}" }],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos/{{elementoDeB}}",
+            "body": { "mode": "raw", "raw": "{\"nombrePropio\":\"Robada por A\"}" } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 403', () => pm.response.to.have.status(403));",
+            "pm.test('se informa que el inventario es ajeno', () => pm.expect(pm.response.json().title).to.eql('Inventario ajeno'));"
+          ] } }]
+        },
+        {
+          "name": "El inventario de B quedo intacto",
+          "request": { "method": "GET", "header": [{ "key": "X-User-Name", "value": "{{jugadorB}}" }], "url": "{{baseUrl}}/api/v1/inventario/elementos" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('el elemento de B conserva su nombre', () => {",
+            "  const e = pm.response.json().elementos.find(x => x.id === pm.collectionVariables.get('elementoDeB'));",
+            "  pm.expect(e.nombrePropio).to.eql('Espada de B');",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "Renombrar un elemento inexistente (404)",
+          "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-User-Name", "value": "{{jugadorA}}" }],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos/no-existe-000",
+            "body": { "mode": "raw", "raw": "{\"nombrePropio\":\"Nada\"}" } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 404', () => pm.response.to.have.status(404));",
+            "pm.test('titulo Elemento no encontrado', () => pm.expect(pm.response.json().title).to.eql('Elemento no encontrado'));"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "2. HU-INV-005 Equipamiento con limites",
+      "item": [
+        {
+          "name": "A crea el arma 1",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-User-Name", "value": "{{jugadorA}}" }],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos",
+            "body": { "mode": "raw", "raw": "{\"productoId\":\"espada-una-mano\",\"tipo\":\"ARMA\",\"nombrePropio\":\"Arma 1\"}" } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 201', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('arma1', pm.response.json().id);"
+          ] } }]
+        },
+        {
+          "name": "A crea el arma 2",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-User-Name", "value": "{{jugadorA}}" }],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos",
+            "body": { "mode": "raw", "raw": "{\"productoId\":\"escudo\",\"tipo\":\"ARMA\",\"nombrePropio\":\"Arma 2\"}" } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 201', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('arma2', pm.response.json().id);"
+          ] } }]
+        },
+        {
+          "name": "A crea el arma 3",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-User-Name", "value": "{{jugadorA}}" }],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos",
+            "body": { "mode": "raw", "raw": "{\"productoId\":\"daga\",\"tipo\":\"ARMA\",\"nombrePropio\":\"Arma 3\"}" } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 201', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('arma3', pm.response.json().id);"
+          ] } }]
+        },
+        {
+          "name": "Equipa el arma 1 (200)",
+          "request": { "method": "PUT", "header": [{ "key": "X-User-Name", "value": "{{jugadorA}}" }], "url": "{{baseUrl}}/api/v1/inventario/heroes/{{heroeId}}/equipamiento/{{arma1}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('una arma equipada', () => pm.expect(pm.response.json().armas).to.eql([pm.collectionVariables.get('arma1')]));"
+          ] } }]
+        },
+        {
+          "name": "Equipa el arma 2 (200): dos armas, una por mano",
+          "request": { "method": "PUT", "header": [{ "key": "X-User-Name", "value": "{{jugadorA}}" }], "url": "{{baseUrl}}/api/v1/inventario/heroes/{{heroeId}}/equipamiento/{{arma2}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('dos armas equipadas', () => pm.expect(pm.response.json().armas).to.have.lengthOf(2));"
+          ] } }]
+        },
+        {
+          "name": "La tercera arma se rechaza (409): maximo dos armas",
+          "request": { "method": "PUT", "header": [{ "key": "X-User-Name", "value": "{{jugadorA}}" }], "url": "{{baseUrl}}/api/v1/inventario/heroes/{{heroeId}}/equipamiento/{{arma3}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 409', () => pm.response.to.have.status(409));",
+            "pm.test('limite de equipamiento con mensaje legible', () => { const p = pm.response.json(); pm.expect(p.title).to.eql('Limite de equipamiento'); pm.expect(p.detail).to.include('dos armas'); });"
+          ] } }]
+        },
+        {
+          "name": "Equipar la misma arma dos veces se rechaza (409)",
+          "request": { "method": "PUT", "header": [{ "key": "X-User-Name", "value": "{{jugadorA}}" }], "url": "{{baseUrl}}/api/v1/inventario/heroes/{{heroeId}}/equipamiento/{{arma1}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 409', () => pm.response.to.have.status(409));",
+            "pm.test('titulo Elemento ya equipado', () => pm.expect(pm.response.json().title).to.eql('Elemento ya equipado'));"
+          ] } }]
+        },
+        {
+          "name": "A crea el casco 1 (ARMADURA con parte CASCO)",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-User-Name", "value": "{{jugadorA}}" }],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos",
+            "body": { "mode": "raw", "raw": "{\"productoId\":\"casco-hierro\",\"tipo\":\"ARMADURA\",\"nombrePropio\":\"Casco 1\",\"parteArmadura\":\"CASCO\"}" } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 201', () => pm.response.to.have.status(201));",
+            "pm.test('conserva la parte', () => pm.expect(pm.response.json().parteArmadura).to.eql('CASCO'));",
+            "pm.collectionVariables.set('casco1', pm.response.json().id);"
+          ] } }]
+        },
+        {
+          "name": "A crea el casco 2",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-User-Name", "value": "{{jugadorA}}" }],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos",
+            "body": { "mode": "raw", "raw": "{\"productoId\":\"casco-acero\",\"tipo\":\"ARMADURA\",\"nombrePropio\":\"Casco 2\",\"parteArmadura\":\"CASCO\"}" } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 201', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('casco2', pm.response.json().id);"
+          ] } }]
+        },
+        {
+          "name": "A crea el pecho 1",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-User-Name", "value": "{{jugadorA}}" }],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos",
+            "body": { "mode": "raw", "raw": "{\"productoId\":\"peto-cuero\",\"tipo\":\"ARMADURA\",\"nombrePropio\":\"Pecho 1\",\"parteArmadura\":\"PECHO\"}" } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 201', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('pecho1', pm.response.json().id);"
+          ] } }]
+        },
+        {
+          "name": "Una armadura sin parte se rechaza (400)",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-User-Name", "value": "{{jugadorA}}" }],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos",
+            "body": { "mode": "raw", "raw": "{\"productoId\":\"guantes\",\"tipo\":\"ARMADURA\",\"nombrePropio\":\"Sin parte\"}" } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 400', () => pm.response.to.have.status(400));"
+          ] } }]
+        },
+        {
+          "name": "Equipa el casco 1 (200): ocupa la ranura CASCO",
+          "request": { "method": "PUT", "header": [{ "key": "X-User-Name", "value": "{{jugadorA}}" }], "url": "{{baseUrl}}/api/v1/inventario/heroes/{{heroeId}}/equipamiento/{{casco1}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('la ranura CASCO tiene el casco 1', () => pm.expect(pm.response.json().armaduras.CASCO).to.eql(pm.collectionVariables.get('casco1')));"
+          ] } }]
+        },
+        {
+          "name": "Un segundo casco se rechaza (409): una pieza por ranura",
+          "request": { "method": "PUT", "header": [{ "key": "X-User-Name", "value": "{{jugadorA}}" }], "url": "{{baseUrl}}/api/v1/inventario/heroes/{{heroeId}}/equipamiento/{{casco2}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 409', () => pm.response.to.have.status(409));",
+            "pm.test('informa que la ranura esta ocupada', () => pm.expect(pm.response.json().detail).to.include('CASCO'));"
+          ] } }]
+        },
+        {
+          "name": "Equipa el pecho 1 (200): otra ranura, si cabe",
+          "request": { "method": "PUT", "header": [{ "key": "X-User-Name", "value": "{{jugadorA}}" }], "url": "{{baseUrl}}/api/v1/inventario/heroes/{{heroeId}}/equipamiento/{{pecho1}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('dos ranuras de armadura ocupadas', () => pm.expect(Object.keys(pm.response.json().armaduras)).to.have.members(['CASCO','PECHO']));"
+          ] } }]
+        },
+        {
+          "name": "A crea el item 1",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-User-Name", "value": "{{jugadorA}}" }],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos",
+            "body": { "mode": "raw", "raw": "{\"productoId\":\"pocion-vida\",\"tipo\":\"ITEM\",\"nombrePropio\":\"Item 1\"}" } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 201', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('item1', pm.response.json().id);"
+          ] } }]
+        },
+        {
+          "name": "A crea el item 2",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-User-Name", "value": "{{jugadorA}}" }],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos",
+            "body": { "mode": "raw", "raw": "{\"productoId\":\"anillo-dano\",\"tipo\":\"ITEM\",\"nombrePropio\":\"Item 2\"}" } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 201', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('item2', pm.response.json().id);"
+          ] } }]
+        },
+        {
+          "name": "A crea el item 3",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-User-Name", "value": "{{jugadorA}}" }],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos",
+            "body": { "mode": "raw", "raw": "{\"productoId\":\"amuleto\",\"tipo\":\"ITEM\",\"nombrePropio\":\"Item 3\"}" } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 201', () => pm.response.to.have.status(201));",
+            "pm.collectionVariables.set('item3', pm.response.json().id);"
+          ] } }]
+        },
+        {
+          "name": "Equipa el item 1 (200)",
+          "request": { "method": "PUT", "header": [{ "key": "X-User-Name", "value": "{{jugadorA}}" }], "url": "{{baseUrl}}/api/v1/inventario/heroes/{{heroeId}}/equipamiento/{{item1}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('un item equipado', () => pm.expect(pm.response.json().items).to.have.lengthOf(1));"
+          ] } }]
+        },
+        {
+          "name": "Equipa el item 2 (200): maximo dos items",
+          "request": { "method": "PUT", "header": [{ "key": "X-User-Name", "value": "{{jugadorA}}" }], "url": "{{baseUrl}}/api/v1/inventario/heroes/{{heroeId}}/equipamiento/{{item2}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('dos items equipados', () => pm.expect(pm.response.json().items).to.have.lengthOf(2));"
+          ] } }]
+        },
+        {
+          "name": "El tercer item se rechaza (409)",
+          "request": { "method": "PUT", "header": [{ "key": "X-User-Name", "value": "{{jugadorA}}" }], "url": "{{baseUrl}}/api/v1/inventario/heroes/{{heroeId}}/equipamiento/{{item3}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 409', () => pm.response.to.have.status(409));",
+            "pm.test('mensaje: dos items', () => pm.expect(pm.response.json().detail).to.include('dos items'));"
+          ] } }]
+        },
+        {
+          "name": "Un heroe no se puede equipar como elemento (400)",
+          "request": { "method": "PUT", "header": [{ "key": "X-User-Name", "value": "{{jugadorA}}" }], "url": "{{baseUrl}}/api/v1/inventario/heroes/{{heroeId}}/equipamiento/{{heroeId}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 400', () => pm.response.to.have.status(400));",
+            "pm.test('titulo Elemento no equipable', () => pm.expect(pm.response.json().title).to.eql('Elemento no equipable'));"
+          ] } }]
+        },
+        {
+          "name": "Consulta del equipamiento completo (200)",
+          "request": { "method": "GET", "header": [{ "key": "X-User-Name", "value": "{{jugadorA}}" }], "url": "{{baseUrl}}/api/v1/inventario/heroes/{{heroeId}}/equipamiento" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const e = pm.response.json();",
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('heroeId, 2 armas, 2 armaduras, 2 items', () => {",
+            "  pm.expect(e.heroeId).to.eql(pm.collectionVariables.get('heroeId'));",
+            "  pm.expect(e.armas).to.have.lengthOf(2);",
+            "  pm.expect(Object.keys(e.armaduras)).to.have.lengthOf(2);",
+            "  pm.expect(e.items).to.have.lengthOf(2);",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "Desequipa el arma 1 (200): libera la ranura",
+          "request": { "method": "DELETE", "header": [{ "key": "X-User-Name", "value": "{{jugadorA}}" }], "url": "{{baseUrl}}/api/v1/inventario/heroes/{{heroeId}}/equipamiento/{{arma1}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('queda una sola arma', () => pm.expect(pm.response.json().armas).to.eql([pm.collectionVariables.get('arma2')]));"
+          ] } }]
+        },
+        {
+          "name": "Ahora el arma 3 si cabe (200)",
+          "request": { "method": "PUT", "header": [{ "key": "X-User-Name", "value": "{{jugadorA}}" }], "url": "{{baseUrl}}/api/v1/inventario/heroes/{{heroeId}}/equipamiento/{{arma3}}" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('dos armas otra vez, con la 3', () => pm.expect(pm.response.json().armas).to.include(pm.collectionVariables.get('arma3')));"
+          ] } }]
+        },
+        {
+          "name": "B no puede ver ni tocar el equipamiento del heroe de A (403)",
+          "request": { "method": "GET", "header": [{ "key": "X-User-Name", "value": "{{jugadorB}}" }], "url": "{{baseUrl}}/api/v1/inventario/heroes/{{heroeId}}/equipamiento" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 403', () => pm.response.to.have.status(403));",
+            "pm.test('titulo Inventario ajeno', () => pm.expect(pm.response.json().title).to.eql('Inventario ajeno'));"
+          ] } }]
+        },
+        {
+          "name": "Equipar un elemento inexistente (404)",
+          "request": { "method": "PUT", "header": [{ "key": "X-User-Name", "value": "{{jugadorA}}" }], "url": "{{baseUrl}}/api/v1/inventario/heroes/{{heroeId}}/equipamiento/no-existe-000" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 404', () => pm.response.to.have.status(404));"
+          ] } }]
+        },
+        {
+          "name": "Sin identidad no se consulta equipamiento (401)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/inventario/heroes/{{heroeId}}/equipamiento" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 401', () => pm.response.to.have.status(401));"
+          ] } }]
+        }
+      ]
+    }
+  ],
+  "variable": [{ "key": "baseUrl", "value": "http://localhost:8080" }]
+}
