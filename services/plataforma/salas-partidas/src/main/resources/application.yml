@@ -42,6 +42,15 @@ spring:
     schemas: salas_partidas
     default-schema: salas_partidas
 
+# Chat de HU-JUE-015. La lista negra es la de HU-ADM-002 (moderacion-sanciones).
+chat:
+  lista-negra:
+    url: ${LISTA_NEGRA_VERIFICAR_URL:http://localhost:8086/api/v1/lista-negra/verificar}
+  ws:
+    origenes: ${CHAT_WS_ORIGENES:http://localhost:5173}
+  historial:
+    tamano: ${CHAT_HISTORIAL_TAMANO:50}
+
 # Regla 3: todo servicio expone salud y metricas.
 management:
   endpoints:
