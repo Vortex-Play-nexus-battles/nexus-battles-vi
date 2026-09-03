@@ -183,8 +183,8 @@ form.addEventListener('submit', async (evento) => {
 
     ocultarEstado();
 
-    // TODO equipo: apuntar a la pantalla real post-login cuando exista.
-    window.location.href = './';
+    // Redirección al perfil del usuario autenticado
+    window.location.href = './perfil.html';
   } finally {
     botonEnviar.disabled = false;
   }

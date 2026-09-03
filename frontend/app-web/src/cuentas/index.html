@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Demostración Integral — Cuentas, Cumplimiento y Comercio · Nexus Battles VI</title>
+    <link rel="stylesheet" href="./demo-rbac.css" />
+    <link rel="stylesheet" href="../comun/barra-navegacion.css" />
+    <style>
+      .barra-navegacion {
+        display: flex;
+        gap: 12px;
+        background: #151a30;
+        padding: 8px 32px;
+        border-bottom: 1px solid #2d3754;
+      }
+      .nav-link {
+        color: #c5cde0;
+        text-decoration: none;
+        padding: 6px 14px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        transition: all 0.2s ease;
+      }
+      .nav-link:hover {
+        background: #2244bf;
+        color: #ffffff;
+      }
+      .nav-link.activo {
+        background: #1e3f88;
+        color: #ffffff;
+      }
+      .cuadricula-flujo {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 20px;
+        margin-top: 24px;
+      }
+      .tarjeta-paso {
+        background: #ffffff;
+        border: 1px solid #dde3f0;
+        border-radius: 10px;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        box-shadow: 0 4px 12px rgba(28, 35, 64, 0.04);
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+      }
+      .tarjeta-paso:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(34, 68, 191, 0.12);
+        border-color: #2244bf;
+      }
+      .paso-numero {
+        display: inline-block;
+        font-size: 11.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        color: #1e3f88;
+        background: #eef2ff;
+        padding: 4px 10px;
+        border-radius: 6px;
+        margin-bottom: 12px;
+      }
+      .paso-titulo {
+        font-size: 18px;
+        font-weight: 700;
+        color: #1c2340;
+        margin: 0 0 8px 0;
+      }
+      .paso-desc {
+        font-size: 13.5px;
+        color: #55617d;
+        line-height: 1.5;
+        margin: 0 0 20px 0;
+        flex-grow: 1;
+      }
+      .paso-pie {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-top: 1px solid #f0f4fc;
+        padding-top: 16px;
+      }
+      .paso-autor {
+        font-size: 12px;
+        color: #8a96b2;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Barra Superior Compartida Oficial (HU-INV-004) -->
+    <div id="contenedor-barra"></div>
+
+    <!-- Navegación entre Vistas del Módulo -->
+    <nav class="barra-navegacion">
+      <a href="./index.html" class="nav-link activo">Hub del Flujo</a>
+      <a href="./registro.html" class="nav-link">Registro</a>
+      <a href="./login.html" class="nav-link">Login</a>
+      <a href="./perfil.html" class="nav-link">Perfil</a>
+      <a href="./matriz-permisos.html" class="nav-link">Matriz RBAC</a>
+      <a href="./seguridad-servidor.html" class="nav-link">Seguridad Servidor</a>
+      <a href="./gestion-usuarios.html" class="nav-link">Gestión Admin</a>
+    </nav>
+
+    <header class="cromo">
+      <h1>Nexus Battles VI · Flujo Integral de Cuentas y Seguridad</h1>
+      <p>Grupo 4: Cuentas, Cumplimiento y Comercio · Demostración E2E (Sprint 1)</p>
+    </header>
+
+    <main>
+      <!-- Panel de Estado de Sesión en Vivo -->
+      <section class="tarjeta" style="background: linear-gradient(180deg, #ffffff 0%, #f9fbfd 100%);">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+          <div>
+            <h2 style="margin: 0 0 6px 0; font-size: 18px;">Estado de Sesión del Usuario</h2>
+            <p id="texto-estado-sesion" style="margin: 0; font-size: 14px; color: var(--texto-secundario);">
+              Verificando sesión en almacenamiento local…
+            </p>
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <button id="btn-cerrar-sesion" type="button" class="btn-secundario" style="font-size: 13px; padding: 7px 16px;">
+              Cerrar Sesión
+            </button>
+            <a href="./login.html" id="btn-ir-login" class="btn-primario" style="text-decoration: none; font-size: 13px; padding: 7px 16px;">
+              Iniciar Sesión
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <!-- Cuadrícula con los 6 Pasos del User Journey -->
+      <section>
+        <div style="margin-top: 24px; margin-bottom: 8px;">
+          <h2 style="margin: 0 0 4px 0;">Viaje del Usuario de Punta a Punta (User Journey E2E)</h2>
+          <p style="margin: 0; font-size: 14px; color: var(--texto-secundario);">
+            Sigue la secuencia de pasos para presenciar el ciclo de vida completo: desde la creación de la cuenta hasta la gobernanza de seguridad en el servidor.
+          </p>
+        </div>
+
+        <div class="cuadricula-flujo">
+          <!-- Paso 1: Registro -->
+          <article class="tarjeta-paso">
+            <div>
+              <span class="paso-numero">Paso 1 · Identidad</span>
+              <h3 class="paso-titulo">Registro de Jugador</h3>
+              <p class="paso-desc">
+                Crea una cuenta nueva validando formato de correo institucional, reglas de contraseña y unicidad de apodo en <code>ms-identidad</code>.
+              </p>
+            </div>
+            <div class="paso-pie">
+              <span class="paso-autor">HU-AUT-001</span>
+              <a href="./registro.html" class="btn-secundario" style="text-decoration: none; font-size: 12.5px; padding: 6px 14px;">
+                Abrir Registro
+              </a>
+            </div>
+          </article>
+
+          <!-- Paso 2: Login -->
+          <article class="tarjeta-paso">
+            <div>
+              <span class="paso-numero">Paso 2 · Autenticación</span>
+              <h3 class="paso-titulo">Inicio de Sesión y JWT</h3>
+              <p class="paso-desc">
+                Autentica credenciales y emite el token criptográfico JWT firmado (HS256) con versión y rol, almacenándolo en la sesión.
+              </p>
+            </div>
+            <div class="paso-pie">
+              <span class="paso-autor">HU-AUT-004</span>
+              <a href="./login.html" class="btn-secundario" style="text-decoration: none; font-size: 12.5px; padding: 6px 14px;">
+                Iniciar Sesión
+              </a>
+            </div>
+          </article>
+
+          <!-- Paso 3: Perfil -->
+          <article class="tarjeta-paso">
+            <div>
+              <span class="paso-numero">Paso 3 · Personalización</span>
+              <h3 class="paso-titulo">Perfil y Galería de Avatares</h3>
+              <p class="paso-desc">
+                El jugador consulta sus datos, redacta su biografía y selecciona su avatar oficial entre las 10 opciones del catálogo.
+              </p>
+            </div>
+            <div class="paso-pie">
+              <span class="paso-autor">HU-PER-001</span>
+              <a href="./perfil.html" class="btn-secundario" style="text-decoration: none; font-size: 12.5px; padding: 6px 14px;">
+                Ver Mi Perfil
+              </a>
+            </div>
+          </article>
+
+          <!-- Paso 4: Matriz RBAC -->
+          <article class="tarjeta-paso" style="border-left: 4px solid #2244bf;">
+            <div>
+              <span class="paso-numero">Paso 4 · Control de Acceso</span>
+              <h3 class="paso-titulo">Panel y Directiva RBAC</h3>
+              <p class="paso-desc">
+                Inspecciona los 4 roles y la matriz 12×4. La directiva reactiva <code>has-permission</code> oculta los módulos administrativos para el rol Jugador.
+              </p>
+            </div>
+            <div class="paso-pie">
+              <span class="paso-autor">HU-RBAC-001 (Andrés)</span>
+              <a href="./matriz-permisos.html" class="btn-primario" style="text-decoration: none; font-size: 12.5px; padding: 6px 14px;">
+                Ver Panel RBAC
+              </a>
+            </div>
+          </article>
+
+          <!-- Paso 5: Seguridad Server-Side -->
+          <article class="tarjeta-paso" style="border-left: 4px solid #b81a1a;">
+            <div>
+              <span class="paso-numero">Paso 5 · Seguridad Perimetral</span>
+              <h3 class="paso-titulo">Verificación en Servidor y Fail-Closed</h3>
+              <p class="paso-desc">
+                Demuestra el rechazo de peticiones no autorizadas o con tokens adulterados: interceptor server-side, Problem Details RFC 7807 y auditoría.
+              </p>
+            </div>
+            <div class="paso-pie">
+              <span class="paso-autor">HU-RBAC-004 (Andrés)</span>
+              <a href="./seguridad-servidor.html" class="btn-primario" style="text-decoration: none; font-size: 12.5px; padding: 6px 14px; background: #b81a1a;">
+                Consola Servidor
+              </a>
+            </div>
+          </article>
+
+          <!-- Paso 6: Gestión Administrativa -->
+          <article class="tarjeta-paso">
+            <div>
+              <span class="paso-numero">Paso 6 · Gobernanza</span>
+              <h3 class="paso-titulo">Gestión de Usuarios y Sanciones</h3>
+              <p class="paso-desc">
+                El Administrador busca usuarios, aplica suspensiones temporales o baneos permanentes, y crea nuevas cuentas administrativas.
+              </p>
+            </div>
+            <div class="paso-pie">
+              <span class="paso-autor">HU-ADM-001</span>
+              <a href="./gestion-usuarios.html" class="btn-secundario" style="text-decoration: none; font-size: 12.5px; padding: 6px 14px;">
+                Gestión Admin
+              </a>
+            </div>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <script type="module">
+      import { construirBarra } from '../comun/barra-navegacion.js';
+
+      const token = sessionStorage.getItem('nexus.token');
+      const rol = sessionStorage.getItem('nexus.rolActual');
+      const apodo = sessionStorage.getItem('nexus.apodoActual');
+
+      const contenedorBarra = document.getElementById('contenedor-barra');
+      if (contenedorBarra) {
+        contenedorBarra.replaceChildren(
+          construirBarra({
+            seccionActiva: 'cuenta',
+            sesion: { autenticado: Boolean(token) },
+            navegar: (ruta) => {
+              if (ruta === '/inventario') {
+                window.location.href = '../contenido/inventario/inventario.html';
+              } else {
+                window.location.href = './index.html';
+              }
+            }
+          })
+        );
+      }
+
+      const textoEstadoSesion = document.getElementById('texto-estado-sesion');
+      const btnCerrarSesion = document.getElementById('btn-cerrar-sesion');
+      const btnIrLogin = document.getElementById('btn-ir-login');
+
+      if (token) {
+        textoEstadoSesion.innerHTML = `Conectado como <strong>${apodo || 'Usuario'}</strong> · Rol: <strong>${rol || 'JUGADOR'}</strong> · Token JWT activo.`;
+        btnCerrarSesion.style.display = 'inline-block';
+        btnIrLogin.style.display = 'none';
+      } else {
+        textoEstadoSesion.textContent = 'Sin sesión activa. Inicia sesión en el Paso 2 para probar con credenciales reales, o explora las pantallas en modo demostración.';
+        btnCerrarSesion.style.display = 'none';
+        btnIrLogin.style.display = 'inline-block';
+      }
+
+      btnCerrarSesion.addEventListener('click', () => {
+        sessionStorage.clear();
+        window.location.reload();
+      });
+    </script>
+  </body>
+</html>
