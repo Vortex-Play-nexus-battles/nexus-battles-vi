@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chat · The Nexus Battles VI</title>
+
+    <!-- Sistema de diseno compartido, sin estilos propios. Mismas rutas que crear-sala.html. -->
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
+  </head>
+
+  <body>
+    <!-- Misma cabecera que las demas vistas mientras no haya fragmentos compartidos. -->
+    <header class="cabecera">
+      <div class="cabecera__nav">
+        <span class="cabecera__marca">NEXUS BATTLES VI</span>
+        <nav class="cabecera__nav" aria-label="Navegacion principal">
+          <a class="cabecera__destino activo" href="#" aria-current="page">Jugar online</a>
+          <a class="cabecera__destino" href="#">Misiones</a>
+          <a class="cabecera__destino" href="#">Torneo</a>
+          <a class="cabecera__destino" href="#">Mi inventario</a>
+          <a class="cabecera__destino" href="#">Subasta</a>
+        </nav>
+      </div>
+
+      <label class="cabecera__buscador">
+        <span class="solo-lectores">Buscar productos</span>
+        <input class="cabecera__buscador-texto" type="search" placeholder="Buscar productos" />
+      </label>
+
+      <div class="cabecera__acciones">
+        <span class="t-etiqueta" data-zona="apodo"></span>
+      </div>
+    </header>
+
+    <main id="chat" class="pagina pila">
+      <div class="pila pila--compacta">
+        <h1 data-zona="titulo">Chat</h1>
+        <p class="t-cuerpo">
+          Lo que escribes pasa por el filtro de contenido antes de salir. El historial queda para
+          quien entra despues.
+          <span class="conexion conexion--reconectando" data-zona="conexion">Conectando</span>
+        </p>
+      </div>
+
+      <section class="tarjeta pila" aria-label="Conversacion">
+        <ol class="pila pila--compacta" data-zona="mensajes" aria-live="polite"></ol>
+      </section>
+
+      <form id="formulario-chat" class="tarjeta pila" novalidate>
+        <div data-zona="aviso" hidden></div>
+
+        <div class="campo campo--area">
+          <label class="campo__etiqueta" for="texto">Mensaje</label>
+          <textarea class="campo__control" id="texto" name="texto" rows="2" maxlength="500"
+                    required></textarea>
+          <p class="campo__pista">Hasta 500 caracteres.</p>
+        </div>
+
+        <!-- CA-02: compartir un logro de mision. Opcional, plegado por defecto. -->
+        <details class="pila pila--compacta">
+          <summary class="t-etiqueta">Compartir un logro de mision</summary>
+          <div class="fila">
+            <div class="campo">
+              <label class="campo__etiqueta" for="logroMision">Mision</label>
+              <input class="campo__control" id="logroMision" name="logroMision" type="text" />
+            </div>
+            <div class="campo">
+              <label class="campo__etiqueta" for="logroTitulo">Logro</label>
+              <input class="campo__control" id="logroTitulo" name="logroTitulo" type="text" />
+            </div>
+          </div>
+        </details>
+
+        <button class="boton boton--primario" type="submit">Enviar</button>
+      </form>
+    </main>
+
+    <!-- RNF-DIS-002: el chatbot esta en todas las vistas, sin excepcion. -->
+    <button class="chatbot-flotante" type="button" aria-label="Abrir el asistente">IA</button>
+
+    <script type="module">
+      import { montarChat, canalDesdeUrl, CLAVE_TOKEN } from './chat.js';
+
+      const canal = canalDesdeUrl(window.location.search);
+      document.querySelector('[data-zona="titulo"]').textContent = canal.idSala
+        ? 'Chat de la sala'
+        : 'Chat general';
+      document.querySelector('[data-zona="apodo"]').textContent =
+        sessionStorage.getItem('nexus.apodoActual') ?? '';
+
+      montarChat(document.getElementById('chat'), {
+        canal,
+        token: sessionStorage.getItem(CLAVE_TOKEN),
+      });
+    </script>
+  </body>
+</html>
