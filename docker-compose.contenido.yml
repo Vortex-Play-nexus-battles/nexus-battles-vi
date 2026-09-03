@@ -3,7 +3,7 @@
 # Uso:
 #   docker compose -f docker-compose.yml -f docker-compose.contenido.yml up -d
 #
-# Levanta los 4 servicios de services/contenido/ junto con MongoDB 7 y la
+# Levanta los 4 servicios de services/contenido/ junto con MongoDB 8 y la
 # infra comun de plataforma (Postgres, Redis, Mailpit del docker-compose.yml
 # base). Cada servicio se construye desde la raiz del monorepo.
 #
@@ -15,7 +15,7 @@ services:
 
   # --- Base de datos documental (regla 7: un esquema por servicio) ---
   contenido-mongo:
-    image: mongo:7.0
+    image: mongo:8.0
     container_name: contenido-mongo
     ports:
       - "27017:27017"
