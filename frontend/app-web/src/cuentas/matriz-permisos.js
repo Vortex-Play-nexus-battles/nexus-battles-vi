@@ -42,9 +42,6 @@ const BASES_BACKEND = [
 ];
 
 const selectorRol = document.querySelector('#selector-rol');
-const rolActivoEtiqueta = document.querySelector('#rol-activo-etiqueta');
-const contadorPrivilegios = document.querySelector('#contador-privilegios');
-const progresoRelleno = document.querySelector('#progreso-relleno');
 const toastAccion = document.querySelector('#toast-accion');
 const toastMensaje = document.querySelector('#toast-mensaje');
 const tarjetasRoles = document.querySelectorAll('.tarjeta-rol');
@@ -59,13 +56,6 @@ const NOMBRES_ROLES = {
   MODERADOR: 'Moderador',
   ADMINISTRADOR: 'Administrador',
   SUPER_ADMINISTRADOR: 'Super Administrador'
-};
-
-const NIVELES_ROLES = {
-  JUGADOR: 'Nivel 1',
-  MODERADOR: 'Nivel 2',
-  ADMINISTRADOR: 'Nivel 3',
-  SUPER_ADMINISTRADOR: 'Nivel 4 - Total'
 };
 
 // La matriz de referencia local (Tabla 24 extendida) vive en matriz-rbac.js,
@@ -151,26 +141,13 @@ function actualizarVistaRol() {
     card.setAttribute('aria-checked', String(esActiva));
   });
 
-  // 2. Actualizar etiquetas de resumen y cálculo de capacidad
-  rolActivoEtiqueta.textContent = `Rol Activo: ${NOMBRES_ROLES[rol]} (${NIVELES_ROLES[rol]})`;
-
-  let permitidas = 0;
-  const total = 12;
+  // 2. Pasar la matriz y el rol a la directiva reactiva (ÚNICA dueña del display)
   const permisosRol = matrizActiva[rol] || {};
-  for (const accion of Object.keys(permisosRol)) {
-    if (permisosRol[accion] === 'GRANTED' || permisosRol[accion] === 'TEMPORARY') {
-      permitidas++;
-    }
-  }
-  contadorPrivilegios.textContent = `${permitidas} / ${total} Acciones`;
-  progresoRelleno.style.width = `${(permitidas / total) * 100}%`;
-
-  // 3. Pasar la matriz y el rol a la directiva reactiva (ÚNICA dueña del display)
   setPermissionMatrix(matrizActiva);
   setCurrentRole(rol);
   applyHasPermissionDirective();
 
-  // 4. Actualizar badges semánticos de estado para los elementos permitidos
+  // 3. Actualizar badges semánticos de estado para los elementos permitidos
   botonesAccion.forEach((btn) => {
     const accion = btn.dataset.hasPermission;
     const tipo = permisosRol[accion];
