@@ -320,18 +320,20 @@ jobs:
           # PENDIENTE (TODO_*): secrets propios de ms-identidad (equipo
           # Cuentas), todavia no creados en GitHub -- ver la validacion de
           # "fallo visible" en desplegar.sh si faltan y ms-identidad esta
-          # en esta corrida. SPRING_PROFILES_ACTIVE NO se fuerza aqui (solo
-          # en produccion, ver mas abajo), hasta que Cristian confirme como
-          # manejar perfiles en dev/test.
+          # en esta corrida. SPRING_PROFILES_ACTIVE="dev": no existe
+          # application-test.properties (HU-RBAC-005), asi que test tambien
+          # activa el perfil "dev" -- usar "test" aqui rompe el despliegue
+          # por falta de configuracion de base de datos.
           MS_IDENTIDAD_DB_URL: ${{ secrets.TODO_DB_URL_MS_IDENTIDAD }}
           MS_IDENTIDAD_DB_USER: ${{ secrets.TODO_DB_USER_MS_IDENTIDAD }}
           MS_IDENTIDAD_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_IDENTIDAD }}
           LISTA_NEGRA_URL: ${{ secrets.TODO_LISTA_NEGRA_URL }}
+          MS_IDENTIDAD_SPRING_PROFILES_ACTIVE: "dev"
         with:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL
+          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -395,16 +397,18 @@ jobs:
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASS: ${{ secrets.DB_PASS }}
           # PENDIENTE (TODO_*): ver el mismo comentario en el job "Desplegar
-          # en Dev" -- misma logica, sin SPRING_PROFILES_ACTIVE aqui tampoco.
+          # en Dev" -- misma logica. SPRING_PROFILES_ACTIVE="dev" tambien
+          # aqui: no existe application-test.properties (HU-RBAC-005).
           MS_IDENTIDAD_DB_URL: ${{ secrets.TODO_DB_URL_MS_IDENTIDAD }}
           MS_IDENTIDAD_DB_USER: ${{ secrets.TODO_DB_USER_MS_IDENTIDAD }}
           MS_IDENTIDAD_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_IDENTIDAD }}
           LISTA_NEGRA_URL: ${{ secrets.TODO_LISTA_NEGRA_URL }}
+          MS_IDENTIDAD_SPRING_PROFILES_ACTIVE: "dev"
         with:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL
+          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh

@@ -51,6 +51,9 @@ public class LoginService {
     @Autowired
     private JwtService jwtService;
 
+    @Autowired
+    private AuditoriaLoginClient auditoriaLoginClient;
+
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     @Transactional
@@ -95,7 +98,6 @@ public class LoginService {
         // --- Verificación de contraseña ---
         if (!passwordEncoder.matches(datos.getPassword(), usuario.getPassword())) {
             intentosFallidosService.registrarIntentoFallido(usuario.getId());
-            auditLog.info("LOGIN_FALLIDO email={} ip={}", datos.getEmail(), direccionIp);
             throw credencialesInvalidas(datos.getEmail(), direccionIp);
         }
 
@@ -124,10 +126,10 @@ public class LoginService {
 
         auditLog.info("LOGIN_EXITOSO email={} ip={}", datos.getEmail(), direccionIp);
 
-        // Token JWT firmado — reemplaza la confianza ciega en X-User-Role.
-        // Pendiente: Andrés debe actualizar su SecurityInterceptor para
-        // verificar este token en vez de leer el header directamente.
-        String token = jwtService.generarToken(usuario.getApodo(), usuario.getRol().getNombre());
+        // Token JWT firmado, incluyendo la versión vigente (HU-RBAC-003) —
+        // reemplaza la confianza ciega en X-User-Role.
+        String token = jwtService.generarToken(
+            usuario.getApodo(), usuario.getRol().getNombre(), usuario.getVersionToken());
 
         return new LoginResponse(
             usuario.getId(),
@@ -167,7 +169,17 @@ public class LoginService {
     }
 
     private CredencialesInvalidasException credencialesInvalidas(String email, String ip) {
-        auditLog.info("LOGIN_FALLIDO email={} ip={} motivo=CREDENCIALES_INVALIDAS", email, ip);
-        return new CredencialesInvalidasException("Correo o contraseña incorrectos.");
+
+        auditLog.info(
+            "LOGIN_FALLIDO email={} ip={} motivo=CREDENCIALES_INVALIDAS_ENTORNO",
+            email,
+            ip
+        );
+
+        auditoriaLoginClient.registrarLoginFallido(email, ip);
+
+        return new CredencialesInvalidasException(
+            "Correo o contraseña incorrectos."
+        );
     }
 }

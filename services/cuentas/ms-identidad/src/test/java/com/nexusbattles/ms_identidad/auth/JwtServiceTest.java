@@ -26,7 +26,7 @@ class JwtServiceTest {
     @Test
     void debeGenerarUnTokenNoNuloYConLaEstructuraEsperada() {
 
-        String token = jwtService.generarToken("cristianc", "JUGADOR");
+        String token = jwtService.generarToken("cristianc", "JUGADOR", 0);
 
         assertNotNull(token);
         // Un JWT siempre tiene 3 partes separadas por puntos: header.payload.firma
@@ -36,7 +36,7 @@ class JwtServiceTest {
     @Test
     void debeValidarYDevolverElApodoYRolCorrectos() {
 
-        String token = jwtService.generarToken("cristianc", "JUGADOR");
+        String token = jwtService.generarToken("cristianc", "JUGADOR", 0);
 
         Claims claims = jwtService.validarYObtenerClaims(token);
 
@@ -47,7 +47,7 @@ class JwtServiceTest {
     @Test
     void debeRechazarUnTokenAlteradoOInvalido() {
 
-        String token = jwtService.generarToken("cristianc", "JUGADOR");
+        String token = jwtService.generarToken("cristianc", "JUGADOR", 0);
         // Se altera el último caracter de la firma, simulando una manipulación.
         String tokenAlterado = token.substring(0, token.length() - 1) + "X";
 
@@ -64,5 +64,25 @@ class JwtServiceTest {
             JwtException.class,
             () -> jwtService.validarYObtenerClaims("esto-no-es-un-token-valido")
         );
+    }
+
+    @Test
+    void debeConsiderarVigenteUnTokenConLaMismaVersion() {
+
+        String token = jwtService.generarToken("cristianc", "JUGADOR", 3);
+        Claims claims = jwtService.validarYObtenerClaims(token);
+
+        assertTrue(jwtService.esVersionVigente(claims, 3));
+    }
+
+    @Test
+    void debeRechazarComoNoVigenteUnTokenConVersionDesactualizada() {
+
+        // Token generado cuando el usuario tenía versión 1 (antes de un
+        // cambio de rol), comparado contra la versión actual (2).
+        String token = jwtService.generarToken("cristianc", "JUGADOR", 1);
+        Claims claims = jwtService.validarYObtenerClaims(token);
+
+        assertFalse(jwtService.esVersionVigente(claims, 2));
     }
 }
