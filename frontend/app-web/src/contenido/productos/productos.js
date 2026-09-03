@@ -30,7 +30,12 @@ function plantilla() {
         <h1>Crear producto del catálogo</h1>
         <p>Registra un producto con los atributos definidos para su tipo.</p>
       </div>
-      <span class="productos-cabecera__insignia">Administración</span>
+    <div class="productos-cabecera__acciones">
+  <span class="productos-cabecera__insignia">Administración</span>
+  <a class="productos-cabecera__enlace" href="./panel-catalogo.html">
+    Estado del catálogo
+  </a>
+</div>
     </header>
 
     <form class="producto-formulario" novalidate>

@@ -1,5 +1,10 @@
 import { jest } from '@jest/globals';
-import { crearProducto, RUTA_PRODUCTOS } from './cliente-productos.js';
+import {
+  consultarEstadisticasCatalogo,
+  crearProducto,
+  RUTA_ESTADISTICAS,
+  RUTA_PRODUCTOS,
+} from './cliente-productos.js';
 
 function respuesta(status, cuerpo) {
   return {
@@ -49,5 +54,45 @@ test('conserva el detalle Problem Details de una solicitud inválida', async () 
   await expect(crearProducto(solicitud, { fetchImpl })).rejects.toMatchObject({
     status: 400,
     message: 'El tiraje debe ser -1 o mayor que cero',
+  });
+});
+
+test('consulta el resumen actual del catálogo mediante GET', async () => {
+  const resumen = {
+    total: 8,
+    porTipo: {
+      HEROE: 2,
+      HABILIDAD: 1,
+      ARMA: 2,
+      ARMADURA: 1,
+      ITEM: 1,
+      EPICA: 1,
+    },
+    porEstado: {
+      ACTIVO: 6,
+      UNICO: 1,
+      SUSPENDIDO: 1,
+    },
+  };
+  const fetchImpl = jest.fn(async () => respuesta(200, resumen));
+
+  await expect(consultarEstadisticasCatalogo({ fetchImpl })).resolves.toEqual(resumen);
+  expect(fetchImpl).toHaveBeenCalledWith(RUTA_ESTADISTICAS, {
+    method: 'GET',
+  });
+});
+
+test('conserva el detalle del error al consultar las estadísticas', async () => {
+  const fetchImpl = jest.fn(async () =>
+    respuesta(401, {
+      title: 'No autenticado',
+      status: 401,
+      detail: 'Se requiere un token Bearer válido',
+    }),
+  );
+
+  await expect(consultarEstadisticasCatalogo({ fetchImpl })).rejects.toMatchObject({
+    status: 401,
+    message: 'Se requiere un token Bearer válido',
   });
 });
