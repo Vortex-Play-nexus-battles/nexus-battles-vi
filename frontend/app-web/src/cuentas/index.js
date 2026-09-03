@@ -7,10 +7,24 @@
  */
 
 import { construirBarra } from '../comun/barra-navegacion.js';
+import { contarAccionesPermitidas, TOTAL_ACCIONES } from './matriz-rbac.js';
 
 const CLAVE_TOKEN = 'nexus.token';
 const CLAVE_ROL = 'nexus.rolActual';
 const CLAVE_APODO = 'nexus.apodoActual';
+
+/**
+ * Acciones del hub que no son acciones RBAC directas se mapean a la más
+ * cercana que SÍ tiene endpoint en el simulador de seguridad-servidor.html,
+ * para que "Comprobar 403" abra la consola ya configurada.
+ */
+const ACCION_A_SIMULADOR = {
+  GESTIONAR_CUENTAS: 'BANEAR_DEFINITIVAMENTE',
+  CREAR_ADMIN_MODERADOR: 'ASIGNAR_ROL',
+  ASIGNAR_ROL: 'ASIGNAR_ROL',
+  BANEAR_DEFINITIVAMENTE: 'BANEAR_DEFINITIVAMENTE',
+  MODIFICAR_PERFIL_PROPIO: 'MODIFICAR_PERFIL_PROPIO'
+};
 
 const ESTRUCTURA_FASES = [
   {
@@ -110,32 +124,36 @@ const ESTRUCTURA_FASES = [
   }
 ];
 
+// Metadatos descriptivos por rol. El conteo de acciones NO se guarda aquí:
+// se calcula desde matriz-rbac.js para no divergir del panel RBAC.
 const METADATA_ROLES = {
   JUGADOR: {
     nombre: 'Jugador (Nivel 1)',
-    acciones: '4 / 12 Acciones Autorizadas',
     subtitulo: 'Portal del Jugador · Arena de Combate',
     descripcion: 'Sesión estándar de jugador. Puedes personalizar tu perfil, auditar tus permisos con la directiva reactiva y simular intentos de bypass en el laboratorio de seguridad.'
   },
   MODERADOR: {
     nombre: 'Moderador (Nivel 2)',
-    acciones: '7 / 12 Acciones Autorizadas',
     subtitulo: 'Panel de Supervisión de Comunidad',
     descripcion: 'Sesión con facultades de moderación de contenido y sanciones disciplinarias temporales. Las operaciones de tienda y baneo definitivo están restringidas.'
   },
   ADMINISTRADOR: {
     nombre: 'Administrador (Nivel 3)',
-    acciones: '10 / 12 Acciones Autorizadas',
     subtitulo: 'Consola de Administración del Sistema',
     descripcion: 'Sesión administrativa plena con control de economía, catálogo de tienda, gestión de usuarios y aplicación de baneos definitivos.'
   },
   SUPER_ADMINISTRADOR: {
     nombre: 'Super Administrador (Nivel 4)',
-    acciones: '11 / 12 Acciones Autorizadas (Default-Deny en Registro)',
     subtitulo: 'Gobernanza y Control Total de Plataforma',
-    descripcion: 'Máxima autoridad de The Nexus Battles VI. Facultades de nombramiento de administradores, asignación de roles y auditoría global de seguridad.'
+    descripcion: 'Máxima autoridad de The Nexus Battles VI. Facultades de nombramiento de administradores, asignación de roles y auditoría global de seguridad.',
+    notaAcciones: '(Default-Deny en Registro)'
   }
 };
+
+function etiquetaAcciones(rol) {
+  const nota = METADATA_ROLES[rol]?.notaAcciones ? ` ${METADATA_ROLES[rol].notaAcciones}` : '';
+  return `${contarAccionesPermitidas(rol)} / ${TOTAL_ACCIONES} Acciones Autorizadas${nota}`;
+}
 
 function montarBarraOficial() {
   const token = sessionStorage.getItem(CLAVE_TOKEN);
@@ -164,7 +182,6 @@ function montarNavegacionContextual(autenticado, rol, apodo) {
   linksNav.replaceChildren();
   chipArea.replaceChildren();
 
-  // Enlace siempre visible: Hub Principal
   const linkHub = document.createElement('a');
   linkHub.href = './index.html';
   linkHub.className = 'nav-link activo';
@@ -172,7 +189,6 @@ function montarNavegacionContextual(autenticado, rol, apodo) {
   linksNav.appendChild(linkHub);
 
   if (autenticado) {
-    // Links de usuario autenticado (cero Registro o Login estorbando)
     const linksAutenticado = [
       { texto: 'Mi Perfil', url: './perfil.html' },
       { texto: 'Matriz RBAC (HU-RBAC-001)', url: './matriz-permisos.html' },
@@ -191,7 +207,6 @@ function montarNavegacionContextual(autenticado, rol, apodo) {
       linksNav.appendChild(a);
     });
 
-    // Chip de sesión a la derecha
     const chip = document.createElement('span');
     chip.className = 'chip-usuario';
     chip.textContent = `${apodo} (${rol})`;
@@ -208,7 +223,6 @@ function montarNavegacionContextual(autenticado, rol, apodo) {
     chipArea.appendChild(chip);
     chipArea.appendChild(btnCerrar);
   } else {
-    // Links para visitante sin sesión
     const linkLogin = document.createElement('a');
     linkLogin.href = './login.html';
     linkLogin.className = 'nav-link';
@@ -226,6 +240,22 @@ function montarNavegacionContextual(autenticado, rol, apodo) {
     chipAnon.className = 'chip-usuario';
     chipAnon.textContent = 'Modo Demostración (Sin sesión)';
     chipArea.appendChild(chipAnon);
+  }
+}
+
+/**
+ * Ajusta el texto del conmutador para dejar claro si la vista es una
+ * simulación (sin login) o refleja la sesión real.
+ */
+function actualizarNotaSimulacion(autenticado, rolReal) {
+  const nota = document.getElementById('nota-simulacion');
+  if (!nota) return;
+  if (autenticado) {
+    nota.textContent = `Sesión real activa como ${rolReal}. El conmutador solo previsualiza cómo vería el hub cada uno de los otros roles.`;
+    nota.classList.add('nota-simulacion--real');
+  } else {
+    nota.textContent = 'Vista simulada para la demostración — no representa una sesión autenticada real. Inicia sesión para cargar un JWT verdadero.';
+    nota.classList.remove('nota-simulacion--real');
   }
 }
 
@@ -247,7 +277,7 @@ function renderizarHero(autenticado, rol, apodo) {
     heroDesc.textContent = meta.descripcion;
     heroApodo.textContent = apodo;
     heroRolBadge.textContent = `Rol: ${rol}`;
-    heroAccionesBadge.textContent = meta.acciones;
+    heroAccionesBadge.textContent = etiquetaAcciones(rol);
   } else {
     heroTag.textContent = 'Demostración de Cuentas (Sprint 1)';
     saludoUsuario.textContent = 'Centro de Demostración E2E · Grupo 4';
@@ -255,7 +285,7 @@ function renderizarHero(autenticado, rol, apodo) {
     heroDesc.textContent = 'Inicia sesión con tus credenciales para cargar tu token criptográfico en el flujo, o explora las fases a continuación seleccionando el rol con los botones superiores.';
     heroApodo.textContent = 'Invitado';
     heroRolBadge.textContent = `Rol Simulado: ${rol}`;
-    heroAccionesBadge.textContent = meta.acciones;
+    heroAccionesBadge.textContent = etiquetaAcciones(rol);
   }
 }
 
@@ -267,7 +297,6 @@ function renderizarFases(rolActual) {
     const bloque = document.createElement('section');
     bloque.className = 'fase-bloque';
 
-    // Encabezado de la Fase
     const enc = document.createElement('header');
     enc.className = 'fase-encabezado';
     enc.innerHTML = `
@@ -275,14 +304,13 @@ function renderizarFases(rolActual) {
         <div class="fase-numero">${fase.numero}</div>
         <div>
           <h2 class="fase-titulo">${fase.titulo}</h2>
-          <p style="margin: 3px 0 0 0; font-size: 13.5px; color: #55617d;">${fase.descripcion}</p>
+          <p class="fase-descripcion">${fase.descripcion}</p>
         </div>
       </div>
       <span class="fase-autor">${fase.autor}</span>
     `;
     bloque.appendChild(enc);
 
-    // Cuadrícula de tarjetas de la fase
     const grid = document.createElement('div');
     grid.className = 'cuadricula-tarjetas';
 
@@ -303,29 +331,28 @@ function renderizarFases(rolActual) {
           </div>
           <div class="tarjeta-pie">
             <span class="tarjeta-meta">Permiso: <code>${paso.accionRequerida}</code></span>
-            <a href="${paso.url}" class="btn-primario" style="text-decoration: none; font-size: 12.5px; padding: 6px 14px;">
-              ${paso.textoBoton}
-            </a>
+            <a href="${paso.url}" class="btn-primario btn-paso">${paso.textoBoton}</a>
           </div>
         `;
       } else {
+        const accionSim = ACCION_A_SIMULADOR[paso.accionRequerida] || '';
+        const url403 = `./seguridad-servidor.html?rol=${encodeURIComponent(rolActual)}` +
+          (accionSim ? `&accion=${encodeURIComponent(accionSim)}` : '');
         tarjeta.innerHTML = `
           <div>
             <div class="paso-etiqueta-fila">
-              <span class="paso-codigo" style="color: #991b1b; background: #fee2e2;">${paso.codigo}</span>
+              <span class="paso-codigo paso-codigo--restringido">${paso.codigo}</span>
               <span class="badge-estado badge-estado--bloqueado">Restringido</span>
             </div>
-            <h3 class="tarjeta-titulo" style="color: #64748b;">${paso.titulo}</h3>
-            <p class="tarjeta-desc" style="color: #8a96b2;">
+            <h3 class="tarjeta-titulo">${paso.titulo}</h3>
+            <p class="tarjeta-desc">
               ${paso.descripcion}
-              <br><strong style="color: #b81a1a;">Requiere rol administrativo superior.</strong>
+              <span class="nota-restriccion">Requiere rol administrativo superior.</span>
             </p>
           </div>
           <div class="tarjeta-pie">
             <span class="tarjeta-meta">Acción: <code>${paso.accionRequerida}</code></span>
-            <a href="./seguridad-servidor.html" class="btn-secundario" style="text-decoration: none; font-size: 11.5px; padding: 5px 10px; color: #b81a1a; border-color: #fca5a5;">
-              Comprobar 403
-            </a>
+            <a href="${url403}" class="btn-paso btn-paso--403">Comprobar 403 en servidor</a>
           </div>
         `;
       }
@@ -342,12 +369,12 @@ function inicializarHub() {
   montarBarraOficial();
 
   const token = sessionStorage.getItem(CLAVE_TOKEN);
-  let rolActual = sessionStorage.getItem(CLAVE_ROL) || 'JUGADOR';
+  const autenticado = Boolean(token);
+  const rolReal = sessionStorage.getItem(CLAVE_ROL);
   const apodo = sessionStorage.getItem(CLAVE_APODO) || 'Usuario';
 
-  if (!METADATA_ROLES[rolActual]) {
-    rolActual = 'JUGADOR';
-  }
+  // Con sesión real, arranca en el rol autenticado; sin sesión, en JUGADOR.
+  let rolActual = (autenticado && METADATA_ROLES[rolReal]) ? rolReal : 'JUGADOR';
 
   const conmutadores = document.querySelectorAll('.btn-conmutador-rol');
 
@@ -359,16 +386,19 @@ function inicializarHub() {
       b.setAttribute('aria-pressed', String(activo));
     });
 
-    montarNavegacionContextual(Boolean(token), rolActual, apodo);
-    renderizarHero(Boolean(token), rolActual, apodo);
+    montarNavegacionContextual(autenticado, rolActual, apodo);
+    renderizarHero(autenticado, rolActual, apodo);
     renderizarFases(rolActual);
+    actualizarNotaSimulacion(autenticado, autenticado ? (rolReal || rolActual) : rolActual);
   }
 
   conmutadores.forEach((btn) => {
     btn.addEventListener('click', () => {
-      const nuevoRol = btn.dataset.rol;
-      sessionStorage.setItem(CLAVE_ROL, nuevoRol);
-      actualizarTodo(nuevoRol);
+      // El conmutador solo cambia la vista; no toca la sesión real.
+      if (!autenticado) {
+        sessionStorage.setItem(CLAVE_ROL, btn.dataset.rol);
+      }
+      actualizarTodo(btn.dataset.rol);
     });
   });
 

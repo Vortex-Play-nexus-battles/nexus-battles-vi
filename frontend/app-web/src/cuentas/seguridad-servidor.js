@@ -50,6 +50,23 @@ const vistaJson = document.querySelector('#vista-json');
 const vistaHeaders = document.querySelector('#vista-headers');
 const cuerpoTablaHeaders = document.querySelector('#cuerpo-tabla-headers');
 
+// Precarga desde el hub (index.html): ?rol=JUGADOR&accion=BANEAR_DEFINITIVAMENTE
+// deja la consola lista para que "Comprobar 403 en servidor" muestre el bloqueo
+// del rol elegido de un clic.
+(function precargarDesdeQuery() {
+  const params = new URLSearchParams(location.search);
+  const rolParam = params.get('rol');
+  const accionParam = params.get('accion');
+
+  if (rolParam && [...simRolSelect.options].some((o) => o.value === rolParam)) {
+    simRolSelect.value = rolParam;
+  }
+  if (accionParam) {
+    const opt = [...simEndpointSelect.options].find((o) => o.dataset.action === accionParam);
+    if (opt) simEndpointSelect.value = opt.value;
+  }
+})();
+
 // Control de Pestañas con ARIA accesible (Point #5)
 tabBtnJson.addEventListener('click', () => {
   tabBtnJson.classList.add('activa');
