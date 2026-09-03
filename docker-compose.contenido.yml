@@ -7,7 +7,8 @@
 # infra comun de plataforma (Postgres, Redis, Mailpit del docker-compose.yml
 # base). Cada servicio se construye desde la raiz del monorepo.
 #
-# Puertos de host: 8090-8093 (plataforma usa 8081-8088, cuentas 8089).
+# Puertos de host: 8101-8104 (ecommerce usa 8090, cumplimiento 8091;
+# plataforma usa 8081-8088, cuentas 8089).
 # Todos los servicios exponen 8080 internamente; el mapeo host:contenedor
 # los diferencia en la maquina del desarrollador.
 
@@ -30,7 +31,7 @@ services:
       dockerfile: services/contenido/heroes/Dockerfile
     container_name: srv-heroes
     ports:
-      - "8090:8080"
+      - "8101:8080"
     environment:
       PUERTO_HEROES: 8080
       SPRING_PROFILES_ACTIVE: mongo
@@ -44,11 +45,15 @@ services:
       dockerfile: services/contenido/inventario/Dockerfile
     container_name: srv-inventario
     ports:
-      - "8091:8080"
+      - "8102:8080"
     environment:
       SPRING_DATA_MONGODB_URI: mongodb://contenido-mongo:27017/inventario
+      HEROES_BASE_URL: http://srv-heroes:8080
+      PRODUCTOS_BASE_URL: http://srv-productos:8080
     depends_on:
       - contenido-mongo
+      - srv-heroes
+      - srv-productos
 
   srv-productos:
     build:
@@ -56,9 +61,10 @@ services:
       dockerfile: services/contenido/productos/Dockerfile
     container_name: srv-productos
     ports:
-      - "8092:8080"
+      - "8103:8080"
     environment:
       MONGODB_URI: mongodb://contenido-mongo:27017/productos
+      KEYCLOAK_JWK_SET_URI: ${KEYCLOAK_JWK_SET_URI:-http://host.docker.internal:9090/realms/nexus/protocol/openid-connect/certs}
     depends_on:
       - contenido-mongo
 
@@ -68,7 +74,11 @@ services:
       dockerfile: services/contenido/motor-combate/Dockerfile
     container_name: srv-motor-combate
     ports:
-      - "8093:8080"
+      - "8104:8080"
+    environment:
+      HEROES_URL: http://srv-heroes:8080
+    depends_on:
+      - srv-heroes
 
 volumes:
   contenido-mongo-data:
