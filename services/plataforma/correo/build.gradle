@@ -1,0 +1,41 @@
+plugins {
+    id 'nexus.spring-conventions'
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
+    implementation 'nz.net.ultraq.thymeleaf:thymeleaf-layout-dialect:3.3.0'
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    testImplementation 'org.testcontainers:testcontainers:1.21.3'
+    testImplementation 'org.testcontainers:junit-jupiter:1.21.3'
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+}
+
+// HU-COR-001 / CA-03: la plantilla corporativa tiene una sola fuente de verdad,
+// el .mjml. El .html que usa Thymeleaf se genera desde ahi y nunca se edita a
+// mano. PlantillaSincronizadaTest falla si los dos dejan de coincidir.
+//
+// No se engancha a 'build' a proposito: requiere Node en el PATH y hoy no esta
+// garantizado en el entorno de CI. Se ejecuta a mano cuando cambia el diseno.
+tasks.register('compilarPlantillas', Exec) {
+    group = 'build'
+    description = 'Compila la plantilla corporativa MJML a la plantilla Thymeleaf (HU-COR-001).'
+    workingDir = projectDir
+    commandLine 'node', 'tools/compilar-plantillas.mjs'
+}
+
+// Testcontainers habla con Docker a traves de docker-java, que por defecto pide
+// la version 1.32 de la API. Docker Engine 25 en adelante exige 1.40 como minimo
+// y responde 400 Bad Request, que Testcontainers reporta como el confuso
+// "Could not find a valid Docker environment" aunque Docker este perfectamente
+// levantado. Fijar la version aqui lo resuelve sin tocar nada de la maquina.
+//
+// Se fija 1.40 y no una mas alta a proposito: es el minimo que exigen los
+// daemons modernos y a la vez esta soportada desde Docker 19.03, asi que sirve
+// tanto en una maquina con Docker recien instalado como en un runner de CI con
+// una version mas antigua. Pedir una version demasiado NUEVA falla igual que
+// pedir una demasiado vieja.
+tasks.named('test') {
+    systemProperty 'api.version', '1.40'
+}

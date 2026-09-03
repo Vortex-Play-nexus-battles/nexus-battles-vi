@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Vitrina del inventario</title>
+    <link rel="stylesheet" href="./vitrina.css" />
+    <link rel="stylesheet" href="./ficha-producto.css" />
+    <link rel="stylesheet" href="../../comun/barra-navegacion.css" />
+  </head>
+  <body class="vitrina-pagina">
+    <div id="contenedor-barra"></div>
+    <main id="inventario-app"></main>
+
+    <!--
+    Raiz de composicion: resuelve el propietario y delega en montarInventario,
+    que integra las escrituras de HU-INV-003 con la vitrina de HU-INV-001.
+    El propietario autenticado llega con HU-INF-009.
+  -->
+    <script type="module">
+      import { montarInventario } from './inventario.js';
+      import { construirBarra } from '../../comun/barra-navegacion.js';
+
+      const parametros = new URLSearchParams(location.search);
+      const contenedor = document.getElementById('inventario-app');
+      const identidad = parametros.get('jugador');
+      const numeroPagina = Number(parametros.get('pagina') ?? 0);
+
+      document
+        .getElementById('contenedor-barra')
+        .replaceChildren(construirBarra({ seccionActiva: 'inventario' }));
+
+      montarInventario(contenedor, identidad, numeroPagina);
+    </script>
+  </body>
+</html>

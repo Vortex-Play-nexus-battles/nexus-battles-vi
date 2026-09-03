@@ -1,0 +1,13 @@
+# Compilados de Maven
+target/
+
+# Archivos de IntelliJ
+.idea/
+*.iml
+
+# Fotos de avatar subidas por usuarios (solo desarrollo local)
+avatares-subidos/
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db

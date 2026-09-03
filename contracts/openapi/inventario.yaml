@@ -1,0 +1,338 @@
+openapi: 3.1.0
+info:
+  title: Servicio de inventario
+  version: 1.0.0
+  description: >
+    Consulta paginada de la vitrina para HU-INV-001, y creacion y modificacion
+    de elementos propios del jugador para HU-INV-003, y equipamiento de
+    heroes con limites para HU-INV-005.
+    La identidad temporal sigue la convencion X-User-Name de ms-identidad hasta
+    que HU-AUT-004 publique el subject del token.
+servers:
+  - url: http://localhost:8080
+    description: Entorno local de desarrollo
+security:
+  - IdentidadTemporal: []
+paths:
+  /api/v1/inventario/elementos:
+    get:
+      summary: Consulta la vitrina del jugador autenticado en paginas de dieciseis
+      description: >
+        HU-INV-001. El tamano de pagina es fijo en dieciseis porque el criterio
+        de aceptacion exige ese numero de productos en la vista de referencia
+        de 1360 x 768. La identidad viaja en la cabecera y nunca en la ruta:
+        un jugador no puede consultar el inventario de otro.
+      operationId: consultarInventarioPaginado
+      parameters:
+        - name: pagina
+          in: query
+          required: false
+          description: Numero de pagina, desde cero.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: >
+            Pagina del inventario. Un jugador sin productos recibe una pagina
+            vacia con este mismo estado: no tener nada no es un error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginaInventario"
+        "400":
+          $ref: "#/components/responses/SolicitudInvalida"
+        "401":
+          $ref: "#/components/responses/IdentidadRequerida"
+    post:
+      summary: Crea un elemento en el inventario del jugador autenticado
+      operationId: crearElementoPropio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrearElemento"
+      responses:
+        "201":
+          description: Elemento creado y persistido en el inventario propio
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ElementoInventario"
+        "400":
+          $ref: "#/components/responses/SolicitudInvalida"
+        "401":
+          $ref: "#/components/responses/IdentidadRequerida"
+        "503":
+          $ref: "#/components/responses/PersistenciaNoDisponible"
+  /api/v1/inventario/elementos/{elementoId}:
+    patch:
+      summary: Modifica el nombre propio de un elemento del jugador autenticado
+      operationId: modificarElementoPropio
+      parameters:
+        - name: elementoId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ModificarElemento"
+      responses:
+        "200":
+          description: Elemento modificado y persistido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ElementoInventario"
+        "400":
+          $ref: "#/components/responses/SolicitudInvalida"
+        "401":
+          $ref: "#/components/responses/IdentidadRequerida"
+        "403":
+          description: El elemento pertenece al inventario de otro jugador
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "404":
+          description: El elemento solicitado no existe
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "503":
+          $ref: "#/components/responses/PersistenciaNoDisponible"
+  /api/v1/inventario/heroes/{heroeId}/equipamiento:
+    get:
+      summary: Consulta las ranuras equipadas de un heroe propio
+      operationId: consultarEquipamientoPropio
+      parameters:
+        - $ref: "#/components/parameters/HeroeId"
+      responses:
+        "200":
+          description: Armas, armaduras e items equipados actualmente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EquipamientoHeroe"
+        "401":
+          $ref: "#/components/responses/IdentidadRequerida"
+        "403":
+          $ref: "#/components/responses/InventarioAjeno"
+        "404":
+          $ref: "#/components/responses/ElementoNoEncontrado"
+  /api/v1/inventario/heroes/{heroeId}/equipamiento/{elementoId}:
+    parameters:
+      - $ref: "#/components/parameters/HeroeId"
+      - $ref: "#/components/parameters/ElementoId"
+    put:
+      summary: Equipa un arma, armadura o item propio en un heroe propio
+      operationId: equiparElementoPropio
+      responses:
+        "200":
+          description: Equipamiento completo despues de ocupar la ranura
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EquipamientoHeroe"
+        "400":
+          $ref: "#/components/responses/ElementoNoEquipable"
+        "401":
+          $ref: "#/components/responses/IdentidadRequerida"
+        "403":
+          $ref: "#/components/responses/InventarioAjeno"
+        "404":
+          $ref: "#/components/responses/ElementoNoEncontrado"
+        "409":
+          $ref: "#/components/responses/LimiteEquipamiento"
+        "503":
+          $ref: "#/components/responses/PersistenciaNoDisponible"
+    delete:
+      summary: Desequipa un elemento de un heroe propio
+      operationId: desequiparElementoPropio
+      responses:
+        "200":
+          description: Equipamiento completo despues de liberar la ranura
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EquipamientoHeroe"
+        "401":
+          $ref: "#/components/responses/IdentidadRequerida"
+        "403":
+          $ref: "#/components/responses/InventarioAjeno"
+        "404":
+          $ref: "#/components/responses/ElementoNoEncontrado"
+        "503":
+          $ref: "#/components/responses/PersistenciaNoDisponible"
+components:
+  securitySchemes:
+    IdentidadTemporal:
+      type: apiKey
+      in: header
+      name: X-User-Name
+      description: >
+        Identidad suministrada por la capa de autenticacion. Es temporal y sera
+        reemplazada por el subject del JWT cuando HU-AUT-004 este disponible.
+  schemas:
+    CrearElemento:
+      type: object
+      additionalProperties: false
+      description: >
+        HU-PRD-001 ya publica la creacion y define los mismos tipos y partes de
+        armadura, pero aun no ofrece una consulta de producto por identificador.
+        Cuando ese endpoint este disponible, tipo y parteArmadura se resolveran
+        en servidor desde productoId.
+      required: [productoId, tipo, nombrePropio]
+      properties:
+        productoId:
+          type: string
+          minLength: 1
+        tipo:
+          type: string
+          enum: [HEROE, HABILIDAD, ARMA, ARMADURA, ITEM, EPICA]
+        nombrePropio:
+          type: string
+          minLength: 1
+        parteArmadura:
+          $ref: "#/components/schemas/ParteArmadura"
+    ModificarElemento:
+      type: object
+      additionalProperties: false
+      required: [nombrePropio]
+      properties:
+        nombrePropio:
+          type: string
+          minLength: 1
+    ElementoInventario:
+      type: object
+      required: [id, productoId, tipo, nombrePropio]
+      properties:
+        id: { type: string }
+        productoId: { type: string }
+        tipo:
+          type: string
+          enum: [HEROE, HABILIDAD, ARMA, ARMADURA, ITEM, EPICA]
+        nombrePropio: { type: string }
+        parteArmadura:
+          oneOf:
+            - $ref: "#/components/schemas/ParteArmadura"
+            - type: "null"
+    ParteArmadura:
+      type: string
+      enum: [CASCO, PECHO, GUANTES, BRAZALETES, PANTALON, ZAPATOS]
+    EquipamientoHeroe:
+      type: object
+      additionalProperties: false
+      required: [heroeId, armas, armaduras, items]
+      properties:
+        heroeId:
+          type: string
+        armas:
+          type: array
+          maxItems: 2
+          uniqueItems: true
+          items: { type: string }
+        armaduras:
+          type: object
+          maxProperties: 6
+          propertyNames:
+            $ref: "#/components/schemas/ParteArmadura"
+          additionalProperties: { type: string }
+        items:
+          type: array
+          maxItems: 2
+          uniqueItems: true
+          items: { type: string }
+    PaginaInventario:
+      type: object
+      required: [elementos, numero, tamanio, totalElementos, totalPaginas, ultima]
+      properties:
+        elementos:
+          type: array
+          maxItems: 16
+          items:
+            $ref: "#/components/schemas/ElementoInventario"
+        numero:
+          type: integer
+          minimum: 0
+          description: Pagina devuelta, desde cero.
+        tamanio:
+          type: integer
+          const: 16
+          description: Productos por pagina, fijo por el criterio de HU-INV-001.
+        totalElementos:
+          type: integer
+          minimum: 0
+        totalPaginas:
+          type: integer
+          minimum: 0
+        ultima:
+          type: boolean
+    DetalleDeProblema:
+      type: object
+      description: Formato estandar de detalles de problema RFC 9457.
+      properties:
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+  responses:
+    SolicitudInvalida:
+      description: Los datos enviados no son validos
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/DetalleDeProblema"
+    IdentidadRequerida:
+      description: No se recibio la identidad autenticada del jugador
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/DetalleDeProblema"
+    PersistenciaNoDisponible:
+      description: La escritura atomica no pudo completarse y no se aplicaron cambios parciales
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/DetalleDeProblema"
+    InventarioAjeno:
+      description: El heroe o elemento pertenece al inventario de otro jugador
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/DetalleDeProblema"
+    ElementoNoEncontrado:
+      description: El heroe o elemento no existe
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/DetalleDeProblema"
+    ElementoNoEquipable:
+      description: El destino no es un heroe o el tipo no ocupa una ranura
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/DetalleDeProblema"
+    LimiteEquipamiento:
+      description: La ranura esta ocupada o se excede el maximo permitido
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/DetalleDeProblema"
+  parameters:
+    HeroeId:
+      name: heroeId
+      in: path
+      required: true
+      schema: { type: string }
+    ElementoId:
+      name: elementoId
+      in: path
+      required: true
+      schema: { type: string }

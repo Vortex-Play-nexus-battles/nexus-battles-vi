@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Crear cuenta — NEXUS BATTLES VI</title>
+  <link rel="stylesheet" href="./registro.css">
+</head>
+<body>
+<main class="pagina-auth">
+  <section class="tarjeta">
+    <h1 class="titulo-grande">NEXUS BATTLES VI</h1>
+    <p class="titulo-mediano">Crea tu cuenta de jugador</p>
+
+    <p class="estado" id="estadoRegistro" hidden role="status"></p>
+
+    <form id="formRegistro" novalidate>
+      <label>
+        Nombres
+        <input type="text" id="nombres" name="nombres" required autocomplete="given-name">
+      </label>
+
+      <label>
+        Apellidos
+        <input type="text" id="apellidos" name="apellidos" required autocomplete="family-name">
+      </label>
+
+      <label>
+        Apodo
+        <input type="text" id="apodo" name="apodo" required autocomplete="nickname">
+      </label>
+      <p class="ayuda">Será tu nombre visible en las salas y comentarios.</p>
+
+      <label>
+        Correo electrónico
+        <input type="email" id="email" name="email" required autocomplete="email">
+      </label>
+      <p class="ayuda">Te enviaremos novedades importantes de tu cuenta.</p>
+
+      <label>
+        Contraseña
+        <input type="password" id="password" name="password" required autocomplete="new-password" minlength="9">
+      </label>
+      <p class="ayuda">Mínimo 9 caracteres, con mayúscula, minúscula, número y símbolo.</p>
+
+      <label>
+        Repetir contraseña
+        <input type="password" id="confirmarPassword" name="confirmarPassword" required autocomplete="new-password">
+      </label>
+      <p class="ayuda error-campo" id="ayudaConfirmar" hidden>Las contraseñas no coinciden.</p>
+
+      <fieldset class="selector-avatar">
+        <legend>Selecciona tu avatar</legend>
+        <div class="avatar-carga">
+          <div class="avatar-vista-previa" id="avatarVistaPrevia">
+            <span class="avatar-placeholder">Sin foto</span>
+          </div>
+          <div class="avatar-carga-acciones">
+            <label for="avatar" class="btn-contorno avatar-boton-subir">
+              Subir foto
+            </label>
+            <input type="file" id="avatar" name="avatar" accept="image/jpeg,image/png,image/webp" hidden>
+            <button type="button" class="avatar-boton-quitar" id="botonQuitarAvatar" hidden>Quitar foto</button>
+          </div>
+        </div>
+        <p class="ayuda">Opcional. Formatos JPG, PNG o WEBP.</p>
+      </fieldset>
+
+      <button type="submit" class="btn-primario" id="botonEnviar">Crear cuenta</button>
+    </form>
+
+    <a class="enlace-secundario" href="./login.html">¿Ya tienes cuenta? Inicia sesión</a>
+  </section>
+</main>
+
+<!-- Ventana de ajuste de foto: arrastrar para posicionar, deslizador para zoom -->
+<dialog id="dialogoRecorte" class="dialogo-recorte">
+  <div class="dialogo-recorte-cabecera">
+    <h2>Ajusta tu foto</h2>
+    <button type="button" class="dialogo-avatar-cerrar" id="botonCancelarRecorte" aria-label="Cancelar">✕</button>
+  </div>
+
+  <div class="recorte-visor" id="recorteVisor">
+    <img id="recorteImagen" alt="" draggable="false">
+    <div class="recorte-mascara"></div>
+  </div>
+
+  <label class="recorte-zoom-label">
+    Zoom
+    <input type="range" id="recorteZoom" min="1" max="3" step="0.01" value="1">
+  </label>
+
+  <div class="recorte-acciones">
+    <button type="button" class="btn-contorno" id="botonCancelarRecorte2">Cancelar</button>
+    <button type="button" class="btn-primario" id="botonConfirmarRecorte">Usar esta foto</button>
+  </div>
+</dialog>
+
+<script type="module" src="./registro.js"></script>
+</body>
+</html>

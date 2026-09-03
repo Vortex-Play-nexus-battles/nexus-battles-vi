@@ -45,6 +45,6 @@ public class RbacController {
 
     @GetMapping("/matrix")
     public ResponseEntity<PermissionMatrixResponse> getMatrix() {
-        return ResponseEntity.ok(new PermissionMatrixResponse("1.0.0 (Tabla 24)", rbacService.getFullMatrix()));
+        return ResponseEntity.ok(new PermissionMatrixResponse("1.1.0 (Tabla 24 extendida)", rbacService.getFullMatrix()));
     }
 }

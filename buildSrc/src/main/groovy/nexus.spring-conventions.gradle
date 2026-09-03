@@ -1,0 +1,82 @@
+// Convenciones compartidas por todos los microservicios Spring del monorepo.
+//
+// Un servicio que aplica este plugin no necesita declarar version de Spring Boot,
+// version de Java, repositorios, motor de pruebas ni jacoco: todo baja de aqui.
+// Asi la pila tecnologica se cambia en un solo archivo y no en veinte.
+
+plugins {
+    id 'java'
+    id 'jacoco'
+    id 'org.springframework.boot'
+    id 'io.spring.dependency-management'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // En Spring Boot 4 el starter web se llama 'webmvc'; 'spring-boot-starter-web'
+    // es el nombre de la linea 3.x y ya no resuelve.
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+
+    // Regla 3 de plataforma: todo servicio expone salud y metricas de Actuator.
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+
+    // Sin esta linea Gradle 9 no descubre las pruebas de JUnit 5 y rompe la
+    // compilacion con "the test task did not discover any tests to execute".
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// HU-CICD-001: cobertura de pruebas centralizada aqui para que los 8
+// servicios de services/plataforma/* (y cualquiera que se sume despues a
+// settings.gradle) la hereden automaticamente, sin repetir configuracion
+// JaCoCo servicio por servicio.
+jacoco {
+    toolVersion = '0.8.12'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    finalizedBy tasks.named('jacocoTestReport')
+}
+
+jacocoTestReport {
+    dependsOn tasks.named('test')
+    reports {
+        xml.required = true
+        html.required = true
+    }
+}
+
+// Regla 11 de plataforma: cobertura minima del 80 %.
+//
+// La regla queda declarada aqui para que sea la misma en los veinte modulos,
+// pero TODAVIA NO esta enganchada a 'check'. Si se engancha hoy, los modulos
+// que aun son andamiaje (una clase @SpringBootApplication y ninguna prueba)
+// reportan 0 % y dejan el build en rojo para todo el mundo.
+//
+// Se activa descomentando el bloque de abajo, y eso se hace cuando los modulos
+// tengan pruebas de verdad. Es una decision de equipo, no de un archivo.
+jacocoTestCoverageVerification {
+    violationRules {
+        rule {
+            limit {
+                counter = 'LINE'
+                minimum = 0.80
+            }
+        }
+    }
+}
+
+// tasks.named('check') {
+//     dependsOn tasks.named('jacocoTestCoverageVerification')
+// }

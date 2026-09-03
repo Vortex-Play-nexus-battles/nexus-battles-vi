@@ -1,0 +1,44 @@
+# HU-CICD-002 (SCRUM-165): override de despliegue, SOLO para dev/test/produccion.
+#
+# docker-compose.yml (la raiz, de Santiago Gonzalez) usa "build: context: ..."
+# pensado para desarrollo local -- eso no se toca. En un despliegue real no
+# se construye nada en el servidor: se usa la imagen ya publicada en GitHub
+# Container Registry por el job "construir-y-publicar" de cd.yml.
+#
+# Por eso este archivo SOLO declara "image:" por servicio. Se combina siempre
+# con el archivo base (nunca se usa solo):
+#   docker compose -f docker-compose.yml -f docker-compose.deploy.yml pull|up -d
+#
+# Compose mezcla ambos por nombre de servicio (srv-comentarios, srv-correo,
+# etc, mismos nombres que docker-compose.yml). El resultado final tiene tanto
+# "build:" (heredado del base, sin usar aqui) como "image:" (de este
+# archivo) -- como no se pasa --build, Compose solo hace pull/up de la
+# imagen indicada, nunca construye.
+#
+# ${TAG} lo exporta desplegar.sh antes de invocar "docker compose" (sha corto
+# del commit que paso CI para ese servicio).
+
+services:
+  srv-comentarios:
+    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-comentarios:${TAG}
+
+  srv-correo:
+    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-correo:${TAG}
+
+  srv-torneos:
+    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-torneos:${TAG}
+
+  srv-salas-partidas:
+    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-salas-partidas:${TAG}
+
+  srv-notificaciones:
+    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-notificaciones:${TAG}
+
+  srv-moderacion-sanciones:
+    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-moderacion-sanciones:${TAG}
+
+  srv-metricas-plataforma:
+    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-metricas-plataforma:${TAG}
+
+  srv-admin-parametros:
+    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-admin-parametros:${TAG}

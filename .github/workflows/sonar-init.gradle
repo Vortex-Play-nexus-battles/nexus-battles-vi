@@ -1,0 +1,71 @@
+// Init script usado SOLO por el pipeline de CI (ci.yml) para poder correr el
+// analisis de SonarQube Cloud sin declarar el plugin en ningun build.gradle
+// versionado. La cobertura (JaCoCo) ya no se maneja aqui: vive en
+// buildSrc/nexus.spring-conventions.gradle, heredada por los 8 servicios de
+// services/plataforma/*. Este archivo se limita unicamente al plugin de
+// SonarQube, cuya organizacion/token son propios de cada entorno de CI y por
+// eso no se fijan en un archivo compartido del repo.
+//
+// Aplica el plugin org.sonarqube unicamente a la corrida de Gradle que se
+// lanza con "--init-script sonar-init.gradle"; no modifica nada persistido
+// en el repositorio.
+//
+// Se aplica a TODOS los proyectos, no solo al raiz (issue #198). Con el plugin
+// solo en la raiz, la unica tarea "sonar" que existia era la del root, y la
+// tarea sonar del root analiza el monorepo entero. Cada job de CI subia por
+// tanto los 20 modulos a la clave de proyecto de su servicio, aunque solo
+// hubiera ejecutado las pruebas de uno: los otros 19 aportaban cero cobertura
+// y la compuerta de calidad fallaba siempre.
+//
+// Aplicandolo a cada proyecto, cada servicio tiene su propia tarea
+// ":services:<equipo>:<servicio>:sonar" que analiza solo ese servicio, y el
+// plugin deduce del modelo de Gradle sus fuentes, sus pruebas, sus binarios y
+// la ruta del informe XML de JaCoCo. Por eso ci.yml ya no pasa esas rutas a
+// mano: las que pasaba eran relativas a la raiz del repo y Sonar las resolvia
+// contra el directorio base de cada modulo.
+
+initscript {
+    repositories {
+        maven { url 'https://plugins.gradle.org/m2/' }
+    }
+    dependencies {
+        classpath 'org.sonarsource.scanner.gradle:sonarqube-gradle-plugin:7.4.0.8496'
+    }
+}
+
+allprojects {
+    apply plugin: org.sonarqube.gradle.SonarQubePlugin
+}
+
+// -DmoduloObjetivo=<rutaGradle> lo agrega ci.yml (mismo valor que
+// matrix.rutaGradle, ej: ":services:plataforma:comentarios"). Causa raiz
+// real de que Sonar analizara el monorepo entero: -Dsonar.sources NO
+// funciona con este plugin porque el plugin deriva las fuentes de cada
+// subproyecto desde el modelo de Gradle y pisa esa propiedad. La forma
+// correcta de acotar el analisis a un solo servicio es marcar
+// "skipProject = true" en todos los demas subproyectos (sintaxis oficial
+// de SonarSource, con el prefijo "is" -- "skipProject" sin el prefijo no
+// existe en la extension del plugin).
+//
+// rootProject { } es la forma correcta de configurar esto desde un init
+// script: los proyectos todavia no existen cuando el init script se evalua,
+// asi que hace falta esta API que difiere la ejecucion hasta que el
+// proyecto raiz este disponible. allprojects() adentro configura raiz +
+// todos los subproyectos, y afterEvaluate asegura que la extension "sonar"
+// (agregada por el plugin de arriba) ya este lista en cada uno antes de
+// tocarla.
+rootProject {
+    allprojects {
+        afterEvaluate {
+            def moduloObjetivo = System.getProperty('moduloObjetivo')
+            // Sin la propiedad (ej. alguien corre "./gradlew sonar" en
+            // local sin pasarla), no tocamos nada: se mantiene el
+            // comportamiento anterior en vez de saltarnos todo por error.
+            if (moduloObjetivo != null && project.path != moduloObjetivo) {
+                sonar {
+                    skipProject = true
+                }
+            }
+        }
+    }
+}
