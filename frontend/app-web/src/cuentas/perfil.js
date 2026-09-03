@@ -18,20 +18,6 @@ const CLAVE_APODO = 'nexus.apodoActual';
 const CLAVE_ROL = 'nexus.rolActual';
 
 
-const AVATARES_PERMITIDOS = [
-    'alquimista-picaro-veneno.jpg',
-    'arquero-cazador.jpg',
-    'chaman-sanador.jpg',
-    'comandante-con-casco.jpg',
-    'gran-mago-sabio.jpg',
-    'guerrero-berserker.jpg',
-    'guerrero-tanque.jpg',
-    'mago-de-fuego.jpg',
-    'mago-de-hielo.jpg',
-    'picaro-asesino.jpg'
-];
-
-
 let perfilOriginal = null;
 let guardadoPendiente = false;
 
@@ -51,10 +37,10 @@ const formulario = document.getElementById('formulario-perfil');
 const campoApodo = document.getElementById('campo-apodo');
 const campoNombres = document.getElementById('campo-nombres');
 const campoApellidos = document.getElementById('campo-apellidos');
-const campoBiografia = document.getElementById('campo-biografia');
 const campoPreferencias = document.getElementById('campo-preferencias');
 
-const galeriaAvatares = document.getElementById('galeria-avatares');
+const campoAvatarArchivo = document.getElementById('campo-avatar-archivo');
+const previewAvatar = document.getElementById('preview-avatar');
 
 const btnGuardar = document.getElementById('btn-guardar');
 const btnDescartar = document.getElementById('btn-descartar');
@@ -199,54 +185,32 @@ function mostrarVacio() {
 
 
 /* =========================
-   AVATARES
+   AVATAR
    ========================= */
 
-function avatarPermitido(avatar) {
+function mostrarPreviewAvatar(urlAvatar) {
 
-    return AVATARES_PERMITIDOS.includes(avatar);
+    if (previewAvatar && urlAvatar) {
+        previewAvatar.src = urlAvatar;
+        previewAvatar.classList.remove('oculto');
+    }
 }
 
 
-function obtenerAvatarSeleccionado() {
+function configurarSelectorAvatar() {
 
-    const seleccionado =
-        document.querySelector(
-            'input[name="avatar"]:checked'
-        );
-
-    return seleccionado
-        ? seleccionado.value
-        : null;
-}
-
-
-function seleccionarAvatar(nombreAvatar) {
-
-    if (!avatarPermitido(nombreAvatar)) {
+    if (!campoAvatarArchivo) {
         return;
     }
 
+    campoAvatarArchivo.addEventListener('change', () => {
 
-    const opcion =
-        document.querySelector(
-            `input[name="avatar"][value="${CSS.escape(nombreAvatar)}"]`
-        );
+        const archivo = campoAvatarArchivo.files[0];
 
-
-    if (opcion) {
-        opcion.checked = true;
-    }
-}
-
-
-function validarAvatarDelBackend(avatar) {
-
-    if (!avatar) {
-        return false;
-    }
-
-    return avatarPermitido(avatar);
+        if (archivo) {
+            mostrarPreviewAvatar(URL.createObjectURL(archivo));
+        }
+    });
 }
 
 
@@ -265,73 +229,33 @@ function llenarFormulario(perfil) {
     campoApellidos.value =
         perfil.apellidos ?? '';
 
-    campoBiografia.value =
-        perfil.biografia ?? '';
-
     campoPreferencias.value =
         perfil.preferencias ?? '';
 
-
-    if (
-        perfil.avatar &&
-        validarAvatarDelBackend(perfil.avatar)
-    ) {
-
-        seleccionarAvatar(perfil.avatar);
-
-    } else {
-
-        const primerAvatar =
-            document.querySelector(
-                'input[name="avatar"]'
-            );
-
-        if (primerAvatar) {
-            primerAvatar.checked = true;
-        }
-    }
+    mostrarPreviewAvatar(perfil.avatar);
 }
 
 
 function construirCuerpoActualizacion() {
 
-    const avatar =
-        obtenerAvatarSeleccionado();
+    const cuerpo = new FormData();
 
+    cuerpo.append('nombres', campoNombres.value.trim());
+    cuerpo.append('apellidos', campoApellidos.value.trim());
+    cuerpo.append('preferencias', campoPreferencias.value.trim());
 
-    if (!avatar || !avatarPermitido(avatar)) {
-
-        throw new Error(
-            'Debes seleccionar uno de los avatares disponibles.'
-        );
+    // El avatar es opcional: solo se agrega si el usuario eligio un archivo
+    // nuevo. Si no, el backend conserva el avatar que ya tenia.
+    const archivoAvatar = campoAvatarArchivo?.files?.[0];
+    if (archivoAvatar) {
+        cuerpo.append('avatar', archivoAvatar);
     }
-
-
-    const cuerpo = {
-
-        nombres:
-            campoNombres.value.trim(),
-
-        apellidos:
-            campoApellidos.value.trim(),
-
-        avatar:
-            avatar,
-
-        biografia:
-            campoBiografia.value.trim(),
-
-        preferencias:
-            campoPreferencias.value.trim()
-    };
-
 
     const apodoActual =
         perfilOriginal?.apodo ?? '';
 
     const nuevoApodo =
         campoApodo.value.trim();
-
 
     /*
      * El apodo solamente se envía cuando realmente cambió.
@@ -341,10 +265,8 @@ function construirCuerpoActualizacion() {
         nuevoApodo &&
         nuevoApodo !== apodoActual
     ) {
-
-        cuerpo.apodo = nuevoApodo;
+        cuerpo.append('apodo', nuevoApodo);
     }
-
 
     return cuerpo;
 }
@@ -577,19 +499,15 @@ async function enviarActualizacion(
          * El JWT NO se coloca manualmente.
          * fetchWithHttpErrorInterceptor lo agrega automáticamente.
          */
+        // No se pone Content-Type a mano: el navegador arma el
+        // multipart/form-data con el boundary correcto solo cuando el
+        // body es un FormData.
         const respuesta =
             await fetchWithHttpErrorInterceptor(
                 `${BASE_API}/${encodeURIComponent(sesion.usuarioId)}`,
                 {
                     method: 'PUT',
-
-                    headers: {
-                        'Content-Type':
-                            'application/json'
-                    },
-
-                    body:
-                        JSON.stringify(cuerpo)
+                    body: cuerpo
                 }
             );
 
@@ -847,38 +765,11 @@ btnConfirmarApodo.addEventListener(
 );
 
 
-galeriaAvatares.addEventListener(
-    'change',
-    (evento) => {
-
-        if (
-            evento.target.matches(
-                'input[name="avatar"]'
-            )
-        ) {
-
-            const avatar =
-                evento.target.value;
-
-
-            if (!avatarPermitido(avatar)) {
-
-                evento.target.checked = false;
-
-                mostrarMensajeFormulario(
-                    'El avatar seleccionado no es válido.',
-                    true
-                );
-            }
-        }
-    }
-);
-
-
 /* =========================
    INICIO
    ========================= */
 
 montarBarraNavegacion();
 montarMenuAdmin();
+configurarSelectorAvatar();
 cargarPerfil();

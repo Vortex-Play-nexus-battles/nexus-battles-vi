@@ -131,28 +131,6 @@
 
 
         </div>
-
-
-        <!-- =========================================
-             BIOGRAFÍA
-             ========================================= -->
-
-        <div class="campo">
-
-          <label for="biografia">
-            Biografía
-          </label>
-
-          <textarea
-            id="biografia"
-            name="biografia"
-            rows="5"
-            placeholder="Cuéntanos algo sobre ti...">
-                </textarea>
-
-        </div>
-
-
         <!-- =========================================
              PREFERENCIAS
              ========================================= -->
@@ -185,198 +163,22 @@
               <h3>Avatar</h3>
 
               <p>
-                Selecciona uno de los avatares disponibles.
+                Sube una foto tuya (JPG, PNG o WEBP).
               </p>
             </div>
 
           </div>
 
+          <img
+            id="preview-avatar"
+            class="oculto"
+            alt="Vista previa del avatar">
 
-          <div
-            id="selector-avatares"
-            class="selector-avatares">
-
-
-            <label class="avatar-opcion">
-
-              <input
-                type="radio"
-                name="avatar"
-                value="alquimista-picaro-veneno.jpg">
-
-              <img
-                src="./avatares/alquimista-picaro-veneno.jpg"
-                alt="Alquimista Pícaro Veneno">
-
-              <span>
-                            Alquimista
-                        </span>
-
-            </label>
-
-
-            <label class="avatar-opcion">
-
-              <input
-                type="radio"
-                name="avatar"
-                value="arquero-cazador.jpg">
-
-              <img
-                src="./avatares/arquero-cazador.jpg"
-                alt="Arquero Cazador">
-
-              <span>
-                            Arquero
-                        </span>
-
-            </label>
-
-
-            <label class="avatar-opcion">
-
-              <input
-                type="radio"
-                name="avatar"
-                value="chaman-sanador.jpg">
-
-              <img
-                src="./avatares/chaman-sanador.jpg"
-                alt="Chamán Sanador">
-
-              <span>
-                            Chamán
-                        </span>
-
-            </label>
-
-
-            <label class="avatar-opcion">
-
-              <input
-                type="radio"
-                name="avatar"
-                value="comandante-con-casco.jpg">
-
-              <img
-                src="./avatares/comandante-con-casco.jpg"
-                alt="Comandante">
-
-              <span>
-                            Comandante
-                        </span>
-
-            </label>
-
-
-            <label class="avatar-opcion">
-
-              <input
-                type="radio"
-                name="avatar"
-                value="gran-mago-sabio.jpg">
-
-              <img
-                src="./avatares/gran-mago-sabio.jpg"
-                alt="Gran Mago Sabio">
-
-              <span>
-                            Gran Mago
-                        </span>
-
-            </label>
-
-
-            <label class="avatar-opcion">
-
-              <input
-                type="radio"
-                name="avatar"
-                value="guerrero-berserker.jpg">
-
-              <img
-                src="./avatares/guerrero-berserker.jpg"
-                alt="Guerrero Berserker">
-
-              <span>
-                            Berserker
-                        </span>
-
-            </label>
-
-
-            <label class="avatar-opcion">
-
-              <input
-                type="radio"
-                name="avatar"
-                value="guerrero-tanque.jpg">
-
-              <img
-                src="./avatares/guerrero-tanque.jpg"
-                alt="Guerrero Tanque">
-
-              <span>
-                            Tanque
-                        </span>
-
-            </label>
-
-
-            <label class="avatar-opcion">
-
-              <input
-                type="radio"
-                name="avatar"
-                value="mago-de-fuego.jpg">
-
-              <img
-                src="./avatares/mago-de-fuego.jpg"
-                alt="Mago de Fuego">
-
-              <span>
-                            Mago de Fuego
-                        </span>
-
-            </label>
-
-
-            <label class="avatar-opcion">
-
-              <input
-                type="radio"
-                name="avatar"
-                value="mago-de-hielo.jpg">
-
-              <img
-                src="./avatares/mago-de-hielo.jpg"
-                alt="Mago de Hielo">
-
-              <span>
-                            Mago de Hielo
-                        </span>
-
-            </label>
-
-
-            <label class="avatar-opcion">
-
-              <input
-                type="radio"
-                name="avatar"
-                value="picaro-asesino.jpg">
-
-              <img
-                src="./avatares/picaro-asesino.jpg"
-                alt="Pícaro Asesino">
-
-              <span>
-                            Pícaro</span>
-
-            </label>
-
-
-          </div>
+          <input
+            type="file"
+            id="campo-avatar-archivo"
+            name="avatar"
+            accept="image/jpeg,image/png,image/webp">
 
         </div>
 

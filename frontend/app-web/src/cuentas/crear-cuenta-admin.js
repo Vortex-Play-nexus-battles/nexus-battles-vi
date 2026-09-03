@@ -331,6 +331,9 @@ const password =
 const rol =
     document.getElementById('rol')?.value;
 
+const archivoAvatar =
+    document.getElementById('avatar')?.files?.[0];
+
 
 const error =
     validarDatos(
@@ -369,25 +372,27 @@ cambiarEstadoBoton(true);
 
 try {
 
+    const cuerpo = new FormData();
+    cuerpo.append('nombres', nombres);
+    cuerpo.append('apellidos', apellidos);
+    cuerpo.append('email', email);
+    cuerpo.append('password', password);
+    cuerpo.append('apodo', apodo);
+    cuerpo.append('rolNombre', rol);
+
+    // El avatar es opcional al crear una cuenta admin, igual que en el registro normal.
+    if (archivoAvatar) {
+        cuerpo.append('avatar', archivoAvatar);
+    }
+
+    // No se pone Content-Type a mano: el navegador arma el
+    // multipart/form-data con el boundary correcto solo cuando el body es un FormData.
     const respuesta =
         await fetchWithHttpErrorInterceptor(
             BASE_API,
             {
                 method: 'POST',
-
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-
-                body: JSON.stringify({
-                    nombres,
-                    apellidos,
-                    email,
-                    password,
-                    apodo,
-                    avatar: '',
-                    rolNombre: rol
-                })
+                body: cuerpo
             }
         );
 

@@ -249,74 +249,19 @@
             <div class="campo">
 
               <label for="avatar">
-                Avatar
+                Avatar (opcional, deja vacío para conservar el actual)
               </label>
 
-              <select
+              <img
+                id="preview-avatar-gestion"
+                class="oculto"
+                alt="Avatar actual del usuario">
+
+              <input
+                type="file"
                 id="avatar"
                 name="avatar"
-              >
-
-                <option value="">
-                  Sin avatar
-                </option>
-
-                <option value="alquimista-picaro-veneno.jpg">
-                  Alquimista pícaro
-                </option>
-
-                <option value="arquero-cazador.jpg">
-                  Arquero cazador
-                </option>
-
-                <option value="chaman-sanador.jpg">
-                  Chamán sanador
-                </option>
-
-                <option value="comandante-con-casco.jpg">
-                  Comandante
-                </option>
-
-                <option value="gran-mago-sabio.jpg">
-                  Gran mago
-                </option>
-
-                <option value="guerrero-berserker.jpg">
-                  Guerrero berserker
-                </option>
-
-                <option value="guerrero-tanque.jpg">
-                  Guerrero tanque
-                </option>
-
-                <option value="mago-de-fuego.jpg">
-                  Mago de fuego
-                </option>
-
-                <option value="mago-de-hielo.jpg">
-                  Mago de hielo
-                </option>
-
-                <option value="picaro-asesino.jpg">
-                  Pícaro asesino
-                </option>
-
-              </select>
-
-            </div>
-
-
-            <div class="campo campo-completo">
-
-              <label for="biografia">
-                Biografía
-              </label>
-
-              <textarea
-                id="biografia"
-                name="biografia"
-                rows="4"
-              ></textarea>
+                accept="image/jpeg,image/png,image/webp">
 
             </div>
 

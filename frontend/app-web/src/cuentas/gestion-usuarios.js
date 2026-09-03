@@ -330,7 +330,6 @@ establecerValor('nombres', '');
 establecerValor('apellidos', '');
 establecerValor('apodo', '');
 establecerValor('avatar', '');
-establecerValor('biografia', '');
 establecerValor('preferencias', '');
 establecerValor('estado', 'ACTIVO');
 establecerValor('suspendido-hasta', '');
@@ -366,11 +365,8 @@ const apellidos =
 const apodo =
     obtenerValor('apodo');
 
-const avatar =
-    obtenerValor('avatar');
-
-const biografia =
-    obtenerValor('biografia');
+const archivoAvatar =
+    document.getElementById('avatar')?.files?.[0];
 
 const preferencias =
     obtenerValor('preferencias');
@@ -429,24 +425,26 @@ cambiarEstadoBoton(
 
 try {
 
+    const cuerpo = new FormData();
+    cuerpo.append('nombres', nombres);
+    cuerpo.append('apellidos', apellidos);
+    cuerpo.append('apodo', apodo);
+    cuerpo.append('preferencias', preferencias);
+
+    // Solo se manda si el admin eligio una foto nueva; si no, el backend
+    // conserva el avatar que el usuario ya tenia.
+    if (archivoAvatar) {
+        cuerpo.append('avatar', archivoAvatar);
+    }
+
+    // No se pone Content-Type a mano: el navegador arma el
+    // multipart/form-data con el boundary correcto solo cuando el body es un FormData.
     const respuesta =
         await fetchWithHttpErrorInterceptor(
             `${BASE_API}/${usuarioSeleccionado.id}/perfil`,
             {
                 method: 'PUT',
-
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-
-                body: JSON.stringify({
-                    nombres,
-                    apellidos,
-                    apodo,
-                    avatar,
-                    biografia,
-                    preferencias
-                })
+                body: cuerpo
             }
         );
 
@@ -466,8 +464,7 @@ try {
 
 
     actualizarResumenUsuario({
-        apodo,
-        avatar
+        apodo
     });
 
 
@@ -772,15 +769,6 @@ if (datos.apodo !== undefined) {
 
 }
 
-
-if (datos.avatar !== undefined) {
-
-    establecerTexto(
-        'usuario-email-mostrado',
-        establecerTexto
-    );
-
-}
 
 }
 

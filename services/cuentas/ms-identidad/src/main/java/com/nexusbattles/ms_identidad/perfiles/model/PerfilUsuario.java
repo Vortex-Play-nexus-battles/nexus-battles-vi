@@ -8,7 +8,7 @@ import jakarta.persistence.*;
 public class PerfilUsuario {
 
     @Id
-    private Long id; // comparte PK con Usuario (relación 1:1)
+    private Long id;
 
     @OneToOne(fetch = FetchType.LAZY, optional = false)
     @MapsId
@@ -24,10 +24,7 @@ public class PerfilUsuario {
     private String avatar;
 
     @Column(columnDefinition = "TEXT")
-    private String biografia;
-
-    @Column(columnDefinition = "TEXT")
-    private String preferencias; // JSON simple con las preferencias del usuario
+    private String preferencias;
 
     public PerfilUsuario() {}
 
@@ -45,9 +42,6 @@ public class PerfilUsuario {
 
     public String getAvatar() { return avatar; }
     public void setAvatar(String avatar) { this.avatar = avatar; }
-
-    public String getBiografia() { return biografia; }
-    public void setBiografia(String biografia) { this.biografia = biografia; }
 
     public String getPreferencias() { return preferencias; }
     public void setPreferencias(String preferencias) { this.preferencias = preferencias; }

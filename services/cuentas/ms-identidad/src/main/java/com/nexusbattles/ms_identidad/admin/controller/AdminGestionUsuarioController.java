@@ -35,16 +35,16 @@ public class AdminGestionUsuarioController {
         }
     }
 
-    @PutMapping("/{usuarioId}/perfil")
+    @PutMapping(value = "/{usuarioId}/perfil", consumes = "multipart/form-data")
     @RequirePermission(Action.GESTIONAR_CUENTAS)
     public ResponseEntity<?> editarPerfil(@PathVariable Long usuarioId,
-                                          @Valid @RequestBody ActualizarPerfilRequest datos,
+                                          @Valid @ModelAttribute ActualizarPerfilRequest datos,
                                           HttpServletRequest request) {
         try {
             String administradorId = (String) request.getAttribute("usuarioActual");
             PerfilUsuario actualizado = adminGestionUsuarioService.editarPerfilDeUsuario(
                 usuarioId, datos.getNombres(), datos.getApellidos(), datos.getAvatar(),
-                datos.getBiografia(), datos.getPreferencias(), datos.getApodo(),
+                datos.getPreferencias(), datos.getApodo(),
                 administradorId, obtenerIpReal(request));
             return ResponseEntity.ok(PerfilUsuarioResponse.from(actualizado));
         } catch (IllegalArgumentException e) {
