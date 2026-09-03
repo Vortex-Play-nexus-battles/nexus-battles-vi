@@ -9,6 +9,7 @@ import {
 fetchWithHttpErrorInterceptor
 } from '../comun/interceptors/http-error.interceptor.js';
 import { construirBarra } from '../comun/barra-navegacion.js';
+import { cambiarRol, ROLES_DISPONIBLES } from './cambio-rol.js';
 
 
 const BASE_API = '/api/admin/usuarios';
@@ -19,6 +20,7 @@ const CLAVE_USUARIO_ID = 'nexus.usuarioId';
 const PERMISO_GESTIONAR = 'GESTIONAR_CUENTAS';
 const PERMISO_SUSPENDER = 'SUSPENDER_USUARIOS';
 const PERMISO_BANEAR = 'BANEAR_DEFINITIVAMENTE';
+const PERMISO_ASIGNAR_ROL = 'ASIGNAR_ROL';
 
 let usuarioSeleccionado = null;
 
@@ -74,6 +76,8 @@ setCurrentRole(rolActual);
 
 applyHasPermissionDirective();
 
+configurarSelectorRoles();
+
 configurarEventos();
 
 verificarAcceso();
@@ -105,6 +109,9 @@ const btnBanear =
 
 const btnRestablecerPassword =
     document.getElementById('btn-restablecer-password');
+
+const btnCambiarRol =
+    document.getElementById('btn-cambiar-rol');
 
 
 if (formularioBusqueda) {
@@ -186,6 +193,39 @@ if (btnRestablecerPassword) {
 
 }
 
+
+if (btnCambiarRol) {
+
+    btnCambiarRol.addEventListener(
+        'click',
+        cambiarRolUsuarioSeleccionado
+    );
+
+}
+
+}
+
+function configurarSelectorRoles() {
+
+const selector =
+    document.getElementById('nuevo-rol');
+
+if (!selector) {
+    return;
+}
+
+
+selector.replaceChildren();
+
+for (const rol of ROLES_DISPONIBLES) {
+
+    const opcion = document.createElement('option');
+    opcion.value = rol;
+    opcion.textContent = rol;
+    selector.append(opcion);
+
+}
+
 }
 
 function verificarAcceso() {
@@ -203,7 +243,7 @@ if (!contenedor || !accesoDenegado) {
 
 
 const tienePermiso =
-    checkPermission(PERMISO_GESTIONAR);
+    checkPermission(getCurrentRole(), PERMISO_GESTIONAR);
 
 
 if (!tienePermiso) {
@@ -334,6 +374,83 @@ establecerValor('biografia', '');
 establecerValor('preferencias', '');
 establecerValor('estado', 'ACTIVO');
 establecerValor('suspendido-hasta', '');
+establecerValor('nuevo-rol', ROLES_DISPONIBLES[0]);
+limpiarMensajeCambioRol();
+
+}
+
+async function cambiarRolUsuarioSeleccionado() {
+
+limpiarMensajeCambioRol();
+
+
+if (!validarUsuarioSeleccionado()) {
+
+    mostrarMensajeCambioRol(
+        'Primero debes seleccionar un usuario.'
+    );
+
+    return;
+}
+
+
+if (!checkPermission(getCurrentRole(), PERMISO_ASIGNAR_ROL)) {
+
+    mostrarMensajeCambioRol(
+        'No tienes permiso para cambiar roles.'
+    );
+
+    return;
+}
+
+
+const nuevoRol = obtenerValor('nuevo-rol');
+const boton = document.getElementById('btn-cambiar-rol');
+
+cambiarEstadoBoton(
+    boton,
+    true,
+    'Cambiando rol...'
+);
+
+
+try {
+
+    await cambiarRol(
+        usuarioSeleccionado.id,
+        nuevoRol
+    );
+
+    establecerTexto(
+        'usuario-rol-mostrado',
+        nuevoRol
+    );
+
+    mostrarMensajeCambioRol(
+        `Rol actualizado correctamente a ${nuevoRol}.`
+    );
+
+} catch (error) {
+
+    console.error(
+        'Error cambiando rol:',
+        error
+    );
+
+    mostrarMensajeCambioRol(
+        error.message ||
+        'No fue posible cambiar el rol del usuario.'
+    );
+
+} finally {
+
+    cambiarEstadoBoton(
+        boton,
+        false,
+        'Cambiar rol'
+    );
+
+}
 
 }
 
@@ -347,7 +464,7 @@ if (!validarUsuarioSeleccionado()) {
 }
 
 
-if (!checkPermission(PERMISO_GESTIONAR)) {
+if (!checkPermission(getCurrentRole(), PERMISO_GESTIONAR)) {
 
     mostrarMensajePerfil(
         'No tienes permisos para modificar cuentas.'
@@ -502,7 +619,7 @@ if (!validarUsuarioSeleccionado()) {
 }
 
 
-if (!checkPermission(PERMISO_SUSPENDER)) {
+if (!checkPermission(getCurrentRole(), PERMISO_SUSPENDER)) {
 
     mostrarMensajePerfil(
         'No tienes permisos para suspender usuarios.'
@@ -552,7 +669,7 @@ if (!validarUsuarioSeleccionado()) {
 }
 
 
-if (!checkPermission(PERMISO_SUSPENDER)) {
+if (!checkPermission(getCurrentRole(), PERMISO_SUSPENDER)) {
 
     mostrarMensajePerfil(
         'No tienes permisos para reactivar usuarios.'
@@ -588,7 +705,7 @@ if (!validarUsuarioSeleccionado()) {
 }
 
 
-if (!checkPermission(PERMISO_BANEAR)) {
+if (!checkPermission(getCurrentRole(), PERMISO_BANEAR)) {
 
     mostrarMensajePerfil(
         'No tienes permisos para banear definitivamente a este usuario.'
@@ -683,7 +800,7 @@ if (!validarUsuarioSeleccionado()) {
 }
 
 
-if (!checkPermission(PERMISO_GESTIONAR)) {
+if (!checkPermission(getCurrentRole(), PERMISO_GESTIONAR)) {
 
     mostrarMensajePerfil(
         'No tienes permisos para restablecer contraseñas.'
@@ -879,6 +996,36 @@ if (!elemento) {
 elemento.textContent = mensaje;
 
 elemento.hidden = false;
+
+}
+
+function mostrarMensajeCambioRol(mensaje) {
+
+const elemento =
+    document.getElementById('mensaje-cambio-rol');
+
+if (!elemento) {
+    return;
+}
+
+
+elemento.textContent = mensaje;
+elemento.hidden = false;
+
+}
+
+function limpiarMensajeCambioRol() {
+
+const elemento =
+    document.getElementById('mensaje-cambio-rol');
+
+if (!elemento) {
+    return;
+}
+
+
+elemento.textContent = '';
+elemento.hidden = true;
 
 }
 
