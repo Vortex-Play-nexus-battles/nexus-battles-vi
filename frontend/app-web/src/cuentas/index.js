@@ -70,35 +70,16 @@ const ESTRUCTURA_FASES = [
       }
     ]
   },
+  // HU-RBAC-001 y HU-RBAC-004 NO se listan en el hub de cliente:
+  //  · HU-RBAC-004 es 100% backend (SecurityInterceptor + 403 RFC 7807), no tiene
+  //    pantalla; su verificación se demuestra por cURL/Postman o abriendo
+  //    seguridad-servidor.html directamente.
+  //  · HU-RBAC-001 vive como la directiva has-permission integrada en las vistas
+  //    reales; matriz-permisos.html es una consola de referencia, no una vista
+  //    del portal del jugador.
   {
     numero: '3',
-    titulo: 'Fase 3: Control de Acceso y Seguridad Perimetral',
-    autor: 'Andrés Núñez · HU-RBAC-001 / HU-RBAC-004',
-    descripcion: 'Núcleo de autorización y defensa en profundidad: modelo de permisos 12×4 en el cliente y validación estricta en el servidor.',
-    pasos: [
-      {
-        codigo: 'HU-RBAC-001',
-        titulo: 'Panel de Permisos y Directiva RBAC',
-        descripcion: 'Inspección de la matriz de 48 combinaciones en caliente. La directiva reactiva has-permission oculta en el DOM las acciones que exceden tu rol.',
-        url: './matriz-permisos.html',
-        textoBoton: 'Inspeccionar Matriz RBAC',
-        accionRequerida: 'CONSULTA_RBAC',
-        disponiblePara: ['JUGADOR', 'MODERADOR', 'ADMINISTRADOR', 'SUPER_ADMINISTRADOR']
-      },
-      {
-        codigo: 'HU-RBAC-004',
-        titulo: 'Verificación Server-Side y Fail-Closed',
-        descripcion: 'El SecurityInterceptor valida claims criptográficos y bloquea intentos de bypass con código 403 RFC 7807 UTF-8 y auditoría asíncrona.',
-        url: './seguridad-servidor.html',
-        textoBoton: 'Consola de Seguridad',
-        accionRequerida: 'TEST_SEGURIDAD',
-        disponiblePara: ['JUGADOR', 'MODERADOR', 'ADMINISTRADOR', 'SUPER_ADMINISTRADOR']
-      }
-    ]
-  },
-  {
-    numero: '4',
-    titulo: 'Fase 4: Gobernanza y Gestión de Cuentas',
+    titulo: 'Fase 3: Gobernanza y Gestión de Cuentas',
     autor: 'Santiago Sanabria & Edwin · HU-USR-003 / HU-RBAC-003',
     descripcion: 'Operaciones avanzadas de administración: sanciones disciplinarias, baneo permanente y control de revocación de sesiones.',
     pasos: [
@@ -130,7 +111,7 @@ const METADATA_ROLES = {
   JUGADOR: {
     nombre: 'Jugador (Nivel 1)',
     subtitulo: 'Portal del Jugador · Arena de Combate',
-    descripcion: 'Sesión estándar de jugador. Puedes personalizar tu perfil, auditar tus permisos con la directiva reactiva y simular intentos de bypass en el laboratorio de seguridad.'
+    descripcion: 'Sesión estándar de jugador. Desde aquí gestionas tu perfil; el control de acceso RBAC actúa de forma transparente en cada acción que realizas.'
   },
   MODERADOR: {
     nombre: 'Moderador (Nivel 2)',
@@ -189,10 +170,11 @@ function montarNavegacionContextual(autenticado, rol, apodo) {
   linksNav.appendChild(linkHub);
 
   if (autenticado) {
+    // El menú del cliente solo enlaza vistas de usuario. Las consolas RBAC
+    // (matriz-permisos.html / seguridad-servidor.html) son herramientas de
+    // demostración/QA: se abren por URL directa, no van en la navegación.
     const linksAutenticado = [
-      { texto: 'Mi Perfil', url: './perfil.html' },
-      { texto: 'Matriz RBAC (HU-RBAC-001)', url: './matriz-permisos.html' },
-      { texto: 'Seguridad Servidor (HU-RBAC-004)', url: './seguridad-servidor.html' }
+      { texto: 'Mi Perfil', url: './perfil.html' }
     ];
 
     if (rol === 'ADMINISTRADOR' || rol === 'SUPER_ADMINISTRADOR') {
