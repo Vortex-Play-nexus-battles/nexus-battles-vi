@@ -18,6 +18,8 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class AdminCuentaServiceTest {
 
+    private static final String IP_ORIGEN = "127.0.0.1";
+
     @Mock
     private AuthAdminService authAdminService;
 
@@ -46,7 +48,7 @@ class AdminCuentaServiceTest {
             Role.MODERADOR
         )).thenReturn(usuarioCreado);
 
-        Usuario resultado = service.crearCuentaAdministrativa(datos, "admin");
+        Usuario resultado = service.crearCuentaAdministrativa(datos, "admin", IP_ORIGEN);
 
         assertEquals(usuarioCreado, resultado);
 
@@ -72,7 +74,8 @@ class AdminCuentaServiceTest {
             "Santi",
             null,
             "rol=MODERADOR, estado=INACTIVO",
-            "Creación de cuenta administrativa"
+            "Creación de cuenta administrativa",
+            IP_ORIGEN
         );
     }
 
@@ -92,7 +95,7 @@ class AdminCuentaServiceTest {
             Role.ADMINISTRADOR
         )).thenReturn(usuarioCreado);
 
-        Usuario resultado = service.crearCuentaAdministrativa(datos, "admin");
+        Usuario resultado = service.crearCuentaAdministrativa(datos, "admin", IP_ORIGEN);
 
         assertEquals(usuarioCreado, resultado);
 
@@ -118,7 +121,8 @@ class AdminCuentaServiceTest {
             "Santi",
             null,
             "rol=ADMINISTRADOR, estado=INACTIVO",
-            "Creación de cuenta administrativa"
+            "Creación de cuenta administrativa",
+            IP_ORIGEN
         );
     }
 
@@ -128,7 +132,7 @@ class AdminCuentaServiceTest {
 
         IllegalArgumentException exception = assertThrows(
             IllegalArgumentException.class,
-            () -> service.crearCuentaAdministrativa(datos, "admin")
+            () -> service.crearCuentaAdministrativa(datos, "admin", IP_ORIGEN)
         );
 
         assertEquals(
@@ -157,7 +161,7 @@ class AdminCuentaServiceTest {
             Role.MODERADOR
         )).thenReturn(usuarioCreado);
 
-        Usuario resultado = service.crearCuentaAdministrativa(datos, "admin");
+        Usuario resultado = service.crearCuentaAdministrativa(datos, "admin", IP_ORIGEN);
 
         assertEquals(usuarioCreado, resultado);
 
