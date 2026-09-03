@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nexus Battles VI - Tienda</title>
+  <link rel="stylesheet" href="tienda.css">
+</head>
+<body>
+<!-- Navbar simulado (Figma) -->
+<header class="navbar">
+  <div class="nav-left">
+    <h1>NEXUS BATTLES VI</h1>
+    <nav>
+      <a href="#">Jugar online</a>
+      <a href="#">Misiones</a>
+      <a href="#">Torneo</a>
+      <a href="#">Mi inventario</a>
+      <a href="#">Subasta</a>
+    </nav>
+  </div>
+  <div class="nav-right">
+    <input type="text" placeholder="Buscar productos..." class="search-bar">
+    <div class="user-info">
+      <span class="user-balance">240 créditos</span>
+      <div class="user-avatar">Simon_P</div>
+    </div>
+  </div>
+</header>
+
+<main class="main-container">
+  <!-- Columna de Productos -->
+  <section class="store-section">
+    <div class="store-header">
+      <h2>Tienda</h2>
+      <p>Paga con moneda local (COP) usando tus métodos registrados.</p>
+    </div>
+
+    <!-- El contenedor donde JS inyectará las tarjetas -->
+    <div id="productos-grid" class="products-grid">
+      <!-- Cargando productos... -->
+    </div>
+  </section>
+
+  <!-- Columna del Carrito -->
+  <aside class="cart-section">
+    <div class="cart-card">
+      <h3>Tu carro</h3>
+
+      <div id="cart-items" class="cart-items-container">
+        <!-- JS inyectará los items del carrito aquí -->
+        <p class="empty-cart-msg">Tu carrito está vacío</p>
+      </div>
+
+      <div class="cart-summary">
+        <div class="summary-row">
+          <span>Subtotal</span>
+          <span id="cart-subtotal">0 COP</span>
+        </div>
+        <div class="summary-row total-row">
+          <span>Total a pagar</span>
+          <span id="cart-total" class="total-price">0 COP</span>
+        </div>
+      </div>
+
+      <!-- Mensaje de advertencia replicado del Figma -->
+      <div id="warning-msg" class="warning-box hidden">
+        No te alcanzan los fondos en tu cuenta principal. Revisa tu billetera o quita algo del carro.
+      </div>
+
+      <button id="btn-pagar" class="btn-pagar" disabled>PAGAR</button>
+    </div>
+  </aside>
+</main>
+
+<script src="tienda.js"></script>
+</body>
+</html>
