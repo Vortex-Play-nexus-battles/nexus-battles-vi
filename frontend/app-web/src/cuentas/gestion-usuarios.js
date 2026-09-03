@@ -2,7 +2,7 @@ import {
 setCurrentRole,
 getCurrentRole,
 checkPermission,
-applyHasPermissionDirective
+setPermissionMatrix
 } from './directives/has-permission.directive.js';
 
 import {
@@ -13,9 +13,11 @@ import { cambiarRol, ROLES_DISPONIBLES } from './cambio-rol.js';
 
 
 const BASE_API = '/api/admin/usuarios';
+const MATRIZ_RBAC_API = '/api/v1/rbac/matrix';
 
 const CLAVE_ROL = 'nexus.rolActual';
 const CLAVE_USUARIO_ID = 'nexus.usuarioId';
+const CLAVE_TOKEN = 'nexus.token';
 
 const PERMISO_GESTIONAR = 'GESTIONAR_CUENTAS';
 const PERMISO_SUSPENDER = 'SUSPENDER_USUARIOS';
@@ -63,7 +65,7 @@ function montarMenuAdmin() {
     document.body.insertBefore(menu, document.body.children[1]);
 }
 
-function iniciar() {
+async function iniciar() {
 
 montarBarraNavegacion();
 
@@ -74,11 +76,53 @@ const rolActual =
 
 setCurrentRole(rolActual);
 
-applyHasPermissionDirective();
-
 configurarSelectorRoles();
 
 configurarEventos();
+
+await cargarMatrizYVerificarAcceso();
+
+}
+
+export async function cargarMatrizYVerificarAcceso({
+fetchImpl = fetchWithHttpErrorInterceptor
+} = {}) {
+
+const token = sessionStorage.getItem(CLAVE_TOKEN);
+const headers = token
+    ? { Authorization: `Bearer ${token}` }
+    : {};
+
+try {
+
+    const respuesta = await fetchImpl(
+        MATRIZ_RBAC_API,
+        { headers }
+    );
+
+    if (!respuesta.ok) {
+        throw new Error(`Error HTTP ${respuesta.status}`);
+    }
+
+    const payload = await respuesta.json();
+    const matriz = payload?.matrix;
+
+    if (
+        !matriz ||
+        typeof matriz !== 'object' ||
+        Object.keys(matriz).length === 0
+    ) {
+        throw new Error('La matriz RBAC recibida no es válida.');
+    }
+
+    setPermissionMatrix(matriz);
+
+} catch (error) {
+
+    console.error('No fue posible cargar la matriz RBAC:', error);
+    setPermissionMatrix({});
+
+}
 
 verificarAcceso();
 
