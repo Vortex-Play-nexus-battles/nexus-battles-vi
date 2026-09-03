@@ -183,6 +183,25 @@ jobs:
             fi
           fi
 
+          # 6) services/cuentas/ms-ecommerce (Maven), mismo patron exacto que
+          #    ms-identidad y ms-cumplimiento arriba -- bloque especifico, NO
+          #    generalizado a un grep de cuentas/*. Puerto 8090, mismo del
+          #    lado del host que del contenedor (confirmado en su Dockerfile:
+          #    EXPOSE 8090). A diferencia de los otros dos, este servicio
+          #    tiene server.servlet.context-path=/api/v1 -- el healthcheck
+          #    generico de desplegar.sh no sirve tal cual para el, ver el
+          #    comentario de "ruta_salud_de" en ese script.
+          if echo "$ARCHIVOS" | grep -q '^services/cuentas/ms-ecommerce/'; then
+            if [ -f "services/cuentas/ms-ecommerce/pom.xml" ]; then
+              MATRIZ=$(echo "$MATRIZ" | jq -c \
+                --arg ruta "services/cuentas/ms-ecommerce" \
+                --arg servicio "ms-ecommerce" \
+                '. + [{ruta:$ruta, rutaGradle:"", servicio:$servicio, puerto:"8090", herramienta:"maven"}]')
+            else
+              echo "Se omite services/cuentas/ms-ecommerce: no tiene pom.xml"
+            fi
+          fi
+
           echo "Servicios a desplegar: $MATRIZ"
           echo "servicios=$MATRIZ" >> "$GITHUB_OUTPUT"
 
@@ -303,7 +322,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,scripts/cd/desplegar.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,scripts/cd/desplegar.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -356,11 +375,20 @@ jobs:
           MS_CUMPLIMIENTO_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_CUMPLIMIENTO }}
           MS_CUMPLIMIENTO_DB_USER: ${{ secrets.TODO_DB_USER_MS_CUMPLIMIENTO }}
           MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_CUMPLIMIENTO }}
+          # PENDIENTE (TODO_*): mismo patron de placeholder que los otros dos
+          # servicios de Cuentas -- 5 secrets propios de ms-ecommerce,
+          # todavia no creados en GitHub. Prefijo "MS_ECOMMERCE_" para no
+          # chocar con ningun otro esquema (ver docker-compose.ms-ecommerce.yml).
+          MS_ECOMMERCE_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_USER: ${{ secrets.TODO_DB_USER_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_ECOMMERCE }}
         with:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD
+          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -397,7 +425,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,scripts/cd/desplegar.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,scripts/cd/desplegar.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -438,11 +466,18 @@ jobs:
           MS_CUMPLIMIENTO_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_CUMPLIMIENTO }}
           MS_CUMPLIMIENTO_DB_USER: ${{ secrets.TODO_DB_USER_MS_CUMPLIMIENTO }}
           MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_CUMPLIMIENTO }}
+          # PENDIENTE (TODO_*): ver el mismo comentario en el job "Desplegar
+          # en Dev" -- misma logica para los 5 secrets de ms-ecommerce.
+          MS_ECOMMERCE_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_USER: ${{ secrets.TODO_DB_USER_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_ECOMMERCE }}
         with:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD
+          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -483,7 +518,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,scripts/cd/desplegar.sh,scripts/cd/revertir.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,scripts/cd/desplegar.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -533,11 +568,19 @@ jobs:
           MS_CUMPLIMIENTO_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_CUMPLIMIENTO }}
           MS_CUMPLIMIENTO_DB_USER: ${{ secrets.TODO_DB_USER_MS_CUMPLIMIENTO }}
           MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_CUMPLIMIENTO }}
+          # PENDIENTE (TODO_*): mismos 5 secrets de ms-ecommerce que en
+          # dev/test -- tampoco tiene perfiles Spring, no hace falta forzar
+          # ninguno.
+          MS_ECOMMERCE_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_USER: ${{ secrets.TODO_DB_USER_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_ECOMMERCE }}
         with:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD
+          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
