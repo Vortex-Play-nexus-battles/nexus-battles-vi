@@ -198,35 +198,114 @@ form > label,
   margin: 0 0 20px;
 }
 
+/* Fondo con movimiento ambiental muy sutil: 2 manchas de luz, en los
+   propios colores de acento del tema a baja opacidad, que se
+   desplazan lentamente en bucle — nada nuevo en la paleta. */
 .pagina-auth {
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 32px 16px;
+  background: var(--fondo);
+  position: relative;
+  overflow: hidden;
+}
+.pagina-auth::before,
+.pagina-auth::after {
+  content: '';
+  position: absolute;
+  width: 480px;
+  height: 480px;
+  border-radius: 50%;
+  filter: blur(60px);
+  pointer-events: none;
+  z-index: 0;
+}
+.pagina-auth::before {
+  top: -120px;
+  left: -120px;
+  background: rgba(34, 68, 191, 0.16);
+  animation: flotar1 14s ease-in-out infinite;
+}
+.pagina-auth::after {
+  bottom: -140px;
+  right: -140px;
+  background: rgba(88, 39, 132, 0.16);
+  animation: flotar2 16s ease-in-out infinite;
 }
 .pagina-auth .tarjeta {
-  width: 100%;
-  max-width: 440px;
-  margin-bottom: 0;
-  /* Tratamiento visual propio del mockup aprobado para estas 2
-     pantallas. El resto de la app (demo-rbac) conserva su .tarjeta
-     de borde fino sin sombra, sin cambios — esto solo aplica
-     dentro de .pagina-auth, no reescribe la regla compartida. */
-  border-radius: 20px;
-  box-shadow: 0 10px 30px rgba(28, 35, 64, 0.12);
-  padding: 32px;
+  position: relative;
+  z-index: 1;
 }
+
+.pagina-auth .tarjeta {
+  width: 100%;
+  max-width: 500px;
+  margin-bottom: 0;
+  /* Marco más trabajado: borde de acento como franja superior,
+     esquinas más redondeadas, y sombra elevada en 2 capas para dar
+     sensación de profundidad — mismo radio de fondo y colores del
+     tema, nada nuevo agregado a la paleta. */
+  overflow: hidden;
+  border-radius: 20px;
+  box-shadow:
+    0 2px 8px rgba(28, 35, 64, 0.08),
+    0 20px 45px rgba(28, 35, 64, 0.16);
+  padding: 36px 32px 32px;
+  animation: entradaTarjeta 0.45s ease both;
+}
+.pagina-auth .tarjeta::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: linear-gradient(90deg, var(--accion) 0%, var(--acento) 100%);
+}
+
 .pagina-auth .fila > label {
   flex: 1 1 0;
   min-width: 0;
 }
+
+/* Campos con más movimiento: al pasar el cursor, un leve aumento de
+   escala además del cambio de borde; al enfocar, resplandor +
+   elevación, igual que antes. */
+.pagina-auth select,
+.pagina-auth input[type='text'],
+.pagina-auth input[type='email'],
+.pagina-auth input[type='password'] {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease,
+  transform 0.15s ease;
+}
+.pagina-auth select:hover,
+.pagina-auth input[type='text']:hover,
+.pagina-auth input[type='email']:hover,
+.pagina-auth input[type='password']:hover {
+  border-color: var(--texto-secundario);
+  transform: scale(1.015);
+}
+.pagina-auth select:focus,
+.pagina-auth input:focus {
+  border-color: var(--accion);
+  box-shadow: 0 0 0 4px rgba(34, 68, 191, 0.14);
+  outline: none;
+  transform: translateY(-1px) scale(1.015);
+}
+
 .pagina-auth .btn-primario {
   width: 100%;
   min-height: 48px;
   border-radius: 8px;
   text-transform: uppercase;
   letter-spacing: 0.02em;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.pagina-auth .btn-primario:hover {
+  transform: translateY(-1px) scale(1.01);
+  box-shadow: 0 8px 20px rgba(30, 63, 136, 0.28);
 }
 
 .enlace-secundario {
@@ -243,6 +322,33 @@ input[aria-invalid='true'] {
   border-color: var(--error);
 }
 
+@keyframes entradaTarjeta {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes flotar1 {
+  0%   { transform: translate(0, 0); }
+  25%  { transform: translate(220px, 120px); }
+  50%  { transform: translate(100px, 280px); }
+  75%  { transform: translate(-120px, 100px); }
+  100% { transform: translate(0, 0); }
+}
+
+@keyframes flotar2 {
+  0%   { transform: translate(0, 0); }
+  25%  { transform: translate(-200px, -100px); }
+  50%  { transform: translate(-80px, -260px); }
+  75%  { transform: translate(140px, -90px); }
+  100% { transform: translate(0, 0); }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  * { transition: none !important; }
+  * { transition: none !important; animation: none !important; }
 }

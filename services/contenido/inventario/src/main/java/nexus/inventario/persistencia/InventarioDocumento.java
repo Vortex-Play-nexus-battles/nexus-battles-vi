@@ -21,10 +21,16 @@ record InventarioDocumento(
 
     @PersistenceCreator
     InventarioDocumento {
+        elementos = elementos == null ? List.of() : List.copyOf(elementos);
+        equipamientos = equipamientos == null ? List.of() : List.copyOf(equipamientos);
     }
 
     InventarioDocumento(String id, String propietarioId, List<ElementoDocumento> elementos) {
         this(id, propietarioId, elementos, List.of());
+    }
+
+    InventarioDocumento withId(String nuevoId) {
+        return new InventarioDocumento(nuevoId, propietarioId, elementos, equipamientos);
     }
 
     static InventarioDocumento de(Inventario inventario) {
@@ -40,9 +46,13 @@ record InventarioDocumento(
                 id,
                 propietarioId,
                 elementos.stream().map(ElementoDocumento::aDominio).toList(),
-                equipamientos == null
-                        ? List.of()
-                        : equipamientos.stream().map(EquipamientoDocumento::aDominio).toList());
+                // DECISION EXPLICITA (no aditiva, a diferencia del resto de este
+                // archivo): se descarta el ternario null-safe que traia esta rama
+                // aqui, en favor de la version de develop, porque el constructor
+                // compacto de arriba ya normaliza equipamientos a List.of() cuando
+                // llega null - repetir el chequeo aqui quedaria como codigo muerto
+                // despues de esa fusion, no como una proteccion adicional real.
+                equipamientos.stream().map(EquipamientoDocumento::aDominio).toList());
     }
 }
 

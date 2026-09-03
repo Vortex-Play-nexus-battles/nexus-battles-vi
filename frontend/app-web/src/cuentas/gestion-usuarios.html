@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Gestión de usuarios - Nexus Battles</title>
+
+  <link rel="stylesheet" href="../comun/barra-navegacion.css">
+  <link rel="stylesheet" href="./gestion-usuarios.css">
+
+</head>
+
+<body>
+
+<main class="pagina">
+
+  <header class="encabezado">
+
+    <div>
+      <p class="eyebrow">NEXUS BATTLES</p>
+
+      <h1>Gestión de usuarios</h1>
+
+      <p class="descripcion">
+        Administra perfiles, estados y acciones de seguridad
+        de las cuentas de usuario.
+      </p>
+    </div>
+
+    <button
+      type="button"
+      id="btn-volver"
+      class="btn btn-secundario"
+    >
+      Volver
+    </button>
+
+  </header>
+
+
+  <section
+    id="acceso-denegado"
+    class="estado estado-denegado"
+    hidden
+    aria-live="polite"
+  >
+
+    <div class="estado-icono">Acceso restringido</div>
+
+    <h2>Acceso denegado</h2>
+
+    <p>
+      No tienes permisos suficientes para gestionar cuentas.
+    </p>
+
+    <button
+      type="button"
+      id="btn-volver-acceso"
+      class="btn btn-secundario"
+    >
+      Volver
+    </button>
+
+  </section>
+
+
+  <section
+    id="gestion-contenedor"
+    hidden
+  >
+
+    <section class="tarjeta busqueda">
+
+      <div class="seccion-cabecera">
+
+        <h2>Buscar usuario</h2>
+
+        <p>
+          Ingresa el ID del usuario que deseas gestionar.
+        </p>
+
+      </div>
+
+
+      <form
+        id="form-buscar-usuario"
+        class="form-busqueda"
+        novalidate
+      >
+
+        <div class="campo">
+
+          <label for="usuario-id">
+            ID del usuario
+          </label>
+
+          <input
+            type="number"
+            id="usuario-id"
+            name="usuario-id"
+            min="1"
+            required
+            placeholder="Ej. 15"
+          >
+
+        </div>
+
+
+        <button
+          type="submit"
+          id="btn-buscar"
+          class="btn btn-principal"
+        >
+          Buscar usuario
+        </button>
+
+      </form>
+
+
+      <div
+        id="mensaje-busqueda"
+        class="mensaje"
+        hidden
+        role="alert"
+        aria-live="assertive"
+      ></div>
+
+    </section>
+
+
+    <section
+      id="panel-usuario"
+      class="panel-usuario"
+      hidden
+    >
+
+      <section class="tarjeta resumen-usuario">
+
+        <div class="seccion-cabecera">
+
+          <h2>Usuario seleccionado</h2>
+
+        </div>
+
+
+        <div class="datos-usuario">
+
+          <div>
+            <span class="etiqueta">ID</span>
+            <strong id="usuario-id-mostrado">-</strong>
+          </div>
+
+          <div>
+            <span class="etiqueta">Apodo</span>
+            <strong id="usuario-apodo-mostrado">-</strong>
+          </div>
+
+          <div>
+            <span class="etiqueta">Correo</span>
+            <strong id="usuario-email-mostrado">-</strong>
+          </div>
+
+          <div>
+            <span class="etiqueta">Rol</span>
+            <strong id="usuario-rol-mostrado">-</strong>
+          </div>
+
+          <div>
+            <span class="etiqueta">Estado</span>
+            <strong id="usuario-estado-mostrado">-</strong>
+          </div>
+
+        </div>
+
+      </section>
+
+
+      <section class="tarjeta">
+
+        <div class="seccion-cabecera">
+
+          <h2>Perfil</h2>
+
+          <p>
+            Modifica la información básica del usuario.
+          </p>
+
+        </div>
+
+
+        <form
+          id="formulario-perfil-admin"
+          novalidate
+        >
+
+          <div class="grid-formulario">
+
+            <div class="campo">
+
+              <label for="nombres">
+                Nombres
+              </label>
+
+              <input
+                type="text"
+                id="nombres"
+                name="nombres"
+                required
+              >
+
+            </div>
+
+
+            <div class="campo">
+
+              <label for="apellidos">
+                Apellidos
+              </label>
+
+              <input
+                type="text"
+                id="apellidos"
+                name="apellidos"
+                required
+              >
+
+            </div>
+
+
+            <div class="campo">
+
+              <label for="apodo">
+                Apodo
+              </label>
+
+              <input
+                type="text"
+                id="apodo"
+                name="apodo"
+                required
+              >
+
+            </div>
+
+
+            <div class="campo">
+
+              <label for="avatar">
+                Avatar
+              </label>
+
+              <select
+                id="avatar"
+                name="avatar"
+              >
+
+                <option value="">
+                  Sin avatar
+                </option>
+
+                <option value="alquimista-picaro-veneno.jpg">
+                  Alquimista pícaro
+                </option>
+
+                <option value="arquero-cazador.jpg">
+                  Arquero cazador
+                </option>
+
+                <option value="chaman-sanador.jpg">
+                  Chamán sanador
+                </option>
+
+                <option value="comandante-con-casco.jpg">
+                  Comandante
+                </option>
+
+                <option value="gran-mago-sabio.jpg">
+                  Gran mago
+                </option>
+
+                <option value="guerrero-berserker.jpg">
+                  Guerrero berserker
+                </option>
+
+                <option value="guerrero-tanque.jpg">
+                  Guerrero tanque
+                </option>
+
+                <option value="mago-de-fuego.jpg">
+                  Mago de fuego
+                </option>
+
+                <option value="mago-de-hielo.jpg">
+                  Mago de hielo
+                </option>
+
+                <option value="picaro-asesino.jpg">
+                  Pícaro asesino
+                </option>
+
+              </select>
+
+            </div>
+
+
+            <div class="campo campo-completo">
+
+              <label for="biografia">
+                Biografía
+              </label>
+
+              <textarea
+                id="biografia"
+                name="biografia"
+                rows="4"
+              ></textarea>
+
+            </div>
+
+
+            <div class="campo campo-completo">
+
+              <label for="preferencias">
+                Preferencias
+              </label>
+
+              <textarea
+                id="preferencias"
+                name="preferencias"
+                rows="4"
+              ></textarea>
+
+            </div>
+
+          </div>
+
+
+          <div
+            id="mensaje-perfil"
+            class="mensaje"
+            hidden
+            role="alert"
+            aria-live="assertive"
+          ></div>
+
+
+          <div class="acciones">
+
+            <button
+              type="submit"
+              id="btn-guardar-perfil"
+              class="btn btn-principal"
+              data-has-permission="GESTIONAR_CUENTAS"
+            >
+              Guardar cambios
+            </button>
+
+          </div>
+
+        </form>
+
+      </section>
+
+
+      <section class="tarjeta">
+
+        <div class="seccion-cabecera">
+
+          <h2>Estado de la cuenta</h2>
+
+          <p>
+            Administra el estado actual de la cuenta.
+          </p>
+
+        </div>
+
+
+        <div class="campo">
+
+          <label for="estado">
+            Estado
+          </label>
+
+          <select
+            id="estado"
+            name="estado"
+            disabled
+          >
+            <option value="ACTIVO">
+              Activo
+            </option>
+
+            <option value="INACTIVO">
+              Inactivo
+            </option>
+
+            <option value="SUSPENDIDO">
+              Suspendido
+            </option>
+
+            <option value="BANEADO">
+              Baneado
+            </option>
+          </select>
+
+        </div>
+
+
+        <div class="campo campo-suspension">
+
+          <label for="suspendido-hasta">
+            Suspendido hasta
+          </label>
+
+          <input
+            type="datetime-local"
+            id="suspendido-hasta"
+            name="suspendido-hasta"
+          >
+
+        </div>
+
+
+        <div class="acciones acciones-estado">
+
+          <button
+            type="button"
+            id="btn-suspender"
+            class="btn btn-secundario"
+            data-has-permission="SUSPENDER_USUARIOS"
+          >
+            Suspender
+          </button>
+
+          <button
+            type="button"
+            id="btn-reactivar"
+            class="btn btn-secundario"
+            data-has-permission="SUSPENDER_USUARIOS"
+          >
+            Reactivar
+          </button>
+
+          <button
+            type="button"
+            id="btn-banear"
+            class="btn btn-peligro"
+            data-has-permission="BANEAR_DEFINITIVAMENTE"
+          >
+            Banear definitivamente
+          </button>
+
+        </div>
+
+      </section>
+
+
+      <section class="tarjeta">
+
+        <div class="seccion-cabecera">
+
+          <h2>Seguridad</h2>
+
+          <p>
+            Puedes solicitar el restablecimiento de contraseña
+            sin conocer ni recibir la nueva contraseña del usuario.
+          </p>
+
+        </div>
+
+
+        <div class="acciones">
+
+          <button
+            type="button"
+            id="btn-restablecer-password"
+            class="btn btn-principal"
+            data-has-permission="GESTIONAR_CUENTAS"
+          >
+            Restablecer contraseña
+          </button>
+
+        </div>
+
+      </section>
+
+
+      <section class="tarjeta">
+
+        <div class="seccion-cabecera">
+
+          <h2>Inventario y privacidad</h2>
+
+          <p>
+            Esta sección queda preparada para las operaciones
+            administrativas que serán conectadas posteriormente
+            con sus endpoints correspondientes.
+          </p>
+
+        </div>
+
+
+        <div class="bloque-informativo">
+
+          <p>
+            Inventario, privacidad y configuraciones de seguridad
+            adicionales requieren endpoints administrativos
+            específicos.
+          </p>
+
+        </div>
+
+      </section>
+
+    </section>
+
+  </section>
+
+</main>
+
+<script
+  type="module"
+  src="./gestion-usuarios.js"
+></script>
+
+</body>
+</html>

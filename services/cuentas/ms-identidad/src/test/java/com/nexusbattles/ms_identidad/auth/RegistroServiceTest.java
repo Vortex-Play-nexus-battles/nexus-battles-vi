@@ -4,6 +4,7 @@ import com.nexusbattles.ms_identidad.auth.correo.CorreoClient;
 import com.nexusbattles.ms_identidad.auth.dto.RegistroRequest;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
+import com.nexusbattles.ms_identidad.auth.service.AvatarStorageService;
 import com.nexusbattles.ms_identidad.auth.service.RegistroService;
 import com.nexusbattles.ms_identidad.auth.validation.ApodoBlacklistValidator;
 import com.nexusbattles.ms_identidad.auth.validation.PasswordPolicyValidator;
@@ -44,6 +45,9 @@ class RegistroServiceTest {
     @Mock
     private CorreoClient correoClient;
 
+    @Mock
+    private AvatarStorageService avatarStorageService;
+
     @InjectMocks
     private RegistroService registroService;
 
@@ -54,7 +58,9 @@ class RegistroServiceTest {
         datos.setEmail("cristian@test.com");
         datos.setPassword("MiClave123!");
         datos.setApodo("cristianc");
-        datos.setAvatar("https://ejemplo.com/avatar.png");
+        // Sin archivo de avatar en las pruebas unitarias: sigue siendo
+        // opcional, y AvatarStorageService.guardarAvatar(null) ya maneja
+        // ese caso devolviendo null en el código real.
         return datos;
     }
 
@@ -136,6 +142,7 @@ class RegistroServiceTest {
         when(rolService.obtenerRolPorNombre("JUGADOR")).thenReturn(rolJugador);
         when(usuarioRepository.save(any(Usuario.class)))
             .thenAnswer(invocacion -> invocacion.getArgument(0));
+        when(avatarStorageService.guardarAvatar(null)).thenReturn(null);
 
         Usuario resultado = registroService.registrarUsuario(datos);
 
@@ -147,7 +154,7 @@ class RegistroServiceTest {
         assertTrue(new BCryptPasswordEncoder().matches("MiClave123!", resultado.getPassword()));
 
         verify(perfilUsuarioService).crearPerfil(
-            resultado, "Cristian", "Chaparro", "https://ejemplo.com/avatar.png"
+            resultado, "Cristian", "Chaparro", null
         );
         verify(correoClient).enviarBienvenida(any());
     }
