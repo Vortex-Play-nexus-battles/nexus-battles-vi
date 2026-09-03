@@ -1,27 +1,44 @@
-# Servicios de contenido (Grupo 2) para desarrollo local.
+# Servicios de contenido (Grupo 2), para desarrollo local Y para despliegue.
 #
-# Uso:
-#   docker compose -f docker-compose.yml -f docker-compose.contenido.yml up -d
+# Uso local:
+#   docker compose -f docker-compose.yml -f docker-compose.contenido.yml up -d --build
 #
 # Levanta los 4 servicios de services/contenido/ junto con MongoDB 8 y la
 # infra comun de plataforma (Postgres, Redis, Mailpit del docker-compose.yml
-# base). Cada servicio se construye desde la raiz del monorepo.
+# base). Cada servicio se construye desde la raiz del monorepo, con -f al
+# Dockerfile del servicio (heroes espera el jar ya compilado:
+# ./gradlew :services:contenido:heroes:bootJar antes del build; los otros
+# tres compilan dentro de la imagen).
+#
+# Uso en despliegue (scripts/cd/desplegar.sh lo agrega al comando SOLO cuando
+# algun servicio de contenido viene entre los modificados de esa corrida,
+# mismo mecanismo que docker-compose.cuentas.yml):
+#   docker compose -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.contenido.yml pull|up -d
+# Ahi manda "image:" (publicada en ghcr.io por cd.yml, nunca se construye en
+# el servidor: el comando no lleva --build). ${TAG} lo exporta desplegar.sh.
 #
 # Puertos de host: 8101-8104 (ecommerce usa 8090, cumplimiento 8091;
-# plataforma usa 8081-8088, cuentas 8089).
+# plataforma usa 8081-8088, cuentas 8089). Es el puerto que consulta el
+# healthcheck de desplegar.sh y el que registra puerto_de() en cd.yml.
 # Todos los servicios exponen 8080 internamente; el mapeo host:contenedor
-# los diferencia en la maquina del desarrollador.
+# los diferencia. Entre ellos se hablan por nombre de servicio en la red de
+# Compose (srv-heroes:8080, etc.), nunca por el puerto del host.
 
 services:
 
   # --- Base de datos documental (regla 7: un esquema por servicio) ---
+  # Sin puerto publicado en el host: solo la alcanzan los servicios de esta
+  # red. Para inspeccionarla en local, "docker exec -it contenido-mongo mongosh".
   contenido-mongo:
     image: mongo:8.0
     container_name: contenido-mongo
-    ports:
-      - "27017:27017"
     volumes:
       - contenido-mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   # --- Servicios de contenido ---
 
@@ -29,6 +46,7 @@ services:
     build:
       context: .
       dockerfile: services/contenido/heroes/Dockerfile
+    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-heroes:${TAG:-local}
     container_name: srv-heroes
     ports:
       - "8101:8080"
@@ -37,12 +55,14 @@ services:
       SPRING_PROFILES_ACTIVE: mongo
       MONGODB_URI: mongodb://contenido-mongo:27017/heroes
     depends_on:
-      - contenido-mongo
+      contenido-mongo:
+        condition: service_healthy
 
   srv-inventario:
     build:
       context: .
       dockerfile: services/contenido/inventario/Dockerfile
+    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-inventario:${TAG:-local}
     container_name: srv-inventario
     ports:
       - "8102:8080"
@@ -51,34 +71,45 @@ services:
       HEROES_BASE_URL: http://srv-heroes:8080
       PRODUCTOS_BASE_URL: http://srv-productos:8080
     depends_on:
-      - contenido-mongo
-      - srv-heroes
-      - srv-productos
+      contenido-mongo:
+        condition: service_healthy
+      srv-heroes:
+        condition: service_started
+      srv-productos:
+        condition: service_started
 
   srv-productos:
     build:
       context: .
       dockerfile: services/contenido/productos/Dockerfile
+    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-productos:${TAG:-local}
     container_name: srv-productos
     ports:
       - "8103:8080"
     environment:
       MONGODB_URI: mongodb://contenido-mongo:27017/productos
+      # Obligatoria (sin valor por defecto en el servicio). El valor de abajo
+      # es el Keycloak local; en despliegue la aporta el entorno del servidor.
+      # El JWKS se consulta solo al validar el primer token, asi que el
+      # contenedor arranca y responde salud aunque la URL no exista aun.
       KEYCLOAK_JWK_SET_URI: ${KEYCLOAK_JWK_SET_URI:-http://host.docker.internal:9090/realms/nexus/protocol/openid-connect/certs}
     depends_on:
-      - contenido-mongo
+      contenido-mongo:
+        condition: service_healthy
 
   srv-motor-combate:
     build:
       context: .
       dockerfile: services/contenido/motor-combate/Dockerfile
+    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-motor-combate:${TAG:-local}
     container_name: srv-motor-combate
     ports:
       - "8104:8080"
     environment:
       HEROES_URL: http://srv-heroes:8080
     depends_on:
-      - srv-heroes
+      srv-heroes:
+        condition: service_started
 
 volumes:
   contenido-mongo-data:
