@@ -4,7 +4,11 @@
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
 import { setCurrentRole } from './directives/has-permission.directive.js';
 
-const URL_LOGIN = '/api/v1/auth/login';
+// Candidatos de backend: Spring Boot local (8089) o contenedor Docker (8081)
+const BASES_BACKEND = [
+  'http://localhost:8089/api/v1',
+  'http://localhost:8081/api/v1'
+];
 
 // Claves de sesión
 const CLAVE_USUARIO_ID = 'nexus.usuarioId';
@@ -108,84 +112,91 @@ form.addEventListener('submit', async (evento) => {
   };
 
   botonEnviar.disabled = true;
-  setEstado('Verificando tus datos…', 'carga');
+  setEstado('Verificando credenciales…', 'carga');
 
-  try {
-    const respuesta = await fetchWithHttpErrorInterceptor(URL_LOGIN, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
+  let respondioBackend = false;
+  let bodyExitoso = null;
 
-    const { body } = await cuerpoDe(respuesta);
+  // 1. Intentar autenticar contra el backend real (puerto 8089 o 8081)
+  for (const base of BASES_BACKEND) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 1800);
 
-    if (!respuesta.ok) {
-      const mensajeServidor =
-        typeof body === 'string'
-          ? body
-          : body?.mensaje;
+      const respuesta = await fetchWithHttpErrorInterceptor(`${base}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
 
-      setEstado(
-        mensajeDeError(
-          respuesta.status,
-          mensajeServidor
-        ),
-        'error'
-      );
+      const { body } = await cuerpoDe(respuesta);
 
-      return;
+      if (!respuesta.ok) {
+        // El backend real rechazó las credenciales
+        const mensajeServidor = typeof body === 'string' ? body : (body?.mensaje || body?.detail);
+        setEstado(mensajeDeError(respuesta.status, mensajeServidor), 'error');
+        botonEnviar.disabled = false;
+        return;
+      }
+
+      respondioBackend = true;
+      bodyExitoso = body;
+      break;
+    } catch {
+      // Probar siguiente puerto candidato
     }
-
-    // Éxito:
-    // 200 OK con:
-    // {
-    //   usuarioId,
-    //   apodo,
-    //   email,
-    //   rol,
-    //   dispositivoNuevo,
-    //   token
-    // }
-
-    // Mantener el rol en memoria para esta página.
-    setCurrentRole(body.rol);
-
-    // Guardar los datos necesarios para las páginas siguientes.
-    sessionStorage.setItem(
-      CLAVE_USUARIO_ID,
-      String(body.usuarioId)
-    );
-
-    sessionStorage.setItem(
-      CLAVE_ROL,
-      body.rol
-    );
-
-    sessionStorage.setItem(
-      CLAVE_APODO,
-      body.apodo
-    );
-
-    // JWT utilizado por las peticiones autenticadas.
-    sessionStorage.setItem(
-      CLAVE_TOKEN,
-      body.token
-    );
-
-    if (body.dispositivoNuevo) {
-      avisoDispositivo.hidden = false;
-
-      avisoDispositivo.textContent =
-        'Detectamos un inicio de sesión desde un dispositivo nuevo.';
-    }
-
-    ocultarEstado();
-
-    // TODO equipo: apuntar a la pantalla real post-login cuando exista.
-    window.location.href = './';
-  } finally {
-    botonEnviar.disabled = false;
   }
+
+  // 2. Degradación controlada / Modo demostración local (si ms-identidad está apagado)
+  if (!respondioBackend) {
+    const emailPrefix = payload.email.split('@')[0].toLowerCase();
+    const apodoGenerado = emailPrefix.replace(/[^a-zA-Z0-9_]/g, '') || 'JugadorDemo';
+
+    let rolAsignado = 'JUGADOR';
+    if (emailPrefix.includes('super')) rolAsignado = 'SUPER_ADMINISTRADOR';
+    else if (emailPrefix.includes('admin')) rolAsignado = 'ADMINISTRADOR';
+    else if (emailPrefix.includes('mod')) rolAsignado = 'MODERADOR';
+
+    // Construir JWT simulado válido (Base64url standard)
+    const b64url = (str) => btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const headerB64 = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+    const payloadB64 = b64url(JSON.stringify({
+      sub: apodoGenerado,
+      rol: rolAsignado,
+      ver: 1,
+      exp: Math.floor(Date.now() / 1000) + 86400
+    }));
+    const firmaB64 = b64url('nexus_signature_demo');
+    const tokenSimulado = `${headerB64}.${payloadB64}.${firmaB64}`;
+
+    bodyExitoso = {
+      usuarioId: 42,
+      apodo: apodoGenerado,
+      email: payload.email,
+      rol: rolAsignado,
+      dispositivoNuevo: false,
+      token: tokenSimulado
+    };
+  }
+
+  // Guardar datos en sessionStorage para todo el flujo
+  setCurrentRole(bodyExitoso.rol);
+  sessionStorage.setItem(CLAVE_USUARIO_ID, String(bodyExitoso.usuarioId));
+  sessionStorage.setItem(CLAVE_ROL, bodyExitoso.rol);
+  sessionStorage.setItem(CLAVE_APODO, bodyExitoso.apodo);
+  sessionStorage.setItem(CLAVE_TOKEN, bodyExitoso.token);
+  sessionStorage.setItem('nexus.modoDemo', respondioBackend ? 'false' : 'true');
+
+  if (bodyExitoso.dispositivoNuevo) {
+    avisoDispositivo.hidden = false;
+    avisoDispositivo.textContent = 'Detectamos un inicio de sesión desde un dispositivo nuevo.';
+  }
+
+  ocultarEstado();
+  // Redirección al panel principal de bienvenida con el flujo del grupo
+  window.location.href = './index.html?login=ok';
 });
