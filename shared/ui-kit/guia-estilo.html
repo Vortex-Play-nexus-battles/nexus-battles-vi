@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guía de estilo · The Nexus Battles VI</title>
+
+<!--
+  Las fuentes se cargan aquí desde Google para poder abrir este archivo con
+  doble clic, sin servidor. En producción hay que servirlas desde el propio
+  Spring Boot: la aplicación va en AWS y no debe depender de un dominio
+  externo para renderizar bien.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/componentes.css">
+
+<style>
+  /* Estilos propios de esta página, no forman parte del kit. */
+  .envoltorio { max-width: 1040px; margin: 0 auto; padding: var(--e-6) var(--e-5) var(--e-16); }
+  .seccion { margin-top: var(--e-8); }
+  .seccion > h2 { margin-bottom: var(--e-4); }
+  .nota { border-left: 3px solid var(--borde-int); padding-left: var(--e-3); color: var(--texto-2); }
+  .muestrario { display: flex; flex-wrap: wrap; gap: var(--e-3); }
+  .muestra { width: 132px; }
+  .muestra__color { height: 48px; border: 1px solid var(--borde); border-radius: var(--radio-chico); }
+  .muestra__nombre { display: block; margin-top: var(--e-1); font-family: var(--t-meta-familia); font-size: var(--t-meta-tam); color: var(--texto-3); }
+  .muestra__hex { display: block; font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; font-size: 11px; color: var(--texto-2); }
+  .fila-tipo { display: grid; grid-template-columns: 200px 1fr; gap: var(--e-4); align-items: baseline; padding: var(--e-3) 0; border-bottom: 1px solid var(--borde); }
+  .fila-tipo:last-child { border-bottom: 0; }
+  .fila-tipo__clave { font-family: var(--t-meta-familia); font-size: var(--t-meta-tam); color: var(--texto-3); }
+  .pila { display: flex; flex-direction: column; gap: var(--e-3); }
+  .tira { display: flex; flex-wrap: wrap; gap: var(--e-3); align-items: center; }
+</style>
+</head>
+<body>
+
+<header class="cabecera">
+  <span class="cabecera__marca">THE NEXUS BATTLES VI</span>
+  <span class="t-meta" style="color:var(--texto-sobre-color);opacity:.8">Guía de estilo · Empresa A</span>
+</header>
+
+<div class="envoltorio">
+
+  <h1>Guía de estilo</h1>
+  <p class="t-meta">
+    Fuente: archivo de Figma «Auditoría UX y fundamentos», página <em>00 · Resumen + Fundamentos</em>.
+    Los valores están copiados de ahí. Esta página es la referencia viva: si algo se ve mal aquí,
+    está mal en la aplicación.
+  </p>
+
+  <p class="nota" style="margin-top:var(--e-4)">
+    Regla del kit: <strong>ningún CSS del proyecto escribe un color en hexadecimal</strong>.
+    Todos usan <code>var(--...)</code>. Así, cambiar la paleta es tocar
+    <code>tokens.css</code> y nada más.
+  </p>
+
+  <!-- ============================================================ -->
+  <section class="seccion">
+    <h2>Color</h2>
+    <div class="muestrario" id="muestrario"></div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="seccion">
+    <h2>Tipografía</h2>
+    <div class="tarjeta">
+      <div class="fila-tipo">
+        <span class="fila-tipo__clave">28 px · Rajdhani 700<br>.t-titulo</span>
+        <span class="t-titulo">Crear sala de batalla</span>
+      </div>
+      <div class="fila-tipo">
+        <span class="fila-tipo__clave">20 px · Rajdhani 600<br>.t-subtitulo</span>
+        <span class="t-subtitulo">Arquero del Norte</span>
+      </div>
+      <div class="fila-tipo">
+        <span class="fila-tipo__clave">16 px · Inter 400<br>.t-cuerpo</span>
+        <span class="t-cuerpo">Configura los parámetros de la partida y elige la modalidad.</span>
+      </div>
+      <div class="fila-tipo">
+        <span class="fila-tipo__clave">13 px · Inter 400<br>.t-meta</span>
+        <span class="t-meta">2 de 4 jugadores · Recompensa 150 créditos</span>
+      </div>
+      <div class="fila-tipo">
+        <span class="fila-tipo__clave">14 px · Inter 600<br>.t-etiqueta</span>
+        <span class="t-etiqueta">CREAR SALA</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="seccion">
+    <h2>Botones</h2>
+    <div class="tarjeta tira">
+      <button class="boton boton--primario">Crear sala</button>
+      <button class="boton boton--secundario">Cancelar</button>
+      <button class="boton boton--peligro">Abandonar partida</button>
+      <button class="boton boton--primario" disabled>Sin créditos</button>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="seccion">
+    <h2>Campos · HU-SAL-001</h2>
+    <div class="tarjeta pila">
+      <div class="campo">
+        <label class="campo__etiqueta" for="ej-participantes">Número de participantes</label>
+        <input class="campo__control" id="ej-participantes" type="number" value="4" min="2" max="6">
+        <span class="campo__pista">Entre 2 y 6 jugadores.</span>
+      </div>
+
+      <div class="campo campo--invalido">
+        <label class="campo__etiqueta" for="ej-recompensa">Recompensa</label>
+        <input class="campo__control" id="ej-recompensa" type="number" value="9999"
+               aria-invalid="true" aria-describedby="ej-recompensa-error">
+        <span class="campo__error" id="ej-recompensa-error">
+          Créditos insuficientes: tienes 250 y la sala exige 9999.
+        </span>
+      </div>
+
+      <p class="t-meta">
+        El criterio de aceptación exige indicar <em>el motivo</em> del rechazo, no solo que falló.
+        Por eso el mensaje dice cuánto tienes y cuánto hace falta.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="seccion">
+    <h2>Modalidad de partida · HU-SAL-004</h2>
+    <div class="tarjeta">
+      <fieldset style="border:0;padding:0;margin:0">
+        <legend class="campo__etiqueta" style="padding:0 0 var(--e-2)">Modalidad</legend>
+        <div class="modalidades">
+          <div class="modalidad">
+            <input class="modalidad__entrada" type="radio" name="modalidad" id="m-1v1" checked>
+            <label class="modalidad__cara" for="m-1v1">
+              <span class="modalidad__titulo">1 contra 1</span>
+              <span class="modalidad__detalle">Duelo directo</span>
+            </label>
+          </div>
+          <div class="modalidad">
+            <input class="modalidad__entrada" type="radio" name="modalidad" id="m-ia">
+            <label class="modalidad__cara" for="m-ia">
+              <span class="modalidad__titulo">Contra la IA</span>
+              <span class="modalidad__detalle">Héroe aleatorio</span>
+            </label>
+          </div>
+          <div class="modalidad">
+            <input class="modalidad__entrada" type="radio" name="modalidad" id="m-6">
+            <label class="modalidad__cara" for="m-6">
+              <span class="modalidad__titulo">Hasta seis</span>
+              <span class="modalidad__detalle">Batalla campal</span>
+            </label>
+          </div>
+        </div>
+      </fieldset>
+      <p class="t-meta" style="margin-top:var(--e-3)">
+        Son <code>&lt;input type="radio"&gt;</code> de verdad, con el input oculto y la etiqueta
+        estilizada. Funciona con teclado y con lector de pantalla. No usar <code>&lt;div&gt;</code>
+        con <code>onclick</code>.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="seccion">
+    <h2>Distintivos y avisos · HU-SAL-002 y HU-SAL-003</h2>
+    <div class="tarjeta pila">
+      <div class="tira">
+        <span class="distintivo distintivo--abierta">Abierta</span>
+        <span class="distintivo distintivo--llena">Llena</span>
+        <span class="distintivo distintivo--en-juego">En juego</span>
+        <span class="distintivo distintivo--privada">Privada</span>
+      </div>
+
+      <div class="aviso aviso--error">
+        <div>
+          <div class="aviso__titulo">No tienes un héroe equipado</div>
+          Equipa un héroe desde tu inventario antes de entrar a la sala.
+        </div>
+      </div>
+
+      <div class="aviso aviso--advertencia">
+        <div>
+          <div class="aviso__titulo">Tu héroe está en otra partida</div>
+          «Arquero del Norte» está en la sala #482. Espera a que termine o elige otro héroe.
+        </div>
+      </div>
+
+      <div class="aviso aviso--exito">
+        <div>
+          <div class="aviso__titulo">Sala creada</div>
+          Ya aparece en el listado de batallas.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="seccion">
+    <h2>Barra de vida · HU-SAL-005</h2>
+    <div class="tarjeta pila">
+
+      <label class="campo__etiqueta" for="deslizador">
+        Mueve el control para ver los umbrales del 60 % y el 40 %
+      </label>
+      <input id="deslizador" type="range" min="0" max="120" value="120" style="width:100%">
+
+      <div class="barra-vida" data-barra-vida id="demo-vida">
+        <span class="barra-vida__nombre">Arquero del Norte</span>
+        <div class="barra-vida__pista"><div class="barra-vida__relleno"></div></div>
+        <span class="barra-vida__valor"></span>
+      </div>
+
+      <p class="t-meta" id="explicacion-umbral"></p>
+
+      <p class="nota">
+        El color <strong>nunca</strong> es el único indicador: el valor numérico va siempre
+        al lado y la barra lleva <code>role="progressbar"</code> con sus <code>aria-value*</code>.
+        Un jugador con daltonismo tiene que poder jugar.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section class="seccion">
+    <h2>Listado de salas · HU-SAL-002</h2>
+    <div class="rejilla-salas">
+
+      <button class="tarjeta tarjeta--pulsable">
+        <div class="tira" style="justify-content:space-between">
+          <span class="t-subtitulo">Duelo en el Nexo</span>
+          <span class="distintivo distintivo--abierta">Abierta</span>
+        </div>
+        <p class="t-meta" style="margin-top:var(--e-2)">2 de 4 jugadores · Recompensa 150 créditos</p>
+      </button>
+
+      <button class="tarjeta tarjeta--pulsable">
+        <div class="tira" style="justify-content:space-between">
+          <span class="t-subtitulo">Cacería nocturna</span>
+          <span class="distintivo distintivo--privada">Privada</span>
+        </div>
+        <p class="t-meta" style="margin-top:var(--e-2)">1 de 2 jugadores · Solo por invitación</p>
+      </button>
+
+      <button class="tarjeta tarjeta--pulsable" aria-disabled="true">
+        <div class="tira" style="justify-content:space-between">
+          <span class="t-subtitulo">Batalla campal</span>
+          <span class="distintivo distintivo--llena">Llena</span>
+        </div>
+        <p class="t-meta" style="margin-top:var(--e-2)">6 de 6 jugadores · Con héroe de la IA</p>
+      </button>
+
+    </div>
+  </section>
+
+</div>
+
+<script type="module">
+  import { actualizar, leerUmbrales, clasificar } from './js/barra-vida.js';
+
+  /* --- Muestrario de color, generado desde las propias fichas -------- */
+  const nombres = [
+    'fondo', 'superficie', 'cromo', 'pista',
+    'borde', 'borde-int',
+    'primaria', 'primaria-relleno', 'acento-relleno',
+    'exito', 'exito-insignia',
+    'advertencia', 'advertencia-insignia',
+    'error', 'error-insignia',
+    'info', 'info-insignia',
+    'texto', 'texto-2', 'texto-3', 'texto-sobre-color'
+  ];
+
+  const raiz = getComputedStyle(document.documentElement);
+  const contenedor = document.getElementById('muestrario');
+
+  for (const nombre of nombres) {
+    const valor = raiz.getPropertyValue(`--${nombre}`).trim();
+    const bloque = document.createElement('div');
+    bloque.className = 'muestra';
+    bloque.innerHTML =
+      `<div class="muestra__color" style="background:var(--${nombre})"></div>` +
+      `<span class="muestra__nombre">--${nombre}</span>` +
+      `<span class="muestra__hex">${valor}</span>`;
+    contenedor.append(bloque);
+  }
+
+  /* --- Demostración de la barra de vida ----------------------------- */
+  const MAXIMA = 120;
+  const barra = document.getElementById('demo-vida');
+  const deslizador = document.getElementById('deslizador');
+  const explicacion = document.getElementById('explicacion-umbral');
+  const { alto, medio } = leerUmbrales();
+
+  const texto = {
+    alto:  `Por encima del ${alto} % → --exito`,
+    medio: `Entre el ${medio} % y el ${alto} % → --advertencia`,
+    bajo:  `Por debajo del ${medio} % → --error`
+  };
+
+  function pintar() {
+    const actual = Number(deslizador.value);
+    actualizar(barra, actual, MAXIMA);
+    const pct = (actual / MAXIMA) * 100;
+    explicacion.textContent = `${pct.toFixed(0)} % de vida — ${texto[clasificar(pct)]}`;
+  }
+
+  deslizador.addEventListener('input', pintar);
+  pintar();
+</script>
+
+</body>
+</html>

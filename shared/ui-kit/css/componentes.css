@@ -1,0 +1,2255 @@
+/* =======================================================================
+   Componentes compartidos
+   -----------------------------------------------------------------------
+   Cada componente de aquí existe porque alguna historia del Sprint 1 lo
+   necesita. La historia está anotada encima. Si vas a añadir uno nuevo,
+   anota también de dónde sale: este archivo lo comparten los tres equipos
+   y sin esa nota nadie sabe si un componente sigue haciendo falta.
+
+   Ningún color se escribe en hexadecimal aquí. Todos bajan de tokens.css.
+   ======================================================================= */
+
+
+/* =======================================================================
+   Tarjeta — base de casi todo
+   ======================================================================= */
+
+.tarjeta {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: var(--e-4);
+  box-shadow: var(--sombra-1);
+}
+
+.tarjeta--hundida {
+  background: var(--fondo);
+  box-shadow: none;
+}
+
+/* Tarjeta que además es un botón o un enlace (ej. una sala del listado) */
+.tarjeta--pulsable {
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  transition: border-color var(--transicion), box-shadow var(--transicion);
+}
+
+.tarjeta--pulsable:hover {
+  border-color: var(--borde-int);
+  box-shadow: var(--sombra-2);
+}
+
+
+/* =======================================================================
+   Botones
+   Tres alturas, según la sección 2 del documento:
+   48 para acciones principales, 40 para secundarias, 32 para barras
+   compactas.
+   ======================================================================= */
+
+.boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e-2);
+  padding: 0 var(--e-4);
+  min-height: var(--boton-mediano);
+  border: 1px solid transparent;
+  border-radius: var(--radio);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  line-height: var(--t-etiqueta-alto);
+  cursor: pointer;
+  transition: background var(--transicion), border-color var(--transicion);
+}
+
+/* Atacar, Confirmar, Pagar */
+.boton--grande  { min-height: var(--boton-grande); padding: 0 var(--e-5); }
+.boton--pequeno { min-height: var(--boton-pequeno); padding: 0 var(--e-3); }
+
+.boton--primario {
+  background: var(--primaria-relleno);
+  color: var(--texto-sobre-color);
+}
+.boton--primario:hover { background: var(--primaria); }
+
+.boton--acento {
+  background: var(--acento-relleno);
+  color: var(--texto-sobre-color);
+}
+
+.boton--secundario {
+  background: var(--superficie);
+  border-color: var(--borde-int);
+  color: var(--texto);
+}
+.boton--secundario:hover { background: var(--fondo); }
+
+.boton--peligro {
+  background: var(--error);
+  color: var(--texto-sobre-color);
+}
+
+.boton[disabled],
+.boton[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+
+/* =======================================================================
+   Campos de formulario
+   HU-SAL-001 · crear sala con parámetros y recompensa
+   ======================================================================= */
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-1);
+}
+
+.campo__etiqueta {
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--texto);
+}
+
+.campo__control {
+  padding: 0 var(--e-3);
+  min-height: var(--campo-alto);
+  background: var(--superficie);
+  border: 1px solid var(--borde-int);
+  border-radius: var(--radio);
+  font-family: var(--t-cuerpo-familia);
+  font-size: var(--t-cuerpo-tam);
+  color: var(--texto);
+}
+
+.campo__pista {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+}
+
+/* Estado inválido. El criterio de aceptación de HU-SAL-001 pide que se
+   indique EL MOTIVO del rechazo, no solo que falló: de ahí campo__error. */
+.campo--invalido .campo__control { border-color: var(--error); }
+
+.campo__error {
+  display: flex;
+  align-items: center;
+  gap: var(--e-1);
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: 600;
+  color: var(--error);
+}
+
+
+/* =======================================================================
+   Selector de modalidad
+   HU-SAL-004 · 1v1, contra IA, hasta seis participantes
+   -----------------------------------------------------------------------
+   Se construye con <input type="radio"> reales para que funcione con
+   teclado y lectores de pantalla; el input se oculta y se estiliza la
+   etiqueta. No usar <div> con onclick.
+   ======================================================================= */
+
+.modalidades {
+  display: flex;
+  gap: var(--e-2);
+  flex-wrap: wrap;
+}
+
+.modalidad {
+  position: relative;
+  flex: 1 1 140px;
+}
+
+.modalidad__entrada {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+
+.modalidad__cara {
+  display: block;
+  padding: var(--e-3);
+  background: var(--superficie);
+  border: 1px solid var(--borde-int);
+  border-radius: var(--radio);
+  text-align: center;
+  transition: border-color var(--transicion), background var(--transicion);
+}
+
+.modalidad__entrada:hover + .modalidad__cara { border-color: var(--primaria); }
+
+.modalidad__entrada:checked + .modalidad__cara {
+  background: var(--primaria-relleno);
+  border-color: var(--primaria-relleno);
+  color: var(--texto-sobre-color);
+}
+
+.modalidad__entrada:focus-visible + .modalidad__cara {
+  outline: 2px solid var(--primaria);
+  outline-offset: 2px;
+}
+
+.modalidad__titulo {
+  display: block;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.modalidad__detalle {
+  display: block;
+  margin-top: var(--e-1);
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  opacity: 0.85;
+}
+
+
+/* =======================================================================
+   Distintivo (insignia)
+   HU-SAL-002 · estado de la sala en el listado
+   -----------------------------------------------------------------------
+   Regla del documento: color saturado como TEXTO sobre el fondo tenue del
+   mismo color. Nunca fondo sólido con texto blanco.
+   ======================================================================= */
+
+.distintivo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+  padding: 2px var(--e-2);
+  border: 1px solid transparent;
+  border-radius: var(--radio-pildora);
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.distintivo--abierta  { background: var(--exito-insignia);       color: var(--exito); }
+.distintivo--llena    { background: var(--advertencia-insignia); color: var(--advertencia); }
+.distintivo--en-juego { background: var(--info-insignia);        color: var(--info); }
+
+/* El documento no define un fondo tenue para el acento, asi que la sala
+   privada se marca con borde y texto en acento, sin inventar un color.
+   Si el equipo aprueba un --acento-insignia, se cambia aqui.            */
+.distintivo--privada {
+  background: var(--superficie);
+  border-color: var(--acento-relleno);
+  color: var(--acento-relleno);
+}
+
+
+/* =======================================================================
+   Aviso
+   HU-SAL-003 · héroe no equipado o no disponible
+   HU-SAL-001 · créditos insuficientes o parámetros inválidos
+   RNF-USA-003 · estado de error de las vistas que consultan datos
+   ======================================================================= */
+
+.aviso {
+  display: flex;
+  gap: var(--e-3);
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid;
+  border-left-width: 4px;
+  border-radius: var(--radio);
+  font-size: var(--t-cuerpo-tam);
+  color: var(--texto);
+}
+
+.aviso__titulo {
+  font-family: var(--t-etiqueta-familia);
+  font-weight: var(--t-etiqueta-peso);
+  margin-bottom: var(--e-1);
+}
+
+.aviso--error       { border-color: var(--error);       background: var(--error-insignia); }
+.aviso--advertencia { border-color: var(--advertencia); background: var(--advertencia-insignia); }
+.aviso--exito       { border-color: var(--exito);       background: var(--exito-insignia); }
+.aviso--info        { border-color: var(--info);        background: var(--info-insignia); }
+
+
+/* =======================================================================
+   Barra de vida
+   HU-SAL-005 · RF-JUE-009 y RN-COM-005
+   -----------------------------------------------------------------------
+   Reglas que NO se pueden romper:
+
+   1. El color NUNCA es el único indicador. El valor numérico va siempre
+      visible al lado. Un jugador con daltonismo tiene que poder jugar.
+   2. Los umbrales viven en tokens.css (--vida-umbral-alto y -medio).
+      El JavaScript los lee de ahí; no los escribe.
+   3. La barra lleva role="progressbar" con sus aria-value*.
+
+   El JS pone data-estado="alto|medio|bajo" y --vida (0-100).
+   Ver shared/ui-kit/js/barra-vida.js
+   ======================================================================= */
+
+.barra-vida {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+}
+
+.barra-vida__pista {
+  flex: 1;
+  height: 12px;
+  background: var(--pista);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-chico);
+  overflow: hidden;
+}
+
+.barra-vida__relleno {
+  height: 100%;
+  width: calc(var(--vida, 100) * 1%);
+  border-radius: inherit;
+  transition: width var(--transicion), background var(--transicion);
+}
+
+.barra-vida[data-estado='alto']  .barra-vida__relleno { background: var(--exito); }
+.barra-vida[data-estado='medio'] .barra-vida__relleno { background: var(--advertencia); }
+.barra-vida[data-estado='bajo']  .barra-vida__relleno { background: var(--error); }
+
+.barra-vida__valor {
+  min-width: 5ch;
+  text-align: right;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  font-variant-numeric: var(--cifras-tabulares);
+  color: var(--texto-2);
+}
+
+.barra-vida__nombre {
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  font-weight: var(--t-subtitulo-peso);
+  color: var(--texto);
+}
+
+
+/* =======================================================================
+   Encabezado de aplicación
+   El cromo oscuro está acotado a esto y a la cabecera del combate.
+   ======================================================================= */
+
+/* Medidas tomadas del componente «Cabecera» de Figma, variante
+   Rol=Jugador / Ancho=1360: 64 px de alto, padding 0 24, separación 24
+   entre los tres grupos. Antes eran 12/20 y 16, que era una aproximación. */
+.cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-6);
+  min-height: var(--cabecera-alto);
+  padding: 0 var(--e-6);
+  background: var(--cromo);
+  color: var(--texto-sobre-color);
+}
+
+.cabecera__marca {
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  font-weight: var(--t-titulo-peso);
+  letter-spacing: 0.02em;
+}
+
+
+/* =======================================================================
+   Rejilla de salas
+   HU-SAL-002 · listado de batallas, dieciséis por página
+   ======================================================================= */
+
+.rejilla-salas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--e-4);
+}
+
+/* A 1024 px la rejilla pasa de cuatro columnas a tres. RNF-USA-001. */
+@media (max-width: 1024px) {
+  .rejilla-salas { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+}
+
+
+/* =======================================================================
+   Marco de héroe
+   Retrato con anillo de rareza e insignia de nivel superpuesta.
+   ======================================================================= */
+
+.marco-heroe {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--e-2);
+  width: 160px;
+}
+
+.marco-heroe__retrato {
+  position: relative;
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  border: 3px solid var(--rareza-comun);
+  background: var(--rareza-comun-insignia);
+  display: grid;
+  place-items: center;
+}
+
+.marco-heroe__imagen {
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--rareza-comun);
+}
+
+/* La insignia de nivel se superpone al borde inferior derecho. */
+.marco-heroe__nivel {
+  position: absolute;
+  right: -4px;
+  bottom: 0;
+  min-width: 34px;
+  padding: 2px var(--e-2);
+  border-radius: var(--radio-pildora);
+  border: 2px solid var(--superficie);
+  background: var(--cromo);
+  color: var(--texto-sobre-color);
+  font-family: var(--t-titulo-familia);
+  font-weight: var(--t-titulo-peso);
+  font-size: 1rem;
+  text-align: center;
+}
+
+.marco-heroe--rara      .marco-heroe__retrato { border-color: var(--rareza-rara);       background: var(--rareza-rara-insignia); }
+.marco-heroe--rara      .marco-heroe__imagen  { background: var(--rareza-rara); }
+.marco-heroe--epica     .marco-heroe__retrato { border-color: var(--rareza-epica);      background: var(--rareza-epica-insignia); }
+.marco-heroe--epica     .marco-heroe__imagen  { background: var(--rareza-epica); }
+.marco-heroe--legendaria .marco-heroe__retrato{ border-color: var(--rareza-legendaria); background: var(--rareza-legendaria-insignia); }
+.marco-heroe--legendaria .marco-heroe__imagen { background: var(--rareza-legendaria); }
+
+.marco-heroe__nombre {
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  font-weight: var(--t-subtitulo-peso);
+  text-align: center;
+}
+
+
+/* =======================================================================
+   Estado de vista — RNF-USA-003
+   Toda vista que consulte datos usa estos tres; el cuarto estado, con
+   datos, es el contenido normal de la vista.
+   ======================================================================= */
+
+.estado-vista {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e-3);
+  padding: var(--e-6);
+  min-height: 260px;
+  text-align: center;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+}
+
+.estado-vista__icono {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--fondo);
+}
+
+.estado-vista--error .estado-vista__icono { background: var(--error-insignia); }
+
+.estado-vista__titulo {
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  font-weight: var(--t-subtitulo-peso);
+}
+
+/* Estado de carga: esqueletos, no un girador. El usuario ve la forma
+   de lo que viene, y eso hace la espera más corta. */
+.estado-vista--cargando { align-items: stretch; justify-content: flex-start; }
+
+.esqueleto {
+  height: 14px;
+  border-radius: 4px;
+  background: var(--pista);
+}
+.esqueleto--corto { width: 40%; }
+.esqueleto--largo { width: 75%; height: 10px; }
+
+
+/* =======================================================================
+   Diálogo — bloquea la interacción, capa 3
+   ======================================================================= */
+
+.velo {
+  position: fixed;
+  inset: 0;
+  background: var(--interaccion-velo-modal);
+  display: grid;
+  place-items: center;
+}
+
+/* La Pantalla 4 atenúa el contenido pero deja la cabecera legible y usable:
+   en Figma el velo empieza en y=64, no en y=0. Variante y no cambio del velo
+   base porque un diálogo destructivo sí debe taparlo todo. */
+.velo--bajo-cabecera { top: var(--cabecera-alto); }
+
+.dialogo {
+  width: min(480px, calc(100vw - var(--e-8)));
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-4);
+  padding: var(--e-6);
+  background: var(--superficie);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra-4);
+}
+
+.dialogo__encabezado { display: flex; align-items: center; gap: var(--e-3); }
+
+.dialogo__icono {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--info-insignia);
+  color: var(--info);
+  flex: 0 0 auto;
+}
+.dialogo--peligro .dialogo__icono { background: var(--error-insignia); color: var(--error); }
+
+/* Retrato de héroe. El componente «Dialogo de validacion de heroe» lo pone a
+   64 px, frente a los 40 del diálogo base. Es un modificador y no un cambio
+   del icono base a propósito: el resto de diálogos siguen con su tamaño. */
+.dialogo__icono--grande {
+  width: 64px;
+  height: 64px;
+  background: var(--pista);
+  color: var(--texto-3);
+}
+
+/* «Dialogo de validacion de heroe» (HU-SAL-003) mide 520 px y separa sus
+   bloques 20 px, frente a los 480 y 16 del diálogo base. Son dos componentes
+   distintos en Figma, no una corrección del base: `cuentas/registro.html`
+   usa el base y no debe moverse. */
+.dialogo--ancho {
+  width: min(520px, calc(100vw - var(--e-8)));
+  gap: var(--e-5);
+}
+
+/* Título y detalle van pegados —4 px— dentro del bloque del héroe. */
+.pila--ajustada { gap: var(--e-1); }
+
+.dialogo__titulo {
+  flex: 1;
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-titulo-tam);
+  font-weight: var(--t-titulo-peso);
+}
+
+/* El botón destructivo va a la derecha; cancelar nunca es el prominente. */
+.dialogo__acciones { display: flex; justify-content: flex-end; gap: var(--e-3); }
+
+
+/* =======================================================================
+   Paginación — RNF-USA-001, dieciséis por página
+   ======================================================================= */
+
+.paginacion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+}
+
+.paginacion__info {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+}
+
+.paginacion__paginas { display: flex; gap: var(--e-2); }
+
+.paginacion__pagina {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--borde-int);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  color: var(--texto-2);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  font-variant-numeric: var(--cifras-tabulares);
+  cursor: pointer;
+}
+
+.paginacion__pagina[aria-current='page'] {
+  background: var(--primaria-relleno);
+  border-color: var(--primaria-relleno);
+  color: var(--texto-sobre-color);
+}
+
+
+/* =======================================================================
+   Tabla
+   Se compone apilando filas: no se dibuja la rejilla completa.
+   ======================================================================= */
+
+.tabla {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  overflow: hidden;
+}
+
+.tabla__fila {
+  display: flex;
+  align-items: center;
+  gap: var(--e-4);
+  padding: var(--e-3) var(--e-4);
+  border-top: 1px solid var(--borde);
+}
+
+.tabla__fila:first-child { border-top: 0; }
+
+.tabla__fila--encabezado {
+  background: var(--fondo);
+  border-top: 0;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--texto-3);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.tabla__fila--alterna { background: var(--fondo); }
+
+.tabla__celda { flex: 0 0 auto; font-variant-numeric: var(--cifras-tabulares); }
+.tabla__celda--principal { flex: 1; font-weight: 600; }
+.tabla__celda--accion { text-align: right; color: var(--primaria); }
+
+
+/* =======================================================================
+   Pestañas
+   La activa se marca con color Y con la línea, nunca solo con color.
+   Se recorren con las flechas, no con el tabulador.
+   ======================================================================= */
+
+.pestanas { display: flex; gap: var(--e-5); border-bottom: 1px solid var(--borde); }
+
+.pestana {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--e-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--texto-2);
+  cursor: pointer;
+  font: inherit;
+}
+
+.pestana__cara {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  padding: 0 var(--e-3);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.pestana__linea { width: 100%; height: 2px; background: transparent; }
+
+.pestana[aria-selected='true'] { color: var(--primaria); }
+.pestana[aria-selected='true'] .pestana__linea { background: var(--primaria); }
+
+
+/* =======================================================================
+   Menú desplegable
+   ======================================================================= */
+
+.menu {
+  min-width: 280px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra-3);
+  overflow: hidden;
+}
+
+.menu__grupo {
+  padding: var(--e-2) var(--e-4);
+  background: var(--fondo);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--texto-3);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.menu__opcion {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  width: 100%;
+  padding: var(--e-3);
+  border: 0;
+  border-top: 1px solid var(--borde);
+  background: none;
+  color: var(--texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu__opcion:hover { background: var(--interaccion-velo-hover); }
+
+/* Peligro siempre va la última del menú, separada del resto. */
+.menu__opcion--peligro { color: var(--error); }
+
+
+/* =======================================================================
+   Ayuda contextual
+   Aparece al señalar Y al enfocar con teclado. Se cierra con Escape.
+   Máximo dos líneas: si necesita más, es documentación.
+   ======================================================================= */
+
+.ayuda {
+  position: relative;
+  max-width: 260px;
+  padding: var(--e-3);
+  background: var(--cromo);
+  color: var(--texto-sobre-color);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra-3);
+  font-size: var(--t-meta-tam);
+}
+
+.ayuda::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  translate: -50% 0;
+  border: 6px solid transparent;
+}
+
+.ayuda--abajo::after { top: -12px; border-bottom-color: var(--cromo); }
+.ayuda--arriba::after { bottom: -12px; border-top-color: var(--cromo); }
+
+
+/* =======================================================================
+   Tecla — indicador de atajo
+   Si el atajo existe pero no se muestra, no existe para el jugador.
+   ======================================================================= */
+
+.tecla {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  padding: 3px var(--e-2);
+  background: var(--superficie);
+  border: 1px solid var(--borde-int);
+  border-radius: var(--radio-chico);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--texto-2);
+}
+
+
+/* =======================================================================
+   Estado de conexión — HU-REN-001 y HU-DIS-003
+   Informar no es interrumpir: nunca bloquea la pantalla.
+   ======================================================================= */
+
+.conexion {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+  padding: 4px var(--e-3);
+  border-radius: var(--radio-pildora);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.conexion--estable      { background: var(--exito-insignia);       color: var(--exito); }
+.conexion--latencia     { background: var(--advertencia-insignia); color: var(--advertencia); }
+.conexion--reconectando { background: var(--advertencia-insignia); color: var(--advertencia); }
+.conexion--sin-conexion { background: var(--error-insignia);       color: var(--error); }
+
+
+/* =======================================================================
+   Panel de resultado
+   La derrota no castiga: muestra la experiencia ganada y ofrece revancha
+   con la misma jerarquía que la victoria.
+   ======================================================================= */
+
+.resultado {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--e-5);
+  width: min(660px, calc(100vw - var(--e-8)));
+  padding: var(--e-8);
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+}
+
+.resultado__titulo {
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-display-tam);
+  line-height: var(--t-display-alto);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--exito);
+}
+
+.resultado--derrota .resultado__titulo { color: var(--error); }
+.resultado--empate  .resultado__titulo { color: var(--info); }
+
+.resultado__marcadores { display: flex; gap: var(--e-4); width: 100%; }
+
+.resultado__marcador {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--e-1);
+  padding: var(--e-4) 0;
+  background: var(--fondo);
+  border-radius: var(--radio);
+  text-align: center;
+}
+
+.resultado__cifra {
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-titulo-xl-tam);
+  line-height: var(--t-titulo-xl-alto);
+  font-weight: 700;
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+
+/* =======================================================================
+   AMPLIACIÓN — componentes compartidos por los tres grupos
+   -----------------------------------------------------------------------
+   Todo lo de aquí abajo sale del barrido de los tres SRS:
+   REQUISITOS GRUPO 2, GRUPO SANTIAGO y REQUISITOS GRUPO 6. Cada bloque
+   lleva anotado el requisito que lo obliga. Igual que arriba: ningún
+   hexadecimal, todo baja de tokens.css.
+   ======================================================================= */
+
+
+/* =======================================================================
+   Controles de formulario
+   RF-JUE-001 · RF-JUE-004 · RF-COM-006 · RF-COM-009 · RF-USR-009
+   RF-CAR-006 · RF-INV-004 · RF-ADM-001 · RF-MIS-002
+   -----------------------------------------------------------------------
+   `.modalidad` (más arriba) sigue siendo la tarjeta de radio del selector
+   de modalidad. Esto es el radio normal, para listas largas de opciones.
+   ======================================================================= */
+
+.casilla,
+.radio {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-3);
+  cursor: pointer;
+}
+
+.casilla__entrada,
+.radio__entrada {
+  appearance: none;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  background: var(--superficie);
+  border: 2px solid var(--borde-int);
+  cursor: pointer;
+  transition: background var(--transicion), border-color var(--transicion);
+}
+
+.casilla__entrada { border-radius: var(--radio-chico); }
+.radio__entrada   { border-radius: 50%; }
+
+.casilla__entrada:checked,
+.radio__entrada:checked {
+  background: var(--primaria-relleno);
+  border-color: var(--primaria-relleno);
+}
+
+/* La marca no es solo color: se dibuja un símbolo dentro. */
+.casilla__entrada:checked::after {
+  content: "";
+  display: block;
+  width: 6px;
+  height: 10px;
+  margin: 1px auto;
+  border: solid var(--texto-sobre-color);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.casilla__entrada:indeterminate {
+  background: var(--primaria-relleno);
+  border-color: var(--primaria-relleno);
+}
+
+.casilla__entrada:indeterminate::after {
+  content: "";
+  display: block;
+  width: 10px;
+  height: 2px;
+  margin: 7px auto;
+  background: var(--texto-sobre-color);
+}
+
+.radio__entrada:checked::after {
+  content: "";
+  display: block;
+  width: 8px;
+  height: 8px;
+  margin: 4px auto;
+  border-radius: 50%;
+  background: var(--texto-sobre-color);
+}
+
+.casilla__entrada:focus-visible,
+.radio__entrada:focus-visible {
+  outline: var(--foco-grosor) solid var(--anillo-foco);
+  outline-offset: 2px;
+}
+
+.casilla__etiqueta,
+.radio__etiqueta {
+  font-family: var(--t-cuerpo-familia);
+  font-size: var(--t-cuerpo-tam);
+  line-height: var(--t-cuerpo-alto);
+  color: var(--texto);
+}
+
+.radio__detalle {
+  display: block;
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+
+/* Desplegable — RF-COM-009 (ordenar), RF-USR-009 (filtrar), RF-ADM-001 */
+.desplegable {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+}
+
+.desplegable__control {
+  height: var(--campo-alto);
+  padding: 0 var(--e-3);
+  background: var(--superficie);
+  border: 1px solid var(--borde-int);
+  border-radius: var(--radio);
+  color: var(--texto);
+  font-family: var(--t-cuerpo-familia);
+  font-size: var(--t-cuerpo-tam);
+  cursor: pointer;
+}
+
+.desplegable__control:focus-visible {
+  outline: var(--foco-grosor) solid var(--anillo-foco);
+  outline-offset: 1px;
+}
+
+.desplegable--invalido .desplegable__control { border-color: var(--error); }
+
+
+/* Campo — tipos añadidos. RF-COM-001 · RF-CAR-006 · RF-INV-004 · RF-SUB-004 */
+.campo--area .campo__control {
+  height: auto;
+  min-height: 96px;
+  padding: var(--e-3);
+  resize: vertical;
+}
+
+.campo--busqueda .campo__control,
+.campo--prefijo  .campo__control {
+  padding-left: calc(var(--e-3) + var(--icono) + var(--e-2));
+}
+
+.campo__adorno {
+  position: absolute;
+  left: var(--e-3);
+  top: 50%;
+  transform: translateY(-50%);
+  width: var(--icono);
+  height: var(--icono);
+  color: var(--texto-3);
+  pointer-events: none;
+}
+
+.campo--prefijo .campo__adorno { color: var(--rareza-legendaria); }
+
+.campo__envoltorio { position: relative; }
+
+
+/* Campo numérico — RF-SUB-004 (incremento mínimo), RF-JUE-001, RF-PRD-003 */
+.campo-numerico__caja {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--campo-alto);
+  background: var(--superficie);
+  border: 1px solid var(--borde-int);
+  border-radius: var(--radio);
+  overflow: hidden;
+}
+
+.campo-numerico__boton {
+  width: 36px;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--primaria);
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  cursor: pointer;
+}
+
+.campo-numerico__boton:hover  { background: var(--interaccion-velo-hover); }
+.campo-numerico__boton:disabled { color: var(--texto-3); cursor: not-allowed; }
+
+.campo-numerico__valor {
+  flex: 1 1 auto;
+  border: 0;
+  background: transparent;
+  text-align: center;
+  font-variant-numeric: var(--cifras-tabulares);
+  color: var(--texto);
+}
+
+
+/* =======================================================================
+   Calificación en estrellas
+   RF-COM-002 (calificación única) · RF-COM-003 (promedio) · RF-INV-005
+   -----------------------------------------------------------------------
+   Las estrellas redondean; la precisión la da el número de al lado.
+   Por eso el detalle textual no es opcional.
+   ======================================================================= */
+
+.estrellas {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+}
+
+.estrellas__lista {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.estrellas__estrella      { width: 18px; height: 18px; color: var(--pista); }
+.estrellas__estrella--llena { color: var(--rareza-legendaria); }
+
+.estrellas__detalle {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+/* Editable: RF-COM-002 permite calificar una sola vez por producto. */
+.estrellas--editable .estrellas__estrella { cursor: pointer; }
+.estrellas--editable .estrellas__entrada:focus-visible + .estrellas__estrella {
+  outline: var(--foco-grosor) solid var(--anillo-foco);
+  outline-offset: 2px;
+}
+
+
+/* =======================================================================
+   Barra de progreso genérica
+   RF-HER-003 (nivel 1 a 8) · RF-MIS-007 (simulación) · RF-SUB-002
+   -----------------------------------------------------------------------
+   NO es .barra-vida. Aquella lleva los umbrales 60/40 y es del combate.
+   ======================================================================= */
+
+.progreso__cabecera {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--e-2);
+}
+
+.progreso__etiqueta,
+.progreso__valor {
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.progreso__valor {
+  color: var(--texto-2);
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+.progreso__riel {
+  height: 10px;
+  background: var(--pista);
+  border-radius: var(--radio-chico);
+  overflow: hidden;
+}
+
+.progreso__relleno {
+  height: 100%;
+  background: var(--primaria-relleno);
+  border-radius: var(--radio-chico);
+  transition: width var(--duracion-normal) var(--curva-estandar);
+}
+
+
+/* =======================================================================
+   Contador / cuenta atrás
+   RF-SUB-002 (duración) · RF-SUB-011 (subastas activas) · turno de combate
+   ======================================================================= */
+
+.contador {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+  padding: var(--e-2) var(--e-3);
+  border-radius: var(--radio);
+  background: var(--info-insignia);
+  color: var(--info);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+.contador--urgente {
+  background: var(--error-insignia);
+  color: var(--error);
+}
+
+
+/* =======================================================================
+   Tarjeta de contenido — tipos
+   RF-INV-005 · RF-MIS-001 · RF-SUB-011 · RF-TOR-003 · RF-TOR-008
+   -----------------------------------------------------------------------
+   Un solo componente con cuatro tipos. La tarjeta de sala del juego en
+   línea sigue aparte porque su anatomía y sus estados son propios.
+   ======================================================================= */
+
+.tarjeta__imagen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 120px;
+  margin: calc(var(--e-4) * -1) calc(var(--e-4) * -1) var(--e-3);
+  background: var(--pista);
+  border-radius: var(--radio) var(--radio) 0 0;
+  color: var(--texto-3);
+}
+
+.tarjeta__titulo {
+  font-family: var(--t-cuerpo-familia);
+  font-size: var(--t-cuerpo-tam);
+  font-weight: var(--t-cuerpo-peso-enfasis);
+  color: var(--texto);
+}
+
+.tarjeta__meta {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.tarjeta__pie {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  margin-top: var(--e-2);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--primaria);
+}
+
+.tarjeta--producto .tarjeta__pie { color: var(--rareza-legendaria); }
+
+/* RF-INV-011 · RF-MIS-012: producto bloqueado por subasta o por misión. */
+.tarjeta--bloqueada {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+
+/* =======================================================================
+   Panel de métrica
+   RF-PRD-001 · RF-MET-001 · RF-MET-002 · RF-MET-003 · RF-MET-004 · RF-CHA-012
+   -----------------------------------------------------------------------
+   Contenedor y estados. La gráfica la dibuja Chart.js dentro de
+   `.metrica__grafica`. Carga, vacío y error se resuelven con .estado-vista.
+   ======================================================================= */
+
+.metrica__titulo {
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--texto-2);
+}
+
+.metrica__cifra {
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-titulo-tam);
+  font-weight: var(--t-titulo-peso);
+  color: var(--texto);
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+.metrica__tendencia {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--exito);
+}
+
+.metrica__tendencia--baja { color: var(--error); }
+
+.metrica__grafica {
+  height: 88px;
+  margin-top: var(--e-2);
+  background: var(--fondo);
+  border-radius: var(--radio-chico);
+}
+
+.metrica__pie {
+  margin-top: var(--e-2);
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+}
+
+
+/* =======================================================================
+   Línea de tiempo
+   RF-USR-010 · RF-PRD-008 · RF-MIS-011 · RF-AUD-001
+   ======================================================================= */
+
+.linea-tiempo { list-style: none; margin: 0; padding: 0; }
+
+.linea-tiempo__item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 12px 1fr;
+  gap: var(--e-3);
+  padding-bottom: var(--e-4);
+}
+
+/* El conector nace del punto y baja hasta el siguiente hito. */
+.linea-tiempo__item::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 12px;
+  bottom: 0;
+  width: 2px;
+  background: var(--borde);
+}
+
+.linea-tiempo__item--ultima::before { display: none; }
+
+.linea-tiempo__punto {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--primaria-relleno);
+}
+
+.linea-tiempo__titulo {
+  font-family: var(--t-cuerpo-familia);
+  font-size: var(--t-cuerpo-tam);
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+.linea-tiempo__meta {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+}
+
+
+/* =======================================================================
+   Indicador de paso
+   RF-MIS-009 (Disponible, Bloqueada, En progreso, Completada)
+   RF-MIS-004 · RF-MIS-005 · RF-CAR-010 · RF-USR-007
+   ======================================================================= */
+
+.pasos {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.paso {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+}
+
+.paso__marcador {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--pista);
+  color: var(--texto-3);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.paso--actual     .paso__marcador { background: var(--primaria-relleno); color: var(--texto-sobre-color); }
+.paso--completado .paso__marcador { background: var(--exito);            color: var(--texto-sobre-color); }
+
+.paso__etiqueta { color: var(--texto-3); }
+
+.paso--actual     .paso__etiqueta,
+.paso--completado .paso__etiqueta {
+  color: var(--texto);
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+.paso__conector {
+  width: 32px;
+  height: 2px;
+  background: var(--pista);
+}
+
+.paso--completado .paso__conector { background: var(--exito); }
+
+
+/* =======================================================================
+   Barra de acciones en lote
+   RF-COM-008 · RF-USR-009 · RF-PRD-004 · RF-PRD-005
+   -----------------------------------------------------------------------
+   Se apoya en `.casilla__entrada:indeterminate` de la fila de encabezado
+   para el «seleccionar todo».
+   ======================================================================= */
+
+.lote {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-4);
+  padding: var(--e-3) var(--e-4);
+  background: var(--cromo);
+  color: var(--texto-sobre-color);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra-3);
+}
+
+.lote__seleccion {
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.lote__acciones { display: flex; gap: var(--e-2); }
+
+.lote__accion {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+  padding: var(--e-2) var(--e-3);
+  background: transparent;
+  border: 1px solid var(--texto-sobre-color);
+  border-radius: var(--radio);
+  color: var(--texto-sobre-color);
+  font: inherit;
+  cursor: pointer;
+}
+
+.lote__accion:hover { background: var(--interaccion-velo-hover); }
+
+
+/* =======================================================================
+   Banner informativo rotativo
+   RF-ADM-003 «Gestión de anuncios y banners» — DUEÑO: GRUPO 2
+   RF-NOT-002 (fecha de publicación y vigencia) · RF-INV-003
+   -----------------------------------------------------------------------
+   Aquí solo vive la forma. La rotación, la programación y las reglas de
+   vigencia las decide el Grupo 2.
+   ======================================================================= */
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--e-4);
+  padding: var(--e-4) var(--e-5);
+  background: var(--info-insignia);
+  border-radius: var(--radio);
+}
+
+.banner__icono { flex: 0 0 auto; width: var(--icono-grande); height: var(--icono-grande); color: var(--info); }
+.banner__cuerpo { flex: 1 1 auto; }
+
+.banner__titulo {
+  font-family: var(--t-cuerpo-familia);
+  font-size: var(--t-cuerpo-tam);
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+.banner__texto { color: var(--texto-2); }
+
+/* RF-NOT-002 exige mostrar publicación y vigencia en cada mensaje. */
+.banner__vigencia {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+}
+
+.banner__rotacion { display: flex; gap: var(--e-2); }
+
+.banner__punto {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--pista);
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.banner__punto[aria-current="true"] { background: var(--info); }
+
+
+/* =======================================================================
+   Fila de resumen económico
+   RF-CAR-007 · RF-CAR-010 · RF-PAG-002
+   ======================================================================= */
+
+.resumen__fila {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--e-3) 0;
+}
+
+.resumen__fila--subtotal,
+.resumen__fila--total { border-top: 1px solid var(--borde); }
+
+.resumen__fila--total {
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+.resumen__fila--total .resumen__importe { color: var(--primaria); }
+
+.resumen__importe { font-variant-numeric: var(--cifras-tabulares); }
+
+
+/* =======================================================================
+   Insignia de logro
+   RF-MIS-015 · RF-USR-012
+   -----------------------------------------------------------------------
+   Sin niveles: ningún documento define bronce, plata ni oro.
+   ======================================================================= */
+
+.logro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--e-2);
+  padding: var(--e-3);
+  text-align: center;
+}
+
+.logro__medalla {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--rareza-epica-insignia);
+  color: var(--rareza-epica);
+}
+
+.logro--bloqueado .logro__medalla { background: var(--pista); color: var(--texto-3); }
+.logro--bloqueado .logro__titulo  { color: var(--texto-3); }
+
+.logro__titulo {
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.logro__detalle {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+}
+
+
+/* =======================================================================
+   Ranura de equipamiento y de habilidad
+   RF-INV-009: 2 armas + 6 piezas de armadura + 2 ítems = 10 ranuras
+   RF-MIS-005: 3 rotaciones con prioridad alta, media y baja
+   Bloqueada: RF-JUE-018 · RF-MIS-012 · RF-INV-011
+   ======================================================================= */
+
+.ranura {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--e-2);
+}
+
+.ranura__caja {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radio);
+  background: var(--rareza-epica-insignia);
+  border: 1px solid var(--borde);
+  color: var(--rareza-epica);
+  cursor: pointer;
+}
+
+/* Vacía: borde discontinuo y un más. El estado no depende del color. */
+.ranura--vacia .ranura__caja {
+  background: var(--fondo);
+  border: 2px dashed var(--borde);
+  color: var(--texto-3);
+}
+
+.ranura--seleccionada .ranura__caja {
+  border: var(--foco-grosor) solid var(--anillo-foco);
+}
+
+/* Bloqueada: candado visible, no solo atenuación. */
+.ranura--bloqueada .ranura__caja {
+  background: var(--pista);
+  color: var(--texto-3);
+  cursor: not-allowed;
+}
+
+.ranura__caja:focus-visible {
+  outline: var(--foco-grosor) solid var(--anillo-foco);
+  outline-offset: 2px;
+}
+
+.ranura__etiqueta {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.ranura--bloqueada .ranura__etiqueta { color: var(--texto-3); }
+
+
+/* =======================================================================
+   Encuentro del torneo
+   RF-TOR-004: 8 equipos · ganadores 1-6, 11 y final · secundarios 7-10, 12, 13
+   RF-TOR-005: equipo sustituido por la IA, marcado en el nombre
+   ======================================================================= */
+
+.encuentro {
+  width: 220px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  overflow: hidden;
+  box-shadow: var(--sombra-1);
+}
+
+.encuentro--en-curso { border: 2px solid var(--primaria-relleno); }
+
+.encuentro__cabecera {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--e-2) var(--e-3);
+  background: var(--fondo);
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+}
+
+.encuentro--en-curso   .encuentro__cabecera { background: var(--info-insignia);  color: var(--info); }
+.encuentro--finalizado .encuentro__cabecera { background: var(--exito-insignia); color: var(--exito); }
+
+.encuentro__equipo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--e-2) var(--e-3);
+}
+
+.encuentro__equipo + .encuentro__equipo { border-top: 1px solid var(--borde); }
+
+/* El ganador no se distingue solo por color: cambia el peso del texto. */
+.encuentro__equipo--ganador {
+  font-weight: var(--t-cuerpo-peso-enfasis);
+  color: var(--texto);
+}
+
+.encuentro__equipo--ganador .encuentro__marcador { color: var(--exito); }
+
+.encuentro__marcador {
+  color: var(--texto-3);
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+
+/* =======================================================================
+   Reproductor de transmisión
+   RF-TOR-006: directo, diferido y comentarios de los presentadores
+   -----------------------------------------------------------------------
+   El servicio de vídeo es externo. Aquí solo el marco y sus estados.
+   ======================================================================= */
+
+.transmision {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  overflow: hidden;
+  box-shadow: var(--sombra-2);
+}
+
+.transmision__lienzo {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  aspect-ratio: 16 / 9;
+  padding: var(--e-3);
+  background: var(--cromo);
+}
+
+/* La etiqueta dice EN DIRECTO o GRABACIÓN: el color no basta. */
+.transmision__etiqueta {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+  padding: var(--e-1) var(--e-3);
+  border-radius: var(--radio-pildora);
+  background: var(--pista);
+  color: var(--texto-3);
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+}
+
+.transmision--directo .transmision__etiqueta {
+  background: var(--error);
+  color: var(--texto-sobre-color);
+}
+
+.transmision__controles {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  color: var(--texto-sobre-color);
+}
+
+.transmision__progreso {
+  flex: 1 1 auto;
+  height: 6px;
+  background: var(--pista);
+  border-radius: var(--radio-chico);
+  overflow: hidden;
+}
+
+.transmision__avance { height: 100%; background: var(--primaria-relleno); }
+.transmision--directo .transmision__avance { background: var(--error); width: 100%; }
+
+.transmision__comentarios { padding: var(--e-3); }
+
+
+/* =======================================================================
+   Mensaje del chatbot
+   RF-CHA-006: respuestas directas, enriquecidas y paso a paso
+   -----------------------------------------------------------------------
+   DUEÑO DEL MÓDULO: GRUPO DE SANTIAGO (M14, Sprint 3). Aquí solo la forma
+   visual compartida; el procesamiento de lenguaje y la base de conocimiento
+   son decisiones suyas.
+   ======================================================================= */
+
+.chatbot__mensaje {
+  padding: var(--e-3);
+  background: var(--fondo);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra-1);
+}
+
+.chatbot__tarjeta {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  margin-top: var(--e-2);
+  padding: var(--e-2) var(--e-3);
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+}
+
+.chatbot__miniatura {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radio-chico);
+  background: var(--pista);
+}
+
+.chatbot__enlace {
+  display: inline-block;
+  margin-top: var(--e-2);
+  color: var(--primaria);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.chatbot__pasos { list-style: none; margin: var(--e-2) 0 0; padding: 0; }
+
+.chatbot__paso {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  padding: 2px 0;
+}
+
+.chatbot__paso-numero {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--info-insignia);
+  color: var(--info);
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+}
+
+
+/* =======================================================================
+   Cabecera — navegación completa
+   RF-INV-008: seis destinos y búsqueda de productos
+   RF-INV-004: la búsqueda arranca a los cuatro caracteres
+   -----------------------------------------------------------------------
+   PENDIENTE DE SANTIAGO: ningún documento define cómo llega un visitante
+   con cuenta a la pantalla de inicio de sesión. La variante de visitante
+   solo ofrece registro, que es lo único que el requisito especifica.
+   ======================================================================= */
+
+/* «Marca y navegacion» separa el logotipo de los destinos con 32, no con 24:
+   son dos separaciones distintas en Figma y compartían clase por descuido. */
+.cabecera__grupo-marca {
+  display: flex;
+  align-items: center;
+  gap: var(--e-8);
+}
+
+.cabecera__nav {
+  display: flex;
+  gap: var(--e-6);
+  align-items: center;
+}
+
+.cabecera__destino {
+  color: var(--texto-sobre-color);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  text-decoration: none;
+  padding: var(--e-1) 0;
+  border-bottom: 2px solid transparent;
+}
+
+/* El destino en curso se marca aquí, no con una variante de Figma. */
+.cabecera__destino.activo,
+.cabecera__destino[aria-current="page"] { border-bottom-color: var(--texto-sobre-color); }
+
+/* Destino cuya pantalla todavía no existe. Se conserva —RF-INV-008 exige los
+   seis— pero no finge llevar a ninguna parte. `data-pendiente` dice de quién
+   es. Cuando su dueño la publique, se le pone `href` y se quita esto. */
+.cabecera__destino--pendiente {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.cabecera__buscador {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  height: 32px;
+  padding: 0 var(--e-3);
+  /* El relleno del buscador es un color propio del diseño (#2A3358), no el
+     cromo aclarado con un filtro: `filter` teñía también el icono y el texto. */
+  background: var(--cromo-elevado);
+  border-radius: var(--radio);
+}
+
+.cabecera__buscador-texto {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: none;
+  border: 0;
+  color: var(--texto-sobre-color);
+  font-family: var(--t-cuerpo-familia);
+  font-size: var(--t-meta-tam);
+}
+
+.cabecera__buscador-texto::placeholder { color: var(--pista); opacity: 1; }
+
+.cabecera__acciones {
+  display: flex;
+  align-items: center;
+  gap: var(--e-5);
+}
+
+/* Créditos: icono más cifra, separados 6 px —el valor del frame «Creditos» de
+   Figma, que no cae en la escala de 4—. La cifra va en el oro de legendaria.
+   Hasta ahora viajaba suelta porque el ui-kit no tenía iconos. */
+.cabecera__dato {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--credito-oro);
+}
+
+/* -----------------------------------------------------------------------
+   Icono — los 30 componentes `Icono/*` de Figma, en iconos/sprite.svg
+   -----------------------------------------------------------------------
+   Uso: <svg class="icono" aria-hidden="true"><use href=".../sprite.svg#buscar"/></svg>
+   Heredan el color del texto que los acompaña, igual que en el diseño.
+   ----------------------------------------------------------------------- */
+.icono {
+  width: var(--icono-chico);
+  height: var(--icono-chico);
+  flex: 0 0 auto;
+  color: inherit;
+}
+
+/* 16 px: es el tamaño real de `Icono/buscar` y `Icono/moneda` en la cabecera.
+   La campana se queda en los 20 de `.icono`. */
+.icono--menudo { width: var(--icono-menudo); height: var(--icono-menudo); }
+
+/* El distintivo va AL LADO de la campana, separado 6 px, no superpuesto:
+   en Figma «Notificaciones» es una fila de campana + distintivo. */
+.cabecera__campana {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cabecera__contador {
+  display: inline-block;
+  min-width: 20px;
+  height: 17px;
+  padding: 0 var(--e-1);
+  border-radius: var(--radio-pildora);
+  background: var(--acento-relleno);
+  color: var(--texto-sobre-color);
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  line-height: 17px;
+  text-align: center;
+}
+
+/* «Mi Cuenta» es el grupo del avatar: retrato, apodo y rango en dos líneas. */
+.cabecera__cuenta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+}
+
+/* En Figma el avatar es una elipse morada lisa de 32 px. No lleva icono de
+   usuario dentro: poner uno sería añadir algo que el diseño no tiene. */
+.cabecera__avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--acento-relleno);
+  flex: 0 0 auto;
+}
+
+.cabecera__identidad { display: flex; flex-direction: column; line-height: 1.2; }
+
+.cabecera__apodo {
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+/* El rango va en `--pista`, que es el color exacto del diseño, no un blanco
+   con opacidad: la opacidad tiñe distinto sobre cada fondo. */
+.cabecera__rango {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--pista);
+}
+
+/* A 1024 px el buscador se repliega a icono. Nunca se quita un destino. */
+@media (max-width: 1100px) {
+  .cabecera__nav      { gap: var(--e-4); }
+  .cabecera__buscador { flex: 0 0 auto; width: 32px; padding: 0; justify-content: center; }
+  .cabecera__buscador .cabecera__buscador-texto { display: none; }
+}
+
+
+/* =======================================================================
+   Distintivo — familias añadidas
+   Inventario RF-INV-010 · Productos RF-PRD-005 · Misiones RF-MIS-009
+   Comercio RF-CAR-003 · Subastas RF-SUB-010 · Cuentas RF-USR-008 · RF-COM-006
+   -----------------------------------------------------------------------
+   Color saturado como TEXTO sobre fondo tenue del mismo color.
+   Nunca fondo sólido con texto blanco. La etiqueta siempre dice el estado.
+   ======================================================================= */
+
+.distintivo--en-mision      { background: var(--info-insignia);        color: var(--info); }
+.distintivo--no-disponible  { background: var(--pista);                color: var(--texto-3); }
+.distintivo--activo         { background: var(--exito-insignia);       color: var(--exito); }
+.distintivo--suspendido     { background: var(--error-insignia);       color: var(--error); }
+.distintivo--bloqueada      { background: var(--pista);                color: var(--texto-3); }
+.distintivo--en-progreso    { background: var(--info-insignia);        color: var(--info); }
+.distintivo--completada     { background: var(--exito-insignia);       color: var(--exito); }
+.distintivo--epica          { background: var(--rareza-epica-insignia); color: var(--rareza-epica); }
+.distintivo--administrador  { background: var(--rareza-epica-insignia); color: var(--acento-relleno); }
+.distintivo--moderador      { background: var(--info-insignia);        color: var(--info); }
+.distintivo--sancionado     { background: var(--error-insignia);       color: var(--error); }
+.distintivo--reportado      { background: var(--advertencia-insignia); color: var(--advertencia); }
+.distintivo--promocion      { background: var(--exito-insignia);       color: var(--exito); }
+.distintivo--maestro-juego  { background: var(--rareza-epica-insignia); color: var(--rareza-epica); }
+
+
+/* =======================================================================
+   Tabla — selección múltiple y encabezado ordenable
+   RF-USR-009 (ordenar y exportar) · RF-COM-008 (lote) · RF-AUD-004
+   ======================================================================= */
+
+.tabla__fila--seleccionada { background: var(--info-insignia); }
+
+.tabla__encabezado--ordenable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.tabla__encabezado--ordenable .tabla__orden {
+  display: inline-block;
+  margin-left: var(--e-2);
+  color: var(--primaria);
+}
+
+.tabla__encabezado--ordenable[aria-sort="descending"] .tabla__orden { transform: rotate(180deg); }
+
+.tabla__seleccion { width: 40px; text-align: center; }
+
+
+/* =======================================================================
+   Bloques base que faltaban
+   -----------------------------------------------------------------------
+   Estas clases estaban documentadas en Figma pero no existían aquí.
+   `.accion-combate` venía sin escribir desde el Sprint 1: el componente
+   existía en Figma y el CSS nunca se creó.
+   ======================================================================= */
+
+/* Barra de progreso genérica — contenedor */
+.progreso { display: block; width: 100%; }
+
+/* Campo numérico — contenedor. RF-SUB-004 · RF-JUE-001 · RF-PRD-003 */
+.campo-numerico {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+}
+
+.campo-numerico__ayuda {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+}
+
+.campo-numerico--invalido .campo-numerico__caja  { border-color: var(--error); }
+.campo-numerico--invalido .campo-numerico__ayuda { color: var(--error); }
+
+/* Panel de métrica — contenedor. RF-PRD-001 · RF-MET-001..004 · RF-CHA-012 */
+.metrica {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  padding: var(--e-4);
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra-2);
+}
+
+.metrica--cifra   { min-width: 200px; }
+.metrica--grafica { min-width: 260px; }
+
+/* Tarjeta de contenido — tipos restantes. RF-MIS-001 · RF-SUB-011 · RF-TOR-003 */
+.tarjeta--mision  .tarjeta__pie { color: var(--primaria); }
+.tarjeta--subasta .tarjeta__pie { color: var(--error); }
+.tarjeta--equipo  .tarjeta__pie { color: var(--exito); }
+
+/* Acción de combate — RF-JUE-006, RF-JUE-017 (todo control con icono) */
+.accion-combate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--e-1);
+  width: var(--boton-grande);
+  padding: var(--e-2);
+  background: var(--superficie);
+  border: 1px solid var(--borde-int);
+  border-radius: var(--radio);
+  color: var(--texto);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color var(--transicion), background var(--transicion);
+}
+
+.accion-combate:hover { background: var(--interaccion-velo-hover); }
+
+.accion-combate:focus-visible {
+  outline: var(--foco-grosor) solid var(--anillo-foco);
+  outline-offset: 2px;
+}
+
+.accion-combate__icono { width: var(--icono); height: var(--icono); }
+
+.accion-combate__etiqueta {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+}
+
+.accion-combate--secundaria { background: var(--fondo); }
+
+/* Sin poder y fuera de turno: no basta con atenuar, el motivo va en el texto. */
+.accion-combate--sin-poder,
+.accion-combate--fuera-de-turno {
+  color: var(--texto-3);
+  border-color: var(--borde);
+  cursor: not-allowed;
+}
+
+.accion-combate--sin-poder .accion-combate__icono,
+.accion-combate--fuera-de-turno .accion-combate__icono { opacity: 0.5; }
+
+
+/* =======================================================================
+   Zona de carga de archivos
+   RF-COM-001 (comentarios con imágenes) · RF-PRD-007 (recursos gráficos)
+   RF-AUT-001 (avatar propio) · RF-CHA-006 (adjuntar capturas)
+   -----------------------------------------------------------------------
+   Arrastrar y soltar nunca es la única vía: la zona es también un botón
+   que abre el selector de archivos del sistema. El error dice siempre
+   qué formatos y qué tamaño se admiten, no solo que falló.
+   ======================================================================= */
+
+.zona-carga {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e-3);
+  min-height: 140px;
+  padding: var(--e-5);
+  background: var(--fondo);
+  border: 2px dashed var(--borde);
+  border-radius: var(--radio);
+  text-align: center;
+  cursor: pointer;
+}
+
+.zona-carga:focus-visible,
+.zona-carga--arrastrando {
+  outline: var(--foco-grosor) solid var(--anillo-foco);
+  outline-offset: 2px;
+  border-color: var(--primaria);
+}
+
+.zona-carga__entrada {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.zona-carga__icono { width: var(--icono-grande); height: var(--icono-grande); color: var(--texto-3); }
+
+.zona-carga__titulo {
+  font-family: var(--t-cuerpo-familia);
+  font-size: var(--t-cuerpo-tam);
+  color: var(--texto);
+}
+
+.zona-carga__ayuda {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+}
+
+/* Con archivos: deja de ser una invitación y pasa a ser una lista. */
+.zona-carga--con-archivos {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+}
+
+.zona-carga__miniaturas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+  justify-content: center;
+}
+
+.zona-carga__miniatura {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radio-chico);
+  background: var(--pista);
+  overflow: hidden;
+}
+
+.zona-carga__quitar {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--interaccion-velo-modal);
+  color: var(--texto-sobre-color);
+  cursor: pointer;
+}
+
+.zona-carga--cargando {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  cursor: progress;
+}
+
+.zona-carga__progreso {
+  width: 240px;
+  height: 8px;
+  background: var(--pista);
+  border-radius: var(--radio-chico);
+  overflow: hidden;
+}
+
+.zona-carga__avance {
+  height: 100%;
+  background: var(--primaria-relleno);
+  transition: width var(--duracion-normal) var(--curva-estandar);
+}
+
+/* Error: el motivo va escrito, no solo el borde en rojo. */
+.zona-carga--error {
+  background: var(--error-insignia);
+  border-color: var(--error);
+}
+
+.zona-carga--error .zona-carga__titulo,
+.zona-carga--error .zona-carga__ayuda,
+.zona-carga--error .zona-carga__icono { color: var(--error); }
+
+
+/* =======================================================================
+   Casilla en caja
+   -----------------------------------------------------------------------
+   Variante de Pantalla 1: la casilla vive dentro de una caja con borde que
+   ocupa el ancho, no suelta sobre el fondo. Toda la caja es el area
+   pulsable, que es mas facil de acertar que un cuadrado de 20 px.
+   ======================================================================= */
+
+.casilla--caja {
+  align-items: center;
+  padding: var(--e-3);
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+}
+
+.casilla--caja:hover { border-color: var(--borde-int); }
+
+.casilla--caja:has(.casilla__entrada:focus-visible) {
+  border-color: var(--primaria);
+}
+
+
+/* =======================================================================
+   Chatbot — boton flotante
+   RNF-DIS-002: presente en todas las vistas, sin excepcion.
+   -----------------------------------------------------------------------
+   El componente existia en el sistema de diseno pero su clase nunca se
+   escribio; lo destapo la primera vista construida de verdad.
+   ======================================================================= */
+
+.chatbot-flotante {
+  position: fixed;
+  right: var(--e-6);
+  bottom: var(--e-6);
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--primaria-relleno);
+  color: var(--texto-sobre-color);
+  font-family: var(--t-etiqueta-familia);
+  font-weight: var(--t-etiqueta-peso);
+  box-shadow: var(--sombra-3);
+  cursor: pointer;
+}
+
+.chatbot-flotante:hover { background: var(--acento-relleno); }
