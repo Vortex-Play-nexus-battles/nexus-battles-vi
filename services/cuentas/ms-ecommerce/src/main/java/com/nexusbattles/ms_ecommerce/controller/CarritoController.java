@@ -9,7 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1/ecommerce/carrito")
+@RequestMapping("/ecommerce/carrito")
 @RequiredArgsConstructor
 public class CarritoController {
 

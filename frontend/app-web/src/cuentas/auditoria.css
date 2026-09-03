@@ -1,0 +1,112 @@
+/* auditoria.css — Registro de auditoría (HU-AUD-002)
+   Depende de tema-cuentas.css (tokens de color, .tarjeta, .fila, .aviso,
+   .estado, botones, inputs). Aquí SOLO va lo que esa hoja no cubre:
+   layout de página, tabla, badges por tipo de acción, y paginación. */
+
+.contenedor {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 32px 16px 64px;
+}
+
+.auditoria-titulo {
+  font-family: Inter, 'Segoe UI', system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 24px;
+  color: var(--texto);
+  margin: 0 0 6px;
+}
+
+/* El .aviso base de tema-cuentas.css usa los colores de "info" (azul).
+   Para el banner de inmutabilidad usamos el tono de advertencia (ámbar),
+   reutilizando los tokens que ya existen — sin inventar colores nuevos. */
+.aviso--advertencia {
+  background: var(--advertencia-fondo);
+  color: var(--advertencia);
+  margin-top: 20px;
+}
+.aviso--advertencia strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+/* Tabla */
+
+.tabla-envoltorio {
+  overflow-x: auto;
+}
+
+.tabla-auditoria {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 920px;
+}
+
+.tabla-auditoria th {
+  text-align: left;
+  font-size: 12px;
+  color: var(--texto-terciario);
+  font-weight: 600;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--borde-decorativo);
+  white-space: nowrap;
+}
+
+.tabla-auditoria td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--borde-decorativo);
+  vertical-align: top;
+  font-size: 14px;
+}
+
+.tabla-auditoria tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.tabla-auditoria tbody tr:hover {
+  background: var(--fondo);
+}
+
+.celda-fecha {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.celda-valor {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Badges por tipo de acción — reutilizan los tokens de color existentes
+   (exito/advertencia/error/info/acento) en vez de definir hex nuevos. */
+
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge--creacion            { background: var(--exito-fondo); color: var(--exito); }
+.badge--aprobacion          { background: var(--exito-fondo); color: var(--exito); }
+.badge--actualizacion       { background: var(--info-fondo); color: var(--info); }
+.badge--suspension          { background: var(--advertencia-fondo); color: var(--advertencia); }
+.badge--sancion             { background: var(--error-fondo); color: var(--error); }
+.badge--rechazo             { background: var(--error-fondo); color: var(--error); }
+.badge--cambio_rol          { background: #efe6f7; color: var(--acento); }
+.badge--eliminacion_logica  { background: var(--fondo); color: var(--texto-secundario); }
+.badge--otro                { background: var(--fondo); color: var(--texto-secundario); }
+
+/* Paginación */
+
+.paginacion {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 16px;
+}

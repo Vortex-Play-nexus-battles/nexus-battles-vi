@@ -139,4 +139,47 @@ test.describe('Ficha de detalle del producto', () => {
     await expect(aviso).toBeVisible();
     expect(await aviso.innerText()).not.toMatch(/\b[1-5]\d{2}\b/);
   });
+
+  test('Un producto suspendido se ve con el indicador de no disponible', async ({ page }) => {
+    await page.route('**/api/v1/inventario/elementos*', (r) =>
+      r.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          elementos: [
+            {
+              id: 'e-0',
+              productoId: 'producto-0',
+              tipo: 'ARMA',
+              nombrePropio: 'Mi hacha',
+            },
+          ],
+          numero: 0,
+          tamanio: 16,
+          totalElementos: 1,
+          totalPaginas: 1,
+          ultima: true,
+        }),
+      }),
+    );
+    // RN-27: el catalogo devuelve el producto suspendido con su estado.
+    await page.route('**/api/v1/productos/*', (r) =>
+      r.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ...PRODUCTO, estado: 'SUSPENDIDO' }),
+      }),
+    );
+    await page.goto(PAGINA);
+    await page.waitForFunction(() => !document.querySelector('.estado-carga'));
+
+    await page.locator('.vitrina__detalle').click();
+
+    // La ficha se muestra, no se oculta ni falla.
+    await expect(page.locator('.ficha__nombre')).toHaveText('Hacha de Vorn');
+    await expect(page.locator('.ficha__no-disponible')).toBeVisible();
+    await expect(page.locator('.ficha__no-disponible')).toContainText(/sigue en tu inventario/i);
+    // Y no se presenta como un error: sigue siendo suyo.
+    await expect(page.locator('.estado-error')).toHaveCount(0);
+  });
 });

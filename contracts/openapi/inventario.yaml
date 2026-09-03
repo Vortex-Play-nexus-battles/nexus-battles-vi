@@ -171,6 +171,31 @@ paths:
           $ref: "#/components/responses/ElementoNoEncontrado"
         "503":
           $ref: "#/components/responses/PersistenciaNoDisponible"
+  /api/v1/inventario/heroes/{heroeId}/estadisticas:
+    get:
+      summary: Consulta las estadisticas de un heroe propio con el equipamiento aplicado
+      description: >
+        HU-INV-006. Recalcula poder, vida, defensa y las formulas de ataque,
+        daño y sanacion del heroe indicado sumando los modificadores de cada
+        elemento que tiene equipado actualmente. La identidad viaja en la
+        cabecera y nunca en la ruta: un jugador no puede consultar las
+        estadisticas del heroe de otro.
+      operationId: consultarEstadisticasEquipadas
+      parameters:
+        - $ref: "#/components/parameters/HeroeId"
+      responses:
+        "200":
+          description: Estadisticas del heroe con el efecto del equipamiento ya aplicado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EstadisticasEquipadas"
+        "401":
+          $ref: "#/components/responses/IdentidadRequerida"
+        "403":
+          $ref: "#/components/responses/InventarioAjeno"
+        "404":
+          $ref: "#/components/responses/ElementoNoEncontrado"
 components:
   securitySchemes:
     IdentidadTemporal:
@@ -275,6 +300,52 @@ components:
           minimum: 0
         ultima:
           type: boolean
+    EstadisticasEquipadas:
+      type: object
+      additionalProperties: false
+      required: [heroeId, poder, vida, defensa]
+      description: >
+        Espejo de EstadisticasEquipadasResponse. ataque, dano y sanar pueden
+        ser null: no todos los prototipos de heroe tienen las tres formulas
+        (ver ResolutorDeEstadisticasHeroe), y la ausencia de una formula no
+        es un error.
+      properties:
+        heroeId:
+          type: string
+        poder:
+          type: integer
+        vida:
+          type: integer
+        defensa:
+          type: integer
+        ataque:
+          oneOf:
+            - $ref: "#/components/schemas/FormulaDetalle"
+            - type: "null"
+        dano:
+          oneOf:
+            - $ref: "#/components/schemas/FormulaDetalle"
+            - type: "null"
+        sanar:
+          oneOf:
+            - $ref: "#/components/schemas/FormulaDetalle"
+            - type: "null"
+    FormulaDetalle:
+      type: object
+      additionalProperties: false
+      required: [base, cantidadDados, caras, formula]
+      properties:
+        base:
+          type: integer
+        cantidadDados:
+          type: integer
+        caras:
+          type: integer
+        formula:
+          type: string
+          description: >
+            Representacion legible ya formateada por el servidor, ej.
+            "10 + 1d6", "1d4", o solo el valor base si no hay dados.
     DetalleDeProblema:
       type: object
       description: Formato estandar de detalles de problema RFC 9457.
