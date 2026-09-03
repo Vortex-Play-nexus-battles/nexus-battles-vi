@@ -65,6 +65,11 @@ COMPOSE_CUENTAS="$DIRECTORIO/docker-compose.cuentas.yml"
 COMPOSE_MS_CUMPLIMIENTO="$DIRECTORIO/docker-compose.ms-cumplimiento.yml"
 # Override de ms-ecommerce (Maven, tambien equipo Cuentas). Mismo patron.
 COMPOSE_MS_ECOMMERCE="$DIRECTORIO/docker-compose.ms-ecommerce.yml"
+# Override de los servicios de services/contenido/* (equipo Contenido):
+# mismo mecanismo que el de cuentas -- se copia siempre, se agrega al
+# comando solo si algun servicio de contenido viene en esta corrida.
+COMPOSE_CONTENIDO="$DIRECTORIO/docker-compose.contenido.yml"
+SERVICIOS_CONTENIDO="heroes inventario productos motor-combate"
 INTENTOS_SALUD=12
 ESPERA_ENTRE_INTENTOS=5
 
@@ -134,6 +139,7 @@ SERVICIOS_COMPOSE=""
 INCLUYE_CUENTAS=0
 INCLUYE_MS_CUMPLIMIENTO=0
 INCLUYE_MS_ECOMMERCE=0
+INCLUYE_CONTENIDO=0
 for par in $SERVICIOS_PUERTOS; do
   servicio="${par%%:*}"
   SERVICIOS_COMPOSE="$SERVICIOS_COMPOSE srv-${servicio}"
@@ -146,6 +152,11 @@ for par in $SERVICIOS_PUERTOS; do
   if [ "$servicio" = "ms-ecommerce" ]; then
     INCLUYE_MS_ECOMMERCE=1
   fi
+  for s in $SERVICIOS_CONTENIDO; do
+    if [ "$servicio" = "$s" ]; then
+      INCLUYE_CONTENIDO=1
+    fi
+  done
 done
 
 # Si ms-identidad esta en esta corrida, sus 3 secrets de base de datos son
@@ -217,6 +228,9 @@ if [ "$INCLUYE_MS_CUMPLIMIENTO" -eq 1 ]; then
 fi
 if [ "$INCLUYE_MS_ECOMMERCE" -eq 1 ]; then
   ARCHIVOS_COMPOSE+=(-f "$COMPOSE_MS_ECOMMERCE")
+fi
+if [ "$INCLUYE_CONTENIDO" -eq 1 ]; then
+  ARCHIVOS_COMPOSE+=(-f "$COMPOSE_CONTENIDO")
 fi
 
 docker compose "${ARCHIVOS_COMPOSE[@]}" pull $SERVICIOS_COMPOSE
