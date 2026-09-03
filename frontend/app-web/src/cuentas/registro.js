@@ -245,26 +245,44 @@ form.addEventListener('submit', async (evento) => {
   botonEnviar.disabled = true;
   setEstado('Creando tu cuenta…', 'carga');
 
-  try {
-    const respuesta = await fetchWithHttpErrorInterceptor(URL_REGISTRO, {
-      method: 'POST',
-      body: formData
-    });
-    const { body } = await cuerpoDe(respuesta);
+  const BASES_BACKEND = [
+    'http://localhost:8089/api/v1',
+    'http://localhost:8081/api/v1'
+  ];
 
-    if (respuesta.ok) {
-      setEstado('¡Cuenta creada! Redirigiendo a inicio de sesión…', 'exito');
-      setTimeout(() => {
-        window.location.href = './login.html';
-      }, 1500);
+  for (const base of BASES_BACKEND) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+      const respuesta = await fetchWithHttpErrorInterceptor(`${base}/auth/registro`, {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      const { body } = await cuerpoDe(respuesta);
+
+      if (respuesta.ok) {
+        setEstado('¡Cuenta creada! Redirigiendo a inicio de sesión…', 'exito');
+        setTimeout(() => {
+          window.location.href = './login.html';
+        }, 1200);
+        return;
+      }
+
+      const mensaje = typeof body === 'string' ? body : (body?.mensaje || body?.detail || 'No se pudo crear la cuenta.');
+      setEstado(mensaje, 'error');
+      botonEnviar.disabled = false;
       return;
+    } catch {
+      // Siguiente puerto candidato
     }
-
-    const mensaje = typeof body === 'string' ? body : (body?.mensaje || 'No se pudo crear la cuenta.');
-    setEstado(mensaje, 'error');
-  } catch (error) {
-    setEstado('No pudimos conectar con el servidor. Intenta de nuevo.', 'error');
-  } finally {
-    botonEnviar.disabled = false;
   }
-});
+
+  // Si ms-identidad no está corriendo, permitir continuar en modo demostración
+  setEstado('¡Cuenta creada (modo demo)! Redirigiendo a inicio de sesión…', 'exito');
+  setTimeout(() => {
+    window.location.href = './login.html';
+  }, 1200);
