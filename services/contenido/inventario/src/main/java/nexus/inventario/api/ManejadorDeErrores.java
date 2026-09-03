@@ -2,6 +2,7 @@ package nexus.inventario.api;
 
 import nexus.inventario.aplicacion.IdentidadRequeridaException;
 import nexus.inventario.aplicacion.InventarioAjenoException;
+import nexus.inventario.aplicacion.ProductoNoEncontradoException;
 import nexus.inventario.dominio.ElementoNoEncontradoException;
 import nexus.inventario.dominio.ElementoNoEquipableException;
 import nexus.inventario.dominio.ElementoYaEquipadoException;
@@ -30,6 +31,11 @@ public class ManejadorDeErrores {
     @ExceptionHandler(ElementoNoEncontradoException.class)
     public ProblemDetail elementoNoEncontrado(ElementoNoEncontradoException error) {
         return problema(HttpStatus.NOT_FOUND, "Elemento no encontrado", error.getMessage());
+    }
+
+    @ExceptionHandler(ProductoNoEncontradoException.class)
+    public ProblemDetail productoNoEncontrado(ProductoNoEncontradoException error) {
+        return problema(HttpStatus.NOT_FOUND, "Producto no encontrado", error.getMessage());
     }
 
     @ExceptionHandler(LimiteEquipamientoException.class)
