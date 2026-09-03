@@ -12,7 +12,69 @@ import {
   setCurrentRole
 } from './directives/has-permission.directive.js';
 import { construirBarra } from '../comun/barra-navegacion.js';
-import { MATRIZ_RBAC as MATRIZ_REFERENCIA } from './matriz-rbac.js';
+
+// Matriz de referencia local (Tabla 24 extendida)
+const MATRIZ_REFERENCIA = {
+  JUGADOR: {
+    CREAR_CUENTA_JUGADOR: 'GRANTED',
+    MODIFICAR_PERFIL_PROPIO: 'GRANTED',
+    PUBLICAR_COMENTARIOS: 'GRANTED',
+    ELIMINAR_COMENTARIO_PROPIO: 'GRANTED',
+    MODERAR_COMENTARIOS: 'DENIED',
+    EMITIR_ADVERTENCIAS: 'DENIED',
+    SUSPENDER_USUARIOS: 'DENIED',
+    BANEAR_DEFINITIVAMENTE: 'DENIED',
+    CREAR_ADMIN_MODERADOR: 'DENIED',
+    GESTIONAR_PRODUCTOS: 'DENIED',
+    ASIGNAR_ROL: 'DENIED',
+    GESTIONAR_CUENTAS: 'DENIED'
+  },
+  MODERADOR: {
+    CREAR_CUENTA_JUGADOR: 'DENIED',
+    MODIFICAR_PERFIL_PROPIO: 'GRANTED',
+    PUBLICAR_COMENTARIOS: 'GRANTED',
+    ELIMINAR_COMENTARIO_PROPIO: 'GRANTED',
+    MODERAR_COMENTARIOS: 'GRANTED',
+    EMITIR_ADVERTENCIAS: 'GRANTED',
+    SUSPENDER_USUARIOS: 'TEMPORARY',
+    BANEAR_DEFINITIVAMENTE: 'DENIED',
+    CREAR_ADMIN_MODERADOR: 'DENIED',
+    GESTIONAR_PRODUCTOS: 'DENIED',
+    ASIGNAR_ROL: 'DENIED',
+    GESTIONAR_CUENTAS: 'DENIED'
+  },
+  ADMINISTRADOR: {
+    CREAR_CUENTA_JUGADOR: 'DENIED',
+    MODIFICAR_PERFIL_PROPIO: 'GRANTED',
+    PUBLICAR_COMENTARIOS: 'GRANTED',
+    ELIMINAR_COMENTARIO_PROPIO: 'GRANTED',
+    MODERAR_COMENTARIOS: 'GRANTED',
+    EMITIR_ADVERTENCIAS: 'GRANTED',
+    SUSPENDER_USUARIOS: 'GRANTED',
+    BANEAR_DEFINITIVAMENTE: 'GRANTED',
+    CREAR_ADMIN_MODERADOR: 'DENIED',
+    GESTIONAR_PRODUCTOS: 'GRANTED',
+    ASIGNAR_ROL: 'DENIED',
+    GESTIONAR_CUENTAS: 'GRANTED'
+  },
+  SUPER_ADMINISTRADOR: {
+    CREAR_CUENTA_JUGADOR: 'DENIED',
+    MODIFICAR_PERFIL_PROPIO: 'GRANTED',
+    PUBLICAR_COMENTARIOS: 'GRANTED',
+    ELIMINAR_COMENTARIO_PROPIO: 'GRANTED',
+    MODERAR_COMENTARIOS: 'GRANTED',
+    EMITIR_ADVERTENCIAS: 'GRANTED',
+    SUSPENDER_USUARIOS: 'GRANTED',
+    BANEAR_DEFINITIVAMENTE: 'GRANTED',
+    CREAR_ADMIN_MODERADOR: 'GRANTED',
+    GESTIONAR_PRODUCTOS: 'GRANTED',
+    ASIGNAR_ROL: 'GRANTED',
+    GESTIONAR_CUENTAS: 'GRANTED'
+  }
+};
+
+let matrizActiva = MATRIZ_REFERENCIA;
+let baseActiva = null;
 
 // Montar la barra superior compartida oficial (HU-INV-004)
 const token = sessionStorage.getItem('nexus.token');
@@ -58,11 +120,7 @@ const NOMBRES_ROLES = {
   SUPER_ADMINISTRADOR: 'Super Administrador'
 };
 
-// La matriz de referencia local (Tabla 24 extendida) vive en matriz-rbac.js,
-// fuente única compartida con el hub (index.js). Solo se usa como respaldo
-// cuando ms-identidad no responde.
-let matrizActiva = MATRIZ_REFERENCIA;
-let baseActiva = null;
+
 
 async function pedir(base, ruta, opciones = {}) {
   const controller = new AbortController();
@@ -101,9 +159,8 @@ async function cargarMatrizDesdeBackend() {
           // Descripciones opcionales
         }
 
-        const puerto = base.match(/:(\d+)/)?.[1] ?? '8089';
         estadoConexion.className = 'indicador-estado-conexion indicador-conectado';
-        textoEstadoConexion.textContent = `Conectado a ms-identidad (puerto ${puerto}) — Versión ${payload.version || '1.1.0'}. Matriz cargada desde el servidor.`;
+        textoEstadoConexion.textContent = 'Conectado';
         return;
       }
     } catch {
@@ -114,7 +171,7 @@ async function cargarMatrizDesdeBackend() {
   matrizActiva = MATRIZ_REFERENCIA;
   baseActiva = null;
   estadoConexion.className = 'indicador-estado-conexion indicador-desconectado';
-  textoEstadoConexion.textContent = 'Sin conexión con ms-identidad (:8089 / :8081). Mostrando la matriz de referencia local (Tabla 24).';
+  textoEstadoConexion.textContent = 'Desconectado';
 }
 
 let timerToast = null;
@@ -143,11 +200,13 @@ function actualizarVistaRol() {
 
   // 2. Pasar la matriz y el rol a la directiva reactiva (ÚNICA dueña del display)
   const permisosRol = matrizActiva[rol] || {};
+
+  // 3. Pasar la matriz y el rol a la directiva reactiva (ÚNICA dueña del display)
   setPermissionMatrix(matrizActiva);
   setCurrentRole(rol);
   applyHasPermissionDirective();
 
-  // 3. Actualizar badges semánticos de estado para los elementos permitidos
+  // 4. Actualizar badges semánticos de estado para los elementos permitidos
   botonesAccion.forEach((btn) => {
     const accion = btn.dataset.hasPermission;
     const tipo = permisosRol[accion];
