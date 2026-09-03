@@ -1,2 +1,29 @@
 server:
   port: 8081
+
+spring:
+  mvc:
+    problemdetails:
+      enabled: true
+  datasource:
+    url: ${DB_RELACIONAL_URL:jdbc:postgresql://localhost:5432/plataformadb}
+    username: ${DB_USER:usuario_nexus}
+    password: ${DB_PASS:password_secreta_123}
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        default_schema: comentarios
+  flyway:
+    schemas: comentarios
+    default-schema: comentarios
+
+comentarios:
+  lista-negra:
+    # Endpoint de verificacion publicado por moderacion-sanciones en
+    # contracts/openapi/moderacion-lista-negra.yaml (HU-ADM-002)
+    url: ${LISTA_NEGRA_VERIFICAR_URL:http://localhost:8086/api/v1/lista-negra/verificar}
+  # Los formatos de imagen admitidos estan pendientes de definir con el
+  # Product Owner (issue 34); mientras tanto se configuran por variable de
+  # entorno y el valor local por defecto es el que usan las pruebas.
+  formatos-imagen: ${COMENTARIOS_FORMATOS_IMAGEN:jpg,png,webp}
