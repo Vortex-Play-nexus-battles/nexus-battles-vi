@@ -206,7 +206,12 @@
         </label>
 
         <div class="acciones">
-          <button class="boton boton--secundario" type="button">Cancelar</button>
+          <!--
+            Cancelar es un enlace y no un boton con manejador: vuelve al
+            listado de Batallas, que es de donde se llega a esta vista, y
+            funciona aunque el modulo JS no haya cargado.
+          -->
+          <a class="boton boton--secundario" href="./batallas.html">Cancelar</a>
           <button class="boton boton--primario boton--grande" type="submit">CREAR SALA</button>
         </div>
       </form>
