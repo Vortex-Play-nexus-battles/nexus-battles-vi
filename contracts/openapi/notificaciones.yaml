@@ -1,0 +1,248 @@
+openapi: 3.1.0
+info:
+  title: Nexus Battles VI - Notificaciones (bandeja del jugador)
+  description: >
+    API de la bandeja de avisos de un jugador (HU-NOT-006, RF-NOT-003,
+    RF-NOT-004, RF-NOT-006). Aqui viven las operaciones de consulta y de
+    lectura. La entrega en tiempo real viaja por STOMP y esta descrita en
+    contracts/websocket/notificaciones.yaml.
+
+    El estado de lectura pertenece al jugador y no a la sesion, por eso marcar
+    leido en un dispositivo se ve en todos.
+
+    El identificador del jugador viaja en la ruta mientras se acuerda con el
+    modulo de identidad que claim del token lo aporta. Al integrar el resource
+    server este contrato abrira una version nueva en lugar de modificar esta.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8085/api/v1
+    description: Entorno local de desarrollo
+paths:
+  /users/{usuarioId}/notifications:
+    get:
+      summary: Consultar la bandeja del jugador
+      operationId: consultarBandeja
+      description: >
+        Devuelve el historial completo, del mas antiguo al mas reciente, con el
+        estado de lectura de cada aviso y la cuenta de no leidos.
+      parameters:
+        - name: usuarioId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Bandeja del jugador
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BandejaResponse'
+
+  /users/{usuarioId}/notifications/{notificacionId}/read:
+    post:
+      summary: Marcar un aviso como leido
+      operationId: marcarLeida
+      description: >
+        Marca el aviso como leido para todo el jugador, no solo para la sesion
+        que lo pide. Es idempotente: marcar dos veces no cambia nada ni falla.
+      parameters:
+        - name: usuarioId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: notificacionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Aviso marcado, se devuelve la cuenta actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContadorResponse'
+        '404':
+          description: El aviso no existe en la bandeja de ese jugador
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /users/{usuarioId}/sessions/{sesionId}/pending:
+    post:
+      summary: Entregar a una sesion lo que se perdio
+      operationId: entregarPendientes
+      description: >
+        Devuelve los avisos que esa sesion todavia no ha recibido y los da por
+        entregados. Sirve tanto para el primer ingreso como para la reconexion
+        despues de una caida.
+
+        Existe ademas del canal STOMP a proposito: cuando el canal en tiempo
+        real no esta disponible, la interfaz puede recuperar lo pendiente por
+        aqui. No reemplaza al canal como mecanismo principal, que es lo que
+        prohibe la historia.
+      parameters:
+        - name: usuarioId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: sesionId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Identificador estable de la sesion, sobrevive a la reconexion
+      responses:
+        '200':
+          description: Avisos entregados en esta llamada, vacio si estaba al dia
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AvisoResponse'
+        '400':
+          description: Identificador de usuario o de sesion invalido
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /internal/notifications:
+    post:
+      summary: Registrar un evento notificable (uso interno entre modulos)
+      operationId: emitirNotificacion
+      description: >
+        Puerta de entrada provisional. Este modulo no inventa eventos, los
+        recibe de los demas. Mientras el equipo no acuerde el bus de eventos y
+        no exista broker en docker-compose.yml, los modulos publican por aqui.
+
+        Cuando exista el bus, este camino se retira y el contrato abre version
+        nueva. Por eso vive bajo /internal y no forma parte de la API publica
+        del jugador.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmitirNotificacionRequest'
+      responses:
+        '201':
+          description: Aviso registrado y entregado a las sesiones conectadas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntregaResponse'
+        '400':
+          description: Datos del evento invalidos
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: Ya existe un aviso con ese identificador en la bandeja
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+components:
+  schemas:
+
+    EmitirNotificacionRequest:
+      type: object
+      required: [usuarioId, id, tipo, titulo, cuerpo, creadaEn]
+      properties:
+        usuarioId:
+          type: string
+          description: Jugador destinatario del aviso
+        id:
+          type: string
+          description: >
+            Identificador del evento que da origen al aviso. Lo pone el modulo
+            que emite, para que un reintento no duplique el aviso.
+        tipo:
+          type: string
+        titulo:
+          type: string
+        cuerpo:
+          type: string
+        creadaEn:
+          type: string
+          format: date-time
+
+    AvisoResponse:
+      type: object
+      required: [id, tipo, titulo, cuerpo, creadaEn, leida]
+      properties:
+        id:
+          type: string
+        tipo:
+          type: string
+        titulo:
+          type: string
+        cuerpo:
+          type: string
+        creadaEn:
+          type: string
+          format: date-time
+        leida:
+          type: boolean
+
+    BandejaResponse:
+      type: object
+      required: [usuarioId, noLeidas, avisos]
+      properties:
+        usuarioId:
+          type: string
+        noLeidas:
+          type: integer
+          minimum: 0
+        avisos:
+          type: array
+          items:
+            $ref: '#/components/schemas/AvisoResponse'
+
+    ContadorResponse:
+      type: object
+      required: [usuarioId, noLeidas]
+      properties:
+        usuarioId:
+          type: string
+        noLeidas:
+          type: integer
+          minimum: 0
+
+    EntregaResponse:
+      type: object
+      required: [aviso, sesionesNotificadas]
+      properties:
+        aviso:
+          $ref: '#/components/schemas/AvisoResponse'
+        sesionesNotificadas:
+          type: array
+          description: >
+            Sesiones a las que se entrego en el momento. Vacio si el jugador no
+            tenia ninguna abierta, en cuyo caso el aviso queda pendiente.
+          items:
+            type: string
+
+    ProblemDetail:
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
