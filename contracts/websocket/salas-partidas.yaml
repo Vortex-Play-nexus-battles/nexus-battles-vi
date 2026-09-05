@@ -21,15 +21,14 @@ asyncapi: 3.0.0
 #    repartidos y cofres otorgados."
 #
 # ---------------------------------------------------------------------------
-# AVISO DE PROPIEDAD — leer antes de implementar el chat
+# AVISO DE PROPIEDAD — chat (HU-JUE-015)
 #
-# Los destinos de chat (`/tema/salas/{idSala}/chat` y `/app/salas/{idSala}/chat`)
-# corresponden a HU-JUE-015, cuyo responsable es Alexander Nino, no a las
-# historias HU-SAL-001..005. Se documentan aqui porque comparten la sala y el
-# mismo broker STOMP, pero su esquema definitivo lo fija su dueno.
+# Los destinos de chat corresponden a HU-JUE-015, cuyo responsable es
+# Alexander Nino. Comparten la sala y el broker STOMP con HU-SAL-001..005, y
+# el esquema de sus mensajes lo fijo su dueno en esta version: ya no es una
+# propuesta de encaje.
 #
-# NO fusionar cambios a esos dos destinos sin aprobacion de Alexander Nino.
-# Lo aqui escrito es una propuesta de encaje, no un contrato cerrado.
+# NO fusionar cambios a los destinos de chat sin aprobacion de Alexander Nino.
 # ---------------------------------------------------------------------------
 # =============================================================================
 
@@ -142,7 +141,9 @@ channels:
       contenido segun las politicas — el filtrado se apoya en la lista negra
       de HU-ADM-002.
 
-      Dueno: Alexander Nino. Esquema pendiente de acordar con el.
+      Los errores de envio (jugador silenciado, contenido bloqueado, filtro
+      no disponible, mensaje invalido) no se difunden: vuelven a quien
+      escribio por /usuario/cola/salas como errorDeCanal (CA-03).
     parameters:
       idSala:
         description: Identificador de la sala
@@ -153,13 +154,52 @@ channels:
   enviarChat:
     address: '/app/salas/{idSala}/chat'
     title: Envio de mensaje de chat (HU-JUE-015)
-    description: 'Dueno: Alexander Nino. Esquema pendiente de acordar con el.'
+    description: Envio desde la sala. El texto pasa por la lista negra antes de salir al canal.
     parameters:
       idSala:
         description: Identificador de la sala
     messages:
       enviarMensaje:
         $ref: '#/components/messages/EnviarMensaje'
+
+  chatGeneral:
+    address: '/tema/chat/general'
+    title: Chat de la vista general (HU-JUE-015)
+    description: |
+      Conversacion de la vista general, para cuadrar partidas y buscar con
+      quien jugar. Mismas reglas que el chat de sala: filtro de la lista
+      negra de HU-ADM-002 y silencio por sancion (RF-USR-004).
+    messages:
+      mensajeDeChat:
+        $ref: '#/components/messages/MensajeDeChat'
+
+  enviarChatGeneral:
+    address: '/app/chat/general'
+    title: Envio de mensaje al chat general (HU-JUE-015)
+    messages:
+      enviarMensaje:
+        $ref: '#/components/messages/EnviarMensaje'
+
+  historialDeSala:
+    address: '/app/salas/{idSala}/chat/historial'
+    title: Historial del chat de la sala (HU-JUE-015)
+    description: |
+      Al suscribirse, el servidor responde una sola vez a esa conexion con
+      los ultimos mensajes de la sala, para que quien entra despues se ponga
+      al dia. La suscripcion en vivo sigue siendo /tema/salas/{idSala}/chat.
+    parameters:
+      idSala:
+        description: Identificador de la sala
+    messages:
+      historialDeChat:
+        $ref: '#/components/messages/HistorialDeChat'
+
+  historialGeneral:
+    address: '/app/chat/general/historial'
+    title: Historial del chat general (HU-JUE-015)
+    messages:
+      historialDeChat:
+        $ref: '#/components/messages/HistorialDeChat'
 
 operations:
 
@@ -198,6 +238,30 @@ operations:
     channel:
       $ref: '#/channels/enviarChat'
     summary: 'HU-JUE-015 — dueno Alexander Nino'
+
+  recibirChatGeneral:
+    action: receive
+    channel:
+      $ref: '#/channels/chatGeneral'
+    summary: 'HU-JUE-015'
+
+  enviarMensajeAlChatGeneral:
+    action: send
+    channel:
+      $ref: '#/channels/enviarChatGeneral'
+    summary: 'HU-JUE-015'
+
+  recibirHistorialDeSala:
+    action: receive
+    channel:
+      $ref: '#/channels/historialDeSala'
+    summary: 'HU-JUE-015 — respuesta unica al suscribirse'
+
+  recibirHistorialGeneral:
+    action: receive
+    channel:
+      $ref: '#/channels/historialGeneral'
+    summary: 'HU-JUE-015 — respuesta unica al suscribirse'
 
 components:
 
@@ -388,25 +452,16 @@ components:
       payload:
         $ref: '#/components/schemas/ProblemDetail'
 
-    # -- HU-JUE-015 · dueno Alexander Nino · propuesta -------------------------
+    # -- HU-JUE-015 · dueno Alexander Nino · esquema cerrado ------------------
     MensajeDeChat:
       name: mensajeDeChat
-      title: Mensaje del chat de la sala (HU-JUE-015)
+      title: Mensaje del chat (HU-JUE-015)
+      description: |
+        Un mensaje ya aceptado: paso el filtro de la lista negra y su autor
+        no esta silenciado. No existe una version "filtrada" del mensaje
+        porque CA-03 pide bloquear sin entregar, no censurar por partes.
       payload:
-        type: object
-        required: [tipo, idSala, autor, texto, enviadoEn]
-        properties:
-          tipo: { const: 'sala.chat.mensaje' }
-          idSala: { type: string, format: uuid }
-          autor: { $ref: '#/components/schemas/ResumenJugador' }
-          texto: { type: string }
-          enviadoEn: { type: string, format: date-time }
-          filtrado:
-            type: boolean
-            description: |
-              Verdadero si la lista negra de HU-ADM-002 censuro parte del
-              contenido. El PDF exige entregar el contenido filtrado segun las
-              politicas.
+        $ref: '#/components/schemas/MensajeDeChat'
 
     EnviarMensaje:
       name: enviarMensaje
@@ -416,8 +471,47 @@ components:
         required: [texto]
         properties:
           texto: { type: string, minLength: 1, maxLength: 500 }
+          logro:
+            type: [object, 'null']
+            description: Presente para compartir un logro de mision (CA-02).
+            required: [mision, titulo]
+            properties:
+              mision: { type: string }
+              titulo: { type: string }
+
+    HistorialDeChat:
+      name: historialDeChat
+      title: Historial de la sesion del chat (HU-JUE-015)
+      description: |
+        Respuesta unica a la suscripcion de historial: los ultimos mensajes
+        del canal, del mas antiguo al mas reciente.
+      payload:
+        type: array
+        items:
+          $ref: '#/components/schemas/MensajeDeChat'
 
   schemas:
+
+    MensajeDeChat:
+      type: object
+      description: Mensaje del chat de sala o de la vista general (HU-JUE-015).
+      required: [id, tipo, autor, texto, enviadoEn]
+      properties:
+        id: { type: string, format: uuid }
+        tipo: { type: string, enum: [chat.mensaje, chat.logro] }
+        idSala:
+          type: [string, 'null']
+          format: uuid
+          description: Nulo en el chat de la vista general.
+        autor: { $ref: '#/components/schemas/ResumenJugador' }
+        texto: { type: string, maxLength: 500 }
+        logro:
+          type: [object, 'null']
+          description: Solo en chat.logro (CA-02), el logro de mision que se comparte.
+          properties:
+            mision: { type: string }
+            titulo: { type: string }
+        enviadoEn: { type: string, format: date-time }
 
     ProblemDetail:
       type: object
