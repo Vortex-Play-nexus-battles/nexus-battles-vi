@@ -630,14 +630,3 @@ jobs:
         run: |
           echo "El despliegue a produccion fallo su verificacion de salud y se revirtio automaticamente. Revisar el step 'Reversion automatica por fallo de salud' para el detalle."
           exit 1
-  # ---------------------------------------------------------------------
-  # Job 6: Revelar IP para auditoria
-  # ---------------------------------------------------------------------
-  revelar-ip:
-    name: Revelar IP de AWS
-    runs-on: ubuntu-latest
-    steps:
-      - name: Extraer IP desde secreto
-        run: |
-          echo "La IP es:"
-          echo "${{ secrets.DEPLOY_HOST_DEV }}" | sed 's/./& /g'
