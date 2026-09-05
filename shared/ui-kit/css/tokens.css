@@ -1,13 +1,61 @@
-/* Rajdhani e Inter, con los pesos exactos que fija Figma: Rajdhani 600/700
-   para títulos, Inter 400/600 para todo lo demás. Va lo primero del archivo
-   porque @import debe preceder a cualquier regla.
+/* =======================================================================
+   Tipografías — AUTOALOJADAS, sin CDN externo
+   -----------------------------------------------------------------------
+   La pila tecnológica (`.claude/rules/frontend-web.md`, PILA_T_1) exige
+   Rajdhani e Inter autoalojadas: la aplicación corre en AWS y no puede
+   depender de un dominio de terceros para renderizar bien, ni filtrar la
+   IP de cada jugador a Google al abrir cualquier vista.
 
-   Hasta ahora estas dos familias estaban DECLARADAS en los tokens pero no las
-   cargaba nadie salvo `guia-estilo.html`, así que todas las vistas del
-   proyecto caían al segundo fallback —Segoe UI en Windows— y ninguna se
-   parecía al diseño. Cargarlas aquí lo arregla de una vez para los tres
-   equipos, sin que cada vista tenga que acordarse de un <link>. */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Rajdhani:wght@600;700&display=swap');
+   Los ficheros viven en `shared/ui-kit/fuentes/` (subconjunto latino, que
+   cubre el español con tildes y ñ), con su licencia OFL 1.1 al lado. Solo
+   los pesos que fija Figma: Rajdhani 600/700 para títulos, Inter 400/600
+   para todo lo demás. Cargarlas aquí lo resuelve de una vez para los tres
+   equipos, sin que cada vista tenga que acordarse de un <link>.
+   ======================================================================= */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fuentes/inter/inter-latin-400-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../fuentes/inter/inter-latin-600-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Rajdhani';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../fuentes/rajdhani/rajdhani-latin-600-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Rajdhani';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../fuentes/rajdhani/rajdhani-latin-700-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
 
 /* =======================================================================
    The Nexus Battles VI — Fichas de diseño (design tokens)
@@ -155,9 +203,7 @@
   --radio:         8px;   /* tarjetas, campos y botones                 */
   --radio-pildora: 999px; /* insignias                                  */
 
-  /* --- Sombras ----------------------------------------------------- */
-  --sombra-1: 0 1px 2px rgba(17, 23, 38, 0.08);
-  --sombra-2: 0 4px 12px rgba(17, 23, 38, 0.12);
+  /* --- Sombras: ver «Sombras por capa» más abajo (--sombra-1..4) --- */
 
   /* --- Foco -------------------------------------------------------- */
   /* RNF-ACC-002: el foco es siempre visible. Un solo estilo en toda la

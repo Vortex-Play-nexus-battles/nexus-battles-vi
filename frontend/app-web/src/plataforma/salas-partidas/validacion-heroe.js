@@ -114,33 +114,24 @@ export function estadisticasDe(heroe) {
 export function pintarValidacion(raiz, verificacion, acciones = {}) {
   const doc = raiz.ownerDocument;
   const variante = VARIANTES[verificacion?.resultado];
-
-  raiz.innerHTML = '';
-  // `--ancho`: el conjunto «Dialogo de validacion de heroe» mide 520 px con
-  // 20 px entre bloques, frente a los 480/16 del `Dialogo` base. Es un
-  // modificador porque el dialogo base lo consumen otras vistas.
-  raiz.className = 'dialogo dialogo--ancho pila';
-  raiz.setAttribute('role', 'dialog');
-  raiz.setAttribute('aria-modal', 'true');
-  raiz.setAttribute('aria-labelledby', 'titulo-validacion-heroe');
+  activarTeclado(raiz);
 
   if (!variante) {
     // Un resultado que el diseno no contempla —CREDITOS_INSUFICIENTES lo esta
     // en el contrato pero no tiene variante— no se inventa: se dice.
-    raiz.dataset.resultado = 'DESCONOCIDO';
+    prepararDialogo(raiz, 'DESCONOCIDO');
     raiz.append(
-      texto(doc, 'h2', 'dialogo__titulo', 'Verificacion de heroe', 'titulo-validacion-heroe'),
+      tituloDelDialogo(doc),
       texto(doc, 'p', 't-cuerpo', 'No se pudo interpretar la respuesta de la verificacion.'),
     );
+    enfocarTitulo(raiz);
     return;
   }
 
-  raiz.dataset.resultado = verificacion.resultado;
+  prepararDialogo(raiz, verificacion.resultado);
 
   // 1 · Titulo del dialogo. Fijo en las tres variantes.
-  raiz.append(
-    texto(doc, 'h2', 'dialogo__titulo', 'Verificacion de heroe', 'titulo-validacion-heroe'),
-  );
+  raiz.append(tituloDelDialogo(doc));
 
   // 2 · Retrato mas mensaje, en fila. El retrato es decorativo: lo que
   //     comunica es el texto, no el circulo.
@@ -199,10 +190,15 @@ export function pintarValidacion(raiz, verificacion, acciones = {}) {
 
   zonaAcciones.append(cancelar, confirmar);
   raiz.append(zonaAcciones);
+  enfocarTitulo(raiz);
 }
 
 /**
  * Monta el dialogo: pide la verificacion y la pinta.
+ *
+ * Sin `idSala` no hay nada que verificar: se muestra el estado de error con
+ * la instruccion de como llegar, en vez de pedir `/salas/null/...` al
+ * servicio.
  *
  * @param {HTMLElement} raiz
  * @param {object} opciones
@@ -217,14 +213,26 @@ export async function montarValidacionDeHeroe(
   { idSala, verificar, alCancelar, alConfirmar },
 ) {
   const doc = raiz.ownerDocument;
+  activarTeclado(raiz);
 
-  raiz.className = 'dialogo dialogo--ancho pila';
-  raiz.dataset.resultado = 'CARGANDO';
-  raiz.innerHTML = '';
-  raiz.append(
-    texto(doc, 'h2', 'dialogo__titulo', 'Verificacion de heroe'),
-    texto(doc, 'p', 't-cuerpo', 'Comprobando tu heroe.'),
-  );
+  if (!idSala) {
+    pintarFalloDeVerificacion(
+      raiz,
+      {
+        titulo: 'Falta saber a que sala quieres entrar',
+        detalle:
+          'Abre esta verificacion desde el listado de Batallas, o anade ?sala=<id> ' +
+          'a la direccion.',
+      },
+      alCancelar,
+      'SIN_SALA',
+    );
+    return;
+  }
+
+  prepararDialogo(raiz, 'CARGANDO');
+  raiz.append(tituloDelDialogo(doc), texto(doc, 'p', 't-cuerpo', 'Comprobando tu heroe.'));
+  enfocarTitulo(raiz);
 
   try {
     pintarValidacion(raiz, await verificar(idSala), { alCancelar, alConfirmar });
@@ -240,15 +248,97 @@ export async function montarValidacionDeHeroe(
  * la vista real: un 404 explicado, no un dialogo en blanco ni un veredicto
  * inventado.
  */
-function pintarFalloDeVerificacion(raiz, error, alCancelar) {
+function pintarFalloDeVerificacion(raiz, error, alCancelar, resultado = 'ERROR') {
   const doc = raiz.ownerDocument;
-  raiz.dataset.resultado = 'ERROR';
-  raiz.innerHTML = '';
+  prepararDialogo(raiz, resultado);
   raiz.append(
-    texto(doc, 'h2', 'dialogo__titulo', 'Verificacion de heroe'),
+    tituloDelDialogo(doc),
     avisoDeError(doc, error),
     accionesSoloCancelar(doc, alCancelar),
   );
+  enfocarTitulo(raiz);
+}
+
+/* -- Dialogo modal: identidad, foco y teclado (RNF-ACC-002). -------------- */
+
+const ID_TITULO = 'titulo-validacion-heroe';
+
+const FOCALIZABLES =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), ' +
+  'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Deja la raiz identificada como dialogo modal en TODOS los estados, tambien
+ * mientras carga y cuando falla: un lector de pantalla no debe encontrarse
+ * una seccion anonima en ningun momento.
+ */
+function prepararDialogo(raiz, resultado) {
+  // `--ancho`: el conjunto «Dialogo de validacion de heroe» mide 520 px con
+  // 20 px entre bloques, frente a los 480/16 del `Dialogo` base. Es un
+  // modificador porque el dialogo base lo consumen otras vistas.
+  raiz.className = 'dialogo dialogo--ancho pila';
+  raiz.setAttribute('role', 'dialog');
+  raiz.setAttribute('aria-modal', 'true');
+  raiz.setAttribute('aria-labelledby', ID_TITULO);
+  raiz.dataset.resultado = resultado;
+  raiz.innerHTML = '';
+}
+
+/**
+ * El titulo recibe el foco al abrir y en cada cambio de estado: asi se
+ * anuncia el dialogo sin activar por accidente ninguna de sus acciones, y el
+ * primer Tab cae en «Cancelar». Patron de dialogo modal de WAI-ARIA.
+ */
+function tituloDelDialogo(doc) {
+  const titulo = texto(doc, 'h2', 'dialogo__titulo', 'Verificacion de heroe', ID_TITULO);
+  titulo.tabIndex = -1;
+  return titulo;
+}
+
+function enfocarTitulo(raiz) {
+  raiz.querySelector(`#${ID_TITULO}`)?.focus();
+}
+
+/**
+ * Escape equivale a «Cancelar» del estado que este pintado, y Tab no sale del
+ * dialogo mientras este abierto. Se instala una sola vez por raiz.
+ */
+function activarTeclado(raiz) {
+  if (raiz.dataset.teclado === 'activo') {
+    return;
+  }
+  raiz.dataset.teclado = 'activo';
+
+  raiz.addEventListener('keydown', (evento) => {
+    if (evento.key === 'Escape') {
+      evento.preventDefault();
+      raiz.querySelector('[data-accion="cancelar"]')?.click();
+      return;
+    }
+    if (evento.key === 'Tab') {
+      atraparTab(raiz, evento);
+    }
+  });
+}
+
+function atraparTab(raiz, evento) {
+  const focalizables = [...raiz.querySelectorAll(FOCALIZABLES)];
+  if (focalizables.length === 0) {
+    evento.preventDefault();
+    return;
+  }
+  const primero = focalizables[0];
+  const ultimo = focalizables[focalizables.length - 1];
+  const activo = raiz.ownerDocument.activeElement;
+  const enElPrimero = activo === primero || !focalizables.includes(activo);
+
+  if (evento.shiftKey && enElPrimero) {
+    evento.preventDefault();
+    ultimo.focus();
+  } else if (!evento.shiftKey && activo === ultimo) {
+    evento.preventDefault();
+    primero.focus();
+  }
 }
 
 /* -- Ayudas de construccion. Ninguna decide nada. ------------------------- */

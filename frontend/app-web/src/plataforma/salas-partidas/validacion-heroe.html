@@ -102,6 +102,8 @@
       import { montarValidacionDeHeroe } from './validacion-heroe.js';
       import { verificarHeroe } from './cliente-salas.js';
 
+      // Sin `?sala=` el modulo pinta su estado de error con la instruccion de
+      // como llegar; no se llama al servicio con una sala inexistente.
       const idSala = new URLSearchParams(location.search).get('sala');
 
       montarValidacionDeHeroe(document.getElementById('validacion-heroe'), {
@@ -111,7 +113,9 @@
         // heroe activo del jugador; la vista muestra su estado de error en vez
         // de fingir un veredicto.
         verificar: (sala) => verificarHeroe(sala),
-        alCancelar: () => history.back(),
+        // Vuelve a donde estaba; si se abrio directamente, al listado.
+        alCancelar: () =>
+          history.length > 1 ? history.back() : location.assign('./batallas.html'),
         alConfirmar: (verificacion) =>
           console.info('Accion principal del dialogo', verificacion.resultado),
       });

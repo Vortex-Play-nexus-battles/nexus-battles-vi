@@ -63,6 +63,9 @@
   font-size: var(--t-etiqueta-tam);
   font-weight: var(--t-etiqueta-peso);
   line-height: var(--t-etiqueta-alto);
+  /* Un enlace con aspecto de botón («CREAR SALA» en Batallas, «Cancelar» en
+     Crear sala) no debe heredar el subrayado ni el azul de `a` en base.css. */
+  text-decoration: none;
   cursor: pointer;
   transition: background var(--transicion), border-color var(--transicion);
 }
@@ -71,28 +74,33 @@
 .boton--grande  { min-height: var(--boton-grande); padding: 0 var(--e-5); }
 .boton--pequeno { min-height: var(--boton-pequeno); padding: 0 var(--e-3); }
 
+/* Cada variante repite su color en :hover a propósito: `a:hover` de base.css
+   (0,1,1) le ganaría a la variante sola (0,1,0) y pintaría el texto de azul
+   sobre un fondo azul o rojo. */
 .boton--primario {
   background: var(--primaria-relleno);
   color: var(--texto-sobre-color);
 }
-.boton--primario:hover { background: var(--primaria); }
+.boton--primario:hover { background: var(--primaria); color: var(--texto-sobre-color); }
 
 .boton--acento {
   background: var(--acento-relleno);
   color: var(--texto-sobre-color);
 }
+.boton--acento:hover { color: var(--texto-sobre-color); }
 
 .boton--secundario {
   background: var(--superficie);
   border-color: var(--borde-int);
   color: var(--texto);
 }
-.boton--secundario:hover { background: var(--fondo); }
+.boton--secundario:hover { background: var(--fondo); color: var(--texto); }
 
 .boton--peligro {
   background: var(--error);
   color: var(--texto-sobre-color);
 }
+.boton--peligro:hover { color: var(--texto-sobre-color); }
 
 .boton[disabled],
 .boton[aria-disabled='true'] {
