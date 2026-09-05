@@ -1,0 +1,200 @@
+openapi: 3.1.0
+info:
+  title: Nexus Battles VI - Correo corporativo (M15)
+  description: >
+    API para que cualquier microservicio dispare el envio de un correo. Todos
+    los correos se construyen sobre la plantilla corporativa unica (HU-COR-001),
+    por lo que el llamante nunca envia HTML: solo el tipo de correo y sus datos.
+
+    Un endpoint por tipo de correo, no uno generico: asi el contrato valida que
+    lleguen los datos que esa plantilla necesita. Anadir tipos nuevos es anadir
+    rutas, que es un cambio compatible y no rompe a quien ya consume.
+
+    Consumidor en Sprint 1: ms-identidad (registro, aviso de acceso y
+    recuperacion de contrasena).
+  version: 1.0.0
+servers:
+  - url: http://localhost:8082/api/v1
+    description: Entorno local de desarrollo
+
+paths:
+  /correos/bienvenida:
+    post:
+      summary: Enviar el correo de bienvenida tras completar el registro
+      operationId: enviarCorreoBienvenida
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CorreoBienvenidaRequest'
+      responses:
+        '202':
+          description: >
+            Correo aceptado y entregado al servidor SMTP. No garantiza que haya
+            llegado a la bandeja del destinatario.
+        '400':
+          $ref: '#/components/responses/SolicitudInvalida'
+
+  /correos/aviso-acceso:
+    post:
+      summary: Avisar de un acceso desde dispositivo o ubicacion no reconocidos
+      description: Soporta RF-AUT-010. Lo dispara ms-identidad desde LoginService.
+      operationId: enviarCorreoAvisoAcceso
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CorreoAvisoAccesoRequest'
+      responses:
+        '202':
+          description: Correo aceptado y entregado al servidor SMTP.
+        '400':
+          $ref: '#/components/responses/SolicitudInvalida'
+
+  /correos/recuperacion-clave:
+    post:
+      summary: Enviar el codigo de un solo uso para recuperar la contrasena
+      description: >
+        Soporta HU-COR-003. Este servicio SOLO envia el correo: generar,
+        guardar, validar e invalidar el codigo son responsabilidad de
+        ms-identidad, porque identidad y control de acceso estan fuera del
+        alcance del Equipo 6 (project-charter.md).
+      operationId: enviarCorreoRecuperacionClave
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CorreoRecuperacionClaveRequest'
+      responses:
+        '202':
+          description: Correo aceptado y entregado al servidor SMTP.
+        '400':
+          $ref: '#/components/responses/SolicitudInvalida'
+
+components:
+  parameters:
+    TraceId:
+      name: X-Trace-Id
+      in: header
+      required: false
+      description: >
+        Identificador de traza para correlacionar la peticion entre servicios
+        (regla 5 de plataforma). Si no se envia, el servicio genera uno propio.
+      schema:
+        type: string
+
+  responses:
+    SolicitudInvalida:
+      description: Faltan datos obligatorios o el correo no tiene formato valido
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+
+  schemas:
+    CorreoBienvenidaRequest:
+      type: object
+      required:
+        - email
+        - apodo
+      properties:
+        email:
+          type: string
+          format: email
+          description: Destinatario
+          examples: ['jugador@ejemplo.com']
+        apodo:
+          type: string
+          minLength: 1
+          description: Nombre visible del jugador; encabeza el saludo
+          examples: ['ElGuerrero']
+        nombres:
+          type: string
+          description: Opcional. Si viene, el saludo lo usa en lugar del apodo.
+        apellidos:
+          type: string
+          description: Opcional.
+
+    CorreoAvisoAccesoRequest:
+      type: object
+      required:
+        - email
+        - apodo
+        - ip
+        - fechaHora
+      properties:
+        email:
+          type: string
+          format: email
+        apodo:
+          type: string
+          minLength: 1
+        ip:
+          type: string
+          description: IP de origen del acceso, tal como la observo ms-identidad
+          examples: ['190.85.12.44']
+        fechaHora:
+          type: string
+          format: date-time
+          description: Momento del acceso en ISO-8601 con zona horaria
+          examples: ['2026-08-30T14:23:11-05:00']
+
+    CorreoRecuperacionClaveRequest:
+      type: object
+      required:
+        - email
+        - apodo
+        - codigo
+        - minutosVigencia
+      properties:
+        email:
+          type: string
+          format: email
+        apodo:
+          type: string
+          minLength: 1
+        codigo:
+          type: string
+          minLength: 1
+          maxLength: 12
+          description: >
+            Codigo de un solo uso ya generado por ms-identidad. Este servicio no
+            lo genera ni lo valida: solo lo transcribe al correo. Tampoco se
+            registra en la bitacora, para no filtrarlo.
+          examples: ['482915']
+        minutosVigencia:
+          type: integer
+          minimum: 1
+          description: >
+            Minutos que le quedan de validez al codigo. Lo envia quien lo genero
+            en lugar de fijarlo aqui: asi el correo nunca miente si ms-identidad
+            cambia el plazo.
+          examples: [15]
+
+    ProblemDetail:
+      type: object
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string

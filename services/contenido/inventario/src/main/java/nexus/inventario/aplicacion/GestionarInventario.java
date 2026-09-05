@@ -4,6 +4,7 @@ import java.util.UUID;
 import nexus.inventario.dominio.ElementoInventario;
 import nexus.inventario.dominio.ElementoNoEncontradoException;
 import nexus.inventario.dominio.Inventario;
+import nexus.inventario.dominio.ParteArmadura;
 import nexus.inventario.dominio.RepositorioDeInventarios;
 import nexus.inventario.dominio.TipoElementoInventario;
 import org.springframework.stereotype.Service;
@@ -22,11 +23,23 @@ public class GestionarInventario {
             String productoId,
             TipoElementoInventario tipo,
             String nombrePropio) {
+        return crear(identidad, productoId, tipo, nombrePropio, null);
+    }
+
+    public ElementoInventario crear(
+            String identidad,
+            String productoId,
+            TipoElementoInventario tipo,
+            String nombrePropio,
+            ParteArmadura parteArmadura) {
         String propietarioId = exigirIdentidad(identidad);
+        if (tipo == TipoElementoInventario.ARMADURA && parteArmadura == null) {
+            throw new IllegalArgumentException("La armadura debe declarar su parte");
+        }
         Inventario inventario = repositorio.buscarPorPropietario(propietarioId)
                 .orElseGet(() -> Inventario.vacio(propietarioId));
         ElementoInventario nuevo = new ElementoInventario(
-                UUID.randomUUID().toString(), productoId, tipo, nombrePropio);
+                UUID.randomUUID().toString(), productoId, tipo, nombrePropio, parteArmadura);
         Inventario guardado = repositorio.guardar(inventario.agregar(nuevo));
         return guardado.elemento(nuevo.id());
     }

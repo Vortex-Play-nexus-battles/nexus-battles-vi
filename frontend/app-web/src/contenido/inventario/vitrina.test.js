@@ -83,6 +83,25 @@ describe('Cuadricula de la vitrina a 1360 x 768', () => {
     expect(editados).toEqual([pagina.elementos[0]]);
   });
 
+  test('un heroe permite abrir su equipamiento desde la tarjeta', () => {
+    const seleccionados = [];
+    const pagina = paginaCon(1);
+    pagina.elementos[0].tipo = 'HEROE';
+    const vitrina = construirVitrina(pagina, {
+      alEquipar: (heroe) => seleccionados.push(heroe),
+    });
+
+    vitrina.querySelector('.vitrina__equipo').click();
+
+    expect(seleccionados).toEqual([pagina.elementos[0]]);
+  });
+
+  test('un elemento que no es heroe no muestra la accion de equipo', () => {
+    const vitrina = construirVitrina(paginaCon(1), { alEquipar: () => {} });
+
+    expect(vitrina.querySelector('.vitrina__equipo')).toBeNull();
+  });
+
   test('el nombre propio del jugador se escribe como texto y nunca como marcado', () => {
     const pagina = paginaCon(1);
     pagina.elementos[0].nombrePropio = '<img src=x onerror="robar()">';
@@ -111,5 +130,38 @@ describe('Cuadricula de la vitrina a 1360 x 768', () => {
 
   test('rechaza una pagina nula', () => {
     expect(() => construirVitrina(null)).toThrow(/pagina/);
+  });
+
+  // --- HU-INV-007: apertura de la ficha de detalle ---------------------
+
+  test('con manejador de detalle, cada tarjeta ofrece verlo', () => {
+    const vitrina = construirVitrina(paginaCon(3), { alAbrirDetalle: () => {} });
+
+    expect(vitrina.querySelectorAll('.vitrina__detalle')).toHaveLength(3);
+  });
+
+  test('el boton de detalle nombra el producto al que pertenece', () => {
+    const vitrina = construirVitrina(paginaCon(1), { alAbrirDetalle: () => {} });
+
+    expect(vitrina.querySelector('.vitrina__detalle').getAttribute('aria-label')).toBe(
+      'Ver el detalle de Espada 0',
+    );
+  });
+
+  test('pulsarlo entrega el elemento de esa tarjeta', () => {
+    const vistos = [];
+    const vitrina = construirVitrina(paginaCon(3), {
+      alAbrirDetalle: (abierto) => vistos.push(abierto.nombrePropio),
+    });
+
+    vitrina.querySelectorAll('.vitrina__detalle')[2].click();
+
+    expect(vistos).toEqual(['Espada 2']);
+  });
+
+  test('sin manejador de detalle la vitrina queda como estaba', () => {
+    const vitrina = construirVitrina(paginaCon(3));
+
+    expect(vitrina.querySelectorAll('.vitrina__detalle')).toHaveLength(0);
   });
 });

@@ -1,19 +1,18 @@
-# Multietapa, conforme a la regla de plataforma: definicion de contenedor
-# versionada junto al servicio. Desde la unificacion del monorepo en Gradle
-# el wrapper vive en la raiz, asi que la imagen se construye desde la RAIZ:
-#   docker build -f services/contenido/heroes/Dockerfile .
-FROM eclipse-temurin:21-jdk AS construccion
-WORKDIR /repo
-COPY gradlew settings.gradle build.gradle gradle.properties ./
-COPY gradle gradle
-COPY buildSrc buildSrc
-COPY services services
-RUN sh gradlew --no-daemon :services:contenido:heroes:bootJar
-
+# Imagen del servicio de heroes, con el patron del flujo de despliegue de la
+# empresa (cd.yml, job "construir-y-publicar"): el jar ejecutable lo compila
+# el flujo desde la raiz (./gradlew :services:contenido:heroes:bootJar) y
+# esta imagen SOLO lo copia. Como todos los servicios de contenido, se
+# construye desde la RAIZ del monorepo, con -f:
+#   ./gradlew :services:contenido:heroes:bootJar
+#   docker build -f services/contenido/heroes/Dockerfile -t servicio-heroes .
+# Regla 9 de plataforma: definicion de contenedor versionada junto al servicio.
 FROM eclipse-temurin:21-jre
 WORKDIR /app
-COPY --from=construccion /repo/services/contenido/heroes/build/libs/*.jar servicio-heroes.jar
+COPY services/contenido/heroes/build/libs/*.jar app.jar
 # Limite de memoria conforme al dimensionamiento de la pila (seccion 9.4).
 ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75"
+# El servicio escucha en 8080 dentro del contenedor (lo que esperan sus
+# consumidores, p. ej. el motor de combate). En despliegue se publica en el
+# 8101 del host: ver puerto_de() en cd.yml y docker-compose.contenido.yml.
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "servicio-heroes.jar"]
+ENTRYPOINT ["java", "-jar", "app.jar"]

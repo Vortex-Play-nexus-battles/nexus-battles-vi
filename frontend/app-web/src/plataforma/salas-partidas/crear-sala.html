@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Crear sala de batalla · The Nexus Battles VI</title>
+
+    <!--
+      Ejecucion INTEGRADA (Spring Boot sirve esta vista): la API vive en el
+      mismo origen y no hay que declarar nada.
+      Ejecucion ESTATICA para revision visual: no hay API detras y las vistas
+      lo dicen con todas las letras. Para apuntarlas a un backend que corra
+      en otro sitio, descomenta y ajusta:
+      <meta name="nexus-api-base" content="http://127.0.0.1:8083" />
+    -->
+
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
+  </head>
+
+  <body>
+    <!--
+      Cabecera de 64 px con los seis destinos de RF-INV-008 y el buscador de
+      productos de RF-INV-004. "Mi Cuenta" es el grupo del avatar, a la derecha.
+
+      Esta marca se repite en cada vista mientras no exista una forma acordada
+      de compartir fragmentos de HTML sin framework. Decision de equipo.
+    -->
+    <header class="cabecera">
+      <div class="cabecera__grupo-marca">
+        <span class="cabecera__marca">NEXUS BATTLES VI</span>
+        <nav class="cabecera__nav" aria-label="Navegacion principal">
+          <a class="cabecera__destino" href="./batallas.html">Jugar online</a>
+          <a
+            class="cabecera__destino cabecera__destino--pendiente"
+            aria-disabled="true"
+            data-pendiente="grupo-alpha"
+            title="Todavia no publicada: grupo-alpha"
+            >Misiones</a
+          >
+          <a
+            class="cabecera__destino cabecera__destino--pendiente"
+            aria-disabled="true"
+            data-pendiente="HU-TOR, sprint 3"
+            title="Todavia no publicada: HU-TOR, sprint 3"
+            >Torneo</a
+          >
+          <a class="cabecera__destino" href="../../contenido/inventario/inventario.html"
+            >Mi inventario</a
+          >
+          <a
+            class="cabecera__destino cabecera__destino--pendiente"
+            aria-disabled="true"
+            data-pendiente="grupo-beta"
+            title="Todavia no publicada: grupo-beta"
+            >Subasta</a
+          >
+        </nav>
+      </div>
+
+      <label class="cabecera__buscador">
+        <svg class="icono icono--menudo" aria-hidden="true">
+          <use href="../../../../../shared/ui-kit/iconos/sprite.svg#buscar" />
+        </svg>
+        <span class="solo-lectores">Buscar productos</span>
+        <input class="cabecera__buscador-texto" type="search" placeholder="Buscar productos" />
+      </label>
+
+      <div class="cabecera__acciones">
+        <span class="cabecera__dato">
+          <svg class="icono icono--menudo" aria-hidden="true">
+            <use href="../../../../../shared/ui-kit/iconos/sprite.svg#moneda" />
+          </svg>
+          240
+        </span>
+
+        <span class="cabecera__campana">
+          <svg class="icono" aria-hidden="true">
+            <use href="../../../../../shared/ui-kit/iconos/sprite.svg#campana" />
+          </svg>
+          <span class="cabecera__contador" aria-hidden="true">3</span>
+          <span class="solo-lectores">3 notificaciones sin leer</span>
+        </span>
+
+        <span class="cabecera__cuenta">
+          <span class="cabecera__avatar" aria-hidden="true"></span>
+          <span class="cabecera__identidad">
+            <span class="cabecera__apodo">Simon_P</span>
+            <span class="cabecera__rango">Rango 12</span>
+          </span>
+        </span>
+      </div>
+    </header>
+
+    <main class="pagina pila">
+      <div class="pila pila--compacta">
+        <h1>Crear sala de batalla</h1>
+        <p class="t-cuerpo">
+          Configura la partida a tu medida. Los campos invalidos te dicen el motivo del rechazo.
+        </p>
+      </div>
+
+      <form id="formulario-crear-sala" class="tarjeta pila" novalidate>
+        <!-- Zona del aviso. Vacia y oculta hasta que hay algo que decir. -->
+        <div data-zona="aviso" hidden></div>
+
+        <!-- Dos campos a lo ancho, como en el diseno. -->
+        <div class="fila">
+          <div class="campo">
+            <label class="campo__etiqueta" for="maximoParticipantes">Numero de participantes</label>
+            <input
+              class="campo__control"
+              id="maximoParticipantes"
+              name="maximoParticipantes"
+              type="number"
+              min="2"
+              max="6"
+              value="4"
+              inputmode="numeric"
+            />
+            <p class="campo__pista">Entre 2 y 6 jugadores.</p>
+          </div>
+
+          <div class="campo">
+            <label class="campo__etiqueta" for="recompensaCreditos">Recompensa en creditos</label>
+            <input
+              class="campo__control"
+              id="recompensaCreditos"
+              name="recompensaCreditos"
+              type="number"
+              min="0"
+              value="0"
+              inputmode="numeric"
+            />
+            <p class="campo__pista">Apostar es libre.</p>
+          </div>
+        </div>
+
+        <!--
+          RF-JUE-004. Botones de radio reales dentro de una tarjeta: la regla de
+          accesibilidad del proyecto prohibe las tarjetas con clic sin input.
+        -->
+        <fieldset class="pila pila--compacta">
+          <legend class="campo__etiqueta">Modalidad de juego</legend>
+          <div class="modalidades">
+            <div class="modalidad">
+              <input
+                class="modalidad__entrada"
+                type="radio"
+                name="modalidad"
+                id="modalidad-duelo"
+                value="UNO_CONTRA_UNO"
+                checked
+              />
+              <label class="modalidad__cara" for="modalidad-duelo">
+                <span class="modalidad__titulo">1 contra 1</span>
+                <span class="modalidad__detalle">Duelo directo entre dos heroes.</span>
+              </label>
+            </div>
+
+            <div class="modalidad">
+              <input
+                class="modalidad__entrada"
+                type="radio"
+                name="modalidad"
+                id="modalidad-ia"
+                value="CONTRA_IA"
+              />
+              <label class="modalidad__cara" for="modalidad-ia">
+                <span class="modalidad__titulo">Contra la IA</span>
+                <span class="modalidad__detalle">Enfrentate a un rival controlado.</span>
+              </label>
+            </div>
+
+            <div class="modalidad">
+              <input
+                class="modalidad__entrada"
+                type="radio"
+                name="modalidad"
+                id="modalidad-seis"
+                value="HASTA_SEIS"
+              />
+              <label class="modalidad__cara" for="modalidad-seis">
+                <span class="modalidad__titulo">Hasta seis</span>
+                <span class="modalidad__detalle">Combate multiple, todos contra todos.</span>
+              </label>
+            </div>
+          </div>
+        </fieldset>
+
+        <label class="casilla casilla--caja">
+          <input class="casilla__entrada" type="checkbox" name="incluirHeroeIA" />
+          <span class="casilla__etiqueta">
+            Incluir un heroe aleatorio controlado por la IA
+            <small class="campo__pista">Se anadira un combatiente automatico a la sala.</small>
+          </span>
+        </label>
+
+        <label class="casilla casilla--caja">
+          <input class="casilla__entrada" type="checkbox" name="privada" />
+          <span class="casilla__etiqueta">
+            Sala privada
+            <small class="campo__pista">Solo accesible por invitacion.</small>
+          </span>
+        </label>
+
+        <div class="acciones">
+          <button class="boton boton--secundario" type="button">Cancelar</button>
+          <button class="boton boton--primario boton--grande" type="submit">CREAR SALA</button>
+        </div>
+      </form>
+    </main>
+
+    <!-- RNF-DIS-002: el chatbot esta en todas las vistas, sin excepcion. -->
+    <button class="chatbot-flotante" type="button" aria-label="Abrir el asistente">IA</button>
+
+    <script type="module">
+      import { montarCrearSala } from './crear-sala.js';
+      montarCrearSala(document.getElementById('formulario-crear-sala'));
+    </script>
+  </body>
+</html>

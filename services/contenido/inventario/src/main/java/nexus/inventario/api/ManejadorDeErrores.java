@@ -2,8 +2,12 @@ package nexus.inventario.api;
 
 import nexus.inventario.aplicacion.IdentidadRequeridaException;
 import nexus.inventario.aplicacion.InventarioAjenoException;
+import nexus.inventario.aplicacion.ProductoNoEncontradoException;
 import nexus.inventario.dominio.ElementoNoEncontradoException;
+import nexus.inventario.dominio.ElementoNoEquipableException;
+import nexus.inventario.dominio.ElementoYaEquipadoException;
 import nexus.inventario.dominio.FalloPersistenciaInventarioException;
+import nexus.inventario.dominio.LimiteEquipamientoException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -27,6 +31,26 @@ public class ManejadorDeErrores {
     @ExceptionHandler(ElementoNoEncontradoException.class)
     public ProblemDetail elementoNoEncontrado(ElementoNoEncontradoException error) {
         return problema(HttpStatus.NOT_FOUND, "Elemento no encontrado", error.getMessage());
+    }
+
+    @ExceptionHandler(ProductoNoEncontradoException.class)
+    public ProblemDetail productoNoEncontrado(ProductoNoEncontradoException error) {
+        return problema(HttpStatus.NOT_FOUND, "Producto no encontrado", error.getMessage());
+    }
+
+    @ExceptionHandler(LimiteEquipamientoException.class)
+    public ProblemDetail limiteEquipamiento(LimiteEquipamientoException error) {
+        return problema(HttpStatus.CONFLICT, "Limite de equipamiento", error.getMessage());
+    }
+
+    @ExceptionHandler(ElementoYaEquipadoException.class)
+    public ProblemDetail elementoYaEquipado(ElementoYaEquipadoException error) {
+        return problema(HttpStatus.CONFLICT, "Elemento ya equipado", error.getMessage());
+    }
+
+    @ExceptionHandler(ElementoNoEquipableException.class)
+    public ProblemDetail elementoNoEquipable(ElementoNoEquipableException error) {
+        return problema(HttpStatus.BAD_REQUEST, "Elemento no equipable", error.getMessage());
     }
 
     @ExceptionHandler(FalloPersistenciaInventarioException.class)

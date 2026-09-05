@@ -3,12 +3,7 @@
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
 
 const URL_REGISTRO = '/api/v1/auth/registro';
-
-// TODO equipo: confirmar la ruta pública real bajo la que Spring Boot sirve
-// frontend/app-web/src/cuentas/avatares/ como recurso estático. Se asume
-// /cuentas/avatares/ tal como sugiere la estructura del proyecto; si el
-// mapeo real es distinto, ajustar solo esta constante.
-const RUTA_BASE_AVATARES = '/cuentas/avatares/';
+const TAMANO_SALIDA_PX = 512; // Resolución del avatar final, cuadrado.
 
 /** @type {HTMLFormElement} */
 const form = document.getElementById('formRegistro');
@@ -22,18 +17,27 @@ const campoConfirmar = document.getElementById('confirmarPassword');
 const ayudaConfirmar = document.getElementById('ayudaConfirmar');
 /** @type {HTMLElement} */
 const estadoRegistro = document.getElementById('estadoRegistro');
+/** @type {HTMLInputElement} */
+const inputAvatar = document.getElementById('avatar');
+/** @type {HTMLDivElement} */
+const avatarVistaPrevia = document.getElementById('avatarVistaPrevia');
+/** @type {HTMLButtonElement} */
+const botonQuitarAvatar = document.getElementById('botonQuitarAvatar');
+
 /** @type {HTMLDialogElement} */
-const dialogoAvatar = document.getElementById('dialogoAvatar');
-/** @type {HTMLButtonElement} */
-const botonAbrirAvatar = document.getElementById('botonAbrirAvatar');
-/** @type {HTMLButtonElement} */
-const botonCerrarAvatar = document.getElementById('botonCerrarAvatar');
-/** @type {HTMLElement} */
-const resumenAvatar = document.getElementById('resumenAvatar');
+const dialogoRecorte = document.getElementById('dialogoRecorte');
+/** @type {HTMLDivElement} */
+const recorteVisor = document.getElementById('recorteVisor');
+/** @type {HTMLImageElement} */
+const recorteImagen = document.getElementById('recorteImagen');
+/** @type {HTMLInputElement} */
+const recorteZoom = document.getElementById('recorteZoom');
+
+// Blob ya recortado, listo para subir. Reemplaza al archivo original.
+let avatarRecortado = null;
 
 /**
  * Lee el cuerpo de una respuesta que puede venir como JSON o texto plano.
- * Mismo patrón que demo-rbac.js (cuerpoDe), incluyendo el caso de body vacío.
  * @param {Response} response
  * @returns {Promise<{status: number, body: unknown}>}
  */
@@ -50,8 +54,6 @@ async function cuerpoDe(response) {
 }
 
 /**
- * Mismo patrón que setEstado(texto, tipo) de demo-rbac.js: un único
- * elemento .estado al que se le cambia textContent y className.
  * @param {string} texto
  * @param {'carga'|'error'|'exito'|'vacio'} tipo
  */
@@ -78,38 +80,142 @@ campoPassword.addEventListener('input', () => {
   if (campoConfirmar.value.length > 0) validarConfirmacion();
 });
 
-// Abrir/cerrar el modal de avatares.
-botonAbrirAvatar.addEventListener('click', () => {
-  dialogoAvatar.showModal();
-});
-botonCerrarAvatar.addEventListener('click', () => {
-  dialogoAvatar.close();
-});
-// Cerrar al hacer clic en el fondo oscuro (fuera de la tarjeta del modal).
-dialogoAvatar.addEventListener('click', (evento) => {
-  if (evento.target === dialogoAvatar) {
-    dialogoAvatar.close();
-  }
+// ---------- Recorte de avatar ----------
+
+const VISOR_TAMANO = 280;
+let escalaBase = 1;
+let zoom = 1;
+let desplazamientoX = 0;
+let desplazamientoY = 0;
+let arrastrando = false;
+let arrastreInicioX = 0;
+let arrastreInicioY = 0;
+let desplazamientoInicioX = 0;
+let desplazamientoInicioY = 0;
+
+inputAvatar.addEventListener('change', () => {
+  const archivo = inputAvatar.files[0];
+  if (!archivo) return;
+
+  const urlObjeto = URL.createObjectURL(archivo);
+  recorteImagen.src = urlObjeto;
+
+  recorteImagen.onload = () => {
+    const anchoNatural = recorteImagen.naturalWidth;
+    const altoNatural = recorteImagen.naturalHeight;
+
+    // "cover": la imagen siempre cubre el visor cuadrado completo, sin
+    // dejar espacios en blanco, sin importar su proporción original.
+    escalaBase = Math.max(VISOR_TAMANO / anchoNatural, VISOR_TAMANO / altoNatural);
+    zoom = 1;
+    recorteZoom.value = '1';
+
+    centrarImagen();
+    aplicarTransformacion();
+
+    dialogoRecorte.showModal();
+  };
 });
 
-// Al elegir un avatar: se muestra una miniatura + su nombre en el botón,
-// y el modal se cierra automáticamente.
-form.querySelectorAll('input[name="avatar"]').forEach((radio) => {
-  radio.addEventListener('change', () => {
-    const opcion = radio.closest('.avatar-opcion');
-    const img = opcion.querySelector('img');
-    const nombre = opcion.querySelector('span').textContent;
+function centrarImagen() {
+  const anchoEfectivo = recorteImagen.naturalWidth * escalaBase * zoom;
+  const altoEfectivo = recorteImagen.naturalHeight * escalaBase * zoom;
+  desplazamientoX = (VISOR_TAMANO - anchoEfectivo) / 2;
+  desplazamientoY = (VISOR_TAMANO - altoEfectivo) / 2;
+}
 
-    resumenAvatar.outerHTML = `
-      <span class="avatar-resumen-elegido" id="resumenAvatar">
-        <img src="${img.getAttribute('src')}" alt="">
-        <span>${nombre}</span>
-      </span>
-    `;
+function limitarDesplazamiento() {
+  const anchoEfectivo = recorteImagen.naturalWidth * escalaBase * zoom;
+  const altoEfectivo = recorteImagen.naturalHeight * escalaBase * zoom;
 
-    dialogoAvatar.close();
-  });
+  const minX = VISOR_TAMANO - anchoEfectivo;
+  const minY = VISOR_TAMANO - altoEfectivo;
+
+  desplazamientoX = Math.min(0, Math.max(minX, desplazamientoX));
+  desplazamientoY = Math.min(0, Math.max(minY, desplazamientoY));
+}
+
+function aplicarTransformacion() {
+  limitarDesplazamiento();
+  const escalaTotal = escalaBase * zoom;
+  recorteImagen.style.transform =
+    `translate(${desplazamientoX}px, ${desplazamientoY}px) scale(${escalaTotal})`;
+}
+
+recorteZoom.addEventListener('input', () => {
+  zoom = Number(recorteZoom.value);
+  aplicarTransformacion();
 });
+
+recorteVisor.addEventListener('pointerdown', (evento) => {
+  arrastrando = true;
+  arrastreInicioX = evento.clientX;
+  arrastreInicioY = evento.clientY;
+  desplazamientoInicioX = desplazamientoX;
+  desplazamientoInicioY = desplazamientoY;
+  recorteVisor.setPointerCapture(evento.pointerId);
+});
+
+recorteVisor.addEventListener('pointermove', (evento) => {
+  if (!arrastrando) return;
+  desplazamientoX = desplazamientoInicioX + (evento.clientX - arrastreInicioX);
+  desplazamientoY = desplazamientoInicioY + (evento.clientY - arrastreInicioY);
+  aplicarTransformacion();
+});
+
+recorteVisor.addEventListener('pointerup', () => { arrastrando = false; });
+recorteVisor.addEventListener('pointercancel', () => { arrastrando = false; });
+
+function cancelarRecorte() {
+  dialogoRecorte.close();
+  inputAvatar.value = '';
+}
+
+document.getElementById('botonCancelarRecorte').addEventListener('click', cancelarRecorte);
+document.getElementById('botonCancelarRecorte2').addEventListener('click', cancelarRecorte);
+dialogoRecorte.addEventListener('click', (evento) => {
+  if (evento.target === dialogoRecorte) cancelarRecorte();
+});
+
+document.getElementById('botonConfirmarRecorte').addEventListener('click', () => {
+  const escalaTotal = escalaBase * zoom;
+
+  // La región visible del visor, traducida a coordenadas reales de la
+  // imagen original (antes de escalar), es lo que se recorta.
+  const origenX = -desplazamientoX / escalaTotal;
+  const origenY = -desplazamientoY / escalaTotal;
+  const origenTamano = VISOR_TAMANO / escalaTotal;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = TAMANO_SALIDA_PX;
+  canvas.height = TAMANO_SALIDA_PX;
+  const contexto = canvas.getContext('2d');
+
+  contexto.drawImage(
+    recorteImagen,
+    origenX, origenY, origenTamano, origenTamano,
+    0, 0, TAMANO_SALIDA_PX, TAMANO_SALIDA_PX
+  );
+
+  canvas.toBlob((blob) => {
+    avatarRecortado = blob;
+
+    const urlVistaPrevia = URL.createObjectURL(blob);
+    avatarVistaPrevia.innerHTML = `<img src="${urlVistaPrevia}" alt="Vista previa de tu foto de perfil">`;
+    botonQuitarAvatar.hidden = false;
+
+    dialogoRecorte.close();
+  }, 'image/jpeg', 0.92);
+});
+
+botonQuitarAvatar.addEventListener('click', () => {
+  avatarRecortado = null;
+  inputAvatar.value = '';
+  avatarVistaPrevia.innerHTML = '<span class="avatar-placeholder">Sin foto</span>';
+  botonQuitarAvatar.hidden = true;
+});
+
+// ---------- Envío del formulario ----------
 
 form.addEventListener('submit', async (evento) => {
   evento.preventDefault();
@@ -123,22 +229,18 @@ form.addEventListener('submit', async (evento) => {
     return;
   }
 
-  const avatarSeleccionado = form.querySelector('input[name="avatar"]:checked');
-  if (!avatarSeleccionado) {
-    // Resguardo explícito: los radios ya tienen required, checkValidity()
-    // debería atrapar esto antes, pero se deja el mensaje claro por si acaso.
-    setEstado('Debes elegir un avatar para continuar.', 'error');
-    return;
-  }
+  // multipart/form-data: el navegador arma el header Content-Type con el
+  // boundary correcto automáticamente — nunca se debe fijar a mano aquí.
+  const formData = new FormData();
+  formData.append('nombres', form.nombres.value.trim());
+  formData.append('apellidos', form.apellidos.value.trim());
+  formData.append('apodo', form.apodo.value.trim());
+  formData.append('email', form.email.value.trim());
+  formData.append('password', form.password.value);
 
-  const payload = {
-    nombres: form.nombres.value.trim(),
-    apellidos: form.apellidos.value.trim(),
-    apodo: form.apodo.value.trim(),
-    email: form.email.value.trim(),
-    password: form.password.value,
-    avatar: RUTA_BASE_AVATARES + avatarSeleccionado.value
-  };
+  if (avatarRecortado) {
+    formData.append('avatar', avatarRecortado, 'avatar.jpg');
+  }
 
   botonEnviar.disabled = true;
   setEstado('Creando tu cuenta…', 'carga');
@@ -146,8 +248,7 @@ form.addEventListener('submit', async (evento) => {
   try {
     const respuesta = await fetchWithHttpErrorInterceptor(URL_REGISTRO, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: formData
     });
     const { body } = await cuerpoDe(respuesta);
 

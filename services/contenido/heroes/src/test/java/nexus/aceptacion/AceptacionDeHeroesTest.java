@@ -138,6 +138,26 @@ class AceptacionDeHeroesTest {
                 .doesNotContain("404");
     }
 
+    // --- Regla 3 de plataforma: salud y metricas de Actuator ---------------
+
+    @Test
+    @DisplayName("el servicio expone su salud (regla 3 de plataforma)")
+    void exponeSalud() throws Exception {
+        ResponseEntity<String> respuesta = http.getForEntity("/actuator/health", String.class);
+
+        assertThat(respuesta.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(json.readTree(respuesta.getBody()).get("status").asText()).isEqualTo("UP");
+    }
+
+    @Test
+    @DisplayName("el servicio expone sus metricas (regla 3 de plataforma)")
+    void exponeMetricas() throws Exception {
+        ResponseEntity<String> respuesta = http.getForEntity("/actuator/metrics", String.class);
+
+        assertThat(respuesta.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(json.readTree(respuesta.getBody()).get("names")).isNotEmpty();
+    }
+
     // --- La pagina de demo que se muestra en el Sprint Review ------------
 
     @Test
