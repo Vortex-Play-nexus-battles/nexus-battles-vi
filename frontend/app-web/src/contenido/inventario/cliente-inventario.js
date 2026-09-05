@@ -13,6 +13,7 @@
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
 
 const RUTA = '/api/v1/inventario/elementos';
+const RUTA_HEROES = '/api/v1/inventario/heroes';
 
 function identidadNormalizada(identidad) {
   if (typeof identidad !== 'string' || identidad.trim() === '') {
@@ -78,23 +79,68 @@ export async function consultarPagina(
 /** Crea un elemento en el inventario del jugador autenticado. */
 export async function crearElemento(
   identidad,
-  { productoId, tipo, nombrePropio },
+  { productoId, tipo, nombrePropio, parteArmadura },
   { fetchImpl = fetchWithHttpErrorInterceptor } = {},
 ) {
   if (![productoId, tipo, nombrePropio].every(textoObligatorio)) {
     throw new TypeError('Producto, tipo y nombre son obligatorios');
   }
-  return escribir(
-    RUTA,
-    'POST',
-    identidad,
-    {
-      productoId: productoId.trim(),
-      tipo: tipo.trim(),
-      nombrePropio: nombrePropio.trim(),
-    },
-    fetchImpl,
-  );
+  const cuerpo = {
+    productoId: productoId.trim(),
+    tipo: tipo.trim(),
+    nombrePropio: nombrePropio.trim(),
+  };
+  if (textoObligatorio(parteArmadura)) {
+    cuerpo.parteArmadura = parteArmadura.trim();
+  }
+  return escribir(RUTA, 'POST', identidad, cuerpo, fetchImpl);
+}
+
+function rutaEquipamiento(heroeId, elementoId) {
+  if (!textoObligatorio(heroeId)) {
+    throw new TypeError('El heroe es obligatorio');
+  }
+  const base = `${RUTA_HEROES}/${encodeURIComponent(heroeId.trim())}/equipamiento`;
+  return textoObligatorio(elementoId) ? `${base}/${encodeURIComponent(elementoId.trim())}` : base;
+}
+
+async function solicitarEquipamiento(identidad, heroeId, metodo, elementoId, fetchImpl) {
+  const respuesta = await fetchImpl(rutaEquipamiento(heroeId, elementoId), {
+    method: metodo,
+    headers: { 'X-User-Name': identidadNormalizada(identidad) },
+  });
+  if (!respuesta.ok) {
+    const fallo = new Error(`No se pudo actualizar el equipamiento (${respuesta.status})`);
+    fallo.status = respuesta.status;
+    throw fallo;
+  }
+  return respuesta.json();
+}
+
+export function consultarEquipamiento(
+  identidad,
+  heroeId,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  return solicitarEquipamiento(identidad, heroeId, 'GET', null, fetchImpl);
+}
+
+export function equiparElemento(
+  identidad,
+  heroeId,
+  elementoId,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  return solicitarEquipamiento(identidad, heroeId, 'PUT', elementoId, fetchImpl);
+}
+
+export function desequiparElemento(
+  identidad,
+  heroeId,
+  elementoId,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  return solicitarEquipamiento(identidad, heroeId, 'DELETE', elementoId, fetchImpl);
 }
 
 /** Modifica el nombre de un elemento propio. */

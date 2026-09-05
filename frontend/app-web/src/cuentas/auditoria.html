@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Registro de auditoría — Nexus Battles VI</title>
+  <link rel="stylesheet" href="tema-cuentas.css" />
+  <link rel="stylesheet" href="auditoria.css" />
+</head>
+<body>
+
+<!-- Barra de navegación compartida: la inserta barra-navegacion.js en este contenedor -->
+<div id="navbar-container"></div>
+
+<div class="contenedor">
+  <header>
+    <h1 class="auditoria-titulo">Registro de auditoría</h1>
+    <p class="ayuda">
+      Toda acción administrativa queda aquí. El registro es inmutable: no se
+      puede editar ni borrar, solo consultar.
+    </p>
+  </header>
+
+  <section class="tarjeta fila" aria-label="Filtros de búsqueda">
+    <label for="filtro-administrador">
+      Administrador
+      <input type="text" id="filtro-administrador" placeholder="ID del administrador" autocomplete="off" />
+    </label>
+
+    <label for="filtro-tipo-accion">
+      Tipo de acción
+      <select id="filtro-tipo-accion">
+        <option value="">Todas</option>
+        <option value="CREACION">Creación</option>
+        <option value="ACTUALIZACION">Actualización</option>
+        <option value="ELIMINACION_LOGICA">Eliminación lógica</option>
+        <option value="SUSPENSION">Suspensión</option>
+        <option value="SANCION">Sanción</option>
+        <option value="CAMBIO_ROL">Cambio de rol</option>
+        <option value="APROBACION">Aprobación</option>
+        <option value="RECHAZO">Rechazo</option>
+        <option value="OTRO">Otro</option>
+      </select>
+    </label>
+
+    <label for="filtro-desde">
+      Desde
+      <input type="text" id="filtro-desde" placeholder="aaaa-mm-dd" onfocus="(this.type='date')" />
+    </label>
+
+    <label for="filtro-hasta">
+      Hasta
+      <input type="text" id="filtro-hasta" placeholder="aaaa-mm-dd" onfocus="(this.type='date')" />
+    </label>
+
+    <button type="button" id="btn-filtrar" class="btn-primario">Filtrar</button>
+    <button type="button" id="btn-limpiar" class="btn-contorno">Limpiar</button>
+  </section>
+
+  <section class="tarjeta">
+    <div class="tabla-envoltorio">
+      <table class="tabla-auditoria">
+        <thead>
+        <tr>
+          <th>Fecha y hora</th>
+          <th>Administrador ID</th>
+          <th>Tipo de acción</th>
+          <th>Afectado</th>
+          <th>Valor anterior</th>
+          <th>Valor nuevo</th>
+          <th>Motivo</th>
+          <th>IP origen</th>
+        </tr>
+        </thead>
+        <tbody id="auditoria-tbody">
+        <!-- filas insertadas por auditoria.js -->
+        </tbody>
+      </table>
+    </div>
+
+    <p id="auditoria-estado" class="estado" hidden></p>
+  </section>
+
+  <nav class="paginacion" aria-label="Paginación">
+    <button type="button" id="btn-anterior" class="btn-contorno" disabled>Anterior</button>
+    <span id="auditoria-pagina-actual" class="ayuda">Página 1</span>
+    <button type="button" id="btn-siguiente" class="btn-contorno" disabled>Siguiente</button>
+  </nav>
+
+  <p class="aviso aviso--advertencia">
+    <strong>Este registro no se puede modificar.</strong>
+    No hay botón de editar ni de borrar, y no lo habrá: la inmutabilidad es
+    el requisito. Solo el Super Administrador puede consultarlo, y esa
+    consulta también queda registrada.
+  </p>
+</div>
+
+<!-- Ajusta esta ruta/orden si barra-navegacion.js espera cargarse de otra forma -->
+<script src="../comun/barra-navegacion.js"></script>
+<script src="auditoria.js"></script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{email/layout-corporativo}">
+<body>
+  <table>
+    <tbody>
+      <tr layout:fragment="contenido">
+        <td align="left" style="font-size:0px;padding:10px 25px;word-break:break-word;">
+          <div style="font-family:Arial, Helvetica, sans-serif;font-size:20px;font-weight:700;line-height:28px;color:#111726;padding-bottom:12px;">
+            ¡Bienvenido, <span th:text="${saludo}">Jugador</span>!
+          </div>
+          <div style="font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:24px;color:#111726;padding-bottom:12px;">
+            Tu cuenta en The Nexus Battles VI ya está activa. Desde ahora puedes entrar
+            a las salas de batalla, formar tu equipo de héroes y competir contra otros
+            jugadores.
+          </div>
+          <div style="font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:24px;color:#48536A;">
+            Que empiece el combate.
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>

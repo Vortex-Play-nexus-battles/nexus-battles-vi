@@ -1,0 +1,200 @@
+asyncapi: 3.0.0
+
+# =============================================================================
+# Nexus Battles VI - Canal en tiempo real de notificaciones
+#
+# Regla 1 de plataforma: contrato primero. Este documento describe los destinos
+# STOMP sobre WebSocket por los que llegan los avisos al jugador.
+#
+# Lo que NO esta aqui: consultar la bandeja, marcar leido y el contador de no
+# leidos, que son peticiones HTTP y viven en contracts/openapi/notificaciones.yaml.
+#
+# Trazabilidad:
+#   RF-NOT-003  Bandeja de notificaciones del jugador
+#   RF-NOT-004  Estado de lectura de cada aviso
+#   RF-NOT-006  Notificaciones en tiempo real sincronizadas entre sesiones
+# =============================================================================
+
+info:
+  title: Nexus Battles VI - Notificaciones en tiempo real
+  version: 1.0.0
+  description: |
+    Canal WebSocket + STOMP del modulo `notificaciones`.
+
+    Convenciones, las mismas de contracts/websocket/salas-partidas.yaml:
+      - Prefijo de suscripcion (servidor -> cliente): `/tema`
+      - Prefijo de envio (cliente -> servidor):       `/app`
+      - Cola privada de un usuario:                   `/usuario/cola`
+
+    La propagacion del identificador de traza (regla 5 de plataforma) queda
+    pendiente de la libreria comun de trazas y por eso no se declara todavia:
+    este contrato solo promete lo que el codigo ya hace.
+
+    Los errores que viajan por el canal usan el mismo formato problem details
+    que la API HTTP (regla 4).
+
+    Sobre la identidad de la sesion. El dominio distingue una sesion de otra
+    para saber que se perdio cada una, y el criterio de aceptacion pide que al
+    reconectar la sesion reciba unicamente lo que se perdio, no todo lo que
+    tiene sin leer. El identificador de sesion de STOMP se renueva en cada
+    reconexion, asi que no sirve para eso. Por eso el cliente envia su propio
+    identificador estable al registrarse, uno que sobrevive a la reconexion
+    porque lo guarda el navegador. Ese mismo par viaja tambien en la URL del
+    handshake (`/ws?usuario={usuarioId}&sesion={sesionId}`) mientras OAuth2
+    este diferido: de ahi sale el Principal que resuelve la cola privada y el
+    cierre de la sesion cuando la conexion se cae sin despedirse. Queda
+    documentado aqui porque es una
+    decision de diseno, no un detalle de implementacion.
+
+    Sobre el origen de los avisos. Este modulo no inventa eventos: los recibe
+    de los demas modulos. Mientras no exista bus de eventos ni broker en
+    docker-compose.yml, la entrada es el endpoint interno descrito en el
+    contrato HTTP. Cuando el equipo acuerde el bus, este contrato abre version
+    nueva en lugar de modificar esta.
+  license:
+    name: Uso academico - Proyecto Integrador II, UPB Bucaramanga
+
+servers:
+  local:
+    host: localhost:8085
+    protocol: ws
+    pathname: /ws
+    description: Entorno local de desarrollo
+  desplegado:
+    host: api.nexusbattles.local
+    protocol: wss
+    pathname: /notificaciones/ws
+    description: Entorno desplegado
+
+channels:
+
+  bandejaDelUsuario:
+    address: '/usuario/cola/notificaciones'
+    title: Avisos dirigidos a un solo jugador
+    description: |
+      Cola privada por la que llegan los avisos. Cada sesion abierta del mismo
+      jugador esta suscrita aqui, por eso un aviso llega a todas a la vez, que
+      es el primer escenario de la historia.
+
+      Tambien viaja por aqui el contador de no leidos. Como el estado de
+      lectura es del jugador y no del dispositivo, el numero es el mismo en
+      todas sus sesiones y se reenvia cada vez que cambia.
+    messages:
+      avisoNuevo:
+        $ref: '#/components/messages/AvisoNuevo'
+      contadorActualizado:
+        $ref: '#/components/messages/ContadorActualizado'
+      errorDeCanal:
+        $ref: '#/components/messages/ErrorDeCanal'
+
+  registroDeSesion:
+    address: '/app/notificaciones/sesion'
+    title: Alta de una sesion del jugador
+    description: |
+      La sesion se anuncia al conectarse enviando su identificador estable. El
+      servidor responde por la cola privada con los avisos que esa sesion se
+      perdio, del mas antiguo al mas reciente.
+
+      Sirve para los otros dos escenarios de la historia. Si el jugador no
+      tenia ninguna sesion abierta, aqui recibe lo que quedo pendiente. Si la
+      sesion se cayo y vuelve, aqui recibe solo lo que se perdio mientras
+      estuvo fuera.
+    messages:
+      registrarSesion:
+        $ref: '#/components/messages/RegistrarSesion'
+
+operations:
+
+  recibirAvisos:
+    action: receive
+    channel:
+      $ref: '#/channels/bandejaDelUsuario'
+    summary: El cliente recibe los avisos de su cola privada
+
+  anunciarSesion:
+    action: send
+    channel:
+      $ref: '#/channels/registroDeSesion'
+    summary: El cliente anuncia su sesion y pide lo pendiente
+
+components:
+
+  messages:
+
+    AvisoNuevo:
+      name: avisoNuevo
+      title: Aviso nuevo para el jugador
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/Aviso'
+
+    ContadorActualizado:
+      name: contadorActualizado
+      title: Cuenta de avisos sin leer
+      contentType: application/json
+      payload:
+        type: object
+        required: [noLeidas]
+        properties:
+          noLeidas:
+            type: integer
+            minimum: 0
+            description: Igual en todas las sesiones del jugador
+
+    RegistrarSesion:
+      name: registrarSesion
+      title: Alta de la sesion
+      contentType: application/json
+      payload:
+        type: object
+        required: [usuarioId, sesionId]
+        properties:
+          usuarioId:
+            type: string
+          sesionId:
+            type: string
+            description: >
+              Identificador estable que el cliente conserva entre reconexiones.
+              No es el identificador de sesion de STOMP.
+
+    ErrorDeCanal:
+      name: errorDeCanal
+      title: Error dirigido a quien envio el mensaje
+      contentType: application/problem+json
+      payload:
+        $ref: '#/components/schemas/ProblemDetail'
+
+  schemas:
+
+    Aviso:
+      type: object
+      required: [id, tipo, titulo, cuerpo, creadaEn, leida]
+      properties:
+        id:
+          type: string
+        tipo:
+          type: string
+          description: Origen del evento, por ejemplo subasta, mision o sancion
+        titulo:
+          type: string
+        cuerpo:
+          type: string
+        creadaEn:
+          type: string
+          format: date-time
+        leida:
+          type: boolean
+
+    ProblemDetail:
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string

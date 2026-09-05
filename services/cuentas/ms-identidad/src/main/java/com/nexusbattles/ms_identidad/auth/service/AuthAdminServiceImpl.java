@@ -52,6 +52,14 @@ public class AuthAdminServiceImpl implements AuthAdminService {
     public void actualizarRol(Long usuarioId, Role nuevoRol) {
         Usuario usuario = buscarOFallar(usuarioId);
         usuario.setRol(rolService.obtenerRolPorNombre(nuevoRol.name()));
+
+        // Nuevo (pedido de Edwin, HU-RBAC-003): al cambiar el rol, se
+        // incrementa la versión de token. Cualquier JWT ya emitido con la
+        // versión anterior deja de ser válido en la próxima verificación,
+        // aunque su firma siga siendo correcta y no haya expirado —evita
+        // que alguien siga actuando con un rol que ya le fue revocado.
+        usuario.setVersionToken(usuario.getVersionToken() + 1);
+
         usuarioRepository.save(usuario);
     }
 

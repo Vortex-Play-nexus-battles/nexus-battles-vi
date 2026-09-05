@@ -6,11 +6,14 @@
     <title>Crear sala de batalla · The Nexus Battles VI</title>
 
     <!--
-      Sistema de diseno compartido. Ningun estilo propio de esta vista.
-      Rutas relativas, como inventario.html: hoy nadie sirve /ui-kit/ como ruta
-      absoluta. El WebConfig de ms-identidad solo mapea /cuentas y /comun, y
-      esta marcado como apano local pendiente de decidir en equipo.
+      Ejecucion INTEGRADA (Spring Boot sirve esta vista): la API vive en el
+      mismo origen y no hay que declarar nada.
+      Ejecucion ESTATICA para revision visual: no hay API detras y las vistas
+      lo dicen con todas las letras. Para apuntarlas a un backend que corra
+      en otro sitio, descomenta y ajusta:
+      <meta name="nexus-api-base" content="http://127.0.0.1:8083" />
     -->
+
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
@@ -25,27 +28,68 @@
       de compartir fragmentos de HTML sin framework. Decision de equipo.
     -->
     <header class="cabecera">
-      <div class="cabecera__nav">
+      <div class="cabecera__grupo-marca">
         <span class="cabecera__marca">NEXUS BATTLES VI</span>
         <nav class="cabecera__nav" aria-label="Navegacion principal">
-          <a class="cabecera__destino activo" href="#" aria-current="page">Jugar online</a>
-          <a class="cabecera__destino" href="#">Misiones</a>
-          <a class="cabecera__destino" href="#">Torneo</a>
-          <a class="cabecera__destino" href="#">Mi inventario</a>
-          <a class="cabecera__destino" href="#">Subasta</a>
+          <a class="cabecera__destino" href="./batallas.html">Jugar online</a>
+          <a
+            class="cabecera__destino cabecera__destino--pendiente"
+            aria-disabled="true"
+            data-pendiente="grupo-alpha"
+            title="Todavia no publicada: grupo-alpha"
+            >Misiones</a
+          >
+          <a
+            class="cabecera__destino cabecera__destino--pendiente"
+            aria-disabled="true"
+            data-pendiente="HU-TOR, sprint 3"
+            title="Todavia no publicada: HU-TOR, sprint 3"
+            >Torneo</a
+          >
+          <a class="cabecera__destino" href="../../contenido/inventario/inventario.html"
+            >Mi inventario</a
+          >
+          <a
+            class="cabecera__destino cabecera__destino--pendiente"
+            aria-disabled="true"
+            data-pendiente="grupo-beta"
+            title="Todavia no publicada: grupo-beta"
+            >Subasta</a
+          >
         </nav>
       </div>
 
       <label class="cabecera__buscador">
+        <svg class="icono icono--menudo" aria-hidden="true">
+          <use href="../../../../../shared/ui-kit/iconos/sprite.svg#buscar" />
+        </svg>
         <span class="solo-lectores">Buscar productos</span>
-        <input class="cabecera__buscador-texto" type="search"
-               placeholder="Buscar productos" />
+        <input class="cabecera__buscador-texto" type="search" placeholder="Buscar productos" />
       </label>
 
       <div class="cabecera__acciones">
-        <span class="t-etiqueta">240</span>
-        <span class="distintivo distintivo--en-juego">3</span>
-        <span class="t-etiqueta">Simon_P</span>
+        <span class="cabecera__dato">
+          <svg class="icono icono--menudo" aria-hidden="true">
+            <use href="../../../../../shared/ui-kit/iconos/sprite.svg#moneda" />
+          </svg>
+          240
+        </span>
+
+        <span class="cabecera__campana">
+          <svg class="icono" aria-hidden="true">
+            <use href="../../../../../shared/ui-kit/iconos/sprite.svg#campana" />
+          </svg>
+          <span class="cabecera__contador" aria-hidden="true">3</span>
+          <span class="solo-lectores">3 notificaciones sin leer</span>
+        </span>
+
+        <span class="cabecera__cuenta">
+          <span class="cabecera__avatar" aria-hidden="true"></span>
+          <span class="cabecera__identidad">
+            <span class="cabecera__apodo">Simon_P</span>
+            <span class="cabecera__rango">Rango 12</span>
+          </span>
+        </span>
       </div>
     </header>
 
@@ -65,15 +109,30 @@
         <div class="fila">
           <div class="campo">
             <label class="campo__etiqueta" for="maximoParticipantes">Numero de participantes</label>
-            <input class="campo__control" id="maximoParticipantes" name="maximoParticipantes"
-                   type="number" min="2" max="6" value="4" inputmode="numeric" />
+            <input
+              class="campo__control"
+              id="maximoParticipantes"
+              name="maximoParticipantes"
+              type="number"
+              min="2"
+              max="6"
+              value="4"
+              inputmode="numeric"
+            />
             <p class="campo__pista">Entre 2 y 6 jugadores.</p>
           </div>
 
           <div class="campo">
             <label class="campo__etiqueta" for="recompensaCreditos">Recompensa en creditos</label>
-            <input class="campo__control" id="recompensaCreditos" name="recompensaCreditos"
-                   type="number" min="0" value="0" inputmode="numeric" />
+            <input
+              class="campo__control"
+              id="recompensaCreditos"
+              name="recompensaCreditos"
+              type="number"
+              min="0"
+              value="0"
+              inputmode="numeric"
+            />
             <p class="campo__pista">Apostar es libre.</p>
           </div>
         </div>
@@ -86,8 +145,14 @@
           <legend class="campo__etiqueta">Modalidad de juego</legend>
           <div class="modalidades">
             <div class="modalidad">
-              <input class="modalidad__entrada" type="radio" name="modalidad"
-                     id="modalidad-duelo" value="UNO_CONTRA_UNO" checked />
+              <input
+                class="modalidad__entrada"
+                type="radio"
+                name="modalidad"
+                id="modalidad-duelo"
+                value="UNO_CONTRA_UNO"
+                checked
+              />
               <label class="modalidad__cara" for="modalidad-duelo">
                 <span class="modalidad__titulo">1 contra 1</span>
                 <span class="modalidad__detalle">Duelo directo entre dos heroes.</span>
@@ -95,17 +160,27 @@
             </div>
 
             <div class="modalidad">
-              <input class="modalidad__entrada" type="radio" name="modalidad"
-                     id="modalidad-ia" value="CONTRA_IA" />
+              <input
+                class="modalidad__entrada"
+                type="radio"
+                name="modalidad"
+                id="modalidad-ia"
+                value="CONTRA_IA"
+              />
               <label class="modalidad__cara" for="modalidad-ia">
                 <span class="modalidad__titulo">Contra la IA</span>
-                <span class="modalidad__detalle">Enfrentate a un rival controlado por la maquina.</span>
+                <span class="modalidad__detalle">Enfrentate a un rival controlado.</span>
               </label>
             </div>
 
             <div class="modalidad">
-              <input class="modalidad__entrada" type="radio" name="modalidad"
-                     id="modalidad-seis" value="HASTA_SEIS" />
+              <input
+                class="modalidad__entrada"
+                type="radio"
+                name="modalidad"
+                id="modalidad-seis"
+                value="HASTA_SEIS"
+              />
               <label class="modalidad__cara" for="modalidad-seis">
                 <span class="modalidad__titulo">Hasta seis</span>
                 <span class="modalidad__detalle">Combate multiple, todos contra todos.</span>
@@ -131,8 +206,13 @@
         </label>
 
         <div class="acciones">
-          <button class="boton boton--secundario" type="button">Cancelar</button>
-          <button class="boton boton--primario boton--grande" type="submit">Crear sala</button>
+          <!--
+            Cancelar es un enlace y no un boton con manejador: vuelve al
+            listado de Batallas, que es de donde se llega a esta vista, y
+            funciona aunque el modulo JS no haya cargado.
+          -->
+          <a class="boton boton--secundario" href="./batallas.html">Cancelar</a>
+          <button class="boton boton--primario boton--grande" type="submit">CREAR SALA</button>
         </div>
       </form>
     </main>

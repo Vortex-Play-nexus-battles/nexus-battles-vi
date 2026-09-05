@@ -34,7 +34,7 @@ const HTML = `
     <input type="checkbox" name="incluirHeroeIA" />
     <input type="checkbox" name="privada" />
 
-    <button type="submit">Crear sala</button>
+    <button type="submit">CREAR SALA</button>
   </form>
 `;
 
@@ -117,6 +117,24 @@ describe('montarCrearSala', () => {
     expect(boton.getAttribute('aria-busy')).toBe('false');
   });
 
+  test('al terminar restaura el literal de la vista, no uno impuesto por el modulo', async () => {
+    const formulario = preparar();
+    const crearSalaImpl = jest
+      .fn()
+      .mockResolvedValue({ id: 'a1', maximoParticipantes: 4, recompensaCreditos: 0 });
+    montarCrearSala(formulario, { crearSalaImpl });
+    const boton = formulario.querySelector('[type="submit"]');
+
+    formulario.dispatchEvent(new Event('submit'));
+    await asentar();
+    expect(boton.textContent).toBe('CREAR SALA');
+
+    // Y una segunda vez: el texto guardado no se contamina con «Creando…».
+    formulario.dispatchEvent(new Event('submit'));
+    await asentar();
+    expect(boton.textContent).toBe('CREAR SALA');
+  });
+
   test('un rechazo por campos marca el campo, no suelta un aviso general', async () => {
     const formulario = preparar();
     const crearSalaImpl = jest.fn().mockRejectedValue(
@@ -127,7 +145,10 @@ describe('montarCrearSala', () => {
           status: 400,
           detail: 'Hay 1 campo que corregir.',
           errores: [
-            { campo: 'maximoParticipantes', mensaje: 'Esta modalidad admite entre 2 y 6 jugadores.' },
+            {
+              campo: 'maximoParticipantes',
+              mensaje: 'Esta modalidad admite entre 2 y 6 jugadores.',
+            },
           ],
         },
         400,

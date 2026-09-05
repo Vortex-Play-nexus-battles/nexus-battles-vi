@@ -38,14 +38,14 @@ public class AuditLogService {
                               String ipOrigen) {
         try {
             AuditLog entrada = AuditLog.builder()
-                    .tipoAccion(tipoAccion)
-                    .administradorId(administradorId)
-                    .afectado(afectado)
-                    .valorAnterior(valorAnterior)
-                    .valorNuevo(valorNuevo)
-                    .motivo(motivo)
-                    .ipOrigen(ipOrigen)
-                    .build();
+                .tipoAccion(tipoAccion)
+                .administradorId(administradorId)
+                .afectado(afectado)
+                .valorAnterior(valorAnterior)
+                .valorNuevo(valorNuevo)
+                .motivo(motivo)
+                .ipOrigen(ipOrigen)
+                .build();
             return repository.saveAndFlush(entrada);
         } catch (Exception e) {
             log.error("Fallo al escribir registro de auditoría, se cancela la acción administrativa", e);
@@ -59,10 +59,20 @@ public class AuditLogService {
                                     Instant desde,
                                     Instant hasta,
                                     Pageable pageable) {
-        Specification<AuditLog> spec = Specification
-                .where(conAdministrador(administradorId))
-                .and(conTipoAccion(tipoAccion))
-                .and(entreFechas(desde, hasta));
+        Specification<AuditLog> spec = Specification.where((root, query, cb) -> cb.conjunction());
+
+        if (administradorId != null && !administradorId.isBlank()) {
+            spec = spec.and(conAdministrador(administradorId));
+        }
+
+        if (tipoAccion != null) {
+            spec = spec.and(conTipoAccion(tipoAccion));
+        }
+
+        if (desde != null || hasta != null) {
+            spec = spec.and(entreFechas(desde, hasta));
+        }
+
         return repository.findAll(spec, pageable);
     }
 
@@ -72,17 +82,17 @@ public class AuditLogService {
             tipoAccion = AuditActionType.valueOf(solicitud.tipoAccion());
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException(
-                    "tipoAccion inválido: " + solicitud.tipoAccion()
-                            + ". Valores permitidos: " + java.util.Arrays.toString(AuditActionType.values()));
+                "tipoAccion inválido: " + solicitud.tipoAccion()
+                    + ". Valores permitidos: " + java.util.Arrays.toString(AuditActionType.values()));
         }
         return registrar(
-                tipoAccion,
-                solicitud.administradorId(),
-                solicitud.afectado(),
-                solicitud.valorAnterior(),
-                solicitud.valorNuevo(),
-                solicitud.motivo(),
-                solicitud.ipOrigen()
+            tipoAccion,
+            solicitud.administradorId(),
+            solicitud.afectado(),
+            solicitud.valorAnterior(),
+            solicitud.valorNuevo(),
+            solicitud.motivo(),
+            solicitud.ipOrigen()
         );
     }
 }

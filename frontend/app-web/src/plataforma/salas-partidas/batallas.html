@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Batallas · The Nexus Battles VI</title>
+
+    <!--
+      Ejecucion INTEGRADA (Spring Boot sirve esta vista): la API vive en el
+      mismo origen y no hay que declarar nada.
+      Ejecucion ESTATICA para revision visual: no hay API detras y las vistas
+      lo dicen con todas las letras. Para apuntarlas a un backend que corra
+      en otro sitio, descomenta y ajusta:
+      <meta name="nexus-api-base" content="http://127.0.0.1:8083" />
+    -->
+
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
+  </head>
+
+  <body>
+    <!--
+      Cabecera de 64 px con los seis destinos de RF-INV-008 y el buscador de
+      productos de RF-INV-004. Se repite en cada vista mientras no exista una
+      forma acordada de compartir fragmentos de HTML sin framework.
+    -->
+    <header class="cabecera">
+      <div class="cabecera__grupo-marca">
+        <span class="cabecera__marca">NEXUS BATTLES VI</span>
+        <nav class="cabecera__nav" aria-label="Navegacion principal">
+          <a class="cabecera__destino activo" href="#" aria-current="page">Jugar online</a>
+          <a
+            class="cabecera__destino cabecera__destino--pendiente"
+            aria-disabled="true"
+            data-pendiente="grupo-alpha"
+            title="Todavia no publicada: grupo-alpha"
+            >Misiones</a
+          >
+          <a
+            class="cabecera__destino cabecera__destino--pendiente"
+            aria-disabled="true"
+            data-pendiente="HU-TOR, sprint 3"
+            title="Todavia no publicada: HU-TOR, sprint 3"
+            >Torneo</a
+          >
+          <a class="cabecera__destino" href="../../contenido/inventario/inventario.html"
+            >Mi inventario</a
+          >
+          <a
+            class="cabecera__destino cabecera__destino--pendiente"
+            aria-disabled="true"
+            data-pendiente="grupo-beta"
+            title="Todavia no publicada: grupo-beta"
+            >Subasta</a
+          >
+        </nav>
+      </div>
+
+      <label class="cabecera__buscador">
+        <svg class="icono icono--menudo" aria-hidden="true">
+          <use href="../../../../../shared/ui-kit/iconos/sprite.svg#buscar" />
+        </svg>
+        <span class="solo-lectores">Buscar productos</span>
+        <input class="cabecera__buscador-texto" type="search" placeholder="Buscar productos" />
+      </label>
+
+      <div class="cabecera__acciones">
+        <span class="cabecera__dato">
+          <svg class="icono icono--menudo" aria-hidden="true">
+            <use href="../../../../../shared/ui-kit/iconos/sprite.svg#moneda" />
+          </svg>
+          240
+        </span>
+
+        <span class="cabecera__campana">
+          <svg class="icono" aria-hidden="true">
+            <use href="../../../../../shared/ui-kit/iconos/sprite.svg#campana" />
+          </svg>
+          <span class="cabecera__contador" aria-hidden="true">3</span>
+          <span class="solo-lectores">3 notificaciones sin leer</span>
+        </span>
+
+        <span class="cabecera__cuenta">
+          <span class="cabecera__avatar" aria-hidden="true"></span>
+          <span class="cabecera__identidad">
+            <span class="cabecera__apodo">Simon_P</span>
+            <span class="cabecera__rango">Rango 12</span>
+          </span>
+        </span>
+      </div>
+    </header>
+
+    <main id="vista-batallas" class="pagina pila">
+      <div class="acciones">
+        <div class="pila pila--compacta">
+          <h1>Batallas</h1>
+          <p class="t-cuerpo" data-zona="subtitulo">Buscando batallas</p>
+        </div>
+        <a class="boton boton--primario boton--grande" href="./crear-sala.html">CREAR SALA</a>
+      </div>
+
+      <!--
+        Dos filtros, los dos del contrato. El buscador que tenia la maqueta se
+        elimino de Figma en HU-SAL-002: buscaba por un nombre de sala que se
+        retiro en HU-SAL-001 y que ningun requisito pide.
+      -->
+      <div class="fila">
+        <label class="campo">
+          <span class="campo__etiqueta">Modalidad</span>
+          <select class="campo__control" name="modalidad">
+            <option value="">Modalidad: todas</option>
+            <option value="UNO_CONTRA_UNO">1 contra 1</option>
+            <option value="CONTRA_IA">Contra la IA</option>
+            <option value="HASTA_SEIS">Hasta seis</option>
+          </select>
+        </label>
+
+        <label class="campo">
+          <span class="campo__etiqueta">Estado</span>
+          <select class="campo__control" name="estado">
+            <option value="">Estado: todos</option>
+            <option value="ABIERTA">Abierta</option>
+            <option value="LLENA">Llena</option>
+            <option value="PRIVADA">Privada</option>
+          </select>
+        </label>
+      </div>
+
+      <!-- RNF-USA-003: cargando, vacio y error comparten esta zona. -->
+      <div class="estado-vista" data-zona="estado" role="status" aria-live="polite"></div>
+
+      <div class="rejilla-salas" data-zona="salas" hidden></div>
+
+      <nav class="paginacion" data-zona="paginacion" aria-label="Paginas del listado" hidden></nav>
+    </main>
+
+    <!-- RNF-DIS-002: el chatbot esta en todas las vistas, sin excepcion. -->
+    <button class="chatbot-flotante" type="button" aria-label="Abrir el asistente">IA</button>
+
+    <script type="module">
+      import { montarBatallas } from './batallas.js';
+
+      montarBatallas(document.getElementById('vista-batallas'), {
+        // Entrar lleva a la sala de espera. Esa vista es HU-SAL-004: hasta que
+        // exista, se deja el destino sin resolver en vez de inventar una ruta.
+        alEntrar: (sala) => console.info('Ingreso aceptado en la sala', sala.id),
+      });
+    </script>
+  </body>
+</html>

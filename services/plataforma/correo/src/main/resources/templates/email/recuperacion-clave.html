@@ -1,0 +1,42 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{email/layout-corporativo}">
+<body>
+  <table>
+    <tbody>
+      <tr layout:fragment="contenido">
+        <td align="left" style="font-size:0px;padding:10px 25px;word-break:break-word;">
+          <div style="font-family:Arial, Helvetica, sans-serif;font-size:20px;font-weight:700;line-height:28px;color:#111726;padding-bottom:12px;">
+            Recupera tu contraseña
+          </div>
+          <div style="font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:24px;color:#111726;padding-bottom:16px;">
+            Hola, <span th:text="${apodo}">Jugador</span>. Recibimos una solicitud para
+            restablecer la contraseña de tu cuenta. Usa este código para continuar:
+          </div>
+
+          <table border="0" cellpadding="0" cellspacing="0" role="presentation"
+                 style="background:#D7DEED;border-radius:6px;width:100%;">
+            <tbody>
+              <tr>
+                <td align="center"
+                    style="font-family:'Courier New', Courier, monospace;font-size:32px;font-weight:700;letter-spacing:8px;color:#1E3F88;padding:20px 16px;"
+                    th:text="${codigo}">000000</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div style="font-family:Arial, Helvetica, sans-serif;font-size:14px;line-height:22px;color:#8A4A00;padding-top:16px;">
+            El código vence en <strong th:text="${minutosVigencia}">15</strong> minutos y
+            solo puede usarse una vez.
+          </div>
+
+          <div style="font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:24px;color:#111726;padding-top:16px;">
+            Si no pediste este cambio, ignora este mensaje: tu contraseña actual sigue
+            siendo válida y nadie puede cambiarla sin este código.
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>

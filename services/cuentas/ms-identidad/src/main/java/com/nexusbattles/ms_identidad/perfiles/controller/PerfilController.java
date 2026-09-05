@@ -23,12 +23,6 @@ public class PerfilController {
         this.perfilUsuarioService = perfilUsuarioService;
     }
 
-    // NOTA TEMPORAL: mientras no exista JWT (HU-AUT-004), la identidad del solicitante
-    // se toma del header X-User-Name (el mismo que ya usa SecurityInterceptor).
-    // No es 100% seguro por sí solo -el cliente podría mentir en el header-, pero evita
-    // que cualquier usuario autorizado por rol edite el perfil de otro solo cambiando el
-    // número en la URL. Cuando exista JWT real, esto se reemplaza por el subject del token.
-
     @GetMapping("/{usuarioId}")
     @RequirePermission(Action.MODIFICAR_PERFIL_PROPIO)
     public ResponseEntity<PerfilUsuarioResponse> obtenerMiPerfil(@PathVariable Long usuarioId,
@@ -45,11 +39,10 @@ public class PerfilController {
                                                 HttpServletRequest request) {
         PerfilUsuario perfilActual = buscarOFallar(usuarioId);
         verificarDueno(perfilActual, request);
-
         try {
             PerfilUsuario actualizado = perfilUsuarioService.actualizarPerfilPropio(
-                    usuarioId, datos.getNombres(), datos.getApellidos(), datos.getAvatar(),
-                    datos.getBiografia(), datos.getPreferencias(), datos.getApodo());
+                usuarioId, datos.getNombres(), datos.getApellidos(), datos.getAvatar(),
+                datos.getBiografia(), datos.getPreferencias(), datos.getApodo());
             return ResponseEntity.ok(PerfilUsuarioResponse.from(actualizado));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
@@ -65,7 +58,7 @@ public class PerfilController {
     }
 
     private void verificarDueno(PerfilUsuario perfil, HttpServletRequest request) {
-        String solicitante = request.getHeader("X-User-Name");
+        String solicitante = (String) request.getAttribute("usuarioActual");
         String dueno = perfil.getUsuario().getApodo();
         if (solicitante == null || !solicitante.equalsIgnoreCase(dueno)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No puedes acceder al perfil de otro usuario.");

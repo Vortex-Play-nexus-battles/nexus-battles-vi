@@ -1,0 +1,144 @@
+/*
+ * HU-INV-007 - Ficha de detalle del producto.
+ *
+ * Usa las mismas variables de tema que la vitrina (definidas en vitrina.css).
+ */
+
+.ficha-capa {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--vitrina-margen, 24px);
+  background: rgb(0 0 0 / 62%);
+}
+
+.ficha {
+  position: relative;
+  width: min(520px, 100%);
+  max-height: 100%;
+  padding: 24px;
+  overflow-y: auto;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  background: var(--superficie);
+  color: var(--texto);
+}
+
+.ficha__cerrar {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 11;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--fondo);
+  color: var(--texto);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* El foco tiene que verse siempre: RNF-ACC-002. */
+.ficha-capa :focus-visible {
+  outline: 2px solid var(--texto);
+  outline-offset: 2px;
+}
+
+.ficha__imagen {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  margin-bottom: 16px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.ficha__nombre {
+  margin: 0 0 4px;
+  font-family: var(--tipografia-titulo);
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.ficha__tipo {
+  margin: 0 0 12px;
+  font-family: var(--tipografia-titulo);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--texto-2);
+}
+
+.ficha__descripcion {
+  margin: 0 0 16px;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.ficha__atributos {
+  margin: 0 0 16px;
+  padding: 0;
+}
+
+.ficha__atributo {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--borde);
+}
+
+.ficha__etiqueta {
+  font-size: 0.85rem;
+  color: var(--texto-2);
+}
+
+.ficha__valor {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.ficha__tiraje {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--texto-2);
+}
+
+/* En pantallas estrechas la ficha ocupa todo el alto disponible. */
+@media (max-width: 599px) {
+  .ficha-capa {
+    padding: 0;
+  }
+
+  .ficha {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    border: none;
+    border-radius: 0;
+  }
+}
+
+/*
+ * RN-27: producto suspendido. Es informacion, no un error — el producto sigue
+ * siendo del jugador. Por eso usa el tono de advertencia y no el de error.
+ */
+.ficha__no-disponible {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #fbeedd;
+  color: var(--advertencia, #8a4a00);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
