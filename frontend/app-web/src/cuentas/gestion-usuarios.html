@@ -182,6 +182,58 @@
 
         <div class="seccion-cabecera">
 
+          <h2>Rol del usuario</h2>
+
+          <p>
+            Asigna uno de los roles válidos del sistema al usuario seleccionado.
+          </p>
+
+        </div>
+
+
+        <div class="campo">
+
+          <label for="nuevo-rol">
+            Nuevo rol
+          </label>
+
+          <select
+            id="nuevo-rol"
+            name="nuevo-rol"
+          ></select>
+
+        </div>
+
+
+        <div
+          id="mensaje-cambio-rol"
+          class="mensaje"
+          hidden
+          role="alert"
+          aria-live="assertive"
+        ></div>
+
+
+        <div class="acciones">
+
+          <button
+            type="button"
+            id="btn-cambiar-rol"
+            class="btn btn-principal"
+            data-has-permission="ASIGNAR_ROL"
+          >
+            Cambiar rol
+          </button>
+
+        </div>
+
+      </section>
+
+
+      <section class="tarjeta">
+
+        <div class="seccion-cabecera">
+
           <h2>Perfil</h2>
 
           <p>

@@ -351,23 +351,3 @@ h1 {
 }
 
 }
-
-.menu-admin {
-    display: flex;
-    gap: 12px;
-    padding: 8px 24px;
-    background-color: var(--superficie, #FFFFFF);
-    border-bottom: 1px solid var(--borde-decorativo, #9FABC9);
-}
-
-.menu-admin a {
-    color: var(--accion-primaria, #2244BF);
-    text-decoration: none;
-    font-family: 'Inter', sans-serif;
-    font-size: 14px;
-    font-weight: 600;
-}
-
-.menu-admin a:hover {
-    text-decoration: underline;
-}

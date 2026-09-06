@@ -116,31 +116,6 @@ function montarBarraNavegacion() {
     document.body.prepend(barra);
 }
 
-function montarMenuAdmin() {
-    const rolActual = sessionStorage.getItem(CLAVE_ROL);
-    const rolesConAcceso = ['ADMINISTRADOR', 'SUPER_ADMINISTRADOR'];
-
-    if (!rolesConAcceso.includes(rolActual)) {
-        return;
-    }
-
-    const menu = document.createElement('div');
-    menu.className = 'menu-admin';
-
-    const enlaceCrear = document.createElement('a');
-    enlaceCrear.href = './crear-cuenta-admin.html';
-    enlaceCrear.textContent = 'Crear cuenta admin';
-    if (rolActual !== 'SUPER_ADMINISTRADOR') {
-        enlaceCrear.style.display = 'none';
-    }
-
-    const enlaceGestion = document.createElement('a');
-    enlaceGestion.href = './gestion-usuarios.html';
-    enlaceGestion.textContent = 'Gestion de usuarios';
-
-    menu.append(enlaceCrear, enlaceGestion);
-    document.body.insertBefore(menu, document.body.children[1]);
-}
 
 /* =========================
    ESTADOS
@@ -770,6 +745,5 @@ btnConfirmarApodo.addEventListener(
    ========================= */
 
 montarBarraNavegacion();
-montarMenuAdmin();
 configurarSelectorAvatar();
 cargarPerfil();
