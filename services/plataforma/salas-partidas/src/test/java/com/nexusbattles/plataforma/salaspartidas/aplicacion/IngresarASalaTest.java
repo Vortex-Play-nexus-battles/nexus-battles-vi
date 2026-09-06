@@ -5,6 +5,8 @@ import com.nexusbattles.plataforma.salaspartidas.dominio.IngresoNoPermitido;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Modalidad;
 import com.nexusbattles.plataforma.salaspartidas.dominio.ParametrosDeSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Sala;
+import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
+import com.nexusbattles.plataforma.salaspartidas.dominio.SalaModificadaConcurrentemente;
 import com.nexusbattles.plataforma.salaspartidas.dominio.SalaNoEncontrada;
 import com.nexusbattles.plataforma.salaspartidas.dominio.SalaPrivadaSinInvitacion;
 import org.junit.jupiter.api.BeforeEach;
@@ -226,5 +228,134 @@ class IngresarASalaTest {
                         () -> ingresarASala.ejecutar(null, VISITANTE)),
                 () -> assertThrows(NullPointerException.class,
                         () -> ingresarASala.ejecutar(sala.id(), null)));
+    }
+
+    /*
+     * Carrera por el ultimo cupo (HU-SAL-002). Aqui se prueba la POLITICA del
+     * caso de uso ante la senal del repositorio; que la senal se produzca de
+     * verdad con dos hilos sobre PostgreSQL lo prueba IngresoConcurrenteIT.
+     */
+
+    @Test
+    @DisplayName("si otro ingreso se adelanto, vuelve a leer y entra si todavia cabe")
+    void reintentaTrasUnaEscrituraAdelantada() {
+        RepositorioQueSeAdelanta almacen = new RepositorioQueSeAdelanta(1);
+        ingresarASala = new IngresarASala(almacen, canal);
+        Sala sala = Sala.crear(
+                new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null), ANFITRION);
+        almacen.guardar(sala);
+
+        Sala resultado = ingresarASala.ejecutar(sala.id(), VISITANTE);
+
+        assertAll(
+                () -> assertTrue(resultado.participantes().contains(VISITANTE)),
+                () -> assertEquals(2, almacen.lecturas(), "una lectura por intento"),
+                () -> assertEquals(1, canal.anuncios().size(), "un solo anuncio, el del ingreso real"),
+                () -> assertEquals(VISITANTE, canal.anuncios().get(0).idJugador()));
+    }
+
+    @Test
+    @DisplayName("si otro ocupo el ultimo cupo en medio, el segundo recibe el rechazo de sala llena y no se anuncia")
+    void elPerdedorDeLaCarreraRecibeSalaLlena() {
+        RepositorioQueSeAdelanta almacen = new RepositorioQueSeAdelanta(1);
+        ingresarASala = new IngresarASala(almacen, canal);
+        Sala sala = Sala.crear(
+                new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, false, null), ANFITRION);
+        almacen.guardar(sala);
+        // El otro jugador gana la carrera: su ingreso ya esta en el almacen
+        // cuando el nuestro vuelve a leer.
+        UUID ganador = UUID.fromString("33333333-3333-3333-3333-333333333333");
+        almacen.alReleer(() -> {
+            Sala actual = almacen.buscarPorId(sala.id()).orElseThrow();
+            actual.unirse(ganador);
+            almacen.sobreescribir(actual);
+        });
+
+        IngresoNoPermitido rechazo = assertThrows(IngresoNoPermitido.class,
+                () -> ingresarASala.ejecutar(sala.id(), VISITANTE));
+
+        assertAll(
+                () -> assertTrue(rechazo.detalle().contains("maximo de participantes")),
+                () -> assertTrue(canal.noAnuncioNada(), "nadie anuncia una entrada que no se guardo"),
+                () -> assertTrue(almacen.buscarPorId(sala.id()).orElseThrow()
+                        .participantes().contains(ganador)),
+                () -> assertEquals(2, almacen.buscarPorId(sala.id()).orElseThrow().ocupacion()));
+    }
+
+    @Test
+    @DisplayName("si la sala no deja de cambiar, tras los intentos previstos se rinde con un 409 y sin anunciar")
+    void seRindeTrasLosIntentosPrevistos() {
+        RepositorioQueSeAdelanta almacen = new RepositorioQueSeAdelanta(Integer.MAX_VALUE);
+        ingresarASala = new IngresarASala(almacen, canal);
+        Sala sala = Sala.crear(
+                new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null), ANFITRION);
+        almacen.guardar(sala);
+
+        IngresoNoPermitido rechazo = assertThrows(IngresoNoPermitido.class,
+                () -> ingresarASala.ejecutar(sala.id(), VISITANTE));
+
+        assertAll(
+                () -> assertEquals(409, rechazo.estado()),
+                () -> assertTrue(rechazo.detalle().contains("Intentalo de nuevo")),
+                () -> assertEquals(IngresarASala.INTENTOS, almacen.lecturas()),
+                () -> assertTrue(canal.noAnuncioNada()));
+    }
+
+    /**
+     * Almacen que simula a otro escritor adelantandose: las primeras N
+     * escrituras del caso de uso fallan con {@link SalaModificadaConcurrentemente}
+     * y, antes de cada relectura, ejecuta lo que el «otro» haya dejado hecho.
+     * Implementa el puerto de verdad; no es un mock.
+     */
+    private static final class RepositorioQueSeAdelanta implements RepositorioDeSalas {
+        private final RepositorioDeSalasEnMemoria real = new RepositorioDeSalasEnMemoria();
+        private int fallosPendientes;
+        private int lecturas;
+        private Runnable alReleer = () -> { };
+
+        RepositorioQueSeAdelanta(int fallos) {
+            this.fallosPendientes = fallos;
+        }
+
+        void alReleer(Runnable accion) {
+            this.alReleer = accion;
+        }
+
+        /** Escritura «del otro», fuera del caso de uso. */
+        void sobreescribir(Sala sala) {
+            real.guardar(sala);
+        }
+
+        int lecturas() {
+            return lecturas;
+        }
+
+        @Override
+        public Sala guardar(Sala sala) {
+            if (fallosPendientes > 0) {
+                fallosPendientes--;
+                throw new SalaModificadaConcurrentemente(sala.id());
+            }
+            return real.guardar(sala);
+        }
+
+        @Override
+        public java.util.Optional<Sala> buscarPorId(UUID id) {
+            lecturas++;
+            if (lecturas > 1) {
+                alReleer.run();
+            }
+            // Copia defensiva: el caso de uso no debe ver el mismo objeto que
+            // el «otro» esta mutando, igual que con PostgreSQL.
+            return real.buscarPorId(id).map(s -> Sala.rehidratar(s.id(), s.estado(), s.modalidad(),
+                    s.maximoParticipantes(), s.recompensaCreditos(), s.incluirHeroeIA(), s.privada(),
+                    s.tamanoEquipo(), s.idAnfitrion(), s.participantes(), s.creadaEn(), s.version()));
+        }
+
+        @Override
+        public com.nexusbattles.plataforma.salaspartidas.dominio.PaginaDeSalas listar(
+                Modalidad modalidad, EstadoSala estado, int pagina, int tamano) {
+            return real.listar(modalidad, estado, pagina, tamano);
+        }
     }
 }

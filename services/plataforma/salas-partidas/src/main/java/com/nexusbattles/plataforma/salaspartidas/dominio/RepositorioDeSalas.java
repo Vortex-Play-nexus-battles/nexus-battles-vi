@@ -16,7 +16,13 @@ public interface RepositorioDeSalas {
     /**
      * Guarda la sala y devuelve el estado con el que quedo almacenada.
      *
+     * <p>Contrato de concurrencia (HU-SAL-002): si la sala fue escrita por
+     * otro entre {@link #buscarPorId(UUID)} y esta llamada, el adaptador NO
+     * pisa esa escritura: lanza {@link SalaModificadaConcurrentemente} y no
+     * guarda nada. Quien llama decide si vuelve a leer.
+     *
      * @return la sala guardada; nunca {@code null}
+     * @throws SalaModificadaConcurrentemente si otra escritura se adelanto
      */
     Sala guardar(Sala sala);
 

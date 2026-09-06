@@ -52,10 +52,22 @@ public final class Sala {
 
     private final Instant creadaEn;
 
+    /**
+     * Marca de concurrencia — HU-SAL-002.
+     *
+     * <p>El dominio no razona con ella: la lleva tal cual de la lectura a la
+     * escritura para que la persistencia detecte si otro ingreso se guardo en
+     * medio (bloqueo optimista). Una sala recien creada nace en 0; la base la
+     * incrementa en cada escritura. Sin esto, dos jugadores que compiten por el
+     * ultimo cupo se pisan la escritura y uno de los dos «entra» solo en su
+     * pantalla.
+     */
+    private final long version;
+
     private Sala(UUID id, EstadoSala estado, Modalidad modalidad,
                  int maximoParticipantes, int recompensaCreditos, boolean incluirHeroeIA,
                  boolean privada, Integer tamanoEquipo, UUID idAnfitrion,
-                 Set<UUID> participantes, Instant creadaEn) {
+                 Set<UUID> participantes, Instant creadaEn, long version) {
         this.id = id;
         this.estado = estado;
         this.modalidad = modalidad;
@@ -66,6 +78,7 @@ public final class Sala {
         this.tamanoEquipo = tamanoEquipo;
         this.idAnfitrion = idAnfitrion;
         this.creadaEn = creadaEn;
+        this.version = version;
 
         // El anfitrion entra primero, siempre: es participante desde que la sala
         // existe. Despues, el resto de quienes ya estuvieran dentro.
@@ -89,9 +102,20 @@ public final class Sala {
     public static Sala rehidratar(UUID id, EstadoSala estado, Modalidad modalidad,
                                   int maximoParticipantes, int recompensaCreditos,
                                   boolean incluirHeroeIA, boolean privada, Integer tamanoEquipo,
-                                  UUID idAnfitrion, Set<UUID> participantes, Instant creadaEn) {
+                                  UUID idAnfitrion, Set<UUID> participantes, Instant creadaEn,
+                                  long version) {
         return new Sala(id, estado, modalidad, maximoParticipantes, recompensaCreditos,
-                incluirHeroeIA, privada, tamanoEquipo, idAnfitrion, participantes, creadaEn);
+                incluirHeroeIA, privada, tamanoEquipo, idAnfitrion, participantes, creadaEn,
+                version);
+    }
+
+    /** Variante sin marca de concurrencia, para dobles y fixtures que no persisten. */
+    public static Sala rehidratar(UUID id, EstadoSala estado, Modalidad modalidad,
+                                  int maximoParticipantes, int recompensaCreditos,
+                                  boolean incluirHeroeIA, boolean privada, Integer tamanoEquipo,
+                                  UUID idAnfitrion, Set<UUID> participantes, Instant creadaEn) {
+        return rehidratar(id, estado, modalidad, maximoParticipantes, recompensaCreditos,
+                incluirHeroeIA, privada, tamanoEquipo, idAnfitrion, participantes, creadaEn, 0L);
     }
 
     /**
@@ -135,7 +159,8 @@ public final class Sala {
                 parametros.tamanoEquipo(),
                 idAnfitrion,
                 Set.of(), // al crearla solo esta el anfitrion, que el constructor anade
-                Instant.now());
+                Instant.now(),
+                0L); // nace sin escrituras; la base la incrementa a partir de aqui
     }
 
     /** RF-JUE-004: cada modalidad admite un rango distinto de participantes. */
@@ -300,6 +325,11 @@ public final class Sala {
      */
     public int ocupacion() {
         return participantes.size();
+    }
+
+    /** Marca de concurrencia leida de la base. Ver el campo. */
+    public long version() {
+        return version;
     }
 
     /** Momento de creacion. Viaja en el contrato como {@code creadaEn}. */

@@ -5,6 +5,8 @@ import com.nexusbattles.plataforma.salaspartidas.dominio.Modalidad;
 import com.nexusbattles.plataforma.salaspartidas.dominio.PaginaDeSalas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Sala;
+import com.nexusbattles.plataforma.salaspartidas.dominio.SalaModificadaConcurrentemente;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
@@ -40,7 +42,15 @@ public class RepositorioSalasJpa implements RepositorioDeSalas {
     @Override
     @Transactional
     public Sala guardar(Sala sala) {
-        datos.save(SalaEntidad.desde(sala));
+        try {
+            // saveAndFlush y no save: el UPDATE con `WHERE version = ?` tiene
+            // que ejecutarse DENTRO de este metodo, no al confirmar la
+            // transaccion despues de salir, para que el conflicto se pueda
+            // traducir aqui y no escape como excepcion de infraestructura.
+            datos.saveAndFlush(SalaEntidad.desde(sala));
+        } catch (OptimisticLockingFailureException | jakarta.persistence.OptimisticLockException otroSeAdelanto) {
+            throw new SalaModificadaConcurrentemente(sala.id());
+        }
         return sala;
     }
 

@@ -13,6 +13,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 import java.time.Instant;
 import java.util.LinkedHashSet;
@@ -95,6 +96,17 @@ class SalaEntidad {
     @Column(name = "creada_en", nullable = false)
     private Instant creadaEn;
 
+    /**
+     * Bloqueo optimista — HU-SAL-002. Hibernate anade {@code AND version = ?}
+     * a cada UPDATE y lanza {@code OptimisticLockException} si otra escritura
+     * se adelanto. Primitivo a proposito: con un {@code Long} nulo Spring Data
+     * decidiria «es nueva» por la version y no por el identificador, que aqui
+     * se asigna en el dominio.
+     */
+    @Version
+    @Column(nullable = false)
+    private long version;
+
     /** Exigido por JPA. No usar desde el codigo. */
     protected SalaEntidad() {
     }
@@ -115,6 +127,9 @@ class SalaEntidad {
         // forma de que la columna no pueda contradecir a las identidades.
         entidad.ocupacion = (short) entidad.participantes.size();
         entidad.creadaEn = sala.creadaEn();
+        // La version que el dominio leyo: es lo que permite detectar que otro
+        // ingreso se guardo entre la lectura y esta escritura.
+        entidad.version = sala.version();
         return entidad;
     }
 
@@ -130,6 +145,7 @@ class SalaEntidad {
                 tamanoEquipo == null ? null : tamanoEquipo.intValue(),
                 idAnfitrion,
                 participantes,
-                creadaEn);
+                creadaEn,
+                version);
     }
 }
