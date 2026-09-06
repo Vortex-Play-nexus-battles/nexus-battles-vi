@@ -44,7 +44,7 @@ servicios y datos, en `.claude/rules/backend-spring.md`; frontend, paleta y tipo
 - **Frontend:** HTML5 + CSS3 + JavaScript ES2022 sin framework, servido por Spring Boot como estático
 - **Datos:** PostgreSQL 17 (relacional), MongoDB 8 (documental), Redis 8 (caché/estado)
 - **Identidad:** Keycloak 26 · **Mensajería:** RabbitMQ 4 · **Tiempo real:** WebSocket + STOMP
-- **Infra:** Docker, k3s, OpenTofu, Azure for Students
+- **Infra:** Docker, k3s, OpenTofu, **AWS** (cuenta normal con el plan gratuito, no AWS Academy)
 - **Calidad:** JUnit5/JaCoCo (80% mínimo), Testcontainers, Pact JVM, ArchUnit, Playwright, k6,
   SonarQube Cloud, GitHub Actions, Conventional Commits
 
@@ -162,8 +162,15 @@ como un solo módulo (M15) bajo Santiago Anaya, pero la asignación real de Spri
 HU-NOT-006 con Alexander Niño. No se resolvió esa diferencia aquí — validarlo en la próxima reunión
 de equipo y actualizar esta tabla según lo que se acuerde.
 
-**Bloqueadores activos:** RF-ADM-003 (sin asignar) bloquea RF-NOT-002 · RF-PRV-003 (fuera de
-alcance del grupo) bloquea RF-COR-004.
+**Bloqueadores activos:** RF-ADM-003 bloquea RF-NOT-002 · RF-PRV-003 bloquea RF-COR-004.
+Ninguno de los dos está sin dueño — los dos son de otro grupo, que es distinto:
+
+- **RF-ADM-003 «Gestión de anuncios y banners» es del Grupo 2** (Thomas), no está sin asignar.
+  Consta en `REQUISITOS GRUPO 2 EMPRESA A.docx` entre sus 57 requisitos propios. Su SRS no
+  asigna sprint, así que la fecha en que se desbloquee RF-NOT-002 depende de la planificación
+  del Grupo 2, no de una reasignación. Coordinar con Thomas, no reclamar el requisito.
+- **RF-PRV-003 «Consentimiento explícito para el tratamiento de datos» es del Grupo de Santiago**,
+  con `Sprint objetivo: Sprint 3` en su SRS. RF-COR-004 no se puede cerrar antes de ese sprint.
 
 ## Diagramas UML y diseño
 
@@ -192,5 +199,6 @@ wrappers de Gradle._
 - No modificar carpetas/servicios de otro integrante o de otro grupo sin coordinarlo primero.
 - No fusionar un cambio a un contrato ajeno sin aprobación de su dueño.
 - No inventar requisitos que no estén en un issue de GitHub o en `REQUISITOS_GRUPO_6_EMPRESA_A.pdf`.
-- No commitear `.env`, credenciales de Keycloak, Azure ni Brevo.
+- No commitear `.env`, credenciales de Keycloak, AWS ni Brevo. Las claves de AWS nunca van al
+  repositorio: en local por variable de entorno, en CI por secreto de GitHub Actions.
 - No reordenar la prioridad del Sprint 1 sin reflejarlo también en Jira y en GitHub.

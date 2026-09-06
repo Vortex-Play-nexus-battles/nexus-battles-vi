@@ -1,0 +1,45 @@
+# HU-CICD-002 (SCRUM-165): override de despliegue para services/cuentas/ms-cumplimiento.
+#
+# Mismo patron que docker-compose.cuentas.yml (ms-identidad, tambien de
+# Cuentas): solo declara "image:", nunca "build:" -- el jar se compila y la
+# imagen se publica en ghcr.io en el job "construir-y-publicar" de cd.yml,
+# nunca en el servidor. Se combina siempre con docker-compose.yml (nunca
+# solo), y SOLO cuando ms-cumplimiento esta entre los servicios modificados
+# de esa corrida:
+#   docker compose -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.ms-cumplimiento.yml pull|up -d
+#
+# Archivo separado de docker-compose.cuentas.yml (no se agrega ahi) por la
+# misma razon que ese archivo esta separado de docker-compose.deploy.yml:
+# cada servicio de otro equipo mantiene su propio override, para que quede
+# claro quien es dueño de que.
+#
+# Puerto: 8091 tanto en el host como en el contenedor (confirmado en el
+# Dockerfile de ms-cumplimiento: EXPOSE 8091, sin el desfase host/contenedor
+# que tuvo ms-identidad).
+#
+# ${TAG} lo exporta scripts/cd/desplegar.sh antes de invocar "docker compose"
+# (mismo sha corto de esta corrida que usan las demas imagenes).
+#
+# Variables de entorno: el lado IZQUIERDO de cada linea es el nombre que
+# Spring realmente lee (confirmado en application.properties de
+# ms-cumplimiento: ${DB_HOST}, ${DB_PORT}, ${DB_NAME}, ${DB_USER},
+# ${DB_PASSWORD}). El lado DERECHO (${MS_CUMPLIMIENTO_...}) es la variable
+# que desplegar.sh deja en el .env del servidor -- con el prefijo
+# "MS_CUMPLIMIENTO_" a proposito, para no chocar ni con las variables de
+# plataforma (DB_USER/DB_PASS, que usa plataforma-db) ni con las de
+# ms-identidad (que usa otro esquema: DB_URL en vez de DB_HOST/PORT/NAME).
+#
+# Todas las variables quedan PENDIENTES por ahora (ver los secrets TODO_*
+# en cd.yml, mismo patron de placeholder que ms-identidad).
+
+services:
+  srv-ms-cumplimiento:
+    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-ms-cumplimiento:${TAG}
+    ports:
+      - "8091:8091"
+    environment:
+      DB_HOST: ${MS_CUMPLIMIENTO_DB_HOST}
+      DB_PORT: ${MS_CUMPLIMIENTO_DB_PORT}
+      DB_NAME: ${MS_CUMPLIMIENTO_DB_NAME}
+      DB_USER: ${MS_CUMPLIMIENTO_DB_USER}
+      DB_PASSWORD: ${MS_CUMPLIMIENTO_DB_PASSWORD}

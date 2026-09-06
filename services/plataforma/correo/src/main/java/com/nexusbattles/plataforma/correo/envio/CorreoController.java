@@ -53,4 +53,19 @@ public class CorreoController {
                         "ip", solicitud.ip(),
                         "fechaHora", solicitud.fechaHoraLegible()));
     }
+
+    @PostMapping("/recuperacion-clave")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void enviarRecuperacionClave(@Valid @RequestBody CorreoRecuperacionClaveRequest solicitud) {
+        // El codigo no se registra en bitacora en ningun punto: un OTP en los
+        // logs es un OTP filtrado.
+        enviador.enviar(
+                solicitud.email(),
+                "Recupera tu contraseña de The Nexus Battles VI",
+                "email/recuperacion-clave",
+                Map.of(
+                        "apodo", solicitud.apodo(),
+                        "codigo", solicitud.codigo(),
+                        "minutosVigencia", solicitud.minutosVigencia()));
+    }
 }

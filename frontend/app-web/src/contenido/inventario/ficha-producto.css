@@ -1,8 +1,7 @@
 /*
  * HU-INV-007 - Ficha de detalle del producto.
  *
- * Usa las mismas variables de tema que la vitrina; cuando entre la paleta de
- * la propuesta de diseno, cambian las dos en un solo sitio.
+ * Usa las mismas variables de tema que la vitrina (definidas en vitrina.css).
  */
 
 .ficha-capa {
@@ -22,10 +21,10 @@
   max-height: 100%;
   padding: 24px;
   overflow-y: auto;
-  border: 1px solid var(--color-borde);
+  border: 1px solid var(--borde);
   border-radius: 12px;
-  background: var(--color-superficie);
-  color: var(--color-texto);
+  background: var(--superficie);
+  color: var(--texto);
 }
 
 .ficha__cerrar {
@@ -35,10 +34,10 @@
   z-index: 11;
   width: 32px;
   height: 32px;
-  border: 1px solid var(--color-borde);
+  border: 1px solid var(--borde);
   border-radius: 8px;
-  background: var(--color-superficie-baja);
-  color: var(--color-texto);
+  background: var(--fondo);
+  color: var(--texto);
   font-size: 1.1rem;
   line-height: 1;
   cursor: pointer;
@@ -46,7 +45,7 @@
 
 /* El foco tiene que verse siempre: RNF-ACC-002. */
 .ficha-capa :focus-visible {
-  outline: 2px solid var(--color-texto);
+  outline: 2px solid var(--texto);
   outline-offset: 2px;
 }
 
@@ -73,7 +72,7 @@
   font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--color-texto-tenue);
+  color: var(--texto-2);
 }
 
 .ficha__descripcion {
@@ -93,12 +92,12 @@
   justify-content: space-between;
   gap: 16px;
   padding: 8px 0;
-  border-bottom: 1px solid var(--color-borde);
+  border-bottom: 1px solid var(--borde);
 }
 
 .ficha__etiqueta {
   font-size: 0.85rem;
-  color: var(--color-texto-tenue);
+  color: var(--texto-2);
 }
 
 .ficha__valor {
@@ -112,7 +111,7 @@
 .ficha__tiraje {
   margin: 0;
   font-size: 0.8rem;
-  color: var(--color-texto-tenue);
+  color: var(--texto-2);
 }
 
 /* En pantallas estrechas la ficha ocupa todo el alto disponible. */
@@ -128,4 +127,18 @@
     border: none;
     border-radius: 0;
   }
+}
+
+/*
+ * RN-27: producto suspendido. Es informacion, no un error — el producto sigue
+ * siendo del jugador. Por eso usa el tono de advertencia y no el de error.
+ */
+.ficha__no-disponible {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #fbeedd;
+  color: var(--advertencia, #8a4a00);
+  font-size: 0.85rem;
+  line-height: 1.4;
 }

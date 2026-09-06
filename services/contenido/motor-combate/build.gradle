@@ -1,27 +1,19 @@
-// OJO: este modulo NO aplica 'nexus.spring-conventions' a proposito.
+// motor-combate aplica 'nexus.spring-conventions' desde que @SimonP0607
+// confirmo, el 2026-09-01, que es un microservicio desplegable y no una
+// biblioteca: 'shared/libs/' es la unica excepcion al modelo de un despliegue
+// por modulo y prohibe logica de negocio, asi que un motor de combate no cabe
+// ahi.
 //
-// motor-combate es logica de dominio pura (Java y JUnit, sin Spring). Si se le
-// aplican las convenciones de Spring, Gradle le anade la tarea bootJar y el
-// build falla con "Main class name has not been configured" porque no hay
-// ninguna clase @SpringBootApplication. Cuando el motor necesite arrancar como
-// servicio, se cambia este archivo por el plugin de convenciones.
+// El dominio sigue siendo Java puro. Spring vive unicamente en el paquete
+// 'nexus.combate.arranque', que no escanea el dominio: las clases de reglas no
+// saben que Spring existe y se pueden probar sin levantar contexto.
 
 plugins {
-    id 'java'
-    id 'jacoco'
+    id 'nexus.spring-conventions'
 }
 
 group = 'nexus'
 version = '0.0.1-SNAPSHOT'
-
-java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
-}
-
-tasks.withType(JavaCompile).configureEach {
-    options.release = 21
-}
 
 repositories {
     mavenCentral()
@@ -42,11 +34,11 @@ dependencies {
     testImplementation platform('org.testcontainers:testcontainers-bom:1.20.4')
     testImplementation 'org.testcontainers:testcontainers'
     testImplementation 'org.testcontainers:junit-jupiter'
-
-    // Binding real de SLF4J solo para test: sin esto Testcontainers registra
-    // "NOP logger" y los WARN de deteccion de Docker (que estrategia probo,
-    // por que fallo) nunca se imprimen, ni con --info.
-    testRuntimeOnly 'org.slf4j:slf4j-simple:2.0.16'
+    // NO se anade un binding de SLF4J aqui. Spring Boot trae Logback, y un
+    // segundo binding (slf4j-simple) hace fallar el arranque con "LoggerFactory
+    // is not a Logback LoggerContext". Los avisos de deteccion de Docker que
+    // buscaba HU-JUE-003 siguen viendose: se piden por nivel de registro en
+    // src/test/resources/logback-test.xml, que es la forma correcta con Boot.
 }
 
 tasks.named('test') {
@@ -86,6 +78,27 @@ jacocoTestCoverageVerification {
     }
 }
 
+// Las convenciones declaran la regla de cobertura pero **no** la enganchan a
+// 'check', para no dejar en rojo a los modulos que aun son andamiaje. Este si
+// tiene pruebas de verdad, asi que conserva su compuerta.
 tasks.named('check') {
     dependsOn jacocoTestCoverageVerification
+}
+
+// La clase de arranque no lleva logica: se excluye del computo para que la
+// compuerta mida el dominio, que es lo que importa.
+jacocoTestReport {
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: 'nexus/combate/arranque/**')
+        }))
+    }
+}
+
+jacocoTestCoverageVerification {
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: 'nexus/combate/arranque/**')
+        }))
+    }
 }

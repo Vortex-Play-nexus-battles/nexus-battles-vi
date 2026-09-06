@@ -1,12 +1,10 @@
 /*
  * HU-INV-004 - Barra superior de navegacion.
  *
- * Usa las mismas variables de tema que la vitrina. Cuando la propuesta de
- * diseno entre al repositorio, ambas cambian en un solo sitio.
- *
- * En anchos pequenos los accesos se envuelven en varias filas en vez de
- * salirse: la barra no puede ser la que introduzca el desplazamiento
- * horizontal que HU-INV-001 prohibe.
+ * Vive sobre --cromo (fondo oscuro) segun el sistema de diseno. El resto de
+ * la pagina usa el tema claro. En anchos pequenos los accesos se envuelven
+ * en varias filas en vez de salirse: la barra no puede ser la que introduzca
+ * el desplazamiento horizontal que HU-INV-001 prohibe.
  */
 
 .barra {
@@ -14,9 +12,11 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 12px 20px;
-  margin-bottom: 20px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--color-borde);
+  padding: 8px 16px;
+  background: var(--cromo);
+  color: var(--texto-sobre-color);
+  border-radius: var(--radio);
+  margin-bottom: 12px;
 }
 
 .barra__busqueda {
@@ -29,10 +29,10 @@
   box-sizing: border-box;
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid var(--color-borde);
-  border-radius: 8px;
-  background: var(--color-superficie-baja);
-  color: var(--color-texto);
+  border: 1px solid rgb(255 255 255 / 20%);
+  border-radius: var(--radio);
+  background: rgb(255 255 255 / 10%);
+  color: var(--texto-sobre-color);
   font: inherit;
   font-size: 0.9rem;
 }
@@ -50,24 +50,23 @@
 .barra__acceso {
   padding: 8px 12px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radio);
   background: none;
-  color: var(--color-texto-tenue);
+  color: rgb(255 255 255 / 70%);
   font-family: var(--tipografia-titulo);
-  /* No baja de aqui: la legibilidad la mide HU-INV-001. */
   font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
 }
 
 .barra__acceso:hover {
-  color: var(--color-texto);
+  color: var(--texto-sobre-color);
 }
 
 .barra__acceso--activo {
-  border-color: var(--color-borde);
-  background: var(--color-superficie);
-  color: var(--color-texto);
+  border-color: rgb(255 255 255 / 20%);
+  background: rgb(255 255 255 / 12%);
+  color: var(--texto-sobre-color);
 }
 
 .barra__panel-cuenta {
@@ -77,9 +76,9 @@
   order: 3;
   width: 100%;
   padding: 10px;
-  border: 1px solid var(--color-borde);
-  border-radius: 8px;
-  background: var(--color-superficie);
+  border: 1px solid rgb(255 255 255 / 20%);
+  border-radius: var(--radio);
+  background: rgb(255 255 255 / 10%);
 }
 
 .barra__panel-cuenta[hidden] {
@@ -91,7 +90,7 @@
   border: none;
   border-radius: 6px;
   background: none;
-  color: var(--color-texto);
+  color: var(--texto-sobre-color);
   font: inherit;
   font-size: 0.9rem;
   text-align: left;
@@ -99,5 +98,5 @@
 }
 
 .barra__opcion-cuenta:hover {
-  background: var(--color-superficie-baja);
+  background: rgb(255 255 255 / 12%);
 }

@@ -2,46 +2,134 @@ import {
 setCurrentRole,
 getCurrentRole,
 checkPermission,
-applyHasPermissionDirective
+setPermissionMatrix
 } from './directives/has-permission.directive.js';
 
 import {
 fetchWithHttpErrorInterceptor
 } from '../comun/interceptors/http-error.interceptor.js';
+import { construirBarra } from '../comun/barra-navegacion.js';
+import { cambiarRol, ROLES_DISPONIBLES } from './cambio-rol.js';
+
 
 const BASE_API = '/api/admin/usuarios';
+const MATRIZ_RBAC_API = '/api/v1/rbac/matrix';
 
 const CLAVE_ROL = 'nexus.rolActual';
 const CLAVE_USUARIO_ID = 'nexus.usuarioId';
+const CLAVE_TOKEN = 'nexus.token';
 
 const PERMISO_GESTIONAR = 'GESTIONAR_CUENTAS';
 const PERMISO_SUSPENDER = 'SUSPENDER_USUARIOS';
 const PERMISO_BANEAR = 'BANEAR_DEFINITIVAMENTE';
+const PERMISO_ASIGNAR_ROL = 'ASIGNAR_ROL';
 
 let usuarioSeleccionado = null;
 
 document.addEventListener('DOMContentLoaded', iniciar);
 
-function iniciar() {
 
-```
+function montarBarraNavegacion() {
+    const rolActual = sessionStorage.getItem(CLAVE_ROL);
+    const barra = construirBarra({
+        seccionActiva: 'cuenta',
+        sesion: { autenticado: !!rolActual },
+        navegar: (ruta) => { location.href = ruta; }
+    });
+    document.body.prepend(barra);
+}
+
+function montarMenuAdmin() {
+    const rolActual = sessionStorage.getItem(CLAVE_ROL);
+    const rolesConAcceso = ['ADMINISTRADOR', 'SUPER_ADMINISTRADOR'];
+
+    if (!rolesConAcceso.includes(rolActual)) {
+        return;
+    }
+
+    const menu = document.createElement('div');
+    menu.className = 'menu-admin';
+
+    const enlaceCrear = document.createElement('a');
+    enlaceCrear.href = './crear-cuenta-admin.html';
+    enlaceCrear.textContent = 'Crear cuenta admin';
+    if (rolActual !== 'SUPER_ADMINISTRADOR') {
+        enlaceCrear.style.display = 'none';
+    }
+
+    const enlaceGestion = document.createElement('a');
+    enlaceGestion.href = './gestion-usuarios.html';
+    enlaceGestion.textContent = 'Gestion de usuarios';
+
+    menu.append(enlaceCrear, enlaceGestion);
+    document.body.insertBefore(menu, document.body.children[1]);
+}
+
+async function iniciar() {
+
+montarBarraNavegacion();
+
+montarMenuAdmin();
+
 const rolActual =
     sessionStorage.getItem(CLAVE_ROL) || 'JUGADOR';
 
 setCurrentRole(rolActual);
 
-applyHasPermissionDirective();
+configurarSelectorRoles();
 
 configurarEventos();
 
+await cargarMatrizYVerificarAcceso();
+
+}
+
+export async function cargarMatrizYVerificarAcceso({
+fetchImpl = fetchWithHttpErrorInterceptor
+} = {}) {
+
+const token = sessionStorage.getItem(CLAVE_TOKEN);
+const headers = token
+    ? { Authorization: `Bearer ${token}` }
+    : {};
+
+try {
+
+    const respuesta = await fetchImpl(
+        MATRIZ_RBAC_API,
+        { headers }
+    );
+
+    if (!respuesta.ok) {
+        throw new Error(`Error HTTP ${respuesta.status}`);
+    }
+
+    const payload = await respuesta.json();
+    const matriz = payload?.matrix;
+
+    if (
+        !matriz ||
+        typeof matriz !== 'object' ||
+        Object.keys(matriz).length === 0
+    ) {
+        throw new Error('La matriz RBAC recibida no es válida.');
+    }
+
+    setPermissionMatrix(matriz);
+
+} catch (error) {
+
+    console.error('No fue posible cargar la matriz RBAC:', error);
+    setPermissionMatrix({});
+
+}
+
 verificarAcceso();
-```
 
 }
 
 function configurarEventos() {
 
-```
 const formularioBusqueda =
     document.getElementById('form-buscar-usuario');
 
@@ -65,6 +153,9 @@ const btnBanear =
 
 const btnRestablecerPassword =
     document.getElementById('btn-restablecer-password');
+
+const btnCambiarRol =
+    document.getElementById('btn-cambiar-rol');
 
 
 if (formularioBusqueda) {
@@ -145,13 +236,44 @@ if (btnRestablecerPassword) {
     );
 
 }
-```
+
+
+if (btnCambiarRol) {
+
+    btnCambiarRol.addEventListener(
+        'click',
+        cambiarRolUsuarioSeleccionado
+    );
+
+}
+
+}
+
+function configurarSelectorRoles() {
+
+const selector =
+    document.getElementById('nuevo-rol');
+
+if (!selector) {
+    return;
+}
+
+
+selector.replaceChildren();
+
+for (const rol of ROLES_DISPONIBLES) {
+
+    const opcion = document.createElement('option');
+    opcion.value = rol;
+    opcion.textContent = rol;
+    selector.append(opcion);
+
+}
 
 }
 
 function verificarAcceso() {
 
-```
 const contenedor =
     document.getElementById('gestion-contenedor');
 
@@ -165,7 +287,7 @@ if (!contenedor || !accesoDenegado) {
 
 
 const tienePermiso =
-    checkPermission(PERMISO_GESTIONAR);
+    checkPermission(getCurrentRole(), PERMISO_GESTIONAR);
 
 
 if (!tienePermiso) {
@@ -181,13 +303,11 @@ if (!tienePermiso) {
 contenedor.hidden = false;
 
 accesoDenegado.hidden = true;
-```
 
 }
 
 async function buscarUsuario(evento) {
 
-```
 evento.preventDefault();
 
 
@@ -245,13 +365,11 @@ limpiarDatosUsuario();
 mostrarMensajeBusqueda(
     'Usuario seleccionado. La consulta de sus datos quedará conectada cuando el backend exponga el endpoint administrativo de consulta.'
 );
-```
 
 }
 
 function mostrarPanelUsuario() {
 
-```
 const panel =
     document.getElementById('panel-usuario');
 
@@ -261,13 +379,11 @@ if (!panel) {
 
 
 panel.hidden = false;
-```
 
 }
 
 function limpiarDatosUsuario() {
 
-```
 establecerTexto(
     'usuario-id-mostrado',
     usuarioSeleccionado?.id ?? '-'
@@ -302,13 +418,88 @@ establecerValor('biografia', '');
 establecerValor('preferencias', '');
 establecerValor('estado', 'ACTIVO');
 establecerValor('suspendido-hasta', '');
-```
+establecerValor('nuevo-rol', ROLES_DISPONIBLES[0]);
+limpiarMensajeCambioRol();
+
+}
+
+async function cambiarRolUsuarioSeleccionado() {
+
+limpiarMensajeCambioRol();
+
+
+if (!validarUsuarioSeleccionado()) {
+
+    mostrarMensajeCambioRol(
+        'Primero debes seleccionar un usuario.'
+    );
+
+    return;
+}
+
+
+if (!checkPermission(getCurrentRole(), PERMISO_ASIGNAR_ROL)) {
+
+    mostrarMensajeCambioRol(
+        'No tienes permiso para cambiar roles.'
+    );
+
+    return;
+}
+
+
+const nuevoRol = obtenerValor('nuevo-rol');
+const boton = document.getElementById('btn-cambiar-rol');
+
+cambiarEstadoBoton(
+    boton,
+    true,
+    'Cambiando rol...'
+);
+
+
+try {
+
+    await cambiarRol(
+        usuarioSeleccionado.id,
+        nuevoRol
+    );
+
+    establecerTexto(
+        'usuario-rol-mostrado',
+        nuevoRol
+    );
+
+    mostrarMensajeCambioRol(
+        `Rol actualizado correctamente a ${nuevoRol}.`
+    );
+
+} catch (error) {
+
+    console.error(
+        'Error cambiando rol:',
+        error
+    );
+
+    mostrarMensajeCambioRol(
+        error.message ||
+        'No fue posible cambiar el rol del usuario.'
+    );
+
+} finally {
+
+    cambiarEstadoBoton(
+        boton,
+        false,
+        'Cambiar rol'
+    );
+
+}
 
 }
 
 async function guardarPerfil(evento) {
 
-```
 evento.preventDefault();
 
 
@@ -317,7 +508,7 @@ if (!validarUsuarioSeleccionado()) {
 }
 
 
-if (!checkPermission(PERMISO_GESTIONAR)) {
+if (!checkPermission(getCurrentRole(), PERMISO_GESTIONAR)) {
 
     mostrarMensajePerfil(
         'No tienes permisos para modificar cuentas.'
@@ -462,19 +653,17 @@ try {
     );
 
 }
-```
 
 }
 
 async function suspenderUsuario() {
 
-```
 if (!validarUsuarioSeleccionado()) {
     return;
 }
 
 
-if (!checkPermission(PERMISO_SUSPENDER)) {
+if (!checkPermission(getCurrentRole(), PERMISO_SUSPENDER)) {
 
     mostrarMensajePerfil(
         'No tienes permisos para suspender usuarios.'
@@ -514,19 +703,17 @@ await ejecutarAccionEstado(
     'SUSPENDIDO',
     'Cuenta suspendida correctamente.'
 );
-```
 
 }
 
 async function reactivarUsuario() {
 
-```
 if (!validarUsuarioSeleccionado()) {
     return;
 }
 
 
-if (!checkPermission(PERMISO_SUSPENDER)) {
+if (!checkPermission(getCurrentRole(), PERMISO_SUSPENDER)) {
 
     mostrarMensajePerfil(
         'No tienes permisos para reactivar usuarios.'
@@ -552,19 +739,17 @@ await ejecutarAccionEstado(
     'ACTIVO',
     'Cuenta reactivada correctamente.'
 );
-```
 
 }
 
 async function banearUsuario() {
 
-```
 if (!validarUsuarioSeleccionado()) {
     return;
 }
 
 
-if (!checkPermission(PERMISO_BANEAR)) {
+if (!checkPermission(getCurrentRole(), PERMISO_BANEAR)) {
 
     mostrarMensajePerfil(
         'No tienes permisos para banear definitivamente a este usuario.'
@@ -590,7 +775,6 @@ await ejecutarAccionEstado(
     'BANEADO',
     'Cuenta baneada definitivamente.'
 );
-```
 
 }
 
@@ -600,7 +784,6 @@ estado,
 mensajeExito
 ) {
 
-```
 try {
 
     const respuesta =
@@ -651,19 +834,17 @@ try {
     );
 
 }
-```
 
 }
 
 async function restablecerPassword() {
 
-```
 if (!validarUsuarioSeleccionado()) {
     return;
 }
 
 
-if (!checkPermission(PERMISO_GESTIONAR)) {
+if (!checkPermission(getCurrentRole(), PERMISO_GESTIONAR)) {
 
     mostrarMensajePerfil(
         'No tienes permisos para restablecer contraseñas.'
@@ -722,13 +903,11 @@ try {
     );
 
 }
-```
 
 }
 
 function validarUsuarioSeleccionado() {
 
-```
 if (!usuarioSeleccionado?.id) {
 
     mostrarMensajePerfil(
@@ -740,13 +919,11 @@ if (!usuarioSeleccionado?.id) {
 
 
 return true;
-```
 
 }
 
 function actualizarResumenUsuario(datos) {
 
-```
 if (datos.apodo !== undefined) {
 
     establecerTexto(
@@ -765,46 +942,39 @@ if (datos.avatar !== undefined) {
     );
 
 }
-```
 
 }
 
 function obtenerValor(id) {
 
-```
 const elemento =
     document.getElementById(id);
 
 return elemento
     ? elemento.value.trim()
     : '';
-```
 
 }
 
 function establecerValor(id, valor) {
 
-```
 const elemento =
     document.getElementById(id);
 
 if (elemento) {
     elemento.value = valor ?? '';
 }
-```
 
 }
 
 function establecerTexto(id, texto) {
 
-```
 const elemento =
     document.getElementById(id);
 
 if (elemento) {
     elemento.textContent = String(texto ?? '-');
 }
-```
 
 }
 
@@ -814,7 +984,6 @@ deshabilitado,
 texto
 ) {
 
-```
 if (!boton) {
     return;
 }
@@ -823,13 +992,11 @@ if (!boton) {
 boton.disabled = deshabilitado;
 
 boton.textContent = texto;
-```
 
 }
 
 function mostrarMensajeBusqueda(mensaje) {
 
-```
 const elemento =
     document.getElementById('mensaje-busqueda');
 
@@ -841,13 +1008,11 @@ if (!elemento) {
 elemento.textContent = mensaje;
 
 elemento.hidden = false;
-```
 
 }
 
 function limpiarMensajeBusqueda() {
 
-```
 const elemento =
     document.getElementById('mensaje-busqueda');
 
@@ -859,13 +1024,11 @@ if (!elemento) {
 elemento.textContent = '';
 
 elemento.hidden = true;
-```
 
 }
 
 function mostrarMensajePerfil(mensaje) {
 
-```
 const elemento =
     document.getElementById('mensaje-perfil');
 
@@ -877,13 +1040,41 @@ if (!elemento) {
 elemento.textContent = mensaje;
 
 elemento.hidden = false;
-```
+
+}
+
+function mostrarMensajeCambioRol(mensaje) {
+
+const elemento =
+    document.getElementById('mensaje-cambio-rol');
+
+if (!elemento) {
+    return;
+}
+
+
+elemento.textContent = mensaje;
+elemento.hidden = false;
+
+}
+
+function limpiarMensajeCambioRol() {
+
+const elemento =
+    document.getElementById('mensaje-cambio-rol');
+
+if (!elemento) {
+    return;
+}
+
+
+elemento.textContent = '';
+elemento.hidden = true;
 
 }
 
 async function obtenerMensajeError(respuesta) {
 
-```
 try {
 
     const datos =
@@ -921,14 +1112,11 @@ try {
     return `Error HTTP ${respuesta.status}`;
 
 }
-```
 
 }
 
 function volverInicio() {
 
-```
 window.location.href = '../index.html';
-```
 
 }

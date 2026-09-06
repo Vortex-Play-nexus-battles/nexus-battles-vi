@@ -4,7 +4,6 @@ import com.nexusbattles.ms_identidad.auditoria.client.AuditoriaClient;
 import com.nexusbattles.ms_identidad.auth.service.AuthAdminService;
 import com.nexusbattles.ms_identidad.perfiles.model.PerfilUsuario;
 import com.nexusbattles.ms_identidad.perfiles.service.PerfilUsuarioService;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -34,6 +33,7 @@ class AdminGestionUsuarioServiceTest {
 
     private static final Long USUARIO_ID = 1L;
     private static final String ADMINISTRADOR_ID = "admin";
+    private static final String IP_ORIGEN = "127.0.0.1";
 
     @Test
     void debeEditarPerfilDeUsuario() {
@@ -57,7 +57,8 @@ class AdminGestionUsuarioServiceTest {
             "Biografía",
             "preferencias",
             "Santi",
-            ADMINISTRADOR_ID
+            ADMINISTRADOR_ID,
+            IP_ORIGEN
         );
 
         assertEquals(perfil, resultado);
@@ -78,7 +79,8 @@ class AdminGestionUsuarioServiceTest {
             "1",
             null,
             "nombres=Santiago, apellidos=Sanabria",
-            "Edición administrativa de perfil"
+            "Edición administrativa de perfil",
+            IP_ORIGEN
         );
     }
 
@@ -92,7 +94,8 @@ class AdminGestionUsuarioServiceTest {
         service.suspenderCuenta(
             USUARIO_ID,
             fecha,
-            ADMINISTRADOR_ID
+            ADMINISTRADOR_ID,
+            IP_ORIGEN
         );
 
         verify(authAdminService).actualizarEstadoCuenta(
@@ -107,7 +110,8 @@ class AdminGestionUsuarioServiceTest {
             "1",
             "ACTIVO",
             "SUSPENDIDA hasta " + fecha,
-            "Suspensión de cuenta"
+            "Suspensión de cuenta",
+            IP_ORIGEN
         );
     }
 
@@ -118,7 +122,8 @@ class AdminGestionUsuarioServiceTest {
 
         service.banearCuenta(
             USUARIO_ID,
-            ADMINISTRADOR_ID
+            ADMINISTRADOR_ID,
+            IP_ORIGEN
         );
 
         verify(authAdminService).actualizarEstadoCuenta(
@@ -133,7 +138,8 @@ class AdminGestionUsuarioServiceTest {
             "1",
             "ACTIVO",
             "BANEADA",
-            "Baneo definitivo de cuenta"
+            "Baneo definitivo de cuenta",
+            IP_ORIGEN
         );
     }
 
@@ -144,7 +150,8 @@ class AdminGestionUsuarioServiceTest {
 
         service.reactivarCuenta(
             USUARIO_ID,
-            ADMINISTRADOR_ID
+            ADMINISTRADOR_ID,
+            IP_ORIGEN
         );
 
         verify(authAdminService).actualizarEstadoCuenta(
@@ -159,7 +166,8 @@ class AdminGestionUsuarioServiceTest {
             "1",
             "SUSPENDIDA",
             "ACTIVO",
-            "Reactivación de cuenta"
+            "Reactivación de cuenta",
+            IP_ORIGEN
         );
     }
 
@@ -172,7 +180,8 @@ class AdminGestionUsuarioServiceTest {
             IllegalArgumentException.class,
             () -> service.reactivarCuenta(
                 USUARIO_ID,
-                ADMINISTRADOR_ID
+                ADMINISTRADOR_ID,
+                IP_ORIGEN
             )
         );
 
@@ -191,7 +200,8 @@ class AdminGestionUsuarioServiceTest {
     void debeRestablecerPassword() {
         service.restablecerPassword(
             USUARIO_ID,
-            ADMINISTRADOR_ID
+            ADMINISTRADOR_ID,
+            IP_ORIGEN
         );
 
         verify(authAdminService)
@@ -203,8 +213,8 @@ class AdminGestionUsuarioServiceTest {
             "1",
             null,
             null,
-            "Restablecimiento de contraseña (token de un solo uso generado)"
+            "Restablecimiento de contraseña (token de un solo uso generado)",
+            IP_ORIGEN
         );
     }
 }
-

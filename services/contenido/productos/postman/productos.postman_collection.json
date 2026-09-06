@@ -1,0 +1,118 @@
+{
+  "info": {
+    "name": "Servicio de productos - HU-PRD-002 (tiraje)",
+    "_postman_id": "3b8a9e11-productos-prd-002",
+    "description": "Validacion contra el servicio en ejecucion de lo que HU-PRD-002 expone por API: el registro del tiraje al crear un producto (-1 = ilimitado; N > 0 = unidades exactas; 0 y negativos distintos de -1 se rechazan). La adquisicion, el agotamiento y la concurrencia de la ultima unidad NO tienen endpoint todavia, asi que no se prueban aqui. HU-PRD-004 (suspension y reactivacion) tampoco expone endpoint. La creacion exige un token Bearer con rol ADMINISTRADOR o SUPER_ADMINISTRADOR: ponerlo en la variable de entorno token.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Salud del servicio (publica)",
+      "request": { "method": "GET", "url": "{{baseUrl}}/actuator/health" },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('responde 200', () => pm.response.to.have.status(200));",
+        "pm.test('estado UP', () => pm.expect(pm.response.json().status).to.eql('UP'));"
+      ] } }]
+    },
+    {
+      "name": "Crear sin token se rechaza (401)",
+      "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/v1/productos",
+        "body": { "mode": "raw", "raw": "{\"nombre\":\"Espada corta\",\"imagen\":\"espada.png\",\"descripcion\":\"Arma basica\",\"tipo\":\"ARMA\",\"tiraje\":-1,\"premium\":false,\"precioCreditos\":100,\"poderDeAtaque\":3,\"tasaDeCaida\":2}" } },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('responde 401', () => pm.response.to.have.status(401));",
+        "pm.test('formato de error estandar', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'));",
+        "pm.test('titulo No autenticado', () => pm.expect(pm.response.json().title).to.eql('No autenticado'));"
+      ] } }]
+    },
+    {
+      "name": "Tiraje -1: disponibilidad ilimitada (201)",
+      "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{baseUrl}}/api/v1/productos",
+        "body": { "mode": "raw", "raw": "{\"nombre\":\"Espada corta\",\"imagen\":\"espada.png\",\"descripcion\":\"Arma basica\",\"tipo\":\"ARMA\",\"tiraje\":-1,\"premium\":false,\"precioCreditos\":100,\"poderDeAtaque\":3,\"tasaDeCaida\":2}" } },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "const p = pm.response.json();",
+        "pm.test('responde 201', () => pm.response.to.have.status(201));",
+        "pm.test('tiraje -1 registrado como ilimitado', () => pm.expect(p.tiraje).to.eql(-1));",
+        "pm.test('estado inicial ACTIVO, version 1, id UUID', () => {",
+        "  pm.expect(p.estado).to.eql('ACTIVO'); pm.expect(p.version).to.eql(1);",
+        "  pm.expect(p.id).to.match(/^[0-9a-f-]{36}$/);",
+        "});",
+        "pm.test('Location apunta al producto', () => pm.expect(pm.response.headers.get('Location')).to.include('/api/v1/productos/' + p.id));",
+        "pm.collectionVariables.set('productoIlimitado', p.id);"
+      ] } }]
+    },
+    {
+      "name": "Consulta publica del producto creado (200, sin token)",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/productos/{{productoIlimitado}}" },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('responde 200', () => pm.response.to.have.status(200));",
+        "pm.test('mismo producto, tiraje -1', () => { const p = pm.response.json(); pm.expect(p.id).to.eql(pm.collectionVariables.get('productoIlimitado')); pm.expect(p.tiraje).to.eql(-1); });"
+      ] } }]
+    },
+    {
+      "name": "Tiraje 5: unidades exactas (201)",
+      "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{baseUrl}}/api/v1/productos",
+        "body": { "mode": "raw", "raw": "{\"nombre\":\"Casco de edicion limitada\",\"imagen\":\"casco.png\",\"descripcion\":\"Solo cinco\",\"tipo\":\"ARMADURA\",\"tiraje\":5,\"premium\":false,\"precioCreditos\":250,\"defensa\":2,\"parte\":\"CASCO\",\"tasaDeCaida\":1}" } },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('responde 201', () => pm.response.to.have.status(201));",
+        "pm.test('tiraje 5 exacto', () => pm.expect(pm.response.json().tiraje).to.eql(5));",
+        "pm.collectionVariables.set('productoLimitado', pm.response.json().id);"
+      ] } }]
+    },
+    {
+      "name": "Tiraje 0 se rechaza (400)",
+      "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{baseUrl}}/api/v1/productos",
+        "body": { "mode": "raw", "raw": "{\"nombre\":\"Nada\",\"imagen\":\"x.png\",\"descripcion\":\"Cero unidades\",\"tipo\":\"ITEM\",\"tiraje\":0,\"premium\":false,\"precioCreditos\":1,\"efecto\":\"ninguno\",\"tasaDeCaida\":0}" } },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('responde 400', () => pm.response.to.have.status(400));",
+        "pm.test('el detalle explica el tiraje', () => pm.expect(JSON.stringify(pm.response.json())).to.match(/tiraje/i));"
+      ] } }]
+    },
+    {
+      "name": "Tiraje -5 se rechaza (400): solo -1 significa ilimitado",
+      "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{baseUrl}}/api/v1/productos",
+        "body": { "mode": "raw", "raw": "{\"nombre\":\"Negativo\",\"imagen\":\"x.png\",\"descripcion\":\"Tiraje invalido\",\"tipo\":\"ITEM\",\"tiraje\":-5,\"premium\":false,\"precioCreditos\":1,\"efecto\":\"ninguno\",\"tasaDeCaida\":0}" } },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('responde 400', () => pm.response.to.have.status(400));"
+      ] } }]
+    },
+    {
+      "name": "Premium sin precio en moneda real se rechaza (400)",
+      "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{baseUrl}}/api/v1/productos",
+        "body": { "mode": "raw", "raw": "{\"nombre\":\"Premium roto\",\"imagen\":\"x.png\",\"descripcion\":\"Sin precio real\",\"tipo\":\"ITEM\",\"tiraje\":-1,\"premium\":true,\"precioCreditos\":10,\"efecto\":\"ninguno\",\"tasaDeCaida\":0}" } },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('responde 400', () => pm.response.to.have.status(400));"
+      ] } }]
+    },
+    {
+      "name": "Producto inexistente (404)",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/productos/00000000-0000-4000-8000-000000000000" },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('responde 404', () => pm.response.to.have.status(404));",
+        "pm.test('formato de error estandar', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'));"
+      ] } }]
+    },
+    {
+      "name": "Estado del catalogo con token (200)",
+      "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/api/v1/productos/estadisticas" },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "const r = pm.response.json();",
+        "pm.test('responde 200', () => pm.response.to.have.status(200));",
+        "pm.test('cuenta al menos los dos creados, todos ACTIVO', () => { pm.expect(r.total).to.be.at.least(2); pm.expect(r.porEstado.ACTIVO).to.be.at.least(2); });"
+      ] } }]
+    },
+    {
+      "name": "Estado del catalogo sin token (401)",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/productos/estadisticas" },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('responde 401', () => pm.response.to.have.status(401));"
+      ] } }]
+    }
+  ],
+  "variable": [{ "key": "baseUrl", "value": "http://localhost:8080" }, { "key": "token", "value": "" }]
+}

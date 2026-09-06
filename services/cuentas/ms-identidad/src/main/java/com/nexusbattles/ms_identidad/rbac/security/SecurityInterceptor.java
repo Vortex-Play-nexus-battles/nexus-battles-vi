@@ -161,7 +161,10 @@ public class SecurityInterceptor implements HandlerInterceptor {
 
     private void sendForbidden(HttpServletResponse response, String uri, String detail) throws Exception {
         response.setStatus(HttpStatus.FORBIDDEN.value());
-        response.setContentType("application/problem+json");
+        // El charset debe fijarse antes de obtener el writer; sin esto el cuerpo
+        // problem+json sale en latin-1 y los acentos llegan corruptos al cliente.
+        response.setCharacterEncoding("UTF-8");
+        response.setContentType("application/problem+json;charset=UTF-8");
         response.setHeader("Access-Control-Allow-Origin", "*");
         response.setHeader("Access-Control-Allow-Headers", "*");
         response.getWriter().write(String.format(

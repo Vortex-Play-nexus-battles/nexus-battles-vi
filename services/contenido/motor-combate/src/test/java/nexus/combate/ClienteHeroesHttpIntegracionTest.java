@@ -63,33 +63,43 @@ class ClienteHeroesHttpIntegracionTest {
         return !salida.isBlank();
     }
 
+    /**
+     * Misma secuencia que el flujo de despliegue (cd.yml): el jar se compila
+     * desde la raiz y el Dockerfile de heroes solo lo copia, con la raiz del
+     * monorepo como contexto (-f al Dockerfile), como todo contenido.
+     */
     private static void construirImagen(Path raizDelRepo) throws IOException, InterruptedException {
-        Path logDocker = Files.createTempFile("docker-build-heroes-", ".log");
+        // "sh gradlew" no necesita el bit de ejecucion (en un checkout de CI el
+        // wrapper puede venir sin el); en Windows el .bat va por cmd.
+        boolean windows = System.getProperty("os.name").toLowerCase().contains("win");
+        String[] gradle = windows
+                ? new String[] {"cmd", "/c", "gradlew.bat", ":services:contenido:heroes:bootJar", "--no-daemon", "-q"}
+                : new String[] {"sh", "gradlew", ":services:contenido:heroes:bootJar", "--no-daemon", "-q"};
+        ejecutar(raizDelRepo, "compilar el jar de heroes (gradle bootJar)", gradle);
+        ejecutar(raizDelRepo, "construir la imagen de heroes (docker build)",
+                "docker", "build", "--progress=plain", "-f", "services/contenido/heroes/Dockerfile", "-t", NOMBRE_IMAGEN, ".");
+    }
 
-        ProcessBuilder pb = new ProcessBuilder(
-                "docker", "build",
-                "--progress=plain",
-                "-f", "services/contenido/heroes/Dockerfile",
-                "-t", NOMBRE_IMAGEN,
-                ".")
+    private static void ejecutar(Path raizDelRepo, String paso, String... comando) throws IOException, InterruptedException {
+        Path log = Files.createTempFile("heroes-" + comando[comando.length - 1].replaceAll("[^A-Za-z0-9]", "") + "-", ".log");
+
+        Process proceso = new ProcessBuilder(comando)
             .directory(raizDelRepo.toFile())
             .redirectErrorStream(true)
-            .redirectOutput(logDocker.toFile());
+            .redirectOutput(log.toFile())
+            .start();
+        proceso.getOutputStream().close();
 
-        Process construccion = pb.start();
-        construccion.getOutputStream().close();
+        boolean termino = proceso.waitFor(5, java.util.concurrent.TimeUnit.MINUTES);
+        String salida = Files.readString(log, StandardCharsets.UTF_8);
 
-        boolean termino = construccion.waitFor(5, java.util.concurrent.TimeUnit.MINUTES);
-        String salida = Files.readString(logDocker, StandardCharsets.UTF_8);
-
-        if (!termino || construccion.exitValue() != 0) {
+        if (!termino || proceso.exitValue() != 0) {
             throw new IllegalStateException(
-                "No se pudo construir la imagen de heroes (docker build). "
-                    + "Raiz del repo: " + raizDelRepo + System.lineSeparator()
-                    + "Sugerencia: construye la imagen manualmente con:" + System.lineSeparator()
-                    + "docker build -f services/contenido/heroes/Dockerfile -t " + NOMBRE_IMAGEN + " ."
-                    + System.lineSeparator()
-                    + "Salida de docker build:" + System.lineSeparator() + salida);
+                "No se pudo " + paso + ". Raiz del repo: " + raizDelRepo + System.lineSeparator()
+                    + "Sugerencia: reproduce a mano, desde la raiz del repo:" + System.lineSeparator()
+                    + "./gradlew :services:contenido:heroes:bootJar" + System.lineSeparator()
+                    + "docker build -f services/contenido/heroes/Dockerfile -t " + NOMBRE_IMAGEN + " ." + System.lineSeparator()
+                    + "Salida:" + System.lineSeparator() + salida);
         }
     }
 
