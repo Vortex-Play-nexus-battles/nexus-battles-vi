@@ -10,7 +10,13 @@
 // Con modulos ES, Jest NO inyecta `jest` como global: hay que importarlo.
 import { jest } from '@jest/globals';
 
-import { montarBatallas, metaDeLaSala, subtituloDeSalas, textoDePaginacion } from './batallas.js';
+import {
+  montarBatallas,
+  fichaEnVivo,
+  metaDeLaSala,
+  subtituloDeSalas,
+  textoDePaginacion,
+} from './batallas.js';
 import { ErrorDeApi } from './cliente-salas.js';
 
 const HTML = `
@@ -19,6 +25,7 @@ const HTML = `
     <select name="modalidad"><option value="">todas</option><option value="CONTRA_IA">IA</option></select>
     <select name="estado"><option value="">todos</option><option value="ABIERTA">Abierta</option></select>
     <div class="estado-vista" data-zona="estado"></div>
+    <p data-zona="canal" hidden></p>
     <div class="rejilla-salas" data-zona="salas" hidden></div>
     <nav class="paginacion" data-zona="paginacion" hidden></nav>
   </main>
@@ -259,5 +266,166 @@ describe('montarBatallas', () => {
     const activa = raiz.querySelectorAll('[aria-current="page"]');
     expect(activa).toHaveLength(1);
     expect(activa[0].textContent).toBe('1');
+  });
+});
+
+/** Cliente de canal de mentira: registra suscripciones y permite entregar avisos. */
+function canalDeMentira() {
+  const suscripciones = new Map();
+  return {
+    suscripciones,
+    alCerrar: null,
+    suscribir(destino, alRecibir) {
+      suscripciones.set(destino, alRecibir);
+      return `sub-${suscripciones.size}`;
+    },
+    entregar(destino, aviso) {
+      suscripciones.get(destino)?.(aviso);
+    },
+  };
+}
+
+const OTRA = '22222222-2222-2222-2222-222222222222';
+const PRIVADA = '33333333-3333-3333-3333-333333333333';
+const JUGADOR = 'bbbbbbbb-0000-0000-0000-000000000002';
+
+describe('fichaEnVivo', () => {
+  test('cuando la ocupacion alcanza el maximo la sala pasa a LLENA', () => {
+    const viva = fichaEnVivo(sala({ ocupacion: 5, maximoParticipantes: 6 }), {
+      ocupacion: { actual: 6, maximo: 6 },
+    });
+    expect(viva.ocupacion).toBe(6);
+    expect(viva.estado).toBe('LLENA');
+  });
+
+  test('una sala privada no cambia de estado aunque se llene: PRIVADA manda', () => {
+    const viva = fichaEnVivo(sala({ estado: 'PRIVADA', privada: true }), {
+      ocupacion: { actual: 6, maximo: 6 },
+    });
+    expect(viva.estado).toBe('PRIVADA');
+  });
+});
+
+describe('canal en tiempo real en el listado', () => {
+  test('con canal, cada sala publica visible se sigue y la tarjeta se actualiza al llegar un ingreso', async () => {
+    const raiz = preparar();
+    const canal = canalDeMentira();
+    montarBatallas(raiz, {
+      listar: jest.fn().mockResolvedValue(pagina([sala(), sala({ id: OTRA, ocupacion: 1 })])),
+      conectarCanal: () => Promise.resolve(canal),
+    });
+    await asentar();
+
+    expect([...canal.suscripciones.keys()]).toEqual([
+      `/tema/salas/${sala().id}`,
+      `/tema/salas/${OTRA}`,
+    ]);
+    expect(raiz.querySelector('[data-zona="canal"]').dataset.estado).toBe('conectado');
+
+    canal.entregar(`/tema/salas/${OTRA}`, {
+      tipo: 'sala.participante.ingreso',
+      idSala: OTRA,
+      idJugador: JUGADOR,
+      ocupacion: { actual: 2, maximo: 6 },
+    });
+
+    expect(raiz.querySelector(`[data-sala="${OTRA}"] .tarjeta__meta`).textContent).toContain(
+      '2 de 6 jugadores',
+    );
+    expect(raiz.querySelector(`[data-sala="${sala().id}"] .tarjeta__meta`).textContent).toContain(
+      '4 de 6 jugadores',
+    );
+  });
+
+  test('una sala que se llena en vivo deja de ser pulsable', async () => {
+    const raiz = preparar();
+    const canal = canalDeMentira();
+    montarBatallas(raiz, {
+      listar: jest.fn().mockResolvedValue(pagina([sala({ ocupacion: 5 })])),
+      conectarCanal: () => Promise.resolve(canal),
+    });
+    await asentar();
+
+    canal.entregar(`/tema/salas/${sala().id}`, {
+      tipo: 'sala.participante.ingreso',
+      idSala: sala().id,
+      idJugador: JUGADOR,
+      ocupacion: { actual: 6, maximo: 6 },
+    });
+
+    const tarjeta = raiz.querySelector(`[data-sala="${sala().id}"]`);
+    expect(tarjeta.disabled).toBe(true);
+    expect(tarjeta.dataset.estado).toBe('LLENA');
+  });
+
+  test('las salas privadas ajenas no se siguen desde el listado', async () => {
+    const raiz = preparar();
+    const canal = canalDeMentira();
+    montarBatallas(raiz, {
+      listar: jest
+        .fn()
+        .mockResolvedValue(
+          pagina([sala(), sala({ id: PRIVADA, estado: 'PRIVADA', privada: true })]),
+        ),
+      conectarCanal: () => Promise.resolve(canal),
+    });
+    await asentar();
+
+    expect(canal.suscripciones.has(`/tema/salas/${PRIVADA}`)).toBe(false);
+    expect(canal.suscripciones.has(`/tema/salas/${sala().id}`)).toBe(true);
+  });
+
+  test('al entrar a una sala privada, ya como participante, se empieza a seguir', async () => {
+    const raiz = preparar();
+    const canal = canalDeMentira();
+    const privada = sala({ id: PRIVADA, estado: 'PRIVADA', privada: true, ocupacion: 1 });
+    montarBatallas(raiz, {
+      listar: jest.fn().mockResolvedValue(pagina([privada])),
+      ingresar: jest.fn().mockResolvedValue({ ...privada, ocupacion: 2, participantes: [JUGADOR] }),
+      conectarCanal: () => Promise.resolve(canal),
+    });
+    await asentar();
+
+    raiz.querySelector(`[data-sala="${PRIVADA}"]`).click();
+    await asentar();
+
+    expect(canal.suscripciones.has(`/tema/salas/${PRIVADA}`)).toBe(true);
+    expect(raiz.querySelector(`[data-sala="${PRIVADA}"] .tarjeta__meta`).textContent).toContain(
+      '2 de 6 jugadores',
+    );
+  });
+
+  test('sin sesion no hay canal, la vista lo dice y el listado funciona igual', async () => {
+    const raiz = preparar();
+    montarBatallas(raiz, {
+      listar: jest.fn().mockResolvedValue(pagina([sala()])),
+      conectarCanal: () => Promise.resolve(null),
+    });
+    await asentar();
+
+    expect(raiz.querySelector('[data-zona="canal"]').dataset.estado).toBe('sin-sesion');
+    expect(raiz.querySelectorAll('[data-sala]')).toHaveLength(1);
+  });
+
+  test('si el canal se rechaza, se informa como no disponible sin romper el listado', async () => {
+    const raiz = preparar();
+    montarBatallas(raiz, {
+      listar: jest.fn().mockResolvedValue(pagina([sala()])),
+      conectarCanal: () => Promise.reject(new Error('El token de acceso no es valido.')),
+    });
+    await asentar();
+
+    const zona = raiz.querySelector('[data-zona="canal"]');
+    expect(zona.dataset.estado).toBe('error');
+    expect(zona.textContent).toContain('no es valido');
+    expect(raiz.querySelectorAll('[data-sala]')).toHaveLength(1);
+  });
+
+  test('sin el puerto del canal, la vista se comporta como siempre', async () => {
+    const raiz = preparar();
+    montarBatallas(raiz, { listar: jest.fn().mockResolvedValue(pagina([sala()])) });
+    await asentar();
+
+    expect(raiz.querySelector('[data-zona="canal"]').dataset.estado).toBe('sin-sesion');
   });
 });
