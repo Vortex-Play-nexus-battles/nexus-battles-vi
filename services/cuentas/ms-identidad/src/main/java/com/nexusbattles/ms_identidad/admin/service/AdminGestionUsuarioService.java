@@ -2,10 +2,12 @@ package com.nexusbattles.ms_identidad.admin.service;
 
 import com.nexusbattles.ms_identidad.auditoria.client.AuditoriaClient;
 import com.nexusbattles.ms_identidad.auth.service.AuthAdminService;
+import com.nexusbattles.ms_identidad.auth.service.AvatarStorageService;
 import com.nexusbattles.ms_identidad.perfiles.model.PerfilUsuario;
 import com.nexusbattles.ms_identidad.perfiles.service.PerfilUsuarioService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 
@@ -15,13 +17,16 @@ public class AdminGestionUsuarioService {
     private final AuthAdminService authAdminService;
     private final PerfilUsuarioService perfilUsuarioService;
     private final AuditoriaClient auditoriaClient;
+    private final AvatarStorageService avatarStorageService;
 
     public AdminGestionUsuarioService(AuthAdminService authAdminService,
                                       PerfilUsuarioService perfilUsuarioService,
-                                      AuditoriaClient auditoriaClient) {
+                                      AuditoriaClient auditoriaClient,
+                                      AvatarStorageService avatarStorageService) {
         this.authAdminService = authAdminService;
         this.perfilUsuarioService = perfilUsuarioService;
         this.auditoriaClient = auditoriaClient;
+        this.avatarStorageService = avatarStorageService;
     }
 
     public PerfilUsuario obtenerUsuarioParaGestion(Long usuarioId) {
@@ -30,10 +35,10 @@ public class AdminGestionUsuarioService {
 
     @Transactional
     public PerfilUsuario editarPerfilDeUsuario(Long usuarioId, String nombres, String apellidos,
-                                               String avatar, String biografia, String preferencias,
+                                               MultipartFile nuevoAvatar, String preferencias,
                                                String nuevoApodo, String administradorId, String ipOrigen) {
         PerfilUsuario actualizado = perfilUsuarioService.actualizarPerfilPropio(
-            usuarioId, nombres, apellidos, avatar, biografia, preferencias, nuevoApodo
+            usuarioId, nombres, apellidos, nuevoAvatar, preferencias, nuevoApodo
         );
 
         auditoriaClient.registrar(
