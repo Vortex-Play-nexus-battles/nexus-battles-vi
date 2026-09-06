@@ -74,7 +74,18 @@ channels:
     description: |
       Cambios en la sala mientras se llena y antes de comenzar: quien entra,
       quien sale, quien esta listo, y la cancelacion por el anfitrion.
-      Alimenta la vista de sala de espera.
+      Alimenta la vista de sala de espera y, mientras esta no exista, las
+      tarjetas del listado de Batallas.
+
+      Autorizacion de la suscripcion (HU-SAL-002). Estar autenticado no
+      basta: el servidor decide frame a frame de SUBSCRIBE.
+        - Sala publica: cualquier jugador autenticado, este dentro o no. Lo
+          que viaja por aqui es lo mismo que muestra el listado publico.
+        - Sala privada: solo sus participantes. Cualquier otro recibe un
+          frame ERROR y la suscripcion no se registra.
+        - Sala inexistente: ERROR.
+      La regla cubre todo lo que cuelga de `/tema/salas/{idSala}`, incluido
+      `/tema/salas/{idSala}/chat`.
     parameters:
       idSala:
         description: Identificador de la sala

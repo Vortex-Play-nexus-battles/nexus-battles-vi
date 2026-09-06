@@ -53,9 +53,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code sala.participante.ingreso}. Nada esta simulado: hay un servidor con
  * puerto, un socket, una PostgreSQL 17 por Testcontainers y el broker real.
  *
- * <p><b>La seguridad no se debilita.</b> La cadena de filtros queda intacta: el
- * handshake sigue exigiendo un token y {@code /api/v1/salas/**} sigue exigiendo
- * rol JUGADOR — el tercer caso lo comprueba. Lo unico que se sustituye es el
+ * <p><b>La seguridad no se debilita.</b> El handshake HTTP de {@code /ws} esta
+ * abierto porque un navegador no puede ponerle cabeceras; a cambio, el JWT se
+ * exige en el frame {@code CONNECT} de STOMP y sin el no hay sesion (un caso lo
+ * comprueba), y suscribirse al canal de una sala privada ajena se rechaza
+ * (otro caso lo comprueba). {@code /api/v1/salas/**} sigue exigiendo rol
+ * JUGADOR. Lo unico que se sustituye es el
  * {@link JwtDecoder}, que en produccion valida contra Keycloak; sin eso la
  * prueba necesitaria un Keycloak levantado para comprobar algo que no es de
  * Keycloak. Los tokens de prueba llevan el rol en {@code realm_access.roles},
@@ -151,14 +154,45 @@ class CanalDeSalaIT {
         return new WebSocketStompClient(new StandardWebSocketClient());
     }
 
+    /**
+     * Conecta como lo hace el navegador: handshake sin cabeceras y el JWT en la
+     * cabecera {@code Authorization} del frame {@code CONNECT}.
+     */
     private StompSession conectar(String token) throws Exception {
-        WebSocketHttpHeaders handshake = new WebSocketHttpHeaders();
-        handshake.add("Authorization", "Bearer " + token);
+        return conectar(token, new StompSessionHandlerAdapter() { });
+    }
 
+    private StompSession conectar(String token, StompSessionHandlerAdapter manejador)
+            throws Exception {
+        StompHeaders connect = new StompHeaders();
+        if (token != null) {
+            connect.add("Authorization", "Bearer " + token);
+        }
         return clienteStomp()
-                .connectAsync("ws://localhost:" + puerto + "/ws", handshake,
-                        new StompSessionHandlerAdapter() { })
+                .connectAsync("ws://localhost:" + puerto + "/ws", new WebSocketHttpHeaders(),
+                        connect, manejador)
                 .get(10, TimeUnit.SECONDS);
+    }
+
+    /** Recoge los frames ERROR y los fallos de transporte que reciba una sesion. */
+    private static final class RegistroDeErrores extends StompSessionHandlerAdapter {
+        final BlockingQueue<String> errores = new LinkedBlockingQueue<>();
+
+        @Override
+        public void handleFrame(StompHeaders cabeceras, Object cuerpo) {
+            errores.add("ERROR: " + cabeceras.getFirst("message"));
+        }
+
+        @Override
+        public void handleException(StompSession sesion, org.springframework.messaging.simp.stomp.StompCommand comando,
+                StompHeaders cabeceras, byte[] cuerpo, Throwable ex) {
+            errores.add("EXCEPCION: " + ex.getMessage());
+        }
+
+        @Override
+        public void handleTransportError(StompSession sesion, Throwable ex) {
+            errores.add("TRANSPORTE: " + ex.getMessage());
+        }
     }
 
     /** Marca de la sonda con la que se confirma que la suscripcion esta viva. */
@@ -251,11 +285,60 @@ class CanalDeSalaIT {
     }
 
     @Test
-    @DisplayName("el handshake sin token se rechaza: la seguridad sigue puesta")
-    void elHandshakeExigeToken() {
-        assertThrows(Exception.class, () -> clienteStomp()
-                .connectAsync("ws://localhost:" + puerto + "/ws", new WebSocketHttpHeaders(),
-                        new StompSessionHandlerAdapter() { })
-                .get(10, TimeUnit.SECONDS));
+    @DisplayName("el handshake esta abierto, pero un CONNECT sin token no obtiene sesion")
+    void elConnectExigeToken() {
+        assertThrows(Exception.class, () -> conectar(null),
+                "sin JWT en el CONNECT el servidor debe responder ERROR y no abrir sesion");
+    }
+
+    @Test
+    @DisplayName("un jugador ajeno no puede suscribirse al canal de una sala privada")
+    void unAjenoNoSigueUnaSalaPrivada() throws Exception {
+        UUID idPrivada = crearSalaPrivada();
+        RegistroDeErrores registro = new RegistroDeErrores();
+        StompSession intruso = conectar(VISITANTE, registro);
+
+        intruso.subscribe(CanalDeSalaStomp.destinoDe(idPrivada), new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders cabeceras) {
+                return byte[].class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders cabeceras, Object cuerpo) {
+                registro.errores.add("MENSAJE INESPERADO");
+            }
+        });
+
+        String rechazo = registro.errores.poll(10, TimeUnit.SECONDS);
+        assertNotNull(rechazo, "el servidor tiene que rechazar la suscripcion, no ignorarla");
+        assertTrue(rechazo.startsWith("ERROR") || rechazo.startsWith("TRANSPORTE")
+                || rechazo.startsWith("EXCEPCION"), rechazo);
+        assertTrue(!rechazo.contains("MENSAJE INESPERADO"), rechazo);
+    }
+
+    @Test
+    @DisplayName("el anfitrion si sigue el canal de su sala privada y recibe el ingreso de su invitado")
+    void elAnfitrionSigueSuSalaPrivada() throws Exception {
+        UUID idPrivada = crearSalaPrivada();
+        BlockingQueue<String> recibidos = suscribirseA(conectar(ANFITRION), idPrivada);
+
+        // La invitacion (criterio 3 de HU-SAL-001) todavia no tiene mecanismo: el
+        // dominio rechaza toda entrada a una sala privada con 403. Lo que aqui
+        // se demuestra es la autorizacion del canal, no el ingreso.
+        HttpResponse<String> intento =
+                pedir("/api/v1/salas/" + idPrivada + "/participantes", null, VISITANTE);
+        assertEquals(403, intento.statusCode());
+        assertNull(recibidos.poll(2, TimeUnit.SECONDS),
+                "un ingreso rechazado no se anuncia, tampoco en una sala privada");
+    }
+
+    private UUID crearSalaPrivada() throws Exception {
+        HttpResponse<String> respuesta = pedir("/api/v1/salas", """
+                {"maximoParticipantes": 4, "modalidad": "HASTA_SEIS", "recompensaCreditos": 0, "privada": true}
+                """, ANFITRION);
+        assertEquals(201, respuesta.statusCode(), "la sala privada tiene que crearse");
+        String ubicacion = respuesta.headers().firstValue("Location").orElseThrow();
+        return UUID.fromString(ubicacion.substring(ubicacion.lastIndexOf('/') + 1));
     }
 }
