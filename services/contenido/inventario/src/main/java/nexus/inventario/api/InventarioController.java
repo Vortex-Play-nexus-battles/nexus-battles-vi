@@ -49,7 +49,8 @@ public class InventarioController {
             @RequestHeader(name = CABECERA_IDENTIDAD, required = false) String identidad,
             @Valid @RequestBody CrearElementoRequest solicitud) {
         ElementoInventario creado = gestion.crear(
-                identidad, solicitud.productoId(), solicitud.tipo(), solicitud.nombrePropio());
+                identidad, solicitud.productoId(), solicitud.tipo(),
+                solicitud.nombrePropio(), solicitud.parteArmadura());
         return ResponseEntity
                 .created(URI.create("/api/v1/inventario/elementos/" + creado.id()))
                 .body(ElementoInventarioResponse.de(creado));

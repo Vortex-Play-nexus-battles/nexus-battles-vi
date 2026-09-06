@@ -10,7 +10,14 @@
 // Misma linea que ya tiene inventario.test.js.
 import { jest } from '@jest/globals';
 
-import { crearSala, listarSalas, ingresarASala, ErrorDeApi } from './cliente-salas.js';
+import {
+  crearSala,
+  listarSalas,
+  ingresarASala,
+  verificarHeroe,
+  baseDeApi,
+  ErrorDeApi,
+} from './cliente-salas.js';
 
 const PARAMETROS = {
   maximoParticipantes: 4,
@@ -21,10 +28,11 @@ const PARAMETROS = {
   tamanoEquipo: null,
 };
 
-function respuesta(estado, cuerpo) {
+function respuesta(estado, cuerpo, tipoContenido) {
   return {
     ok: estado >= 200 && estado < 300,
     status: estado,
+    headers: { get: (clave) => (clave === 'content-type' ? (tipoContenido ?? null) : null) },
     json: async () => {
       if (cuerpo === undefined) {
         throw new SyntaxError('Unexpected end of JSON input');
@@ -130,6 +138,37 @@ describe('ingresarASala', () => {
   });
 });
 
+describe('verificarHeroe', () => {
+  test('consulta la ruta de verificacion del contrato', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, { resultado: 'DISPONIBLE' }));
+
+    await verificarHeroe('abc', { fetchImpl });
+
+    expect(fetchImpl.mock.calls[0][0]).toBe('/api/v1/salas/abc/verificacion-heroe');
+  });
+
+  test('devuelve el veredicto tal cual: la vista no decide nada', async () => {
+    const veredicto = {
+      resultado: 'HEROE_OCUPADO',
+      puedeIngresar: false,
+      heroe: { id: 'h1', nombre: 'Arquero del Norte', vidaActual: 120, vidaMaxima: 120 },
+      salaQueLoOcupa: 'Torre del Alba',
+    };
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, veredicto));
+
+    expect(await verificarHeroe('abc', { fetchImpl })).toEqual(veredicto);
+  });
+
+  test('mientras el servicio no implemente la ruta, el 404 llega interpretado', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(404, undefined));
+
+    const error = await verificarHeroe('abc', { fetchImpl }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ErrorDeApi);
+    expect(error.estado).toBe(404);
+  });
+});
+
 describe('crearSala', () => {
   test('envia el cuerpo al contrato y devuelve la sala creada', async () => {
     const sala = { id: 'abc', estado: 'ABIERTA', maximoParticipantes: 4 };
@@ -228,5 +267,109 @@ describe('crearSala', () => {
 
     expect(error.estado).toBe(500);
     expect(error.detalle).toContain('500');
+  });
+});
+
+/**
+ * Ejecucion estatica contra ejecucion integrada.
+ *
+ * Al abrir las vistas desde un servidor de ficheros no hay API detras. Antes
+ * eso se veia como «No se pudo crear la sala · El servicio respondio 405», que
+ * culpa al servicio de salas de algo que ni siquiera esta levantado.
+ */
+describe('sin backend detras', () => {
+  test('un 405 de servidor estatico se nombra por lo que es, no como fallo del servicio', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(405, undefined, 'text/html'));
+
+    const error = await crearSala(PARAMETROS, { fetchImpl }).catch((e) => e);
+
+    expect(error.titulo).toMatch(/no hay ninguna api/i);
+    expect(error.detalle).toContain('/api/v1/salas');
+    expect(error.detalle).not.toMatch(/respondio 405/i);
+  });
+
+  test('el 405 real de http-server llega como text/plain y tambien se reconoce', async () => {
+    // `http-server` responde 405 con `content-type: text/plain` a un POST.
+    // Reducir la deteccion a HTML, como sugirio Copilot en #271, perderia
+    // justo este caso, que es el que motivo la distincion.
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(405, undefined, 'text/plain'));
+
+    const error = await crearSala(PARAMETROS, { fetchImpl }).catch((e) => e);
+
+    expect(error.titulo).toMatch(/no hay ninguna api/i);
+  });
+
+  test('un 405 con problem details es un fallo del servicio, no un servidor estatico', async () => {
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValue(
+        respuesta(
+          405,
+          { status: 405, title: 'Metodo no permitido', detail: 'Solo GET.' },
+          'application/problem+json',
+        ),
+      );
+
+    const error = await crearSala(PARAMETROS, { fetchImpl }).catch((e) => e);
+
+    expect(error.titulo).toBe('Metodo no permitido');
+  });
+
+  test('el mensaje nombra la URL real de la peticion cuando fetch la trae', async () => {
+    const conUrl = {
+      ...respuesta(404, undefined, 'text/html'),
+      url: 'http://127.0.0.1:4399/api/v1/salas/s1/verificacion-heroe',
+    };
+    const fetchImpl = jest.fn().mockResolvedValue(conUrl);
+
+    const error = await verificarHeroe('s1', { fetchImpl }).catch((e) => e);
+
+    expect(error.detalle).toContain('/api/v1/salas/s1/verificacion-heroe');
+  });
+
+  test('un GET que devuelve la pagina HTML del servidor estatico tambien se detecta', async () => {
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValue(respuesta(404, undefined, 'text/html; charset=utf-8'));
+
+    const error = await listarSalas({}, { fetchImpl }).catch((e) => e);
+
+    expect(error.titulo).toMatch(/no hay ninguna api/i);
+  });
+
+  test('un fallo real del servicio sigue siendo un fallo del servicio', async () => {
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValue(respuesta(503, undefined, 'application/problem+json'));
+
+    const error = await listarSalas({}, { fetchImpl }).catch((e) => e);
+
+    expect(error.titulo).not.toMatch(/no hay ninguna api/i);
+    expect(error.detalle).toContain('503');
+  });
+});
+
+describe('baseDeApi', () => {
+  afterEach(() => {
+    document.head.innerHTML = '';
+  });
+
+  test('sin declararla, es el mismo origen: nada de localhost escrito en el codigo', () => {
+    expect(baseDeApi()).toBe('');
+  });
+
+  test('la pagina puede apuntar a un backend en otro sitio', () => {
+    document.head.innerHTML = '<meta name="nexus-api-base" content="http://127.0.0.1:8083/" />';
+
+    expect(baseDeApi()).toBe('http://127.0.0.1:8083');
+  });
+
+  test('la ruta se construye sobre esa base', async () => {
+    document.head.innerHTML = '<meta name="nexus-api-base" content="http://127.0.0.1:8083" />';
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, { contenido: [] }));
+
+    await listarSalas({}, { fetchImpl });
+
+    expect(fetchImpl).toHaveBeenCalledWith('http://127.0.0.1:8083/api/v1/salas');
   });
 });

@@ -1,0 +1,49 @@
+# HU-CICD-002 (SCRUM-165): override de despliegue para services/cuentas/ms-ecommerce.
+#
+# Mismo patron que docker-compose.cuentas.yml y docker-compose.ms-cumplimiento.yml
+# (tambien de Cuentas): solo declara "image:", nunca "build:" -- el jar se
+# compila y la imagen se publica en ghcr.io en el job "construir-y-publicar"
+# de cd.yml, nunca en el servidor. Se combina siempre con docker-compose.yml
+# (nunca solo), y SOLO cuando ms-ecommerce esta entre los servicios
+# modificados de esa corrida:
+#   docker compose -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.ms-ecommerce.yml pull|up -d
+#
+# Archivo separado por la misma razon que los otros dos overrides de
+# Cuentas: cada servicio de otro equipo mantiene el suyo, para que quede
+# claro quien es dueño de que.
+#
+# Puerto: 8090 tanto en el host como en el contenedor (confirmado en el
+# Dockerfile de ms-ecommerce: EXPOSE 8090).
+#
+# ${TAG} lo exporta scripts/cd/desplegar.sh antes de invocar "docker compose"
+# (mismo sha corto de esta corrida que usan las demas imagenes).
+#
+# Variables de entorno: el lado IZQUIERDO de cada linea es el nombre que
+# Spring realmente lee (confirmado en application.properties de
+# ms-ecommerce: ${DB_HOST}, ${DB_PORT}, ${DB_NAME}, ${DB_USER},
+# ${DB_PASSWORD}). El lado DERECHO (${MS_ECOMMERCE_...}) es la variable que
+# desplegar.sh deja en el .env del servidor -- con el prefijo
+# "MS_ECOMMERCE_" a proposito, mismo criterio que MS_CUMPLIMIENTO_: no
+# choca con DB_USER/DB_PASS de plataforma ni con el DB_URL de ms-identidad.
+#
+# OJO context-path: application.properties de ms-ecommerce declara
+# server.servlet.context-path=/api/v1 -- a diferencia de ms-identidad y
+# ms-cumplimiento (que no tienen context-path), su /actuator/health real
+# queda en /api/v1/actuator/health. Esto NO se resuelve aqui (este archivo
+# solo mapea variables de entorno de base de datos): lo maneja
+# scripts/cd/desplegar.sh, que elige la ruta de salud por servicio.
+#
+# Todas las variables quedan PENDIENTES por ahora (ver los secrets TODO_*
+# en cd.yml, mismo patron de placeholder que ms-identidad y ms-cumplimiento).
+
+services:
+  srv-ms-ecommerce:
+    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-ms-ecommerce:${TAG}
+    ports:
+      - "8090:8090"
+    environment:
+      DB_HOST: ${MS_ECOMMERCE_DB_HOST}
+      DB_PORT: ${MS_ECOMMERCE_DB_PORT}
+      DB_NAME: ${MS_ECOMMERCE_DB_NAME}
+      DB_USER: ${MS_ECOMMERCE_DB_USER}
+      DB_PASSWORD: ${MS_ECOMMERCE_DB_PASSWORD}

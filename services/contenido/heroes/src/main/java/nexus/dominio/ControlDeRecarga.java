@@ -8,6 +8,9 @@ package nexus.dominio;
  */
 public class ControlDeRecarga {
 
+    public static final int TURNOS_DE_CARGA_ACCION_ESPECIAL = 1;
+    public static final int TURNOS_DE_RECARGA_EPICA = 2;
+
     private final int turnosDeCarga;
     private Integer turnoDeUltimoUso;
 
@@ -16,11 +19,11 @@ public class ControlDeRecarga {
     }
 
     public static ControlDeRecarga paraAccionEspecial() {
-        return new ControlDeRecarga(1);
+        return new ControlDeRecarga(TURNOS_DE_CARGA_ACCION_ESPECIAL);
     }
 
     public static ControlDeRecarga paraEpica() {
-        return new ControlDeRecarga(2);
+        return new ControlDeRecarga(TURNOS_DE_RECARGA_EPICA);
     }
 
     public void registrarUso(int turno) {

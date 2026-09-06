@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Registro de las pruebas del motor de combate.
+
+  Sustituye al binding `slf4j-simple` que traia HU-JUE-003: Spring Boot usa
+  Logback, y tener dos bindings hace fallar el arranque del contexto. Los
+  avisos de deteccion de Docker de Testcontainers -que estrategia probo y por
+  que fallo- se siguen viendo, que era el motivo original de aquel binding.
+-->
+<configuration>
+  <appender name="CONSOLA" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{HH:mm:ss.SSS} %-5level %logger{36} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <!-- El motivo del binding anterior: ver por que Testcontainers no encuentra
+       el daemon aunque `docker` funcione desde la terminal. -->
+  <logger name="org.testcontainers" level="INFO"/>
+  <logger name="tc" level="INFO"/>
+  <logger name="com.github.dockerjava" level="WARN"/>
+
+  <root level="WARN">
+    <appender-ref ref="CONSOLA"/>
+  </root>
+</configuration>

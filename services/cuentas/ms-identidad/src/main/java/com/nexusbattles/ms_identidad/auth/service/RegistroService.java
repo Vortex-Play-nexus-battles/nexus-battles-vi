@@ -35,6 +35,9 @@ public class RegistroService {
     @Autowired
     private CorreoClient correoClient;
 
+    @Autowired
+    private AvatarStorageService avatarStorageService;
+
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     @Transactional
@@ -61,8 +64,14 @@ public class RegistroService {
 
         Usuario usuarioGuardado = usuarioRepository.save(nuevoUsuario);
 
+        // El avatar ahora es una foto real subida por el usuario (antes era
+        // una URL fija de una galería predefinida). AvatarStorageService
+        // valida, guarda el archivo en disco, y devuelve la URL con la que
+        // se sirve después.
+        String urlAvatar = avatarStorageService.guardarAvatar(datos.getAvatar());
+
         perfilUsuarioService.crearPerfil(
-            usuarioGuardado, datos.getNombres(), datos.getApellidos(), datos.getAvatar()
+            usuarioGuardado, datos.getNombres(), datos.getApellidos(), urlAvatar
         );
 
         // Integración real con el módulo de correo de Santiago Anaya

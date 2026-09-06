@@ -1,41 +1,61 @@
-// OJO: este modulo NO aplica 'nexus.spring-conventions' a proposito.
+// motor-combate aplica 'nexus.spring-conventions' desde que @SimonP0607
+// confirmo, el 2026-09-01, que es un microservicio desplegable y no una
+// biblioteca: 'shared/libs/' es la unica excepcion al modelo de un despliegue
+// por modulo y prohibe logica de negocio, asi que un motor de combate no cabe
+// ahi.
 //
-// motor-combate es logica de dominio pura (Java y JUnit, sin Spring). Si se le
-// aplican las convenciones de Spring, Gradle le anade la tarea bootJar y el
-// build falla con "Main class name has not been configured" porque no hay
-// ninguna clase @SpringBootApplication. Cuando el motor necesite arrancar como
-// servicio, se cambia este archivo por el plugin de convenciones.
+// El dominio sigue siendo Java puro. Spring vive unicamente en el paquete
+// 'nexus.combate.arranque', que no escanea el dominio: las clases de reglas no
+// saben que Spring existe y se pueden probar sin levantar contexto.
 
 plugins {
-    id 'java'
-    id 'jacoco'
+    id 'nexus.spring-conventions'
 }
 
 group = 'nexus'
 version = '0.0.1-SNAPSHOT'
-
-java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
-}
-
-tasks.withType(JavaCompile).configureEach {
-    options.release = 21
-}
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
+    // Jackson: parseo del JSON de heroes.yaml en ClienteHeroesHttp.
+    // Se agrega directo (sin Spring) porque este modulo evita el plugin de
+    // convenciones de Spring a proposito (ver comentario arriba).
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.2'
+
     testImplementation platform('org.junit:junit-bom:5.13.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // Testcontainers: pruebas de integracion reales contra el servicio heroes
+    // levantado en Docker (ClienteHeroesHttpIntegracionTest).
+    testImplementation platform('org.testcontainers:testcontainers-bom:1.20.4')
+    testImplementation 'org.testcontainers:testcontainers'
+    testImplementation 'org.testcontainers:junit-jupiter'
+    // NO se anade un binding de SLF4J aqui. Spring Boot trae Logback, y un
+    // segundo binding (slf4j-simple) hace fallar el arranque con "LoggerFactory
+    // is not a Logback LoggerContext". Los avisos de deteccion de Docker que
+    // buscaba HU-JUE-003 siguen viendose: se piden por nivel de registro en
+    // src/test/resources/logback-test.xml, que es la forma correcta con Boot.
 }
 
 tasks.named('test') {
     useJUnitPlatform()
     finalizedBy jacocoTestReport
+
+    // Docker Desktop reciente rechaza (HTTP 400) cualquier version de la API
+    // de Docker por debajo de su minimo declarado (ver 'docker version' ->
+    // "API version: ... (minimum version: ...)"). El docker-java 3.4.0 que
+    // trae testcontainers-bom:1.20.4 usa como version por defecto la 1.32
+    // cuando no se fija ninguna (ver DockerClientProviderStrategy, cae a
+    // RemoteApiVersion.VERSION_1_32), asi que sin esto Testcontainers no
+    // detecta el daemon aunque 'docker' SI funcione desde la terminal. Se
+    // fija 1.41 por ser una version moderna ampliamente soportada, en vez
+    // de depender de DOCKER_API_VERSION (variable que este docker-java NO
+    // lee) o de tocar la maquina de cada developer.
+    systemProperty 'api.version', '1.41'
 }
 
 jacocoTestReport {
@@ -58,6 +78,27 @@ jacocoTestCoverageVerification {
     }
 }
 
+// Las convenciones declaran la regla de cobertura pero **no** la enganchan a
+// 'check', para no dejar en rojo a los modulos que aun son andamiaje. Este si
+// tiene pruebas de verdad, asi que conserva su compuerta.
 tasks.named('check') {
     dependsOn jacocoTestCoverageVerification
+}
+
+// La clase de arranque no lleva logica: se excluye del computo para que la
+// compuerta mida el dominio, que es lo que importa.
+jacocoTestReport {
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: 'nexus/combate/arranque/**')
+        }))
+    }
+}
+
+jacocoTestCoverageVerification {
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: 'nexus/combate/arranque/**')
+        }))
+    }
 }

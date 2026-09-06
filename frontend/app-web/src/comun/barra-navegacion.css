@@ -1,0 +1,102 @@
+/*
+ * HU-INV-004 - Barra superior de navegacion.
+ *
+ * Vive sobre --cromo (fondo oscuro) segun el sistema de diseno. El resto de
+ * la pagina usa el tema claro. En anchos pequenos los accesos se envuelven
+ * en varias filas en vez de salirse: la barra no puede ser la que introduzca
+ * el desplazamiento horizontal que HU-INV-001 prohibe.
+ */
+
+.barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  padding: 8px 16px;
+  background: var(--cromo);
+  color: var(--texto-sobre-color);
+  border-radius: var(--radio);
+  margin-bottom: 12px;
+}
+
+.barra__busqueda {
+  flex: 1 1 220px;
+  min-width: 0;
+  order: 2;
+}
+
+.barra__busqueda input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid rgb(255 255 255 / 20%);
+  border-radius: var(--radio);
+  background: rgb(255 255 255 / 10%);
+  color: var(--texto-sobre-color);
+  font: inherit;
+  font-size: 0.9rem;
+}
+
+.barra__accesos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  order: 1;
+}
+
+.barra__acceso {
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radio);
+  background: none;
+  color: rgb(255 255 255 / 70%);
+  font-family: var(--tipografia-titulo);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.barra__acceso:hover {
+  color: var(--texto-sobre-color);
+}
+
+.barra__acceso--activo {
+  border-color: rgb(255 255 255 / 20%);
+  background: rgb(255 255 255 / 12%);
+  color: var(--texto-sobre-color);
+}
+
+.barra__panel-cuenta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  order: 3;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid rgb(255 255 255 / 20%);
+  border-radius: var(--radio);
+  background: rgb(255 255 255 / 10%);
+}
+
+.barra__panel-cuenta[hidden] {
+  display: none;
+}
+
+.barra__opcion-cuenta {
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--texto-sobre-color);
+  font: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.barra__opcion-cuenta:hover {
+  background: rgb(255 255 255 / 12%);
+}

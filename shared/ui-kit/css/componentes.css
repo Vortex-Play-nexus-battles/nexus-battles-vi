@@ -63,6 +63,9 @@
   font-size: var(--t-etiqueta-tam);
   font-weight: var(--t-etiqueta-peso);
   line-height: var(--t-etiqueta-alto);
+  /* Un enlace con aspecto de botón («CREAR SALA» en Batallas, «Cancelar» en
+     Crear sala) no debe heredar el subrayado ni el azul de `a` en base.css. */
+  text-decoration: none;
   cursor: pointer;
   transition: background var(--transicion), border-color var(--transicion);
 }
@@ -71,28 +74,33 @@
 .boton--grande  { min-height: var(--boton-grande); padding: 0 var(--e-5); }
 .boton--pequeno { min-height: var(--boton-pequeno); padding: 0 var(--e-3); }
 
+/* Cada variante repite su color en :hover a propósito: `a:hover` de base.css
+   (0,1,1) le ganaría a la variante sola (0,1,0) y pintaría el texto de azul
+   sobre un fondo azul o rojo. */
 .boton--primario {
   background: var(--primaria-relleno);
   color: var(--texto-sobre-color);
 }
-.boton--primario:hover { background: var(--primaria); }
+.boton--primario:hover { background: var(--primaria); color: var(--texto-sobre-color); }
 
 .boton--acento {
   background: var(--acento-relleno);
   color: var(--texto-sobre-color);
 }
+.boton--acento:hover { color: var(--texto-sobre-color); }
 
 .boton--secundario {
   background: var(--superficie);
   border-color: var(--borde-int);
   color: var(--texto);
 }
-.boton--secundario:hover { background: var(--fondo); }
+.boton--secundario:hover { background: var(--fondo); color: var(--texto); }
 
 .boton--peligro {
   background: var(--error);
   color: var(--texto-sobre-color);
 }
+.boton--peligro:hover { color: var(--texto-sobre-color); }
 
 .boton[disabled],
 .boton[aria-disabled='true'] {
@@ -349,12 +357,16 @@
    El cromo oscuro está acotado a esto y a la cabecera del combate.
    ======================================================================= */
 
+/* Medidas tomadas del componente «Cabecera» de Figma, variante
+   Rol=Jugador / Ancho=1360: 64 px de alto, padding 0 24, separación 24
+   entre los tres grupos. Antes eran 12/20 y 16, que era una aproximación. */
 .cabecera {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--e-4);
-  padding: var(--e-3) var(--e-5);
+  gap: var(--e-6);
+  min-height: var(--cabecera-alto);
+  padding: 0 var(--e-6);
   background: var(--cromo);
   color: var(--texto-sobre-color);
 }
@@ -510,6 +522,11 @@
   place-items: center;
 }
 
+/* La Pantalla 4 atenúa el contenido pero deja la cabecera legible y usable:
+   en Figma el velo empieza en y=64, no en y=0. Variante y no cambio del velo
+   base porque un diálogo destructivo sí debe taparlo todo. */
+.velo--bajo-cabecera { top: var(--cabecera-alto); }
+
 .dialogo {
   width: min(480px, calc(100vw - var(--e-8)));
   display: flex;
@@ -534,6 +551,28 @@
   flex: 0 0 auto;
 }
 .dialogo--peligro .dialogo__icono { background: var(--error-insignia); color: var(--error); }
+
+/* Retrato de héroe. El componente «Dialogo de validacion de heroe» lo pone a
+   64 px, frente a los 40 del diálogo base. Es un modificador y no un cambio
+   del icono base a propósito: el resto de diálogos siguen con su tamaño. */
+.dialogo__icono--grande {
+  width: 64px;
+  height: 64px;
+  background: var(--pista);
+  color: var(--texto-3);
+}
+
+/* «Dialogo de validacion de heroe» (HU-SAL-003) mide 520 px y separa sus
+   bloques 20 px, frente a los 480 y 16 del diálogo base. Son dos componentes
+   distintos en Figma, no una corrección del base: `cuentas/registro.html`
+   usa el base y no debe moverse. */
+.dialogo--ancho {
+  width: min(520px, calc(100vw - var(--e-8)));
+  gap: var(--e-5);
+}
+
+/* Título y detalle van pegados —4 px— dentro del bloque del héroe. */
+.pila--ajustada { gap: var(--e-1); }
 
 .dialogo__titulo {
   flex: 1;
@@ -1750,6 +1789,14 @@
    solo ofrece registro, que es lo único que el requisito especifica.
    ======================================================================= */
 
+/* «Marca y navegacion» separa el logotipo de los destinos con 32, no con 24:
+   son dos separaciones distintas en Figma y compartían clase por descuido. */
+.cabecera__grupo-marca {
+  display: flex;
+  align-items: center;
+  gap: var(--e-8);
+}
+
 .cabecera__nav {
   display: flex;
   gap: var(--e-6);
@@ -1770,6 +1817,14 @@
 .cabecera__destino.activo,
 .cabecera__destino[aria-current="page"] { border-bottom-color: var(--texto-sobre-color); }
 
+/* Destino cuya pantalla todavía no existe. Se conserva —RF-INV-008 exige los
+   seis— pero no finge llevar a ninguna parte. `data-pendiente` dice de quién
+   es. Cuando su dueño la publique, se le pone `href` y se quita esto. */
+.cabecera__destino--pendiente {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .cabecera__buscador {
   flex: 1 1 auto;
   display: flex;
@@ -1777,15 +1832,113 @@
   gap: var(--e-2);
   height: 32px;
   padding: 0 var(--e-3);
-  background: var(--cromo);
-  filter: brightness(1.35);
+  /* El relleno del buscador es un color propio del diseño (#2A3358), no el
+     cromo aclarado con un filtro: `filter` teñía también el icono y el texto. */
+  background: var(--cromo-elevado);
   border-radius: var(--radio);
 }
+
+.cabecera__buscador-texto {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: none;
+  border: 0;
+  color: var(--texto-sobre-color);
+  font-family: var(--t-cuerpo-familia);
+  font-size: var(--t-meta-tam);
+}
+
+.cabecera__buscador-texto::placeholder { color: var(--pista); opacity: 1; }
 
 .cabecera__acciones {
   display: flex;
   align-items: center;
   gap: var(--e-5);
+}
+
+/* Créditos: icono más cifra, separados 6 px —el valor del frame «Creditos» de
+   Figma, que no cae en la escala de 4—. La cifra va en el oro de legendaria.
+   Hasta ahora viajaba suelta porque el ui-kit no tenía iconos. */
+.cabecera__dato {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--credito-oro);
+}
+
+/* -----------------------------------------------------------------------
+   Icono — los 30 componentes `Icono/*` de Figma, en iconos/sprite.svg
+   -----------------------------------------------------------------------
+   Uso: <svg class="icono" aria-hidden="true"><use href=".../sprite.svg#buscar"/></svg>
+   Heredan el color del texto que los acompaña, igual que en el diseño.
+   ----------------------------------------------------------------------- */
+.icono {
+  width: var(--icono-chico);
+  height: var(--icono-chico);
+  flex: 0 0 auto;
+  color: inherit;
+}
+
+/* 16 px: es el tamaño real de `Icono/buscar` y `Icono/moneda` en la cabecera.
+   La campana se queda en los 20 de `.icono`. */
+.icono--menudo { width: var(--icono-menudo); height: var(--icono-menudo); }
+
+/* El distintivo va AL LADO de la campana, separado 6 px, no superpuesto:
+   en Figma «Notificaciones» es una fila de campana + distintivo. */
+.cabecera__campana {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cabecera__contador {
+  display: inline-block;
+  min-width: 20px;
+  height: 17px;
+  padding: 0 var(--e-1);
+  border-radius: var(--radio-pildora);
+  background: var(--acento-relleno);
+  color: var(--texto-sobre-color);
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  line-height: 17px;
+  text-align: center;
+}
+
+/* «Mi Cuenta» es el grupo del avatar: retrato, apodo y rango en dos líneas. */
+.cabecera__cuenta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+}
+
+/* En Figma el avatar es una elipse morada lisa de 32 px. No lleva icono de
+   usuario dentro: poner uno sería añadir algo que el diseño no tiene. */
+.cabecera__avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--acento-relleno);
+  flex: 0 0 auto;
+}
+
+.cabecera__identidad { display: flex; flex-direction: column; line-height: 1.2; }
+
+.cabecera__apodo {
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+/* El rango va en `--pista`, que es el color exacto del diseño, no un blanco
+   con opacidad: la opacidad tiñe distinto sobre cada fondo. */
+.cabecera__rango {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--pista);
 }
 
 /* A 1024 px el buscador se repliega a icono. Nunca se quita un destino. */

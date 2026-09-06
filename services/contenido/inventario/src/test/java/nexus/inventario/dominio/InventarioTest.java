@@ -96,6 +96,60 @@ class InventarioTest {
         assertThrows(UnsupportedOperationException.class, () -> inventario.elementos().clear());
     }
 
+    @Test
+    @DisplayName("equipa sobre un heroe propio un elemento que existe en el inventario")
+    void equiparElementoExistente() {
+        ElementoInventario heroe = new ElementoInventario(
+                "heroe-1", "producto-heroe", TipoElementoInventario.HEROE, "Guerrero");
+        ElementoInventario arma = new ElementoInventario(
+                "arma-1", "producto-arma", TipoElementoInventario.ARMA, "Espada");
+        Inventario inventario = Inventario.vacio("jugador-A").agregar(heroe).agregar(arma);
+
+        Inventario actualizado = inventario.equipar("heroe-1", "arma-1");
+
+        assertEquals(List.of("arma-1"), actualizado.equipamiento("heroe-1").armas());
+        assertEquals(List.of(), inventario.equipamiento("heroe-1").armas());
+    }
+
+    @Test
+    @DisplayName("solo una instancia de heroe puede recibir equipamiento")
+    void destinoDebeSerHeroe() {
+        ElementoInventario item = new ElementoInventario(
+                "item-1", "producto-item", TipoElementoInventario.ITEM, "Pocion");
+        Inventario inventario = Inventario.vacio("jugador-A").agregar(item);
+
+        assertThrows(ElementoNoEquipableException.class,
+                () -> inventario.equipar("item-1", "item-1"));
+    }
+
+    @Test
+    @DisplayName("no se puede equipar una instancia que no pertenece al inventario")
+    void elementoDebeExistir() {
+        ElementoInventario heroe = new ElementoInventario(
+                "heroe-1", "producto-heroe", TipoElementoInventario.HEROE, "Guerrero");
+        Inventario inventario = Inventario.vacio("jugador-A").agregar(heroe);
+
+        assertThrows(ElementoNoEncontradoException.class,
+                () -> inventario.equipar("heroe-1", "arma-ajena"));
+    }
+
+    @Test
+    @DisplayName("una misma instancia no se equipa simultaneamente en dos heroes")
+    void elementoEnUnSoloHeroe() {
+        ElementoInventario heroeA = new ElementoInventario(
+                "heroe-A", "producto-heroe-A", TipoElementoInventario.HEROE, "Guerrero");
+        ElementoInventario heroeB = new ElementoInventario(
+                "heroe-B", "producto-heroe-B", TipoElementoInventario.HEROE, "Mago");
+        ElementoInventario arma = new ElementoInventario(
+                "arma-1", "producto-arma", TipoElementoInventario.ARMA, "Espada");
+        Inventario inventario = Inventario.vacio("jugador-A")
+                .agregar(heroeA).agregar(heroeB).agregar(arma)
+                .equipar("heroe-A", "arma-1");
+
+        assertThrows(ElementoYaEquipadoException.class,
+                () -> inventario.equipar("heroe-B", "arma-1"));
+    }
+
     private static Stream<TipoElementoInventario> tiposDeProducto() {
         return Stream.of(TipoElementoInventario.values());
     }

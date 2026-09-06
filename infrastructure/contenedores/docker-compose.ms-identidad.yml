@@ -3,9 +3,9 @@ services:
     image: postgres:16
     container_name: db-ms-identidad
     environment:
-      POSTGRES_DB: ms_identidad
-      POSTGRES_USER: nexus_dev
-      POSTGRES_PASSWORD: nexus_dev_local
+      POSTGRES_DB: ${DB_NAME:-ms_identidad}
+      POSTGRES_USER: ${DB_USER:-nexus_dev}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-nexus_dev_local}
     ports:
       - "5433:5432"
     volumes:

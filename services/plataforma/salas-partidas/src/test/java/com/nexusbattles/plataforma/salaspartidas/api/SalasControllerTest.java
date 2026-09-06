@@ -32,6 +32,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -154,6 +155,25 @@ class SalasControllerTest {
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.type").value("https://nexusbattles.local/errores/creditos-insuficientes"))
                 .andExpect(jsonPath("$.detail").value("Tienes 240 creditos y necesitas 400 para crear esta sala."));
+    }
+
+    @Test
+    @DisplayName("mientras no exista el modulo de creditos, una recompensa sale como 503 con su tipo, no como 500")
+    void creditosSinIntegrar() throws Exception {
+        when(crearSala.ejecutar(any(), any()))
+                .thenThrow(new com.nexusbattles.plataforma.salaspartidas.integracion
+                        .CreditosSinIntegrar.IntegracionDeCreditosPendiente());
+
+        mockMvc.perform(post("/api/v1/salas")
+                        .with(jugador())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(CUERPO.replace("\"recompensaCreditos\": 0", "\"recompensaCreditos\": 320")))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
+                .andExpect(jsonPath("$.type").value("https://nexusbattles.local/errores/creditos-sin-integrar"))
+                .andExpect(jsonPath("$.title").value("Las apuestas todavia no estan disponibles"))
+                .andExpect(jsonPath("$.status").value(503))
+                .andExpect(jsonPath("$.errores").doesNotExist());
     }
 
     @Test

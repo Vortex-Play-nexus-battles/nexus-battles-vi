@@ -82,10 +82,15 @@ están fijados por RF-JUE-009 y se reutilizan en toda la interfaz — no reasign
 - Chatbot flotante, redimensionable, conserva historial, presente en todas las vistas (RNF-DIS-002)
 
 ## Diseño
+**Sistema de diseño** (fuente de verdad visual — 101 variables, 16 conjuntos, 30 iconos, 8 estilos
+de texto, 2 modos de color): https://www.figma.com/design/iMcw1JhmSAD6XjzDZuYlIz — fuente para
+`shared/ui-kit/` y las variables de tema en `src/comun/`. Las variables CSS del Figma usan los
+nombres `--fondo`, `--superficie`, `--cromo`, `--texto`, `--texto-2`, `--texto-3`, `--borde`,
+`--primaria` — adoptarlos tal cual, no inventar nombres propios.
+
 Figma con la auditoría UX y las pantallas de Sprint 1 (usa estos hex exactos vía variables de
-color, no valores sueltos): https://www.figma.com/design/PXanKCqsAYLemJhyTyTTHk — es la fuente para
-`shared/ui-kit/` y las variables de tema de Tailwind en `src/comun/`. No rediseñar desde cero,
-traducir lo que ya está ahí a HTML/CSS/JS plano.
+color, no valores sueltos): https://www.figma.com/design/PXanKCqsAYLemJhyTyTTHk — no rediseñar
+desde cero, traducir lo que ya está ahí a HTML/CSS/JS plano.
 
 ## Organización del código
 Un `.html` + un `.js` del mismo nombre por vista. Lo que se repite en dos vistas sube obligatoriamente

@@ -1,0 +1,309 @@
+{
+  "info": {
+    "name": "Servicio de heroes - lote HER",
+    "_postman_id": "9f3d2c6a-heroes-her-lote",
+    "description": "Validacion de las historias HU-HER-001 a HU-HER-010 contra el servicio en ejecucion. Cada peticion trae aserciones que citan la regla del cliente que verifican (Tablas 5, 6, 7 y 20 del documento; RC-01 del acta 2026-07-29; correcciones del acta 2026-08-13). Correr con la app de Postman (importar coleccion + entorno) o con Newman: npx newman run heroes.postman_collection.json -e local.postman_environment.json",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "0. Plataforma",
+      "item": [
+        {
+          "name": "Salud (regla 3 de plataforma)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/actuator/health" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('estado UP', () => pm.expect(pm.response.json().status).to.eql('UP'));"
+          ] } }]
+        },
+        {
+          "name": "Metricas (regla 3 de plataforma)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/actuator/metrics" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('expone nombres de metricas', () => pm.expect(pm.response.json().names).to.be.an('array').that.is.not.empty);"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "1. HU-HER-001 Seleccion de heroe (catalogo)",
+      "item": [
+        {
+          "name": "Catalogo: los prototipos de la Tabla 5",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/heroes" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const catalogo = pm.response.json();",
+            "pm.test('responde 200 JSON', () => { pm.response.to.have.status(200); pm.response.to.be.json; });",
+            "pm.test('trae los 8 prototipos iniciales de la Tabla 5 (sin fijar la cantidad: acta 13-ago)', () => {",
+            "  const nombres = catalogo.map(h => h.nombre);",
+            "  ['Guerrero Tanque','Guerrero Armas','Mago Fuego','Mago Hielo','Pícaro Veneno','Pícaro Machete','Chamán','Médico'].forEach(n => pm.expect(nombres).to.include(n));",
+            "});",
+            "pm.test('cada entrada tiene nombre, tipo y esSanador (criterio 1)', () => {",
+            "  catalogo.forEach(h => { pm.expect(h).to.have.all.keys('nombre','tipo','esSanador'); });",
+            "});",
+            "pm.test('exactamente dos sanadores: Chaman y Medico (Tabla 6)', () => {",
+            "  pm.expect(catalogo.filter(h => h.esSanador).map(h => h.nombre).sort()).to.eql(['Chamán','Médico']);",
+            "});"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "2. HU-HER-002 Estadisticas base (ficha)",
+      "item": [
+        {
+          "name": "Ficha del Guerrero Tanque: ejemplo del cliente en clase (RG-015)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/heroes/Guerrero Tanque" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const f = pm.response.json();",
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('Tabla 6: poder 10, vida 44, defensa 11', () => {",
+            "  pm.expect(f.estadisticasNivel1.poder).to.eql(10);",
+            "  pm.expect(f.estadisticasNivel1.vida).to.eql(44);",
+            "  pm.expect(f.estadisticasNivel1.defensa).to.eql(11);",
+            "});",
+            "pm.test('Tabla 6: ataque 10 + 1d6, dano 1d4 (texto)', () => {",
+            "  pm.expect(f.estadisticasNivel1.ataque).to.eql('10 + 1d6');",
+            "  pm.expect(f.estadisticasNivel1.dano).to.eql('1d4');",
+            "});",
+            "pm.test('formula estructurada para el motor: ataqueDetalle 10/1/6, danoDetalle 0/1/4', () => {",
+            "  pm.expect(f.estadisticasNivel1.ataqueDetalle).to.eql({base:10, cantidadDados:1, caras:6});",
+            "  pm.expect(f.estadisticasNivel1.danoDetalle).to.eql({base:0, cantidadDados:1, caras:4});",
+            "});",
+            "pm.test('un no sanador no trae sanar', () => pm.expect(f.estadisticasNivel1).to.not.have.property('sanar'));",
+            "pm.test('tres acciones exactas de la Tabla 7', () => {",
+            "  pm.expect(f.acciones).to.have.lengthOf(3);",
+            "  pm.expect(f.acciones[0].nombre).to.eql('Golpe con escudo');",
+            "});",
+            "pm.test('descripcion textual de la Tabla 5', () => pm.expect(f.descripcion).to.include('alta resistencia'));"
+          ] } }]
+        },
+        {
+          "name": "Ficha del Chaman: sanador sin ataque ni dano (Tabla 6)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/heroes/Chamán" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const f = pm.response.json();",
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('esSanador', () => pm.expect(f.esSanador).to.be.true);",
+            "pm.test('sanar 6 + 1d6 y detalle 6/1/6', () => {",
+            "  pm.expect(f.estadisticasNivel1.sanar).to.eql('6 + 1d6');",
+            "  pm.expect(f.estadisticasNivel1.sanarDetalle).to.eql({base:6, cantidadDados:1, caras:6});",
+            "});",
+            "pm.test('ataque y dano AUSENTES, no null (contrato)', () => {",
+            "  pm.expect(f.estadisticasNivel1).to.not.have.property('ataque');",
+            "  pm.expect(f.estadisticasNivel1).to.not.have.property('dano');",
+            "  pm.expect(f.estadisticasNivel1).to.not.have.property('ataqueDetalle');",
+            "});",
+            "pm.test('poder 10, vida 28, defensa 4', () => {",
+            "  pm.expect(f.estadisticasNivel1.poder).to.eql(10);",
+            "  pm.expect(f.estadisticasNivel1.vida).to.eql(28);",
+            "  pm.expect(f.estadisticasNivel1.defensa).to.eql(4);",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "Ficha del Medico: tampoco ataca (Tabla 6)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/heroes/Médico" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const f = pm.response.json();",
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('sanar 4 + 1d8', () => pm.expect(f.estadisticasNivel1.sanar).to.eql('4 + 1d8'));",
+            "pm.test('sin ataque ni dano', () => { pm.expect(f.estadisticasNivel1).to.not.have.property('ataque'); pm.expect(f.estadisticasNivel1).to.not.have.property('dano'); });"
+          ] } }]
+        },
+        {
+          "name": "Busqueda tolerante a tildes y mayusculas",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/heroes/picaro veneno" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 200 escribiendo sin tilde', () => pm.response.to.have.status(200));",
+            "pm.test('resuelve al nombre canonico', () => pm.expect(pm.response.json().nombre).to.eql('Pícaro Veneno'));"
+          ] } }]
+        },
+        {
+          "name": "Heroe inexistente: mensaje apto para el usuario, jamas un codigo (acta 13-ago)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/heroes/Nigromante" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 404', () => pm.response.to.have.status(404));",
+            "pm.test('formato de error estandar de la plataforma (RFC 9457)', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'));",
+            "const p = pm.response.json();",
+            "pm.test('titulo y detalle legibles', () => {",
+            "  pm.expect(p.title).to.eql('Héroe no disponible');",
+            "  pm.expect(p.detail).to.eql('El héroe solicitado no está disponible en el catálogo.');",
+            "});",
+            "pm.test('el detalle no contiene codigos de estado', () => pm.expect(p.detail).to.not.match(/404|500|http/i));"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "3. HU-HER-003/006/007/008/009/010 Vista por nivel",
+      "item": [
+        {
+          "name": "Mago Fuego nivel 3: escalado del ejemplo textual del cliente (HER-008)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/heroes/Mago Fuego/niveles/3" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const v = pm.response.json();",
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('ataque base 30 (10 x 3) y el dado NO escala: 30 + 1d8', () => {",
+            "  pm.expect(v.estadisticas.ataque).to.eql('30 + 1d8');",
+            "  pm.expect(v.estadisticas.ataqueDetalle).to.eql({base:30, cantidadDados:1, caras:8});",
+            "});",
+            "pm.test('poder, vida y defensa multiplicados por 3', () => {",
+            "  pm.expect(v.estadisticas.poder).to.eql(24);",
+            "  pm.expect(v.estadisticas.vida).to.eql(120);",
+            "  pm.expect(v.estadisticas.defensa).to.eql(30);",
+            "});",
+            "pm.test('multiplicador de efecto = nivel (HER-007)', () => pm.expect(v.multiplicadorDeEfecto).to.eql(3));",
+            "pm.test('experiencia para subir 100 x 1,2^(3-1) = 144 (HER-003)', () => pm.expect(v.experienciaParaSubir).to.be.closeTo(144, 0.001));",
+            "pm.test('en nivel 3 solo la primera accion esta desbloqueada (RC-01: 1/4/8)', () => pm.expect(v.accionesDisponibles).to.have.lengthOf(1));",
+            "pm.test('epica afin Luz cegadora con efecto potenciado y 2 turnos de recarga (Tabla 20, HER-009/010)', () => {",
+            "  pm.expect(v.epica.nombre).to.eql('Luz cegadora');",
+            "  pm.expect(v.epica.efectoGeneral).to.eql('+1 a la vida');",
+            "  pm.expect(v.epica.efectoPotenciado).to.eql('+2 al daño, +1% de crítico');",
+            "  pm.expect(v.epica.turnosDeRecarga).to.eql(2);",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "Guerrero Tanque nivel 4: segunda accion desbloqueada (RC-01)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/heroes/Guerrero Tanque/niveles/4" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const v = pm.response.json();",
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('dos acciones en nivel 4', () => pm.expect(v.accionesDisponibles).to.have.lengthOf(2));",
+            "pm.test('en el orden de la Tabla 7', () => pm.expect(v.accionesDisponibles.map(a => a.nombre)).to.eql(['Golpe con escudo','Mano de piedra']));"
+          ] } }]
+        },
+        {
+          "name": "Guerrero Tanque nivel 8: tres acciones y sin experiencia para subir (tope)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/heroes/Guerrero Tanque/niveles/8" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const v = pm.response.json();",
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('tres acciones en nivel 8', () => pm.expect(v.accionesDisponibles).to.have.lengthOf(3));",
+            "pm.test('en el nivel maximo no hay experiencia para subir', () => pm.expect(v).to.not.have.property('experienciaParaSubir'));",
+            "pm.test('vida 44 x 8 = 352', () => pm.expect(v.estadisticas.vida).to.eql(352));"
+          ] } }]
+        },
+        {
+          "name": "Chaman nivel 2: sanar escala y la epica no tiene efecto general (Tabla 20: No aplica)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/heroes/Chamán/niveles/2" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const v = pm.response.json();",
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('sanar 12 + 1d6', () => pm.expect(v.estadisticas.sanar).to.eql('12 + 1d6'));",
+            "pm.test('epica Te changua sin efecto general', () => { pm.expect(v.epica.nombre).to.eql('Té changua'); pm.expect(v.epica).to.not.have.property('efectoGeneral'); });"
+          ] } }]
+        },
+        {
+          "name": "Nivel 9: fuera de rango, 400 con mensaje apto",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/heroes/Mago Fuego/niveles/9" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 400', () => pm.response.to.have.status(400));",
+            "const p = pm.response.json();",
+            "pm.test('titulo y detalle', () => { pm.expect(p.title).to.eql('Nivel no válido'); pm.expect(p.detail).to.eql('El nivel de un héroe está entre 1 y 8.'); });"
+          ] } }]
+        },
+        {
+          "name": "Prototipo inexistente en la vista por nivel: 404",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/heroes/Nigromante/niveles/2" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 404', () => pm.response.to.have.status(404));",
+            "pm.test('titulo Heroe no disponible', () => pm.expect(pm.response.json().title).to.eql('Héroe no disponible'));"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "4. HU-HER-003/004 Progresion",
+      "item": [
+        {
+          "name": "Tabla de niveles: 100 x 1,2^(N-1), el 8 no sube",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/progresion/niveles" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const t = pm.response.json();",
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('ocho niveles', () => pm.expect(t).to.have.lengthOf(8));",
+            "pm.test('nivel 1 -> 100, nivel 2 -> 120, nivel 4 -> 172.8', () => {",
+            "  pm.expect(t[0].experienciaParaSubir).to.be.closeTo(100, 0.001);",
+            "  pm.expect(t[1].experienciaParaSubir).to.be.closeTo(120, 0.001);",
+            "  pm.expect(t[3].experienciaParaSubir).to.be.closeTo(172.8, 0.001);",
+            "});",
+            "pm.test('el nivel 8 no tiene experiencia para subir', () => { pm.expect(t[7].nivel).to.eql(8); pm.expect(t[7]).to.not.have.property('experienciaParaSubir'); });"
+          ] } }]
+        },
+        {
+          "name": "Progresar: 250 puntos desde nivel 1 encadenan a nivel 3 con sobrante 30",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/progresion/experiencia",
+            "body": { "mode": "raw", "raw": "{\"nivel\": 1, \"experiencia\": 0, \"puntos\": 250}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const p = pm.response.json();",
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('nivel 3 (100 + 120 cubiertos)', () => pm.expect(p.nivel).to.eql(3));",
+            "pm.test('sobrante 30 conservado', () => pm.expect(p.experiencia).to.be.closeTo(30, 0.001));"
+          ] } }]
+        },
+        {
+          "name": "Progresar: el nivel 8 es tope, la experiencia se acumula sin subir",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/progresion/experiencia",
+            "body": { "mode": "raw", "raw": "{\"nivel\": 8, \"experiencia\": 10, \"puntos\": 100000}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const p = pm.response.json();",
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('sigue en 8', () => pm.expect(p.nivel).to.eql(8));",
+            "pm.test('acumula 100010', () => pm.expect(p.experiencia).to.be.closeTo(100010, 0.001));"
+          ] } }]
+        },
+        {
+          "name": "Progresar: puntos negativos rechazados con 400",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/v1/progresion/experiencia",
+            "body": { "mode": "raw", "raw": "{\"nivel\": 1, \"experiencia\": 0, \"puntos\": -5}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 400', () => pm.response.to.have.status(400));",
+            "pm.test('detalle legible', () => pm.expect(pm.response.json().detail).to.eql('La experiencia ganada no puede ser negativa.'));"
+          ] } }]
+        },
+        {
+          "name": "Experiencia por enemigo derrotado: 10 x 1,2^(dado) (HER-004)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/progresion/experiencia-por-enemigo/1" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const r = pm.response.json();",
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('dado 1 -> 12 puntos', () => { pm.expect(r.dado).to.eql(1); pm.expect(r.puntos).to.be.closeTo(12, 0.001); });"
+          ] } }]
+        },
+        {
+          "name": "Experiencia por enemigo: dado 8 -> 42.998",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/progresion/experiencia-por-enemigo/8" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('10 x 1,2^8 = 42.998', () => pm.expect(pm.response.json().puntos).to.be.closeTo(42.998, 0.001));"
+          ] } }]
+        },
+        {
+          "name": "Experiencia por enemigo: dado 9 fuera de 1..8, 400",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/progresion/experiencia-por-enemigo/9" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 400', () => pm.response.to.have.status(400));",
+            "pm.test('detalle legible', () => pm.expect(pm.response.json().detail).to.eql('El resultado de un 1d8 está entre 1 y 8.'));"
+          ] } }]
+        }
+      ]
+    }
+  ],
+  "variable": [{ "key": "baseUrl", "value": "http://localhost:8080" }]
+}

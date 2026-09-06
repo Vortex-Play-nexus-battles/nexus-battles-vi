@@ -1,6 +1,7 @@
 package nexus.api;
 
 import nexus.dominio.HeroeNoDisponibleException;
+import nexus.dominio.NivelFueraDeRangoException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -17,8 +18,23 @@ public class ManejadorDeErrores {
 
     @ExceptionHandler(HeroeNoDisponibleException.class)
     public ProblemDetail heroeNoDisponible(HeroeNoDisponibleException e) {
-        ProblemDetail problema = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
-        problema.setTitle("Héroe no disponible");
+        return problema(HttpStatus.NOT_FOUND, "Héroe no disponible", e.getMessage());
+    }
+
+    @ExceptionHandler(NivelFueraDeRangoException.class)
+    public ProblemDetail nivelNoValido(NivelFueraDeRangoException e) {
+        return problema(HttpStatus.BAD_REQUEST, "Nivel no válido", e.getMessage());
+    }
+
+    /** Reglas del dominio violadas por la entrada (puntos negativos, dado fuera de 1..8). */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ProblemDetail entradaNoValida(IllegalArgumentException e) {
+        return problema(HttpStatus.BAD_REQUEST, "Solicitud no válida", e.getMessage());
+    }
+
+    private static ProblemDetail problema(HttpStatus estado, String titulo, String detalle) {
+        ProblemDetail problema = ProblemDetail.forStatusAndDetail(estado, detalle);
+        problema.setTitle(titulo);
         return problema;
     }
 }

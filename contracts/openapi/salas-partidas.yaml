@@ -117,6 +117,24 @@ paths:
                 status: 422
                 detail: 'Tienes 240 creditos y necesitas 400 para crear esta sala.'
                 instance: '/api/v1/salas'
+        '503':
+          description: |
+            Estado transitorio, documentado a proposito: el modulo de creditos
+            (RF-JUE-014, equipo de Cuentas) todavia no publica su contrato, asi
+            que toda sala con `recompensaCreditos > 0` se rechaza con este
+            error en vez de fingir una reserva. Las salas sin recompensa no
+            pasan por aqui. Esta respuesta desaparece del contrato cuando
+            exista `contracts/openapi/creditos.yaml` y su adaptador.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+              example:
+                type: 'https://nexusbattles.local/errores/creditos-sin-integrar'
+                title: 'Las apuestas todavia no estan disponibles'
+                status: 503
+                detail: 'Por ahora solo se pueden crear salas sin recompensa. La apuesta de creditos se habilita cuando este listo el modulo de creditos.'
+                instance: '/api/v1/salas'
 
     # -------------------------------------------------------------------------
     # RF-JUE-002 · HU-SAL-002 — Listado de salas creadas por otros jugadores

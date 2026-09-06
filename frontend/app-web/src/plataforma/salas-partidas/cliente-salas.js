@@ -15,7 +15,30 @@
 
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
 
-const RUTA = '/api/v1/salas';
+/**
+ * Base de la API. Vacia por omision, es decir **mismo origen**: asi es como
+ * Spring Boot sirve estas vistas en la ejecucion integrada, y por eso no hay
+ * ningun `localhost` escrito en el codigo.
+ *
+ * Para revisar las vistas servidas como HTML estatico contra un backend que
+ * corre en otro sitio, la propia pagina lo declara:
+ *
+ *   <meta name="nexus-api-base" content="http://127.0.0.1:8083" />
+ *
+ * @returns {string} base sin barra final, o cadena vacia
+ */
+export function baseDeApi() {
+  const meta = globalThis.document?.querySelector?.('meta[name="nexus-api-base"]');
+  return String(meta?.content ?? '').replace(/\/+$/, '');
+}
+
+/**
+ * @param {string} [sufijo]
+ * @returns {string} ruta absoluta al recurso de salas
+ */
+function ruta(sufijo = '') {
+  return `${baseDeApi()}/api/v1/salas${sufijo}`;
+}
 
 /**
  * Error de negocio devuelto por el servicio, ya interpretado.
@@ -33,7 +56,7 @@ export class ErrorDeApi extends Error {
     super(problema?.detail || problema?.title || 'El servicio no pudo completar la operacion.');
     this.name = 'ErrorDeApi';
     this.tipo = problema?.type ?? null;
-    this.titulo = problema?.title ?? 'No se pudo crear la sala';
+    this.titulo = problema?.title ?? 'El servicio no pudo completar la operacion';
     this.detalle = this.message;
     this.estado = problema?.status ?? estado;
     /** @type {Array<{campo: string, mensaje: string}>} */
@@ -57,7 +80,7 @@ export class ErrorDeApi extends Error {
  * @throws {ErrorDeApi} si el servicio rechaza la peticion
  */
 export async function crearSala(parametros, { fetchImpl = fetchWithHttpErrorInterceptor } = {}) {
-  const respuesta = await fetchImpl(RUTA, {
+  const respuesta = await fetchImpl(ruta(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(parametros),
@@ -93,7 +116,7 @@ export async function listarSalas(
   }
 
   const consulta = parametros.toString();
-  const respuesta = await fetchImpl(consulta ? `${RUTA}?${consulta}` : RUTA);
+  const respuesta = await fetchImpl(consulta ? `${ruta()}?${consulta}` : ruta());
 
   if (respuesta.ok) {
     return respuesta.json();
@@ -114,7 +137,7 @@ export async function listarSalas(
  * @throws {ErrorDeApi} 404 no existe · 403 privada · 409 llena o ya empezo
  */
 export async function ingresarASala(idSala, { fetchImpl = fetchWithHttpErrorInterceptor } = {}) {
-  const respuesta = await fetchImpl(`${RUTA}/${encodeURIComponent(idSala)}/participantes`, {
+  const respuesta = await fetchImpl(ruta(`/${encodeURIComponent(idSala)}/participantes`), {
     method: 'POST',
   });
 
@@ -126,9 +149,57 @@ export async function ingresarASala(idSala, { fetchImpl = fetchWithHttpErrorInte
 }
 
 /**
+ * Verifica el heroe antes de intentar entrar — HU-SAL-003, RF-JUE-003.
+ *
+ * Habla con `GET /salas/{idSala}/verificacion-heroe`, que ya esta publicado en
+ * `contracts/openapi/salas-partidas.yaml`. La ruta existe en el contrato pero
+ * **todavia no en el servicio**: depende de que el modulo de contenido publique
+ * cual es el heroe activo del jugador. Por eso este cliente se escribe contra
+ * el contrato y se inyecta en la vista, que se prueba con datos de ejemplo.
+ *
+ * No comprueba ni decide nada: solo trae el veredicto. Quien decide es el
+ * servidor, y la vista solo lo pinta.
+ *
+ * @param {string} idSala
+ * @param {{fetchImpl?: Function}} [opciones] inyeccion para las pruebas
+ * @returns {Promise<object>} segun el esquema VerificacionHeroe del contrato
+ * @throws {ErrorDeApi} si el servicio rechaza la peticion
+ */
+export async function verificarHeroe(idSala, { fetchImpl = fetchWithHttpErrorInterceptor } = {}) {
+  const respuesta = await fetchImpl(ruta(`/${encodeURIComponent(idSala)}/verificacion-heroe`));
+
+  if (respuesta.ok) {
+    return respuesta.json();
+  }
+
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+}
+
+/**
+ * True cuando detras de la ruta no hay ninguna API, sino un servidor de
+ * ficheros. Un servidor estatico responde 405 a un POST sobre una ruta que
+ * para el es un fichero (`http-server` lo hace con `text/plain`), y devuelve
+ * HTML cuando la ruta no existe. Distinguirlo importa: es la diferencia entre
+ * «el servicio fallo» y «no has levantado el servicio».
+ *
+ * Solo se consulta cuando el cuerpo NO era JSON. Un servicio de la Empresa A
+ * responde siempre con problem details (regla 4 de plataforma), tambien en
+ * un 405 real, asi que ese 405 nunca llega aqui: lo atrapa `cuerpoDelProblema`
+ * antes. Por eso no se reduce la comprobacion a `text/html`: dejaria de
+ * reconocerse el caso real del servidor estatico.
+ *
+ * @param {Response} respuesta
+ * @returns {boolean}
+ */
+function sinApiDetras(respuesta) {
+  const tipo = String(respuesta.headers?.get?.('content-type') ?? '');
+  return respuesta.status === 405 || tipo.includes('text/html');
+}
+
+/**
  * Lee el problem details de una respuesta fallida.
  *
- * Un 401 de Spring Security llega sin cuerpo, y un fallo de red puede devolver
+ * Un 401 de Spring Security llega sin cuerpo, y un servidor estatico devuelve
  * HTML. En esos casos se construye un problema minimo en vez de reventar: la
  * persona necesita ver un mensaje, no una excepcion de JSON.
  *
@@ -142,14 +213,28 @@ async function cuerpoDelProblema(respuesta) {
       return problema;
     }
   } catch {
-    // Cuerpo vacio o no JSON: se cae al mensaje por defecto de abajo.
+    // Cuerpo vacio o no JSON: se cae a los mensajes de abajo.
   }
+
+  if (sinApiDetras(respuesta)) {
+    // La URL real de la peticion cuando `fetch` la trae; la base como respaldo.
+    const direccion = respuesta.url || ruta();
+    return {
+      status: respuesta.status,
+      title: 'No hay ninguna API detras de esta ruta',
+      detail:
+        `Estas viendo la vista servida como HTML estatico: nadie atiende ${direccion}. ` +
+        'Levanta el servicio de salas, o declara en la pagina ' +
+        '<meta name="nexus-api-base"> apuntando a donde este corriendo.',
+    };
+  }
+
   return {
     status: respuesta.status,
-    title: respuesta.status === 401 ? 'Tu sesion no es valida' : 'No se pudo crear la sala',
+    title: respuesta.status === 401 ? 'Tu sesion no es valida' : 'El servicio no respondio bien',
     detail:
       respuesta.status === 401
-        ? 'Vuelve a iniciar sesion para crear una sala.'
+        ? 'Vuelve a iniciar sesion para continuar.'
         : `El servicio respondio ${respuesta.status}.`,
   };
 }
