@@ -1,0 +1,7 @@
+# Estado y llaves de la instancia de contenido: nunca al repositorio.
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.pem
+*.tfvars
