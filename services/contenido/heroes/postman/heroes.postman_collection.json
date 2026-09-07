@@ -968,6 +968,261 @@
      ]
     }
    ]
+  },
+  {
+   "name": "7. HU-SIM-002 Decision de la IA por turno (prioridad de rotaciones)",
+   "item": [
+    {
+     "name": "Turno 1 con poder lleno: se ejecuta la Rotacion 1 (RF-MIS-13)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{baseUrl}}/api/v1/estrategias/decision",
+      "body": {
+       "mode": "raw",
+       "raw": "{\"heroe\": \"Guerrero Armas\", \"nivel\": 8, \"rotaciones\": [{\"pasos\": [\"Golpe de tormenta\", \"Embate sangriento\", \"Ataque básico\"]}, {\"pasos\": [\"Lanza de los dioses\", \"Ataque básico\", \"Ataque básico\"]}, {\"pasos\": [\"Embate sangriento\", \"Ataque básico\", \"Ataque básico\"]}], \"estado\": {\"turno\": 1, \"poder\": 64, \"vida\": 44}}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "const v = pm.response.json();",
+         "pm.test('responde 200', () => pm.response.to.have.status(200));",
+         "pm.test('accion del primer paso de la Rotacion 1', () => pm.expect(v.accion).to.eql('Golpe de tormenta'));",
+         "pm.test('salio de la rotacion 1', () => pm.expect(v.rotacion).to.eql(1));",
+         "pm.test('consume el costo de la Tabla 7 (6)', () => pm.expect(v.costoDePoder).to.eql(6));",
+         "pm.test('el cursor de la rotacion 1 avanza', () => pm.expect(v.cursoresSiguientes).to.eql([1,0,0]));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "Sin poder para la Rotacion 1: pasa a la 2 y explica el descarte (RF-MIS-14)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{baseUrl}}/api/v1/estrategias/decision",
+      "body": {
+       "mode": "raw",
+       "raw": "{\"heroe\": \"Guerrero Armas\", \"nivel\": 8, \"rotaciones\": [{\"pasos\": [\"Golpe de tormenta\", \"Embate sangriento\", \"Ataque básico\"]}, {\"pasos\": [\"Lanza de los dioses\", \"Ataque básico\", \"Ataque básico\"]}, {\"pasos\": [\"Embate sangriento\", \"Ataque básico\", \"Ataque básico\"]}], \"estado\": {\"turno\": 1, \"poder\": 5, \"vida\": 44}}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "const v = pm.response.json();",
+         "pm.test('responde 200', () => pm.response.to.have.status(200));",
+         "pm.test('ejecuta la Rotacion 2', () => pm.expect(v.rotacion).to.eql(2));",
+         "pm.test('accion de la Rotacion 2', () => pm.expect(v.accion).to.eql('Lanza de los dioses'));",
+         "pm.test('razon del descarte apta para el jugador', () => pm.expect(v.evaluaciones[0].razon).to.eql('Poder insuficiente: Golpe de tormenta cuesta 6 y el héroe tiene 5.'));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "Habilidad en periodo de espera: no es viable hasta cumplir la carga (HU-HER-007)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{baseUrl}}/api/v1/estrategias/decision",
+      "body": {
+       "mode": "raw",
+       "raw": "{\"heroe\": \"Guerrero Armas\", \"nivel\": 8, \"rotaciones\": [{\"pasos\": [\"Golpe de tormenta\", \"Embate sangriento\", \"Ataque básico\"]}, {\"pasos\": [\"Lanza de los dioses\", \"Ataque básico\", \"Ataque básico\"]}, {\"pasos\": [\"Embate sangriento\", \"Ataque básico\", \"Ataque básico\"]}], \"estado\": {\"turno\": 4, \"poder\": 64, \"vida\": 44, \"turnoDeUltimoUso\": {\"Golpe de tormenta\": 3}}}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "const v = pm.response.json();",
+         "pm.test('responde 200', () => pm.response.to.have.status(200));",
+         "pm.test('no ejecuta la que esta en recarga', () => pm.expect(v.accion).to.eql('Lanza de los dioses'));",
+         "pm.test('informa el turno en que vuelve', () => pm.expect(v.evaluaciones[0].razon).to.eql('En recarga: Golpe de tormenta se usó en el turno 3 y vuelve a estar disponible en el turno 5.'));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "Ninguna rotacion viable: ataque basico sin consumir poder (RF-MIS-15)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{baseUrl}}/api/v1/estrategias/decision",
+      "body": {
+       "mode": "raw",
+       "raw": "{\"heroe\": \"Guerrero Armas\", \"nivel\": 8, \"rotaciones\": [{\"pasos\": [\"Golpe de tormenta\"]}, {\"pasos\": [\"Lanza de los dioses\"]}, {\"pasos\": [\"Embate sangriento\"]}], \"estado\": {\"turno\": 1, \"poder\": 0, \"vida\": 44}}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "const v = pm.response.json();",
+         "pm.test('responde 200', () => pm.response.to.have.status(200));",
+         "pm.test('ataque basico', () => pm.expect(v.accion).to.eql('Ataque básico'));",
+         "pm.test('sin rotacion de origen', () => pm.expect(v).to.not.have.property('rotacion'));",
+         "pm.test('no consume poder', () => pm.expect(v.costoDePoder).to.eql(0));",
+         "pm.test('evaluo las tres', () => pm.expect(v.evaluaciones.length).to.eql(3));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "Turno nuevo: vuelve a empezar por la Rotacion 1 (RF-MIS-16)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{baseUrl}}/api/v1/estrategias/decision",
+      "body": {
+       "mode": "raw",
+       "raw": "{\"heroe\": \"Guerrero Armas\", \"nivel\": 8, \"rotaciones\": [{\"pasos\": [\"Golpe de tormenta\", \"Embate sangriento\", \"Ataque básico\"]}, {\"pasos\": [\"Lanza de los dioses\", \"Ataque básico\", \"Ataque básico\"]}, {\"pasos\": [\"Embate sangriento\", \"Ataque básico\", \"Ataque básico\"]}], \"estado\": {\"turno\": 2, \"poder\": 64, \"vida\": 44, \"turnoDeUltimoUso\": {\"Lanza de los dioses\": 1}, \"cursores\": [0, 1, 0]}}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "const v = pm.response.json();",
+         "pm.test('responde 200', () => pm.response.to.have.status(200));",
+         "pm.test('evalua primero la Rotacion 1 y la ejecuta', () => pm.expect(v.rotacion).to.eql(1));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "El cursor da la vuelta al terminar la secuencia",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{baseUrl}}/api/v1/estrategias/decision",
+      "body": {
+       "mode": "raw",
+       "raw": "{\"heroe\": \"Guerrero Armas\", \"nivel\": 8, \"rotaciones\": [{\"pasos\": [\"Golpe de tormenta\", \"Embate sangriento\", \"Ataque básico\"]}, {\"pasos\": [\"Lanza de los dioses\", \"Ataque básico\", \"Ataque básico\"]}, {\"pasos\": [\"Embate sangriento\", \"Ataque básico\", \"Ataque básico\"]}], \"estado\": {\"turno\": 4, \"poder\": 64, \"vida\": 44, \"cursores\": [3, 0, 0]}}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "const v = pm.response.json();",
+         "pm.test('responde 200', () => pm.response.to.have.status(200));",
+         "pm.test('vuelve al primer paso', () => pm.expect(v.accion).to.eql('Golpe de tormenta'));",
+         "pm.test('cursor sigue avanzando', () => pm.expect(v.cursoresSiguientes).to.eql([4,0,0]));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "Heroe sin vida: 400 legible (estado de salud, pendiente P-E)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{baseUrl}}/api/v1/estrategias/decision",
+      "body": {
+       "mode": "raw",
+       "raw": "{\"heroe\": \"Guerrero Armas\", \"nivel\": 8, \"rotaciones\": [{\"pasos\": [\"Golpe de tormenta\", \"Embate sangriento\", \"Ataque básico\"]}, {\"pasos\": [\"Lanza de los dioses\", \"Ataque básico\", \"Ataque básico\"]}, {\"pasos\": [\"Embate sangriento\", \"Ataque básico\", \"Ataque básico\"]}], \"estado\": {\"turno\": 1, \"poder\": 64, \"vida\": 0}}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "const v = pm.response.json();",
+         "pm.test('responde 400', () => pm.response.to.have.status(400));",
+         "pm.test('detalle apto para el usuario', () => pm.expect(v.detail).to.eql('Un héroe sin vida no actúa.'));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "Estrategia invalida en la decision: 400 con el motivo",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{baseUrl}}/api/v1/estrategias/decision",
+      "body": {
+       "mode": "raw",
+       "raw": "{\"heroe\": \"Guerrero Armas\", \"nivel\": 1, \"rotaciones\": [{\"pasos\": [\"Golpe de tormenta\"]}], \"estado\": {\"turno\": 1, \"poder\": 8, \"vida\": 44}}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "const v = pm.response.json();",
+         "pm.test('responde 400', () => pm.response.to.have.status(400));",
+         "pm.test('motivo de la regla', () => pm.expect(v.detail).to.eql('La rotación 1 usa una habilidad que Guerrero Armas no posee en nivel 1: Golpe de tormenta.'));"
+        ]
+       }
+      }
+     ]
+    }
+   ]
   }
  ],
  "variable": [
