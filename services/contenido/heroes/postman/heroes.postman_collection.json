@@ -744,6 +744,230 @@
      ]
     }
    ]
+  },
+  {
+   "name": "6. HU-SIM-001 Estrategia de combate (rotaciones)",
+   "item": [
+    {
+     "name": "Ejemplo del documento (7.8.5): tres rotaciones del Guerrero Armas nivel 8",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{baseUrl}}/api/v1/estrategias/validacion",
+      "body": {
+       "mode": "raw",
+       "raw": "{\"heroe\": \"Guerrero Armas\", \"nivel\": 8, \"rotaciones\": [{\"pasos\": [\"Golpe de tormenta\", \"Embate sangriento\", \"Ataque básico\"]}, {\"pasos\": [\"Lanza de los dioses\", \"Ataque básico\", \"Ataque básico\"]}, {\"pasos\": [\"Embate sangriento\", \"Ataque básico\", \"Ataque básico\"]}]}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "const v = pm.response.json();",
+         "pm.test('responde 200', () => pm.response.to.have.status(200));",
+         "pm.test('valida', () => pm.expect(v.valida).to.eql(true));",
+         "pm.test('tres rotaciones (RF-MIS-12: hasta tres)', () => pm.expect(v.rotaciones.length).to.eql(3));",
+         "pm.test('prioridades Alta, Media, Baja por posicion (7.8.5)', () => pm.expect(v.rotaciones.map(r => r.prioridad)).to.eql(['Alta','Media','Baja']));",
+         "pm.test('no es la estrategia por defecto', () => pm.expect(v.porDefecto).to.eql(false));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "Habilidad no poseida en nivel 4: se rechaza e indica las validas (ERS CU-61 E1)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{baseUrl}}/api/v1/estrategias/validacion",
+      "body": {
+       "mode": "raw",
+       "raw": "{\"heroe\": \"guerrero armas\", \"nivel\": 4, \"rotaciones\": [{\"pasos\": [\"Golpe de tormenta\"]}]}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "const v = pm.response.json();",
+         "pm.test('responde 200: un rechazo no es un error de la peticion', () => pm.response.to.have.status(200));",
+         "pm.test('no valida', () => pm.expect(v.valida).to.eql(false));",
+         "pm.test('motivo apto para el jugador', () => pm.expect(v.motivo).to.eql('La rotación 1 usa una habilidad que Guerrero Armas no posee en nivel 4: Golpe de tormenta.'));",
+         "pm.test('indica las habilidades validas (dos desbloqueadas + ataque basico, RC-01)', () => pm.expect(v.habilidadesValidas).to.eql(['Embate sangriento','Lanza de los dioses','Ataque básico']));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "Sin rotaciones: comportamiento por defecto ataque basico (RF-MIS-15)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{baseUrl}}/api/v1/estrategias/validacion",
+      "body": {
+       "mode": "raw",
+       "raw": "{\"heroe\": \"Pícaro Veneno\", \"nivel\": 3}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "const v = pm.response.json();",
+         "pm.test('responde 200', () => pm.response.to.have.status(200));",
+         "pm.test('valida', () => pm.expect(v.valida).to.eql(true));",
+         "pm.test('por defecto', () => pm.expect(v.porDefecto).to.eql(true));",
+         "pm.test('ataque basico', () => pm.expect(v.comportamientoPorDefecto).to.eql('Ataque básico'));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "Pasos como los escribe el jugador, guardados con el nombre exacto de la Tabla 7",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{baseUrl}}/api/v1/estrategias/validacion",
+      "body": {
+       "mode": "raw",
+       "raw": "{\"heroe\": \"mago fuego\", \"nivel\": 8, \"rotaciones\": [{\"pasos\": [\"misiles de MAGMA\", \"vulcano\", \"ataque basico\"]}]}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "const v = pm.response.json();",
+         "pm.test('responde 200', () => pm.response.to.have.status(200));",
+         "pm.test('valida', () => pm.expect(v.valida).to.eql(true));",
+         "pm.test('nombres canonicos', () => pm.expect(v.rotaciones[0].pasos).to.eql(['Misiles de magma','Vulcano','Ataque básico']));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "Cuatro rotaciones: se rechazan (hasta tres)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{baseUrl}}/api/v1/estrategias/validacion",
+      "body": {
+       "mode": "raw",
+       "raw": "{\"heroe\": \"Chamán\", \"nivel\": 1, \"rotaciones\": [{\"pasos\": [\"Ataque básico\"]}, {\"pasos\": [\"Ataque básico\"]}, {\"pasos\": [\"Ataque básico\"]}, {\"pasos\": [\"Ataque básico\"]}]}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "const v = pm.response.json();",
+         "pm.test('responde 200', () => pm.response.to.have.status(200));",
+         "pm.test('no valida', () => pm.expect(v.valida).to.eql(false));",
+         "pm.test('motivo del tope', () => pm.expect(v.motivo).to.eql('Una estrategia admite hasta tres rotaciones: alta, media y baja.'));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "Heroe inexistente: 404 legible",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{baseUrl}}/api/v1/estrategias/validacion",
+      "body": {
+       "mode": "raw",
+       "raw": "{\"heroe\": \"Paladín\", \"nivel\": 1}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "const v = pm.response.json();",
+         "pm.test('responde 404', () => pm.response.to.have.status(404));",
+         "pm.test('titulo apto para el usuario', () => pm.expect(v.title).to.eql('Héroe no disponible'));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "Nivel 9: 400 legible",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{baseUrl}}/api/v1/estrategias/validacion",
+      "body": {
+       "mode": "raw",
+       "raw": "{\"heroe\": \"Chamán\", \"nivel\": 9}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "const v = pm.response.json();",
+         "pm.test('responde 400', () => pm.response.to.have.status(400));",
+         "pm.test('titulo apto para el usuario', () => pm.expect(v.title).to.eql('Nivel no válido'));"
+        ]
+       }
+      }
+     ]
+    }
+   ]
   }
  ],
  "variable": [
