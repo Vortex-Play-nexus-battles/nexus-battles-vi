@@ -82,6 +82,7 @@ class IngresoConcurrenteIT {
         Sala sala = Sala.crear(
                 new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, false, null), ANFITRION);
         repositorio.guardar(sala);
+        long versionTrasCrear = repositorio.buscarPorId(sala.id()).orElseThrow().version();
 
         CyclicBarrier ambosLeyeron = new CyclicBarrier(2);
         RepositorioDeSalas coordinado = new EsperaTrasLaPrimeraLectura(repositorio, ambosLeyeron);
@@ -117,7 +118,8 @@ class IngresoConcurrenteIT {
                     () -> assertTrue(enBase.participantes().contains(ANFITRION)),
                     () -> assertTrue(enBase.participantes().contains(ganador)),
                     () -> assertFalse(enBase.participantes().contains(perdedor)),
-                    () -> assertEquals(1, enBase.version(), "una sola escritura tras la creacion"));
+                    () -> assertEquals(versionTrasCrear + 1, enBase.version(),
+                            "una sola escritura tras la creacion: la del ganador"));
 
             assertAll("el canal solo anuncia a quien de verdad quedo dentro",
                     () -> assertEquals(1, canal.anuncios().size(), "anuncios: " + canal.anuncios()),
@@ -137,9 +139,10 @@ class IngresoConcurrenteIT {
 
         Sala lecturaDeAna = repositorio.buscarPorId(sala.id()).orElseThrow();
         Sala lecturaDeBruno = repositorio.buscarPorId(sala.id()).orElseThrow();
+        long versionLeida = lecturaDeAna.version();
 
         lecturaDeAna.unirse(ANA);
-        repositorio.guardar(lecturaDeAna); // version 0 -> 1
+        repositorio.guardar(lecturaDeAna); // version N -> N+1
 
         lecturaDeBruno.unirse(BRUNO); // en memoria cabe; en la base ya no es la misma sala
         Object resultado = intentarGuardar(lecturaDeBruno);
@@ -152,7 +155,8 @@ class IngresoConcurrenteIT {
                 () -> assertTrue(enBase.participantes().contains(ANA), "Ana sigue dentro"),
                 () -> assertFalse(enBase.participantes().contains(BRUNO), "Bruno no piso a Ana"),
                 () -> assertEquals(2, enBase.ocupacion()),
-                () -> assertEquals(1, enBase.version()));
+                () -> assertEquals(versionLeida + 1, enBase.version(),
+                        "solo avanzo la escritura de Ana; la de Bruno no toco la fila"));
     }
 
     private static Object intentar(IngresarASala ingresar, UUID idSala, UUID idJugador) {

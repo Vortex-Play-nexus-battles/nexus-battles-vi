@@ -38,6 +38,21 @@ public class RepositorioSalasJpa implements RepositorioDeSalas {
      * participantes tienen que escribirse juntas o no escribirse. Media
      * operacion dejaria un aforo que no coincide con quienes estan dentro, que
      * es justo lo que este incremento vino a impedir.
+     *
+     * <p><b>Contrato de la marca de concurrencia</b> ({@code version}, V4).
+     * La entidad se reconstruye desde el dominio con la version que este leyo,
+     * y el {@code UPDATE} lleva {@code WHERE version = ?}: una copia leida
+     * antes de otra escritura no encuentra la fila y se traduce a
+     * {@link SalaModificadaConcurrentemente}, sin pisar nada. Lo que se
+     * garantiza es que la marca avanza <b>exactamente en uno por escritura que
+     * llega a la base</b> y que una copia vieja falla. El valor con el que
+     * <i>nace</i> la fila no es parte del contrato: como el identificador lo
+     * asigna el dominio, Spring Data hace {@code merge}, Hibernate inserta la
+     * sala con 0 y, al volcar la coleccion de participantes en la copia
+     * gestionada, la marca como sucia y sube la version a 1 en el mismo flush
+     * ({@code insert} + {@code update salas set version}). Una sentencia de mas
+     * una sola vez por sala, a cambio de no tener que consultar antes si existe.
+     * Las pruebas comparan la marca con la observada tras crear, no con 0.
      */
     @Override
     @Transactional

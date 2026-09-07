@@ -243,7 +243,9 @@ class IngresarASalaTest {
         ingresarASala = new IngresarASala(almacen, canal);
         Sala sala = Sala.crear(
                 new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null), ANFITRION);
-        almacen.guardar(sala);
+        // La semilla es una escritura «de fuera»: no debe consumir el fallo
+        // programado para el caso de uso.
+        almacen.sobreescribir(sala);
 
         Sala resultado = ingresarASala.ejecutar(sala.id(), VISITANTE);
 
@@ -261,7 +263,9 @@ class IngresarASalaTest {
         ingresarASala = new IngresarASala(almacen, canal);
         Sala sala = Sala.crear(
                 new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, false, null), ANFITRION);
-        almacen.guardar(sala);
+        // La semilla es una escritura «de fuera»: no debe consumir el fallo
+        // programado para el caso de uso.
+        almacen.sobreescribir(sala);
         // El otro jugador gana la carrera: su ingreso ya esta en el almacen
         // cuando el nuestro vuelve a leer.
         UUID ganador = UUID.fromString("33333333-3333-3333-3333-333333333333");
@@ -289,7 +293,9 @@ class IngresarASalaTest {
         ingresarASala = new IngresarASala(almacen, canal);
         Sala sala = Sala.crear(
                 new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null), ANFITRION);
-        almacen.guardar(sala);
+        // La semilla es una escritura «de fuera»: no debe consumir el fallo
+        // programado para el caso de uso.
+        almacen.sobreescribir(sala);
 
         IngresoNoPermitido rechazo = assertThrows(IngresoNoPermitido.class,
                 () -> ingresarASala.ejecutar(sala.id(), VISITANTE));

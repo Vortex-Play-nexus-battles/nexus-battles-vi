@@ -334,13 +334,20 @@ class RepositorioSalasJpaIT {
         repositorio.guardar(sala);
 
         Sala primeraLectura = repositorio.buscarPorId(sala.id()).orElseThrow();
+        long versionInicial = primeraLectura.version();
         primeraLectura.unirse(ANA);
         repositorio.guardar(primeraLectura);
         Sala segundaLectura = repositorio.buscarPorId(sala.id()).orElseThrow();
 
+        // Lo que garantiza el bloqueo optimista es que la marca viaja intacta
+        // de la lectura a la escritura y avanza exactamente en uno por cada
+        // escritura que llega a la base. El valor con el que nace la fila lo
+        // decide Hibernate (ver RepositorioSalasJpa.guardar), no el dominio.
         assertAll(
-                () -> assertEquals(0, primeraLectura.version()),
-                () -> assertEquals(1, segundaLectura.version()),
+                () -> assertTrue(versionInicial >= sala.version(),
+                        "la marca nunca retrocede: dominio " + sala.version() + ", base " + versionInicial),
+                () -> assertEquals(versionInicial + 1, segundaLectura.version(),
+                        "una escritura, una unidad mas"),
                 () -> assertEquals(2, segundaLectura.ocupacion()));
     }
 
