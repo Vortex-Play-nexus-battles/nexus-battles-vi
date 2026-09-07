@@ -142,6 +142,31 @@ class ContratoDeHeroesTest {
     }
 
     @Test
+    @DisplayName("la validacion de la estrategia de combate cumple el contrato (HU-SIM-001)")
+    void estrategiaDeCombateCumpleElContrato() throws Exception {
+        mvc.perform(post("/api/v1/estrategias/validacion")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"heroe\":\"Guerrero Armas\",\"nivel\":8,\"rotaciones\":[{\"pasos\":[\"Golpe de tormenta\",\"Ataque básico\"]}]}"))
+                .andExpect(status().isOk())
+                .andExpect(openApi().isValid(CONTRATO));
+        mvc.perform(post("/api/v1/estrategias/validacion")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"heroe\":\"Guerrero Armas\",\"nivel\":1,\"rotaciones\":[{\"pasos\":[\"Golpe de tormenta\"]}]}"))
+                .andExpect(status().isOk())
+                .andExpect(openApi().isValid(CONTRATO));
+        mvc.perform(post("/api/v1/estrategias/validacion")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"heroe\":\"Chamán\"}"))
+                .andExpect(status().isOk())
+                .andExpect(openApi().isValid(CONTRATO));
+        mvc.perform(post("/api/v1/estrategias/validacion")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"heroe\":\"Nigromante\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(openApi().isValid(CONTRATO));
+    }
+
+    @Test
     @DisplayName("el error de nivel no valido cumple el contrato (RFC 9457)")
     void errorDeNivelCumpleElContrato() throws Exception {
         // La peticion viola a proposito el minimo del parametro (eso es lo que se
