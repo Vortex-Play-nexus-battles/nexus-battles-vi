@@ -2,6 +2,7 @@ package com.nexusbattles.ms_identidad.admin.dto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import org.springframework.web.multipart.MultipartFile;
 
 public class CrearCuentaAdminRequest {
 
@@ -21,9 +22,9 @@ public class CrearCuentaAdminRequest {
     @NotBlank
     private String apodo;
 
-    private String avatar;
+    // Opcional, igual que en el registro normal.
+    private MultipartFile avatar;
 
-    // El frontend manda el nombre del rol como texto: "MODERADOR" o "ADMINISTRADOR"
     @NotBlank
     private String rolNombre;
 
@@ -37,8 +38,8 @@ public class CrearCuentaAdminRequest {
     public void setPassword(String password) { this.password = password; }
     public String getApodo() { return apodo; }
     public void setApodo(String apodo) { this.apodo = apodo; }
-    public String getAvatar() { return avatar; }
-    public void setAvatar(String avatar) { this.avatar = avatar; }
+    public MultipartFile getAvatar() { return avatar; }
+    public void setAvatar(MultipartFile avatar) { this.avatar = avatar; }
     public String getRolNombre() { return rolNombre; }
     public void setRolNombre(String rolNombre) { this.rolNombre = rolNombre; }
 }

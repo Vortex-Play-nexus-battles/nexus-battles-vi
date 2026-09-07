@@ -39,37 +39,10 @@ function montarBarraNavegacion() {
     document.body.prepend(barra);
 }
 
-function montarMenuAdmin() {
-    const rolActual = sessionStorage.getItem(CLAVE_ROL);
-    const rolesConAcceso = ['ADMINISTRADOR', 'SUPER_ADMINISTRADOR'];
-
-    if (!rolesConAcceso.includes(rolActual)) {
-        return;
-    }
-
-    const menu = document.createElement('div');
-    menu.className = 'menu-admin';
-
-    const enlaceCrear = document.createElement('a');
-    enlaceCrear.href = './crear-cuenta-admin.html';
-    enlaceCrear.textContent = 'Crear cuenta admin';
-    if (rolActual !== 'SUPER_ADMINISTRADOR') {
-        enlaceCrear.style.display = 'none';
-    }
-
-    const enlaceGestion = document.createElement('a');
-    enlaceGestion.href = './gestion-usuarios.html';
-    enlaceGestion.textContent = 'Gestion de usuarios';
-
-    menu.append(enlaceCrear, enlaceGestion);
-    document.body.insertBefore(menu, document.body.children[1]);
-}
-
 async function iniciar() {
 
 montarBarraNavegacion();
 
-montarMenuAdmin();
 
 const rolActual =
     sessionStorage.getItem(CLAVE_ROL) || 'JUGADOR';
@@ -414,7 +387,6 @@ establecerValor('nombres', '');
 establecerValor('apellidos', '');
 establecerValor('apodo', '');
 establecerValor('avatar', '');
-establecerValor('biografia', '');
 establecerValor('preferencias', '');
 establecerValor('estado', 'ACTIVO');
 establecerValor('suspendido-hasta', '');
@@ -527,11 +499,8 @@ const apellidos =
 const apodo =
     obtenerValor('apodo');
 
-const avatar =
-    obtenerValor('avatar');
-
-const biografia =
-    obtenerValor('biografia');
+const archivoAvatar =
+    document.getElementById('avatar')?.files?.[0];
 
 const preferencias =
     obtenerValor('preferencias');
@@ -590,24 +559,22 @@ cambiarEstadoBoton(
 
 try {
 
+    const cuerpoFormData = new FormData();
+    cuerpoFormData.append('nombres', nombres);
+    cuerpoFormData.append('apellidos', apellidos);
+    cuerpoFormData.append('apodo', apodo);
+    cuerpoFormData.append('preferencias', preferencias);
+    if (archivoAvatar) {
+        cuerpoFormData.append('avatar', archivoAvatar);
+    }
+
+    // No se pone Content-Type a mano: el navegador arma el multipart/form-data solo.
     const respuesta =
         await fetchWithHttpErrorInterceptor(
             `${BASE_API}/${usuarioSeleccionado.id}/perfil`,
             {
                 method: 'PUT',
-
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-
-                body: JSON.stringify({
-                    nombres,
-                    apellidos,
-                    apodo,
-                    avatar,
-                    biografia,
-                    preferencias
-                })
+                body: cuerpoFormData
             }
         );
 
@@ -627,8 +594,7 @@ try {
 
 
     actualizarResumenUsuario({
-        apodo,
-        avatar
+        apodo
     });
 
 
@@ -933,15 +899,6 @@ if (datos.apodo !== undefined) {
 
 }
 
-
-if (datos.avatar !== undefined) {
-
-    establecerTexto(
-        'usuario-email-mostrado',
-        establecerTexto
-    );
-
-}
 
 }
 
