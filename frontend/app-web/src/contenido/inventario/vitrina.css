@@ -25,12 +25,12 @@
   --texto-2: #48536a;
   --texto-3: #57627a;
   --borde: #9fabc9;
-  --borde-interactivo: #6f7994;
+  --borde-int: #6f7994;
   --primaria: #2244bf;
-  --primaria-relleno: #1e3f88;
-  --acento-relleno: #582784;
+  --primaria-relleno: #1e3fb8;
+  --acento-relleno: #5b27b4;
   --texto-sobre-color: #ffffff;
-  --exito: #086b31;
+  --exito: #0b6b31;
   --advertencia: #8a4a00;
   --error: #b81a1a;
   --info: #095e8c;
@@ -96,7 +96,22 @@
 .inventario-equipo__cerrar:hover,
 .inventario-equipo__equipar:hover,
 .inventario-equipo__desequipar:hover {
-  border-color: var(--borde-interactivo);
+  border-color: var(--borde-int);
+}
+
+.inventario__nuevo,
+.inventario-editor__guardar,
+.inventario-equipo__equipar {
+  border-color: var(--primaria-relleno);
+  background: var(--primaria-relleno);
+  color: var(--texto-sobre-color);
+}
+
+.inventario__nuevo:hover,
+.inventario-editor__guardar:hover,
+.inventario-equipo__equipar:hover {
+  border-color: var(--primaria);
+  background: var(--primaria);
 }
 
 .inventario-editor {
@@ -198,59 +213,6 @@
   min-width: 0;
   padding: 8px;
   border: 1px solid var(--borde);
-  border-radius: 6px;
-}
-
-.inventario-equipo__nombre {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: 0.82rem;
-}
-
-.inventario-equipo {
-  margin-bottom: var(--vitrina-separacion);
-  padding: 16px 0;
-  border-top: 1px solid var(--color-borde);
-  border-bottom: 1px solid var(--color-borde);
-}
-
-.inventario-equipo__cabecera,
-.inventario-equipo__elemento {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.inventario-equipo__titulo,
-.inventario-equipo__resumen {
-  margin: 0;
-}
-
-.inventario-equipo__titulo {
-  font-family: var(--tipografia-titulo);
-  font-size: 1rem;
-}
-
-.inventario-equipo__resumen {
-  padding: 12px 0;
-  color: var(--color-texto-tenue);
-  font-size: 0.85rem;
-}
-
-.inventario-equipo__lista {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.inventario-equipo__elemento {
-  min-width: 0;
-  padding: 8px;
-  border: 1px solid var(--color-borde);
   border-radius: 6px;
 }
 
