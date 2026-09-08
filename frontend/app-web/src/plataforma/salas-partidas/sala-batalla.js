@@ -19,6 +19,32 @@
 import { montarPanelVidas } from './panel-vidas.js';
 
 /**
+ * Destino del canal `partidaEstado` del AsyncAPI
+ * (`contracts/websocket/salas-partidas.yaml`): por aqui llega
+ * `partida.accion.resuelta`.
+ *
+ * @param {string} idPartida
+ * @returns {string}
+ */
+export function destinoDePartida(idPartida) {
+  return `/tema/partidas/${idPartida}`;
+}
+
+/**
+ * Construye el `suscribir` que espera la vista a partir de un cliente STOMP ya
+ * conectado (el transporte del servicio, `cliente-chat.js`: CONNECT con el JWT,
+ * SUBSCRIBE, MESSAGE). La vista sigue sin saber que existe STOMP: solo recibe
+ * una funcion que le entrega mensajes del canal de su partida.
+ *
+ * @param {{suscribir: (destino: string, alRecibir: Function) => unknown}} cliente
+ * @param {string} idPartida
+ * @returns {(alRecibir: (evento: object) => void) => void}
+ */
+export function suscripcionDePartida(cliente, idPartida) {
+  return (alRecibir) => cliente.suscribir(destinoDePartida(idPartida), alRecibir);
+}
+
+/**
  * Lee el estado que el servidor haya incrustado en la pagina.
  *
  * Este es el punto por el que entrara la partida cuando exista el endpoint:
@@ -30,7 +56,9 @@ import { montarPanelVidas } from './panel-vidas.js';
  */
 export function leerEstadoInicial(raiz = document) {
   const bloque = raiz.querySelector('script[data-estado-inicial]');
-  if (!bloque || !bloque.textContent.trim()) return null;
+  if (!bloque || !bloque.textContent.trim()) {
+    return null;
+  }
 
   return JSON.parse(bloque.textContent);
 }
@@ -42,7 +70,9 @@ export function leerEstadoInicial(raiz = document) {
  * @param {boolean} hayCanal
  */
 function pintarConexion(zona, hayCanal) {
-  if (!zona) return;
+  if (!zona) {
+    return;
+  }
 
   zona.className = hayCanal ? 'conexion conexion--estable' : 'conexion conexion--sin-conexion';
   zona.textContent = hayCanal
@@ -71,10 +101,16 @@ export function montarSalaBatalla(raiz, { idPartida, participantes, suscribir } 
 
   const hayPartida = Array.isArray(participantes) && participantes.length > 0;
 
-  if (zonaSinPartida) zonaSinPartida.hidden = hayPartida;
-  if (panel) panel.hidden = !hayPartida;
+  if (zonaSinPartida) {
+    zonaSinPartida.hidden = hayPartida;
+  }
+  if (panel) {
+    panel.hidden = !hayPartida;
+  }
 
-  if (!hayPartida || !vidas) return;
+  if (!hayPartida || !vidas) {
+    return;
+  }
 
   montarPanelVidas(vidas, { idPartida, participantes, suscribir });
 }

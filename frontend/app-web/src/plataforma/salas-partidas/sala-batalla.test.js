@@ -9,7 +9,12 @@
  * Lo que ya cubre `panel-vidas.test.js` no se repite aqui.
  */
 
-import { montarSalaBatalla, leerEstadoInicial } from './sala-batalla.js';
+import {
+  montarSalaBatalla,
+  leerEstadoInicial,
+  destinoDePartida,
+  suscripcionDePartida,
+} from './sala-batalla.js';
 
 const ID_PARTIDA = '11111111-1111-1111-1111-111111111111';
 const ANA = '22222222-2222-2222-2222-222222222222';
@@ -118,5 +123,45 @@ describe('leerEstadoInicial', () => {
     `;
 
     expect(leerEstadoInicial(document)).toEqual({ idPartida: ID_PARTIDA, participantes: [] });
+  });
+});
+
+describe('transporte real del canal de la partida', () => {
+  test('el destino es el canal partidaEstado del AsyncAPI', () => {
+    expect(destinoDePartida(ID_PARTIDA)).toBe(`/tema/partidas/${ID_PARTIDA}`);
+  });
+
+  test('suscripcionDePartida usa el cliente STOMP ya conectado, sin inventar otro transporte', () => {
+    const suscripciones = [];
+    const cliente = {
+      suscribir(destino, alRecibir) {
+        suscripciones.push({ destino, alRecibir });
+        return 'sub-1';
+      },
+    };
+
+    montarSalaBatalla(document, {
+      idPartida: ID_PARTIDA,
+      participantes: participantes(),
+      suscribir: suscripcionDePartida(cliente, ID_PARTIDA),
+    });
+
+    expect(suscripciones).toHaveLength(1);
+    expect(suscripciones[0].destino).toBe(`/tema/partidas/${ID_PARTIDA}`);
+    expect(conexion().className).toContain('conexion--estable');
+
+    // Lo que el broker entregue por ese destino mueve la barra, con la forma
+    // exacta de AccionResuelta (vidaActual/vidaMaxima por afectado, sin color).
+    suscripciones[0].alRecibir({
+      tipo: 'partida.accion.resuelta',
+      idPartida: ID_PARTIDA,
+      idEjecutor: ANA,
+      accion: { codigo: 'GOLPE', nombre: 'Golpe' },
+      afectados: [{ idJugador: ANA, vidaActual: 50, vidaMaxima: 100, diferencia: -50 }],
+    });
+
+    const barra = document.querySelector(`[data-jugador="${ANA}"]`);
+    expect(barra.querySelector('.barra-vida__valor').textContent).toBe('50/100');
+    expect(barra.dataset.estado).toBe('medio');
   });
 });
