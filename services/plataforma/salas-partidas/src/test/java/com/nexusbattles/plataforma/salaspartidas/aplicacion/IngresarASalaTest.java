@@ -270,7 +270,10 @@ class IngresarASalaTest {
         // cuando el nuestro vuelve a leer.
         UUID ganador = UUID.fromString("33333333-3333-3333-3333-333333333333");
         almacen.alReleer(() -> {
-            Sala actual = almacen.buscarPorId(sala.id()).orElseThrow();
+            // El «otro» lee y escribe por fuera del doble instrumentado: si
+            // usara almacen.buscarPorId, contaria como relectura del caso de
+            // uso y volveria a disparar este mismo callback sin fin.
+            Sala actual = almacen.leerDeFuera(sala.id()).orElseThrow();
             actual.unirse(ganador);
             almacen.sobreescribir(actual);
         });
@@ -332,6 +335,11 @@ class IngresarASalaTest {
             real.guardar(sala);
         }
 
+        /** Lectura «del otro», sin contar como relectura ni disparar alReleer. */
+        java.util.Optional<Sala> leerDeFuera(UUID id) {
+            return real.buscarPorId(id);
+        }
+
         int lecturas() {
             return lecturas;
         }
@@ -349,7 +357,10 @@ class IngresarASalaTest {
         public java.util.Optional<Sala> buscarPorId(UUID id) {
             lecturas++;
             if (lecturas > 1) {
-                alReleer.run();
+                // El otro se adelanta una sola vez: en la primera relectura.
+                Runnable accion = alReleer;
+                alReleer = () -> { };
+                accion.run();
             }
             // Copia defensiva: el caso de uso no debe ver el mismo objeto que
             // el «otro» esta mutando, igual que con PostgreSQL.
