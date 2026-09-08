@@ -15,8 +15,12 @@ import { crearSala, ErrorDeApi } from './cliente-salas.js';
 
 /** Codigo HTTP -> variante del componente Aviso (tabla 4 del mapeo). */
 export function tonoPara(estado) {
-  if (estado >= 500) return 'error';
-  if (estado === 404) return 'info';
+  if (estado >= 500) {
+    return 'error';
+  }
+  if (estado === 404) {
+    return 'info';
+  }
   return 'advertencia';
 }
 
@@ -65,7 +69,9 @@ function marcarCampos(formulario, errores) {
 
   errores.forEach(({ campo, mensaje }) => {
     const control = formulario.querySelector(`[name="${campo}"]`);
-    if (!control) return;
+    if (!control) {
+      return;
+    }
 
     const contenedor = control.closest('.campo') ?? control.parentElement;
     contenedor.classList.add('campo--invalido');
@@ -80,7 +86,9 @@ function marcarCampos(formulario, errores) {
     control.setAttribute('aria-invalid', 'true');
     control.setAttribute('aria-describedby', idMensaje);
 
-    if (!primero) primero = control;
+    if (!primero) {
+      primero = control;
+    }
   });
 
   return primero;
@@ -107,10 +115,20 @@ function pintarAviso(zona, { tono, titulo, detalle }) {
   zona.hidden = false;
 }
 
+/**
+ * Bloquea el boton mientras se espera y lo restaura tal cual estaba.
+ *
+ * El literal en reposo lo pone la vista («CREAR SALA», como en Figma), no
+ * este modulo: se guarda la primera vez y se devuelve intacto, en vez de
+ * imponer un texto que puede no coincidir con el HTML.
+ */
 function cargando(boton, activo) {
+  if (boton.dataset.textoReposo === undefined) {
+    boton.dataset.textoReposo = boton.textContent;
+  }
   boton.disabled = activo;
   boton.setAttribute('aria-busy', String(activo));
-  boton.textContent = activo ? 'Creando la sala…' : 'Crear sala';
+  boton.textContent = activo ? 'Creando la sala…' : boton.dataset.textoReposo;
 }
 
 /**
@@ -142,13 +160,17 @@ export function montarCrearSala(formulario, { crearSalaImpl = crearSala, alCrear
           `participantes${sala.recompensaCreditos ? `, ${sala.recompensaCreditos} creditos en juego` : ''}.`,
       });
       formulario.reset();
-      if (alCrear) alCrear(sala);
+      if (alCrear) {
+        alCrear(sala);
+      }
     } catch (error) {
       if (error instanceof ErrorDeApi && error.esDeFormulario) {
         // El requisito exige senalar el motivo: se marca cada campo, no un
         // aviso general que obligue a adivinar cual esta mal.
         const primero = marcarCampos(formulario, error.errores);
-        if (primero) primero.focus();
+        if (primero) {
+          primero.focus();
+        }
       } else if (error instanceof ErrorDeApi) {
         pintarAviso(zonaAviso, {
           tono: tonoPara(error.estado),

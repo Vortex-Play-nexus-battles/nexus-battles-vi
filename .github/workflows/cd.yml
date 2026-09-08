@@ -91,12 +91,13 @@ jobs:
 
           echo "Comparando $BASE..$HEAD"
 
-          # 2) Solo nos importan los 8 servicios de services/plataforma/* que
-          #    ya tienen imagen en docker-compose.yml (los unicos que este
-          #    equipo despliega). Un servicio de otro equipo que cambie en el
-          #    mismo push se ignora aqui a proposito.
+          # 2) Nos importan los servicios de services/plataforma/* (8, con
+          #    imagen en docker-compose.yml) y los de services/contenido/*
+          #    que ya esten registrados en puerto_de() y en
+          #    docker-compose.contenido.yml. Un servicio sin puerto
+          #    registrado se omite mas abajo con un mensaje, no rompe nada.
           ARCHIVOS=$(git diff --name-only "$BASE" "$HEAD")
-          CARPETAS=$(echo "$ARCHIVOS" | grep -E '^services/plataforma/[^/]+/' | awk -F'/' '{print $1"/"$2"/"$3}' | sort -u || true)
+          CARPETAS=$(echo "$ARCHIVOS" | grep -E '^services/(plataforma|contenido)/[^/]+/' | awk -F'/' '{print $1"/"$2"/"$3}' | sort -u || true)
 
           # 3) Puerto fijo por servicio, mismo orden que docker-compose.yml
           #    (8081 a 8088). Si se agrega un noveno servicio de plataforma
@@ -112,6 +113,17 @@ jobs:
               moderacion-sanciones) echo 8086 ;;
               metricas-plataforma) echo 8087 ;;
               admin-parametros) echo 8088 ;;
+              # services/contenido/* (equipo Contenido): bloque 8101-8104.
+              # Es el puerto del HOST (el que consulta el healthcheck de
+              # desplegar.sh); dentro del contenedor todos escuchan en 8080
+              # y docker-compose.contenido.yml los publica como 810x:8080.
+              # No se usa 8090-8094: cuentas ya fija ms-ecommerce en 8090 y
+              # ms-cumplimiento en 8091. Cada servicio de aqui se construye
+              # desde la raiz del monorepo con -f (ver "Construir la imagen").
+              heroes) echo 8101 ;;
+              inventario) echo 8102 ;;
+              productos) echo 8103 ;;
+              motor-combate) echo 8104 ;;
               *) echo "" ;;
             esac
           }
@@ -163,6 +175,42 @@ jobs:
                 '. + [{ruta:$ruta, rutaGradle:"", servicio:$servicio, puerto:"8089", herramienta:"maven"}]')
             else
               echo "Se omite services/cuentas/ms-identidad: no tiene pom.xml"
+            fi
+          fi
+
+          # 5) services/cuentas/ms-cumplimiento (Maven), mismo patron exacto
+          #    que ms-identidad arriba -- bloque especifico, NO generalizado
+          #    a un grep de cuentas/* (ms-ecommerce sigue sin Dockerfile).
+          #    Puerto 8091, mismo del lado del host que del contenedor
+          #    (confirmado en su Dockerfile: EXPOSE 8091, sin el desfase que
+          #    tuvo ms-identidad).
+          if echo "$ARCHIVOS" | grep -q '^services/cuentas/ms-cumplimiento/'; then
+            if [ -f "services/cuentas/ms-cumplimiento/pom.xml" ]; then
+              MATRIZ=$(echo "$MATRIZ" | jq -c \
+                --arg ruta "services/cuentas/ms-cumplimiento" \
+                --arg servicio "ms-cumplimiento" \
+                '. + [{ruta:$ruta, rutaGradle:"", servicio:$servicio, puerto:"8091", herramienta:"maven"}]')
+            else
+              echo "Se omite services/cuentas/ms-cumplimiento: no tiene pom.xml"
+            fi
+          fi
+
+          # 6) services/cuentas/ms-ecommerce (Maven), mismo patron exacto que
+          #    ms-identidad y ms-cumplimiento arriba -- bloque especifico, NO
+          #    generalizado a un grep de cuentas/*. Puerto 8090, mismo del
+          #    lado del host que del contenedor (confirmado en su Dockerfile:
+          #    EXPOSE 8090). A diferencia de los otros dos, este servicio
+          #    tiene server.servlet.context-path=/api/v1 -- el healthcheck
+          #    generico de desplegar.sh no sirve tal cual para el, ver el
+          #    comentario de "ruta_salud_de" en ese script.
+          if echo "$ARCHIVOS" | grep -q '^services/cuentas/ms-ecommerce/'; then
+            if [ -f "services/cuentas/ms-ecommerce/pom.xml" ]; then
+              MATRIZ=$(echo "$MATRIZ" | jq -c \
+                --arg ruta "services/cuentas/ms-ecommerce" \
+                --arg servicio "ms-ecommerce" \
+                '. + [{ruta:$ruta, rutaGradle:"", servicio:$servicio, puerto:"8090", herramienta:"maven"}]')
+            else
+              echo "Se omite services/cuentas/ms-ecommerce: no tiene pom.xml"
             fi
           fi
 
@@ -247,14 +295,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # El contexto del build es la carpeta del servicio (matrix.ruta): ahi
-      # es donde acaba de quedar el jar (build/libs/*.jar en Gradle,
-      # target/*.jar en Maven) y donde vive su Dockerfile.
+      # Contexto del build:
+      #  - services/plataforma/*: la carpeta del servicio (matrix.ruta), donde
+      #    acaba de quedar el jar (build/libs/*.jar en Gradle, target/*.jar
+      #    en Maven) y donde vive su Dockerfile.
+      #  - services/contenido/*: la RAIZ del monorepo, con -f al Dockerfile
+      #    del servicio. Sus Dockerfiles necesitan ver el wrapper de Gradle y
+      #    buildSrc (inventario, productos y motor-combate compilan dentro de
+      #    la imagen; heroes copia el jar que este job ya compilo).
       - name: Construir la imagen Docker
         run: |
-          docker build \
-            -t ${{ env.REGISTRO_IMAGENES }}/nexus-battles-vi-${{ matrix.servicio }}:${{ needs.detectar-servicios.outputs.tag }} \
-            ${{ matrix.ruta }}
+          IMAGEN=${{ env.REGISTRO_IMAGENES }}/nexus-battles-vi-${{ matrix.servicio }}:${{ needs.detectar-servicios.outputs.tag }}
+          case "${{ matrix.ruta }}" in
+            services/contenido/*)
+              docker build -f "${{ matrix.ruta }}/Dockerfile" -t "$IMAGEN" . ;;
+            *)
+              docker build -t "$IMAGEN" "${{ matrix.ruta }}" ;;
+          esac
 
       - name: Publicar la imagen en ghcr.io
         run: docker push ${{ env.REGISTRO_IMAGENES }}/nexus-battles-vi-${{ matrix.servicio }}:${{ needs.detectar-servicios.outputs.tag }}
@@ -286,7 +343,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,scripts/cd/desplegar.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -320,18 +377,39 @@ jobs:
           # PENDIENTE (TODO_*): secrets propios de ms-identidad (equipo
           # Cuentas), todavia no creados en GitHub -- ver la validacion de
           # "fallo visible" en desplegar.sh si faltan y ms-identidad esta
-          # en esta corrida. SPRING_PROFILES_ACTIVE NO se fuerza aqui (solo
-          # en produccion, ver mas abajo), hasta que Cristian confirme como
-          # manejar perfiles en dev/test.
+          # en esta corrida. SPRING_PROFILES_ACTIVE="dev": no existe
+          # application-test.properties (HU-RBAC-005), asi que test tambien
+          # activa el perfil "dev" -- usar "test" aqui rompe el despliegue
+          # por falta de configuracion de base de datos.
           MS_IDENTIDAD_DB_URL: ${{ secrets.TODO_DB_URL_MS_IDENTIDAD }}
           MS_IDENTIDAD_DB_USER: ${{ secrets.TODO_DB_USER_MS_IDENTIDAD }}
           MS_IDENTIDAD_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_IDENTIDAD }}
           LISTA_NEGRA_URL: ${{ secrets.TODO_LISTA_NEGRA_URL }}
+          MS_IDENTIDAD_SPRING_PROFILES_ACTIVE: "dev"
+          # PENDIENTE (TODO_*): mismo patron de placeholder que ms-identidad
+          # -- 5 secrets propios de ms-cumplimiento (equipo Cuentas),
+          # todavia no creados en GitHub. Prefijo "MS_CUMPLIMIENTO_" para no
+          # chocar con DB_USER/DB_PASS de plataforma ni con el esquema
+          # DB_URL de ms-identidad (ver docker-compose.ms-cumplimiento.yml).
+          MS_CUMPLIMIENTO_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_USER: ${{ secrets.TODO_DB_USER_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_CUMPLIMIENTO }}
+          # PENDIENTE (TODO_*): mismo patron de placeholder que los otros dos
+          # servicios de Cuentas -- 5 secrets propios de ms-ecommerce,
+          # todavia no creados en GitHub. Prefijo "MS_ECOMMERCE_" para no
+          # chocar con ningun otro esquema (ver docker-compose.ms-ecommerce.yml).
+          MS_ECOMMERCE_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_USER: ${{ secrets.TODO_DB_USER_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_ECOMMERCE }}
         with:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL
+          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -368,7 +446,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,scripts/cd/desplegar.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -395,16 +473,32 @@ jobs:
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASS: ${{ secrets.DB_PASS }}
           # PENDIENTE (TODO_*): ver el mismo comentario en el job "Desplegar
-          # en Dev" -- misma logica, sin SPRING_PROFILES_ACTIVE aqui tampoco.
+          # en Dev" -- misma logica. SPRING_PROFILES_ACTIVE="dev" tambien
+          # aqui: no existe application-test.properties (HU-RBAC-005).
           MS_IDENTIDAD_DB_URL: ${{ secrets.TODO_DB_URL_MS_IDENTIDAD }}
           MS_IDENTIDAD_DB_USER: ${{ secrets.TODO_DB_USER_MS_IDENTIDAD }}
           MS_IDENTIDAD_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_IDENTIDAD }}
           LISTA_NEGRA_URL: ${{ secrets.TODO_LISTA_NEGRA_URL }}
+          MS_IDENTIDAD_SPRING_PROFILES_ACTIVE: "dev"
+          # PENDIENTE (TODO_*): ver el mismo comentario en el job "Desplegar
+          # en Dev" -- misma logica para los 5 secrets de ms-cumplimiento.
+          MS_CUMPLIMIENTO_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_USER: ${{ secrets.TODO_DB_USER_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_CUMPLIMIENTO }}
+          # PENDIENTE (TODO_*): ver el mismo comentario en el job "Desplegar
+          # en Dev" -- misma logica para los 5 secrets de ms-ecommerce.
+          MS_ECOMMERCE_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_USER: ${{ secrets.TODO_DB_USER_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_ECOMMERCE }}
         with:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL
+          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -445,7 +539,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,scripts/cd/desplegar.sh,scripts/cd/revertir.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -487,11 +581,27 @@ jobs:
           MS_IDENTIDAD_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_IDENTIDAD }}
           LISTA_NEGRA_URL: ${{ secrets.TODO_LISTA_NEGRA_URL }}
           MS_IDENTIDAD_SPRING_PROFILES_ACTIVE: "prod"
+          # PENDIENTE (TODO_*): mismos 5 secrets de ms-cumplimiento que en
+          # dev/test -- este servicio no tiene perfiles Spring (un solo
+          # application.properties), asi que no hace falta forzar ninguno.
+          MS_CUMPLIMIENTO_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_USER: ${{ secrets.TODO_DB_USER_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_CUMPLIMIENTO }}
+          # PENDIENTE (TODO_*): mismos 5 secrets de ms-ecommerce que en
+          # dev/test -- tampoco tiene perfiles Spring, no hace falta forzar
+          # ninguno.
+          MS_ECOMMERCE_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_USER: ${{ secrets.TODO_DB_USER_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_ECOMMERCE }}
         with:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE
+          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -520,14 +630,3 @@ jobs:
         run: |
           echo "El despliegue a produccion fallo su verificacion de salud y se revirtio automaticamente. Revisar el step 'Reversion automatica por fallo de salud' para el detalle."
           exit 1
-  # ---------------------------------------------------------------------
-  # Job 6: Revelar IP para auditoria
-  # ---------------------------------------------------------------------
-  revelar-ip:
-    name: Revelar IP de AWS
-    runs-on: ubuntu-latest
-    steps:
-      - name: Extraer IP desde secreto
-        run: |
-          echo "La IP es:"
-          echo "${{ secrets.DEPLOY_HOST_DEV }}" | sed 's/./& /g'

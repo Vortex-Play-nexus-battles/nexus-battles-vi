@@ -1,2 +1,20 @@
 server:
   port: 8082
+
+spring:
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:1025}
+  mvc:
+    problemdetails:
+      enabled: true
+  jackson:
+    datatype:
+      datetime:
+        # Por defecto Jackson pasa las fechas con huso a UTC al deserializarlas.
+        # El aviso de acceso (RF-AUT-010) debe mostrar la hora tal como la vio
+        # el usuario: convertirla lo haría dudar de si el acceso fue suyo.
+        #
+        # En Jackson 3 esta opción dejó de estar en DeserializationFeature y
+        # pasó a DateTimeFeature, de ahí la ruta 'datatype.datetime'.
+        adjust-dates-to-context-time-zone: false

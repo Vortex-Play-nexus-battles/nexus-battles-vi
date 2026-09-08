@@ -22,7 +22,7 @@ public class RepositorioInventariosEnMemoria implements RepositorioDeInventarios
         }
         Inventario guardado = inventario.id() == null
                 ? new Inventario("inventario-" + secuencia.incrementAndGet(),
-                        inventario.propietarioId(), inventario.elementos())
+                        inventario.propietarioId(), inventario.elementos(), inventario.equipamientos())
                 : inventario;
         inventarios.put(guardado.propietarioId(), guardado);
         return guardado;

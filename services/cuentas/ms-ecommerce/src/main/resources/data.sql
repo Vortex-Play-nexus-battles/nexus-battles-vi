@@ -1,0 +1,2 @@
+INSERT INTO productos (nombre, descripcion, precio_base_cop, tipo, en_promocion, porcentaje_descuento) VALUES ('Poción de Curación', 'Restaura 50 HP', 5000.00, 'CONSUMIBLE', false, 0);
+INSERT INTO productos (nombre, descripcion, precio_base_cop, tipo, en_promocion, porcentaje_descuento) VALUES ('Espada Larga', 'Aumenta el daño físico +15', 25000.00, 'ARMA', false, 0);

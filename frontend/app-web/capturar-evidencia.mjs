@@ -51,5 +51,31 @@ await capturar('estado-vacio-1360x768', { ancho: 1360, alto: 768, total: 0 });
 await capturar('editor-1360x768', { ancho: 1360, alto: 768, total: 7, mostrarEditor: true });
 await capturar('editor-375x812', { ancho: 375, alto: 812, total: 3, mostrarEditor: true });
 
+// HU-INV-007: la ficha de detalle abierta desde una tarjeta.
+{
+  const ctx = await navegador.newContext({ viewport: { width: 1360, height: 768 } });
+  const page = await ctx.newPage();
+  await page.route('**/api/v1/inventario/elementos*', (r) => r.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify(pagina(16)),
+  }));
+  await page.route('**/api/v1/productos/*', (r) => r.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({
+      id: 'producto-0', nombre: 'Hacha de Vorn',
+      imagen: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+      descripcion: 'Forjada en la niebla de los pantanos del norte. Su filo conserva el frio del pantano y no se mella.',
+      tipo: 'ARMA', tiraje: -1, premium: false, estado: 'ACTIVO', version: 1,
+      poderDeAtaque: 42, tasaDeCaida: 0.15,
+    }),
+  }));
+  await page.goto(BASE);
+  await page.waitForFunction(() => !document.querySelector('.estado-carga'));
+  await page.locator('.vitrina__detalle').first().click();
+  await page.waitForSelector('.ficha');
+  await page.screenshot({ path: `${SALIDA}/ficha-producto-1360x768.png` });
+  console.log('  ficha-producto-1360x768.png  (1360x768)');
+  await ctx.close();
+}
+
 await navegador.close();
 process.exit(0);

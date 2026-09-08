@@ -15,6 +15,8 @@ DIRECTORIO=/opt/nexus
 COMPOSE_BASE="$DIRECTORIO/docker-compose.yml"
 COMPOSE_DEPLOY="$DIRECTORIO/docker-compose.deploy.yml"
 COMPOSE_CUENTAS="$DIRECTORIO/docker-compose.cuentas.yml"
+COMPOSE_MS_CUMPLIMIENTO="$DIRECTORIO/docker-compose.ms-cumplimiento.yml"
+COMPOSE_MS_ECOMMERCE="$DIRECTORIO/docker-compose.ms-ecommerce.yml"
 ARCHIVO_FALLO="$DIRECTORIO/ultimo-fallo.txt"
 
 cd "$DIRECTORIO"
@@ -38,6 +40,12 @@ while IFS=: read -r servicio tag_fallido tag_anterior; do
   ARCHIVOS_COMPOSE=(-f "$COMPOSE_BASE" -f "$COMPOSE_DEPLOY")
   if [ "$servicio" = "ms-identidad" ]; then
     ARCHIVOS_COMPOSE+=(-f "$COMPOSE_CUENTAS")
+  fi
+  if [ "$servicio" = "ms-cumplimiento" ]; then
+    ARCHIVOS_COMPOSE+=(-f "$COMPOSE_MS_CUMPLIMIENTO")
+  fi
+  if [ "$servicio" = "ms-ecommerce" ]; then
+    ARCHIVOS_COMPOSE+=(-f "$COMPOSE_MS_ECOMMERCE")
   fi
 
   docker compose "${ARCHIVOS_COMPOSE[@]}" pull "srv-${servicio}"

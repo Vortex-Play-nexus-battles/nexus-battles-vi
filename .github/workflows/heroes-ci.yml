@@ -1,7 +1,9 @@
 # CI del servicio de heroes (grupo Thomas / contenido).
 # Las pruebas y la compuerta de cobertura corren en el flujo comun
 # pruebas-contenido.yml (matriz de servicios de contenido). Aqui queda solo
-# lo que ese flujo no cubre: la construccion de la imagen Docker.
+# lo que ese flujo no cubre: construir la imagen Docker EXACTAMENTE como lo
+# hace cd.yml (jar compilado desde la raiz, contexto = carpeta del servicio),
+# para que un cambio que rompa el despliegue se vea en el PR y no en el servidor.
 name: heroes-ci
 
 on:
@@ -25,5 +27,24 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - name: Construir la imagen (contexto raiz, build unificado de Gradle)
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - name: Compilar el jar ejecutable (igual que cd.yml)
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :services:contenido:heroes:bootJar --no-daemon
+      - name: Construir la imagen (contexto = raiz del monorepo con -f, igual que cd.yml)
         run: docker build -f services/contenido/heroes/Dockerfile -t servicio-heroes:ci .
+      - name: La imagen arranca y responde su salud (host 8101 -> contenedor 8080, como en despliegue)
+        run: |
+          docker run -d --name heroes-ci -p 8101:8080 servicio-heroes:ci
+          for i in $(seq 1 20); do
+            if curl -fsS http://localhost:8101/actuator/health | grep -q '"status":"UP"'; then
+              echo "saludable en el intento $i"; exit 0
+            fi
+            sleep 3
+          done
+          echo "el contenedor no respondio UP"; docker logs heroes-ci; exit 1

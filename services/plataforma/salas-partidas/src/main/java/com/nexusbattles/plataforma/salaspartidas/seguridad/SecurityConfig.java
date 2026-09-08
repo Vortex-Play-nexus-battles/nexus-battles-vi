@@ -35,6 +35,9 @@ public class SecurityConfig {
 
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/**").permitAll()
+                // Handshake del chat (HU-JUE-015): el navegador no manda cabeceras
+                // aqui; el JWT se exige en el CONNECT de STOMP (AutenticacionStomp).
+                .requestMatchers("/ws/**").permitAll()
                 .requestMatchers("/api/v1/salas/**").hasRole("JUGADOR")
                 .anyRequest().authenticated());
 

@@ -1,0 +1,16 @@
+services:
+  cumplimiento-db:
+    image: postgres:15-alpine
+    container_name: cumplimiento-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: cumplimientodb
+      POSTGRES_USER: usuario_cumplimiento
+      POSTGRES_PASSWORD: password_cumplimiento_local
+    ports:
+      - "5433:5432"
+    volumes:
+      - cumplimiento-db-data:/var/lib/postgresql/data
+
+volumes:
+  cumplimiento-db-data:

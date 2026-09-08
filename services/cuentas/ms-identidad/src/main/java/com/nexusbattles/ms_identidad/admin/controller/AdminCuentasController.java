@@ -5,6 +5,7 @@ import com.nexusbattles.ms_identidad.admin.service.AdminCuentaService;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.rbac.model.Action;
 import com.nexusbattles.ms_identidad.rbac.security.RequirePermission;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,12 +23,23 @@ public class AdminCuentasController {
 
     @PostMapping
     @RequirePermission(Action.CREAR_ADMIN_MODERADOR)
-    public ResponseEntity<?> crearCuentaAdministrativa(@Valid @RequestBody CrearCuentaAdminRequest datos) {
+    public ResponseEntity<?> crearCuentaAdministrativa(@Valid @RequestBody CrearCuentaAdminRequest datos,
+                                                       HttpServletRequest request) {
         try {
-            Usuario usuarioCreado = adminCuentaService.crearCuentaAdministrativa(datos);
+            String administradorId = (String) request.getAttribute("usuarioActual");
+            String ipOrigen = obtenerIpReal(request);
+            Usuario usuarioCreado = adminCuentaService.crearCuentaAdministrativa(datos, administradorId, ipOrigen);
             return ResponseEntity.status(HttpStatus.CREATED).body(usuarioCreado);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
         }
+    }
+
+    private String obtenerIpReal(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 }

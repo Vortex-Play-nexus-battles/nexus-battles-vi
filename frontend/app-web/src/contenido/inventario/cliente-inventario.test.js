@@ -2,7 +2,14 @@
  * HU-INV-001 - Acceso a la consulta paginada.
  * Endpoint: GET /api/v1/inventario/elementos?pagina=N con cabecera X-User-Name.
  */
-import { consultarPagina, crearElemento, modificarElemento } from './cliente-inventario.js';
+import {
+  consultarPagina,
+  crearElemento,
+  modificarElemento,
+  consultarEquipamiento,
+  equiparElemento,
+  desequiparElemento,
+} from './cliente-inventario.js';
 
 function respuesta(cuerpo, ok = true, status = 200) {
   return { ok, status, json: async () => cuerpo };
@@ -178,5 +185,36 @@ describe('Cliente de creacion y modificacion', () => {
         { fetchImpl: fetchFalso },
       ),
     ).rejects.toThrow(/403/);
+  });
+});
+
+describe('Cliente de equipamiento', () => {
+  test.each([
+    ['GET', consultarEquipamiento, undefined],
+    ['PUT', equiparElemento, 'arma-1'],
+    ['DELETE', desequiparElemento, 'arma-1'],
+  ])('%s usa la ruta del heroe y la identidad autenticada', async (metodo, operacion, id) => {
+    const { llamadas, fetchFalso } = espia({
+      heroeId: 'heroe-1',
+      armas: [],
+      armaduras: {},
+      items: [],
+    });
+
+    await operacion('jugador-A', 'heroe-1', ...(id ? [id] : []), { fetchImpl: fetchFalso });
+
+    expect(llamadas[0].url).toBe(
+      `/api/v1/inventario/heroes/heroe-1/equipamiento${id ? `/${id}` : ''}`,
+    );
+    expect(llamadas[0].opciones.method).toBe(metodo);
+    expect(llamadas[0].opciones.headers['X-User-Name']).toBe('jugador-A');
+  });
+
+  test('propaga un limite rechazado con su estado', async () => {
+    const fetchFalso = async () => respuesta(null, false, 409);
+
+    await expect(
+      equiparElemento('jugador-A', 'heroe-1', 'arma-3', { fetchImpl: fetchFalso }),
+    ).rejects.toMatchObject({ status: 409 });
   });
 });

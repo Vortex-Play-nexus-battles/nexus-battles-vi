@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Mi perfil - Nexus Battles</title>
+
+  <link rel="stylesheet" href="../comun/barra-navegacion.css">
+  <link rel="stylesheet" href="./perfil.css">
+
+</head>
+
+<body>
+
+<header class="encabezado">
+
+  <div class="encabezado-contenido">
+
+    <div>
+      <h1>Mi perfil</h1>
+      <p>Administra tu información personal y preferencias.</p>
+    </div>
+
+    <button
+      id="btn-volver"
+      type="button"
+      class="btn btn-secundario">
+      Volver
+    </button>
+
+  </div>
+
+</header>
+
+<main class="contenedor-principal">
+
+  <!-- =====================================================
+       MENSAJE DE SESIÓN
+       ===================================================== -->
+
+  <section
+    id="mensaje-sesion"
+    class="mensaje mensaje-error"
+    hidden>
+  </section>
+
+
+  <!-- =====================================================
+       CONTENIDO DEL PERFIL
+       ===================================================== -->
+
+  <section id="perfil-contenedor" hidden>
+
+
+    <!-- =================================================
+         INFORMACIÓN PERSONAL
+         ================================================= -->
+
+    <section class="tarjeta">
+
+      <div class="tarjeta-cabecera">
+
+        <div>
+          <h2>Información personal</h2>
+
+          <p>
+            Actualiza los datos que aparecen en tu perfil.
+          </p>
+        </div>
+
+      </div>
+
+
+      <form id="formulario-perfil">
+
+        <div class="formulario-grid">
+
+
+          <div class="campo">
+
+            <label for="nombres">
+              Nombres
+            </label>
+
+            <input
+              id="nombres"
+              name="nombres"
+              type="text"
+              autocomplete="given-name"
+              required>
+
+          </div>
+
+
+          <div class="campo">
+
+            <label for="apellidos">
+              Apellidos
+            </label>
+
+            <input
+              id="apellidos"
+              name="apellidos"
+              type="text"
+              autocomplete="family-name"
+              required>
+
+          </div>
+
+
+          <div class="campo">
+
+            <label for="apodo">
+              Apodo
+            </label>
+
+            <input
+              id="apodo"
+              name="apodo"
+              type="text"
+              autocomplete="nickname"
+              required>
+
+            <small>
+              Cambiar el apodo requiere confirmación y validación.
+            </small>
+
+          </div>
+
+
+        </div>
+
+
+        <!-- =========================================
+             BIOGRAFÍA
+             ========================================= -->
+
+        <div class="campo">
+
+          <label for="biografia">
+            Biografía
+          </label>
+
+          <textarea
+            id="biografia"
+            name="biografia"
+            rows="5"
+            placeholder="Cuéntanos algo sobre ti...">
+                </textarea>
+
+        </div>
+
+
+        <!-- =========================================
+             PREFERENCIAS
+             ========================================= -->
+
+        <div class="campo">
+
+          <label for="preferencias">
+            Preferencias
+          </label>
+
+          <textarea
+            id="preferencias"
+            name="preferencias"
+            rows="5"
+            placeholder="Escribe tus preferencias...">
+                </textarea>
+
+        </div>
+
+
+        <!-- =========================================
+             AVATAR
+             ========================================= -->
+
+        <div class="seccion-avatar">
+
+          <div class="seccion-avatar-cabecera">
+
+            <div>
+              <h3>Avatar</h3>
+
+              <p>
+                Selecciona uno de los avatares disponibles.
+              </p>
+            </div>
+
+          </div>
+
+
+          <div
+            id="selector-avatares"
+            class="selector-avatares">
+
+
+            <label class="avatar-opcion">
+
+              <input
+                type="radio"
+                name="avatar"
+                value="alquimista-picaro-veneno.jpg">
+
+              <img
+                src="./avatares/alquimista-picaro-veneno.jpg"
+                alt="Alquimista Pícaro Veneno">
+
+              <span>
+                            Alquimista
+                        </span>
+
+            </label>
+
+
+            <label class="avatar-opcion">
+
+              <input
+                type="radio"
+                name="avatar"
+                value="arquero-cazador.jpg">
+
+              <img
+                src="./avatares/arquero-cazador.jpg"
+                alt="Arquero Cazador">
+
+              <span>
+                            Arquero
+                        </span>
+
+            </label>
+
+
+            <label class="avatar-opcion">
+
+              <input
+                type="radio"
+                name="avatar"
+                value="chaman-sanador.jpg">
+
+              <img
+                src="./avatares/chaman-sanador.jpg"
+                alt="Chamán Sanador">
+
+              <span>
+                            Chamán
+                        </span>
+
+            </label>
+
+
+            <label class="avatar-opcion">
+
+              <input
+                type="radio"
+                name="avatar"
+                value="comandante-con-casco.jpg">
+
+              <img
+                src="./avatares/comandante-con-casco.jpg"
+                alt="Comandante">
+
+              <span>
+                            Comandante
+                        </span>
+
+            </label>
+
+
+            <label class="avatar-opcion">
+
+              <input
+                type="radio"
+                name="avatar"
+                value="gran-mago-sabio.jpg">
+
+              <img
+                src="./avatares/gran-mago-sabio.jpg"
+                alt="Gran Mago Sabio">
+
+              <span>
+                            Gran Mago
+                        </span>
+
+            </label>
+
+
+            <label class="avatar-opcion">
+
+              <input
+                type="radio"
+                name="avatar"
+                value="guerrero-berserker.jpg">
+
+              <img
+                src="./avatares/guerrero-berserker.jpg"
+                alt="Guerrero Berserker">
+
+              <span>
+                            Berserker
+                        </span>
+
+            </label>
+
+
+            <label class="avatar-opcion">
+
+              <input
+                type="radio"
+                name="avatar"
+                value="guerrero-tanque.jpg">
+
+              <img
+                src="./avatares/guerrero-tanque.jpg"
+                alt="Guerrero Tanque">
+
+              <span>
+                            Tanque
+                        </span>
+
+            </label>
+
+
+            <label class="avatar-opcion">
+
+              <input
+                type="radio"
+                name="avatar"
+                value="mago-de-fuego.jpg">
+
+              <img
+                src="./avatares/mago-de-fuego.jpg"
+                alt="Mago de Fuego">
+
+              <span>
+                            Mago de Fuego
+                        </span>
+
+            </label>
+
+
+            <label class="avatar-opcion">
+
+              <input
+                type="radio"
+                name="avatar"
+                value="mago-de-hielo.jpg">
+
+              <img
+                src="./avatares/mago-de-hielo.jpg"
+                alt="Mago de Hielo">
+
+              <span>
+                            Mago de Hielo
+                        </span>
+
+            </label>
+
+
+            <label class="avatar-opcion">
+
+              <input
+                type="radio"
+                name="avatar"
+                value="picaro-asesino.jpg">
+
+              <img
+                src="./avatares/picaro-asesino.jpg"
+                alt="Pícaro Asesino">
+
+              <span>
+                            Pícaro</span>
+
+            </label>
+
+
+          </div>
+
+        </div>
+
+
+        <!-- =========================================
+             MENSAJE
+             ========================================= -->
+
+        <div
+          id="mensaje-perfil"
+          class="mensaje"
+          role="alert"
+          aria-live="polite"
+          hidden>
+        </div>
+
+
+        <!-- =========================================
+             ACCIONES
+             ========================================= -->
+
+        <div class="acciones-formulario">
+
+          <button
+            id="btn-descartar"
+            type="button"
+            class="btn btn-secundario">
+            Descartar cambios
+          </button>
+
+          <button
+            id="btn-guardar"
+            type="submit"
+            class="btn btn-principal">
+            Guardar cambios
+          </button>
+
+        </div>
+
+      </form>
+
+    </section>
+
+
+    <!-- =================================================
+         INFORMACIÓN DE LA CUENTA
+         ================================================= -->
+
+    <section class="tarjeta">
+
+      <div class="tarjeta-cabecera">
+
+        <div>
+          <h2>Información de la cuenta</h2>
+
+          <p>
+            Información básica asociada a tu cuenta.
+          </p>
+        </div>
+
+      </div>
+
+
+      <div class="informacion-cuenta">
+
+        <div class="dato-cuenta">
+
+                <span>
+                    ID de usuario
+                </span>
+
+          <strong id="usuario-id">
+            -
+          </strong>
+
+        </div>
+
+
+        <div class="dato-cuenta">
+
+                <span>
+                    Correo electrónico
+                </span>
+
+          <strong id="email">
+            -
+          </strong>
+
+        </div>
+
+
+        <div class="dato-cuenta">
+
+                <span>
+                    Rol
+                </span>
+
+          <strong id="rol">
+            -
+          </strong>
+
+        </div>
+
+      </div>
+
+    </section>
+
+
+  </section>
+
+</main>
+
+<script type="module" src="./perfil.js"></script>
+
+</body>
+</html>

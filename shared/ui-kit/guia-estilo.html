@@ -6,15 +6,10 @@
 <title>Guía de estilo · The Nexus Battles VI</title>
 
 <!--
-  Las fuentes se cargan aquí desde Google para poder abrir este archivo con
-  doble clic, sin servidor. En producción hay que servirlas desde el propio
-  Spring Boot: la aplicación va en AWS y no debe depender de un dominio
-  externo para renderizar bien.
+  Las fuentes las declara `css/tokens.css` con @font-face sobre los ficheros
+  de `fuentes/`: ninguna vista depende de un dominio externo, y esta guía se
+  sigue abriendo con doble clic porque las rutas son relativas.
 -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
-
 <link rel="stylesheet" href="css/tokens.css">
 <link rel="stylesheet" href="css/base.css">
 <link rel="stylesheet" href="css/componentes.css">
