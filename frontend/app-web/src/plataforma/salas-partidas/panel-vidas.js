@@ -45,7 +45,9 @@ function crearBarra(participante) {
   // Se marca a la IA porque el requisito permite que cualquier participante
   // de una partida de seis este controlado por la maquina, y quien mira la
   // pantalla necesita distinguirlo de una persona.
-  if (esIA) barra.dataset.ia = 'true';
+  if (esIA) {
+    barra.dataset.ia = 'true';
+  }
 
   const nombre = document.createElement('span');
   nombre.className = 'barra-vida__nombre';
@@ -82,7 +84,9 @@ export function pintarParticipantes(contenedor, participantes, { idPartida } = {
     throw new TypeError('panel-vidas: se esperaba un HTMLElement como contenedor.');
   }
 
-  if (idPartida) contenedor.dataset.partida = idPartida;
+  if (idPartida) {
+    contenedor.dataset.partida = idPartida;
+  }
 
   contenedor.replaceChildren();
 
@@ -105,14 +109,20 @@ export function pintarParticipantes(contenedor, participantes, { idPartida } = {
  * @param {object} evento  mensaje `AccionResuelta` del contrato
  */
 export function aplicarAccionResuelta(contenedor, evento) {
-  if (!evento || evento.tipo !== ACCION_RESUELTA) return;
+  if (!evento || evento.tipo !== ACCION_RESUELTA) {
+    return;
+  }
 
   const propia = contenedor.dataset.partida;
-  if (propia && evento.idPartida !== propia) return;
+  if (propia && evento.idPartida !== propia) {
+    return;
+  }
 
   for (const afectado of evento.afectados ?? []) {
     const barra = contenedor.querySelector(`[data-jugador="${afectado.idJugador}"]`);
-    if (!barra) continue; // espectador, o participante ya retirado de la vista
+    if (!barra) {
+      continue;
+    } // espectador, o participante ya retirado de la vista
 
     actualizar(barra, afectado.vidaActual, afectado.vidaMaxima);
   }

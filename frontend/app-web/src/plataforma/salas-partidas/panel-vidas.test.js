@@ -123,7 +123,7 @@ describe('aplicarAccionResuelta · criterio 3', () => {
       accionResuelta([
         { idJugador: BRUNO, vidaActual: 55, vidaMaxima: 100, diferencia: -25 },
         { idJugador: MAQUINA, vidaActual: 30, vidaMaxima: 100, diferencia: -70 },
-      ])
+      ]),
     );
 
     expect(valorDe(BRUNO)).toBe('55/100');
@@ -135,7 +135,7 @@ describe('aplicarAccionResuelta · criterio 3', () => {
   test('no toca a quien la accion no afecto', () => {
     aplicarAccionResuelta(
       panel,
-      accionResuelta([{ idJugador: BRUNO, vidaActual: 10, vidaMaxima: 100, diferencia: -70 }])
+      accionResuelta([{ idJugador: BRUNO, vidaActual: 10, vidaMaxima: 100, diferencia: -70 }]),
     );
 
     expect(valorDe(ANA)).toBe('100/100');
@@ -145,7 +145,7 @@ describe('aplicarAccionResuelta · criterio 3', () => {
   test('una curacion sube la barra igual que un dano la baja', () => {
     aplicarAccionResuelta(
       panel,
-      accionResuelta([{ idJugador: BRUNO, vidaActual: 95, vidaMaxima: 100, diferencia: 15 }])
+      accionResuelta([{ idJugador: BRUNO, vidaActual: 95, vidaMaxima: 100, diferencia: 15 }]),
     );
 
     expect(valorDe(BRUNO)).toBe('95/100');
@@ -179,7 +179,7 @@ describe('aplicarAccionResuelta · criterio 3', () => {
       accionResuelta([
         { idJugador: fantasma, vidaActual: 5, vidaMaxima: 100, diferencia: -95 },
         { idJugador: ANA, vidaActual: 70, vidaMaxima: 100, diferencia: -30 },
-      ])
+      ]),
     );
 
     expect(valorDe(ANA)).toBe('70/100');
@@ -188,7 +188,7 @@ describe('aplicarAccionResuelta · criterio 3', () => {
   test('un participante sin vida se queda en cero, no en negativo', () => {
     aplicarAccionResuelta(
       panel,
-      accionResuelta([{ idJugador: ANA, vidaActual: 0, vidaMaxima: 100, diferencia: -100 }])
+      accionResuelta([{ idJugador: ANA, vidaActual: 0, vidaMaxima: 100, diferencia: -100 }]),
     );
 
     expect(valorDe(ANA)).toBe('0/100');
@@ -214,17 +214,21 @@ describe('montarPanelVidas', () => {
 
     montarPanelVidas(panel, { idPartida: ID_PARTIDA, participantes: participantes(), suscribir });
 
-    entregar(accionResuelta([{ idJugador: ANA, vidaActual: 45, vidaMaxima: 100, diferencia: -55 }]));
+    entregar(
+      accionResuelta([{ idJugador: ANA, vidaActual: 45, vidaMaxima: 100, diferencia: -55 }]),
+    );
     expect(valorDe(ANA)).toBe('45/100');
 
-    entregar(accionResuelta([{ idJugador: ANA, vidaActual: 20, vidaMaxima: 100, diferencia: -25 }]));
+    entregar(
+      accionResuelta([{ idJugador: ANA, vidaActual: 20, vidaMaxima: 100, diferencia: -25 }]),
+    );
     expect(valorDe(ANA)).toBe('20/100');
     expect(barraDe(ANA).dataset.estado).toBe('bajo');
   });
 
   test('funciona sin canal: la vista pinta el estado inicial igual', () => {
     expect(() =>
-      montarPanelVidas(panel, { idPartida: ID_PARTIDA, participantes: participantes() })
+      montarPanelVidas(panel, { idPartida: ID_PARTIDA, participantes: participantes() }),
     ).not.toThrow();
 
     expect(panel.querySelectorAll('.barra-vida')).toHaveLength(3);
