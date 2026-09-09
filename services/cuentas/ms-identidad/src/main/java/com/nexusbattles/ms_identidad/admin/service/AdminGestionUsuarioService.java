@@ -45,6 +45,11 @@ public class AdminGestionUsuarioService {
         return actualizado;
     }
 
+    // @Transactional obligatorio (HU-AUD-001, fail-closed): el cambio de estado
+    // y el registro de auditoría deben ir en la MISMA transacción. Si la
+    // auditoría falla, AuditoriaClient lanza excepción y Spring revierte el
+    // cambio de estado ya hecho, para que la operación no se consuma sin auditoría.
+    @Transactional
     public void suspenderCuenta(Long usuarioId, LocalDateTime suspendidoHasta, String administradorId, String ipOrigen) {
         String estadoAnterior = authAdminService.obtenerEstadoCuenta(usuarioId);
         authAdminService.actualizarEstadoCuenta(usuarioId, "SUSPENDIDA", suspendidoHasta);
@@ -56,6 +61,7 @@ public class AdminGestionUsuarioService {
         );
     }
 
+    @Transactional
     public void banearCuenta(Long usuarioId, String administradorId, String ipOrigen) {
         String estadoAnterior = authAdminService.obtenerEstadoCuenta(usuarioId);
         authAdminService.actualizarEstadoCuenta(usuarioId, "BANEADA", null);
@@ -67,6 +73,7 @@ public class AdminGestionUsuarioService {
         );
     }
 
+    @Transactional
     public void reactivarCuenta(Long usuarioId, String administradorId, String ipOrigen) {
         String estadoAnterior = authAdminService.obtenerEstadoCuenta(usuarioId);
         if ("BANEADA".equals(estadoAnterior)) {
@@ -83,6 +90,7 @@ public class AdminGestionUsuarioService {
         );
     }
 
+    @Transactional
     public void restablecerPassword(Long usuarioId, String administradorId, String ipOrigen) {
         authAdminService.restablecerContrasena(usuarioId);
 
