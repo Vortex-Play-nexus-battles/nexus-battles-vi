@@ -28,6 +28,11 @@ El inventario conserva referencias al catalogo y no copia imagenes,
 estadisticas, habilidades, efectos ni precios. Asi, las modificaciones globales
 de productos pueden propagarse a todas las instancias, como exige `RF-ADM-10`.
 
+`SCRUM-322` crea un indice de texto MongoDB sobre la informacion que si pertenece
+al inventario: referencia del producto, tipo, nombre propio y parte de armadura.
+Este indice prepara la busqueda sin duplicar datos administrados por el servicio
+de productos.
+
 El agregado es inmutable y se guarda como un documento por propietario. Esta
 decision permite que los cambios de una instancia se persistan atomicamente y
 sirve como base para la prueba de escritura fallida de `SCRUM-328`.
