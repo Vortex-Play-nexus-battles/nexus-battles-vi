@@ -4,12 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Registro de auditoría — Nexus Battles VI</title>
+  <!-- CSS de la barra compartida -->
+  <link rel="stylesheet" href="../comun/barra-navegacion.css" />
   <link rel="stylesheet" href="tema-cuentas.css" />
   <link rel="stylesheet" href="auditoria.css" />
 </head>
 <body>
 
-<!-- Barra de navegación compartida: la inserta barra-navegacion.js en este contenedor -->
+<!-- Barra de navegación compartida -->
 <div id="navbar-container"></div>
 
 <div class="contenedor">
@@ -45,16 +47,18 @@
 
     <label for="filtro-desde">
       Desde
-      <input type="text" id="filtro-desde" placeholder="aaaa-mm-dd" onfocus="(this.type='date')" />
+      <input type="date" id="filtro-desde" />
     </label>
 
     <label for="filtro-hasta">
       Hasta
-      <input type="text" id="filtro-hasta" placeholder="aaaa-mm-dd" onfocus="(this.type='date')" />
+      <input type="date" id="filtro-hasta" />
     </label>
 
-    <button type="button" id="btn-filtrar" class="btn-primario">Filtrar</button>
-    <button type="button" id="btn-limpiar" class="btn-contorno">Limpiar</button>
+    <div class="acciones-filtros">
+      <button type="button" id="btn-filtrar" class="btn-primario">Filtrar</button>
+      <button type="button" id="btn-limpiar" class="btn-contorno">Limpiar</button>
+    </div>
   </section>
 
   <section class="tarjeta">
@@ -95,8 +99,17 @@
   </p>
 </div>
 
-<!-- Ajusta esta ruta/orden si barra-navegacion.js espera cargarse de otra forma -->
-<script src="../comun/barra-navegacion.js"></script>
+<!-- Carga del módulo de la barra compartida -->
+<script type="module">
+  import { construirBarra } from '../comun/barra-navegacion.js';
+
+  const navbarContainer = document.getElementById('navbar-container');
+  if (navbarContainer) {
+    const barra = construirBarra({ seccionActiva: 'cuenta' });
+    navbarContainer.appendChild(barra);
+  }
+</script>
+
 <script src="auditoria.js"></script>
 </body>
 </html>
