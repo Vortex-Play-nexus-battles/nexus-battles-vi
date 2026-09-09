@@ -61,6 +61,11 @@ jobs:
     outputs:
       servicios: ${{ steps.detectar.outputs.servicios }}
       hay_servicios: ${{ steps.detectar.outputs.hay_servicios }}
+      # Desplegar por perfil de dominio (reglas de trabajo de plataforma):
+      # plataforma y cuentas van al host de plataforma; contenido a su propio
+      # host. Cada lista dispara solo el job de despliegue que le toca.
+      hay_plataforma: ${{ steps.detectar.outputs.hay_plataforma }}
+      hay_contenido: ${{ steps.detectar.outputs.hay_contenido }}
       tag: ${{ steps.detectar.outputs.tag }}
     steps:
       - name: Descargar el repositorio con historial completo
@@ -224,6 +229,13 @@ jobs:
             echo "hay_servicios=false" >> "$GITHUB_OUTPUT"
           fi
 
+          # Por dominio: contenido despliega en su propio host (job
+          # "desplegar-contenido-dev"); todo lo demas en el de plataforma.
+          CONTENIDO=$(echo "$MATRIZ" | jq '[.[] | select(.ruta | startswith("services/contenido/"))] | length')
+          PLATAFORMA=$(echo "$MATRIZ" | jq '[.[] | select(.ruta | startswith("services/contenido/") | not)] | length')
+          if [ "$CONTENIDO" -gt 0 ]; then echo "hay_contenido=true" >> "$GITHUB_OUTPUT"; else echo "hay_contenido=false" >> "$GITHUB_OUTPUT"; fi
+          if [ "$PLATAFORMA" -gt 0 ]; then echo "hay_plataforma=true" >> "$GITHUB_OUTPUT"; else echo "hay_plataforma=false" >> "$GITHUB_OUTPUT"; fi
+
           # TAG unico para toda esta corrida: se usa para nombrar las
           # imagenes en ghcr.io y para saber que version desplegar despues.
           echo "tag=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
@@ -324,17 +336,19 @@ jobs:
   desplegar-dev:
     name: Desplegar en Dev
     needs: [detectar-servicios, construir-y-publicar]
-    if: needs.detectar-servicios.outputs.hay_servicios == 'true'
+    # Solo plataforma y cuentas: los servicios de contenido van al host de
+    # contenido (job "desplegar-contenido-dev"), nunca a este.
+    if: needs.detectar-servicios.outputs.hay_plataforma == 'true'
     runs-on: ubuntu-latest
     environment: dev
     steps:
       - name: Descargar el repositorio
         uses: actions/checkout@v4
 
-      - name: Preparar lista "servicio:puerto" para este ambiente
+      - name: Preparar lista "servicio:puerto" para este ambiente (sin contenido)
         id: lista
         run: |
-          LISTA=$(echo '${{ needs.detectar-servicios.outputs.servicios }}' | jq -r '[.[] | "\(.servicio):\(.puerto)"] | join(" ")')
+          LISTA=$(echo '${{ needs.detectar-servicios.outputs.servicios }}' | jq -r '[.[] | select(.ruta | startswith("services/contenido/") | not) | "\(.servicio):\(.puerto)"] | join(" ")')
           echo "lista=$LISTA" >> "$GITHUB_OUTPUT"
 
       - name: Copiar docker-compose.yml, docker-compose.deploy.yml y el script de despliegue
@@ -420,6 +434,61 @@ jobs:
       # este job via needs). No hay reversion automatica en dev/test: el
       # diseño acordado con Santiago Gonzalez la reserva para produccion
       # (ver el job "desplegar-produccion" mas abajo).
+
+  # ---------------------------------------------------------------------
+  # Job 3b: dev de CONTENIDO, en el host propio del dominio. Mismo script
+  # (desplegar.sh), mismos compose, mismo TAG; solo cambian el host y la
+  # llave (secrets *_CONTENIDO_DEV del entorno "dev"). Lo pide el propio
+  # documento de plataforma ("desplegar por perfil de dominio, no los 20
+  # servicios a la vez") y lo motiva el tamano del host de plataforma
+  # (t3.micro, 1 GB): ahi no caben 20 JVM. Los servicios de contenido solo
+  # leen variables propias (URIs de Mongo internas, URLs entre servicios
+  # del mismo compose), asi que no necesitan los secrets de aplicacion de
+  # plataforma: desplegar.sh los deja vacios en el .env sin fallar.
+  # Test y produccion de contenido quedan para cuando exista ese entorno.
+  # ---------------------------------------------------------------------
+  desplegar-contenido-dev:
+    name: Desplegar contenido en Dev
+    needs: [detectar-servicios, construir-y-publicar]
+    if: needs.detectar-servicios.outputs.hay_contenido == 'true'
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar lista "servicio:puerto" (solo contenido)
+        id: lista
+        run: |
+          LISTA=$(echo '${{ needs.detectar-servicios.outputs.servicios }}' | jq -r '[.[] | select(.ruta | startswith("services/contenido/")) | "\(.servicio):\(.puerto)"] | join(" ")')
+          echo "lista=$LISTA" >> "$GITHUB_OUTPUT"
+
+      - name: Copiar los compose y el script de despliegue al host de contenido
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST_CONTENIDO_DEV }}
+          username: ${{ secrets.SSH_USER_CONTENIDO_DEV }}
+          key: ${{ secrets.SSH_KEY_CONTENIDO_DEV }}
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh"
+          target: "/opt/nexus"
+          strip_components: 0
+
+      - name: Desplegar contenido en Dev
+        id: desplegar
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          TAG: ${{ needs.detectar-servicios.outputs.tag }}
+          SERVICIOS_PUERTOS: ${{ steps.lista.outputs.lista }}
+          APP_ENV: dev
+          LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST_CONTENIDO_DEV }}
+          username: ${{ secrets.SSH_USER_CONTENIDO_DEV }}
+          key: ${{ secrets.SSH_KEY_CONTENIDO_DEV }}
+          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL
+          script: |
+            chmod +x /opt/nexus/scripts/cd/desplegar.sh
+            /opt/nexus/scripts/cd/desplegar.sh
 
   # ---------------------------------------------------------------------
   # Job 4: test. Espera a que dev termine y haya pasado salud (needs).

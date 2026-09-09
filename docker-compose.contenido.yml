@@ -17,6 +17,12 @@
 # Ahi manda "image:" (publicada en ghcr.io por cd.yml, nunca se construye en
 # el servidor: el comando no lleva --build). ${TAG} lo exporta desplegar.sh.
 #
+# Memoria: cada contenedor lleva un limite (deploy.resources.limits.memory,
+# que Docker Compose v2 aplica sin swarm). Los Dockerfiles fijan
+# JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=75, asi que la JVM se dimensiona
+# sola dentro de ese limite. Suma ~1,7 GB: cabe en una t3.small de 2 GB, que
+# es un tipo elegible del plan gratuito (ver infrastructure/entornos/contenido/).
+#
 # Puertos de host: 8101-8104 (ecommerce usa 8090, cumplimiento 8091;
 # plataforma usa 8081-8088, cuentas 8089). Es el puerto que consulta el
 # healthcheck de desplegar.sh y el que registra puerto_de() en cd.yml.
@@ -32,6 +38,10 @@ services:
   contenido-mongo:
     image: mongo:8.0
     container_name: contenido-mongo
+    deploy:
+      resources:
+        limits:
+          memory: 384M
     volumes:
       - contenido-mongo-data:/data/db
     healthcheck:
@@ -48,6 +58,10 @@ services:
       dockerfile: services/contenido/heroes/Dockerfile
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-heroes:${TAG:-local}
     container_name: srv-heroes
+    deploy:
+      resources:
+        limits:
+          memory: 320M
     ports:
       - "8101:8080"
     environment:
@@ -64,6 +78,10 @@ services:
       dockerfile: services/contenido/inventario/Dockerfile
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-inventario:${TAG:-local}
     container_name: srv-inventario
+    deploy:
+      resources:
+        limits:
+          memory: 320M
     ports:
       - "8102:8080"
     environment:
@@ -84,6 +102,10 @@ services:
       dockerfile: services/contenido/productos/Dockerfile
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-productos:${TAG:-local}
     container_name: srv-productos
+    deploy:
+      resources:
+        limits:
+          memory: 384M
     ports:
       - "8103:8080"
     environment:
@@ -103,6 +125,10 @@ services:
       dockerfile: services/contenido/motor-combate/Dockerfile
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-motor-combate:${TAG:-local}
     container_name: srv-motor-combate
+    deploy:
+      resources:
+        limits:
+          memory: 320M
     ports:
       - "8104:8080"
     environment:
