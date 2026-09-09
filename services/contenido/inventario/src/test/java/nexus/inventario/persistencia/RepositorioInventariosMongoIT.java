@@ -1,15 +1,19 @@
 package nexus.inventario.persistencia;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import nexus.inventario.dominio.ElementoInventario;
 import nexus.inventario.dominio.FalloPersistenciaInventarioException;
 import nexus.inventario.dominio.Inventario;
 import nexus.inventario.dominio.ParteArmadura;
 import nexus.inventario.dominio.RepositorioDeInventarios;
 import nexus.inventario.dominio.TipoElementoInventario;
+import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -17,6 +21,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.mongodb.test.autoconfigure.DataMongoTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.mongodb.core.MongoTemplate;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -35,6 +40,9 @@ class RepositorioInventariosMongoIT {
 
     @Autowired
     private RepositorioInventariosSpringData documentos;
+
+    @Autowired
+    private MongoTemplate mongoTemplate;
 
     @BeforeEach
     void limpiarColeccion() {
@@ -104,5 +112,31 @@ class RepositorioInventariosMongoIT {
 
         assertEquals("jugador-A", recuperado.propietarioId());
         assertEquals("elemento-1", recuperado.elementos().getFirst().id());
+    }
+
+    @Test
+    @DisplayName("crea en MongoDB el indice de texto de los elementos")
+    void creaIndiceDeBusqueda() {
+        repositorio.guardar(Inventario.vacio("jugador-indexado")
+                .agregar(new ElementoInventario(
+                        "elemento-1", "producto-1", TipoElementoInventario.ARMADURA,
+                        "Casco de Bruma", ParteArmadura.CASCO)));
+
+        List<Document> indices = mongoTemplate.getCollection("inventarios")
+                .listIndexes()
+                .into(new ArrayList<>());
+        Document indiceTexto = indices.stream()
+                .filter(indice -> indice.get("weights", Document.class) != null)
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(indiceTexto);
+        assertEquals(
+                Set.of(
+                        "elementos.productoId",
+                        "elementos.tipo",
+                        "elementos.nombrePropio",
+                        "elementos.parteArmadura"),
+                indiceTexto.get("weights", Document.class).keySet());
     }
 }

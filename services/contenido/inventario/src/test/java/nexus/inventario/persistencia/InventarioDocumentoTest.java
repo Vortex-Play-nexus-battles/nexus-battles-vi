@@ -1,8 +1,10 @@
 package nexus.inventario.persistencia;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.util.List;
+import java.util.stream.StreamSupport;
 import nexus.inventario.dominio.ElementoInventario;
 import nexus.inventario.dominio.Inventario;
 import nexus.inventario.dominio.ParteArmadura;
@@ -12,6 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.mongodb.core.convert.MappingMongoConverter;
 import org.springframework.data.mongodb.core.convert.NoOpDbRefResolver;
+import org.springframework.data.mongodb.core.index.MongoPersistentEntityIndexResolver;
 import org.springframework.data.mongodb.core.mapping.MongoMappingContext;
 
 class InventarioDocumentoTest {
@@ -72,6 +75,26 @@ class InventarioDocumentoTest {
         assertEquals("inventario-1", documento.id());
         assertEquals("jugador-A", documento.propietarioId());
         assertEquals(List.of(), documento.equipamientos());
+    }
+
+    @Test
+    @DisplayName("indexa la informacion registrada de cada elemento del inventario")
+    void defineIndiceDeBusqueda() throws Exception {
+        MongoMappingContext contexto = contextoMongo();
+        var resolutor = new MongoPersistentEntityIndexResolver(contexto);
+
+        Document indice = StreamSupport.stream(
+                        resolutor.resolveIndexFor(InventarioDocumento.class).spliterator(), false)
+                .map(definicion -> definicion.getIndexKeys())
+                .filter(claves -> "text".equals(claves.get("elementos.nombrePropio")))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(indice);
+        assertEquals("text", indice.get("elementos.productoId"));
+        assertEquals("text", indice.get("elementos.tipo"));
+        assertEquals("text", indice.get("elementos.nombrePropio"));
+        assertEquals("text", indice.get("elementos.parteArmadura"));
     }
 
     private MongoMappingContext contextoMongo() throws Exception {
