@@ -10,13 +10,14 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1/ecommerce")
+@RequestMapping("/api/v1/productos")
 @RequiredArgsConstructor
+@CrossOrigin(origins = {"http://localhost:8080", "http://127.0.0.1:8080"})
 public class VitrinaController {
 
     private final VitrinaService vitrinaService;
 
-    @GetMapping("/productos")
+    @GetMapping()
     public ResponseEntity<Page<ProductoVitrinaDto>> obtenerProductos(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "16") int size, // Paginación de 16 elementos por norma[cite: 3]
