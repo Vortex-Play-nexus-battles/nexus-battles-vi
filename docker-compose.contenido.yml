@@ -16,6 +16,12 @@
 #   docker compose -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.contenido.yml pull|up -d
 # Ahi manda "image:" (publicada en ghcr.io por cd.yml, nunca se construye en
 # el servidor: el comando no lleva --build). ${TAG} lo exporta desplegar.sh.
+# La etiqueta es por servicio (${TAG_HEROES}, ${TAG_INVENTARIO}, ...) con
+# ${TAG} de respaldo: el CD solo construye las imagenes de los servicios que
+# cambiaron, y las dependencias que no cambiaron (p. ej. srv-heroes para
+# inventario y motor) conservan la etiqueta que ya tienen desplegada. Las
+# resuelve resolver_etiquetas_contenido en scripts/cd/desplegar.sh; en local
+# no hace falta definir nada: todo cae en "local".
 #
 # Memoria: cada contenedor lleva un limite (deploy.resources.limits.memory,
 # que Docker Compose v2 aplica sin swarm). Los Dockerfiles fijan
@@ -56,7 +62,7 @@ services:
     build:
       context: .
       dockerfile: services/contenido/heroes/Dockerfile
-    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-heroes:${TAG:-local}
+    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-heroes:${TAG_HEROES:-${TAG:-local}}
     container_name: srv-heroes
     deploy:
       resources:
@@ -76,7 +82,7 @@ services:
     build:
       context: .
       dockerfile: services/contenido/inventario/Dockerfile
-    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-inventario:${TAG:-local}
+    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-inventario:${TAG_INVENTARIO:-${TAG:-local}}
     container_name: srv-inventario
     deploy:
       resources:
@@ -103,7 +109,7 @@ services:
     build:
       context: .
       dockerfile: services/contenido/productos/Dockerfile
-    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-productos:${TAG:-local}
+    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-productos:${TAG_PRODUCTOS:-${TAG:-local}}
     container_name: srv-productos
     deploy:
       resources:
@@ -126,7 +132,7 @@ services:
     build:
       context: .
       dockerfile: services/contenido/motor-combate/Dockerfile
-    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-motor-combate:${TAG:-local}
+    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-motor-combate:${TAG_MOTOR_COMBATE:-${TAG:-local}}
     container_name: srv-motor-combate
     deploy:
       resources:

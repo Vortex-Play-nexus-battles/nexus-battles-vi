@@ -143,3 +143,5 @@ Spring Boot `SPRING_DATA_MONGODB_URI`.
 ## Despliegue
 
 Este servicio se despliega en el host propio del dominio de contenido (`infrastructure/entornos/contenido/`), por el flujo `cd.yml` (job `desplegar-contenido-dev`) en cada push a `develop` que toque `services/contenido/inventario`. Queda publicado en el puerto **8102** del host (8080 dentro del contenedor), con su MongoDB en la misma red de Compose (`SPRING_MONGODB_URI`) y las URLs internas de héroes y productos (`HEROES_BASE_URL`, `PRODUCTOS_BASE_URL`). Salud: `http://<ip-del-host>:8102/actuator/health`.
+
+La imagen lleva la etiqueta propia de este servicio (`TAG_INVENTARIO`, el sha corto del push que lo cambió); las dependencias que no cambiaron conservan la etiqueta que ya tienen desplegada. Lo resuelve `resolver_etiquetas_contenido` en `scripts/cd/desplegar.sh`.
