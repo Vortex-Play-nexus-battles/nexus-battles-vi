@@ -233,6 +233,18 @@ if [ "$INCLUYE_CONTENIDO" -eq 1 ]; then
   ARCHIVOS_COMPOSE+=(-f "$COMPOSE_CONTENIDO")
 fi
 
+# Las imagenes de ghcr.io son privadas (paquetes de la organizacion): el
+# servidor tiene que iniciar sesion antes del pull. Usa el token de la propia
+# corrida (GITHUB_TOKEN, permiso packages:read, valido solo mientras dura el
+# job) que cd.yml reexporta como GHCR_TOKEN; nunca una credencial guardada en
+# el servidor. Si no llega el token (p. ej. corrida a mano), se intenta sin
+# sesion y el pull explica el "unauthorized" como hasta ahora.
+if [ -n "${GHCR_TOKEN:-}" ]; then
+  echo "== 3a) Iniciando sesion en ghcr.io con el token de la corrida =="
+  echo "$GHCR_TOKEN" | docker login ghcr.io -u "${GHCR_USER:-github-actions}" --password-stdin
+  trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
+fi
+
 docker compose "${ARCHIVOS_COMPOSE[@]}" pull $SERVICIOS_COMPOSE
 docker compose "${ARCHIVOS_COMPOSE[@]}" up -d $SERVICIOS_COMPOSE
 
