@@ -9,6 +9,11 @@
 # Variables de entorno que este script espera recibir ya puestas (las pone
 # GitHub Actions via appleboy/ssh-action, ver cd.yml):
 #   TAG                 -> tag de imagen a desplegar (sha corto del commit)
+#                          Para services/contenido/* la etiqueta es POR
+#                          SERVICIO (TAG_HEROES, TAG_INVENTARIO, ...):
+#                          los de esta corrida usan TAG y los que no
+#                          cambiaron conservan la que ya tienen
+#                          desplegada. Ver resolver_etiquetas_contenido.
 #   SERVICIOS_PUERTOS   -> ej: "comentarios:8081 correo:8082" (lista de
 #                          servicios modificados en este push, con su puerto)
 #   Las 16 variables de aplicacion listadas en .env.example, con el MISMO
@@ -72,6 +77,48 @@ COMPOSE_CONTENIDO="$DIRECTORIO/docker-compose.contenido.yml"
 SERVICIOS_CONTENIDO="heroes inventario productos motor-combate"
 INTENTOS_SALUD=12
 ESPERA_ENTRE_INTENTOS=5
+
+# Etiqueta de imagen por servicio de contenido. docker-compose.contenido.yml
+# lee ${TAG_HEROES}, ${TAG_INVENTARIO}, ${TAG_PRODUCTOS} y ${TAG_MOTOR_COMBATE}
+# (con ${TAG} como respaldo). Hace falta porque el CD solo construye la imagen
+# de los servicios que cambiaron en el push, pero "docker compose up" arrastra
+# a las dependencias (inventario y motor dependen de srv-heroes): si todas
+# compartieran el TAG de la corrida, la dependencia que no cambio apuntaria a
+# una imagen que no existe y Compose intentaria construirla en el servidor
+# (corrida 34307790392, 9-sep). Regla: el servicio que viene en esta corrida
+# usa el TAG nuevo; el que no viene conserva la etiqueta del contenedor que ya
+# esta corriendo; si nunca se desplego, usa el TAG nuevo y el pull fallara con
+# un "not found" explicito (mejor eso que un build silencioso en el host).
+#   $1 = TAG de la corrida, $2 = lista "servicio:puerto" de la corrida.
+resolver_etiquetas_contenido() {
+  local tag_corrida="$1" lista="$2" s par variable en_corrida tag_desplegada
+  for s in $SERVICIOS_CONTENIDO; do
+    variable="TAG_$(echo "$s" | tr 'a-z-' 'A-Z_')"
+    en_corrida=0
+    for par in $lista; do
+      if [ "${par%%:*}" = "$s" ]; then en_corrida=1; fi
+    done
+    if [ "$en_corrida" -eq 1 ]; then
+      export "$variable=$tag_corrida"
+      echo "  $s: cambia en esta corrida -> $tag_corrida"
+      continue
+    fi
+    tag_desplegada=$(docker inspect --format '{{.Config.Image}}' "srv-$s" 2>/dev/null | sed 's/^.*://' || true)
+    if [ -n "$tag_desplegada" ]; then
+      export "$variable=$tag_desplegada"
+      echo "  $s: no cambia, conserva la etiqueta desplegada -> $tag_desplegada"
+    else
+      export "$variable=$tag_corrida"
+      echo "  $s: no cambia y nunca se desplego; si otro servicio depende de el, el pull fallara con 'not found' (despliegalo primero)"
+    fi
+  done
+}
+
+# Las pruebas de scripts/cd/pruebas/ cargan este archivo solo por sus
+# funciones; con esta variable no se toca el servidor.
+if [ "${DESPLEGAR_SOLO_FUNCIONES:-0}" = "1" ]; then
+  return 0 2>/dev/null || exit 0
+fi
 
 mkdir -p "$DIRECTORIO"
 cd "$DIRECTORIO"
@@ -243,6 +290,11 @@ if [ -n "${GHCR_TOKEN:-}" ]; then
   echo "== 3a) Iniciando sesion en ghcr.io con el token de la corrida =="
   echo "$GHCR_TOKEN" | docker login ghcr.io -u "${GHCR_USER:-github-actions}" --password-stdin
   trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
+fi
+
+if [ "$INCLUYE_CONTENIDO" -eq 1 ]; then
+  echo "== 3b) Etiqueta de imagen por servicio de contenido =="
+  resolver_etiquetas_contenido "$TAG" "$SERVICIOS_PUERTOS"
 fi
 
 docker compose "${ARCHIVOS_COMPOSE[@]}" pull $SERVICIOS_COMPOSE
