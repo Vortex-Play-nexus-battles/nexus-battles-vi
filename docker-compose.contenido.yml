@@ -85,6 +85,9 @@ services:
     ports:
       - "8102:8080"
     environment:
+      # Boot 4 lee spring.mongodb.uri (SPRING_MONGODB_URI); el nombre de Boot 3
+      # se conserva porque el README y el LEEME de inventario lo documentan.
+      SPRING_MONGODB_URI: mongodb://contenido-mongo:27017/inventario
       SPRING_DATA_MONGODB_URI: mongodb://contenido-mongo:27017/inventario
       HEROES_BASE_URL: http://srv-heroes:8080
       PRODUCTOS_BASE_URL: http://srv-productos:8080
