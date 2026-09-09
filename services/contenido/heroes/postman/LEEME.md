@@ -1,6 +1,6 @@
 # Validacion con Postman del servicio de heroes
 
-Coleccion con **aserciones** para las historias HU-HER-001 a HU-HER-010: cada
+Coleccion con **aserciones** para las historias HU-HER-001 a HU-HER-010 y HU-JUE-009: cada
 peticion verifica la regla del cliente que le corresponde (Tablas 5, 6, 7 y 20
 del documento; RC-01 del acta del 2026-07-29; correcciones del acta del
 2026-08-13). Sirve para validar el servicio antes de un push a `develop`, y
@@ -10,7 +10,7 @@ es la misma validacion que puede correr el CI.
 
 | Archivo | Que es |
 |---|---|
-| `heroes.postman_collection.json` | La coleccion: 21 peticiones, 68 aserciones, agrupadas por historia |
+| `heroes.postman_collection.json` | La coleccion: 27 peticiones, 90 aserciones, agrupadas por historia |
 | `local.postman_environment.json` | Entorno local: `baseUrl = http://localhost:8080` |
 
 ## Con la app de Postman
@@ -42,6 +42,7 @@ Contra otro ambiente, cambiar `baseUrl` en el entorno o pasar
 | 2. HU-HER-002 | Ficha del Tanque (ejemplo de clase), Chaman y Medico sin ataque, busqueda tolerante, error 404 legible sin codigos |
 | 3. HU-HER-003/006/007/008/009/010 | Vista por nivel: escalado del ejemplo textual, desbloqueo 1/4/8, multiplicador, epica afin con recarga, tope del nivel 8, 400 fuera de rango |
 | 4. HU-HER-003/004 | Tabla de niveles, progresion con sobrante y tope, experiencia por enemigo, errores 400 |
+| 5. HU-JUE-009 | Composicion de equipo: un sanador se acepta, dos se rechazan (RC-08), individual segun el parametro propio (RC-09), errores 404 y 400 legibles |
 
 Cuando cambie el contrato (`contracts/openapi/heroes.yaml`), actualizar aqui
 la peticion afectada en el mismo cambio: la coleccion es parte de la evidencia

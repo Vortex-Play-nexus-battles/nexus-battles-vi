@@ -90,6 +90,42 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/DetalleDeProblema"
+  /api/v1/equipos/validacion:
+    post:
+      summary: Valida la composición de un equipo de combate (HU-JUE-009)
+      description: >
+        Regla del cliente dictada en clase el 2026-07-29 (RC-08): un equipo admite un
+        único sanador, Chamán o Médico. Servicio sin estado para que Jugar online (sala
+        de batalla) y Torneo lo consuman en vez de reimplementar la regla. Un equipo de
+        un solo héroe es un enfrentamiento individual y se rige por un parámetro propio
+        del servicio (criterio 3 de la historia; RC-09, pendiente V-09): por defecto los
+        sanadores solo participan en combate por equipos.
+      operationId: validarComposicionDeEquipo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudDeComposicion"
+      responses:
+        "200":
+          description: Veredicto sobre la composición. Un rechazo NO es un error de la petición.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VeredictoDeComposicion"
+        "400":
+          description: Equipo vacío
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "404":
+          description: Algún nombre no corresponde a un prototipo del catálogo
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
   /api/v1/progresion/niveles:
     get:
       summary: Tabla de experiencia requerida por nivel (100 × 1,2^(N−1))
@@ -275,6 +311,26 @@ components:
         nombre: { type: string, example: Golpe con escudo }
         costo: { type: string, example: 2 puntos de poder }
         efecto: { type: string, example: +2 al ataque }
+    SolicitudDeComposicion:
+      type: object
+      required: [heroes]
+      properties:
+        heroes:
+          type: array
+          minItems: 1
+          description: Nombres de los prototipos del equipo (búsqueda tolerante a tildes y mayúsculas)
+          items: { type: string, example: Chamán }
+    VeredictoDeComposicion:
+      type: object
+      required: [valida, sanadores, individual]
+      properties:
+        valida: { type: boolean, example: false }
+        motivo:
+          type: string
+          description: Mensaje apto para el jugador. Ausente cuando la composición es válida.
+          example: "Un equipo admite un único sanador: Chamán o Médico."
+        sanadores: { type: integer, example: 2, description: Cuántos Chamán o Médico trae el equipo }
+        individual: { type: boolean, example: false, description: Verdadero si el equipo es de un solo héroe (1v1) }
     DetalleDeProblema:
       type: object
       description: Formato estándar de detalles de problema (RFC 9457) de la plataforma.

@@ -122,6 +122,26 @@ class ContratoDeHeroesTest {
     }
 
     @Test
+    @DisplayName("la validacion de composicion de equipo cumple el contrato (HU-JUE-009)")
+    void composicionDeEquipoCumpleElContrato() throws Exception {
+        mvc.perform(post("/api/v1/equipos/validacion")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"heroes\":[\"Chamán\",\"Guerrero Tanque\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(openApi().isValid(CONTRATO));
+        mvc.perform(post("/api/v1/equipos/validacion")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"heroes\":[\"Chamán\",\"Médico\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(openApi().isValid(CONTRATO));
+        mvc.perform(post("/api/v1/equipos/validacion")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"heroes\":[\"Nigromante\"]}"))
+                .andExpect(status().isNotFound())
+                .andExpect(openApi().isValid(CONTRATO));
+    }
+
+    @Test
     @DisplayName("el error de nivel no valido cumple el contrato (RFC 9457)")
     void errorDeNivelCumpleElContrato() throws Exception {
         // La peticion viola a proposito el minimo del parametro (eso es lo que se
