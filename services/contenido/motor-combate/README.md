@@ -43,3 +43,5 @@ La tarea `check` ejecuta JUnit y falla si la cobertura de lineas es inferior al
 ## Despliegue
 
 Este servicio se despliega en el host propio del dominio de contenido (`infrastructure/entornos/contenido/`), por el flujo `cd.yml` (job `desplegar-contenido-dev`) en cada push a `develop` que toque `services/contenido/motor-combate`. Queda publicado en el puerto **8104** del host (8080 dentro del contenedor), consumiendo héroes por la URL interna `HEROES_URL`. Salud: `http://<ip-del-host>:8104/actuator/health`.
+
+La imagen lleva la etiqueta propia de este servicio (`TAG_MOTOR_COMBATE`, el sha corto del push que lo cambió); las dependencias que no cambiaron conservan la etiqueta que ya tienen desplegada. Lo resuelve `resolver_etiquetas_contenido` en `scripts/cd/desplegar.sh`.
