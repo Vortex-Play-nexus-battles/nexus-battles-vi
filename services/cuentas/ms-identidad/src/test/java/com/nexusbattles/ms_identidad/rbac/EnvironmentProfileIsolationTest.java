@@ -77,4 +77,26 @@ class EnvironmentProfileIsolationTest {
                 base.getProperty("spring.profiles.active")
         );
     }
+
+    @Test
+    void produccionDebeDeshabilitarElRespaldoDeRolPorHeader()
+            throws IOException {
+
+        Properties prod = cargar("application-prod.properties");
+        Properties dev = cargar("application-dev.properties");
+
+        // HU-RBAC-004: en produccion la unica credencial valida es el Bearer JWT.
+        assertEquals(
+                "false",
+                prod.getProperty("app.seguridad.permitir-header-rol"),
+                "El respaldo X-User-Role debe estar apagado en produccion"
+        );
+
+        // En desarrollo si se permite, para demostrar los cuatro roles sin
+        // cuatro inicios de sesion reales.
+        assertEquals(
+                "true",
+                dev.getProperty("app.seguridad.permitir-header-rol")
+        );
+    }
 }
