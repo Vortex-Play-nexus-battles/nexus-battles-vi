@@ -30,7 +30,7 @@ Con eso, el siguiente push a `develop` que toque cualquier servicio de contenido
 
 ## Costos y apagado
 
-`t3.medium` ~30 USD/mes bajo demanda, `t3.small` ~17 (variable `instance_type`). Se descuenta de los créditos de la cuenta. Apagar la instancia desde la consola cuando no se use; la IP elástica se conserva, así que el secreto no cambia.
+`t3.small` ~17 USD/mes más la IP elástica ~3,6 USD/mes, descontados de los créditos del plan gratuito (hasta 200 USD por 6 meses; el semestre cabe con holgura). `t3.small` es tipo elegible del plan gratuito; `t3.medium` no lo es (variable `instance_type`). Apagar la instancia desde la consola cuando no se use; la IP elástica se conserva, así que el secreto no cambia.
 
 ## Lo que NO hace
 

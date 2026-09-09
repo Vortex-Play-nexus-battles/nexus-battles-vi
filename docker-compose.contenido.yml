@@ -20,8 +20,8 @@
 # Memoria: cada contenedor lleva un limite (deploy.resources.limits.memory,
 # que Docker Compose v2 aplica sin swarm). Los Dockerfiles fijan
 # JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=75, asi que la JVM se dimensiona
-# sola dentro de ese limite. Suma ~2,1 GB: cabe en un host de 4 GB con
-# holgura y en uno de 2 GB apenas (ver infrastructure/entornos/contenido/).
+# sola dentro de ese limite. Suma ~1,7 GB: cabe en una t3.small de 2 GB, que
+# es un tipo elegible del plan gratuito (ver infrastructure/entornos/contenido/).
 #
 # Puertos de host: 8101-8104 (ecommerce usa 8090, cumplimiento 8091;
 # plataforma usa 8081-8088, cuentas 8089). Es el puerto que consulta el
@@ -41,7 +41,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 384M
     volumes:
       - contenido-mongo-data:/data/db
     healthcheck:
@@ -61,7 +61,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 320M
     ports:
       - "8101:8080"
     environment:
@@ -81,7 +81,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 320M
     ports:
       - "8102:8080"
     environment:
@@ -105,7 +105,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 448M
+          memory: 384M
     ports:
       - "8103:8080"
     environment:
@@ -128,7 +128,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 320M
     ports:
       - "8104:8080"
     environment:

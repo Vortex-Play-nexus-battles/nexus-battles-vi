@@ -7,8 +7,11 @@
 # toca el estado de plataforma.
 #
 # Cuenta: la prueba gratuita / creditos de AWS que el cliente autorizo en la
-# clase del 2026-09-03. Costo de referencia: t3.small ~17 USD/mes, t3.medium
-# ~30 USD/mes (us-east-1, bajo demanda), descontado de los creditos. Apagar la
+# clase del 2026-09-03. Plan gratuito de AWS (cuentas desde julio de 2025):
+# hasta 200 USD de credito por 6 meses y solo tipos de instancia elegibles
+# (t3.micro, t3.small, t4g.micro, t4g.small, c7i-flex.large, m7i-flex.large).
+# t3.small ~17 USD/mes + IP elastica ~3,6 USD/mes, descontados del credito:
+# el semestre (hasta el 6 de noviembre) cabe con holgura. Apagar la
 # instancia cuando no se use.
 #
 # Uso:
@@ -38,9 +41,9 @@ variable "region" {
 }
 
 variable "instance_type" {
-  description = "t3.small (2 GB) alcanza justo para los 4 servicios + Mongo con los limites del compose; t3.medium (4 GB) deja holgura."
+  description = "t3.small (2 GB) es un tipo elegible del nivel gratuito para cuentas nuevas y alcanza para los 4 servicios + Mongo con los limites del compose (~1,7 GB). t3.medium no es elegible en el plan gratuito."
   type        = string
-  default     = "t3.medium"
+  default     = "t3.small"
 }
 
 variable "cidr_ssh" {
