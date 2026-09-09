@@ -32,3 +32,14 @@ Requiere JDK 21. El contrato REST está en `contracts/openapi/heroes.yaml` (pend
 - Persistencia en MongoDB cuando plataforma aprovisione los motores (el bean `Catalogo` en memoria se sustituye por el repositorio documental sin tocar dominio ni controlador).
 - Adaptarse a los complementos de convención de Gradle cuando `shared/config/` los publique.
 - El catálogo es de lectura: la administración de héroes como productos pertenece al servicio de productos (el héroe es un tipo de producto, sección 7.2.1).
+
+## Despliegue
+
+Los servicios de contenido se despliegan en el host propio del dominio (`infrastructure/entornos/contenido/`), por el flujo `cd.yml` (job `desplegar-contenido-dev`) en cada push a `develop` que toque `services/contenido/*`. Héroes queda publicado en el puerto **8101** del host (8080 dentro del contenedor) con el perfil `mongo` y su MongoDB en la misma red de Compose.
+
+Para verificar un despliegue con la colección de Postman contra el host:
+
+```bash
+npx --yes newman run postman/heroes.postman_collection.json -e postman/local.postman_environment.json --env-var baseUrl=http://<ip-del-host>:8101
+```
+
