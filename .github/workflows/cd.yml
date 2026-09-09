@@ -61,6 +61,11 @@ jobs:
     outputs:
       servicios: ${{ steps.detectar.outputs.servicios }}
       hay_servicios: ${{ steps.detectar.outputs.hay_servicios }}
+      # Desplegar por perfil de dominio (reglas de trabajo de plataforma):
+      # plataforma y cuentas van al host de plataforma; contenido a su propio
+      # host. Cada lista dispara solo el job de despliegue que le toca.
+      hay_plataforma: ${{ steps.detectar.outputs.hay_plataforma }}
+      hay_contenido: ${{ steps.detectar.outputs.hay_contenido }}
       tag: ${{ steps.detectar.outputs.tag }}
     steps:
       - name: Descargar el repositorio con historial completo
@@ -91,12 +96,13 @@ jobs:
 
           echo "Comparando $BASE..$HEAD"
 
-          # 2) Solo nos importan los 8 servicios de services/plataforma/* que
-          #    ya tienen imagen en docker-compose.yml (los unicos que este
-          #    equipo despliega). Un servicio de otro equipo que cambie en el
-          #    mismo push se ignora aqui a proposito.
+          # 2) Nos importan los servicios de services/plataforma/* (8, con
+          #    imagen en docker-compose.yml) y los de services/contenido/*
+          #    que ya esten registrados en puerto_de() y en
+          #    docker-compose.contenido.yml. Un servicio sin puerto
+          #    registrado se omite mas abajo con un mensaje, no rompe nada.
           ARCHIVOS=$(git diff --name-only "$BASE" "$HEAD")
-          CARPETAS=$(echo "$ARCHIVOS" | grep -E '^services/plataforma/[^/]+/' | awk -F'/' '{print $1"/"$2"/"$3}' | sort -u || true)
+          CARPETAS=$(echo "$ARCHIVOS" | grep -E '^services/(plataforma|contenido)/[^/]+/' | awk -F'/' '{print $1"/"$2"/"$3}' | sort -u || true)
 
           # 3) Puerto fijo por servicio, mismo orden que docker-compose.yml
           #    (8081 a 8088). Si se agrega un noveno servicio de plataforma
@@ -112,6 +118,17 @@ jobs:
               moderacion-sanciones) echo 8086 ;;
               metricas-plataforma) echo 8087 ;;
               admin-parametros) echo 8088 ;;
+              # services/contenido/* (equipo Contenido): bloque 8101-8104.
+              # Es el puerto del HOST (el que consulta el healthcheck de
+              # desplegar.sh); dentro del contenedor todos escuchan en 8080
+              # y docker-compose.contenido.yml los publica como 810x:8080.
+              # No se usa 8090-8094: cuentas ya fija ms-ecommerce en 8090 y
+              # ms-cumplimiento en 8091. Cada servicio de aqui se construye
+              # desde la raiz del monorepo con -f (ver "Construir la imagen").
+              heroes) echo 8101 ;;
+              inventario) echo 8102 ;;
+              productos) echo 8103 ;;
+              motor-combate) echo 8104 ;;
               *) echo "" ;;
             esac
           }
@@ -166,6 +183,42 @@ jobs:
             fi
           fi
 
+          # 5) services/cuentas/ms-cumplimiento (Maven), mismo patron exacto
+          #    que ms-identidad arriba -- bloque especifico, NO generalizado
+          #    a un grep de cuentas/* (ms-ecommerce sigue sin Dockerfile).
+          #    Puerto 8091, mismo del lado del host que del contenedor
+          #    (confirmado en su Dockerfile: EXPOSE 8091, sin el desfase que
+          #    tuvo ms-identidad).
+          if echo "$ARCHIVOS" | grep -q '^services/cuentas/ms-cumplimiento/'; then
+            if [ -f "services/cuentas/ms-cumplimiento/pom.xml" ]; then
+              MATRIZ=$(echo "$MATRIZ" | jq -c \
+                --arg ruta "services/cuentas/ms-cumplimiento" \
+                --arg servicio "ms-cumplimiento" \
+                '. + [{ruta:$ruta, rutaGradle:"", servicio:$servicio, puerto:"8091", herramienta:"maven"}]')
+            else
+              echo "Se omite services/cuentas/ms-cumplimiento: no tiene pom.xml"
+            fi
+          fi
+
+          # 6) services/cuentas/ms-ecommerce (Maven), mismo patron exacto que
+          #    ms-identidad y ms-cumplimiento arriba -- bloque especifico, NO
+          #    generalizado a un grep de cuentas/*. Puerto 8090, mismo del
+          #    lado del host que del contenedor (confirmado en su Dockerfile:
+          #    EXPOSE 8090). A diferencia de los otros dos, este servicio
+          #    tiene server.servlet.context-path=/api/v1 -- el healthcheck
+          #    generico de desplegar.sh no sirve tal cual para el, ver el
+          #    comentario de "ruta_salud_de" en ese script.
+          if echo "$ARCHIVOS" | grep -q '^services/cuentas/ms-ecommerce/'; then
+            if [ -f "services/cuentas/ms-ecommerce/pom.xml" ]; then
+              MATRIZ=$(echo "$MATRIZ" | jq -c \
+                --arg ruta "services/cuentas/ms-ecommerce" \
+                --arg servicio "ms-ecommerce" \
+                '. + [{ruta:$ruta, rutaGradle:"", servicio:$servicio, puerto:"8090", herramienta:"maven"}]')
+            else
+              echo "Se omite services/cuentas/ms-ecommerce: no tiene pom.xml"
+            fi
+          fi
+
           echo "Servicios a desplegar: $MATRIZ"
           echo "servicios=$MATRIZ" >> "$GITHUB_OUTPUT"
 
@@ -175,6 +228,13 @@ jobs:
           else
             echo "hay_servicios=false" >> "$GITHUB_OUTPUT"
           fi
+
+          # Por dominio: contenido despliega en su propio host (job
+          # "desplegar-contenido-dev"); todo lo demas en el de plataforma.
+          CONTENIDO=$(echo "$MATRIZ" | jq '[.[] | select(.ruta | startswith("services/contenido/"))] | length')
+          PLATAFORMA=$(echo "$MATRIZ" | jq '[.[] | select(.ruta | startswith("services/contenido/") | not)] | length')
+          if [ "$CONTENIDO" -gt 0 ]; then echo "hay_contenido=true" >> "$GITHUB_OUTPUT"; else echo "hay_contenido=false" >> "$GITHUB_OUTPUT"; fi
+          if [ "$PLATAFORMA" -gt 0 ]; then echo "hay_plataforma=true" >> "$GITHUB_OUTPUT"; else echo "hay_plataforma=false" >> "$GITHUB_OUTPUT"; fi
 
           # TAG unico para toda esta corrida: se usa para nombrar las
           # imagenes en ghcr.io y para saber que version desplegar despues.
@@ -247,14 +307,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # El contexto del build es la carpeta del servicio (matrix.ruta): ahi
-      # es donde acaba de quedar el jar (build/libs/*.jar en Gradle,
-      # target/*.jar en Maven) y donde vive su Dockerfile.
+      # Contexto del build:
+      #  - services/plataforma/*: la carpeta del servicio (matrix.ruta), donde
+      #    acaba de quedar el jar (build/libs/*.jar en Gradle, target/*.jar
+      #    en Maven) y donde vive su Dockerfile.
+      #  - services/contenido/*: la RAIZ del monorepo, con -f al Dockerfile
+      #    del servicio. Sus Dockerfiles necesitan ver el wrapper de Gradle y
+      #    buildSrc (inventario, productos y motor-combate compilan dentro de
+      #    la imagen; heroes copia el jar que este job ya compilo).
       - name: Construir la imagen Docker
         run: |
-          docker build \
-            -t ${{ env.REGISTRO_IMAGENES }}/nexus-battles-vi-${{ matrix.servicio }}:${{ needs.detectar-servicios.outputs.tag }} \
-            ${{ matrix.ruta }}
+          IMAGEN=${{ env.REGISTRO_IMAGENES }}/nexus-battles-vi-${{ matrix.servicio }}:${{ needs.detectar-servicios.outputs.tag }}
+          case "${{ matrix.ruta }}" in
+            services/contenido/*)
+              docker build -f "${{ matrix.ruta }}/Dockerfile" -t "$IMAGEN" . ;;
+            *)
+              docker build -t "$IMAGEN" "${{ matrix.ruta }}" ;;
+          esac
 
       - name: Publicar la imagen en ghcr.io
         run: docker push ${{ env.REGISTRO_IMAGENES }}/nexus-battles-vi-${{ matrix.servicio }}:${{ needs.detectar-servicios.outputs.tag }}
@@ -267,17 +336,19 @@ jobs:
   desplegar-dev:
     name: Desplegar en Dev
     needs: [detectar-servicios, construir-y-publicar]
-    if: needs.detectar-servicios.outputs.hay_servicios == 'true'
+    # Solo plataforma y cuentas: los servicios de contenido van al host de
+    # contenido (job "desplegar-contenido-dev"), nunca a este.
+    if: needs.detectar-servicios.outputs.hay_plataforma == 'true'
     runs-on: ubuntu-latest
     environment: dev
     steps:
       - name: Descargar el repositorio
         uses: actions/checkout@v4
 
-      - name: Preparar lista "servicio:puerto" para este ambiente
+      - name: Preparar lista "servicio:puerto" para este ambiente (sin contenido)
         id: lista
         run: |
-          LISTA=$(echo '${{ needs.detectar-servicios.outputs.servicios }}' | jq -r '[.[] | "\(.servicio):\(.puerto)"] | join(" ")')
+          LISTA=$(echo '${{ needs.detectar-servicios.outputs.servicios }}' | jq -r '[.[] | select(.ruta | startswith("services/contenido/") | not) | "\(.servicio):\(.puerto)"] | join(" ")')
           echo "lista=$LISTA" >> "$GITHUB_OUTPUT"
 
       - name: Copiar docker-compose.yml, docker-compose.deploy.yml y el script de despliegue
@@ -286,7 +357,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,scripts/cd/desplegar.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -300,6 +371,10 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           TAG: ${{ needs.detectar-servicios.outputs.tag }}
+          # Para que el servidor pueda hacer pull de las imagenes privadas de
+          # ghcr.io: token de esta corrida (packages:read), no un secreto guardado.
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SERVICIOS_PUERTOS: ${{ steps.lista.outputs.lista }}
           APP_ENV: ${{ secrets.APP_ENV }}
           LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
@@ -329,11 +404,30 @@ jobs:
           MS_IDENTIDAD_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_IDENTIDAD }}
           LISTA_NEGRA_URL: ${{ secrets.TODO_LISTA_NEGRA_URL }}
           MS_IDENTIDAD_SPRING_PROFILES_ACTIVE: "dev"
+          # PENDIENTE (TODO_*): mismo patron de placeholder que ms-identidad
+          # -- 5 secrets propios de ms-cumplimiento (equipo Cuentas),
+          # todavia no creados en GitHub. Prefijo "MS_CUMPLIMIENTO_" para no
+          # chocar con DB_USER/DB_PASS de plataforma ni con el esquema
+          # DB_URL de ms-identidad (ver docker-compose.ms-cumplimiento.yml).
+          MS_CUMPLIMIENTO_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_USER: ${{ secrets.TODO_DB_USER_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_CUMPLIMIENTO }}
+          # PENDIENTE (TODO_*): mismo patron de placeholder que los otros dos
+          # servicios de Cuentas -- 5 secrets propios de ms-ecommerce,
+          # todavia no creados en GitHub. Prefijo "MS_ECOMMERCE_" para no
+          # chocar con ningun otro esquema (ver docker-compose.ms-ecommerce.yml).
+          MS_ECOMMERCE_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_USER: ${{ secrets.TODO_DB_USER_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_ECOMMERCE }}
         with:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -344,6 +438,65 @@ jobs:
       # este job via needs). No hay reversion automatica en dev/test: el
       # diseño acordado con Santiago Gonzalez la reserva para produccion
       # (ver el job "desplegar-produccion" mas abajo).
+
+  # ---------------------------------------------------------------------
+  # Job 3b: dev de CONTENIDO, en el host propio del dominio. Mismo script
+  # (desplegar.sh), mismos compose, mismo TAG; solo cambian el host y la
+  # llave (secrets *_CONTENIDO_DEV del entorno "dev"). Lo pide el propio
+  # documento de plataforma ("desplegar por perfil de dominio, no los 20
+  # servicios a la vez") y lo motiva el tamano del host de plataforma
+  # (t3.micro, 1 GB): ahi no caben 20 JVM. Los servicios de contenido solo
+  # leen variables propias (URIs de Mongo internas, URLs entre servicios
+  # del mismo compose), asi que no necesitan los secrets de aplicacion de
+  # plataforma: desplegar.sh los deja vacios en el .env sin fallar.
+  # Test y produccion de contenido quedan para cuando exista ese entorno.
+  # ---------------------------------------------------------------------
+  desplegar-contenido-dev:
+    name: Desplegar contenido en Dev
+    needs: [detectar-servicios, construir-y-publicar]
+    if: needs.detectar-servicios.outputs.hay_contenido == 'true'
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar lista "servicio:puerto" (solo contenido)
+        id: lista
+        run: |
+          LISTA=$(echo '${{ needs.detectar-servicios.outputs.servicios }}' | jq -r '[.[] | select(.ruta | startswith("services/contenido/")) | "\(.servicio):\(.puerto)"] | join(" ")')
+          echo "lista=$LISTA" >> "$GITHUB_OUTPUT"
+
+      - name: Copiar los compose y el script de despliegue al host de contenido
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST_CONTENIDO_DEV }}
+          username: ${{ secrets.SSH_USER_CONTENIDO_DEV }}
+          key: ${{ secrets.SSH_KEY_CONTENIDO_DEV }}
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh"
+          target: "/opt/nexus"
+          strip_components: 0
+
+      - name: Desplegar contenido en Dev
+        id: desplegar
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          TAG: ${{ needs.detectar-servicios.outputs.tag }}
+          # Para que el servidor pueda hacer pull de las imagenes privadas de
+          # ghcr.io: token de esta corrida (packages:read), no un secreto guardado.
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SERVICIOS_PUERTOS: ${{ steps.lista.outputs.lista }}
+          APP_ENV: dev
+          LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST_CONTENIDO_DEV }}
+          username: ${{ secrets.SSH_USER_CONTENIDO_DEV }}
+          key: ${{ secrets.SSH_KEY_CONTENIDO_DEV }}
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL
+          script: |
+            chmod +x /opt/nexus/scripts/cd/desplegar.sh
+            /opt/nexus/scripts/cd/desplegar.sh
 
   # ---------------------------------------------------------------------
   # Job 4: test. Espera a que dev termine y haya pasado salud (needs).
@@ -370,7 +523,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,scripts/cd/desplegar.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -379,6 +532,10 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           TAG: ${{ needs.detectar-servicios.outputs.tag }}
+          # Para que el servidor pueda hacer pull de las imagenes privadas de
+          # ghcr.io: token de esta corrida (packages:read), no un secreto guardado.
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SERVICIOS_PUERTOS: ${{ steps.lista.outputs.lista }}
           APP_ENV: ${{ secrets.APP_ENV }}
           LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
@@ -404,11 +561,25 @@ jobs:
           MS_IDENTIDAD_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_IDENTIDAD }}
           LISTA_NEGRA_URL: ${{ secrets.TODO_LISTA_NEGRA_URL }}
           MS_IDENTIDAD_SPRING_PROFILES_ACTIVE: "dev"
+          # PENDIENTE (TODO_*): ver el mismo comentario en el job "Desplegar
+          # en Dev" -- misma logica para los 5 secrets de ms-cumplimiento.
+          MS_CUMPLIMIENTO_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_USER: ${{ secrets.TODO_DB_USER_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_CUMPLIMIENTO }}
+          # PENDIENTE (TODO_*): ver el mismo comentario en el job "Desplegar
+          # en Dev" -- misma logica para los 5 secrets de ms-ecommerce.
+          MS_ECOMMERCE_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_USER: ${{ secrets.TODO_DB_USER_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_ECOMMERCE }}
         with:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -449,7 +620,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,scripts/cd/desplegar.sh,scripts/cd/revertir.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -461,6 +632,10 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           TAG: ${{ needs.detectar-servicios.outputs.tag }}
+          # Para que el servidor pueda hacer pull de las imagenes privadas de
+          # ghcr.io: token de esta corrida (packages:read), no un secreto guardado.
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SERVICIOS_PUERTOS: ${{ steps.lista.outputs.lista }}
           APP_ENV: ${{ secrets.APP_ENV }}
           LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
@@ -491,11 +666,27 @@ jobs:
           MS_IDENTIDAD_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_IDENTIDAD }}
           LISTA_NEGRA_URL: ${{ secrets.TODO_LISTA_NEGRA_URL }}
           MS_IDENTIDAD_SPRING_PROFILES_ACTIVE: "prod"
+          # PENDIENTE (TODO_*): mismos 5 secrets de ms-cumplimiento que en
+          # dev/test -- este servicio no tiene perfiles Spring (un solo
+          # application.properties), asi que no hace falta forzar ninguno.
+          MS_CUMPLIMIENTO_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_USER: ${{ secrets.TODO_DB_USER_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_CUMPLIMIENTO }}
+          # PENDIENTE (TODO_*): mismos 5 secrets de ms-ecommerce que en
+          # dev/test -- tampoco tiene perfiles Spring, no hace falta forzar
+          # ninguno.
+          MS_ECOMMERCE_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_USER: ${{ secrets.TODO_DB_USER_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_ECOMMERCE }}
         with:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -524,14 +715,3 @@ jobs:
         run: |
           echo "El despliegue a produccion fallo su verificacion de salud y se revirtio automaticamente. Revisar el step 'Reversion automatica por fallo de salud' para el detalle."
           exit 1
-  # ---------------------------------------------------------------------
-  # Job 6: Revelar IP para auditoria
-  # ---------------------------------------------------------------------
-  revelar-ip:
-    name: Revelar IP de AWS
-    runs-on: ubuntu-latest
-    steps:
-      - name: Extraer IP desde secreto
-        run: |
-          echo "La IP es:"
-          echo "${{ secrets.DEPLOY_HOST_DEV }}" | sed 's/./& /g'

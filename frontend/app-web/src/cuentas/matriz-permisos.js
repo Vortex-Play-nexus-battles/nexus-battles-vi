@@ -13,60 +13,6 @@ import {
 } from './directives/has-permission.directive.js';
 import { construirBarra } from '../comun/barra-navegacion.js';
 
-// Montar la barra superior compartida oficial (HU-INV-004)
-const token = sessionStorage.getItem('nexus.token');
-const contenedorBarra = document.getElementById('contenedor-barra');
-if (contenedorBarra) {
-  contenedorBarra.replaceChildren(
-    construirBarra({
-      seccionActiva: 'cuenta',
-      sesion: { autenticado: Boolean(token) },
-      navegar: (ruta) => {
-        if (ruta === '/inventario') {
-          window.location.href = '../contenido/inventario/inventario.html';
-        } else if (ruta === '/cuenta') {
-          window.location.href = './matriz-permisos.html';
-        } else {
-          alert(`La sección ${ruta} se habilitará en el Sprint 2.`);
-        }
-      }
-    })
-  );
-}
-
-// Candidatos de puerto: Spring Boot local (8089) o contenedor Docker (8081)
-const BASES_BACKEND = [
-  'http://localhost:8089/api/v1',
-  'http://localhost:8081/api/v1'
-];
-
-const selectorRol = document.querySelector('#selector-rol');
-const rolActivoEtiqueta = document.querySelector('#rol-activo-etiqueta');
-const contadorPrivilegios = document.querySelector('#contador-privilegios');
-const progresoRelleno = document.querySelector('#progreso-relleno');
-const toastAccion = document.querySelector('#toast-accion');
-const toastMensaje = document.querySelector('#toast-mensaje');
-const tarjetasRoles = document.querySelectorAll('.tarjeta-rol');
-const botonesAccion = document.querySelectorAll('.boton-accion-card');
-const avisoSesion = document.querySelector('#aviso-sesion-activa');
-const textoSesion = document.querySelector('#texto-sesion-activa');
-const estadoConexion = document.querySelector('#estado-conexion');
-const textoEstadoConexion = document.querySelector('#texto-estado-conexion');
-
-const NOMBRES_ROLES = {
-  JUGADOR: 'Jugador',
-  MODERADOR: 'Moderador',
-  ADMINISTRADOR: 'Administrador',
-  SUPER_ADMINISTRADOR: 'Super Administrador'
-};
-
-const NIVELES_ROLES = {
-  JUGADOR: 'Nivel 1',
-  MODERADOR: 'Nivel 2',
-  ADMINISTRADOR: 'Nivel 3',
-  SUPER_ADMINISTRADOR: 'Nivel 4 - Total'
-};
-
 // Matriz de referencia local (Tabla 24 extendida)
 const MATRIZ_REFERENCIA = {
   JUGADOR: {
@@ -130,6 +76,52 @@ const MATRIZ_REFERENCIA = {
 let matrizActiva = MATRIZ_REFERENCIA;
 let baseActiva = null;
 
+// Montar la barra superior compartida oficial (HU-INV-004)
+const token = sessionStorage.getItem('nexus.token');
+const contenedorBarra = document.getElementById('contenedor-barra');
+if (contenedorBarra) {
+  contenedorBarra.replaceChildren(
+    construirBarra({
+      seccionActiva: 'cuenta',
+      sesion: { autenticado: Boolean(token) },
+      navegar: (ruta) => {
+        if (ruta === '/inventario') {
+          window.location.href = '../contenido/inventario/inventario.html';
+        } else if (ruta === '/cuenta') {
+          window.location.href = './matriz-permisos.html';
+        } else {
+          alert(`La sección ${ruta} se habilitará en el Sprint 2.`);
+        }
+      }
+    })
+  );
+}
+
+// Candidatos de puerto: Spring Boot local (8089) o contenedor Docker (8081)
+const BASES_BACKEND = [
+  'http://localhost:8089/api/v1',
+  'http://localhost:8081/api/v1'
+];
+
+const selectorRol = document.querySelector('#selector-rol');
+const toastAccion = document.querySelector('#toast-accion');
+const toastMensaje = document.querySelector('#toast-mensaje');
+const tarjetasRoles = document.querySelectorAll('.tarjeta-rol');
+const botonesAccion = document.querySelectorAll('.boton-accion-card');
+const avisoSesion = document.querySelector('#aviso-sesion-activa');
+const textoSesion = document.querySelector('#texto-sesion-activa');
+const estadoConexion = document.querySelector('#estado-conexion');
+const textoEstadoConexion = document.querySelector('#texto-estado-conexion');
+
+const NOMBRES_ROLES = {
+  JUGADOR: 'Jugador',
+  MODERADOR: 'Moderador',
+  ADMINISTRADOR: 'Administrador',
+  SUPER_ADMINISTRADOR: 'Super Administrador'
+};
+
+
+
 async function pedir(base, ruta, opciones = {}) {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), 1500);
@@ -167,9 +159,8 @@ async function cargarMatrizDesdeBackend() {
           // Descripciones opcionales
         }
 
-        const puerto = base.match(/:(\d+)/)?.[1] ?? '8089';
         estadoConexion.className = 'indicador-estado-conexion indicador-conectado';
-        textoEstadoConexion.textContent = `Conectado a ms-identidad (puerto ${puerto}) — Versión ${payload.version || '1.1.0'}. Matriz cargada desde el servidor.`;
+        textoEstadoConexion.textContent = 'Conectado';
         return;
       }
     } catch {
@@ -180,7 +171,7 @@ async function cargarMatrizDesdeBackend() {
   matrizActiva = MATRIZ_REFERENCIA;
   baseActiva = null;
   estadoConexion.className = 'indicador-estado-conexion indicador-desconectado';
-  textoEstadoConexion.textContent = 'Sin conexión con ms-identidad (:8089 / :8081). Mostrando la matriz de referencia local (Tabla 24).';
+  textoEstadoConexion.textContent = 'Desconectado';
 }
 
 let timerToast = null;
@@ -207,19 +198,8 @@ function actualizarVistaRol() {
     card.setAttribute('aria-checked', String(esActiva));
   });
 
-  // 2. Actualizar etiquetas de resumen y cálculo de capacidad
-  rolActivoEtiqueta.textContent = `Rol Activo: ${NOMBRES_ROLES[rol]} (${NIVELES_ROLES[rol]})`;
-
-  let permitidas = 0;
-  const total = 12;
+  // 2. Pasar la matriz y el rol a la directiva reactiva (ÚNICA dueña del display)
   const permisosRol = matrizActiva[rol] || {};
-  for (const accion of Object.keys(permisosRol)) {
-    if (permisosRol[accion] === 'GRANTED' || permisosRol[accion] === 'TEMPORARY') {
-      permitidas++;
-    }
-  }
-  contadorPrivilegios.textContent = `${permitidas} / ${total} Acciones`;
-  progresoRelleno.style.width = `${(permitidas / total) * 100}%`;
 
   // 3. Pasar la matriz y el rol a la directiva reactiva (ÚNICA dueña del display)
   setPermissionMatrix(matrizActiva);

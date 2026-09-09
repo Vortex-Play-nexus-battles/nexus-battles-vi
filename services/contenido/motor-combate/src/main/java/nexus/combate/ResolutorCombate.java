@@ -1,5 +1,6 @@
 package nexus.combate;
 
+import java.util.Objects;
 import java.util.random.RandomGenerator;
 
 public final class ResolutorCombate {
@@ -17,6 +18,32 @@ public final class ResolutorCombate {
         throw new UnsupportedOperationException(
             "Use resolverCompleto(...) para el criterio 2/3, "
                 + "que necesita la distribucion de efectos del heroe y el generador de indice.");
+    }
+
+    /**
+     * Resuelve una accion aplicando primero la proteccion de aliados de
+     * HU-JUE-008. La sobrecarga original se conserva para no cambiar el
+     * contrato de las historias anteriores.
+     */
+    public static ResolucionAtaque resolverCompleto(
+            ContextoAccion contextoAccion,
+            int ataqueResuelto,
+            int defensa,
+            DistribucionEfectos distribucion,
+            int danoResuelto,
+            RandomGenerator generadorIndice,
+            RandomGenerator generadorCritico) {
+
+        Objects.requireNonNull(contextoAccion, "contextoAccion no puede ser nulo");
+        validar(ataqueResuelto, defensa);
+
+        if (contextoAccion.protegeACompanero()) {
+            return new ResolucionAtaque.SinEfecto();
+        }
+
+        return resolverCompleto(
+                ataqueResuelto, defensa, distribucion, danoResuelto,
+                generadorIndice, generadorCritico);
     }
 
     public static ResolucionAtaque resolverCompleto(

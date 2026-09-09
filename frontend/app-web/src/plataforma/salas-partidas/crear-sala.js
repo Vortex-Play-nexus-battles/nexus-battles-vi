@@ -115,10 +115,20 @@ function pintarAviso(zona, { tono, titulo, detalle }) {
   zona.hidden = false;
 }
 
+/**
+ * Bloquea el boton mientras se espera y lo restaura tal cual estaba.
+ *
+ * El literal en reposo lo pone la vista («CREAR SALA», como en Figma), no
+ * este modulo: se guarda la primera vez y se devuelve intacto, en vez de
+ * imponer un texto que puede no coincidir con el HTML.
+ */
 function cargando(boton, activo) {
+  if (boton.dataset.textoReposo === undefined) {
+    boton.dataset.textoReposo = boton.textContent;
+  }
   boton.disabled = activo;
   boton.setAttribute('aria-busy', String(activo));
-  boton.textContent = activo ? 'Creando la sala…' : 'Crear sala';
+  boton.textContent = activo ? 'Creando la sala…' : boton.dataset.textoReposo;
 }
 
 /**

@@ -11,6 +11,9 @@ Catálogo de prototipos de héroe y reglas de progresión de THE NEXUS BATTLES V
 | HU-HER-003 | Subida de nivel: `Experiencia = 100 × 1,2^(N−1)`, sobrante conservado, tope en nivel 8 |
 | HU-HER-005 | Poder: +2 por turno, recuperación instantánea al concluir, y sin poder suficiente el ataque cae al valor base |
 | HU-HER-006 | Las 24 acciones de la Tabla 7 con costo y efecto exactos; tres acciones por prototipo como invariante |
+| HU-JUE-009 | Composición de equipo como servicio: un equipo admite un único sanador (RC-08, clase del 2026-07-29; ERS CU-44 E4); el individual (1v1) se rige por el parámetro `SANADOR_EN_INDIVIDUAL_PERMITIDO` (RC-09, pendiente V-09). `POST /api/v1/equipos/validacion` |
+| HU-SIM-001 | Estrategia de combate como servicio: hasta tres rotaciones de habilidades con prioridad Alta, Media y Baja (sección 7.8.5, RF-MIS-12); solo habilidades que el héroe posee en su nivel (ERS CU-61 E1); sin rotaciones, ataque básico (RF-MIS-15). `POST /api/v1/estrategias/validacion` |
+| HU-SIM-002 | Decisión de la IA por turno como servicio sin estado (sección 7.8.5, RF-MIS-13 a 16): Rotación 1 si hay poder, periodo de espera cumplido y salud; si no, la 2 y la 3; si ninguna, ataque básico sin consumir poder; cada turno empieza por la 1. `POST /api/v1/estrategias/decision` |
 | RC-01 (RG-021) | Desbloqueo de acciones en niveles 1, 4 y 8 — regla dictada por el cliente en la sesión del 2026-07-29, ausente del PDF |
 
 Cada prueba cita en comentario la regla del cliente que verifica (Tablas 5/6/7 del documento, actas de clase).
@@ -29,3 +32,16 @@ Requiere JDK 21. El contrato REST está en `contracts/openapi/heroes.yaml` (pend
 - Persistencia en MongoDB cuando plataforma aprovisione los motores (el bean `Catalogo` en memoria se sustituye por el repositorio documental sin tocar dominio ni controlador).
 - Adaptarse a los complementos de convención de Gradle cuando `shared/config/` los publique.
 - El catálogo es de lectura: la administración de héroes como productos pertenece al servicio de productos (el héroe es un tipo de producto, sección 7.2.1).
+
+## Despliegue
+
+Los servicios de contenido se despliegan en el host propio del dominio (`infrastructure/entornos/contenido/`), por el flujo `cd.yml` (job `desplegar-contenido-dev`) en cada push a `develop` que toque `services/contenido/*`. Héroes queda publicado en el puerto **8101** del host (8080 dentro del contenedor) con el perfil `mongo` y su MongoDB en la misma red de Compose.
+
+El servidor descarga la imagen de `ghcr.io` con el token de la propia corrida (`GHCR_TOKEN`, ver `scripts/cd/desplegar.sh`); no hay credenciales guardadas en la máquina.
+
+Para verificar un despliegue con la colección de Postman contra el host:
+
+```bash
+npx --yes newman run postman/heroes.postman_collection.json -e postman/local.postman_environment.json --env-var baseUrl=http://<ip-del-host>:8101
+```
+

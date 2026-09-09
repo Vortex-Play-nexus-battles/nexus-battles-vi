@@ -1,11 +1,12 @@
 openapi: 3.1.0
 info:
   title: Servicio de productos
-  version: 1.0.0
+  version: 1.1.0
   description: >
     Creación de productos del catálogo de THE NEXUS BATTLES VI
-    (HU-PRD-001). Contrato publicado antes de la implementación,
-    conforme a la regla de plataforma "contrato primero".
+    (HU-PRD-001), reserva de tiraje (HU-PRD-002) y suspensión lógica
+    con reactivación (HU-PRD-004). Contrato publicado antes de la
+    implementación, conforme a la regla de plataforma "contrato primero".
 
 servers:
   - url: /
@@ -123,7 +124,131 @@ paths:
               schema:
                 $ref: "#/components/schemas/DetalleDeProblema"
 
+  /api/v1/productos/{id}/adquisiciones:
+    post:
+      summary: Reserva una unidad disponible del producto
+      operationId: adquirirProducto
+      description: >
+        Descuenta de forma atómica una unidad del tiraje limitado. Los
+        productos ilimitados conservan el valor -1. Esta operación solo
+        reserva disponibilidad: no registra el producto en un inventario
+        ni ejecuta cobros.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProductoId"
+      responses:
+        "200":
+          description: Unidad reservada correctamente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResultadoAdquisicion"
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "404":
+          description: No existe ningún producto con ese identificador
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "409":
+          description: El producto está agotado o suspendido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResultadoAdquisicion"
+
+  /api/v1/productos/{id}/suspender:
+    put:
+      summary: Suspende lógicamente un producto
+      operationId: suspenderProducto
+      description: >
+        Impide nuevas adquisiciones sin eliminar el producto ni modificar
+        su tiraje. Operación exclusiva para ADMINISTRADOR y
+        SUPER_ADMINISTRADOR.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProductoId"
+      responses:
+        "200":
+          description: Producto suspendido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EstadoDisponibilidadProducto"
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "403":
+          description: El usuario no tiene permiso para suspender productos
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "404":
+          description: No existe ningún producto con ese identificador
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+
+  /api/v1/productos/{id}/reactivar:
+    put:
+      summary: Reactiva un producto suspendido
+      operationId: reactivarProducto
+      description: >
+        Restaura el estado ACTIVO o UNICO que el producto tenía antes de
+        suspenderse y conserva el tiraje. Operación exclusiva para
+        ADMINISTRADOR y SUPER_ADMINISTRADOR.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProductoId"
+      responses:
+        "200":
+          description: Producto reactivado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EstadoDisponibilidadProducto"
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "403":
+          description: El usuario no tiene permiso para reactivar productos
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "404":
+          description: No existe ningún producto con ese identificador
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+
 components:
+  parameters:
+    ProductoId:
+      name: id
+      in: path
+      required: true
+      description: Identificador del producto (UUID v4).
+      schema:
+        type: string
+        format: uuid
   securitySchemes:
     BearerAuth:
       type: http
@@ -380,6 +505,49 @@ components:
         - ACTIVO
         - UNICO
         - SUSPENDIDO
+
+    EstadoAdquisicion:
+      type: string
+      enum:
+        - ACEPTADA
+        - AGOTADO
+        - SUSPENDIDO
+
+    ResultadoAdquisicion:
+      type: object
+      additionalProperties: false
+      required:
+        - estado
+        - mensaje
+      properties:
+        estado:
+          $ref: "#/components/schemas/EstadoAdquisicion"
+        mensaje:
+          type: string
+          minLength: 1
+
+    EstadoDisponibilidadProducto:
+      type: object
+      additionalProperties: false
+      required:
+        - productoId
+        - estado
+        - tiraje
+      properties:
+        productoId:
+          type: string
+          format: uuid
+        estado:
+          $ref: "#/components/schemas/EstadoProducto"
+        tiraje:
+          description: >
+            -1 representa tiraje ilimitado; cero representa un producto
+            agotado; un entero positivo representa las unidades restantes.
+          anyOf:
+            - type: integer
+              const: -1
+            - type: integer
+              minimum: 0
 
     ResumenCatalogo:
       type: object

@@ -178,16 +178,22 @@ export async function verificarHeroe(idSala, { fetchImpl = fetchWithHttpErrorInt
 /**
  * True cuando detras de la ruta no hay ninguna API, sino un servidor de
  * ficheros. Un servidor estatico responde 405 a un POST sobre una ruta que
- * para el es un fichero, y devuelve HTML —nunca problem details— cuando la
- * ruta no existe. Distinguirlo importa: es la diferencia entre «el servicio
- * fallo» y «no has levantado el servicio».
+ * para el es un fichero (`http-server` lo hace con `text/plain`), y devuelve
+ * HTML cuando la ruta no existe. Distinguirlo importa: es la diferencia entre
+ * «el servicio fallo» y «no has levantado el servicio».
+ *
+ * Solo se consulta cuando el cuerpo NO era JSON. Un servicio de la Empresa A
+ * responde siempre con problem details (regla 4 de plataforma), tambien en
+ * un 405 real, asi que ese 405 nunca llega aqui: lo atrapa `cuerpoDelProblema`
+ * antes. Por eso no se reduce la comprobacion a `text/html`: dejaria de
+ * reconocerse el caso real del servidor estatico.
  *
  * @param {Response} respuesta
  * @returns {boolean}
  */
 function sinApiDetras(respuesta) {
-  const tipo = respuesta.headers?.get?.('content-type') ?? '';
-  return respuesta.status === 405 || String(tipo).includes('text/html');
+  const tipo = String(respuesta.headers?.get?.('content-type') ?? '');
+  return respuesta.status === 405 || tipo.includes('text/html');
 }
 
 /**
@@ -211,11 +217,13 @@ async function cuerpoDelProblema(respuesta) {
   }
 
   if (sinApiDetras(respuesta)) {
+    // La URL real de la peticion cuando `fetch` la trae; la base como respaldo.
+    const direccion = respuesta.url || ruta();
     return {
       status: respuesta.status,
       title: 'No hay ninguna API detras de esta ruta',
       detail:
-        `Estas viendo la vista servida como HTML estatico: nadie atiende ${ruta()}. ` +
+        `Estas viendo la vista servida como HTML estatico: nadie atiende ${direccion}. ` +
         'Levanta el servicio de salas, o declara en la pagina ' +
         '<meta name="nexus-api-base"> apuntando a donde este corriendo.',
     };

@@ -9,7 +9,6 @@ public class PerfilUsuarioResponse {
     private String nombres;
     private String apellidos;
     private String avatar;
-    private String biografia;
     private String preferencias;
 
     public static PerfilUsuarioResponse from(PerfilUsuario perfil) {
@@ -19,7 +18,6 @@ public class PerfilUsuarioResponse {
         dto.nombres = perfil.getNombres();
         dto.apellidos = perfil.getApellidos();
         dto.avatar = perfil.getAvatar();
-        dto.biografia = perfil.getBiografia();
         dto.preferencias = perfil.getPreferencias();
         return dto;
     }
@@ -29,6 +27,5 @@ public class PerfilUsuarioResponse {
     public String getNombres() { return nombres; }
     public String getApellidos() { return apellidos; }
     public String getAvatar() { return avatar; }
-    public String getBiografia() { return biografia; }
     public String getPreferencias() { return preferencias; }
 }

@@ -288,6 +288,45 @@ describe('sin backend detras', () => {
     expect(error.detalle).not.toMatch(/respondio 405/i);
   });
 
+  test('el 405 real de http-server llega como text/plain y tambien se reconoce', async () => {
+    // `http-server` responde 405 con `content-type: text/plain` a un POST.
+    // Reducir la deteccion a HTML, como sugirio Copilot en #271, perderia
+    // justo este caso, que es el que motivo la distincion.
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(405, undefined, 'text/plain'));
+
+    const error = await crearSala(PARAMETROS, { fetchImpl }).catch((e) => e);
+
+    expect(error.titulo).toMatch(/no hay ninguna api/i);
+  });
+
+  test('un 405 con problem details es un fallo del servicio, no un servidor estatico', async () => {
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValue(
+        respuesta(
+          405,
+          { status: 405, title: 'Metodo no permitido', detail: 'Solo GET.' },
+          'application/problem+json',
+        ),
+      );
+
+    const error = await crearSala(PARAMETROS, { fetchImpl }).catch((e) => e);
+
+    expect(error.titulo).toBe('Metodo no permitido');
+  });
+
+  test('el mensaje nombra la URL real de la peticion cuando fetch la trae', async () => {
+    const conUrl = {
+      ...respuesta(404, undefined, 'text/html'),
+      url: 'http://127.0.0.1:4399/api/v1/salas/s1/verificacion-heroe',
+    };
+    const fetchImpl = jest.fn().mockResolvedValue(conUrl);
+
+    const error = await verificarHeroe('s1', { fetchImpl }).catch((e) => e);
+
+    expect(error.detalle).toContain('/api/v1/salas/s1/verificacion-heroe');
+  });
+
   test('un GET que devuelve la pagina HTML del servidor estatico tambien se detecta', async () => {
     const fetchImpl = jest
       .fn()

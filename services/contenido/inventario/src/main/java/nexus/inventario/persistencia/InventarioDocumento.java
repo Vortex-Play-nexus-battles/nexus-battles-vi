@@ -46,6 +46,12 @@ record InventarioDocumento(
                 id,
                 propietarioId,
                 elementos.stream().map(ElementoDocumento::aDominio).toList(),
+                // DECISION EXPLICITA (no aditiva, a diferencia del resto de este
+                // archivo): se descarta el ternario null-safe que traia esta rama
+                // aqui, en favor de la version de develop, porque el constructor
+                // compacto de arriba ya normaliza equipamientos a List.of() cuando
+                // llega null - repetir el chequeo aqui quedaria como codigo muerto
+                // despues de esa fusion, no como una proteccion adicional real.
                 equipamientos.stream().map(EquipamientoDocumento::aDominio).toList());
     }
 }

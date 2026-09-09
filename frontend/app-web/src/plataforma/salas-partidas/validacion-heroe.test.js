@@ -255,6 +255,139 @@ describe('accesibilidad', () => {
     pintarValidacion(d, disponible());
     expect(d.querySelector('.aviso').getAttribute('role')).toBe('status');
   });
+
+  test('tambien es dialogo modal con titulo mientras carga y cuando falla', async () => {
+    const d = raiz();
+    let rechazar;
+    montarValidacionDeHeroe(d, {
+      idSala: 's1',
+      verificar: () => new Promise((_, r) => (rechazar = r)),
+    });
+
+    expect(d.dataset.resultado).toBe('CARGANDO');
+    expect(d.getAttribute('role')).toBe('dialog');
+    expect(d.getAttribute('aria-modal')).toBe('true');
+    expect(document.getElementById(d.getAttribute('aria-labelledby')).textContent).toBe(
+      'Verificacion de heroe',
+    );
+
+    rechazar(new Error('sin red'));
+    await asentar();
+
+    expect(d.dataset.resultado).toBe('ERROR');
+    expect(d.getAttribute('role')).toBe('dialog');
+    expect(document.getElementById(d.getAttribute('aria-labelledby')).textContent).toBe(
+      'Verificacion de heroe',
+    );
+  });
+
+  test('al abrir, el foco entra al dialogo por el titulo y el primer Tab cae en Cancelar', () => {
+    const d = raiz();
+    pintarValidacion(d, disponible());
+
+    expect(document.activeElement).toBe(document.getElementById('titulo-validacion-heroe'));
+    // El titulo no entra en el orden de tabulacion: solo recibe foco por programa.
+    expect(document.activeElement.tabIndex).toBe(-1);
+    const primero = d.querySelector('a[href], button:not([disabled])');
+    expect(primero.dataset.accion).toBe('cancelar');
+  });
+
+  test('Escape equivale a Cancelar', () => {
+    const d = raiz();
+    const alCancelar = jest.fn();
+    const v = disponible();
+    pintarValidacion(d, v, { alCancelar });
+
+    d.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    expect(alCancelar).toHaveBeenCalledWith(v);
+  });
+
+  test('Escape tambien cancela desde el estado de error', async () => {
+    const d = raiz();
+    const alCancelar = jest.fn();
+    await montarValidacionDeHeroe(d, {
+      idSala: 's1',
+      verificar: jest.fn().mockRejectedValue(new Error('sin red')),
+      alCancelar,
+    });
+    await asentar();
+
+    d.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    expect(alCancelar).toHaveBeenCalledTimes(1);
+  });
+
+  test('Tab no sale del dialogo: del ultimo boton vuelve al primero y al reves', () => {
+    const d = raiz();
+    pintarValidacion(d, disponible());
+    const cancelar = d.querySelector('[data-accion="cancelar"]');
+    const confirmar = d.querySelector('[data-accion="confirmar"]');
+
+    confirmar.focus();
+    const adelante = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    d.dispatchEvent(adelante);
+    expect(adelante.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(cancelar);
+
+    const atras = new KeyboardEvent('keydown', {
+      key: 'Tab',
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    d.dispatchEvent(atras);
+    expect(atras.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(confirmar);
+  });
+
+  test('entre medias, Tab sigue su curso normal', () => {
+    const d = raiz();
+    pintarValidacion(d, disponible());
+    d.querySelector('[data-accion="cancelar"]').focus();
+
+    const evento = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    d.dispatchEvent(evento);
+
+    expect(evento.defaultPrevented).toBe(false);
+  });
+
+  test('el teclado se instala una sola vez aunque se repinte', () => {
+    const d = raiz();
+    const alCancelar = jest.fn();
+    pintarValidacion(d, disponible(), { alCancelar });
+    pintarValidacion(d, disponible(), { alCancelar });
+
+    d.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    expect(alCancelar).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('sin sala en la direccion', () => {
+  test('no llama al servicio con /salas/null y explica como llegar', async () => {
+    const d = raiz();
+    const verificar = jest.fn();
+
+    await montarValidacionDeHeroe(d, { idSala: null, verificar });
+
+    expect(verificar).not.toHaveBeenCalled();
+    expect(d.dataset.resultado).toBe('SIN_SALA');
+    expect(d.getAttribute('role')).toBe('dialog');
+    expect(d.textContent).toContain('?sala=');
+    expect(d.querySelector('[data-accion="cancelar"]')).not.toBeNull();
+    expect(d.querySelector('[data-accion="confirmar"]')).toBeNull();
+  });
+
+  test('una cadena vacia cuenta como sala ausente', async () => {
+    const d = raiz();
+    const verificar = jest.fn();
+
+    await montarValidacionDeHeroe(d, { idSala: '', verificar });
+
+    expect(verificar).not.toHaveBeenCalled();
+    expect(d.dataset.resultado).toBe('SIN_SALA');
+  });
 });
 
 describe('montarValidacionDeHeroe', () => {

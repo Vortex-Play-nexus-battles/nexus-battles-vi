@@ -50,8 +50,6 @@ class AdminGestionUsuarioControllerTest {
         ActualizarPerfilRequest datos = new ActualizarPerfilRequest();
         datos.setNombres("Santiago");
         datos.setApellidos("Sanabria");
-        datos.setAvatar("avatar.png");
-        datos.setBiografia("Biografía");
         datos.setPreferencias("preferencias");
         datos.setApodo("Santi");
 
@@ -65,8 +63,7 @@ class AdminGestionUsuarioControllerTest {
             1L,
             "Santiago",
             "Sanabria",
-            "avatar.png",
-            "Biografía",
+            null,
             "preferencias",
             "Santi",
             "admin",
@@ -85,8 +82,7 @@ class AdminGestionUsuarioControllerTest {
             1L,
             "Santiago",
             "Sanabria",
-            "avatar.png",
-            "Biografía",
+            null,
             "preferencias",
             "Santi",
             "admin",
@@ -103,7 +99,6 @@ class AdminGestionUsuarioControllerTest {
 
         when(adminGestionUsuarioService.editarPerfilDeUsuario(
             anyLong(),
-            any(),
             any(),
             any(),
             any(),
@@ -132,7 +127,6 @@ class AdminGestionUsuarioControllerTest {
 
         when(adminGestionUsuarioService.editarPerfilDeUsuario(
             anyLong(),
-            any(),
             any(),
             any(),
             any(),

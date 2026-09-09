@@ -2,10 +2,12 @@ package com.nexusbattles.ms_identidad.admin.service;
 
 import com.nexusbattles.ms_identidad.auditoria.client.AuditoriaClient;
 import com.nexusbattles.ms_identidad.auth.service.AuthAdminService;
+import com.nexusbattles.ms_identidad.auth.service.AvatarStorageService;
 import com.nexusbattles.ms_identidad.perfiles.model.PerfilUsuario;
 import com.nexusbattles.ms_identidad.perfiles.service.PerfilUsuarioService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 
@@ -15,13 +17,16 @@ public class AdminGestionUsuarioService {
     private final AuthAdminService authAdminService;
     private final PerfilUsuarioService perfilUsuarioService;
     private final AuditoriaClient auditoriaClient;
+    private final AvatarStorageService avatarStorageService;
 
     public AdminGestionUsuarioService(AuthAdminService authAdminService,
                                       PerfilUsuarioService perfilUsuarioService,
-                                      AuditoriaClient auditoriaClient) {
+                                      AuditoriaClient auditoriaClient,
+                                      AvatarStorageService avatarStorageService) {
         this.authAdminService = authAdminService;
         this.perfilUsuarioService = perfilUsuarioService;
         this.auditoriaClient = auditoriaClient;
+        this.avatarStorageService = avatarStorageService;
     }
 
     public PerfilUsuario obtenerUsuarioParaGestion(Long usuarioId) {
@@ -30,10 +35,10 @@ public class AdminGestionUsuarioService {
 
     @Transactional
     public PerfilUsuario editarPerfilDeUsuario(Long usuarioId, String nombres, String apellidos,
-                                               String avatar, String biografia, String preferencias,
+                                               MultipartFile nuevoAvatar, String preferencias,
                                                String nuevoApodo, String administradorId, String ipOrigen) {
         PerfilUsuario actualizado = perfilUsuarioService.actualizarPerfilPropio(
-            usuarioId, nombres, apellidos, avatar, biografia, preferencias, nuevoApodo
+            usuarioId, nombres, apellidos, nuevoAvatar, preferencias, nuevoApodo
         );
 
         auditoriaClient.registrar(
@@ -45,6 +50,11 @@ public class AdminGestionUsuarioService {
         return actualizado;
     }
 
+    // @Transactional obligatorio (HU-AUD-001, fail-closed): el cambio de estado
+    // y el registro de auditoría deben ir en la MISMA transacción. Si la
+    // auditoría falla, AuditoriaClient lanza excepción y Spring revierte el
+    // cambio de estado ya hecho, para que la operación no se consuma sin auditoría.
+    @Transactional
     public void suspenderCuenta(Long usuarioId, LocalDateTime suspendidoHasta, String administradorId, String ipOrigen) {
         String estadoAnterior = authAdminService.obtenerEstadoCuenta(usuarioId);
         authAdminService.actualizarEstadoCuenta(usuarioId, "SUSPENDIDA", suspendidoHasta);
@@ -56,6 +66,7 @@ public class AdminGestionUsuarioService {
         );
     }
 
+    @Transactional
     public void banearCuenta(Long usuarioId, String administradorId, String ipOrigen) {
         String estadoAnterior = authAdminService.obtenerEstadoCuenta(usuarioId);
         authAdminService.actualizarEstadoCuenta(usuarioId, "BANEADA", null);
@@ -67,6 +78,7 @@ public class AdminGestionUsuarioService {
         );
     }
 
+    @Transactional
     public void reactivarCuenta(Long usuarioId, String administradorId, String ipOrigen) {
         String estadoAnterior = authAdminService.obtenerEstadoCuenta(usuarioId);
         if ("BANEADA".equals(estadoAnterior)) {
@@ -83,6 +95,7 @@ public class AdminGestionUsuarioService {
         );
     }
 
+    @Transactional
     public void restablecerPassword(Long usuarioId, String administradorId, String ipOrigen) {
         authAdminService.restablecerContrasena(usuarioId);
 

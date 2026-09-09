@@ -32,6 +32,19 @@ tasks.named('jacocoTestCoverageVerification') {
     dependsOn tasks.named('test')
 }
 
+// El frontend de Productos vive en la carpeta transversal aprobada. Se copia
+// al JAR ejecutable sin duplicar sus fuentes y conserva las rutas de imports.
+tasks.named('processResources') {
+    from(rootProject.file('frontend/app-web/src/contenido/productos')) {
+        into 'static/contenido/productos'
+        exclude '**/*.test.js', '**/*.spec.js', '**/*.feature', 'evidencia/**'
+    }
+    from(rootProject.file('frontend/app-web/src/comun')) {
+        into 'static/comun'
+        exclude '**/*.test.js', '**/*.spec.js', '**/*.md'
+    }
+}
+
 tasks.named('check') {
     dependsOn tasks.named('jacocoTestCoverageVerification')
 }
