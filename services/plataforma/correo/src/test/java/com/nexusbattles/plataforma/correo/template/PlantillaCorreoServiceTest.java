@@ -122,7 +122,10 @@ class PlantillaCorreoServiceTest {
                 .contains("15</strong> minutos")
                 .as("debe decir que se puede pedir uno nuevo y que el anterior deja de servir (CA-03)")
                 .contains("pide uno nuevo")
-                .doesNotContain("000000")
+                // El valor de muestra de la celda del codigo (">000000</td>") debe
+                // quedar sustituido. No se busca "000000" a secas: el layout
+                // corporativo lleva "background:#000000" en su CSS.
+                .doesNotContain(">000000</td>")
                 .doesNotContain("�");
     }
 
@@ -130,9 +133,13 @@ class PlantillaCorreoServiceTest {
     void laConfirmacionDeCuentaNoDejaValoresDeEjemploSiFaltaUnaVariable() {
         // Si ms-identidad mandara el codigo vacio, la plantilla no debe rellenar
         // con el "000000" de muestra: quedaria un correo que parece valido.
+        // (El "#000000" del CSS del layout corporativo no cuenta: es un color.)
         String html = service.renderizar("email/confirmacion-cuenta",
                 Map.of("apodo", "ElGuerrero", "codigo", "", "minutosVigencia", 15));
 
-        assertThat(html).doesNotContain("000000");
+        assertThat(html)
+                .doesNotContain(">000000</td>")
+                .as("la celda del codigo queda vacia, no con el valor de muestra")
+                .contains("padding:20px 16px;\"></td>");
     }
 }
