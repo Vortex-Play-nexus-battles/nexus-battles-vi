@@ -37,6 +37,8 @@ Requiere JDK 21. El contrato REST está en `contracts/openapi/heroes.yaml` (pend
 
 Los servicios de contenido se despliegan en el host propio del dominio (`infrastructure/entornos/contenido/`), por el flujo `cd.yml` (job `desplegar-contenido-dev`) en cada push a `develop` que toque `services/contenido/*`. Héroes queda publicado en el puerto **8101** del host (8080 dentro del contenedor) con el perfil `mongo` y su MongoDB en la misma red de Compose.
 
+El servidor descarga la imagen de `ghcr.io` con el token de la propia corrida (`GHCR_TOKEN`, ver `scripts/cd/desplegar.sh`); no hay credenciales guardadas en la máquina.
+
 Para verificar un despliegue con la colección de Postman contra el host:
 
 ```bash
