@@ -39,3 +39,7 @@ La tarea `check` ejecuta JUnit y falla si la cobertura de lineas es inferior al
 - Configurar el `CriterioDesempate` cuando el cliente documente la regla.
 - Exponer el inicio de partida desde la capa de aplicacion; HU-JUE-001 y
   HU-JUE-002 no exigen por si solas un endpoint.
+
+## Despliegue
+
+Este servicio se despliega en el host propio del dominio de contenido (`infrastructure/entornos/contenido/`), por el flujo `cd.yml` (job `desplegar-contenido-dev`) en cada push a `develop` que toque `services/contenido/motor-combate`. Queda publicado en el puerto **8104** del host (8080 dentro del contenedor), consumiendo héroes por la URL interna `HEROES_URL`. Salud: `http://<ip-del-host>:8104/actuator/health`.
