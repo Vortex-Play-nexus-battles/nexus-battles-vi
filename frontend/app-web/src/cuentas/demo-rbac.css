@@ -404,6 +404,23 @@ button:active {
   border: 1px solid var(--advertencia-borde);
 }
 
+.boton-accion-card .badge-estado--denegado {
+  background: #fbe4e4;
+  color: #b81a1a;
+  border: 1px solid #f5c6c6;
+}
+
+.boton-accion-card--bloqueado {
+  opacity: 0.7;
+  background: #fafafa !important;
+  border-color: #e5e7eb !important;
+}
+
+.boton-accion-card--bloqueado:hover {
+  background: #fff5f5 !important;
+  border-color: #fca5a5 !important;
+}
+
 .toast-feedback {
   margin-top: 16px;
   padding: 14px 18px;

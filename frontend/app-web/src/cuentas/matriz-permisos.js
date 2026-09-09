@@ -198,26 +198,28 @@ function actualizarVistaRol() {
     card.setAttribute('aria-checked', String(esActiva));
   });
 
-  // 2. Pasar la matriz y el rol a la directiva reactiva (ÚNICA dueña del display)
   const permisosRol = matrizActiva[rol] || {};
 
-  // 3. Pasar la matriz y el rol a la directiva reactiva (ÚNICA dueña del display)
-  setPermissionMatrix(matrizActiva);
-  setCurrentRole(rol);
-  applyHasPermissionDirective();
-
-  // 4. Actualizar badges semánticos de estado para los elementos permitidos
+  // 2. Actualizar estado visual y badges semánticos de todas las acciones
   botonesAccion.forEach((btn) => {
     const accion = btn.dataset.hasPermission;
     const tipo = permisosRol[accion];
     const badge = btn.querySelector('.badge-estado');
+    btn.style.display = ''; // Mantener visible en el panel de pruebas
+
     if (badge) {
       if (tipo === 'TEMPORARY') {
         badge.textContent = 'Temporal';
         badge.className = 'badge-estado badge-estado--temporal';
-      } else {
+        btn.classList.remove('boton-accion-card--bloqueado');
+      } else if (tipo === 'GRANTED') {
         badge.textContent = 'Habilitado';
         badge.className = 'badge-estado';
+        btn.classList.remove('boton-accion-card--bloqueado');
+      } else {
+        badge.textContent = 'Bloqueado';
+        badge.className = 'badge-estado badge-estado--denegado';
+        btn.classList.add('boton-accion-card--bloqueado');
       }
     }
   });
