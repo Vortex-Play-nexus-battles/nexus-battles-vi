@@ -126,6 +126,82 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/DetalleDeProblema"
+  /api/v1/estrategias/validacion:
+    post:
+      summary: Valida la estrategia de combate de un héroe, hasta tres rotaciones con prioridad (HU-SIM-001)
+      description: >
+        Sección 7.8.5 del documento (RF-MIS-12): el jugador define hasta tres rotaciones de
+        habilidades con prioridad Alta, Media y Baja, en ese orden. Cada paso es el nombre de
+        una acción de la Tabla 7 que el héroe posee en su nivel (desbloqueo 1/4/8) o
+        "Ataque básico". Sin rotaciones, el comportamiento por defecto es el ataque básico
+        (RF-MIS-15). Servicio sin estado: quien guarda la configuración es el módulo de
+        misiones (RNF-16, ERS CU-61). Un rechazo responde 200 con el motivo y las habilidades
+        válidas (ERS CU-61 E1), no un error de la petición.
+      operationId: validarEstrategiaDeCombate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudDeEstrategia"
+      responses:
+        "200":
+          description: Veredicto sobre la estrategia
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VeredictoDeEstrategia"
+        "400":
+          description: Nivel fuera de 1..8
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "404":
+          description: El héroe no está en el catálogo
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+  /api/v1/estrategias/decision:
+    post:
+      summary: Decide la acción de la IA para el turno que empieza (HU-SIM-002)
+      description: >
+        Sección 7.8.5 del documento (RF-MIS-13 a RF-MIS-16): en cada turno se verifica la
+        Rotación 1 (poder suficiente, periodo de espera cumplido, estado de salud); si no es
+        viable, la 2; luego la 3; si ninguna, ataque básico sin consumir poder. El ciclo
+        empieza siempre por la Rotación 1. Sin estado: la simulación manda la estrategia y el
+        estado del héroe y recibe la acción, por qué se descartó cada rotación anterior y los
+        cursores para el turno siguiente. Cada rotación es una secuencia con un cursor; solo
+        avanza el cursor de la rotación ejecutada y da la vuelta al terminar. "Estado de salud"
+        no tiene umbral definido por el cliente (pendiente P-E): el héroe debe tener vida.
+        Una estrategia inválida aquí es un error de la petición: debió validarse antes.
+      operationId: decidirAccionDelTurno
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudDeDecision"
+      responses:
+        "200":
+          description: La acción a ejecutar en el turno
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DecisionDelTurno"
+        "400":
+          description: Estrategia inválida, héroe sin vida, poder fuera de rango, nivel fuera de 1..8 o estado ausente
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "404":
+          description: El héroe no está en el catálogo
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
   /api/v1/progresion/niveles:
     get:
       summary: Tabla de experiencia requerida por nivel (100 × 1,2^(N−1))
@@ -331,6 +407,117 @@ components:
           example: "Un equipo admite un único sanador: Chamán o Médico."
         sanadores: { type: integer, example: 2, description: Cuántos Chamán o Médico trae el equipo }
         individual: { type: boolean, example: false, description: Verdadero si el equipo es de un solo héroe (1v1) }
+    SolicitudDeEstrategia:
+      type: object
+      required: [heroe]
+      properties:
+        heroe: { type: string, example: Guerrero Armas, description: Nombre del prototipo (búsqueda tolerante) }
+        nivel: { type: integer, minimum: 1, maximum: 8, example: 8, description: Nivel del héroe; ausente = 1 }
+        rotaciones:
+          type: array
+          maxItems: 3
+          description: En orden de prioridad (Alta, Media, Baja). Ausente o vacía = estrategia por defecto.
+          items:
+            $ref: "#/components/schemas/RotacionSolicitada"
+    RotacionSolicitada:
+      type: object
+      required: [pasos]
+      properties:
+        pasos:
+          type: array
+          minItems: 1
+          description: Secuencia de habilidades, nombre de la Tabla 7 o "Ataque básico"
+          items: { type: string, example: Golpe de tormenta }
+    Rotacion:
+      type: object
+      required: [prioridad, pasos]
+      properties:
+        prioridad: { type: string, enum: [Alta, Media, Baja], example: Alta }
+        pasos:
+          type: array
+          items: { type: string, example: Embate sangriento }
+    VeredictoDeEstrategia:
+      type: object
+      required: [valida, heroe, nivel, habilidadesValidas, porDefecto, comportamientoPorDefecto]
+      properties:
+        valida: { type: boolean, example: true }
+        motivo:
+          type: string
+          description: Mensaje apto para el jugador. Ausente cuando la estrategia es válida.
+          example: "La rotación 1 usa una habilidad que Guerrero Armas no posee en nivel 4: Golpe de tormenta."
+        heroe: { type: string, example: Guerrero Armas }
+        nivel: { type: integer, example: 8 }
+        rotaciones:
+          type: array
+          description: Las rotaciones con sus pasos en el nombre exacto de la Tabla 7. Ausente cuando se rechaza.
+          items:
+            $ref: "#/components/schemas/Rotacion"
+        habilidadesValidas:
+          type: array
+          description: Lo que el héroe puede usar en su nivel, más el ataque básico (ERS CU-61 E1)
+          items: { type: string, example: Embate sangriento }
+        porDefecto: { type: boolean, example: false, description: Verdadero si no hay rotaciones configuradas }
+        comportamientoPorDefecto: { type: string, example: Ataque básico, description: Lo que ejecuta la IA cuando ninguna rotación aplica (RF-MIS-15) }
+    SolicitudDeDecision:
+      type: object
+      required: [heroe, estado]
+      properties:
+        heroe: { type: string, example: Guerrero Armas }
+        nivel: { type: integer, minimum: 1, maximum: 8, example: 8, description: Ausente = 1 }
+        rotaciones:
+          type: array
+          maxItems: 3
+          description: La estrategia, en orden de prioridad. Ausente o vacía = ataque básico siempre.
+          items:
+            $ref: "#/components/schemas/RotacionSolicitada"
+        estado:
+          $ref: "#/components/schemas/EstadoEnTurno"
+    EstadoEnTurno:
+      type: object
+      required: [turno, poder, vida]
+      description: Lo que la simulación sabe del héroe al empezar el turno
+      properties:
+        turno: { type: integer, minimum: 1, example: 4 }
+        poder: { type: integer, minimum: 0, example: 5, description: Puntos de poder actuales; no supera el máximo del héroe en su nivel }
+        vida: { type: integer, minimum: 0, example: 44, description: Vida actual; con 0 el héroe no actúa }
+        turnoDeUltimoUso:
+          type: object
+          description: Por nombre de habilidad, el turno en que se usó por última vez (periodo de espera, HU-HER-007). Ausente = sin usos previos.
+          additionalProperties: { type: integer }
+          example: { "Golpe de tormenta": 3 }
+        cursores:
+          type: array
+          description: Por rotación, el índice del paso que le toca. Ausente = todas en su primer paso.
+          items: { type: integer, minimum: 0 }
+          example: [1, 0, 0]
+    DecisionDelTurno:
+      type: object
+      required: [heroe, nivel, turno, accion, costoDePoder, evaluaciones, cursoresSiguientes]
+      properties:
+        heroe: { type: string, example: Guerrero Armas }
+        nivel: { type: integer, example: 8 }
+        turno: { type: integer, example: 4 }
+        accion: { type: string, example: Lanza de los dioses, description: La habilidad a ejecutar, o "Ataque básico" }
+        rotacion: { type: integer, minimum: 1, maximum: 3, example: 2, description: De qué rotación salió. Ausente cuando fue el ataque básico de respaldo (RF-MIS-15) }
+        costoDePoder: { type: integer, minimum: 0, example: 4, description: 0 para el ataque básico }
+        evaluaciones:
+          type: array
+          description: Las rotaciones evaluadas en orden, hasta la ejecutada, con la razón de cada descarte
+          items:
+            $ref: "#/components/schemas/EvaluacionDeRotacion"
+        cursoresSiguientes:
+          type: array
+          description: Con estos cursores se llama en el turno siguiente
+          items: { type: integer, minimum: 0 }
+          example: [0, 1, 0]
+    EvaluacionDeRotacion:
+      type: object
+      required: [rotacion, paso, viable]
+      properties:
+        rotacion: { type: integer, example: 1 }
+        paso: { type: string, example: Golpe de tormenta }
+        viable: { type: boolean, example: false }
+        razon: { type: string, example: "Poder insuficiente: Golpe de tormenta cuesta 6 y el héroe tiene 5.", description: Ausente cuando la rotación fue viable }
     DetalleDeProblema:
       type: object
       description: Formato estándar de detalles de problema (RFC 9457) de la plataforma.
