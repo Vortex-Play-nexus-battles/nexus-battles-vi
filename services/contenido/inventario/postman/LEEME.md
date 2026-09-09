@@ -1,7 +1,7 @@
 # Validacion con Postman del servicio de inventario
 
-Coleccion con **aserciones** para HU-INV-003 (creacion y edicion de elementos
-propios) y HU-INV-005 (equipamiento con limites). Cada peticion verifica el
+Coleccion con **aserciones** para HU-INV-002 (busqueda indexada), HU-INV-003
+(creacion y edicion de elementos propios) y HU-INV-005 (equipamiento con limites). Cada peticion verifica el
 criterio de aceptacion que le corresponde y las peticiones estan encadenadas:
 cada una guarda los identificadores que usan las siguientes, asi que se corre
 la coleccion **completa y en orden**.
@@ -10,7 +10,7 @@ la coleccion **completa y en orden**.
 
 | Archivo | Que es |
 |---|---|
-| `inventario.postman_collection.json` | 32 peticiones agrupadas por historia |
+| `inventario.postman_collection.json` | 35 peticiones agrupadas por historia |
 | `local.postman_environment.json` | Entorno local: `baseUrl` |
 
 ## Requisitos
@@ -45,6 +45,7 @@ Contra otro puerto: `--env-var baseUrl=http://localhost:8082`.
 
 | Historia | Criterio | Peticiones |
 |---|---|---|
+| HU-INV-002 | Buscar con minimo cuatro caracteres e indice | Coincidencia propia → 200; criterio corto → 400; sin identidad → 401 |
 | HU-INV-003 | Crear y modificar quedan persistidos y se ven en la vitrina | Crear heroe (201 + Location), renombrar (200), vitrina en pagina de 16 |
 | HU-INV-003 | Operar sobre el inventario de otro no se permite | A renombra el elemento de B → 403 "Inventario ajeno"; B sigue intacto |
 | HU-INV-003 | Errores legibles | 401 sin identidad, 400 sin nombre, 404 inexistente |

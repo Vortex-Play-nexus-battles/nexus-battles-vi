@@ -1,5 +1,6 @@
 package nexus.inventario.api;
 
+import nexus.inventario.aplicacion.CriterioBusquedaInvalidoException;
 import nexus.inventario.aplicacion.IdentidadRequeridaException;
 import nexus.inventario.aplicacion.InventarioAjenoException;
 import nexus.inventario.aplicacion.ProductoNoEncontradoException;
@@ -17,6 +18,11 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class ManejadorDeErrores {
+
+    @ExceptionHandler(CriterioBusquedaInvalidoException.class)
+    public ProblemDetail criterioBusquedaInvalido(CriterioBusquedaInvalidoException error) {
+        return problema(HttpStatus.BAD_REQUEST, "Criterio de busqueda invalido", error.getMessage());
+    }
 
     @ExceptionHandler(IdentidadRequeridaException.class)
     public ProblemDetail identidadRequerida(IdentidadRequeridaException error) {
