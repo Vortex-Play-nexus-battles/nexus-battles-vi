@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Mi perfil - Nexus Battles</title>
+
+  <link rel="stylesheet" href="../comun/barra-navegacion.css">
+  <link rel="stylesheet" href="./perfil.css">
+
+</head>
+
+<body>
+
+<header class="encabezado">
+
+  <div class="encabezado-contenido">
+
+    <div>
+      <h1>Mi perfil</h1>
+      <p>Administra tu información personal y preferencias.</p>
+    </div>
+
+    <button
+      id="btn-volver"
+      type="button"
+      class="btn btn-secundario">
+      Volver
+    </button>
+
+  </div>
+
+</header>
+
+<main class="contenedor-principal">
+
+  <!-- =====================================================
+       MENSAJE DE SESIÓN
+       ===================================================== -->
+
+  <section
+    id="mensaje-sesion"
+    class="mensaje mensaje-error"
+    hidden>
+  </section>
+
+
+  <!-- =====================================================
+       CONTENIDO DEL PERFIL
+       ===================================================== -->
+
+  <section id="perfil-contenedor" hidden>
+
+
+    <!-- =================================================
+         INFORMACIÓN PERSONAL
+         ================================================= -->
+
+    <section class="tarjeta">
+
+      <div class="tarjeta-cabecera">
+
+        <div>
+          <h2>Información personal</h2>
+
+          <p>
+            Actualiza los datos que aparecen en tu perfil.
+          </p>
+        </div>
+
+      </div>
+
+
+      <form id="formulario-perfil">
+
+        <div class="formulario-grid">
+
+
+          <div class="campo">
+
+            <label for="nombres">
+              Nombres
+            </label>
+
+            <input
+              id="nombres"
+              name="nombres"
+              type="text"
+              autocomplete="given-name"
+              required>
+
+          </div>
+
+
+          <div class="campo">
+
+            <label for="apellidos">
+              Apellidos
+            </label>
+
+            <input
+              id="apellidos"
+              name="apellidos"
+              type="text"
+              autocomplete="family-name"
+              required>
+
+          </div>
+
+
+          <div class="campo">
+
+            <label for="apodo">
+              Apodo
+            </label>
+
+            <input
+              id="apodo"
+              name="apodo"
+              type="text"
+              autocomplete="nickname"
+              required>
+
+            <small>
+              Cambiar el apodo requiere confirmación y validación.
+            </small>
+
+          </div>
+
+
+        </div>
+
+
+        <!-- =========================================
+             PREFERENCIAS
+             ========================================= -->
+
+        <div class="campo">
+
+          <label for="preferencias">
+            Preferencias
+          </label>
+
+          <textarea
+            id="preferencias"
+            name="preferencias"
+            rows="5"
+            placeholder="Escribe tus preferencias...">
+                </textarea>
+
+        </div>
+
+
+        <!-- =========================================
+             AVATAR
+             ========================================= -->
+
+        <div class="seccion-avatar">
+
+          <div class="seccion-avatar-cabecera">
+
+            <div>
+              <h3>Avatar</h3>
+
+              <p>
+                Sube una foto tuya (JPG, PNG o WEBP).
+              </p>
+            </div>
+
+          </div>
+
+          <img
+            id="preview-avatar"
+            class="oculto"
+            alt="Vista previa del avatar">
+
+          <input
+            type="file"
+            id="campo-avatar-archivo"
+            name="avatar"
+            accept="image/jpeg,image/png,image/webp">
+
+        </div>
+
+
+        <!-- =========================================
+             MENSAJE
+             ========================================= -->
+
+        <div
+          id="mensaje-perfil"
+          class="mensaje"
+          role="alert"
+          aria-live="polite"
+          hidden>
+        </div>
+
+
+        <!-- =========================================
+             ACCIONES
+             ========================================= -->
+
+        <div class="acciones-formulario">
+
+          <button
+            id="btn-descartar"
+            type="button"
+            class="btn btn-secundario">
+            Descartar cambios
+          </button>
+
+          <button
+            id="btn-guardar"
+            type="submit"
+            class="btn btn-principal">
+            Guardar cambios
+          </button>
+
+        </div>
+
+      </form>
+
+    </section>
+
+
+    <!-- =================================================
+         INFORMACIÓN DE LA CUENTA
+         ================================================= -->
+
+    <section class="tarjeta">
+
+      <div class="tarjeta-cabecera">
+
+        <div>
+          <h2>Información de la cuenta</h2>
+
+          <p>
+            Información básica asociada a tu cuenta.
+          </p>
+        </div>
+
+      </div>
+
+
+      <div class="informacion-cuenta">
+
+        <div class="dato-cuenta">
+
+                <span>
+                    ID de usuario
+                </span>
+
+          <strong id="usuario-id">
+            -
+          </strong>
+
+        </div>
+
+
+        <div class="dato-cuenta">
+
+                <span>
+                    Correo electrónico
+                </span>
+
+          <strong id="email">
+            -
+          </strong>
+
+        </div>
+
+
+        <div class="dato-cuenta">
+
+                <span>
+                    Rol
+                </span>
+
+          <strong id="rol">
+            -
+          </strong>
+
+        </div>
+
+      </div>
+
+    </section>
+
+
+  </section>
+
+</main>
+
+<script type="module" src="./perfil.js"></script>
+
+</body>
+</html>

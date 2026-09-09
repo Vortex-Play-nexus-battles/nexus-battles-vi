@@ -2,6 +2,7 @@ package com.nexusbattles.ms_identidad.auth.dto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import org.springframework.web.multipart.MultipartFile;
 
 public class RegistroRequest {
 
@@ -21,7 +22,7 @@ public class RegistroRequest {
     @NotBlank
     private String apodo;
 
-    private String avatar;
+    private MultipartFile avatar;
 
     public String getNombres() { return nombres; }
     public void setNombres(String nombres) { this.nombres = nombres; }
@@ -33,6 +34,6 @@ public class RegistroRequest {
     public void setPassword(String password) { this.password = password; }
     public String getApodo() { return apodo; }
     public void setApodo(String apodo) { this.apodo = apodo; }
-    public String getAvatar() { return avatar; }
-    public void setAvatar(String avatar) { this.avatar = avatar; }
+    public MultipartFile getAvatar() { return avatar; }
+    public void setAvatar(MultipartFile avatar) { this.avatar = avatar; }
 }

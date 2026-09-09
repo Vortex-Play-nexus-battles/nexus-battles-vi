@@ -21,6 +21,7 @@ include 'services:plataforma:torneos'
 include 'services:contenido:heroes'
 include 'services:contenido:inventario'
 include 'services:contenido:motor-combate'
+include 'services:contenido:productos'
 
 // --- Pendientes de incorporar ---
 //
@@ -28,7 +29,6 @@ include 'services:contenido:motor-combate'
 // Descomentar en cuanto el servicio tenga su build.gradle y su primera clase.
 //
 // include 'services:contenido:misiones'
-// include 'services:contenido:productos'
 // include 'services:contenido:progresion-jugador'
 // include 'services:cuentas:ms-chatbot'
 // include 'services:cuentas:ms-finanzas'

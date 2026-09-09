@@ -34,8 +34,10 @@ public class AuthController {
     @Autowired
     private TokenCredencialService tokenCredencialService;
 
-    @PostMapping("/registro")
-    public ResponseEntity<?> registrarUsuario(@Valid @RequestBody RegistroRequest datos) {
+    // Cambió de @RequestBody (JSON puro) a @ModelAttribute, porque ahora el
+    // registro incluye un archivo (la foto de avatar), no solo texto.
+    @PostMapping(value = "/registro", consumes = "multipart/form-data")
+    public ResponseEntity<?> registrarUsuario(@Valid @ModelAttribute RegistroRequest datos) {
         try {
             Usuario usuarioRegistrado = registroService.registrarUsuario(datos);
             return ResponseEntity.status(HttpStatus.CREATED).body(usuarioRegistrado);
@@ -67,9 +69,6 @@ public class AuthController {
         }
     }
 
-    // Nuevo (corrige el hallazgo de Sanabria, punto 1): el usuario llega
-    // aquí desde el link de su correo (bienvenida o restablecimiento) para
-    // definir su contraseña real y activar/recuperar el acceso a su cuenta.
     @PostMapping("/restablecer/confirmar")
     public ResponseEntity<?> canjearToken(@Valid @RequestBody CanjearTokenRequest datos) {
         try {

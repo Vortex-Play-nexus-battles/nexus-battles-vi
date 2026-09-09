@@ -11,4 +11,5 @@ public class LoginResponse {
     private String email;
     private String rol;
     private boolean dispositivoNuevo;
+    private String token;
 }

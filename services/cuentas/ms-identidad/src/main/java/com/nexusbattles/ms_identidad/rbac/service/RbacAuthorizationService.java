@@ -15,6 +15,7 @@ import java.util.Map;
 @Service
 public class RbacAuthorizationService {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(RbacAuthorizationService.class);
     private final RbacMatrixRepository matrixRepository;
 
     public RbacAuthorizationService(RbacMatrixRepository matrixRepository) {
@@ -22,8 +23,16 @@ public class RbacAuthorizationService {
     }
 
     public PermissionType evaluatePermission(Role role, Action action) {
+        if (role == null || action == null) {
+            log.warn("RBAC_INCONSISTENCY_DETECTED: Intento de evaluar permiso con rol o acción nulos (rol={}, accion={}). Aplicando Default-Deny.", role, action);
+            return PermissionType.DENIED;
+        }
+
         return matrixRepository.findPermission(role, action)
-                .orElse(PermissionType.DENIED); // Default-Deny
+                .orElseGet(() -> {
+                    log.warn("RBAC_INCONSISTENCY_DETECTED: Combinación no contemplada en la matriz (rol={}, accion={}). Aplicando Default-Deny.", role, action);
+                    return PermissionType.DENIED;
+                });
     }
 
     public boolean isActionPermitted(Role role, Action action) {

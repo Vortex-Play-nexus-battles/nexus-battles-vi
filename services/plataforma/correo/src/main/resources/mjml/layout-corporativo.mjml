@@ -1,0 +1,62 @@
+<mjml>
+  <mj-head>
+    <mj-title>The Nexus Battles VI</mj-title>
+    <mj-attributes>
+      <mj-all font-family="Arial, Helvetica, sans-serif" />
+      <mj-text font-size="16px" color="#111726" line-height="24px" />
+    </mj-attributes>
+    <mj-style>
+      .footer-link { color: #D7DEED !important; text-decoration: none; }
+    </mj-style>
+  </mj-head>
+  <mj-body background-color="#D7DEED">
+
+    <!-- Encabezado: logo sobre fondo Cromo.
+
+         El logo va incrustado en el propio mensaje (cid:), no como URL: el
+         proyecto todavía no tiene alojamiento público, y las imágenes en base64
+         las bloquean Gmail y Outlook. EnviadorCorreoService adjunta el archivo
+         imagenes/logo-nexus.png con ese Content-ID.
+
+         El texto se conserva a propósito: muchos clientes bloquean las imágenes
+         por defecto, y sin él el encabezado quedaría vacío. -->
+    <mj-section background-color="#1C2340" padding="24px 0">
+      <mj-column>
+        <mj-image src="cid:logo-nexus" alt="The Nexus Battles VI" width="80px" padding="0 0 12px 0" />
+        <mj-text align="center" color="#FFFFFF" font-size="22px" font-weight="700">
+          THE NEXUS BATTLES VI
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Bloque dinámico: cada correo concreto sobreescribe este fragmento.
+         Va dentro de mj-raw para que MJML lo emita tal cual y la marca de
+         Thymeleaf quede dentro del andamiaje compatible con Outlook. -->
+    <mj-section background-color="#FFFFFF" padding="32px 24px">
+      <mj-column>
+        <mj-raw>
+          <tr layout:fragment="contenido">
+            <td align="left" style="font-size:0px;padding:10px 25px;word-break:break-word;">
+              <div style="font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:24px;text-align:left;color:#111726;">Contenido del correo.</div>
+            </td>
+          </tr>
+        </mj-raw>
+      </mj-column>
+    </mj-section>
+
+    <!-- Pie de página: marca y redes sociales -->
+    <mj-section background-color="#1C2340" padding="24px">
+      <mj-column>
+        <mj-text align="center" color="#9FABC9" font-size="13px">
+          © 2026 The Nexus Battles VI · Todos los derechos reservados
+        </mj-text>
+        <mj-social font-size="13px" icon-size="20px" mode="horizontal" align="center">
+          <mj-social-element name="instagram" href="https://instagram.com/thenexusbattles" css-class="footer-link" />
+          <mj-social-element name="x" href="https://x.com/thenexusbattles" css-class="footer-link" />
+          <mj-social-element name="youtube" href="https://youtube.com/@thenexusbattles" css-class="footer-link" />
+        </mj-social>
+      </mj-column>
+    </mj-section>
+
+  </mj-body>
+</mjml>

@@ -8,7 +8,12 @@ import java.util.Objects;
 public record Inventario(
         String id,
         String propietarioId,
-        List<ElementoInventario> elementos) {
+        List<ElementoInventario> elementos,
+        List<EquipamientoHeroe> equipamientos) {
+
+    public Inventario(String id, String propietarioId, List<ElementoInventario> elementos) {
+        this(id, propietarioId, elementos, List.of());
+    }
 
     public Inventario {
         if (id != null && id.isBlank()) {
@@ -18,10 +23,11 @@ public record Inventario(
             throw new IllegalArgumentException("propietarioId no puede estar vacio");
         }
         elementos = List.copyOf(Objects.requireNonNull(elementos, "elementos no puede ser nulo"));
+        equipamientos = equipamientos == null ? List.of() : List.copyOf(equipamientos);
     }
 
     public static Inventario vacio(String propietarioId) {
-        return new Inventario(null, propietarioId, List.of());
+        return new Inventario(null, propietarioId, List.of(), List.of());
     }
 
     public Inventario agregar(ElementoInventario elemento) {
@@ -31,7 +37,7 @@ public record Inventario(
         }
         List<ElementoInventario> actualizados = new ArrayList<>(elementos);
         actualizados.add(elemento);
-        return new Inventario(id, propietarioId, actualizados);
+        return new Inventario(id, propietarioId, actualizados, equipamientos);
     }
 
     public Inventario renombrarElemento(String elementoId, String nuevoNombre) {
@@ -44,7 +50,7 @@ public record Inventario(
                         ? elemento.renombrar(nuevoNombre)
                         : elemento)
                 .toList();
-        return new Inventario(id, propietarioId, actualizados);
+        return new Inventario(id, propietarioId, actualizados, equipamientos);
     }
 
     public ElementoInventario elemento(String elementoId) {
@@ -52,5 +58,53 @@ public record Inventario(
                 .filter(elemento -> elemento.id().equals(elementoId))
                 .findFirst()
                 .orElseThrow(ElementoNoEncontradoException::new);
+    }
+
+    public EquipamientoHeroe equipamiento(String heroeId) {
+        validarHeroe(heroeId);
+        return equipamientos.stream()
+                .filter(equipamiento -> equipamiento.heroeId().equals(heroeId))
+                .findFirst()
+                .orElseGet(() -> EquipamientoHeroe.vacio(heroeId));
+    }
+
+    public Inventario equipar(String heroeId, String elementoId) {
+        validarHeroe(heroeId);
+        ElementoInventario elemento = elemento(elementoId);
+        boolean equipadoEnOtroHeroe = equipamientos.stream()
+                .filter(equipamiento -> !equipamiento.heroeId().equals(heroeId))
+                .anyMatch(equipamiento -> equipamiento.contiene(elementoId));
+        if (equipadoEnOtroHeroe) {
+            throw new ElementoYaEquipadoException();
+        }
+        return reemplazarEquipamiento(equipamiento(heroeId).equipar(elemento));
+    }
+
+    public Inventario desequipar(String heroeId, String elementoId) {
+        validarHeroe(heroeId);
+        return reemplazarEquipamiento(equipamiento(heroeId).desequipar(elementoId));
+    }
+
+    private void validarHeroe(String heroeId) {
+        ElementoInventario heroe = elemento(heroeId);
+        if (heroe.tipo() != TipoElementoInventario.HEROE) {
+            throw new ElementoNoEquipableException("El destino del equipamiento debe ser un heroe");
+        }
+    }
+
+    private Inventario reemplazarEquipamiento(EquipamientoHeroe actualizado) {
+        List<EquipamientoHeroe> nuevos = new ArrayList<>(equipamientos);
+        boolean reemplazado = false;
+        for (int indice = 0; indice < nuevos.size(); indice++) {
+            if (nuevos.get(indice).heroeId().equals(actualizado.heroeId())) {
+                nuevos.set(indice, actualizado);
+                reemplazado = true;
+                break;
+            }
+        }
+        if (!reemplazado) {
+            nuevos.add(actualizado);
+        }
+        return new Inventario(id, propietarioId, elementos, nuevos);
     }
 }
