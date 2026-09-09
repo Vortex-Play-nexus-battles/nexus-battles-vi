@@ -1,6 +1,6 @@
 # Validacion con Postman del servicio de heroes
 
-Coleccion con **aserciones** para las historias HU-HER-001 a HU-HER-010, HU-JUE-009 y HU-SIM-001: cada
+Coleccion con **aserciones** para las historias HU-HER-001 a HU-HER-010, HU-JUE-009, HU-SIM-001 y HU-SIM-002: cada
 peticion verifica la regla del cliente que le corresponde (Tablas 5, 6, 7 y 20
 del documento; RC-01 del acta del 2026-07-29; correcciones del acta del
 2026-08-13). Sirve para validar el servicio antes de un push a `develop`, y
@@ -10,7 +10,7 @@ es la misma validacion que puede correr el CI.
 
 | Archivo | Que es |
 |---|---|
-| `heroes.postman_collection.json` | La coleccion: 34 peticiones, 113 aserciones, agrupadas por historia |
+| `heroes.postman_collection.json` | La coleccion: 42 peticiones, 139 aserciones, agrupadas por historia |
 | `local.postman_environment.json` | Entorno local: `baseUrl = http://localhost:8080` |
 
 ## Con la app de Postman
@@ -44,6 +44,7 @@ Contra otro ambiente, cambiar `baseUrl` en el entorno o pasar
 | 4. HU-HER-003/004 | Tabla de niveles, progresion con sobrante y tope, experiencia por enemigo, errores 400 |
 | 5. HU-JUE-009 | Composicion de equipo: un sanador se acepta, dos se rechazan (RC-08), individual segun el parametro propio (RC-09), errores 404 y 400 legibles |
 | 6. HU-SIM-001 | Estrategia de combate: el ejemplo del documento (7.8.5), habilidad no poseida rechazada con las validas (ERS CU-61 E1), sin rotaciones = ataque basico (RF-MIS-15), nombres canonicos, tope de tres, errores 404 y 400 |
+| 7. HU-SIM-002 | Decision de la IA por turno: Rotacion 1 con poder, pasa a la 2 sin poder o en recarga, ataque basico si ninguna es viable (RF-MIS-13 a 16), el turno nuevo empieza por la 1, el cursor da la vuelta, errores 400 |
 
 Cuando cambie el contrato (`contracts/openapi/heroes.yaml`), actualizar aqui
 la peticion afectada en el mismo cambio: la coleccion es parte de la evidencia

@@ -167,6 +167,27 @@ class ContratoDeHeroesTest {
     }
 
     @Test
+    @DisplayName("la decision de la IA por turno cumple el contrato (HU-SIM-002)")
+    void decisionPorTurnoCumpleElContrato() throws Exception {
+        String estrategia = "\"heroe\":\"Guerrero Armas\",\"nivel\":8,\"rotaciones\":[{\"pasos\":[\"Golpe de tormenta\",\"Ataque básico\"]},{\"pasos\":[\"Lanza de los dioses\"]}]";
+        mvc.perform(post("/api/v1/estrategias/decision")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{" + estrategia + ",\"estado\":{\"turno\":1,\"poder\":64,\"vida\":44}}"))
+                .andExpect(status().isOk())
+                .andExpect(openApi().isValid(CONTRATO));
+        mvc.perform(post("/api/v1/estrategias/decision")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{" + estrategia + ",\"estado\":{\"turno\":4,\"poder\":0,\"vida\":44,\"turnoDeUltimoUso\":{\"Golpe de tormenta\":3},\"cursores\":[1,0]}}"))
+                .andExpect(status().isOk())
+                .andExpect(openApi().isValid(CONTRATO));
+        mvc.perform(post("/api/v1/estrategias/decision")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{" + estrategia + ",\"estado\":{\"turno\":1,\"poder\":64,\"vida\":0}}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(openApi().isValid(CONTRATO));
+    }
+
+    @Test
     @DisplayName("el error de nivel no valido cumple el contrato (RFC 9457)")
     void errorDeNivelCumpleElContrato() throws Exception {
         // La peticion viola a proposito el minimo del parametro (eso es lo que se

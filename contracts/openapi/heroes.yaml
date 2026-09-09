@@ -163,6 +163,45 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/DetalleDeProblema"
+  /api/v1/estrategias/decision:
+    post:
+      summary: Decide la acción de la IA para el turno que empieza (HU-SIM-002)
+      description: >
+        Sección 7.8.5 del documento (RF-MIS-13 a RF-MIS-16): en cada turno se verifica la
+        Rotación 1 (poder suficiente, periodo de espera cumplido, estado de salud); si no es
+        viable, la 2; luego la 3; si ninguna, ataque básico sin consumir poder. El ciclo
+        empieza siempre por la Rotación 1. Sin estado: la simulación manda la estrategia y el
+        estado del héroe y recibe la acción, por qué se descartó cada rotación anterior y los
+        cursores para el turno siguiente. Cada rotación es una secuencia con un cursor; solo
+        avanza el cursor de la rotación ejecutada y da la vuelta al terminar. "Estado de salud"
+        no tiene umbral definido por el cliente (pendiente P-E): el héroe debe tener vida.
+        Una estrategia inválida aquí es un error de la petición: debió validarse antes.
+      operationId: decidirAccionDelTurno
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudDeDecision"
+      responses:
+        "200":
+          description: La acción a ejecutar en el turno
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DecisionDelTurno"
+        "400":
+          description: Estrategia inválida, héroe sin vida, poder fuera de rango, nivel fuera de 1..8 o estado ausente
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "404":
+          description: El héroe no está en el catálogo
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
   /api/v1/progresion/niveles:
     get:
       summary: Tabla de experiencia requerida por nivel (100 × 1,2^(N−1))
@@ -419,6 +458,66 @@ components:
           items: { type: string, example: Embate sangriento }
         porDefecto: { type: boolean, example: false, description: Verdadero si no hay rotaciones configuradas }
         comportamientoPorDefecto: { type: string, example: Ataque básico, description: Lo que ejecuta la IA cuando ninguna rotación aplica (RF-MIS-15) }
+    SolicitudDeDecision:
+      type: object
+      required: [heroe, estado]
+      properties:
+        heroe: { type: string, example: Guerrero Armas }
+        nivel: { type: integer, minimum: 1, maximum: 8, example: 8, description: Ausente = 1 }
+        rotaciones:
+          type: array
+          maxItems: 3
+          description: La estrategia, en orden de prioridad. Ausente o vacía = ataque básico siempre.
+          items:
+            $ref: "#/components/schemas/RotacionSolicitada"
+        estado:
+          $ref: "#/components/schemas/EstadoEnTurno"
+    EstadoEnTurno:
+      type: object
+      required: [turno, poder, vida]
+      description: Lo que la simulación sabe del héroe al empezar el turno
+      properties:
+        turno: { type: integer, minimum: 1, example: 4 }
+        poder: { type: integer, minimum: 0, example: 5, description: Puntos de poder actuales; no supera el máximo del héroe en su nivel }
+        vida: { type: integer, minimum: 0, example: 44, description: Vida actual; con 0 el héroe no actúa }
+        turnoDeUltimoUso:
+          type: object
+          description: Por nombre de habilidad, el turno en que se usó por última vez (periodo de espera, HU-HER-007). Ausente = sin usos previos.
+          additionalProperties: { type: integer }
+          example: { "Golpe de tormenta": 3 }
+        cursores:
+          type: array
+          description: Por rotación, el índice del paso que le toca. Ausente = todas en su primer paso.
+          items: { type: integer, minimum: 0 }
+          example: [1, 0, 0]
+    DecisionDelTurno:
+      type: object
+      required: [heroe, nivel, turno, accion, costoDePoder, evaluaciones, cursoresSiguientes]
+      properties:
+        heroe: { type: string, example: Guerrero Armas }
+        nivel: { type: integer, example: 8 }
+        turno: { type: integer, example: 4 }
+        accion: { type: string, example: Lanza de los dioses, description: La habilidad a ejecutar, o "Ataque básico" }
+        rotacion: { type: integer, minimum: 1, maximum: 3, example: 2, description: De qué rotación salió. Ausente cuando fue el ataque básico de respaldo (RF-MIS-15) }
+        costoDePoder: { type: integer, minimum: 0, example: 4, description: 0 para el ataque básico }
+        evaluaciones:
+          type: array
+          description: Las rotaciones evaluadas en orden, hasta la ejecutada, con la razón de cada descarte
+          items:
+            $ref: "#/components/schemas/EvaluacionDeRotacion"
+        cursoresSiguientes:
+          type: array
+          description: Con estos cursores se llama en el turno siguiente
+          items: { type: integer, minimum: 0 }
+          example: [0, 1, 0]
+    EvaluacionDeRotacion:
+      type: object
+      required: [rotacion, paso, viable]
+      properties:
+        rotacion: { type: integer, example: 1 }
+        paso: { type: string, example: Golpe de tormenta }
+        viable: { type: boolean, example: false }
+        razon: { type: string, example: "Poder insuficiente: Golpe de tormenta cuesta 6 y el héroe tiene 5.", description: Ausente cuando la rotación fue viable }
     DetalleDeProblema:
       type: object
       description: Formato estándar de detalles de problema (RFC 9457) de la plataforma.
