@@ -94,4 +94,45 @@ class PlantillaCorreoServiceTest {
                 .contains("contraseña")
                 .doesNotContain("�");
     }
+
+    // ----- HU-COR-002: plantilla de confirmacion de cuenta -----
+
+    @Test
+    void laConfirmacionDeCuentaVaSobreLaPlantillaCorporativa() {
+        // CP-01 de #24: "el correo llega con el codigo legible y aplicando el
+        // diseno de la plantilla corporativa oficial".
+        String html = service.renderizar("email/confirmacion-cuenta",
+                Map.of("apodo", "ElGuerrero", "codigo", "734201", "minutosVigencia", 15));
+
+        assertThat(html)
+                .contains("THE NEXUS BATTLES VI")
+                .contains("src=\"cid:logo-nexus\"")
+                .contains("instagram.com/thenexusbattles");
+    }
+
+    @Test
+    void laConfirmacionDeCuentaMuestraElCodigoLaVigenciaYElApodo() {
+        String html = service.renderizar("email/confirmacion-cuenta",
+                Map.of("apodo", "ElGuerrero", "codigo", "734201", "minutosVigencia", 15));
+
+        assertThat(html)
+                .contains("Confirma tu cuenta")
+                .contains("ElGuerrero")
+                .contains("734201")
+                .contains("15</strong> minutos")
+                .as("debe decir que se puede pedir uno nuevo y que el anterior deja de servir (CA-03)")
+                .contains("pide uno nuevo")
+                .doesNotContain("000000")
+                .doesNotContain("�");
+    }
+
+    @Test
+    void laConfirmacionDeCuentaNoDejaValoresDeEjemploSiFaltaUnaVariable() {
+        // Si ms-identidad mandara el codigo vacio, la plantilla no debe rellenar
+        // con el "000000" de muestra: quedaria un correo que parece valido.
+        String html = service.renderizar("email/confirmacion-cuenta",
+                Map.of("apodo", "ElGuerrero", "codigo", "", "minutosVigencia", 15));
+
+        assertThat(html).doesNotContain("000000");
+    }
 }

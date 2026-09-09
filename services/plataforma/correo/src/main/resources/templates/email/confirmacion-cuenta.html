@@ -1,0 +1,43 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{email/layout-corporativo}">
+<body>
+  <table>
+    <tbody>
+      <tr layout:fragment="contenido">
+        <td align="left" style="font-size:0px;padding:10px 25px;word-break:break-word;">
+          <div style="font-family:Arial, Helvetica, sans-serif;font-size:20px;font-weight:700;line-height:28px;color:#111726;padding-bottom:12px;">
+            Confirma tu cuenta
+          </div>
+          <div style="font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:24px;color:#111726;padding-bottom:16px;">
+            Hola, <span th:text="${apodo}">Jugador</span>. Falta un paso para activar tu
+            cuenta en The Nexus Battles VI: escribe este código en la pantalla de
+            verificación.
+          </div>
+
+          <table border="0" cellpadding="0" cellspacing="0" role="presentation"
+                 style="background:#D7DEED;border-radius:6px;width:100%;">
+            <tbody>
+              <tr>
+                <td align="center"
+                    style="font-family:'Courier New', Courier, monospace;font-size:32px;font-weight:700;letter-spacing:8px;color:#1E3F88;padding:20px 16px;"
+                    th:text="${codigo}">000000</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div style="font-family:Arial, Helvetica, sans-serif;font-size:14px;line-height:22px;color:#8A4A00;padding-top:16px;">
+            El código vence en <strong th:text="${minutosVigencia}">15</strong> minutos. Si
+            caduca, pide uno nuevo desde la misma pantalla: el anterior deja de servir.
+          </div>
+
+          <div style="font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:24px;color:#111726;padding-top:16px;">
+            Si no creaste esta cuenta, ignora este mensaje: sin el código nadie puede
+            activarla.
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>

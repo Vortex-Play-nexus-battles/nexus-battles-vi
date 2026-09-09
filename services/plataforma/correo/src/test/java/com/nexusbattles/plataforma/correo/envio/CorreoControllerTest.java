@@ -30,6 +30,7 @@ class CorreoControllerTest {
     private static final String BIENVENIDA = "/api/v1/correos/bienvenida";
     private static final String AVISO_ACCESO = "/api/v1/correos/aviso-acceso";
     private static final String RECUPERACION = "/api/v1/correos/recuperacion-clave";
+    private static final String CONFIRMACION = "/api/v1/correos/confirmacion-cuenta";
 
     @Autowired
     private MockMvc mockMvc;
@@ -195,5 +196,86 @@ class CorreoControllerTest {
         verify(enviador).enviar(anyString(), asunto.capture(), anyString(), any());
 
         assertThat(asunto.getValue()).isEqualTo("Recupera tu contraseña de The Nexus Battles VI");
+    }
+
+    // ----- HU-COR-002: confirmacion de cuenta -----
+
+    @Test
+    void aceptaUnCorreoDeConfirmacionDeCuentaYLoDespacha() throws Exception {
+        // CA-01: el registro deja la cuenta pendiente y despacha el correo con
+        // el codigo. Lo que se prueba aqui es la mitad de este servicio: que
+        // el correo sale por la plantilla de confirmacion.
+        mockMvc.perform(post(CONFIRMACION).contentType(MediaType.APPLICATION_JSON).content("""
+                {"email":"nuevo@ejemplo.com","apodo":"ElGuerrero",
+                 "codigo":"734201","minutosVigencia":15}
+                """))
+                .andExpect(status().isAccepted());
+
+        verify(enviador).enviar(
+                eq("nuevo@ejemplo.com"), anyString(), eq("email/confirmacion-cuenta"), any());
+    }
+
+    @Test
+    void elCorreoDeConfirmacionLlevaElCodigoYSuVigenciaTalCualLlegan() throws Exception {
+        // El servicio de correo no genera ni recorta el codigo ni decide la
+        // vigencia: transcribe lo que ms-identidad emitio.
+        mockMvc.perform(post(CONFIRMACION).contentType(MediaType.APPLICATION_JSON).content("""
+                {"email":"nuevo@ejemplo.com","apodo":"ElGuerrero",
+                 "codigo":"734201","minutosVigencia":10}
+                """))
+                .andExpect(status().isAccepted());
+
+        @SuppressWarnings("unchecked")
+        Class<Map<String, Object>> tipo = (Class<Map<String, Object>>) (Class<?>) Map.class;
+        org.mockito.ArgumentCaptor<Map<String, Object>> captor = org.mockito.ArgumentCaptor.forClass(tipo);
+        verify(enviador).enviar(anyString(), anyString(), anyString(), captor.capture());
+
+        assertThat(captor.getValue())
+                .containsEntry("apodo", "ElGuerrero")
+                .containsEntry("codigo", "734201")
+                .containsEntry("minutosVigencia", 10);
+    }
+
+    @Test
+    void elAsuntoDeConfirmacionEstaBienEscritoEnEspanol() throws Exception {
+        mockMvc.perform(post(CONFIRMACION).contentType(MediaType.APPLICATION_JSON).content("""
+                {"email":"nuevo@ejemplo.com","apodo":"ElGuerrero",
+                 "codigo":"734201","minutosVigencia":15}
+                """))
+                .andExpect(status().isAccepted());
+
+        org.mockito.ArgumentCaptor<String> asunto = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(enviador).enviar(anyString(), asunto.capture(), anyString(), any());
+
+        assertThat(asunto.getValue()).isEqualTo("Confirma tu cuenta de The Nexus Battles VI");
+    }
+
+    @ParameterizedTest(name = "confirmacion rechazada: {0}")
+    @ValueSource(strings = {
+            "{\"apodo\":\"ElGuerrero\",\"codigo\":\"734201\",\"minutosVigencia\":15}",
+            "{\"email\":\"no-es-un-correo\",\"apodo\":\"ElGuerrero\",\"codigo\":\"734201\",\"minutosVigencia\":15}",
+            "{\"email\":\"nuevo@ejemplo.com\",\"codigo\":\"734201\",\"minutosVigencia\":15}",
+            "{\"email\":\"nuevo@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"minutosVigencia\":15}",
+            "{\"email\":\"nuevo@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"codigo\":\"  \",\"minutosVigencia\":15}",
+            "{\"email\":\"nuevo@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"codigo\":\"734201\"}",
+            "{\"email\":\"nuevo@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"codigo\":\"734201\",\"minutosVigencia\":0}",
+            "{\"email\":\"nuevo@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"codigo\":\"1234567890123\",\"minutosVigencia\":15}",
+    })
+    void rechazaConfirmacionConDatosInvalidos(String cuerpo) throws Exception {
+        mockMvc.perform(post(CONFIRMACION).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                .andExpect(status().isBadRequest());
+
+        verify(enviador, never()).enviar(anyString(), anyString(), anyString(), any());
+    }
+
+    @Test
+    void elRechazoDeConfirmacionSaleEnFormatoProblemDetails() throws Exception {
+        String cuerpo = mockMvc.perform(post(CONFIRMACION)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"nuevo@ejemplo.com\",\"apodo\":\"ElGuerrero\"}"))
+                .andExpect(status().isBadRequest())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(cuerpo).contains("\"status\":400").contains("\"title\"");
     }
 }
