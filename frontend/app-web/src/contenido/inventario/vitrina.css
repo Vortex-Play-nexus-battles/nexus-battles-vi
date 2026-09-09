@@ -62,7 +62,8 @@
 }
 
 .inventario-cabecera {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(280px, 520px) auto;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -70,6 +71,8 @@
 }
 
 .inventario__nuevo,
+.inventario-busqueda__buscar,
+.inventario-busqueda__limpiar,
 .inventario-editor__guardar,
 .inventario-editor__cancelar,
 .vitrina__editar,
@@ -89,6 +92,8 @@
 }
 
 .inventario__nuevo:hover,
+.inventario-busqueda__buscar:hover,
+.inventario-busqueda__limpiar:hover,
 .inventario-editor__guardar:hover,
 .inventario-editor__cancelar:hover,
 .vitrina__editar:hover,
@@ -97,6 +102,62 @@
 .inventario-equipo__equipar:hover,
 .inventario-equipo__desequipar:hover {
   border-color: var(--borde-interactivo);
+}
+
+.inventario-busqueda {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+}
+
+.inventario-busqueda__campo {
+  min-width: 0;
+}
+
+.inventario-busqueda__etiqueta {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.inventario-busqueda__control {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--borde-interactivo);
+  border-radius: 6px;
+  color: var(--texto);
+  background: var(--superficie);
+  font: inherit;
+}
+
+.inventario-busqueda__buscar,
+.inventario-busqueda__limpiar {
+  min-height: 40px;
+}
+
+.inventario-busqueda__buscar {
+  border-color: var(--primaria-relleno);
+  color: var(--texto-sobre-color);
+  background: var(--primaria-relleno);
+}
+
+.inventario-busqueda__control:focus-visible,
+.inventario-busqueda__buscar:focus-visible,
+.inventario-busqueda__limpiar:focus-visible {
+  outline: 3px solid var(--primaria);
+  outline-offset: 2px;
+}
+
+.inventario-busqueda__buscar:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .inventario-editor {
@@ -346,6 +407,20 @@
     --vitrina-separacion: 16px;
     --vitrina-margen: 16px;
   }
+
+  .inventario-cabecera {
+    grid-template-columns: 1fr auto;
+  }
+
+  .inventario-busqueda {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .inventario__nuevo {
+    grid-column: 2;
+    grid-row: 1;
+  }
 }
 
 /* Telefonos: una sola columna y tarjetas mas bajas. Cubre 375 x 812. */
@@ -358,6 +433,22 @@
 
   .vitrina__producto {
     min-height: 96px;
+  }
+
+  .inventario-busqueda {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inventario-busqueda__campo {
+    grid-column: 1 / -1;
+  }
+
+  .inventario-busqueda__buscar {
+    grid-column: 1 / -1;
+  }
+
+  .inventario-busqueda--activa .inventario-busqueda__buscar {
+    grid-column: auto;
   }
 
   .inventario-cabecera {
