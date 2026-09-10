@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Notificaciones · The Nexus Battles VI</title>
+
+    <!--
+      Ejecucion INTEGRADA (Spring Boot sirve esta vista): la API y el canal
+      viven en el mismo origen y no hay que declarar nada.
+      Ejecucion ESTATICA para revision visual: para apuntar la vista al
+      servicio de notificaciones que corra en otro sitio, descomenta y ajusta
+      (la URL del canal ws:// se deriva de esta misma base):
+      <meta name="nexus-api-base" content="http://127.0.0.1:8085" />
+    -->
+
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
+  </head>
+
+  <body>
+    <!--
+      Cabecera de 64 px con los seis destinos de RF-INV-008 y el buscador de
+      productos de RF-INV-004. Se repite en cada vista mientras no exista una
+      forma acordada de compartir fragmentos de HTML sin framework.
+
+      La campana de esta cabecera es la de verdad: la monta `campana.js`.
+    -->
+    <header class="cabecera">
+      <div class="cabecera__grupo-marca">
+        <span class="cabecera__marca">NEXUS BATTLES VI</span>
+        <nav class="cabecera__nav" aria-label="Navegacion principal">
+          <a class="cabecera__destino" href="../salas-partidas/batallas.html">Jugar online</a>
+          <a
+            class="cabecera__destino cabecera__destino--pendiente"
+            aria-disabled="true"
+            data-pendiente="grupo-alpha"
+            title="Todavia no publicada: grupo-alpha"
+            >Misiones</a
+          >
+          <a
+            class="cabecera__destino cabecera__destino--pendiente"
+            aria-disabled="true"
+            data-pendiente="HU-TOR, sprint 3"
+            title="Todavia no publicada: HU-TOR, sprint 3"
+            >Torneo</a
+          >
+          <a class="cabecera__destino" href="../../contenido/inventario/inventario.html"
+            >Mi inventario</a
+          >
+          <a
+            class="cabecera__destino cabecera__destino--pendiente"
+            aria-disabled="true"
+            data-pendiente="grupo-beta"
+            title="Todavia no publicada: grupo-beta"
+            >Subasta</a
+          >
+        </nav>
+      </div>
+
+      <label class="cabecera__buscador">
+        <svg class="icono icono--menudo" aria-hidden="true">
+          <use href="../../../../../shared/ui-kit/iconos/sprite.svg#buscar" />
+        </svg>
+        <span class="solo-lectores">Buscar productos</span>
+        <input class="cabecera__buscador-texto" type="search" placeholder="Buscar productos" />
+      </label>
+
+      <div class="cabecera__acciones">
+        <button
+          class="cabecera__campana"
+          type="button"
+          data-zona="boton"
+          aria-controls="panel-notificaciones"
+          aria-expanded="false"
+        >
+          <svg class="icono" aria-hidden="true">
+            <use href="../../../../../shared/ui-kit/iconos/sprite.svg#campana" />
+          </svg>
+          <span class="cabecera__contador" data-zona="contador" aria-hidden="true" hidden>0</span>
+        </button>
+
+        <span class="cabecera__cuenta">
+          <span class="cabecera__avatar" aria-hidden="true"></span>
+          <span class="cabecera__identidad">
+            <span class="cabecera__apodo" data-zona="apodo"></span>
+          </span>
+        </span>
+      </div>
+    </header>
+
+    <main class="pagina pila">
+      <!--
+        Region viva para los avisos que llegan en tiempo real. No bloquea:
+        no hay velo ni dialogo, y cada aviso se cierra solo o con su boton.
+      -->
+      <div class="pila pila--compacta" data-zona="emergentes" aria-live="polite"></div>
+
+      <div class="pila pila--compacta">
+        <h1>Notificaciones</h1>
+        <p class="t-cuerpo">
+          Lo que te pasa en el juego, en todas tus sesiones abiertas a la vez. Si pierdes la
+          conexion, esta vista consulta periodicamente y se pone al dia al volver.
+        </p>
+      </div>
+
+      <div class="estado-vista" data-zona="sin-sesion" hidden>
+        <p class="estado-vista__titulo">Inicia sesion para ver tus notificaciones</p>
+        <p class="t-meta">Los avisos son tuyos: hace falta tu sesion para pedirlos.</p>
+      </div>
+
+      <section class="tarjeta pila" id="panel-notificaciones" data-zona="panel" hidden>
+        <div class="fila">
+          <h2 class="tarjeta__titulo">Bandeja</h2>
+          <!-- Estado del canal: componente `Estado de conexion`, no un Aviso (mapeo §5.4). -->
+          <span class="conexion conexion--sin-conexion" data-zona="conexion" role="status"
+            >Sin canal en tiempo real</span
+          >
+        </div>
+
+        <p class="t-meta" data-zona="lista-vacia">Todavia no tienes notificaciones.</p>
+        <ul class="pila pila--compacta" data-zona="lista" aria-label="Notificaciones"></ul>
+      </section>
+    </main>
+
+    <!-- RNF-DIS-002: el chatbot esta en todas las vistas, sin excepcion. -->
+    <button class="chatbot-flotante" type="button" aria-label="Abrir el asistente">IA</button>
+
+    <script type="module">
+      import { montarCampana } from './campana.js';
+      import { leerSesion, identificadorDeSesion } from './cliente-notificaciones.js';
+
+      const sesion = leerSesion();
+      document.querySelector('[data-zona="apodo"]').textContent = sesion.apodo ?? 'Sin sesion';
+
+      if (!sesion.usuarioId) {
+        document.querySelector('[data-zona="sin-sesion"]').hidden = false;
+      } else {
+        const { abrir } = montarCampana(document, {
+          usuarioId: sesion.usuarioId,
+          sesionId: identificadorDeSesion(),
+        });
+        // En la vista de notificaciones el panel arranca abierto.
+        abrir();
+      }
+    </script>
+  </body>
+</html>
