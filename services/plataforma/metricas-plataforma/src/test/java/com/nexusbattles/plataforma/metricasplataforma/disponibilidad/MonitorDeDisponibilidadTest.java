@@ -180,6 +180,37 @@ class MonitorDeDisponibilidadTest {
     }
 
     @Test
+    void unaSondaQueLanzaCuentaComoCaidaYNoAbortaLaRonda() {
+        // La garantia no puede depender de que cada implementacion de la sonda
+        // se acuerde de capturar: si lanzara, los servicios siguientes se
+        // quedarian sin medir en esa ronda.
+        SondaDeSalud sondaQueLanza = (servicio, url, instante) -> {
+            if (servicio.equals("salas-partidas")) {
+                throw new IllegalStateException("host desconocido");
+            }
+            return Comprobacion.disponible(servicio, instante);
+        };
+        Map<String, String> servicios = new LinkedHashMap<>();
+        servicios.put("salas-partidas", "http://localhost/actuator/health");
+        servicios.put("correo", "http://localhost/actuator/health");
+
+        MonitorDeDisponibilidad monitor = new MonitorDeDisponibilidad(
+                new ConfiguracionDeDisponibilidad(servicios, 99.95, 30_000),
+                sondaQueLanza,
+                registro,
+                alertas,
+                reloj);
+
+        List<Comprobacion> ronda = monitor.comprobarTodos();
+
+        assertThat(ronda).hasSize(2);
+        assertThat(ronda.get(0).disponible()).isFalse();
+        assertThat(ronda.get(0).detalle()).contains("host desconocido");
+        assertThat(ronda.get(1).servicio()).isEqualTo("correo");
+        assertThat(ronda.get(1).disponible()).isTrue();
+    }
+
+    @Test
     void elInformeDisparaLaAlertaCuandoLaDisponibilidadCaeBajoElUmbral() {
         // CP-03: cuando la disponibilidad medida cae por debajo del 99,95 %,
         // se dispara una alerta.

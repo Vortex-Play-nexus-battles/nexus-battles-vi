@@ -1,5 +1,7 @@
 package com.nexusbattles.plataforma.metricasplataforma.disponibilidad;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -25,7 +27,15 @@ public record ConfiguracionDeDisponibilidad(
         Map<String, String> servicios, double umbralPorcentaje, long intervaloMs) {
 
     public ConfiguracionDeDisponibilidad {
-        servicios = servicios == null ? Map.of() : Map.copyOf(servicios);
+        // LinkedHashMap y no Map.copyOf: el orden de iteracion de Map.copyOf
+        // NO esta especificado —depende de los hashes— y eso haria que cada
+        // ronda sondeara los servicios en un orden arbitrario y que el informe
+        // los listara distinto de como estan declarados en la configuracion.
+        // Con LinkedHashMap el orden es el del application.yml, que es el que
+        // el equipo lee en el informe. Sigue siendo inmutable.
+        servicios = servicios == null
+                ? Map.of()
+                : Collections.unmodifiableMap(new LinkedHashMap<>(servicios));
         if (umbralPorcentaje <= 0 || umbralPorcentaje > 100) {
             throw new IllegalArgumentException(
                     "el umbral de disponibilidad debe estar entre 0 y 100, y llego " + umbralPorcentaje);

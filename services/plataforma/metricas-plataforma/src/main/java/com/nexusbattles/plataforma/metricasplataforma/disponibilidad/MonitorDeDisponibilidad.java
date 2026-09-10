@@ -3,6 +3,7 @@ package com.nexusbattles.plataforma.metricasplataforma.disponibilidad;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -49,19 +50,25 @@ public class MonitorDeDisponibilidad {
      * de responder. Alertar en cada ronda mientras siga caido convertiria la
      * alerta en ruido y nadie la miraria.
      *
+     * <p>Los servicios se recorren en el orden en que estan declarados en la
+     * configuracion, y ninguno puede impedir que se midan los demas: una sonda
+     * que falle cuenta como servicio caido, no como ronda perdida.
+     *
      * @return lo comprobado en esta ronda
      */
     public List<Comprobacion> comprobarTodos() {
         Instant ahora = reloj.instant();
-        List<Comprobacion> resultados = new java.util.ArrayList<>();
+        List<Comprobacion> resultados = new ArrayList<>();
 
         for (Map.Entry<String, String> servicio : configuracion.servicios().entrySet()) {
-            boolean estabaSano = estabaSano(servicio.getKey());
-            Comprobacion comprobacion = sonda.comprobar(servicio.getKey(), servicio.getValue(), ahora);
+            // Se consulta ANTES de registrar: despues, la comprobacion nueva
+            // ya seria el "estado anterior" y la transicion se perderia.
+            boolean constabaSano = constabaSano(servicio.getKey());
+            Comprobacion comprobacion = comprobar(servicio.getKey(), servicio.getValue(), ahora);
             registro.registrar(comprobacion);
             resultados.add(comprobacion);
 
-            if (!comprobacion.disponible() && estabaSano) {
+            if (!comprobacion.disponible() && constabaSano) {
                 alertas.servicioCaido(comprobacion.servicio(), comprobacion.detalle());
             }
         }
@@ -94,13 +101,42 @@ public class MonitorDeDisponibilidad {
         return List.copyOf(registro.estadoActual());
     }
 
-    private boolean estabaSano(String servicio) {
+    /**
+     * Comprueba un servicio sin dejar que su fallo tumbe la ronda.
+     *
+     * <p>El adaptador HTTP ya traduce los fallos de red a «caido», pero la
+     * garantia no puede depender de que toda implementacion de
+     * {@link SondaDeSalud} se acuerde de hacerlo: si una lanzara, el
+     * {@code for} se cortaria y los servicios siguientes se quedarian sin
+     * medir esa ronda, que es justo lo contrario de CA-01.
+     */
+    private Comprobacion comprobar(String servicio, String url, Instant instante) {
+        try {
+            return sonda.comprobar(servicio, url, instante);
+        } catch (RuntimeException e) {
+            String motivo = e.getMessage() == null || e.getMessage().isBlank()
+                    ? e.getClass().getSimpleName()
+                    : e.getMessage();
+            return Comprobacion.caido(servicio, instante, "la sonda fallo: " + motivo);
+        }
+    }
+
+    /**
+     * True solo si consta una comprobacion anterior y decia que el servicio
+     * estaba sano.
+     *
+     * <p>Sin historial devuelve false, y esa es la parte que importa: la
+     * alerta es de <b>transicion</b> sano -> caido. Si al arrancar el monitor
+     * un servicio ya estaba caido, no hay transicion que anunciar —lleva caido
+     * desde antes— y tratar «sin historial» como «estaba sano» inventaria una
+     * caida que no ocurrio en esta ronda. Ese estado inicial si queda
+     * registrado y cuenta para el informe; lo que no hace es disparar alerta.
+     */
+    private boolean constabaSano(String servicio) {
         return registro.estadoActual().stream()
                 .filter(comprobacion -> comprobacion.servicio().equals(servicio))
                 .findFirst()
                 .map(Comprobacion::disponible)
-                // Primera ronda: sin historial se considera sano, para no
-                // alertar por el simple arranque del monitor.
-                .orElse(true);
+                .orElse(false);
     }
 }
