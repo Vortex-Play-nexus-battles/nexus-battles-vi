@@ -10,6 +10,7 @@ import nexus.inventario.dominio.TipoElementoInventario;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.PersistenceCreator;
 import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.index.TextIndexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 @Document(collection = "inventarios")
@@ -46,16 +47,22 @@ record InventarioDocumento(
                 id,
                 propietarioId,
                 elementos.stream().map(ElementoDocumento::aDominio).toList(),
+                // DECISION EXPLICITA (no aditiva, a diferencia del resto de este
+                // archivo): se descarta el ternario null-safe que traia esta rama
+                // aqui, en favor de la version de develop, porque el constructor
+                // compacto de arriba ya normaliza equipamientos a List.of() cuando
+                // llega null - repetir el chequeo aqui quedaria como codigo muerto
+                // despues de esa fusion, no como una proteccion adicional real.
                 equipamientos.stream().map(EquipamientoDocumento::aDominio).toList());
     }
 }
 
 record ElementoDocumento(
         String id,
-        String productoId,
-        TipoElementoInventario tipo,
-        String nombrePropio,
-        ParteArmadura parteArmadura) {
+        @TextIndexed String productoId,
+        @TextIndexed TipoElementoInventario tipo,
+        @TextIndexed(weight = 2) String nombrePropio,
+        @TextIndexed ParteArmadura parteArmadura) {
 
     static ElementoDocumento de(ElementoInventario elemento) {
         return new ElementoDocumento(

@@ -157,6 +157,18 @@ class ProductosApiTest {
         }
 
         @Test
+        @DisplayName("rechaza la consulta de estadisticas sin token")
+        void estadisticasRequierenAutenticacion() throws Exception {
+                mvc.perform(get("/api/v1/productos/estadisticas"))
+                        .andExpect(status().isUnauthorized())
+                        .andExpect(content().contentTypeCompatibleWith(
+                                MediaType.APPLICATION_PROBLEM_JSON))
+                        .andExpect(jsonPath("$.type")
+                                .value("urn:nexus:problema:no-autenticado"))
+                        .andExpect(jsonPath("$.status").value(401));
+        }
+
+        @Test
         @DisplayName("consulta el total y la distribucion del catalogo")
         void consultaResumenCatalogo() throws Exception {
                 when(productoRepository.count()).thenReturn(6L);

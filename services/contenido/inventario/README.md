@@ -28,6 +28,11 @@ El inventario conserva referencias al catalogo y no copia imagenes,
 estadisticas, habilidades, efectos ni precios. Asi, las modificaciones globales
 de productos pueden propagarse a todas las instancias, como exige `RF-ADM-10`.
 
+`SCRUM-322` crea un indice de texto MongoDB sobre la informacion que si pertenece
+al inventario: referencia del producto, tipo, nombre propio y parte de armadura.
+Este indice prepara la busqueda sin duplicar datos administrados por el servicio
+de productos.
+
 El agregado es inmutable y se guarda como un documento por propietario. Esta
 decision permite que los cambios de una instancia se persistan atomicamente y
 sirve como base para la prueba de escritura fallida de `SCRUM-328`.
@@ -139,3 +144,9 @@ MongoDB 8.
 
 Para ejecutar el servicio, MongoDB se configura con la variable estandar de
 Spring Boot `SPRING_DATA_MONGODB_URI`.
+
+## Despliegue
+
+Este servicio se despliega en el host propio del dominio de contenido (`infrastructure/entornos/contenido/`), por el flujo `cd.yml` (job `desplegar-contenido-dev`) en cada push a `develop` que toque `services/contenido/inventario`. Queda publicado en el puerto **8102** del host (8080 dentro del contenedor), con su MongoDB en la misma red de Compose (`SPRING_MONGODB_URI`) y las URLs internas de héroes y productos (`HEROES_BASE_URL`, `PRODUCTOS_BASE_URL`). Salud: `http://<ip-del-host>:8102/actuator/health`.
+
+La imagen lleva la etiqueta propia de este servicio (`TAG_INVENTARIO`, el sha corto del push que lo cambió); las dependencias que no cambiaron conservan la etiqueta que ya tienen desplegada. Lo resuelve `resolver_etiquetas_contenido` en `scripts/cd/desplegar.sh`.

@@ -49,7 +49,7 @@ class JwtServiceTest {
 
         String token = jwtService.generarToken("cristianc", "JUGADOR", 0);
         // Se altera el último caracter de la firma, simulando una manipulación.
-        String tokenAlterado = token.substring(0, token.length() - 1) + "X";
+        String tokenAlterado = token.substring(0, token.length() - 1) + (token.endsWith("X") ? "Y" : "X");
 
         assertThrows(
             JwtException.class,

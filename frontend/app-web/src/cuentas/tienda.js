@@ -1,5 +1,5 @@
 // --- CONFIGURACIÓN ---
-const API_BASE_URL = 'http://localhost:8090/ecommerce/api/v1';
+const API_BASE_URL = 'http://localhost:8090/api/v1/ecommerce';
 const USER_ID = 'usr_test_123'; // Simulación del ID que provee ms-identidad
 
 // Configuración genérica para los headers requeridos

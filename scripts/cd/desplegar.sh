@@ -9,6 +9,11 @@
 # Variables de entorno que este script espera recibir ya puestas (las pone
 # GitHub Actions via appleboy/ssh-action, ver cd.yml):
 #   TAG                 -> tag de imagen a desplegar (sha corto del commit)
+#                          Para services/contenido/* la etiqueta es POR
+#                          SERVICIO (TAG_HEROES, TAG_INVENTARIO, ...):
+#                          los de esta corrida usan TAG y los que no
+#                          cambiaron conservan la que ya tienen
+#                          desplegada. Ver resolver_etiquetas_contenido.
 #   SERVICIOS_PUERTOS   -> ej: "comentarios:8081 correo:8082" (lista de
 #                          servicios modificados en este push, con su puerto)
 #   Las 16 variables de aplicacion listadas en .env.example, con el MISMO
@@ -25,6 +30,23 @@
 #   en el .env de plataforma (los usa plataforma-db) -- si los reusamos aqui
 #   se pisarian entre si. Ver docker-compose.cuentas.yml para el mapeo a los
 #   nombres que Spring realmente espera (DB_URL, DB_USER, DB_PASSWORD).
+#   PENDIENTE (TODO_*, ver cd.yml): 5 variables especificas de
+#   ms-cumplimiento -- MS_CUMPLIMIENTO_DB_HOST, MS_CUMPLIMIENTO_DB_PORT,
+#   MS_CUMPLIMIENTO_DB_NAME, MS_CUMPLIMIENTO_DB_USER,
+#   MS_CUMPLIMIENTO_DB_PASSWORD. Mismo prefijo "MS_CUMPLIMIENTO_" a
+#   proposito, por la misma razon: ms-cumplimiento usa un esquema distinto
+#   (DB_HOST/DB_PORT/DB_NAME en vez de DB_URL) para su propia base, no
+#   comparte nada con DB_USER/DB_PASS de plataforma ni con el DB_URL de
+#   ms-identidad. Ver docker-compose.ms-cumplimiento.yml para el mapeo.
+#   PENDIENTE (TODO_*, ver cd.yml): 5 variables especificas de
+#   ms-ecommerce -- MS_ECOMMERCE_DB_HOST, MS_ECOMMERCE_DB_PORT,
+#   MS_ECOMMERCE_DB_NAME, MS_ECOMMERCE_DB_USER, MS_ECOMMERCE_DB_PASSWORD.
+#   Mismo prefijo por la misma razon que ms-cumplimiento. Ver
+#   docker-compose.ms-ecommerce.yml para el mapeo. OJO: a diferencia de
+#   ms-identidad y ms-cumplimiento, ms-ecommerce tiene
+#   server.servlet.context-path=/api/v1 -- su /actuator/health real vive en
+#   /api/v1/actuator/health, no en /actuator/health. Ver "ruta_salud_de" en
+#   el paso 4 de este script.
 #
 # Este script NUNCA decide si hay que revertir: eso lo hace un step aparte en
 # cd.yml (solo en el job de produccion) leyendo el archivo
@@ -42,8 +64,61 @@ COMPOSE_DEPLOY="$DIRECTORIO/docker-compose.deploy.yml"
 # abajo si ms-identidad viene en SERVICIOS_PUERTOS de esta corrida -- si
 # nadie toco cuentas en este push, este archivo ni se menciona.
 COMPOSE_CUENTAS="$DIRECTORIO/docker-compose.cuentas.yml"
+# Override de ms-cumplimiento (Maven, tambien equipo Cuentas). Mismo patron
+# que COMPOSE_CUENTAS: se copia siempre, solo se agrega al comando si
+# ms-cumplimiento viene en esta corrida.
+COMPOSE_MS_CUMPLIMIENTO="$DIRECTORIO/docker-compose.ms-cumplimiento.yml"
+# Override de ms-ecommerce (Maven, tambien equipo Cuentas). Mismo patron.
+COMPOSE_MS_ECOMMERCE="$DIRECTORIO/docker-compose.ms-ecommerce.yml"
+# Override de los servicios de services/contenido/* (equipo Contenido):
+# mismo mecanismo que el de cuentas -- se copia siempre, se agrega al
+# comando solo si algun servicio de contenido viene en esta corrida.
+COMPOSE_CONTENIDO="$DIRECTORIO/docker-compose.contenido.yml"
+SERVICIOS_CONTENIDO="heroes inventario productos motor-combate"
 INTENTOS_SALUD=12
 ESPERA_ENTRE_INTENTOS=5
+
+# Etiqueta de imagen por servicio de contenido. docker-compose.contenido.yml
+# lee ${TAG_HEROES}, ${TAG_INVENTARIO}, ${TAG_PRODUCTOS} y ${TAG_MOTOR_COMBATE}
+# (con ${TAG} como respaldo). Hace falta porque el CD solo construye la imagen
+# de los servicios que cambiaron en el push, pero "docker compose up" arrastra
+# a las dependencias (inventario y motor dependen de srv-heroes): si todas
+# compartieran el TAG de la corrida, la dependencia que no cambio apuntaria a
+# una imagen que no existe y Compose intentaria construirla en el servidor
+# (corrida 34307790392, 9-sep). Regla: el servicio que viene en esta corrida
+# usa el TAG nuevo; el que no viene conserva la etiqueta del contenedor que ya
+# esta corriendo; si nunca se desplego, usa el TAG nuevo y el pull fallara con
+# un "not found" explicito (mejor eso que un build silencioso en el host).
+#   $1 = TAG de la corrida, $2 = lista "servicio:puerto" de la corrida.
+resolver_etiquetas_contenido() {
+  local tag_corrida="$1" lista="$2" s par variable en_corrida tag_desplegada
+  for s in $SERVICIOS_CONTENIDO; do
+    variable="TAG_$(echo "$s" | tr 'a-z-' 'A-Z_')"
+    en_corrida=0
+    for par in $lista; do
+      if [ "${par%%:*}" = "$s" ]; then en_corrida=1; fi
+    done
+    if [ "$en_corrida" -eq 1 ]; then
+      export "$variable=$tag_corrida"
+      echo "  $s: cambia en esta corrida -> $tag_corrida"
+      continue
+    fi
+    tag_desplegada=$(docker inspect --format '{{.Config.Image}}' "srv-$s" 2>/dev/null | sed 's/^.*://' || true)
+    if [ -n "$tag_desplegada" ]; then
+      export "$variable=$tag_desplegada"
+      echo "  $s: no cambia, conserva la etiqueta desplegada -> $tag_desplegada"
+    else
+      export "$variable=$tag_corrida"
+      echo "  $s: no cambia y nunca se desplego; si otro servicio depende de el, el pull fallara con 'not found' (despliegalo primero)"
+    fi
+  done
+}
+
+# Las pruebas de scripts/cd/pruebas/ cargan este archivo solo por sus
+# funciones; con esta variable no se toca el servidor.
+if [ "${DESPLEGAR_SOLO_FUNCIONES:-0}" = "1" ]; then
+  return 0 2>/dev/null || exit 0
+fi
 
 mkdir -p "$DIRECTORIO"
 cd "$DIRECTORIO"
@@ -75,6 +150,16 @@ MS_IDENTIDAD_DB_USER=${MS_IDENTIDAD_DB_USER:-}
 MS_IDENTIDAD_DB_PASSWORD=${MS_IDENTIDAD_DB_PASSWORD:-}
 LISTA_NEGRA_URL=${LISTA_NEGRA_URL:-}
 MS_IDENTIDAD_SPRING_PROFILES_ACTIVE=${MS_IDENTIDAD_SPRING_PROFILES_ACTIVE:-}
+MS_CUMPLIMIENTO_DB_HOST=${MS_CUMPLIMIENTO_DB_HOST:-}
+MS_CUMPLIMIENTO_DB_PORT=${MS_CUMPLIMIENTO_DB_PORT:-}
+MS_CUMPLIMIENTO_DB_NAME=${MS_CUMPLIMIENTO_DB_NAME:-}
+MS_CUMPLIMIENTO_DB_USER=${MS_CUMPLIMIENTO_DB_USER:-}
+MS_CUMPLIMIENTO_DB_PASSWORD=${MS_CUMPLIMIENTO_DB_PASSWORD:-}
+MS_ECOMMERCE_DB_HOST=${MS_ECOMMERCE_DB_HOST:-}
+MS_ECOMMERCE_DB_PORT=${MS_ECOMMERCE_DB_PORT:-}
+MS_ECOMMERCE_DB_NAME=${MS_ECOMMERCE_DB_NAME:-}
+MS_ECOMMERCE_DB_USER=${MS_ECOMMERCE_DB_USER:-}
+MS_ECOMMERCE_DB_PASSWORD=${MS_ECOMMERCE_DB_PASSWORD:-}
 EOF
 chmod 600 .env
 
@@ -99,12 +184,26 @@ echo "== 3) Desplegando TAG=$TAG para: $SERVICIOS_PUERTOS =="
 export TAG
 SERVICIOS_COMPOSE=""
 INCLUYE_CUENTAS=0
+INCLUYE_MS_CUMPLIMIENTO=0
+INCLUYE_MS_ECOMMERCE=0
+INCLUYE_CONTENIDO=0
 for par in $SERVICIOS_PUERTOS; do
   servicio="${par%%:*}"
   SERVICIOS_COMPOSE="$SERVICIOS_COMPOSE srv-${servicio}"
   if [ "$servicio" = "ms-identidad" ]; then
     INCLUYE_CUENTAS=1
   fi
+  if [ "$servicio" = "ms-cumplimiento" ]; then
+    INCLUYE_MS_CUMPLIMIENTO=1
+  fi
+  if [ "$servicio" = "ms-ecommerce" ]; then
+    INCLUYE_MS_ECOMMERCE=1
+  fi
+  for s in $SERVICIOS_CONTENIDO; do
+    if [ "$servicio" = "$s" ]; then
+      INCLUYE_CONTENIDO=1
+    fi
+  done
 done
 
 # Si ms-identidad esta en esta corrida, sus 3 secrets de base de datos son
@@ -125,29 +224,108 @@ if [ "$INCLUYE_CUENTAS" -eq 1 ]; then
   fi
 fi
 
+# Mismo patron de "fallo visible" que ms-identidad arriba, para
+# ms-cumplimiento: sus 5 secrets son obligatorios si esta en esta corrida --
+# application.properties lee ${DB_HOST}/${DB_PORT}/${DB_NAME}/${DB_USER}/
+# ${DB_PASSWORD} literalmente (DB_PASSWORD sin default, ni siquiera arranca
+# sin ella).
+if [ "$INCLUYE_MS_CUMPLIMIENTO" -eq 1 ]; then
+  FALTANTES=""
+  [ -n "${MS_CUMPLIMIENTO_DB_HOST:-}" ] || FALTANTES="$FALTANTES TODO_DB_HOST_MS_CUMPLIMIENTO"
+  [ -n "${MS_CUMPLIMIENTO_DB_PORT:-}" ] || FALTANTES="$FALTANTES TODO_DB_PORT_MS_CUMPLIMIENTO"
+  [ -n "${MS_CUMPLIMIENTO_DB_NAME:-}" ] || FALTANTES="$FALTANTES TODO_DB_NAME_MS_CUMPLIMIENTO"
+  [ -n "${MS_CUMPLIMIENTO_DB_USER:-}" ] || FALTANTES="$FALTANTES TODO_DB_USER_MS_CUMPLIMIENTO"
+  [ -n "${MS_CUMPLIMIENTO_DB_PASSWORD:-}" ] || FALTANTES="$FALTANTES TODO_DB_PASSWORD_MS_CUMPLIMIENTO"
+  if [ -n "$FALTANTES" ]; then
+    echo "Faltan secrets de GitHub para ms-cumplimiento, crealos en Settings > Environments:$FALTANTES"
+    exit 1
+  fi
+fi
+
+# Mismo patron de "fallo visible" para ms-ecommerce: sus 5 secrets son
+# obligatorios si esta en esta corrida -- application.properties lee
+# ${DB_HOST}/${DB_PORT}/${DB_NAME}/${DB_USER}/${DB_PASSWORD} literalmente
+# (DB_PASSWORD sin default, igual que ms-cumplimiento).
+if [ "$INCLUYE_MS_ECOMMERCE" -eq 1 ]; then
+  FALTANTES=""
+  [ -n "${MS_ECOMMERCE_DB_HOST:-}" ] || FALTANTES="$FALTANTES TODO_DB_HOST_MS_ECOMMERCE"
+  [ -n "${MS_ECOMMERCE_DB_PORT:-}" ] || FALTANTES="$FALTANTES TODO_DB_PORT_MS_ECOMMERCE"
+  [ -n "${MS_ECOMMERCE_DB_NAME:-}" ] || FALTANTES="$FALTANTES TODO_DB_NAME_MS_ECOMMERCE"
+  [ -n "${MS_ECOMMERCE_DB_USER:-}" ] || FALTANTES="$FALTANTES TODO_DB_USER_MS_ECOMMERCE"
+  [ -n "${MS_ECOMMERCE_DB_PASSWORD:-}" ] || FALTANTES="$FALTANTES TODO_DB_PASSWORD_MS_ECOMMERCE"
+  if [ -n "$FALTANTES" ]; then
+    echo "Faltan secrets de GitHub para ms-ecommerce, crealos en Settings > Environments:$FALTANTES"
+    exit 1
+  fi
+fi
+
 # Siempre el base + el de despliegue de plataforma combinados: el base (de
 # desarrollo local, con "build:") nunca se usa solo. El de despliegue solo
 # agrega "image:", y como aqui no pasamos --build, Compose usa esa imagen ya
 # publicada en ghcr.io en vez de intentar construir nada en el servidor.
-# El tercer archivo (ms-identidad) solo se agrega si de verdad esta entre
-# los servicios de esta corrida -- si no, ni se menciona en el comando.
+# Los overrides de Cuentas (ms-identidad, ms-cumplimiento, ms-ecommerce)
+# solo se agregan si de verdad estan entre los servicios de esta corrida --
+# si no, ni se mencionan en el comando.
 ARCHIVOS_COMPOSE=(-f "$COMPOSE_BASE" -f "$COMPOSE_DEPLOY")
 if [ "$INCLUYE_CUENTAS" -eq 1 ]; then
   ARCHIVOS_COMPOSE+=(-f "$COMPOSE_CUENTAS")
+fi
+if [ "$INCLUYE_MS_CUMPLIMIENTO" -eq 1 ]; then
+  ARCHIVOS_COMPOSE+=(-f "$COMPOSE_MS_CUMPLIMIENTO")
+fi
+if [ "$INCLUYE_MS_ECOMMERCE" -eq 1 ]; then
+  ARCHIVOS_COMPOSE+=(-f "$COMPOSE_MS_ECOMMERCE")
+fi
+if [ "$INCLUYE_CONTENIDO" -eq 1 ]; then
+  ARCHIVOS_COMPOSE+=(-f "$COMPOSE_CONTENIDO")
+fi
+
+# Las imagenes de ghcr.io son privadas (paquetes de la organizacion): el
+# servidor tiene que iniciar sesion antes del pull. Usa el token de la propia
+# corrida (GITHUB_TOKEN, permiso packages:read, valido solo mientras dura el
+# job) que cd.yml reexporta como GHCR_TOKEN; nunca una credencial guardada en
+# el servidor. Si no llega el token (p. ej. corrida a mano), se intenta sin
+# sesion y el pull explica el "unauthorized" como hasta ahora.
+if [ -n "${GHCR_TOKEN:-}" ]; then
+  echo "== 3a) Iniciando sesion en ghcr.io con el token de la corrida =="
+  echo "$GHCR_TOKEN" | docker login ghcr.io -u "${GHCR_USER:-github-actions}" --password-stdin
+  trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
+fi
+
+if [ "$INCLUYE_CONTENIDO" -eq 1 ]; then
+  echo "== 3b) Etiqueta de imagen por servicio de contenido =="
+  resolver_etiquetas_contenido "$TAG" "$SERVICIOS_PUERTOS"
 fi
 
 docker compose "${ARCHIVOS_COMPOSE[@]}" pull $SERVICIOS_COMPOSE
 docker compose "${ARCHIVOS_COMPOSE[@]}" up -d $SERVICIOS_COMPOSE
 
 echo "== 4) Verificando /actuator/health de cada servicio desplegado (con reintentos) =="
+# Ruta de salud por servicio: todos los servicios de plataforma y
+# ms-identidad/ms-cumplimiento NO tienen server.servlet.context-path, asi
+# que su Actuator vive en la raiz (/actuator/health). ms-ecommerce es la
+# UNICA excepcion confirmada hasta ahora: su application.properties declara
+# server.servlet.context-path=/api/v1, entonces Spring monta TODOS sus
+# endpoints (incluido Actuator) bajo ese prefijo -- su salud real esta en
+# /api/v1/actuator/health. Se resuelve por funcion (no con un valor fijo)
+# para no romper el healthcheck generico de los demas servicios, que siguen
+# usando la ruta sin prefijo.
+ruta_salud_de() {
+  case "$1" in
+    ms-ecommerce) echo "/api/v1/actuator/health" ;;
+    *) echo "/actuator/health" ;;
+  esac
+}
+
 > ultimo-fallo.txt
 HUBO_FALLO=0
 for par in $SERVICIOS_PUERTOS; do
   servicio="${par%%:*}"
   puerto="${par##*:}"
+  ruta_salud=$(ruta_salud_de "$servicio")
   ok=0
   for intento in $(seq 1 "$INTENTOS_SALUD"); do
-    if curl -fsS "http://localhost:${puerto}/actuator/health" | grep -q '"status":"UP"'; then
+    if curl -fsS "http://localhost:${puerto}${ruta_salud}" | grep -q '"status":"UP"'; then
       echo "  $servicio (puerto $puerto): saludable en el intento $intento"
       ok=1
       break

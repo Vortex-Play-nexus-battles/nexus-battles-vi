@@ -12,6 +12,7 @@ capa de aplicacion sin acoplarlas a transporte o persistencia.
 | HU-JUE-002 | Una sola accion por turno, avance al resolver o expirar y la misma duracion configurable para todos los participantes |
 | HU-JUE-005 | Fallecimiento al llegar a cero vida, cierre individual o por equipos y rechazo de acciones posteriores |
 | HU-JUE-007 | Tope de 6 minutos, derrota por 1 minuto de inactividad, vida conservada y estrategia de desempate |
+| HU-JUE-008 | Proteccion contra dano a companeros en combate cooperativo, salvo que la accion permita afectar aliados expresamente
 
 El sorteo usa Fisher-Yates y `SecureRandom` en produccion. Las pruebas inyectan
 un generador con semilla para que la validacion estadistica sea reproducible.
@@ -38,3 +39,9 @@ La tarea `check` ejecuta JUnit y falla si la cobertura de lineas es inferior al
 - Configurar el `CriterioDesempate` cuando el cliente documente la regla.
 - Exponer el inicio de partida desde la capa de aplicacion; HU-JUE-001 y
   HU-JUE-002 no exigen por si solas un endpoint.
+
+## Despliegue
+
+Este servicio se despliega en el host propio del dominio de contenido (`infrastructure/entornos/contenido/`), por el flujo `cd.yml` (job `desplegar-contenido-dev`) en cada push a `develop` que toque `services/contenido/motor-combate`. Queda publicado en el puerto **8104** del host (8080 dentro del contenedor), consumiendo héroes por la URL interna `HEROES_URL`. Salud: `http://<ip-del-host>:8104/actuator/health`.
+
+La imagen lleva la etiqueta propia de este servicio (`TAG_MOTOR_COMBATE`, el sha corto del push que lo cambió); las dependencias que no cambiaron conservan la etiqueta que ya tienen desplegada. Lo resuelve `resolver_etiquetas_contenido` en `scripts/cd/desplegar.sh`.

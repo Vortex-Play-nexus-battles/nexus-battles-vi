@@ -43,8 +43,7 @@ class AdminGestionUsuarioServiceTest {
             USUARIO_ID,
             "Santiago",
             "Sanabria",
-            "avatar.png",
-            "Biografía",
+            null,
             "preferencias",
             "Santi"
         )).thenReturn(perfil);
@@ -53,8 +52,7 @@ class AdminGestionUsuarioServiceTest {
             USUARIO_ID,
             "Santiago",
             "Sanabria",
-            "avatar.png",
-            "Biografía",
+            null,
             "preferencias",
             "Santi",
             ADMINISTRADOR_ID,
@@ -67,8 +65,7 @@ class AdminGestionUsuarioServiceTest {
             USUARIO_ID,
             "Santiago",
             "Sanabria",
-            "avatar.png",
-            "Biografía",
+            null,
             "preferencias",
             "Santi"
         );
