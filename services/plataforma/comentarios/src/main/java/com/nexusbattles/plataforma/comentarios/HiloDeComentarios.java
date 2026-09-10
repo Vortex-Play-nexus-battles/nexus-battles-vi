@@ -63,7 +63,7 @@ public final class HiloDeComentarios {
 
         private final transient MotivoDeRechazo motivo;
 
-        PublicacionRechazada(MotivoDeRechazo motivo, String explicacion) {
+        public PublicacionRechazada(MotivoDeRechazo motivo, String explicacion) {
             super(explicacion);
             this.motivo = motivo;
         }
@@ -104,6 +104,35 @@ public final class HiloDeComentarios {
             normalizados.add(formato.toLowerCase(Locale.ROOT));
         }
         return new HiloDeComentarios(productoId, Set.copyOf(normalizados));
+    }
+
+    /**
+     * Reconstruye el hilo a partir de los comentarios ya guardados de un producto.
+     *
+     * <p>Existe para la capa de persistencia. El hilo aplica la regla de la
+     * calificacion unica recordando quien ya califico, y esa memoria hay que
+     * recuperarla de la base de datos antes de atender cada publicacion nueva.
+     * Los comentarios retenidos tambien reservan la calificacion de su autor,
+     * igual que hace publicar, para que nadie califique dos veces aprovechando
+     * que su primer intento quedo en revision.
+     *
+     * @param productoId producto comentado
+     * @param formatosAdmitidos extensiones de imagen aceptadas, sin punto
+     * @param existentes comentarios ya guardados del producto, del mas antiguo al mas reciente
+     * @return un hilo con la historia cargada, listo para publicar el siguiente
+     */
+    public static HiloDeComentarios reconstituir(
+            String productoId, Set<String> formatosAdmitidos, List<Comentario> existentes) {
+        Objects.requireNonNull(existentes, "los comentarios existentes son obligatorios");
+        HiloDeComentarios hilo = de(productoId, formatosAdmitidos);
+        for (Comentario comentario : existentes) {
+            Objects.requireNonNull(comentario, "ningun comentario existente puede ser nulo");
+            hilo.comentarios.add(comentario);
+            if (comentario.calificacion().isPresent()) {
+                hilo.yaCalificaron.add(comentario.autorId());
+            }
+        }
+        return hilo;
     }
 
     /**

@@ -1,0 +1,190 @@
+openapi: 3.1.0
+info:
+  title: Nexus Battles VI - Comentarios (publicacion sobre productos)
+  description: >
+    API para publicar comentarios con texto e imagenes sobre productos, con
+    calificacion unica por jugador y filtro automatico de contenido (HU-COM-001,
+    RF-COM-001, RF-COM-002 y RF-COM-007; el contenido del comentario sigue
+    RN-CMT-001). El filtro se apoya en la lista negra de
+    HU-ADM-002, consumida por REST segun contracts/openapi/moderacion-lista-negra.yaml.
+    El autor y su apodo viajan en el cuerpo mientras se acuerda con el modulo de
+    identidad que claim del token los aporta; al integrar el resource server este
+    contrato abrira una version nueva en lugar de modificar esta.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8081/api/v1
+    description: Entorno local de desarrollo
+paths:
+  /products/{productId}/comments:
+    post:
+      summary: Publicar un comentario sobre un producto
+      operationId: publicarComentario
+      description: >
+        La retencion y el rechazo no son lo mismo. Si el filtro senala el texto,
+        el comentario si se guarda pero queda esperando a un moderador y la
+        respuesta es 202, no 201. Si el autor esta silenciado (403) o alguna
+        imagen viene en formato no admitido (422), el comentario no se guarda.
+        Un jugador comenta cuantas veces quiera pero califica una sola vez: del
+        segundo comentario en adelante el sistema acepta la publicacion y
+        descarta las estrellas sin tratarlo como error.
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            Identificador del producto comentado. La verificacion de que el
+            producto exista contra el catalogo queda pendiente de integrar
+            cuando el catalogo publique su contrato; mientras tanto el
+            identificador se acepta tal cual.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicacionComentarioRequest'
+      responses:
+        '201':
+          description: Comentario publicado y visible en el hilo del producto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComentarioResponse'
+        '202':
+          description: >
+            Comentario retenido por el filtro automatico, guardado a la espera
+            de revision de un moderador. No aparece en el hilo ni mueve el
+            promedio hasta que se apruebe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComentarioResponse'
+        '400':
+          description: Datos de la solicitud invalidos o incompletos
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '403':
+          description: El autor tiene una sancion activa de silencio y no puede publicar
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: >
+            Dos solicitudes simultaneas del mismo autor intentaron calificar
+            el mismo producto: la primera quedo y esta recibio el conflicto.
+            Reintentar sin estrellas publica el comentario sin calificacion.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: Al menos una imagen viene en un formato que no se admite
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+components:
+  schemas:
+    PublicacionComentarioRequest:
+      type: object
+      required:
+        - autorId
+        - apodoAutor
+        - texto
+      properties:
+        autorId:
+          type: string
+          description: Identificador del jugador que publica
+        apodoAutor:
+          type: string
+          description: Apodo del jugador en el momento de publicar
+        texto:
+          type: string
+          description: >
+            Contenido escrito. El largo maximo esta pendiente de definir con el
+            Product Owner (issue 34), por eso todavia no se limita aqui.
+        imagenes:
+          type: array
+          items:
+            type: string
+          description: >
+            Nombres de archivo de los adjuntos. Los formatos admitidos estan
+            pendientes de definir con el Product Owner y por eso son
+            configurables en el servicio.
+        estrellas:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: >
+            Calificacion pretendida. Omitir si no se quiere calificar. Si viene
+            y el jugador ya habia calificado el producto, el sistema la descarta
+            y publica el comentario sin calificacion, sin tratarlo como error.
+
+    ComentarioResponse:
+      type: object
+      required:
+        - id
+        - productoId
+        - autorId
+        - apodoAutor
+        - texto
+        - fechaPublicacion
+        - estado
+      properties:
+        id:
+          type: string
+        productoId:
+          type: string
+        autorId:
+          type: string
+        apodoAutor:
+          type: string
+        texto:
+          type: string
+        imagenes:
+          type: array
+          items:
+            type: string
+        estrellas:
+          type: integer
+          description: Ausente cuando el jugador ya habia calificado el producto
+        fechaPublicacion:
+          type: string
+          format: date-time
+        estado:
+          type: string
+          enum:
+            - PUBLICADO
+            - EN_REVISION
+
+    ProblemDetail:
+      type: object
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        motivo:
+          type: string
+          enum:
+            - AUTOR_SILENCIADO
+            - FORMATO_DE_IMAGEN_NO_ADMITIDO
+          description: >
+            Presente solo en los rechazos de publicacion (403 y 422), para que
+            el cliente distinga el motivo sin interpretar el texto del detalle.
