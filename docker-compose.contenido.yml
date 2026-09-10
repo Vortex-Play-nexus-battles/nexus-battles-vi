@@ -227,6 +227,8 @@ services:
       # servicios en 30-60 MiB. JAVA_TOOL_OPTIONS aqui gana al del Dockerfile.
       JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
       HEROES_URL: http://srv-heroes:8080
+      PRODUCTOS_URL: http://srv-productos:8080
+      INVENTARIO_URL: http://srv-inventario:8080
       # R8.1 — POST /api/v1/combate/ataques exige ROLE_SERVICIO. El token lo
       # firma ms-identidad en el host de plataforma y lo presenta
       # salas-partidas; el motor solo necesita la clave publica para
