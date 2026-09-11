@@ -84,9 +84,9 @@ horizontal.
 
 - La tarjeta y la paginacion de dieciseis son **componentes de `shared/ui-kit`**
   segun la pila; ese directorio esta vacio, asi que viven aqui provisionalmente.
-- El tema de `vitrina.css` es provisional: la paleta y las tipografias
-  autoalojadas (Rajdhani e Inter) salen de la propuesta de diseno, que aun no
-  esta en el repositorio.
+- `vitrina.css` usa la paleta oficial del sistema de diseno de Figma
+  (`iMcw1JhmSAD6XjzDZuYlIz`) y los mismos nombres de token publicados en
+  `shared/ui-kit/css/tokens.css`.
 - Los cuatro estados de `RNF-USA-003` ya existen en `estados-vista.js`, pero la
   pila los quiere **centralizados para los veinte modulos**. Su hogar es
   `shared/ui-kit`; se mudan sin cambiar la interfaz.
