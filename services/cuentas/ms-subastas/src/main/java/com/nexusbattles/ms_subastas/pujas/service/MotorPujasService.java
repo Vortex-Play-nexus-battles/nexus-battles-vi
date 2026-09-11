@@ -22,12 +22,11 @@ import java.util.UUID;
  * concurrencia sin depender de que exista la tabla Subastas de Edwin ni el
  * endpoint real de ms-finanzas de Juan Diego.
  *
- * Concurrencia: el metodo es synchronized como guardia de proceso para las
- * pruebas de carrera entre hilos sobre la MISMA instancia. El guardia real
- * entre procesos/replicas sera un lock pesimista de base de datos
- * (SELECT ... FOR UPDATE / @Lock(PESSIMISTIC_WRITE)) sobre la fila de
- * Subasta una vez exista el repositorio JPA real - pendiente del diseno
- * conjunto del Dia 1.
+ * Concurrencia: esta clase no se sincroniza a si misma a proposito. Solo
+ * muta los objetos que recibe por parametro, y el guardia de la carrera es
+ * el lock pesimista sobre la fila de Subasta que toma
+ * PujaApplicationService dentro de su transaccion. Sincronizar aqui
+ * serializaria pujas de subastas distintas sin necesidad.
  */
 @Service
 @RequiredArgsConstructor
@@ -37,8 +36,8 @@ public class MotorPujasService {
     private final Clock clock;
     private final ParametrosPuja parametros;
 
-    public synchronized Puja pujar(Subasta subasta, Puja pujaVigente, UUID jugadorId, BigDecimal monto,
-                                    ContextoParticipacion contexto) {
+    public Puja pujar(Subasta subasta, Puja pujaVigente, UUID jugadorId, BigDecimal monto,
+                      ContextoParticipacion contexto) {
         validarReglasDeParticipacion(subasta, jugadorId, monto, contexto);
 
         String idempotencyKey = "%s:%s:%s".formatted(jugadorId, subasta.getId(), clock.instant());
@@ -56,7 +55,7 @@ public class MotorPujasService {
                 EstadoPuja.ACTIVA, clock.instant(), reserva.id().toString());
     }
 
-    public synchronized Puja comprarAhora(Subasta subasta, UUID jugadorId) {
+    public Puja comprarAhora(Subasta subasta, UUID jugadorId) {
         if (!subasta.estaActiva()) {
             throw new PujaRechazadaException(PujaRechazadaException.Motivo.SUBASTA_NO_ACTIVA,
                     "La subasta " + subasta.getId() + " no esta activa");

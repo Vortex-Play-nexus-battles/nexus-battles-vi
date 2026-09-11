@@ -1,0 +1,59 @@
+name: Pruebas de ms-subastas
+
+# Cubre solo ms-subastas a proposito. Los demas servicios de cuentas
+# (ms-identidad, ms-cumplimiento, ms-ecommerce, ms-finanzas, ms-chatbot)
+# son de otros companeros y no se gatean desde aqui: si el equipo quiere un
+# workflow para todo el dominio, es una decision del grupo, no de esta rama.
+
+on:
+  pull_request:
+    paths:
+      - "services/cuentas/ms-subastas/**"
+      - ".github/workflows/pruebas-ms-subastas.yml"
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - "services/cuentas/ms-subastas/**"
+      - ".github/workflows/pruebas-ms-subastas.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pruebas-ms-subastas-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pruebas:
+    name: ms-subastas
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v7
+
+      - name: Preparar Java 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Ejecutar pruebas y compuerta de cobertura
+        working-directory: services/cuentas/ms-subastas
+        run: ./mvnw --batch-mode --no-transfer-progress verify
+
+      - name: Publicar evidencia de pruebas y cobertura
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reportes-ms-subastas
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            services/cuentas/ms-subastas/target/surefire-reports/
+            services/cuentas/ms-subastas/target/site/jacoco/
