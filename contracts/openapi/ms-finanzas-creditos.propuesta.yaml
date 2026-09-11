@@ -1,0 +1,265 @@
+openapi: 3.1.0
+info:
+  title: "PROPUESTA — Reserva de créditos (ms-finanzas)"
+  description: >-
+    BORRADOR ESCRITO DESDE EL CONSUMIDOR, NO ES EL CONTRATO VIGENTE.
+
+    ms-finanzas es de Juan Diego (HU-PAG-001). Este archivo describe lo que
+    ms-subastas necesita para HU-SUB-004, escrito por el consumidor para que el
+    dueño del servicio lo ajuste o lo rechace — no para imponerlo. Mientras no
+    lleve su aprobación, no debe tomarse como contrato acordado ni generarse
+    clientes definitivos a partir de él. Renombrar quitando ".propuesta" cuando
+    el dueño lo apruebe.
+
+    Por qué existe: la regla 1 de plataforma exige contrato primero, y el
+    Riesgo #3 del Project Charter pide congelar y versionar los contratos al
+    inicio del sprint. El Sprint Backlog marca este endpoint como "prioridad
+    técnica del Día 1-2 para no bloquear a Andrés y Edwin".
+
+    Edwin (HU-SUB-001) necesita además el cobro de la comisión de publicación
+    (1 crédito a 24 h, 3 a 48 h) de forma atómica con la creación de la
+    subasta. No se describe aquí porque no es parte de HU-SUB-004, pero conviene
+    que salga en el mismo contrato.
+  version: 0.1.0-propuesta
+servers:
+  - url: http://localhost:8093/api/v1
+    description: Puerto supuesto por el consumidor; lo fija el dueño del servicio
+
+security:
+  - bearerJwt: []
+
+paths:
+  /creditos/reservas:
+    post:
+      summary: Reservar créditos sin debitarlos
+      description: >-
+        Retiene créditos del jugador para respaldar una puja. El saldo no se
+        debita todavía: la reserva se libera si el ofertante es superado, o se
+        consume si gana.
+
+        DEBE SER IDEMPOTENTE por Idempotency-Key. ms-subastas llama a este
+        endpoint dentro de una transacción con la fila de la subasta bloqueada;
+        si un reintento por expiración creara una segunda reserva, el jugador
+        quedaría con el doble de créditos retenidos.
+      operationId: reservarCreditos
+      tags: [creditos]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservarRequest'
+      responses:
+        '201':
+          description: Reserva creada (o la existente, si la clave se repite)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaResponse'
+        '409':
+          description: Saldo insuficiente
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /creditos/reservas/{reservaId}/liberacion:
+    post:
+      summary: Liberar una reserva
+      description: >-
+        Devuelve los créditos retenidos al saldo disponible. Se invoca cuando el
+        ofertante es superado, cuando lo supera una compra inmediata, o cuando
+        la subasta cierra sin adjudicación.
+      operationId: liberarReserva
+      tags: [creditos]
+      parameters:
+        - $ref: '#/components/parameters/ReservaId'
+      responses:
+        '200':
+          description: Reserva liberada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaResponse'
+        '404':
+          $ref: '#/components/responses/ReservaNoEncontrada'
+        '409':
+          $ref: '#/components/responses/EstadoInvalido'
+
+  /creditos/reservas/{reservaId}/consumo:
+    post:
+      summary: Consumir una reserva (débito real)
+      description: >-
+        Convierte la reserva en un débito efectivo porque la puja ganó la
+        subasta.
+
+        A DEFINIR POR EL DUEÑO: si este endpoint acredita también al vendedor, o
+        si ms-subastas debe pedirlo en una llamada aparte. El consumidor no
+        asume ninguna de las dos.
+      operationId: consumirReserva
+      tags: [creditos]
+      parameters:
+        - $ref: '#/components/parameters/ReservaId'
+      responses:
+        '200':
+          description: Reserva consumida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaResponse'
+        '404':
+          $ref: '#/components/responses/ReservaNoEncontrada'
+        '409':
+          $ref: '#/components/responses/EstadoInvalido'
+
+  /creditos/saldo/{jugadorId}:
+    get:
+      summary: Saldo del jugador
+      description: >-
+        ms-subastas lo usa para validar el límite de una puja automática al
+        configurarla.
+
+        A DEFINIR POR EL DUEÑO: `disponible` debe venir ya NETO de las reservas
+        activas. Si el servicio devolviera saldo bruto, el consumidor no podría
+        decidir si un límite es financiable.
+      operationId: consultarSaldo
+      tags: [creditos]
+      parameters:
+        - name: jugadorId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Saldo del jugador
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaldoResponse'
+        '404':
+          description: Jugador sin cuenta de créditos
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+components:
+  securitySchemes:
+    bearerJwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+    ReservaId:
+      name: reservaId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    ReservarRequest:
+      type: object
+      required: [jugadorId, monto, referencia]
+      properties:
+        jugadorId:
+          type: string
+          format: uuid
+        monto:
+          type: string
+          format: decimal
+          description: Cadena para no perder precisión decimal.
+          example: "110.00"
+        referencia:
+          type: string
+          format: uuid
+          description: Id de la subasta que motiva la reserva, para conciliación.
+
+    ReservaResponse:
+      type: object
+      required: [id, jugadorId, monto, estado]
+      properties:
+        id:
+          type: string
+          format: uuid
+        jugadorId:
+          type: string
+          format: uuid
+        monto:
+          type: string
+          format: decimal
+          example: "110.00"
+        estado:
+          type: string
+          enum: [RESERVADA, LIBERADA, CONSUMIDA]
+
+    SaldoResponse:
+      type: object
+      required: [jugadorId, disponible]
+      properties:
+        jugadorId:
+          type: string
+          format: uuid
+        disponible:
+          type: string
+          format: decimal
+          description: Neto de reservas activas.
+          example: "890.00"
+        reservado:
+          type: string
+          format: decimal
+          example: "110.00"
+
+    ProblemDetail:
+      type: object
+      description: >-
+        Formato de error estándar (regla 4 de plataforma). El consumidor
+        necesita distinguir estos motivos para dar mensajes distintos al
+        jugador; no sirve un 500 genérico.
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        motivo:
+          type: string
+          enum:
+            - SALDO_INSUFICIENTE
+            - RESERVA_INEXISTENTE
+            - RESERVA_YA_LIBERADA
+            - RESERVA_YA_CONSUMIDA
+
+  responses:
+    ReservaNoEncontrada:
+      description: No existe la reserva
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    EstadoInvalido:
+      description: La reserva ya estaba liberada o consumida
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'

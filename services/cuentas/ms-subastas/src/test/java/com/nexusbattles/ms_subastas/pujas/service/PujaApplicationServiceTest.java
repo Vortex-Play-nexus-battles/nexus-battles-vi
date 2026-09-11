@@ -119,7 +119,9 @@ class PujaApplicationServiceTest {
         servicio.pujar(subasta.getId(), segundoPostor, new BigDecimal("125"), claveUnica());
 
         assertEquals(EstadoPuja.SUPERADA, pujaVigente.getEstado());
-        verify(pujaRepository).save(pujaVigente);
+        // saveAndFlush y no save: la puja anterior debe dejar de ser ACTIVA en la
+        // base de datos antes de insertar la nueva, o el indice unico parcial la rechaza.
+        verify(pujaRepository).saveAndFlush(pujaVigente);
         assertEquals(new BigDecimal("1000"), creditoClient.saldoDisponible(primerPostor));
     }
 
@@ -156,7 +158,7 @@ class PujaApplicationServiceTest {
         assertEquals(new BigDecimal("500"), creditoClient.saldoDisponible(comprador));
         assertEquals(new BigDecimal("1000"), creditoClient.saldoDisponible(postorPrevio),
                 "al postor superado por la compra inmediata hay que devolverle sus creditos");
-        verify(pujaRepository).save(pujaVigente);
+        verify(pujaRepository).saveAndFlush(pujaVigente);
     }
 
     @Test

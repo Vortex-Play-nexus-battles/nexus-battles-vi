@@ -69,7 +69,8 @@ public class MotorPujaAutomaticaService {
                     "El saldo disponible (" + saldoDisponible + ") no cubre el limite configurado (" + limite + ")");
         }
 
-        return new PujaAutomatica(UUID.randomUUID(), subasta.getId(), jugadorId, limite, true);
+        // id nulo: lo genera la base de datos, igual que en Puja.
+        return new PujaAutomatica(null, subasta.getId(), jugadorId, limite, true);
     }
 
     /**

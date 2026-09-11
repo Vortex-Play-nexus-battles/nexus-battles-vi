@@ -58,7 +58,10 @@ public class MotorPujasService {
         subasta.setOfertaVigente(monto);
         subasta.setMejorPostorId(jugadorId);
 
-        return new Puja(UUID.randomUUID(), subasta.getId(), jugadorId, monto, TipoPuja.MANUAL,
+        // id nulo a proposito: lo genera la base de datos (@GeneratedValue). Si
+        // el dominio lo asignara, Spring Data veria una entidad con id y haria
+        // merge (UPDATE de una fila inexistente) en vez de persist.
+        return new Puja(null, subasta.getId(), jugadorId, monto, TipoPuja.MANUAL,
                 EstadoPuja.ACTIVA, clock.instant(), reserva.id().toString());
     }
 
@@ -96,7 +99,7 @@ public class MotorPujasService {
         // TODO(Dia 2+): publicar evento SubastaCerrada para que notificaciones
         // avise a los demas postores e inventario desbloquee/transfiera el
         // producto. Ninguno de los dos microservicios esta en el Sprint 2.
-        return new Puja(UUID.randomUUID(), subasta.getId(), jugadorId, precio, TipoPuja.MANUAL,
+        return new Puja(null, subasta.getId(), jugadorId, precio, TipoPuja.MANUAL,
                 EstadoPuja.GANADORA, clock.instant(), reserva.id().toString());
     }
 

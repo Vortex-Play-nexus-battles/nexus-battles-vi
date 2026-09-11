@@ -17,7 +17,22 @@ Lo que ya esta desarrollado, de lo que no depende de nadie mas del equipo:
 - `subastas/repository` y `pujas/repository` — repositorios JPA, con `findByIdParaActualizar` (SELECT ... FOR UPDATE) como guardia real de concurrencia.
 - `subastas/model/Subasta` — **borrador** pendiente del diseno conjunto del Dia 1 con Edwin y Cristian; puede cambiar.
 - `db/migration/V1__create_subastas_pujas.sql` — esquema por Flyway (nunca `ddl-auto`), con los indices que sostienen las reglas: unico parcial de una sola puja vigente por subasta, `(jugador_id, creada_en DESC)` para el intervalo de 5 s, y parcial por jugador para los topes de 10/50.
-- Pruebas unitarias de las 5 reglas + prueba de concurrencia (`MotorPujasServiceConcurrenciaTest`) que reproduce el caso pedido por el backlog: varios jugadores pujando en la misma fraccion de segundo, solo uno gana. Compuerta JaCoCo al 80% que rompe el build.
+- `pujas/creditos/CreditoClientResiliente` — cortacircuitos y reintento (Resilience4j) sobre la llamada a ms-finanzas, que ocurre dentro del lock de la subasta. Los rechazos de negocio estan excluidos del reintento: saldo insuficiente no es un fallo del servicio.
+- Pruebas: 49 en verde. Unitarias de las 5 reglas, `MotorPujasServiceConcurrenciaTest` en memoria, y `PujaConcurrenciaPostgresTest` contra PostgreSQL real (Testcontainers) que si ejercita el lock pesimista y el indice unico parcial. Compuerta JaCoCo al 80% que rompe el build, y `ReglasDeArquitecturaTest` (ArchUnit) que falla si alguien cruza dominios, mete persistencia en el motor o usa `Instant.now()`.
+
+## Contratos
+
+- `contracts/openapi/ms-subastas-pujas.yaml` — el contrato de esta HU, publicado ANTES de los controladores (regla 1 de plataforma).
+- `contracts/openapi/ms-finanzas-creditos.propuesta.yaml` — borrador escrito desde el consumidor de lo que se necesita de ms-finanzas. **No es el contrato vigente**: el dueno es Juan Diego y requiere su aprobacion.
+
+## Levantar en local
+
+```bash
+docker compose up -d          # PostgreSQL 17 en el puerto 5435
+DB_PASSWORD=subastas_password ./mvnw spring-boot:run
+```
+
+Arranca con el doble en memoria de creditos (`app.finanzas.modo=fake`) y lo advierte en el log: ningun credito se mueve de verdad.
 
 ## Pendiente (bloqueado por otros, o fuera de este paquete)
 

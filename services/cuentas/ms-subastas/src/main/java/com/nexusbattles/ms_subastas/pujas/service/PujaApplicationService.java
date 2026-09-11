@@ -41,8 +41,13 @@ public class PujaApplicationService {
 
         Puja nuevaPuja = motorPujas.pujar(subasta, pujaVigente, jugadorId, monto, contextoDe(jugadorId, subastaId), idempotencyKey);
 
+        // saveAndFlush, no save: el indice unico parcial solo admite una puja
+        // ACTIVA por subasta, e Hibernate ordena los INSERT antes que los
+        // UPDATE al volcar la sesion. Sin este flush explicito, la nueva puja
+        // se insertaria antes de que la anterior pase a SUPERADA y la
+        // constraint la rechazaria.
         if (pujaVigente != null) {
-            pujaRepository.save(pujaVigente);
+            pujaRepository.saveAndFlush(pujaVigente);
         }
         subastaRepository.save(subasta);
         return pujaRepository.save(nuevaPuja);
@@ -55,8 +60,10 @@ public class PujaApplicationService {
 
         Puja pujaGanadora = motorPujas.comprarAhora(subasta, pujaVigente, jugadorId);
 
+        // Mismo motivo que en pujar(): la puja vigente debe dejar de ser ACTIVA
+        // en la base de datos antes de insertar la ganadora.
         if (pujaVigente != null) {
-            pujaRepository.save(pujaVigente);
+            pujaRepository.saveAndFlush(pujaVigente);
         }
         subastaRepository.save(subasta);
         return pujaRepository.save(pujaGanadora);
