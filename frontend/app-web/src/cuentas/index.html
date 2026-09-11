@@ -1,0 +1,199 @@
+<!doctype html>
+
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Inicio - Nexus Battles</title>
+
+  <link rel="stylesheet" href="../comun/barra-navegacion.css">
+  <link rel="stylesheet" href="./index.css">
+
+</head>
+
+<body>
+
+<header class="encabezado-inicio">
+
+  <div class="encabezado-inicio-contenido">
+
+    <div>
+      <p class="eyebrow">NEXUS BATTLES VI</p>
+
+      <h1 class="titulo-grande titulo-bienvenida">
+        Hola, <span id="bienvenida-apodo">jugador</span>
+      </h1>
+
+      <p class="descripcion">
+        Elige a dónde quieres ir.
+      </p>
+    </div>
+
+    <button
+      type="button"
+      id="btn-cerrar-sesion"
+      class="btn-contorno"
+    >
+      Cerrar sesión
+    </button>
+
+  </div>
+
+</header>
+
+
+<main class="contenedor-principal">
+
+  <!-- =====================================================
+       CUENTA — visible para todos los roles autenticados
+       ===================================================== -->
+
+  <section class="seccion-menu">
+
+    <h2 class="titulo-seccion">Cuenta</h2>
+
+    <div class="tarjetas-acceso">
+
+      <a class="tarjeta tarjeta-acceso" href="./perfil.html">
+        <h3>Mi perfil</h3>
+        <p>Consulta y actualiza tu información personal.</p>
+      </a>
+
+    </div>
+
+  </section>
+
+
+  <!-- =====================================================
+       JUEGO Y CONTENIDO — visible para todos los roles
+       ===================================================== -->
+
+  <section class="seccion-menu">
+
+    <h2 class="titulo-seccion">Juego y contenido</h2>
+
+    <div class="tarjetas-acceso">
+
+      <a class="tarjeta tarjeta-acceso" href="../contenido/inventario/inventario.html">
+        <h3>Inventario</h3>
+        <p>Vitrina de tu inventario de productos.</p>
+      </a>
+
+      <a class="tarjeta tarjeta-acceso" href="../contenido/productos/productos.html">
+        <h3>Productos</h3>
+        <p>Crea y administra productos del catálogo.</p>
+      </a>
+
+      <a class="tarjeta tarjeta-acceso" href="./tienda.html">
+        <h3>Tienda</h3>
+        <p>Explora la tienda de Nexus Battles.</p>
+      </a>
+
+    </div>
+
+  </section>
+
+
+  <!-- =====================================================
+       SALAS Y PARTIDAS — visible para todos los roles
+       ===================================================== -->
+
+  <section class="seccion-menu">
+
+    <h2 class="titulo-seccion">Salas y partidas</h2>
+
+    <div class="tarjetas-acceso">
+
+      <a class="tarjeta tarjeta-acceso" href="../plataforma/salas-partidas/crear-sala.html">
+        <h3>Crear sala</h3>
+        <p>Configura una nueva sala de batalla.</p>
+      </a>
+
+      <a class="tarjeta tarjeta-acceso" href="../plataforma/salas-partidas/batallas.html">
+        <h3>Batallas</h3>
+        <p>Entra a la sala de batalla y su canal en tiempo real.</p>
+      </a>
+
+      <a class="tarjeta tarjeta-acceso" href="../plataforma/salas-partidas/validacion-heroe.html">
+        <h3>Validación de héroe</h3>
+        <p>Verifica el héroe equipado antes de jugar.</p>
+      </a>
+
+    </div>
+
+  </section>
+
+
+  <!-- =====================================================
+       ADMINISTRACIÓN — solo según rol.
+       Si para el rol actual no queda ninguna tarjeta visible,
+       index.js oculta también esta sección completa.
+       ===================================================== -->
+
+  <section class="seccion-menu">
+
+    <h2 class="titulo-seccion">Administración</h2>
+
+    <div class="tarjetas-acceso">
+
+      <a
+        class="tarjeta tarjeta-acceso"
+        href="./gestion-usuarios.html"
+        data-roles="ADMINISTRADOR,SUPER_ADMINISTRADOR"
+        hidden
+      >
+        <h3>Gestión de usuarios</h3>
+        <p>Administra perfiles, roles y estado de las cuentas.</p>
+      </a>
+
+      <a
+        class="tarjeta tarjeta-acceso"
+        href="./crear-cuenta-admin.html"
+        data-roles="SUPER_ADMINISTRADOR"
+        hidden
+      >
+        <h3>Crear cuenta administrativa</h3>
+        <p>Registra una nueva cuenta con rol administrativo.</p>
+      </a>
+
+      <a
+        class="tarjeta tarjeta-acceso"
+        href="./matriz-permisos.html"
+        data-roles="MODERADOR,ADMINISTRADOR,SUPER_ADMINISTRADOR"
+        hidden
+      >
+        <h3>Matriz de permisos</h3>
+        <p>Consulta qué acciones tiene autorizadas cada rol.</p>
+      </a>
+
+      <a
+        class="tarjeta tarjeta-acceso"
+        href="./auditoria.html"
+        data-roles="SUPER_ADMINISTRADOR"
+        hidden
+      >
+        <h3>Auditoría</h3>
+        <p>Revisa el registro de acciones administrativas.</p>
+      </a>
+
+      <a
+        class="tarjeta tarjeta-acceso"
+        href="../plataforma/moderacion-sanciones/lista-negra-admin.html"
+        data-roles="MODERADOR,ADMINISTRADOR,SUPER_ADMINISTRADOR"
+        hidden
+      >
+        <h3>Lista negra</h3>
+        <p>Administra los términos prohibidos del sistema.</p>
+      </a>
+
+    </div>
+
+  </section>
+
+</main>
+
+<script type="module" src="./index.js"></script>
+
+</body>
+</html>
