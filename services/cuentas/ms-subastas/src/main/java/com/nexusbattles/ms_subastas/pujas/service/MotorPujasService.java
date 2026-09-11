@@ -45,7 +45,7 @@ public class MotorPujasService {
      *                       debe evitar.
      */
     public Puja pujar(Subasta subasta, Puja pujaVigente, UUID jugadorId, BigDecimal monto,
-                      ContextoParticipacion contexto, String idempotencyKey) {
+                      ContextoParticipacion contexto, String idempotencyKey, TipoPuja tipo) {
         validarReglasDeParticipacion(subasta, jugadorId, monto, contexto);
 
         ReservaCredito reserva = creditoClient.reservar(jugadorId, monto, subasta.getId(), idempotencyKey);
@@ -61,7 +61,7 @@ public class MotorPujasService {
         // id nulo a proposito: lo genera la base de datos (@GeneratedValue). Si
         // el dominio lo asignara, Spring Data veria una entidad con id y haria
         // merge (UPDATE de una fila inexistente) en vez de persist.
-        return new Puja(null, subasta.getId(), jugadorId, monto, TipoPuja.MANUAL,
+        return new Puja(null, subasta.getId(), jugadorId, monto, tipo,
                 EstadoPuja.ACTIVA, clock.instant(), reserva.id().toString());
     }
 

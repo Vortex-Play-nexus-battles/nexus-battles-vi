@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_subastas.pujas.service;
 
+import com.nexusbattles.ms_subastas.notificaciones.NotificacionOutbox;
 import com.nexusbattles.ms_subastas.pujas.creditos.CreditoClientFake;
 import com.nexusbattles.ms_subastas.pujas.model.EstadoPuja;
 import com.nexusbattles.ms_subastas.pujas.model.Puja;
@@ -18,6 +19,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -49,6 +51,9 @@ class PujaApplicationServiceTest {
     @Mock
     private PujaRepository pujaRepository;
 
+    @Mock
+    private NotificacionOutbox outbox;
+
     private CreditoClientFake creditoClient;
     private PujaApplicationService servicio;
 
@@ -56,7 +61,7 @@ class PujaApplicationServiceTest {
     void setUp() {
         creditoClient = new CreditoClientFake();
         MotorPujasService motor = new MotorPujasService(creditoClient, Clock.fixed(AHORA, ZoneOffset.UTC), new ParametrosPuja());
-        servicio = new PujaApplicationService(subastaRepository, pujaRepository, motor);
+        servicio = new PujaApplicationService(subastaRepository, pujaRepository, motor, outbox);
     }
 
     private Subasta subastaActiva() {
@@ -159,6 +164,33 @@ class PujaApplicationServiceTest {
         assertEquals(new BigDecimal("1000"), creditoClient.saldoDisponible(postorPrevio),
                 "al postor superado por la compra inmediata hay que devolverle sus creditos");
         verify(pujaRepository).saveAndFlush(pujaVigente);
+    }
+
+    @Test
+    void comprarAhoraEncolaElAvisoParaTodosLosQueHabianPujado() {
+        Subasta subasta = subastaActiva();
+        UUID postorPrevio = UUID.randomUUID();
+        UUID postorAntiguo = UUID.randomUUID();
+        UUID comprador = UUID.randomUUID();
+        creditoClient.acreditar(postorPrevio, new BigDecimal("1000"));
+        creditoClient.acreditar(comprador, new BigDecimal("1000"));
+
+        var reservaPrevia = creditoClient.reservar(postorPrevio, new BigDecimal("110"), subasta.getId(), "previa");
+        Puja pujaVigente = new Puja(UUID.randomUUID(), subasta.getId(), postorPrevio, new BigDecimal("110"),
+                TipoPuja.MANUAL, EstadoPuja.ACTIVA, AHORA.minusSeconds(60), reservaPrevia.id().toString());
+
+        when(subastaRepository.findByIdParaActualizar(subasta.getId())).thenReturn(Optional.of(subasta));
+        when(pujaRepository.findBySubastaIdAndEstado(subasta.getId(), EstadoPuja.ACTIVA)).thenReturn(Optional.of(pujaVigente));
+        when(pujaRepository.save(any(Puja.class))).thenAnswer(invocacion -> invocacion.getArgument(0));
+        when(pujaRepository.findDistinctJugadorIdBySubastaId(subasta.getId()))
+                .thenReturn(List.of(postorPrevio, postorAntiguo));
+
+        servicio.comprarAhora(subasta.getId(), comprador);
+
+        // Incluye al postor antiguo que ya estaba SUPERADA: la historia dice
+        // "notificando a quienes hubieran pujado", no solo al que iba ganando.
+        verify(outbox).avisarCierrePorCompraInmediata(subasta.getId(),
+                List.of(postorPrevio, postorAntiguo), comprador);
     }
 
     @Test

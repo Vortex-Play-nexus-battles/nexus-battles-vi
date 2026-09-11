@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -19,6 +20,13 @@ public interface PujaRepository extends JpaRepository<Puja, UUID> {
 
     /** Su ultima puja en cualquier subasta, para validar el intervalo minimo de 5 s. */
     Optional<Puja> findFirstByJugadorIdOrderByCreadaEnDesc(UUID jugadorId);
+
+    /**
+     * Todos los jugadores que pujaron en la subasta, ganando o no. Es la lista
+     * de destinatarios de "notificando a quienes hubieran pujado" del criterio 2.
+     */
+    @Query("select distinct p.jugadorId from Puja p where p.subastaId = :subastaId")
+    List<UUID> findDistinctJugadorIdBySubastaId(@Param("subastaId") UUID subastaId);
 
     /**
      * En cuantas subastas DISTINTAS participa activamente, excluyendo la que

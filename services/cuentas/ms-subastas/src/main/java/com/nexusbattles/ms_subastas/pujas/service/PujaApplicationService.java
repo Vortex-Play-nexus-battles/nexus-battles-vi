@@ -1,7 +1,9 @@
 package com.nexusbattles.ms_subastas.pujas.service;
 
+import com.nexusbattles.ms_subastas.notificaciones.NotificacionOutbox;
 import com.nexusbattles.ms_subastas.pujas.model.EstadoPuja;
 import com.nexusbattles.ms_subastas.pujas.model.Puja;
+import com.nexusbattles.ms_subastas.pujas.model.TipoPuja;
 import com.nexusbattles.ms_subastas.pujas.repository.PujaRepository;
 import com.nexusbattles.ms_subastas.subastas.model.Subasta;
 import com.nexusbattles.ms_subastas.subastas.repository.SubastaRepository;
@@ -10,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -33,13 +36,28 @@ public class PujaApplicationService {
     private final SubastaRepository subastaRepository;
     private final PujaRepository pujaRepository;
     private final MotorPujasService motorPujas;
+    private final NotificacionOutbox outbox;
 
     @Transactional
     public Puja pujar(UUID subastaId, UUID jugadorId, BigDecimal monto, String idempotencyKey) {
+        return registrar(subastaId, jugadorId, monto, idempotencyKey, TipoPuja.MANUAL);
+    }
+
+    /**
+     * Misma orquestacion que pujar, pero la puja queda marcada como AUTOMATICA.
+     * La usa el motor de pujas automaticas, que no es una peticion del jugador
+     * aunque pase por las mismas reglas y el mismo lock.
+     */
+    @Transactional
+    public Puja pujarAutomaticamente(UUID subastaId, UUID jugadorId, BigDecimal monto, String idempotencyKey) {
+        return registrar(subastaId, jugadorId, monto, idempotencyKey, TipoPuja.AUTOMATICA);
+    }
+
+    private Puja registrar(UUID subastaId, UUID jugadorId, BigDecimal monto, String idempotencyKey, TipoPuja tipo) {
         Subasta subasta = cargarConLock(subastaId);
         Puja pujaVigente = pujaRepository.findBySubastaIdAndEstado(subastaId, EstadoPuja.ACTIVA).orElse(null);
 
-        Puja nuevaPuja = motorPujas.pujar(subasta, pujaVigente, jugadorId, monto, contextoDe(jugadorId, subastaId), idempotencyKey);
+        Puja nuevaPuja = motorPujas.pujar(subasta, pujaVigente, jugadorId, monto, contextoDe(jugadorId, subastaId), idempotencyKey, tipo);
 
         // saveAndFlush, no save: el indice unico parcial solo admite una puja
         // ACTIVA por subasta, e Hibernate ordena los INSERT antes que los
@@ -58,6 +76,11 @@ public class PujaApplicationService {
         Subasta subasta = cargarConLock(subastaId);
         Puja pujaVigente = pujaRepository.findBySubastaIdAndEstado(subastaId, EstadoPuja.ACTIVA).orElse(null);
 
+        // Se consulta ANTES de cerrar: despues del cierre la lista es la misma,
+        // pero leerla aqui deja claro que el aviso va a todos los que pujaron,
+        // no solo a quien iba ganando.
+        List<UUID> postores = pujaRepository.findDistinctJugadorIdBySubastaId(subastaId);
+
         Puja pujaGanadora = motorPujas.comprarAhora(subasta, pujaVigente, jugadorId);
 
         // Mismo motivo que en pujar(): la puja vigente debe dejar de ser ACTIVA
@@ -66,7 +89,12 @@ public class PujaApplicationService {
             pujaRepository.saveAndFlush(pujaVigente);
         }
         subastaRepository.save(subasta);
-        return pujaRepository.save(pujaGanadora);
+        Puja persistida = pujaRepository.save(pujaGanadora);
+
+        // Misma transaccion que el cierre: si esto no se escribe, el cierre
+        // tampoco, y no se puede perder un aviso.
+        outbox.avisarCierrePorCompraInmediata(subastaId, postores, jugadorId);
+        return persistida;
     }
 
     @Transactional

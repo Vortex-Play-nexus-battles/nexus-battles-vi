@@ -3,6 +3,7 @@ package com.nexusbattles.ms_subastas.pujas.service;
 import com.nexusbattles.ms_subastas.pujas.creditos.CreditoClientFake;
 import com.nexusbattles.ms_subastas.pujas.model.EstadoPuja;
 import com.nexusbattles.ms_subastas.pujas.model.Puja;
+import com.nexusbattles.ms_subastas.pujas.model.TipoPuja;
 import com.nexusbattles.ms_subastas.subastas.model.EstadoSubasta;
 import com.nexusbattles.ms_subastas.subastas.model.Subasta;
 import org.junit.jupiter.api.BeforeEach;
@@ -54,7 +55,7 @@ class MotorPujasServiceTest {
         UUID jugador = UUID.randomUUID();
         creditoClient.acreditar(jugador, new BigDecimal("1000"));
 
-        Puja puja = motor.pujar(subasta, null, jugador, new BigDecimal("110"), ContextoParticipacion.sinHistorial(), claveUnica());
+        Puja puja = motor.pujar(subasta, null, jugador, new BigDecimal("110"), ContextoParticipacion.sinHistorial(), claveUnica(), TipoPuja.MANUAL);
 
         assertEquals(new BigDecimal("110"), subasta.getOfertaVigente());
         assertEquals(jugador, subasta.getMejorPostorId());
@@ -68,7 +69,7 @@ class MotorPujasServiceTest {
         creditoClient.acreditar(jugador, new BigDecimal("1000"));
 
         PujaRechazadaException ex = assertThrows(PujaRechazadaException.class,
-                () -> motor.pujar(subasta, null, jugador, new BigDecimal("105"), ContextoParticipacion.sinHistorial(), claveUnica()));
+                () -> motor.pujar(subasta, null, jugador, new BigDecimal("105"), ContextoParticipacion.sinHistorial(), claveUnica(), TipoPuja.MANUAL));
 
         assertEquals(PujaRechazadaException.Motivo.OFERTA_INSUFICIENTE, ex.getMotivo());
     }
@@ -79,7 +80,7 @@ class MotorPujasServiceTest {
         creditoClient.acreditar(VENDEDOR, new BigDecimal("1000"));
 
         PujaRechazadaException ex = assertThrows(PujaRechazadaException.class,
-                () -> motor.pujar(subasta, null, VENDEDOR, new BigDecimal("110"), ContextoParticipacion.sinHistorial(), claveUnica()));
+                () -> motor.pujar(subasta, null, VENDEDOR, new BigDecimal("110"), ContextoParticipacion.sinHistorial(), claveUnica(), TipoPuja.MANUAL));
 
         assertEquals(PujaRechazadaException.Motivo.PUJA_PROPIA, ex.getMotivo());
     }
@@ -92,7 +93,7 @@ class MotorPujasServiceTest {
         creditoClient.acreditar(jugador, new BigDecimal("1000"));
 
         PujaRechazadaException ex = assertThrows(PujaRechazadaException.class,
-                () -> motor.pujar(subasta, null, jugador, new BigDecimal("110"), ContextoParticipacion.sinHistorial(), claveUnica()));
+                () -> motor.pujar(subasta, null, jugador, new BigDecimal("110"), ContextoParticipacion.sinHistorial(), claveUnica(), TipoPuja.MANUAL));
 
         assertEquals(PujaRechazadaException.Motivo.SUBASTA_NO_ACTIVA, ex.getMotivo());
     }
@@ -105,7 +106,7 @@ class MotorPujasServiceTest {
         ContextoParticipacion hacePocoMenosDe5s = new ContextoParticipacion(clock.instant().minusSeconds(3), 0, 0);
 
         PujaRechazadaException ex = assertThrows(PujaRechazadaException.class,
-                () -> motor.pujar(subasta, null, jugador, new BigDecimal("110"), hacePocoMenosDe5s, claveUnica()));
+                () -> motor.pujar(subasta, null, jugador, new BigDecimal("110"), hacePocoMenosDe5s, claveUnica(), TipoPuja.MANUAL));
 
         assertEquals(PujaRechazadaException.Motivo.INTERVALO_MINIMO_NO_CUMPLIDO, ex.getMotivo());
     }
@@ -117,7 +118,7 @@ class MotorPujasServiceTest {
         creditoClient.acreditar(jugador, new BigDecimal("1000"));
         ContextoParticipacion hace5sExactos = new ContextoParticipacion(clock.instant().minus(Duration.ofSeconds(5)), 0, 0);
 
-        Puja puja = motor.pujar(subasta, null, jugador, new BigDecimal("110"), hace5sExactos, claveUnica());
+        Puja puja = motor.pujar(subasta, null, jugador, new BigDecimal("110"), hace5sExactos, claveUnica(), TipoPuja.MANUAL);
 
         assertEquals(EstadoPuja.ACTIVA, puja.getEstado());
     }
@@ -130,7 +131,7 @@ class MotorPujasServiceTest {
         ContextoParticipacion enElLimite = new ContextoParticipacion(null, 0, parametros.getMaxSubastasActivasPorJugador());
 
         PujaRechazadaException ex = assertThrows(PujaRechazadaException.class,
-                () -> motor.pujar(subasta, null, jugador, new BigDecimal("110"), enElLimite, claveUnica()));
+                () -> motor.pujar(subasta, null, jugador, new BigDecimal("110"), enElLimite, claveUnica(), TipoPuja.MANUAL));
 
         assertEquals(PujaRechazadaException.Motivo.LIMITE_SUBASTAS_ACTIVAS, ex.getMotivo());
     }
@@ -143,7 +144,7 @@ class MotorPujasServiceTest {
         ContextoParticipacion enElLimite = new ContextoParticipacion(null, parametros.getMaxPujasActivasPorJugador(), 0);
 
         PujaRechazadaException ex = assertThrows(PujaRechazadaException.class,
-                () -> motor.pujar(subasta, null, jugador, new BigDecimal("110"), enElLimite, claveUnica()));
+                () -> motor.pujar(subasta, null, jugador, new BigDecimal("110"), enElLimite, claveUnica(), TipoPuja.MANUAL));
 
         assertEquals(PujaRechazadaException.Motivo.LIMITE_PUJAS_ACTIVAS, ex.getMotivo());
     }
@@ -156,11 +157,11 @@ class MotorPujasServiceTest {
         creditoClient.acreditar(primerPostor, new BigDecimal("1000"));
         creditoClient.acreditar(segundoPostor, new BigDecimal("1000"));
 
-        Puja pujaInicial = motor.pujar(subasta, null, primerPostor, new BigDecimal("110"), ContextoParticipacion.sinHistorial(), claveUnica());
+        Puja pujaInicial = motor.pujar(subasta, null, primerPostor, new BigDecimal("110"), ContextoParticipacion.sinHistorial(), claveUnica(), TipoPuja.MANUAL);
         BigDecimal disponibleMientrasGana = creditoClient.saldoDisponible(primerPostor);
         assertEquals(new BigDecimal("890"), disponibleMientrasGana);
 
-        motor.pujar(subasta, pujaInicial, segundoPostor, new BigDecimal("125"), ContextoParticipacion.sinHistorial(), claveUnica());
+        motor.pujar(subasta, pujaInicial, segundoPostor, new BigDecimal("125"), ContextoParticipacion.sinHistorial(), claveUnica(), TipoPuja.MANUAL);
 
         assertEquals(EstadoPuja.SUPERADA, pujaInicial.getEstado());
         assertEquals(new BigDecimal("1000"), creditoClient.saldoDisponible(primerPostor));
@@ -189,7 +190,7 @@ class MotorPujasServiceTest {
         creditoClient.acreditar(postor, new BigDecimal("1000"));
         creditoClient.acreditar(comprador, new BigDecimal("1000"));
 
-        Puja pujaDelPostor = motor.pujar(subasta, null, postor, new BigDecimal("110"), ContextoParticipacion.sinHistorial(), claveUnica());
+        Puja pujaDelPostor = motor.pujar(subasta, null, postor, new BigDecimal("110"), ContextoParticipacion.sinHistorial(), claveUnica(), TipoPuja.MANUAL);
         assertEquals(new BigDecimal("890"), creditoClient.saldoDisponible(postor));
 
         motor.comprarAhora(subasta, pujaDelPostor, comprador);
@@ -227,12 +228,12 @@ class MotorPujasServiceTest {
         creditoClient.acreditar(jugador, new BigDecimal("1000"));
         String mismaClave = "reintento-del-cliente";
 
-        motor.pujar(subasta, null, jugador, new BigDecimal("110"), ContextoParticipacion.sinHistorial(), mismaClave);
+        motor.pujar(subasta, null, jugador, new BigDecimal("110"), ContextoParticipacion.sinHistorial(), mismaClave, TipoPuja.MANUAL);
         assertEquals(new BigDecimal("890"), creditoClient.saldoDisponible(jugador));
 
         // El cliente no recibio la respuesta y reintenta con la misma clave.
         subasta.setOfertaVigente(new BigDecimal("100"));
-        motor.pujar(subasta, null, jugador, new BigDecimal("110"), ContextoParticipacion.sinHistorial(), mismaClave);
+        motor.pujar(subasta, null, jugador, new BigDecimal("110"), ContextoParticipacion.sinHistorial(), mismaClave, TipoPuja.MANUAL);
 
         assertEquals(new BigDecimal("890"), creditoClient.saldoDisponible(jugador),
                 "el reintento debe reutilizar la reserva, no crear una segunda");
@@ -254,7 +255,7 @@ class MotorPujasServiceTest {
         Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
         UUID postor = UUID.randomUUID();
         creditoClient.acreditar(postor, new BigDecimal("1000"));
-        Puja puja = motor.pujar(subasta, null, postor, new BigDecimal("110"), ContextoParticipacion.sinHistorial(), claveUnica());
+        Puja puja = motor.pujar(subasta, null, postor, new BigDecimal("110"), ContextoParticipacion.sinHistorial(), claveUnica(), TipoPuja.MANUAL);
 
         motor.cerrarPorVencimiento(subasta, puja);
 

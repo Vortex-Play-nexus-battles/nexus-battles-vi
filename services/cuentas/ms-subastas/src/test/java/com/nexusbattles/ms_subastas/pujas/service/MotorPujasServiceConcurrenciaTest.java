@@ -3,6 +3,7 @@ package com.nexusbattles.ms_subastas.pujas.service;
 import com.nexusbattles.ms_subastas.pujas.creditos.CreditoClientFake;
 import com.nexusbattles.ms_subastas.pujas.model.EstadoPuja;
 import com.nexusbattles.ms_subastas.pujas.model.Puja;
+import com.nexusbattles.ms_subastas.pujas.model.TipoPuja;
 import com.nexusbattles.ms_subastas.subastas.model.EstadoSubasta;
 import com.nexusbattles.ms_subastas.subastas.model.Subasta;
 import org.junit.jupiter.api.Test;
@@ -80,7 +81,7 @@ class MotorPujasServiceConcurrenciaTest {
                     salida.await();
                     synchronized (motor) {
                         Puja actual = pujaVigente.get();
-                        Puja nueva = motor.pujar(subasta, actual, jugador, monto, ContextoParticipacion.sinHistorial(), claveUnica());
+                        Puja nueva = motor.pujar(subasta, actual, jugador, monto, ContextoParticipacion.sinHistorial(), claveUnica(), TipoPuja.MANUAL);
                         pujaVigente.set(nueva);
                         pujasAceptadas.put(jugador, nueva);
                     }
