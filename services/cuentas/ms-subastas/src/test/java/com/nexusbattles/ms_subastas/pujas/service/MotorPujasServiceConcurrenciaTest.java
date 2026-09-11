@@ -37,6 +37,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * contra Testcontainers para probar el lock pesimista real entre procesos.
  */
 class MotorPujasServiceConcurrenciaTest {
+    /** Cada puja de prueba usa su propia clave, como la enviaria un cliente distinto. */
+    private static String claveUnica() {
+        return UUID.randomUUID().toString();
+    }
+
 
     @Test
     void soloUnaPujaGanaLaCarreraCuandoVariosJugadoresPujanAlMismoTiempo() throws InterruptedException {
@@ -75,7 +80,7 @@ class MotorPujasServiceConcurrenciaTest {
                     salida.await();
                     synchronized (motor) {
                         Puja actual = pujaVigente.get();
-                        Puja nueva = motor.pujar(subasta, actual, jugador, monto, ContextoParticipacion.sinHistorial());
+                        Puja nueva = motor.pujar(subasta, actual, jugador, monto, ContextoParticipacion.sinHistorial(), claveUnica());
                         pujaVigente.set(nueva);
                         pujasAceptadas.put(jugador, nueva);
                     }

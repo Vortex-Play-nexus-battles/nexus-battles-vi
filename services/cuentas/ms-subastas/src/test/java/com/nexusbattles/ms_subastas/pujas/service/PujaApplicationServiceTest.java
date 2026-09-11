@@ -34,6 +34,11 @@ import static org.mockito.Mockito.*;
  */
 @ExtendWith(MockitoExtension.class)
 class PujaApplicationServiceTest {
+    /** Cada puja de prueba usa su propia clave, como la enviaria un cliente distinto. */
+    private static String claveUnica() {
+        return UUID.randomUUID().toString();
+    }
+
 
     private static final Instant AHORA = Instant.parse("2026-09-11T12:00:00Z");
     private static final UUID VENDEDOR = UUID.randomUUID();
@@ -69,7 +74,7 @@ class PujaApplicationServiceTest {
         when(pujaRepository.findBySubastaIdAndEstado(subasta.getId(), EstadoPuja.ACTIVA)).thenReturn(Optional.empty());
         when(pujaRepository.save(any(Puja.class))).thenAnswer(invocacion -> invocacion.getArgument(0));
 
-        Puja resultado = servicio.pujar(subasta.getId(), jugador, new BigDecimal("110"));
+        Puja resultado = servicio.pujar(subasta.getId(), jugador, new BigDecimal("110"), claveUnica());
 
         verify(subastaRepository).findByIdParaActualizar(subasta.getId());
         verify(subastaRepository, never()).findById(any());
@@ -88,7 +93,7 @@ class PujaApplicationServiceTest {
         when(pujaRepository.findBySubastaIdAndEstado(subasta.getId(), EstadoPuja.ACTIVA)).thenReturn(Optional.empty());
         when(pujaRepository.save(any(Puja.class))).thenAnswer(invocacion -> invocacion.getArgument(0));
 
-        servicio.pujar(subasta.getId(), jugador, new BigDecimal("110"));
+        servicio.pujar(subasta.getId(), jugador, new BigDecimal("110"), claveUnica());
 
         verify(pujaRepository).findFirstByJugadorIdOrderByCreadaEnDesc(jugador);
         verify(pujaRepository).countByJugadorIdAndEstado(jugador, EstadoPuja.ACTIVA);
@@ -111,7 +116,7 @@ class PujaApplicationServiceTest {
         when(pujaRepository.findBySubastaIdAndEstado(subasta.getId(), EstadoPuja.ACTIVA)).thenReturn(Optional.of(pujaVigente));
         when(pujaRepository.save(any(Puja.class))).thenAnswer(invocacion -> invocacion.getArgument(0));
 
-        servicio.pujar(subasta.getId(), segundoPostor, new BigDecimal("125"));
+        servicio.pujar(subasta.getId(), segundoPostor, new BigDecimal("125"), claveUnica());
 
         assertEquals(EstadoPuja.SUPERADA, pujaVigente.getEstado());
         verify(pujaRepository).save(pujaVigente);
@@ -124,7 +129,7 @@ class PujaApplicationServiceTest {
         when(subastaRepository.findByIdParaActualizar(inexistente)).thenReturn(Optional.empty());
 
         assertThrows(SubastaNoEncontradaException.class,
-                () -> servicio.pujar(inexistente, UUID.randomUUID(), new BigDecimal("110")));
+                () -> servicio.pujar(inexistente, UUID.randomUUID(), new BigDecimal("110"), claveUnica()));
     }
 
     @Test

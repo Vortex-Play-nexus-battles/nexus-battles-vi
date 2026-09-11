@@ -36,11 +36,18 @@ public class MotorPujasService {
     private final Clock clock;
     private final ParametrosPuja parametros;
 
+    /**
+     * @param idempotencyKey clave que debe venir del cliente (cabecera
+     *                       Idempotency-Key). NO se genera aqui a proposito: si
+     *                       se derivara del reloj, un reintento por timeout
+     *                       produciria una clave distinta y reservaria los
+     *                       creditos dos veces, que es justo lo que la clave
+     *                       debe evitar.
+     */
     public Puja pujar(Subasta subasta, Puja pujaVigente, UUID jugadorId, BigDecimal monto,
-                      ContextoParticipacion contexto) {
+                      ContextoParticipacion contexto, String idempotencyKey) {
         validarReglasDeParticipacion(subasta, jugadorId, monto, contexto);
 
-        String idempotencyKey = "%s:%s:%s".formatted(jugadorId, subasta.getId(), clock.instant());
         ReservaCredito reserva = creditoClient.reservar(jugadorId, monto, subasta.getId(), idempotencyKey);
 
         if (pujaVigente != null) {

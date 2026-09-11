@@ -35,11 +35,11 @@ public class PujaApplicationService {
     private final MotorPujasService motorPujas;
 
     @Transactional
-    public Puja pujar(UUID subastaId, UUID jugadorId, BigDecimal monto) {
+    public Puja pujar(UUID subastaId, UUID jugadorId, BigDecimal monto, String idempotencyKey) {
         Subasta subasta = cargarConLock(subastaId);
         Puja pujaVigente = pujaRepository.findBySubastaIdAndEstado(subastaId, EstadoPuja.ACTIVA).orElse(null);
 
-        Puja nuevaPuja = motorPujas.pujar(subasta, pujaVigente, jugadorId, monto, contextoDe(jugadorId, subastaId));
+        Puja nuevaPuja = motorPujas.pujar(subasta, pujaVigente, jugadorId, monto, contextoDe(jugadorId, subastaId), idempotencyKey);
 
         if (pujaVigente != null) {
             pujaRepository.save(pujaVigente);
