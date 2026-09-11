@@ -1,0 +1,215 @@
+openapi: 3.1.0
+info:
+  title: Nexus Battles VI - Metricas de plataforma (M16A) - disponibilidad
+  description: >
+    Monitoreo y registro de disponibilidad de los servicios del bloque
+    (HU-DIS-001, RNF-DIS-001). Publica dos cosas: el estado en vivo de cada
+    servicio y el informe de un periodo, que es el que se anexa al informe de
+    avance.
+
+    Alcance de la medida (DEC-01, adoptada provisionalmente por el Product
+    Owner y sujeta a confirmacion del Cliente): umbral del 99,95 % mensual,
+    medido SOLO sobre los servicios del bloque, excluyendo las ventanas de
+    mantenimiento programado y las caidas atribuibles a los servicios de los
+    equipos socios. Es una meta de diseno verificable, no un acuerdo de nivel
+    de servicio: la infraestructura opera sobre cuotas gratuitas y el proveedor
+    no ofrece SLA.
+
+    Como se mide: este servicio consulta periodicamente el endpoint de salud de
+    Actuator de cada servicio del bloque (regla 3 de plataforma, ya presente en
+    los veinte modulos). No hace falta instrumentar nada en el servicio medido.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8087/api/v1
+    description: Entorno local de desarrollo
+
+paths:
+  /disponibilidad:
+    get:
+      summary: Estado de disponibilidad en vivo de los servicios del bloque
+      description: >
+        Soporta CP-01: dados los servicios desplegados, cuando se revisa el
+        monitoreo, el 100 % reporta su disponibilidad. Devuelve la ultima
+        comprobacion conocida de cada servicio declarado en la configuracion.
+      operationId: consultarDisponibilidad
+      responses:
+        '200':
+          description: Estado de cada servicio del bloque
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadoResponse'
+
+  /disponibilidad/informe:
+    get:
+      summary: Informe de disponibilidad de un periodo
+      description: >
+        Soporta CP-02: dado un periodo de medicion, el informe incluye el
+        tiempo disponible y las interrupciones registradas. Sin parametros
+        devuelve los ultimos treinta dias, que es el periodo mensual de DEC-01.
+
+        Cuando la disponibilidad del bloque queda por debajo del umbral, ademas
+        de reportarlo aqui se dispara la alerta de CP-03.
+      operationId: consultarInformeDeDisponibilidad
+      parameters:
+        - name: desde
+          in: query
+          required: false
+          description: Inicio del periodo, inclusive. Si falta, se usan los ultimos 30 dias.
+          schema:
+            type: string
+            format: date-time
+          examples:
+            semana:
+              value: '2026-09-01T00:00:00Z'
+        - name: hasta
+          in: query
+          required: false
+          description: Fin del periodo, exclusivo. Cierra las interrupciones abiertas.
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Informe del periodo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InformeResponse'
+        '400':
+          description: El periodo pedido es invalido, por ejemplo con el fin antes del inicio
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+components:
+  schemas:
+    EstadoResponse:
+      type: object
+      required: [servicios]
+      properties:
+        servicios:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServicioResponse'
+
+    ServicioResponse:
+      type: object
+      required: [servicio, estado, comprobadoEn]
+      properties:
+        servicio:
+          type: string
+          description: Nombre logico del servicio, tal como lo declara la configuracion
+          examples: ['salas-partidas']
+        estado:
+          type: string
+          enum: [DISPONIBLE, INDISPONIBLE]
+        comprobadoEn:
+          type: string
+          format: date-time
+          description: Momento de la ultima comprobacion
+        detalle:
+          type: string
+          description: Motivo cuando el servicio no responde; vacio cuando si
+          examples: ['connection refused']
+
+    InformeResponse:
+      type: object
+      required:
+        - desde
+        - hasta
+        - periodoMinutos
+        - umbral
+        - porcentajeDelBloque
+        - cumpleElUmbral
+        - servicios
+      properties:
+        desde:
+          type: string
+          format: date-time
+        hasta:
+          type: string
+          format: date-time
+        periodoMinutos:
+          type: integer
+          description: Duracion total del periodo medido
+          examples: [10080]
+        umbral:
+          type: number
+          description: Minimo acordado en DEC-01
+          examples: [99.95]
+        porcentajeDelBloque:
+          type: number
+          description: >
+            Disponibilidad del bloque, que es la del PEOR servicio y no el
+            promedio. Si un servicio del bloque esta caido el jugador no puede
+            jugar; promediarlo con los que si respondian maquillaria la cifra.
+          examples: [99.92]
+        cumpleElUmbral:
+          type: boolean
+        servicios:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineaDeServicio'
+
+    LineaDeServicio:
+      type: object
+      required:
+        - servicio
+        - disponibleMinutos
+        - indisponibleMinutos
+        - porcentaje
+        - cumple
+        - interrupciones
+      properties:
+        servicio:
+          type: string
+        disponibleMinutos:
+          type: integer
+          examples: [10072]
+        indisponibleMinutos:
+          type: integer
+          description: Ya descontado el mantenimiento programado (DEC-01)
+          examples: [8]
+        porcentaje:
+          type: number
+          description: Disponibilidad con dos decimales
+          examples: [99.92]
+        cumple:
+          type: boolean
+        interrupciones:
+          type: array
+          items:
+            $ref: '#/components/schemas/Interrupcion'
+
+    Interrupcion:
+      type: object
+      required: [inicio]
+      properties:
+        inicio:
+          type: string
+          format: date-time
+        fin:
+          type: [string, 'null']
+          format: date-time
+          description: Ausente mientras el servicio siga caido
+        detalle:
+          type: string
+          examples: ['connection refused']
+
+    ProblemDetail:
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
