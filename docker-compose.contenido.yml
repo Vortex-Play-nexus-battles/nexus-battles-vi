@@ -142,6 +142,8 @@ services:
       - "8104:8080"
     environment:
       HEROES_URL: http://srv-heroes:8080
+      PRODUCTOS_URL: http://srv-productos:8080
+      INVENTARIO_URL: http://srv-inventario:8080
     depends_on:
       srv-heroes:
         condition: service_started
