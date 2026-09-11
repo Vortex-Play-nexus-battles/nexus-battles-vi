@@ -139,4 +139,26 @@ class RepositorioInventariosMongoIT {
                         "elementos.parteArmadura"),
                 indiceTexto.get("weights", Document.class).keySet());
     }
+
+    @Test
+    @DisplayName("busca con el indice de texto sin exponer inventarios ajenos")
+    void buscaElementosIndexadosDelPropietario() {
+        repositorio.guardar(Inventario.vacio("jugador-A")
+                .agregar(new ElementoInventario(
+                        "elemento-1", "producto-bruma", TipoElementoInventario.ITEM,
+                        "Amuleto de Bruma"))
+                .agregar(new ElementoInventario(
+                        "elemento-2", "producto-solar", TipoElementoInventario.ARMA,
+                        "Espada Solar")));
+        repositorio.guardar(Inventario.vacio("jugador-B")
+                .agregar(new ElementoInventario(
+                        "elemento-3", "producto-ajeno", TipoElementoInventario.ITEM,
+                        "Bruma ajena")));
+
+        List<ElementoInventario> encontrados =
+                repositorio.buscarElementos("jugador-A", "bruma");
+
+        assertEquals(List.of("elemento-1"), encontrados.stream()
+                .map(ElementoInventario::id).toList());
+    }
 }
