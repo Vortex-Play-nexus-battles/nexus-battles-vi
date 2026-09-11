@@ -39,6 +39,9 @@ y permite limpiar el criterio para volver al inventario completo.
 
 **Pruebas de aceptacion**:
 
+- los escenarios de `HU-INV-002-busqueda-inventario.feature` ejecutados en
+  Chromium para localizar productos por nombre, identificador, tipo y parte
+  de armadura, validar el mínimo y restaurar la vitrina al limpiar;
 - los cuatro escenarios de `HU-INV-001-vitrina-del-inventario.feature`
   traducidos uno a uno a Playwright sobre Chromium, con el esquema del
   criterio 2 expandido a sus tres resoluciones;
