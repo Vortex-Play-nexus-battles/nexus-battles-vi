@@ -35,6 +35,11 @@
   --error: #b81a1a;
   --info: #095e8c;
   --radio: 8px;
+  /* HU-INV-013: sombra de capa elevada del sistema de diseno (--sombra-2 de
+     shared/ui-kit/css/tokens.css). Se replica aqui por la misma razon que
+     el resto de la paleta: estas vistas todavia no enlazan el ui-kit. */
+  --sombra-2: 0 4px 12px rgba(17, 23, 38, 0.12);
+  --transicion: 150ms cubic-bezier(0.4, 0, 0.2, 1);
   --tipografia-titulo: 'Rajdhani', system-ui, 'Segoe UI', sans-serif;
   --tipografia-texto: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
 
@@ -287,6 +292,30 @@
   border: 1px solid var(--borde);
   border-radius: 10px;
   background: var(--superficie);
+  transition:
+    border-color var(--transicion),
+    box-shadow var(--transicion);
+}
+
+/*
+ * HU-INV-013 - Resaltado del producto al senalar.
+ *
+ * Mismo par que usa `.tarjeta--pulsable` en el sistema de diseno: color de
+ * borde y sombra elevada. Se eligen precisamente esas dos propiedades
+ * porque **ninguna ocupa sitio**: el criterio 3 exige que el realce no
+ * altere la posicion ni el tamano de las demas tarjetas, y en una rejilla
+ * basta con que la senalada engorde un pixel de borde para arrastrar a
+ * toda su fila. Por eso aqui no se toca el ancho del borde, ni el relleno,
+ * ni la escala.
+ *
+ * `:focus-within` y no `:focus`: la tarjeta es un <li> y no recibe foco.
+ * Quien lo recibe es uno de sus botones, al llegar con el tabulador. Es lo
+ * que pide el criterio 2 — el mismo realce por teclado que por puntero.
+ */
+.vitrina__producto:hover,
+.vitrina__producto:focus-within {
+  border-color: var(--borde-interactivo);
+  box-shadow: var(--sombra-2);
 }
 
 .vitrina__acciones {

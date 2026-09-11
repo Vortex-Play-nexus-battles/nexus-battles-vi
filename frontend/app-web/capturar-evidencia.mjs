@@ -77,5 +77,32 @@ await capturar('editor-375x812', { ancho: 375, alto: 812, total: 3, mostrarEdito
   await ctx.close();
 }
 
+// HU-INV-013: el realce de la tarjeta senalada. Se capturan las dos vias
+// del criterio — puntero y foco por teclado — sobre tarjetas distintas para
+// que en una sola imagen se vea el realce junto a las tarjetas en reposo.
+{
+  const ctx = await navegador.newContext({ viewport: { width: 1360, height: 768 } });
+  const page = await ctx.newPage();
+  await page.route('**/api/v1/inventario/elementos*', (r) => r.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify(pagina(16)),
+  }));
+  await page.goto(BASE);
+  await page.waitForFunction(() => !document.querySelector('.estado-carga'));
+
+  const tarjetas = page.locator('.vitrina__producto');
+  await tarjetas.first().hover();
+  // La transicion dura 150 ms: se espera a que el borde asiente.
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `${SALIDA}/resaltado-puntero-1360x768.png` });
+  console.log('  resaltado-puntero-1360x768.png  (1360x768)');
+
+  await page.mouse.move(2, 2);
+  await tarjetas.nth(5).locator('button').first().focus();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `${SALIDA}/resaltado-foco-1360x768.png` });
+  console.log('  resaltado-foco-1360x768.png  (1360x768)');
+  await ctx.close();
+}
+
 await navegador.close();
 process.exit(0);
