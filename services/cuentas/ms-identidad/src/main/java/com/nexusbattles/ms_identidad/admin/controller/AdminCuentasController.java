@@ -12,7 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/admin/cuentas")
+@RequestMapping("/api/v1/admin/cuentas")
 public class AdminCuentasController {
 
     private final AdminCuentaService adminCuentaService;
