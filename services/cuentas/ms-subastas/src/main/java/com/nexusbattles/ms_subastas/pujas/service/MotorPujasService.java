@@ -55,7 +55,7 @@ public class MotorPujasService {
                 EstadoPuja.ACTIVA, clock.instant(), reserva.id().toString());
     }
 
-    public Puja comprarAhora(Subasta subasta, UUID jugadorId) {
+    public Puja comprarAhora(Subasta subasta, Puja pujaVigente, UUID jugadorId) {
         if (!subasta.estaActiva()) {
             throw new PujaRechazadaException(PujaRechazadaException.Motivo.SUBASTA_NO_ACTIVA,
                     "La subasta " + subasta.getId() + " no esta activa");
@@ -73,6 +73,15 @@ public class MotorPujasService {
         ReservaCredito reserva = creditoClient.reservar(jugadorId, precio, subasta.getId(), idempotencyKey);
         creditoClient.consumir(reserva.id());
 
+        // El postor vigente queda superado por la compra inmediata, asi que sus
+        // creditos se restituyen igual que en una puja normal. Solo hay una
+        // reserva que liberar: a los postores anteriores ya se les libero al
+        // ser superados (lo garantiza el unico parcial de una puja ACTIVA).
+        if (pujaVigente != null) {
+            creditoClient.liberar(UUID.fromString(pujaVigente.getReservaCreditoId()));
+            pujaVigente.setEstado(EstadoPuja.SUPERADA);
+        }
+
         subasta.setOfertaVigente(precio);
         subasta.setMejorPostorId(jugadorId);
         subasta.setEstado(EstadoSubasta.ADJUDICADA);
@@ -82,6 +91,32 @@ public class MotorPujasService {
         // producto. Ninguno de los dos microservicios esta en el Sprint 2.
         return new Puja(UUID.randomUUID(), subasta.getId(), jugadorId, precio, TipoPuja.MANUAL,
                 EstadoPuja.GANADORA, clock.instant(), reserva.id().toString());
+    }
+
+    /**
+     * Cierra una subasta vencida. Si llego con una puja vigente, esa puja gana
+     * y su reserva se convierte en debito; si nadie pujo, la subasta cierra sin
+     * adjudicacion. Cubre el criterio 3 de HU-SUB-004: los creditos reservados
+     * se restituyen si la subasta cierra sin adjudicacion.
+     *
+     * Quien dispara este cierre (un job programado) es una costura con
+     * HU-SUB-001, pendiente de acordar con Edwin: el contador de la subasta lo
+     * inicia el. La restitucion de creditos, en cambio, es de esta HU.
+     */
+    public void cerrarPorVencimiento(Subasta subasta, Puja pujaVigente) {
+        if (!subasta.estaActiva()) {
+            throw new PujaRechazadaException(PujaRechazadaException.Motivo.SUBASTA_NO_ACTIVA,
+                    "La subasta " + subasta.getId() + " ya no esta activa");
+        }
+
+        if (pujaVigente == null) {
+            subasta.setEstado(EstadoSubasta.SIN_ADJUDICACION);
+            return;
+        }
+
+        creditoClient.consumir(UUID.fromString(pujaVigente.getReservaCreditoId()));
+        pujaVigente.setEstado(EstadoPuja.GANADORA);
+        subasta.setEstado(EstadoSubasta.ADJUDICADA);
     }
 
     private void validarReglasDeParticipacion(Subasta subasta, UUID jugadorId, BigDecimal monto, ContextoParticipacion contexto) {

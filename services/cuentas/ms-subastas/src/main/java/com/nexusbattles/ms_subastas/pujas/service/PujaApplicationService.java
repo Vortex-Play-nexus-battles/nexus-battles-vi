@@ -51,15 +51,28 @@ public class PujaApplicationService {
     @Transactional
     public Puja comprarAhora(UUID subastaId, UUID jugadorId) {
         Subasta subasta = cargarConLock(subastaId);
+        Puja pujaVigente = pujaRepository.findBySubastaIdAndEstado(subastaId, EstadoPuja.ACTIVA).orElse(null);
 
-        Puja pujaGanadora = motorPujas.comprarAhora(subasta, jugadorId);
+        Puja pujaGanadora = motorPujas.comprarAhora(subasta, pujaVigente, jugadorId);
 
-        pujaRepository.findBySubastaIdAndEstado(subastaId, EstadoPuja.ACTIVA).ifPresent(pujaSuperada -> {
-            pujaSuperada.setEstado(EstadoPuja.SUPERADA);
-            pujaRepository.save(pujaSuperada);
-        });
+        if (pujaVigente != null) {
+            pujaRepository.save(pujaVigente);
+        }
         subastaRepository.save(subasta);
         return pujaRepository.save(pujaGanadora);
+    }
+
+    @Transactional
+    public void cerrarPorVencimiento(UUID subastaId) {
+        Subasta subasta = cargarConLock(subastaId);
+        Puja pujaVigente = pujaRepository.findBySubastaIdAndEstado(subastaId, EstadoPuja.ACTIVA).orElse(null);
+
+        motorPujas.cerrarPorVencimiento(subasta, pujaVigente);
+
+        if (pujaVigente != null) {
+            pujaRepository.save(pujaVigente);
+        }
+        subastaRepository.save(subasta);
     }
 
     private Subasta cargarConLock(UUID subastaId) {

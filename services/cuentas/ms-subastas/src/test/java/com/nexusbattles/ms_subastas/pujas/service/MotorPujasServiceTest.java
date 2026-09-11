@@ -168,7 +168,7 @@ class MotorPujasServiceTest {
         UUID comprador = UUID.randomUUID();
         creditoClient.acreditar(comprador, new BigDecimal("1000"));
 
-        Puja puja = motor.comprarAhora(subasta, comprador);
+        Puja puja = motor.comprarAhora(subasta, null, comprador);
 
         assertEquals(EstadoSubasta.ADJUDICADA, subasta.getEstado());
         assertEquals(EstadoPuja.GANADORA, puja.getEstado());
@@ -177,12 +177,78 @@ class MotorPujasServiceTest {
     }
 
     @Test
+    void comprarAhoraRestituyeLosCreditosDelPostorQueQuedaSuperado() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+        UUID postor = UUID.randomUUID();
+        UUID comprador = UUID.randomUUID();
+        creditoClient.acreditar(postor, new BigDecimal("1000"));
+        creditoClient.acreditar(comprador, new BigDecimal("1000"));
+
+        Puja pujaDelPostor = motor.pujar(subasta, null, postor, new BigDecimal("110"), ContextoParticipacion.sinHistorial());
+        assertEquals(new BigDecimal("890"), creditoClient.saldoDisponible(postor));
+
+        motor.comprarAhora(subasta, pujaDelPostor, comprador);
+
+        assertEquals(EstadoPuja.SUPERADA, pujaDelPostor.getEstado());
+        assertEquals(new BigDecimal("1000"), creditoClient.saldoDisponible(postor),
+                "la compra inmediata lo superó, así que sus creditos reservados deben volver");
+    }
+
+    @Test
     void elVendedorNoPuedeComprarSuPropiaSubasta() {
         Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
         creditoClient.acreditar(VENDEDOR, new BigDecimal("1000"));
 
-        PujaRechazadaException ex = assertThrows(PujaRechazadaException.class, () -> motor.comprarAhora(subasta, VENDEDOR));
+        PujaRechazadaException ex = assertThrows(PujaRechazadaException.class,
+                () -> motor.comprarAhora(subasta, null, VENDEDOR));
 
         assertEquals(PujaRechazadaException.Motivo.PUJA_PROPIA, ex.getMotivo());
+    }
+
+    @Test
+    void noSePuedeComprarUnaSubastaSinPrecioDeCompraInmediata() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+        subasta.setPrecioCompraInmediata(null);
+        UUID comprador = UUID.randomUUID();
+        creditoClient.acreditar(comprador, new BigDecimal("1000"));
+
+        assertThrows(IllegalStateException.class, () -> motor.comprarAhora(subasta, null, comprador));
+    }
+
+    // --- cierre por vencimiento (criterio 3) ---
+
+    @Test
+    void alVencerSinPujasLaSubastaCierraSinAdjudicacion() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+
+        motor.cerrarPorVencimiento(subasta, null);
+
+        assertEquals(EstadoSubasta.SIN_ADJUDICACION, subasta.getEstado());
+    }
+
+    @Test
+    void alVencerConPujaVigenteEsaPujaGanaYSeCobraLaReserva() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+        UUID postor = UUID.randomUUID();
+        creditoClient.acreditar(postor, new BigDecimal("1000"));
+        Puja puja = motor.pujar(subasta, null, postor, new BigDecimal("110"), ContextoParticipacion.sinHistorial());
+
+        motor.cerrarPorVencimiento(subasta, puja);
+
+        assertEquals(EstadoSubasta.ADJUDICADA, subasta.getEstado());
+        assertEquals(EstadoPuja.GANADORA, puja.getEstado());
+        assertEquals(new BigDecimal("890"), creditoClient.saldoDisponible(postor),
+                "la reserva pasa a debito real: los 110 se cobran de verdad");
+    }
+
+    @Test
+    void noSePuedeCerrarDosVecesLaMismaSubasta() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+        motor.cerrarPorVencimiento(subasta, null);
+
+        PujaRechazadaException ex = assertThrows(PujaRechazadaException.class,
+                () -> motor.cerrarPorVencimiento(subasta, null));
+
+        assertEquals(PujaRechazadaException.Motivo.SUBASTA_NO_ACTIVA, ex.getMotivo());
     }
 }

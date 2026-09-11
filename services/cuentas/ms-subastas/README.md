@@ -11,7 +11,7 @@ Lo que ya esta desarrollado, de lo que no depende de nadie mas del equipo:
 - `pujas/model` — `Puja`, `PujaAutomatica` y sus enums.
 - `pujas/creditos` — contrato `CreditoClient` hacia ms-finanzas (reservar/liberar/consumir/saldo) + `CreditoClientFake` en memoria para desarrollar y testear sin depender del endpoint real.
 - `pujas/service/MotorPujasService` — las 5 reglas de negocio de pujar (supera oferta + incremento minimo, intervalo de 5 s, prohibido pujar en la propia subasta, topes de 10 subastas / 50 pujas activas) y la compra inmediata.
-- `pujas/service/MotorPujaAutomaticaService` — decide cuanto ofrecer o si debe detenerse al llegar al limite configurado.
+- `pujas/service/MotorPujaAutomaticaService` — configurar una puja automatica (validando saldo y que el limite sea alcanzable), elegir cual de varias responde (la de mayor limite), cuanto ofrecer, y desde cuando puede volver a emitir sin violar el intervalo de 5 s.
 - `pujas/service/ParametrosPuja` — los 4 limites configurables (`app.pujas.*`).
 - `pujas/service/PujaApplicationService` — orquesta la transaccion: toma el lock pesimista de la subasta, arma el contexto de participacion desde la base de datos y delega las reglas en el motor.
 - `subastas/repository` y `pujas/repository` — repositorios JPA, con `findByIdParaActualizar` (SELECT ... FOR UPDATE) como guardia real de concurrencia.
@@ -25,7 +25,16 @@ Lo que ya esta desarrollado, de lo que no depende de nadie mas del equipo:
 - `CreditoClientHttp` real contra el endpoint de ms-finanzas (Juan Diego, Dia 1-2). Nota: la regla del proyecto pide que el doble se **genere desde el contrato** (Pact), no escrito a mano — `CreditoClientFake` es un andamio temporal hasta que exista ese contrato.
 - Evento `SubastaCerrada` hacia notificaciones (plataforma) e inventario (contenido) — ninguno de los dos esta en el Sprint 2.
 - Controladores REST y la vista de detalle de subasta en el front.
-- Valor por defecto del incremento minimo: pregunta abierta al cliente (RF-SUB-004).
+- Planificador que emite las pujas automaticas: `MotorPujaAutomaticaService` ya decide *que* ofrecer y *desde cuando*, pero falta el listener de `PujaRealizada` que lo dispare. Depende del catalogo de eventos (`contracts/eventos/`).
+- Job que cierra las subastas vencidas: la restitucion de creditos ya esta (`cerrarPorVencimiento`), falta acordar con Edwin quien dispara el cierre — el contador de la subasta lo inicia HU-SUB-001.
+
+## Asunciones tomadas (a validar con el cliente)
+
+El backlog solo deja una pregunta abierta (el valor por defecto del incremento minimo, RF-SUB-004), pero al implementar aparecieron tres mas. Se resolvieron con el criterio mas literal y quedan marcadas en el codigo:
+
+1. **Guerra entre pujas automaticas:** se resuelve de forma *iterativa* (cada una ofrece oferta vigente + incremento, por turnos, respetando los 5 s). La alternativa estilo eBay —saltar de una al limite del segundo mayor— converge en un paso, pero el criterio habla de "emitir ofertas respetando el intervalo minimo". Con 5 s de intervalo, el modo iterativo puede tardar minutos en converger.
+2. **Saldo de la puja automatica:** se valida al *configurar*, no al emitir, para avisar al jugador en el momento en vez de que su puja automatica falle en silencio despues.
+3. **Anti-sniping:** no implementado, porque la HU no lo menciona. Sin extension de tiempo, una puja manual en el ultimo segundo es inalcanzable para el motor automatico, que debe esperar su intervalo de 5 s.
 
 ## Correr las pruebas
 

@@ -38,6 +38,29 @@ Característica: Pujar o comprar de forma inmediata en una subasta
     Y la subasta queda cerrada y adjudicada
     Y se notifica a quienes hubieran pujado
 
+  Escenario: La compra inmediata restituye los créditos del postor que quedaba vigente
+    Dado una subasta con una puja vigente y créditos reservados de ese postor
+    Cuando otro jugador la compra de forma inmediata
+    Entonces la puja vigente queda superada
+    Y los créditos reservados de ese postor se le restituyen
+
+  Escenario: Al vencer el plazo con una puja vigente, esa puja gana
+    Dado una subasta activa con una puja vigente que llega a su hora de cierre
+    Cuando la subasta se cierra por vencimiento
+    Entonces esa puja queda como ganadora
+    Y sus créditos reservados se cobran de forma definitiva
+
+  Escenario: Configurar una puja automática con un límite que el saldo no cubre se rechaza
+    Dado un jugador cuyo saldo disponible es menor que el límite que quiere configurar
+    Cuando intenta configurar la puja automática
+    Entonces la configuración se rechaza por saldo insuficiente
+
+  Escenario: Entre varias pujas automáticas responde la de mayor límite
+    Dado dos jugadores con pujas automáticas activas en la misma subasta
+    Cuando sube la oferta vigente
+    Entonces responde la puja automática de mayor límite
+    Y la que ya no alcanza el incremento queda detenida y se notifica a su dueño
+
   Escenario: Los créditos reservados se restituyen si la subasta cierra sin adjudicación
     Dado una subasta con pujas activas que llega a su hora de cierre sin compra inmediata
     Cuando la subasta se cierra sin adjudicación

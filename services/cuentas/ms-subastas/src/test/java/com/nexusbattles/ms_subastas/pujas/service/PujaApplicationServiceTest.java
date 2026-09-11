@@ -149,6 +149,9 @@ class PujaApplicationServiceTest {
         assertEquals(EstadoPuja.GANADORA, ganadora.getEstado());
         assertEquals(EstadoPuja.SUPERADA, pujaVigente.getEstado());
         assertEquals(new BigDecimal("500"), creditoClient.saldoDisponible(comprador));
+        assertEquals(new BigDecimal("1000"), creditoClient.saldoDisponible(postorPrevio),
+                "al postor superado por la compra inmediata hay que devolverle sus creditos");
+        verify(pujaRepository).save(pujaVigente);
     }
 
     @Test
@@ -158,5 +161,37 @@ class PujaApplicationServiceTest {
 
         assertThrows(SubastaNoEncontradaException.class,
                 () -> servicio.comprarAhora(inexistente, UUID.randomUUID()));
+    }
+
+    @Test
+    void cerrarPorVencimientoSinPujasDejaLaSubastaSinAdjudicacion() {
+        Subasta subasta = subastaActiva();
+        when(subastaRepository.findByIdParaActualizar(subasta.getId())).thenReturn(Optional.of(subasta));
+        when(pujaRepository.findBySubastaIdAndEstado(subasta.getId(), EstadoPuja.ACTIVA)).thenReturn(Optional.empty());
+
+        servicio.cerrarPorVencimiento(subasta.getId());
+
+        assertEquals(EstadoSubasta.SIN_ADJUDICACION, subasta.getEstado());
+        verify(subastaRepository).save(subasta);
+    }
+
+    @Test
+    void cerrarPorVencimientoConPujaVigenteLaMarcaGanadoraYCobra() {
+        Subasta subasta = subastaActiva();
+        UUID postor = UUID.randomUUID();
+        creditoClient.acreditar(postor, new BigDecimal("1000"));
+        var reserva = creditoClient.reservar(postor, new BigDecimal("110"), subasta.getId(), "vigente");
+        Puja pujaVigente = new Puja(UUID.randomUUID(), subasta.getId(), postor, new BigDecimal("110"),
+                TipoPuja.MANUAL, EstadoPuja.ACTIVA, AHORA.minusSeconds(60), reserva.id().toString());
+
+        when(subastaRepository.findByIdParaActualizar(subasta.getId())).thenReturn(Optional.of(subasta));
+        when(pujaRepository.findBySubastaIdAndEstado(subasta.getId(), EstadoPuja.ACTIVA)).thenReturn(Optional.of(pujaVigente));
+        when(pujaRepository.save(any(Puja.class))).thenAnswer(invocacion -> invocacion.getArgument(0));
+
+        servicio.cerrarPorVencimiento(subasta.getId());
+
+        assertEquals(EstadoSubasta.ADJUDICADA, subasta.getEstado());
+        assertEquals(EstadoPuja.GANADORA, pujaVigente.getEstado());
+        assertEquals(new BigDecimal("890"), creditoClient.saldoDisponible(postor));
     }
 }

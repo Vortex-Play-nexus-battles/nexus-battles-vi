@@ -8,7 +8,9 @@ public class PujaRechazadaException extends RuntimeException {
         OFERTA_INSUFICIENTE,
         INTERVALO_MINIMO_NO_CUMPLIDO,
         LIMITE_SUBASTAS_ACTIVAS,
-        LIMITE_PUJAS_ACTIVAS
+        LIMITE_PUJAS_ACTIVAS,
+        LIMITE_AUTOMATICO_INALCANZABLE,
+        SALDO_INSUFICIENTE_PARA_LIMITE
     }
 
     private final Motivo motivo;
