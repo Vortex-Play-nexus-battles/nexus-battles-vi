@@ -30,7 +30,7 @@ public class Carrito {
 
     public void recalcularTotal() {
         this.total = items.stream()
-                .map(ItemCarrito::getSubtotal)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            .map(ItemCarrito::getSubtotal)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }

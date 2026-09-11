@@ -45,7 +45,7 @@ public class CarritoService {
             item.calcularSubtotal();
         } else {
             ItemCarrito nuevoItem = new ItemCarrito();
-            //nuevoItem.setCarrito(carrito);
+            nuevoItem.setCarrito(carrito);
             nuevoItem.setProducto(producto);
             nuevoItem.setCantidad(request.getCantidad());
             nuevoItem.setPrecioUnitario(producto.getPrecioBaseCop());

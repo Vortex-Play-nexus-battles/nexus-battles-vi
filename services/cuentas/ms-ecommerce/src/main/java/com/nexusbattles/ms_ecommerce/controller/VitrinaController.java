@@ -19,9 +19,9 @@ public class VitrinaController {
 
     @GetMapping()
     public ResponseEntity<Page<ProductoVitrinaDto>> obtenerProductos(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "16") int size, // Paginación de 16 elementos por norma[cite: 3]
-            @RequestParam(required = false, defaultValue = "COP") String moneda) {
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "16") int size, // Paginación de 16 elementos por norma[cite: 3]
+        @RequestParam(required = false, defaultValue = "COP") String moneda) {
 
         Pageable pageable = PageRequest.of(page, size);
         Page<ProductoVitrinaDto> resultado = vitrinaService.obtenerProductosVitrina(pageable, moneda);
