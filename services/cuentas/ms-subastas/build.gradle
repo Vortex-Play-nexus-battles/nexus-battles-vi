@@ -1,0 +1,50 @@
+plugins {
+    id 'nexus.spring-conventions'
+}
+
+group = 'nexus'
+version = '0.0.1-SNAPSHOT'
+
+// Web MVC, Actuator, Java 21, JUnit 5 y JaCoCo provienen de la convención.
+// Aquí solo van las dependencias propias de Subastas.
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // El esquema lo gobierna Flyway, nunca ddl-auto (regla 8 de plataforma).
+    implementation 'org.springframework.boot:spring-boot-starter-flyway'
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-database-postgresql'
+
+    // Cortacircuitos hacia ms-finanzas: esa llamada ocurre dentro del lock
+    // pesimista de la subasta, así que una caída de ese servicio congelaría
+    // todas las pujas si no se corta rápido.
+    implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
+
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    testCompileOnly 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+
+    runtimeOnly 'org.postgresql:postgresql'
+    runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'org.testcontainers:testcontainers-postgresql'
+    testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+
+    // Falla el build si un servicio importa clases internas de otro dominio.
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.3.0'
+}
+
+// Subastas tiene pruebas de verdad, así que activa desde ya la compuerta
+// corporativa del 80 % declarada en nexus.spring-conventions.
+tasks.named('jacocoTestCoverageVerification') {
+    dependsOn tasks.named('test')
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('jacocoTestCoverageVerification')
+}

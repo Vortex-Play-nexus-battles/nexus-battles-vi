@@ -23,6 +23,9 @@ include 'services:contenido:inventario'
 include 'services:contenido:motor-combate'
 include 'services:contenido:productos'
 
+// --- Cuentas y economia ---
+include 'services:cuentas:ms-subastas'
+
 // --- Pendientes de incorporar ---
 //
 // Sin build.gradle todavia: la carpeta existe pero no hay nada que compilar.
@@ -32,7 +35,6 @@ include 'services:contenido:productos'
 // include 'services:contenido:progresion-jugador'
 // include 'services:cuentas:ms-chatbot'
 // include 'services:cuentas:ms-finanzas'
-// include 'services:cuentas:ms-subastas'
 //
 // Todavia en Maven (pom.xml). Migrarlos a Gradle y descomentar aqui:
 //

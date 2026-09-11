@@ -25,24 +25,25 @@ equipo no aparece en el CLAUDE.md de la raíz. Al trabajar aquí:
 
 ## Comandos
 
+Siempre desde la **raíz del monorepo**: este servicio es un módulo del build raíz y no trae
+wrapper propio (`guardia-monorepo.yml` falla el PR si un servicio trae su propio Gradle).
+
 ```bash
-# Desde services/cuentas/ms-subastas/
-./mvnw test                                      # solo pruebas
-./mvnw verify                                    # pruebas + compuerta JaCoCo del 80% (rompe el build)
-./mvnw test -Dtest=MotorPujasServiceTest         # una clase
-./mvnw test -Dtest='MotorPujasServiceTest#pasadosLos5sElMismoJugadorPuedeVolverAPujar'   # un método
+./gradlew :services:cuentas:ms-subastas:test     # solo pruebas
+./gradlew :services:cuentas:ms-subastas:check    # pruebas + compuerta JaCoCo del 80 % (rompe el build)
+./gradlew :services:cuentas:ms-subastas:test --tests '*MotorPujasServiceTest'
+./gradlew :services:cuentas:ms-subastas:test --tests '*MotorPujasServiceTest.pasadosLos5sElMismoJugadorPuedeVolverAPujar'
 ```
 
-Informe de cobertura tras `verify`: `target/site/jacoco/index.html`.
+Informe de cobertura: `services/cuentas/ms-subastas/build/reports/jacoco/test/html/index.html`.
 
-CI: `.github/workflows/pruebas-ms-subastas.yml`. Cubre **solo este servicio** a propósito — los
-demás servicios de `cuentas` son de otros integrantes y gatear sus PRs es decisión del equipo, no
-de esta rama.
+CI: la cubre `ci.yml` de la raíz, que detecta los servicios modificados y compila cada uno con su
+herramienta. Este servicio **no lleva workflow propio**; sería duplicar lo que ya hace `ci.yml`.
 
-Nota: `cuentas/` usa **Maven**; `contenido/` usa **Gradle**. El CLAUDE.md de la raíz y
-`backend-spring.md` dicen Gradle para todo el monorepo, pero los 4 servicios de `cuentas` son Maven
-y `shared/config/` (donde vivirían los complementos de convención de Gradle) solo tiene un README.
-Discrepancia real sin resolver — no "corregirla" unilateralmente.
+Nota sobre Maven: `ms-identidad`, `ms-cumplimiento` y `ms-ecommerce` siguen en Maven, pero son
+excepciones heredadas. `guardia-monorepo.yml` tiene esa lista blanca y dice que **solo puede
+encoger, nunca crecer**: un `pom.xml` nuevo bajo `services/` falla el PR. Todo servicio nuevo va en
+Gradle, como módulo declarado en el `settings.gradle` de la raíz.
 
 ## Arquitectura: por qué el dominio no conoce la base de datos
 

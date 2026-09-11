@@ -29,7 +29,8 @@ Lo que ya esta desarrollado, de lo que no depende de nadie mas del equipo:
 
 ```bash
 docker compose up -d          # PostgreSQL 17 en el puerto 5435
-DB_PASSWORD=subastas_password ./mvnw spring-boot:run
+cd ../../..                   # la raiz del monorepo
+DB_PASSWORD=subastas_password ./gradlew :services:cuentas:ms-subastas:bootRun
 ```
 
 Arranca con el doble en memoria de creditos (`app.finanzas.modo=fake`) y lo advierte en el log: ningun credito se mueve de verdad.
@@ -53,6 +54,15 @@ El backlog solo deja una pregunta abierta (el valor por defecto del incremento m
 
 ## Correr las pruebas
 
+Desde la raiz del monorepo, porque este servicio es un modulo del build raiz
+(no trae su propio wrapper: lo prohibe `guardia-monorepo.yml`):
+
 ```bash
-./mvnw test
+./gradlew :services:cuentas:ms-subastas:test    # solo pruebas
+./gradlew :services:cuentas:ms-subastas:check   # pruebas + compuerta del 80 %
+./gradlew :services:cuentas:ms-subastas:test --tests '*MotorPujasServiceTest'
 ```
+
+La integracion continua la cubre `ci.yml`, que detecta los servicios
+modificados y los compila con su herramienta. Este servicio no lleva workflow
+propio.
