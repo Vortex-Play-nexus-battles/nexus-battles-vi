@@ -279,10 +279,14 @@
   justify-content: flex-end;
   gap: 4px;
   min-width: 0;
-  /* Las cuatro filas mas la barra y el titulo tienen que caber en 768 px:
-     el criterio 1 pide que la vitrina "se vea completa". Ver la prueba de
-     aceptacion que fija que no hay desplazamiento vertical a 1360 x 768. */
-  min-height: 132px;
+  /* Las cuatro filas mas la barra, el titulo y el control de paginacion
+     tienen que caber en 768 px: el criterio 1 pide que la vitrina "se vea
+     completa". Ver la prueba de aceptacion que fija que no hay
+     desplazamiento vertical a 1360 x 768.
+     HU-INV-011 sumo el control de paginacion a ese alto compartido, y por
+     eso la fila bajo de 132 a 124: cuatro filas devuelven los 32 px que
+     ocupa el control. El contenido de la tarjeta no cambia. */
+  min-height: 124px;
   padding: 14px 16px;
   border: 1px solid var(--borde);
   border-radius: 10px;

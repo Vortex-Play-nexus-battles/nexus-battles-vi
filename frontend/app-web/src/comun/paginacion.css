@@ -1,0 +1,108 @@
+/*
+ * HU-INV-011 - Control de paginacion.
+ *
+ * Las reglas de `.paginacion*` ya existen en
+ * `shared/ui-kit/css/componentes.css`, derivadas del sistema de diseno. Esta
+ * hoja las replica porque las vistas de inventario todavia no enlazan las
+ * hojas del ui-kit: `vitrina.css` declara su propia copia de los tokens de
+ * la paleta por la misma razon. Adoptar el ui-kit completo en estas vistas
+ * es un cambio transversal que toca a los tres equipos, no cabe dentro de
+ * esta historia.
+ *
+ * DEUDA: cuando las vistas enlacen tokens.css + base.css + componentes.css,
+ * este archivo se borra y el marcado no cambia — las clases son las mismas.
+ *
+ * Los nombres de token siguen a `vitrina.css`, que es quien los define en
+ * el contexto de esta pagina. Los valores de respaldo cubren el caso de que
+ * la hoja se use en una vista que aun no los declare.
+ */
+
+/*
+ * El margen es ajustado a proposito: el criterio 1 de HU-INV-001 exige que
+ * los dieciseis productos se vean completos a 1360 x 768, y este control
+ * ahora comparte ese alto. Hay una prueba de aceptacion que falla si el
+ * conjunto vuelve a desbordar.
+ */
+.inventario__paginacion {
+  margin-top: 8px;
+}
+
+.paginacion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.paginacion__info {
+  margin: 0;
+  font-family: var(--tipografia-texto, system-ui, sans-serif);
+  font-size: 13px;
+  color: var(--texto-3, #57627a);
+  font-variant-numeric: tabular-nums;
+}
+
+.paginacion__paginas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.paginacion__pagina {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--borde-interactivo, #6f7994);
+  border-radius: var(--radio, 8px);
+  background: var(--superficie, #ffffff);
+  color: var(--texto-2, #48536a);
+  font-family: var(--tipografia-texto, system-ui, sans-serif);
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.paginacion__pagina:hover {
+  border-color: var(--primaria, #2244bf);
+  color: var(--primaria, #2244bf);
+}
+
+/*
+ * RNF-ACC-002: el foco siempre visible. El contorno va por fuera del borde
+ * para que no lo tape la casilla vecina.
+ */
+.paginacion__pagina:focus-visible {
+  outline: 2px solid var(--primaria, #2244bf);
+  outline-offset: 2px;
+}
+
+/*
+ * La pagina en curso no es solo un color: lleva aria-current="page", que es
+ * lo que anuncia el lector de pantalla. El color refuerza, no sustituye.
+ */
+.paginacion__pagina[aria-current='page'] {
+  background: var(--primaria-relleno, #1e3f88);
+  border-color: var(--primaria-relleno, #1e3f88);
+  color: var(--texto-sobre-color, #ffffff);
+  cursor: default;
+}
+
+.paginacion__pagina[aria-current='page']:hover {
+  color: var(--texto-sobre-color, #ffffff);
+}
+
+/* Telefonos: el control se apila para no forzar desplazamiento lateral. */
+@media (max-width: 599px) {
+  .paginacion {
+    justify-content: center;
+  }
+
+  .paginacion__info {
+    width: 100%;
+    text-align: center;
+  }
+}
