@@ -23,7 +23,7 @@ Lo que ya esta desarrollado, de lo que no depende de nadie mas del equipo:
 ## Contratos
 
 - `contracts/openapi/ms-subastas-pujas.yaml` — el contrato de esta HU, publicado ANTES de los controladores (regla 1 de plataforma).
-- `contracts/openapi/ms-finanzas-creditos.propuesta.yaml` — borrador escrito desde el consumidor de lo que se necesita de ms-finanzas. **No es el contrato vigente**: el dueno es Juan Diego y requiere su aprobacion.
+- El contrato de reserva de creditos que este servicio consume es de `ms-finanzas` (Juan Diego). Se le paso por aparte un borrador escrito desde el consumidor; cuando lo apruebe, se publica en `contracts/openapi/` y se genera el cliente a partir de el.
 
 ## Levantar en local
 

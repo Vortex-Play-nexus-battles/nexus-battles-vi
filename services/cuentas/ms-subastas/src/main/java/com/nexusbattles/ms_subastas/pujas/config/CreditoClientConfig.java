@@ -18,9 +18,8 @@ import org.springframework.context.annotation.Configuration;
  * El doble esta escrito a mano, lo que NO cumple la regla de
  * backend-spring.md ("si el proveedor no existe, desarrollar contra un doble
  * generado desde el mismo contrato, nunca uno escrito a mano"). Es deuda
- * consciente: el contrato del que habria que generarlo es
- * contracts/openapi/ms-finanzas-creditos.propuesta.yaml, que todavia no tiene
- * la aprobacion de su dueno.
+ * consciente: todavia no existe un contrato acordado de ms-finanzas del que
+ * generarlo. En cuanto su dueno publique uno, se genera el doble desde ahi.
  */
 @Configuration
 public class CreditoClientConfig {
