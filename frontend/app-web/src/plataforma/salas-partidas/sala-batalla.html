@@ -3,17 +3,12 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Batallas · The Nexus Battles VI</title>
+    <title>Sala en batalla · The Nexus Battles VI</title>
 
     <!--
-      Ejecucion INTEGRADA (Spring Boot sirve esta vista): la API vive en el
-      mismo origen y no hay que declarar nada.
-      Ejecucion ESTATICA para revision visual: no hay API detras y las vistas
-      lo dicen con todas las letras. Para apuntarlas a un backend que corra
-      en otro sitio, descomenta y ajusta:
-      <meta name="nexus-api-base" content="http://127.0.0.1:8083" />
+      Sistema de diseno compartido. Ningun estilo propio de esta vista.
+      Rutas relativas, igual que crear-sala.html.
     -->
-
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
@@ -91,82 +86,83 @@
       </div>
     </header>
 
-    <main id="vista-batallas" class="pagina pila">
-      <div class="acciones">
-        <div class="pila pila--compacta">
-          <h1>Batallas</h1>
-          <p class="t-cuerpo" data-zona="subtitulo">Buscando batallas</p>
-        </div>
-        <a class="boton boton--primario boton--grande" href="./crear-sala.html">CREAR SALA</a>
+    <main class="pagina pila">
+      <div class="pila pila--compacta">
+        <h1>Sala en batalla</h1>
+        <p class="t-cuerpo">
+          La vida de cada participante con su valor numerico. El color cambia al 60 % y al 40 %.
+        </p>
       </div>
 
       <!--
-        Dos filtros, los dos del contrato. El buscador que tenia la maqueta se
-        elimino de Figma en HU-SAL-002: buscaba por un nombre de sala que se
-        retiro en HU-SAL-001 y que ningun requisito pide.
+        Dice lo que hay de verdad. Mientras no exista el transporte del canal,
+        esta vista NO aparenta estar conectada: lo pinta el script segun reciba
+        o no una funcion de suscripcion.
       -->
       <div class="fila">
-        <label class="campo">
-          <span class="campo__etiqueta">Modalidad</span>
-          <select class="campo__control" name="modalidad">
-            <option value="">Modalidad: todas</option>
-            <option value="UNO_CONTRA_UNO">1 contra 1</option>
-            <option value="CONTRA_IA">Contra la IA</option>
-            <option value="HASTA_SEIS">Hasta seis</option>
-          </select>
-        </label>
-
-        <label class="campo">
-          <span class="campo__etiqueta">Estado</span>
-          <select class="campo__control" name="estado">
-            <option value="">Estado: todos</option>
-            <option value="ABIERTA">Abierta</option>
-            <option value="LLENA">Llena</option>
-            <option value="PRIVADA">Privada</option>
-          </select>
-        </label>
+        <span class="conexion conexion--sin-conexion" data-zona="conexion" role="status">
+          Canal en tiempo real no conectado
+        </span>
       </div>
 
-      <!-- RNF-USA-003: cargando, vacio y error comparten esta zona. -->
-      <div class="estado-vista" data-zona="estado" role="status" aria-live="polite"></div>
-
       <!--
-        Estado del canal en tiempo real (HU-SAL-002, criterio 3). Se dice con
-        todas las letras si esta conectado o no, en vez de dejar que la persona
-        adivine por que una sala no cambia.
+        Estado vacio de RNF-USA-003. Es lo que se ve mientras no haya partida
+        cargada: no se inventan participantes de ejemplo.
       -->
-      <p class="t-meta" data-zona="canal" role="status" aria-live="polite" hidden></p>
+      <div class="estado-vista" data-zona="sin-partida">
+        <p class="estado-vista__titulo">No hay ninguna partida cargada</p>
+        <p class="t-meta">
+          Esta vista se pinta con los participantes de una partida en curso. El endpoint que los
+          entrega todavia no existe.
+        </p>
+      </div>
 
-      <div class="rejilla-salas" data-zona="salas" hidden></div>
-
-      <nav class="paginacion" data-zona="paginacion" aria-label="Paginas del listado" hidden></nav>
+      <section class="tarjeta pila" data-zona="panel" hidden>
+        <h2 class="tarjeta__titulo">Participantes</h2>
+        <div class="pila pila--compacta" data-zona="vidas"></div>
+      </section>
     </main>
 
     <!-- RNF-DIS-002: el chatbot esta en todas las vistas, sin excepcion. -->
     <button class="chatbot-flotante" type="button" aria-label="Abrir el asistente">IA</button>
 
     <script type="module">
-      import { montarBatallas } from './batallas.js';
+      import {
+        montarSalaBatalla,
+        leerEstadoInicial,
+        suscripcionDePartida,
+      } from './sala-batalla.js';
       import { urlDelCanal } from './canal-sala.js';
       import { baseDeApi } from './cliente-salas.js';
-      // Transporte STOMP sobre WebSocket nativo del servicio (HU-JUE-015). Es
-      // el unico del monorepo y la pila prohibe traer otro; la sala solo le
-      // pide CONNECT con el JWT y SUBSCRIBE. Su nombre sigue siendo el del
-      // chat porque moverlo a un modulo neutro es una decision con su autor.
+      // Transporte STOMP sobre WebSocket nativo del servicio, el mismo que usan
+      // Batallas (HU-SAL-002) y el chat (HU-JUE-015): CONNECT con el JWT en la
+      // cabecera Authorization, SUBSCRIBE a /tema/partidas/{id}. No hay un
+      // segundo cliente.
       import { conectarChat } from './cliente-chat.js';
 
-      // El mismo token que adjunta `src/comun/interceptors/http-error.interceptor.js`
-      // a cada peticion HTTP. Sin sesion no hay canal, y la vista lo dice.
+      // El servidor incrustara aqui la partida cuando exista el endpoint. Sin
+      // ese bloque, montarSalaBatalla pinta el estado vacio.
+      const estado = leerEstadoInicial();
       const token = sessionStorage.getItem('nexus.token');
 
-      montarBatallas(document.getElementById('vista-batallas'), {
-        conectarCanal: () =>
-          token
-            ? conectarChat({ url: urlDelCanal({ base: baseDeApi() }), token })
-            : Promise.resolve(null),
-        // Entrar lleva a la sala de espera. Esa vista es HU-SAL-004: hasta que
-        // exista, se deja el destino sin resolver en vez de inventar una ruta.
-        alEntrar: (sala) => console.info('Ingreso aceptado en la sala', sala.id),
+      // Sin partida o sin sesion no hay nada a que suscribirse: la vista dice
+      // «no conectado» en vez de aparentar. Con ambas, se abre el canal y el
+      // panel de vidas recibe `partida.accion.resuelta` tal como lo define el
+      // AsyncAPI; quien lo emite (motor de combate) es otro bloque.
+      let suscribir;
+      if (estado?.idPartida && token) {
+        try {
+          const cliente = await conectarChat({ url: urlDelCanal({ base: baseDeApi() }), token });
+          suscribir = suscripcionDePartida(cliente, estado.idPartida);
+        } catch (error) {
+          console.warn('Canal de la partida no disponible:', error?.message);
+        }
+      }
+
+      montarSalaBatalla(document, {
+        idPartida: estado?.idPartida,
+        participantes: estado?.participantes,
+        suscribir,
       });
     </script>
   </body>

@@ -1,7 +1,9 @@
 package com.nexusbattles.plataforma.salaspartidas.integracion;
 
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CrearSala;
+import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Modalidad;
+import com.nexusbattles.plataforma.salaspartidas.dominio.PaginaDeSalas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.ParametrosDeSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Sala;
@@ -10,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 import java.net.URI;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -99,6 +102,12 @@ class CreditosSinIntegrarTest {
         @Override
         public Optional<Sala> buscarPorId(UUID id) {
             return Optional.ofNullable(almacen.get(id));
+        }
+
+        /** Esta prueba nunca lista: una pagina vacia con la forma exacta del puerto. */
+        @Override
+        public PaginaDeSalas listar(Modalidad modalidad, EstadoSala estado, int pagina, int tamano) {
+            return new PaginaDeSalas(List.of(), pagina, tamano, 0L, 0);
         }
 
         int cuantasHay() {

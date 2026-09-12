@@ -51,13 +51,26 @@ export function leerUmbrales() {
 
 /**
  * Clasifica un porcentaje de vida segun los umbrales.
+ *
+ * Las fronteras salen literalmente de RF-JUE-009 (HU-SAL-005): «verde por
+ * encima del 60 %, amarillo entre el 60 % y el 40 % INCLUSIVE, y rojo por
+ * debajo del 40 %». O sea:
+ *
+ *   (60, 100]  -> alto
+ *   [40,  60]  -> medio   <- los dos extremos entran
+ *   [ 0,  40)  -> bajo
+ *
+ * De ahi la asimetria entre los dos comparadores, que no es un descuido:
+ * el 60 exacto NO es verde y el 40 exacto SI es amarillo. Antes ambos eran
+ * `>`, y con 40 puntos justos la barra se pintaba roja.
+ *
  * @param {number} porcentaje 0-100
  * @returns {'alto'|'medio'|'bajo'}
  */
 export function clasificar(porcentaje) {
   const { alto, medio } = leerUmbrales();
   if (porcentaje > alto) return 'alto';
-  if (porcentaje > medio) return 'medio';
+  if (porcentaje >= medio) return 'medio';
   return 'bajo';
 }
 
