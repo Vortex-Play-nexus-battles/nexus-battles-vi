@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Nexus Battles VI - Metricas de plataforma (M16A) - disponibilidad
+  title: Nexus Battles VI - Metricas de plataforma (M16A) - disponibilidad y latencia
   description: >
     Monitoreo y registro de disponibilidad de los servicios del bloque
     (HU-DIS-001, RNF-DIS-001). Publica dos cosas: el estado en vivo de cada
@@ -18,7 +18,17 @@ info:
     Como se mide: este servicio consulta periodicamente el endpoint de salud de
     Actuator de cada servicio del bloque (regla 3 de plataforma, ya presente en
     los veinte modulos). No hace falta instrumentar nada en el servicio medido.
-  version: 1.0.0
+
+    Publica ademas el informe de latencia extremo a extremo (HU-REN-001,
+    RNF-REN-001). Las muestras las recoge el filtro de
+    shared/libs/plataforma-observabilidad, que llega a los veinte modulos desde
+    las convenciones de Gradle: ningun servicio copia ni configura el filtro.
+
+    AVISO sobre el percentil: RNF-REN-001 se evalua en p95 o en p99 y esa
+    eleccion la aprueba el Product Owner por escrito (CA-03 de HU-REN-001).
+    Mientras no exista esa aprobacion, /latencia/informe responde 409: la API no
+    elige un percentil por su cuenta. La recoleccion de muestras si esta activa.
+  version: 1.1.0
 servers:
   - url: http://localhost:8087/api/v1
     description: Entorno local de desarrollo
@@ -78,6 +88,70 @@ paths:
                 $ref: '#/components/schemas/InformeResponse'
         '400':
           description: El periodo pedido es invalido, por ejemplo con el fin antes del inicio
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /latencia/informe:
+    get:
+      summary: Informe de latencia extremo a extremo
+      description: >
+        Soporta CA-02 de HU-REN-001: exporta las metricas recolectadas para el
+        informe tecnico de rendimiento. Devuelve cuantas peticiones se midieron,
+        el percentil acordado, la peticion mas lenta y las operaciones peores,
+        que es donde hay que mirar cuando el objetivo no se cumple.
+
+        Un informe sin muestras NO cumple: no medir no es lo mismo que cumplir,
+        y darlo por bueno dejaria pasar un servicio que nunca se instrumento.
+        Por eso se devuelve sinDatos ademas de cumple.
+      operationId: consultarInformeDeLatencia
+      responses:
+        '200':
+          description: Informe de latencia del servicio
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InformeDeLatenciaResponse'
+        '409':
+          description: >
+            El Product Owner aun no aprobo el percentil de evaluacion (CA-03).
+            No es un fallo del servicio: la medicion sigue activa y el cuerpo
+            informa cuantas muestras lleva acumuladas. Se resuelve configurando
+            LATENCIA_PERCENTIL, sin recompilar.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /latencia/informe/texto:
+    get:
+      summary: El mismo informe, ya redactado, para anexarlo como evidencia
+      description: >
+        Misma informacion que /latencia/informe en texto plano, pensado para
+        pegarse tal cual en el informe de avance. Es una ruta aparte y no una
+        negociacion por Accept: con las dos representaciones en la misma ruta,
+        una peticion sin cabecera Accept dejaria a la eleccion sin criterio.
+      operationId: consultarInformeDeLatenciaEnTexto
+      responses:
+        '200':
+          description: Informe redactado
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                cumple:
+                  value: |
+                    Informe de latencia extremo a extremo - RNF-REN-001
+                    Servicio: metricas-plataforma
+                    Objetivo: p95 <= 500 ms
+                    Peticiones medidas: 1284
+                    p95: 312 ms
+                    Maximo: 1904 ms
+                    Resultado: CUMPLE
+        '409':
+          description: Falta la aprobacion del percentil (CA-03)
           content:
             application/problem+json:
               schema:
@@ -197,6 +271,78 @@ components:
         detalle:
           type: string
           examples: ['connection refused']
+
+    InformeDeLatenciaResponse:
+      type: object
+      required:
+        - servicio
+        - muestras
+        - percentil
+        - objetivoMs
+        - percentilMs
+        - maximoMs
+        - cumple
+        - sinDatos
+        - operacionesMasLentas
+      properties:
+        servicio:
+          type: string
+          description: Modulo que produjo las muestras
+          examples: ['metricas-plataforma']
+        muestras:
+          type: integer
+          description: Cuantas peticiones entraron en el calculo
+          examples: [1284]
+        percentil:
+          type: string
+          description: Percentil de evaluacion vigente, el aprobado por el Product Owner
+          examples: ['p95']
+        objetivoMs:
+          type: integer
+          description: Los 500 ms de RNF-REN-001
+          examples: [500]
+        percentilMs:
+          type: integer
+          description: >
+            Valor del percentil, por rango mas cercano y sin interpolar: siempre
+            corresponde a una peticion que de verdad ocurrio.
+          examples: [312]
+        maximoMs:
+          type: integer
+          description: >
+            La peticion mas lenta medida. Se reporta junto al percentil porque
+            una lenta aislada no mueve el percentil pero si importa.
+          examples: [1904]
+        cumple:
+          type: boolean
+          description: Falso tambien cuando no hay muestras
+        sinDatos:
+          type: boolean
+          description: El servicio no ha atendido peticiones desde el ultimo arranque
+        operacionesMasLentas:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperacionDeLatencia'
+
+    OperacionDeLatencia:
+      type: object
+      required: [metodo, ruta, muestras, percentilMs]
+      properties:
+        metodo:
+          type: string
+          examples: ['POST']
+        ruta:
+          type: string
+          description: >
+            Plantilla de la ruta, no la URI concreta. Con la URI cada sala seria
+            una operacion distinta y no habria percentil que calcular.
+          examples: ['/api/v1/salas/{id}']
+        muestras:
+          type: integer
+          examples: [412]
+        percentilMs:
+          type: integer
+          examples: [488]
 
     ProblemDetail:
       type: object
