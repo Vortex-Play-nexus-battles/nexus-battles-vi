@@ -1,6 +1,7 @@
 # plataforma-observabilidad
 
-Biblioteca compartida de instrumentación de latencia — **HU-REN-001** (RNF-REN-001, issue #68).
+Biblioteca compartida de instrumentación de rendimiento — **HU-REN-001** (RNF-REN-001,
+issue #68) y **HU-REN-003** (RNF-REN-003, issue #69).
 
 **No es un servicio**: no se despliega ni tiene `main`. La usan los servicios del
 bloque de tiempo real para medir el tiempo extremo a extremo de sus peticiones
@@ -17,6 +18,9 @@ sin copiar el mismo filtro ocho veces.
 | `InformeDeLatencia` | resultado exportable como evidencia (CA-02) |
 | `PropiedadesDeLatencia` | la configuración, solo por variable de entorno (regla 10) |
 | `ObservabilidadDeLatenciaAutoConfiguration` | enciende todo lo anterior sola en cualquier servicio |
+| `DataSourceInstrumentado` | envuelve el `DataSource` y mide **cada consulta a la base de datos** (HU-REN-003) |
+| `RegistroDeConsultas` | ventana de consultas + ventana separada de las lentas |
+| `MuestraDeConsulta` / `InformeDeConsultas` | una consulta medida y el informe agregado |
 
 ## Cómo llega a los veinte módulos
 
@@ -87,6 +91,31 @@ en los veinte módulos desde el Sprint 1. Lo que espera al Product Owner es la
 localizada en `GET /api/v1/latencia/informe` (409, con el nombre de la variable
 y el criterio), en vez de impedir que arranquen servicios de los tres equipos.
 
+## Medición de consultas (HU-REN-003)
+
+Mismo principio que el filtro, una capa más abajo: en vez de pedirle a cada equipo que
+instrumente sus repositorios, se envuelve el `DataSource` y se mide todo lo que pasa por él.
+Cubre Hibernate, Spring Data y el SQL escrito a mano, y un repositorio nuevo queda medido
+sin que nadie tenga que acordarse de nada.
+
+- **La sentencia se guarda con marcadores `?`, nunca con los valores.** Agrupa las
+  ejecuciones de la misma consulta y evita que datos de jugadores acaben en el informe.
+- **Se mide en `finally`.** Un tiempo de espera agotado es la consulta lenta por
+  excelencia, y es justo la que interesa ver.
+- **Medir nunca puede tumbar una consulta.** Si el registro fallara, el error se traga: el
+  jugador no va a perder una operación real por culpa de la observabilidad.
+- **Delegación fiel, incluidos `unwrap` e `isWrapperFor`.** Son los que usan Hibernate y el
+  pool para llegar al objeto concreto; un envoltorio que no los delegue rompe el arranque.
+- **Dos ventanas, no una.** Con una sola, una racha de consultas rápidas expulsaría justo
+  las lentas, que son las únicas que hay que optimizar.
+
+| Variable | Por omisión | Para qué |
+|---|---|---|
+| `LATENCIA_CONSULTAS_ACTIVA` | `true` | Válvula de escape por servicio |
+| `LATENCIA_CONSULTAS_UMBRAL_MS` | *(el objetivo, 500)* | Cuándo una consulta se marca como lenta |
+| `LATENCIA_CONSULTAS_CAPACIDAD` | `10000` | Ventana general |
+| `LATENCIA_CONSULTAS_CAPACIDAD_LENTAS` | `200` | Ventana de lentas |
+
 ## Estado de HU-REN-001
 
 | CA | Estado | Dónde |
@@ -107,3 +136,15 @@ que permitirá responder el día que la decisión llegue.
   agregación entre servicios ni entre réplicas. Qué se usa para agregar y
   persistir es la misma decisión de equipo que quedó abierta en HU-DIS-001
   (SCRUM-1141, SCRUM-1144), y no se inventa aquí.
+
+## Estado de HU-REN-003
+
+| CA | Estado | Dónde |
+|---|---|---|
+| CA-01 · medición de las consultas contra el objetivo | ✅ | `DataSourceInstrumentado` + `/api/v1/consultas/informe` |
+| CA-02 · el plan de ejecución demuestra uso de índices | ⛔ | **Necesita PostgreSQL con volumen de datos.** Procedimiento y hallazgos en `metricas-plataforma/docs/CONSULTAS-CRITICAS.md` |
+| CA-03 · las consultas lentas quedan marcadas | ✅ | `RegistroDeConsultas` + `/api/v1/consultas/lentas` |
+
+**La HU tampoco está terminada.** CA-02 es evidencia de entorno, no de código: hace falta
+una base de datos poblada para que el `EXPLAIN` signifique algo. Sobre una tabla vacía el
+planificador elige `Seq Scan` aunque el índice sea perfecto.
