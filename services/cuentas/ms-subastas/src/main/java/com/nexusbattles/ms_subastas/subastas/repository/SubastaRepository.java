@@ -2,6 +2,7 @@ package com.nexusbattles.ms_subastas.subastas.repository;
 
 import com.nexusbattles.ms_subastas.subastas.model.Subasta;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
@@ -52,4 +53,22 @@ public interface SubastaRepository extends JpaRepository<Subasta, UUID>,
     // --- HU-SUB-011 (Cristian): busqueda paginada con filtros dinamicos.
     // findAll(Specification, Pageable) llega gratis con JpaSpecificationExecutor,
     // no se declara aqui -- ver SubastaSpecifications para los filtros.
+
+    /**
+     * HU-SUB-011: autocompletado. Devuelve solo los nombres, ya ordenados por
+     * popularidad (mas pujas primero).
+     *
+     * NO usa SELECT DISTINCT nombreProducto: Postgres exige que toda columna
+     * del ORDER BY aparezca en el SELECT cuando hay DISTINCT (SQLState 42P10),
+     * y cantidadPujas no es parte de lo que queremos seleccionar. En su lugar
+     * se seleccionan las entidades completas (sin DISTINCT, ya ordenadas), y
+     * el servicio deduplica los nombres en Java preservando ese orden.
+     */
+    @Query("""
+            select s from Subasta s
+            where s.estado = 'ACTIVA'
+              and lower(s.nombreProducto) like lower(concat('%', :texto, '%'))
+            order by s.cantidadPujas desc
+            """)
+    List<Subasta> buscarSugeridasPorTexto(@Param("texto") String texto, Pageable limite);
 }

@@ -2,9 +2,9 @@ openapi: 3.1.0
 info:
   title: ms-subastas — Listado de subastas activas
   description: >
-    Contrato de HU-SUB-011. Endpoint público (jugador o visitante, sin
+    Contrato de HU-SUB-011. Endpoints públicos (jugador o visitante, sin
     autenticación requerida) para explorar el mercado de subastas activas,
-    con filtros, ordenamiento y búsqueda.
+    con filtros, ordenamiento, búsqueda y autocompletado.
   version: "1.0.0-draft"
   x-historia: HU-SUB-011
   x-responsable: Cristian
@@ -95,6 +95,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
 
+  /api/v1/subastas/sugerencias:
+    get:
+      summary: Sugerencias de autocompletado para la búsqueda
+      operationId: sugerirSubastas
+      tags: [Subastas]
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 1 }
+        - name: limite
+          in: query
+          schema: { type: integer, default: 8, minimum: 1, maximum: 20 }
+      responses:
+        '200':
+          description: Nombres de producto que coinciden, sin paginación.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SugerenciasResponse'
+        '400':
+          description: Falta el parámetro q, o está vacío.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
 components:
   schemas:
     TipoProducto:
@@ -138,6 +165,14 @@ components:
         tamanoPagina: { type: integer }
         totalElementos: { type: integer }
         totalPaginas: { type: integer }
+
+    SugerenciasResponse:
+      type: object
+      required: [sugerencias]
+      properties:
+        sugerencias:
+          type: array
+          items: { type: string }
 
     Problem:
       type: object

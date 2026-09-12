@@ -3,6 +3,7 @@ package com.nexusbattles.ms_subastas.subastas.service;
 import com.nexusbattles.ms_subastas.subastas.dto.FiltrosSubasta;
 import com.nexusbattles.ms_subastas.subastas.dto.PaginaDeSubastasResponse;
 import com.nexusbattles.ms_subastas.subastas.dto.SubastaResumenResponse;
+import com.nexusbattles.ms_subastas.subastas.dto.SugerenciasResponse;
 import com.nexusbattles.ms_subastas.subastas.model.Subasta;
 import com.nexusbattles.ms_subastas.subastas.repository.SubastaRepository;
 import com.nexusbattles.ms_subastas.subastas.repository.SubastaSpecifications;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Stream;
@@ -35,11 +37,6 @@ public class SubastaListadoService {
     }
 
     public PaginaDeSubastasResponse listar(FiltrosSubasta filtros, int pagina, int tamano) {
-        // Specification.and(null) lanza IllegalArgumentException, asi que se
-        // filtran los null antes de combinar. OJO: List.of(...) NO admite
-        // elementos null (revienta al construirla, antes de poder filtrar),
-        // por eso aqui se usa Stream.of(...), que si los tolera hasta el
-        // filter().
         List<Specification<Subasta>> filtrosNoNulos = Stream.of(
             SubastaSpecifications.soloActivas(),
             SubastaSpecifications.textoLibre(filtros.q()),
@@ -61,6 +58,25 @@ public class SubastaListadoService {
         Page<SubastaResumenResponse> paginaDto = paginaEntidades.map(SubastaResumenResponse::desde);
 
         return PaginaDeSubastasResponse.desde(paginaDto);
+    }
+
+    /**
+     * HU-SUB-011: autocompletado. La consulta puede traer varias subastas
+     * con el mismo nombreProducto (por ejemplo, dos "Escudo de Roble" de
+     * vendedores distintos) -- se deduplica aqui con LinkedHashSet, que
+     * preserva el orden de llegada (ya viene ordenado por popularidad desde
+     * la consulta), a diferencia de un HashSet normal que no garantiza orden.
+     */
+    public SugerenciasResponse sugerir(String texto, int limite) {
+        List<Subasta> subastas = subastaRepository.buscarSugeridasPorTexto(
+            texto, PageRequest.of(0, limite));
+
+        LinkedHashSet<String> nombresUnicos = new LinkedHashSet<>();
+        for (Subasta subasta : subastas) {
+            nombresUnicos.add(subasta.getNombreProducto());
+        }
+
+        return new SugerenciasResponse(List.copyOf(nombresUnicos));
     }
 
     /**

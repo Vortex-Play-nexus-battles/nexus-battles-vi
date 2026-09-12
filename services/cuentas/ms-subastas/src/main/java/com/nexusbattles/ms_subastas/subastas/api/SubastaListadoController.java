@@ -2,6 +2,7 @@ package com.nexusbattles.ms_subastas.subastas.api;
 
 import com.nexusbattles.ms_subastas.subastas.dto.FiltrosSubasta;
 import com.nexusbattles.ms_subastas.subastas.dto.PaginaDeSubastasResponse;
+import com.nexusbattles.ms_subastas.subastas.dto.SugerenciasResponse;
 import com.nexusbattles.ms_subastas.subastas.model.TipoProducto;
 import com.nexusbattles.ms_subastas.subastas.service.SubastaListadoService;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -13,8 +14,8 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * HU-SUB-011. Endpoint publico (jugador o visitante, sin autenticacion) --
- * confirmado desde el inicio, no bloqueado por la decision de JWT pendiente
+ * HU-SUB-011. Endpoints publicos (jugador o visitante, sin autenticacion) --
+ * confirmado desde el inicio, no bloqueados por la decision de JWT pendiente
  * entre Andres/Edwin/Santiago.
  *
  * Sin /api/v1 en el mapping: ya lo agrega server.servlet.context-path
@@ -50,5 +51,13 @@ public class SubastaListadoController {
             tiempoRestante, tipoVenta, metodoPago, vendedor, ordenarPor
         );
         return subastaListadoService.listar(filtros, page, size);
+    }
+
+    @GetMapping("/sugerencias")
+    public SugerenciasResponse sugerir(
+        @RequestParam String q,
+        @RequestParam(defaultValue = "8") int limite
+    ) {
+        return subastaListadoService.sugerir(q, limite);
     }
 }
