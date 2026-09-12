@@ -1,5 +1,7 @@
 package com.nexusbattles.ms_identidad.rbac;
 
+import java.util.UUID;
+
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
 import com.nexusbattles.ms_identidad.auth.service.JwtService;
@@ -83,7 +85,7 @@ public class SecurityBypassTest {
     @Test
     @DisplayName("JWT Válido con rol 'ADMINISTRADOR' -> 200 OK")
     void testValidJwtAdminCanBan() throws Exception {
-        String token = jwtService.generarToken("admin_autenticado", "ADMINISTRADOR", 0);
+        String token = jwtService.generarToken("admin_autenticado", "ADMINISTRADOR", 0, UUID.randomUUID());
 
         mockMvc.perform(post("/api/v1/admin/ban")
                 .header("Authorization", "Bearer " + token)
@@ -96,7 +98,7 @@ public class SecurityBypassTest {
     @Test
     @DisplayName("JWT Válido con rol 'JUGADOR' intenta invocar /api/v1/admin/ban -> 403 Forbidden")
     void testValidJwtJugadorCannotBan() throws Exception {
-        String token = jwtService.generarToken("jugador_autenticado", "JUGADOR", 0);
+        String token = jwtService.generarToken("jugador_autenticado", "JUGADOR", 0, UUID.randomUUID());
 
         mockMvc.perform(post("/api/v1/admin/ban")
                 .header("Authorization", "Bearer " + token)
@@ -110,7 +112,7 @@ public class SecurityBypassTest {
     @Test
     @DisplayName("JWT Alterado/Manipulado -> 403 Forbidden (Fail-Closed)")
     void testTamperedJwtIsForbidden() throws Exception {
-        String token = jwtService.generarToken("hacker", "SUPER_ADMINISTRADOR", 0);
+        String token = jwtService.generarToken("hacker", "SUPER_ADMINISTRADOR", 0, UUID.randomUUID());
         String tamperedToken = token.substring(0, token.length() - 2) + "ZZ";
 
         mockMvc.perform(post("/api/v1/admin/ban")
@@ -126,7 +128,7 @@ public class SecurityBypassTest {
     @DisplayName("JWT con versión de token vieja (rol fue cambiado) -> 403 Forbidden (HU-RBAC-003)")
     void testRevokedTokenVersionIsForbidden() throws Exception {
         // Generar un JWT con versión 0 (como si el usuario nunca hubiera cambiado de rol)
-        String tokenViejo = jwtService.generarToken("admin_degradado", "ADMINISTRADOR", 0);
+        String tokenViejo = jwtService.generarToken("admin_degradado", "ADMINISTRADOR", 0, UUID.randomUUID());
 
         // Simular que el usuario ahora tiene versionToken=1 (le cambiaron el rol)
         Usuario usuario = mock(Usuario.class);

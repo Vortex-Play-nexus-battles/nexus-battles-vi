@@ -12,6 +12,8 @@ import lombok.Setter;
 
 import java.time.LocalDateTime;
 
+import java.util.UUID;
+
 @Entity
 @Table(name = "usuarios", uniqueConstraints = {
     @UniqueConstraint(columnNames = "apodo"),
@@ -25,6 +27,38 @@ public class Usuario {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    /**
+     * Identificador publico y estable del usuario, para que otros servicios lo
+     * referencien sin depender del apodo (que es mutable: se cambia desde
+     * PerfilUsuarioService y desde la edicion de administracion) ni del `id`
+     * interno (secuencial y por tanto enumerable desde fuera).
+     *
+     * <p>Viaja en el JWT como claim `uid`. ms-subastas lo necesita porque su
+     * dominio referencia jugadores por UUID y una puja retiene creditos: si el
+     * identificador cambiara, las pujas quedarian huerfanas y quien tomara el
+     * apodo liberado heredaria sus creditos reservados.
+     *
+     * <p>Es nullable en el mapeo a proposito. El servicio corre con
+     * `ddl-auto=update` y no tiene Flyway todavia (R8 pendiente), asi que la
+     * columna no puede nacer NOT NULL sobre una tabla con filas existentes.
+     * Los usuarios nuevos la reciben en {@link #asignarIdentificadorPublico()};
+     * a los anteriores los rellena RellenoDeIdentificadorPublico al arrancar.
+     * Cuando se monte Flyway, endurecer a NOT NULL.
+     */
+    @Column(name = "public_id", unique = true)
+    private UUID publicId;
+
+    /**
+     * Se ejecuta antes del primer INSERT. Nunca sobreescribe uno existente,
+     * para que reasignar una entidad cargada no cambie su identificador.
+     */
+    @PrePersist
+    void asignarIdentificadorPublico() {
+        if (publicId == null) {
+            publicId = UUID.randomUUID();
+        }
+    }
 
     @NotBlank
     @Column(nullable = false, length = 50)
