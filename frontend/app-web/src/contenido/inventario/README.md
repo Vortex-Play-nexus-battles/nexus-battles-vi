@@ -8,6 +8,11 @@ La integración de `HU-INV-003` añade la creación por `POST` y la edición del
 nombre por `PATCH`. Después de cada escritura, la vista vuelve a consultar el
 inventario persistido y muestra el resultado en la cuadrícula.
 
+`HU-INV-002` incorpora un campo de búsqueda que consulta
+`GET /api/v1/inventario/elementos/busqueda?criterio=texto&pagina=N`. La vista
+exige cuatro caracteres, conserva los estados de carga, éxito, vacío y error,
+y permite limpiar el criterio para volver al inventario completo.
+
 ## Alcance actual
 
 **Cuadricula de referencia**:
@@ -17,6 +22,7 @@ inventario persistido y muestra el resultado en la cuadrícula.
 - nombre propio del jugador escrito como texto, nunca como marcado;
 - rechazo ruidoso de una pagina que exceda los 16 elementos acordados;
 - cliente HTTP de la consulta paginada, con `fetch` inyectable.
+- campo de búsqueda por nombre, tipo o identificador de producto;
 - formulario para crear elementos y editar el nombre de elementos propios;
 - actualización de la vitrina después de guardar, incluida la página donde
   queda el elemento nuevo cuando el inventario supera los 16 elementos.
@@ -33,6 +39,9 @@ inventario persistido y muestra el resultado en la cuadrícula.
 
 **Pruebas de aceptacion**:
 
+- los escenarios de `HU-INV-002-busqueda-inventario.feature` ejecutados en
+  Chromium para localizar productos por nombre, identificador, tipo y parte
+  de armadura, validar el mínimo y restaurar la vitrina al limpiar;
 - los cuatro escenarios de `HU-INV-001-vitrina-del-inventario.feature`
   traducidos uno a uno a Playwright sobre Chromium, con el esquema del
   criterio 2 expandido a sus tres resoluciones;

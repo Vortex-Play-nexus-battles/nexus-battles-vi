@@ -1,0 +1,171 @@
+{
+  "info": {
+    "name": "HU-RBAC-001 / HU-RBAC-004 · ms-identidad",
+    "description": "Pruebas de aceptación del control de acceso por roles (matriz + directiva) y de la autorización server-side con política fail-closed. Base local: http://localhost:8089/api/v1 (perfil dev).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8089/api/v1" }
+  ],
+  "item": [
+    {
+      "name": "HU-RBAC-001 · Modelo y matriz de permisos",
+      "item": [
+        {
+          "name": "GET matriz de permisos (48 celdas · Tabla 24)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/rbac/matrix"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "const b = pm.response.json();",
+            "pm.test('trae version y matriz', () => { pm.expect(b).to.have.property('version'); pm.expect(b.matrix).to.be.an('object'); });",
+            "pm.test('4 roles x 12 acciones = 48 celdas', () => {",
+            "  const roles = Object.keys(b.matrix); pm.expect(roles).to.have.lengthOf(4);",
+            "  let celdas = 0; roles.forEach(r => celdas += Object.keys(b.matrix[r]).length);",
+            "  pm.expect(celdas).to.eql(48);",
+            "});",
+            "pm.test('Default-Deny: JUGADOR no puede BANEAR_DEFINITIVAMENTE', () => pm.expect(b.matrix.JUGADOR.BANEAR_DEFINITIVAMENTE).to.eql('DENIED'));"
+          ]}}]
+        },
+        {
+          "name": "GET catálogo de roles",
+          "request": { "method": "GET", "url": "{{baseUrl}}/rbac/roles" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "pm.test('4 roles oficiales', () => pm.expect(pm.response.json()).to.have.lengthOf(4));"
+          ]}}]
+        },
+        {
+          "name": "POST authorize · JUGADOR / BANEAR_DEFINITIVAMENTE → DENIED",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"role\": \"JUGADOR\",\n  \"action\": \"BANEAR_DEFINITIVAMENTE\"\n}" },
+            "url": "{{baseUrl}}/rbac/authorize"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 OK (evaluación)', () => pm.response.to.have.status(200));",
+            "const b = pm.response.json();",
+            "pm.test('permitted = false', () => pm.expect(b.permitted).to.be.false);",
+            "pm.test('permissionType = DENIED', () => pm.expect(b.permissionType).to.eql('DENIED'));"
+          ]}}]
+        },
+        {
+          "name": "POST authorize · ADMINISTRADOR / BANEAR_DEFINITIVAMENTE → GRANTED",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"role\": \"ADMINISTRADOR\",\n  \"action\": \"BANEAR_DEFINITIVAMENTE\"\n}" },
+            "url": "{{baseUrl}}/rbac/authorize"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const b = pm.response.json();",
+            "pm.test('permitted = true', () => pm.expect(b.permitted).to.be.true);",
+            "pm.test('permissionType = GRANTED', () => pm.expect(b.permissionType).to.eql('GRANTED'));"
+          ]}}]
+        },
+        {
+          "name": "POST authorize · MODERADOR / SUSPENDER_USUARIOS → TEMPORARY",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"role\": \"MODERADOR\",\n  \"action\": \"SUSPENDER_USUARIOS\"\n}" },
+            "url": "{{baseUrl}}/rbac/authorize"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const b = pm.response.json();",
+            "pm.test('permitted = true (suspensión temporal)', () => pm.expect(b.permitted).to.be.true);",
+            "pm.test('permissionType = TEMPORARY', () => pm.expect(b.permissionType).to.eql('TEMPORARY'));"
+          ]}}]
+        }
+      ]
+    },
+    {
+      "name": "HU-RBAC-004 · Autorización server-side (Fail-Closed)",
+      "item": [
+        {
+          "name": "POST /admin/ban · SIN credencial → 403",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"userId\": \"42\" }" },
+            "url": "{{baseUrl}}/admin/ban"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403 Forbidden (fail-closed)', () => pm.response.to.have.status(403));",
+            "const b = pm.response.json();",
+            "pm.test('Problem Details RFC 7807', () => { pm.expect(b).to.have.property('type'); pm.expect(b.status).to.eql(403); pm.expect(b).to.have.property('instance'); });"
+          ]}}]
+        },
+        {
+          "name": "POST /admin/ban · rol JUGADOR (X-User-Role) → 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Role", "value": "JUGADOR" },
+              { "key": "X-User-Name", "value": "atacante" }
+            ],
+            "body": { "mode": "raw", "raw": "{ \"userId\": \"42\" }" },
+            "url": "{{baseUrl}}/admin/ban"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403 — rol sin permiso para la acción', () => pm.response.to.have.status(403));",
+            "pm.test('detail = No tienes permiso para esta acción', () => pm.expect(pm.response.json().detail).to.eql('No tienes permiso para esta acción'));"
+          ]}}]
+        },
+        {
+          "name": "POST /admin/ban · JWT con firma corrupta → 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer eyJhbGciOiJIUzUxMiJ9.PAYLOAD_FALSO.FIRMA_INVALIDA" }
+            ],
+            "body": { "mode": "raw", "raw": "{ \"userId\": \"42\" }" },
+            "url": "{{baseUrl}}/admin/ban"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403 — token rechazado antes de evaluar permiso', () => pm.response.to.have.status(403));",
+            "pm.test('detail = Token de autenticación inválido o expirado', () => pm.expect(pm.response.json().detail).to.eql('Token de autenticación inválido o expirado'));"
+          ]}}]
+        },
+        {
+          "name": "POST /admin/ban · rol ADMINISTRADOR (dev backdoor) → 200",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Role", "value": "ADMINISTRADOR" },
+              { "key": "X-User-Name", "value": "admin_demo" }
+            ],
+            "body": { "mode": "raw", "raw": "{ \"userId\": \"42\" }" },
+            "url": "{{baseUrl}}/admin/ban"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 — el rol correcto SÍ pasa (respaldo solo dev)', () => pm.response.to.have.status(200));",
+            "pm.test('status = SUCCESS', () => pm.expect(pm.response.json().status).to.eql('SUCCESS'));"
+          ]}}]
+        },
+        {
+          "name": "PUT /rbac/usuarios/2/rol · rol JUGADOR → 403",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Role", "value": "JUGADOR" },
+              { "key": "X-User-Name", "value": "x" }
+            ],
+            "body": { "mode": "raw", "raw": "{ \"nuevoRol\": \"MODERADOR\" }" },
+            "url": "{{baseUrl}}/rbac/usuarios/2/rol"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('403 — asignar rol es exclusivo de SUPER_ADMINISTRADOR', () => pm.response.to.have.status(403));"
+          ]}}]
+        }
+      ]
+    }
+  ]
+}
