@@ -1,6 +1,7 @@
 package com.nexusbattles.ms_subastas.pujas.service;
 
 import com.nexusbattles.ms_subastas.notificaciones.NotificacionOutbox;
+import com.nexusbattles.ms_subastas.pujas.dto.PujaResponse;
 import com.nexusbattles.ms_subastas.pujas.model.EstadoPuja;
 import com.nexusbattles.ms_subastas.pujas.model.Puja;
 import com.nexusbattles.ms_subastas.pujas.model.TipoPuja;
@@ -108,6 +109,19 @@ public class PujaApplicationService {
             pujaRepository.save(pujaVigente);
         }
         subastaRepository.save(subasta);
+    }
+
+    @Transactional(readOnly = true)
+    public List<PujaResponse> listarPujasPorJugadorYEstado(UUID jugadorId, EstadoPuja estado) {
+        return pujaRepository.findByJugadorIdAndEstadoOrderByCreadaEnDesc(jugadorId, estado)
+                .stream()
+                .map(PujaResponse::de)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<Puja> findByJugadorIdAndEstado(UUID jugadorId, EstadoPuja estado) {
+        return pujaRepository.findByJugadorIdAndEstado(jugadorId, estado);
     }
 
     private Subasta cargarConLock(UUID subastaId) {

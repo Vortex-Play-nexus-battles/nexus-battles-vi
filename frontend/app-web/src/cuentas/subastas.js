@@ -6,7 +6,16 @@
  * - 4 estados obligatorios (RNF-USA-003): carga, éxito, vacío, error
  * - Resolución de contraste WCAG 2.2 AA y fichas de tokens
  * - Límites de participación: 10 subastas activas, intervalo de 5 s
+ * - Vistas integradas: Explorar, Mis subastas, Detalle y Cierre múltiple
+ * - Sistema de avisos cruzados en vivo tipo toast (esquina inferior derecha)
  */
+
+export const PALETA_RAREZA = {
+  comun: { fondo: '#E7EAF0', texto: '#57627A', borde: '#9FABC9', icono: '🛡️' },
+  rara: { fondo: '#DFEEF8', texto: '#095E8C', borde: '#095E8C', icono: '⚔️' },
+  epica: { fondo: '#EDE5FA', texto: '#5B27B4', borde: '#5B27B4', icono: '🪓' },
+  legendaria: { fondo: '#FBF0DE', texto: '#9A6800', borde: '#9A6800', icono: '🏹' }
+};
 
 export const SUBASTAS_INICIALES = [
   {
@@ -23,7 +32,7 @@ export const SUBASTAS_INICIALES = [
     segundosRestantes: 38,
     ganando: true,
     superado: false,
-    autoLimite: 0,
+    autoLimite: 2000,
     esperaSegundos: 0,
     retenido: 1350,
     rival: 'draconis_91',
@@ -47,10 +56,10 @@ export const SUBASTAS_INICIALES = [
     oferta: 750,
     compraInmediata: 1500,
     mediaMercado: 900,
-    segundosRestantes: 184,
+    segundosRestantes: 96,
     ganando: false,
     superado: true,
-    autoLimite: 0,
+    autoLimite: 1200,
     esperaSegundos: 0,
     retenido: 0,
     rival: 'morrigan_x',
@@ -97,7 +106,7 @@ export const SUBASTAS_INICIALES = [
     oferta: 600,
     compraInmediata: 1200,
     mediaMercado: 850,
-    segundosRestantes: 950,
+    segundosRestantes: 8,
     ganando: false,
     superado: false,
     autoLimite: 0,
@@ -124,7 +133,7 @@ export const SUBASTAS_INICIALES = [
     segundosRestantes: 1800,
     ganando: false,
     superado: false,
-    autoLimite: 0,
+    autoLimite: 1500,
     esperaSegundos: 0,
     retenido: 0,
     rival: 'novato_12',
@@ -160,6 +169,46 @@ export const CONFIG_REGLAS = {
   maxSubastasSimultaneas: 10,
   maxPujasActivas: 50
 };
+
+export const EVENTOS_CIERRE_DEFAULT = [
+  {
+    id: 'hacha-obsidiana',
+    nombre: 'Hacha de Obsidiana Fracturada',
+    rareza: 'epica',
+    tipoDesenlace: 'adjudicada',
+    montoFinal: 1350,
+    montoCobrado: 1350,
+    montoDevuelto: 0,
+    ganador: 'andres_nv',
+    esGanador: true,
+    motivo: '¡Adjudicada a tu inventario! La mejor oferta se mantuvo hasta el cierre.'
+  },
+  {
+    id: 'grebas-centinela',
+    nombre: 'Grebas del Centinela Caído',
+    rareza: 'rara',
+    tipoDesenlace: 'superada_rival',
+    montoFinal: 1240,
+    montoCobrado: 0,
+    montoDevuelto: 880,
+    ganador: 'thar_vex',
+    esGanador: false,
+    motivo: 'Ganó thar_vex con 1.240 cr · su automática respondió'
+  },
+  {
+    id: 'amuleto-brasa',
+    nombre: 'Amuleto de Brasa Eterna',
+    rareza: 'legendaria',
+    tipoDesenlace: 'superada_tope',
+    montoFinal: 2450,
+    topePropio: 2400,
+    montoCobrado: 0,
+    montoDevuelto: 2400,
+    ganador: 'valkyria_99',
+    esGanador: false,
+    motivo: 'Tu automática paró en su tope de 2.400 cr · cerró en 2.450 cr'
+  }
+];
 
 // =========================================================================
 // Funciones de cálculo y lógica pura (probables con Jest sin DOM)
@@ -243,18 +292,105 @@ export function calcularComparacionHeroe(heroe, item) {
   return { comparaciones, nivelInsuficiente, deltaNivel };
 }
 
+export function calcularSumaTopesAuto(subastas = []) {
+  return subastas.reduce((acc, sub) => acc + (Number(sub.autoLimite) || 0), 0);
+}
+
+export function verificarSobreCompromiso(total, subastas = []) {
+  const sumaTopes = calcularSumaTopesAuto(subastas);
+  const sobreCompromiso = sumaTopes > total;
+  const faltante = sobreCompromiso ? sumaTopes - total : 0;
+  return { sobreCompromiso, sumaTopes, total, faltante };
+}
+
+export function calcularBalanceNetoCierre(eventosCierre = [], saldoTotal = CONFIG_REGLAS.creditosTotales) {
+  const cobrado = eventosCierre.reduce((acc, ev) => acc + (Number(ev.montoCobrado) || 0), 0);
+  const devuelto = eventosCierre.reduce((acc, ev) => acc + (Number(ev.montoDevuelto) || 0), 0);
+  const saldoLibre = Math.max(0, saldoTotal - cobrado);
+  return {
+    cobrado,
+    devuelto,
+    neto: devuelto - cobrado,
+    saldoLibre
+  };
+}
+
+export function generarConsejoTactico(eventoCierre, saldoLibre = 4130) {
+  if (!eventoCierre) return null;
+  const nombre = eventoCierre.nombre || 'el objeto';
+  const tope = eventoCierre.topePropio || 0;
+  const montoFinal = eventoCierre.montoFinal || 0;
+  const diferencia = Math.max(0, montoFinal - tope);
+  const margenRecomendado = diferencia + 50;
+
+  return {
+    titulo: `El ${nombre.split(' ')[0]} se te escapó por ${formatearCreditos(diferencia)} cr.`,
+    cuerpo: `Tu tope estaba en ${formatearCreditos(tope)} cr y cerró en ${formatearCreditos(montoFinal)} cr. Con ${formatearCreditos(margenRecomendado)} cr más de margen era tuyo — y tenías ${formatearCreditos(saldoLibre)} cr libres.`,
+    diferencia,
+    margenRecomendado
+  };
+}
+
+export function calcularEstadoTopesConcurrencia(subastas = [], config = CONFIG_REGLAS) {
+  const maxSubastas = config.maxSubastasSimultaneas || 10;
+  const maxPujas = config.maxPujasActivas || 50;
+
+  const nSubastas = subastas.length;
+  const nPujasGanando = subastas.filter((s) => s.ganando).length;
+
+  const ratioSubastas = nSubastas / maxSubastas;
+  const ratioPujas = nPujasGanando / maxPujas;
+
+  const alertaSubastas = ratioSubastas >= 0.8;
+  const alertaPujas = ratioPujas >= 0.8;
+
+  return {
+    subastas: {
+      actual: nSubastas,
+      max: maxSubastas,
+      ratio: ratioSubastas,
+      alerta: alertaSubastas,
+      topeAlcanzado: nSubastas >= maxSubastas,
+      pista: nSubastas >= maxSubastas
+        ? 'Has llegado al tope: no puedes entrar en más.'
+        : alertaSubastas
+          ? `Aviso de tope (80%): te quedan ${maxSubastas - nSubastas} subastas.`
+          : 'Margen de sobra.'
+    },
+    pujas: {
+      actual: nPujasGanando,
+      max: maxPujas,
+      ratio: ratioPujas,
+      alerta: alertaPujas,
+      topeAlcanzado: nPujasGanando >= maxPujas,
+      pista: nPujasGanando >= maxPujas
+        ? 'Has llegado al tope de 50 pujas activas.'
+        : alertaPujas
+          ? `Aviso de tope (80%): te quedan ${maxPujas - nPujasGanando} pujas.`
+          : 'Margen de sobra.'
+    }
+  };
+}
+
 // =========================================================================
 // Controlador y renderizador interactivo DOM
 // =========================================================================
 
 export class ControladorSubastas {
-  constructor({ contenedor, subastas = SUBASTAS_INICIALES, heroes = HEROES_BASE, config = CONFIG_REGLAS } = {}) {
+  constructor({
+    contenedor,
+    subastas = SUBASTAS_INICIALES,
+    heroes = HEROES_BASE,
+    config = CONFIG_REGLAS,
+    eventosCierre = EVENTOS_CIERRE_DEFAULT
+  } = {}) {
     this.contenedor = contenedor;
     this.subastas = JSON.parse(JSON.stringify(subastas));
     this.heroes = JSON.parse(JSON.stringify(heroes));
     this.config = Object.assign({}, CONFIG_REGLAS, config);
+    this.eventosCierre = JSON.parse(JSON.stringify(eventosCierre));
     this.heroeId = this.heroes[0]?.id || 'kaelen';
-    this.vista = 'lista'; // 'lista' | 'detalle'
+    this.vista = 'lista'; // 'lista' | 'explorar' | 'mis-subastas' | 'detalle' | 'cierre-multiple'
     this.subastaActivaId = null;
     this.confirmandoCompra = false;
     this.resultadoCierre = null;
@@ -263,6 +399,7 @@ export class ControladorSubastas {
     this.estadoDatos = 'exito'; // 'carga' | 'exito' | 'vacio' | 'error'
     this.mensajeError = null;
     this.intervalId = null;
+    this.avisoCruzado = null; // { id, nombre, oferta, rival, segundosRestantes }
   }
 
   iniciar() {
@@ -313,6 +450,26 @@ export class ControladorSubastas {
     return this.heroes.find((h) => h.id === this.heroeId) || this.heroes[0];
   }
 
+  cambiarVista(nuevaVista) {
+    this.vista = nuevaVista;
+    this.render();
+  }
+
+  abrirExplorar() {
+    this.vista = 'explorar';
+    this.render();
+  }
+
+  abrirMisSubastas() {
+    this.vista = 'mis-subastas';
+    this.render();
+  }
+
+  abrirCierreMultiple() {
+    this.vista = 'cierre-multiple';
+    this.render();
+  }
+
   abrirDetalle(id) {
     this.subastaActivaId = id;
     this.vista = 'detalle';
@@ -334,6 +491,33 @@ export class ControladorSubastas {
   seleccionarHeroe(id) {
     this.heroeId = id;
     this.render();
+  }
+
+  lanzarAvisoCruzado(subastaOId) {
+    const sub = typeof subastaOId === 'string'
+      ? this.subastas.find((s) => s.id === subastaOId)
+      : subastaOId;
+    if (!sub) return;
+    this.avisoCruzado = {
+      id: sub.id,
+      nombre: sub.nombre,
+      oferta: sub.oferta,
+      rival: sub.rival || 'rival',
+      segundosRestantes: sub.segundosRestantes
+    };
+    this.render();
+  }
+
+  descartarAvisoCruzado() {
+    this.avisoCruzado = null;
+    this.render();
+  }
+
+  irDesdeAvisoCruzado() {
+    if (!this.avisoCruzado) return;
+    const id = this.avisoCruzado.id;
+    this.avisoCruzado = null;
+    this.abrirDetalle(id);
   }
 
   pujar(monto) {
@@ -375,6 +559,16 @@ export class ControladorSubastas {
             cuando: 'ahora',
             esTu: false
           });
+          // Si el usuario no está viendo esta subasta en detalle, se dispara el aviso cruzado tipo toast
+          if (this.vista !== 'detalle' || this.subastaActivaId !== sub.id) {
+            this.avisoCruzado = {
+              id: sub.id,
+              nombre: sub.nombre,
+              oferta: contraoferta,
+              rival: sub.rival,
+              segundosRestantes: sub.segundosRestantes
+            };
+          }
           if (this.contenedor) this.render();
         }
       }, 4000);
@@ -440,6 +634,7 @@ export class ControladorSubastas {
   }
 
   actualizarTiemposEnDOM() {
+    if (!this.contenedor) return;
     const elementosTiempo = this.contenedor.querySelectorAll('[data-tiempo-subasta]');
     elementosTiempo.forEach((el) => {
       const id = el.getAttribute('data-tiempo-subasta');
@@ -447,9 +642,9 @@ export class ControladorSubastas {
       if (sub) {
         el.textContent = formatearTiempo(sub.segundosRestantes);
         if (sub.segundosRestantes <= 10 && sub.segundosRestantes > 0) {
-          el.classList.add('tiempo-urgente');
+          el.classList.add('tiempo-urgente', 'animacion-latido');
         } else {
-          el.classList.remove('tiempo-urgente');
+          el.classList.remove('tiempo-urgente', 'animacion-latido');
         }
       }
     });
@@ -501,22 +696,62 @@ export class ControladorSubastas {
 
     let contenidoHtml = '';
 
-    if (this.vista === 'lista') {
-      contenidoHtml = this.generarHtmlLista({ total, retenido, libre, subastasGanando, superadas });
+    if (this.vista === 'mis-subastas') {
+      contenidoHtml = this.generarHtmlMisSubastas({ total, retenido, libre, subastasGanando, superadas });
+    } else if (this.vista === 'cierre-multiple') {
+      contenidoHtml = this.generarHtmlCierreMultiple({ total, libre });
+    } else if (this.vista === 'detalle') {
+      contenidoHtml = this.generarHtmlDetalle({ total, retenido, libre, superadas });
     } else {
-      contenidoHtml = this.generarHtmlDetalle({ total, retenido, libre });
+      // 'lista' | 'explorar'
+      contenidoHtml = this.generarHtmlExplorar({ total, retenido, libre, subastasGanando, superadas });
+    }
+
+    if (this.avisoCruzado) {
+      contenidoHtml += this.generarHtmlToastCruzado();
     }
 
     this.contenedor.innerHTML = contenidoHtml;
     this.conectarEventos();
   }
 
-  generarHtmlLista({ total, retenido, libre, subastasGanando, superadas }) {
+  generarHtmlPestanas({ superadas = 0 } = {}) {
+    const esExplorar = this.vista === 'lista' || this.vista === 'explorar';
+    const esMisSubastas = this.vista === 'mis-subastas';
+    const esCierre = this.vista === 'cierre-multiple';
+    const esDetalle = this.vista === 'detalle';
+    const subActiva = this.getSubastaActiva();
+
+    return `
+      <nav class="subastas-tabs" role="tablist" aria-label="Secciones de subastas">
+        <button type="button" role="tab" class="tab-btn ${esExplorar ? 'tab-btn--activo' : ''}" data-tab="explorar" aria-selected="${esExplorar}">
+          Explorar subastas
+        </button>
+        <button type="button" role="tab" class="tab-btn ${esMisSubastas ? 'tab-btn--activo' : ''}" data-tab="mis-subastas" aria-selected="${esMisSubastas}">
+          Mis subastas activas
+          ${superadas > 0 ? `<span class="badge-tab-aviso" title="Te superaron en ${superadas}">${superadas}</span>` : `<span class="badge-tab-neutral">${this.subastas.length}</span>`}
+        </button>
+        <button type="button" role="tab" class="tab-btn ${esCierre ? 'tab-btn--activo' : ''}" data-tab="cierre-multiple" aria-selected="${esCierre}">
+          Cierre múltiple
+          <span class="badge-tab-neutral">${this.eventosCierre.length}</span>
+        </button>
+        ${esDetalle && subActiva ? `
+          <button type="button" role="tab" class="tab-btn tab-btn--activo" data-tab="detalle" aria-selected="true">
+            Detalle: ${subActiva.nombre.split(' ')[0]}
+          </button>
+        ` : ''}
+      </nav>
+    `;
+  }
+
+  generarHtmlExplorar({ total, retenido, libre, subastasGanando, superadas }) {
     const pctRetenido = total > 0 ? ((retenido / total) * 100).toFixed(1) : 0;
     const pctLibre = total > 0 ? ((libre / total) * 100).toFixed(1) : 100;
 
     return `
       <div class="subastas-app">
+        ${this.generarHtmlPestanas({ superadas })}
+
         <!-- Resumen de Saldos y Participación -->
         <header class="panel-resumen">
           <div class="resumen-titular">
@@ -571,8 +806,6 @@ export class ControladorSubastas {
 
   generarTarjetaSubasta(sub) {
     const urgente = sub.segundosRestantes <= 10 && sub.segundosRestantes > 0;
-    const cerrada = sub.segundosRestantes <= 0;
-
     let badgeEstado = '<span class="badge badge-neutral">Sin pujar</span>';
     let claseBorde = '';
     let textoBoton = 'Ver subasta';
@@ -614,7 +847,7 @@ export class ControladorSubastas {
           </div>
           <div class="columna-tiempo">
             <span class="etiqueta-sm">Tiempo restante</span>
-            <span class="tiempo-cifra cifra ${urgente ? 'tiempo-urgente' : ''}" data-tiempo-subasta="${sub.id}">
+            <span class="tiempo-cifra cifra ${urgente ? 'tiempo-urgente animacion-latido' : ''}" data-tiempo-subasta="${sub.id}">
               ${formatearTiempo(sub.segundosRestantes)}
             </span>
             <span class="compra-ya-texto">Comprar ya: ${formatearCreditos(sub.compraInmediata)} cr</span>
@@ -630,7 +863,319 @@ export class ControladorSubastas {
     `;
   }
 
-  generarHtmlDetalle({ total, retenido, libre }) {
+  generarHtmlMisSubastas({ total, retenido, libre, superadas }) {
+    const sobreCompromiso = verificarSobreCompromiso(total, this.subastas);
+    const estadoTopes = calcularEstadoTopesConcurrencia(this.subastas, this.config);
+    const porUrgencia = [...this.subastas].sort((a, b) => a.segundosRestantes - b.segundosRestantes);
+
+    // Segmentos para la barra interactiva
+    const conRetencion = this.subastas.filter((s) => (s.retenido || 0) > 0);
+    const PALETA_TRAMOS = ['#9A6800', '#C89A1E', '#B37D14', '#D48806', '#E6A23C', '#8A4A00'];
+    const tramos = conRetencion.map((sub, i) => {
+      const ancho = total > 0 ? ((sub.retenido / total) * 100).toFixed(1) : '0';
+      const color = PALETA_TRAMOS[i % PALETA_TRAMOS.length];
+      return {
+        id: sub.id,
+        nombre: sub.nombre,
+        ancho: `${ancho}%`,
+        color,
+        titulo: `${sub.nombre}: ${formatearCreditos(sub.retenido)} cr`
+      };
+    });
+    const libreAncho = total > 0 ? ((libre / total) * 100).toFixed(1) : '100';
+    tramos.push({
+      id: 'libre',
+      nombre: 'Libre para pujar',
+      ancho: `${libreAncho}%`,
+      color: '#0B6B31',
+      titulo: `Libre: ${formatearCreditos(libre)} cr`
+    });
+
+    const leyenda = conRetencion.map((sub, i) => ({
+      color: PALETA_TRAMOS[i % PALETA_TRAMOS.length],
+      texto: `${sub.nombre.split(' ')[0]} · ${formatearCreditos(sub.retenido)} cr`
+    })).concat([{
+      color: '#0B6B31',
+      texto: `Libre · ${formatearCreditos(libre)} cr`
+    }]);
+
+    return `
+      <div class="subastas-app vista-mis-subastas">
+        ${this.generarHtmlPestanas({ superadas })}
+
+        <div class="mis-subastas-cabecera">
+          <h1 class="titulo-grande">Mis subastas</h1>
+          <p class="texto-pista">Dónde estás participando ahora mismo y cuánto tienes comprometido en cada subasta.</p>
+        </div>
+
+        <!-- Panel de Créditos con Barra Segmentada -->
+        <section class="panel-creditos-segmentada" aria-label="Desglose financiero de créditos">
+          <h2 class="titulo-mediano">Tus créditos</h2>
+
+          <div class="creditos-tarjetas-grid">
+            <div class="tarjeta-credito tarjeta-credito-total">
+              <div class="tarjeta-credito-etiqueta">Tienes en total</div>
+              <div class="tarjeta-credito-valor cifra">${formatearCreditos(total)} cr</div>
+            </div>
+            <div class="tarjeta-credito tarjeta-credito-retenido">
+              <div class="tarjeta-credito-etiqueta">Retenido en subastas</div>
+              <div class="tarjeta-credito-valor tarjeta-credito-valor--retenido cifra">${formatearCreditos(retenido)} cr</div>
+            </div>
+            <div class="tarjeta-credito ${libre < 500 ? 'tarjeta-credito-libre--baja' : 'tarjeta-credito-libre'}">
+              <div class="tarjeta-credito-etiqueta">Libre para pujar</div>
+              <div class="tarjeta-credito-valor ${libre < 500 ? 'tarjeta-credito-valor--libre-baja' : 'tarjeta-credito-valor--libre'} cifra">${formatearCreditos(libre)} cr</div>
+            </div>
+          </div>
+
+          <!-- Barra segmentada interactiva -->
+          <div class="barra-segmentada-tramos" role="progressbar" aria-label="Distribución de créditos en subastas">
+            ${tramos.map((t) => `
+              <div class="tramo-subasta" style="width: ${t.ancho}; background: ${t.color};" title="${t.titulo}"></div>
+            `).join('')}
+          </div>
+
+          <!-- Leyenda de tramos -->
+          <div class="leyenda-tramos">
+            ${leyenda.map((l) => `
+              <span class="item-leyenda">
+                <span class="leyenda-punto" style="background: ${l.color};"></span>
+                <span>${l.texto}</span>
+              </span>
+            `).join('')}
+          </div>
+
+          <!-- Alerta de Sobre-compromiso -->
+          ${sobreCompromiso.sobreCompromiso ? `
+            <div class="alerta-sobrecompromiso" role="alert">
+              <div class="sobrecompromiso-icono">⚠️</div>
+              <div>
+                <div class="sobrecompromiso-titulo">Tus automáticas prometen más de lo que tienes</div>
+                <div class="sobrecompromiso-texto">
+                  Si todas llegaran a su tope harían falta <strong class="cifra">${formatearCreditos(sobreCompromiso.sumaTopes)} cr</strong>,
+                  y solo tienes <strong class="cifra">${formatearCreditos(total)} cr</strong>. Las últimas en responder fallarán. Baja algún tope o desactiva una.
+                </div>
+              </div>
+            </div>
+          ` : ''}
+        </section>
+
+        <!-- Medidores Visuales de Topes de Concurrencia -->
+        <section class="grid-topes-concurrencia" aria-label="Topes reglamentarios de concurrencia">
+          <!-- Tope 1: Subastas Simultáneas -->
+          <div class="tarjeta-tope ${estadoTopes.subastas.topeAlcanzado ? 'tarjeta-tope--critico' : (estadoTopes.subastas.alerta ? 'tarjeta-tope--alerta' : '')}">
+            <div class="tope-cabecera">
+              <span class="tope-nombre">Subastas en las que participas</span>
+              <span class="tope-cifra cifra" style="color: ${estadoTopes.subastas.topeAlcanzado ? 'var(--error)' : (estadoTopes.subastas.alerta ? 'var(--advertencia)' : 'var(--exito)')}">
+                ${estadoTopes.subastas.actual} de ${estadoTopes.subastas.max}
+              </span>
+            </div>
+            <div class="tope-barra-fondo">
+              <div class="tope-barra-progreso" style="width: ${Math.min(100, estadoTopes.subastas.ratio * 100)}%; background: ${estadoTopes.subastas.topeAlcanzado ? 'var(--error)' : (estadoTopes.subastas.alerta ? 'var(--advertencia)' : 'var(--exito)')};"></div>
+            </div>
+            <div class="tope-alerta-texto" style="color: ${estadoTopes.subastas.topeAlcanzado ? 'var(--error)' : (estadoTopes.subastas.alerta ? 'var(--advertencia)' : 'var(--texto-3)')}">
+              ${estadoTopes.subastas.pista}
+            </div>
+          </div>
+
+          <!-- Tope 2: Pujas Activas Ganando -->
+          <div class="tarjeta-tope ${estadoTopes.pujas.topeAlcanzado ? 'tarjeta-tope--critico' : (estadoTopes.pujas.alerta ? 'tarjeta-tope--alerta' : '')}">
+            <div class="tope-cabecera">
+              <span class="tope-nombre">Pujas tuyas que van ganando</span>
+              <span class="tope-cifra cifra" style="color: ${estadoTopes.pujas.topeAlcanzado ? 'var(--error)' : (estadoTopes.pujas.alerta ? 'var(--advertencia)' : 'var(--exito)')}">
+                ${estadoTopes.pujas.actual} de ${estadoTopes.pujas.max}
+              </span>
+            </div>
+            <div class="tope-barra-fondo">
+              <div class="tope-barra-progreso" style="width: ${Math.min(100, estadoTopes.pujas.ratio * 100)}%; background: ${estadoTopes.pujas.topeAlcanzado ? 'var(--error)' : (estadoTopes.pujas.alerta ? 'var(--advertencia)' : 'var(--exito)')};"></div>
+            </div>
+            <div class="tope-alerta-texto" style="color: ${estadoTopes.pujas.topeAlcanzado ? 'var(--error)' : (estadoTopes.pujas.alerta ? 'var(--advertencia)' : 'var(--texto-3)')}">
+              ${estadoTopes.pujas.pista}
+            </div>
+          </div>
+        </section>
+
+        <!-- Listado ordenado por urgencia de vencimiento -->
+        <section class="seccion-mis-subastas" aria-label="Listado de mis subastas activas">
+          <div class="encabezado-mis-subastas">
+            <h2 class="titulo-seccion">En curso</h2>
+            <span class="contador-mis-subastas">${porUrgencia.length} subastas</span>
+            <div style="flex-grow: 1;"></div>
+            <span class="texto-pista">Ordenadas por lo que se acaba antes</span>
+          </div>
+
+          <div class="lista-mis-subastas">
+            ${porUrgencia.map((sub) => this.generarFilaMiSubasta(sub)).join('')}
+          </div>
+        </section>
+      </div>
+    `;
+  }
+
+  generarFilaMiSubasta(sub) {
+    const urgente = sub.segundosRestantes <= 10 && sub.segundosRestantes > 0;
+    const rarezaInfo = PALETA_RAREZA[sub.rareza] || PALETA_RAREZA.comun;
+
+    let claseBorde = 'borde-sin-puja';
+    let badgeEstado = '<span class="badge badge-neutral">Sin pujar</span>';
+    let textoBoton = 'Ver subasta';
+    let claseBoton = 'btn-contorno btn-ver-subasta';
+
+    if (sub.ganando) {
+      claseBorde = 'borde-ganando';
+      badgeEstado = '<span class="badge badge-exito">Vas ganando</span>';
+      textoBoton = 'Ver subasta';
+      claseBoton = 'btn-contorno btn-ver-subasta';
+    } else if (sub.superado) {
+      claseBorde = 'borde-superada';
+      badgeEstado = '<span class="badge badge-error">Te superaron</span>';
+      textoBoton = 'Recuperarla';
+      claseBoton = 'btn-primario btn-recuperar';
+    }
+
+    if (urgente) {
+      textoBoton = 'Ir ahora';
+      claseBoton = 'btn-primario btn-ir-ahora animacion-latido';
+    }
+
+    return `
+      <article class="fila-mi-subasta ${claseBorde} ${urgente ? 'urgente' : ''}" data-id="${sub.id}">
+        <div class="fila-icono-rareza" style="background: ${rarezaInfo.fondo}; border: 1px solid ${rarezaInfo.borde};">
+          ${rarezaInfo.icono}
+        </div>
+
+        <div class="fila-info-principal">
+          <h3 class="fila-nombre">${sub.nombre}</h3>
+          <div class="fila-badges">
+            <span class="badge badge-${sub.rareza}">${sub.rareza.toUpperCase()}</span>
+            ${badgeEstado}
+            ${sub.autoLimite > 0 ? `
+              <span class="chip-automatica-tope" title="Puja automática configurada">
+                ⚡ hasta ${formatearCreditos(sub.autoLimite)} cr
+              </span>
+            ` : ''}
+          </div>
+        </div>
+
+        <div class="fila-oferta">
+          <div class="etiqueta-sm">Oferta vigente</div>
+          <div class="fila-oferta-monto cifra" style="color: var(--advertencia);">${formatearCreditos(sub.oferta)} cr</div>
+          <div class="postor-texto ${sub.ganando ? 'texto-exito' : ''}">
+            ${sub.ganando ? 'Tu puja' : `de ${sub.rival || 'rival'}`}
+          </div>
+        </div>
+
+        <div class="fila-retenido">
+          <div class="etiqueta-sm">Tú tienes retenido</div>
+          <div class="fila-retenido-monto cifra" style="color: ${sub.retenido > 0 ? 'var(--advertencia)' : 'var(--texto-3)'};">
+            ${sub.retenido > 0 ? `${formatearCreditos(sub.retenido)} cr` : '—'}
+          </div>
+        </div>
+
+        <div class="fila-acciones-tiempo">
+          <div class="reloj-fila ${urgente ? 'animacion-latido' : ''}" data-tiempo-subasta="${sub.id}">
+            ⏱️ <span class="cifra">${formatearTiempo(sub.segundosRestantes)}</span>
+          </div>
+          <button type="button" class="btn ${claseBoton}" data-abrir="${sub.id}">
+            ${textoBoton}
+          </button>
+        </div>
+      </article>
+    `;
+  }
+
+  generarHtmlCierreMultiple({ total }) {
+    const eventos = this.eventosCierre;
+    const balance = calcularBalanceNetoCierre(eventos, total);
+    const ganadas = eventos.filter((e) => e.esGanador).length;
+    const superadas = eventos.filter((e) => !e.esGanador).length;
+
+    const eventoConTope = eventos.find((e) => e.tipoDesenlace === 'superada_tope') || eventos.find((e) => !e.esGanador);
+    const consejo = generarConsejoTactico(eventoConTope, balance.saldoLibre);
+
+    return `
+      <div class="subastas-app vista-cierre-multiple">
+        ${this.generarHtmlPestanas({ superadas: 0 })}
+
+        <div class="panel-cierre-multiple">
+          <div class="cierre-titular-bloque">
+            <h1 class="cierre-titular">${eventos.length} CERRARON</h1>
+            <p class="cierre-subtitulo">Ganaste ${ganadas}, te superaron en ${superadas}. Esto es lo que cambió en tu saldo.</p>
+          </div>
+
+          <!-- Resumen de Balance Neto -->
+          <div class="cierre-neto-grid" aria-label="Balance financiero neto del cierre">
+            <div class="caja-neto">
+              <span class="cifra-neto cifra-neto--cobrado cifra">−${formatearCreditos(balance.cobrado)}</span>
+              <span class="etiqueta-neto">cobrado</span>
+            </div>
+            <div class="caja-neto">
+              <span class="cifra-neto cifra-neto--devuelto cifra">+${formatearCreditos(balance.devuelto)}</span>
+              <span class="etiqueta-neto">devuelto</span>
+            </div>
+            <div class="caja-neto caja-neto--libre">
+              <span class="cifra-neto cifra-neto--libre cifra">${formatearCreditos(balance.saldoLibre)}</span>
+              <span class="etiqueta-neto">libre ahora</span>
+            </div>
+          </div>
+
+          <!-- Filas de desenlaces -->
+          <div class="lista-eventos-cierre">
+            ${eventos.map((ev) => {
+              const rarezaInfo = PALETA_RAREZA[ev.rareza] || PALETA_RAREZA.comun;
+              let claseEvento = 'evento--superada-rival';
+              let montoHtml = `<div class="evento-cifra cifra" style="color: var(--exito);">+${formatearCreditos(ev.montoDevuelto)}</div><div class="etiqueta-sm">devuelto</div>`;
+              let btnAccion = `<button type="button" class="btn btn-contorno btn-sm btn-buscar-parecidas" data-id="${ev.id}">Parecidas</button>`;
+
+              if (ev.tipoDesenlace === 'adjudicada') {
+                claseEvento = 'evento--adjudicada';
+                montoHtml = `<div class="evento-cifra cifra" style="color: var(--advertencia);">−${formatearCreditos(ev.montoCobrado)}</div><div class="etiqueta-sm">cobrado</div>`;
+                btnAccion = `<button type="button" class="btn btn-acento btn-sm btn-ver-adjudicada" data-id="${ev.id}">Ver</button>`;
+              } else if (ev.tipoDesenlace === 'superada_tope') {
+                claseEvento = 'evento--superada-tope';
+              }
+
+              return `
+                <div class="fila-evento-cierre ${claseEvento}">
+                  <div class="evento-icono" style="background: ${rarezaInfo.fondo}; border: 1px solid ${rarezaInfo.borde};">
+                    ${rarezaInfo.icono}
+                  </div>
+                  <div class="evento-info">
+                    <h3 class="evento-titulo">${ev.nombre}</h3>
+                    <div class="evento-motivo">${ev.motivo}</div>
+                  </div>
+                  <div class="evento-monto">
+                    ${montoHtml}
+                  </div>
+                  <div class="evento-accion">
+                    ${btnAccion}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+
+          <!-- Caja de Consejo Táctico Personalizado -->
+          ${consejo ? `
+            <div class="caja-consejo-tactico" role="region" aria-label="Consejo táctico">
+              <div class="consejo-icono">⚡</div>
+              <div class="consejo-contenido">
+                <div class="consejo-titulo">${consejo.titulo}</div>
+                <div>${consejo.cuerpo}</div>
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- Botones de Navegación del Cierre -->
+          <div class="cierre-acciones-pie">
+            <button type="button" class="btn btn-primario" id="btn-cierre-a-mis-subastas">Ver mis subastas</button>
+            <button type="button" class="btn btn-contorno" id="btn-cierre-a-explorar">Al listado</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  generarHtmlDetalle({ libre, superadas = 0 }) {
     const sub = this.getSubastaActiva();
     const hero = this.getHeroeActivo();
     const comp = calcularComparacionHeroe(hero, sub);
@@ -641,6 +1186,8 @@ export class ControladorSubastas {
 
     return `
       <div class="subastas-app vista-detalle">
+        ${this.generarHtmlPestanas({ superadas })}
+
         <!-- Barra de navegación contextual -->
         <div class="barra-volver">
           <button type="button" class="btn btn-texto" id="btn-volver">
@@ -755,7 +1302,7 @@ export class ControladorSubastas {
                 </div>
                 <div class="reloj-cierre">
                   <span class="etiqueta-sm">Cierre en</span>
-                  <div class="tiempo-cierre cifra ${urgente ? 'tiempo-urgente' : ''}" data-tiempo-subasta="${sub.id}">
+                  <div class="tiempo-cierre cifra ${urgente ? 'tiempo-urgente animacion-latido' : ''}" data-tiempo-subasta="${sub.id}">
                     ${formatearTiempo(sub.segundosRestantes)}
                   </div>
                 </div>
@@ -842,21 +1389,89 @@ export class ControladorSubastas {
     `;
   }
 
+  generarHtmlToastCruzado() {
+    if (!this.avisoCruzado) return '';
+    return `
+      <aside class="toast-cruzado-flotante" role="alert" aria-live="polite">
+        <div class="toast-cruzado-cabecera">
+          <div class="toast-titulo-contenedor">
+            <span class="toast-icono">⚠️</span>
+            <strong class="toast-titulo">¡Te superaron en otra subasta!</strong>
+          </div>
+          <button type="button" class="btn-cerrar-toast" aria-label="Cerrar aviso cruzado">×</button>
+        </div>
+        <p class="toast-mensaje">
+          <strong>${this.avisoCruzado.nombre}</strong> · ahora <strong class="cifra">${formatearCreditos(this.avisoCruzado.oferta)} cr</strong> ·
+          quedan <span class="cifra">${formatearTiempo(this.avisoCruzado.segundosRestantes)}</span>
+        </p>
+        <div class="toast-acciones">
+          <button type="button" class="btn btn-primario btn-sm btn-toast-ir" data-id="${this.avisoCruzado.id}">Ir</button>
+          <button type="button" class="btn btn-contorno btn-sm btn-toast-descartar">Descartar</button>
+        </div>
+      </aside>
+    `;
+  }
+
   conectarEventos() {
-    // Abrir detalle desde tarjeta
-    this.contenedor.querySelectorAll('.btn-abrir').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const id = btn.getAttribute('data-abrir');
-        this.abrirDetalle(id);
+    // Pestañas de navegación
+    this.contenedor.querySelectorAll('.tab-btn[data-tab]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const tab = btn.getAttribute('data-tab');
+        if (tab === 'explorar') this.abrirExplorar();
+        else if (tab === 'mis-subastas') this.abrirMisSubastas();
+        else if (tab === 'cierre-multiple') this.abrirCierreMultiple();
       });
     });
 
-    this.contenedor.querySelectorAll('.tarjeta-subasta').forEach((tarj) => {
+    // Abrir detalle desde tarjeta en Explorar o Mis subastas
+    this.contenedor.querySelectorAll('.btn-abrir, .btn-ver-subasta, .btn-recuperar, .btn-ir-ahora').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-abrir') || btn.closest('[data-id]')?.getAttribute('data-id');
+        if (id) this.abrirDetalle(id);
+      });
+    });
+
+    this.contenedor.querySelectorAll('.tarjeta-subasta, .fila-mi-subasta').forEach((tarj) => {
       tarj.addEventListener('click', () => {
         const id = tarj.getAttribute('data-id');
-        this.abrirDetalle(id);
+        if (id) this.abrirDetalle(id);
       });
+    });
+
+    // Cierre múltiple
+    this.contenedor.querySelector('#btn-cierre-a-mis-subastas')?.addEventListener('click', () => {
+      this.abrirMisSubastas();
+    });
+
+    this.contenedor.querySelector('#btn-cierre-a-explorar')?.addEventListener('click', () => {
+      this.abrirExplorar();
+    });
+
+    this.contenedor.querySelectorAll('.btn-ver-adjudicada').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id');
+        if (id) this.abrirDetalle(id);
+      });
+    });
+
+    this.contenedor.querySelectorAll('.btn-buscar-parecidas').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.abrirExplorar();
+      });
+    });
+
+    // Toast cruzado
+    this.contenedor.querySelector('.btn-toast-ir')?.addEventListener('click', () => {
+      this.irDesdeAvisoCruzado();
+    });
+
+    this.contenedor.querySelector('.btn-toast-descartar')?.addEventListener('click', () => {
+      this.descartarAvisoCruzado();
+    });
+
+    this.contenedor.querySelector('.btn-cerrar-toast')?.addEventListener('click', () => {
+      this.descartarAvisoCruzado();
     });
 
     // Volver a la lista

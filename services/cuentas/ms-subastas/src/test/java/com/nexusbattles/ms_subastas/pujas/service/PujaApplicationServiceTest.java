@@ -2,6 +2,7 @@ package com.nexusbattles.ms_subastas.pujas.service;
 
 import com.nexusbattles.ms_subastas.notificaciones.NotificacionOutbox;
 import com.nexusbattles.ms_subastas.pujas.creditos.CreditoClientFake;
+import com.nexusbattles.ms_subastas.pujas.dto.PujaResponse;
 import com.nexusbattles.ms_subastas.pujas.model.EstadoPuja;
 import com.nexusbattles.ms_subastas.pujas.model.Puja;
 import com.nexusbattles.ms_subastas.pujas.model.TipoPuja;
@@ -284,5 +285,42 @@ class PujaApplicationServiceTest {
         assertEquals(EstadoSubasta.ADJUDICADA, subasta.getEstado());
         assertEquals(EstadoPuja.GANADORA, pujaVigente.getEstado());
         assertEquals(new BigDecimal("890"), creditoClient.saldoDisponible(postor));
+    }
+
+    @Test
+    void listarPujasPorJugadorYEstadoDevuelvePujasMapeadasADto() {
+        UUID jugador = UUID.randomUUID();
+        UUID subastaId = UUID.randomUUID();
+        Puja puja = new Puja(UUID.randomUUID(), subastaId, jugador, new BigDecimal("250"),
+                TipoPuja.MANUAL, EstadoPuja.ACTIVA, AHORA, "reserva-1");
+
+        when(pujaRepository.findByJugadorIdAndEstadoOrderByCreadaEnDesc(jugador, EstadoPuja.ACTIVA))
+                .thenReturn(List.of(puja));
+
+        List<PujaResponse> resultado = servicio.listarPujasPorJugadorYEstado(jugador, EstadoPuja.ACTIVA);
+
+        assertEquals(1, resultado.size());
+        assertEquals(puja.getId(), resultado.get(0).id());
+        assertEquals(puja.getSubastaId(), resultado.get(0).subastaId());
+        assertEquals(new BigDecimal("250"), resultado.get(0).monto());
+        assertEquals(EstadoPuja.ACTIVA, resultado.get(0).estado());
+        verify(pujaRepository).findByJugadorIdAndEstadoOrderByCreadaEnDesc(jugador, EstadoPuja.ACTIVA);
+    }
+
+    @Test
+    void findByJugadorIdAndEstadoDelegaEnRepositorio() {
+        UUID jugador = UUID.randomUUID();
+        UUID subastaId = UUID.randomUUID();
+        Puja puja = new Puja(UUID.randomUUID(), subastaId, jugador, new BigDecimal("400"),
+                TipoPuja.AUTOMATICA, EstadoPuja.ACTIVA, AHORA, "reserva-2");
+
+        when(pujaRepository.findByJugadorIdAndEstado(jugador, EstadoPuja.ACTIVA))
+                .thenReturn(List.of(puja));
+
+        List<Puja> resultado = servicio.findByJugadorIdAndEstado(jugador, EstadoPuja.ACTIVA);
+
+        assertEquals(1, resultado.size());
+        assertEquals(puja.getId(), resultado.get(0).getId());
+        verify(pujaRepository).findByJugadorIdAndEstado(jugador, EstadoPuja.ACTIVA);
     }
 }

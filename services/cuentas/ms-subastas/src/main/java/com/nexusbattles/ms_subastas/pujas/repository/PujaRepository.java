@@ -18,6 +18,12 @@ public interface PujaRepository extends JpaRepository<Puja, UUID> {
     /** Cuantas pujas del jugador siguen siendo oferta vigente (tope de 50). */
     int countByJugadorIdAndEstado(UUID jugadorId, EstadoPuja estado);
 
+    /** Lista de pujas del jugador por estado (ej. ACTIVA). */
+    List<Puja> findByJugadorIdAndEstado(UUID jugadorId, EstadoPuja estado);
+
+    /** Lista de pujas del jugador por estado ordenadas por fecha de creacion descendente. */
+    List<Puja> findByJugadorIdAndEstadoOrderByCreadaEnDesc(UUID jugadorId, EstadoPuja estado);
+
     /** Su ultima puja en cualquier subasta, para validar el intervalo minimo de 5 s. */
     /**
      * Ultima puja del jugador EN ESA SUBASTA, para el intervalo minimo de 5 s.
