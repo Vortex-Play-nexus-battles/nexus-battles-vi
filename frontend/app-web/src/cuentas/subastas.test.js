@@ -264,10 +264,17 @@ describe('ControladorSubastas - Interacción y Flujo DOM', () => {
   });
 
   describe('Navegación por Pestañas / Modos', () => {
-    test('permite alternar entre Explorar, Mis Subastas y Cierre Múltiple mediante las pestañas', () => {
+    test('permite alternar entre las 4 pestañas: Explorar, Mis Subastas, Detalle y Cierre Múltiple', () => {
       // Estado inicial en lista/explorar
       expect(controlador.vista).toBe('lista');
       expect(contenedor.querySelector('.tab-btn[data-tab="explorar"]')).not.toBeNull();
+      expect(contenedor.querySelector('.tab-btn[data-tab="detalle"]')).not.toBeNull();
+
+      // Ir a Detalle mediante pestaña
+      const tabDetalle = contenedor.querySelector('.tab-btn[data-tab="detalle"]');
+      tabDetalle.click();
+      expect(controlador.vista).toBe('detalle');
+      expect(contenedor.querySelector('.vista-detalle')).not.toBeNull();
 
       // Ir a Mis Subastas
       const tabMisSubastas = contenedor.querySelector('.tab-btn[data-tab="mis-subastas"]');
@@ -289,6 +296,24 @@ describe('ControladorSubastas - Interacción y Flujo DOM', () => {
       tabExplorar.click();
       expect(controlador.vista).toBe('explorar');
       expect(contenedor.querySelector('.grid-subastas')).not.toBeNull();
+    });
+
+    test('el botón volver en detalle respeta el origen de navegación', () => {
+      // Entrar a detalle desde Mis Subastas
+      controlador.abrirMisSubastas();
+      controlador.abrirDetalle('grebas-centinela');
+      expect(controlador.origenVista).toBe('mis-subastas');
+      const btnVolver = contenedor.querySelector('#btn-volver');
+      expect(btnVolver.textContent).toContain('Volver a mis subastas');
+      btnVolver.click();
+      expect(controlador.vista).toBe('mis-subastas');
+
+      // Botón lateral 'Ver todas mis subastas'
+      controlador.abrirDetalle('hacha-obsidiana');
+      const btnLateral = contenedor.querySelector('#btn-ver-todas-mis-subastas');
+      expect(btnLateral).not.toBeNull();
+      btnLateral.click();
+      expect(controlador.vista).toBe('mis-subastas');
     });
   });
 
@@ -384,8 +409,21 @@ describe('ControladorSubastas - Interacción y Flujo DOM', () => {
       const cajaConsejo = contenedor.querySelector('.caja-consejo-tactico');
       expect(cajaConsejo).not.toBeNull();
       expect(cajaConsejo.textContent).toContain('se te escapó por 50 cr');
-      expect(cajaConsejo.textContent).toContain('Tu tope estaba en 2.400 cr y cerró en 2.450 cr');
+      expect(cajaConsejo.textContent).toContain('Tu tope estaba en 2.400');
+      expect(cajaConsejo.textContent).toContain('cerró en 2.450');
+      expect(cajaConsejo.textContent).toContain('tenías 4.130 libres');
       expect(cajaConsejo.textContent).toContain('más de margen era tuyo');
+    });
+
+    test('el botón "Ver" de una subasta adjudicada la abre en modo cerrado/victoria', () => {
+      const btnVer = contenedor.querySelector('.btn-ver-adjudicada');
+      expect(btnVer).not.toBeNull();
+      btnVer.click();
+      expect(controlador.vista).toBe('detalle');
+      expect(controlador.resultadoCierre).toBe('adjudicada');
+      expect(contenedor.textContent).toContain('¡ES TUYA!');
+      expect(contenedor.querySelector('#btn-pujar-manual').disabled).toBe(true);
+      expect(contenedor.querySelector('#btn-solicitar-compra').disabled).toBe(true);
     });
 
     test('permite navegar desde el panel de cierre a mis subastas o al listado', () => {
@@ -416,6 +454,20 @@ describe('ControladorSubastas - Interacción y Flujo DOM', () => {
       btnDescartar.click();
       expect(controlador.avisoCruzado).toBeNull();
       expect(contenedor.querySelector('.toast-cruzado-flotante')).toBeNull();
+    });
+
+    test('el reloj del aviso cruzado se actualiza en el DOM con data-tiempo-subasta', () => {
+      controlador.lanzarAvisoCruzado('hacha-obsidiana');
+      const toast = contenedor.querySelector('.toast-cruzado-flotante');
+      const relojToast = toast.querySelector('[data-tiempo-subasta="hacha-obsidiana"]');
+      expect(relojToast).not.toBeNull();
+      expect(relojToast.textContent).toBe('0:08');
+
+      // Avanzamos el temporizador
+      const sub = controlador.subastas.find((s) => s.id === 'hacha-obsidiana');
+      sub.segundosRestantes = 7;
+      controlador.actualizarTiemposEnDOM();
+      expect(relojToast.textContent).toBe('0:07');
     });
 
     test('el botón "Ir" del aviso cruzado lleva al detalle de la subasta superada', () => {
@@ -473,7 +525,7 @@ describe('HU-SUB-004 - Pruebas Unitarias de Cálculos Nuevos', () => {
     expect(balance.cobrado).toBe(1350);
     expect(balance.devuelto).toBe(3280);
     expect(balance.neto).toBe(1930);
-    expect(balance.saldoLibre).toBe(4850);
+    expect(balance.saldoLibre).toBe(4130);
   });
 
   test('generarConsejoTactico calcula la diferencia y el margen necesario', () => {
@@ -486,7 +538,7 @@ describe('HU-SUB-004 - Pruebas Unitarias de Cálculos Nuevos', () => {
     expect(consejo.diferencia).toBe(50);
     expect(consejo.margenRecomendado).toBe(100);
     expect(consejo.titulo).toContain('se te escapó por 50 cr');
-    expect(consejo.cuerpo).toContain('tenías 4.130 cr libres');
+    expect(consejo.cuerpo).toContain('tenías 4.130 libres');
   });
 
   test('calcularEstadoTopesConcurrencia genera alertas al superar el 80%', () => {

@@ -323,4 +323,16 @@ class PujaApplicationServiceTest {
         assertEquals(puja.getId(), resultado.get(0).getId());
         verify(pujaRepository).findByJugadorIdAndEstado(jugador, EstadoPuja.ACTIVA);
     }
+
+    @Test
+    void listarPujasPorJugadorYEstadoLanzaNullPointerSiArgumentosSonNulos() {
+        assertThrows(NullPointerException.class, () -> servicio.listarPujasPorJugadorYEstado(null, EstadoPuja.ACTIVA));
+        assertThrows(NullPointerException.class, () -> servicio.listarPujasPorJugadorYEstado(UUID.randomUUID(), null));
+    }
+
+    @Test
+    void findByJugadorIdAndEstadoLanzaNullPointerSiArgumentosSonNulos() {
+        assertThrows(NullPointerException.class, () -> servicio.findByJugadorIdAndEstado(null, EstadoPuja.ACTIVA));
+        assertThrows(NullPointerException.class, () -> servicio.findByJugadorIdAndEstado(UUID.randomUUID(), null));
+    }
 }

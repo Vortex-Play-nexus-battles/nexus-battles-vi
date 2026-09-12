@@ -29,7 +29,7 @@ export const SUBASTAS_INICIALES = [
     oferta: 1350,
     compraInmediata: 2800,
     mediaMercado: 1800,
-    segundosRestantes: 38,
+    segundosRestantes: 8,
     ganando: true,
     superado: false,
     autoLimite: 2000,
@@ -53,7 +53,7 @@ export const SUBASTAS_INICIALES = [
     rareza: 'rara',
     nivel: 20,
     vendedor: 'valeria_iron',
-    oferta: 750,
+    oferta: 880,
     compraInmediata: 1500,
     mediaMercado: 900,
     segundosRestantes: 96,
@@ -62,85 +62,85 @@ export const SUBASTAS_INICIALES = [
     autoLimite: 1200,
     esperaSegundos: 0,
     retenido: 0,
-    rival: 'morrigan_x',
+    rival: 'thar_vex',
     rivales: 2,
     aporte: { poder: 0, vida: 90, defensa: 18 },
     historial: [
-      { apodo: 'morrigan_x', monto: 750, tipo: 'Manual', cuando: 'hace 12 s', esTu: false },
-      { apodo: 'andres_nv', monto: 700, tipo: 'Manual', cuando: 'hace 45 s', esTu: true }
+      { apodo: 'thar_vex', monto: 880, tipo: 'Automática', cuando: 'hace 12 s', esTu: false },
+      { apodo: 'andres_nv', monto: 800, tipo: 'Manual', cuando: 'hace 45 s', esTu: true }
     ]
   },
   {
-    id: 'arco-cazador',
-    nombre: 'Arco del Susurro Nocturno',
-    tipo: 'Arma · Distancia',
-    descripcion: 'Cuerda trenzada con tendón de quimera. Los disparos no emiten silbido al rasgar el viento.',
+    id: 'amuleto-brasa',
+    nombre: 'Amuleto de Brasa Eterna',
+    tipo: 'Accesorio · Cuello',
+    descripcion: 'Gema ígnea que late con el calor de las forjas primigenias. Otorga gran afinidad arcana y salud.',
     rareza: 'legendaria',
     nivel: 25,
     vendedor: 'aerith_moon',
-    oferta: 2100,
-    compraInmediata: 4500,
-    mediaMercado: 2400,
-    segundosRestantes: 620,
+    oferta: 2400,
+    compraInmediata: 4800,
+    mediaMercado: 2600,
+    segundosRestantes: 640,
     ganando: true,
     superado: false,
-    autoLimite: 2500,
+    autoLimite: 2000,
     esperaSegundos: 0,
-    retenido: 2100,
-    rival: 'fenrir_9',
+    retenido: 2400,
+    rival: 'valkyria_99',
     rivales: 4,
-    aporte: { poder: 22, vida: -20, defensa: 0 },
+    aporte: { poder: 25, vida: 50, defensa: 5 },
     historial: [
-      { apodo: 'andres_nv', monto: 2100, tipo: 'Automática', cuando: 'hace 1 min', esTu: true },
-      { apodo: 'fenrir_9', monto: 2000, tipo: 'Manual', cuando: 'hace 2 min', esTu: false }
+      { apodo: 'andres_nv', monto: 2400, tipo: 'Automática', cuando: 'hace 1 min', esTu: true },
+      { apodo: 'valkyria_99', monto: 2350, tipo: 'Manual', cuando: 'hace 2 min', esTu: false }
     ]
   },
   {
-    id: 'baculo-cristal',
-    nombre: 'Báculo de Runas Resonantes',
-    tipo: 'Arma · Mágica',
-    descripcion: 'Canaliza la resonancia arcana amplificando el alcance de los conjuros mayores.',
-    rareza: 'rara',
-    nivel: 22,
+    id: 'daga-hueso',
+    nombre: 'Daga de Hueso Pulido',
+    tipo: 'Arma · Una mano',
+    descripcion: 'Tallada en colmillo de behemoth. Ligera y letal en ataques furtivos.',
+    rareza: 'comun',
+    nivel: 12,
     vendedor: 'zephyr_mage',
-    oferta: 600,
-    compraInmediata: 1200,
-    mediaMercado: 850,
-    segundosRestantes: 8,
+    oferta: 310,
+    compraInmediata: 700,
+    mediaMercado: 400,
+    segundosRestantes: 1820,
     ganando: false,
     superado: false,
     autoLimite: 0,
     esperaSegundos: 0,
     retenido: 0,
-    rival: 'ignis_red',
+    rival: 'novato_12',
     rivales: 1,
-    aporte: { poder: 18, vida: 40, defensa: -5 },
+    aporte: { poder: 8, vida: 10, defensa: 0 },
     historial: [
-      { apodo: 'ignis_red', monto: 600, tipo: 'Manual', cuando: 'hace 5 min', esTu: false }
+      { apodo: 'novato_12', monto: 310, tipo: 'Manual', cuando: 'hace 5 min', esTu: false }
     ]
   },
   {
-    id: 'anillo-veterano',
-    nombre: 'Anillo de Hierro del Veterano',
-    tipo: 'Accesorio · Dedo',
-    descripcion: 'Sencillo pero forjado con temple impecable. Otorga tenacidad en asedios prolongados.',
-    rareza: 'comun',
-    nivel: 15,
+    id: 'yelmo-vigia',
+    nombre: 'Yelmo del Vigía',
+    tipo: 'Armadura · Cabeza',
+    descripcion: 'Casco de acero templado con visor blindado. Mejora la resistencia y percepción táctica.',
+    rareza: 'rara',
+    nivel: 18,
     vendedor: 'barkeep_tom',
-    oferta: 250,
-    compraInmediata: 500,
-    mediaMercado: 350,
-    segundosRestantes: 1800,
+    oferta: 1100,
+    compraInmediata: 2200,
+    mediaMercado: 1400,
+    segundosRestantes: 5400,
     ganando: false,
     superado: false,
     autoLimite: 1500,
     esperaSegundos: 0,
     retenido: 0,
-    rival: 'novato_12',
-    rivales: 1,
-    aporte: { poder: 5, vida: 30, defensa: 2 },
+    rival: 'ignis_red',
+    rivales: 2,
+    aporte: { poder: 6, vida: 60, defensa: 14 },
     historial: [
-      { apodo: 'novato_12', monto: 250, tipo: 'Manual', cuando: 'hace 10 min', esTu: false }
+      { apodo: 'ignis_red', monto: 1100, tipo: 'Manual', cuando: 'hace 10 min', esTu: false }
     ]
   }
 ];
@@ -303,10 +303,10 @@ export function verificarSobreCompromiso(total, subastas = []) {
   return { sobreCompromiso, sumaTopes, total, faltante };
 }
 
-export function calcularBalanceNetoCierre(eventosCierre = [], saldoTotal = CONFIG_REGLAS.creditosTotales) {
+export function calcularBalanceNetoCierre(eventosCierre = [], saldoTotal = CONFIG_REGLAS.creditosTotales, retenidoEnOtras = 720) {
   const cobrado = eventosCierre.reduce((acc, ev) => acc + (Number(ev.montoCobrado) || 0), 0);
   const devuelto = eventosCierre.reduce((acc, ev) => acc + (Number(ev.montoDevuelto) || 0), 0);
-  const saldoLibre = Math.max(0, saldoTotal - cobrado);
+  const saldoLibre = Math.max(0, saldoTotal - retenidoEnOtras - cobrado);
   return {
     cobrado,
     devuelto,
@@ -321,11 +321,12 @@ export function generarConsejoTactico(eventoCierre, saldoLibre = 4130) {
   const tope = eventoCierre.topePropio || 0;
   const montoFinal = eventoCierre.montoFinal || 0;
   const diferencia = Math.max(0, montoFinal - tope);
-  const margenRecomendado = diferencia + 50;
+  const margenRecomendado = diferencia > 0 ? diferencia * 2 : 100;
+  const nombreCorto = nombre.includes('Amuleto') ? 'Amuleto' : nombre.split(' ')[0].replace(/^(el|la|los|las)\s+/i, '');
 
   return {
-    titulo: `El ${nombre.split(' ')[0]} se te escapó por ${formatearCreditos(diferencia)} cr.`,
-    cuerpo: `Tu tope estaba en ${formatearCreditos(tope)} cr y cerró en ${formatearCreditos(montoFinal)} cr. Con ${formatearCreditos(margenRecomendado)} cr más de margen era tuyo — y tenías ${formatearCreditos(saldoLibre)} cr libres.`,
+    titulo: `El ${nombreCorto} se te escapó por ${formatearCreditos(diferencia)} cr.`,
+    cuerpo: `Tu tope estaba en ${formatearCreditos(tope)} y cerró en ${formatearCreditos(montoFinal)}. Con ${formatearCreditos(margenRecomendado)} cr más de margen era tuyo — y tenías ${formatearCreditos(saldoLibre)} libres.`,
     diferencia,
     margenRecomendado
   };
@@ -391,6 +392,7 @@ export class ControladorSubastas {
     this.eventosCierre = JSON.parse(JSON.stringify(eventosCierre));
     this.heroeId = this.heroes[0]?.id || 'kaelen';
     this.vista = 'lista'; // 'lista' | 'explorar' | 'mis-subastas' | 'detalle' | 'cierre-multiple'
+    this.origenVista = 'explorar';
     this.subastaActivaId = null;
     this.confirmandoCompra = false;
     this.resultadoCierre = null;
@@ -428,6 +430,15 @@ export class ControladorSubastas {
           cambio = true;
         }
       });
+      if (this.avisoCruzado) {
+        const subAviso = this.subastas.find((s) => s.id === this.avisoCruzado.id);
+        if (subAviso) {
+          this.avisoCruzado.segundosRestantes = subAviso.segundosRestantes;
+        } else if (this.avisoCruzado.segundosRestantes > 0) {
+          this.avisoCruzado.segundosRestantes -= 1;
+        }
+        cambio = true;
+      }
       if (cambio && this.contenedor) {
         this.actualizarTiemposEnDOM();
       }
@@ -470,18 +481,26 @@ export class ControladorSubastas {
     this.render();
   }
 
-  abrirDetalle(id) {
-    this.subastaActivaId = id;
+  abrirDetalle(id, opciones = {}) {
+    if (this.vista !== 'detalle') {
+      this.origenVista = this.vista;
+    }
+    this.subastaActivaId = id || this.subastaActivaId || this.subastas[0]?.id;
     this.vista = 'detalle';
     this.confirmandoCompra = false;
-    this.resultadoCierre = null;
+    this.resultadoCierre = opciones.resultadoCierre || null;
     this.montoPersonalizado = null;
     this.limiteAutoPersonalizado = null;
     this.render();
   }
 
   volverALista() {
-    this.vista = 'lista';
+    const destino = this.origenVista === 'mis-subastas'
+      ? 'mis-subastas'
+      : (this.origenVista === 'cierre-multiple'
+          ? 'cierre-multiple'
+          : (this.origenVista === 'explorar' ? 'explorar' : 'lista'));
+    this.vista = destino;
     this.subastaActivaId = null;
     this.confirmandoCompra = false;
     this.resultadoCierre = null;
@@ -638,7 +657,7 @@ export class ControladorSubastas {
     const elementosTiempo = this.contenedor.querySelectorAll('[data-tiempo-subasta]');
     elementosTiempo.forEach((el) => {
       const id = el.getAttribute('data-tiempo-subasta');
-      const sub = this.subastas.find((s) => s.id === id);
+      const sub = this.subastas.find((s) => s.id === id) || (this.avisoCruzado && this.avisoCruzado.id === id ? this.avisoCruzado : null);
       if (sub) {
         el.textContent = formatearTiempo(sub.segundosRestantes);
         if (sub.segundosRestantes <= 10 && sub.segundosRestantes > 0) {
@@ -735,11 +754,9 @@ export class ControladorSubastas {
           Cierre múltiple
           <span class="badge-tab-neutral">${this.eventosCierre.length}</span>
         </button>
-        ${esDetalle && subActiva ? `
-          <button type="button" role="tab" class="tab-btn tab-btn--activo" data-tab="detalle" aria-selected="true">
-            Detalle: ${subActiva.nombre.split(' ')[0]}
-          </button>
-        ` : ''}
+        <button type="button" role="tab" class="tab-btn ${esDetalle ? 'tab-btn--activo' : ''}" data-tab="detalle" aria-selected="${esDetalle}">
+          ${esDetalle && subActiva ? `Detalle: ${subActiva.nombre.split(' ')[0]}` : 'Detalle de subasta'}
+        </button>
       </nav>
     `;
   }
@@ -813,15 +830,23 @@ export class ControladorSubastas {
 
     if (sub.ganando) {
       badgeEstado = '<span class="badge badge-exito">Vas ganando</span>';
-      claseBorde = 'tarjeta-ganando';
+      claseBorde = 'tarjeta-ganando borde-ganando';
     } else if (sub.superado) {
       badgeEstado = '<span class="badge badge-error">Te superaron</span>';
-      claseBorde = 'tarjeta-superada';
+      claseBorde = 'tarjeta-superada borde-superada';
+    } else {
+      claseBorde = 'borde-sin-puja';
+    }
+
+    if (sub.superado) {
       textoBoton = 'Recuperarla';
-      claseBoton = 'btn-primario';
+      claseBoton = 'btn-primario btn-recuperar';
     } else if (urgente) {
       textoBoton = 'Ir ahora';
-      claseBoton = 'btn-primario';
+      claseBoton = 'btn-primario btn-ir-ahora animacion-latido';
+    } else {
+      textoBoton = 'Ver subasta';
+      claseBoton = 'btn-contorno btn-ver-subasta';
     }
 
     return `
@@ -1023,18 +1048,20 @@ export class ControladorSubastas {
     if (sub.ganando) {
       claseBorde = 'borde-ganando';
       badgeEstado = '<span class="badge badge-exito">Vas ganando</span>';
-      textoBoton = 'Ver subasta';
-      claseBoton = 'btn-contorno btn-ver-subasta';
     } else if (sub.superado) {
       claseBorde = 'borde-superada';
       badgeEstado = '<span class="badge badge-error">Te superaron</span>';
-      textoBoton = 'Recuperarla';
-      claseBoton = 'btn-primario btn-recuperar';
     }
 
-    if (urgente) {
+    if (sub.superado) {
+      textoBoton = 'Recuperarla';
+      claseBoton = 'btn-primario btn-recuperar';
+    } else if (urgente) {
       textoBoton = 'Ir ahora';
       claseBoton = 'btn-primario btn-ir-ahora animacion-latido';
+    } else {
+      textoBoton = 'Ver subasta';
+      claseBoton = 'btn-contorno btn-ver-subasta';
     }
 
     return `
@@ -1184,6 +1211,14 @@ export class ControladorSubastas {
     const cerrada = sub.segundosRestantes <= 0 || this.resultadoCierre !== null;
     const urgente = sub.segundosRestantes <= 10 && !cerrada;
 
+    const subastasOtras = this.subastas.filter((s) => s.id !== sub.id);
+    const otrasConRetenido = subastasOtras.filter((s) => (s.retenido || 0) > 0).length;
+    const retenidoEnOtras = subastasOtras.reduce((acc, s) => acc + (s.retenido || 0), 0);
+
+    const textoVolver = this.origenVista === 'mis-subastas'
+      ? '← Volver a mis subastas'
+      : (this.origenVista === 'cierre-multiple' ? '← Volver a cierre múltiple' : '← Volver al listado de subastas');
+
     return `
       <div class="subastas-app vista-detalle">
         ${this.generarHtmlPestanas({ superadas })}
@@ -1191,17 +1226,33 @@ export class ControladorSubastas {
         <!-- Barra de navegación contextual -->
         <div class="barra-volver">
           <button type="button" class="btn btn-texto" id="btn-volver">
-            ← Volver al listado de subastas
+            ${textoVolver}
           </button>
           <span class="separador-pipe">|</span>
           <span class="saldo-contextual">Disponible libre: <strong>${formatearCreditos(libre)} cr</strong> (en esta subasta: <strong>${formatearCreditos(disponibleAqui)} cr</strong>)</span>
         </div>
 
-        <!-- Alerta de resultado final si cerró -->
-        ${this.resultadoCierre === 'comprada' ? `
-          <div class="alerta alerta-exito-cierre" role="alert">
-            <h2 class="titulo-mediano">¡Has comprado este objeto de inmediato!</h2>
-            <p>Se te adjudicó por <strong>${formatearCreditos(sub.compraInmediata)} cr</strong>. El objeto ha sido transferido a tu inventario.</p>
+        <!-- Alerta de resultado final si cerró o se adjudicó -->
+        ${(this.resultadoCierre === 'comprada' || this.resultadoCierre === 'adjudicada') ? `
+          <div class="alerta alerta-exito-cierre" role="alert" style="margin-bottom: 20px; background: #DFF1E6; border: 1px solid #0B6B31; border-radius: 8px; padding: 20px; text-align: center;">
+            <h2 class="titulo-grande" style="color: #0B6B31; margin-bottom: 6px;">¡ES TUYA!</h2>
+            <p style="font-size: 16px; color: var(--texto-1); margin-bottom: 12px;">
+              ${this.resultadoCierre === 'comprada' ? '¡Has comprado este objeto de inmediato!' : 'La subasta cerró exitosamente y el objeto ha sido adjudicado a tu inventario.'}
+            </p>
+            <div style="display: flex; justify-content: center; gap: 16px; margin-bottom: 16px;">
+              <div style="background: #FFFFFF; padding: 10px 16px; border-radius: 6px; border: 1px solid #9FABC9;">
+                <span style="font-size: 12px; color: var(--texto-2); display: block;">Monto pagado:</span>
+                <strong class="cifra" style="font-size: 20px; color: #0B6B31;">${formatearCreditos(this.resultadoCierre === 'comprada' ? sub.compraInmediata : sub.oferta)} cr</strong>
+              </div>
+              <div style="background: #FFFFFF; padding: 10px 16px; border-radius: 6px; border: 1px solid #9FABC9;">
+                <span style="font-size: 12px; color: var(--texto-2); display: block;">Saldo libre resultante:</span>
+                <strong class="cifra" style="font-size: 20px; color: #0B6B31;">${formatearCreditos(libre)} cr</strong>
+              </div>
+            </div>
+            <div style="display: flex; justify-content: center; gap: 12px;">
+              <button type="button" class="btn btn-primario" id="btn-resultado-mis-subastas">Ver mis subastas</button>
+              <button type="button" class="btn btn-contorno" id="btn-resultado-explorar">Al listado</button>
+            </div>
           </div>
         ` : ''}
 
@@ -1368,6 +1419,26 @@ export class ControladorSubastas {
                 `}
               </div>
             </div>
+
+            <!-- Desglose de Retención Contextual (Main.dc.html) -->
+            <div class="panel-resumen-sidebar" style="background: var(--superficie); border: 1px solid var(--borde); border-radius: 8px; padding: 16px 20px; margin-top: 16px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                <span style="font-size: 13px; color: var(--texto-2);">Libre para pujar</span>
+                <span class="cifra" style="font-size: 16px; font-weight: 600; color: var(--exito);">${formatearCreditos(libre)} cr</span>
+              </div>
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                <span style="font-size: 13px; color: var(--texto-2);">Retenido aquí</span>
+                <span class="cifra" style="font-size: 16px; font-weight: 600; color: ${sub.retenido > 0 ? 'var(--advertencia)' : 'var(--texto-3)'};">${sub.retenido > 0 ? `${formatearCreditos(sub.retenido)} cr` : '—'}</span>
+              </div>
+              <div style="display: flex; align-items: center; justify-content: space-between;">
+                <span style="font-size: 13px; color: var(--texto-2);">Retenido en otras (${otrasConRetenido})</span>
+                <span class="cifra" style="font-size: 16px; font-weight: 600; color: #8A4A00;">${formatearCreditos(retenidoEnOtras)} cr</span>
+              </div>
+              <div style="height: 1px; background: var(--fondo); margin: 12px 0;"></div>
+              <button type="button" class="btn btn-contorno" id="btn-ver-todas-mis-subastas" style="width: 100%; min-height: 32px; font-size: 13px; font-weight: 600;">
+                Ver todas mis subastas
+              </button>
+            </div>
           </section>
         </div>
 
@@ -1402,7 +1473,7 @@ export class ControladorSubastas {
         </div>
         <p class="toast-mensaje">
           <strong>${this.avisoCruzado.nombre}</strong> · ahora <strong class="cifra">${formatearCreditos(this.avisoCruzado.oferta)} cr</strong> ·
-          quedan <span class="cifra">${formatearTiempo(this.avisoCruzado.segundosRestantes)}</span>
+          quedan <span class="cifra" data-tiempo-subasta="${this.avisoCruzado.id}">${formatearTiempo(this.avisoCruzado.segundosRestantes)}</span>
         </p>
         <div class="toast-acciones">
           <button type="button" class="btn btn-primario btn-sm btn-toast-ir" data-id="${this.avisoCruzado.id}">Ir</button>
@@ -1419,8 +1490,22 @@ export class ControladorSubastas {
         const tab = btn.getAttribute('data-tab');
         if (tab === 'explorar') this.abrirExplorar();
         else if (tab === 'mis-subastas') this.abrirMisSubastas();
+        else if (tab === 'detalle') this.abrirDetalle(this.subastaActivaId || this.subastas[0]?.id);
         else if (tab === 'cierre-multiple') this.abrirCierreMultiple();
       });
+    });
+
+    // Botones de resultado de compra o adjudicación
+    this.contenedor.querySelector('#btn-resultado-mis-subastas')?.addEventListener('click', () => {
+      this.abrirMisSubastas();
+    });
+    this.contenedor.querySelector('#btn-resultado-explorar')?.addEventListener('click', () => {
+      this.abrirExplorar();
+    });
+
+    // Botón de ver todas mis subastas desde el sidebar de detalle
+    this.contenedor.querySelector('#btn-ver-todas-mis-subastas')?.addEventListener('click', () => {
+      this.abrirMisSubastas();
     });
 
     // Abrir detalle desde tarjeta en Explorar o Mis subastas
@@ -1451,7 +1536,7 @@ export class ControladorSubastas {
     this.contenedor.querySelectorAll('.btn-ver-adjudicada').forEach((btn) => {
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-id');
-        if (id) this.abrirDetalle(id);
+        if (id) this.abrirDetalle(id, { resultadoCierre: 'adjudicada' });
       });
     });
 

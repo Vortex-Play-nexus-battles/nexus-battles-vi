@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -113,6 +114,8 @@ public class PujaApplicationService {
 
     @Transactional(readOnly = true)
     public List<PujaResponse> listarPujasPorJugadorYEstado(UUID jugadorId, EstadoPuja estado) {
+        Objects.requireNonNull(jugadorId, "jugadorId no puede ser nulo");
+        Objects.requireNonNull(estado, "estado no puede ser nulo");
         return pujaRepository.findByJugadorIdAndEstadoOrderByCreadaEnDesc(jugadorId, estado)
                 .stream()
                 .map(PujaResponse::de)
@@ -121,6 +124,8 @@ public class PujaApplicationService {
 
     @Transactional(readOnly = true)
     public List<Puja> findByJugadorIdAndEstado(UUID jugadorId, EstadoPuja estado) {
+        Objects.requireNonNull(jugadorId, "jugadorId no puede ser nulo");
+        Objects.requireNonNull(estado, "estado no puede ser nulo");
         return pujaRepository.findByJugadorIdAndEstado(jugadorId, estado);
     }
 
