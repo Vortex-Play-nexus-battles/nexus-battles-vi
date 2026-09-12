@@ -1,0 +1,1474 @@
+/* =======================================================================
+   The Nexus Battles VI — Módulo de Subastas y Pujas (HU-SUB-004)
+   Alineado con shared/ui-kit/css/tokens.css y .claude/rules/frontend-web.md
+   ======================================================================= */
+
+:root {
+  --fondo: #D7DEED;
+  --superficie: #FFFFFF;
+  --cromo: #1C2340;
+  --cromo-elevado: #2A3358;
+  --pista: #CBD4E6;
+  --borde: #9FABC9;
+  --borde-int: #6F7994;
+  --primaria: #2244BF;
+  --primaria-relleno: #1E3FB8;
+  --acento-relleno: #5B27B4;
+  --exito: #0B6B31;
+  --exito-insignia: #DFF1E6;
+  --advertencia: #8A4A00;
+  --advertencia-insignia: #FBF0DE;
+  --error: #B81A1A;
+  --error-insignia: #FBE5E5;
+  --info: #095E8C;
+  --info-insignia: #DDEEF7;
+  --texto: #111726;
+  --texto-2: #48536A;
+  --texto-3: #57627A;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--fondo);
+  color: var(--texto);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.cifra {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tipografía */
+.eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--primaria);
+  text-transform: uppercase;
+}
+
+.titulo-grande {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  font-size: 32px;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.titulo-seccion {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  font-size: 24px;
+  margin: 0;
+}
+
+.titulo-mediano {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 600;
+  font-size: 20px;
+  margin: 0 0 8px 0;
+}
+
+.titulo-pequeno {
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  margin: 0 0 4px 0;
+}
+
+.texto-pista {
+  font-size: 13px;
+  color: var(--texto-3);
+}
+
+/* Contenedor Principal */
+.contenedor-subastas {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 24px 32px 64px 32px;
+}
+
+.subastas-app {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Panel de Resumen de Saldos */
+.panel-resumen {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(17, 23, 38, 0.05);
+}
+
+.resumen-titular {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.resumen-saldo-total {
+  text-align: right;
+  background: #F4F6FB;
+  border: 1px solid var(--borde);
+  padding: 10px 16px;
+  border-radius: 6px;
+}
+
+.etiqueta-saldo {
+  display: block;
+  font-size: 12px;
+  color: var(--texto-2);
+}
+
+.valor-saldo {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--cromo);
+}
+
+.barra-distribucion {
+  height: 12px;
+  background: #E2E7F0;
+  border-radius: 6px;
+  display: flex;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.segmento-retenido {
+  background: var(--advertencia);
+  transition: width 200ms ease;
+}
+
+.segmento-libre {
+  background: var(--exito);
+  transition: width 200ms ease;
+}
+
+.resumen-metadatos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+}
+
+.chip-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--texto-2);
+  background: #F8FAFC;
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: 1px solid #E2E8F0;
+}
+
+.chip-info.alerta-superada {
+  border-color: var(--error);
+  background: var(--error-insignia);
+  color: var(--error);
+}
+
+.punto-color {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.punto-retenido { background: var(--advertencia); }
+.punto-libre { background: var(--exito); }
+
+/* Cuadrícula de Subastas */
+.encabezado-listado {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 16px;
+}
+
+.grid-subastas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 20px;
+}
+
+.tarjeta-subasta {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+}
+
+.tarjeta-subasta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(17, 23, 38, 0.1);
+  border-color: var(--borde-int);
+}
+
+.tarjeta-subasta.tarjeta-ganando {
+  border-left: 5px solid var(--exito);
+}
+
+.tarjeta-subasta.tarjeta-superada {
+  border-left: 5px solid var(--error);
+  background: #FFFDFD;
+}
+
+.tarjeta-subasta.urgente {
+  border-color: var(--error);
+}
+
+.tarjeta-cabecera {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.tarjeta-titulo {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  font-size: 19px;
+  margin: 0 0 4px 0;
+  color: var(--texto);
+}
+
+.tarjeta-subtitulo {
+  font-size: 12px;
+  color: var(--texto-2);
+  margin: 0 0 10px 0;
+  font-weight: 500;
+}
+
+.tarjeta-desc {
+  font-size: 13px;
+  color: var(--texto-3);
+  margin: 0 0 16px 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tarjeta-finanzas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 12px;
+  background: #F8FAFC;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  gap: 8px;
+}
+
+.monto-destacado {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--cromo);
+  display: block;
+}
+
+.postor-texto {
+  font-size: 11px;
+  color: var(--texto-3);
+}
+
+.tiempo-cifra {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--texto);
+  display: block;
+}
+
+.compra-ya-texto {
+  font-size: 11px;
+  color: var(--texto-2);
+}
+
+.tiempo-urgente {
+  color: var(--error) !important;
+  font-weight: 700;
+  animation: pulso-urgente 1s infinite alternate;
+}
+
+@keyframes pulso-urgente {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.05); }
+}
+
+/* Badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-exito {
+  background: var(--exito-insignia);
+  color: var(--exito);
+}
+
+.badge-error {
+  background: var(--error-insignia);
+  color: var(--error);
+}
+
+.badge-advertencia {
+  background: var(--advertencia-insignia);
+  color: var(--advertencia);
+}
+
+.badge-neutral {
+  background: #E7EAF0;
+  color: var(--texto-2);
+}
+
+.badge-comun {
+  background: #E7EAF0;
+  color: var(--texto-2);
+}
+
+.badge-rara {
+  background: var(--info-insignia);
+  color: var(--info);
+}
+
+.badge-epica {
+  background: #EDE5FA;
+  color: var(--acento-relleno);
+}
+
+.badge-legendaria {
+  background: #FBF0DE;
+  color: var(--advertencia);
+}
+
+/* Botones */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: 120ms ease;
+  text-decoration: none;
+}
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(34, 68, 191, 0.35);
+}
+
+.btn-primario {
+  background: var(--primaria-relleno);
+  color: #FFFFFF;
+}
+
+.btn-primario:hover:not(:disabled) {
+  background: #173294;
+}
+
+.btn-contorno {
+  background: #FFFFFF;
+  border-color: var(--borde-int);
+  color: var(--primaria);
+}
+
+.btn-contorno:hover:not(:disabled) {
+  background: #F4F6FB;
+  border-color: var(--primaria);
+}
+
+.btn-acento {
+  background: var(--acento-relleno);
+  color: #FFFFFF;
+}
+
+.btn-acento:hover:not(:disabled) {
+  background: #4A1E94;
+}
+
+.btn-texto {
+  background: transparent;
+  color: var(--primaria);
+  padding: 4px 8px;
+}
+
+.btn-texto:hover {
+  text-decoration: underline;
+}
+
+.btn-peligro-sm {
+  background: var(--error-insignia);
+  color: var(--error);
+  border: 1px solid var(--error);
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Vista Detalle */
+.barra-volver {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.separador-pipe {
+  color: var(--borde);
+}
+
+.saldo-contextual {
+  color: var(--texto-2);
+}
+
+.detalle-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 28px;
+}
+
+.panel-objeto, .panel-historial, .panel-puja {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(17, 23, 38, 0.05);
+}
+
+.panel-historial {
+  margin-top: 24px;
+}
+
+.objeto-badges {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.titulo-objeto {
+  font-size: 28px;
+  margin-bottom: 4px;
+}
+
+.objeto-tipo {
+  font-size: 13px;
+  color: var(--texto-2);
+  margin: 0 0 16px 0;
+}
+
+.objeto-descripcion {
+  font-size: 14px;
+  color: var(--texto);
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
+/* Selector de Héroes */
+.selector-heroes-seccion {
+  margin-bottom: 16px;
+}
+
+.selector-heroes-botones {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.btn-heroe-chip {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--borde);
+  background: #FFFFFF;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--texto);
+  transition: 120ms ease;
+}
+
+.btn-heroe-chip:hover {
+  border-color: var(--borde-int);
+}
+
+.btn-heroe-chip.heroe-elegido {
+  border-color: var(--primaria);
+  background: #DFEEF8;
+  color: var(--info);
+  font-weight: 600;
+}
+
+/* Tabla Comparativa */
+.tabla-comparacion-contenedor {
+  margin-top: 16px;
+  overflow-x: auto;
+}
+
+.tabla-comparacion {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.tabla-comparacion th, .tabla-comparacion td {
+  padding: 10px 14px;
+  border-bottom: 1px solid #E2E8F0;
+  text-align: left;
+}
+
+.tabla-comparacion th {
+  background: #F8FAFC;
+  font-weight: 600;
+  color: var(--texto-2);
+}
+
+/* Historial */
+.lista-historial {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.item-historial {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr 1fr;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-bottom: 1px solid #F1F5F9;
+}
+
+.item-historial:last-child {
+  border-bottom: none;
+}
+
+.item-historial.historial-propio {
+  background: #F6F9FE;
+}
+
+.postor-tu {
+  color: var(--primaria);
+  font-weight: 600;
+}
+
+/* Panel de Pujas */
+.panel-puja {
+  position: sticky;
+  top: 24px;
+}
+
+.panel-puja.panel-urgente {
+  border-color: var(--error);
+  box-shadow: 0 0 12px rgba(184, 26, 26, 0.2);
+}
+
+.cabecera-panel-puja {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--borde);
+  margin-bottom: 20px;
+}
+
+.precio-actual {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--cromo);
+  font-family: 'Rajdhani', sans-serif;
+}
+
+.tiempo-cierre {
+  font-size: 24px;
+  font-weight: 700;
+  font-family: 'Rajdhani', sans-serif;
+  text-align: right;
+}
+
+.seccion-bloque {
+  margin-bottom: 20px;
+}
+
+.atajos-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.btn-atajo {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.campo-con-boton {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+  margin-bottom: 4px;
+}
+
+.input-estandar {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--borde-int);
+  border-radius: 6px;
+  font-size: 15px;
+  color: var(--texto);
+}
+
+.input-estandar:focus {
+  outline: none;
+  border-color: var(--primaria);
+  box-shadow: 0 0 0 3px rgba(34, 68, 191, 0.2);
+}
+
+.bloque-compra-inmediata {
+  background: #FBF8FF;
+  border: 1px solid #E4D7F5;
+  border-radius: 6px;
+  padding: 14px;
+}
+
+.fila-compra {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.precio-compra {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--acento-relleno);
+  font-family: 'Rajdhani', sans-serif;
+}
+
+.bloque-automatica {
+  background: #F8FAFC;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  padding: 14px;
+}
+
+.auto-activa-aviso {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #FFFFFF;
+  border: 1px solid var(--borde);
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin-top: 8px;
+}
+
+/* Alertas */
+.alerta {
+  padding: 12px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.alerta-advertencia {
+  background: var(--advertencia-insignia);
+  border: 1px solid var(--advertencia);
+  color: var(--advertencia);
+}
+
+.alerta-exito-suave {
+  background: var(--exito-insignia);
+  border: 1px solid var(--exito);
+  color: var(--exito);
+}
+
+.alerta-exito-cierre {
+  background: #F4F0FB;
+  border: 2px solid var(--acento-relleno);
+  color: var(--acento-relleno);
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(28, 35, 64, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-tarjeta {
+  background: var(--superficie);
+  padding: 28px;
+  border-radius: 8px;
+  max-width: 480px;
+  width: 90%;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.2);
+}
+
+.modal-acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+/* Estados de carga, error y vacío (RNF-USA-003) */
+.estado-contenedor {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 64px 24px;
+  text-align: center;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #E2E8F0;
+  border-top-color: var(--primaria);
+  border-radius: 50%;
+  animation: girar 800ms linear infinite;
+  margin: 0 auto 16px auto;
+}
+
+@keyframes girar {
+  to { transform: rotate(360deg); }
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .detalle-grid {
+    grid-template-columns: 1fr;
+  }
+  .panel-puja {
+    position: static;
+  }
+}
+
+/* =======================================================================
+   Navegación de Pestañas / Modos (HU-SUB-004)
+   ======================================================================= */
+.subastas-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  background: var(--cromo);
+  border: 1px solid var(--borde);
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 24px;
+}
+
+.tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.tab-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: #FFFFFF;
+}
+
+.tab-btn--activo {
+  background: var(--primaria) !important;
+  color: #FFFFFF !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+.badge-tab-aviso {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--error);
+  color: #FFFFFF;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+}
+
+.badge-tab-neutral {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--cromo-elevado);
+  color: rgba(255, 255, 255, 0.9);
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+  text-align: center;
+}
+
+/* =======================================================================
+   Vista «Mis Subastas» - Finanzas y Concurrencia
+   ======================================================================= */
+.panel-creditos-segmentada {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(17, 23, 38, 0.08);
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.creditos-tarjetas-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.tarjeta-credito {
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(17, 23, 38, 0.06);
+}
+
+.tarjeta-credito-total {
+  background: var(--fondo);
+}
+
+.tarjeta-credito-retenido {
+  background: var(--advertencia-insignia);
+}
+
+.tarjeta-credito-libre {
+  background: var(--exito-insignia);
+}
+
+.tarjeta-credito-libre--baja {
+  background: var(--error-insignia);
+}
+
+.tarjeta-credito-etiqueta {
+  font-size: 13px;
+  color: var(--texto-2);
+  margin-bottom: 4px;
+}
+
+.tarjeta-credito-valor {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 38px;
+  line-height: 1.1;
+  font-weight: 700;
+}
+
+.tarjeta-credito-valor--retenido {
+  color: var(--advertencia);
+}
+
+.tarjeta-credito-valor--libre {
+  color: var(--exito);
+}
+
+.tarjeta-credito-valor--libre-baja {
+  color: var(--error);
+}
+
+.barra-segmentada-tramos {
+  height: 10px;
+  display: flex;
+  border-radius: 5px;
+  overflow: hidden;
+  background: #CBD4E6;
+  margin-bottom: 12px;
+}
+
+.tramo-subasta {
+  height: 100%;
+  transition: width 200ms ease;
+  cursor: pointer;
+}
+
+.leyenda-tramos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.item-leyenda {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--texto-2);
+}
+
+.leyenda-punto {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* Alerta sobre-compromiso */
+.alerta-sobrecompromiso {
+  margin-top: 16px;
+  background: #FBE5E5;
+  border: 1px solid #E8BDBD;
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.sobrecompromiso-icono {
+  font-size: 20px;
+  flex-shrink: 0;
+  line-height: 1.2;
+}
+
+.sobrecompromiso-titulo {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--error);
+  margin-bottom: 4px;
+}
+
+.sobrecompromiso-texto {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--texto-2);
+}
+
+/* Medidores visuales de topes de concurrencia */
+.grid-topes-concurrencia {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.tarjeta-tope {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 18px 20px;
+}
+
+.tarjeta-tope--alerta {
+  border-color: var(--advertencia);
+}
+
+.tarjeta-tope--critico {
+  border-color: var(--error);
+}
+
+.tope-cabecera {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.tope-nombre {
+  font-size: 13px;
+  color: var(--texto-2);
+  font-weight: 600;
+}
+
+.tope-cifra {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.tope-barra-fondo {
+  height: 6px;
+  border-radius: 6px;
+  background: #CBD4E6;
+  overflow: hidden;
+}
+
+.tope-barra-progreso {
+  height: 100%;
+  transition: width 200ms ease;
+}
+
+.tope-alerta-texto {
+  font-size: 13px;
+  margin-top: 8px;
+  font-weight: 500;
+}
+
+/* Lista de Mis Subastas */
+.seccion-mis-subastas {
+  margin-top: 8px;
+}
+
+.encabezado-mis-subastas {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.contador-mis-subastas {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #E7EAF0;
+  color: var(--texto-3);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.lista-mis-subastas {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fila-mi-subasta {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) 150px 140px 150px;
+  gap: 16px;
+  align-items: center;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 14px 18px;
+  box-shadow: 0 1px 2px rgba(17, 23, 38, 0.08);
+  transition: transform 120ms ease, box-shadow 120ms ease;
+  cursor: pointer;
+}
+
+.fila-mi-subasta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(17, 23, 38, 0.12);
+}
+
+.borde-ganando {
+  border-left: 5px solid var(--exito) !important;
+}
+
+.borde-superada {
+  border-left: 5px solid var(--error) !important;
+  background: #FFFDFD;
+}
+
+.borde-sin-puja {
+  border-left: 5px solid var(--borde) !important;
+}
+
+.fila-icono-rareza {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+}
+
+.fila-nombre {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+  color: var(--texto);
+}
+
+.fila-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.chip-automatica-tope {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #DFEEF8;
+  color: var(--info);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.fila-oferta-monto,
+.fila-retenido-monto {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.fila-acciones-tiempo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.reloj-fila {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.animacion-latido {
+  animation: latido 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  color: var(--error) !important;
+}
+
+@keyframes latido {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.05);
+  }
+}
+
+/* =======================================================================
+   Vista «Cierre Múltiple»
+   ======================================================================= */
+.vista-cierre-multiple {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0 32px 0;
+}
+
+.panel-cierre-multiple {
+  width: 100%;
+  max-width: 820px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(17, 23, 38, 0.16);
+  padding: 32px;
+}
+
+.cierre-titular-bloque {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.cierre-titular {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 48px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  margin: 0;
+  color: var(--texto);
+}
+
+.cierre-subtitulo {
+  font-size: 16px;
+  color: var(--texto-2);
+  margin-top: 6px;
+}
+
+.cierre-neto-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.caja-neto {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 16px 8px;
+  border-radius: 8px;
+  background: var(--fondo);
+}
+
+.caja-neto--libre {
+  background: var(--exito-insignia);
+}
+
+.cifra-neto {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.cifra-neto--cobrado {
+  color: var(--advertencia);
+}
+
+.cifra-neto--devuelto,
+.cifra-neto--libre {
+  color: var(--exito);
+}
+
+.etiqueta-neto {
+  font-size: 13px;
+  color: var(--texto-2);
+}
+
+.lista-eventos-cierre {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.fila-evento-cierre {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 130px 110px;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+}
+
+.evento--adjudicada {
+  border-left: 4px solid var(--exito);
+}
+
+.evento--superada-rival {
+  border-left: 4px solid var(--error);
+}
+
+.evento--superada-tope {
+  border-left: 4px solid var(--advertencia);
+}
+
+.evento-icono {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+
+.evento-titulo {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+}
+
+.evento-motivo {
+  font-size: 13px;
+  color: var(--texto-2);
+}
+
+.evento-monto {
+  text-align: right;
+}
+
+.evento-cifra {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.caja-consejo-tactico {
+  padding: 14px 18px;
+  background: #DFEEF8;
+  border: 1px solid #B5D5EA;
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.consejo-icono {
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.consejo-contenido {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--texto-2);
+}
+
+.consejo-titulo {
+  font-weight: 700;
+  color: var(--info);
+  margin-bottom: 2px;
+}
+
+.cierre-acciones-pie {
+  display: flex;
+  gap: 12px;
+}
+
+/* =======================================================================
+   Aviso Cruzado en Vivo (Toast en esquina inferior derecha)
+   ======================================================================= */
+.toast-cruzado-flotante {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1100;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-left: 5px solid var(--error);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(17, 23, 38, 0.18);
+  padding: 16px;
+  animation: entrarToast 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes entrarToast {
+  from {
+    transform: translateY(30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.toast-cruzado-cabecera {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.toast-titulo-contenedor {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toast-icono {
+  font-size: 18px;
+}
+
+.toast-titulo {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--error);
+}
+
+.btn-cerrar-toast {
+  background: transparent;
+  border: none;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--texto-3);
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.btn-cerrar-toast:hover {
+  color: var(--texto);
+}
+
+.toast-mensaje {
+  font-size: 13px;
+  color: var(--texto-2);
+  line-height: 1.4;
+  margin: 0 0 12px 0;
+}
+
+.toast-acciones {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* Responsive adicional y reducción de movimiento */
+@media (prefers-reduced-motion: reduce) {
+  .animacion-latido,
+  .toast-cruzado-flotante,
+  .spinner {
+    animation: none !important;
+  }
+  .fila-mi-subasta:hover,
+  .tarjeta-subasta:hover {
+    transform: none !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .fila-mi-subasta {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .fila-acciones-tiempo {
+    align-items: flex-start;
+    flex-direction: row;
+    justify-content: space-between;
+  }
+  .creditos-tarjetas-grid,
+  .grid-topes-concurrencia,
+  .cierre-neto-grid {
+    grid-template-columns: 1fr;
+  }
+  .fila-evento-cierre {
+    grid-template-columns: 1fr;
+  }
+}

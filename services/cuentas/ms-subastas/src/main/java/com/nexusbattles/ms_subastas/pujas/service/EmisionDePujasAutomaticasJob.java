@@ -86,7 +86,7 @@ public class EmisionDePujasAutomaticasJob {
         }
 
         PujaAutomatica automatica = elegida.get();
-        if (!puedeEmitirYa(automatica.getJugadorId())) {
+        if (!puedeEmitirYa(automatica.getJugadorId(), subastaId)) {
             return;
         }
 
@@ -95,8 +95,13 @@ public class EmisionDePujasAutomaticasJob {
                         claveDeIdempotencia(subastaId, automatica.getJugadorId(), monto)));
     }
 
-    private boolean puedeEmitirYa(UUID jugadorId) {
-        Instant ultimaPuja = pujaRepository.findFirstByJugadorIdOrderByCreadaEnDesc(jugadorId)
+    /**
+     * El intervalo se mide dentro de la subasta, igual que para una puja
+     * manual. Si fuera global, una automatica emitiendo en una subasta
+     * silenciaria las del mismo jugador en las otras nueve que la HU permite.
+     */
+    private boolean puedeEmitirYa(UUID jugadorId, UUID subastaId) {
+        Instant ultimaPuja = pujaRepository.findFirstByJugadorIdAndSubastaIdOrderByCreadaEnDesc(jugadorId, subastaId)
                 .map(Puja::getCreadaEn)
                 .orElse(null);
         return !motorAutomatico.disponibleDesde(ultimaPuja).isAfter(clock.instant());

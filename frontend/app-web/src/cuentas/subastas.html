@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nexus Battles VI - Subastas y Pujas</title>
+    <link rel="stylesheet" href="../comun/barra-navegacion.css" />
+    <link rel="stylesheet" href="./subastas.css" />
+  </head>
+  <body>
+    <!-- Barra de Navegación Compartida (HU-INV-004 / src/comun) -->
+    <header id="contenedor-barra">
+      <nav class="barra" aria-label="Navegacion principal">
+        <div class="barra__busqueda">
+          <input type="search" placeholder="Buscar subastas, armas, objetos..." class="barra__campo-busqueda" />
+        </div>
+        <ul class="barra__accesos">
+          <li class="barra__item"><a href="../plataforma/salas-partidas/batallas.html" class="barra__enlace">Jugar online</a></li>
+          <li class="barra__item"><a href="#" class="barra__enlace">Misiones</a></li>
+          <li class="barra__item"><a href="#" class="barra__enlace">Torneo</a></li>
+          <li class="barra__item"><a href="../contenido/inventario/inventario.html" class="barra__enlace">Mi inventario</a></li>
+          <li class="barra__item"><a href="./subastas.html" class="barra__enlace barra__enlace--activo" aria-current="page">Subasta</a></li>
+          <li class="barra__item"><a href="./perfil.html" class="barra__enlace">Mi Cuenta</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <!-- Contenedor Principal de la Aplicación -->
+    <main id="subastas-app" class="contenedor-subastas">
+      <!-- Inyectado por subastas.js -->
+    </main>
+
+    <script type="module">
+      import { montarSubastas } from './subastas.js';
+
+      const contenedor = document.getElementById('subastas-app');
+      montarSubastas(contenedor);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,122 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1320,
+      "title": "Flujo interactivo · Mis subastas ↔ Detalle ↔ Cierre",
+      "page": "page-1"
+    },
+    {
+      "file": "Cierre.dc.html",
+      "x": 1560,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "El cierre · panel de resultado",
+      "page": "page-1"
+    },
+    {
+      "file": "Estados.dc.html",
+      "x": 3120,
+      "y": 0,
+      "w": 1400,
+      "h": 1180,
+      "title": "Estados del panel de puja",
+      "page": "page-1"
+    },
+    {
+      "file": "EstadosDeDatos.dc.html",
+      "x": 4640,
+      "y": 0,
+      "w": 1080,
+      "h": 880,
+      "title": "Carga · error · vacío · sin conexión",
+      "page": "page-1"
+    },
+    {
+      "file": "MisSubastas.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1180,
+      "title": "Mis subastas · dónde estoy metido",
+      "page": "page-2"
+    },
+    {
+      "file": "CierreMultiple.dc.html",
+      "x": 1560,
+      "y": 0,
+      "w": 1240,
+      "h": 960,
+      "title": "Cierre múltiple y aviso cruzado",
+      "page": "page-2"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "como-probar",
+      "x": 0,
+      "y": -200,
+      "w": 460,
+      "text": "Pruébalo como jugador:\n\n1. En 'Mis subastas', pulsa 'Ver', 'Ir ahora' o 'Recuperarla' en cualquiera de las subastas para abrir su detalle.\n2. Cambia de héroe: Lyra es nivel 21 y el hacha pide 24 — salta la alerta y la comparación se recalcula.\n3. Pulsa el botón azul de puja rápida: pujas de un toque, sin escribir nada.\n4. Espera 4 s: draconis_91 tiene su propia automática y te responde.\n5. Pulsa 'Volver a mis subastas' para regresar al listado con tus créditos y tiempos sincronizados.",
+      "page": "page-1"
+    },
+    {
+      "id": "tweaks",
+      "x": 480,
+      "y": -200,
+      "w": 420,
+      "text": "Las tres reglas son ajustables desde los chips de arriba: incremento mínimo, intervalo entre pujas y saldo.\n\nSon los valores que HU-SUB-004 pide configurables desde administración; hoy viven en app.pujas.* como variables de entorno.\n\nLas estadísticas salen del contrato real de inventario: Poder/Vida/Defensa enteros, y Ataque/Daño como fórmulas de dados ya formateadas por el servidor (\"10 + 1d6\").",
+      "page": "page-1"
+    },
+    {
+      "id": "juego",
+      "x": 1560,
+      "y": -240,
+      "w": 520,
+      "text": "Sensación de juego SIN salirse del sistema.\n\ntokens.css dice literalmente: «la sensación de juego se construye en el feedback de cada pulsación». Así que sale del movimiento y de la escala display, no de oscurecer la pantalla ni de meter gradientes.\n\nEl componente .resultado ya existía en el kit: Rajdhani 56px, letter-spacing 0.1em, verde en victoria y morado en compra directa.",
+      "page": "page-1"
+    },
+    {
+      "id": "pendiente",
+      "x": 3120,
+      "y": -240,
+      "w": 520,
+      "text": "Cifras y apodos son de muestra.\n\nEl caso 9 (últimos segundos) documenta la asunción de anti-sniping que quedó abierta: sin prórroga, una puja manual en el último segundo es inalcanzable para el motor automático. Está en el README del servicio y hay que validarla con el PO.",
+      "page": "page-1"
+    },
+    {
+      "id": "varias",
+      "x": 0,
+      "y": -260,
+      "w": 560,
+      "page": "page-2",
+      "text": "El problema que nadie había mirado: la HU permite participar en 10 subastas a la vez, y el diseño inicial asumía una sola.\n\nAl analizarlo salió un fallo real en el backend, ya corregido: el intervalo de 5 s era GLOBAL por jugador, no por subasta. Pujar en una bloqueaba al jugador en las otras nueve, y su propia automática le impedía pujar a mano en otra.\n\nAhora la consulta lleva subastaId. 80 pruebas en verde contra Postgres real."
+    },
+    {
+      "id": "pendientes-varias",
+      "x": 1560,
+      "y": -260,
+      "w": 520,
+      "page": "page-2",
+      "text": "Dos piezas que faltan, ambas identificadas:\n\n1. Una consulta findByJugadorIdAndEstado que devuelva la LISTA de pujas activas. Hoy PujaRepository solo sabe cuántas hay, no cuáles. Es trabajo de ms-subastas, no depende de nadie.\n\n2. WebSocket con STOMP para el aviso en vivo cuando te superan en otra subasta. La pila ya lo fija; subastas aún no lo monta."
+    }
+  ],
+  "launch": {
+    "view": "canvas",
+    "page": "page-1"
+  },
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "Flujo interactivo"
+    },
+    {
+      "id": "page-2",
+      "name": "Exploraciones estáticas"
+    }
+  ]
+}

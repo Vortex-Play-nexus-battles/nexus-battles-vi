@@ -1,0 +1,332 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Inter:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; background: #D7DEED; color: #111726;
+           font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; }
+    a { color: #2244BF; text-decoration: none }
+    a:hover { color: #1E3FB8; text-decoration: underline }
+    * { box-sizing: border-box }
+    .cifra { font-variant-numeric: tabular-nums }
+    .btn { transition: 120ms cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer }
+    .btn:hover:not(:disabled) { filter: brightness(1.08) }
+    .btn:active:not(:disabled) { transform: scale(0.96) }
+    .btn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(34, 68, 191, 0.35) }
+    .tarj { transition: 120ms cubic-bezier(0.4, 0, 0.2, 1) }
+    .tarj:hover { box-shadow: 0 4px 12px rgba(17,23,38,0.12); transform: translateY(-1px) }
+    .late { animation: late 1s cubic-bezier(0.4, 0, 0.2, 1) infinite }
+    @keyframes late { 0%, 100% { opacity: 1 } 50% { opacity: 0.5 } }
+    @media (prefers-reduced-motion: reduce) {
+      .late { animation: none } .tarj:hover { transform: none } .btn:active:not(:disabled) { transform: none }
+    }
+  </style>
+</helmet>
+
+<div style="min-height: 1180px">
+
+  <div style="padding: 16px 32px 0">
+    <nav aria-label="Navegacion principal"
+         style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 8px 16px; background: #1C2340; color: #FFFFFF; border-radius: 8px; margin-bottom: 12px">
+      <ul style="display: flex; flex-wrap: wrap; gap: 4px 8px; margin: 0; padding: 0; list-style: none; order: 1">
+        <sc-for list="{{secciones}}" as="s" hint-placeholder-count="6">
+          <li>
+            <button type="button" aria-current="{{s.actual}}"
+                    style="position: relative; padding: 8px 12px; border: 1px solid {{s.borde}}; border-radius: 8px; background: {{s.fondo}}; color: {{s.color}}; font-family: 'Rajdhani', system-ui, sans-serif; font-size: 0.95rem; font-weight: 600; cursor: pointer">
+              {{s.etiqueta}}
+              <!-- El contador es la unica forma de enterarse de lo que pasa en
+                   las otras subastas sin estar dentro de cada una. -->
+              <sc-if value="{{s.tieneAviso}}" hint-placeholder-val="{{true}}">
+                <span class="cifra" style="position: absolute; top: -6px; right: -6px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px; background: #B81A1A; color: #FFFFFF; font-family: 'Inter'; font-size: 13px; font-weight: 600; line-height: 20px; text-align: center">{{s.aviso}}</span>
+              </sc-if>
+            </button>
+          </li>
+        </sc-for>
+      </ul>
+      <div style="flex: 1 1 220px; min-width: 0; order: 2">
+        <input type="search" placeholder="Buscar productos" aria-label="Buscar productos"
+               style="box-sizing: border-box; width: 100%; padding: 8px 12px; border: 1px solid rgb(255 255 255 / 20%); border-radius: 8px; background: rgb(255 255 255 / 10%); color: #FFFFFF; font-family: 'Inter', system-ui, sans-serif; font-size: 0.9rem">
+      </div>
+    </nav>
+  </div>
+
+  <main style="padding: 12px 32px 48px">
+
+    <h1 style="margin: 0 0 4px; font-family: 'Rajdhani', system-ui, sans-serif; font-size: 28px; font-weight: 700">
+      Mis subastas
+    </h1>
+    <p style="margin: 0 0 24px; font-size: 16px; line-height: 1.5; color: #48536A">
+      Dónde estás metido ahora mismo y cuánto tienes comprometido en cada sitio.
+    </p>
+
+    <!-- ===== El dinero primero: es lo que no se entiende sin verlo junto ===== -->
+    <section style="background: #FFFFFF; border: 1px solid #9FABC9; border-radius: 8px; box-shadow: 0 1px 2px rgba(17,23,38,0.08); padding: 24px; margin-bottom: 24px">
+      <h2 style="margin: 0 0 16px; font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 600">
+        Tus créditos
+      </h2>
+
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px">
+        <div style="padding: 16px; background: #D7DEED; border-radius: 8px">
+          <div style="font-size: 13px; color: #48536A; margin-bottom: 4px">Tienes en total</div>
+          <div class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 40px; line-height: 1.1; font-weight: 700">{{totalFmt}}</div>
+        </div>
+        <div style="padding: 16px; background: #FBF0DE; border-radius: 8px">
+          <div style="font-size: 13px; color: #48536A; margin-bottom: 4px">Retenido en subastas</div>
+          <div class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 40px; line-height: 1.1; font-weight: 700; color: #8A4A00">{{retenidoFmt}}</div>
+        </div>
+        <div style="padding: 16px; background: {{libreFondo}}; border-radius: 8px">
+          <div style="font-size: 13px; color: #48536A; margin-bottom: 4px">Libre para pujar</div>
+          <div class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 40px; line-height: 1.1; font-weight: 700; color: {{libreColor}}">{{libreFmt}}</div>
+        </div>
+      </div>
+
+      <div style="height: 8px; display: flex; border-radius: 5px; overflow: hidden; background: #CBD4E6">
+        <sc-for list="{{tramos}}" as="t" hint-placeholder-count="4">
+          <div style="width: {{t.ancho}}; height: 100%; background: {{t.color}}" title="{{t.titulo}}"></div>
+        </sc-for>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px">
+        <sc-for list="{{leyenda}}" as="l" hint-placeholder-count="4">
+          <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #48536A">
+            <span style="width: 10px; height: 10px; border-radius: 2px; background: {{l.color}}"></span>
+            {{l.texto}}
+          </span>
+        </sc-for>
+      </div>
+
+      <!-- Sobre-compromiso: el saldo se valida al configurar la automatica, no
+           al emitir, asi que los topes pueden sumar mas de lo que hay. -->
+      <sc-if value="{{sobreCompromiso}}" hint-placeholder-val="{{true}}">
+        <div style="margin-top: 16px; background: #FBE5E5; border: 1px solid #E8BDBD; border-radius: 8px; padding: 12px; display: flex; gap: 10px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B81A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px"><path d="M21.7 18 13.7 4a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+          <div>
+            <div style="font-size: 13px; font-weight: 600; color: #B81A1A; margin-bottom: 2px">
+              Tus automáticas prometen más de lo que tienes
+            </div>
+            <div style="font-size: 13px; line-height: 1.4; color: #48536A">
+              Si todas llegaran a su tope harían falta <strong class="cifra" style="font-weight: 600">{{topesFmt}} cr</strong>,
+              y solo tienes <strong class="cifra" style="font-weight: 600">{{totalFmt}}</strong>. Las últimas en
+              responder fallarán. Baja algún tope o desactiva una.
+            </div>
+          </div>
+        </div>
+      </sc-if>
+    </section>
+
+    <!-- ===== Los topes de participacion, visibles ANTES de chocar con ellos ===== -->
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 24px">
+      <sc-for list="{{topes}}" as="t" hint-placeholder-count="2">
+        <div style="background: #FFFFFF; border: 1px solid {{t.borde}}; border-radius: 8px; padding: 16px 20px">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px">
+            <span style="font-size: 13px; color: #48536A">{{t.nombre}}</span>
+            <span class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 700; color: {{t.color}}">{{t.texto}}</span>
+          </div>
+          <div style="height: 5px; border-radius: 5px; background: #CBD4E6; overflow: hidden">
+            <div style="width: {{t.ancho}}; height: 100%; background: {{t.color}}"></div>
+          </div>
+          <div style="font-size: 13px; color: {{t.color}}; margin-top: 6px">{{t.pista}}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- ===== Una tarjeta por subasta, ordenadas por urgencia ===== -->
+    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px">
+      <h2 style="margin: 0; font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 600">
+        En curso
+      </h2>
+      <span style="display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; background: #E7EAF0; color: #57627A; font-size: 13px; font-weight: 600">{{cuantas}}</span>
+      <div style="flex-grow: 1"></div>
+      <span style="font-size: 13px; color: #57627A">Ordenadas por lo que se acaba antes</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <sc-for list="{{subastas}}" as="a" hint-placeholder-count="5">
+        <article class="tarj" style="display: grid; grid-template-columns: 64px minmax(0, 1fr) 160px 150px 150px; gap: 16px; align-items: center; background: #FFFFFF; border: 1px solid {{a.borde}}; border-left: 4px solid {{a.acento}}; border-radius: 8px; padding: 14px 18px; box-shadow: 0 1px 2px rgba(17,23,38,0.08)">
+
+          <div style="width: 64px; height: 64px; border-radius: 8px; background: {{a.rarezaFondo}}; border: 1px solid {{a.rarezaBorde}}; display: flex; align-items: center; justify-content: center">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="{{a.rarezaBorde}}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5 3 6V3h3l11.5 11.5"/><path d="M13 19l6-6"/><path d="M16 16l4 4"/></svg>
+          </div>
+
+          <div style="min-width: 0">
+            <div style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 600; margin-bottom: 4px">{{a.nombre}}</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center">
+              <span style="display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; background: {{a.estadoFondo}}; color: {{a.estadoColor}}; font-size: 13px; font-weight: 600">{{a.estadoTexto}}</span>
+              <sc-if value="{{a.conAutomatica}}" hint-placeholder-val="{{true}}">
+                <span style="display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: 999px; background: #DFEEF8; color: #095E8C; font-size: 13px; font-weight: 600">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></svg>
+                  hasta {{a.topeFmt}}
+                </span>
+              </sc-if>
+            </div>
+          </div>
+
+          <div>
+            <div style="font-size: 13px; color: #57627A; margin-bottom: 2px">Oferta vigente</div>
+            <div class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 700; color: #9A6800">{{a.ofertaFmt}}</div>
+            <div style="font-size: 13px; color: {{a.postorColor}}">{{a.postorTexto}}</div>
+          </div>
+
+          <div>
+            <div style="font-size: 13px; color: #57627A; margin-bottom: 2px">Tú tienes retenido</div>
+            <div class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 700; color: {{a.retenidoColor}}">{{a.retenidoFmt}}</div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-end">
+            <div class="{{a.claseReloj}}" style="display: flex; align-items: center; gap: 5px; color: {{a.relojColor}}">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+              <span class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 700">{{a.tiempo}}</span>
+            </div>
+            <button class="btn" type="button"
+                    style="min-height: 32px; padding: 0 14px; font-size: 13px; font-weight: 600; color: {{a.botonColor}}; background: {{a.botonFondo}}; border: 1px solid {{a.botonBorde}}; border-radius: 8px; white-space: nowrap">{{a.botonTexto}}</button>
+          </div>
+        </article>
+      </sc-for>
+    </div>
+
+    <p style="margin: 20px 0 0; font-size: 13px; line-height: 1.4; color: #57627A; max-width: 90ch">
+      <strong style="font-weight: 600">Nota del prototipo:</strong> esta vista necesita una consulta
+      que hoy no existe — <code style="font-family: ui-monospace, monospace">PujaRepository</code>
+      sabe <em>cuántas</em> pujas activas tiene un jugador
+      (<code style="font-family: ui-monospace, monospace">countByJugadorIdAndEstado</code>) pero no
+      <em>cuáles</em>. Hace falta un
+      <code style="font-family: ui-monospace, monospace">findByJugadorIdAndEstado</code> que devuelva
+      la lista. Es trabajo de ms-subastas, no depende de nadie.
+    </p>
+  </main>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview": {"width": 1440, "height": 1180}}'>
+class Component extends DCLogic {
+  fmt(n) { return Number(n).toLocaleString('es-CO'); }
+
+  renderVals() {
+    const TOTAL = 6200;
+
+    // Cinco subastas: ganando en dos, superado en una, dos sin pujar aun.
+    const crudas = [
+      { nombre: 'Hacha de Obsidiana Fracturada', oferta: 1350, retenido: 1350, ganando: true,
+        seg: 8, rareza: 'epica', auto: 2000 },
+      { nombre: 'Grebas del Centinela Caído', oferta: 880, retenido: 0, ganando: false,
+        seg: 96, rareza: 'rara', auto: 1200, superado: true },
+      { nombre: 'Amuleto de Brasa Eterna', oferta: 2400, retenido: 2400, ganando: true,
+        seg: 640, rareza: 'legendaria', auto: 0 },
+      { nombre: 'Daga de Hueso Pulido', oferta: 310, retenido: 0, ganando: false,
+        seg: 1820, rareza: 'comun', auto: 0 },
+      { nombre: 'Yelmo del Vigía', oferta: 1100, retenido: 0, ganando: false,
+        seg: 5400, rareza: 'rara', auto: 1500 }
+    ];
+
+    const paletaRareza = {
+      comun: ['#E7EAF0', '#57627A'], rara: ['#DFEEF8', '#095E8C'],
+      epica: ['#EDE5FA', '#5B27B4'], legendaria: ['#FBF0DE', '#9A6800']
+    };
+
+    const porUrgencia = crudas.slice().sort((a, b) => a.seg - b.seg);
+    const retenido = crudas.reduce((t, a) => t + a.retenido, 0);
+    const libre = TOTAL - retenido;
+    const topesSuma = crudas.reduce((t, a) => t + a.auto, 0);
+
+    const subastas = porUrgencia.map((a) => {
+      const urgente = a.seg <= 10;
+      const pronto = a.seg < 120;
+      const m = Math.floor(a.seg / 60), sg = a.seg % 60;
+      const tiempo = a.seg >= 3600
+        ? Math.floor(a.seg / 3600) + ' h ' + Math.floor((a.seg % 3600) / 60) + ' m'
+        : m + ':' + String(sg).padStart(2, '0');
+
+      let estadoTexto = 'Sin pujar', estadoFondo = '#E7EAF0', estadoColor = '#57627A';
+      if (a.ganando) { estadoTexto = 'Vas ganando'; estadoFondo = '#DFF1E6'; estadoColor = '#0B6B31'; }
+      else if (a.superado) { estadoTexto = 'Te superaron'; estadoFondo = '#FBE5E5'; estadoColor = '#B81A1A'; }
+
+      const [rf, rb] = paletaRareza[a.rareza];
+      return {
+        nombre: a.nombre,
+        rarezaFondo: rf, rarezaBorde: rb,
+        acento: a.ganando ? '#0B6B31' : (a.superado ? '#B81A1A' : '#9FABC9'),
+        borde: urgente ? '#B81A1A' : '#9FABC9',
+        estadoTexto: estadoTexto, estadoFondo: estadoFondo, estadoColor: estadoColor,
+        conAutomatica: a.auto > 0, topeFmt: this.fmt(a.auto),
+        ofertaFmt: this.fmt(a.oferta) + ' cr',
+        postorTexto: a.ganando ? 'tu puja' : 'de otro jugador',
+        postorColor: a.ganando ? '#0B6B31' : '#57627A',
+        retenidoFmt: a.retenido === 0 ? '—' : this.fmt(a.retenido) + ' cr',
+        retenidoColor: a.retenido === 0 ? '#57627A' : '#9A6800',
+        tiempo: tiempo,
+        relojColor: pronto ? '#B81A1A' : '#111726',
+        claseReloj: urgente ? 'late' : '',
+        botonTexto: a.superado ? 'Recuperarla' : (urgente ? 'Ir ahora' : 'Ver'),
+        botonFondo: (a.superado || urgente) ? '#1E3FB8' : '#FFFFFF',
+        botonColor: (a.superado || urgente) ? '#FFFFFF' : '#2244BF',
+        botonBorde: (a.superado || urgente) ? '#1E3FB8' : '#6F7994'
+      };
+    });
+
+    // Un tramo por subasta con retencion, mas el libre.
+    const conRetencion = crudas.filter((a) => a.retenido > 0);
+    const tramos = conRetencion.map((a, i) => ({
+      ancho: ((a.retenido / TOTAL) * 100).toFixed(1) + '%',
+      color: i % 2 === 0 ? '#9A6800' : '#C89A1E',
+      titulo: a.nombre + ': ' + this.fmt(a.retenido) + ' cr'
+    })).concat([{ ancho: ((libre / TOTAL) * 100).toFixed(1) + '%', color: '#0B6B31', titulo: 'Libre' }]);
+
+    const leyenda = conRetencion.map((a, i) => ({
+      color: i % 2 === 0 ? '#9A6800' : '#C89A1E',
+      texto: a.nombre.split(' ')[0] + ' · ' + this.fmt(a.retenido) + ' cr'
+    })).concat([{ color: '#0B6B31', texto: 'Libre · ' + this.fmt(libre) + ' cr' }]);
+
+    const nSubastas = crudas.length;
+    const nPujas = crudas.filter((a) => a.ganando).length;
+    const topes = [
+      { nombre: 'Subastas en las que participas', hecho: nSubastas, max: 10 },
+      { nombre: 'Pujas tuyas que van ganando', hecho: nPujas, max: 50 }
+    ].map((t) => {
+      const r = t.hecho / t.max;
+      const color = r >= 1 ? '#B81A1A' : (r >= 0.8 ? '#8A4A00' : '#0B6B31');
+      return {
+        nombre: t.nombre, texto: t.hecho + ' de ' + t.max, color: color,
+        borde: r >= 0.8 ? color : '#9FABC9',
+        ancho: Math.min(100, r * 100).toFixed(0) + '%',
+        pista: r >= 1 ? 'Has llegado al tope: no puedes entrar en más.'
+             : (r >= 0.8 ? 'Te quedan ' + (t.max - t.hecho) + '.' : 'Margen de sobra.')
+      };
+    });
+
+    return {
+      secciones: [
+        { id: 'jugar', etiqueta: 'Jugar online' }, { id: 'misiones', etiqueta: 'Misiones' },
+        { id: 'torneo', etiqueta: 'Torneo' }, { id: 'inventario', etiqueta: 'Mi inventario' },
+        { id: 'subasta', etiqueta: 'Subasta' }, { id: 'cuenta', etiqueta: 'Mi Cuenta' }
+      ].map((x) => {
+        const a = x.id === 'subasta';
+        return {
+          etiqueta: x.etiqueta, actual: a ? 'page' : 'false',
+          borde: a ? 'rgb(255 255 255 / 20%)' : 'transparent',
+          fondo: a ? 'rgb(255 255 255 / 12%)' : 'transparent',
+          color: a ? '#FFFFFF' : 'rgb(255 255 255 / 70%)',
+          tieneAviso: a, aviso: '1'
+        };
+      }),
+      totalFmt: this.fmt(TOTAL),
+      retenidoFmt: this.fmt(retenido),
+      libreFmt: this.fmt(libre),
+      libreFondo: libre < 500 ? '#FBE5E5' : '#DFF1E6',
+      libreColor: libre < 500 ? '#B81A1A' : '#0B6B31',
+      tramos: tramos, leyenda: leyenda,
+      sobreCompromiso: topesSuma > TOTAL,
+      topesFmt: this.fmt(topesSuma),
+      topes: topes,
+      cuantas: nSubastas + ' subastas',
+      subastas: subastas
+    };
+  }
+}
+</script>
+</body>
+</html>

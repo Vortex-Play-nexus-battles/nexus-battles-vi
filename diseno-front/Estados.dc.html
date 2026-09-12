@@ -1,0 +1,241 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Inter:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; background: #D7DEED; color: #111726;
+           font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; }
+    a { color: #2244BF; text-decoration: none; }
+    a:hover { color: #1E3FB8; text-decoration: underline; }
+    * { box-sizing: border-box; }
+    .cifra { font-variant-numeric: tabular-nums; }
+  </style>
+</helmet>
+
+<div style="padding: 32px">
+
+  <h1 style="margin: 0 0 6px; font-family: 'Rajdhani', system-ui, sans-serif; font-size: 28px; font-weight: 700; color: #111726">
+    Estados del panel de puja
+  </h1>
+  <p style="margin: 0 0 28px; font-size: 16px; line-height: 1.5; color: #48536A; max-width: 72ch">
+    Cada regla del motor tiene que verse en pantalla, o el jugador no entiende por qué le rechazan
+    la puja. Un mensaje por caso, siempre en el mismo sitio: bajo el campo.
+  </p>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 420px)); gap: 24px">
+
+    <!-- 1. Te superaron -->
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 13px; font-weight: 600; color: #57627A">1 · Te superaron</div>
+      <section style="background: #FFFFFF; border: 1px solid #9FABC9; border-radius: 8px; box-shadow: 0 1px 2px rgba(17,23,38,0.08); padding: 20px">
+        <div style="background: #FBF0DE; border: 1px solid #E8D3AE; border-radius: 8px; padding: 12px; margin-bottom: 16px; display: flex; gap: 10px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8A4A00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px"><path d="M21.7 18 13.7 4a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+          <div>
+            <div style="font-size: 13px; font-weight: 600; color: #8A4A00; margin-bottom: 2px">Ya no vas ganando</div>
+            <div style="font-size: 13px; line-height: 1.4; color: #48536A">
+              <strong style="font-weight: 600">draconis_91</strong> pujó 1.300 cr. Te devolvimos tus
+              1.250 cr al saldo.
+            </div>
+          </div>
+        </div>
+        <div style="font-size: 13px; color: #57627A; margin-bottom: 2px">Oferta vigente</div>
+        <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 16px">
+          <span class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 40px; font-weight: 700; line-height: 1.1; color: #9A6800">1.300</span>
+          <span style="font-size: 13px; font-weight: 600; color: #9A6800">créditos</span>
+        </div>
+        <div style="display: flex; gap: 8px">
+          <input type="number" value="1350" style="flex-grow: 1; height: 40px; padding: 0 12px; font-family: 'Inter'; font-size: 16px; font-variant-numeric: tabular-nums; border: 1px solid #6F7994; border-radius: 8px">
+          <button type="button" style="min-height: 48px; padding: 0 20px; font-size: 14px; font-weight: 600; color: #FFFFFF; background: #1E3FB8; border: none; border-radius: 8px; cursor: pointer">Pujar</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- 2. Saldo insuficiente -->
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 13px; font-weight: 600; color: #57627A">2 · Saldo insuficiente</div>
+      <section style="background: #FFFFFF; border: 1px solid #9FABC9; border-radius: 8px; box-shadow: 0 1px 2px rgba(17,23,38,0.08); padding: 20px">
+        <div style="font-size: 13px; color: #57627A; margin-bottom: 2px">Oferta vigente</div>
+        <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 16px">
+          <span class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 40px; font-weight: 700; line-height: 1.1; color: #9A6800">3.450</span>
+          <span style="font-size: 13px; font-weight: 600; color: #9A6800">créditos</span>
+        </div>
+        <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px">Tu puja</label>
+        <div style="display: flex; gap: 8px; margin-bottom: 6px">
+          <input type="number" value="3500" style="flex-grow: 1; height: 40px; padding: 0 12px; font-family: 'Inter'; font-size: 16px; font-variant-numeric: tabular-nums; border: 1px solid #B81A1A; border-radius: 8px">
+          <button type="button" disabled style="min-height: 48px; padding: 0 20px; font-size: 14px; font-weight: 600; color: #FFFFFF; background: #1E3FB8; border: none; border-radius: 8px; opacity: 0.45; cursor: not-allowed">Pujar</button>
+        </div>
+        <div style="font-size: 13px; line-height: 1.4; color: #B81A1A; margin-bottom: 14px">
+          No te alcanza: tu saldo disponible es 3.400 cr.
+        </div>
+        <a href="#" style="display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600">
+          Recargar créditos
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a>
+      </section>
+    </div>
+
+    <!-- 3. Intervalo de 5 s -->
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 13px; font-weight: 600; color: #57627A">3 · Intervalo de 5 s (RF-SUB-004)</div>
+      <section style="background: #FFFFFF; border: 1px solid #9FABC9; border-radius: 8px; box-shadow: 0 1px 2px rgba(17,23,38,0.08); padding: 20px">
+        <div style="font-size: 13px; color: #57627A; margin-bottom: 2px">Oferta vigente · vas ganando</div>
+        <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 16px">
+          <span class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 40px; font-weight: 700; line-height: 1.1; color: #9A6800">1.300</span>
+          <span style="font-size: 13px; font-weight: 600; color: #9A6800">créditos</span>
+        </div>
+        <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px">Tu puja</label>
+        <div style="display: flex; gap: 8px; margin-bottom: 6px">
+          <input type="number" value="1350" style="flex-grow: 1; height: 40px; padding: 0 12px; font-family: 'Inter'; font-size: 16px; font-variant-numeric: tabular-nums; border: 1px solid #6F7994; border-radius: 8px">
+          <button type="button" disabled style="min-height: 48px; padding: 0 20px; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; color: #FFFFFF; background: #1E3FB8; border: none; border-radius: 8px; opacity: 0.45; cursor: not-allowed; white-space: nowrap">Espera 3 s</button>
+        </div>
+        <div style="font-size: 13px; line-height: 1.4; color: #8A4A00; margin-bottom: 10px">
+          Espera 3 s antes de volver a pujar.
+        </div>
+        <div style="height: 5px; border-radius: 5px; background: #CBD4E6; overflow: hidden">
+          <div style="width: 40%; height: 100%; background: #8A4A00"></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- 4. Limite automatico alcanzado -->
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 13px; font-weight: 600; color: #57627A">4 · Límite automático alcanzado</div>
+      <section style="background: #FFFFFF; border: 1px solid #9FABC9; border-radius: 8px; box-shadow: 0 1px 2px rgba(17,23,38,0.08); padding: 20px">
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2244BF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></svg>
+          <h3 style="margin: 0; font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 600">Puja automática</h3>
+        </div>
+        <div style="background: #FBE5E5; border: 1px solid #E8BDBD; border-radius: 8px; padding: 12px; margin-bottom: 14px; display: flex; gap: 10px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B81A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
+          <div>
+            <div style="font-size: 13px; font-weight: 600; color: #B81A1A; margin-bottom: 2px">Se alcanzó tu tope de 2.000 cr</div>
+            <div style="font-size: 13px; line-height: 1.4; color: #48536A">
+              La oferta subió a 2.050 cr y tu automática se detuvo. Te devolvimos los créditos
+              reservados.
+            </div>
+          </div>
+        </div>
+        <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px">Nuevo límite</label>
+        <input type="number" value="2500" style="width: 100%; height: 40px; padding: 0 12px; margin-bottom: 10px; font-family: 'Inter'; font-size: 16px; font-variant-numeric: tabular-nums; border: 1px solid #6F7994; border-radius: 8px">
+        <button type="button" style="width: 100%; min-height: 40px; font-size: 14px; font-weight: 600; color: #FFFFFF; background: #1E3FB8; border: none; border-radius: 8px; cursor: pointer">Subir el tope y reactivar</button>
+      </section>
+    </div>
+
+    <!-- 5. Ganaste -->
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 13px; font-weight: 600; color: #57627A">5 · Cerrada · ganaste</div>
+      <section style="background: #FFFFFF; border: 1px solid #9FABC9; border-radius: 8px; box-shadow: 0 1px 2px rgba(17,23,38,0.08); padding: 20px">
+        <span style="display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; background: #DFF1E6; color: #0B6B31; font-size: 13px; font-weight: 600; margin-bottom: 16px">Adjudicada</span>
+        <div style="display: flex; flex-direction: column; align-items: center; text-align: center; padding: 8px 0 16px">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#9A6800" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 12px"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+          <div style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 28px; font-weight: 700; line-height: 1.2; margin-bottom: 4px">La ganaste</div>
+          <div style="font-size: 16px; line-height: 1.5; color: #48536A; max-width: 34ch">
+            Se te cobraron <strong class="cifra" style="font-weight: 600; color: #9A6800">1.350 cr</strong>
+            y la Hacha de Obsidiana ya está en tu inventario.
+          </div>
+        </div>
+        <button type="button" style="width: 100%; min-height: 48px; font-size: 14px; font-weight: 600; color: #FFFFFF; background: #5B27B4; border: none; border-radius: 8px; cursor: pointer">Ver en mi inventario</button>
+      </section>
+    </div>
+
+    <!-- 6. No ganaste -->
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 13px; font-weight: 600; color: #57627A">6 · Cerrada · no ganaste</div>
+      <section style="background: #FFFFFF; border: 1px solid #9FABC9; border-radius: 8px; box-shadow: 0 1px 2px rgba(17,23,38,0.08); padding: 20px">
+        <span style="display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; background: #E7EAF0; color: #57627A; font-size: 13px; font-weight: 600; margin-bottom: 16px">Finalizada</span>
+        <div style="display: flex; flex-direction: column; align-items: center; text-align: center; padding: 8px 0 16px">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#57627A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 12px"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          <div style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 28px; font-weight: 700; line-height: 1.2; margin-bottom: 4px">Se cerró sin ti</div>
+          <div style="font-size: 16px; line-height: 1.5; color: #48536A; max-width: 34ch">
+            Ganó <strong style="font-weight: 600; color: #111726">draconis_91</strong> con 2.050 cr.
+            Tus <strong class="cifra" style="font-weight: 600">1.350 cr</strong> volvieron completos
+            a tu saldo.
+          </div>
+        </div>
+        <button type="button" style="width: 100%; min-height: 48px; font-size: 14px; font-weight: 600; color: #2244BF; background: #FFFFFF; border: 1px solid #6F7994; border-radius: 8px; cursor: pointer">Ver subastas parecidas</button>
+      </section>
+    </div>
+
+    <!-- 7. Tu propia subasta -->
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 13px; font-weight: 600; color: #57627A">7 · Es tu propia subasta</div>
+      <section style="background: #FFFFFF; border: 1px solid #9FABC9; border-radius: 8px; box-shadow: 0 1px 2px rgba(17,23,38,0.08); padding: 20px">
+        <div style="font-size: 13px; color: #57627A; margin-bottom: 2px">Oferta vigente</div>
+        <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 16px">
+          <span class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 40px; font-weight: 700; line-height: 1.1; color: #9A6800">1.300</span>
+          <span style="font-size: 13px; font-weight: 600; color: #9A6800">créditos</span>
+        </div>
+        <div style="background: #DFEEF8; border: 1px solid #B5D5EA; border-radius: 8px; padding: 12px; display: flex; gap: 10px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#095E8C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+          <div>
+            <div style="font-size: 13px; font-weight: 600; color: #095E8C; margin-bottom: 2px">Esta subasta es tuya</div>
+            <div style="font-size: 13px; line-height: 1.4; color: #48536A">
+              No puedes pujar en lo que tú publicaste. Puedes retirarla mientras nadie haya pujado.
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- 8. Tope de participacion -->
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 13px; font-weight: 600; color: #57627A">8 · Tope de participación</div>
+      <section style="background: #FFFFFF; border: 1px solid #9FABC9; border-radius: 8px; box-shadow: 0 1px 2px rgba(17,23,38,0.08); padding: 20px">
+        <div style="background: #FBF0DE; border: 1px solid #E8D3AE; border-radius: 8px; padding: 12px; margin-bottom: 16px; display: flex; gap: 10px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8A4A00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <div>
+            <div style="font-size: 13px; font-weight: 600; color: #8A4A00; margin-bottom: 2px">Llegaste a 10 subastas activas</div>
+            <div style="font-size: 13px; line-height: 1.4; color: #48536A">
+              Para entrar en esta, cierra o abandona alguna de las que ya tienes en curso.
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px">
+          <span style="font-size: 13px; color: #57627A">Subastas activas</span>
+          <span class="cifra" style="font-size: 13px; font-weight: 600; color: #8A4A00">10 de 10</span>
+        </div>
+        <div style="height: 5px; border-radius: 5px; background: #CBD4E6; margin-bottom: 14px; overflow: hidden">
+          <div style="width: 100%; height: 100%; background: #8A4A00"></div>
+        </div>
+        <button type="button" style="width: 100%; min-height: 40px; font-size: 14px; font-weight: 600; color: #2244BF; background: #FFFFFF; border: 1px solid #6F7994; border-radius: 8px; cursor: pointer">Ver mis subastas activas</button>
+      </section>
+    </div>
+
+    <!-- 9. Sobrepuja en el ultimo segundo -->
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 13px; font-weight: 600; color: #57627A">9 · Últimos segundos</div>
+      <section style="background: #FFFFFF; border: 1px solid #B81A1A; border-radius: 8px; box-shadow: 0 4px 12px rgba(17,23,38,0.12); padding: 20px">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px">
+          <span style="display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; background: #FBF0DE; color: #8A4A00; font-size: 13px; font-weight: 600">Termina ya</span>
+          <div style="display: flex; align-items: center; gap: 6px; color: #B81A1A">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            <span class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 700">0:08</span>
+          </div>
+        </div>
+        <div style="font-size: 13px; color: #57627A; margin-bottom: 2px">Oferta vigente · vas ganando</div>
+        <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 16px">
+          <span class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 40px; font-weight: 700; line-height: 1.1; color: #9A6800">2.050</span>
+          <span style="font-size: 13px; font-weight: 600; color: #9A6800">créditos</span>
+        </div>
+        <div style="background: #FBE5E5; border: 1px solid #E8BDBD; border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.4; color: #48536A">
+          Sin prórroga: si te superan ahora, tu automática no alcanza a responder — necesita
+          <strong style="font-weight: 600">5 s</strong> entre pujas.
+          <span style="color: #57627A">(Asunción pendiente de validar con el PO.)</span>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview": {"width": 1400, "height": 1180}}'>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>

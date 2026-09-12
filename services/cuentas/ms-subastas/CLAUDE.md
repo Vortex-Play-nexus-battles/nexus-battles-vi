@@ -73,6 +73,10 @@ por subasta" incluso si la validación en Java fallara bajo carrera.
   intestable si el reloj no es inyectable. Bean declarado en `MsSubastasApplication`.
 - **La clave de idempotencia la provee el cliente**, nunca se deriva del reloj: un reintento por
   timeout generaría una clave distinta y reservaría los créditos dos veces.
+- **El intervalo mínimo de 5 s es por jugador Y subasta**, nunca global. `ContextoParticipacion
+  .ultimaPujaDelJugador` se llena con `findFirstByJugadorIdAndSubastaIdOrderByCreadaEnDesc`. Si se
+  vuelve global, pujar en una subasta bloquea al jugador en las otras nueve que la HU permite, y sus
+  propias pujas automáticas se estorban entre sí.
 - **En todo momento hay como máximo una puja `ACTIVA` por subasta**, y solo su dueño mantiene una
   reserva de créditos viva. A los postores anteriores se les liberó al ser superados. Cualquier
   código que cierre o adjudique una subasta solo tiene una reserva que liberar o consumir.

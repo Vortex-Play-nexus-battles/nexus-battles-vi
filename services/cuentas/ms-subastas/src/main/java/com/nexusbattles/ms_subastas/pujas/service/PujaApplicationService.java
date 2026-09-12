@@ -1,6 +1,7 @@
 package com.nexusbattles.ms_subastas.pujas.service;
 
 import com.nexusbattles.ms_subastas.notificaciones.NotificacionOutbox;
+import com.nexusbattles.ms_subastas.pujas.dto.PujaResponse;
 import com.nexusbattles.ms_subastas.pujas.model.EstadoPuja;
 import com.nexusbattles.ms_subastas.pujas.model.Puja;
 import com.nexusbattles.ms_subastas.pujas.model.TipoPuja;
@@ -13,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -110,6 +112,23 @@ public class PujaApplicationService {
         subastaRepository.save(subasta);
     }
 
+    @Transactional(readOnly = true)
+    public List<PujaResponse> listarPujasPorJugadorYEstado(UUID jugadorId, EstadoPuja estado) {
+        Objects.requireNonNull(jugadorId, "jugadorId no puede ser nulo");
+        Objects.requireNonNull(estado, "estado no puede ser nulo");
+        return pujaRepository.findByJugadorIdAndEstadoOrderByCreadaEnDesc(jugadorId, estado)
+                .stream()
+                .map(PujaResponse::de)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<Puja> findByJugadorIdAndEstado(UUID jugadorId, EstadoPuja estado) {
+        Objects.requireNonNull(jugadorId, "jugadorId no puede ser nulo");
+        Objects.requireNonNull(estado, "estado no puede ser nulo");
+        return pujaRepository.findByJugadorIdAndEstado(jugadorId, estado);
+    }
+
     private Subasta cargarConLock(UUID subastaId) {
         return subastaRepository.findByIdParaActualizar(subastaId)
                 .orElseThrow(() -> new SubastaNoEncontradaException(subastaId));
@@ -117,7 +136,8 @@ public class PujaApplicationService {
 
     private ContextoParticipacion contextoDe(UUID jugadorId, UUID subastaId) {
         return new ContextoParticipacion(
-                pujaRepository.findFirstByJugadorIdOrderByCreadaEnDesc(jugadorId).map(Puja::getCreadaEn).orElse(null),
+                pujaRepository.findFirstByJugadorIdAndSubastaIdOrderByCreadaEnDesc(jugadorId, subastaId)
+                        .map(Puja::getCreadaEn).orElse(null),
                 pujaRepository.countByJugadorIdAndEstado(jugadorId, EstadoPuja.ACTIVA),
                 pujaRepository.contarSubastasActivasExcluyendo(jugadorId, EstadoPuja.ACTIVA, subastaId));
     }
