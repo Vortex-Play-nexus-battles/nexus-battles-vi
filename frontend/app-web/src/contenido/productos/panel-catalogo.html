@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Estado del catálogo | Nexus Battles VI</title>
+    <link rel="stylesheet" href="./productos.css" />
+    <link rel="stylesheet" href="./panel-catalogo.css" />
+  </head>
+  <body>
+    <main id="panel-catalogo-app" class="productos-pagina"></main>
+
+    <script type="module">
+      import { montarPanelCatalogo } from './panel-catalogo.js';
+
+      montarPanelCatalogo(document.getElementById('panel-catalogo-app'));
+    </script>
+  </body>
+</html>

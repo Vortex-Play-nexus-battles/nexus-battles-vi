@@ -107,6 +107,27 @@ textarea:focus-visible {
   font-weight: 600;
 }
 
+.productos-cabecera__acciones {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.productos-cabecera__enlace {
+  padding: 8px 12px;
+  border: 1px solid rgb(255 255 255 / 55%);
+  border-radius: 7px;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: none;
+  background: var(--primario);
+}
+
+.productos-cabecera__enlace:hover {
+  background: #2854ad;
+}
+
 .producto-formulario {
   display: grid;
   gap: 18px;
