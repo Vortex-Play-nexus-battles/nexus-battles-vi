@@ -1,0 +1,20 @@
+services:
+  db-subastas:
+    image: postgres:17-alpine
+    container_name: postgres-subastas
+    environment:
+      POSTGRES_DB: subastas_db
+      POSTGRES_USER: subastas_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-subastas_password}
+    ports:
+      - "5435:5432"
+    volumes:
+      - pgdata_subastas:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U subastas_user -d subastas_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata_subastas:

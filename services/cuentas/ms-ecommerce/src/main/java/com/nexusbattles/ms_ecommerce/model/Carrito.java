@@ -23,14 +23,14 @@ public class Carrito {
     @Column(nullable = false)
     private String usuarioId; // Identificador único de la cuenta/jugador
 
-    @OneToMany(mappedBy = "carrito", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "carrito", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     private List<ItemCarrito> items = new ArrayList<>();
 
     private BigDecimal total = BigDecimal.ZERO;
 
     public void recalcularTotal() {
         this.total = items.stream()
-                .map(ItemCarrito::getSubtotal)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            .map(ItemCarrito::getSubtotal)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }

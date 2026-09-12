@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import nexus.inventario.aplicacion.BuscarElementosInventario;
 import nexus.inventario.aplicacion.ConsultarInventarioPaginado;
 import nexus.inventario.aplicacion.GestionarInventario;
 import nexus.inventario.aplicacion.RepositorioInventariosEnMemoria;
@@ -31,7 +32,9 @@ class InventarioApiTest {
         gestion = new GestionarInventario(repositorio);
         mvc = MockMvcBuilders.standaloneSetup(
                         new InventarioController(
-                                gestion, new ConsultarInventarioPaginado(repositorio)))
+                                gestion,
+                                new ConsultarInventarioPaginado(repositorio),
+                                new BuscarElementosInventario(repositorio)))
                 .setControllerAdvice(new ManejadorDeErrores())
                 .build();
     }
@@ -250,5 +253,46 @@ class InventarioApiTest {
                         .header("X-User-Name", "jugador-A")
                         .param("pagina", "-1"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("GET busqueda localiza elementos propios por la informacion registrada")
+    void buscarElementosPropios() throws Exception {
+        gestion.crear("jugador-A", "producto-bruma", TipoElementoInventario.ITEM,
+                "Amuleto de Bruma");
+        gestion.crear("jugador-A", "producto-solar", TipoElementoInventario.ARMA,
+                "Espada Solar");
+        gestion.crear("jugador-B", "producto-ajeno", TipoElementoInventario.ITEM,
+                "Amuleto de Bruma ajeno");
+
+        mvc.perform(get("/api/v1/inventario/elementos/busqueda")
+                        .header("X-User-Name", "jugador-A")
+                        .param("criterio", "bruma")
+                        .param("pagina", "0"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.elementos.length()").value(1))
+                .andExpect(jsonPath("$.elementos[0].productoId").value("producto-bruma"))
+                .andExpect(jsonPath("$.totalElementos").value(1))
+                .andExpect(jsonPath("$.tamanio").value(16));
+    }
+
+    @Test
+    @DisplayName("GET busqueda rechaza menos de cuatro caracteres")
+    void buscarConCriterioCorto() throws Exception {
+        mvc.perform(get("/api/v1/inventario/elementos/busqueda")
+                        .header("X-User-Name", "jugador-A")
+                        .param("criterio", "abc"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Criterio de busqueda invalido"))
+                .andExpect(jsonPath("$.detail")
+                        .value("Ingresa al menos cuatro caracteres para buscar."));
+    }
+
+    @Test
+    @DisplayName("GET busqueda exige la identidad autenticada")
+    void buscarSinIdentidad() throws Exception {
+        mvc.perform(get("/api/v1/inventario/elementos/busqueda")
+                        .param("criterio", "bruma"))
+                .andExpect(status().isUnauthorized());
     }
 }

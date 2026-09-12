@@ -7,6 +7,7 @@
 
 import {
   consultarPagina,
+  buscarElementos,
   crearElemento,
   modificarElemento,
   consultarEquipamiento,
@@ -48,9 +49,16 @@ export async function montarVitrina(
   contenedor,
   identidad,
   numeroPagina = 0,
-  { consultar = consultarPagina, alEditar, alEquipar } = {},
+  {
+    consultar = consultarPagina,
+    alEditar,
+    alEquipar,
+    mensajeCarga,
+    mensajeVacio,
+    detalleVacio,
+  } = {},
 ) {
-  contenedor.replaceChildren(construirCarga());
+  contenedor.replaceChildren(construirCarga(mensajeCarga));
 
   let pagina;
   try {
@@ -63,7 +71,7 @@ export async function montarVitrina(
   }
 
   if (!pagina || pagina.elementos.length === 0) {
-    contenedor.replaceChildren(construirVacio());
+    contenedor.replaceChildren(construirVacio(mensajeVacio, detalleVacio));
     return pagina;
   }
 
@@ -111,6 +119,30 @@ function construirGestion() {
   const botonNuevo = elementoHtml('button', 'inventario__nuevo', 'Agregar elemento');
   botonNuevo.type = 'button';
   cabecera.append(titulo, botonNuevo);
+
+  const busqueda = elementoHtml('form', 'inventario-busqueda');
+  busqueda.setAttribute('role', 'search');
+  const busquedaCampo = elementoHtml('label', 'inventario-busqueda__campo');
+  const busquedaEtiqueta = elementoHtml(
+    'span',
+    'inventario-busqueda__etiqueta',
+    'Buscar productos',
+  );
+  const busquedaControl = document.createElement('input');
+  busquedaControl.className = 'inventario-busqueda__control';
+  busquedaControl.type = 'search';
+  busquedaControl.name = 'criterio';
+  busquedaControl.minLength = 4;
+  busquedaControl.autocomplete = 'off';
+  busquedaControl.placeholder = 'Buscar por nombre, tipo o producto';
+  busquedaCampo.append(busquedaEtiqueta, busquedaControl);
+  const botonBuscar = elementoHtml('button', 'inventario-busqueda__buscar', 'Buscar');
+  botonBuscar.type = 'submit';
+  const botonLimpiar = elementoHtml('button', 'inventario-busqueda__limpiar', 'Limpiar');
+  botonLimpiar.type = 'button';
+  botonLimpiar.hidden = true;
+  busqueda.append(busquedaCampo, botonBuscar, botonLimpiar);
+  cabecera.append(busqueda, botonNuevo);
 
   const editor = elementoHtml('section', 'inventario-editor');
   editor.hidden = true;
@@ -164,6 +196,10 @@ function construirGestion() {
     elementos: [cabecera, editor, equipo, mensaje, contenido],
     cabecera,
     botonNuevo,
+    busqueda,
+    busquedaControl,
+    botonBuscar,
+    botonLimpiar,
     editor,
     tituloEditor,
     formulario,
@@ -193,6 +229,7 @@ export async function montarInventario(
   numeroPagina = 0,
   {
     consultar = consultarPagina,
+    buscar = buscarElementos,
     crear = crearElemento,
     modificar = modificarElemento,
     consultarEquipo = consultarEquipamiento,
@@ -204,6 +241,7 @@ export async function montarInventario(
   raiz.replaceChildren(...vista.elementos);
 
   let paginaActual = numeroPagina;
+  let criterioBusqueda = '';
   let paginaMostrada = null;
   let elementoSeleccionado = null;
   let heroeSeleccionado = null;
@@ -322,10 +360,18 @@ export async function montarInventario(
 
   async function actualizar(numero = paginaActual) {
     paginaActual = numero;
+    const busquedaActiva = criterioBusqueda !== '';
     const consultada = await montarVitrina(vista.contenido, identidad, paginaActual, {
-      consultar,
+      consultar: busquedaActiva
+        ? (jugador, pagina) => buscar(jugador, criterioBusqueda, pagina)
+        : consultar,
       alEditar: abrirEdicion,
       alEquipar: abrirEquipamiento,
+      mensajeCarga: busquedaActiva ? 'Buscando en tu inventario...' : undefined,
+      mensajeVacio: busquedaActiva ? 'No encontramos productos con ese criterio.' : undefined,
+      detalleVacio: busquedaActiva
+        ? 'Prueba con otro nombre, tipo o identificador de producto.'
+        : undefined,
     });
     if (consultada) {
       paginaMostrada = consultada;
@@ -334,6 +380,44 @@ export async function montarInventario(
   }
 
   vista.botonNuevo.addEventListener('click', abrirCreacion);
+  vista.busqueda.addEventListener('submit', async (evento) => {
+    evento.preventDefault();
+    const criterio = vista.busquedaControl.value.trim();
+    if (criterio.length < 4) {
+      mostrarMensaje('Ingresa al menos cuatro caracteres para buscar.', true);
+      vista.busquedaControl.focus();
+      return;
+    }
+
+    criterioBusqueda = criterio;
+    vista.busquedaControl.value = criterio;
+    vista.busqueda.classList.add('inventario-busqueda--activa');
+    vista.botonLimpiar.hidden = false;
+    cambiarDisponibilidad(vista.botonBuscar, false);
+    mostrarMensaje(`Buscando "${criterio}"...`);
+    try {
+      const resultado = await actualizar(0);
+      if (resultado) {
+        const cantidad = resultado.totalElementos ?? resultado.elementos.length;
+        mostrarMensaje(
+          `${cantidad} ${cantidad === 1 ? 'resultado' : 'resultados'} para "${criterio}".`,
+        );
+      } else {
+        mostrarMensaje('No pudimos realizar la búsqueda. Inténtalo de nuevo.', true);
+      }
+    } finally {
+      cambiarDisponibilidad(vista.botonBuscar, true);
+    }
+  });
+  vista.botonLimpiar.addEventListener('click', async () => {
+    criterioBusqueda = '';
+    vista.busquedaControl.value = '';
+    vista.busqueda.classList.remove('inventario-busqueda--activa');
+    vista.botonLimpiar.hidden = true;
+    mostrarMensaje('');
+    await actualizar(0);
+    vista.busquedaControl.focus();
+  });
   vista.botonCancelar.addEventListener('click', cerrarEditor);
   vista.equipoCerrar.addEventListener('click', () => {
     vista.equipo.hidden = true;
@@ -367,7 +451,9 @@ export async function montarInventario(
             vista.tipo.control.value === 'ARMADURA' ? vista.parte.control.value : undefined,
         });
         cerrarEditor();
-        await actualizar(Math.floor(totalAntes / PRODUCTOS_POR_PAGINA));
+        await actualizar(
+          criterioBusqueda === '' ? Math.floor(totalAntes / PRODUCTOS_POR_PAGINA) : 0,
+        );
         mostrarMensaje('Elemento creado.');
       }
     } catch (fallo) {

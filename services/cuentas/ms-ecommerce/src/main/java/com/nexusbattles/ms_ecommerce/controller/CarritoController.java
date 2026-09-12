@@ -9,8 +9,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/ecommerce/carrito")
+@RequestMapping("/api/v1/carrito")
 @RequiredArgsConstructor
+@CrossOrigin(origins = {"http://localhost:8080", "http://127.0.0.1:8080"})
 public class CarritoController {
 
     private final CarritoService carritoService;
@@ -22,15 +23,15 @@ public class CarritoController {
 
     @PostMapping("/items")
     public ResponseEntity<Carrito> agregarItem(
-            @RequestHeader("X-User-Id") String usuarioId,
-            @Valid @RequestBody AgregarItemRequest request) {
+        @RequestHeader("X-User-Id") String usuarioId,
+        @Valid @RequestBody AgregarItemRequest request) {
         return ResponseEntity.ok(carritoService.agregarProducto(usuarioId, request));
     }
 
     @DeleteMapping("/items/{itemId}")
     public ResponseEntity<Carrito> eliminarItem(
-            @RequestHeader("X-User-Id") String usuarioId,
-            @PathVariable Long itemId) {
+        @RequestHeader("X-User-Id") String usuarioId,
+        @PathVariable Long itemId) {
         return ResponseEntity.ok(carritoService.eliminarItem(usuarioId, itemId));
     }
 }
