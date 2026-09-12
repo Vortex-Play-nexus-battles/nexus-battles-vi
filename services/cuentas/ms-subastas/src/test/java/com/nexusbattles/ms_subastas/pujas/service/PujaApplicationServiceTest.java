@@ -100,9 +100,61 @@ class PujaApplicationServiceTest {
 
         servicio.pujar(subasta.getId(), jugador, new BigDecimal("110"), claveUnica());
 
-        verify(pujaRepository).findFirstByJugadorIdOrderByCreadaEnDesc(jugador);
+        verify(pujaRepository).findFirstByJugadorIdAndSubastaIdOrderByCreadaEnDesc(jugador, subasta.getId());
         verify(pujaRepository).countByJugadorIdAndEstado(jugador, EstadoPuja.ACTIVA);
         verify(pujaRepository).contarSubastasActivasExcluyendo(jugador, EstadoPuja.ACTIVA, subasta.getId());
+    }
+
+    /**
+     * El intervalo minimo es por jugador Y subasta, no por jugador a secas.
+     * Con la consulta global, pujar en una subasta bloqueaba al jugador en
+     * TODAS las demas durante 5 s: con 10 subastas simultaneas (el tope que
+     * permite la propia HU) solo alcanzaba a pujar en una cada 5 s, y su propia
+     * puja automatica en una subasta le bloqueaba pujar a mano en otra.
+     */
+    @Test
+    void pujarEnUnaSubastaNoBloqueaPujarEnOtraDistinta() {
+        Subasta primera = subastaActiva();
+        Subasta segunda = subastaActiva();
+        UUID jugador = UUID.randomUUID();
+        creditoClient.acreditar(jugador, new BigDecimal("1000"));
+
+        // En la segunda subasta no ha pujado nunca, asi que no hay intervalo que
+        // esperar — aunque acabe de pujar en la primera hace un segundo.
+        when(pujaRepository.findFirstByJugadorIdAndSubastaIdOrderByCreadaEnDesc(jugador, segunda.getId()))
+                .thenReturn(Optional.empty());
+        when(subastaRepository.findByIdParaActualizar(segunda.getId())).thenReturn(Optional.of(segunda));
+        when(pujaRepository.findBySubastaIdAndEstado(segunda.getId(), EstadoPuja.ACTIVA)).thenReturn(Optional.empty());
+        when(pujaRepository.save(any(Puja.class))).thenAnswer(invocacion -> invocacion.getArgument(0));
+
+        Puja enLaSegunda = servicio.pujar(segunda.getId(), jugador, new BigDecimal("110"), claveUnica());
+
+        assertEquals(EstadoPuja.ACTIVA, enLaSegunda.getEstado());
+        // La clave: la consulta del intervalo va acotada a ESTA subasta, asi que
+        // lo que el jugador hiciera en la primera no entra en la decision.
+        verify(pujaRepository).findFirstByJugadorIdAndSubastaIdOrderByCreadaEnDesc(jugador, segunda.getId());
+        verify(pujaRepository, never()).findFirstByJugadorIdAndSubastaIdOrderByCreadaEnDesc(jugador, primera.getId());
+    }
+
+    /** Pero dentro de la MISMA subasta el freno sigue en pie. */
+    @Test
+    void pujarDosVecesSeguidasEnLaMismaSubastaSigueRechazandose() {
+        Subasta subasta = subastaActiva();
+        UUID jugador = UUID.randomUUID();
+        creditoClient.acreditar(jugador, new BigDecimal("1000"));
+
+        Puja haceUnSegundo = new Puja(UUID.randomUUID(), subasta.getId(), jugador, new BigDecimal("110"),
+                TipoPuja.MANUAL, EstadoPuja.SUPERADA, AHORA.minusSeconds(1), UUID.randomUUID().toString());
+
+        when(pujaRepository.findFirstByJugadorIdAndSubastaIdOrderByCreadaEnDesc(jugador, subasta.getId()))
+                .thenReturn(Optional.of(haceUnSegundo));
+        when(subastaRepository.findByIdParaActualizar(subasta.getId())).thenReturn(Optional.of(subasta));
+        when(pujaRepository.findBySubastaIdAndEstado(subasta.getId(), EstadoPuja.ACTIVA)).thenReturn(Optional.empty());
+
+        PujaRechazadaException ex = assertThrows(PujaRechazadaException.class,
+                () -> servicio.pujar(subasta.getId(), jugador, new BigDecimal("120"), claveUnica()));
+
+        assertEquals(PujaRechazadaException.Motivo.INTERVALO_MINIMO_NO_CUMPLIDO, ex.getMotivo());
     }
 
     @Test

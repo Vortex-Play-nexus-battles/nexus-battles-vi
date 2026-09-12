@@ -109,7 +109,7 @@ class EmisionDePujasAutomaticasJobTest {
 
         Puja pujaReciente = new Puja(UUID.randomUUID(), subasta.getId(), automatica.getJugadorId(),
                 new BigDecimal("90"), TipoPuja.AUTOMATICA, EstadoPuja.SUPERADA, AHORA.minusSeconds(2), "r");
-        when(pujaRepository.findFirstByJugadorIdOrderByCreadaEnDesc(automatica.getJugadorId()))
+        when(pujaRepository.findFirstByJugadorIdAndSubastaIdOrderByCreadaEnDesc(automatica.getJugadorId(), subasta.getId()))
                 .thenReturn(Optional.of(pujaReciente));
 
         job.emitirPujasAutomaticas();
@@ -125,7 +125,7 @@ class EmisionDePujasAutomaticasJobTest {
 
         Puja pujaVieja = new Puja(UUID.randomUUID(), subasta.getId(), automatica.getJugadorId(),
                 new BigDecimal("90"), TipoPuja.AUTOMATICA, EstadoPuja.SUPERADA, AHORA.minusSeconds(5), "r");
-        when(pujaRepository.findFirstByJugadorIdOrderByCreadaEnDesc(automatica.getJugadorId()))
+        when(pujaRepository.findFirstByJugadorIdAndSubastaIdOrderByCreadaEnDesc(automatica.getJugadorId(), subasta.getId()))
                 .thenReturn(Optional.of(pujaVieja));
 
         job.emitirPujasAutomaticas();
