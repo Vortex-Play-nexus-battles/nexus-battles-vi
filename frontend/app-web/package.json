@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Interfaz web de The Nexus Battles VI. HTML, CSS y JavaScript sin framework, servida por Spring Boot como recursos estaticos. Este archivo NO construye la aplicacion: declara las herramientas de calidad y el arnes de pruebas.",
   "scripts": {
+    "dev": "http-server src -p 8080 -c-1",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write \"src/**/*.{js,css,html,json}\"",

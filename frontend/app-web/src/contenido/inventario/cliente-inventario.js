@@ -13,6 +13,7 @@
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
 
 const RUTA = '/api/v1/inventario/elementos';
+const RUTA_BUSQUEDA = `${RUTA}/busqueda`;
 const RUTA_HEROES = '/api/v1/inventario/heroes';
 
 function identidadNormalizada(identidad) {
@@ -72,6 +73,44 @@ export async function consultarPagina(
     throw new Error(
       `El servicio de inventario respondio ${respuesta.status} al pedir la pagina ${pagina}`,
     );
+  }
+  return respuesta.json();
+}
+
+/**
+ * Busca una pagina del inventario propio usando el indice del servicio.
+ *
+ * @param {string} identidad jugador autenticado, que viaja en la cabecera.
+ * @param {string} criterio texto de al menos cuatro caracteres.
+ * @param {number} numeroPagina pagina pedida, desde cero.
+ * @param {{fetchImpl?: Function}} opciones inyeccion para las pruebas.
+ * @returns {Promise<object>} pagina con los elementos coincidentes.
+ */
+export async function buscarElementos(
+  identidad,
+  criterio,
+  numeroPagina = 0,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const propietario = identidadNormalizada(identidad);
+  const texto = typeof criterio === 'string' ? criterio.trim() : '';
+  const pagina = numeroPagina ?? 0;
+
+  if (texto.length < 4) {
+    throw new RangeError('El criterio de busqueda debe tener al menos cuatro caracteres');
+  }
+  if (!Number.isInteger(pagina) || pagina < 0) {
+    throw new RangeError('El numero de pagina no puede ser negativo');
+  }
+
+  const parametros = new URLSearchParams({ criterio: texto, pagina: String(pagina) });
+  const respuesta = await fetchImpl(`${RUTA_BUSQUEDA}?${parametros}`, {
+    headers: { 'X-User-Name': propietario },
+  });
+  if (!respuesta.ok) {
+    const fallo = new Error(`No se pudo buscar en el inventario (${respuesta.status})`);
+    fallo.status = respuesta.status;
+    throw fallo;
   }
   return respuesta.json();
 }

@@ -12,7 +12,6 @@ public class AdminUsuarioResumenResponse {
     private String nombres;
     private String apellidos;
     private String avatar;
-    private String biografia;
     private String preferencias;
 
     public static AdminUsuarioResumenResponse from(PerfilUsuario perfil) {
@@ -25,7 +24,6 @@ public class AdminUsuarioResumenResponse {
         dto.nombres = perfil.getNombres();
         dto.apellidos = perfil.getApellidos();
         dto.avatar = perfil.getAvatar();
-        dto.biografia = perfil.getBiografia();
         dto.preferencias = perfil.getPreferencias();
         return dto;
     }
@@ -38,6 +36,5 @@ public class AdminUsuarioResumenResponse {
     public String getNombres() { return nombres; }
     public String getApellidos() { return apellidos; }
     public String getAvatar() { return avatar; }
-    public String getBiografia() { return biografia; }
     public String getPreferencias() { return preferencias; }
 }

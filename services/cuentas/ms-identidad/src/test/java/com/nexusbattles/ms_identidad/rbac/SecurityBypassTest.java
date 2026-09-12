@@ -154,4 +154,56 @@ public class SecurityBypassTest {
                 .andExpect(jsonPath("$.status").value(403))
                 .andExpect(jsonPath("$.detail").value("Token de autenticación inválido o expirado"));
     }
+
+    @Test
+    @DisplayName("Fail-closed: con el respaldo X-User-Role deshabilitado (produccion), "
+        + "un ADMINISTRADOR sin JWT recibe 403 aunque el header diga que es admin")
+    void headerRolDeshabilitadoNoAcreditaRol() throws Exception {
+        RbacMatrixRepository repository = new RbacMatrixRepository();
+        RbacAuthorizationService service = new RbacAuthorizationService(repository);
+        AuditoriaEventClient auditoriaClient =
+            new AuditoriaEventClient("http://localhost:8083/api/v1/admin/auditoria/eventos");
+
+        // permitirHeaderRol = false -> configuracion de produccion
+        SecurityInterceptor interceptorProd =
+            new SecurityInterceptor(service, auditoriaClient, jwtService, null, false);
+
+        MockMvc mockMvcProd = MockMvcBuilders
+            .standaloneSetup(new AdminActionDemoController())
+            .addInterceptors(interceptorProd)
+            .build();
+
+        mockMvcProd.perform(post("/api/v1/admin/ban")
+                .header("X-User-Name", "atacante")
+                .header("X-User-Role", "ADMINISTRADOR")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"userId\": \"target_user_123\"}"))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.status").value(403))
+            .andExpect(jsonPath("$.detail").value("No tienes permiso para esta acción"));
+    }
+
+    @Test
+    @DisplayName("Dev: con el respaldo habilitado, el mismo header SI acredita al ADMINISTRADOR -> 200")
+    void headerRolHabilitadoSoloEnDesarrollo() throws Exception {
+        RbacMatrixRepository repository = new RbacMatrixRepository();
+        RbacAuthorizationService service = new RbacAuthorizationService(repository);
+        AuditoriaEventClient auditoriaClient =
+            new AuditoriaEventClient("http://localhost:8083/api/v1/admin/auditoria/eventos");
+
+        SecurityInterceptor interceptorDev =
+            new SecurityInterceptor(service, auditoriaClient, jwtService, null, true);
+
+        MockMvc mockMvcDev = MockMvcBuilders
+            .standaloneSetup(new AdminActionDemoController())
+            .addInterceptors(interceptorDev)
+            .build();
+
+        mockMvcDev.perform(post("/api/v1/admin/ban")
+                .header("X-User-Name", "admin_demo")
+                .header("X-User-Role", "ADMINISTRADOR")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"userId\": \"target_user_123\"}"))
+            .andExpect(status().isOk());
+    }
 }

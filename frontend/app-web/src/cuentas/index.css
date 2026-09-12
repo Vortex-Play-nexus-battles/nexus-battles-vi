@@ -1,0 +1,138 @@
+/* ============================================================
+   index.css — menú principal GLOBAL (frontend/app-web/src/cuentas/)
+   Usa los tokens de tema-cuentas.css (misma fuente de variables
+   que login/registro) en vez de duplicar valores hex sueltos.
+   ============================================================ */
+
+@import url('./tema-cuentas.css');
+
+.encabezado-inicio {
+  background: var(--cromo);
+  color: #ffffff;
+  padding: 28px 0;
+}
+
+.encabezado-inicio-contenido {
+  width: min(1100px, calc(100% - 32px));
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: rgb(255 255 255 / 65%);
+}
+
+.titulo-bienvenida {
+  text-align: left;
+  color: #ffffff;
+  margin: 0 0 6px;
+}
+
+.encabezado-inicio .descripcion {
+  margin: 0;
+  color: rgb(255 255 255 / 75%);
+}
+
+.encabezado-inicio .btn-contorno {
+  flex-shrink: 0;
+  background: transparent;
+  border-color: rgb(255 255 255 / 35%);
+  color: #ffffff;
+}
+
+.encabezado-inicio .btn-contorno:hover {
+  border-color: #ffffff;
+}
+
+.contenedor-principal {
+  width: min(1100px, calc(100% - 32px));
+  margin: 32px auto 50px;
+}
+
+.seccion-menu {
+  margin-bottom: 32px;
+}
+
+.seccion-menu[hidden] {
+  display: none;
+}
+
+.titulo-seccion {
+  margin: 0 0 14px;
+  font-family: Rajdhani, 'Trebuchet MS', sans-serif;
+  font-weight: 600;
+  font-size: 18px;
+  color: var(--texto-secundario);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tarjetas-acceso {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 20px;
+}
+
+.tarjeta-acceso {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.tarjeta-acceso h3 {
+  margin: 0 0 8px;
+  font-family: Rajdhani, 'Trebuchet MS', sans-serif;
+  font-weight: 600;
+  font-size: 20px;
+  color: var(--texto);
+}
+
+.tarjeta-acceso p {
+  margin: 0;
+  color: var(--texto-secundario);
+  line-height: 1.5;
+}
+
+.tarjeta-acceso:hover {
+  transform: translateY(-2px);
+  border-color: var(--accion);
+  box-shadow: 0 8px 20px rgba(28, 35, 64, 0.12);
+}
+
+.tarjeta-acceso:focus-visible {
+  outline: 3px solid #9bb0e8;
+  outline-offset: 2px;
+}
+
+.tarjeta-acceso[hidden] {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tarjeta-acceso {
+    transition: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .encabezado-inicio-contenido {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .encabezado-inicio .btn-contorno {
+    align-self: stretch;
+  }
+
+  .tarjetas-acceso {
+    grid-template-columns: 1fr;
+  }
+}

@@ -13,6 +13,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.method.HandlerMethod;
@@ -33,16 +34,31 @@ public class SecurityInterceptor implements HandlerInterceptor {
     private final JwtService jwtService;
     private final UsuarioRepository usuarioRepository;
 
+    /**
+     * Habilita el respaldo de desarrollo por header X-User-Role.
+     *
+     * Por omision es FALSE: sin JWT valido no hay rol, que es la politica
+     * fail-closed de HU-RBAC-004 ("la interfaz nunca es perimetro de
+     * confianza"). Solo el perfil dev lo activa, para poder demostrar los
+     * cuatro roles sin cuatro inicios de sesion reales. En produccion queda
+     * apagado y la unica credencial valida es el Bearer JWT.
+     */
+    private final boolean permitirHeaderRol;
+
     public SecurityInterceptor(RbacAuthorizationService rbacService) {
-        this(rbacService, null, null, null);
+        this(rbacService, null, null, null, true);
     }
 
     public SecurityInterceptor(RbacAuthorizationService rbacService, AuditoriaEventClient auditoriaClient) {
-        this(rbacService, auditoriaClient, null, null);
+        this(rbacService, auditoriaClient, null, null, true);
     }
 
     public SecurityInterceptor(RbacAuthorizationService rbacService, AuditoriaEventClient auditoriaClient, JwtService jwtService) {
-        this(rbacService, auditoriaClient, jwtService, null);
+        this(rbacService, auditoriaClient, jwtService, null, true);
+    }
+
+    public SecurityInterceptor(RbacAuthorizationService rbacService, AuditoriaEventClient auditoriaClient, JwtService jwtService, UsuarioRepository usuarioRepository) {
+        this(rbacService, auditoriaClient, jwtService, usuarioRepository, true);
     }
 
     @Autowired
@@ -50,11 +66,13 @@ public class SecurityInterceptor implements HandlerInterceptor {
         RbacAuthorizationService rbacService,
         AuditoriaEventClient auditoriaClient,
         @Autowired(required = false) JwtService jwtService,
-        @Autowired(required = false) UsuarioRepository usuarioRepository) {
+        @Autowired(required = false) UsuarioRepository usuarioRepository,
+        @Value("${app.seguridad.permitir-header-rol:false}") boolean permitirHeaderRol) {
         this.rbacService = rbacService;
         this.auditoriaClient = auditoriaClient;
         this.jwtService = jwtService;
         this.usuarioRepository = usuarioRepository;
+        this.permitirHeaderRol = permitirHeaderRol;
     }
 
     @Override
@@ -112,8 +130,18 @@ public class SecurityInterceptor implements HandlerInterceptor {
                     return false;
                 }
             } else if (roleHeader != null && !roleHeader.trim().isEmpty()) {
-                // 2. Respaldo para demo / tests usando header temporal X-User-Role
-                roleName = roleHeader.trim();
+                if (permitirHeaderRol) {
+                    // 2. Respaldo SOLO de desarrollo (app.seguridad.permitir-header-rol=true)
+                    roleName = roleHeader.trim();
+                } else {
+                    // Fail-closed: en produccion el header no acredita nada. Se
+                    // audita el intento en vez de ignorarlo en silencio.
+                    auditBypass(username, roleHeader.trim(), requiredAction,
+                        "HEADER_ROL_DESHABILITADO", ipOrigen);
+                    sendForbidden(response, request.getRequestURI(),
+                        "No tienes permiso para esta acción");
+                    return false;
+                }
             }
 
             // Si no hay rol verificado -> FAIL-CLOSED (Denegar)
