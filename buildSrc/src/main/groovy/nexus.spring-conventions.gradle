@@ -29,6 +29,18 @@ dependencies {
     // Regla 3 de plataforma: todo servicio expone salud y metricas de Actuator.
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
 
+    // HU-REN-001, CA-01: instrumentacion de latencia extremo a extremo.
+    //
+    // Se reparte desde aqui, y no copiando el filtro en cada servicio, por la
+    // misma razon que JaCoCo o el Actuator de arriba: son veinte modulos de
+    // tres equipos distintos. Copiado, en dos sprints habria veinte variantes
+    // del mismo filtro midiendo cosas ligeramente distintas y el informe de
+    // RNF-REN-001 no seria comparable entre servicios.
+    //
+    // La biblioteca trae una autoconfiguracion, asi que un servicio nuevo queda
+    // instrumentado por existir: no tiene que declarar nada ni escribir codigo.
+    implementation project(':shared:libs:plataforma-observabilidad')
+
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 
     // Sin esta linea Gradle 9 no descubre las pruebas de JUnit 5 y rompe la
