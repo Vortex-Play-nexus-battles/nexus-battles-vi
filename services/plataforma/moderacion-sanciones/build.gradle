@@ -1,16 +1,15 @@
 plugins {
     id 'nexus.spring-conventions'
+    id 'nexus.persistencia-conventions'
+    id 'nexus.seguridad-conventions'
 }
 
 dependencies {
-    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-    implementation 'org.springframework.boot:spring-boot-starter-flyway'
-    implementation 'org.flywaydb:flyway-database-postgresql'
-    runtimeOnly 'org.postgresql:postgresql'
+    // Cache en Redis: propio de este servicio, no de la plataforma.
+    // La lista negra se consulta en cada mensaje de chat y en cada comentario,
+    // asi que no puede ir a la base de datos cada vez.
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     implementation 'org.springframework.boot:spring-boot-starter-cache'
-    implementation 'org.springframework.boot:spring-boot-starter-security'
-    implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
-    testImplementation 'org.springframework.security:spring-security-test'
+
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 }

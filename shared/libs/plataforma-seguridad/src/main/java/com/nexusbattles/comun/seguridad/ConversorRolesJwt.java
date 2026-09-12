@@ -1,4 +1,4 @@
-package com.nexusbattles.plataforma.moderacionsanciones.seguridad;
+package com.nexusbattles.comun.seguridad;
 
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
@@ -17,6 +17,11 @@ import java.util.stream.Collectors;
  * Traduce el claim "realm_access.roles" que emite Keycloak (RF-AUT / RF-RBAC)
  * a authorities de Spring Security con prefijo ROLE_, para poder usar
  * hasRole()/hasAnyRole() en la configuracion de seguridad.
+ *
+ * <p>Vivia en {@code moderacion-sanciones}. Se movio aqui sin cambiar una linea
+ * de su comportamiento cuando {@code salas-partidas} necesito lo mismo: el
+ * segundo servicio que necesita una pieza es la senal de que la pieza es
+ * compartida, no de que haya que copiarla.
  */
 public class ConversorRolesJwt implements Converter<Jwt, AbstractAuthenticationToken> {
 

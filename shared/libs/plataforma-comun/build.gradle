@@ -1,0 +1,20 @@
+// Biblioteca compartida por los 20 microservicios.
+//
+// Aqui solo van piezas que las doce reglas de plataforma obligan a que sean
+// identicas en todos los servicios. Si algo sirve a un solo dominio, no va aqui.
+//
+// Usa las convenciones de biblioteca para heredar el catalogo de versiones de
+// Spring Boot y no tener que fijar numeros a mano. NO arrastra Spring: la unica
+// dependencia es la API de servlet, y en tiempo de compilacion.
+
+plugins {
+    id 'nexus.libreria-spring-conventions'
+}
+
+dependencies {
+    // compileOnly: el contenedor de servlets ya la aporta en tiempo de ejecucion.
+    compileOnly 'jakarta.servlet:jakarta.servlet-api'
+    api 'org.slf4j:slf4j-api'
+
+    testImplementation 'jakarta.servlet:jakarta.servlet-api'
+}

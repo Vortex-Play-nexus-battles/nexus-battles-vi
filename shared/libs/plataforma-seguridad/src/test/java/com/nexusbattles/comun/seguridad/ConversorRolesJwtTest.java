@@ -1,4 +1,4 @@
-package com.nexusbattles.plataforma.moderacionsanciones.seguridad;
+package com.nexusbattles.comun.seguridad;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
@@ -10,6 +10,11 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * Movida desde {@code moderacion-sanciones} junto con la clase que prueba.
+ * Ni una asercion cambio: si el comportamiento fuera distinto, esta prueba
+ * lo diria.
+ */
 class ConversorRolesJwtTest {
 
     private final ConversorRolesJwt conversor = new ConversorRolesJwt();

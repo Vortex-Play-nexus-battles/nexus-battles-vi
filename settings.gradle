@@ -7,6 +7,13 @@ rootProject.name = 'nexus-battles-vi'
 // El workflow guardia-monorepo.yml falla el pull request si se olvida.
 // -----------------------------------------------------------------------
 
+// --- Bibliotecas compartidas por los tres equipos ---
+//
+// No son servicios: no se despliegan, se enlazan. Aqui vive lo que las doce
+// reglas de plataforma obligan a que sea identico en los 20 modulos.
+include 'shared:libs:plataforma-comun'
+include 'shared:libs:plataforma-seguridad'
+
 // --- Plataforma: tiempo real, comunidad y plataforma (Equipo 6) ---
 include 'services:plataforma:admin-parametros'
 include 'services:plataforma:comentarios'
