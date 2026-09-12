@@ -21,6 +21,19 @@ dependencies {
     // todas las pujas si no se corta rápido.
     implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
 
+    // Validación del JWT que emite ms-identidad. Misma versión que ese
+    // servicio (0.12.6) para no divergir en el formato del token. Solo se
+    // valida firma y expiración; la revocación de rol queda fuera de alcance
+    // por acuerdo con Cristian — ver README, "Asunciones tomadas" punto 4.
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+
+    // El validador se prueba generando tokens reales, así que en pruebas hace
+    // falta la implementación, no solo la API.
+    testImplementation 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    testImplementation 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
     testCompileOnly 'org.projectlombok:lombok'
