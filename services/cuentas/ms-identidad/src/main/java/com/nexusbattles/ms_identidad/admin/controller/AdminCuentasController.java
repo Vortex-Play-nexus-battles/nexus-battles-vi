@@ -12,7 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/admin/cuentas")
+@RequestMapping("/api/v1/admin/cuentas")
 public class AdminCuentasController {
 
     private final AdminCuentaService adminCuentaService;
@@ -21,9 +21,9 @@ public class AdminCuentasController {
         this.adminCuentaService = adminCuentaService;
     }
 
-    @PostMapping
+    @PostMapping(consumes = "multipart/form-data")
     @RequirePermission(Action.CREAR_ADMIN_MODERADOR)
-    public ResponseEntity<?> crearCuentaAdministrativa(@Valid @RequestBody CrearCuentaAdminRequest datos,
+    public ResponseEntity<?> crearCuentaAdministrativa(@Valid @ModelAttribute CrearCuentaAdminRequest datos,
                                                        HttpServletRequest request) {
         try {
             String administradorId = (String) request.getAttribute("usuarioActual");
