@@ -31,9 +31,9 @@
   ];
 
   function formatearFecha(isoString) {
-    if (!isoString) return "—";
+    if (!isoString) {return "—";}
     const fecha = new Date(isoString);
-    if (Number.isNaN(fecha.getTime())) return isoString;
+    if (Number.isNaN(fecha.getTime())) {return isoString;}
     const dia = fecha.getDate();
     const mes = MESES[fecha.getMonth()];
     const horas = String(fecha.getHours()).padStart(2, "0");
@@ -42,12 +42,12 @@
   }
 
   function claseBadge(tipoAccion) {
-    return "badge badge--" + String(tipoAccion || "otro").toLowerCase();
+    return `badge badge--${  String(tipoAccion || "otro").toLowerCase()}`;
   }
 
   function textoCorto(valor, maxLargo = 60) {
-    if (!valor) return "—";
-    return valor.length > maxLargo ? valor.slice(0, maxLargo) + "…" : valor;
+    if (!valor) {return "—";}
+    return valor.length > maxLargo ? `${valor.slice(0, maxLargo)  }…` : valor;
   }
 
   // Sigue el mismo patrón que .estado.carga/.error/.vacio de tema-cuentas.css
@@ -55,7 +55,7 @@
     el.estado.hidden = false;
     el.estado.textContent = texto;
     el.estado.classList.remove("carga", "error", "vacio", "exito");
-    if (tipo) el.estado.classList.add(tipo);
+    if (tipo) {el.estado.classList.add(tipo);}
   }
 
   function ocultarEstado() {
@@ -71,10 +71,10 @@
     const desde = el.filtroDesde.value;
     const hasta = el.filtroHasta.value;
 
-    if (administradorId) params.set("administradorId", administradorId);
-    if (tipoAccion) params.set("tipoAccion", tipoAccion);
-    if (desde) params.set("desde", desde + "T00:00:00Z");
-    if (hasta) params.set("hasta", hasta + "T23:59:59Z");
+    if (administradorId) {params.set("administradorId", administradorId);}
+    if (tipoAccion) {params.set("tipoAccion", tipoAccion);}
+    if (desde) {params.set("desde", `${desde  }T00:00:00Z`);}
+    if (hasta) {params.set("hasta", `${hasta  }T23:59:59Z`);}
 
     params.set("page", String(estado.pagina));
     params.set("size", String(TAMANO_PAGINA));
@@ -149,7 +149,9 @@
       }
 
       actualizarPaginacion(paginaActual, totalPaginas);
-    } catch (error) {
+      // OJO: este bloque atrapa cualquier excepcion, no solo las de red, y
+      // siempre muestra el mismo mensaje. Ver la nota del PR de saneamiento.
+    } catch {
       mostrarEstado("Error de red al consultar la auditoría.", "error");
     }
   }
