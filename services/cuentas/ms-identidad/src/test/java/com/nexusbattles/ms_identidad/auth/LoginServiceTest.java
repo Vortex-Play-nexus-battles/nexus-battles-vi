@@ -179,7 +179,7 @@ class LoginServiceTest {
         when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.of(usuario));
         when(dispositivoConocidoRepository.findByUsuarioAndHuella(eq(usuario), anyString()))
             .thenReturn(Optional.of(new DispositivoConocido()));
-        when(jwtService.generarToken(anyString(), anyString(), anyInt())).thenReturn("token-de-prueba");
+        when(jwtService.generarToken(anyString(), anyString(), anyInt(), any())).thenReturn("token-de-prueba");
 
         LoginResponse respuesta = loginService.iniciarSesion(datosValidos(), "127.0.0.1", "agente");
 
@@ -210,7 +210,7 @@ class LoginServiceTest {
         when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.of(usuario));
         when(dispositivoConocidoRepository.findByUsuarioAndHuella(eq(usuario), anyString()))
             .thenReturn(Optional.empty());
-        when(jwtService.generarToken(anyString(), anyString(), anyInt())).thenReturn("token-de-prueba");
+        when(jwtService.generarToken(anyString(), anyString(), anyInt(), any())).thenReturn("token-de-prueba");
 
         LoginResponse respuesta = loginService.iniciarSesion(datosValidos(), "127.0.0.1", "agente");
 
@@ -235,7 +235,7 @@ class LoginServiceTest {
         when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.of(usuario));
         when(dispositivoConocidoRepository.findByUsuarioAndHuella(eq(usuario), anyString()))
             .thenReturn(Optional.of(new DispositivoConocido()));
-        when(jwtService.generarToken(anyString(), anyString(), anyInt())).thenReturn("token-de-prueba");
+        when(jwtService.generarToken(anyString(), anyString(), anyInt(), any())).thenReturn("token-de-prueba");
 
         LoginResponse respuesta = loginService.iniciarSesion(datosValidos(), "127.0.0.1", "agente");
 
