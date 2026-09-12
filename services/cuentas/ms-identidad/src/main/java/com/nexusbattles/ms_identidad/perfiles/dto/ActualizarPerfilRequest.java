@@ -1,6 +1,7 @@
 package com.nexusbattles.ms_identidad.perfiles.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import org.springframework.web.multipart.MultipartFile;
 
 public class ActualizarPerfilRequest {
 
@@ -10,9 +11,9 @@ public class ActualizarPerfilRequest {
     @NotBlank
     private String apellidos;
 
-    private String avatar;
-
-    private String biografia;
+    // Opcional: solo si el usuario sube una foto nueva. Si viene vacio/null,
+    // se conserva el avatar que ya tenia (ver PerfilUsuarioService).
+    private MultipartFile avatar;
 
     private String preferencias;
 
@@ -25,11 +26,8 @@ public class ActualizarPerfilRequest {
     public String getApellidos() { return apellidos; }
     public void setApellidos(String apellidos) { this.apellidos = apellidos; }
 
-    public String getAvatar() { return avatar; }
-    public void setAvatar(String avatar) { this.avatar = avatar; }
-
-    public String getBiografia() { return biografia; }
-    public void setBiografia(String biografia) { this.biografia = biografia; }
+    public MultipartFile getAvatar() { return avatar; }
+    public void setAvatar(MultipartFile avatar) { this.avatar = avatar; }
 
     public String getPreferencias() { return preferencias; }
     public void setPreferencias(String preferencias) { this.preferencias = preferencias; }

@@ -4,6 +4,7 @@ import com.nexusbattles.ms_identidad.admin.dto.CrearCuentaAdminRequest;
 import com.nexusbattles.ms_identidad.auditoria.client.AuditoriaClient;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.service.AuthAdminService;
+import com.nexusbattles.ms_identidad.auth.service.AvatarStorageService;
 import com.nexusbattles.ms_identidad.perfiles.service.PerfilUsuarioService;
 import com.nexusbattles.ms_identidad.rbac.model.Role;
 import org.junit.jupiter.api.Test;
@@ -19,6 +20,7 @@ import static org.mockito.Mockito.*;
 class AdminCuentaServiceTest {
 
     private static final String IP_ORIGEN = "127.0.0.1";
+    private static final String URL_AVATAR = "/avatares-subidos/generado.png";
 
     @Mock
     private AuthAdminService authAdminService;
@@ -28,6 +30,9 @@ class AdminCuentaServiceTest {
 
     @Mock
     private AuditoriaClient auditoriaClient;
+
+    @Mock
+    private AvatarStorageService avatarStorageService;
 
     @InjectMocks
     private AdminCuentaService service;
@@ -39,12 +44,14 @@ class AdminCuentaServiceTest {
         Usuario usuarioCreado = new Usuario();
         usuarioCreado.setApodo("Santi");
 
+        when(avatarStorageService.guardarAvatar(datos.getAvatar())).thenReturn(URL_AVATAR);
+
         when(authAdminService.crearCuentaConRol(
             "Santiago",
             "Sanabria",
             "santiago@test.com",
             "Santi",
-            "avatar.png",
+            URL_AVATAR,
             Role.MODERADOR
         )).thenReturn(usuarioCreado);
 
@@ -57,7 +64,7 @@ class AdminCuentaServiceTest {
             "Sanabria",
             "santiago@test.com",
             "Santi",
-            "avatar.png",
+            URL_AVATAR,
             Role.MODERADOR
         );
 
@@ -65,7 +72,7 @@ class AdminCuentaServiceTest {
             usuarioCreado,
             "Santiago",
             "Sanabria",
-            "avatar.png"
+            URL_AVATAR
         );
 
         verify(auditoriaClient).registrar(
@@ -86,12 +93,14 @@ class AdminCuentaServiceTest {
         Usuario usuarioCreado = new Usuario();
         usuarioCreado.setApodo("Santi");
 
+        when(avatarStorageService.guardarAvatar(datos.getAvatar())).thenReturn(URL_AVATAR);
+
         when(authAdminService.crearCuentaConRol(
             "Santiago",
             "Sanabria",
             "santiago@test.com",
             "Santi",
-            "avatar.png",
+            URL_AVATAR,
             Role.ADMINISTRADOR
         )).thenReturn(usuarioCreado);
 
@@ -104,7 +113,7 @@ class AdminCuentaServiceTest {
             "Sanabria",
             "santiago@test.com",
             "Santi",
-            "avatar.png",
+            URL_AVATAR,
             Role.ADMINISTRADOR
         );
 
@@ -112,7 +121,7 @@ class AdminCuentaServiceTest {
             usuarioCreado,
             "Santiago",
             "Sanabria",
-            "avatar.png"
+            URL_AVATAR
         );
 
         verify(auditoriaClient).registrar(
@@ -152,12 +161,14 @@ class AdminCuentaServiceTest {
         Usuario usuarioCreado = new Usuario();
         usuarioCreado.setApodo("Santi");
 
+        when(avatarStorageService.guardarAvatar(datos.getAvatar())).thenReturn(URL_AVATAR);
+
         when(authAdminService.crearCuentaConRol(
             "Santiago",
             "Sanabria",
             "santiago@test.com",
             "Santi",
-            "avatar.png",
+            URL_AVATAR,
             Role.MODERADOR
         )).thenReturn(usuarioCreado);
 
@@ -170,7 +181,7 @@ class AdminCuentaServiceTest {
             "Sanabria",
             "santiago@test.com",
             "Santi",
-            "avatar.png",
+            URL_AVATAR,
             Role.MODERADOR
         );
     }
@@ -183,7 +194,6 @@ class AdminCuentaServiceTest {
         datos.setEmail("santiago@test.com");
         datos.setPassword("password123");
         datos.setApodo("Santi");
-        datos.setAvatar("avatar.png");
         datos.setRolNombre(rol);
 
         return datos;

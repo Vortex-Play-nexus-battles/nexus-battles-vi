@@ -48,3 +48,16 @@ jobs:
             sleep 3
           done
           echo "el contenedor no respondio UP"; docker logs heroes-ci; exit 1
+      # SCRUM-1408: la misma coleccion de Postman que se corre a mano antes de un
+      # push (postman/LEEME.md), contra el contenedor recien levantado. Cada
+      # asercion cita la regla del cliente que verifica; si una falla, el CI falla.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Coleccion de Postman contra el contenedor (Newman)
+        working-directory: services/contenido/heroes
+        run: |
+          npx --yes newman run postman/heroes.postman_collection.json             -e postman/local.postman_environment.json             --env-var baseUrl=http://localhost:8101             --reporters cli
+      - name: Registro del contenedor si algo fallo
+        if: failure()
+        run: docker logs heroes-ci || true

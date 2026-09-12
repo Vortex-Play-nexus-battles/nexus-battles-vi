@@ -2,6 +2,7 @@ package com.nexusbattles.ms_identidad.admin.service;
 
 import com.nexusbattles.ms_identidad.auditoria.client.AuditoriaClient;
 import com.nexusbattles.ms_identidad.auth.service.AuthAdminService;
+import com.nexusbattles.ms_identidad.notificaciones.client.NotificacionClient;
 import com.nexusbattles.ms_identidad.perfiles.model.PerfilUsuario;
 import com.nexusbattles.ms_identidad.perfiles.service.PerfilUsuarioService;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,9 @@ class AdminGestionUsuarioServiceTest {
     @Mock
     private AuditoriaClient auditoriaClient;
 
+    @Mock
+    private NotificacionClient notificacionClient;
+
     @InjectMocks
     private AdminGestionUsuarioService service;
 
@@ -43,8 +47,7 @@ class AdminGestionUsuarioServiceTest {
             USUARIO_ID,
             "Santiago",
             "Sanabria",
-            "avatar.png",
-            "Biografía",
+            null,
             "preferencias",
             "Santi"
         )).thenReturn(perfil);
@@ -53,8 +56,7 @@ class AdminGestionUsuarioServiceTest {
             USUARIO_ID,
             "Santiago",
             "Sanabria",
-            "avatar.png",
-            "Biografía",
+            null,
             "preferencias",
             "Santi",
             ADMINISTRADOR_ID,
@@ -67,8 +69,7 @@ class AdminGestionUsuarioServiceTest {
             USUARIO_ID,
             "Santiago",
             "Sanabria",
-            "avatar.png",
-            "Biografía",
+            null,
             "preferencias",
             "Santi"
         );
@@ -194,6 +195,7 @@ class AdminGestionUsuarioServiceTest {
             .actualizarEstadoCuenta(anyLong(), anyString(), any());
 
         verifyNoInteractions(auditoriaClient);
+        verifyNoInteractions(notificacionClient);
     }
 
     @Test
