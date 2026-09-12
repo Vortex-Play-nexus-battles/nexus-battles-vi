@@ -104,6 +104,28 @@ que tiene sus propias variantes: `Estable`, `Latencia alta`, `Reconectando`,
 `Sin conexion`. Un `Aviso` de error aquí sería ruido, porque el sistema se está
 recuperando solo.
 
+### 5.5 Caso aparte: una sección depende de un servicio caído
+
+Cuando el que no responde es **otro microservicio**, no se pinta ni `Estado de vista`
+ni `Aviso`. Se pinta `Seccion degradada` **en el hueco de esa sección**, y el resto de la
+pantalla se queda como está.
+
+La diferencia con §5.1 importa: ahí la vista entera no se puede pintar; aquí la vista está
+bien y es **una parte** la que no. Tratarlo como fallo de vista haría desaparecer
+funciones que sí están operativas, que es justo lo contrario de lo que pide RNF-DIS-003.
+
+Tres cosas obligatorias:
+
+1. **Nombrar la función limitada.** El backend manda `seccion` en el problem detail
+   precisamente para esto. «Algo falló» no cumple el requisito.
+2. **Decir que el resto sigue.** Si no se dice, el jugador asume que se cayó todo.
+3. **Reintentar.** La degradación es temporal por definición.
+
+Se anuncia con `role="status"` y `aria-live="polite"`, no con `alert`: el resto de la
+pantalla sigue siendo usable y una degradación no es una emergencia.
+
+Implementación de referencia: `frontend/app-web/src/comun/degradacion/aviso-degradacion.js`.
+
 ---
 
 ## 6. Errores de formulario
@@ -129,6 +151,7 @@ concreto. La lista crece con cada módulo; añadir aquí al definir el `type`.
 | `heroe-ocupado` | `salas-partidas` | `Dialogo de validacion de heroe`, variante ocupado. Nombra la sala. | RF-JUE-003 |
 | `creditos-insuficientes` | `salas-partidas` | `Aviso` que dice cuántos créditos hay y cuántos faltan. | RF-JUE-001, RF-JUE-014 |
 | `sesion-caducada` | cualquiera | No es `Aviso`: lleva a iniciar sesión conservando a dónde iba. | — |
+| `seccion-no-disponible` | cualquiera | `Seccion degradada` dentro del hueco de esa sección, **no** un `Aviso` ni un `Estado de vista`. Dice qué función está limitada, aclara que el resto sigue, y lleva reintentar. Ver §5.5. | RNF-DIS-003 |
 
 ---
 
@@ -163,6 +186,7 @@ Si ocurre **en mitad de un combate**, primero se muestra `Estado de conexion` en
 ¿falló una acción?           → Aviso · según status          + salida
 ¿falló un campo?             → Campo · Invalido              + mensaje debajo
 ¿se cayó el canal?           → Estado de conexion            (no es un Aviso)
+¿se cayó otro servicio?      → Seccion degradada, en su hueco + reintentar
 ¿caducó la sesión?           → iniciar sesión, guardando destino
 ¿el type tiene diálogo?      → tabla §7, manda sobre lo anterior
 ```
