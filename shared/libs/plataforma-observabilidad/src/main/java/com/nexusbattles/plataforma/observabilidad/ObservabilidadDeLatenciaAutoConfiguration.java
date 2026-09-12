@@ -2,6 +2,7 @@ package com.nexusbattles.plataforma.observabilidad;
 
 import java.time.Clock;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -73,5 +74,43 @@ public class ObservabilidadDeLatenciaAutoConfiguration {
     @ConditionalOnMissingBean
     public FiltroDeLatencia filtroDeLatencia(RegistroDeLatencia registro, Clock relojDeLatencia) {
         return new FiltroDeLatencia(registro, relojDeLatencia, Ordered.HIGHEST_PRECEDENCE + 10);
+    }
+
+    // --- HU-REN-003: medicion de las consultas a la base de datos ---
+
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(prefix = "latencia.consultas", name = "activa",
+            havingValue = "true", matchIfMissing = true)
+    public RegistroDeConsultas registroDeConsultas(
+            PropiedadesDeLatencia propiedades,
+            @Value("${spring.application.name:servicio-sin-nombre}") String nombreDeLaAplicacion) {
+
+        String servicio = propiedades.getServicio() == null || propiedades.getServicio().isBlank()
+                ? nombreDeLaAplicacion
+                : propiedades.getServicio();
+
+        return new RegistroDeConsultas(
+                servicio,
+                propiedades.umbralDeConsultaLentaMs(),
+                propiedades.getConsultas().getCapacidad(),
+                propiedades.getConsultas().getCapacidadLentas());
+    }
+
+    /**
+     * Envuelve el {@code DataSource} del servicio, si tiene uno.
+     *
+     * <p>Es {@code static} a proposito: un {@code BeanPostProcessor} declarado
+     * en un metodo de instancia obliga a Spring a construir la configuracion
+     * entera —y todo lo que esta inyecte— antes de que el resto del contexto
+     * este listo, y eso deja avisos de arranque en los veinte modulos. Los
+     * {@code ObjectProvider} resuelven tarde por el mismo motivo.
+     */
+    @Bean
+    @ConditionalOnProperty(prefix = "latencia.consultas", name = "activa",
+            havingValue = "true", matchIfMissing = true)
+    public static InstrumentadorDeDataSource instrumentadorDeDataSource(
+            ObjectProvider<RegistroDeConsultas> registro, ObjectProvider<Clock> reloj) {
+        return new InstrumentadorDeDataSource(registro, reloj);
     }
 }

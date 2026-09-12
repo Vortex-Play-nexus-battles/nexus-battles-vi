@@ -78,6 +78,44 @@ class ObservabilidadDeLatenciaAutoConfigurationTest {
                 .run(ambiente -> assertThat(ambiente).doesNotHaveBean(FiltroDeLatencia.class));
     }
 
+    // --- HU-REN-003: medicion de consultas a la base de datos ---
+
+    @Test
+    void tambienQuedaInstrumentadaLaBaseDeDatosSinConfigurarNada() {
+        contexto.run(ambiente -> {
+            assertThat(ambiente).hasSingleBean(RegistroDeConsultas.class);
+            assertThat(ambiente).hasSingleBean(InstrumentadorDeDataSource.class);
+        });
+    }
+
+    @Test
+    void elUmbralDeConsultaLentaCaeEnElObjetivoDeRnfRen001SiNadieLoAcuerda() {
+        // No se inventa un presupuesto de base de datos: los 500 ms son el
+        // unico numero que existe en los requisitos. Un presupuesto propio y
+        // mas estricto es una decision de equipo que aun no esta tomada.
+        contexto.run(ambiente ->
+                assertThat(ambiente.getBean(RegistroDeConsultas.class).umbralLentaMs()).isEqualTo(500));
+    }
+
+    @Test
+    void elUmbralDeConsultaLentaSeAjustaPorVariableDeEntorno() {
+        contexto.withPropertyValues("latencia.consultas.umbral-lenta-ms=120")
+                .run(ambiente ->
+                        assertThat(ambiente.getBean(RegistroDeConsultas.class).umbralLentaMs()).isEqualTo(120));
+    }
+
+    @Test
+    void unServicioPuedeDesactivarSoloLaMedicionDeConsultas() {
+        // Apagar la de base de datos no debe apagar la de peticiones: son dos
+        // historias distintas y un equipo puede querer solo una.
+        contexto.withPropertyValues("latencia.consultas.activa=false")
+                .run(ambiente -> {
+                    assertThat(ambiente).doesNotHaveBean(InstrumentadorDeDataSource.class);
+                    assertThat(ambiente).doesNotHaveBean(RegistroDeConsultas.class);
+                    assertThat(ambiente).hasSingleBean(FiltroDeLatencia.class);
+                });
+    }
+
     @Test
     void unServicioPuedeReemplazarElRegistroPorElSuyo() {
         contexto.withBean(RegistroDeLatencia.class, () -> new RegistroDeLatencia("el-mio", 7))

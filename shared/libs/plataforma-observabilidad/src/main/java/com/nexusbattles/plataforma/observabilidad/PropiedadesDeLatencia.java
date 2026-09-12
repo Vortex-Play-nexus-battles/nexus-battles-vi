@@ -51,6 +51,89 @@ public class PropiedadesDeLatencia {
     /** Cuantas de las operaciones mas lentas incluye el informe. */
     private int operacionesEnInforme = 5;
 
+    /** HU-REN-003: medicion de las consultas a la base de datos. */
+    private Consultas consultas = new Consultas();
+
+    /** Configuracion de la instrumentacion de consultas (HU-REN-003). */
+    public static class Consultas {
+
+        /** Valvula de escape por servicio, igual que {@code latencia.activa}. */
+        private boolean activa = true;
+
+        private int capacidad = RegistroDeConsultas.CAPACIDAD_POR_OMISION;
+
+        private int capacidadLentas = RegistroDeConsultas.CAPACIDAD_LENTAS_POR_OMISION;
+
+        /**
+         * A partir de cuantos ms una consulta se marca como lenta (CA-03).
+         *
+         * <p>Vacio significa «usa el objetivo de RNF-REN-001», que son 500 ms.
+         * <b>No se inventa aqui un presupuesto de base de datos</b>: los 500 ms
+         * son extremo a extremo —red, validacion, negocio, consulta y
+         * serializacion—, asi que una consulta que sola se los come ya es un
+         * problema demostrable. Un presupuesto propio y mas estricto para la
+         * base de datos no esta acordado en ningun requisito, y ponerlo aqui
+         * seria inventarlo. Queda como decision pendiente del equipo.
+         */
+        private Long umbralLentaMs;
+
+        private int sentenciasEnInforme = 10;
+
+        public boolean isActiva() {
+            return activa;
+        }
+
+        public void setActiva(boolean activa) {
+            this.activa = activa;
+        }
+
+        public int getCapacidad() {
+            return capacidad;
+        }
+
+        public void setCapacidad(int capacidad) {
+            this.capacidad = capacidad;
+        }
+
+        public int getCapacidadLentas() {
+            return capacidadLentas;
+        }
+
+        public void setCapacidadLentas(int capacidadLentas) {
+            this.capacidadLentas = capacidadLentas;
+        }
+
+        public Long getUmbralLentaMs() {
+            return umbralLentaMs;
+        }
+
+        public void setUmbralLentaMs(Long umbralLentaMs) {
+            this.umbralLentaMs = umbralLentaMs;
+        }
+
+        public int getSentenciasEnInforme() {
+            return sentenciasEnInforme;
+        }
+
+        public void setSentenciasEnInforme(int sentenciasEnInforme) {
+            this.sentenciasEnInforme = sentenciasEnInforme;
+        }
+    }
+
+    public Consultas getConsultas() {
+        return consultas;
+    }
+
+    public void setConsultas(Consultas consultas) {
+        this.consultas = consultas;
+    }
+
+    /** El umbral de consulta lenta vigente: el configurado, o el objetivo. */
+    public long umbralDeConsultaLentaMs() {
+        Long propio = consultas.getUmbralLentaMs();
+        return propio != null ? propio : objetivoMs;
+    }
+
     /**
      * El objetivo vigente, o vacio si el Product Owner aun no aprobo el percentil.
      *
