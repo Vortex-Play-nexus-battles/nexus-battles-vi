@@ -51,8 +51,15 @@ public class RellenoDeIdentificadorPublico {
                 return;
             }
 
+            // Se comprueba de nuevo aunque la consulta filtre por null: si algun
+            // dia devolviera uno que ya lo tiene, sobreescribirlo le cambiaria el
+            // identificador a un usuario vivo, y cualquier servicio que lo
+            // referenciara —una puja de subastas, por ejemplo— quedaria apuntando
+            // a un UUID que ya no existe.
             for (Usuario usuario : sinIdentificador) {
-                usuario.setPublicId(UUID.randomUUID());
+                if (usuario.getPublicId() == null) {
+                    usuario.setPublicId(UUID.randomUUID());
+                }
             }
             usuarioRepository.saveAll(sinIdentificador);
 
