@@ -1,0 +1,190 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Inter:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; background: #D7DEED; color: #111726;
+           font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; }
+    a { color: #2244BF; text-decoration: none } a:hover { color: #1E3FB8; text-decoration: underline }
+    * { box-sizing: border-box }
+    .cifra { font-variant-numeric: tabular-nums }
+    .btn { transition: 120ms cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer }
+    .btn:hover { filter: brightness(1.08) } .btn:active { transform: scale(0.96) }
+    .entra { animation: golpe 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both }
+    @keyframes golpe { from { transform: scale(0.86); opacity: 0 } to { transform: scale(1); opacity: 1 } }
+    .f2 { animation-delay: 90ms } .f3 { animation-delay: 180ms }
+    @media (prefers-reduced-motion: reduce) { .entra { animation: none } .btn:active { transform: none } }
+  </style>
+</helmet>
+
+<div style="padding: 32px">
+
+  <h1 style="margin: 0 0 6px; font-family: 'Rajdhani', system-ui, sans-serif; font-size: 28px; font-weight: 700">
+    Cuando varias cierran a la vez
+  </h1>
+  <p style="margin: 0 0 28px; font-size: 16px; line-height: 1.5; color: #48536A; max-width: 78ch">
+    Tres subastas vencieron en el mismo minuto mientras el jugador estaba en otra pantalla. Un panel
+    de resultado por cada una sería inmanejable, y encadenarlos esconde dos detrás del primero. Un
+    solo resumen con el saldo neto arriba, y cada desenlace en su fila.
+  </p>
+
+  <div style="display: flex; gap: 24px; align-items: flex-start">
+
+    <!-- ============ Resumen ============ -->
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 13px; font-weight: 600; color: #57627A">Resumen de cierres</div>
+
+      <div style="width: 720px; padding: 32px; background: #FFFFFF; border: 1px solid #9FABC9; border-radius: 8px; box-shadow: 0 8px 24px rgba(17,23,38,0.20)">
+
+        <div class="entra" style="text-align: center; margin-bottom: 24px">
+          <div style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 56px; line-height: 1.05; font-weight: 700; letter-spacing: 0.1em; color: #111726">
+            3 CERRARON
+          </div>
+          <div style="font-size: 16px; line-height: 1.5; color: #48536A; margin-top: 4px">
+            Ganaste una, te superaron en dos. Esto es lo que cambió en tu saldo.
+          </div>
+        </div>
+
+        <!-- El neto primero: es la pregunta que el jugador tiene en la cabeza -->
+        <div style="display: flex; gap: 16px; margin-bottom: 24px">
+          <div class="entra" style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px 0; background: #D7DEED; border-radius: 8px">
+            <span class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 40px; line-height: 1.1; font-weight: 700; color: #9A6800">−1.350</span>
+            <span style="font-size: 13px; color: #48536A">cobrado</span>
+          </div>
+          <div class="entra f2" style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px 0; background: #D7DEED; border-radius: 8px">
+            <span class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 40px; line-height: 1.1; font-weight: 700; color: #0B6B31">+3.280</span>
+            <span style="font-size: 13px; color: #48536A">devuelto</span>
+          </div>
+          <div class="entra f3" style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px 0; background: #DFF1E6; border-radius: 8px">
+            <span class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 40px; line-height: 1.1; font-weight: 700; color: #0B6B31">4.130</span>
+            <span style="font-size: 13px; color: #48536A">libre ahora</span>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px">
+
+          <!-- Ganada -->
+          <div style="display: grid; grid-template-columns: 48px minmax(0, 1fr) 130px 110px; gap: 14px; align-items: center; padding: 14px; background: #FFFFFF; border: 1px solid #9FABC9; border-left: 4px solid #0B6B31; border-radius: 8px">
+            <div style="width: 48px; height: 48px; border-radius: 8px; background: #EDE5FA; border: 1px solid #5B27B4; display: flex; align-items: center; justify-content: center">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#5B27B4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5 3 6V3h3l11.5 11.5"/><path d="M13 19l6-6"/><path d="M16 16l4 4"/></svg>
+            </div>
+            <div style="min-width: 0">
+              <div style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 600">Hacha de Obsidiana Fracturada</div>
+              <span style="display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: 999px; background: #DFF1E6; color: #0B6B31; font-size: 13px; font-weight: 600; margin-top: 4px">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                Adjudicada
+              </span>
+            </div>
+            <div style="text-align: right">
+              <div class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 700; color: #9A6800">−1.350</div>
+              <div style="font-size: 13px; color: #57627A">cobrado</div>
+            </div>
+            <button class="btn" type="button" style="min-height: 32px; padding: 0 12px; font-size: 13px; font-weight: 600; color: #FFFFFF; background: #5B27B4; border: none; border-radius: 8px; white-space: nowrap">Ver</button>
+          </div>
+
+          <!-- Superado por automatica ajena -->
+          <div style="display: grid; grid-template-columns: 48px minmax(0, 1fr) 130px 110px; gap: 14px; align-items: center; padding: 14px; background: #FFFFFF; border: 1px solid #9FABC9; border-left: 4px solid #B81A1A; border-radius: 8px">
+            <div style="width: 48px; height: 48px; border-radius: 8px; background: #DFEEF8; border: 1px solid #095E8C; display: flex; align-items: center; justify-content: center">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#095E8C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.7 8.9a1 1 0 0 1-.6 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1 1 0 0 1 1.5 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1Z"/></svg>
+            </div>
+            <div style="min-width: 0">
+              <div style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 600">Grebas del Centinela Caído</div>
+              <div style="font-size: 13px; color: #48536A; margin-top: 4px">
+                Ganó <strong style="font-weight: 600; color: #111726">thar_vex</strong> con 1.240 cr ·
+                su automática respondió
+              </div>
+            </div>
+            <div style="text-align: right">
+              <div class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 700; color: #0B6B31">+880</div>
+              <div style="font-size: 13px; color: #57627A">devuelto</div>
+            </div>
+            <button class="btn" type="button" style="min-height: 32px; padding: 0 12px; font-size: 13px; font-weight: 600; color: #2244BF; background: #FFFFFF; border: 1px solid #6F7994; border-radius: 8px; white-space: nowrap">Parecidas</button>
+          </div>
+
+          <!-- Superado por tope de automatica propia -->
+          <div style="display: grid; grid-template-columns: 48px minmax(0, 1fr) 130px 110px; gap: 14px; align-items: center; padding: 14px; background: #FFFFFF; border: 1px solid #9FABC9; border-left: 4px solid #8A4A00; border-radius: 8px">
+            <div style="width: 48px; height: 48px; border-radius: 8px; background: #FBF0DE; border: 1px solid #9A6800; display: flex; align-items: center; justify-content: center">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#9A6800" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v8"/><path d="M9.5 10.5h4a2 2 0 0 1 0 4h-4"/></svg>
+            </div>
+            <div style="min-width: 0">
+              <div style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 600">Amuleto de Brasa Eterna</div>
+              <div style="font-size: 13px; color: #48536A; margin-top: 4px">
+                Tu automática paró en su tope de <strong class="cifra" style="font-weight: 600">2.400 cr</strong> ·
+                cerró en 2.450
+              </div>
+            </div>
+            <div style="text-align: right">
+              <div class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 700; color: #0B6B31">+2.400</div>
+              <div style="font-size: 13px; color: #57627A">devuelto</div>
+            </div>
+            <button class="btn" type="button" style="min-height: 32px; padding: 0 12px; font-size: 13px; font-weight: 600; color: #2244BF; background: #FFFFFF; border: 1px solid #6F7994; border-radius: 8px; white-space: nowrap">Parecidas</button>
+          </div>
+        </div>
+
+        <!-- Aprendizaje concreto, no un consejo generico -->
+        <div style="padding: 12px 16px; background: #DFEEF8; border: 1px solid #B5D5EA; border-radius: 8px; display: flex; gap: 10px; margin-bottom: 20px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#095E8C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></svg>
+          <div style="font-size: 13px; line-height: 1.4; color: #48536A">
+            <strong style="font-weight: 600; color: #095E8C">El Amuleto se te escapó por 50 cr.</strong>
+            Tu tope estaba en 2.400 y cerró en 2.450. Con 100 cr más de margen era tuyo — y tenías
+            4.130 libres.
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 12px">
+          <button class="btn" type="button" style="flex: 1; min-height: 48px; font-size: 14px; font-weight: 600; color: #FFFFFF; background: #1E3FB8; border: none; border-radius: 8px">Ver mis subastas</button>
+          <button class="btn" type="button" style="flex: 1; min-height: 48px; font-size: 14px; font-weight: 600; color: #2244BF; background: #FFFFFF; border: 1px solid #6F7994; border-radius: 8px">Al listado</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ Aviso en vivo ============ -->
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 13px; font-weight: 600; color: #57627A">Aviso mientras estás en otra subasta</div>
+
+      <div style="width: 400px; padding: 20px; background: #FFFFFF; border: 1px solid #9FABC9; border-radius: 8px">
+        <p style="margin: 0 0 16px; font-size: 13px; line-height: 1.4; color: #57627A">
+          Si te superan en otra subasta, el aviso no puede robarte el foco: podrías estar pujando en
+          los últimos segundos de esta. Entra abajo a la derecha y se queda.
+        </p>
+
+        <div style="padding: 14px; background: #FFFFFF; border: 1px solid #9FABC9; border-left: 4px solid #B81A1A; border-radius: 8px; box-shadow: 0 4px 12px rgba(17,23,38,0.12); margin-bottom: 14px">
+          <div style="display: flex; gap: 10px">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B81A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px"><path d="M21.7 18 13.7 4a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+            <div style="min-width: 0">
+              <div style="font-size: 13px; font-weight: 600; color: #B81A1A; margin-bottom: 2px">Te superaron en otra subasta</div>
+              <div style="font-size: 13px; line-height: 1.4; color: #48536A; margin-bottom: 8px">
+                <strong style="font-weight: 600">Grebas del Centinela</strong> · ahora 1.240 cr ·
+                quedan <span class="cifra">1:36</span>
+              </div>
+              <div style="display: flex; gap: 8px">
+                <button class="btn" type="button" style="min-height: 32px; padding: 0 12px; font-size: 13px; font-weight: 600; color: #FFFFFF; background: #1E3FB8; border: none; border-radius: 8px">Ir</button>
+                <button class="btn" type="button" style="min-height: 32px; padding: 0 12px; font-size: 13px; font-weight: 600; color: #57627A; background: #FFFFFF; border: 1px solid #6F7994; border-radius: 8px">Descartar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding: 12px; background: #FBF0DE; border: 1px dashed #8A4A00; border-radius: 8px; font-size: 13px; line-height: 1.4; color: #48536A">
+          <strong style="font-weight: 600; color: #8A4A00">Pendiente:</strong> para que este aviso
+          llegue en vivo hace falta WebSocket con STOMP, que la pila ya fija pero subastas aún no
+          monta. Mientras no exista, el contador de la barra se refresca al cambiar de pantalla — que
+          es peor, pero no inventa infraestructura.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview": {"width": 1240, "height": 960}}'>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>

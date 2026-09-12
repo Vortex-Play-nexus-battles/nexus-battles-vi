@@ -1,0 +1,953 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Inter:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; background: #D7DEED; color: #111726;
+           font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; }
+    a { color: #2244BF; text-decoration: none } a:hover { color: #1E3FB8; text-decoration: underline }
+    * { box-sizing: border-box }
+    .cifra { font-variant-numeric: tabular-nums }
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0 }
+    input[type=number] { -moz-appearance: textfield }
+    .btn, .inp, .lnk, .heroe, .tarj { transition: 120ms cubic-bezier(0.4, 0, 0.2, 1) }
+    .btn:focus-visible, .inp:focus-visible, .lnk:focus-visible, .heroe:focus-visible, .tarj:focus-visible {
+      outline: none; box-shadow: 0 0 0 3px rgba(34, 68, 191, 0.35)
+    }
+    .btn { cursor: pointer } .btn:hover:not(:disabled) { filter: brightness(1.08) }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed }
+    .btn:active:not(:disabled) { transform: scale(0.96) }
+    .heroe { cursor: pointer }
+    .tarj { cursor: pointer }
+    .tarj:hover { box-shadow: 0 4px 12px rgba(17,23,38,0.12); transform: translateY(-1px) }
+    .fila:hover { background: #F4F6FB }
+
+    /* tokens.css: «la sensacion de juego se construye en el feedback de cada
+       pulsacion» — de ahi --curva-impulso, que sobrepasa y vuelve. */
+    .salta-a, .salta-b { animation: salta 380ms cubic-bezier(0.34, 1.56, 0.64, 1) both }
+    @keyframes salta { 0% { transform: scale(1) } 35% { transform: scale(1.14) } 100% { transform: scale(1) } }
+    .late { animation: late 1s cubic-bezier(0.4, 0, 0.2, 1) infinite }
+    @keyframes late { 0%, 100% { opacity: 1 } 50% { opacity: 0.5 } }
+    .aparece-a, .aparece-b { animation: aparece 260ms cubic-bezier(0, 0, 0.2, 1) both }
+    @keyframes aparece { from { transform: translateY(-6px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+    .nueva-a, .nueva-b { animation: entraFila 420ms cubic-bezier(0, 0, 0.2, 1) both }
+    @keyframes entraFila { from { background: #FBF0DE; transform: translateX(-8px) } to { background: transparent; transform: translateX(0) } }
+    .golpe-a, .golpe-b { animation: golpe 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both }
+    @keyframes golpe { from { transform: scale(0.86); opacity: 0 } to { transform: scale(1); opacity: 1 } }
+
+    @media (prefers-reduced-motion: reduce) {
+      .salta-a, .salta-b, .late, .aparece-a, .aparece-b, .nueva-a, .nueva-b, .golpe-a, .golpe-b { animation: none }
+      .btn:active:not(:disabled), .tarj:hover { transform: none }
+    }
+  </style>
+</helmet>
+
+<div style="min-height: 1320px">
+
+  <div style="padding: 16px 32px 0">
+    <!-- Barra real de src/comun/barra-navegacion.js (HU-INV-004). «Subasta» navega. -->
+    <nav aria-label="Navegacion principal"
+         style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 8px 16px; background: #1C2340; color: #FFFFFF; border-radius: 8px; margin-bottom: 12px">
+      <ul style="display: flex; flex-wrap: wrap; gap: 4px 8px; margin: 0; padding: 0; list-style: none; order: 1">
+        <sc-for list="{{secciones}}" as="s" hint-placeholder-count="6">
+          <li>
+            <button class="btn" type="button" aria-current="{{s.actual}}" onClick="{{s.ir}}"
+                    style="position: relative; padding: 8px 12px; border: 1px solid {{s.borde}}; border-radius: 8px; background: {{s.fondo}}; color: {{s.color}}; font-family: 'Rajdhani', system-ui, sans-serif; font-size: 0.95rem; font-weight: 600">
+              {{s.etiqueta}}
+              <sc-if value="{{s.tieneAviso}}" hint-placeholder-val="{{false}}">
+                <span class="cifra" style="position: absolute; top: -6px; right: -6px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px; background: #B81A1A; color: #FFFFFF; font-family: 'Inter'; font-size: 13px; font-weight: 600; line-height: 20px; text-align: center">{{s.aviso}}</span>
+              </sc-if>
+            </button>
+          </li>
+        </sc-for>
+      </ul>
+      <div style="flex: 1 1 220px; min-width: 0; order: 2">
+        <input type="search" placeholder="Buscar productos" aria-label="Buscar productos"
+               style="box-sizing: border-box; width: 100%; padding: 8px 12px; border: 1px solid rgb(255 255 255 / 20%); border-radius: 8px; background: rgb(255 255 255 / 10%); color: #FFFFFF; font-family: 'Inter', system-ui, sans-serif; font-size: 0.9rem">
+      </div>
+    </nav>
+  </div>
+
+  <main style="padding: 12px 32px 48px">
+
+  <!-- ==================== LISTA ==================== -->
+  <sc-if value="{{enLista}}" hint-placeholder-val="{{true}}">
+    <h1 style="margin: 0 0 4px; font-family: 'Rajdhani', system-ui, sans-serif; font-size: 28px; font-weight: 700">Mis subastas</h1>
+    <p style="margin: 0 0 24px; font-size: 16px; line-height: 1.5; color: #48536A">
+      Dónde estás metido ahora mismo y cuánto tienes comprometido en cada sitio.
+    </p>
+
+    <section style="background: #FFFFFF; border: 1px solid #9FABC9; border-radius: 8px; box-shadow: 0 1px 2px rgba(17,23,38,0.08); padding: 24px; margin-bottom: 20px">
+      <h2 style="margin: 0 0 16px; font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 600">Tus créditos</h2>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px">
+        <div style="padding: 16px; background: #D7DEED; border-radius: 8px">
+          <div style="font-size: 13px; color: #48536A; margin-bottom: 4px">Tienes en total</div>
+          <div class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 40px; line-height: 1.1; font-weight: 700">{{totalFmt}}</div>
+        </div>
+        <div style="padding: 16px; background: #FBF0DE; border-radius: 8px">
+          <div style="font-size: 13px; color: #48536A; margin-bottom: 4px">Retenido en subastas</div>
+          <div class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 40px; line-height: 1.1; font-weight: 700; color: #8A4A00">{{retenidoFmt}}</div>
+        </div>
+        <div style="padding: 16px; background: {{libreFondo}}; border-radius: 8px">
+          <div style="font-size: 13px; color: #48536A; margin-bottom: 4px">Libre para pujar</div>
+          <div class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 40px; line-height: 1.1; font-weight: 700; color: {{libreColor}}">{{libreFmt}}</div>
+        </div>
+      </div>
+      <div style="height: 8px; display: flex; border-radius: 5px; overflow: hidden; background: #CBD4E6">
+        <sc-for list="{{tramos}}" as="t" hint-placeholder-count="3">
+          <div style="width: {{t.ancho}}; height: 100%; background: {{t.color}}" title="{{t.titulo}}"></div>
+        </sc-for>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px">
+        <sc-for list="{{leyenda}}" as="l" hint-placeholder-count="3">
+          <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #48536A">
+            <span style="width: 10px; height: 10px; border-radius: 2px; background: {{l.color}}"></span>{{l.texto}}
+          </span>
+        </sc-for>
+      </div>
+      <sc-if value="{{sobreCompromiso}}" hint-placeholder-val="{{true}}">
+        <div style="margin-top: 16px; background: #FBE5E5; border: 1px solid #E8BDBD; border-radius: 8px; padding: 12px; display: flex; gap: 10px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B81A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px"><path d="M21.7 18 13.7 4a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+          <div>
+            <div style="font-size: 13px; font-weight: 600; color: #B81A1A; margin-bottom: 2px">Tus automáticas prometen más de lo que tienes</div>
+            <div style="font-size: 13px; line-height: 1.4; color: #48536A">
+              Si todas llegaran a su tope harían falta <strong class="cifra" style="font-weight: 600">{{topesFmt}} cr</strong>
+              y solo tienes <strong class="cifra" style="font-weight: 600">{{totalFmt}}</strong>. Las últimas en responder fallarán.
+            </div>
+          </div>
+        </div>
+      </sc-if>
+    </section>
+
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 24px">
+      <sc-for list="{{topes}}" as="t" hint-placeholder-count="2">
+        <div style="background: #FFFFFF; border: 1px solid {{t.borde}}; border-radius: 8px; padding: 16px 20px">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px">
+            <span style="font-size: 13px; color: #48536A">{{t.nombre}}</span>
+            <span class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 700; color: {{t.color}}">{{t.texto}}</span>
+          </div>
+          <div style="height: 5px; border-radius: 5px; background: #CBD4E6; overflow: hidden">
+            <div style="width: {{t.ancho}}; height: 100%; background: {{t.color}}"></div>
+          </div>
+          <div style="font-size: 13px; color: {{t.color}}; margin-top: 6px">{{t.pista}}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px">
+      <h2 style="margin: 0; font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 600">En curso</h2>
+      <span style="display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; background: #E7EAF0; color: #57627A; font-size: 13px; font-weight: 600">{{cuantas}}</span>
+      <div style="flex-grow: 1"></div>
+      <span style="font-size: 13px; color: #57627A">Ordenadas por lo que se acaba antes · pulsa una para abrirla</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <sc-for list="{{lista}}" as="a" hint-placeholder-count="5">
+        <article class="tarj" role="button" tabindex="0" onClick="{{a.abrir}}"
+                 style="display: grid; grid-template-columns: 64px minmax(0, 1fr) 160px 150px 150px; gap: 16px; align-items: center; background: #FFFFFF; border: 1px solid {{a.borde}}; border-left: 4px solid {{a.acento}}; border-radius: 8px; padding: 14px 18px; box-shadow: 0 1px 2px rgba(17,23,38,0.08)">
+          <div style="width: 64px; height: 64px; border-radius: 8px; background: {{a.rarezaFondo}}; border: 1px solid {{a.rarezaBorde}}; display: flex; align-items: center; justify-content: center">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="{{a.rarezaBorde}}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5 3 6V3h3l11.5 11.5"/><path d="M13 19l6-6"/><path d="M16 16l4 4"/></svg>
+          </div>
+          <div style="min-width: 0">
+            <div style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 600; margin-bottom: 4px">{{a.nombre}}</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center">
+              <span style="display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; background: {{a.estadoFondo}}; color: {{a.estadoColor}}; font-size: 13px; font-weight: 600">{{a.estadoTexto}}</span>
+              <sc-if value="{{a.conAutomatica}}" hint-placeholder-val="{{true}}">
+                <span style="display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: 999px; background: #DFEEF8; color: #095E8C; font-size: 13px; font-weight: 600">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></svg>
+                  hasta {{a.topeFmt}}
+                </span>
+              </sc-if>
+            </div>
+          </div>
+          <div>
+            <div style="font-size: 13px; color: #57627A; margin-bottom: 2px">Oferta vigente</div>
+            <div class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 700; color: #9A6800">{{a.ofertaFmt}}</div>
+            <div style="font-size: 13px; color: {{a.postorColor}}">{{a.postorTexto}}</div>
+          </div>
+          <div>
+            <div style="font-size: 13px; color: #57627A; margin-bottom: 2px">Tú tienes retenido</div>
+            <div class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 700; color: {{a.retenidoColor}}">{{a.retenidoFmt}}</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-end">
+            <div class="{{a.claseReloj}}" style="display: flex; align-items: center; gap: 5px; color: {{a.relojColor}}">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+              <span class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 700">{{a.tiempo}}</span>
+            </div>
+            <button class="btn" type="button" onClick="{{a.abrir}}"
+                    style="min-height: 32px; padding: 0 14px; font-size: 13px; font-weight: 600; color: {{a.botonColor}}; background: {{a.botonFondo}}; border: 1px solid {{a.botonBorde}}; border-radius: 8px; white-space: nowrap">{{a.botonTexto}}</button>
+          </div>
+        </article>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <!-- ==================== DETALLE ==================== -->
+  <sc-if value="{{enDetalle}}" hint-placeholder-val="{{false}}">
+    <button class="btn lnk" type="button" onClick="{{volverALista}}"
+            style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; margin-bottom: 16px; background: none; border: none; color: #2244BF; padding: 4px 0">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+      Volver a mis subastas
+    </button>
+
+    <div style="display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 24px; align-items: start">
+      <div style="display: flex; flex-direction: column; gap: 24px">
+
+        <section style="background: #FFFFFF; border: 1px solid #9FABC9; border-radius: 8px; box-shadow: 0 1px 2px rgba(17,23,38,0.08); padding: 24px">
+          <div style="display: flex; gap: 24px">
+            <div style="width: 240px; height: 240px; flex-shrink: 0; border-radius: 8px; background: {{d.rarezaFondo}}; border: 2px solid {{d.rarezaBorde}}; display: flex; align-items: center; justify-content: center; position: relative">
+              <svg width="130" height="130" viewBox="0 0 24 24" fill="none" stroke="{{d.rarezaBorde}}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5 3 6V3h3l11.5 11.5"/><path d="M13 19l6-6"/><path d="M16 16l4 4"/><path d="M19 21l2-2"/></svg>
+              <span style="position: absolute; bottom: 12px; left: 12px; display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; background: {{d.rarezaBorde}}; color: #FFFFFF; font-family: 'Rajdhani', system-ui, sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.06em">{{d.rarezaTexto}}</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 12px; min-width: 0">
+              <h1 style="margin: 0; font-family: 'Rajdhani', system-ui, sans-serif; font-size: 28px; font-weight: 700; line-height: 1.2">{{d.nombre}}</h1>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap">
+                <span style="display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; background: #DFEEF8; color: #095E8C; font-size: 13px; font-weight: 600">{{d.tipo}}</span>
+                <span style="display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; background: {{nivelFondo}}; color: {{nivelColor}}; font-size: 13px; font-weight: 600">Nivel {{d.nivel}} requerido</span>
+              </div>
+              <p style="margin: 0; font-size: 16px; line-height: 1.5; color: #48536A; max-width: 48ch">{{d.descripcion}}</p>
+              <div style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #48536A">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                La vende <strong style="color: #111726; font-weight: 600">{{d.vendedor}}</strong>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section style="background: #FFFFFF; border: 1px solid #9FABC9; border-radius: 8px; box-shadow: 0 1px 2px rgba(17,23,38,0.08); padding: 24px">
+          <h2 style="margin: 0 0 4px; font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 600">Qué le hace a tu héroe</h2>
+          <p style="margin: 0 0 16px; font-size: 13px; color: #57627A">Comparado con lo que tiene equipado ahora mismo.</p>
+
+          <div style="display: flex; gap: 8px; margin-bottom: 20px">
+            <sc-for list="{{heroes}}" as="h" hint-placeholder-count="2">
+              <button class="heroe btn" type="button" onClick="{{h.elegir}}" aria-pressed="{{h.elegido}}"
+                      style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: {{h.fondo}}; border: 1px solid {{h.borde}}; border-radius: 8px; text-align: left">
+                <div style="width: 36px; height: 36px; border-radius: 999px; background: {{h.avatarFondo}}; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{h.avatarColor}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.7 8.9a1 1 0 0 1-.6 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1 1 0 0 1 1.5 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1Z"/></svg>
+                </div>
+                <div>
+                  <div style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 16px; font-weight: 600">{{h.nombre}}</div>
+                  <div class="cifra" style="font-size: 13px; color: {{h.nivelColor}}">Nivel {{h.nivel}} · {{h.clase}}</div>
+                </div>
+              </button>
+            </sc-for>
+          </div>
+
+          <sc-if value="{{nivelInsuficiente}}" hint-placeholder-val="{{false}}">
+            <div style="background: #FBE5E5; border: 1px solid #E8BDBD; border-radius: 8px; padding: 12px; margin-bottom: 16px; display: flex; gap: 10px">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B81A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <div>
+                <div style="font-size: 13px; font-weight: 600; color: #B81A1A; margin-bottom: 2px">{{heroeNombre}} no puede equiparla</div>
+                <div style="font-size: 13px; line-height: 1.4; color: #48536A">Le faltan <strong class="cifra" style="font-weight: 600">{{nivelesQueFaltan}} niveles</strong>. Puedes pujar igual y guardarla.</div>
+              </div>
+            </div>
+          </sc-if>
+
+          <table style="width: 100%; border-collapse: collapse">
+            <thead>
+              <tr>
+                <th style="text-align: left; font-size: 13px; font-weight: 600; color: #57627A; padding: 0 8px 8px; border-bottom: 1px solid #9FABC9">Estadística</th>
+                <th style="text-align: right; font-size: 13px; font-weight: 600; color: #57627A; padding: 0 8px 8px; border-bottom: 1px solid #9FABC9">Ahora</th>
+                <th style="text-align: right; font-size: 13px; font-weight: 600; color: #57627A; padding: 0 8px 8px; border-bottom: 1px solid #9FABC9">Con esto</th>
+                <th style="text-align: right; font-size: 13px; font-weight: 600; color: #57627A; padding: 0 8px 8px; border-bottom: 1px solid #9FABC9">Cambio</th>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{comparacion}}" as="c" hint-placeholder-count="5">
+                <tr class="fila">
+                  <td style="padding: 12px 8px; border-bottom: 1px solid #E7EAF0; font-size: 16px; font-weight: 500">{{c.nombre}}</td>
+                  <td class="cifra" style="padding: 12px 8px; border-bottom: 1px solid #E7EAF0; text-align: right; font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 600; color: #48536A">{{c.actual}}</td>
+                  <td class="cifra" style="padding: 12px 8px; border-bottom: 1px solid #E7EAF0; text-align: right; font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 600; color: {{c.colorNuevo}}">{{c.nuevo}}</td>
+                  <td style="padding: 12px 8px; border-bottom: 1px solid #E7EAF0; text-align: right">
+                    <span class="cifra" style="display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; background: {{c.deltaFondo}}; color: {{c.deltaColor}}; font-size: 13px; font-weight: 600">{{c.delta}}</span>
+                  </td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </section>
+
+        <section style="background: #FFFFFF; border: 1px solid #9FABC9; border-radius: 8px; box-shadow: 0 1px 2px rgba(17,23,38,0.08); padding: 24px">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px">
+            <h2 style="margin: 0; font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 600">Historial de pujas</h2>
+            <span style="display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; background: #E7EAF0; color: #57627A; font-size: 13px; font-weight: 600">{{totalPujas}}</span>
+          </div>
+          <table style="width: 100%; border-collapse: collapse">
+            <thead>
+              <tr>
+                <th style="text-align: left; font-size: 13px; font-weight: 600; color: #57627A; padding: 0 8px 8px; border-bottom: 1px solid #9FABC9">Jugador</th>
+                <th style="text-align: right; font-size: 13px; font-weight: 600; color: #57627A; padding: 0 8px 8px; border-bottom: 1px solid #9FABC9">Monto</th>
+                <th style="text-align: left; font-size: 13px; font-weight: 600; color: #57627A; padding: 0 8px 8px; border-bottom: 1px solid #9FABC9">Cómo</th>
+                <th style="text-align: right; font-size: 13px; font-weight: 600; color: #57627A; padding: 0 8px 8px; border-bottom: 1px solid #9FABC9">Cuándo</th>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{historial}}" as="p" hint-placeholder-count="4">
+                <tr class="fila {{p.claseEntrada}}">
+                  <td style="padding: 12px 8px; border-bottom: 1px solid #E7EAF0">
+                    <div style="display: flex; align-items: center; gap: 8px">
+                      <span style="font-size: 16px; font-weight: 500; color: {{p.colorApodo}}">{{p.apodo}}</span>
+                      <sc-if value="{{p.esTu}}" hint-placeholder-val="{{true}}">
+                        <span style="display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; background: #DFEEF8; color: #095E8C; font-size: 13px; font-weight: 600">tú</span>
+                      </sc-if>
+                    </div>
+                  </td>
+                  <td class="cifra" style="padding: 12px 8px; border-bottom: 1px solid #E7EAF0; text-align: right; font-size: 16px; font-weight: 600; color: {{p.colorMonto}}">{{p.montoFmt}}</td>
+                  <td style="padding: 12px 8px; border-bottom: 1px solid #E7EAF0; font-size: 13px; color: #57627A">
+                    <span style="display: inline-flex; align-items: center; gap: 5px" title="{{p.tipoTitulo}}">
+                      <sc-if value="{{p.esAutomatica}}" hint-placeholder-val="{{true}}">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2244BF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></svg>
+                      </sc-if>
+                      {{p.tipo}}
+                    </span>
+                  </td>
+                  <td style="padding: 12px 8px; border-bottom: 1px solid #E7EAF0; text-align: right; font-size: 13px; color: #57627A">{{p.cuando}}</td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </section>
+      </div>
+
+      <aside style="display: flex; flex-direction: column; gap: 16px">
+        <section style="background: #FFFFFF; border: 1px solid {{panelBorde}}; border-radius: 8px; box-shadow: 0 4px 12px rgba(17,23,38,0.12); padding: 20px">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px">
+            <span style="display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; background: {{estadoFondo}}; color: {{estadoColor}}; font-size: 13px; font-weight: 600">{{estadoTexto}}</span>
+            <div class="{{claseReloj}}" style="display: flex; align-items: center; gap: 6px; color: {{relojColor}}">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+              <span class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 700">{{tiempoFmt}}</span>
+            </div>
+          </div>
+
+          <sc-if value="{{superado}}" hint-placeholder-val="{{false}}">
+            <div class="{{claseAviso}}" style="background: #FBF0DE; border: 1px solid #E8D3AE; border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; display: flex; gap: 8px">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8A4A00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px"><path d="M21.7 18 13.7 4a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+              <div>
+                <div style="font-size: 13px; font-weight: 600; color: #8A4A00">Te superó {{rivalNombre}}</div>
+                <div style="font-size: 13px; line-height: 1.4; color: #48536A">Tiene su propia automática. Tus créditos volvieron al saldo.</div>
+              </div>
+            </div>
+          </sc-if>
+
+          <div style="font-size: 13px; color: #57627A; margin-bottom: 4px">Oferta vigente</div>
+          <div style="display: flex; align-items: baseline; gap: 8px">
+            <span class="cifra {{claseSalta}}" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 40px; font-weight: 700; line-height: 1.1; color: #9A6800; transform-origin: left center">{{ofertaFmt}}</span>
+            <span style="font-size: 13px; font-weight: 600; color: #9A6800">créditos</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px; margin: 6px 0 14px; font-size: 13px; color: {{refColor}}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+            {{refTexto}}
+          </div>
+
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: #F4F6FB; border-radius: 5px; margin-bottom: 16px">
+            <div style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #48536A">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg>
+              Va ganando <strong style="color: {{postorColor}}; font-weight: 600">{{mejorPostor}}</strong>
+            </div>
+            <span class="cifra" style="font-size: 13px; color: #57627A">{{rivales}} pujando</span>
+          </div>
+
+          <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px">Pujar de una</div>
+          <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px">
+            <sc-for list="{{atajos}}" as="a" hint-placeholder-count="3">
+              <button class="btn" type="button" onClick="{{a.pujar}}" disabled="{{a.bloqueado}}"
+                      style="display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 56px; padding: 8px 4px; background: {{a.fondo}}; color: {{a.color}}; border: 1px solid {{a.borde}}; border-radius: 8px">
+                <span class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 700; line-height: 1">{{a.monto}}</span>
+                <span style="font-size: 13px; font-weight: 500; opacity: 0.85">{{a.etiqueta}}</span>
+              </button>
+            </sc-for>
+          </div>
+          <div style="font-size: 13px; line-height: 1.4; color: {{pistaColor}}; min-height: 18px; margin-bottom: 12px">{{pistaMonto}}</div>
+
+          <details>
+            <summary style="font-size: 13px; font-weight: 600; color: #2244BF; cursor: pointer">Pujar otra cantidad</summary>
+            <div style="display: flex; gap: 8px; margin-top: 10px">
+              <input class="inp" type="number" value="{{monto}}" onInput="{{cambiarMonto}}" disabled="{{bloqueado}}" aria-label="Monto a pujar"
+                     style="flex-grow: 1; height: 40px; padding: 0 12px; font-family: 'Inter'; font-size: 16px; font-variant-numeric: tabular-nums; border: 1px solid {{bordeCampo}}; border-radius: 8px">
+              <button class="btn" type="button" onClick="{{pujar}}" disabled="{{pujaBloqueada}}"
+                      style="min-height: 48px; padding: 0 20px; font-size: 14px; font-weight: 600; color: #FFFFFF; background: #1E3FB8; border: none; border-radius: 8px; white-space: nowrap">{{textoBotonPujar}}</button>
+            </div>
+          </details>
+        </section>
+
+        <section style="background: #FFFFFF; border: 1px solid #9FABC9; border-radius: 8px; box-shadow: 0 1px 2px rgba(17,23,38,0.08); padding: 20px">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px">
+            <span style="font-size: 13px; color: #57627A">Llévatela ya</span>
+            <span class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 28px; font-weight: 700">{{compraFmt}}</span>
+          </div>
+          <p style="margin: 0 0 14px; font-size: 13px; line-height: 1.4; color: #57627A">
+            Cierra la subasta al instante. A los demás postores se les devuelven sus créditos.
+          </p>
+          <button class="btn" type="button" onClick="{{comprarAhora}}" disabled="{{compraBloqueada}}"
+                  style="width: 100%; min-height: 48px; font-size: 14px; font-weight: 600; color: #FFFFFF; background: #5B27B4; border: none; border-radius: 8px">{{textoBotonComprar}}</button>
+        </section>
+
+        <section style="background: #FFFFFF; border: 1px solid #9FABC9; border-radius: 8px; box-shadow: 0 1px 2px rgba(17,23,38,0.08); padding: 20px">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2244BF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></svg>
+            <h3 style="margin: 0; font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 600">Que puje por ti</h3>
+          </div>
+          <sc-if value="{{autoActiva}}" hint-placeholder-val="{{false}}">
+            <div style="background: #DFF1E6; border: 1px solid #B7DFC6; border-radius: 8px; padding: 12px; margin-bottom: 12px">
+              <div style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #0B6B31; margin-bottom: 4px">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                Vigilando hasta <span class="cifra">{{autoLimiteFmt}}</span>
+              </div>
+              <div style="font-size: 13px; line-height: 1.4; color: #48536A">Responderá cada vez que te superen, esperando los 5 s, hasta ese tope.</div>
+            </div>
+            <button class="btn" type="button" onClick="{{desactivarAuto}}"
+                    style="width: 100%; min-height: 40px; font-size: 14px; font-weight: 600; color: #B81A1A; background: #FFFFFF; border: 1px solid #6F7994; border-radius: 8px">Dejar de vigilar</button>
+          </sc-if>
+          <sc-if value="{{autoInactiva}}" hint-placeholder-val="{{true}}">
+            <p style="margin: 0 0 12px; font-size: 13px; line-height: 1.4; color: #57627A">
+              Pon tu tope y cierra el juego: pujará por ti sin pasarse. Otros jugadores también tienen
+              la suya — <strong style="font-weight: 600">gana el tope más alto</strong>.
+            </p>
+            <label for="lim" style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px">Tu tope</label>
+            <input class="inp" id="lim" type="number" value="{{autoLimite}}" onInput="{{cambiarLimite}}" disabled="{{bloqueado}}"
+                   style="width: 100%; height: 40px; padding: 0 12px; margin-bottom: 6px; font-family: 'Inter'; font-size: 16px; font-variant-numeric: tabular-nums; border: 1px solid {{bordeLimite}}; border-radius: 8px">
+            <div style="font-size: 13px; line-height: 1.4; color: {{pistaLimiteColor}}; min-height: 18px; margin-bottom: 10px">{{pistaLimite}}</div>
+            <button class="btn" type="button" onClick="{{activarAuto}}" disabled="{{autoBloqueada}}"
+                    style="width: 100%; min-height: 40px; font-size: 14px; font-weight: 600; color: #FFFFFF; background: #1E3FB8; border: none; border-radius: 8px">Activar</button>
+          </sc-if>
+        </section>
+
+        <section style="background: #FFFFFF; border: 1px solid #9FABC9; border-radius: 8px; padding: 16px 20px">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px">
+            <span style="font-size: 13px; color: #57627A">Libre para pujar</span>
+            <span class="cifra" style="font-size: 16px; font-weight: 600">{{libreFmt}} cr</span>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px">
+            <span style="font-size: 13px; color: #57627A">Retenido aquí</span>
+            <span class="cifra" style="font-size: 16px; font-weight: 600; color: {{reservaColor}}">{{reservaFmt}}</span>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between">
+            <span style="font-size: 13px; color: #57627A">Retenido en otras {{otrasCuantas}}</span>
+            <span class="cifra" style="font-size: 16px; font-weight: 600; color: #8A4A00">{{otrasFmt}}</span>
+          </div>
+          <div style="height: 1px; background: #E7EAF0; margin: 12px 0"></div>
+          <button class="btn" type="button" onClick="{{volverALista}}"
+                  style="width: 100%; min-height: 32px; font-size: 13px; font-weight: 600; color: #2244BF; background: #FFFFFF; border: 1px solid #6F7994; border-radius: 8px">Ver todas mis subastas</button>
+        </section>
+      </aside>
+    </div>
+  </sc-if>
+
+  <!-- ==================== RESULTADO ==================== -->
+  <sc-if value="{{enResultado}}" hint-placeholder-val="{{false}}">
+    <div style="display: flex; justify-content: center; padding: 40px 0">
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 20px; width: 660px; padding: 32px; background: #FFFFFF; border: 1px solid #9FABC9; border-radius: 8px; box-shadow: 0 8px 24px rgba(17,23,38,0.20)">
+        <div style="width: 96px; height: 96px; border-radius: 8px; background: {{d.rarezaFondo}}; border: 2px solid {{d.rarezaBorde}}; display: flex; align-items: center; justify-content: center">
+          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="{{d.rarezaBorde}}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5 3 6V3h3l11.5 11.5"/><path d="M13 19l6-6"/><path d="M16 16l4 4"/><path d="M19 21l2-2"/></svg>
+        </div>
+        <div class="{{claseGolpe}}" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 56px; line-height: 1.05; font-weight: 700; letter-spacing: 0.1em; color: {{resColor}}; text-align: center">{{resTitulo}}</div>
+        <div style="text-align: center; max-width: 46ch">
+          <div style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 600; margin-bottom: 4px">{{resSubtitulo}}</div>
+          <div style="font-size: 16px; line-height: 1.5; color: #48536A">{{resDetalle}}</div>
+        </div>
+        <div style="display: flex; gap: 16px; width: 100%">
+          <sc-for list="{{resMarcadores}}" as="m" hint-placeholder-count="3">
+            <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px 0; background: #D7DEED; border-radius: 8px; text-align: center">
+              <span class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 40px; line-height: 1.1; font-weight: 700; color: {{m.color}}">{{m.cifra}}</span>
+              <span style="font-size: 13px; color: #48536A">{{m.etiqueta}}</span>
+            </div>
+          </sc-for>
+        </div>
+        <sc-if value="{{resEntrega}}" hint-placeholder-val="{{true}}">
+          <div style="width: 100%; padding: 12px 16px; background: #FBF0DE; border: 1px dashed #8A4A00; border-radius: 8px; display: flex; gap: 10px">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8A4A00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <div style="font-size: 13px; line-height: 1.4; color: #48536A">
+              <strong style="font-weight: 600; color: #8A4A00">Pendiente, no es parte del juego:</strong>
+              la entrega no se puede construir todavía. Ni <code style="font-family: ui-monospace, monospace">inventario</code>
+              ni <code style="font-family: ui-monospace, monospace">productos</code> exponen una operación que cambie
+              de dueño un elemento. Equipar sí existe, pero no habría nada que equipar.
+            </div>
+          </div>
+        </sc-if>
+        <sc-if value="{{resAviso}}" hint-placeholder-val="{{false}}">
+          <div style="width: 100%; padding: 12px 16px; background: #DFEEF8; border: 1px solid #B5D5EA; border-radius: 8px; display: flex; gap: 10px">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#095E8C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></svg>
+            <div style="font-size: 13px; line-height: 1.4; color: #48536A">
+              <strong style="font-weight: 600; color: #095E8C">Para la próxima:</strong> una automática
+              con tope alto habría respondido por ti sin que tuvieras que estar mirando.
+            </div>
+          </div>
+        </sc-if>
+        <div style="display: flex; gap: 12px; width: 100%">
+          <button class="btn" type="button" onClick="{{volverALista}}"
+                  style="flex: 1; min-height: 48px; font-size: 14px; font-weight: 600; color: #FFFFFF; background: {{resBotonFondo}}; border: none; border-radius: 8px">{{resBotonTexto}}</button>
+          <button class="btn" type="button" onClick="{{volverALista}}"
+                  style="flex: 1; min-height: 48px; font-size: 14px; font-weight: 600; color: #2244BF; background: #FFFFFF; border: 1px solid #6F7994; border-radius: 8px">Ver mis subastas</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+  </main>
+
+  <!-- Confirmacion de compra inmediata -->
+  <sc-if value="{{confirmando}}" hint-placeholder-val="{{false}}">
+    <div style="position: fixed; inset: 0; background: rgba(17, 23, 38, 0.45); display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 10">
+      <div role="dialog" aria-modal="true" aria-labelledby="tc"
+           style="width: 480px; padding: 24px; background: #FFFFFF; border-radius: 8px; box-shadow: 0 10px 30px rgba(17,23,38,0.25)">
+        <h2 id="tc" style="margin: 0 0 8px; font-family: 'Rajdhani', system-ui, sans-serif; font-size: 28px; font-weight: 700; line-height: 1.2">¿Comprarla ya?</h2>
+        <p style="margin: 0 0 20px; font-size: 16px; line-height: 1.5; color: #48536A">
+          Cierras la subasta al instante y {{d.nombre}} pasa a tu inventario. Esto no se puede deshacer.
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 10px; padding: 16px; background: #F4F6FB; border-radius: 8px; margin-bottom: 20px">
+          <div style="display: flex; align-items: center; justify-content: space-between">
+            <span style="font-size: 13px; color: #57627A">Pagas</span>
+            <span class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 28px; font-weight: 700; color: #9A6800">{{compraFmt}}</span>
+          </div>
+          <div style="height: 1px; background: #E7EAF0"></div>
+          <div style="display: flex; align-items: center; justify-content: space-between">
+            <span style="font-size: 13px; color: #57627A">Te queda libre después</span>
+            <span class="cifra" style="font-size: 16px; font-weight: 600">{{libreTrasCompra}} cr</span>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between">
+            <span style="font-size: 13px; color: #57627A">Lo equipa</span>
+            <span style="font-size: 16px; font-weight: 600; color: {{nivelColor}}">{{heroeNombre}}{{avisoNivelModal}}</span>
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px">
+          <button class="btn" type="button" onClick="{{confirmarCompra}}"
+                  style="flex: 1; min-height: 48px; font-size: 14px; font-weight: 600; color: #FFFFFF; background: #5B27B4; border: none; border-radius: 8px">Sí, comprarla</button>
+          <button class="btn" type="button" onClick="{{cancelarCompra}}"
+                  style="flex: 1; min-height: 48px; font-size: 14px; font-weight: 600; color: #2244BF; background: #FFFFFF; border: 1px solid #6F7994; border-radius: 8px">Seguir pujando</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{
+  "$preview": {"width": 1440, "height": 1320},
+  "incrementoMinimo": {"editor": "int", "default": 50, "min": 10, "max": 500, "step": 10, "unit": "cr", "section": "Reglas"},
+  "intervaloSegundos": {"editor": "int", "default": 5, "min": 0, "max": 30, "unit": "s", "section": "Reglas"},
+  "creditosTotales": {"editor": "int", "default": 6200, "min": 0, "max": 30000, "step": 100, "unit": "cr", "section": "Reglas"}
+}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    // Cinco subastas vivas. El estado es de TODAS, no solo de la abierta: es
+    // lo que permite que el listado y el detalle cuenten lo mismo.
+    this.state = {
+      vista: 'lista',
+      abierta: null,
+      heroe: 'kaelen',
+      confirmando: false,
+      resultado: null,
+      pulso: 0,
+      subastas: [
+        { id: 'hacha', nombre: 'Hacha de Obsidiana Fracturada', tipo: 'Arma · dos manos',
+          descripcion: 'Hoja de obsidiana templada en el Abismo. Su filo no se degrada, pero cada golpe cobra una fracción de la vitalidad de quien la empuña.',
+          vendedor: 'kaelthas_vx', rareza: 'epica', nivel: 24, aporte: { poder: 14, vida: 0, defensa: -3 },
+          oferta: 1350, compra: 2800, media: 1800, seg: 38, retenido: 1350, ganando: true,
+          superado: false, auto: 0, espera: 0, rival: 'draconis_91', rivales: 3,
+          historial: [
+            { apodo: 'andres_nv', monto: 1350, tipo: 'Manual', cuando: 'hace 9 s', esTu: true },
+            { apodo: 'draconis_91', monto: 1300, tipo: 'Automática', cuando: 'hace 25 s', esTu: false },
+            { apodo: 'kael_vortex', monto: 1200, tipo: 'Automática', cuando: 'hace 1 min', esTu: false },
+            { apodo: 'andres_nv', monto: 1150, tipo: 'Manual', cuando: 'hace 2 min', esTu: true }
+          ] },
+        { id: 'grebas', nombre: 'Grebas del Centinela Caído', tipo: 'Armadura · piernas',
+          descripcion: 'Placas recogidas del campo de Vael. Pesan, pero aguantan lo que nada más aguanta.',
+          vendedor: 'thar_vex', rareza: 'rara', nivel: 18, aporte: { poder: 2, vida: 60, defensa: 22 },
+          oferta: 880, compra: 1600, media: 900, seg: 96, retenido: 0, ganando: false,
+          superado: true, auto: 1200, espera: 0, rival: 'thar_vex', rivales: 2,
+          historial: [
+            { apodo: 'thar_vex', monto: 880, tipo: 'Automática', cuando: 'hace 18 s', esTu: false },
+            { apodo: 'andres_nv', monto: 830, tipo: 'Automática', cuando: 'hace 40 s', esTu: true }
+          ] },
+        { id: 'amuleto', nombre: 'Amuleto de Brasa Eterna', tipo: 'Accesorio · cuello',
+          descripcion: 'Una brasa que no se apaga. Calienta el pecho y la sangre de quien lo lleva.',
+          vendedor: 'mirelle_s', rareza: 'legendaria', nivel: 30, aporte: { poder: 26, vida: 120, defensa: 0 },
+          oferta: 2400, compra: 5000, media: 2200, seg: 640, retenido: 2400, ganando: true,
+          superado: false, auto: 2400, espera: 0, rival: 'vex_nocturn', rivales: 4,
+          historial: [
+            { apodo: 'andres_nv', monto: 2400, tipo: 'Automática', cuando: 'hace 2 min', esTu: true },
+            { apodo: 'vex_nocturn', monto: 2350, tipo: 'Manual', cuando: 'hace 3 min', esTu: false }
+          ] },
+        { id: 'daga', nombre: 'Daga de Hueso Pulido', tipo: 'Arma · una mano',
+          descripcion: 'Ligera y discreta. No abre grandes heridas, pero llega antes que nada.',
+          vendedor: 'sombra_11', rareza: 'comun', nivel: 8, aporte: { poder: 5, vida: 0, defensa: 0 },
+          oferta: 310, compra: 600, media: 280, seg: 1820, retenido: 0, ganando: false,
+          superado: false, auto: 0, espera: 0, rival: 'sombra_11', rivales: 1,
+          historial: [{ apodo: 'lunaq', monto: 310, tipo: 'Manual', cuando: 'hace 6 min', esTu: false }] },
+        { id: 'yelmo', nombre: 'Yelmo del Vigía', tipo: 'Armadura · cabeza',
+          descripcion: 'Visor estrecho, oído fino. Quien lo usa ve venir lo que otros no.',
+          vendedor: 'oren_dal', rareza: 'rara', nivel: 22, aporte: { poder: 4, vida: 40, defensa: 14 },
+          oferta: 1100, compra: 2100, media: 1400, seg: 5400, retenido: 0, ganando: false,
+          superado: false, auto: 1500, espera: 0, rival: 'oren_dal', rivales: 2,
+          historial: [{ apodo: 'oren_dal', monto: 1100, tipo: 'Manual', cuando: 'hace 12 min', esTu: false }] }
+      ]
+    };
+  }
+
+  componentDidMount() {
+    // Un solo reloj para todas: el listado tiene que bajar aunque estes dentro
+    // de otra, igual que en el servidor.
+    this.reloj = setInterval(() => {
+      this.setState((s) => {
+        let resultado = s.resultado;
+        const subastas = s.subastas.map((a) => {
+          const seg = a.seg > 0 ? a.seg - 1 : 0;
+          const espera = a.espera > 0 ? a.espera - 1 : 0;
+          if (a.seg === 1 && a.id === s.abierta && s.resultado === null) {
+            resultado = a.ganando ? 'ganada' : 'perdida';
+          }
+          return Object.assign({}, a, { seg: seg, espera: espera });
+        });
+        return { subastas: subastas, resultado: resultado };
+      });
+    }, 1000);
+  }
+
+  componentWillUnmount() {
+    if (this.reloj) clearInterval(this.reloj);
+    if (this.rival) clearTimeout(this.rival);
+  }
+
+  fmt(n) { return Number(n).toLocaleString('es-CO'); }
+  incremento() { return this.props.incrementoMinimo ?? 50; }
+  total() { return this.props.creditosTotales ?? 6200; }
+  retenido() { return this.state.subastas.reduce((t, a) => t + a.retenido, 0); }
+  libre() { return this.total() - this.retenido(); }
+  activa() { return this.state.subastas.find((a) => a.id === this.state.abierta) || this.state.subastas[0]; }
+
+  /** Cambia una subasta por id, dejando las demas intactas. */
+  cambiar(id, cambios) {
+    this.setState((s) => ({
+      subastas: s.subastas.map((a) => (a.id === id ? Object.assign({}, a, cambios) : a)),
+      pulso: s.pulso + 1
+    }));
+  }
+
+  abrir(id) { this.setState({ vista: 'detalle', abierta: id, resultado: null }); }
+  volverALista = () => {
+    if (this.rival) clearTimeout(this.rival);
+    this.setState({ vista: 'lista', abierta: null, resultado: null, confirmando: false });
+  };
+
+  /** El rival tarda 4 s: su automatica tambien respeta el intervalo de 5 s. */
+  programarRival(id) {
+    if (this.rival) clearTimeout(this.rival);
+    this.rival = setTimeout(() => {
+      const a = this.state.subastas.find((x) => x.id === id);
+      if (!a || !a.ganando || this.state.resultado !== null) return;
+      const suya = a.oferta + this.incremento();
+      this.cambiar(id, {
+        oferta: suya, ganando: false, superado: true, retenido: 0,
+        historial: [{ apodo: a.rival, monto: suya, tipo: 'Automática', cuando: 'ahora', esTu: false }].concat(a.historial)
+      });
+    }, 4000);
+  }
+
+  pujarMonto(monto) {
+    const a = this.activa();
+    if (!a || this.state.resultado !== null) return;
+    if (monto < a.oferta + this.incremento() || monto > this.libre() + a.retenido) return;
+    if (a.espera > 0) return;
+    this.cambiar(a.id, {
+      oferta: monto, ganando: true, superado: false, retenido: monto,
+      espera: this.props.intervaloSegundos ?? 5,
+      historial: [{ apodo: 'andres_nv', monto: monto, tipo: 'Manual', cuando: 'ahora', esTu: true }].concat(a.historial)
+    });
+    this.programarRival(a.id);
+  }
+
+  pujar = () => { this.pujarMonto(Number(this.montoEscrito !== undefined ? this.montoEscrito : this.minimo())); };
+  minimo() { const a = this.activa(); return a ? a.oferta + this.incremento() : 0; }
+  cambiarMonto = (e) => { this.montoEscrito = e.target.value; this.forceUpdate(); };
+  cambiarLimite = (e) => { this.limiteEscrito = e.target.value; this.forceUpdate(); };
+
+  comprarAhora = () => { this.setState({ confirmando: true }); };
+  cancelarCompra = () => { this.setState({ confirmando: false }); };
+  confirmarCompra = () => {
+    if (this.rival) clearTimeout(this.rival);
+    const a = this.activa();
+    this.cambiar(a.id, { oferta: a.compra, retenido: a.compra, ganando: true, superado: false, seg: 0 });
+    this.setState({ confirmando: false, resultado: 'comprada' });
+  };
+
+  activarAuto = () => {
+    const a = this.activa();
+    const lim = Number(this.limiteEscrito !== undefined ? this.limiteEscrito : a.oferta + this.incremento() * 8);
+    if (lim < a.oferta + this.incremento()) return;
+    this.cambiar(a.id, { auto: lim });
+  };
+  desactivarAuto = () => { this.cambiar(this.activa().id, { auto: 0 }); };
+
+  renderVals() {
+    const s = this.state;
+    const inc = this.incremento();
+    const TOTAL = this.total();
+    const retenido = this.retenido();
+    const libre = this.libre();
+    const par = s.pulso % 2 === 0;
+    const PAL = { comun: ['#E7EAF0', '#57627A', 'COMÚN'], rara: ['#DFEEF8', '#095E8C', 'RARA'],
+                  epica: ['#EDE5FA', '#5B27B4', 'ÉPICA'], legendaria: ['#FBF0DE', '#9A6800', 'LEGENDARIA'] };
+
+    const secciones = [
+      { id: 'jugar', etiqueta: 'Jugar online' }, { id: 'misiones', etiqueta: 'Misiones' },
+      { id: 'torneo', etiqueta: 'Torneo' }, { id: 'inventario', etiqueta: 'Mi inventario' },
+      { id: 'subasta', etiqueta: 'Subasta' }, { id: 'cuenta', etiqueta: 'Mi Cuenta' }
+    ].map((x) => {
+      const act = x.id === 'subasta';
+      const superadas = s.subastas.filter((a) => a.superado).length;
+      return {
+        etiqueta: x.etiqueta, actual: act ? 'page' : 'false',
+        borde: act ? 'rgb(255 255 255 / 20%)' : 'transparent',
+        fondo: act ? 'rgb(255 255 255 / 12%)' : 'transparent',
+        color: act ? '#FFFFFF' : 'rgb(255 255 255 / 70%)',
+        tieneAviso: act && superadas > 0, aviso: String(superadas),
+        ir: act ? this.volverALista : () => {}
+      };
+    });
+
+    const tiempoDe = (seg) => {
+      if (seg >= 3600) return Math.floor(seg / 3600) + ' h ' + Math.floor((seg % 3600) / 60) + ' m';
+      return Math.floor(seg / 60) + ':' + String(seg % 60).padStart(2, '0');
+    };
+
+    // ---------- LISTA ----------
+    const lista = s.subastas.slice().sort((a, b) => a.seg - b.seg).map((a) => {
+      const urgente = a.seg <= 10, pronto = a.seg < 120;
+      const [rf, rb] = PAL[a.rareza];
+      let et = 'Sin pujar', ef = '#E7EAF0', ec = '#57627A';
+      if (a.ganando) { et = 'Vas ganando'; ef = '#DFF1E6'; ec = '#0B6B31'; }
+      else if (a.superado) { et = 'Te superaron'; ef = '#FBE5E5'; ec = '#B81A1A'; }
+      return {
+        nombre: a.nombre, rarezaFondo: rf, rarezaBorde: rb,
+        acento: a.ganando ? '#0B6B31' : (a.superado ? '#B81A1A' : '#9FABC9'),
+        borde: urgente ? '#B81A1A' : '#9FABC9',
+        estadoTexto: et, estadoFondo: ef, estadoColor: ec,
+        conAutomatica: a.auto > 0, topeFmt: this.fmt(a.auto),
+        ofertaFmt: this.fmt(a.oferta) + ' cr',
+        postorTexto: a.ganando ? 'tu puja' : 'de otro jugador',
+        postorColor: a.ganando ? '#0B6B31' : '#57627A',
+        retenidoFmt: a.retenido === 0 ? '—' : this.fmt(a.retenido) + ' cr',
+        retenidoColor: a.retenido === 0 ? '#57627A' : '#9A6800',
+        tiempo: tiempoDe(a.seg), relojColor: pronto ? '#B81A1A' : '#111726',
+        claseReloj: urgente ? 'late' : '',
+        botonTexto: a.superado ? 'Recuperarla' : (urgente ? 'Ir ahora' : 'Ver'),
+        botonFondo: (a.superado || urgente) ? '#1E3FB8' : '#FFFFFF',
+        botonColor: (a.superado || urgente) ? '#FFFFFF' : '#2244BF',
+        botonBorde: (a.superado || urgente) ? '#1E3FB8' : '#6F7994',
+        abrir: () => this.abrir(a.id)
+      };
+    });
+
+    const conRet = s.subastas.filter((a) => a.retenido > 0);
+    const tramos = conRet.map((a, i) => ({
+      ancho: ((a.retenido / TOTAL) * 100).toFixed(1) + '%',
+      color: i % 2 === 0 ? '#9A6800' : '#C89A1E',
+      titulo: a.nombre + ': ' + this.fmt(a.retenido) + ' cr'
+    })).concat([{ ancho: ((libre / TOTAL) * 100).toFixed(1) + '%', color: '#0B6B31', titulo: 'Libre' }]);
+    const leyenda = conRet.map((a, i) => ({
+      color: i % 2 === 0 ? '#9A6800' : '#C89A1E',
+      texto: a.nombre.split(' ')[0] + ' · ' + this.fmt(a.retenido) + ' cr'
+    })).concat([{ color: '#0B6B31', texto: 'Libre · ' + this.fmt(libre) + ' cr' }]);
+
+    const topesSuma = s.subastas.reduce((t, a) => t + a.auto, 0);
+    const topes = [
+      { nombre: 'Subastas en las que participas', hecho: s.subastas.length, max: 10 },
+      { nombre: 'Pujas tuyas que van ganando', hecho: s.subastas.filter((a) => a.ganando).length, max: 50 }
+    ].map((t) => {
+      const r = t.hecho / t.max;
+      const color = r >= 1 ? '#B81A1A' : (r >= 0.8 ? '#8A4A00' : '#0B6B31');
+      return { nombre: t.nombre, texto: t.hecho + ' de ' + t.max, color: color,
+               borde: r >= 0.8 ? color : '#9FABC9', ancho: Math.min(100, r * 100).toFixed(0) + '%',
+               pista: r >= 1 ? 'Tope alcanzado: no puedes entrar en más.'
+                    : (r >= 0.8 ? 'Te quedan ' + (t.max - t.hecho) + '.' : 'Margen de sobra.') };
+    });
+
+    // ---------- DETALLE ----------
+    const a = this.activa();
+    const [rf, rb, rtxt] = PAL[a.rareza];
+    const NIV = a.nivel;
+    const heroesBase = [
+      { id: 'kaelen', nombre: 'Kaelen', nivel: 26, clase: 'Guerrero',
+        stats: { poder: 142, vida: 890, defensa: 64, ataque: '10 + 1d6', dano: '8 + 2d4' } },
+      { id: 'lyra', nombre: 'Lyra', nivel: 21, clase: 'Exploradora',
+        stats: { poder: 118, vida: 640, defensa: 48, ataque: '7 + 1d8', dano: '6 + 1d6' } }
+    ];
+    const hero = heroesBase.find((h) => h.id === s.heroe) || heroesBase[0];
+    const nivelInsuficiente = hero.nivel < NIV;
+    const heroes = heroesBase.map((h) => {
+      const act = h.id === s.heroe;
+      return { nombre: h.nombre, nivel: h.nivel, clase: h.clase,
+               elegir: () => this.setState({ heroe: h.id }), elegido: act ? 'true' : 'false',
+               fondo: act ? '#DFEEF8' : '#FFFFFF', borde: act ? '#095E8C' : '#9FABC9',
+               avatarFondo: act ? '#095E8C' : '#E7EAF0', avatarColor: act ? '#FFFFFF' : '#57627A',
+               nivelColor: h.nivel < NIV ? '#B81A1A' : '#57627A' };
+    });
+
+    const st = hero.stats, ap = a.aporte;
+    const cmp = [
+      { n: 'Poder', act: st.poder, nue: st.poder + ap.poder, d: ap.poder },
+      { n: 'Vida', act: st.vida, nue: st.vida + ap.vida, d: ap.vida },
+      { n: 'Defensa', act: st.defensa, nue: st.defensa + ap.defensa, d: ap.defensa },
+      { n: 'Ataque', act: st.ataque, nue: st.ataque.replace('1d6', '1d8').replace('1d8', '1d10'), d: 'dado mayor' },
+      { n: 'Daño', act: st.dano, nue: st.dano, d: 0 }
+    ];
+    const comparacion = cmp.map((c) => {
+      const num = typeof c.d === 'number', igual = num && c.d === 0, mejora = num ? c.d > 0 : true;
+      return { nombre: c.n, actual: c.act, nuevo: c.nue,
+               colorNuevo: igual ? '#48536A' : (mejora ? '#0B6B31' : '#B81A1A'),
+               delta: igual ? 'igual' : (num ? (c.d > 0 ? '+' + c.d : String(c.d)) : c.d),
+               deltaFondo: igual ? '#E7EAF0' : (mejora ? '#DFF1E6' : '#FBE5E5'),
+               deltaColor: igual ? '#57627A' : (mejora ? '#0B6B31' : '#B81A1A') };
+    });
+
+    const minimo = a.oferta + inc;
+    const disponibleAqui = libre + a.retenido;
+    const monto = Number(this.montoEscrito !== undefined ? this.montoEscrito : minimo);
+    const cerrada = s.resultado !== null;
+    const esperando = a.espera > 0;
+
+    const pct = Math.round(((a.oferta - a.media) / a.media) * 100);
+    let refTexto, refColor;
+    if (pct <= -15) { refTexto = 'Va ' + Math.abs(pct) + ' % por debajo de su media (' + this.fmt(a.media) + ' cr). Buen momento.'; refColor = '#0B6B31'; }
+    else if (pct >= 15) { refTexto = 'Ya va ' + pct + ' % por encima de su media (' + this.fmt(a.media) + ' cr).'; refColor = '#B81A1A'; }
+    else { refTexto = 'En torno a su precio habitual (' + this.fmt(a.media) + ' cr de media).'; refColor = '#57627A'; }
+
+    const atajos = [
+      { m: minimo, e: 'mínimo' }, { m: a.oferta + inc * 4, e: 'con margen' }, { m: a.oferta + inc * 10, e: 'ir en serio' }
+    ].map((p, i) => {
+      const cabe = p.m <= disponibleAqui, off = cerrada || esperando || !cabe, dest = i === 1 && !off;
+      return { monto: this.fmt(p.m), etiqueta: cabe ? p.e : 'no te alcanza',
+               pujar: () => this.pujarMonto(p.m), bloqueado: off,
+               fondo: dest ? '#1E3FB8' : '#FFFFFF',
+               color: dest ? '#FFFFFF' : (cabe ? '#2244BF' : '#57627A'),
+               borde: dest ? '#1E3FB8' : '#6F7994' };
+    });
+
+    let pista = 'El mínimo sube ' + this.fmt(inc) + ' cr cada vez que alguien puja.';
+    let pistaColor = '#57627A', bordeCampo = '#6F7994';
+    if (cerrada) pista = 'La subasta está cerrada.';
+    else if (esperando) { pista = 'Espera ' + a.espera + ' s: no se puede pujar dos veces seguidas en la misma subasta.'; pistaColor = '#8A4A00'; }
+    else if (monto > disponibleAqui) { pista = 'No te alcanza: tienes ' + this.fmt(disponibleAqui) + ' cr para esta subasta.'; pistaColor = '#B81A1A'; bordeCampo = '#B81A1A'; }
+    else if (monto < minimo) { pista = 'El mínimo ahora es ' + this.fmt(minimo) + ' cr.'; pistaColor = '#B81A1A'; bordeCampo = '#B81A1A'; }
+
+    const limite = Number(this.limiteEscrito !== undefined ? this.limiteEscrito : a.oferta + inc * 8);
+    const limValido = limite >= minimo && limite <= disponibleAqui;
+    let pistaLimite = 'Entre ' + this.fmt(minimo) + ' y ' + this.fmt(disponibleAqui) + ' cr.';
+    let pistaLimiteColor = '#57627A';
+    if (limite > disponibleAqui) { pistaLimite = 'No te alcanza para ese tope.'; pistaLimiteColor = '#B81A1A'; }
+    else if (limite < minimo) { pistaLimite = 'Tiene que superar el mínimo actual.'; pistaLimiteColor = '#B81A1A'; }
+
+    let et = 'En curso', ef = '#DFF1E6', ec = '#0B6B31';
+    if (s.resultado === 'comprada') { et = 'Cerrada · la compraste'; ef = '#EDE5FA'; ec = '#5B27B4'; }
+    else if (cerrada) { et = 'Finalizada'; ef = '#E7EAF0'; ec = '#57627A'; }
+    else if (a.seg < 60) { et = 'Últimos segundos'; ef = '#FBF0DE'; ec = '#8A4A00'; }
+
+    const otras = s.subastas.filter((x) => x.id !== a.id && x.retenido > 0);
+    const otrasTotal = otras.reduce((t, x) => t + x.retenido, 0);
+
+    // ---------- RESULTADO ----------
+    const tuyas = a.historial.filter((p) => p.esTu).length;
+    const R = {
+      comprada: { titulo: 'ES TUYA', color: '#5B27B4', sub: a.nombre,
+        det: 'Cerraste la subasta con la compra inmediata. Te la entregamos en tu inventario.',
+        marc: [{ cifra: this.fmt(a.compra), etiqueta: 'créditos pagados', color: '#9A6800' },
+               { cifra: '+' + ap.poder, etiqueta: 'de poder al equiparla', color: '#0B6B31' },
+               { cifra: String(a.rivales), etiqueta: 'postores reembolsados', color: '#111726' }],
+        aviso: false, entrega: true, bt: 'Ver mi inventario', bf: '#5B27B4' },
+      ganada: { titulo: 'ADJUDICADA', color: '#0B6B31', sub: a.nombre,
+        det: 'Aguantaste hasta el final con la puja más alta. Te cobramos solo tu puja ganadora.',
+        marc: [{ cifra: this.fmt(a.oferta), etiqueta: 'créditos pagados', color: '#9A6800' },
+               { cifra: String(tuyas), etiqueta: 'pujas tuyas', color: '#111726' },
+               { cifra: '+' + ap.poder, etiqueta: 'de poder al equiparla', color: '#0B6B31' }],
+        aviso: false, entrega: true, bt: 'Ver mi inventario', bf: '#5B27B4' },
+      perdida: { titulo: 'SUPERADO', color: '#B81A1A',
+        sub: 'Ganó ' + a.rival + ' con ' + this.fmt(a.oferta) + ' cr',
+        det: 'Tus créditos volvieron completos. Participar no te costó nada.',
+        marc: [{ cifra: this.fmt(a.retenido || a.oferta - inc), etiqueta: 'créditos devueltos', color: '#0B6B31' },
+               { cifra: String(tuyas), etiqueta: 'pujas tuyas', color: '#111726' },
+               { cifra: this.fmt(inc), etiqueta: 'te faltaron', color: '#111726' }],
+        aviso: true, entrega: false, bt: 'Ver subastas parecidas', bf: '#1E3FB8' }
+    };
+    const res = R[s.resultado] || R.ganada;
+
+    return {
+      secciones: secciones,
+      enLista: s.vista === 'lista' && s.resultado === null,
+      enDetalle: s.vista === 'detalle' && s.resultado === null,
+      enResultado: s.resultado !== null,
+      volverALista: this.volverALista,
+      // lista
+      totalFmt: this.fmt(TOTAL), retenidoFmt: this.fmt(retenido), libreFmt: this.fmt(libre),
+      libreFondo: libre < 500 ? '#FBE5E5' : '#DFF1E6',
+      libreColor: libre < 500 ? '#B81A1A' : '#0B6B31',
+      tramos: tramos, leyenda: leyenda,
+      sobreCompromiso: topesSuma > TOTAL, topesFmt: this.fmt(topesSuma),
+      topes: topes, cuantas: s.subastas.length + ' subastas', lista: lista,
+      // detalle
+      d: { nombre: a.nombre, tipo: a.tipo, descripcion: a.descripcion, vendedor: a.vendedor,
+           nivel: NIV, rarezaFondo: rf, rarezaBorde: rb, rarezaTexto: rtxt },
+      heroes: heroes, heroeNombre: hero.nombre, comparacion: comparacion,
+      nivelInsuficiente: nivelInsuficiente, nivelesQueFaltan: NIV - hero.nivel,
+      nivelFondo: nivelInsuficiente ? '#FBE5E5' : '#DFF1E6',
+      nivelColor: nivelInsuficiente ? '#B81A1A' : '#0B6B31',
+      avisoNivelModal: nivelInsuficiente ? ' · aún no puede' : '',
+      ofertaFmt: this.fmt(a.oferta), compraFmt: this.fmt(a.compra) + ' cr',
+      refTexto: refTexto, refColor: refColor, rivales: a.rivales + ' jugadores',
+      mejorPostor: a.ganando ? 'tú' : a.rival, rivalNombre: a.rival,
+      postorColor: a.ganando ? '#0B6B31' : '#111726',
+      tiempoFmt: cerrada ? '—' : tiempoDe(a.seg),
+      relojColor: a.seg < 60 && !cerrada ? '#B81A1A' : '#111726',
+      claseReloj: a.seg <= 10 && !cerrada ? 'late' : '',
+      panelBorde: a.seg <= 10 && !cerrada ? '#B81A1A' : '#9FABC9',
+      estadoTexto: et, estadoFondo: ef, estadoColor: ec,
+      superado: a.superado && !cerrada,
+      claseSalta: par ? 'salta-a' : 'salta-b',
+      claseAviso: par ? 'aparece-a' : 'aparece-b',
+      claseGolpe: par ? 'golpe-a' : 'golpe-b',
+      atajos: atajos, monto: monto, pistaMonto: pista, pistaColor: pistaColor, bordeCampo: bordeCampo,
+      textoBotonPujar: cerrada ? 'Cerrada' : (esperando ? 'Espera ' + a.espera + ' s' : 'Pujar'),
+      pujaBloqueada: cerrada || esperando || monto < minimo || monto > disponibleAqui,
+      textoBotonComprar: cerrada ? 'Subasta cerrada' : (disponibleAqui < a.compra ? 'Te faltan ' + this.fmt(a.compra - disponibleAqui) + ' cr' : 'Comprarla ya'),
+      compraBloqueada: cerrada || disponibleAqui < a.compra,
+      bloqueado: cerrada,
+      pujar: this.pujar, cambiarMonto: this.cambiarMonto, cambiarLimite: this.cambiarLimite,
+      comprarAhora: this.comprarAhora, confirmando: s.confirmando,
+      confirmarCompra: this.confirmarCompra, cancelarCompra: this.cancelarCompra,
+      libreTrasCompra: this.fmt(Math.max(0, disponibleAqui - a.compra)),
+      autoActiva: a.auto > 0, autoInactiva: a.auto === 0,
+      autoLimite: limite, autoLimiteFmt: this.fmt(a.auto) + ' cr',
+      autoBloqueada: cerrada || !limValido,
+      pistaLimite: pistaLimite, pistaLimiteColor: pistaLimiteColor,
+      bordeLimite: limValido ? '#6F7994' : '#B81A1A',
+      activarAuto: this.activarAuto, desactivarAuto: this.desactivarAuto,
+      reservaFmt: a.retenido === 0 ? '—' : this.fmt(a.retenido) + ' cr',
+      reservaColor: a.retenido === 0 ? '#57627A' : '#9A6800',
+      otrasCuantas: otras.length, otrasFmt: otrasTotal === 0 ? '—' : this.fmt(otrasTotal) + ' cr',
+      totalPujas: a.historial.length + ' pujas',
+      historial: a.historial.map((p, i) => ({
+        apodo: p.apodo, montoFmt: this.fmt(p.monto) + ' cr',
+        tipo: p.tipo === 'Automática' ? 'Su automática' : 'A mano',
+        esAutomatica: p.tipo === 'Automática',
+        tipoTitulo: p.tipo === 'Automática' ? p.apodo + ' dejó un tope y el sistema pujó por él' : p.apodo + ' pujó a mano',
+        cuando: p.cuando, esTu: p.esTu,
+        colorApodo: p.esTu ? '#2244BF' : '#111726',
+        colorMonto: p.monto === a.oferta ? '#9A6800' : '#48536A',
+        claseEntrada: i === 0 && s.pulso > 0 ? (par ? 'nueva-a' : 'nueva-b') : ''
+      })),
+      // resultado
+      resTitulo: res.titulo, resColor: res.color, resSubtitulo: res.sub, resDetalle: res.det,
+      resMarcadores: res.marc, resAviso: res.aviso, resEntrega: res.entrega,
+      resBotonTexto: res.bt, resBotonFondo: res.bf
+    };
+  }
+}
+</script>
+</body>
+</html>

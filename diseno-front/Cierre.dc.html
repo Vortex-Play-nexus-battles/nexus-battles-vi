@@ -1,0 +1,174 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Inter:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; background: #D7DEED; color: #111726;
+           font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; }
+    a { color: #2244BF; text-decoration: none; }
+    a:hover { color: #1E3FB8; text-decoration: underline; }
+    * { box-sizing: border-box; }
+    .cifra { font-variant-numeric: tabular-nums; }
+
+    /* El unico movimiento que el sistema autoriza para esto: --curva-impulso,
+       que sobrepasa y vuelve. Es lo que da el golpe de los 56 px. */
+    .entra-titulo {
+      animation: golpe 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    }
+    @keyframes golpe {
+      from { transform: scale(0.82); opacity: 0 }
+      to   { transform: scale(1);    opacity: 1 }
+    }
+    .entra-marcador { animation: sube 320ms cubic-bezier(0, 0, 0.2, 1) both; }
+    @keyframes sube {
+      from { transform: translateY(10px); opacity: 0 }
+      to   { transform: translateY(0);    opacity: 1 }
+    }
+    .m2 { animation-delay: 80ms }
+    .m3 { animation-delay: 160ms }
+
+    @media (prefers-reduced-motion: reduce) {
+      .entra-titulo, .entra-marcador { animation: none }
+    }
+  </style>
+</helmet>
+
+<div style="padding: 32px">
+
+  <h1 style="margin: 0 0 6px; font-family: 'Rajdhani', system-ui, sans-serif; font-size: 28px; font-weight: 700">
+    El cierre · panel de resultado
+  </h1>
+  <p style="margin: 0 0 8px; font-size: 16px; line-height: 1.5; color: #48536A; max-width: 76ch">
+    Usa el componente <strong style="font-weight: 600">.resultado</strong> que ya existe en
+    <code style="font-family: ui-monospace, monospace; font-size: 14px">shared/ui-kit/css/componentes.css</code>
+    y que todavía nadie había usado: Rajdhani a 56 px con <code style="font-family: ui-monospace, monospace; font-size: 14px">letter-spacing: 0.1em</code>,
+    verde en victoria y rojo en derrota, marcadores de cifras abajo.
+  </p>
+  <p style="margin: 0 0 28px; font-size: 13px; line-height: 1.4; color: #57627A; max-width: 76ch">
+    El comentario del kit dice «la derrota no castiga: muestra la experiencia ganada y ofrece
+    revancha con la misma jerarquía que la victoria». Aquí eso se traduce en que perder enseña
+    cuánto se devolvió y ofrece subastas parecidas, no un callejón sin salida.
+  </p>
+
+  <div style="display: flex; gap: 24px; align-items: flex-start">
+
+    <!-- ============ Adjudicada a ti ============ -->
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 13px; font-weight: 600; color: #57627A">Ganaste la subasta</div>
+
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 20px; width: 660px; padding: 32px; background: #FFFFFF; border: 1px solid #9FABC9; border-radius: 8px">
+
+        <div style="width: 96px; height: 96px; border-radius: 8px; background: #EDE5FA; border: 1px solid #D8C7F2; display: flex; align-items: center; justify-content: center">
+          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#5B27B4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5 3 6V3h3l11.5 11.5"/><path d="M13 19l6-6"/><path d="M16 16l4 4"/><path d="M19 21l2-2"/></svg>
+        </div>
+
+        <div class="entra-titulo" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 56px; line-height: 1.05; font-weight: 700; letter-spacing: 0.1em; color: #0B6B31; text-align: center">
+          ADJUDICADA
+        </div>
+
+        <div style="text-align: center; max-width: 44ch">
+          <div style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 600; margin-bottom: 4px">
+            Hacha de Obsidiana Fracturada
+          </div>
+          <div style="font-size: 16px; line-height: 1.5; color: #48536A">
+            Ya está en tu inventario. Te cobramos solo tu puja ganadora.
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 16px; width: 100%">
+          <div class="entra-marcador" style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px 0; background: #D7DEED; border-radius: 8px; text-align: center">
+            <span class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 40px; line-height: 1.1; font-weight: 700; color: #9A6800">1.350</span>
+            <span style="font-size: 13px; color: #48536A">créditos pagados</span>
+          </div>
+          <div class="entra-marcador m2" style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px 0; background: #D7DEED; border-radius: 8px; text-align: center">
+            <span class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 40px; line-height: 1.1; font-weight: 700; color: #111726">7</span>
+            <span style="font-size: 13px; color: #48536A">pujas en total</span>
+          </div>
+          <div class="entra-marcador m3" style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px 0; background: #D7DEED; border-radius: 8px; text-align: center">
+            <span class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 40px; line-height: 1.1; font-weight: 700; color: #111726">3</span>
+            <span style="font-size: 13px; color: #48536A">rivales superados</span>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 12px; width: 100%">
+          <button type="button" style="flex: 1; min-height: 48px; font-size: 14px; font-weight: 600; color: #FFFFFF; background: #5B27B4; border: none; border-radius: 8px; cursor: pointer">
+            Equipar ahora
+          </button>
+          <button type="button" style="flex: 1; min-height: 48px; font-size: 14px; font-weight: 600; color: #2244BF; background: #FFFFFF; border: 1px solid #6F7994; border-radius: 8px; cursor: pointer">
+            Ver mi inventario
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ Se cerro sin ti ============ -->
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 13px; font-weight: 600; color: #57627A">No ganaste · la derrota no castiga</div>
+
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 20px; width: 660px; padding: 32px; background: #FFFFFF; border: 1px solid #9FABC9; border-radius: 8px">
+
+        <div style="width: 96px; height: 96px; border-radius: 8px; background: #E7EAF0; border: 1px solid #CBD4E6; display: flex; align-items: center; justify-content: center">
+          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#57627A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5 3 6V3h3l11.5 11.5"/><path d="M13 19l6-6"/><path d="M16 16l4 4"/><path d="M19 21l2-2"/></svg>
+        </div>
+
+        <div class="entra-titulo" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 56px; line-height: 1.05; font-weight: 700; letter-spacing: 0.1em; color: #B81A1A; text-align: center">
+          SUPERADO
+        </div>
+
+        <div style="text-align: center; max-width: 46ch">
+          <div style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 20px; font-weight: 600; margin-bottom: 4px">
+            Ganó draconis_91 con 2.050 cr
+          </div>
+          <div style="font-size: 16px; line-height: 1.5; color: #48536A">
+            Tus créditos volvieron completos. No se te cobró nada por participar.
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 16px; width: 100%">
+          <div class="entra-marcador" style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px 0; background: #D7DEED; border-radius: 8px; text-align: center">
+            <span class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 40px; line-height: 1.1; font-weight: 700; color: #0B6B31">1.350</span>
+            <span style="font-size: 13px; color: #48536A">créditos devueltos</span>
+          </div>
+          <div class="entra-marcador m2" style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px 0; background: #D7DEED; border-radius: 8px; text-align: center">
+            <span class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 40px; line-height: 1.1; font-weight: 700; color: #111726">700</span>
+            <span style="font-size: 13px; color: #48536A">te faltaron</span>
+          </div>
+          <div class="entra-marcador m3" style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px 0; background: #D7DEED; border-radius: 8px; text-align: center">
+            <span class="cifra" style="font-family: 'Rajdhani', system-ui, sans-serif; font-size: 40px; line-height: 1.1; font-weight: 700; color: #111726">4</span>
+            <span style="font-size: 13px; color: #48536A">pujas tuyas</span>
+          </div>
+        </div>
+
+        <div style="width: 100%; padding: 12px 16px; background: #DFEEF8; border: 1px solid #B5D5EA; border-radius: 8px; display: flex; gap: 10px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#095E8C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></svg>
+          <div style="font-size: 13px; line-height: 1.4; color: #48536A">
+            <strong style="font-weight: 600; color: #095E8C">Para la próxima:</strong> una puja
+            automática con tope alto habría respondido por ti sin que tuvieras que estar mirando.
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 12px; width: 100%">
+          <button type="button" style="flex: 1; min-height: 48px; font-size: 14px; font-weight: 600; color: #FFFFFF; background: #1E3FB8; border: none; border-radius: 8px; cursor: pointer">
+            Ver 4 subastas parecidas
+          </button>
+          <button type="button" style="flex: 1; min-height: 48px; font-size: 14px; font-weight: 600; color: #2244BF; background: #FFFFFF; border: 1px solid #6F7994; border-radius: 8px; cursor: pointer">
+            Volver al listado
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview": {"width": 1440, "height": 900}}'>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>
