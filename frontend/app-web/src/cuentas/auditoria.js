@@ -3,7 +3,7 @@
 // (visto en tema-cuentas.css: .estado.carga / .estado.error / .estado.vacio).
 
 (() => {
-  const API_BASE = "http://localhost:8091/api/v1/admin/auditoria";
+  const API_BASE = "/api/v1/admin/auditoria";
   const TAMANO_PAGINA = 20;
 
   const estado = {
