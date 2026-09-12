@@ -5,7 +5,8 @@ info:
   description: >
     Consulta paginada de la vitrina para HU-INV-001, y creacion y modificacion
     de elementos propios del jugador para HU-INV-003, y equipamiento de
-    heroes con limites para HU-INV-005.
+    heroes con limites para HU-INV-005, y busqueda indexada de productos
+    propios para HU-INV-002.
     La identidad temporal sigue la convencion X-User-Name de ms-identidad hasta
     que HU-AUT-004 publique el subject del token.
 servers:
@@ -67,6 +68,42 @@ paths:
           $ref: "#/components/responses/IdentidadRequerida"
         "503":
           $ref: "#/components/responses/PersistenciaNoDisponible"
+  /api/v1/inventario/elementos/busqueda:
+    get:
+      summary: Busca productos en el inventario del jugador autenticado
+      description: >
+        HU-INV-002. Usa el indice de texto de la informacion registrada en los
+        elementos y solo consulta el inventario derivado de X-User-Name. El
+        criterio debe contener al menos cuatro caracteres y los resultados
+        conservan la paginacion fija de dieciseis elementos.
+      operationId: buscarElementosInventario
+      parameters:
+        - name: criterio
+          in: query
+          required: true
+          description: Texto que se busca en productoId, tipo, nombre propio y parte de armadura.
+          schema:
+            type: string
+            minLength: 4
+        - name: pagina
+          in: query
+          required: false
+          description: Numero de pagina de coincidencias, desde cero.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Pagina de productos propios que coinciden con el criterio
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginaInventario"
+        "400":
+          $ref: "#/components/responses/SolicitudInvalida"
+        "401":
+          $ref: "#/components/responses/IdentidadRequerida"
   /api/v1/inventario/elementos/{elementoId}:
     patch:
       summary: Modifica el nombre propio de un elemento del jugador autenticado

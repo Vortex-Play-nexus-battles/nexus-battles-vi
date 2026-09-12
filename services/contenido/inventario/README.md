@@ -33,6 +33,10 @@ al inventario: referencia del producto, tipo, nombre propio y parte de armadura.
 Este indice prepara la busqueda sin duplicar datos administrados por el servicio
 de productos.
 
+`SCRUM-323` expone la consulta indexada del inventario propio. Exige un criterio
+de al menos cuatro caracteres, busca por referencia de producto, tipo, nombre
+propio o parte de armadura y conserva la paginacion de dieciseis elementos.
+
 El agregado es inmutable y se guarda como un documento por propietario. Esta
 decision permite que los cambios de una instancia se persistan atomicamente y
 sirve como base para la prueba de escritura fallida de `SCRUM-328`.
@@ -45,6 +49,7 @@ La API deriva el propietario de `X-User-Name`, la convencion temporal de
 token sin cambiar las reglas de propiedad de la aplicacion.
 
 ```text
+GET   /api/v1/inventario/elementos/busqueda?criterio={texto}&pagina={numero}
 POST  /api/v1/inventario/elementos
 PATCH /api/v1/inventario/elementos/{elementoId}
 ```

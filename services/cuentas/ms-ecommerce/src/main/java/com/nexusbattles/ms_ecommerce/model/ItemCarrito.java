@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_ecommerce.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -20,6 +21,7 @@ public class ItemCarrito {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "carrito_id")
+    @JsonIgnore
     private Carrito carrito;
 
     @ManyToOne(fetch = FetchType.LAZY)
