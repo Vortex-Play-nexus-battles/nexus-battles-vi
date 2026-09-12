@@ -1,0 +1,149 @@
+openapi: 3.1.0
+info:
+  title: ms-subastas — Listado de subastas activas
+  description: >
+    Contrato de HU-SUB-011. Endpoint público (jugador o visitante, sin
+    autenticación requerida) para explorar el mercado de subastas activas,
+    con filtros, ordenamiento y búsqueda.
+  version: "1.0.0-draft"
+  x-historia: HU-SUB-011
+  x-responsable: Cristian
+  x-estado: >
+    BORRADOR. Los campos de Subasta que este contrato expone (nombreProducto,
+    tipoProducto, rareza, miniaturaUrl, cantidadPujas, esMaestroDeJuego,
+    vistas) están pendientes de confirmar en el diseño conjunto con Edwin
+    (HU-SUB-001). El tipo de vendedorId está pendiente de la decisión de
+    identificador estable en JWT (ver discusión con Andrés/Santiago).
+
+paths:
+  /api/v1/subastas:
+    get:
+      summary: Listado paginado de subastas activas
+      operationId: listarSubastas
+      tags: [Subastas]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: size
+          in: query
+          description: Fijo en 16 según SRS 7.7.9, pero configurable por si cambia.
+          schema: { type: integer, default: 16, minimum: 1, maximum: 100 }
+        - name: q
+          in: query
+          description: >
+            Búsqueda sobre nombre, descripción, tipo y habilidades
+            (SRF-SUB-011, con autocompletado en el front).
+          schema: { type: string }
+        - name: tipoProducto
+          in: query
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/TipoProducto'
+          style: form
+          explode: true
+        - name: rareza
+          in: query
+          schema: { type: string }
+        - name: precioMin
+          in: query
+          schema: { type: number, format: decimal }
+        - name: precioMax
+          in: query
+          schema: { type: number, format: decimal }
+        - name: tiempoRestante
+          in: query
+          description: Buckets según SRS 7.7.9.
+          schema:
+            type: string
+            enum: [FINALIZA_PRONTO, MENOS_1H, MENOS_6H, MENOS_24H]
+        - name: tipoVenta
+          in: query
+          description: Se deriva de si precioCompraInmediata es null o no.
+          schema:
+            type: string
+            enum: [SOLO_PUJAS, COMPRA_INMEDIATA_DISPONIBLE]
+        - name: metodoPago
+          in: query
+          description: Se deriva de esMaestroDeJuego.
+          schema:
+            type: string
+            enum: [CREDITOS, DINERO_REAL]
+        - name: vendedor
+          in: query
+          schema:
+            type: string
+            enum: [JUGADORES, MAESTRO_DE_JUEGO]
+        - name: ordenarPor
+          in: query
+          schema:
+            type: string
+            enum: [PRECIO_ASC, PRECIO_DESC, TIEMPO_RESTANTE, PUJAS, FECHA_PUBLICACION, POPULARIDAD]
+            default: FECHA_PUBLICACION
+      responses:
+        '200':
+          description: Página de subastas activas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaDeSubastas'
+        '400':
+          description: Parámetro de filtro/ordenamiento inválido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+components:
+  schemas:
+    TipoProducto:
+      type: string
+      enum: [HEROE, HABILIDAD, ARMA, ARMADURA, ITEM, EPICA]
+
+    SubastaResumen:
+      type: object
+      required:
+        - id
+        - nombreProducto
+        - tipoProducto
+        - precioInicial
+        - ofertaVigente
+        - cantidadPujas
+        - fechaFin
+        - esMaestroDeJuego
+      properties:
+        id: { type: string, format: uuid }
+        nombreProducto: { type: string }
+        tipoProducto: { $ref: '#/components/schemas/TipoProducto' }
+        rareza: { type: string }
+        miniaturaUrl: { type: string }
+        precioInicial: { type: number, format: decimal }
+        ofertaVigente: { type: number, format: decimal }
+        precioCompraInmediata: { type: number, format: decimal, nullable: true }
+        cantidadPujas: { type: integer }
+        fechaFin: { type: string, format: date-time }
+        esMaestroDeJuego: { type: boolean }
+        # PENDIENTE: tipo real a confirmar (Long / String / UUID publicId)
+        vendedorId: { type: string }
+
+    PaginaDeSubastas:
+      type: object
+      required: [contenido, pagina, tamanoPagina, totalElementos, totalPaginas]
+      properties:
+        contenido:
+          type: array
+          items: { $ref: '#/components/schemas/SubastaResumen' }
+        pagina: { type: integer }
+        tamanoPagina: { type: integer }
+        totalElementos: { type: integer }
+        totalPaginas: { type: integer }
+
+    Problem:
+      type: object
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
