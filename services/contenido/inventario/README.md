@@ -70,12 +70,15 @@ La misma subasta puede repetir la reserva de forma idempotente; otra subasta
 recibe `409` y no reemplaza el bloqueo vigente.
 
 ```text
-PUT /api/v1/inventario/elementos/{elementoId}/bloqueo-subasta
+PUT    /api/v1/inventario/elementos/{elementoId}/bloqueo-subasta
+DELETE /api/v1/inventario/elementos/{elementoId}/bloqueo-subasta/{subastaId}
 ```
 
 El servicio de subastas debe propagar `X-User-Name`, `Idempotency-Key` y enviar
-el `subastaId` definido en el contrato OpenAPI. La liberacion automatica se
-incorpora en la siguiente subtarea de la historia.
+el `subastaId` definido en el contrato OpenAPI. Al cerrar o cancelar la
+publicacion, llama a `DELETE` con el mismo elemento, subasta y una clave de
+idempotencia. Repetir el aviso conserva el producto disponible; un aviso de
+otra subasta responde `409` y no levanta el bloqueo vigente.
 
 ## Equipamiento con limites
 

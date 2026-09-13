@@ -33,6 +33,23 @@ public class GestionarBloqueoSubasta {
         return guardado.elemento(elementoId);
     }
 
+    public ElementoInventario liberar(
+            String elementoId,
+            String subastaId,
+            String claveIdempotencia) {
+        exigirTexto(claveIdempotencia, "claveIdempotencia");
+        String subastaQueFinalizo = exigirTexto(subastaId, "subastaId");
+        Inventario inventario = repositorio.buscarPorElementoId(exigirTexto(elementoId, "elementoId"))
+                .orElseThrow(ElementoNoEncontradoException::new);
+        ElementoInventario actual = inventario.elemento(elementoId);
+        if (actual.disponible()) {
+            return actual;
+        }
+        Inventario guardado = repositorio.guardar(
+                inventario.liberarBloqueoSubasta(elementoId, subastaQueFinalizo));
+        return guardado.elemento(elementoId);
+    }
+
     private String exigirTexto(String valor, String campo) {
         if (valor == null || valor.isBlank()) {
             if ("identidad".equals(campo)) {

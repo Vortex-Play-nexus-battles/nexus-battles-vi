@@ -2,6 +2,7 @@ package nexus.inventario.aplicacion;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import nexus.inventario.dominio.ElementoInventario;
@@ -50,5 +51,32 @@ class GestionarBloqueoSubastaTest {
 
         assertThrows(ElementoNoDisponibleException.class, () -> gestion.bloquear(
                 "jugador-A", "elemento-1", "subasta-2", "operacion-2"));
+    }
+
+    @Test
+    @DisplayName("el aviso de cierre libera y persiste el producto de forma idempotente")
+    void liberarAlRecibirAvisoDeCierre() {
+        gestion.bloquear("jugador-A", "elemento-1", "subasta-1", "publicar-1");
+
+        ElementoInventario liberado = gestion.liberar(
+                "elemento-1", "subasta-1", "cerrar-1");
+        ElementoInventario repetido = gestion.liberar(
+                "elemento-1", "subasta-1", "cerrar-1");
+
+        assertTrue(liberado.disponible());
+        assertTrue(repetido.disponible());
+        assertTrue(repositorio.buscarPorElementoId("elemento-1")
+                .orElseThrow().elemento("elemento-1").disponible());
+    }
+
+    @Test
+    @DisplayName("el aviso de una subasta diferente conserva el bloqueo")
+    void conservarBloqueoAnteAvisoAjeno() {
+        gestion.bloquear("jugador-A", "elemento-1", "subasta-1", "publicar-1");
+
+        assertThrows(ElementoNoDisponibleException.class, () -> gestion.liberar(
+                "elemento-1", "subasta-2", "cerrar-2"));
+        assertFalse(repositorio.buscarPorElementoId("elemento-1")
+                .orElseThrow().elemento("elemento-1").disponible());
     }
 }
