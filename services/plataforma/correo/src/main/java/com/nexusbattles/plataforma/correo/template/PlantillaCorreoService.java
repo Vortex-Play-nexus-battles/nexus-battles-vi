@@ -43,6 +43,7 @@ public class PlantillaCorreoService {
     private static final Set<String> PLANTILLAS_PERMITIDAS = Set.of(
             "email/bienvenida",
             "email/aviso-acceso",
+            "email/confirmacion-cuenta",
             "email/recuperacion-clave",
             "email/plantilla-prueba");
 

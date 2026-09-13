@@ -54,6 +54,22 @@ public class CorreoController {
                         "fechaHora", solicitud.fechaHoraLegible()));
     }
 
+    @PostMapping("/confirmacion-cuenta")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void enviarConfirmacionCuenta(@Valid @RequestBody CorreoConfirmacionCuentaRequest solicitud) {
+        // HU-COR-002. Igual que en recuperacion-clave: el codigo no se registra
+        // en bitacora en ningun punto. Un codigo de activacion en los logs es
+        // una cuenta activable por quien lea los logs.
+        enviador.enviar(
+                solicitud.email(),
+                "Confirma tu cuenta de The Nexus Battles VI",
+                "email/confirmacion-cuenta",
+                Map.of(
+                        "apodo", solicitud.apodo(),
+                        "codigo", solicitud.codigo(),
+                        "minutosVigencia", solicitud.minutosVigencia()));
+    }
+
     @PostMapping("/recuperacion-clave")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public void enviarRecuperacionClave(@Valid @RequestBody CorreoRecuperacionClaveRequest solicitud) {

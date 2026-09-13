@@ -10,8 +10,8 @@ info:
     lleguen los datos que esa plantilla necesita. Anadir tipos nuevos es anadir
     rutas, que es un cambio compatible y no rompe a quien ya consume.
 
-    Consumidor en Sprint 1: ms-identidad (registro, aviso de acceso y
-    recuperacion de contrasena).
+    Consumidor en Sprint 1: ms-identidad (registro, confirmacion de cuenta,
+    aviso de acceso y recuperacion de contrasena).
   version: 1.0.0
 servers:
   - url: http://localhost:8082/api/v1
@@ -51,6 +51,32 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/CorreoAvisoAccesoRequest'
+      responses:
+        '202':
+          description: Correo aceptado y entregado al servidor SMTP.
+        '400':
+          $ref: '#/components/responses/SolicitudInvalida'
+
+  /correos/confirmacion-cuenta:
+    post:
+      summary: Enviar el codigo de vigencia limitada para confirmar una cuenta nueva
+      description: >
+        Soporta HU-COR-002 (RNF-COR-002). Este servicio SOLO envia el correo
+        sobre la plantilla corporativa: generar el codigo de forma segura,
+        guardarlo con su caducidad, validarlo, invalidar el anterior al
+        reenviar y bloquear tras varios intentos fallidos son responsabilidad
+        de ms-identidad, que es quien deja la cuenta pendiente de
+        verificacion (identidad y control de acceso estan fuera del alcance
+        del Equipo 6, project-charter.md).
+      operationId: enviarCorreoConfirmacionCuenta
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CorreoConfirmacionCuentaRequest'
       responses:
         '202':
           description: Correo aceptado y entregado al servidor SMTP.
@@ -147,6 +173,42 @@ components:
           format: date-time
           description: Momento del acceso en ISO-8601 con zona horaria
           examples: ['2026-08-30T14:23:11-05:00']
+
+    CorreoConfirmacionCuentaRequest:
+      type: object
+      required:
+        - email
+        - apodo
+        - codigo
+        - minutosVigencia
+      properties:
+        email:
+          type: string
+          format: email
+          description: Destinatario, el correo que se esta verificando
+          examples: ['jugador@ejemplo.com']
+        apodo:
+          type: string
+          minLength: 1
+          examples: ['ElGuerrero']
+        codigo:
+          type: string
+          minLength: 1
+          maxLength: 12
+          description: >
+            Codigo de confirmacion ya generado por ms-identidad. Este servicio
+            no lo genera ni lo valida: solo lo transcribe al correo. Tampoco se
+            registra en la bitacora, para no filtrarlo.
+          examples: ['482915']
+        minutosVigencia:
+          type: integer
+          minimum: 1
+          description: >
+            Minutos de validez del codigo desde su emision. Lo envia quien lo
+            genero (configurable alli por variable de entorno) en lugar de
+            fijarlo aqui: asi el correo nunca promete un plazo distinto del
+            real.
+          examples: [15]
 
     CorreoRecuperacionClaveRequest:
       type: object

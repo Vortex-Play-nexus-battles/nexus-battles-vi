@@ -12,7 +12,7 @@ import {
   aVistaDeSubasta,
   mensajePara,
   ErrorDeSubastas
-} from './subastas-api.js';
+} from './pujas-api.js';
 
 function respuesta({ ok = true, status = 200, cuerpo = {} } = {}) {
   return {

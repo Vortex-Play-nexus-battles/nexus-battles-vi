@@ -19,6 +19,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers("/api/v1/lista-negra/verificar").permitAll()
+                        .requestMatchers("/api/v1/sanciones/usuarios/*/activa").permitAll()
                         .requestMatchers("/api/v1/lista-negra/terminos/**")
                         .hasAnyRole("ADMINISTRADOR", "MODERADOR")
                         .anyRequest().authenticated())

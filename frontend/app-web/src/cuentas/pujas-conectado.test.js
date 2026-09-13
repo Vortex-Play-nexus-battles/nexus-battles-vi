@@ -7,8 +7,8 @@
  */
 
 import { jest } from '@jest/globals';
-import { ControladorSubastas } from './subastas.js';
-import { ErrorDeSubastas } from './subastas-api.js';
+import { ControladorSubastas } from './pujas.js';
+import { ErrorDeSubastas } from './pujas-api.js';
 
 function subastaDelServidor(extra = {}) {
   return Object.assign({

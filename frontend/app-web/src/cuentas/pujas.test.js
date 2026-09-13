@@ -19,7 +19,7 @@ import {
   ControladorSubastas,
   SUBASTAS_INICIALES,
   HEROES_BASE
-} from './subastas.js';
+} from './pujas.js';
 
 describe('HU-SUB-004 - Reglas de Negocio de Subastas y Pujas', () => {
   describe('Cálculos y formateo', () => {

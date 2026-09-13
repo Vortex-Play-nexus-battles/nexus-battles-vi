@@ -1,48 +1,22 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Nexus Battles VI - Subastas y Pujas</title>
-    <link rel="stylesheet" href="../comun/barra-navegacion.css" />
-    <link rel="stylesheet" href="./subastas.css" />
-  </head>
-  <body>
-    <!-- Barra de Navegación Compartida (HU-INV-004 / src/comun) -->
-    <header id="contenedor-barra">
-      <nav class="barra" aria-label="Navegacion principal">
-        <div class="barra__busqueda">
-          <input type="search" placeholder="Buscar subastas, armas, objetos..." class="barra__campo-busqueda" />
-        </div>
-        <ul class="barra__accesos">
-          <li class="barra__item"><a href="../plataforma/salas-partidas/batallas.html" class="barra__enlace">Jugar online</a></li>
-          <li class="barra__item"><a href="#" class="barra__enlace">Misiones</a></li>
-          <li class="barra__item"><a href="#" class="barra__enlace">Torneo</a></li>
-          <li class="barra__item"><a href="../contenido/inventario/inventario.html" class="barra__enlace">Mi inventario</a></li>
-          <li class="barra__item"><a href="./subastas.html" class="barra__enlace barra__enlace--activo" aria-current="page">Subasta</a></li>
-          <li class="barra__item"><a href="./perfil.html" class="barra__enlace">Mi Cuenta</a></li>
-        </ul>
-      </nav>
-    </header>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Subastas · Nexus Battles VI</title>
 
-    <!-- Contenedor Principal de la Aplicación -->
-    <main id="subastas-app" class="contenedor-subastas">
-      <!-- Inyectado por subastas.js -->
-    </main>
+  <link rel="stylesheet" href="/shared/ui-kit/css/tokens.css">
+  <link rel="stylesheet" href="/shared/ui-kit/css/base.css">
+  <link rel="stylesheet" href="/comun/barra-navegacion.css">
+  <link rel="stylesheet" href="subastas-vitrina.css">
+  <link rel="stylesheet" href="subastas-filtros.css">
+  <link rel="stylesheet" href="subastas-busqueda.css">
+</head>
+<body class="subastas-pagina">
 
-    <script type="module">
-      import { montarSubastas } from './subastas.js';
-      import { crearApiSubastas } from './subastas-api.js';
+<div id="raiz-subastas"></div>
 
-      const contenedor = document.getElementById('subastas-app');
+<script type="module" src="subastas.js"></script>
 
-      // Con ?demo en la URL se monta con los datos de ejemplo, sin servidor.
-      // Sirve para ensenar la pantalla en la sustentacion si ms-subastas no
-      // esta levantado, y para trabajar el diseno sin base de datos. Por
-      // defecto, la pantalla habla con el servicio de verdad.
-      const demo = new URLSearchParams(location.search).has('demo');
-
-      montarSubastas(contenedor, demo ? {} : { api: crearApiSubastas() });
-    </script>
-  </body>
+</body>
 </html>
