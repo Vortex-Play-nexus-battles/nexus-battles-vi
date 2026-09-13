@@ -1,2 +1,33 @@
 server:
   port: 8087
+
+# HU-DIS-001 — monitoreo y registro de disponibilidad de los servicios del bloque.
+#
+# Regla 10 de plataforma: ningun valor real se versiona. Las URL salen de
+# variables de entorno y lo que hay aqui son los valores de desarrollo local,
+# que es donde cada servicio corre en su propio puerto.
+#
+# Solo van servicios del bloque (M02, M09, M13, M15, M16A/B). Los de los
+# equipos socios se quedan fuera a proposito: DEC-01 excluye sus caidas de la
+# cifra de disponibilidad.
+disponibilidad:
+  umbral-porcentaje: ${DISPONIBILIDAD_UMBRAL:99.95}
+  intervalo-ms: ${DISPONIBILIDAD_INTERVALO_MS:30000}
+  servicios:
+    salas-partidas: ${SALUD_SALAS_PARTIDAS:http://localhost:8083/actuator/health}
+    notificaciones: ${SALUD_NOTIFICACIONES:http://localhost:8085/actuator/health}
+    correo: ${SALUD_CORREO:http://localhost:8082/actuator/health}
+    comentarios: ${SALUD_COMENTARIOS:http://localhost:8081/actuator/health}
+    moderacion-sanciones: ${SALUD_MODERACION:http://localhost:8084/actuator/health}
+    admin-parametros: ${SALUD_ADMIN_PARAMETROS:http://localhost:8086/actuator/health}
+    torneos: ${SALUD_TORNEOS:http://localhost:8088/actuator/health}
+
+# Regla 3 de plataforma: este servicio tambien expone su propia salud.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
