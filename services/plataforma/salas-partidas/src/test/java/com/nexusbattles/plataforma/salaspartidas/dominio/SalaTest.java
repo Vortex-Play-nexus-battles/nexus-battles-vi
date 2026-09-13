@@ -4,12 +4,16 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Reglas de creacion de sala — HU-SAL-001.
@@ -178,6 +182,164 @@ class SalaTest {
                     new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null);
 
             assertEquals(0, Sala.crear(gratis, ANFITRION).recompensaCreditos());
+        }
+    }
+
+    /**
+     * HU-SAL-002 · RF-JUE-002 — ingreso a una sala existente.
+     *
+     * <p>Los tres criterios de aceptacion del issue #30:
+     * <ol>
+     *   <li>«El sistema verifica cupos y condiciones antes de admitir.»</li>
+     *   <li>«El estado de la sala se actualiza para todos los participantes.»
+     *       — la difusion es del canal; aqui se prueba que el ESTADO cambie.</li>
+     *   <li>«Sala llena, cerrada o iniciada rechaza el ingreso.»</li>
+     * </ol>
+     *
+     * <p>Se modelan participantes y no solo un contador porque el esquema
+     * {@code Sala} del contrato exige el arreglo {@code participantes}, y
+     * porque sin identidad no se puede impedir que el mismo jugador ocupe dos
+     * cupos.
+     *
+     * <p>NO se prueba aqui el heroe equipado (HU-SAL-003, depende del modulo de
+     * Thomas) ni los creditos de la apuesta (depende del modulo de Santiago).
+     */
+    @Nested
+    @DisplayName("RF-JUE-002 · ingreso a una sala existente")
+    class Ingreso {
+
+        private static final UUID VISITANTE =
+                UUID.fromString("55555555-5555-5555-5555-555555555555");
+        private static final UUID OTRO =
+                UUID.fromString("66666666-6666-6666-6666-666666666666");
+
+        /**
+         * Sala de dos cupos en el estado que pida la prueba.
+         *
+         * <p>El anfitrion lo anade el propio constructor, asi que aqui solo se
+         * rellenan los cupos que falten hasta la ocupacion pedida.
+         */
+        private Sala salaEn(EstadoSala estado, int ocupacion) {
+            Set<UUID> dentro = new LinkedHashSet<>();
+            for (int i = 1; i < ocupacion; i++) {
+                dentro.add(UUID.randomUUID());
+            }
+            return Sala.rehidratar(UUID.randomUUID(), estado, Modalidad.UNO_CONTRA_UNO,
+                    2, 0, false, false, null, ANFITRION, dentro, Instant.now());
+        }
+
+        @Test
+        @DisplayName("el anfitrion cuenta como participante desde que se crea la sala")
+        void elAnfitrionYaEstaDentro() {
+            Sala sala = Sala.crear(validos(), ANFITRION);
+
+            assertTrue(sala.participantes().contains(ANFITRION));
+        }
+
+        @Test
+        @DisplayName("un jugador entra y la sala pasa a tener dos ocupantes")
+        void entraUnJugador() {
+            Sala sala = Sala.crear(validos(), ANFITRION);
+
+            sala.unirse(VISITANTE);
+
+            assertAll(
+                    () -> assertEquals(2, sala.ocupacion()),
+                    () -> assertTrue(sala.participantes().contains(VISITANTE)),
+                    () -> assertEquals(EstadoSala.ABIERTA, sala.estado(), "aun quedan cupos"));
+        }
+
+        @Test
+        @DisplayName("al ocuparse el ultimo cupo la sala pasa a LLENA")
+        void seLlena() {
+            ParametrosDeSala duelo =
+                    new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, false, null);
+            Sala sala = Sala.crear(duelo, ANFITRION);
+
+            sala.unirse(VISITANTE);
+
+            assertEquals(EstadoSala.LLENA, sala.estado());
+        }
+
+        @Test
+        @DisplayName("una sala llena rechaza el ingreso")
+        void salaLlena() {
+            Sala sala = salaEn(EstadoSala.LLENA, 2);
+
+            assertThrows(IngresoNoPermitido.class, () -> sala.unirse(VISITANTE));
+        }
+
+        @Test
+        @DisplayName("una partida ya iniciada rechaza el ingreso")
+        void partidaIniciada() {
+            Sala sala = salaEn(EstadoSala.EN_JUEGO, 2);
+
+            assertThrows(IngresoNoPermitido.class, () -> sala.unirse(VISITANTE));
+        }
+
+        @Test
+        @DisplayName("una sala cancelada rechaza el ingreso")
+        void salaCancelada() {
+            Sala sala = salaEn(EstadoSala.CANCELADA, 1);
+
+            assertThrows(IngresoNoPermitido.class, () -> sala.unirse(VISITANTE));
+        }
+
+        @Test
+        @DisplayName("una sala finalizada rechaza el ingreso")
+        void salaFinalizada() {
+            Sala sala = salaEn(EstadoSala.FINALIZADA, 2);
+
+            assertThrows(IngresoNoPermitido.class, () -> sala.unirse(VISITANTE));
+        }
+
+        @Test
+        @DisplayName("el mismo jugador no puede ocupar dos cupos")
+        void ingresoRepetido() {
+            Sala sala = Sala.crear(validos(), ANFITRION);
+            sala.unirse(VISITANTE);
+
+            assertThrows(IngresoNoPermitido.class, () -> sala.unirse(VISITANTE));
+        }
+
+        @Test
+        @DisplayName("el anfitrion no puede volver a entrar en su propia sala")
+        void elAnfitrionNoSeUneDosVeces() {
+            Sala sala = Sala.crear(validos(), ANFITRION);
+
+            assertThrows(IngresoNoPermitido.class, () -> sala.unirse(ANFITRION));
+        }
+
+        @Test
+        @DisplayName("el rechazo es un conflicto: 409, como fija el contrato")
+        void elRechazoEs409() {
+            Sala sala = salaEn(EstadoSala.LLENA, 2);
+
+            IngresoNoPermitido error =
+                    assertThrows(IngresoNoPermitido.class, () -> sala.unirse(VISITANTE));
+            assertEquals(409, error.estado());
+        }
+
+        @Test
+        @DisplayName("una sala privada rechaza con 403, no con el 409 de los conflictos")
+        void salaPrivada() {
+            Sala sala = salaEn(EstadoSala.PRIVADA, 1);
+
+            SalaPrivadaSinInvitacion error =
+                    assertThrows(SalaPrivadaSinInvitacion.class, () -> sala.unirse(OTRO));
+
+            assertAll(
+                    () -> assertEquals(403, error.estado(), "lo fija el contrato"),
+                    () -> assertTrue(error.detalle().toLowerCase().contains("invitacion"),
+                            "el motivo tiene que nombrar la invitacion, no dejar adivinar"));
+        }
+
+        @Test
+        @DisplayName("sin jugador identificado no hay ingreso")
+        void exigeJugador() {
+            Sala sala = Sala.crear(validos(), ANFITRION);
+
+            assertThrows(NullPointerException.class, () -> sala.unirse(null));
         }
     }
 }

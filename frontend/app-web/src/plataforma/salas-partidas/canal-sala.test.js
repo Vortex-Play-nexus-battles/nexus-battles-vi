@@ -8,7 +8,14 @@
 
 import { jest } from '@jest/globals';
 
-import { seguirSala, aplicarAviso, destinoDeSala, TIPO_INGRESO } from './canal-sala.js';
+import {
+  seguirSala,
+  aplicarAviso,
+  destinoDeSala,
+  urlDelCanal,
+  estadoDesdeFicha,
+  TIPO_INGRESO,
+} from './canal-sala.js';
 
 const SALA = '11111111-1111-1111-1111-111111111111';
 const ANFITRION = 'aaaaaaaa-0000-0000-0000-000000000001';
@@ -133,5 +140,50 @@ describe('seguirSala', () => {
 
     canal.recibir(avisoDeIngreso());
     expect(canal.estado().ocupacion.actual).toBe(2);
+  });
+});
+
+describe('urlDelCanal', () => {
+  test('en la ejecucion integrada el canal vive en el mismo origen que la pagina', () => {
+    expect(urlDelCanal({ location: { protocol: 'http:', host: 'localhost:8084' } })).toBe(
+      'ws://localhost:8084/ws',
+    );
+    expect(urlDelCanal({ location: { protocol: 'https:', host: 'juego.nexus.local' } })).toBe(
+      'wss://juego.nexus.local/ws',
+    );
+  });
+
+  test('con base declarada, el canal sigue a la API y cambia http por ws', () => {
+    expect(urlDelCanal({ base: 'http://127.0.0.1:8083' })).toBe('ws://127.0.0.1:8083/ws');
+    expect(urlDelCanal({ base: 'https://api.nexus.local/' })).toBe('wss://api.nexus.local/ws');
+  });
+
+  test('el token nunca forma parte de la URL', () => {
+    expect(urlDelCanal({ base: 'http://127.0.0.1:8083' })).not.toMatch(/token|Bearer|\?/);
+  });
+});
+
+describe('estadoDesdeFicha', () => {
+  test('traduce la ficha del listado a la forma que entiende el canal', () => {
+    expect(
+      estadoDesdeFicha({
+        id: SALA,
+        ocupacion: 3,
+        maximoParticipantes: 6,
+        participantes: [ANFITRION, VISITANTE],
+      }),
+    ).toEqual({
+      idSala: SALA,
+      ocupacion: { actual: 3, maximo: 6 },
+      participantes: [ANFITRION, VISITANTE],
+    });
+  });
+
+  test('sin lista de participantes arranca vacia, no rota', () => {
+    expect(estadoDesdeFicha({ id: SALA, ocupacion: 1, maximoParticipantes: 2 })).toEqual({
+      idSala: SALA,
+      ocupacion: { actual: 1, maximo: 2 },
+      participantes: [],
+    });
   });
 });

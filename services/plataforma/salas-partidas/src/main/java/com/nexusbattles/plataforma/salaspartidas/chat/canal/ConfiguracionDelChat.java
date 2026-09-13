@@ -5,57 +5,28 @@ import com.nexusbattles.plataforma.salaspartidas.chat.FiltroDeContenido;
 import com.nexusbattles.plataforma.salaspartidas.chat.HistorialDeChat;
 import com.nexusbattles.plataforma.salaspartidas.chat.PublicadorDeChat;
 import com.nexusbattles.plataforma.salaspartidas.chat.SancionesDelJugador;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.messaging.simp.config.ChannelRegistration;
-import org.springframework.messaging.simp.config.MessageBrokerRegistry;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
-import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
-import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
 import java.time.Clock;
 
 /**
- * Canal STOMP del chat, con los prefijos que fija el contrato AsyncAPI:
- * /tema para suscribirse, /app para enviar y /usuario/cola para lo privado.
+ * Beans del chat de HU-JUE-015.
  *
- * <p>El broker es el simple de Spring, en memoria: alcanza para un nodo y la
- * eleccion de uno externo es decision de equipo. La identidad de cada
- * conexion la pone AutenticacionStomp a partir del JWT, la misma que usa la
- * API HTTP.
+ * <p>El canal STOMP (endpoint {@code /ws}, broker, prefijos {@code /tema},
+ * {@code /app} y {@code /usuario/cola}, y la autenticacion por JWT en el
+ * {@code CONNECT} con {@link AutenticacionStomp}) es uno solo para todo el
+ * servicio y vive en {@code tiemporeal.ConfiguracionWebSocket}: la sala de
+ * batalla (HU-SAL-002) y el chat comparten conexion, tal como fija
+ * {@code contracts/websocket/salas-partidas.yaml}. Esta clase registro ese
+ * mismo endpoint por su cuenta mientras el chat vivio en una rama aparte; al
+ * integrarse ambas historias, dos configuraciones sobre {@code /ws} impedian
+ * arrancar el servicio, y el canal quedo en un solo sitio. Los origenes que
+ * el chat declaraba en {@code chat.ws.origenes} se siguen honrando alli.
  */
 @Configuration
-@EnableWebSocketMessageBroker
-public class ConfiguracionDelChat implements WebSocketMessageBrokerConfigurer {
-
-    private final JwtDecoder decodificador;
-    private final String[] origenesPermitidos;
-
-    public ConfiguracionDelChat(JwtDecoder decodificador,
-            @Value("${chat.ws.origenes}") String[] origenesPermitidos) {
-        this.decodificador = decodificador;
-        this.origenesPermitidos = origenesPermitidos;
-    }
-
-    @Override
-    public void registerStompEndpoints(StompEndpointRegistry registro) {
-        registro.addEndpoint("/ws").setAllowedOriginPatterns(origenesPermitidos);
-    }
-
-    @Override
-    public void configureMessageBroker(MessageBrokerRegistry broker) {
-        broker.enableSimpleBroker("/tema", "/cola");
-        broker.setApplicationDestinationPrefixes("/app");
-        broker.setUserDestinationPrefix("/usuario");
-    }
-
-    @Override
-    public void configureClientInboundChannel(ChannelRegistration registro) {
-        registro.interceptors(new AutenticacionStomp(decodificador));
-    }
+public class ConfiguracionDelChat {
 
     @Bean
     public EnviarMensaje enviarMensaje(HistorialDeChat historial, FiltroDeContenido filtro,

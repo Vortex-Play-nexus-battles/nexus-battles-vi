@@ -19,6 +19,10 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
  * que el token viaja en la cabecera Authorization del frame CONNECT. Sin
  * token valido no hay conexion: el chat no admite anonimos porque cada
  * mensaje se atribuye a un jugador y las sanciones son por persona.
+ *
+ * <p>Desde HU-SAL-002 autentica TODO el canal del servicio: la sala de
+ * batalla y el chat comparten endpoint, y la registra una sola vez
+ * {@code tiemporeal.ConfiguracionWebSocket}.
  */
 public class AutenticacionStomp implements ChannelInterceptor {
 
@@ -39,7 +43,7 @@ public class AutenticacionStomp implements ChannelInterceptor {
         }
         String valor = cabeceras.getFirstNativeHeader(CABECERA);
         if (valor == null || !valor.startsWith(PREFIJO)) {
-            throw new AccessDeniedException("El chat necesita un token de acceso en la conexion.");
+            throw new AccessDeniedException("El canal necesita un token de acceso en la conexion.");
         }
         try {
             Jwt jwt = decodificador.decode(valor.substring(PREFIJO.length()).strip());
