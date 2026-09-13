@@ -32,9 +32,17 @@
 
     <script type="module">
       import { montarSubastas } from './subastas.js';
+      import { crearApiSubastas } from './subastas-api.js';
 
       const contenedor = document.getElementById('subastas-app');
-      montarSubastas(contenedor);
+
+      // Con ?demo en la URL se monta con los datos de ejemplo, sin servidor.
+      // Sirve para ensenar la pantalla en la sustentacion si ms-subastas no
+      // esta levantado, y para trabajar el diseno sin base de datos. Por
+      // defecto, la pantalla habla con el servicio de verdad.
+      const demo = new URLSearchParams(location.search).has('demo');
+
+      montarSubastas(contenedor, demo ? {} : { api: crearApiSubastas() });
     </script>
   </body>
 </html>

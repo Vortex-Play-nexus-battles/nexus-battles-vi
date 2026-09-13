@@ -2,7 +2,6 @@
  * Subastas - Pruebas unitarias y de integración DOM (HU-SUB-004)
  */
 
-import { jest } from '@jest/globals';
 import {
   calcularSaldoLibre,
   calcularSaldoRetenido,
@@ -19,8 +18,7 @@ import {
   calcularEstadoTopesConcurrencia,
   ControladorSubastas,
   SUBASTAS_INICIALES,
-  HEROES_BASE,
-  EVENTOS_CIERRE_DEFAULT
+  HEROES_BASE
 } from './subastas.js';
 
 describe('HU-SUB-004 - Reglas de Negocio de Subastas y Pujas', () => {

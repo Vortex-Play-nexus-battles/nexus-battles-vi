@@ -219,7 +219,7 @@ export function formatearCreditos(n) {
 }
 
 export function formatearTiempo(seg) {
-  if (seg <= 0) return 'Cerrada';
+  if (seg <= 0) {return 'Cerrada';}
   if (seg >= 3600) {
     const h = Math.floor(seg / 3600);
     const m = Math.floor((seg % 3600) / 60);
@@ -264,7 +264,7 @@ export function validarPuja(monto, subasta, saldoLibre, incremento = CONFIG_REGL
 }
 
 export function validarLimiteAuto(limite, subasta, saldoLibre, incremento = CONFIG_REGLAS.incrementoMinimo) {
-  if (!subasta) return { valida: false, motivo: 'Subasta no encontrada.' };
+  if (!subasta) {return { valida: false, motivo: 'Subasta no encontrada.' };}
   const min = calcularMinimoPuja(subasta.oferta, incremento);
   if (limite < min) {
     return { valida: false, motivo: `El tope de puja automática debe ser al menos ${formatearCreditos(min)} cr.` };
@@ -277,7 +277,7 @@ export function validarLimiteAuto(limite, subasta, saldoLibre, incremento = CONF
 }
 
 export function calcularComparacionHeroe(heroe, item) {
-  if (!heroe || !item) return { comparaciones: [], nivelInsuficiente: false, deltaNivel: 0 };
+  if (!heroe || !item) {return { comparaciones: [], nivelInsuficiente: false, deltaNivel: 0 };}
   const nivelInsuficiente = heroe.nivel < item.nivel;
   const deltaNivel = item.nivel - heroe.nivel;
   const st = heroe.stats;
@@ -316,7 +316,7 @@ export function calcularBalanceNetoCierre(eventosCierre = [], saldoTotal = CONFI
 }
 
 export function generarConsejoTactico(eventoCierre, saldoLibre = 4130) {
-  if (!eventoCierre) return null;
+  if (!eventoCierre) {return null;}
   const nombre = eventoCierre.nombre || 'el objeto';
   const tope = eventoCierre.topePropio || 0;
   const montoFinal = eventoCierre.montoFinal || 0;
@@ -330,6 +330,51 @@ export function generarConsejoTactico(eventoCierre, saldoLibre = 4130) {
     diferencia,
     margenRecomendado
   };
+}
+
+/**
+ * Elige entre tres valores segun como este un tope: alcanzado, en aviso, o con
+ * margen. Existe para no repetir el mismo ternario anidado en cada color,
+ * ancho de barra y texto de los medidores.
+ *
+ * @param {{topeAlcanzado: boolean, alerta: boolean}} estado
+ */
+export function segunTope(estado, critico, aviso, normal) {
+  if (estado.topeAlcanzado) {return critico;}
+  if (estado.alerta) {return aviso;}
+  return normal;
+}
+
+/**
+ * A donde vuelve el boton de atras, segun desde donde se abrio el detalle.
+ *
+ * La vista y el texto no se corresponden una a una: se vuelve a 'explorar' o a
+ * 'lista' segun de donde se venga, pero el boton dice lo mismo en los dos
+ * casos, porque para el jugador son la misma pantalla.
+ *
+ * @param {string} origenVista
+ * @returns {{vista: string, texto: string}}
+ */
+export function destinoDeVuelta(origenVista) {
+  if (origenVista === 'mis-subastas') {
+    return { vista: 'mis-subastas', texto: '\u2190 Volver a mis subastas' };
+  }
+  if (origenVista === 'cierre-multiple') {
+    return { vista: 'cierre-multiple', texto: '\u2190 Volver a cierre m\u00faltiple' };
+  }
+  return {
+    vista: origenVista === 'explorar' ? 'explorar' : 'lista',
+    texto: '\u2190 Volver al listado de subastas'
+  };
+}
+
+/**
+ * Elige entre tres valores segun el signo de un delta (sube, baja, igual).
+ */
+export function segunDelta(delta, positivo, negativo, cero) {
+  if (delta > 0) {return positivo;}
+  if (delta < 0) {return negativo;}
+  return cero;
 }
 
 export function calcularEstadoTopesConcurrencia(subastas = [], config = CONFIG_REGLAS) {
@@ -352,11 +397,12 @@ export function calcularEstadoTopesConcurrencia(subastas = [], config = CONFIG_R
       ratio: ratioSubastas,
       alerta: alertaSubastas,
       topeAlcanzado: nSubastas >= maxSubastas,
-      pista: nSubastas >= maxSubastas
-        ? 'Has llegado al tope: no puedes entrar en más.'
-        : alertaSubastas
-          ? `Aviso de tope (80%): te quedan ${maxSubastas - nSubastas} subastas.`
-          : 'Margen de sobra.'
+      pista: segunTope(
+        { topeAlcanzado: nSubastas >= maxSubastas, alerta: alertaSubastas },
+        'Has llegado al tope: no puedes entrar en más.',
+        `Aviso de tope (80%): te quedan ${maxSubastas - nSubastas} subastas.`,
+        'Margen de sobra.'
+      )
     },
     pujas: {
       actual: nPujasGanando,
@@ -364,11 +410,12 @@ export function calcularEstadoTopesConcurrencia(subastas = [], config = CONFIG_R
       ratio: ratioPujas,
       alerta: alertaPujas,
       topeAlcanzado: nPujasGanando >= maxPujas,
-      pista: nPujasGanando >= maxPujas
-        ? 'Has llegado al tope de 50 pujas activas.'
-        : alertaPujas
-          ? `Aviso de tope (80%): te quedan ${maxPujas - nPujasGanando} pujas.`
-          : 'Margen de sobra.'
+      pista: segunTope(
+        { topeAlcanzado: nPujasGanando >= maxPujas, alerta: alertaPujas },
+        'Has llegado al tope de 50 pujas activas.',
+        `Aviso de tope (80%): te quedan ${maxPujas - nPujasGanando} pujas.`,
+        'Margen de sobra.'
+      )
     }
   };
 }
@@ -383,8 +430,14 @@ export class ControladorSubastas {
     subastas = SUBASTAS_INICIALES,
     heroes = HEROES_BASE,
     config = CONFIG_REGLAS,
-    eventosCierre = EVENTOS_CIERRE_DEFAULT
+    eventosCierre = EVENTOS_CIERRE_DEFAULT,
+    api = null
   } = {}) {
+    // Sin api, el controlador funciona con los datos de ejemplo: es como lo
+    // ejercitan las pruebas unitarias, que no deben depender de que haya un
+    // servidor levantado. Con api, manda el servidor.
+    this.api = api;
+    this.enviando = false;
     this.contenedor = contenedor;
     this.subastas = JSON.parse(JSON.stringify(subastas));
     this.heroes = JSON.parse(JSON.stringify(heroes));
@@ -405,8 +458,65 @@ export class ControladorSubastas {
   }
 
   iniciar() {
+    if (this.api) {
+      this.estadoDatos = 'carga';
+      this.render();
+      return this.recargar();
+    }
     this.iniciarTemporizador();
     this.render();
+    return Promise.resolve();
+  }
+
+  /**
+   * Relee el listado del servidor. Se llama al arrancar y despues de cada
+   * operacion que cambia algo, en vez de tocar el estado local: el servidor es
+   * quien sabe cual es la oferta vigente, y adivinarla en el cliente es
+   * exactamente como se pintan pantallas que mienten.
+   */
+  async recargar() {
+    if (!this.api) {return;}
+    try {
+      const subastas = await this.api.listar();
+      this.subastas = subastas;
+      this.estadoDatos = subastas.length ? 'exito' : 'vacio';
+      this.mensajeError = null;
+      if (this.subastaActivaId && !subastas.some((s) => s.id === this.subastaActivaId)) {
+        // La subasta que se estaba mirando se cerro o se adjudico mientras
+        // tanto: volver a la lista es mejor que dejar una pantalla de detalle
+        // sobre algo que ya no existe.
+        this.vista = this.origenVista || 'explorar';
+        this.subastaActivaId = null;
+      }
+    } catch (fallo) {
+      this.estadoDatos = 'error';
+      this.mensajeError = fallo?.message || 'No se pudo cargar el listado de subastas.';
+    }
+    this.iniciarTemporizador();
+    this.render();
+  }
+
+  /**
+   * Ejecuta una operacion contra el servidor y refresca. El mensaje que ve el
+   * jugador sale del campo 'motivo' del problem+json, no del texto libre: ese
+   * texto es para depurar.
+   */
+  async ejecutarContraElServidor(operacion) {
+    if (this.enviando) {return false;}
+    this.enviando = true;
+    this.render();
+    try {
+      await operacion();
+      await this.recargar();
+      return true;
+    } catch (fallo) {
+      this.mensajeError = fallo?.message || 'No se pudo completar la operacion.';
+      alert(this.mensajeError);
+      await this.recargar();
+      return false;
+    } finally {
+      this.enviando = false;
+    }
   }
 
   destruir() {
@@ -495,12 +605,7 @@ export class ControladorSubastas {
   }
 
   volverALista() {
-    const destino = this.origenVista === 'mis-subastas'
-      ? 'mis-subastas'
-      : (this.origenVista === 'cierre-multiple'
-          ? 'cierre-multiple'
-          : (this.origenVista === 'explorar' ? 'explorar' : 'lista'));
-    this.vista = destino;
+    this.vista = destinoDeVuelta(this.origenVista).vista;
     this.subastaActivaId = null;
     this.confirmandoCompra = false;
     this.resultadoCierre = null;
@@ -516,7 +621,7 @@ export class ControladorSubastas {
     const sub = typeof subastaOId === 'string'
       ? this.subastas.find((s) => s.id === subastaOId)
       : subastaOId;
-    if (!sub) return;
+    if (!sub) {return;}
     this.avisoCruzado = {
       id: sub.id,
       nombre: sub.nombre,
@@ -533,7 +638,7 @@ export class ControladorSubastas {
   }
 
   irDesdeAvisoCruzado() {
-    if (!this.avisoCruzado) return;
+    if (!this.avisoCruzado) {return;}
     const id = this.avisoCruzado.id;
     this.avisoCruzado = null;
     this.abrirDetalle(id);
@@ -541,6 +646,20 @@ export class ControladorSubastas {
 
   pujar(monto) {
     const sub = this.getSubastaActiva();
+
+    if (this.api) {
+      // No se revalidan aqui las reglas de negocio. El servidor las aplica
+      // dentro del lock de la subasta, que es donde se decide de verdad quien
+      // gana la carrera; repetirlas en el cliente solo abre la puerta a que
+      // rechace algo que el servidor habria aceptado. Lo unico que se filtra
+      // es lo que ni siquiera es un monto.
+      if (!Number.isFinite(monto) || monto <= 0) {
+        alert('Escribe un monto valido.');
+        return Promise.resolve(false);
+      }
+      return this.ejecutarContraElServidor(() => this.api.pujar(sub.id, monto));
+    }
+
     const saldoLibre = this.getSaldoLibre();
     const validacion = validarPuja(monto, sub, saldoLibre, this.config.incrementoMinimo, sub.esperaSegundos);
 
@@ -588,7 +707,7 @@ export class ControladorSubastas {
               segundosRestantes: sub.segundosRestantes
             };
           }
-          if (this.contenedor) this.render();
+          if (this.contenedor) {this.render();}
         }
       }, 4000);
     }
@@ -599,6 +718,15 @@ export class ControladorSubastas {
 
   configurarAutoPuja(limite) {
     const sub = this.getSubastaActiva();
+
+    if (this.api) {
+      if (!Number.isFinite(limite) || limite <= 0) {
+        alert('Escribe un limite valido.');
+        return Promise.resolve(false);
+      }
+      return this.ejecutarContraElServidor(() => this.api.configurarAutomatica(sub.id, limite));
+    }
+
     const saldoLibre = this.getSaldoLibre();
     const validacion = validarLimiteAuto(limite, sub, saldoLibre, this.config.incrementoMinimo);
 
@@ -614,10 +742,15 @@ export class ControladorSubastas {
 
   desactivarAutoPuja() {
     const sub = this.getSubastaActiva();
-    if (sub) {
-      sub.autoLimite = 0;
-      this.render();
+    if (!sub) {return undefined;}
+
+    if (this.api) {
+      return this.ejecutarContraElServidor(() => this.api.desactivarAutomatica(sub.id));
     }
+
+    sub.autoLimite = 0;
+    this.render();
+    return undefined;
   }
 
   solicitarCompraInmediata() {
@@ -632,6 +765,19 @@ export class ControladorSubastas {
 
   confirmarCompraInmediata() {
     const sub = this.getSubastaActiva();
+
+    if (this.api) {
+      this.confirmandoCompra = false;
+      return this.ejecutarContraElServidor(() => this.api.comprarAhora(sub.id))
+        .then((exito) => {
+          if (exito) {
+            this.resultadoCierre = 'comprada';
+            this.render();
+          }
+          return exito;
+        });
+    }
+
     const saldoLibre = this.getSaldoLibre() + (sub.retenido || 0);
 
     if (saldoLibre < sub.compraInmediata) {
@@ -653,7 +799,7 @@ export class ControladorSubastas {
   }
 
   actualizarTiemposEnDOM() {
-    if (!this.contenedor) return;
+    if (!this.contenedor) {return;}
     const elementosTiempo = this.contenedor.querySelectorAll('[data-tiempo-subasta]');
     elementosTiempo.forEach((el) => {
       const id = el.getAttribute('data-tiempo-subasta');
@@ -670,7 +816,7 @@ export class ControladorSubastas {
   }
 
   render() {
-    if (!this.contenedor) return;
+    if (!this.contenedor) {return;}
 
     if (this.estadoDatos === 'carga') {
       this.contenedor.innerHTML = `
@@ -987,33 +1133,33 @@ export class ControladorSubastas {
         <!-- Medidores Visuales de Topes de Concurrencia -->
         <section class="grid-topes-concurrencia" aria-label="Topes reglamentarios de concurrencia">
           <!-- Tope 1: Subastas Simultáneas -->
-          <div class="tarjeta-tope ${estadoTopes.subastas.topeAlcanzado ? 'tarjeta-tope--critico' : (estadoTopes.subastas.alerta ? 'tarjeta-tope--alerta' : '')}">
+          <div class="tarjeta-tope ${segunTope(estadoTopes.subastas, 'tarjeta-tope--critico', 'tarjeta-tope--alerta', '')}">
             <div class="tope-cabecera">
               <span class="tope-nombre">Subastas en las que participas</span>
-              <span class="tope-cifra cifra" style="color: ${estadoTopes.subastas.topeAlcanzado ? 'var(--error)' : (estadoTopes.subastas.alerta ? 'var(--advertencia)' : 'var(--exito)')}">
+              <span class="tope-cifra cifra" style="color: ${segunTope(estadoTopes.subastas, 'var(--error)', 'var(--advertencia)', 'var(--exito)')}">
                 ${estadoTopes.subastas.actual} de ${estadoTopes.subastas.max}
               </span>
             </div>
             <div class="tope-barra-fondo">
-              <div class="tope-barra-progreso" style="width: ${Math.min(100, estadoTopes.subastas.ratio * 100)}%; background: ${estadoTopes.subastas.topeAlcanzado ? 'var(--error)' : (estadoTopes.subastas.alerta ? 'var(--advertencia)' : 'var(--exito)')};"></div>
+              <div class="tope-barra-progreso" style="width: ${Math.min(100, estadoTopes.subastas.ratio * 100)}%; background: ${segunTope(estadoTopes.subastas, 'var(--error)', 'var(--advertencia)', 'var(--exito)')};"></div>
             </div>
-            <div class="tope-alerta-texto" style="color: ${estadoTopes.subastas.topeAlcanzado ? 'var(--error)' : (estadoTopes.subastas.alerta ? 'var(--advertencia)' : 'var(--texto-3)')}">
+            <div class="tope-alerta-texto" style="color: ${segunTope(estadoTopes.subastas, 'var(--error)', 'var(--advertencia)', 'var(--texto-3)')}">
               ${estadoTopes.subastas.pista}
             </div>
           </div>
 
           <!-- Tope 2: Pujas Activas Ganando -->
-          <div class="tarjeta-tope ${estadoTopes.pujas.topeAlcanzado ? 'tarjeta-tope--critico' : (estadoTopes.pujas.alerta ? 'tarjeta-tope--alerta' : '')}">
+          <div class="tarjeta-tope ${segunTope(estadoTopes.pujas, 'tarjeta-tope--critico', 'tarjeta-tope--alerta', '')}">
             <div class="tope-cabecera">
               <span class="tope-nombre">Pujas tuyas que van ganando</span>
-              <span class="tope-cifra cifra" style="color: ${estadoTopes.pujas.topeAlcanzado ? 'var(--error)' : (estadoTopes.pujas.alerta ? 'var(--advertencia)' : 'var(--exito)')}">
+              <span class="tope-cifra cifra" style="color: ${segunTope(estadoTopes.pujas, 'var(--error)', 'var(--advertencia)', 'var(--exito)')}">
                 ${estadoTopes.pujas.actual} de ${estadoTopes.pujas.max}
               </span>
             </div>
             <div class="tope-barra-fondo">
-              <div class="tope-barra-progreso" style="width: ${Math.min(100, estadoTopes.pujas.ratio * 100)}%; background: ${estadoTopes.pujas.topeAlcanzado ? 'var(--error)' : (estadoTopes.pujas.alerta ? 'var(--advertencia)' : 'var(--exito)')};"></div>
+              <div class="tope-barra-progreso" style="width: ${Math.min(100, estadoTopes.pujas.ratio * 100)}%; background: ${segunTope(estadoTopes.pujas, 'var(--error)', 'var(--advertencia)', 'var(--exito)')};"></div>
             </div>
-            <div class="tope-alerta-texto" style="color: ${estadoTopes.pujas.topeAlcanzado ? 'var(--error)' : (estadoTopes.pujas.alerta ? 'var(--advertencia)' : 'var(--texto-3)')}">
+            <div class="tope-alerta-texto" style="color: ${segunTope(estadoTopes.pujas, 'var(--error)', 'var(--advertencia)', 'var(--texto-3)')}">
               ${estadoTopes.pujas.pista}
             </div>
           </div>
@@ -1215,9 +1361,7 @@ export class ControladorSubastas {
     const otrasConRetenido = subastasOtras.filter((s) => (s.retenido || 0) > 0).length;
     const retenidoEnOtras = subastasOtras.reduce((acc, s) => acc + (s.retenido || 0), 0);
 
-    const textoVolver = this.origenVista === 'mis-subastas'
-      ? '← Volver a mis subastas'
-      : (this.origenVista === 'cierre-multiple' ? '← Volver a cierre múltiple' : '← Volver al listado de subastas');
+    const textoVolver = destinoDeVuelta(this.origenVista).texto;
 
     return `
       <div class="subastas-app vista-detalle">
@@ -1313,8 +1457,8 @@ export class ControladorSubastas {
                         <td class="cifra">${c.actual}</td>
                         <td class="cifra">${c.nuevo}</td>
                         <td>
-                          <span class="badge ${c.delta > 0 ? 'badge-exito' : (c.delta < 0 ? 'badge-error' : 'badge-neutral')}">
-                            ${c.delta > 0 ? `+${c.delta}` : (c.delta === 0 ? 'igual' : c.delta)}
+                          <span class="badge ${segunDelta(c.delta, 'badge-exito', 'badge-error', 'badge-neutral')}">
+                            ${segunDelta(c.delta, `+${c.delta}`, c.delta, 'igual')}
                           </span>
                         </td>
                       </tr>
@@ -1330,7 +1474,7 @@ export class ControladorSubastas {
               <ul class="lista-historial">
                 ${sub.historial.map((p) => `
                   <li class="item-historial ${p.esTu ? 'historial-propio' : ''}">
-                    <span class="historial-postor ${p.esTu ? 'postor-tu' : ''}">${p.esTu ? 'Tú (' + p.apodo + ')' : p.apodo}</span>
+                    <span class="historial-postor ${p.esTu ? 'postor-tu' : ''}">${p.esTu ? `Tú (${  p.apodo  })` : p.apodo}</span>
                     <span class="historial-tipo">${p.tipo}</span>
                     <span class="historial-cuando">${p.cuando}</span>
                     <span class="historial-monto cifra"><strong>${formatearCreditos(p.monto)} cr</strong></span>
@@ -1461,7 +1605,7 @@ export class ControladorSubastas {
   }
 
   generarHtmlToastCruzado() {
-    if (!this.avisoCruzado) return '';
+    if (!this.avisoCruzado) {return '';}
     return `
       <aside class="toast-cruzado-flotante" role="alert" aria-live="polite">
         <div class="toast-cruzado-cabecera">
@@ -1488,10 +1632,10 @@ export class ControladorSubastas {
     this.contenedor.querySelectorAll('.tab-btn[data-tab]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const tab = btn.getAttribute('data-tab');
-        if (tab === 'explorar') this.abrirExplorar();
-        else if (tab === 'mis-subastas') this.abrirMisSubastas();
-        else if (tab === 'detalle') this.abrirDetalle(this.subastaActivaId || this.subastas[0]?.id);
-        else if (tab === 'cierre-multiple') this.abrirCierreMultiple();
+        if (tab === 'explorar') {this.abrirExplorar();}
+        else if (tab === 'mis-subastas') {this.abrirMisSubastas();}
+        else if (tab === 'detalle') {this.abrirDetalle(this.subastaActivaId || this.subastas[0]?.id);}
+        else if (tab === 'cierre-multiple') {this.abrirCierreMultiple();}
       });
     });
 
@@ -1513,14 +1657,14 @@ export class ControladorSubastas {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const id = btn.getAttribute('data-abrir') || btn.closest('[data-id]')?.getAttribute('data-id');
-        if (id) this.abrirDetalle(id);
+        if (id) {this.abrirDetalle(id);}
       });
     });
 
     this.contenedor.querySelectorAll('.tarjeta-subasta, .fila-mi-subasta').forEach((tarj) => {
       tarj.addEventListener('click', () => {
         const id = tarj.getAttribute('data-id');
-        if (id) this.abrirDetalle(id);
+        if (id) {this.abrirDetalle(id);}
       });
     });
 
@@ -1536,7 +1680,7 @@ export class ControladorSubastas {
     this.contenedor.querySelectorAll('.btn-ver-adjudicada').forEach((btn) => {
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-id');
-        if (id) this.abrirDetalle(id, { resultadoCierre: 'adjudicada' });
+        if (id) {this.abrirDetalle(id, { resultadoCierre: 'adjudicada' });}
       });
     });
 
