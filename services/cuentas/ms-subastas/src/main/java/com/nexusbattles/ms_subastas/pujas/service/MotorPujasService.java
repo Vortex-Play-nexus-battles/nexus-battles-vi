@@ -57,6 +57,11 @@ public class MotorPujasService {
 
         subasta.setOfertaVigente(monto);
         subasta.setMejorPostorId(jugadorId);
+        // cantidadPujas es de HU-SUB-011 (Cristian): el listado lo muestra y
+        // permite ordenar por el. Este motor es el unico sitio del servicio que
+        // crea pujas, asi que si no se incrementa aqui el contador se queda en 0
+        // para siempre y "ordenar por pujas" no ordena nada.
+        subasta.setCantidadPujas(subasta.getCantidadPujas() + 1);
 
         // id nulo a proposito: lo genera la base de datos (@GeneratedValue). Si
         // el dominio lo asignara, Spring Data veria una entidad con id y haria
@@ -65,7 +70,18 @@ public class MotorPujasService {
                 EstadoPuja.ACTIVA, clock.instant(), reserva.id().toString());
     }
 
-    public Puja comprarAhora(Subasta subasta, Puja pujaVigente, UUID jugadorId) {
+    /**
+     * @param idempotencyKey clave del cliente (cabecera Idempotency-Key), igual
+     *                       que en {@link #pujar}. Antes se derivaba aqui de
+     *                       (jugador, subasta), que protegia incluso frente a un
+     *                       cliente que reintentara con una clave distinta; el
+     *                       contrato la declara obligatoria, asi que manda la
+     *                       del cliente. El riesgo queda acotado porque tras la
+     *                       primera compra la subasta queda ADJUDICADA y un
+     *                       reintento se corta en SUBASTA_NO_ACTIVA antes de
+     *                       llegar a reservar creditos.
+     */
+    public Puja comprarAhora(Subasta subasta, Puja pujaVigente, UUID jugadorId, String idempotencyKey) {
         if (!subasta.estaActiva()) {
             throw new PujaRechazadaException(PujaRechazadaException.Motivo.SUBASTA_NO_ACTIVA,
                     "La subasta " + subasta.getId() + " no esta activa");
@@ -75,11 +91,11 @@ public class MotorPujasService {
                     "El jugador " + jugadorId + " no puede comprar en su propia subasta");
         }
         if (subasta.getPrecioCompraInmediata() == null) {
-            throw new IllegalStateException("La subasta " + subasta.getId() + " no ofrece compra inmediata");
+            throw new PujaRechazadaException(PujaRechazadaException.Motivo.SIN_COMPRA_INMEDIATA,
+                    "La subasta " + subasta.getId() + " no ofrece compra inmediata");
         }
 
         BigDecimal precio = subasta.getPrecioCompraInmediata();
-        String idempotencyKey = "compra-inmediata:%s:%s".formatted(jugadorId, subasta.getId());
         ReservaCredito reserva = creditoClient.reservar(jugadorId, precio, subasta.getId(), idempotencyKey);
         creditoClient.consumir(reserva.id());
 
@@ -94,6 +110,7 @@ public class MotorPujasService {
 
         subasta.setOfertaVigente(precio);
         subasta.setMejorPostorId(jugadorId);
+        subasta.setCantidadPujas(subasta.getCantidadPujas() + 1);
         subasta.setEstado(EstadoSubasta.ADJUDICADA);
 
         // TODO(Dia 2+): publicar evento SubastaCerrada para que notificaciones

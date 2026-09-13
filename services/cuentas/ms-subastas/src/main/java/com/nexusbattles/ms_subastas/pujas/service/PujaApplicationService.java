@@ -72,7 +72,7 @@ public class PujaApplicationService {
     }
 
     @Transactional
-    public Puja comprarAhora(UUID subastaId, UUID jugadorId) {
+    public Puja comprarAhora(UUID subastaId, UUID jugadorId, String idempotencyKey) {
         Subasta subasta = cargarConLock(subastaId);
         Puja pujaVigente = pujaRepository.findBySubastaIdAndEstado(subastaId, EstadoPuja.ACTIVA).orElse(null);
 
@@ -81,7 +81,7 @@ public class PujaApplicationService {
         // no solo a quien iba ganando.
         List<UUID> postores = pujaRepository.findDistinctJugadorIdBySubastaId(subastaId);
 
-        Puja pujaGanadora = motorPujas.comprarAhora(subasta, pujaVigente, jugadorId);
+        Puja pujaGanadora = motorPujas.comprarAhora(subasta, pujaVigente, jugadorId, idempotencyKey);
 
         // Mismo motivo que en pujar(): la puja vigente debe dejar de ser ACTIVA
         // en la base de datos antes de insertar la ganadora.

@@ -155,7 +155,7 @@ class PujaApplicationServiceTest {
         when(pujaRepository.findBySubastaIdAndEstado(subasta.getId(), EstadoPuja.ACTIVA)).thenReturn(Optional.of(pujaVigente));
         when(pujaRepository.save(any(Puja.class))).thenAnswer(invocacion -> invocacion.getArgument(0));
 
-        Puja ganadora = servicio.comprarAhora(subasta.getId(), comprador);
+        Puja ganadora = servicio.comprarAhora(subasta.getId(), comprador, claveUnica());
 
         assertEquals(EstadoSubasta.ADJUDICADA, subasta.getEstado());
         assertEquals(EstadoPuja.GANADORA, ganadora.getEstado());
@@ -185,7 +185,7 @@ class PujaApplicationServiceTest {
         when(pujaRepository.findDistinctJugadorIdBySubastaId(subasta.getId()))
                 .thenReturn(List.of(postorPrevio, postorAntiguo));
 
-        servicio.comprarAhora(subasta.getId(), comprador);
+        servicio.comprarAhora(subasta.getId(), comprador, claveUnica());
 
         // Incluye al postor antiguo que ya estaba SUPERADA: la historia dice
         // "notificando a quienes hubieran pujado", no solo al que iba ganando.
@@ -199,7 +199,7 @@ class PujaApplicationServiceTest {
         when(subastaRepository.findByIdParaActualizar(inexistente)).thenReturn(Optional.empty());
 
         assertThrows(SubastaNoEncontradaException.class,
-                () -> servicio.comprarAhora(inexistente, UUID.randomUUID()));
+                () -> servicio.comprarAhora(inexistente, UUID.randomUUID(), claveUnica()));
     }
 
     @Test

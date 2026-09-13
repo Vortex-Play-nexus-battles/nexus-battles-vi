@@ -1,5 +1,13 @@
 package com.nexusbattles.ms_subastas.pujas.service;
 
+/**
+ * Rechazo de negocio al participar en una subasta. El {@link Motivo} es un
+ * codigo estable: viaja en el campo {@code motivo} del problem+json para que
+ * la interfaz elija el mensaje sin leer el texto libre, que puede cambiar.
+ *
+ * <p>Los motivos estan declarados en {@code ms-subastas-pujas.yaml}; anadir uno
+ * aqui obliga a anadirlo alli.
+ */
 public class PujaRechazadaException extends RuntimeException {
 
     public enum Motivo {
@@ -10,7 +18,22 @@ public class PujaRechazadaException extends RuntimeException {
         LIMITE_SUBASTAS_ACTIVAS,
         LIMITE_PUJAS_ACTIVAS,
         LIMITE_AUTOMATICO_INALCANZABLE,
-        SALDO_INSUFICIENTE_PARA_LIMITE
+        SALDO_INSUFICIENTE_PARA_LIMITE,
+
+        /**
+         * La subasta se publico sin precio de compra inmediata. Antes era un
+         * IllegalStateException, que por HTTP se habria visto como un 500: es
+         * una situacion legitima del cliente (la interfaz ofrecio el boton
+         * sobre una subasta que no lo admite), no un fallo del servidor.
+         */
+        SIN_COMPRA_INMEDIATA,
+
+        /**
+         * Llego una compra inmediata con {@code confirmado} en false. La
+         * historia exige confirmacion explicita, asi que el servidor la exige
+         * tambien: una interfaz con un bug no debe poder cerrar una compra.
+         */
+        CONFIRMACION_REQUERIDA
     }
 
     private final Motivo motivo;

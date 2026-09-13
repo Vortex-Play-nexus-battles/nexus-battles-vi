@@ -174,7 +174,7 @@ class MotorPujasServiceTest {
         UUID comprador = UUID.randomUUID();
         creditoClient.acreditar(comprador, new BigDecimal("1000"));
 
-        Puja puja = motor.comprarAhora(subasta, null, comprador);
+        Puja puja = motor.comprarAhora(subasta, null, comprador, claveUnica());
 
         assertEquals(EstadoSubasta.ADJUDICADA, subasta.getEstado());
         assertEquals(EstadoPuja.GANADORA, puja.getEstado());
@@ -193,7 +193,7 @@ class MotorPujasServiceTest {
         Puja pujaDelPostor = motor.pujar(subasta, null, postor, new BigDecimal("110"), ContextoParticipacion.sinHistorial(), claveUnica(), TipoPuja.MANUAL);
         assertEquals(new BigDecimal("890"), creditoClient.saldoDisponible(postor));
 
-        motor.comprarAhora(subasta, pujaDelPostor, comprador);
+        motor.comprarAhora(subasta, pujaDelPostor, comprador, claveUnica());
 
         assertEquals(EstadoPuja.SUPERADA, pujaDelPostor.getEstado());
         assertEquals(new BigDecimal("1000"), creditoClient.saldoDisponible(postor),
@@ -206,7 +206,7 @@ class MotorPujasServiceTest {
         creditoClient.acreditar(VENDEDOR, new BigDecimal("1000"));
 
         PujaRechazadaException ex = assertThrows(PujaRechazadaException.class,
-                () -> motor.comprarAhora(subasta, null, VENDEDOR));
+                () -> motor.comprarAhora(subasta, null, VENDEDOR, claveUnica()));
 
         assertEquals(PujaRechazadaException.Motivo.PUJA_PROPIA, ex.getMotivo());
     }
@@ -218,7 +218,13 @@ class MotorPujasServiceTest {
         UUID comprador = UUID.randomUUID();
         creditoClient.acreditar(comprador, new BigDecimal("1000"));
 
-        assertThrows(IllegalStateException.class, () -> motor.comprarAhora(subasta, null, comprador));
+        PujaRechazadaException ex = assertThrows(PujaRechazadaException.class,
+                () -> motor.comprarAhora(subasta, null, comprador, claveUnica()));
+
+        // Antes era IllegalStateException, que por HTTP habria salido como un
+        // 500: la interfaz ofrecio comprar una subasta que no admite compra
+        // inmediata, y eso es un rechazo de negocio, no un fallo del servidor.
+        assertEquals(PujaRechazadaException.Motivo.SIN_COMPRA_INMEDIATA, ex.getMotivo());
     }
 
     @Test
@@ -263,6 +269,43 @@ class MotorPujasServiceTest {
         assertEquals(EstadoPuja.GANADORA, puja.getEstado());
         assertEquals(new BigDecimal("890"), creditoClient.saldoDisponible(postor),
                 "la reserva pasa a debito real: los 110 se cobran de verdad");
+    }
+
+    /**
+     * cantidadPujas alimenta el listado de HU-SUB-011: se muestra en la tarjeta
+     * y es una de las opciones de "ordenar por". Este motor es el unico que
+     * crea pujas en el servicio, asi que si no lo incrementa aqui, el contador
+     * se queda en 0 para siempre y ese orden no ordena nada.
+     */
+    @Test
+    void cadaPujaIncrementaElContadorQueMuestraElListado() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+        UUID primero = UUID.randomUUID();
+        UUID segundo = UUID.randomUUID();
+        creditoClient.acreditar(primero, new BigDecimal("1000"));
+        creditoClient.acreditar(segundo, new BigDecimal("1000"));
+        assertEquals(0, subasta.getCantidadPujas());
+
+        Puja inicial = motor.pujar(subasta, null, primero, new BigDecimal("110"),
+                ContextoParticipacion.sinHistorial(), claveUnica(), TipoPuja.MANUAL);
+        assertEquals(1, subasta.getCantidadPujas());
+
+        motor.pujar(subasta, inicial, segundo, new BigDecimal("125"),
+                ContextoParticipacion.sinHistorial(), claveUnica(), TipoPuja.MANUAL);
+
+        assertEquals(2, subasta.getCantidadPujas());
+    }
+
+    @Test
+    void laCompraInmediataTambienCuentaComoPuja() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+        UUID comprador = UUID.randomUUID();
+        creditoClient.acreditar(comprador, new BigDecimal("1000"));
+
+        motor.comprarAhora(subasta, null, comprador, claveUnica());
+
+        assertEquals(1, subasta.getCantidadPujas(),
+                "la compra inmediata deja una fila en pujas, asi que el contador la refleja");
     }
 
     @Test

@@ -10,14 +10,14 @@ info:
     (HU-SUB-001) y de listado (HU-SUB-011) son de otras historias y no se
     describen aquí.
 
-    PENDIENTE DE DECISIÓN DE EQUIPO: el esquema de autenticación. Se describe
-    como bearer JWT porque es lo que emite ms-identidad hoy, pero el
-    interceptor de ese servicio no se puede importar sin cruzar dominios
-    (lo prohíbe backend-spring.md y lo verifica ArchUnit). Hace falta acordar
-    si se extrae un validador a shared/libs/ o si cada servicio valida por su
-    cuenta. La identidad del jugador se toma SIEMPRE del token, nunca de un
-    encabezado, porque estos endpoints mueven créditos.
-  version: 0.1.0
+    DECISIÓN TOMADA (v0.2.0): cada servicio valida el token por su cuenta.
+    ms-subastas trae su propio ValidadorDeToken, escrito sin dependencias de
+    Spring ni del dominio para poder mudarse a shared/libs/ cuando los tres
+    equipos acuerden esa estructura; importar el interceptor de ms-identidad
+    habría cruzado dominios, cosa que prohíbe backend-spring.md y verifica
+    ArchUnit. La identidad del jugador se toma SIEMPRE del token, nunca de un
+    encabezado ni del cuerpo, porque estos endpoints mueven créditos.
+  version: 0.2.0
 servers:
   - url: http://localhost:8092/api/v1
     description: Spring Boot local (perfil dev)
@@ -52,6 +52,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PujaResponse'
+        '400':
+          $ref: '#/components/responses/SolicitudMalFormada'
         '401':
           $ref: '#/components/responses/NoAutenticado'
         '404':
@@ -87,6 +89,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PujaResponse'
+        '400':
+          $ref: '#/components/responses/SolicitudMalFormada'
         '401':
           $ref: '#/components/responses/NoAutenticado'
         '404':
@@ -120,10 +124,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PujaAutomaticaResponse'
+        '400':
+          $ref: '#/components/responses/SolicitudMalFormada'
         '401':
           $ref: '#/components/responses/NoAutenticado'
         '404':
           $ref: '#/components/responses/SubastaNoEncontrada'
+        '409':
+          $ref: '#/components/responses/PujaRechazada'
         '422':
           $ref: '#/components/responses/PujaRechazada'
     delete:
@@ -134,7 +142,12 @@ paths:
         - $ref: '#/components/parameters/SubastaId'
       responses:
         '204':
-          description: Puja automática desactivada
+          description: >-
+            Puja automática desactivada. Idempotente: si el jugador no tenía
+            ninguna configurada, la respuesta es igualmente 204, porque el
+            estado que pedía el cliente ya se cumple. La fila no se borra, se
+            marca inactiva: es la única evidencia de por qué se emitieron sus
+            pujas.
         '401':
           $ref: '#/components/responses/NoAutenticado'
         '404':
@@ -147,8 +160,15 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: >-
-        Token emitido por ms-identidad. El `sub` identifica al jugador. Esquema
-        pendiente de la decisión de equipo descrita en la cabecera.
+        Token emitido por ms-identidad. El jugador se identifica por el claim
+        `uid` (UUID estable), NO por `sub`: el subject es el apodo, que el
+        usuario puede cambiar desde su perfil y un administrador desde la
+        edición, así que no sirve como clave de nada que mueva créditos.
+
+        Un token sin `uid` es válido para leer pero se rechaza con 401 en estos
+        endpoints: acredita que alguien inició sesión, pero no a quién cobrarle.
+        Ese caso solo aparece con tokens emitidos antes de que ms-identidad
+        incluyera el claim, y se resuelve volviendo a iniciar sesión.
 
   parameters:
     SubastaId:
@@ -280,9 +300,21 @@ components:
             - LIMITE_AUTOMATICO_INALCANZABLE
             - SALDO_INSUFICIENTE_PARA_LIMITE
             - CONFIRMACION_REQUERIDA
+            - SIN_COMPRA_INMEDIATA
             - SALDO_INSUFICIENTE
 
   responses:
+    SolicitudMalFormada:
+      description: >-
+        La petición no cumple el propio contrato: falta la cabecera
+        Idempotency-Key o no tiene entre 8 y 128 caracteres, falta un campo
+        obligatorio del cuerpo, o un valor no tiene el tipo declarado. No lleva
+        `motivo`: no es un rechazo de negocio, es una petición que el servidor
+        no puede ni evaluar.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
     NoAutenticado:
       description: Falta el token o no es válido
       content:
