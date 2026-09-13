@@ -30,4 +30,23 @@ public record MuestraDeLatencia(
     public boolean fallo() {
         return estado >= 500;
     }
+
+    /**
+     * Si la peticion fue de lectura o de escritura (HU-REN-002).
+     *
+     * <p>La restriccion de esa historia lo pide literalmente: «los datos
+     * capturados deben etiquetarse correctamente para diferenciar entre
+     * consultas de lectura y operaciones de escritura». Y tiene sentido
+     * medirlas por separado: un listado que tarda 300 ms es aceptable y una
+     * puja que tarda 300 ms no lo es, porque el jugador esta compitiendo
+     * contra otros por el mismo objeto. Mezclarlas en un solo percentil
+     * esconde justo la que importa.
+     *
+     * <p>Se decide por el metodo HTTP y no por la ruta: es la unica regla que
+     * vale igual para los veinte modulos sin que nadie tenga que mantener una
+     * lista de rutas.
+     */
+    public TipoDeOperacion tipo() {
+        return TipoDeOperacion.deMetodo(metodo);
+    }
 }

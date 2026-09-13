@@ -144,6 +144,54 @@ come ya es un problema demostrable. Acordar un presupuesto más estricto es tare
 de CA-02 están en [`docs/CONSULTAS-CRITICAS.md`](docs/CONSULTAS-CRITICAS.md)** — incluida una
 sospecha de escaneo secuencial en la consulta más frecuente del bloque.
 
+## Carga de subastas y pujas (HU-REN-002)
+
+`GET /api/v1/latencia/informe` trae ahora un bloque `porTipo` con **lecturas y
+escrituras medidas por separado**. Es la restricción literal de la historia, y no es
+cosmética: con 99 listados de 10 ms y una puja de 900, el percentil global sale en 10 ms
+y el informe parece verde. Separado, la escritura sale en 900.
+
+Un listado de 300 ms es aceptable. Una puja de 300 ms no lo es, porque el jugador está
+compitiendo con otros por el mismo objeto.
+
+Se clasifica **por método HTTP** (`GET`/`HEAD` → lectura, `POST`/`PUT`/`PATCH`/`DELETE` →
+escritura) y no por ruta: es la única regla que vale igual en los veinte módulos sin que
+nadie mantenga una lista que envejece a la semana. `OPTIONS` cae en «otra» — el preflight
+de CORS no es tráfico de jugador.
+
+**`ms-subastas` no necesita ningún cambio**: aplica `nexus.spring-conventions`, así que su
+listado y sus pujas quedan instrumentados por la biblioteca compartida.
+
+### ⚠️ CA-02 NO CUMPLIDA — el canal existe, pero nadie lo dispara
+
+Verificado en `develop` tras la entrada de **#330 (`Feat/listado`)**:
+
+| Pieza | Estado |
+|---|---|
+| Canal STOMP sobre WebSocket en `ms-subastas` | ✅ **existe** — `subastas/realtime/WebSocketConfig.java`, broker simple en memoria |
+| Evento `SubastaActualizadaEvent` | ✅ existe |
+| `SubastaRealtimePublisher` | ✅ existe |
+| **Alguien que publique el evento** | ❌ **nadie** |
+| Contrato del canal en `contracts/websocket/` | ❌ **no publicado** |
+
+El javadoc del propio evento lo dice sin rodeos:
+
+> *«PENDIENTE DE COORDINAR: **nadie publica este evento todavía**. Le corresponde a
+> `MotorPujasService` dispararlo después de guardar una puja exitosa, y al job de cierre
+> dispararlo al adjudicar. No se editó código de otro sin coordinar primero.»*
+
+Así que la tubería está montada y **falta una línea**: la llamada al publicador dentro de
+`MotorPujasService` tras persistir la puja. Eso es coordinación **dentro de Cuentas**, no
+una petición nuestra.
+
+Cuando se dispare, medir la propagación es trabajo nuestro y es directo: el canal ya usa
+STOMP, igual que el de salas.
+
+**Hallazgo aparte, y este sí es de plataforma:** ese canal en tiempo real **no tiene
+contrato publicado**. `contracts/websocket/` solo contiene `notificaciones.yaml`. La regla 1
+dice contrato primero, y sin él ningún otro módulo —el nuestro incluido— puede consumirlo
+sin adivinar el destino ni la forma del mensaje.
+
 ## Degradación controlada (HU-DIS-003)
 
 `GET /api/v1/degradacion` dice qué secciones están limitadas por la caída de otro
