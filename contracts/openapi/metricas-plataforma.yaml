@@ -24,11 +24,17 @@ info:
     shared/libs/plataforma-observabilidad, que llega a los veinte modulos desde
     las convenciones de Gradle: ningun servicio copia ni configura el filtro.
 
+    Publica ademas el informe de las consultas a la base de datos (HU-REN-003,
+    RNF-REN-003), recogido por el envoltorio de DataSource de la misma
+    biblioteca: ningun servicio instrumenta sus repositorios a mano.
+
     AVISO sobre el percentil: RNF-REN-001 se evalua en p95 o en p99 y esa
     eleccion la aprueba el Product Owner por escrito (CA-03 de HU-REN-001).
-    Mientras no exista esa aprobacion, /latencia/informe responde 409: la API no
-    elige un percentil por su cuenta. La recoleccion de muestras si esta activa.
-  version: 1.1.0
+    Mientras no exista esa aprobacion, /latencia/informe y /consultas/informe
+    responden 409: la API no elige un percentil por su cuenta. La recoleccion de
+    muestras si esta activa, y /consultas/lentas responde igualmente porque
+    marcar una consulta lenta no depende del percentil.
+  version: 1.2.0
 servers:
   - url: http://localhost:8087/api/v1
     description: Entorno local de desarrollo
@@ -156,6 +162,56 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+
+  /consultas/informe:
+    get:
+      summary: Informe de latencia de las consultas a la base de datos
+      description: >
+        Soporta CA-01 de HU-REN-003: el tiempo de respuesta de las consultas
+        frente al objetivo de latencia. Las muestras las recoge el envoltorio de
+        DataSource de shared/libs/plataforma-observabilidad, asi que cubre las
+        consultas que genera Hibernate, las de Spring Data y las escritas a
+        mano, sin que ningun servicio instrumente sus repositorios.
+
+        La sentencia se reporta con sus marcadores ? y nunca con los valores:
+        agrupa todas las ejecuciones de la misma consulta y evita que datos de
+        jugadores acaben en el informe.
+
+        Un informe sin muestras NO cumple: un servicio cuyas consultas nunca se
+        midieron no ha demostrado nada sobre sus indices.
+      operationId: consultarInformeDeConsultas
+      responses:
+        '200':
+          description: Informe de consultas del servicio
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InformeDeConsultasResponse'
+        '409':
+          description: El Product Owner aun no aprobo el percentil de evaluacion (CA-03 de HU-REN-001)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /consultas/lentas:
+    get:
+      summary: Registro de consultas lentas
+      description: >
+        Soporta CA-03 de HU-REN-003: cuando una consulta supera el umbral
+        acordado queda marcada aqui para que el equipo proceda a optimizarla.
+
+        Esta ruta responde aunque el percentil de HU-REN-001 siga sin acordar:
+        marcar una consulta lenta es comparar contra un umbral, no evaluar un
+        percentil.
+      operationId: consultarConsultasLentas
+      responses:
+        '200':
+          description: Consultas que superaron el umbral, de la mas reciente a la mas vieja
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultasLentasResponse'
 
 components:
   schemas:
@@ -343,6 +399,115 @@ components:
         percentilMs:
           type: integer
           examples: [488]
+
+    InformeDeConsultasResponse:
+      type: object
+      required:
+        - servicio
+        - muestras
+        - percentil
+        - objetivoMs
+        - percentilMs
+        - maximoMs
+        - umbralLentaMs
+        - cuantasLentas
+        - cumple
+        - sinDatos
+        - sentenciasMasLentas
+      properties:
+        servicio:
+          type: string
+          examples: ['metricas-plataforma']
+        muestras:
+          type: integer
+          description: Cuantas consultas entraron en el calculo
+          examples: [8421]
+        percentil:
+          type: string
+          examples: ['p95']
+        objetivoMs:
+          type: integer
+          examples: [500]
+        percentilMs:
+          type: integer
+          examples: [7]
+        maximoMs:
+          type: integer
+          examples: [812]
+        umbralLentaMs:
+          type: integer
+          description: >
+            A partir de aqui una consulta se marca como lenta. Por omision es el
+            objetivo de RNF-REN-001: no se inventa un presupuesto propio de base
+            de datos, porque ningun requisito lo fija.
+          examples: [500]
+        cuantasLentas:
+          type: integer
+          description: Total de consultas que superaron el umbral, no solo las retenidas
+          examples: [3]
+        cumple:
+          type: boolean
+          description: Falso tambien cuando no hay muestras
+        sinDatos:
+          type: boolean
+        sentenciasMasLentas:
+          type: array
+          items:
+            $ref: '#/components/schemas/SentenciaMedida'
+
+    SentenciaMedida:
+      type: object
+      required: [sentencia, muestras, percentilMs, maximoMs]
+      properties:
+        sentencia:
+          type: string
+          description: SQL con marcadores, normalizado a una linea y acotado a 500 caracteres
+          examples: ['select t.id from terminos_prohibidos t where upper(t.termino) = upper(?)']
+        muestras:
+          type: integer
+          examples: [5120]
+        percentilMs:
+          type: integer
+          examples: [412]
+        maximoMs:
+          type: integer
+          examples: [812]
+
+    ConsultasLentasResponse:
+      type: object
+      required: [servicio, umbralLentaMs, total, consultas]
+      properties:
+        servicio:
+          type: string
+        umbralLentaMs:
+          type: integer
+          examples: [500]
+        total:
+          type: integer
+          description: Cuantas se han visto en total, aunque solo se retengan las ultimas
+          examples: [37]
+        consultas:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConsultaLenta'
+
+    ConsultaLenta:
+      type: object
+      required: [sentencia, duracionMs, ejecutadaEn, fallo]
+      properties:
+        sentencia:
+          type: string
+        duracionMs:
+          type: integer
+          examples: [812]
+        ejecutadaEn:
+          type: string
+          format: date-time
+        fallo:
+          type: boolean
+          description: >
+            La consulta termino en excepcion. Un tiempo de espera agotado es la
+            consulta lenta por excelencia, por eso tambien se registra.
 
     ProblemDetail:
       type: object

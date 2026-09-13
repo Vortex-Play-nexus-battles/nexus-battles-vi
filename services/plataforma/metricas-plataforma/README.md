@@ -23,6 +23,8 @@ Contrato: [`contracts/openapi/metricas-plataforma.yaml`](../../../contracts/open
 | `GET` | `/api/v1/disponibilidad/informe?desde=&hasta=` | Tiempo disponible e interrupciones del periodo (CP-02). Sin fechas, últimos 30 días |
 | `GET` | `/api/v1/latencia/informe` | Informe de latencia en JSON (HU-REN-001 CA-02) |
 | `GET` | `/api/v1/latencia/informe/texto` | El mismo informe redactado, para pegarlo como evidencia |
+| `GET` | `/api/v1/consultas/informe` | Latencia de las consultas a la base de datos (HU-REN-003 CA-01) |
+| `GET` | `/api/v1/consultas/lentas` | Registro de consultas lentas (HU-REN-003 CA-03) |
 
 ## Cómo se mide (DEC-01)
 
@@ -110,6 +112,36 @@ El registro vive **en memoria y por proceso**: cada servicio reporta lo suyo y
 al reiniciar pierde sus muestras. Todavía no hay agregación entre servicios ni
 entre réplicas — es la misma decisión abierta que la de disponibilidad
 (SCRUM-1141, SCRUM-1144), y no se inventa aquí.
+
+## Búsquedas indexadas (HU-REN-003)
+
+Las consultas a la base de datos se miden envolviendo el `DataSource`, no pidiéndole a cada
+equipo que instrumente sus repositorios. Así la medida cubre lo que genera Hibernate, lo de
+Spring Data y lo escrito a mano, y un repositorio nuevo queda medido sin que nadie se
+acuerde de añadir una línea.
+
+La sentencia se guarda **con sus marcadores `?`, nunca con los valores**: agrupa todas las
+ejecuciones de la misma consulta —sin eso, cada búsqueda de un jugador distinto sería una
+consulta distinta y no habría percentil— y evita que datos de jugadores acaben en el
+informe.
+
+| Variable | Por omisión | Para qué |
+|---|---|---|
+| `LATENCIA_CONSULTAS_ACTIVA` | `true` | Válvula de escape por servicio |
+| `LATENCIA_CONSULTAS_UMBRAL_MS` | *(el objetivo, 500)* | A partir de aquí una consulta se marca como lenta |
+| `LATENCIA_CONSULTAS_CAPACIDAD` | `10000` | Ventana general |
+| `LATENCIA_CONSULTAS_CAPACIDAD_LENTAS` | `200` | Ventana de lentas, separada a propósito |
+
+Dos ventanas y no una: con una sola, una racha de consultas rápidas expulsaría justo las
+lentas, que son las únicas que hay que optimizar.
+
+El umbral no trae un presupuesto propio de base de datos porque **ningún requisito lo fija**.
+Cae en los 500 ms de RNF-REN-001, que son extremo a extremo: una consulta que sola se los
+come ya es un problema demostrable. Acordar un presupuesto más estricto es tarea del equipo.
+
+**Las tres búsquedas críticas elegidas, el estado de sus índices y cómo obtener la evidencia
+de CA-02 están en [`docs/CONSULTAS-CRITICAS.md`](docs/CONSULTAS-CRITICAS.md)** — incluida una
+sospecha de escaneo secuencial en la consulta más frecuente del bloque.
 
 ## Pruebas
 

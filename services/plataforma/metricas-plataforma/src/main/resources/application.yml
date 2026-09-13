@@ -23,6 +23,21 @@ latencia:
   capacidad: ${LATENCIA_CAPACIDAD:10000}
   operaciones-en-informe: ${LATENCIA_OPERACIONES_EN_INFORME:5}
 
+  # HU-REN-003 — medicion de las consultas a la base de datos.
+  #
+  # umbral-lenta-ms vacio significa «usa objetivo-ms». No se inventa aqui un
+  # presupuesto propio de base de datos: los 500 ms de RNF-REN-001 son extremo a
+  # extremo —red, validacion, negocio, consulta y serializacion—, asi que una
+  # consulta que sola se los come ya es un problema demostrable. Un presupuesto
+  # mas estricto solo para la base de datos no esta acordado en ningun
+  # requisito; acordarlo es tarea del equipo, no de este archivo.
+  consultas:
+    activa: ${LATENCIA_CONSULTAS_ACTIVA:true}
+    umbral-lenta-ms: ${LATENCIA_CONSULTAS_UMBRAL_MS:}
+    capacidad: ${LATENCIA_CONSULTAS_CAPACIDAD:10000}
+    capacidad-lentas: ${LATENCIA_CONSULTAS_CAPACIDAD_LENTAS:200}
+    sentencias-en-informe: ${LATENCIA_CONSULTAS_SENTENCIAS_EN_INFORME:10}
+
 # HU-DIS-001 — monitoreo y registro de disponibilidad de los servicios del bloque.
 #
 # Regla 10 de plataforma: ningun valor real se versiona. Las URL salen de

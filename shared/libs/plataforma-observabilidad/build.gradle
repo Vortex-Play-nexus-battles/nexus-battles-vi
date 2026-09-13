@@ -53,6 +53,10 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-test'
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testImplementation 'org.assertj:assertj-core'
+
+    // Para las pruebas del envoltorio de DataSource: JDBC son interfaces de
+    // cincuenta metodos y escribir dobles a mano solo aportaria ruido.
+    testImplementation 'org.mockito:mockito-core'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
