@@ -105,4 +105,14 @@ class ManejadorDeErroresPujasTest {
         assertNull(problema.getProperties() == null ? null : problema.getProperties().get("motivo"),
                 "un fallo interno no lleva motivo de negocio: la interfaz no puede hacer nada con el");
     }
+
+    @Test
+    void unFalloDeInventarioDaUn500ConFormatoProblemDetail() {
+        ProblemDetail problema = manejador.manejarFalloDeInventario(
+                new com.nexusbattles.ms_subastas.subastas.port.InventarioClientException("Fallo al contactar inventario"), peticion);
+
+        assertEquals(500, problema.getStatus());
+        assertEquals("https://nexusbattles.upb.edu.co/errors/error-de-inventario", problema.getType().toString());
+        assertEquals("Error en el inventario", problema.getTitle());
+    }
 }

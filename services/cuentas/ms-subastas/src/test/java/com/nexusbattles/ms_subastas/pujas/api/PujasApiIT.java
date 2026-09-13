@@ -6,8 +6,11 @@ import com.nexusbattles.ms_subastas.pujas.creditos.CreditoClient;
 import com.nexusbattles.ms_subastas.pujas.creditos.CreditoClientFake;
 import com.nexusbattles.ms_subastas.pujas.model.PujaAutomatica;
 import com.nexusbattles.ms_subastas.pujas.repository.PujaAutomaticaRepository;
+import com.nexusbattles.ms_subastas.pujas.service.PujaApplicationService;
 import com.nexusbattles.ms_subastas.subastas.model.EstadoSubasta;
 import com.nexusbattles.ms_subastas.subastas.model.Subasta;
+import com.nexusbattles.ms_subastas.subastas.port.InventarioClient;
+import com.nexusbattles.ms_subastas.subastas.port.InventarioClientFake;
 import com.nexusbattles.ms_subastas.subastas.repository.SubastaRepository;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -36,6 +39,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -99,6 +103,12 @@ class PujasApiIT {
 
     @Autowired
     private CreditoClient creditos;
+
+    @Autowired
+    private InventarioClient inventario;
+
+    @Autowired
+    private PujaApplicationService pujaApplicationService;
 
     private final HttpClient cliente = HttpClient.newHttpClient();
     private final ObjectMapper mapper = new ObjectMapper();
@@ -389,6 +399,61 @@ class PujasApiIT {
 
         Subasta recargada = subastas.findById(subasta.getId()).orElseThrow();
         assertEquals(EstadoSubasta.ADJUDICADA, recargada.getEstado());
+
+        if (inventario instanceof InventarioClientFake fake) {
+            var elemento = fake.buscar(subasta.getElementoInventarioId());
+            assertTrue(elemento.isPresent());
+            assertEquals(comprador, elemento.get().propietarioId(),
+                    "El item debio transferirse formalmente al nuevo dueno");
+            assertFalse(elemento.get().enUso());
+        }
+    }
+
+    @Test
+    void laCompraInmediataConFalloEnInventarioDevuelve500YNoDebitaCreditos() throws Exception {
+        UUID comprador = jugadorConSaldo("1000");
+        Subasta subasta = subastaActiva(UUID.randomUUID(), "100", "500");
+
+        if (inventario instanceof InventarioClientFake fake) {
+            fake.simularFallo(true, "Inventario no disponible");
+        }
+
+        try {
+            HttpResponse<String> respuesta = enviar("POST", "/subastas/" + subasta.getId() + "/compra-inmediata",
+                    "{\"confirmado\":true}", tokenDe(comprador), claveNueva());
+
+            assertEquals(500, respuesta.statusCode(), respuesta.body());
+            Subasta recargada = subastas.findById(subasta.getId()).orElseThrow();
+            assertEquals(EstadoSubasta.ACTIVA, recargada.getEstado());
+            assertEquals(new BigDecimal("1000"), creditos.saldoDisponible(comprador));
+        } finally {
+            if (inventario instanceof InventarioClientFake fake) {
+                fake.simularFallo(false);
+            }
+        }
+    }
+
+    @Test
+    void elCierrePorVencimientoTransfiereElProductoAlMejorPostor() throws Exception {
+        UUID postor = jugadorConSaldo("1000");
+        Subasta subasta = subastaActiva(UUID.randomUUID(), "100", "500");
+
+        HttpResponse<String> respuesta = enviar("POST", "/subastas/" + subasta.getId() + "/pujas",
+                "{\"monto\":\"150\"}", tokenDe(postor), claveNueva());
+        assertEquals(201, respuesta.statusCode());
+
+        pujaApplicationService.cerrarPorVencimiento(subasta.getId());
+
+        Subasta recargada = subastas.findById(subasta.getId()).orElseThrow();
+        assertEquals(EstadoSubasta.ADJUDICADA, recargada.getEstado());
+
+        if (inventario instanceof InventarioClientFake fake) {
+            var elemento = fake.buscar(subasta.getElementoInventarioId());
+            assertTrue(elemento.isPresent());
+            assertEquals(postor, elemento.get().propietarioId(),
+                    "El item debio transferirse formalmente al ganador de la subasta vencida");
+            assertFalse(elemento.get().enUso());
+        }
     }
 
     /**

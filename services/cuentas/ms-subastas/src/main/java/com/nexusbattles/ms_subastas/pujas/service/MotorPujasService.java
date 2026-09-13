@@ -7,7 +7,8 @@ import com.nexusbattles.ms_subastas.pujas.model.Puja;
 import com.nexusbattles.ms_subastas.pujas.model.TipoPuja;
 import com.nexusbattles.ms_subastas.subastas.model.EstadoSubasta;
 import com.nexusbattles.ms_subastas.subastas.model.Subasta;
-import lombok.RequiredArgsConstructor;
+import com.nexusbattles.ms_subastas.subastas.port.InventarioClient;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -29,12 +30,27 @@ import java.util.UUID;
  * serializaria pujas de subastas distintas sin necesidad.
  */
 @Service
-@RequiredArgsConstructor
 public class MotorPujasService {
 
     private final CreditoClient creditoClient;
+    private final InventarioClient inventarioClient;
     private final Clock clock;
     private final ParametrosPuja parametros;
+
+    public MotorPujasService(CreditoClient creditoClient, Clock clock, ParametrosPuja parametros) {
+        this(creditoClient, null, clock, parametros);
+    }
+
+    @Autowired
+    public MotorPujasService(CreditoClient creditoClient,
+                             @Autowired(required = false) InventarioClient inventarioClient,
+                             Clock clock,
+                             ParametrosPuja parametros) {
+        this.creditoClient = creditoClient;
+        this.inventarioClient = inventarioClient;
+        this.clock = clock;
+        this.parametros = parametros;
+    }
 
     /**
      * @param idempotencyKey clave que debe venir del cliente (cabecera
@@ -97,7 +113,19 @@ public class MotorPujasService {
 
         BigDecimal precio = subasta.getPrecioCompraInmediata();
         ReservaCredito reserva = creditoClient.reservar(jugadorId, precio, subasta.getId(), idempotencyKey);
-        creditoClient.consumir(reserva.id());
+
+        try {
+            if (subasta.getElementoInventarioId() != null && inventarioClient != null) {
+                inventarioClient.transferirProducto(subasta.getElementoInventarioId(), jugadorId, subasta.getId(), idempotencyKey);
+            }
+            creditoClient.consumir(reserva.id());
+        } catch (RuntimeException e) {
+            try {
+                creditoClient.liberar(reserva.id());
+            } catch (RuntimeException ignored) {
+            }
+            throw e;
+        }
 
         // El postor vigente queda superado por la compra inmediata, asi que sus
         // creditos se restituyen igual que en una puja normal. Solo hay una
@@ -113,22 +141,16 @@ public class MotorPujasService {
         subasta.setCantidadPujas(subasta.getCantidadPujas() + 1);
         subasta.setEstado(EstadoSubasta.ADJUDICADA);
 
-        // TODO(Dia 2+): publicar evento SubastaCerrada para que notificaciones
-        // avise a los demas postores e inventario desbloquee/transfiera el
-        // producto. Ninguno de los dos microservicios esta en el Sprint 2.
         return new Puja(null, subasta.getId(), jugadorId, precio, TipoPuja.MANUAL,
                 EstadoPuja.GANADORA, clock.instant(), reserva.id().toString());
     }
 
     /**
-     * Cierra una subasta vencida. Si llego con una puja vigente, esa puja gana
-     * y su reserva se convierte en debito; si nadie pujo, la subasta cierra sin
-     * adjudicacion. Cubre el criterio 3 de HU-SUB-004: los creditos reservados
-     * se restituyen si la subasta cierra sin adjudicacion.
-     *
-     * Quien dispara este cierre (un job programado) es una costura con
-     * HU-SUB-001, pendiente de acordar con Edwin: el contador de la subasta lo
-     * inicia el. La restitucion de creditos, en cambio, es de esta HU.
+     * Cierra una subasta vencida. Si llego con una puja vigente, esa puja gana,
+     * el ítem se transfiere formalmente al ganador en el inventario y su reserva
+     * de créditos se convierte en débito; si nadie pujó, la subasta cierra sin
+     * adjudicación y se libera la reserva del producto para que el vendedor lo recupere.
+     * Cubre el criterio 3 de HU-SUB-004 y la transferencia formal de propiedad.
      */
     public void cerrarPorVencimiento(Subasta subasta, Puja pujaVigente) {
         if (!subasta.estaActiva()) {
@@ -138,7 +160,14 @@ public class MotorPujasService {
 
         if (pujaVigente == null) {
             subasta.setEstado(EstadoSubasta.SIN_ADJUDICACION);
+            if (subasta.getElementoInventarioId() != null && inventarioClient != null) {
+                inventarioClient.liberarReserva(subasta.getElementoInventarioId(), subasta.getId(), "cierre-" + subasta.getId());
+            }
             return;
+        }
+
+        if (subasta.getElementoInventarioId() != null && inventarioClient != null) {
+            inventarioClient.transferirProducto(subasta.getElementoInventarioId(), pujaVigente.getJugadorId(), subasta.getId(), "cierre-" + subasta.getId());
         }
 
         creditoClient.consumir(UUID.fromString(pujaVigente.getReservaCreditoId()));

@@ -6,6 +6,8 @@ import com.nexusbattles.ms_subastas.pujas.model.Puja;
 import com.nexusbattles.ms_subastas.pujas.model.TipoPuja;
 import com.nexusbattles.ms_subastas.subastas.model.EstadoSubasta;
 import com.nexusbattles.ms_subastas.subastas.model.Subasta;
+import com.nexusbattles.ms_subastas.subastas.port.InventarioClient;
+import com.nexusbattles.ms_subastas.subastas.port.InventarioClientException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -15,6 +17,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 /**
  * Cubre las 5 reglas de HU-SUB-004: superar oferta + incremento minimo,
@@ -35,6 +38,8 @@ class MotorPujasServiceTest {
     private CreditoClientFake creditoClient;
     private ParametrosPuja parametros;
     private MotorPujasService motor;
+    private InventarioClient inventarioClient;
+    private MotorPujasService motorConInventario;
 
     @BeforeEach
     void setUp() {
@@ -42,6 +47,8 @@ class MotorPujasServiceTest {
         creditoClient = new CreditoClientFake();
         parametros = new ParametrosPuja();
         motor = new MotorPujasService(creditoClient, clock, parametros);
+        inventarioClient = mock(InventarioClient.class);
+        motorConInventario = new MotorPujasService(creditoClient, inventarioClient, clock, parametros);
     }
 
     private Subasta nuevaSubasta(BigDecimal ofertaVigente, BigDecimal incrementoMinimo) {
@@ -317,5 +324,89 @@ class MotorPujasServiceTest {
                 () -> motor.cerrarPorVencimiento(subasta, null));
 
         assertEquals(PujaRechazadaException.Motivo.SUBASTA_NO_ACTIVA, ex.getMotivo());
+    }
+
+    @Test
+    void comprarAhoraTransfiereElItemAlCompradorYConsumeCreditos() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+        subasta.setElementoInventarioId("elem-compra-1");
+        UUID comprador = UUID.randomUUID();
+        creditoClient.acreditar(comprador, new BigDecimal("1000"));
+        String clave = claveUnica();
+
+        Puja puja = motorConInventario.comprarAhora(subasta, null, comprador, clave);
+
+        assertEquals(EstadoPuja.GANADORA, puja.getEstado());
+        assertEquals(EstadoSubasta.ADJUDICADA, subasta.getEstado());
+        assertEquals(comprador, subasta.getMejorPostorId());
+
+        verify(inventarioClient).transferirProducto("elem-compra-1", comprador, subasta.getId(), clave);
+        assertEquals(new BigDecimal("500"), creditoClient.saldoDisponible(comprador));
+    }
+
+    @Test
+    void comprarAhoraLiberaReservaDeCreditoSiFallaTransferenciaDeItem() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+        subasta.setElementoInventarioId("elem-compra-fail");
+        UUID comprador = UUID.randomUUID();
+        creditoClient.acreditar(comprador, new BigDecimal("1000"));
+        String clave = claveUnica();
+
+        doThrow(new InventarioClientException("Inventario fuera de linea"))
+                .when(inventarioClient).transferirProducto(eq("elem-compra-fail"), eq(comprador), eq(subasta.getId()), eq(clave));
+
+        assertThrows(InventarioClientException.class, () ->
+                motorConInventario.comprarAhora(subasta, null, comprador, clave));
+
+        assertEquals(EstadoSubasta.ACTIVA, subasta.getEstado());
+        // Se le restituyeron los creditos: el saldo disponible sigue siendo 1000
+        assertEquals(new BigDecimal("1000"), creditoClient.saldoDisponible(comprador));
+    }
+
+    @Test
+    void cerrarPorVencimientoConGanadorTransfiereElItemAlGanador() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+        subasta.setElementoInventarioId("elem-vencida-1");
+        UUID ganador = UUID.randomUUID();
+        creditoClient.acreditar(ganador, new BigDecimal("1000"));
+        Puja pujaVigente = motorConInventario.pujar(subasta, null, ganador, new BigDecimal("150"),
+                ContextoParticipacion.sinHistorial(), claveUnica(), TipoPuja.MANUAL);
+
+        motorConInventario.cerrarPorVencimiento(subasta, pujaVigente);
+
+        assertEquals(EstadoSubasta.ADJUDICADA, subasta.getEstado());
+        assertEquals(EstadoPuja.GANADORA, pujaVigente.getEstado());
+        verify(inventarioClient).transferirProducto("elem-vencida-1", ganador, subasta.getId(), "cierre-" + subasta.getId());
+        assertEquals(new BigDecimal("850"), creditoClient.saldoDisponible(ganador));
+    }
+
+    @Test
+    void cerrarPorVencimientoConGanadorNoConsumeCreditosSiFallaTransferencia() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+        subasta.setElementoInventarioId("elem-vencida-fail");
+        UUID ganador = UUID.randomUUID();
+        creditoClient.acreditar(ganador, new BigDecimal("1000"));
+        Puja pujaVigente = motorConInventario.pujar(subasta, null, ganador, new BigDecimal("150"),
+                ContextoParticipacion.sinHistorial(), claveUnica(), TipoPuja.MANUAL);
+
+        doThrow(new InventarioClientException("Fallo transferencia"))
+                .when(inventarioClient).transferirProducto(eq("elem-vencida-fail"), eq(ganador), eq(subasta.getId()), any());
+
+        assertThrows(InventarioClientException.class, () ->
+                motorConInventario.cerrarPorVencimiento(subasta, pujaVigente));
+
+        assertEquals(EstadoSubasta.ACTIVA, subasta.getEstado());
+        assertEquals(EstadoPuja.ACTIVA, pujaVigente.getEstado());
+    }
+
+    @Test
+    void cerrarPorVencimientoSinOfertasLiberaReservaDeInventario() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+        subasta.setElementoInventarioId("elem-sin-ofertas");
+
+        motorConInventario.cerrarPorVencimiento(subasta, null);
+
+        assertEquals(EstadoSubasta.SIN_ADJUDICACION, subasta.getEstado());
+        verify(inventarioClient).liberarReserva("elem-sin-ofertas", subasta.getId(), "cierre-" + subasta.getId());
     }
 }

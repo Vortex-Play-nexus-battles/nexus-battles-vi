@@ -4,6 +4,7 @@ import com.nexusbattles.ms_subastas.pujas.creditos.CreditoClientException;
 import com.nexusbattles.ms_subastas.pujas.service.PujaRechazadaException;
 import com.nexusbattles.ms_subastas.pujas.service.SubastaNoEncontradaException;
 import com.nexusbattles.ms_subastas.seguridad.TokenInvalidoException;
+import com.nexusbattles.ms_subastas.subastas.port.InventarioClientException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -100,6 +101,14 @@ public class ManejadorDeErroresPujas {
         return problema(HttpStatus.INTERNAL_SERVER_ERROR, "error-de-creditos",
                 "Error al mover creditos",
                 "No se pudo completar la operacion de creditos. Intentalo de nuevo en un momento.", peticion);
+    }
+
+    @ExceptionHandler(InventarioClientException.class)
+    public ProblemDetail manejarFalloDeInventario(InventarioClientException ex, HttpServletRequest peticion) {
+        log.error("Error en ms-inventario: {}", ex.getMessage(), ex);
+        return problema(HttpStatus.INTERNAL_SERVER_ERROR, "error-de-inventario",
+                "Error en el inventario",
+                "No se pudo completar la transferencia del producto. Intentalo de nuevo en un momento.", peticion);
     }
 
     private ProblemDetail problema(HttpStatus estado, String tipo, String titulo,

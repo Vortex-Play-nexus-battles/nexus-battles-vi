@@ -62,11 +62,18 @@ cd frontend/app-web && npm install && npm run dev   # http://localhost:8080
 
 Arranca con el doble en memoria de creditos (`app.finanzas.modo=fake`) y lo advierte en el log: **ningun credito se mueve de verdad**. Cada jugador aparece con 5000 creditos ficticios (`app.finanzas.saldo-inicial-doble`), porque sin ms-finanzas no hay ningun sitio desde donde acreditar y con saldo cero ninguna puja pasaria.
 
+## Transferencia y entrega de productos (HU-SUB-001 / HU-SUB-004)
+
+Resuelto el dolor prioritario #1: la operacion `transferirProducto` quedo definida en el puerto `InventarioClient` e implementada con:
+- `InventarioClientHttp`: cliente REST hacia `ms-inventario` (`POST /api/v1/inventario/elementos/{id}/transferencias`).
+- `InventarioClientFake`: doble configurable en memoria (`app.inventario.modo=fake`) que simula la custodia del producto, actualiza el nuevo propietario y soporta simulacion de fallos.
+- Integracion en el flujo de compra inmediata (`MotorPujasService.comprarAhora`): transfiere el producto al comprador; si falla, se libera la reserva de creditos y no se consumen fondos.
+- Integracion en el flujo de adjudicacion por vencimiento (`CierreDeSubastasVencidasJob` / `MotorPujasService.cerrarPorVencimiento`): transfiere el producto al mejor postor cuando hay ofertas ganadoras; y libera la reserva si la subasta cierra sin adjudicacion.
+
 ## Pendiente
 
 Por orden de lo que mas duele:
 
-- **El producto no cambia de dueno.** Se cobra y no se entrega: `InventarioClient` (puerto de Edwin, HU-SUB-001) tiene `buscar`, `reservar` y `liberarReserva`, y ninguna operacion de transferencia. Hay que acordarla con el.
 - **`CreditoClientHttp` real.** `services/cuentas/ms-finanzas/` solo tiene un README: el servicio no existe. Cuando exista y publique contrato, el doble se genera desde ahi (la regla pide generarlo, no escribirlo a mano) y `app.finanzas.modo` pasa a `http`.
 - **`esMaestroDeJuego` devuelve siempre `false`.** El token no trae ese dato y ms-identidad no tiene ese rol. `false` es el valor seguro porque el Maestro de Juego esta exento de la comision de publicacion. Falta acordar de donde sale.
 - **El saldo del jugador no se muestra de verdad** en la pantalla: sale del valor de ejemplo, porque no hay endpoint que lo dé.
