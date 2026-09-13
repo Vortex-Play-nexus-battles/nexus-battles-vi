@@ -60,7 +60,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
                 "app.finanzas.modo=prueba",
                 "app.jwt.clave-secreta=" + PujasApiIT.CLAVE_DE_FIRMA,
                 "app.pujas.emision-automatica-intervalo-ms=3600000",
-                "app.subastas.cierre-intervalo-ms=3600000"
+                "app.subastas.cierre-intervalo-ms=3600000",
+                // El drenador intentaria entregar los avisos a un modulo de
+                // notificaciones que aqui no existe: llenaria el log de avisos
+                // de conexion rechazada sin aportar nada a estas pruebas.
+                "app.notificaciones.drenaje-intervalo-ms=3600000"
         })
 @Testcontainers(disabledWithoutDocker = true)
 class PujasApiIT {
