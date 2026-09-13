@@ -43,8 +43,12 @@ export function canalDesdeUrl(busqueda) {
 
 /** Codigo HTTP -> variante del componente Aviso (tabla 4 del mapeo). */
 export function tonoPara(estado) {
-  if (estado >= 500) return 'error';
-  if (estado === 404) return 'info';
+  if (estado >= 500) {
+    return 'error';
+  }
+  if (estado === 404) {
+    return 'info';
+  }
   return 'advertencia';
 }
 
@@ -129,7 +133,10 @@ function urlDelCanal() {
  * @param {HTMLElement} raiz contenedor con [data-zona=mensajes|aviso|conexion] y el form
  * @param {{canal: {idSala?: string}, token: string|null, conectar?: Function, url?: string}} opciones
  */
-export async function montarChat(raiz, { canal, token, conectar = conectarChat, url = urlDelCanal() }) {
+export async function montarChat(
+  raiz,
+  { canal, token, conectar = conectarChat, url = urlDelCanal() },
+) {
   const lista = raiz.querySelector('[data-zona="mensajes"]');
   const zonaAviso = raiz.querySelector('[data-zona="aviso"]');
   const indicador = raiz.querySelector('[data-zona="conexion"]');
@@ -155,7 +162,11 @@ export async function montarChat(raiz, { canal, token, conectar = conectarChat, 
   } catch (error) {
     marcarConexion(indicador, 'sin-conexion');
     boton.disabled = true;
-    pintarAviso(zonaAviso, { tono: 'error', titulo: 'No hay conexion con el chat', detalle: error.message });
+    pintarAviso(zonaAviso, {
+      tono: 'error',
+      titulo: 'No hay conexion con el chat',
+      detalle: error.message,
+    });
     return null;
   }
   marcarConexion(indicador, 'estable');
@@ -172,7 +183,11 @@ export async function montarChat(raiz, { canal, token, conectar = conectarChat, 
   cliente.suscribir(destinos.vivo, agregar);
   cliente.suscribir(COLA_DE_ERRORES, (problema) => {
     const error = new ErrorDeCanal(problema);
-    pintarAviso(zonaAviso, { tono: tonoPara(error.estado), titulo: error.titulo, detalle: error.detalle });
+    pintarAviso(zonaAviso, {
+      tono: tonoPara(error.estado),
+      titulo: error.titulo,
+      detalle: error.detalle,
+    });
   });
   cliente.alCerrar = () => {
     marcarConexion(indicador, 'sin-conexion');
@@ -182,7 +197,9 @@ export async function montarChat(raiz, { canal, token, conectar = conectarChat, 
   formulario.addEventListener('submit', (evento) => {
     evento.preventDefault();
     const texto = formulario.elements.texto.value.trim();
-    if (!texto) return;
+    if (!texto) {
+      return;
+    }
     zonaAviso.hidden = true;
     zonaAviso.innerHTML = '';
     cliente.enviar(destinos.envio, { texto, logro: leerLogro(formulario) });

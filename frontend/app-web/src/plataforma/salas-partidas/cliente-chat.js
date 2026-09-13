@@ -17,24 +17,47 @@
  * `estado`, nunca por el texto (MAPEO-ERRORES.md, regla de oro).
  */
 
-const NUL = '\u0000';
+/**
+ * El octeto NUL que cierra todo frame STOMP 1.2.
+ *
+ * Se construye con `String.fromCharCode(0)` y no escribiendo el caracter a
+ * mano, para que no quede ningun caracter de control dentro del codigo
+ * fuente: un NUL literal es invisible en el editor y en el diff, y hay
+ * herramientas que lo mutilan al copiarlo o al normalizar finales de linea.
+ * El valor resultante es exactamente el mismo.
+ */
+const NUL = String.fromCharCode(0);
 
 /** Arma un frame STOMP 1.2. */
 export function armarFrame(comando, cabeceras = {}, cuerpo = '') {
-  const lineas = [comando, ...Object.entries(cabeceras).map(([clave, valor]) => `${clave}:${valor}`)];
+  const lineas = [
+    comando,
+    ...Object.entries(cabeceras).map(([clave, valor]) => `${clave}:${valor}`),
+  ];
   return `${lineas.join('\n')}\n\n${cuerpo}${NUL}`;
 }
 
 /** Lee un frame STOMP. Devuelve null para los latidos (frames vacios). */
 export function leerFrame(texto) {
-  const limpio = String(texto).replace(/\u0000$/, '');
-  if (limpio.trim() === '') return null;
+  // El NUL final se quita comparando el ultimo caracter, no con una expresion
+  // regular: meter un caracter de control dentro de un regex es justo lo que
+  // avisa `no-control-regex`, y aqui no aporta nada. En STOMP el NUL solo
+  // puede estar al final del frame, asi que `endsWith` hace exactamente lo
+  // mismo. Ademas reutiliza la constante que usa `armarFrame`, con lo que las
+  // dos mitades del protocolo quedan atadas al mismo valor.
+  const bruto = String(texto);
+  const limpio = bruto.endsWith(NUL) ? bruto.slice(0, -1) : bruto;
+  if (limpio.trim() === '') {
+    return null;
+  }
   const [cabecera, ...resto] = limpio.split('\n\n');
   const [comando, ...lineas] = cabecera.split('\n');
   const cabeceras = {};
   for (const linea of lineas) {
     const separador = linea.indexOf(':');
-    if (separador > 0) cabeceras[linea.slice(0, separador)] = linea.slice(separador + 1);
+    if (separador > 0) {
+      cabeceras[linea.slice(0, separador)] = linea.slice(separador + 1);
+    }
   }
   return { comando, cabeceras, cuerpo: resto.join('\n\n') };
 }
@@ -101,7 +124,9 @@ export function conectarChat({ url, token, WebSocketImpl = globalThis.WebSocket 
 
     socket.onmessage = (evento) => {
       const frame = leerFrame(evento.data);
-      if (!frame) return;
+      if (!frame) {
+        return;
+      }
       if (frame.comando === 'CONNECTED') {
         conectado = true;
         resolver(cliente);
@@ -109,19 +134,27 @@ export function conectarChat({ url, token, WebSocketImpl = globalThis.WebSocket 
       }
       if (frame.comando === 'MESSAGE') {
         const alRecibir = suscripciones.get(frame.cabeceras.subscription);
-        if (alRecibir) alRecibir(frame.cuerpo ? JSON.parse(frame.cuerpo) : null, frame.cabeceras);
+        if (alRecibir) {
+          alRecibir(frame.cuerpo ? JSON.parse(frame.cuerpo) : null, frame.cabeceras);
+        }
         return;
       }
       if (frame.comando === 'ERROR') {
         const error = new Error(frame.cabeceras.message || 'El canal rechazo la conexion.');
-        if (!conectado) rechazar(error);
-        else if (cliente.alError) cliente.alError(error);
+        if (!conectado) {
+          rechazar(error);
+        } else if (cliente.alError) {
+          cliente.alError(error);
+        }
       }
     };
 
     socket.onclose = () => {
-      if (!conectado) rechazar(new Error('No se pudo abrir el canal del chat.'));
-      else if (cliente.alCerrar) cliente.alCerrar();
+      if (!conectado) {
+        rechazar(new Error('No se pudo abrir el canal del chat.'));
+      } else if (cliente.alCerrar) {
+        cliente.alCerrar();
+      }
     };
   });
 }
