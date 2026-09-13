@@ -21,6 +21,22 @@ dependencies {
     // todas las pujas si no se corta rápido.
     implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
 
+    // HU-SUB-011: contador en vivo del listado, vía STOMP sobre WebSocket
+    // (backend-spring.md: "Tiempo real: Spring WebSocket + STOMP").
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
+
+    // MappingJackson2MessageConverter (para serializar SubastaResumenResponse
+    // sobre STOMP) necesita jackson-databind explicito en este modulo -- no
+    // se resuelve solo como transitiva de starter-websocket, aunque si esta
+    // disponible para el controlador REST via la convencion compartida.
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+
+    // Idem para Instant/LocalDate/etc: Jackson no los soporta por defecto
+    // sin este modulo, y el ObjectMapper armado a mano para el cliente
+    // STOMP de prueba no hereda la configuracion automatica que si aplica
+    // Spring MVC a las respuestas REST normales.
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
+
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
     testCompileOnly 'org.projectlombok:lombok'

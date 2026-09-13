@@ -1,0 +1,637 @@
+openapi: 3.1.0
+info:
+  title: Nexus Battles VI - Metricas de plataforma (M16A) - disponibilidad y latencia
+  description: >
+    Monitoreo y registro de disponibilidad de los servicios del bloque
+    (HU-DIS-001, RNF-DIS-001). Publica dos cosas: el estado en vivo de cada
+    servicio y el informe de un periodo, que es el que se anexa al informe de
+    avance.
+
+    Alcance de la medida (DEC-01, adoptada provisionalmente por el Product
+    Owner y sujeta a confirmacion del Cliente): umbral del 99,95 % mensual,
+    medido SOLO sobre los servicios del bloque, excluyendo las ventanas de
+    mantenimiento programado y las caidas atribuibles a los servicios de los
+    equipos socios. Es una meta de diseno verificable, no un acuerdo de nivel
+    de servicio: la infraestructura opera sobre cuotas gratuitas y el proveedor
+    no ofrece SLA.
+
+    Como se mide: este servicio consulta periodicamente el endpoint de salud de
+    Actuator de cada servicio del bloque (regla 3 de plataforma, ya presente en
+    los veinte modulos). No hace falta instrumentar nada en el servicio medido.
+
+    Publica ademas el informe de latencia extremo a extremo (HU-REN-001,
+    RNF-REN-001). Las muestras las recoge el filtro de
+    shared/libs/plataforma-observabilidad, que llega a los veinte modulos desde
+    las convenciones de Gradle: ningun servicio copia ni configura el filtro.
+
+    Publica ademas el informe de las consultas a la base de datos (HU-REN-003,
+    RNF-REN-003), recogido por el envoltorio de DataSource de la misma
+    biblioteca: ningun servicio instrumenta sus repositorios a mano.
+
+    AVISO sobre el percentil: RNF-REN-001 se evalua en p95 o en p99 y esa
+    eleccion la aprueba el Product Owner por escrito (CA-03 de HU-REN-001).
+    Mientras no exista esa aprobacion, /latencia/informe y /consultas/informe
+    responden 409: la API no elige un percentil por su cuenta. La recoleccion de
+    muestras si esta activa, y /consultas/lentas responde igualmente porque
+    marcar una consulta lenta no depende del percentil.
+    Publica ademas que secciones estan limitadas por la caida de otro servicio
+    (HU-DIS-003, RNF-DIS-003). El problem detail de una seccion limitada lo
+    construye shared/libs/plataforma-resiliencia y es identico en los veinte
+    modulos: type https://nexusbattles.local/errores/seccion-no-disponible,
+    status 503 y la propiedad 'seccion'. Su tratamiento en la interfaz esta en
+    shared/ui-kit/MAPEO-ERRORES.md, §5.5 y §7.
+    HU-REN-002 anade el desglose por tipo de operacion —lectura y escritura—
+    en /latencia/informe, que es la restriccion que esa historia exige
+    textualmente. El panel que lo consume esta en
+    frontend/app-web/src/plataforma/metricas-plataforma/.
+
+    OJO: HU-REN-002 NO define un umbral propio. El objetivoMs que se publica
+    es el de RNF-REN-001 y se presenta como referencia configurada, nunca
+    como el limite especifico de esa historia.
+  version: 1.4.0
+servers:
+  - url: http://localhost:8087/api/v1
+    description: Entorno local de desarrollo
+
+paths:
+  /disponibilidad:
+    get:
+      summary: Estado de disponibilidad en vivo de los servicios del bloque
+      description: >
+        Soporta CP-01: dados los servicios desplegados, cuando se revisa el
+        monitoreo, el 100 % reporta su disponibilidad. Devuelve la ultima
+        comprobacion conocida de cada servicio declarado en la configuracion.
+      operationId: consultarDisponibilidad
+      responses:
+        '200':
+          description: Estado de cada servicio del bloque
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadoResponse'
+
+  /disponibilidad/informe:
+    get:
+      summary: Informe de disponibilidad de un periodo
+      description: >
+        Soporta CP-02: dado un periodo de medicion, el informe incluye el
+        tiempo disponible y las interrupciones registradas. Sin parametros
+        devuelve los ultimos treinta dias, que es el periodo mensual de DEC-01.
+
+        Cuando la disponibilidad del bloque queda por debajo del umbral, ademas
+        de reportarlo aqui se dispara la alerta de CP-03.
+      operationId: consultarInformeDeDisponibilidad
+      parameters:
+        - name: desde
+          in: query
+          required: false
+          description: Inicio del periodo, inclusive. Si falta, se usan los ultimos 30 dias.
+          schema:
+            type: string
+            format: date-time
+          examples:
+            semana:
+              value: '2026-09-01T00:00:00Z'
+        - name: hasta
+          in: query
+          required: false
+          description: Fin del periodo, exclusivo. Cierra las interrupciones abiertas.
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Informe del periodo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InformeResponse'
+        '400':
+          description: El periodo pedido es invalido, por ejemplo con el fin antes del inicio
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /latencia/informe:
+    get:
+      summary: Informe de latencia extremo a extremo
+      description: >
+        Soporta CA-02 de HU-REN-001: exporta las metricas recolectadas para el
+        informe tecnico de rendimiento. Devuelve cuantas peticiones se midieron,
+        el percentil acordado, la peticion mas lenta y las operaciones peores,
+        que es donde hay que mirar cuando el objetivo no se cumple.
+
+        Un informe sin muestras NO cumple: no medir no es lo mismo que cumplir,
+        y darlo por bueno dejaria pasar un servicio que nunca se instrumento.
+        Por eso se devuelve sinDatos ademas de cumple.
+      operationId: consultarInformeDeLatencia
+      responses:
+        '200':
+          description: Informe de latencia del servicio
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InformeDeLatenciaResponse'
+        '409':
+          description: >
+            El Product Owner aun no aprobo el percentil de evaluacion (CA-03).
+            No es un fallo del servicio: la medicion sigue activa y el cuerpo
+            informa cuantas muestras lleva acumuladas. Se resuelve configurando
+            LATENCIA_PERCENTIL, sin recompilar.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /latencia/informe/texto:
+    get:
+      summary: El mismo informe, ya redactado, para anexarlo como evidencia
+      description: >
+        Misma informacion que /latencia/informe en texto plano, pensado para
+        pegarse tal cual en el informe de avance. Es una ruta aparte y no una
+        negociacion por Accept: con las dos representaciones en la misma ruta,
+        una peticion sin cabecera Accept dejaria a la eleccion sin criterio.
+      operationId: consultarInformeDeLatenciaEnTexto
+      responses:
+        '200':
+          description: Informe redactado
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                cumple:
+                  value: |
+                    Informe de latencia extremo a extremo - RNF-REN-001
+                    Servicio: metricas-plataforma
+                    Objetivo: p95 <= 500 ms
+                    Peticiones medidas: 1284
+                    p95: 312 ms
+                    Maximo: 1904 ms
+                    Resultado: CUMPLE
+        '409':
+          description: Falta la aprobacion del percentil (CA-03)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /consultas/informe:
+    get:
+      summary: Informe de latencia de las consultas a la base de datos
+      description: >
+        Soporta CA-01 de HU-REN-003: el tiempo de respuesta de las consultas
+        frente al objetivo de latencia. Las muestras las recoge el envoltorio de
+        DataSource de shared/libs/plataforma-observabilidad, asi que cubre las
+        consultas que genera Hibernate, las de Spring Data y las escritas a
+        mano, sin que ningun servicio instrumente sus repositorios.
+
+        La sentencia se reporta con sus marcadores ? y nunca con los valores:
+        agrupa todas las ejecuciones de la misma consulta y evita que datos de
+        jugadores acaben en el informe.
+
+        Un informe sin muestras NO cumple: un servicio cuyas consultas nunca se
+        midieron no ha demostrado nada sobre sus indices.
+      operationId: consultarInformeDeConsultas
+      responses:
+        '200':
+          description: Informe de consultas del servicio
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InformeDeConsultasResponse'
+        '409':
+          description: El Product Owner aun no aprobo el percentil de evaluacion (CA-03 de HU-REN-001)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /consultas/lentas:
+    get:
+      summary: Registro de consultas lentas
+      description: >
+        Soporta CA-03 de HU-REN-003: cuando una consulta supera el umbral
+        acordado queda marcada aqui para que el equipo proceda a optimizarla.
+
+        Esta ruta responde aunque el percentil de HU-REN-001 siga sin acordar:
+        marcar una consulta lenta es comparar contra un umbral, no evaluar un
+        percentil.
+      operationId: consultarConsultasLentas
+      responses:
+        '200':
+          description: Consultas que superaron el umbral, de la mas reciente a la mas vieja
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultasLentasResponse'
+
+  /degradacion:
+    get:
+      summary: Que secciones estan limitadas ahora mismo
+      description: >
+        Soporta CP-03 de HU-DIS-003 con un dato y no con una opinion: si el
+        registro dice que solo una dependencia esta degradada, el resto de los
+        modulos esta respondiendo con normalidad.
+
+        Que esta ruta responda 200 mientras hay una seccion caida es, en si
+        mismo, la evidencia de CA-01: el servicio sigue en pie y lo esta
+        contando. Por eso nunca devuelve un 5xx por haber degradaciones.
+
+        Ojo con leer operativoPorCompleto al reves: que haya una seccion
+        limitada NO significa que el servicio este caido, sino justo lo
+        contrario.
+      operationId: consultarDegradacion
+      responses:
+        '200':
+          description: Estado de degradacion del servicio
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DegradacionResponse'
+
+components:
+  schemas:
+    EstadoResponse:
+      type: object
+      required: [servicios]
+      properties:
+        servicios:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServicioResponse'
+
+    ServicioResponse:
+      type: object
+      required: [servicio, estado, comprobadoEn]
+      properties:
+        servicio:
+          type: string
+          description: Nombre logico del servicio, tal como lo declara la configuracion
+          examples: ['salas-partidas']
+        estado:
+          type: string
+          enum: [DISPONIBLE, INDISPONIBLE]
+        comprobadoEn:
+          type: string
+          format: date-time
+          description: Momento de la ultima comprobacion
+        detalle:
+          type: string
+          description: Motivo cuando el servicio no responde; vacio cuando si
+          examples: ['connection refused']
+
+    InformeResponse:
+      type: object
+      required:
+        - desde
+        - hasta
+        - periodoMinutos
+        - umbral
+        - porcentajeDelBloque
+        - cumpleElUmbral
+        - servicios
+      properties:
+        desde:
+          type: string
+          format: date-time
+        hasta:
+          type: string
+          format: date-time
+        periodoMinutos:
+          type: integer
+          description: Duracion total del periodo medido
+          examples: [10080]
+        umbral:
+          type: number
+          description: Minimo acordado en DEC-01
+          examples: [99.95]
+        porcentajeDelBloque:
+          type: number
+          description: >
+            Disponibilidad del bloque, que es la del PEOR servicio y no el
+            promedio. Si un servicio del bloque esta caido el jugador no puede
+            jugar; promediarlo con los que si respondian maquillaria la cifra.
+          examples: [99.92]
+        cumpleElUmbral:
+          type: boolean
+        servicios:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineaDeServicio'
+
+    LineaDeServicio:
+      type: object
+      required:
+        - servicio
+        - disponibleMinutos
+        - indisponibleMinutos
+        - porcentaje
+        - cumple
+        - interrupciones
+      properties:
+        servicio:
+          type: string
+        disponibleMinutos:
+          type: integer
+          examples: [10072]
+        indisponibleMinutos:
+          type: integer
+          description: Ya descontado el mantenimiento programado (DEC-01)
+          examples: [8]
+        porcentaje:
+          type: number
+          description: Disponibilidad con dos decimales
+          examples: [99.92]
+        cumple:
+          type: boolean
+        interrupciones:
+          type: array
+          items:
+            $ref: '#/components/schemas/Interrupcion'
+
+    Interrupcion:
+      type: object
+      required: [inicio]
+      properties:
+        inicio:
+          type: string
+          format: date-time
+        fin:
+          type: [string, 'null']
+          format: date-time
+          description: Ausente mientras el servicio siga caido
+        detalle:
+          type: string
+          examples: ['connection refused']
+
+    InformeDeLatenciaResponse:
+      type: object
+      required:
+        - servicio
+        - muestras
+        - percentil
+        - objetivoMs
+        - percentilMs
+        - maximoMs
+        - cumple
+        - sinDatos
+        - operacionesMasLentas
+      properties:
+        servicio:
+          type: string
+          description: Modulo que produjo las muestras
+          examples: ['metricas-plataforma']
+        muestras:
+          type: integer
+          description: Cuantas peticiones entraron en el calculo
+          examples: [1284]
+        percentil:
+          type: string
+          description: Percentil de evaluacion vigente, el aprobado por el Product Owner
+          examples: ['p95']
+        objetivoMs:
+          type: integer
+          description: Los 500 ms de RNF-REN-001
+          examples: [500]
+        percentilMs:
+          type: integer
+          description: >
+            Valor del percentil, por rango mas cercano y sin interpolar: siempre
+            corresponde a una peticion que de verdad ocurrio.
+          examples: [312]
+        maximoMs:
+          type: integer
+          description: >
+            La peticion mas lenta medida. Se reporta junto al percentil porque
+            una lenta aislada no mueve el percentil pero si importa.
+          examples: [1904]
+        cumple:
+          type: boolean
+          description: Falso tambien cuando no hay muestras
+        sinDatos:
+          type: boolean
+          description: El servicio no ha atendido peticiones desde el ultimo arranque
+        porTipo:
+          type: array
+          description: >
+            HU-REN-002: lecturas y escrituras medidas por separado. La
+            restriccion de esa historia lo exige textualmente.
+
+            Solo aparecen los tipos que tienen muestras. Una fila
+            «escritura: 0 muestras, 0 ms» invita a leer el cero como «va
+            rapidisimo» cuando lo que pasa es que nadie ha escrito nada.
+          items:
+            $ref: '#/components/schemas/LatenciaPorTipo'
+        operacionesMasLentas:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperacionDeLatencia'
+
+    LatenciaPorTipo:
+      type: object
+      required: [tipo, muestras, percentilMs, maximoMs]
+      properties:
+        tipo:
+          type: string
+          enum: [lectura, escritura, otra]
+          description: >
+            Se decide por el metodo HTTP: GET y HEAD son lectura; POST, PUT,
+            PATCH y DELETE son escritura. OPTIONS y TRACE caen en «otra»
+            porque el preflight de CORS no es trafico de jugador y contarlo
+            como lectura bajaria artificialmente el percentil de los listados.
+
+            Se clasifica por metodo y no por ruta porque es la unica regla que
+            vale igual en los veinte modulos sin mantener una lista de rutas.
+          examples: ['escritura']
+        muestras:
+          type: integer
+          examples: [412]
+        percentilMs:
+          type: integer
+          description: >
+            Percentil de ese tipo. Separarlo del global importa: un listado de
+            300 ms es aceptable y una puja de 300 ms no lo es, porque el
+            jugador esta compitiendo con otros por el mismo objeto.
+          examples: [488]
+        maximoMs:
+          type: integer
+          examples: [1904]
+
+    OperacionDeLatencia:
+      type: object
+      required: [metodo, ruta, muestras, percentilMs]
+      properties:
+        metodo:
+          type: string
+          examples: ['POST']
+        ruta:
+          type: string
+          description: >
+            Plantilla de la ruta, no la URI concreta. Con la URI cada sala seria
+            una operacion distinta y no habria percentil que calcular.
+          examples: ['/api/v1/salas/{id}']
+        muestras:
+          type: integer
+          examples: [412]
+        percentilMs:
+          type: integer
+          examples: [488]
+
+    InformeDeConsultasResponse:
+      type: object
+      required:
+        - servicio
+        - muestras
+        - percentil
+        - objetivoMs
+        - percentilMs
+        - maximoMs
+        - umbralLentaMs
+        - cuantasLentas
+        - cumple
+        - sinDatos
+        - sentenciasMasLentas
+      properties:
+        servicio:
+          type: string
+          examples: ['metricas-plataforma']
+        muestras:
+          type: integer
+          description: Cuantas consultas entraron en el calculo
+          examples: [8421]
+        percentil:
+          type: string
+          examples: ['p95']
+        objetivoMs:
+          type: integer
+          examples: [500]
+        percentilMs:
+          type: integer
+          examples: [7]
+        maximoMs:
+          type: integer
+          examples: [812]
+        umbralLentaMs:
+          type: integer
+          description: >
+            A partir de aqui una consulta se marca como lenta. Por omision es el
+            objetivo de RNF-REN-001: no se inventa un presupuesto propio de base
+            de datos, porque ningun requisito lo fija.
+          examples: [500]
+        cuantasLentas:
+          type: integer
+          description: Total de consultas que superaron el umbral, no solo las retenidas
+          examples: [3]
+        cumple:
+          type: boolean
+          description: Falso tambien cuando no hay muestras
+        sinDatos:
+          type: boolean
+        sentenciasMasLentas:
+          type: array
+          items:
+            $ref: '#/components/schemas/SentenciaMedida'
+
+    SentenciaMedida:
+      type: object
+      required: [sentencia, muestras, percentilMs, maximoMs]
+      properties:
+        sentencia:
+          type: string
+          description: SQL con marcadores, normalizado a una linea y acotado a 500 caracteres
+          examples: ['select t.id from terminos_prohibidos t where upper(t.termino) = upper(?)']
+        muestras:
+          type: integer
+          examples: [5120]
+        percentilMs:
+          type: integer
+          examples: [412]
+        maximoMs:
+          type: integer
+          examples: [812]
+
+    ConsultasLentasResponse:
+      type: object
+      required: [servicio, umbralLentaMs, total, consultas]
+      properties:
+        servicio:
+          type: string
+        umbralLentaMs:
+          type: integer
+          examples: [500]
+        total:
+          type: integer
+          description: Cuantas se han visto en total, aunque solo se retengan las ultimas
+          examples: [37]
+        consultas:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConsultaLenta'
+
+    ConsultaLenta:
+      type: object
+      required: [sentencia, duracionMs, ejecutadaEn, fallo]
+      properties:
+        sentencia:
+          type: string
+        duracionMs:
+          type: integer
+          examples: [812]
+        ejecutadaEn:
+          type: string
+          format: date-time
+        fallo:
+          type: boolean
+          description: >
+            La consulta termino en excepcion. Un tiempo de espera agotado es la
+            consulta lenta por excelencia, por eso tambien se registra.
+
+    DegradacionResponse:
+      type: object
+      required: [operativoPorCompleto, seccionesLimitadas]
+      properties:
+        operativoPorCompleto:
+          type: boolean
+          description: True cuando no hay ninguna seccion limitada
+        seccionesLimitadas:
+          type: array
+          items:
+            $ref: '#/components/schemas/SeccionLimitada'
+
+    SeccionLimitada:
+      type: object
+      required: [dependencia, seccion, desde]
+      properties:
+        dependencia:
+          type: string
+          description: Nombre interno del servicio que no responde. No se muestra al jugador
+          examples: ['inventario']
+        seccion:
+          type: string
+          description: >
+            Que parte de la interfaz queda limitada. Es lo que permite al
+            frontend decir QUE funcion no esta disponible; sin este dato solo
+            podria decir «algo fallo».
+          examples: ['Inventario']
+        desde:
+          type: string
+          format: date-time
+          description: Cuando se abrio el circuito
+
+    ProblemDetail:
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string

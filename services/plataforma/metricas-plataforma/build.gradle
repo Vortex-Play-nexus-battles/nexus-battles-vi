@@ -1,3 +1,14 @@
 plugins {
     id 'nexus.spring-conventions'
 }
+
+dependencies {
+    // HU-DIS-003: este modulo publica el estado de degradacion del bloque.
+    //
+    // Se declara aqui y no en las convenciones a proposito: un corta circuitos
+    // solo hace falta donde hay una llamada saliente a otro servicio, asi que
+    // repartirlo a los veinte modulos meteria un jar que la mayoria no usaria.
+    // La instrumentacion de latencia si va en las convenciones porque su
+    // criterio de aceptacion exige que este en todos.
+    implementation project(':shared:libs:plataforma-resiliencia')
+}

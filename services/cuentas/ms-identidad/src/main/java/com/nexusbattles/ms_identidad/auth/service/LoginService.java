@@ -127,9 +127,12 @@ public class LoginService {
         auditLog.info("LOGIN_EXITOSO email={} ip={}", datos.getEmail(), direccionIp);
 
         // Token JWT firmado, incluyendo la versión vigente (HU-RBAC-003) —
-        // reemplaza la confianza ciega en X-User-Role.
+        // reemplaza la confianza ciega en X-User-Role. El publicId viaja como
+        // claim `uid` para que otros servicios referencien al usuario sin
+        // depender del apodo, que es mutable.
         String token = jwtService.generarToken(
-            usuario.getApodo(), usuario.getRol().getNombre(), usuario.getVersionToken());
+            usuario.getApodo(), usuario.getRol().getNombre(), usuario.getVersionToken(),
+            usuario.getPublicId());
 
         return new LoginResponse(
             usuario.getId(),
