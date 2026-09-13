@@ -1,5 +1,5 @@
 // --- CONFIGURACIÓN ---
-const API_BASE_URL = '/api/v1/ecommerce';
+API_BASE_URL = '/api/v1';
 const USER_ID = 'usr_test_123'; // Simulación del ID que provee ms-identidad
 
 // Configuración genérica para los headers requeridos
