@@ -94,4 +94,52 @@ class PlantillaCorreoServiceTest {
                 .contains("contraseña")
                 .doesNotContain("�");
     }
+
+    // ----- HU-COR-002: plantilla de confirmacion de cuenta -----
+
+    @Test
+    void laConfirmacionDeCuentaVaSobreLaPlantillaCorporativa() {
+        // CP-01 de #24: "el correo llega con el codigo legible y aplicando el
+        // diseno de la plantilla corporativa oficial".
+        String html = service.renderizar("email/confirmacion-cuenta",
+                Map.of("apodo", "ElGuerrero", "codigo", "734201", "minutosVigencia", 15));
+
+        assertThat(html)
+                .contains("THE NEXUS BATTLES VI")
+                .contains("src=\"cid:logo-nexus\"")
+                .contains("instagram.com/thenexusbattles");
+    }
+
+    @Test
+    void laConfirmacionDeCuentaMuestraElCodigoLaVigenciaYElApodo() {
+        String html = service.renderizar("email/confirmacion-cuenta",
+                Map.of("apodo", "ElGuerrero", "codigo", "734201", "minutosVigencia", 15));
+
+        assertThat(html)
+                .contains("Confirma tu cuenta")
+                .contains("ElGuerrero")
+                .contains("734201")
+                .contains("15</strong> minutos")
+                .as("debe decir que se puede pedir uno nuevo y que el anterior deja de servir (CA-03)")
+                .contains("pide uno nuevo")
+                // El valor de muestra de la celda del codigo (">000000</td>") debe
+                // quedar sustituido. No se busca "000000" a secas: el layout
+                // corporativo lleva "background:#000000" en su CSS.
+                .doesNotContain(">000000</td>")
+                .doesNotContain("�");
+    }
+
+    @Test
+    void laConfirmacionDeCuentaNoDejaValoresDeEjemploSiFaltaUnaVariable() {
+        // Si ms-identidad mandara el codigo vacio, la plantilla no debe rellenar
+        // con el "000000" de muestra: quedaria un correo que parece valido.
+        // (El "#000000" del CSS del layout corporativo no cuenta: es un color.)
+        String html = service.renderizar("email/confirmacion-cuenta",
+                Map.of("apodo", "ElGuerrero", "codigo", "", "minutosVigencia", 15));
+
+        assertThat(html)
+                .doesNotContain(">000000</td>")
+                .as("la celda del codigo queda vacia, no con el valor de muestra")
+                .contains("padding:20px 16px;\"></td>");
+    }
 }
