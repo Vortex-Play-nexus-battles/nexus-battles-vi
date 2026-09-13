@@ -162,27 +162,35 @@ de CORS no es tráfico de jugador.
 **`ms-subastas` no necesita ningún cambio**: aplica `nexus.spring-conventions`, así que su
 listado y sus pujas quedan instrumentados por la biblioteca compartida.
 
-### ⚠️ CA-02 NO CUMPLIDA — la propagación de puja no existe
+### ⚠️ CA-02 NO CUMPLIDA — el canal existe, pero nadie lo dispara
 
-No se mide la latencia de propagación de una puja porque **no hay propagación**. Verificado
-en `develop`:
+Verificado en `develop` tras la entrada de **#330 (`Feat/listado`)**:
 
 | Pieza | Estado |
 |---|---|
-| `NotificacionOutbox` | existe, **sin drenador** |
-| `TipoNotificacion` | solo cierre por compra inmediata y límite automático |
-| Tipo `NUEVA_PUJA` | **no existe** |
-| WebSocket / STOMP / SSE en `ms-subastas` | **no existe** |
-| Consumidor real | **no existe** |
+| Canal STOMP sobre WebSocket en `ms-subastas` | ✅ **existe** — `subastas/realtime/WebSocketConfig.java`, broker simple en memoria |
+| Evento `SubastaActualizadaEvent` | ✅ existe |
+| `SubastaRealtimePublisher` | ✅ existe |
+| **Alguien que publique el evento** | ❌ **nadie** |
+| Contrato del canal en `contracts/websocket/` | ❌ **no publicado** |
 
-El javadoc del propio outbox lo dice: *«No incluye el drenador a propósito: entregar a
-donde nadie escucha todavía sería código sin forma de verificarse.»*
+El javadoc del propio evento lo dice sin rodeos:
 
-Faltan, en orden: **evento `NUEVA_PUJA`** → **drenador del outbox** → **canal de
-propagación** → **consumidor**. El consumidor sería `notificaciones`, que es nuestro: esto
-no es una petición a otro equipo, es trabajo conjunto por acordar.
+> *«PENDIENTE DE COORDINAR: **nadie publica este evento todavía**. Le corresponde a
+> `MotorPujasService` dispararlo después de guardar una puja exitosa, y al job de cierre
+> dispararlo al adjudicar. No se editó código de otro sin coordinar primero.»*
 
-Medirlo con dobles daría un número inventado, así que no se hace.
+Así que la tubería está montada y **falta una línea**: la llamada al publicador dentro de
+`MotorPujasService` tras persistir la puja. Eso es coordinación **dentro de Cuentas**, no
+una petición nuestra.
+
+Cuando se dispare, medir la propagación es trabajo nuestro y es directo: el canal ya usa
+STOMP, igual que el de salas.
+
+**Hallazgo aparte, y este sí es de plataforma:** ese canal en tiempo real **no tiene
+contrato publicado**. `contracts/websocket/` solo contiene `notificaciones.yaml`. La regla 1
+dice contrato primero, y sin él ningún otro módulo —el nuestro incluido— puede consumirlo
+sin adivinar el destino ni la forma del mensaje.
 
 ## Degradación controlada (HU-DIS-003)
 
