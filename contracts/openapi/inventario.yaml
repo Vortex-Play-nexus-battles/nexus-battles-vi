@@ -23,7 +23,9 @@ paths:
         HU-INV-001. El tamano de pagina es fijo en dieciseis porque el criterio
         de aceptacion exige ese numero de productos en la vista de referencia
         de 1360 x 768. La identidad viaja en la cabecera y nunca en la ruta:
-        un jugador no puede consultar el inventario de otro.
+        un jugador no puede consultar el inventario de otro. HU-INV-010 evalua
+        la disponibilidad desde el bloqueo persistido: si subastas no responde
+        o no envia un aviso de cierre, el producto permanece no disponible.
       operationId: consultarInventarioPaginado
       parameters:
         - name: pagina

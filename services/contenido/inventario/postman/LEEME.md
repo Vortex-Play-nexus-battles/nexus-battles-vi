@@ -59,6 +59,7 @@ Contra otro puerto: `--env-var baseUrl=http://localhost:8082`.
 | HU-INV-010 | Bloqueo y liberacion por subasta | Reserva → 200; queda no disponible; aviso ajeno → 409; cierre/cancelacion → 200 y vuelve a estar disponible |
 | HU-INV-010 | No se vende dos veces | Repetir la misma reserva → 200; reservar para otra subasta → 409 |
 | HU-INV-010 | Operaciones bloqueadas | Modificar y eliminar el producto reservado → 409 "Producto no disponible" |
+| HU-INV-010 | Falla conservadora | Sin aviso del servicio de subastas, una nueva consulta conserva `disponible: false` y el mismo `subastaId` |
 
 Cuando cambie el contrato (`contracts/openapi/inventario.yaml`), actualizar
 aqui la peticion afectada en el mismo cambio.

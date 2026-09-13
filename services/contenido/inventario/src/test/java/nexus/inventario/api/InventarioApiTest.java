@@ -301,6 +301,29 @@ class InventarioApiTest {
     }
 
     @Test
+    @DisplayName("sin respuesta de subastas la disponibilidad conserva el bloqueo registrado")
+    void conservarBloqueoSiSubastasNoResponde() throws Exception {
+        ElementoInventario creado = gestion.crear(
+                "jugador-A", "producto-1", TipoElementoInventario.ITEM, "Reliquia");
+        String subastaId = "89d9040d-52e0-44ae-8d8c-8ec033978afb";
+        gestionBloqueo.bloquear("jugador-A", creado.id(), subastaId, "publicar-1");
+
+        mvc.perform(get("/api/v1/inventario/elementos")
+                        .header("X-User-Name", "jugador-A"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.elementos[0].disponible").value(false))
+                .andExpect(jsonPath("$.elementos[0].subastaId").value(subastaId));
+
+        mvc.perform(delete("/api/v1/inventario/elementos/{elementoId}", creado.id())
+                        .header("X-User-Name", "jugador-A"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Producto no disponible"));
+
+        assertEquals(subastaId, repositorio.buscarPorElementoId(creado.id())
+                .orElseThrow().elemento(creado.id()).subastaId());
+    }
+
+    @Test
     @DisplayName("GET entrega la vitrina en paginas de dieciseis del inventario propio")
     void consultarPaginaDeLaVitrina() throws Exception {
         for (int i = 0; i < 20; i++) {
