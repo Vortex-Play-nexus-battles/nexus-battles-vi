@@ -4,10 +4,13 @@ import com.nexusbattles.ms_subastas.subastas.model.EstadoSubasta;
 import com.nexusbattles.ms_subastas.subastas.model.Subasta;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -59,6 +62,7 @@ class SubastaRepositoryIT {
             new BigDecimal("50.00"), new BigDecimal("5.00"), null, null,
             estado, Instant.now().plusSeconds(3600), 0L);
         subasta.setNombreProducto(nombre);
+        subasta.setElementoInventarioId("elemento-" + UUID.randomUUID());
         subasta.setCantidadPujas(cantidadPujas);
         subasta.setFechaPublicacion(Instant.now());
         return subasta;
@@ -108,5 +112,49 @@ class SubastaRepositoryIT {
             "hacha", PageRequest.of(0, 10));
 
         assertTrue(resultado.isEmpty());
+    }
+
+    @Test
+    void rechazaDosSubastasActivasDelMismoElemento() {
+        Subasta primera = subastaRepository.saveAndFlush(
+            nuevaSubasta("Unidad", EstadoSubasta.ACTIVA, 0));
+        Subasta duplicada = nuevaSubasta("Unidad", EstadoSubasta.ACTIVA, 0);
+        duplicada.setElementoInventarioId(primera.getElementoInventarioId());
+
+        assertThrows(DataIntegrityViolationException.class,
+            () -> subastaRepository.saveAndFlush(duplicada));
+    }
+
+    @Test
+    void permiteUnidadesDistintasDelMismoProductoActivas() {
+        Subasta primera = subastaRepository.saveAndFlush(
+            nuevaSubasta("Producto", EstadoSubasta.ACTIVA, 0));
+        Subasta segunda = nuevaSubasta("Producto", EstadoSubasta.ACTIVA, 0);
+        segunda.setProductoId(primera.getProductoId());
+
+        assertDoesNotThrow(() -> subastaRepository.saveAndFlush(segunda));
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = EstadoSubasta.class, names = {"ADJUDICADA", "SIN_ADJUDICACION"})
+    void permiteHistorialYRepublicarTrasFinalizar(EstadoSubasta estadoFinal) {
+        Subasta primera = subastaRepository.saveAndFlush(
+            nuevaSubasta("Unidad", EstadoSubasta.ACTIVA, 0));
+        primera.setEstado(estadoFinal);
+        subastaRepository.saveAndFlush(primera);
+
+        Subasta historica = nuevaSubasta("Unidad", estadoFinal, 0);
+        historica.setElementoInventarioId(primera.getElementoInventarioId());
+        historica.setProductoId(primera.getProductoId());
+        assertDoesNotThrow(() -> subastaRepository.saveAndFlush(historica));
+
+        Subasta nueva = nuevaSubasta("Unidad", EstadoSubasta.ACTIVA, 0);
+        nueva.setElementoInventarioId(primera.getElementoInventarioId());
+        nueva.setProductoId(primera.getProductoId());
+        assertDoesNotThrow(() -> subastaRepository.saveAndFlush(nueva));
+
+        historica.setEstado(EstadoSubasta.ACTIVA);
+        assertThrows(DataIntegrityViolationException.class,
+            () -> subastaRepository.saveAndFlush(historica));
     }
 }

@@ -91,6 +91,7 @@ class SubastaSpecificationsIT {
         Subasta subasta = new Subasta(null, UUID.randomUUID(), UUID.randomUUID(), ofertaVigente,
             new BigDecimal("5.00"), precioCompraInmediata, null, estado, fechaFin, 0L);
         subasta.setNombreProducto(nombre);
+        subasta.setElementoInventarioId("elemento-" + UUID.randomUUID());
         subasta.setTipoProducto(tipo);
         subasta.setRareza(rareza);
         subasta.setPrecioInicial(ofertaVigente);
