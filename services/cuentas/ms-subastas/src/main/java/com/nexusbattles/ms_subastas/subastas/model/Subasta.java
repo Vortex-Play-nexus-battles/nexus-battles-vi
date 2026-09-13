@@ -43,6 +43,10 @@ public class Subasta {
     @Column(nullable = false)
     private UUID productoId;
 
+    // HU-SUB-001: identifica la instancia del producto en el inventario.
+    @Column(nullable = false)
+    private String elementoInventarioId;
+
     @Column(nullable = false)
     private UUID vendedorId;
 
