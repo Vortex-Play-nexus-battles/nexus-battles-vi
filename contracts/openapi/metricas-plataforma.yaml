@@ -40,7 +40,15 @@ info:
     modulos: type https://nexusbattles.local/errores/seccion-no-disponible,
     status 503 y la propiedad 'seccion'. Su tratamiento en la interfaz esta en
     shared/ui-kit/MAPEO-ERRORES.md, §5.5 y §7.
-  version: 1.3.0
+    HU-REN-002 anade el desglose por tipo de operacion —lectura y escritura—
+    en /latencia/informe, que es la restriccion que esa historia exige
+    textualmente. El panel que lo consume esta en
+    frontend/app-web/src/plataforma/metricas-plataforma/.
+
+    OJO: HU-REN-002 NO define un umbral propio. El objetivoMs que se publica
+    es el de RNF-REN-001 y se presenta como referencia configurada, nunca
+    como el limite especifico de esa historia.
+  version: 1.4.0
 servers:
   - url: http://localhost:8087/api/v1
     description: Entorno local de desarrollo
@@ -405,10 +413,51 @@ components:
         sinDatos:
           type: boolean
           description: El servicio no ha atendido peticiones desde el ultimo arranque
+        porTipo:
+          type: array
+          description: >
+            HU-REN-002: lecturas y escrituras medidas por separado. La
+            restriccion de esa historia lo exige textualmente.
+
+            Solo aparecen los tipos que tienen muestras. Una fila
+            «escritura: 0 muestras, 0 ms» invita a leer el cero como «va
+            rapidisimo» cuando lo que pasa es que nadie ha escrito nada.
+          items:
+            $ref: '#/components/schemas/LatenciaPorTipo'
         operacionesMasLentas:
           type: array
           items:
             $ref: '#/components/schemas/OperacionDeLatencia'
+
+    LatenciaPorTipo:
+      type: object
+      required: [tipo, muestras, percentilMs, maximoMs]
+      properties:
+        tipo:
+          type: string
+          enum: [lectura, escritura, otra]
+          description: >
+            Se decide por el metodo HTTP: GET y HEAD son lectura; POST, PUT,
+            PATCH y DELETE son escritura. OPTIONS y TRACE caen en «otra»
+            porque el preflight de CORS no es trafico de jugador y contarlo
+            como lectura bajaria artificialmente el percentil de los listados.
+
+            Se clasifica por metodo y no por ruta porque es la unica regla que
+            vale igual en los veinte modulos sin mantener una lista de rutas.
+          examples: ['escritura']
+        muestras:
+          type: integer
+          examples: [412]
+        percentilMs:
+          type: integer
+          description: >
+            Percentil de ese tipo. Separarlo del global importa: un listado de
+            300 ms es aceptable y una puja de 300 ms no lo es, porque el
+            jugador esta compitiendo con otros por el mismo objeto.
+          examples: [488]
+        maximoMs:
+          type: integer
+          examples: [1904]
 
     OperacionDeLatencia:
       type: object

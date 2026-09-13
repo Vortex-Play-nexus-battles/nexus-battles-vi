@@ -63,6 +63,16 @@ public class LatenciaController {
                         operacion.percentilMs()))
                 .toList();
 
+        // HU-REN-002: lecturas y escrituras separadas. Con un percentil unico,
+        // los listados —que son muchisimos mas— entierran a las pujas.
+        List<TipoResponse> porTipo = registro.resumenPorTipo(objetivo).stream()
+                .map(resumen -> new TipoResponse(
+                        resumen.etiqueta(),
+                        resumen.muestras(),
+                        resumen.percentilMs(),
+                        resumen.maximoMs()))
+                .toList();
+
         return new InformeResponse(
                 registro.servicio(),
                 informe.muestras(),
@@ -72,6 +82,7 @@ public class LatenciaController {
                 informe.maximoMs(),
                 informe.cumple(),
                 informe.sinDatos(),
+                porTipo,
                 operaciones);
     }
 
@@ -98,8 +109,20 @@ public class LatenciaController {
 
         texto.append(objetivo.nombre()).append(": ").append(informe.percentilMs()).append(" ms\n")
                 .append("Maximo: ").append(informe.maximoMs()).append(" ms\n")
-                .append("Resultado: ").append(informe.cumple() ? "CUMPLE" : "NO CUMPLE").append("\n\n")
-                .append("Operaciones mas lentas (").append(objetivo.nombre()).append("):\n");
+                .append("Resultado: ").append(informe.cumple() ? "CUMPLE" : "NO CUMPLE").append("\n\n");
+
+        // HU-REN-002: el desglose va ANTES de las operaciones porque es lo
+        // primero que hay que mirar. Un percentil global bueno con las
+        // escrituras en rojo es un informe que enganna.
+        texto.append("Por tipo de operacion (").append(objetivo.nombre()).append("):\n");
+        for (InformeDeLatencia.ResumenPorTipo tipo : registro.resumenPorTipo(objetivo)) {
+            texto.append("  ").append(tipo.etiqueta()).append(": ")
+                    .append(tipo.percentilMs()).append(" ms")
+                    .append("  (maximo ").append(tipo.maximoMs()).append(" ms, ")
+                    .append(tipo.muestras()).append(" muestras)\n");
+        }
+
+        texto.append("\nOperaciones mas lentas (").append(objetivo.nombre()).append("):\n");
 
         for (InformeDeLatencia.Operacion operacion : informe.operacionesMasLentas()) {
             texto.append("  ").append(operacion.percentilMs()).append(" ms  ")
@@ -158,7 +181,11 @@ public class LatenciaController {
             long maximoMs,
             boolean cumple,
             boolean sinDatos,
+            List<TipoResponse> porTipo,
             List<OperacionResponse> operacionesMasLentas) {}
+
+    /** HU-REN-002: lecturas y escrituras medidas por separado. */
+    public record TipoResponse(String tipo, long muestras, long percentilMs, long maximoMs) {}
 
     public record OperacionResponse(String metodo, String ruta, long muestras, long percentilMs) {}
 }

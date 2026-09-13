@@ -168,6 +168,51 @@ class LatenciaControllerTest {
      * asi que el registro y las propiedades se declaran aqui. Son las clases
      * reales, no dobles: lo que interesa comprobar es el calculo de verdad.
      */
+    // --- HU-REN-002: lecturas y escrituras separadas ---
+
+    @Test
+    void elInformeSeparaLasLecturasDeLasEscrituras() throws Exception {
+        // La restriccion de HU-REN-002 lo pide literalmente. Y hace falta: aqui
+        // el percentil global sale en 10 ms y parece que todo va bien, cuando
+        // la puja tarda 900.
+        for (int i = 0; i < 99; i++) {
+            medir("GET", "/api/v1/subastas", 10);
+        }
+        medir("POST", "/api/v1/subastas/{subastaId}/pujas", 900);
+
+        mockMvc.perform(get("/api/v1/latencia/informe"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.percentilMs").value(10))
+                .andExpect(jsonPath("$.porTipo.length()").value(2))
+                .andExpect(jsonPath("$.porTipo[0].tipo").value("lectura"))
+                .andExpect(jsonPath("$.porTipo[0].muestras").value(99))
+                .andExpect(jsonPath("$.porTipo[0].percentilMs").value(10))
+                .andExpect(jsonPath("$.porTipo[1].tipo").value("escritura"))
+                .andExpect(jsonPath("$.porTipo[1].muestras").value(1))
+                .andExpect(jsonPath("$.porTipo[1].percentilMs").value(900));
+    }
+
+    @Test
+    void sinMuestrasNoSeInventaUnaFilaEnCeroPorTipo() throws Exception {
+        // Una fila «escritura: 0 ms» se lee como «va rapidisimo» cuando lo que
+        // pasa es que nadie ha escrito nada.
+        mockMvc.perform(get("/api/v1/latencia/informe"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.porTipo.length()").value(0));
+    }
+
+    @Test
+    void elInformeRedactadoTambienTraeElDesglosePorTipo() throws Exception {
+        medir("GET", "/api/v1/subastas", 40);
+        medir("POST", "/api/v1/subastas/{subastaId}/pujas", 120);
+
+        mockMvc.perform(get("/api/v1/latencia/informe/texto"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Por tipo de operacion")))
+                .andExpect(content().string(containsString("lectura: 40 ms")))
+                .andExpect(content().string(containsString("escritura: 120 ms")));
+    }
+
     @TestConfiguration
     static class Dobles {
 

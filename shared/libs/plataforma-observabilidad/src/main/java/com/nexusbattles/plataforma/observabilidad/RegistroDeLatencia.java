@@ -4,6 +4,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Deque;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -89,6 +90,38 @@ public class RegistroDeLatencia {
                 percentil(duraciones, objetivo.percentil()),
                 maximo,
                 operacionesMasLentas(objetivo, cuantasOperaciones));
+    }
+
+    /**
+     * Las mismas muestras, separadas en lectura y escritura (HU-REN-002).
+     *
+     * <p>Solo aparecen los tipos que de verdad tienen muestras: un panel con
+     * una fila «escritura: 0 muestras, 0 ms» invita a leer un cero como «va
+     * rapidisimo» cuando lo que pasa es que nadie ha escrito nada.
+     *
+     * <p>Se devuelven en el orden del enum —lectura, escritura, otra— para que
+     * el informe no cambie de orden entre dos consultas.
+     */
+    public synchronized List<InformeDeLatencia.ResumenPorTipo> resumenPorTipo(ObjetivoDeLatencia objetivo) {
+        Map<TipoDeOperacion, List<Long>> porTipo = new EnumMap<>(TipoDeOperacion.class);
+        for (MuestraDeLatencia muestra : muestras) {
+            porTipo.computeIfAbsent(muestra.tipo(), t -> new ArrayList<>()).add(muestra.duracionMs());
+        }
+
+        List<InformeDeLatencia.ResumenPorTipo> resumen = new ArrayList<>();
+        for (TipoDeOperacion tipo : TipoDeOperacion.values()) {
+            List<Long> duraciones = porTipo.get(tipo);
+            if (duraciones == null || duraciones.isEmpty()) {
+                continue;
+            }
+            List<Long> ordenadas = duraciones.stream().sorted().toList();
+            resumen.add(new InformeDeLatencia.ResumenPorTipo(
+                    tipo,
+                    ordenadas.size(),
+                    percentil(ordenadas, objetivo.percentil()),
+                    ordenadas.get(ordenadas.size() - 1)));
+        }
+        return List.copyOf(resumen);
     }
 
     /**

@@ -144,6 +144,46 @@ come ya es un problema demostrable. Acordar un presupuesto más estricto es tare
 de CA-02 están en [`docs/CONSULTAS-CRITICAS.md`](docs/CONSULTAS-CRITICAS.md)** — incluida una
 sospecha de escaneo secuencial en la consulta más frecuente del bloque.
 
+## Carga de subastas y pujas (HU-REN-002)
+
+`GET /api/v1/latencia/informe` trae ahora un bloque `porTipo` con **lecturas y
+escrituras medidas por separado**. Es la restricción literal de la historia, y no es
+cosmética: con 99 listados de 10 ms y una puja de 900, el percentil global sale en 10 ms
+y el informe parece verde. Separado, la escritura sale en 900.
+
+Un listado de 300 ms es aceptable. Una puja de 300 ms no lo es, porque el jugador está
+compitiendo con otros por el mismo objeto.
+
+Se clasifica **por método HTTP** (`GET`/`HEAD` → lectura, `POST`/`PUT`/`PATCH`/`DELETE` →
+escritura) y no por ruta: es la única regla que vale igual en los veinte módulos sin que
+nadie mantenga una lista que envejece a la semana. `OPTIONS` cae en «otra» — el preflight
+de CORS no es tráfico de jugador.
+
+**`ms-subastas` no necesita ningún cambio**: aplica `nexus.spring-conventions`, así que su
+listado y sus pujas quedan instrumentados por la biblioteca compartida.
+
+### ⚠️ CA-02 NO CUMPLIDA — la propagación de puja no existe
+
+No se mide la latencia de propagación de una puja porque **no hay propagación**. Verificado
+en `develop`:
+
+| Pieza | Estado |
+|---|---|
+| `NotificacionOutbox` | existe, **sin drenador** |
+| `TipoNotificacion` | solo cierre por compra inmediata y límite automático |
+| Tipo `NUEVA_PUJA` | **no existe** |
+| WebSocket / STOMP / SSE en `ms-subastas` | **no existe** |
+| Consumidor real | **no existe** |
+
+El javadoc del propio outbox lo dice: *«No incluye el drenador a propósito: entregar a
+donde nadie escucha todavía sería código sin forma de verificarse.»*
+
+Faltan, en orden: **evento `NUEVA_PUJA`** → **drenador del outbox** → **canal de
+propagación** → **consumidor**. El consumidor sería `notificaciones`, que es nuestro: esto
+no es una petición a otro equipo, es trabajo conjunto por acordar.
+
+Medirlo con dobles daría un número inventado, así que no se hace.
+
 ## Degradación controlada (HU-DIS-003)
 
 `GET /api/v1/degradacion` dice qué secciones están limitadas por la caída de otro
