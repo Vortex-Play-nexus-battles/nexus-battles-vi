@@ -1,9 +1,9 @@
 # metricas-plataforma (M16A)
 
-Monitoreo y registro de disponibilidad de los servicios del bloque — **HU-DIS-001**
-(RNF-DIS-001, issue #71).
+Observabilidad del bloque: **disponibilidad** (HU-DIS-001, RNF-DIS-001, issue #71)
+y **latencia extremo a extremo** (HU-REN-001, RNF-REN-001, issue #68).
 
-## Qué hace
+## Disponibilidad — qué hace
 
 Consulta cada 30 s el endpoint de salud de Actuator de cada servicio del bloque,
 registra los tramos en que alguno estuvo caído y con eso arma el informe de
@@ -21,6 +21,8 @@ Contrato: [`contracts/openapi/metricas-plataforma.yaml`](../../../contracts/open
 |---|---|---|
 | `GET` | `/api/v1/disponibilidad` | Estado en vivo de cada servicio (CP-01) |
 | `GET` | `/api/v1/disponibilidad/informe?desde=&hasta=` | Tiempo disponible e interrupciones del periodo (CP-02). Sin fechas, últimos 30 días |
+| `GET` | `/api/v1/latencia/informe` | Informe de latencia en JSON (HU-REN-001 CA-02) |
+| `GET` | `/api/v1/latencia/informe/texto` | El mismo informe redactado, para pegarlo como evidencia |
 
 ## Cómo se mide (DEC-01)
 
@@ -67,9 +69,52 @@ Se alerta **en el flanco**: la primera vez que un servicio sano deja de responde
 no en cada ronda mientras siga caído. Alertar siempre convertiría la alerta en
 ruido y nadie la miraría.
 
+## Latencia extremo a extremo (HU-REN-001)
+
+Este módulo **no mide** la latencia: la miden todos los módulos a la vez. El
+filtro vive en [`shared/libs/plataforma-observabilidad`](../../../shared/libs/plataforma-observabilidad/)
+y llega a los veinte servicios desde `nexus.spring-conventions.gradle`, igual que
+JaCoCo o Actuator. Lo que este módulo aporta es el **informe**: percentil,
+máximo, y las operaciones más lentas, que es donde hay que mirar cuando el
+objetivo no se cumple.
+
+| Variable | Por omisión | Para qué |
+|---|---|---|
+| `LATENCIA_OBJETIVO_MS` | `500` | Objetivo de RNF-REN-001 |
+| `LATENCIA_PERCENTIL` | **ninguno** | Percentil de evaluación — ver abajo |
+| `LATENCIA_CAPACIDAD` | `10000` | Tamaño de la ventana de muestras |
+| `LATENCIA_OPERACIONES_EN_INFORME` | `5` | Cuántas operaciones lentas lista el informe |
+
+### Por qué `LATENCIA_PERCENTIL` no tiene valor por omisión
+
+**CA-03 exige que el Product Owner apruebe por escrito si RNF-REN-001 se evalúa
+en p95 o en p99.** Poner un `95` en el `application.yml` tomaría esa decisión en
+su lugar y nadie volvería a mirarla.
+
+Mientras falte esa aprobación:
+
+- la **medición sigue activa** en los veinte módulos y las muestras se acumulan;
+- el informe responde **409** con el nombre de la variable, el criterio
+  (`HU-REN-001 CA-03`) y cuántas muestras lleva acumuladas.
+
+Fallar así —explícito, localizado en un endpoint— y no al arrancar es
+deliberado: arrancar en rojo por una decisión de negocio pendiente tumbaría
+servicios de los tres equipos por algo que no es un defecto.
+
+El día que el PO decida, es cambiar la variable. No hay que recompilar, y hay
+una prueba que lo demuestra (`cambiarElPercentilCambiaElInformeSinTocarCodigo`).
+
+### Deuda de latencia
+
+El registro vive **en memoria y por proceso**: cada servicio reporta lo suyo y
+al reiniciar pierde sus muestras. Todavía no hay agregación entre servicios ni
+entre réplicas — es la misma decisión abierta que la de disponibilidad
+(SCRUM-1141, SCRUM-1144), y no se inventa aquí.
+
 ## Pruebas
 
 ```bash
+./gradlew :shared:libs:plataforma-observabilidad:test
 ./gradlew :services:plataforma:metricas-plataforma:test
 ```
 

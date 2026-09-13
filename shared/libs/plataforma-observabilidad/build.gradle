@@ -1,0 +1,70 @@
+// Biblioteca compartida de observabilidad (HU-REN-001).
+//
+// NO aplica 'nexus.spring-conventions' a proposito: esa convencion trae el
+// plugin de Spring Boot, que espera una clase con main para armar el bootJar.
+// Esto es una biblioteca, no un servicio: se empaqueta como jar corriente y
+// son los servicios quienes la declaran como dependencia.
+//
+// El BOM se importa igual que en las convenciones, para que las versiones de
+// Spring sean exactamente las mismas que en los veinte modulos y no aparezca
+// una segunda version de spring-web en el classpath.
+plugins {
+    id 'java-library'
+    id 'jacoco'
+    id 'io.spring.dependency-management'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencyManagement {
+    imports {
+        mavenBom 'org.springframework.boot:spring-boot-dependencies:4.1.1'
+    }
+}
+
+dependencies {
+    // Todo compileOnly: los servicios que usan esta biblioteca ya traen
+    // spring-boot-starter-webmvc por las convenciones, que aporta spring-web,
+    // spring-webmvc y la API de servlet en tiempo de ejecucion. Declararlas
+    // como implementation duplicaria esos jar en el classpath del servicio y
+    // abriria la puerta a dos versiones distintas de Spring.
+    compileOnly 'org.springframework:spring-web'
+    compileOnly 'org.springframework:spring-webmvc'
+    compileOnly 'jakarta.servlet:jakarta.servlet-api'
+
+    // La autoconfiguracion (CA-01) necesita @AutoConfiguration y las
+    // @ConditionalOn*. Tambien compileOnly: todo servicio que aplica las
+    // convenciones ya trae spring-boot-autoconfigure por sus starters.
+    compileOnly 'org.springframework.boot:spring-boot-autoconfigure'
+
+    testImplementation 'org.springframework:spring-web'
+    testImplementation 'org.springframework:spring-webmvc'
+    testImplementation 'jakarta.servlet:jakarta.servlet-api'
+    testImplementation 'org.springframework:spring-test'
+    testImplementation 'org.springframework.boot:spring-boot-autoconfigure'
+    testImplementation 'org.springframework.boot:spring-boot-test'
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.assertj:assertj-core'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    finalizedBy tasks.named('jacocoTestReport')
+}
+
+jacocoTestReport {
+    dependsOn tasks.named('test')
+    reports {
+        xml.required = true
+        html.required = true
+    }
+}

@@ -1,6 +1,28 @@
 server:
   port: 8087
 
+spring:
+  application:
+    name: metricas-plataforma
+
+# HU-REN-001 — instrumentacion de latencia extremo a extremo (RNF-REN-001).
+#
+# El filtro que recoge las muestras NO se configura aqui: lo pone la
+# autoconfiguracion de shared/libs/plataforma-observabilidad, que llega a este
+# y a los otros diecinueve modulos desde nexus.spring-conventions. Lo unico que
+# vive en el application.yml son los valores.
+#
+# OJO con el percentil: se deja SIN valor por omision a proposito. CA-03 exige
+# que el Product Owner apruebe por escrito si RNF-REN-001 se evalua en p95 o en
+# p99; poner un 95 aqui tomaria esa decision en su lugar. Mientras falte, la
+# medicion sigue corriendo y el endpoint del informe responde 409 diciendo que
+# falta la aprobacion. Ver README.md.
+latencia:
+  objetivo-ms: ${LATENCIA_OBJETIVO_MS:500}
+  percentil: ${LATENCIA_PERCENTIL:}
+  capacidad: ${LATENCIA_CAPACIDAD:10000}
+  operaciones-en-informe: ${LATENCIA_OPERACIONES_EN_INFORME:5}
+
 # HU-DIS-001 — monitoreo y registro de disponibilidad de los servicios del bloque.
 #
 # Regla 10 de plataforma: ningun valor real se versiona. Las URL salen de
