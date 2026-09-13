@@ -25,6 +25,7 @@ Contrato: [`contracts/openapi/metricas-plataforma.yaml`](../../../contracts/open
 | `GET` | `/api/v1/latencia/informe/texto` | El mismo informe redactado, para pegarlo como evidencia |
 | `GET` | `/api/v1/consultas/informe` | Latencia de las consultas a la base de datos (HU-REN-003 CA-01) |
 | `GET` | `/api/v1/consultas/lentas` | Registro de consultas lentas (HU-REN-003 CA-03) |
+| `GET` | `/api/v1/degradacion` | Qué secciones están limitadas ahora mismo (HU-DIS-003) |
 
 ## Cómo se mide (DEC-01)
 
@@ -143,10 +144,26 @@ come ya es un problema demostrable. Acordar un presupuesto más estricto es tare
 de CA-02 están en [`docs/CONSULTAS-CRITICAS.md`](docs/CONSULTAS-CRITICAS.md)** — incluida una
 sospecha de escaneo secuencial en la consulta más frecuente del bloque.
 
+## Degradación controlada (HU-DIS-003)
+
+`GET /api/v1/degradacion` dice qué secciones están limitadas por la caída de otro
+servicio, y desde cuándo. Que esa ruta responda **200 mientras hay una sección caída** es,
+en sí mismo, la evidencia de CA-01: el servicio sigue en pie y lo está contando.
+
+Cuidado al leer `operativoPorCompleto` al revés: que haya una sección limitada no
+significa que el servicio esté caído, sino justo lo contrario.
+
+Los corta circuitos viven en
+[`shared/libs/plataforma-resiliencia`](../../../shared/libs/plataforma-resiliencia/).
+Esa biblioteca **no** se reparte desde `buildSrc`, a diferencia de la de observabilidad:
+solo hace falta donde hay una llamada saliente a otro servicio, y este módulo la declara
+en su `build.gradle`.
+
 ## Pruebas
 
 ```bash
 ./gradlew :shared:libs:plataforma-observabilidad:test
+./gradlew :shared:libs:plataforma-resiliencia:test
 ./gradlew :services:plataforma:metricas-plataforma:test
 ```
 

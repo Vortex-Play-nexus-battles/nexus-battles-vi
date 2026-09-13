@@ -34,7 +34,13 @@ info:
     responden 409: la API no elige un percentil por su cuenta. La recoleccion de
     muestras si esta activa, y /consultas/lentas responde igualmente porque
     marcar una consulta lenta no depende del percentil.
-  version: 1.2.0
+    Publica ademas que secciones estan limitadas por la caida de otro servicio
+    (HU-DIS-003, RNF-DIS-003). El problem detail de una seccion limitada lo
+    construye shared/libs/plataforma-resiliencia y es identico en los veinte
+    modulos: type https://nexusbattles.local/errores/seccion-no-disponible,
+    status 503 y la propiedad 'seccion'. Su tratamiento en la interfaz esta en
+    shared/ui-kit/MAPEO-ERRORES.md, §5.5 y §7.
+  version: 1.3.0
 servers:
   - url: http://localhost:8087/api/v1
     description: Entorno local de desarrollo
@@ -212,6 +218,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ConsultasLentasResponse'
+
+  /degradacion:
+    get:
+      summary: Que secciones estan limitadas ahora mismo
+      description: >
+        Soporta CP-03 de HU-DIS-003 con un dato y no con una opinion: si el
+        registro dice que solo una dependencia esta degradada, el resto de los
+        modulos esta respondiendo con normalidad.
+
+        Que esta ruta responda 200 mientras hay una seccion caida es, en si
+        mismo, la evidencia de CA-01: el servicio sigue en pie y lo esta
+        contando. Por eso nunca devuelve un 5xx por haber degradaciones.
+
+        Ojo con leer operativoPorCompleto al reves: que haya una seccion
+        limitada NO significa que el servicio este caido, sino justo lo
+        contrario.
+      operationId: consultarDegradacion
+      responses:
+        '200':
+          description: Estado de degradacion del servicio
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DegradacionResponse'
 
 components:
   schemas:
@@ -508,6 +538,38 @@ components:
           description: >
             La consulta termino en excepcion. Un tiempo de espera agotado es la
             consulta lenta por excelencia, por eso tambien se registra.
+
+    DegradacionResponse:
+      type: object
+      required: [operativoPorCompleto, seccionesLimitadas]
+      properties:
+        operativoPorCompleto:
+          type: boolean
+          description: True cuando no hay ninguna seccion limitada
+        seccionesLimitadas:
+          type: array
+          items:
+            $ref: '#/components/schemas/SeccionLimitada'
+
+    SeccionLimitada:
+      type: object
+      required: [dependencia, seccion, desde]
+      properties:
+        dependencia:
+          type: string
+          description: Nombre interno del servicio que no responde. No se muestra al jugador
+          examples: ['inventario']
+        seccion:
+          type: string
+          description: >
+            Que parte de la interfaz queda limitada. Es lo que permite al
+            frontend decir QUE funcion no esta disponible; sin este dato solo
+            podria decir «algo fallo».
+          examples: ['Inventario']
+        desde:
+          type: string
+          format: date-time
+          description: Cuando se abrio el circuito
 
     ProblemDetail:
       type: object

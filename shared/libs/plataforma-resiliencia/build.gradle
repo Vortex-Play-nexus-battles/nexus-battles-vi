@@ -1,0 +1,63 @@
+// Biblioteca compartida de degradacion controlada (HU-DIS-003).
+//
+// Misma forma que plataforma-observabilidad: 'java-library' y no el plugin de
+// Spring Boot, porque esto es una biblioteca y no un servicio con main.
+//
+// DIFERENCIA IMPORTANTE con plataforma-observabilidad: esta NO se reparte desde
+// nexus.spring-conventions. La instrumentacion de latencia tiene que estar en
+// los veinte modulos porque su criterio de aceptacion lo exige; un corta
+// circuitos, en cambio, solo hace falta donde hay una llamada saliente a otro
+// servicio. Repartirlo a todos meteria un jar que la mayoria no usaria y
+// ampliaria el radio de impacto sin ganar nada. El servicio que lo necesita lo
+// declara en su build.gradle, una linea.
+plugins {
+    id 'java-library'
+    id 'jacoco'
+    id 'io.spring.dependency-management'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencyManagement {
+    imports {
+        mavenBom 'org.springframework.boot:spring-boot-dependencies:4.1.1'
+    }
+}
+
+dependencies {
+    // El nucleo —corta circuitos y registro— no conoce Spring: es Java puro y
+    // se prueba sin contexto. Spring solo aparece para construir el problem
+    // detail de la regla 4, y entra compileOnly porque todo servicio que use
+    // esta biblioteca ya trae spring-web por las convenciones.
+    compileOnly 'org.springframework:spring-web'
+    compileOnly 'org.springframework:spring-webmvc'
+    compileOnly 'org.springframework.boot:spring-boot-autoconfigure'
+
+    testImplementation 'org.springframework:spring-web'
+    testImplementation 'org.springframework:spring-webmvc'
+    testImplementation 'org.springframework.boot:spring-boot-autoconfigure'
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.assertj:assertj-core'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    finalizedBy tasks.named('jacocoTestReport')
+}
+
+jacocoTestReport {
+    dependsOn tasks.named('test')
+    reports {
+        xml.required = true
+        html.required = true
+    }
+}
