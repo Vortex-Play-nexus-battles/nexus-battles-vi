@@ -5,15 +5,15 @@ import org.springframework.context.ApplicationEvent;
 
 /**
  * HU-SUB-011. Se publica cuando algo del listado en vivo de una subasta
- * cambia (nueva puja, cierre, etc.) -- quien dispare el cambio real no
- * necesita saber que existe WebSocket ni STOMP, solo publicar este evento
- * con la entidad ya actualizada.
+ * cambia -- quien dispare el cambio real no necesita saber que existe
+ * WebSocket ni STOMP, solo publicar este evento con la entidad ya
+ * actualizada.
  *
- * PENDIENTE DE COORDINAR: nadie publica este evento todavia. Le
- * corresponde a MotorPujasService (Andres) dispararlo despues de guardar
- * una puja exitosa, y al job de cierre (CierreDeSubastasVencidasJob)
- * dispararlo al adjudicar/cerrar. No se edito codigo de Andres para esto
- * sin coordinar primero -- ver README, seccion de asunciones/pendientes.
+ * Disparado por PujaApplicationService (Andres), rama
+ * feat/subastas-evento-realtime, tras una puja exitosa o una compra
+ * inmediata -- deliberadamente NO en pujas rechazadas (perder contra otro
+ * postor es el caso normal, avisar ahi llenaria el canal de ruido sin que
+ * el listado realmente cambiara).
  */
 public class SubastaActualizadaEvent extends ApplicationEvent {
 

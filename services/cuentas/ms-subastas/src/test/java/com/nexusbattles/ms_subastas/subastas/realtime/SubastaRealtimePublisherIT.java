@@ -38,19 +38,18 @@ import static org.junit.jupiter.api.Assertions.*;
  * JavaTimeModule registrado explicitamente en el ObjectMapper del cliente:
  * a diferencia de Spring MVC (que lo configura automaticamente para las
  * respuestas REST), un MappingJackson2MessageConverter armado a mano para
- * el cliente STOMP no lo trae por defecto -- sin esto, Jackson no sabe
- * deserializar Instant (fechaFin) y falla en silencio del lado del
- * cliente, apareciendo como un TimeoutException generico si no se
- * capturan handleException/handleTransportError.
+ * el cliente STOMP no lo trae por defecto.
  *
  * StompSessionHandlerAdapter con handleException/handleTransportError
  * sobrescritos a proposito: sin esto, un error del lado del cliente se
  * traga en silencio y la prueba solo reporta un timeout generico.
  *
- * PENDIENTE DE COORDINAR (ver SubastaActualizadaEvent): esta prueba publica
- * el evento directamente via ApplicationEventPublisher, simulando lo que
- * MotorPujasService haria -- no verifica que Andres ya lo dispare de
- * verdad, porque todavia no lo hace.
+ * Esta prueba publica el evento directamente via ApplicationEventPublisher,
+ * simulando lo que PujaApplicationService hace tras una puja exitosa --
+ * SubastaRealtimePublisher usa @TransactionalEventListener con
+ * fallbackExecution=true precisamente para que este escenario (publicar
+ * sin una transaccion activa) siga funcionando igual que en produccion
+ * (donde si hay transaccion, y el envio espera al AFTER_COMMIT).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers(disabledWithoutDocker = true)
