@@ -117,7 +117,8 @@ public class PujaApplicationService {
 
     private ContextoParticipacion contextoDe(UUID jugadorId, UUID subastaId) {
         return new ContextoParticipacion(
-                pujaRepository.findFirstByJugadorIdOrderByCreadaEnDesc(jugadorId).map(Puja::getCreadaEn).orElse(null),
+                pujaRepository.findFirstByJugadorIdAndSubastaIdOrderByCreadaEnDesc(jugadorId, subastaId)
+                        .map(Puja::getCreadaEn).orElse(null),
                 pujaRepository.countByJugadorIdAndEstado(jugadorId, EstadoPuja.ACTIVA),
                 pujaRepository.contarSubastasActivasExcluyendo(jugadorId, EstadoPuja.ACTIVA, subastaId));
     }
