@@ -5,9 +5,12 @@ import com.nexusbattles.ms_subastas.pujas.creditos.CreditoClientFake;
 import com.nexusbattles.ms_subastas.pujas.creditos.CreditoClientResiliente;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.math.BigDecimal;
 
 /**
  * Mientras no exista el endpoint real de ms-finanzas (HU-PAG-001, Juan Diego),
@@ -26,11 +29,25 @@ public class CreditoClientConfig {
 
     private static final Logger log = LoggerFactory.getLogger(CreditoClientConfig.class);
 
+    /**
+     * @param saldoInicial creditos con los que aparece cualquier jugador en
+     *        modo doble. Tiene que ser mayor que cero para poder ver la
+     *        funcionalidad: sin ms-finanzas no existe ningun sitio desde donde
+     *        acreditar, asi que con cero toda puja muere en SALDO_INSUFICIENTE
+     *        y la historia no se puede demostrar. El dia que exista el cliente
+     *        real, este bean deja de aplicar y el valor se ignora.
+     */
     @Bean
     @ConditionalOnProperty(name = "app.finanzas.modo", havingValue = "fake", matchIfMissing = true)
-    public CreditoClient creditoClientFake() {
+    public CreditoClient creditoClientFake(
+            @Value("${app.finanzas.saldo-inicial-doble:5000}") BigDecimal saldoInicial) {
         log.warn("ms-subastas arranca con el doble EN MEMORIA de creditos (app.finanzas.modo=fake). "
-                + "No hay integracion real con ms-finanzas: ningun credito se mueve de verdad.");
-        return new CreditoClientResiliente(new CreditoClientFake());
+                + "No hay integracion real con ms-finanzas: ningun credito se mueve de verdad. "
+                + "Cada jugador aparece con {} creditos ficticios.", saldoInicial);
+        // true: corriendo en local, las pujas viven en PostgreSQL y las reservas
+        // solo en memoria, asi que tras un reinicio hay pujas apuntando a
+        // reservas que ya no existen. Sin esto, la primera puja sobre una
+        // subasta que ya tenia oferta devuelve 500 y no se puede ni demostrar.
+        return new CreditoClientResiliente(new CreditoClientFake(saldoInicial, true));
     }
 }

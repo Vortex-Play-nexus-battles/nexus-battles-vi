@@ -169,6 +169,47 @@ class PujasApiIT {
 
     // --- autenticacion ----------------------------------------------------
 
+    /**
+     * Sin CORS el navegador bloquea la peticion antes de enviarla y la pantalla
+     * de subastas no carga nada, ni siquiera el listado publico. Se comprueba
+     * sobre el preflight de pujar porque es el caso que mas facil se rompe:
+     * Idempotency-Key no esta entre las cabeceras que CORS admite por defecto.
+     */
+    @Test
+    void elPreflightDePujarPermiteAlFrontendDeDesarrollo() throws Exception {
+        HttpRequest preflight = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + puerto + "/api/v1/subastas/" + UUID.randomUUID() + "/pujas"))
+                .header("Origin", "http://localhost:8080")
+                .header("Access-Control-Request-Method", "POST")
+                .header("Access-Control-Request-Headers", "authorization,content-type,idempotency-key")
+                .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
+                .build();
+
+        HttpResponse<String> respuesta = cliente.send(preflight, HttpResponse.BodyHandlers.ofString());
+
+        assertEquals(200, respuesta.statusCode(), respuesta.body());
+        assertEquals("http://localhost:8080",
+                respuesta.headers().firstValue("Access-Control-Allow-Origin").orElse(null));
+        assertTrue(respuesta.headers().firstValue("Access-Control-Allow-Headers").orElse("")
+                        .toLowerCase().contains("idempotency-key"),
+                "sin esta cabecera declarada, pujar y comprar fallan en el preflight");
+    }
+
+    @Test
+    void unOrigenNoAutorizadoNoRecibePermiso() throws Exception {
+        HttpRequest preflight = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + puerto + "/api/v1/subastas/" + UUID.randomUUID() + "/pujas"))
+                .header("Origin", "http://sitio-que-no-es-nuestro.example")
+                .header("Access-Control-Request-Method", "POST")
+                .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
+                .build();
+
+        HttpResponse<String> respuesta = cliente.send(preflight, HttpResponse.BodyHandlers.ofString());
+
+        assertTrue(respuesta.headers().firstValue("Access-Control-Allow-Origin").isEmpty(),
+                "por aqui pasan operaciones que mueven creditos: la lista de origenes es explicita");
+    }
+
     @Test
     void pujarSinTokenDevuelve401() throws Exception {
         Subasta subasta = subastaActiva(UUID.randomUUID(), "100", "500");
