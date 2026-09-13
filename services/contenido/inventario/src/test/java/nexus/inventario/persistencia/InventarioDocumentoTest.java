@@ -1,7 +1,9 @@
 package nexus.inventario.persistencia;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import java.util.stream.StreamSupport;
@@ -35,6 +37,30 @@ class InventarioDocumentoTest {
         Inventario restaurado = documento.aDominio();
 
         assertEquals(inventario, restaurado);
+    }
+
+    @Test
+    @DisplayName("el documento Mongo conserva el bloqueo de una subasta")
+    void conservaBloqueoDeSubasta() {
+        ElementoInventario item = new ElementoInventario(
+                "item-1", "producto-item", TipoElementoInventario.ITEM, "Pocion");
+        Inventario inventario = new Inventario(
+                "inventario-1", "jugador-A", List.of(item))
+                .bloquearEnSubasta("item-1", "subasta-1");
+
+        Inventario restaurado = InventarioDocumento.de(inventario).aDominio();
+
+        assertEquals("subasta-1", restaurado.elemento("item-1").subastaId());
+        assertFalse(restaurado.elemento("item-1").disponible());
+    }
+
+    @Test
+    @DisplayName("un documento anterior sin bloqueo mantiene el producto disponible")
+    void documentoAnteriorSinBloqueo() {
+        ElementoDocumento anterior = new ElementoDocumento(
+                "item-1", "producto-item", TipoElementoInventario.ITEM, "Pocion", null);
+
+        assertTrue(anterior.aDominio().disponible());
     }
 
     @Test

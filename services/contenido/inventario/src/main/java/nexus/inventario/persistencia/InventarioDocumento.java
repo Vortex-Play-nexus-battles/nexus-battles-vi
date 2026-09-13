@@ -62,16 +62,27 @@ record ElementoDocumento(
         @TextIndexed String productoId,
         @TextIndexed TipoElementoInventario tipo,
         @TextIndexed(weight = 2) String nombrePropio,
-        @TextIndexed ParteArmadura parteArmadura) {
+        @TextIndexed ParteArmadura parteArmadura,
+        String subastaId) {
+
+    ElementoDocumento(
+            String id,
+            String productoId,
+            TipoElementoInventario tipo,
+            String nombrePropio,
+            ParteArmadura parteArmadura) {
+        this(id, productoId, tipo, nombrePropio, parteArmadura, null);
+    }
 
     static ElementoDocumento de(ElementoInventario elemento) {
         return new ElementoDocumento(
                 elemento.id(), elemento.productoId(), elemento.tipo(),
-                elemento.nombrePropio(), elemento.parteArmadura());
+                elemento.nombrePropio(), elemento.parteArmadura(), elemento.subastaId());
     }
 
     ElementoInventario aDominio() {
-        return new ElementoInventario(id, productoId, tipo, nombrePropio, parteArmadura);
+        return new ElementoInventario(
+                id, productoId, tipo, nombrePropio, parteArmadura, subastaId);
     }
 }
 
