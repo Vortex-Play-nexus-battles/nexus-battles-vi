@@ -19,6 +19,17 @@ public class WebConfig implements WebMvcConfigurer {
     @Value("${app.frontend.ruta:file:../../../frontend/app-web/src/}")
     private String rutaFrontend;
 
+    // Agregado para HU-SUB-011: subastas.html depende de
+    // shared/ui-kit/css/tokens.css (y base.css), que hasta ahora no tenia
+    // ningun mapeo -- ni /cuentas/** ni /comun/** lo cubren, porque
+    // shared/ vive fuera de frontend/app-web/src/. Se resuelve la ruta
+    // desde rutaFrontend + "../../../shared/ui-kit/" porque
+    // frontend/app-web/src/ y shared/ui-kit/ son ambos hijos directos de
+    // la raiz del monorepo -- misma logica relativa que ya usa
+    // rutaFrontend consigo mismo, no un valor inventado aparte.
+    @Value("${app.shared-ui-kit.ruta:file:../../../shared/ui-kit/}")
+    private String rutaSharedUiKit;
+
     // TODO EQUIPO: los avatares subidos por usuarios se guardan en disco
     // local del servidor (ver AvatarStorageService). Igual que el frontend
     // de arriba, es una solucion de desarrollo LOCAL — si ms-identidad se
@@ -36,6 +47,12 @@ public class WebConfig implements WebMvcConfigurer {
 
         registry.addResourceHandler("/comun/**")
             .addResourceLocations(rutaFrontend + "comun/");
+
+        // HU-SUB-011: expone shared/ui-kit/ bajo /shared/ui-kit/**, para
+        // que cualquier pagina en /cuentas/** o /comun/** pueda referenciar
+        // sus hojas de estilo con una ruta absoluta simple.
+        registry.addResourceHandler("/shared/ui-kit/**")
+            .addResourceLocations(rutaSharedUiKit);
 
         registry.addResourceHandler("/avatares-subidos/**")
             .addResourceLocations("file:" + rutaAvatares + "/");
