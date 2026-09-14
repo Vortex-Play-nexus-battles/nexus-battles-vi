@@ -543,6 +543,19 @@
           ] } }]
         },
         {
+          "name": "Sin aviso de subastas el producto permanece bloqueado (200)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-User-Name", "value": "{{jugadorA}}" }],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const e = pm.response.json().elementos.find(x => x.id === pm.collectionVariables.get('elementoSubastaId'));",
+            "pm.test('responde 200 aunque subastas no envie aviso', () => pm.response.to.have.status(200));",
+            "pm.test('aplica falla conservadora', () => { pm.expect(e).to.not.be.undefined; pm.expect(e.disponible).to.eql(false); pm.expect(e.subastaId).to.eql(pm.collectionVariables.get('subastaId')); });"
+          ] } }]
+        },
+        {
           "name": "El aviso de cierre o cancelacion libera el producto (200)",
           "request": {
             "method": "DELETE",

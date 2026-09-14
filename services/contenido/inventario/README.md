@@ -69,6 +69,11 @@ inventario. Mientras exista ese bloqueo, la consulta devuelve
 La misma subasta puede repetir la reserva de forma idempotente; otra subasta
 recibe `409` y no reemplaza el bloqueo vigente.
 
+La consulta del inventario no depende de una llamada en vivo al servicio de
+subastas. Evalua `disponible` desde el bloqueo persistido y solo un aviso de
+cierre o cancelacion con el `subastaId` correcto puede levantarlo. Si subastas
+no responde o no envia el aviso, el producto permanece bloqueado por defecto.
+
 ```text
 PUT    /api/v1/inventario/elementos/{elementoId}/bloqueo-subasta
 DELETE /api/v1/inventario/elementos/{elementoId}/bloqueo-subasta/{subastaId}
