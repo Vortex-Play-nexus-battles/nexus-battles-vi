@@ -1,0 +1,341 @@
+/*
+ * HU-SUB-011 - Estilos del listado de subastas.
+ *
+ * Usa unicamente variables de shared/ui-kit/css/tokens.css -- ningun color
+ * en hexadecimal, y nunca redefine tokens localmente (a diferencia de
+ * vitrina.css, que redeclara su propia paleta dentro de .vitrina-pagina y
+ * en el camino introdujo un valor de --primaria-relleno distinto al real).
+ * Se asume tokens.css ya cargado globalmente por la pagina, como indica
+ * su propio comentario de cabecera.
+ *
+ * Rejilla igual a la de inventario (4/3/2/1 columnas, mismos 3 puntos de
+ * quiebre) por consistencia visual entre modulos -- ambos comparten el
+ * mismo requisito de 16 items por pagina sin desplazamiento horizontal.
+ */
+
+.subastas-pagina {
+  --subastas-columnas: 4;
+
+  box-sizing: border-box;
+  min-height: 100vh;
+  margin: 0;
+  padding: var(--e-5);
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: var(--fuente-texto);
+}
+
+.subastas-pagina *,
+.subastas-pagina *::before,
+.subastas-pagina *::after {
+  box-sizing: inherit;
+}
+
+.subastas-titulo {
+  margin: 0 0 var(--e-4);
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-titulo-tam);
+  font-weight: var(--t-titulo-peso);
+  line-height: var(--t-titulo-alto);
+}
+
+/* --- Barra de orden, encima de la rejilla --------------------------- */
+
+.subastas-orden {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--e-4);
+}
+
+.subastas-orden__control {
+  min-height: var(--campo-alto);
+  padding: 0 var(--e-3);
+  border: 1px solid var(--borde-int);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+  font-size: var(--t-cuerpo-tam);
+}
+
+/* --- Rejilla ---------------------------------------------------------- */
+
+.subastas {
+  display: grid;
+  grid-template-columns: repeat(var(--subastas-columnas), 1fr);
+  gap: var(--e-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-width: 100%;
+}
+
+.subastas__producto {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-1);
+  min-width: 0;
+  padding: var(--e-3) var(--e-4) var(--e-4);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+}
+
+/* --- Miniatura e insignia de Maestro de Juego -------------------------
+ * La insignia va sobre la miniatura, no junto al nombre: se distingue de
+ * la insignia de rareza por forma y posicion, no por color -- los 4
+ * colores del sistema de diseno ya estan asignados uno a uno a cada
+ * rareza (ver CLASE_POR_RAREZA en subastas-vitrina.js), asi que un badge
+ * de MdJ del mismo color competiria visualmente en vez de distinguirse. */
+
+.subastas__miniatura {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  margin: calc(var(--e-3) * -1) calc(var(--e-4) * -1) var(--e-2);
+  overflow: hidden;
+  border-radius: var(--radio) var(--radio) 0 0;
+  background: var(--pista);
+}
+
+.subastas__miniatura img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.subastas__insignia-mdj {
+  position: absolute;
+  top: var(--e-2);
+  left: var(--e-2);
+  padding: 2px var(--e-2);
+  border-radius: var(--radio-chico);
+  background: var(--cromo);
+  color: var(--texto-sobre-color);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+/* --- Contenido de la tarjeta -------------------------------------- */
+
+.subastas__nombre {
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: 0.95rem;
+  font-weight: var(--t-subtitulo-peso);
+  line-height: var(--t-cuerpo-alto);
+  overflow-wrap: anywhere;
+}
+
+.subastas__meta {
+  margin: 0;
+  font-family: var(--fuente-titulo);
+  font-size: var(--t-meta-tam);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--texto-2);
+}
+
+/* Regla de insignias del sistema de diseno: el color saturado va como
+   TEXTO sobre el fondo tenue del mismo color. Nunca fondo solido con
+   texto blanco (ver comentario "Estados" en tokens.css). */
+
+.subastas__rareza {
+  align-self: flex-start;
+  padding: 2px var(--e-2);
+  border-radius: var(--radio-pildora);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.subastas__rareza--comun {
+  color: var(--rareza-comun);
+  background: var(--rareza-comun-insignia);
+}
+
+.subastas__rareza--rara {
+  color: var(--rareza-rara);
+  background: var(--rareza-rara-insignia);
+}
+
+.subastas__rareza--epica {
+  color: var(--rareza-epica);
+  background: var(--rareza-epica-insignia);
+}
+
+.subastas__rareza--legendaria {
+  color: var(--rareza-legendaria);
+  background: var(--rareza-legendaria-insignia);
+}
+
+.subastas__precio {
+  margin: var(--e-1) 0 0;
+  font-size: 1.1rem;
+  font-weight: var(--t-cuerpo-peso-enfasis);
+  font-variant-numeric: tabular-nums;
+}
+
+.subastas__info {
+  display: flex;
+  gap: var(--e-3);
+  margin: var(--e-1) 0 var(--e-2);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.subastas__acciones {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  margin-top: auto;
+}
+
+.subastas__ver-detalle,
+.subastas__comprar-ahora {
+  min-height: var(--boton-mediano);
+  padding: 0 var(--e-3);
+  border-radius: var(--radio);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  cursor: pointer;
+}
+
+.subastas__ver-detalle {
+  border: 1px solid var(--borde-int);
+  background: var(--superficie);
+  color: var(--texto);
+}
+
+.subastas__ver-detalle:hover {
+  border-color: var(--primaria);
+  color: var(--primaria);
+}
+
+.subastas__comprar-ahora {
+  border: 1px solid var(--primaria-relleno);
+  background: var(--primaria-relleno);
+  color: var(--texto-sobre-color);
+}
+
+.subastas__comprar-ahora:hover {
+  background: var(--acento-relleno);
+  border-color: var(--acento-relleno);
+}
+
+/* Foco unico y siempre visible (RNF-ACC-002), via el token dedicado en
+   vez de un outline improvisado por componente. */
+.subastas-orden__control:focus-visible,
+.subastas__ver-detalle:focus-visible,
+.subastas__comprar-ahora:focus-visible {
+  outline: none;
+  box-shadow: var(--anillo-foco);
+}
+
+/* --- Paginacion ------------------------------------------------------ */
+
+.subastas-paginacion {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--e-2);
+  margin-top: var(--e-6);
+  font-size: var(--t-cuerpo-tam);
+  color: var(--texto-2);
+}
+
+.subastas-paginacion__pagina {
+  min-width: var(--boton-pequeno);
+  min-height: var(--boton-pequeno);
+  border: none;
+  border-radius: var(--radio-chico);
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.subastas-paginacion__pagina--activa {
+  background: var(--primaria-relleno);
+  color: var(--texto-sobre-color);
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+/* ---------------------------------------------------------------------
+ * Reorganizacion en resoluciones inferiores -- mismos 3 puntos de
+ * quiebre que vitrina.css, por consistencia entre modulos.
+ * ------------------------------------------------------------------- */
+
+@media (max-width: 1279px) {
+  .subastas-pagina {
+    --subastas-columnas: 3;
+  }
+}
+
+@media (max-width: 899px) {
+  .subastas-pagina {
+    --subastas-columnas: 2;
+    padding: var(--e-4);
+  }
+}
+
+@media (max-width: 599px) {
+  .subastas-pagina {
+    --subastas-columnas: 1;
+    padding: var(--e-3);
+  }
+
+  .subastas-orden {
+    justify-content: stretch;
+  }
+
+  .subastas-orden__control {
+    width: 100%;
+  }
+}
+
+/* ---------------------------------------------------------------------
+ * Estados -- mismo nombre y forma que vitrina.css a proposito, duplicado
+ * mientras shared/ui-kit siga vacio (ver comentario de deuda pendiente
+ * en ese archivo). Cuando ese componente compartido exista, esta copia
+ * se retira y ambos modulos consumen el mismo.
+ * ------------------------------------------------------------------- */
+
+.estado {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e-2);
+  min-height: 240px;
+  padding: var(--e-8) var(--e-6);
+  border: 1px dashed var(--borde);
+  border-radius: var(--radio);
+  text-align: center;
+}
+
+.estado__mensaje {
+  margin: 0;
+  font-family: var(--fuente-titulo);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.estado__detalle {
+  margin: 0;
+  font-size: var(--t-cuerpo-tam);
+  color: var(--texto-2);
+}
+
+.estado-carga,
+.estado-vacio {
+  color: var(--texto);
+}
+
+.estado-error {
+  border-style: solid;
+  border-color: var(--error);
+}

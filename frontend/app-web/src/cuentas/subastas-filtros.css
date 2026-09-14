@@ -1,0 +1,131 @@
+/*
+ * HU-SUB-011 - Panel de filtros del listado de subastas.
+ *
+ * Mismas variables de shared/ui-kit/css/tokens.css que subastas-vitrina.css,
+ * ningun hexadecimal ni redefinicion local de tokens.
+ */
+
+/* --- Layout de dos columnas: filtros + contenido -------------------
+ * Vive aqui (no en subastas-vitrina.css) porque es la pieza que las
+ * coordina a ambas -- se usa en subastas.html envolviendo el <form> de
+ * filtros y la vitrina/paginacion juntos. */
+
+.subastas-contenido {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: var(--e-5);
+  align-items: start;
+}
+
+@media (max-width: 899px) {
+  .subastas-contenido {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- El panel en si --------------------------------------------------- */
+
+.subastas-filtros {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-4);
+  padding: var(--e-4);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+}
+
+.subastas-filtros__grupo {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.subastas-filtros__leyenda {
+  padding: 0 0 var(--e-2);
+  font-family: var(--fuente-titulo);
+  font-size: var(--t-meta-tam);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--texto-2);
+}
+
+.subastas-filtros__opcion {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  padding: 3px 0;
+  font-size: var(--t-cuerpo-tam);
+  color: var(--texto);
+  cursor: pointer;
+}
+
+.subastas-filtros__opcion input {
+  accent-color: var(--primaria-relleno);
+}
+
+.subastas-filtros__opcion input:focus-visible {
+  outline: none;
+  box-shadow: var(--anillo-foco);
+}
+
+.subastas-filtros__precio {
+  display: flex;
+  gap: var(--e-3);
+}
+
+.subastas-filtros__campo-precio {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-1);
+  flex: 1;
+  min-width: 0;
+}
+
+.subastas-filtros__etiqueta-precio {
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.subastas-filtros__campo-precio input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--campo-alto);
+  padding: 0 var(--e-2);
+  border: 1px solid var(--borde-int);
+  border-radius: var(--radio);
+  background: var(--fondo);
+  color: var(--texto);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.subastas-filtros__campo-precio input:focus-visible {
+  outline: none;
+  box-shadow: var(--anillo-foco);
+}
+
+.subastas-filtros__limpiar {
+  min-height: var(--boton-mediano);
+  padding: 0 var(--e-3);
+  border: 1px solid var(--borde-int);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  color: var(--texto);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  cursor: pointer;
+}
+
+.subastas-filtros__limpiar:hover {
+  border-color: var(--borde-int);
+  background: var(--fondo);
+}
+
+.subastas-filtros__limpiar:focus-visible {
+  outline: none;
+  box-shadow: var(--anillo-foco);
+}

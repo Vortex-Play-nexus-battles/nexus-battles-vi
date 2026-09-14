@@ -1,0 +1,67 @@
+/*
+ * HU-SUB-011 - Buscador con autocompletado, independiente del campo de
+ * busqueda de la barra de navegacion compartida (ver subastas.js: ese
+ * campo solo esta conectado a HU-INV-002, no es generico todavia).
+ */
+
+.subastas-busqueda {
+  position: relative;
+  margin-bottom: var(--e-4);
+}
+
+.subastas-busqueda__campo {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--campo-alto);
+  padding: 0 var(--e-4);
+  border: 1px solid var(--borde-int);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+  font-size: var(--t-cuerpo-tam);
+}
+
+.subastas-busqueda__campo:focus-visible {
+  outline: none;
+  box-shadow: var(--anillo-foco);
+}
+
+.subastas-busqueda__sugerencias {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: var(--e-1);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  box-shadow: var(--sombra-2);
+  list-style: none;
+}
+
+.subastas-busqueda__sugerencias[hidden] {
+  display: none;
+}
+
+.subastas-busqueda__sugerencia {
+  display: block;
+  width: 100%;
+  padding: var(--e-2) var(--e-3);
+  border: none;
+  border-radius: var(--radio-chico);
+  background: none;
+  color: var(--texto);
+  font: inherit;
+  font-size: var(--t-cuerpo-tam);
+  text-align: left;
+  cursor: pointer;
+}
+
+.subastas-busqueda__sugerencia:hover,
+.subastas-busqueda__sugerencia:focus-visible {
+  outline: none;
+  background: var(--fondo);
+}
