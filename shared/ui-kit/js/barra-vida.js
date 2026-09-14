@@ -41,7 +41,7 @@ export function leerUmbrales() {
   if (Number.isNaN(alto) || Number.isNaN(medio)) {
     throw new Error(
       'barra-vida: no se encontraron --vida-umbral-alto / --vida-umbral-medio. ' +
-      'Falta cargar shared/ui-kit/css/tokens.css antes de este modulo.'
+        'Falta cargar shared/ui-kit/css/tokens.css antes de este modulo.',
     );
   }
 
@@ -110,7 +110,7 @@ export function actualizar(elemento, vidaActual, vidaMaxima) {
   elemento.setAttribute(
     'aria-label',
     `Vida de ${nombre?.textContent?.trim() || 'participante'}: ` +
-    `${Math.round(acotada)} de ${Math.round(vidaMaxima)}`
+      `${Math.round(acotada)} de ${Math.round(vidaMaxima)}`,
   );
 }
 
