@@ -9,14 +9,16 @@
  * con el componente Aviso segun la tabla 4 del mapeo de errores. Nunca se
  * decide por el texto del error.
  *
- * El token de acceso se lee de sessionStorage con la misma convencion de
- * nombres del login (`nexus.rolActual`, `nexus.apodoActual`). Hoy el login no
- * lo guarda: queda declarado como pendiente con el equipo de cuentas.
+ * El token de acceso se lee de sessionStorage con la misma clave que escribe
+ * el login de cuentas (`nexus.token`, ver `cuentas/login.js`) y que ya usan
+ * `batallas.html` y `pujas-api.js`. Antes se leia `nexus.tokenAcceso`, una
+ * clave que ningun login escribe: el chat conectaba siempre sin token y el
+ * servidor lo rechazaba en el CONNECT.
  */
 
 import { conectarChat, ErrorDeCanal } from './cliente-chat.js';
 
-export const CLAVE_TOKEN = 'nexus.tokenAcceso';
+export const CLAVE_TOKEN = 'nexus.token';
 export const COLA_DE_ERRORES = '/usuario/cola/salas';
 
 /** Destinos del contrato AsyncAPI para el canal elegido. */

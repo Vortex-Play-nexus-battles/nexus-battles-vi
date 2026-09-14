@@ -49,13 +49,7 @@
           <a class="cabecera__destino" href="../../contenido/inventario/inventario.html"
             >Mi inventario</a
           >
-          <a
-            class="cabecera__destino cabecera__destino--pendiente"
-            aria-disabled="true"
-            data-pendiente="grupo-beta"
-            title="Todavia no publicada: grupo-beta"
-            >Subasta</a
-          >
+          <a class="cabecera__destino" href="../../cuentas/subastas.html">Subasta</a>
         </nav>
       </div>
 
@@ -68,26 +62,34 @@
       </label>
 
       <div class="cabecera__acciones">
-        <span class="cabecera__dato">
+        <!--
+          Sin datos de ejemplo en la cabecera. El saldo se pinta cuando exista
+          el contrato de creditos (#29); hasta entonces el dato queda oculto en
+          vez de mostrar un numero inventado.
+        -->
+        <span class="cabecera__dato" data-zona="creditos" hidden>
           <svg class="icono icono--menudo" aria-hidden="true">
             <use href="../../../../../shared/ui-kit/iconos/sprite.svg#moneda" />
           </svg>
-          240
+          <span data-zona="saldo"></span>
         </span>
 
-        <span class="cabecera__campana">
+        <a
+          class="cabecera__campana"
+          href="../notificaciones/notificaciones.html"
+          aria-label="Notificaciones"
+        >
           <svg class="icono" aria-hidden="true">
             <use href="../../../../../shared/ui-kit/iconos/sprite.svg#campana" />
           </svg>
-          <span class="cabecera__contador" aria-hidden="true">3</span>
-          <span class="solo-lectores">3 notificaciones sin leer</span>
-        </span>
+          <span class="cabecera__contador" data-zona="contador" aria-hidden="true" hidden>0</span>
+        </a>
 
         <span class="cabecera__cuenta">
           <span class="cabecera__avatar" aria-hidden="true"></span>
           <span class="cabecera__identidad">
-            <span class="cabecera__apodo">Simon_P</span>
-            <span class="cabecera__rango">Rango 12</span>
+            <!-- El apodo lo escribe el login en sessionStorage (nexus.apodoActual). -->
+            <span class="cabecera__apodo" data-zona="apodo"></span>
           </span>
         </span>
       </div>
@@ -222,6 +224,11 @@
 
     <script type="module">
       import { montarCrearSala } from './crear-sala.js';
+
+      // Cabecera: solo lo que el login dejo de verdad en la sesion.
+      document.querySelector('[data-zona="apodo"]').textContent =
+        sessionStorage.getItem('nexus.apodoActual') ?? '';
+
       montarCrearSala(document.getElementById('formulario-crear-sala'));
     </script>
   </body>
