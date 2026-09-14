@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -127,7 +128,7 @@ class InventarioClientHttpTest {
                 URI.create("http://localhost:1"), HttpClient.newHttpClient(),
                 new ObjectMapper(), Duration.ofMillis(300));
 
-        assertThrows(InventarioClientException.class,
+        assertThrows(InventarioNoDisponibleException.class,
                 () -> haciaLaNada.reservar(ELEMENTO, UUID.randomUUID(), UUID.randomUUID(), "clave"));
     }
 
@@ -148,14 +149,71 @@ class InventarioClientHttpTest {
         assertEquals(null, metodo.get(), "no puede salir ninguna peticion hacia una ruta que no existe");
     }
 
-    @Test
-    void liberarElBloqueoDiceQueEsEndpointNoExiste() {
-        InventarioClientException error = assertThrows(InventarioClientException.class,
-                () -> cliente.liberarReserva(ELEMENTO, UUID.randomUUID(), "clave"));
+    // --- liberar el bloqueo, que Nicolay publico despues -------------------
 
-        assertTrue(error.getMessage().contains("DELETE"), error.getMessage());
-        assertTrue(error.getMessage().contains("bloqueo-subasta"), error.getMessage());
-        assertEquals(null, metodo.get());
+    @Test
+    void liberarUsaElVerboYLaRutaConSubastaIdQueDeclaraElContrato() {
+        UUID subasta = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
+
+        cliente.liberarReserva(ELEMENTO, subasta, "clave-de-cierre");
+
+        assertEquals("DELETE", metodo.get());
+        assertEquals("/api/v1/inventario/elementos/" + ELEMENTO + "/bloqueo-subasta/" + subasta, ruta.get());
+        assertEquals("clave-de-cierre", claveIdempotencia.get());
+    }
+
+    /**
+     * El cierre por vencimiento lo dispara un job programado: no hay peticion
+     * HTTP ni token de nadie, porque lo inicio el reloj. Que inventario no pida
+     * identidad en esta operacion es justamente lo que hace viable ese camino.
+     */
+    @Test
+    void liberarNoNecesitaIdentidadPorqueLoLlamaUnJobSinToken() {
+        cliente.liberarReserva(ELEMENTO, UUID.randomUUID(), "clave-de-cierre");
+
+        assertEquals(null, identidad.get());
+    }
+
+    /**
+     * 409 aqui significa que el elemento esta bloqueado por OTRA subasta.
+     * Inventario lo conserva bloqueado a proposito, y hace bien: soltarlo seria
+     * quitarle el producto a una subasta viva.
+     */
+    @Test
+    void liberarUnBloqueoDeOtraSubastaSeRechazaSinReintentar() {
+        codigo.set(409);
+        UUID subasta = UUID.randomUUID();
+
+        InventarioClientException error = assertThrows(InventarioClientException.class,
+                () -> cliente.liberarReserva(ELEMENTO, subasta, "clave"));
+
+        assertFalse(error instanceof InventarioNoDisponibleException,
+                "es un rechazo de negocio: reintentarlo da lo mismo y no debe abrir el cortacircuitos");
+        assertTrue(error.getMessage().contains("otra subasta"), error.getMessage());
+    }
+
+    // --- disponibilidad frente a negocio -----------------------------------
+
+    /**
+     * La distincion que sostiene el cortacircuitos. Un 503 es una averia y debe
+     * contar como fallo; un 409 es una respuesta correcta y no.
+     */
+    @Test
+    void un503SeDistingueDeUnRechazoDeNegocio() {
+        codigo.set(503);
+
+        assertThrows(InventarioNoDisponibleException.class,
+                () -> cliente.liberarReserva(ELEMENTO, UUID.randomUUID(), "clave"));
+    }
+
+    @Test
+    void unRechazoDeNegocioNoCuentaComoAveria() {
+        codigo.set(409);
+
+        InventarioClientException error = assertThrows(InventarioClientException.class,
+                () -> cliente.reservar(ELEMENTO, UUID.randomUUID(), UUID.randomUUID(), "clave"));
+
+        assertFalse(error instanceof InventarioNoDisponibleException, error.getMessage());
     }
 
     @Test
