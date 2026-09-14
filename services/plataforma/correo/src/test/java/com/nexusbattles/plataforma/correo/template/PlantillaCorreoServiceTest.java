@@ -142,4 +142,30 @@ class PlantillaCorreoServiceTest {
                 .as("la celda del codigo queda vacia, no con el valor de muestra")
                 .contains("padding:20px 16px;\"></td>");
     }
+
+    // ----- HU-COR-005: plantillas de mision y subasta -----
+
+    @Test
+    void laPlantillaDeMisionVaSobreLaPlantillaCorporativaYMuestraElContenido() {
+        String html = service.renderizar("email/mision",
+                Map.of("apodo", "ElGuerrero", "asunto", "Nueva misión disponible", "mensaje", "Derrota al dragón"));
+
+        assertThat(html)
+                .contains("THE NEXUS BATTLES VI")
+                .contains("ElGuerrero")
+                .contains("Nueva misión disponible")
+                .contains("Derrota al dragón");
+    }
+
+    @Test
+    void laPlantillaDeSubastaVaSobreLaPlantillaCorporativaYMuestraElContenido() {
+        String html = service.renderizar("email/subasta",
+                Map.of("apodo", "ElGuerrero", "asunto", "Ganaste la subasta", "mensaje", "Espada Legendaria"));
+
+        assertThat(html)
+                .contains("THE NEXUS BATTLES VI")
+                .contains("ElGuerrero")
+                .contains("Ganaste la subasta")
+                .contains("Espada Legendaria");
+    }
 }
