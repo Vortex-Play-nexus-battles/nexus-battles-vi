@@ -84,4 +84,42 @@ public class CorreoController {
                         "codigo", solicitud.codigo(),
                         "minutosVigencia", solicitud.minutosVigencia()));
     }
+
+    @PostMapping("/mision")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void enviarCorreoMision(@Valid @RequestBody CorreoMisionRequest solicitud) {
+        // HU-COR-005: este servicio no decide si corresponde enviar. Si viene
+        // debeEnviarCorreo=false (avisos solo dentro de la app, o categoria
+        // apagada -- CA-02/CA-03), se responde 202 igual pero no se envia
+        // nada. El registro de esa supresion es de quien llama.
+        if (!solicitud.debeEnviarCorreo()) {
+            return;
+        }
+        enviador.enviar(
+                solicitud.email(),
+                solicitud.asunto(),
+                "email/mision",
+                Map.of(
+                        "apodo", solicitud.apodo(),
+                        "asunto", solicitud.asunto(),
+                        "mensaje", solicitud.mensaje()));
+    }
+
+    @PostMapping("/subasta")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void enviarCorreoSubasta(@Valid @RequestBody CorreoSubastaRequest solicitud) {
+        // Mismo criterio que enviarCorreoMision: la preferencia ya viene
+        // resuelta por quien llama.
+        if (!solicitud.debeEnviarCorreo()) {
+            return;
+        }
+        enviador.enviar(
+                solicitud.email(),
+                solicitud.asunto(),
+                "email/subasta",
+                Map.of(
+                        "apodo", solicitud.apodo(),
+                        "asunto", solicitud.asunto(),
+                        "mensaje", solicitud.mensaje()));
+    }
 }
