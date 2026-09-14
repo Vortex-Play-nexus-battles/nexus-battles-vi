@@ -77,7 +77,7 @@ function validarConfirmacion() {
 
 campoConfirmar.addEventListener('input', validarConfirmacion);
 campoPassword.addEventListener('input', () => {
-  if (campoConfirmar.value.length > 0) validarConfirmacion();
+  if (campoConfirmar.value.length > 0) {validarConfirmacion();}
 });
 
 // ---------- Recorte de avatar ----------
@@ -95,7 +95,7 @@ let desplazamientoInicioY = 0;
 
 inputAvatar.addEventListener('change', () => {
   const archivo = inputAvatar.files[0];
-  if (!archivo) return;
+  if (!archivo) {return;}
 
   const urlObjeto = URL.createObjectURL(archivo);
   recorteImagen.src = urlObjeto;
@@ -157,7 +157,7 @@ recorteVisor.addEventListener('pointerdown', (evento) => {
 });
 
 recorteVisor.addEventListener('pointermove', (evento) => {
-  if (!arrastrando) return;
+  if (!arrastrando) {return;}
   desplazamientoX = desplazamientoInicioX + (evento.clientX - arrastreInicioX);
   desplazamientoY = desplazamientoInicioY + (evento.clientY - arrastreInicioY);
   aplicarTransformacion();
@@ -174,7 +174,7 @@ function cancelarRecorte() {
 document.getElementById('botonCancelarRecorte').addEventListener('click', cancelarRecorte);
 document.getElementById('botonCancelarRecorte2').addEventListener('click', cancelarRecorte);
 dialogoRecorte.addEventListener('click', (evento) => {
-  if (evento.target === dialogoRecorte) cancelarRecorte();
+  if (evento.target === dialogoRecorte) {cancelarRecorte();}
 });
 
 document.getElementById('botonConfirmarRecorte').addEventListener('click', () => {
@@ -262,7 +262,9 @@ form.addEventListener('submit', async (evento) => {
 
     const mensaje = typeof body === 'string' ? body : (body?.mensaje || 'No se pudo crear la cuenta.');
     setEstado(mensaje, 'error');
-  } catch (error) {
+  } catch {
+    // OJO: atrapa cualquier excepcion, no solo las de conexion, y siempre
+    // muestra el mismo mensaje. Ver la nota del PR de saneamiento.
     setEstado('No pudimos conectar con el servidor. Intenta de nuevo.', 'error');
   } finally {
     botonEnviar.disabled = false;
