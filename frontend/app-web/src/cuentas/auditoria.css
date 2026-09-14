@@ -17,6 +17,36 @@
   margin: 0 0 6px;
 }
 
+/* Fix para la alineación del formulario de filtros y fechas */
+.tarjeta.fila {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.tarjeta.fila label {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--texto-secundario);
+  gap: 4px;
+}
+
+.tarjeta.fila input,
+.tarjeta.fila select {
+  box-sizing: border-box;
+  height: 38px;
+  min-width: 160px;
+}
+
+.acciones-filtros {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 /* El .aviso base de tema-cuentas.css usa los colores de "info" (azul).
    Para el banner de inmutabilidad usamos el tono de advertencia (ámbar),
    reutilizando los tokens que ya existen — sin inventar colores nuevos. */

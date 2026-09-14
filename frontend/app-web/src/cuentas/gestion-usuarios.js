@@ -12,7 +12,7 @@ import { construirBarra } from '../comun/barra-navegacion.js';
 import { cambiarRol, ROLES_DISPONIBLES } from './cambio-rol.js';
 
 
-const BASE_API = '/api/admin/usuarios';
+const BASE_API = '/api/v1/admin/usuarios';
 const MATRIZ_RBAC_API = '/api/v1/rbac/matrix';
 
 const CLAVE_ROL = 'nexus.rolActual';

@@ -1,6 +1,7 @@
 package com.nexusbattles.ms_identidad.auth.service;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtBuilder;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
@@ -9,6 +10,7 @@ import org.springframework.stereotype.Service;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.UUID;
 
 @Service
 public class JwtService {
@@ -28,15 +30,34 @@ public class JwtService {
      * y la versión de token vigente al momento de generarlo (HU-RBAC-003).
      * Es lo que el SecurityInterceptor de Andrés necesitaría leer y
      * verificar en vez de confiar en X-User-Role.
+     *
+     * <p>El sujeto sigue siendo el apodo, y eso es deliberado: el
+     * {@code SecurityInterceptor} lo lee como identidad y lo propaga a los
+     * controladores de administración como {@code usuarioActual}. Cambiarlo por
+     * el UUID rompería esa cadena, así que el identificador estable se añade
+     * como un claim más ({@code uid}) en lugar de sustituir al sujeto.
+     *
+     * @param identificadorPublico UUID estable del usuario, para que otros
+     *        servicios lo referencien sin depender del apodo, que es mutable.
+     *        Puede ser nulo en usuarios creados antes de que el campo
+     *        existiera: entonces el token se emite sin ese claim, porque no
+     *        poder identificar al usuario de cara a otros servicios no es razón
+     *        para negarle el acceso al suyo.
      */
-    public String generarToken(String apodo, String rol, int versionToken) {
+    public String generarToken(String apodo, String rol, int versionToken, UUID identificadorPublico) {
         Date ahora = new Date();
         Date expiracion = new Date(ahora.getTime() + horasExpiracion * 3600_000L);
 
-        return Jwts.builder()
+        JwtBuilder constructor = Jwts.builder()
             .subject(apodo)
             .claim("rol", rol)
-            .claim("ver", versionToken)
+            .claim("ver", versionToken);
+
+        if (identificadorPublico != null) {
+            constructor.claim("uid", identificadorPublico.toString());
+        }
+
+        return constructor
             .issuedAt(ahora)
             .expiration(expiracion)
             .signWith(obtenerClave())

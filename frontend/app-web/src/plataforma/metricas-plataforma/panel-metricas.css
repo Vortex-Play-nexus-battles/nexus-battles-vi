@@ -1,0 +1,62 @@
+/*
+ * Panel de observabilidad — HU-REN-002 (CA-03).
+ *
+ * Solo lo que el ui-kit no tiene todavia: una tabla de metricas y el
+ * distintivo por tipo de operacion. Todo lo demas —tarjeta, aviso,
+ * estado-vista, esqueleto, boton— sale de shared/ui-kit/css/componentes.css,
+ * y los colores de tokens.css. Nada de paleta nueva aqui.
+ */
+
+.tabla-metricas {
+  width: 100%;
+  border-collapse: collapse;
+  margin-block: var(--espacio-3, 1rem);
+  font-variant-numeric: tabular-nums;
+}
+
+.tabla-metricas th,
+.tabla-metricas td {
+  padding: var(--espacio-2, 0.5rem) var(--espacio-3, 1rem);
+  text-align: left;
+  border-bottom: 1px solid var(--color-borde, #2a2f3a);
+}
+
+/* Las cifras a la derecha: comparar columnas de numeros alineados a la
+   izquierda obliga a leer digito a digito. */
+.tabla-metricas td {
+  text-align: right;
+}
+
+.tabla-metricas thead th:not(:first-child) {
+  text-align: right;
+}
+
+.tabla-metricas tbody tr:last-child th,
+.tabla-metricas tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/*
+ * El color NO es el unico indicador del tipo: al lado va siempre el nombre
+ * escrito ("Lecturas · listados"). Un panel que distinga lectura de escritura
+ * solo por el color deja fuera a quien no distingue esos dos colores.
+ */
+.distintivo[data-tipo-operacion='lectura'] {
+  background: var(--color-info-suave, #17324a);
+  color: var(--color-info, #7fc4ff);
+}
+
+.distintivo[data-tipo-operacion='escritura'] {
+  background: var(--color-acento-suave, #4a2f17);
+  color: var(--color-acento, #ffb87f);
+}
+
+.distintivo[data-tipo-operacion='otra'] {
+  background: var(--color-superficie-2, #1c2029);
+  color: var(--color-texto-tenue, #9aa3b2);
+}
+
+.estado-vista__criterio {
+  color: var(--color-texto-tenue, #9aa3b2);
+  font-size: var(--texto-pequeno, 0.875rem);
+}

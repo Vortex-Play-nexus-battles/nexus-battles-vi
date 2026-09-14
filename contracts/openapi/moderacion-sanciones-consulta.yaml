@@ -1,0 +1,91 @@
+openapi: 3.1.0
+info:
+  title: Nexus Battles VI - Moderacion y Sanciones (consulta de sancion activa)
+  description: >
+    Consulta de solo lectura para que otros microservicios sepan si un jugador
+    tiene una sancion activa que le impida participar en una operacion (por
+    ejemplo, HU-SUB-001: no publicar subastas con sanciones activas).
+
+    Sprint 2: backing provisional. Todavia no existe el modelo ni el mecanismo
+    para imponer sanciones, asi que este endpoint siempre responde
+    "sancionActiva: false". En Sprint 3 se reemplaza la logica interna
+    manteniendo exactamente esta forma -- ningun consumidor necesita cambiar
+    codigo cuando eso pase.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8086/api/v1
+    description: Entorno local de desarrollo
+
+paths:
+  /sanciones/usuarios/{usuarioId}/activa:
+    get:
+      summary: Consultar si un usuario tiene una sancion activa
+      operationId: consultarSancionActiva
+      parameters:
+        - name: usuarioId
+          in: path
+          required: true
+          description: >
+            Identificador publico y estable del jugador (claim "uid" del JWT
+            de identidad), no el id interno secuencial.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Estado de sancion del usuario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SancionActivaResponse'
+        '400':
+          description: usuarioId no tiene formato de UUID valido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+components:
+  schemas:
+    SancionActivaResponse:
+      type: object
+      required:
+        - sancionActiva
+      properties:
+        sancionActiva:
+          type: boolean
+        motivo:
+          type: string
+          nullable: true
+          description: Solo presente si sancionActiva es true.
+        vigenteHasta:
+          type: string
+          format: date-time
+          nullable: true
+          description: Solo presente si sancionActiva es true.
+      examples:
+        - sancionActiva: false
+          motivo: null
+          vigenteHasta: null
+        - sancionActiva: true
+          motivo: "Lenguaje ofensivo reiterado"
+          vigenteHasta: "2026-09-20T00:00:00Z"
+
+    ProblemDetail:
+      type: object
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string

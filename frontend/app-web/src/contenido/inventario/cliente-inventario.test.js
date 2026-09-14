@@ -4,6 +4,7 @@
  */
 import {
   consultarPagina,
+  buscarElementos,
   crearElemento,
   modificarElemento,
   consultarEquipamiento,
@@ -90,6 +91,40 @@ describe('Cliente de la consulta paginada', () => {
     const fetchFalso = async () => respuesta(null, false, 503);
 
     await expect(consultarPagina('jugador-A', 0, { fetchImpl: fetchFalso })).rejects.toThrow(/503/);
+  });
+});
+
+describe('Cliente de busqueda del inventario', () => {
+  test('envia el criterio codificado, la pagina y la identidad', async () => {
+    const { llamadas, fetchFalso } = espia({ elementos: [], totalElementos: 0 });
+
+    await buscarElementos('jugador-A', ' espada larga ', 2, { fetchImpl: fetchFalso });
+
+    expect(llamadas[0].url).toBe(
+      '/api/v1/inventario/elementos/busqueda?criterio=espada+larga&pagina=2',
+    );
+    expect(llamadas[0].opciones.headers['X-User-Name']).toBe('jugador-A');
+  });
+
+  test('rechaza menos de cuatro caracteres sin llamar al servicio', async () => {
+    let llamado = false;
+    const fetchFalso = async () => {
+      llamado = true;
+      return respuesta({});
+    };
+
+    await expect(buscarElementos('jugador-A', 'abc', 0, { fetchImpl: fetchFalso })).rejects.toThrow(
+      /cuatro/i,
+    );
+    expect(llamado).toBe(false);
+  });
+
+  test('propaga el estado de una busqueda fallida', async () => {
+    const fetchFalso = async () => respuesta(null, false, 503);
+
+    await expect(
+      buscarElementos('jugador-A', 'espada', 0, { fetchImpl: fetchFalso }),
+    ).rejects.toMatchObject({ status: 503 });
   });
 });
 

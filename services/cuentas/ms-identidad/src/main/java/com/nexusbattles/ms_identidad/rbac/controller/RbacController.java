@@ -30,7 +30,7 @@ public class RbacController {
     public ResponseEntity<AuthorizationResponse> evaluatePermission(@Valid @RequestBody AuthorizationRequest request) {
         PermissionType type = rbacService.evaluatePermission(request.getRole(), request.getAction());
         boolean permitted = (type == PermissionType.GRANTED || type == PermissionType.TEMPORARY);
-        String reason = permitted ? "Acción autorizada por política RBAC" : "Acceso denegado según la Tabla 24 (Default-Deny)";
+        String reason = permitted ? "Acción autorizada por política RBAC" : "Acceso denegado: el rol no cuenta con permisos suficientes para esta acción";
 
         return ResponseEntity.ok(new AuthorizationResponse(permitted, type, request.getRole(), request.getAction(), reason));
     }

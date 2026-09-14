@@ -11,7 +11,7 @@ fetchWithHttpErrorInterceptor
 import { construirBarra } from '../comun/barra-navegacion.js';
 
 
-const BASE_API = '/api/admin/cuentas';
+const BASE_API = '/api/v1/admin/cuentas';
 
 const CLAVE_ROL = 'nexus.rolActual';
 

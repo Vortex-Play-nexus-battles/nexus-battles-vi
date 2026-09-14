@@ -1,8 +1,8 @@
 {
   "info": {
-    "name": "Servicio de inventario - HU-INV-003 y HU-INV-005",
+    "name": "Servicio de inventario - HU-INV-002, HU-INV-003 y HU-INV-005",
     "_postman_id": "7c1e4b02-inventario-inv-003-005",
-    "description": "Validacion contra el servicio en ejecucion de HU-INV-003 (creacion y edicion de elementos propios, propiedad, 403 sobre inventario ajeno) y HU-INV-005 (equipamiento con limites: dos armas, seis partes de armadura, dos items). Las peticiones estan encadenadas: cada una guarda los identificadores que usan las siguientes, asi que se corre la coleccion completa y en orden (Run collection o Newman). La identidad viaja en X-User-Name, la convencion temporal hasta HU-AUT-004.",
+    "description": "Validacion contra el servicio en ejecucion de HU-INV-002 (busqueda indexada desde cuatro caracteres), HU-INV-003 (creacion y edicion de elementos propios, propiedad, 403 sobre inventario ajeno) y HU-INV-005 (equipamiento con limites: dos armas, seis partes de armadura, dos items). Las peticiones estan encadenadas: cada una guarda los identificadores que usan las siguientes, asi que se corre la coleccion completa y en orden (Run collection o Newman). La identidad viaja en X-User-Name, la convencion temporal hasta HU-AUT-004.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "event": [
@@ -362,6 +362,51 @@
         {
           "name": "Sin identidad no se consulta equipamiento (401)",
           "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/inventario/heroes/{{heroeId}}/equipamiento" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 401', () => pm.response.to.have.status(401));"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "3. HU-INV-002 Busqueda indexada del inventario",
+      "item": [
+        {
+          "name": "Localiza un producto propio por su informacion registrada (200)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-User-Name", "value": "{{jugadorA}}" }],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos/busqueda?criterio=tanque&pagina=0"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const p = pm.response.json();",
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('devuelve solo coincidencias propias', () => {",
+            "  pm.expect(p.elementos).to.have.lengthOf(1);",
+            "  pm.expect(p.elementos[0].id).to.eql(pm.collectionVariables.get('heroeId'));",
+            "  pm.expect(p.elementos[0].nombrePropio).to.eql('Tanque de Cesar');",
+            "});",
+            "pm.test('conserva pagina de 16', () => pm.expect(p.tamanio).to.eql(16));"
+          ] } }]
+        },
+        {
+          "name": "Rechaza criterios con menos de cuatro caracteres (400)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-User-Name", "value": "{{jugadorA}}" }],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos/busqueda?criterio=abc"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 400', () => pm.response.to.have.status(400));",
+            "pm.test('explica el minimo requerido', () => { const p = pm.response.json(); pm.expect(p.title).to.eql('Criterio de busqueda invalido'); pm.expect(p.detail).to.include('cuatro caracteres'); });"
+          ] } }]
+        },
+        {
+          "name": "Sin identidad no ejecuta la busqueda (401)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/inventario/elementos/busqueda?criterio=tanque"
+          },
           "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
             "pm.test('responde 401', () => pm.response.to.have.status(401));"
           ] } }]
