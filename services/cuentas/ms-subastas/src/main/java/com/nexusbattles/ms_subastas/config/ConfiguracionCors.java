@@ -32,7 +32,7 @@ public class ConfiguracionCors implements WebMvcConfigurer {
     private final List<String> origenesPermitidos;
 
     public ConfiguracionCors(
-            @Value("${app.cors.origenes-permitidos:http://localhost:8080,http://127.0.0.1:8080}")
+            @Value("${app.cors.origenes-permitidos:http://localhost:8080,http://127.0.0.1:8080,http://localhost:8089,http://127.0.0.1:8089,http://localhost:5500,http://127.0.0.1:5500}")
             List<String> origenesPermitidos) {
         this.origenesPermitidos = origenesPermitidos;
     }
