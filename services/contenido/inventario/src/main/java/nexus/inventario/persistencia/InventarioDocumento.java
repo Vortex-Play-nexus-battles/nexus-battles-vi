@@ -65,6 +65,10 @@ record ElementoDocumento(
         @TextIndexed ParteArmadura parteArmadura,
         String subastaId) {
 
+    @PersistenceCreator
+    ElementoDocumento {
+    }
+
     ElementoDocumento(
             String id,
             String productoId,

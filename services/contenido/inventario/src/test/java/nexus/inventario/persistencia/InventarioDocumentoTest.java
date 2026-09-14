@@ -104,6 +104,28 @@ class InventarioDocumentoTest {
     }
 
     @Test
+    @DisplayName("Spring Data reconstruye elementos persistidos con bloqueo opcional")
+    void reconstruyeElementoPersistido() throws Exception {
+        MappingMongoConverter convertidor = new MappingMongoConverter(
+                NoOpDbRefResolver.INSTANCE, contextoMongo());
+        convertidor.afterPropertiesSet();
+        Document elemento = new Document("_id", "elemento-1")
+                .append("productoId", "producto-1")
+                .append("tipo", "ITEM")
+                .append("nombrePropio", "Reliquia")
+                .append("parteArmadura", null);
+        Document bson = new Document("_id", "inventario-1")
+                .append("propietarioId", "jugador-A")
+                .append("elementos", List.of(elemento))
+                .append("equipamientos", List.of());
+
+        InventarioDocumento documento = convertidor.read(InventarioDocumento.class, bson);
+
+        assertEquals("elemento-1", documento.elementos().getFirst().id());
+        assertTrue(documento.elementos().getFirst().aDominio().disponible());
+    }
+
+    @Test
     @DisplayName("indexa la informacion registrada de cada elemento del inventario")
     void defineIndiceDeBusqueda() throws Exception {
         MongoMappingContext contexto = contextoMongo();
