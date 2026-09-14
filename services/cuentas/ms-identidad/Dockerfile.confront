@@ -1,0 +1,19 @@
+# Dockerfile de ms-identidad que incluye SOLO el frontend del dominio cuentas.
+# Se construye desde la RAIZ del proyecto (nexus-battles-vi).
+#
+# Uso (desde la raiz):
+#   docker build -f services/cuentas/ms-identidad/Dockerfile.confront -t sansanur/ms-identidad:latest .
+#
+# NOTA: este archivo va en services/cuentas/ms-identidad/, NO en terraform-nexus.
+
+FROM eclipse-temurin:21-jdk-alpine
+WORKDIR /app
+
+COPY services/cuentas/ms-identidad/target/*.jar app.jar
+
+# Solo el frontend de nuestro equipo (cuentas) + los recursos comunes.
+COPY frontend/app-web/src/cuentas/ /app/frontend/cuentas/
+COPY frontend/app-web/src/comun/  /app/frontend/comun/
+
+EXPOSE 8089
+ENTRYPOINT ["java", "-jar", "app.jar"]
