@@ -108,7 +108,12 @@ public class ValidadorDeToken {
      * eso no es un usuario antiguo, es un token manipulado o mal emitido.
      */
     private UUID leerJugadorId(Claims claims) {
-        String uid = claims.get("uid", String.class);
+        final String uid;
+        try {
+            uid = claims.get("uid", String.class);
+        } catch (io.jsonwebtoken.RequiredTypeException tipoInvalido) {
+            throw new TokenInvalidoException("el identificador de jugador del token debe ser texto UUID", tipoInvalido);
+        }
         if (uid == null || uid.isBlank()) {
             return null;
         }
