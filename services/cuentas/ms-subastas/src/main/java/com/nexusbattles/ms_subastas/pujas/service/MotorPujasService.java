@@ -122,19 +122,15 @@ public class MotorPujasService {
 
         boolean transferido = false;
         try {
-            if (subasta.getElementoInventarioId() != null && !subasta.getElementoInventarioId().isBlank() && inventarioClient != null) {
-                inventarioClient.transferirProducto(subasta.getElementoInventarioId(), jugadorId, subasta.getId(), idempotencyKey);
+            if (tieneInventario(subasta)) {
+                inventarioClient.transferirProducto(subasta.getElementoInventarioId(), jugadorId,
+                        subasta.getId(), idempotencyKey);
                 transferido = true;
             }
             creditoClient.consumir(reserva.id());
         } catch (RuntimeException e) {
-            if (transferido && inventarioClient != null && subasta.getElementoInventarioId() != null) {
-                try {
-                    inventarioClient.transferirProducto(subasta.getElementoInventarioId(), subasta.getVendedorId(), subasta.getId(), "compensar-" + idempotencyKey);
-                    inventarioClient.reservar(subasta.getElementoInventarioId(), subasta.getVendedorId(), subasta.getId(), "compensar-reserva-" + idempotencyKey);
-                } catch (RuntimeException compEx) {
-                    log.error("Fallo al compensar transferencia de inventario para subasta {}: {}", subasta.getId(), compEx.getMessage(), compEx);
-                }
+            if (transferido) {
+                devolverProductoAlVendedor(subasta, idempotencyKey);
             }
             try {
                 creditoClient.liberar(reserva.id());
@@ -176,19 +172,64 @@ public class MotorPujasService {
 
         if (pujaVigente == null) {
             subasta.setEstado(EstadoSubasta.SIN_ADJUDICACION);
-            if (subasta.getElementoInventarioId() != null && !subasta.getElementoInventarioId().isBlank() && inventarioClient != null) {
-                inventarioClient.liberarReserva(subasta.getElementoInventarioId(), subasta.getId(), "cierre-" + subasta.getId());
+            if (tieneInventario(subasta)) {
+                inventarioClient.liberarReserva(subasta.getElementoInventarioId(), subasta.getId(),
+                        "cierre-" + subasta.getId());
             }
             return;
         }
 
-        if (subasta.getElementoInventarioId() != null && !subasta.getElementoInventarioId().isBlank() && inventarioClient != null) {
-            inventarioClient.transferirProducto(subasta.getElementoInventarioId(), pujaVigente.getJugadorId(), subasta.getId(), "cierre-" + subasta.getId());
+        String claveCierre = "cierre-" + subasta.getId();
+        boolean transferido = false;
+        if (tieneInventario(subasta)) {
+            inventarioClient.transferirProducto(subasta.getElementoInventarioId(), pujaVigente.getJugadorId(),
+                    subasta.getId(), claveCierre);
+            transferido = true;
         }
 
-        creditoClient.consumir(UUID.fromString(pujaVigente.getReservaCreditoId()));
+        try {
+            creditoClient.consumir(UUID.fromString(pujaVigente.getReservaCreditoId()));
+        } catch (RuntimeException fallo) {
+            // El producto ya salio hacia el ganador y esa llamada es HTTP: no la
+            // deshace el rollback de la transaccion, que si revierte el estado
+            // en la base de datos. Sin esta compensacion el ganador se queda el
+            // objeto sin haberlo pagado. comprarAhora ya lo hacia; esto faltaba.
+            if (transferido) {
+                devolverProductoAlVendedor(subasta, claveCierre);
+            }
+            throw fallo;
+        }
+
         pujaVigente.setEstado(EstadoPuja.GANADORA);
         subasta.setEstado(EstadoSubasta.ADJUDICADA);
+    }
+
+    /** Hay un elemento de inventario que mover. */
+    private boolean tieneInventario(Subasta subasta) {
+        return subasta.getElementoInventarioId() != null
+                && !subasta.getElementoInventarioId().isBlank();
+    }
+
+    /**
+     * Deshace una transferencia ya hecha: devuelve el producto al vendedor y lo
+     * vuelve a dejar reservado para la subasta, que es el estado en el que
+     * estaba antes de intentar adjudicarla.
+     *
+     * <p>Es el mejor esfuerzo posible. Si la compensacion tambien falla no se
+     * puede hacer nada mas automaticamente, asi que queda en el log con el
+     * identificador de la subasta para poder repararlo a mano: tragarsela en
+     * silencio dejaria un producto en manos de quien no lo pago sin rastro.
+     */
+    private void devolverProductoAlVendedor(Subasta subasta, String claveOriginal) {
+        try {
+            inventarioClient.transferirProducto(subasta.getElementoInventarioId(), subasta.getVendedorId(),
+                    subasta.getId(), "compensar-" + claveOriginal);
+            inventarioClient.reservar(subasta.getElementoInventarioId(), subasta.getVendedorId(),
+                    subasta.getId(), "compensar-reserva-" + claveOriginal);
+        } catch (RuntimeException falloCompensando) {
+            log.error("Fallo al compensar transferencia de inventario para subasta {}: {}",
+                    subasta.getId(), falloCompensando.getMessage(), falloCompensando);
+        }
     }
 
     private void validarReglasDeParticipacion(Subasta subasta, UUID jugadorId, BigDecimal monto, ContextoParticipacion contexto) {

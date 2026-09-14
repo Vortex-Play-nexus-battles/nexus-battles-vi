@@ -17,6 +17,15 @@ export const PALETA_RAREZA = {
   legendaria: { fondo: '#FBF0DE', texto: '#9A6800', borde: '#9A6800', icono: '🏹' }
 };
 
+/**
+ * Datos de ejemplo. **Son un banco de pruebas, no un modo de demostracion.**
+ * La pantalla ya no tiene ningun camino hasta aqui: pujas.html monta siempre
+ * contra el servicio real. Solo los usa pujas.test.js, para poder ejercitar el
+ * renderizado y las reglas de la vista sin levantar backend ni base de datos.
+ *
+ * No volver a colgarlos de la pagina. Pintar datos inventados cuando el
+ * servicio no responde engana justo cuando mas importa saberlo.
+ */
 export const SUBASTAS_INICIALES = [
   {
     id: 'hacha-obsidiana',

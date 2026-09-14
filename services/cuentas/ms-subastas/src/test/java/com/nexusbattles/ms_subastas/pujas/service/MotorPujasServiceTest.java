@@ -428,6 +428,67 @@ class MotorPujasServiceTest {
         verify(creditoMock).liberar(reserva.id());
     }
 
+    /**
+     * El cierre por vencimiento transfiere el producto ANTES de cobrar, asi que
+     * si el cobro falla el ganador se queda con el objeto sin haberlo pagado.
+     * La transferencia sale por HTTP y no la revierte el rollback de la
+     * transaccion, que es lo que si deshace el estado en la base de datos.
+     *
+     * <p>No es un caso rebuscado: basta reiniciar el servicio. Las pujas viven
+     * en PostgreSQL y las reservas del doble de creditos solo en memoria, asi
+     * que al arrancar hay pujas apuntando a reservas que ya no existen y
+     * consumir() las rechaza.
+     *
+     * <p>comprarAhora ya compensaba este mismo caso; el cierre no.
+     */
+    @Test
+    void siElCobroFallaAlCerrarSeDevuelveElProductoAlVendedor() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+        subasta.setElementoInventarioId("elem-cierre-fail-debito");
+        UUID ganador = UUID.randomUUID();
+        String reservaId = UUID.randomUUID().toString();
+
+        CreditoClient creditoMock = mock(CreditoClient.class);
+        doThrow(new RuntimeException("Fallo al consumir creditos en ms-finanzas"))
+                .when(creditoMock).consumir(UUID.fromString(reservaId));
+
+        MotorPujasService motorTest = new MotorPujasService(creditoMock, inventarioClient, clock, parametros);
+        Puja pujaVigente = new Puja(UUID.randomUUID(), subasta.getId(), ganador, new BigDecimal("110"),
+                TipoPuja.MANUAL, EstadoPuja.ACTIVA, clock.instant().minusSeconds(30), reservaId);
+
+        assertThrows(RuntimeException.class, () -> motorTest.cerrarPorVencimiento(subasta, pujaVigente));
+
+        String claveCierre = "cierre-" + subasta.getId();
+        verify(inventarioClient).transferirProducto("elem-cierre-fail-debito", ganador, subasta.getId(), claveCierre);
+        verify(inventarioClient).transferirProducto("elem-cierre-fail-debito", VENDEDOR, subasta.getId(),
+                "compensar-" + claveCierre);
+        verify(inventarioClient).reservar("elem-cierre-fail-debito", VENDEDOR, subasta.getId(),
+                "compensar-reserva-" + claveCierre);
+    }
+
+    /**
+     * Y la otra mitad: compensar no puede convertirse en devolver el producto
+     * siempre. Si el cobro prospera, el ganador se lo queda.
+     */
+    @Test
+    void siElCobroProsperaAlCerrarElProductoSeQuedaConElGanador() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+        subasta.setElementoInventarioId("elem-cierre-ok");
+        UUID ganador = UUID.randomUUID();
+        creditoClient.acreditar(ganador, new BigDecimal("1000"));
+        ReservaCredito reserva = creditoClient.reservar(ganador, new BigDecimal("110"), subasta.getId(), claveUnica());
+        Puja pujaVigente = new Puja(UUID.randomUUID(), subasta.getId(), ganador, new BigDecimal("110"),
+                TipoPuja.MANUAL, EstadoPuja.ACTIVA, clock.instant().minusSeconds(30), reserva.id().toString());
+
+        motorConInventario.cerrarPorVencimiento(subasta, pujaVigente);
+
+        verify(inventarioClient).transferirProducto("elem-cierre-ok", ganador, subasta.getId(),
+                "cierre-" + subasta.getId());
+        verify(inventarioClient, never()).transferirProducto(eq("elem-cierre-ok"), eq(VENDEDOR), any(), any());
+        assertEquals(EstadoSubasta.ADJUDICADA, subasta.getEstado());
+        assertEquals(EstadoPuja.GANADORA, pujaVigente.getEstado());
+    }
+
     @Test
     void comprarAhoraConPujaVigenteLiberaCreditosDePostorAnteriorYTransfiereItemAlComprador() {
         Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));

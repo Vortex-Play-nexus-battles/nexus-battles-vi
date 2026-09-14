@@ -32,6 +32,7 @@ Implementa `contracts/openapi/ms-subastas-pujas.yaml` (0.2.0). Todo cuelga de `/
 - `pujas/service/CierreDeSubastasVencidasJob` — cierra las vencidas cada 30 s y restituye los creditos del postor sin adjudicacion.
 - `notificaciones/` — outbox transaccional **y su drenador**: los avisos se escriben en la misma transaccion que cierra la subasta, y `DrenadorDeNotificacionesJob` los entrega a `POST /internal/notifications` del modulo de notificaciones. Cada fila se marca por separado; un 409 ("ya existe ese aviso") cuenta como entregado.
 - `config/ConfiguracionCors` — sin esto el navegador bloquea hasta el listado publico y la pantalla no carga nada. Lista explicita de origenes, no comodin: por aqui pasan operaciones que mueven creditos.
+- Al registrar una puja se publica `SubastaActualizadaEvent`, que alimenta el contador en vivo del listado (HU-SUB-011). Se pudo conectar cuando el `@TransactionalEventListener(AFTER_COMMIT)` de Cristian llego a develop: antes, publicarlo habria metido el envio STOMP dentro del lock pesimista de la subasta.
 
 ### Frontend
 
@@ -74,10 +75,11 @@ Resuelto el dolor prioritario #1: la operacion `transferirProducto` quedo defini
 
 Por orden de lo que mas duele:
 
-- **`CreditoClientHttp` real.** `services/cuentas/ms-finanzas/` solo tiene un README: el servicio no existe. Cuando exista y publique contrato, el doble se genera desde ahi (la regla pide generarlo, no escribirlo a mano) y `app.finanzas.modo` pasa a `http`.
-- **`esMaestroDeJuego` devuelve siempre `false`.** El token no trae ese dato y ms-identidad no tiene ese rol. `false` es el valor seguro porque el Maestro de Juego esta exento de la comision de publicacion. Falta acordar de donde sale.
-- **El saldo del jugador no se muestra de verdad** en la pantalla: sale del valor de ejemplo, porque no hay endpoint que lo dé.
-- **`SubastaActualizadaEvent` no se publica desde el camino de pujas.** El contador en vivo del listado no se mueve al pujar. Hacerlo hoy meteria el envio STOMP dentro del lock pesimista; el arreglo de Cristian (`AFTER_COMMIT`) esta en `feat/listado-manejo-errores` y todavia no en develop. En cuanto se fusione, es una linea.
+- **Ninguna puja mueve creditos de verdad.** `services/cuentas/ms-finanzas/` tiene un unico archivo Java (la clase de arranque), cero endpoints y ningun contrato publicado, asi que no existe un `CreditoClientHttp` al que cambiar. Hay un borrador de contrato en conversacion con Juan Diego, pensado para los tres consumidores a la vez (este servicio, HU-SUB-001 y salas-partidas) para no repetir lo del Sprint 1 con auditoria. Nomenclatura acordada: base `/api/v1/creditos`, operacion `consolidar`, identificador `uid`. Cuando lo suba a `contracts/openapi/`, el cliente se genera desde ahi y `app.finanzas.modo` pasa a `http`.
+- **El producto no cambia de dueno al comprarlo.** La logica esta, pero inventario no expone transferencia de propiedad. Pedidos a Nicolay tres endpoints: `GET /elementos/{elementoId}`, `DELETE /elementos/{elementoId}/bloqueo-subasta` y la transferencia. Sin el DELETE, una subasta que cierra sin adjudicacion deja el producto del vendedor bloqueado para siempre.
+- **El identificador de la frontera con inventario: acordado, pendiente de implementar.** Inventario autentica con `X-User-Name`, que es el apodo; este servicio solo conoce el `uid` del token. Se descarto la transicion de pasar ambos porque **en tres de las cinco llamadas a inventario no existe ningun apodo que propagar**: el cierre por vencimiento y la liberacion los dispara un `@Scheduled` sin peticion ni token, y la compensacion transfiere al vendedor, que no es quien hizo la peticion. El `uid`, en cambio, ya queda persistido al crear la subasta y se reutiliza despues. Acordado con Edwin el 14/09/2026: el contrato nuevo nace con `uid`. `InventarioClient` no se toca hasta cerrarlo con Nicolay.
+- **`esMaestroDeJuego` devuelve siempre `false`, y es una decision acordada, no un olvido.** Ese rol no existe formalmente en ms-identidad y no se inventa desde subastas. `false` es el valor seguro porque el Maestro de Juego esta exento de la comision de publicacion, asi que **hasta nuevo aviso todos pagan comision**. Lo define **HU-SUB-010 del Sprint 3**, y ms-identidad sera la fuente de verdad. Acordado con Edwin el 14/09/2026.
+- **El saldo del jugador no se muestra de verdad** en la pantalla: sale del valor de ejemplo, porque no hay endpoint que lo dé. Se resuelve con el `GET /api/v1/creditos/{uid}/saldo` del contrato de arriba.
 - Pruebas de contrato (Pact) — ninguna todavia.
 - Los 4 limites de participacion son "configurables desde administracion" solo por variable de entorno.
 
