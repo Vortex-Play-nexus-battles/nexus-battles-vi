@@ -85,84 +85,108 @@ class SubastaListadoServiceTest {
         return subasta;
     }
 
+    // --- Prioridad del Maestro de Juego (RF-SUB-010, confirmado con Edwin) ---
+    // Solo aplica cuando NO hay un orden explicito del usuario. En cuanto el
+    // usuario elige un criterio, el orden es global (una sola dimension),
+    // sin agrupar por MdJ -- de lo contrario "ordenar por precio" no seria
+    // un orden global real.
+
     @Test
-    void elMaestroDeJuegoSiempreVaPrimeroSinImportarElOrdenElegido() {
+    void sinOrdenExplicitoElMaestroDeJuegoVaPrimero() {
         mockearPaginaVacia();
-        servicio.listar(filtrosVacios("PRECIO_ASC"), 0, 16);
+        servicio.listar(filtrosVacios(null), 0, 16);
 
         List<Sort.Order> orders = capturarSortUsado().toList();
 
         assertEquals("esMaestroDeJuego", orders.get(0).getProperty());
         assertEquals(Sort.Direction.DESC, orders.get(0).getDirection());
+        assertEquals("fechaPublicacion", orders.get(1).getProperty());
     }
 
     @Test
-    void ordenarPorPrecioAscUsaOfertaVigenteAscendenteComoSegundoCriterio() {
+    void conOrdenExplicitoElMaestroDeJuegoNoTienePrioridadYElOrdenEsGlobal() {
         mockearPaginaVacia();
         servicio.listar(filtrosVacios("PRECIO_ASC"), 0, 16);
 
-        Sort.Order segundo = capturarSortUsado().toList().get(1);
-        assertEquals("ofertaVigente", segundo.getProperty());
-        assertEquals(Sort.Direction.ASC, segundo.getDirection());
+        List<Sort.Order> orders = capturarSortUsado().toList();
+
+        assertEquals(1, orders.size(),
+            "con un orden explicito, esMaestroDeJuego no debe aparecer como criterio adicional");
+        assertEquals("ofertaVigente", orders.get(0).getProperty());
+        assertEquals(Sort.Direction.ASC, orders.get(0).getDirection());
     }
 
     @Test
-    void ordenarPorPrecioDescUsaOfertaVigenteDescendente() {
+    void ordenarPorPrecioDescUsaOfertaVigenteDescendenteComoUnicoCriterio() {
         mockearPaginaVacia();
         servicio.listar(filtrosVacios("PRECIO_DESC"), 0, 16);
 
-        Sort.Order segundo = capturarSortUsado().toList().get(1);
-        assertEquals("ofertaVigente", segundo.getProperty());
-        assertEquals(Sort.Direction.DESC, segundo.getDirection());
+        List<Sort.Order> orders = capturarSortUsado().toList();
+        assertEquals(1, orders.size());
+        assertEquals("ofertaVigente", orders.get(0).getProperty());
+        assertEquals(Sort.Direction.DESC, orders.get(0).getDirection());
     }
 
     @Test
-    void ordenarPorTiempoRestanteUsaFechaFinAscendente() {
+    void ordenarPorTiempoRestanteUsaFechaFinAscendenteComoUnicoCriterio() {
         mockearPaginaVacia();
         servicio.listar(filtrosVacios("TIEMPO_RESTANTE"), 0, 16);
 
-        Sort.Order segundo = capturarSortUsado().toList().get(1);
-        assertEquals("fechaFin", segundo.getProperty());
-        assertEquals(Sort.Direction.ASC, segundo.getDirection());
+        List<Sort.Order> orders = capturarSortUsado().toList();
+        assertEquals(1, orders.size());
+        assertEquals("fechaFin", orders.get(0).getProperty());
+        assertEquals(Sort.Direction.ASC, orders.get(0).getDirection());
     }
 
     @Test
-    void ordenarPorPujasUsaCantidadPujasDescendente() {
+    void ordenarPorPujasUsaCantidadPujasDescendenteComoUnicoCriterio() {
         mockearPaginaVacia();
         servicio.listar(filtrosVacios("PUJAS"), 0, 16);
 
-        Sort.Order segundo = capturarSortUsado().toList().get(1);
-        assertEquals("cantidadPujas", segundo.getProperty());
-        assertEquals(Sort.Direction.DESC, segundo.getDirection());
+        List<Sort.Order> orders = capturarSortUsado().toList();
+        assertEquals(1, orders.size());
+        assertEquals("cantidadPujas", orders.get(0).getProperty());
+        assertEquals(Sort.Direction.DESC, orders.get(0).getDirection());
     }
 
     @Test
-    void ordenarPorPopularidadUsaVistasDescendente() {
+    void ordenarPorPopularidadUsaVistasDescendenteComoUnicoCriterio() {
         mockearPaginaVacia();
         servicio.listar(filtrosVacios("POPULARIDAD"), 0, 16);
 
-        Sort.Order segundo = capturarSortUsado().toList().get(1);
-        assertEquals("vistas", segundo.getProperty());
-        assertEquals(Sort.Direction.DESC, segundo.getDirection());
+        List<Sort.Order> orders = capturarSortUsado().toList();
+        assertEquals(1, orders.size());
+        assertEquals("vistas", orders.get(0).getProperty());
+        assertEquals(Sort.Direction.DESC, orders.get(0).getDirection());
     }
 
     @Test
-    void ordenarPorNuloCaeEnFechaPublicacionDescendentePorDefecto() {
+    void ordenarPorNuloCaeEnFechaPublicacionConPrioridadMdjPorDefecto() {
         mockearPaginaVacia();
         servicio.listar(filtrosVacios(null), 0, 16);
 
-        Sort.Order segundo = capturarSortUsado().toList().get(1);
-        assertEquals("fechaPublicacion", segundo.getProperty());
-        assertEquals(Sort.Direction.DESC, segundo.getDirection());
+        List<Sort.Order> orders = capturarSortUsado().toList();
+        assertEquals(2, orders.size());
+        assertEquals("esMaestroDeJuego", orders.get(0).getProperty());
+        assertEquals("fechaPublicacion", orders.get(1).getProperty());
+        assertEquals(Sort.Direction.DESC, orders.get(1).getDirection());
     }
 
+    /**
+     * Un valor no reconocido se trata igual que "sin seleccion" -- no
+     * cuenta como que el usuario eligio explicitamente un orden, asi que
+     * SI debe llevar la prioridad de Maestro de Juego, no tratarse como
+     * un orden global de un criterio desconocido.
+     */
     @Test
-    void unValorDeOrdenNoReconocidoTambienCaeEnElDefault() {
+    void unValorDeOrdenNoReconocidoTambienLlevaPrioridadMdj() {
         mockearPaginaVacia();
         servicio.listar(filtrosVacios("ALGO_QUE_NO_EXISTE"), 0, 16);
 
-        Sort.Order segundo = capturarSortUsado().toList().get(1);
-        assertEquals("fechaPublicacion", segundo.getProperty());
+        List<Sort.Order> orders = capturarSortUsado().toList();
+        assertEquals(2, orders.size());
+        assertEquals("esMaestroDeJuego", orders.get(0).getProperty());
+        assertEquals("fechaPublicacion", orders.get(1).getProperty());
     }
 
     @Test
@@ -205,8 +229,6 @@ class SubastaListadoServiceTest {
 
     @Test
     void sugerirDeduplicaNombresRepetidosPreservandoElOrden() {
-        // Dos subastas distintas (vendedores distintos) con el mismo nombre
-        // de producto -- el resultado no debe repetir el nombre.
         when(subastaRepository.buscarSugeridasPorTexto(eq("escudo"), any(Pageable.class)))
             .thenReturn(List.of(
                 subastaConNombre("Escudo de Roble"),

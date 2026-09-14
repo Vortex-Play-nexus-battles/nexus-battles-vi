@@ -60,13 +60,6 @@ public class SubastaListadoService {
         return PaginaDeSubastasResponse.desde(paginaDto);
     }
 
-    /**
-     * HU-SUB-011: autocompletado. La consulta puede traer varias subastas
-     * con el mismo nombreProducto (por ejemplo, dos "Escudo de Roble" de
-     * vendedores distintos) -- se deduplica aqui con LinkedHashSet, que
-     * preserva el orden de llegada (ya viene ordenado por popularidad desde
-     * la consulta), a diferencia de un HashSet normal que no garantiza orden.
-     */
     public SugerenciasResponse sugerir(String texto, int limite) {
         List<Subasta> subastas = subastaRepository.buscarSugeridasPorTexto(
             texto, PageRequest.of(0, limite));
@@ -80,22 +73,28 @@ public class SubastaListadoService {
     }
 
     /**
-     * TEMPORAL, pendiente de confirmar con Edwin (SRS 7.7.4): el Maestro de
-     * Juego siempre va primero, como criterio de orden previo a cualquier
-     * otro. Dentro de cada grupo (MdJ / jugadores) se aplica el orden que
-     * pidio el usuario. Si la decision final es otra, este es el unico
-     * lugar que hay que tocar.
+     * Confirmado con Edwin (RF-SUB-010 / HU-SUB-010 del SRS, cita literal:
+     * "prioridad en el ordenamiento por defecto"): el Maestro de Juego solo
+     * va primero cuando NO hay un orden explicito del usuario. En cuanto el
+     * usuario elige un criterio (precio, tiempo, pujas, fecha, popularidad),
+     * el orden es global y se mezclan todas las subastas -- si se siguiera
+     * agrupando por MdJ, "ordenar por precio" dejaria de ser un orden real
+     * por precio.
      */
     private Sort construirOrden(String ordenarPor) {
-        Sort prioridadMdj = Sort.by(Sort.Direction.DESC, "esMaestroDeJuego");
-        Sort ordenElegido = switch (ordenarPor == null ? "" : ordenarPor) {
+        if (ordenarPor == null || ordenarPor.isBlank()) {
+            return Sort.by(Sort.Direction.DESC, "esMaestroDeJuego")
+                .and(Sort.by(Sort.Direction.DESC, "fechaPublicacion"));
+        }
+
+        return switch (ordenarPor) {
             case "PRECIO_ASC" -> Sort.by(Sort.Direction.ASC, "ofertaVigente");
             case "PRECIO_DESC" -> Sort.by(Sort.Direction.DESC, "ofertaVigente");
             case "TIEMPO_RESTANTE" -> Sort.by(Sort.Direction.ASC, "fechaFin");
             case "PUJAS" -> Sort.by(Sort.Direction.DESC, "cantidadPujas");
             case "POPULARIDAD" -> Sort.by(Sort.Direction.DESC, "vistas");
-            default -> Sort.by(Sort.Direction.DESC, "fechaPublicacion");
+            default -> Sort.by(Sort.Direction.DESC, "esMaestroDeJuego")
+                .and(Sort.by(Sort.Direction.DESC, "fechaPublicacion"));
         };
-        return prioridadMdj.and(ordenElegido);
     }
 }
