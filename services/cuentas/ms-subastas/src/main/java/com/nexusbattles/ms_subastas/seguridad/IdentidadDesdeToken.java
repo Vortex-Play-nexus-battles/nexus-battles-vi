@@ -20,15 +20,20 @@ import org.springframework.stereotype.Component;
  * peticion cuyo dueno no se puede determinar. Crear una subasta con vendedor
  * nulo, o retener creditos a nombre de nadie, es peor que negar el acceso.
  *
- * <p><b>Limitacion conocida:</b> {@code esMaestroDeJuego} devuelve siempre
- * {@code false}, porque el token no trae ese dato y ms-identidad no tiene ese
- * rol — sus roles son Jugador, Moderador, Administrador, Super Administrador y
- * cuentas institucionales. {@code false} es el valor seguro: el Maestro de
- * Juego esta exento de la comision de publicacion, asi que devolverlo en
- * {@code true} por defecto regalaria exenciones a cualquiera. Queda pendiente
- * acordar con Edwin y con el dueno de identidad de donde sale ese dato: si es
- * un rol nuevo en ms-identidad que viaje en el claim {@code rol}, o un atributo
- * propio de subastas.
+ * <p><b>{@code esMaestroDeJuego} devuelve siempre {@code false}, y es una
+ * decision acordada, no un pendiente olvidado.</b> Ese rol no existe
+ * formalmente en ms-identidad — sus roles son Jugador, Moderador,
+ * Administrador, Super Administrador y cuentas institucionales— y no se
+ * inventa desde subastas. {@code false} es ademas el valor seguro: el Maestro
+ * de Juego esta exento de la comision de publicacion, asi que suponerlo
+ * {@code true} regalaria exenciones a cualquiera. Consecuencia buscada: hasta
+ * nuevo aviso, <b>todos pagan comision</b>.
+ *
+ * <p>Lo resuelve <b>HU-SUB-010 del Sprint 3</b>, que tiene como pendiente
+ * explicito definir ese rol o cuenta especial. Cuando se defina, ms-identidad
+ * sigue siendo la fuente de verdad y decidira si viaja como un rol nuevo en el
+ * claim {@code rol} o como un atributo propio. Acordado con Edwin (HU-SUB-001)
+ * el 14/09/2026; no cambiar esto antes de esa definicion.
  */
 @Component
 public class IdentidadDesdeToken implements IdentidadClient {
