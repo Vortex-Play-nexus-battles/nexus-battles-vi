@@ -5,6 +5,7 @@ import nexus.inventario.aplicacion.IdentidadRequeridaException;
 import nexus.inventario.aplicacion.InventarioAjenoException;
 import nexus.inventario.aplicacion.ProductoNoEncontradoException;
 import nexus.inventario.dominio.ElementoNoEncontradoException;
+import nexus.inventario.dominio.ElementoNoDisponibleException;
 import nexus.inventario.dominio.ElementoNoEquipableException;
 import nexus.inventario.dominio.ElementoYaEquipadoException;
 import nexus.inventario.dominio.FalloPersistenciaInventarioException;
@@ -37,6 +38,11 @@ public class ManejadorDeErrores {
     @ExceptionHandler(ElementoNoEncontradoException.class)
     public ProblemDetail elementoNoEncontrado(ElementoNoEncontradoException error) {
         return problema(HttpStatus.NOT_FOUND, "Elemento no encontrado", error.getMessage());
+    }
+
+    @ExceptionHandler(ElementoNoDisponibleException.class)
+    public ProblemDetail elementoNoDisponible(ElementoNoDisponibleException error) {
+        return problema(HttpStatus.CONFLICT, "Producto no disponible", error.getMessage());
     }
 
     @ExceptionHandler(ProductoNoEncontradoException.class)

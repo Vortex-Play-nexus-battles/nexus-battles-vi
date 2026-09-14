@@ -78,26 +78,27 @@ class ServicioDePublicacionDeComentariosTest {
         assertTrue(comentario.estaPublicado());
         assertEquals(4, comentario.calificacion().orElseThrow());
 
-        ArgumentCaptor<RegistroDeComentario> captor =
-                ArgumentCaptor.forClass(RegistroDeComentario.class);
+        ArgumentCaptor<RegistroDeComentario> captor = ArgumentCaptor.forClass(RegistroDeComentario.class);
         verify(repositorio).save(captor.capture());
         assertEquals("espada-del-alba", captor.getValue().getProductoId());
     }
 
     @Test
-    @DisplayName("la calificacion previa cargada de la base descarta las estrellas nuevas")
+    @DisplayName("la calificación previa cargada de la base rechaza una segunda calificación")
     void descartaLaSegundaCalificacionDelMismoAutor() {
         when(repositorio.findByProductoIdOrderByFechaPublicacionAsc("espada-del-alba"))
                 .thenReturn(List.of(guardado("jugador-1", 5)));
         when(sanciones.estadoDe("jugador-1")).thenReturn(HABILITADO);
         when(filtro.verificar("Sigue siendo buena")).thenReturn(LIMPIO);
 
-        Comentario comentario = servicio.publicar(
-                "espada-del-alba", "jugador-1", "LyraRoja",
-                "Sigue siendo buena", List.of(), 3);
+        HiloDeComentarios.PublicacionRechazada excepcion = assertThrows(
+                HiloDeComentarios.PublicacionRechazada.class,
+                () -> servicio.publicar(
+                        "espada-del-alba", "jugador-1", "LyraRoja",
+                        "Sigue siendo buena", List.of(), 3));
 
-        assertTrue(comentario.calificacion().isEmpty());
-        assertTrue(comentario.estaPublicado());
+        assertEquals(HiloDeComentarios.MotivoDeRechazo.CALIFICACION_DUPLICADA, excepcion.motivo());
+        verify(repositorio, never()).save(any(RegistroDeComentario.class));
     }
 
     @Test

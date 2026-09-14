@@ -45,6 +45,8 @@ public class PlantillaCorreoService {
             "email/aviso-acceso",
             "email/confirmacion-cuenta",
             "email/recuperacion-clave",
+            "email/mision",
+            "email/subasta",
             "email/plantilla-prueba");
 
     public String renderizar(String nombrePlantilla, Map<String, Object> variables) {

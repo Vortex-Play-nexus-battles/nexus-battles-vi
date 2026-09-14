@@ -24,9 +24,9 @@ paths:
         el comentario si se guarda pero queda esperando a un moderador y la
         respuesta es 202, no 201. Si el autor esta silenciado (403) o alguna
         imagen viene en formato no admitido (422), el comentario no se guarda.
-        Un jugador comenta cuantas veces quiera pero califica una sola vez: del
-        segundo comentario en adelante el sistema acepta la publicacion y
-        descarta las estrellas sin tratarlo como error.
+        Un jugador comenta cuantas veces quiera pero califica una sola vez.
+        Si el jugador envía una calificación para un producto que ya calificó,
+        el sistema rechaza la solicitud con un error 409 (CALIFICACION_DUPLICADA).
       parameters:
         - name: productId
           in: path
@@ -43,15 +43,15 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PublicacionComentarioRequest'
+              $ref: "#/components/schemas/PublicacionComentarioRequest"
       responses:
-        '201':
+        "201":
           description: Comentario publicado y visible en el hilo del producto
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ComentarioResponse'
-        '202':
+                $ref: "#/components/schemas/ComentarioResponse"
+        "202":
           description: >
             Comentario retenido por el filtro automatico, guardado a la espera
             de revision de un moderador. No aparece en el hilo ni mueve el
@@ -59,34 +59,33 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ComentarioResponse'
-        '400':
+                $ref: "#/components/schemas/ComentarioResponse"
+        "400":
           description: Datos de la solicitud invalidos o incompletos
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/ProblemDetail'
-        '403':
+                $ref: "#/components/schemas/ProblemDetail"
+        "403":
           description: El autor tiene una sancion activa de silencio y no puede publicar
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/ProblemDetail'
-        '409':
+                $ref: "#/components/schemas/ProblemDetail"
+        "409":
           description: >
-            Dos solicitudes simultaneas del mismo autor intentaron calificar
-            el mismo producto: la primera quedo y esta recibio el conflicto.
-            Reintentar sin estrellas publica el comentario sin calificacion.
+            El usuario intentó enviar una calificación para un producto que ya había calificado,
+            o bien hubo una colisión concurrente (dos solicitudes intentaron calificar al mismo tiempo).
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/ProblemDetail'
-        '422':
+                $ref: "#/components/schemas/ProblemDetail"
+        "422":
           description: Al menos una imagen viene en un formato que no se admite
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/ProblemDetail'
+                $ref: "#/components/schemas/ProblemDetail"
 
 components:
   schemas:
@@ -121,9 +120,7 @@ components:
           minimum: 1
           maximum: 5
           description: >
-            Calificacion pretendida. Omitir si no se quiere calificar. Si viene
-            y el jugador ya habia calificado el producto, el sistema la descarta
-            y publica el comentario sin calificacion, sin tratarlo como error.
+            Calificacion pretendida. Omitir si no se quiere calificar.
 
     ComentarioResponse:
       type: object
@@ -185,6 +182,7 @@ components:
           enum:
             - AUTOR_SILENCIADO
             - FORMATO_DE_IMAGEN_NO_ADMITIDO
+            - CALIFICACION_DUPLICADA
           description: >
-            Presente solo en los rechazos de publicacion (403 y 422), para que
+            Presente en los rechazos de publicación (403, 409 y 422), para que
             el cliente distinga el motivo sin interpretar el texto del detalle.
