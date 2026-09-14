@@ -1,6 +1,7 @@
 package nexus.inventario.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -27,18 +28,20 @@ class InventarioApiTest {
 
     private RepositorioInventariosEnMemoria repositorio;
     private GestionarInventario gestion;
+    private GestionarBloqueoSubasta gestionBloqueo;
     private MockMvc mvc;
 
     @BeforeEach
     void preparar() {
         repositorio = new RepositorioInventariosEnMemoria();
         gestion = new GestionarInventario(repositorio);
+        gestionBloqueo = new GestionarBloqueoSubasta(repositorio);
         mvc = MockMvcBuilders.standaloneSetup(
                         new InventarioController(
                                 gestion,
                                 new ConsultarInventarioPaginado(repositorio),
                                 new BuscarElementosInventario(repositorio)),
-                        new BloqueoSubastaController(new GestionarBloqueoSubasta(repositorio)))
+                        new BloqueoSubastaController(gestionBloqueo))
                 .setControllerAdvice(new ManejadorDeErrores())
                 .build();
     }
@@ -247,6 +250,54 @@ class InventarioApiTest {
                         .header("X-User-Name", "jugador-A"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.title").value("Producto no disponible"));
+    }
+
+    @Test
+    @DisplayName("el aviso de cierre libera el producto y permite volver a modificarlo")
+    void liberarProductoAlCerrarSubasta() throws Exception {
+        ElementoInventario creado = gestion.crear(
+                "jugador-A", "producto-1", TipoElementoInventario.ITEM, "Amuleto");
+        String subastaId = "89d9040d-52e0-44ae-8d8c-8ec033978afb";
+        mvc.perform(put("/api/v1/inventario/elementos/{elementoId}/bloqueo-subasta", creado.id())
+                        .header("X-User-Name", "jugador-A")
+                        .header("Idempotency-Key", "publicar-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"subastaId\":\"" + subastaId + "\"}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(delete("/api/v1/inventario/elementos/{elementoId}/bloqueo-subasta/{subastaId}",
+                        creado.id(), subastaId)
+                        .header("Idempotency-Key", "cerrar-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.disponible").value(true))
+                .andExpect(jsonPath("$.subastaId").doesNotExist());
+
+        mvc.perform(patch("/api/v1/inventario/elementos/{elementoId}", creado.id())
+                        .header("X-User-Name", "jugador-A")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nombrePropio\":\"Amuleto liberado\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nombrePropio").value("Amuleto liberado"));
+    }
+
+    @Test
+    @DisplayName("un aviso ajeno no libera el producto y responde conflicto")
+    void noLiberarProductoConOtraSubasta() throws Exception {
+        ElementoInventario creado = gestion.crear(
+                "jugador-A", "producto-1", TipoElementoInventario.ITEM, "Amuleto");
+        String subastaVigente = "89d9040d-52e0-44ae-8d8c-8ec033978afb";
+        gestionBloqueo.bloquear(
+                "jugador-A", creado.id(), subastaVigente, "publicar-1");
+
+        mvc.perform(delete("/api/v1/inventario/elementos/{elementoId}/bloqueo-subasta/{subastaId}",
+                        creado.id(), "51326b9d-1aa2-4d8a-bb7d-d3ad593f902d")
+                        .header("Idempotency-Key", "cerrar-anterior"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value(
+                        "El aviso no corresponde a la subasta que mantiene el bloqueo."));
+
+        assertFalse(repositorio.buscarPorElementoId(creado.id())
+                .orElseThrow().elemento(creado.id()).disponible());
     }
 
     @Test

@@ -2,7 +2,9 @@ package nexus.inventario.dominio;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -175,6 +177,34 @@ class InventarioTest {
         Inventario repetido = bloqueado.bloquearEnSubasta("arma-1", "subasta-1");
 
         assertEquals(bloqueado, repetido);
+    }
+
+    @Test
+    @DisplayName("el aviso de cierre libera el producto bloqueado por esa subasta")
+    void liberarProductoAlCerrarSubasta() {
+        ElementoInventario arma = new ElementoInventario(
+                "arma-1", "producto-arma", TipoElementoInventario.ARMA, "Espada");
+        Inventario bloqueado = Inventario.vacio("jugador-A").agregar(arma)
+                .bloquearEnSubasta("arma-1", "subasta-1");
+
+        Inventario liberado = bloqueado.liberarBloqueoSubasta("arma-1", "subasta-1");
+
+        assertTrue(liberado.elemento("arma-1").disponible());
+        assertNull(liberado.elemento("arma-1").subastaId());
+        assertEquals(liberado, liberado.liberarBloqueoSubasta("arma-1", "subasta-1"));
+    }
+
+    @Test
+    @DisplayName("un aviso de otra subasta no levanta el bloqueo vigente")
+    void noLiberarConAvisoDeOtraSubasta() {
+        ElementoInventario arma = new ElementoInventario(
+                "arma-1", "producto-arma", TipoElementoInventario.ARMA, "Espada");
+        Inventario bloqueado = Inventario.vacio("jugador-A").agregar(arma)
+                .bloquearEnSubasta("arma-1", "subasta-1");
+
+        assertThrows(ElementoNoDisponibleException.class,
+                () -> bloqueado.liberarBloqueoSubasta("arma-1", "subasta-anterior"));
+        assertFalse(bloqueado.elemento("arma-1").disponible());
     }
 
     @Test

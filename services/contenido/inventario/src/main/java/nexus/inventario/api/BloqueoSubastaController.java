@@ -1,7 +1,9 @@
 package nexus.inventario.api;
 
 import jakarta.validation.Valid;
+import java.util.UUID;
 import nexus.inventario.aplicacion.GestionarBloqueoSubasta;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -28,5 +30,14 @@ public class BloqueoSubastaController {
             @Valid @RequestBody BloquearEnSubastaRequest solicitud) {
         return ElementoInventarioResponse.de(gestion.bloquear(
                 identidad, elementoId, solicitud.subastaId().toString(), claveIdempotencia));
+    }
+
+    @DeleteMapping("/{subastaId}")
+    public ElementoInventarioResponse liberar(
+            @RequestHeader(name = "Idempotency-Key", required = false) String claveIdempotencia,
+            @PathVariable String elementoId,
+            @PathVariable UUID subastaId) {
+        return ElementoInventarioResponse.de(
+                gestion.liberar(elementoId, subastaId.toString(), claveIdempotencia));
     }
 }

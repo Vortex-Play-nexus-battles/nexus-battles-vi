@@ -63,6 +63,18 @@ public record ElementoInventario(
                 id, productoId, tipo, nombrePropio, parteArmadura, nuevaSubastaId);
     }
 
+    public ElementoInventario liberarBloqueoSubasta(String subastaQueFinalizo) {
+        exigirTexto(subastaQueFinalizo, "subastaId");
+        if (disponible()) {
+            return this;
+        }
+        if (!subastaId.equals(subastaQueFinalizo)) {
+            throw new ElementoNoDisponibleException(
+                    "El aviso no corresponde a la subasta que mantiene el bloqueo.");
+        }
+        return new ElementoInventario(id, productoId, tipo, nombrePropio, parteArmadura, null);
+    }
+
     public void exigirDisponible() {
         if (!disponible()) {
             throw new ElementoNoDisponibleException(

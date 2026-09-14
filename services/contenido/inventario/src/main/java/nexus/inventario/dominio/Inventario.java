@@ -80,6 +80,16 @@ public record Inventario(
         return new Inventario(id, propietarioId, actualizados, equipamientos);
     }
 
+    public Inventario liberarBloqueoSubasta(String elementoId, String subastaId) {
+        ElementoInventario elemento = elemento(elementoId);
+        List<ElementoInventario> actualizados = elementos.stream()
+                .map(actual -> actual.id().equals(elementoId)
+                        ? elemento.liberarBloqueoSubasta(subastaId)
+                        : actual)
+                .toList();
+        return new Inventario(id, propietarioId, actualizados, equipamientos);
+    }
+
     public boolean estaEnUso(String elementoId) {
         return equipamientos.stream().anyMatch(equipamiento -> equipamiento.contiene(elementoId));
     }

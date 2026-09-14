@@ -200,6 +200,35 @@ paths:
           $ref: "#/components/responses/ElementoNoDisponible"
         "503":
           $ref: "#/components/responses/PersistenciaNoDisponible"
+  /api/v1/inventario/elementos/{elementoId}/bloqueo-subasta/{subastaId}:
+    delete:
+      summary: Libera el producto cuando la subasta se cierra o cancela
+      description: >
+        HU-INV-010. El servicio de subastas envia este aviso al cerrar o
+        cancelar la publicacion. La operacion es idempotente si el producto ya
+        esta disponible. Si subastaId no corresponde al bloqueo vigente,
+        responde 409 y conserva el producto bloqueado.
+      operationId: liberarElementoDeSubasta
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/ElementoId"
+        - $ref: "#/components/parameters/SubastaId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Producto liberado o aviso repetido procesado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ElementoInventario"
+        "400":
+          $ref: "#/components/responses/SolicitudInvalida"
+        "404":
+          $ref: "#/components/responses/ElementoNoEncontrado"
+        "409":
+          $ref: "#/components/responses/ElementoNoDisponible"
+        "503":
+          $ref: "#/components/responses/PersistenciaNoDisponible"
   /api/v1/inventario/heroes/{heroeId}/equipamiento:
     get:
       summary: Consulta las ranuras equipadas de un heroe propio
@@ -529,3 +558,10 @@ components:
         type: string
         minLength: 1
         maxLength: 100
+    SubastaId:
+      name: subastaId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
