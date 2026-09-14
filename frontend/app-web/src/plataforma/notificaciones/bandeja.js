@@ -29,7 +29,7 @@ import {
   entregarPendientes as entregarPendientesHttp,
   urlDelCanal,
 } from './cliente-notificaciones.js';
-import { conectarStomp } from './transporte-stomp.js';
+import { conectarStomp } from '../../comun/transporte-stomp.js';
 
 /** Variantes del componente `Estado de conexion` del ui-kit. */
 export const ESTADO_CANAL = Object.freeze({
