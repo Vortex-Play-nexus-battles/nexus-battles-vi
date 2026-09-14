@@ -29,11 +29,17 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http, ConversorRolesJwt conversor) throws Exception {
+        // CSRF desactivado, sin estado y JWT de Keycloak traducido: todo eso lo
+        // pone CadenaDeSeguridad, compartida con el resto de la plataforma.
         CadenaDeSeguridad.aplicarBase(http, conversor);
 
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers("/api/v1/lista-negra/verificar").permitAll()
+                // Consulta de sancion activa: la llaman otros servicios antes de
+                // dejar actuar a un jugador, igual que la verificacion de
+                // terminos. Regla traida de develop al integrar.
+                .requestMatchers("/api/v1/sanciones/usuarios/*/activa").permitAll()
                 .requestMatchers("/api/v1/lista-negra/terminos/**")
                 .hasAnyRole("ADMINISTRADOR", "MODERADOR")
                 .anyRequest().authenticated());

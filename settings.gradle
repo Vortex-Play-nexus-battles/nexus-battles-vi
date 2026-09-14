@@ -9,10 +9,13 @@ rootProject.name = 'nexus-battles-vi'
 
 // --- Bibliotecas compartidas por los tres equipos ---
 //
-// No son servicios: no se despliegan, se enlazan. Aqui vive lo que las doce
-// reglas de plataforma obligan a que sea identico en los 20 modulos.
+// No son servicios: no se despliegan ni tienen main. Los servicios las
+// declaran como dependencia. Cambiarlas afecta a los veinte modulos, asi que
+// requieren revision de los tres Scrum Masters (CLAUDE.md).
 include 'shared:libs:plataforma-comun'
 include 'shared:libs:plataforma-seguridad'
+include 'shared:libs:plataforma-observabilidad'
+include 'shared:libs:plataforma-resiliencia'
 
 // --- Plataforma: tiempo real, comunidad y plataforma (Equipo 6) ---
 include 'services:plataforma:admin-parametros'

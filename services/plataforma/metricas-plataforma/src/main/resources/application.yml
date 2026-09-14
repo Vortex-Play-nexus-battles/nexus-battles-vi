@@ -1,2 +1,70 @@
 server:
   port: 8087
+
+spring:
+  application:
+    name: metricas-plataforma
+
+# HU-REN-001 — instrumentacion de latencia extremo a extremo (RNF-REN-001).
+#
+# El filtro que recoge las muestras NO se configura aqui: lo pone la
+# autoconfiguracion de shared/libs/plataforma-observabilidad, que llega a este
+# y a los otros diecinueve modulos desde nexus.spring-conventions. Lo unico que
+# vive en el application.yml son los valores.
+#
+# OJO con el percentil: se deja SIN valor por omision a proposito. CA-03 exige
+# que el Product Owner apruebe por escrito si RNF-REN-001 se evalua en p95 o en
+# p99; poner un 95 aqui tomaria esa decision en su lugar. Mientras falte, la
+# medicion sigue corriendo y el endpoint del informe responde 409 diciendo que
+# falta la aprobacion. Ver README.md.
+latencia:
+  objetivo-ms: ${LATENCIA_OBJETIVO_MS:500}
+  percentil: ${LATENCIA_PERCENTIL:}
+  capacidad: ${LATENCIA_CAPACIDAD:10000}
+  operaciones-en-informe: ${LATENCIA_OPERACIONES_EN_INFORME:5}
+
+  # HU-REN-003 — medicion de las consultas a la base de datos.
+  #
+  # umbral-lenta-ms vacio significa «usa objetivo-ms». No se inventa aqui un
+  # presupuesto propio de base de datos: los 500 ms de RNF-REN-001 son extremo a
+  # extremo —red, validacion, negocio, consulta y serializacion—, asi que una
+  # consulta que sola se los come ya es un problema demostrable. Un presupuesto
+  # mas estricto solo para la base de datos no esta acordado en ningun
+  # requisito; acordarlo es tarea del equipo, no de este archivo.
+  consultas:
+    activa: ${LATENCIA_CONSULTAS_ACTIVA:true}
+    umbral-lenta-ms: ${LATENCIA_CONSULTAS_UMBRAL_MS:}
+    capacidad: ${LATENCIA_CONSULTAS_CAPACIDAD:10000}
+    capacidad-lentas: ${LATENCIA_CONSULTAS_CAPACIDAD_LENTAS:200}
+    sentencias-en-informe: ${LATENCIA_CONSULTAS_SENTENCIAS_EN_INFORME:10}
+
+# HU-DIS-001 — monitoreo y registro de disponibilidad de los servicios del bloque.
+#
+# Regla 10 de plataforma: ningun valor real se versiona. Las URL salen de
+# variables de entorno y lo que hay aqui son los valores de desarrollo local,
+# que es donde cada servicio corre en su propio puerto.
+#
+# Solo van servicios del bloque (M02, M09, M13, M15, M16A/B). Los de los
+# equipos socios se quedan fuera a proposito: DEC-01 excluye sus caidas de la
+# cifra de disponibilidad.
+disponibilidad:
+  umbral-porcentaje: ${DISPONIBILIDAD_UMBRAL:99.95}
+  intervalo-ms: ${DISPONIBILIDAD_INTERVALO_MS:30000}
+  servicios:
+    salas-partidas: ${SALUD_SALAS_PARTIDAS:http://localhost:8083/actuator/health}
+    notificaciones: ${SALUD_NOTIFICACIONES:http://localhost:8085/actuator/health}
+    correo: ${SALUD_CORREO:http://localhost:8082/actuator/health}
+    comentarios: ${SALUD_COMENTARIOS:http://localhost:8081/actuator/health}
+    moderacion-sanciones: ${SALUD_MODERACION:http://localhost:8084/actuator/health}
+    admin-parametros: ${SALUD_ADMIN_PARAMETROS:http://localhost:8086/actuator/health}
+    torneos: ${SALUD_TORNEOS:http://localhost:8088/actuator/health}
+
+# Regla 3 de plataforma: este servicio tambien expone su propia salud.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
