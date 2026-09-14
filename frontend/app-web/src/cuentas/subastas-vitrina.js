@@ -116,7 +116,11 @@ function construirTarjeta(subasta, alAbrirDetalle, alComprarAhora) {
     acciones.appendChild(botonDetalle);
   }
 
-  if (subasta.precioCompraInmediata != null && typeof alComprarAhora === 'function') {
+  if (
+    subasta.precioCompraInmediata !== null &&
+    subasta.precioCompraInmediata !== undefined &&
+    typeof alComprarAhora === 'function'
+  ) {
     const botonComprar = document.createElement('button');
     botonComprar.className = 'subastas__comprar-ahora';
     botonComprar.type = 'button';

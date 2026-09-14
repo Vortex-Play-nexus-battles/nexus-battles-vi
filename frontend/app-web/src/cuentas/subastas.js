@@ -108,7 +108,7 @@ function construirBarraBusqueda() {
     if (idPeticion !== idPeticionVigente) {
       return; // Llego una respuesta vieja despues de una tecla mas reciente.
     }
-    mostrarSugerencias(sugerencias, texto);
+    mostrarSugerencias(sugerencias);
   }, ESPERA_DEBOUNCE_MS);
 
   campo.addEventListener('input', () => buscar(campo.value));
@@ -123,7 +123,7 @@ function construirBarraBusqueda() {
     }
   });
 
-  function mostrarSugerencias(sugerencias, texto) {
+  function mostrarSugerencias(sugerencias) {
     listaSugerencias.replaceChildren();
     if (sugerencias.length === 0) {
       ocultarSugerencias();
