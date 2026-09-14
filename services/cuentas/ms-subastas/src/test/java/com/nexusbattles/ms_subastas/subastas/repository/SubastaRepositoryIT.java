@@ -33,7 +33,11 @@ import static org.junit.jupiter.api.Assertions.*;
  * precioMinimo/tiempoRestante sin soloActivas), esta prueba lo detectaria
  * de inmediato: apareceria primera por popularidad en vez de estar ausente.
  */
-@SpringBootTest
+@SpringBootTest(properties = {
+        "app.pujas.emision-automatica-intervalo-ms=3600000",
+        "app.subastas.cierre-intervalo-ms=3600000",
+        "app.notificaciones.drenaje-intervalo-ms=3600000"
+})
 @Testcontainers(disabledWithoutDocker = true)
 class SubastaRepositoryIT {
 

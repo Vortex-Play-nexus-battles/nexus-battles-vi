@@ -42,7 +42,11 @@ import static org.junit.jupiter.api.Assertions.*;
  * si no se combina con soloActivas(). Sembrarla es lo que detecta ese
  * error, no evitarla.
  */
-@SpringBootTest
+@SpringBootTest(properties = {
+        "app.pujas.emision-automatica-intervalo-ms=3600000",
+        "app.subastas.cierre-intervalo-ms=3600000",
+        "app.notificaciones.drenaje-intervalo-ms=3600000"
+})
 @Testcontainers(disabledWithoutDocker = true)
 class SubastaSpecificationsIT {
 
