@@ -12,6 +12,8 @@ rootProject.name = 'nexus-battles-vi'
 // No son servicios: no se despliegan ni tienen main. Los servicios las
 // declaran como dependencia. Cambiarlas afecta a los veinte modulos, asi que
 // requieren revision de los tres Scrum Masters (CLAUDE.md).
+include 'shared:libs:plataforma-comun'
+include 'shared:libs:plataforma-seguridad'
 include 'shared:libs:plataforma-observabilidad'
 include 'shared:libs:plataforma-resiliencia'
 

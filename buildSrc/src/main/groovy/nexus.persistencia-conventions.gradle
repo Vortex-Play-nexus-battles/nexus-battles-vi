@@ -1,0 +1,39 @@
+// Persistencia relacional: PostgreSQL 17 + JPA + Flyway.
+//
+// Plugin OPT-IN: solo lo aplica el servicio que guarda en relacional. No se
+// metio dentro de 'nexus.spring-conventions' porque lo aplican los once modulos
+// declarados, y varios de ellos (heroes, inventario) usan MongoDB. Meterlo alli
+// les colgaria un datasource que no necesitan.
+//
+// Uso:
+//     plugins {
+//         id 'nexus.spring-conventions'
+//         id 'nexus.persistencia-conventions'
+//     }
+//
+// CONVENCION DE ESQUEMA (establecida por moderacion-sanciones):
+// un solo PostgreSQL para la plataforma y UN ESQUEMA POR SERVICIO. Asi se cumple
+// la regla 7 —ningun servicio toca los datos de otro— sin pagar una instancia
+// por microservicio, que en el credito de AWS no cabria.
+//
+// Cada servicio fija su esquema en su application.yml:
+//     spring.jpa.properties.hibernate.default_schema: <mi_esquema>
+//     spring.flyway.schemas: <mi_esquema>
+//     spring.flyway.default-schema: <mi_esquema>
+//
+// Regla 8: todo cambio de esquema por Flyway, versionado, nunca a mano.
+
+plugins {
+    id 'java'
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-flyway'
+    implementation 'org.flywaydb:flyway-database-postgresql'
+    runtimeOnly 'org.postgresql:postgresql'
+
+    // Validacion de los objetos de entrada. Sin esto, @Valid en un controlador
+    // no hace nada y las restricciones del contrato OpenAPI no se comprueban.
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+}
