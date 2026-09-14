@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nexus Battles VI - Pujar en una subasta</title>
+    <link rel="stylesheet" href="../comun/barra-navegacion.css" />
+    <link rel="stylesheet" href="./pujas.css" />
+  </head>
+  <body>
+    <!-- Barra de Navegación Compartida (HU-INV-004 / src/comun) -->
+    <header id="contenedor-barra">
+      <nav class="barra" aria-label="Navegacion principal">
+        <div class="barra__busqueda">
+          <input type="search" placeholder="Buscar subastas, armas, objetos..." class="barra__campo-busqueda" />
+        </div>
+        <ul class="barra__accesos">
+          <li class="barra__item"><a href="../plataforma/salas-partidas/batallas.html" class="barra__enlace">Jugar online</a></li>
+          <li class="barra__item"><a href="#" class="barra__enlace">Misiones</a></li>
+          <li class="barra__item"><a href="#" class="barra__enlace">Torneo</a></li>
+          <li class="barra__item"><a href="../contenido/inventario/inventario.html" class="barra__enlace">Mi inventario</a></li>
+          <li class="barra__item"><a href="./subastas.html" class="barra__enlace barra__enlace--activo" aria-current="page">Subasta</a></li>
+          <li class="barra__item"><a href="./perfil.html" class="barra__enlace">Mi Cuenta</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <!-- Contenedor Principal de la Aplicación -->
+    <main id="subastas-app" class="contenedor-subastas">
+      <!-- Inyectado por pujas.js -->
+    </main>
+
+    <script type="module">
+      import { montarSubastas } from './pujas.js';
+      import { crearApiSubastas } from './pujas-api.js';
+
+      const contenedor = document.getElementById('subastas-app');
+      const parametros = new URLSearchParams(location.search);
+
+      // Con ?demo en la URL se monta con los datos de ejemplo, sin servidor.
+      // Sirve para ensenar la pantalla en la sustentacion si ms-subastas no
+      // esta levantado, y para trabajar el diseno sin base de datos. Por
+      // defecto, la pantalla habla con el servicio de verdad.
+      const demo = parametros.has('demo');
+
+      // ?id=<uuid> abre directamente el detalle de esa subasta. Es el enganche
+      // que espera el listado de HU-SUB-011: su vitrina ya llama a
+      // alAbrirDetalle, que hoy apunta a /subasta/{id} — una ruta que no
+      // existe. Cambiar ese destino por ./pujas.html?id={id} conecta las dos
+      // pantallas, pero es una linea en el archivo de Cristian y la decide el.
+      const subastaId = parametros.get('id');
+
+      montarSubastas(contenedor, {
+        ...(demo ? {} : { api: crearApiSubastas() }),
+        ...(subastaId ? { subastaInicialId: subastaId } : {})
+      });
+    </script>
+  </body>
+</html>
