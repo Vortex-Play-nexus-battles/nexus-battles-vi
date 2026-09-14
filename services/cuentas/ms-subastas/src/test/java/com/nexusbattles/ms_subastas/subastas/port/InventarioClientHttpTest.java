@@ -17,6 +17,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -190,6 +191,20 @@ class InventarioClientHttpTest {
         assertFalse(error instanceof InventarioNoDisponibleException,
                 "es un rechazo de negocio: reintentarlo da lo mismo y no debe abrir el cortacircuitos");
         assertTrue(error.getMessage().contains("otra subasta"), error.getMessage());
+    }
+
+    /**
+     * Si el elemento ya no existe, no queda nada que desbloquear: el efecto
+     * buscado ya se cumple. Y tratarlo como error seria peor que inutil — el
+     * cierre corre dentro de una transaccion, asi que al fallar revierte, la
+     * subasta se queda ACTIVA y el job la reintenta cada 30 s para siempre sin
+     * que ninguna vuelta pueda salir bien.
+     */
+    @Test
+    void liberarUnElementoQueYaNoExisteNoImpideCerrarLaSubasta() {
+        codigo.set(404);
+
+        assertDoesNotThrow(() -> cliente.liberarReserva(ELEMENTO, UUID.randomUUID(), "clave"));
     }
 
     // --- disponibilidad frente a negocio -----------------------------------

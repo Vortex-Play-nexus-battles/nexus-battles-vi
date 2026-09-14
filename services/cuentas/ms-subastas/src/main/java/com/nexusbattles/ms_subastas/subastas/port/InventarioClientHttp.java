@@ -1,6 +1,8 @@
 package com.nexusbattles.ms_subastas.subastas.port;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
@@ -38,6 +40,8 @@ import java.util.UUID;
  * respondera con 403 y el mensaje de abajo lo explica.
  */
 public class InventarioClientHttp implements InventarioClient {
+
+    private static final Logger log = LoggerFactory.getLogger(InventarioClientHttp.class);
 
     private static final String CABECERA_IDENTIDAD = "X-User-Name";
 
@@ -155,6 +159,17 @@ public class InventarioClientHttp implements InventarioClient {
         HttpResponse<String> respuesta = enviar(constructor.build());
         int estado = respuesta.statusCode();
         if (estado >= 200 && estado < 300) {
+            return;
+        }
+        if (estado == 404) {
+            // El elemento ya no existe en inventario, asi que no queda nada que
+            // desbloquear: el efecto buscado ya se cumple. Tratarlo como error
+            // seria peor que inutil — el cierre se invoca dentro de una
+            // transaccion, asi que al fallar revierte el estado, la subasta se
+            // queda ACTIVA y el job la reintenta cada 30 s para siempre sin que
+            // ninguna de esas vueltas pueda salir bien.
+            log.warn("El elemento {} ya no existe en inventario: no hay bloqueo que liberar "
+                    + "y la subasta {} se cierra igualmente.", elementoInventarioId, subastaId);
             return;
         }
         if (estado == 503) {
