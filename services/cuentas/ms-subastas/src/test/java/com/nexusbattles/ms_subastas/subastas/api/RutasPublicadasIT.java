@@ -15,6 +15,7 @@ import java.net.http.HttpResponse;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Comprueba que cada ruta de los contratos existe donde ellos dicen.
@@ -51,21 +52,43 @@ class RutasPublicadasIT {
 
     private final HttpClient cliente = HttpClient.newHttpClient();
 
-    private int estadoDe(String metodo, String ruta, String cuerpo) throws Exception {
+    private HttpResponse<String> pedir(String metodo, String ruta, String cuerpo) throws Exception {
         HttpRequest peticion = HttpRequest.newBuilder(URI.create("http://localhost:" + puerto + ruta))
                 .header("Content-Type", "application/json")
                 .method(metodo, cuerpo == null
                         ? HttpRequest.BodyPublishers.noBody()
                         : HttpRequest.BodyPublishers.ofString(cuerpo))
                 .build();
-        return cliente.send(peticion, HttpResponse.BodyHandlers.ofString()).statusCode();
+        return cliente.send(peticion, HttpResponse.BodyHandlers.ofString());
+    }
+
+    private int estadoDe(String metodo, String ruta, String cuerpo) throws Exception {
+        return pedir(metodo, ruta, cuerpo).statusCode();
     }
 
     private void resuelve(String metodo, String ruta, String cuerpo) throws Exception {
-        int estado = estadoDe(metodo, ruta, cuerpo);
-        assertNotEquals(404, estado, metodo + " " + ruta + " no existe (404)");
-        assertNotEquals(405, estado, metodo + " " + ruta + " existe con otro verbo (405): "
+        HttpResponse<String> respuesta = pedir(metodo, ruta, cuerpo);
+        assertNotEquals(404, respuesta.statusCode(), metodo + " " + ruta + " no existe (404)");
+        assertNotEquals(405, respuesta.statusCode(), metodo + " " + ruta + " existe con otro verbo (405): "
                 + "casi siempre es un prefijo /api/v1 repetido sobre el context-path");
+    }
+
+    /**
+     * Para las consultas que devuelven 404 con todo derecho cuando la subasta
+     * no existe. Aqui el 404 no distingue por si solo una ruta ausente de un
+     * recurso ausente, asi que se mira quien contesto: si el cuerpo trae el
+     * problem+json de "subasta no encontrada", la peticion llego a su
+     * controlador y la ruta existe. Un 404 de Spring por ruta desconocida no
+     * lleva ese tipo.
+     */
+    private void resuelveAunqueElRecursoNoExista(String metodo, String ruta) throws Exception {
+        HttpResponse<String> respuesta = pedir(metodo, ruta, null);
+        assertNotEquals(405, respuesta.statusCode(), metodo + " " + ruta + " existe con otro verbo (405)");
+        if (respuesta.statusCode() == 404) {
+            assertTrue(respuesta.body().contains("subasta-no-encontrada"),
+                    metodo + " " + ruta + " devolvio un 404 que no viene de esta API: la ruta no existe. "
+                            + "Cuerpo: " + respuesta.body());
+        }
     }
 
     /** ms-subastas-publicar.yaml: server .../api/v1 + ruta /subastas. */
@@ -85,6 +108,8 @@ class RutasPublicadasIT {
     @Test
     void lasRutasDePujasRespondenDondeDiceSuContrato() throws Exception {
         String subasta = "/api/v1/subastas/" + UUID.randomUUID();
+        resuelveAunqueElRecursoNoExista("GET", subasta + "/pujas");
+        resuelveAunqueElRecursoNoExista("GET", subasta + "/mi-participacion");
         resuelve("POST", subasta + "/pujas", "{}");
         resuelve("POST", subasta + "/compra-inmediata", "{}");
         resuelve("PUT", subasta + "/puja-automatica", "{}");

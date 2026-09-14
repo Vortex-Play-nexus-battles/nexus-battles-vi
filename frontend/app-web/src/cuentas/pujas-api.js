@@ -158,16 +158,19 @@ export function crearApiSubastas({
   leerApodo = () => globalThis.sessionStorage?.getItem(CLAVE_APODO) || null
 } = {}) {
 
-  async function pedir(ruta, { metodo = 'GET', cuerpo = null, conIdempotencia = false } = {}) {
+  async function pedir(
+    ruta,
+    { metodo = 'GET', cuerpo = null, conIdempotencia = false, exigeSesion = true } = {}
+  ) {
     const token = leerToken();
-    if (!token) {
+    if (!token && exigeSesion) {
       throw new ErrorDeSubastas('Inicia sesion para participar en las subastas.', { estado: 401 });
     }
 
-    const cabeceras = {
-      Accept: 'application/json',
-      Authorization: `Bearer ${token}`
-    };
+    const cabeceras = { Accept: 'application/json' };
+    // Sin sesion se manda igual la peticion cuando el endpoint es publico: el
+    // token solo enriquece la respuesta (marcar las pujas propias).
+    if (token) {cabeceras.Authorization = `Bearer ${token}`;}
     if (cuerpo !== null) {cabeceras['Content-Type'] = 'application/json';}
     if (conIdempotencia) {cabeceras['Idempotency-Key'] = claveDeIdempotencia();}
 
@@ -215,6 +218,33 @@ export function crearApiSubastas({
       // se escribio a mano justamente para no serializar el Page de Spring
       // Data, cuyo JSON usa 'content' y no coincidiria.
       return (pagina.contenido || []).map((resumen) => aVistaDeSubasta(resumen, apodo));
+    },
+
+    /**
+     * GET /mis-pujas/resumen — lo que tienes en juego sumando todas las
+     * subastas. No trae saldo total ni disponible: eso lo sabe ms-finanzas, que
+     * todavia no existe, y este servicio no se lo inventa.
+     */
+    async miResumen() {
+      return pedir('/mis-pujas/resumen');
+    },
+
+    /**
+     * GET /subastas/{id}/pujas — historial, de la mas reciente a la mas
+     * antigua. Publico, pero se manda el token si lo hay para que el servidor
+     * marque cuales son propias.
+     */
+    async historial(subastaId) {
+      return pedir(`/subastas/${subastaId}/pujas`, { exigeSesion: false });
+    },
+
+    /**
+     * GET /subastas/{id}/mi-participacion — si vas ganando, tu oferta vigente,
+     * tus creditos retenidos, tu limite automatico y cuanto falta para poder
+     * volver a pujar. Sin esto la pantalla tenia que suponerlo.
+     */
+    async miParticipacion(subastaId) {
+      return pedir(`/subastas/${subastaId}/mi-participacion`);
     },
 
     /** POST /subastas/{id}/pujas */

@@ -6,6 +6,7 @@ import com.nexusbattles.ms_subastas.pujas.dto.PujarRequest;
 import com.nexusbattles.ms_subastas.pujas.model.EstadoPuja;
 import com.nexusbattles.ms_subastas.pujas.model.Puja;
 import com.nexusbattles.ms_subastas.pujas.model.TipoPuja;
+import com.nexusbattles.ms_subastas.pujas.service.ConsultaDeParticipacionService;
 import com.nexusbattles.ms_subastas.pujas.service.PujaApplicationService;
 import com.nexusbattles.ms_subastas.pujas.service.PujaRechazadaException;
 import com.nexusbattles.ms_subastas.subastas.port.IdentidadClient;
@@ -42,13 +43,16 @@ class PujaControllerTest {
     private PujaApplicationService pujas;
 
     @Mock
+    private ConsultaDeParticipacionService consultas;
+
+    @Mock
     private IdentidadClient identidad;
 
     private PujaController controlador;
 
     @BeforeEach
     void setUp() {
-        controlador = new PujaController(pujas, identidad);
+        controlador = new PujaController(pujas, consultas, identidad);
     }
 
     private Puja pujaDe(UUID subastaId, UUID jugadorId, String monto, EstadoPuja estado) {

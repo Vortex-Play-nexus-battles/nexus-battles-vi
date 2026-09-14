@@ -17,7 +17,7 @@ info:
     habría cruzado dominios, cosa que prohíbe backend-spring.md y verifica
     ArchUnit. La identidad del jugador se toma SIEMPRE del token, nunca de un
     encabezado ni del cuerpo, porque estos endpoints mueven créditos.
-  version: 0.2.0
+  version: 0.3.0
 servers:
   - url: http://localhost:8092/api/v1
     description: Spring Boot local (perfil dev)
@@ -27,6 +27,33 @@ security:
 
 paths:
   /subastas/{subastaId}/pujas:
+    get:
+      summary: Historial de pujas de la subasta
+      description: >-
+        De la mas reciente a la mas antigua. Publico: se consulta sin sesion,
+        igual que el listado. Con sesion, cada linea viene marcada con `esTuya`
+        para que la interfaz resalte las propias sin conocer el identificador de
+        nadie.
+
+        No devuelve apodos. El de cada postor vive en ms-identidad, y traerlo
+        obligaria a este servicio a consultar otro dominio solo para pintar una
+        lista.
+      operationId: historialDePujas
+      tags: [pujas]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/SubastaId'
+      responses:
+        '200':
+          description: Historial de la subasta
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PujaDelHistorial'
+        '404':
+          $ref: '#/components/responses/SubastaNoEncontrada'
     post:
       summary: Pujar en una subasta
       description: >-
@@ -62,6 +89,33 @@ paths:
           $ref: '#/components/responses/PujaRechazada'
         '422':
           $ref: '#/components/responses/PujaRechazada'
+
+  /subastas/{subastaId}/mi-participacion:
+    get:
+      summary: Situacion del jugador autenticado en esta subasta
+      description: >-
+        Si va ganando, cuanto lleva retenido, que limite automatico tiene puesto
+        y cuantos segundos faltan para poder volver a pujar.
+
+        Existe porque el listado de HU-SUB-011 es el mismo para todos y no puede
+        responder nada de esto. Sin el, la interfaz tiene que suponerlo, y lo
+        que hacia era mostrar siempre "no vas ganando" y "sin puja automatica"
+        aunque fuera falso.
+      operationId: miParticipacion
+      tags: [pujas]
+      parameters:
+        - $ref: '#/components/parameters/SubastaId'
+      responses:
+        '200':
+          description: Situacion del jugador
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MiParticipacion'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '404':
+          $ref: '#/components/responses/SubastaNoEncontrada'
 
   /subastas/{subastaId}/compra-inmediata:
     post:
@@ -227,6 +281,49 @@ components:
             sea alcanzable (al menos la siguiente oferta válida) y que el saldo
             disponible del jugador lo cubra.
           example: "500.00"
+
+    PujaDelHistorial:
+      type: object
+      required: [id, monto, tipo, estado, creadaEn, esTuya]
+      properties:
+        id: { type: string, format: uuid }
+        monto: { type: string, format: decimal, example: "110.00" }
+        tipo: { type: string, enum: [MANUAL, AUTOMATICA] }
+        estado: { type: string, enum: [ACTIVA, SUPERADA, GANADORA, RECHAZADA] }
+        creadaEn: { type: string, format: date-time }
+        esTuya:
+          type: boolean
+          description: Falso siempre si se consulta sin sesion.
+
+    MiParticipacion:
+      type: object
+      required: [vasGanando, teSuperaron, creditosRetenidos, automaticaActiva, segundosParaVolverAPujar]
+      properties:
+        vasGanando: { type: boolean }
+        teSuperaron:
+          type: boolean
+          description: >-
+            No es lo contrario de vasGanando: exige haber pujado antes. Quien
+            nunca pujo no va perdiendo, es que no participa, y la interfaz no
+            debe decirle lo mismo.
+        tuOfertaVigente:
+          type: [string, "null"]
+          format: decimal
+          description: Nula si no tienes ninguna puja que sea la oferta vigente.
+        creditosRetenidos:
+          type: string
+          format: decimal
+          description: >-
+            Suma de tus pujas que siguen siendo oferta vigente. Es lo unico que
+            este servicio sabe de creditos: el saldo total y el disponible los
+            tiene ms-finanzas.
+        limiteAutomatico:
+          type: [string, "null"]
+          format: decimal
+        automaticaActiva: { type: boolean }
+        segundosParaVolverAPujar:
+          type: integer
+          description: Cero si ya puedes pujar. El intervalo es por subasta, no por cuenta.
 
     PujaResponse:
       type: object

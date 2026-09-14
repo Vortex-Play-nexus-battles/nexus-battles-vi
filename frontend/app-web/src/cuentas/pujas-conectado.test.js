@@ -38,6 +38,17 @@ function subastaDelServidor(extra = {}) {
 function apiFalsa(sobrescribir = {}) {
   return Object.assign({
     listar: jest.fn(async () => [subastaDelServidor()]),
+    miResumen: jest.fn(async () => ({ creditosRetenidos: '0', subastasGanando: 0 })),
+    historial: jest.fn(async () => []),
+    miParticipacion: jest.fn(async () => ({
+      vasGanando: false,
+      teSuperaron: false,
+      tuOfertaVigente: null,
+      retenidoAqui: '0',
+      limiteAutomatico: null,
+      automaticaActiva: false,
+      segundosParaVolverAPujar: 0
+    })),
     pujar: jest.fn(async () => ({ id: 'p1', estado: 'ACTIVA' })),
     comprarAhora: jest.fn(async () => ({ id: 'p2', estado: 'GANADORA' })),
     configurarAutomatica: jest.fn(async () => ({ id: 'a1', activa: true })),
@@ -165,6 +176,125 @@ describe('llegada desde el listado (HU-SUB-011)', () => {
     await ctrl.recargar();
 
     expect(ctrl.vista).not.toBe('detalle');
+    ctrl.destruir();
+  });
+});
+
+describe('datos propios del detalle', () => {
+  /**
+   * El listado es el mismo para todos: no puede decir si TU vas ganando. Antes
+   * de tener /mi-participacion la pantalla mostraba siempre "no vas ganando",
+   * aunque fueras el mejor postor.
+   */
+  test('al abrir el detalle se pregunta al servidor por la situacion propia', async () => {
+    const api = apiFalsa({
+      miParticipacion: jest.fn(async () => ({
+        vasGanando: true,
+        teSuperaron: false,
+        tuOfertaVigente: '1450',
+        retenidoAqui: '1450',
+        limiteAutomatico: '2000',
+        automaticaActiva: true,
+        segundosParaVolverAPujar: 3
+      }))
+    });
+    const ctrl = new ControladorSubastas({ contenedor: contenedor(), api });
+    await ctrl.iniciar();
+
+    await ctrl.cargarDetalle('sub-1');
+
+    const sub = ctrl.subastas.find((s) => s.id === 'sub-1');
+    expect(api.miParticipacion).toHaveBeenCalledWith('sub-1');
+    expect(sub.ganando).toBe(true);
+    expect(sub.retenido).toBe(1450);
+    expect(sub.autoLimite).toBe(2000);
+    expect(sub.esperaSegundos).toBe(3);
+    ctrl.destruir();
+  });
+
+  test('el historial viene del servidor y marca cuales son tuyas', async () => {
+    const api = apiFalsa({
+      historial: jest.fn(async () => [
+        { id: 'p1', monto: '1450', tipo: 'MANUAL', estado: 'ACTIVA', creadaEn: '2026-09-14T12:00:00Z', esTuya: true },
+        { id: 'p2', monto: '1400', tipo: 'AUTOMATICA', estado: 'SUPERADA', creadaEn: '2026-09-14T11:59:00Z', esTuya: false }
+      ])
+    });
+    const ctrl = new ControladorSubastas({ contenedor: contenedor(), api });
+    await ctrl.iniciar();
+
+    await ctrl.cargarDetalle('sub-1');
+
+    const sub = ctrl.subastas.find((s) => s.id === 'sub-1');
+    expect(sub.historial).toHaveLength(2);
+    expect(sub.historial[0].esTu).toBe(true);
+    expect(sub.historial[1].apodo).toBe('Otro jugador');
+    ctrl.destruir();
+  });
+
+  /**
+   * Una puja cambia si vas ganando y cuanto llevas retenido, y eso el listado
+   * no lo refleja. Sin releer la parte propia, la pantalla se quedaria
+   * diciendo lo de antes de pujar.
+   */
+  test('despues de pujar se relee tambien la situacion propia', async () => {
+    const api = apiFalsa();
+    const ctrl = new ControladorSubastas({ contenedor: contenedor(), api });
+    await ctrl.iniciar();
+    // Se puja DESDE el detalle: montar solo subastaActivaId dejaba un estado
+    // que no ocurre, y la recarga no tenia por que traer el detalle.
+    ctrl.abrirDetalle('sub-1');
+    api.miParticipacion.mockClear();
+
+    await ctrl.pujar(1400);
+
+    expect(api.miParticipacion).toHaveBeenCalledWith('sub-1');
+    ctrl.destruir();
+  });
+
+  /** Si el servidor no responde, el detalle se pinta igual: pujar importa mas. */
+  test('un fallo al traer el detalle no rompe la pantalla', async () => {
+    const api = apiFalsa({
+      historial: jest.fn(async () => { throw new Error('sin red'); }),
+      miParticipacion: jest.fn(async () => { throw new Error('sin red'); })
+    });
+    const ctrl = new ControladorSubastas({ contenedor: contenedor(), api });
+    await ctrl.iniciar();
+
+    await expect(ctrl.cargarDetalle('sub-1')).resolves.toBeUndefined();
+    expect(ctrl.subastas).toHaveLength(1);
+    ctrl.destruir();
+  });
+});
+
+describe('nada inventado en pantalla', () => {
+  /**
+   * El saldo total y el disponible los sabe ms-finanzas, que no existe. La
+   * pantalla mostraba 6.200 cr fijos, que no eran de nadie.
+   */
+  test('el retenido sale del servidor, no de un valor de ejemplo', async () => {
+    const api = apiFalsa({
+      miResumen: jest.fn(async () => ({ creditosRetenidos: '2750', subastasGanando: 2 }))
+    });
+    const ctrl = new ControladorSubastas({ contenedor: contenedor(), api });
+
+    await ctrl.iniciar();
+
+    expect(ctrl.getRetenidoReal()).toBe(2750);
+    expect(ctrl.getSubastasGanando()).toBe(2);
+    ctrl.destruir();
+  });
+
+  /**
+   * Si no se sabe, no se pinta. Un cero se leeria como "no vas ganando en
+   * ninguna", que es una afirmacion distinta de "no lo sabemos".
+   */
+  test('sin resumen del servidor no se afirma en cuantas vas ganando', async () => {
+    const api = apiFalsa({ miResumen: jest.fn(async () => { throw new Error('sin red'); }) });
+    const ctrl = new ControladorSubastas({ contenedor: contenedor(), api });
+
+    await ctrl.iniciar();
+
+    expect(ctrl.getSubastasGanando()).toBeNull();
     ctrl.destruir();
   });
 });
