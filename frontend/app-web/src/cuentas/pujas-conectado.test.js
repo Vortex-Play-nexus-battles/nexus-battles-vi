@@ -100,6 +100,75 @@ describe('carga inicial', () => {
   });
 });
 
+describe('llegada desde el listado (HU-SUB-011)', () => {
+  /**
+   * El listado de Cristian navega a ./pujas.html?id=<uuid>, y esa pagina
+   * traduce el parametro a subastaInicialId. Es un contrato entre dos modulos
+   * de personas distintas: si el nombre del parametro o el comportamiento
+   * cambian, el enlace deja de funcionar sin que falle nada visible.
+   */
+  test('abre directamente el detalle de la subasta que llega en el enlace', async () => {
+    const api = apiFalsa({
+      listar: jest.fn(async () => [
+        subastaDelServidor({ id: 'sub-1' }),
+        subastaDelServidor({ id: 'sub-2', nombre: 'Grebas del Centinela' })
+      ])
+    });
+    const ctrl = new ControladorSubastas({ contenedor: contenedor(), api, subastaInicialId: 'sub-2' });
+
+    await ctrl.iniciar();
+
+    expect(ctrl.vista).toBe('detalle');
+    expect(ctrl.subastaActivaId).toBe('sub-2');
+    ctrl.destruir();
+  });
+
+  /**
+   * Un enlace a una subasta que ya se cerro o se adjudico. Abrir un detalle
+   * vacio seria peor que decirlo: el jugador vendria de pulsar "Ver subasta"
+   * y no entenderia que esta mirando.
+   */
+  test('si la subasta del enlace ya no esta, lo dice en vez de abrir un detalle vacio', async () => {
+    const api = apiFalsa();
+    const ctrl = new ControladorSubastas({
+      contenedor: contenedor(), api, subastaInicialId: 'sub-que-ya-no-existe'
+    });
+
+    await ctrl.iniciar();
+
+    expect(ctrl.vista).not.toBe('detalle');
+    expect(ctrl.mensajeError).toContain('ya no esta disponible');
+    ctrl.destruir();
+  });
+
+  /** Sin id en la URL se entra por la lista, como siempre. */
+  test('sin id en el enlace se queda en el listado', async () => {
+    const ctrl = new ControladorSubastas({ contenedor: contenedor(), api: apiFalsa() });
+
+    await ctrl.iniciar();
+
+    expect(ctrl.vista).not.toBe('detalle');
+    ctrl.destruir();
+  });
+
+  /**
+   * El id solo vale para la primera carga. Si se quedara pegado, cada refresco
+   * posterior devolveria al jugador al detalle aunque hubiera navegado a otro
+   * sitio.
+   */
+  test('el id del enlace no reabre el detalle en cada recarga', async () => {
+    const api = apiFalsa();
+    const ctrl = new ControladorSubastas({ contenedor: contenedor(), api, subastaInicialId: 'sub-1' });
+    await ctrl.iniciar();
+
+    ctrl.volverALista();
+    await ctrl.recargar();
+
+    expect(ctrl.vista).not.toBe('detalle');
+    ctrl.destruir();
+  });
+});
+
 describe('acciones', () => {
   test('pujar llama al servidor y no toca la oferta por su cuenta', async () => {
     const api = apiFalsa();
