@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.Instant;
 import java.util.List;
+import java.util.OptionalDouble;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -51,25 +52,28 @@ class ComentariosControllerTest {
     @MockitoBean
     private ServicioDePublicacionDeComentarios servicio;
 
-    private static Comentario comentario(Comentario.Estado estado, Integer estrellas) {
-        return new Comentario(
+    private static ServicioDePublicacionDeComentarios.ResultadoPublicacion resultado(
+            Comentario.Estado estado, Integer estrellas, OptionalDouble promedio) {
+        Comentario c = new Comentario(
                 "com-1", "espada-del-alba", "jugador-1", "LyraRoja",
                 "Muy buena espada", List.of("captura.jpg"), estrellas,
                 Instant.parse("2026-08-30T03:00:00Z"), estado);
+        return new ServicioDePublicacionDeComentarios.ResultadoPublicacion(c, promedio);
     }
 
     @Test
-    @DisplayName("publicado responde 201 con el comentario completo")
+    @DisplayName("publicado responde 201 con el comentario completo y el promedio")
     void publicadoResponde201() throws Exception {
         when(servicio.publicar(eq("espada-del-alba"), anyString(), anyString(),
                 anyString(), any(), any()))
-                .thenReturn(comentario(Comentario.Estado.PUBLICADO, 4));
+                .thenReturn(resultado(Comentario.Estado.PUBLICADO, 4, OptionalDouble.of(4.5)));
 
         mvc.perform(post(RUTA).contentType(MediaType.APPLICATION_JSON).content(CUERPO))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.estado").value("PUBLICADO"))
                 .andExpect(jsonPath("$.estrellas").value(4))
-                .andExpect(jsonPath("$.apodoAutor").value("LyraRoja"));
+                .andExpect(jsonPath("$.apodoAutor").value("LyraRoja"))
+                .andExpect(jsonPath("$.promedio").value(4.5));
     }
 
     @Test
@@ -77,7 +81,7 @@ class ComentariosControllerTest {
     void retenidoResponde202() throws Exception {
         when(servicio.publicar(eq("espada-del-alba"), anyString(), anyString(),
                 anyString(), any(), any()))
-                .thenReturn(comentario(Comentario.Estado.EN_REVISION, 4));
+                .thenReturn(resultado(Comentario.Estado.EN_REVISION, 4, OptionalDouble.empty()));
 
         mvc.perform(post(RUTA).contentType(MediaType.APPLICATION_JSON).content(CUERPO))
                 .andExpect(status().isAccepted())
