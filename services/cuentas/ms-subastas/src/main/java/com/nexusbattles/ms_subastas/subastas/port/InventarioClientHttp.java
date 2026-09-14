@@ -66,6 +66,12 @@ public class InventarioClientHttp implements InventarioClient {
         if (elementoInventarioId == null || elementoInventarioId.isBlank()) {
             throw new InventarioClientException("El identificador del elemento de inventario es obligatorio");
         }
+        if (propietarioId == null) {
+            throw new InventarioClientException("El propietario es obligatorio para la reserva");
+        }
+        if (subastaId == null) {
+            throw new InventarioClientException("El identificador de la subasta es obligatorio para la reserva");
+        }
         SolicitudReserva solicitud = new SolicitudReserva(propietarioId, subastaId);
         String cuerpo = serializar(solicitud);
         HttpRequest.Builder builder = HttpRequest.newBuilder(uri("/api/v1/inventario/elementos/" + elementoInventarioId + "/reservas"))
@@ -85,6 +91,9 @@ public class InventarioClientHttp implements InventarioClient {
     public void liberarReserva(String elementoInventarioId, UUID subastaId, String idempotencyKey) {
         if (elementoInventarioId == null || elementoInventarioId.isBlank()) {
             throw new InventarioClientException("El identificador del elemento de inventario es obligatorio");
+        }
+        if (subastaId == null) {
+            throw new InventarioClientException("El identificador de la subasta es obligatorio para la liberación");
         }
         HttpRequest.Builder builder = HttpRequest.newBuilder(uri("/api/v1/inventario/elementos/" + elementoInventarioId + "/reservas/" + subastaId))
                 .timeout(timeout)
@@ -106,6 +115,9 @@ public class InventarioClientHttp implements InventarioClient {
         if (nuevoPropietarioId == null) {
             throw new InventarioClientException("El nuevo propietario es obligatorio para la transferencia");
         }
+        if (subastaId == null) {
+            throw new InventarioClientException("El identificador de la subasta es obligatorio para la transferencia");
+        }
         SolicitudTransferencia solicitud = new SolicitudTransferencia(nuevoPropietarioId, subastaId);
         String cuerpo = serializar(solicitud);
         HttpRequest.Builder builder = HttpRequest.newBuilder(uri("/api/v1/inventario/elementos/" + elementoInventarioId + "/transferencias"))
@@ -122,11 +134,14 @@ public class InventarioClientHttp implements InventarioClient {
     }
 
     private URI uri(String ruta) {
-        try {
-            return new URI(baseUri.getScheme(), baseUri.getAuthority(), ruta, null, null);
-        } catch (URISyntaxException e) {
-            throw new InventarioClientException("No se pudo construir la URL de inventario: " + ruta, e);
+        String basePath = baseUri.getPath();
+        if (basePath == null || basePath.isBlank() || basePath.equals("/")) {
+            basePath = "";
+        } else {
+            basePath = basePath.replaceAll("/+$", "");
         }
+        String fullPath = basePath + (ruta.startsWith("/") ? ruta : "/" + ruta);
+        return URI.create(baseUri.getScheme() + "://" + baseUri.getAuthority() + fullPath);
     }
 
     private HttpResponse<String> enviar(HttpRequest request) {

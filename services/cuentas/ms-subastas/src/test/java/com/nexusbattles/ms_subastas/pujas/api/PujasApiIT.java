@@ -434,6 +434,42 @@ class PujasApiIT {
     }
 
     @Test
+    void laCompraInmediataConPujaVigenteLiberaCreditosDePostorAnteriorYTransfiereItemAlComprador() throws Exception {
+        UUID postor = jugadorConSaldo("1000");
+        UUID comprador = jugadorConSaldo("1000");
+        Subasta subasta = subastaActiva(UUID.randomUUID(), "100", "500");
+
+        // Postor oferta 150
+        HttpResponse<String> pujaResp = enviar("POST", "/subastas/" + subasta.getId() + "/pujas",
+                "{\"monto\":\"150\"}", tokenDe(postor), claveNueva());
+        assertEquals(201, pujaResp.statusCode());
+        assertEquals(0, new BigDecimal("850.00").compareTo(creditos.saldoDisponible(postor)));
+
+        // Comprador ejecuta compra inmediata por 500
+        HttpResponse<String> compraResp = enviar("POST", "/subastas/" + subasta.getId() + "/compra-inmediata",
+                "{\"confirmado\":true}", tokenDe(comprador), claveNueva());
+        assertEquals(201, compraResp.statusCode(), compraResp.body());
+
+        // El postor anterior recuperó sus 1000 créditos
+        assertEquals(0, new BigDecimal("1000.00").compareTo(creditos.saldoDisponible(postor)));
+        // El comprador pagó 500
+        assertEquals(0, new BigDecimal("500.00").compareTo(creditos.saldoDisponible(comprador)));
+
+        // Subasta quedó adjudicada al comprador
+        Subasta recargada = subastas.findById(subasta.getId()).orElseThrow();
+        assertEquals(EstadoSubasta.ADJUDICADA, recargada.getEstado());
+        assertEquals(comprador, recargada.getMejorPostorId());
+
+        // El inventario quedó transferido formalmente al comprador
+        if (inventario instanceof InventarioClientFake fake) {
+            var elemento = fake.buscar(subasta.getElementoInventarioId());
+            assertTrue(elemento.isPresent());
+            assertEquals(comprador, elemento.get().propietarioId());
+            assertFalse(elemento.get().enUso());
+        }
+    }
+
+    @Test
     void elCierrePorVencimientoTransfiereElProductoAlMejorPostor() throws Exception {
         UUID postor = jugadorConSaldo("1000");
         Subasta subasta = subastaActiva(UUID.randomUUID(), "100", "500");

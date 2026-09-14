@@ -2,6 +2,8 @@ plugins {
     id 'nexus.spring-conventions'
 }
 
+layout.buildDirectory.set(file("build.nosync"))
+
 group = 'nexus'
 version = '0.0.1-SNAPSHOT'
 

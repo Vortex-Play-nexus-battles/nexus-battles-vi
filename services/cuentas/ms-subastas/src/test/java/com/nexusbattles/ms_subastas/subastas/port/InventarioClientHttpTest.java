@@ -110,9 +110,15 @@ class InventarioClientHttpTest {
     }
 
     @Test
-    void reservarLanzaExcepcionSiIdEsNulo() {
+    void reservarLanzaExcepcionSiParametrosSonInvalidos() {
         assertThrows(InventarioClientException.class, () ->
                 client.reservar(null, UUID.randomUUID(), UUID.randomUUID(), "idem-res"));
+        assertThrows(InventarioClientException.class, () ->
+                client.reservar("  ", UUID.randomUUID(), UUID.randomUUID(), "idem-res"));
+        assertThrows(InventarioClientException.class, () ->
+                client.reservar("elem-1", null, UUID.randomUUID(), "idem-res"));
+        assertThrows(InventarioClientException.class, () ->
+                client.reservar("elem-1", UUID.randomUUID(), null, "idem-res"));
     }
 
     // --- liberarReserva ---
@@ -145,9 +151,13 @@ class InventarioClientHttpTest {
     }
 
     @Test
-    void liberarReservaLanzaExcepcionSiIdEsNulo() {
+    void liberarReservaLanzaExcepcionSiParametrosSonInvalidos() {
         assertThrows(InventarioClientException.class, () ->
                 client.liberarReserva(null, UUID.randomUUID(), "idem-lib"));
+        assertThrows(InventarioClientException.class, () ->
+                client.liberarReserva("  ", UUID.randomUUID(), "idem-lib"));
+        assertThrows(InventarioClientException.class, () ->
+                client.liberarReserva("elem-1", null, "idem-lib"));
     }
 
     // --- transferirProducto ---
@@ -175,7 +185,27 @@ class InventarioClientHttpTest {
         assertThrows(InventarioClientException.class, () ->
                 client.transferirProducto(null, UUID.randomUUID(), UUID.randomUUID(), "idem"));
         assertThrows(InventarioClientException.class, () ->
+                client.transferirProducto("  ", UUID.randomUUID(), UUID.randomUUID(), "idem"));
+        assertThrows(InventarioClientException.class, () ->
                 client.transferirProducto("elem-1", null, UUID.randomUUID(), "idem"));
+        assertThrows(InventarioClientException.class, () ->
+                client.transferirProducto("elem-1", UUID.randomUUID(), null, "idem"));
+    }
+
+    @Test
+    void construyeUriRespetandoPrefijoDeRutaEnBaseUri() throws Exception {
+        InventarioClientHttp clientConPrefijo = new InventarioClientHttp(
+                URI.create("http://gateway:8080/servicios/inventario/"), http, mapper, Duration.ofSeconds(1));
+        when(response.statusCode()).thenReturn(204);
+        when(http.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenAnswer(inv -> {
+            HttpRequest req = inv.getArgument(0);
+            assertEquals("http://gateway:8080/servicios/inventario/api/v1/inventario/elementos/elem-1/reservas/00000000-0000-0000-0000-000000000001",
+                    req.uri().toString());
+            return response;
+        });
+
+        assertDoesNotThrow(() ->
+                clientConPrefijo.liberarReserva("elem-1", UUID.fromString("00000000-0000-0000-0000-000000000001"), "k"));
     }
 
     // --- red e interrupciones ---

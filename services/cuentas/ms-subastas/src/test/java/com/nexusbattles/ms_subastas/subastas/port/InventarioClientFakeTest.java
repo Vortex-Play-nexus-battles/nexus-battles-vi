@@ -105,6 +105,58 @@ class InventarioClientFakeTest {
     }
 
     @Test
+    void transferirProductoEsIdempotenteConMismaClave() {
+        String id = "elem-idem";
+        UUID vendedor = UUID.randomUUID();
+        UUID comprador = UUID.randomUUID();
+        UUID subasta = UUID.randomUUID();
+        fake.registrarElemento(new InventarioClient.ElementoInventario(id, UUID.randomUUID(), vendedor, false));
+        fake.reservar(id, vendedor, subasta, "idem-1");
+
+        fake.transferirProducto(id, comprador, subasta, "idem-repetida");
+        fake.transferirProducto(id, comprador, subasta, "idem-repetida");
+
+        assertEquals(1, fake.getTransferencias().size());
+        assertEquals(comprador, fake.buscar(id).orElseThrow().propietarioId());
+    }
+
+    @Test
+    void reservarEsIdempotenteParaLaMismaSubasta() {
+        String id = "elem-res-idem";
+        UUID prop = UUID.randomUUID();
+        UUID subasta = UUID.randomUUID();
+        fake.registrarElemento(new InventarioClient.ElementoInventario(id, UUID.randomUUID(), prop, false));
+
+        fake.reservar(id, prop, subasta, "clave-1");
+        assertDoesNotThrow(() -> fake.reservar(id, prop, subasta, "clave-1"));
+
+        assertTrue(fake.buscar(id).orElseThrow().enUso());
+    }
+
+    @Test
+    void validaParametrosObligatoriosEnTodasLasOperaciones() {
+        UUID u1 = UUID.randomUUID();
+        UUID u2 = UUID.randomUUID();
+
+        assertThrows(InventarioClientException.class, () -> fake.buscar(null));
+        assertThrows(InventarioClientException.class, () -> fake.buscar("   "));
+
+        assertThrows(InventarioClientException.class, () -> fake.reservar(null, u1, u2, "k"));
+        assertThrows(InventarioClientException.class, () -> fake.reservar("  ", u1, u2, "k"));
+        assertThrows(InventarioClientException.class, () -> fake.reservar("elem", null, u2, "k"));
+        assertThrows(InventarioClientException.class, () -> fake.reservar("elem", u1, null, "k"));
+
+        assertThrows(InventarioClientException.class, () -> fake.liberarReserva(null, u2, "k"));
+        assertThrows(InventarioClientException.class, () -> fake.liberarReserva("  ", u2, "k"));
+        assertThrows(InventarioClientException.class, () -> fake.liberarReserva("elem", null, "k"));
+
+        assertThrows(InventarioClientException.class, () -> fake.transferirProducto(null, u1, u2, "k"));
+        assertThrows(InventarioClientException.class, () -> fake.transferirProducto("  ", u1, u2, "k"));
+        assertThrows(InventarioClientException.class, () -> fake.transferirProducto("elem", null, u2, "k"));
+        assertThrows(InventarioClientException.class, () -> fake.transferirProducto("elem", u1, null, "k"));
+    }
+
+    @Test
     void limpiarVaciaTodoElEstado() {
         fake.registrarElemento(new InventarioClient.ElementoInventario("elem-6", UUID.randomUUID(), UUID.randomUUID(), false));
         fake.reservar("elem-6", UUID.randomUUID(), UUID.randomUUID(), "k");

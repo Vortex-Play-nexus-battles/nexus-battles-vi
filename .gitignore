@@ -33,6 +33,7 @@ desktop.ini
 # --- Artefactos de compilacion y dependencias ---
 .gradle/
 build/
+build.nosync/
 dist/
 out/
 target/

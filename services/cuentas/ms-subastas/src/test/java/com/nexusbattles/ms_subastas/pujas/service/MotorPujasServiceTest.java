@@ -1,6 +1,8 @@
 package com.nexusbattles.ms_subastas.pujas.service;
 
+import com.nexusbattles.ms_subastas.pujas.creditos.CreditoClient;
 import com.nexusbattles.ms_subastas.pujas.creditos.CreditoClientFake;
+import com.nexusbattles.ms_subastas.pujas.creditos.ReservaCredito;
 import com.nexusbattles.ms_subastas.pujas.model.EstadoPuja;
 import com.nexusbattles.ms_subastas.pujas.model.Puja;
 import com.nexusbattles.ms_subastas.pujas.model.TipoPuja;
@@ -400,6 +402,60 @@ class MotorPujasServiceTest {
     }
 
     @Test
+    void comprarAhoraRevierteTransferenciaDeItemSiFallaConsumoDeCreditos() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+        subasta.setElementoInventarioId("elem-compra-fail-debito");
+        UUID comprador = UUID.randomUUID();
+        String clave = claveUnica();
+
+        CreditoClient creditoMock = mock(CreditoClient.class);
+        ReservaCredito reserva = new ReservaCredito(UUID.randomUUID(), comprador, new BigDecimal("500"), ReservaCredito.EstadoReserva.RESERVADA);
+        when(creditoMock.reservar(eq(comprador), any(BigDecimal.class), eq(subasta.getId()), eq(clave))).thenReturn(reserva);
+        doThrow(new RuntimeException("Fallo al consumir creditos en ms-finanzas"))
+                .when(creditoMock).consumir(reserva.id());
+
+        MotorPujasService motorTest = new MotorPujasService(creditoMock, inventarioClient, clock, parametros);
+
+        assertThrows(RuntimeException.class, () ->
+                motorTest.comprarAhora(subasta, null, comprador, clave));
+
+        // Verifica que se transfirió inicialmente al comprador
+        verify(inventarioClient).transferirProducto("elem-compra-fail-debito", comprador, subasta.getId(), clave);
+        // Verifica que ante el fallo de consumo se compensó: se revirtió al vendedor y se re-reservó
+        verify(inventarioClient).transferirProducto("elem-compra-fail-debito", VENDEDOR, subasta.getId(), "compensar-" + clave);
+        verify(inventarioClient).reservar("elem-compra-fail-debito", VENDEDOR, subasta.getId(), "compensar-reserva-" + clave);
+        // Verifica que se liberó la reserva de crédito
+        verify(creditoMock).liberar(reserva.id());
+    }
+
+    @Test
+    void comprarAhoraConPujaVigenteLiberaCreditosDePostorAnteriorYTransfiereItemAlComprador() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+        subasta.setElementoInventarioId("elem-compra-con-postor");
+        UUID postorAnterior = UUID.randomUUID();
+        UUID comprador = UUID.randomUUID();
+        creditoClient.acreditar(postorAnterior, new BigDecimal("1000"));
+        creditoClient.acreditar(comprador, new BigDecimal("1000"));
+
+        Puja pujaVigente = motorConInventario.pujar(subasta, null, postorAnterior, new BigDecimal("150"),
+                ContextoParticipacion.sinHistorial(), claveUnica(), TipoPuja.MANUAL);
+        assertEquals(new BigDecimal("850"), creditoClient.saldoDisponible(postorAnterior));
+
+        String claveCompra = claveUnica();
+        Puja ganadora = motorConInventario.comprarAhora(subasta, pujaVigente, comprador, claveCompra);
+
+        assertEquals(EstadoPuja.GANADORA, ganadora.getEstado());
+        assertEquals(EstadoPuja.SUPERADA, pujaVigente.getEstado());
+        assertEquals(EstadoSubasta.ADJUDICADA, subasta.getEstado());
+        // El postor anterior recupera sus 1000 créditos
+        assertEquals(new BigDecimal("1000"), creditoClient.saldoDisponible(postorAnterior));
+        // El comprador pagó 500
+        assertEquals(new BigDecimal("500"), creditoClient.saldoDisponible(comprador));
+        // El ítem se transfirió al comprador
+        verify(inventarioClient).transferirProducto("elem-compra-con-postor", comprador, subasta.getId(), claveCompra);
+    }
+
+    @Test
     void cerrarPorVencimientoSinOfertasLiberaReservaDeInventario() {
         Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
         subasta.setElementoInventarioId("elem-sin-ofertas");
@@ -408,5 +464,16 @@ class MotorPujasServiceTest {
 
         assertEquals(EstadoSubasta.SIN_ADJUDICACION, subasta.getEstado());
         verify(inventarioClient).liberarReserva("elem-sin-ofertas", subasta.getId(), "cierre-" + subasta.getId());
+    }
+
+    @Test
+    void cerrarPorVencimientoIgnoraInventarioSiElementoEsBlanco() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+        subasta.setElementoInventarioId("   ");
+
+        motorConInventario.cerrarPorVencimiento(subasta, null);
+
+        assertEquals(EstadoSubasta.SIN_ADJUDICACION, subasta.getEstado());
+        verifyNoInteractions(inventarioClient);
     }
 }

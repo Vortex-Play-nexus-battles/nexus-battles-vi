@@ -63,6 +63,9 @@ public class InventarioClientFake implements InventarioClient {
         if (simularFallo) {
             throw new InventarioClientException(mensajeFallo);
         }
+        if (elementoInventarioId == null || elementoInventarioId.isBlank()) {
+            throw new InventarioClientException("El identificador del elemento de inventario es obligatorio");
+        }
         ElementoInventario elem = elementos.get(elementoInventarioId);
         return Optional.ofNullable(elem);
     }
@@ -71,6 +74,20 @@ public class InventarioClientFake implements InventarioClient {
     public synchronized void reservar(String elementoInventarioId, UUID propietarioId, UUID subastaId, String idempotencyKey) {
         if (simularFallo) {
             throw new InventarioClientException(mensajeFallo);
+        }
+        if (elementoInventarioId == null || elementoInventarioId.isBlank()) {
+            throw new InventarioClientException("El identificador del elemento de inventario es obligatorio");
+        }
+        if (propietarioId == null) {
+            throw new InventarioClientException("El propietario es obligatorio para la reserva");
+        }
+        if (subastaId == null) {
+            throw new InventarioClientException("El identificador de la subasta es obligatorio para la reserva");
+        }
+        // Idempotencia: si ya está reservado exactamente para esta misma subasta, es una repetición idempotente
+        ReservaRegistro existente = reservas.get(subastaId.toString());
+        if (existente != null && existente.elementoInventarioId().equals(elementoInventarioId)) {
+            return;
         }
         ElementoInventario actual = elementos.get(elementoInventarioId);
         if (actual != null && actual.enUso()) {
@@ -90,6 +107,12 @@ public class InventarioClientFake implements InventarioClient {
         if (simularFallo) {
             throw new InventarioClientException(mensajeFallo);
         }
+        if (elementoInventarioId == null || elementoInventarioId.isBlank()) {
+            throw new InventarioClientException("El identificador del elemento de inventario es obligatorio");
+        }
+        if (subastaId == null) {
+            throw new InventarioClientException("El identificador de la subasta es obligatorio para la liberación");
+        }
         reservas.remove(subastaId.toString());
         ElementoInventario actual = elementos.get(elementoInventarioId);
         if (actual != null) {
@@ -102,6 +125,22 @@ public class InventarioClientFake implements InventarioClient {
     public synchronized void transferirProducto(String elementoInventarioId, UUID nuevoPropietarioId, UUID subastaId, String idempotencyKey) {
         if (simularFallo) {
             throw new InventarioClientException(mensajeFallo);
+        }
+        if (elementoInventarioId == null || elementoInventarioId.isBlank()) {
+            throw new InventarioClientException("El identificador del elemento de inventario es obligatorio");
+        }
+        if (nuevoPropietarioId == null) {
+            throw new InventarioClientException("El nuevo propietario es obligatorio para la transferencia");
+        }
+        if (subastaId == null) {
+            throw new InventarioClientException("El identificador de la subasta es obligatorio para la transferencia");
+        }
+        // Idempotencia: si ya se transfirió con la misma idempotencyKey, no duplicar el registro
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            boolean yaTransferido = transferencias.stream().anyMatch(t -> idempotencyKey.equals(t.idempotencyKey()));
+            if (yaTransferido) {
+                return;
+            }
         }
         reservas.remove(subastaId.toString());
         ElementoInventario actual = elementos.get(elementoInventarioId);

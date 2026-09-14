@@ -8,12 +8,16 @@ import com.nexusbattles.ms_subastas.pujas.model.TipoPuja;
 import com.nexusbattles.ms_subastas.subastas.model.EstadoSubasta;
 import com.nexusbattles.ms_subastas.subastas.model.Subasta;
 import com.nexusbattles.ms_subastas.subastas.port.InventarioClient;
+import com.nexusbattles.ms_subastas.subastas.port.InventarioClientFake;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -32,24 +36,26 @@ import java.util.UUID;
 @Service
 public class MotorPujasService {
 
+    private static final Logger log = LoggerFactory.getLogger(MotorPujasService.class);
+
     private final CreditoClient creditoClient;
     private final InventarioClient inventarioClient;
     private final Clock clock;
     private final ParametrosPuja parametros;
 
     public MotorPujasService(CreditoClient creditoClient, Clock clock, ParametrosPuja parametros) {
-        this(creditoClient, null, clock, parametros);
+        this(creditoClient, new InventarioClientFake(), clock, parametros);
     }
 
     @Autowired
     public MotorPujasService(CreditoClient creditoClient,
-                             @Autowired(required = false) InventarioClient inventarioClient,
+                             InventarioClient inventarioClient,
                              Clock clock,
                              ParametrosPuja parametros) {
-        this.creditoClient = creditoClient;
-        this.inventarioClient = inventarioClient;
-        this.clock = clock;
-        this.parametros = parametros;
+        this.creditoClient = Objects.requireNonNull(creditoClient, "creditoClient no puede ser nulo");
+        this.inventarioClient = Objects.requireNonNull(inventarioClient, "inventarioClient no puede ser nulo");
+        this.clock = Objects.requireNonNull(clock, "clock no puede ser nulo");
+        this.parametros = Objects.requireNonNull(parametros, "parametros no puede ser nulo");
     }
 
     /**
@@ -114,12 +120,22 @@ public class MotorPujasService {
         BigDecimal precio = subasta.getPrecioCompraInmediata();
         ReservaCredito reserva = creditoClient.reservar(jugadorId, precio, subasta.getId(), idempotencyKey);
 
+        boolean transferido = false;
         try {
-            if (subasta.getElementoInventarioId() != null && inventarioClient != null) {
+            if (subasta.getElementoInventarioId() != null && !subasta.getElementoInventarioId().isBlank() && inventarioClient != null) {
                 inventarioClient.transferirProducto(subasta.getElementoInventarioId(), jugadorId, subasta.getId(), idempotencyKey);
+                transferido = true;
             }
             creditoClient.consumir(reserva.id());
         } catch (RuntimeException e) {
+            if (transferido && inventarioClient != null && subasta.getElementoInventarioId() != null) {
+                try {
+                    inventarioClient.transferirProducto(subasta.getElementoInventarioId(), subasta.getVendedorId(), subasta.getId(), "compensar-" + idempotencyKey);
+                    inventarioClient.reservar(subasta.getElementoInventarioId(), subasta.getVendedorId(), subasta.getId(), "compensar-reserva-" + idempotencyKey);
+                } catch (RuntimeException compEx) {
+                    log.error("Fallo al compensar transferencia de inventario para subasta {}: {}", subasta.getId(), compEx.getMessage(), compEx);
+                }
+            }
             try {
                 creditoClient.liberar(reserva.id());
             } catch (RuntimeException ignored) {
@@ -160,13 +176,13 @@ public class MotorPujasService {
 
         if (pujaVigente == null) {
             subasta.setEstado(EstadoSubasta.SIN_ADJUDICACION);
-            if (subasta.getElementoInventarioId() != null && inventarioClient != null) {
+            if (subasta.getElementoInventarioId() != null && !subasta.getElementoInventarioId().isBlank() && inventarioClient != null) {
                 inventarioClient.liberarReserva(subasta.getElementoInventarioId(), subasta.getId(), "cierre-" + subasta.getId());
             }
             return;
         }
 
-        if (subasta.getElementoInventarioId() != null && inventarioClient != null) {
+        if (subasta.getElementoInventarioId() != null && !subasta.getElementoInventarioId().isBlank() && inventarioClient != null) {
             inventarioClient.transferirProducto(subasta.getElementoInventarioId(), pujaVigente.getJugadorId(), subasta.getId(), "cierre-" + subasta.getId());
         }
 
