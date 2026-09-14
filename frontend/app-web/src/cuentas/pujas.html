@@ -37,12 +37,6 @@
       const contenedor = document.getElementById('subastas-app');
       const parametros = new URLSearchParams(location.search);
 
-      // Con ?demo en la URL se monta con los datos de ejemplo, sin servidor.
-      // Sirve para ensenar la pantalla en la sustentacion si ms-subastas no
-      // esta levantado, y para trabajar el diseno sin base de datos. Por
-      // defecto, la pantalla habla con el servicio de verdad.
-      const demo = parametros.has('demo');
-
       // ?id=<uuid> abre directamente el detalle de esa subasta. Es el enganche
       // que espera el listado de HU-SUB-011: su vitrina ya llama a
       // alAbrirDetalle, que hoy apunta a /subasta/{id} — una ruta que no
@@ -50,8 +44,13 @@
       // pantallas, pero es una linea en el archivo de Cristian y la decide el.
       const subastaId = parametros.get('id');
 
+      // Siempre contra el servicio real. No hay modo de demostracion: una
+      // pantalla que se pinta con datos inventados cuando el backend no
+      // responde engana justo cuando mas importa saberlo, y en una
+      // sustentacion haria creer que funciona algo que no esta funcionando.
+      // Si el servicio no esta, la pantalla lo dice y ofrece reintentar.
       montarSubastas(contenedor, {
-        ...(demo ? {} : { api: crearApiSubastas() }),
+        api: crearApiSubastas(),
         ...(subastaId ? { subastaInicialId: subastaId } : {})
       });
     </script>
