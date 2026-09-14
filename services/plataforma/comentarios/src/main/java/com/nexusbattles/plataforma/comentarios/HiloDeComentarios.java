@@ -9,26 +9,42 @@ import java.util.OptionalDouble;
 import java.util.Set;
 
 /**
- * Hilo de opiniones de un producto. HU-COM-001, requisitos RF-COM-001 y RF-COM-002.
+ * Hilo de opiniones de un producto. HU-COM-001, requisitos RF-COM-001 y
+ * RF-COM-002.
  *
- * <p>Aqui viven las tres reglas que la historia describe y que no se pueden dejar al
- * criterio de quien llame. La primera es que un jugador comenta cuantas veces quiera
- * pero califica una sola vez: del segundo comentario en adelante el sistema lo acepta
- * y le quita las estrellas, sin tratarlo como error. La segunda es que un jugador
- * silenciado por sancion no publica. La tercera es que una imagen con formato no
+ * <p>
+ * Aqui viven las tres reglas que la historia describe y que no se pueden dejar
+ * al
+ * criterio de quien llame. La primera es que un jugador comenta cuantas veces
+ * quiera
+ * pero califica una sola vez: del segundo comentario en adelante el sistema lo
+ * acepta
+ * y le quita las estrellas, sin tratarlo como error. La segunda es que un
+ * jugador
+ * silenciado por sancion no publica. La tercera es que una imagen con formato
+ * no
  * admitido tumba la publicacion completa.
  *
- * <p>Hay una diferencia que conviene no perder de vista. El rechazo y la retencion no
- * son lo mismo. Si el autor esta silenciado o la imagen no sirve, el comentario no se
- * guarda y se le explica por que. Si el filtro automatico lo senala, si se guarda,
- * pero queda esperando a un moderador. Al jugador hay que decirle cosas distintas en
+ * <p>
+ * Hay una diferencia que conviene no perder de vista. El rechazo y la retencion
+ * no
+ * son lo mismo. Si el autor esta silenciado o la imagen no sirve, el comentario
+ * no se
+ * guarda y se le explica por que. Si el filtro automatico lo senala, si se
+ * guarda,
+ * pero queda esperando a un moderador. Al jugador hay que decirle cosas
+ * distintas en
  * cada caso.
  *
- * <p>El hilo no consulta el estado de sancion ni ejecuta el filtro: los recibe ya
- * resueltos. Esa decision viene de la regla de plataforma que prohibe que un servicio
+ * <p>
+ * El hilo no consulta el estado de sancion ni ejecuta el filtro: los recibe ya
+ * resueltos. Esa decision viene de la regla de plataforma que prohibe que un
+ * servicio
  * alcance los datos de otro, y ademas deja la clase probable sin levantar nada.
  *
- * <p>Los formatos de imagen admitidos se reciben al construir el hilo porque el issue
+ * <p>
+ * Los formatos de imagen admitidos se reciben al construir el hilo porque el
+ * issue
  * los deja pendientes de definir con el Product Owner. Cuando se decidan, se
  * configuran en un solo sitio y esta clase no cambia.
  */
@@ -55,15 +71,20 @@ public final class HiloDeComentarios {
         /** El autor tiene una sancion activa de silencio. */
         AUTOR_SILENCIADO,
         /** Al menos una imagen viene en un formato que no se admite. */
-        FORMATO_DE_IMAGEN_NO_ADMITIDO
+        FORMATO_DE_IMAGEN_NO_ADMITIDO,
+
+        CALIFICACION_DUPLICADA
     }
 
-    /** Se lanza cuando el comentario no se guarda. Lleva el motivo para explicarselo al autor. */
+    /**
+     * Se lanza cuando el comentario no se guarda. Lleva el motivo para explicarselo
+     * al autor.
+     */
     public static final class PublicacionRechazada extends RuntimeException {
 
         private final transient MotivoDeRechazo motivo;
 
-        PublicacionRechazada(MotivoDeRechazo motivo, String explicacion) {
+        public PublicacionRechazada(MotivoDeRechazo motivo, String explicacion) {
             super(explicacion);
             this.motivo = motivo;
         }
@@ -86,9 +107,11 @@ public final class HiloDeComentarios {
     /**
      * Abre el hilo de un producto.
      *
-     * @param productoId producto comentado
-     * @param formatosAdmitidos extensiones de imagen aceptadas, sin punto y sin importar
-     *     mayusculas. Valor pendiente de definir con el Product Owner segun el issue
+     * @param productoId        producto comentado
+     * @param formatosAdmitidos extensiones de imagen aceptadas, sin punto y sin
+     *                          importar
+     *                          mayusculas. Valor pendiente de definir con el
+     *                          Product Owner segun el issue
      * @return un hilo sin comentarios
      */
     public static HiloDeComentarios de(String productoId, Set<String> formatosAdmitidos) {
@@ -107,14 +130,48 @@ public final class HiloDeComentarios {
     }
 
     /**
+     * Reconstruye el hilo a partir de los comentarios ya guardados de un producto.
+     *
+     * <p>
+     * Existe para la capa de persistencia. El hilo aplica la regla de la
+     * calificacion unica recordando quien ya califico, y esa memoria hay que
+     * recuperarla de la base de datos antes de atender cada publicacion nueva.
+     * Los comentarios retenidos tambien reservan la calificacion de su autor,
+     * igual que hace publicar, para que nadie califique dos veces aprovechando
+     * que su primer intento quedo en revision.
+     *
+     * @param productoId        producto comentado
+     * @param formatosAdmitidos extensiones de imagen aceptadas, sin punto
+     * @param existentes        comentarios ya guardados del producto, del mas
+     *                          antiguo al mas reciente
+     * @return un hilo con la historia cargada, listo para publicar el siguiente
+     */
+    public static HiloDeComentarios reconstituir(
+            String productoId, Set<String> formatosAdmitidos, List<Comentario> existentes) {
+        Objects.requireNonNull(existentes, "los comentarios existentes son obligatorios");
+        HiloDeComentarios hilo = de(productoId, formatosAdmitidos);
+        for (Comentario comentario : existentes) {
+            Objects.requireNonNull(comentario, "ningun comentario existente puede ser nulo");
+            hilo.comentarios.add(comentario);
+            if (comentario.calificacion().isPresent()) {
+                hilo.yaCalificaron.add(comentario.autorId());
+            }
+        }
+        return hilo;
+    }
+
+    /**
      * Publica un comentario aplicando las reglas de la historia.
      *
-     * @param solicitud lo que envio el jugador
-     * @param estadoAutor si el jugador puede publicar, resuelto por el modulo de sanciones
+     * @param solicitud       lo que envio el jugador
+     * @param estadoAutor     si el jugador puede publicar, resuelto por el modulo
+     *                        de sanciones
      * @param resultadoFiltro veredicto del filtro automatico sobre el texto
-     * @return el comentario tal como quedo guardado, que puede venir sin estrellas si el
-     *     jugador ya habia calificado, y en revision si el filtro lo senalo
-     * @throws PublicacionRechazada si el autor esta silenciado o alguna imagen no se admite
+     * @return el comentario tal como quedo guardado, que puede venir sin estrellas
+     *         si el
+     *         jugador ya habia calificado, y en revision si el filtro lo senalo
+     * @throws PublicacionRechazada si el autor esta silenciado o alguna imagen no
+     *                              se admite
      */
     public Comentario publicar(
             SolicitudDePublicacion solicitud,
@@ -140,7 +197,9 @@ public final class HiloDeComentarios {
 
         Integer estrellas = solicitud.estrellas();
         if (estrellas != null && yaCalificaron.contains(solicitud.autorId())) {
-            estrellas = null;
+            throw new PublicacionRechazada(
+                    MotivoDeRechazo.CALIFICACION_DUPLICADA,
+                    "Ya calificaste este producto");
         }
 
         Comentario comentario = new Comentario(
@@ -171,8 +230,11 @@ public final class HiloDeComentarios {
     /**
      * Calificacion promedio del producto.
      *
-     * <p>Solo entran las calificaciones de comentarios publicados. Un comentario retenido
-     * por el filtro reserva la calificacion de su autor, para que no pueda calificar dos
+     * <p>
+     * Solo entran las calificaciones de comentarios publicados. Un comentario
+     * retenido
+     * por el filtro reserva la calificacion de su autor, para que no pueda
+     * calificar dos
      * veces, pero no mueve el promedio mientras un moderador no lo apruebe.
      *
      * @return el promedio, o vacio si todavia nadie ha calificado

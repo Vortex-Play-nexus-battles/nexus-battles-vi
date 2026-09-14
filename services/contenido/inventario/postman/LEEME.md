@@ -1,8 +1,9 @@
 # Validacion con Postman del servicio de inventario
 
 Coleccion con **aserciones** para HU-INV-002 (busqueda indexada), HU-INV-003
-(creacion y edicion de elementos propios) y HU-INV-005 (equipamiento con limites). Cada peticion verifica el
-criterio de aceptacion que le corresponde y las peticiones estan encadenadas:
+(creacion y edicion de elementos propios), HU-INV-005 (equipamiento con limites)
+y HU-INV-010 (bloqueo por subasta). Cada peticion verifica el criterio de
+aceptacion que le corresponde y las peticiones estan encadenadas:
 cada una guarda los identificadores que usan las siguientes, asi que se corre
 la coleccion **completa y en orden**.
 
@@ -55,6 +56,9 @@ Contra otro puerto: `--env-var baseUrl=http://localhost:8082`.
 | HU-INV-005 | Solo se equipan armas, armaduras e items | Equipar el heroe → 400 "Elemento no equipable" |
 | HU-INV-005 | Liberar ranura | Desequipar el arma 1 → cabe el arma 3 |
 | HU-INV-005 | Propiedad | B consulta el heroe de A → 403; sin identidad → 401 |
+| HU-INV-010 | Bloqueo y liberacion por subasta | Reserva → 200; queda no disponible; aviso ajeno → 409; cierre/cancelacion → 200 y vuelve a estar disponible |
+| HU-INV-010 | No se vende dos veces | Repetir la misma reserva → 200; reservar para otra subasta → 409 |
+| HU-INV-010 | Operaciones bloqueadas | Modificar y eliminar el producto reservado → 409 "Producto no disponible" |
 
 Cuando cambie el contrato (`contracts/openapi/inventario.yaml`), actualizar
 aqui la peticion afectada en el mismo cambio.

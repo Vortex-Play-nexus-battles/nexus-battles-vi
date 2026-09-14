@@ -19,7 +19,17 @@ public interface PujaRepository extends JpaRepository<Puja, UUID> {
     int countByJugadorIdAndEstado(UUID jugadorId, EstadoPuja estado);
 
     /** Su ultima puja en cualquier subasta, para validar el intervalo minimo de 5 s. */
-    Optional<Puja> findFirstByJugadorIdOrderByCreadaEnDesc(UUID jugadorId);
+    /**
+     * Ultima puja del jugador EN ESA SUBASTA, para el intervalo minimo de 5 s.
+     *
+     * <p>Tiene que filtrar por subasta. La version global (solo por jugadorId)
+     * bloqueaba al jugador en todas las demas subastas durante 5 s: con las 10
+     * simultaneas que la propia HU permite, solo alcanzaba a pujar en una cada
+     * 5 s, y su propia puja automatica en una subasta le impedia pujar a mano
+     * en otra. El freno es contra el spam dentro de una subasta, no contra
+     * participar en varias.
+     */
+    Optional<Puja> findFirstByJugadorIdAndSubastaIdOrderByCreadaEnDesc(UUID jugadorId, UUID subastaId);
 
     /**
      * Todos los jugadores que pujaron en la subasta, ganando o no. Es la lista

@@ -1,0 +1,7 @@
+{
+  "name": "@nexus-battles/ui-kit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sistema visual compartido de The Nexus Battles VI. Este archivo NO instala nada ni construye nada: declara que los .js de esta carpeta son modulos ES nativos, que es como los cargan las vistas (<script type=\"module\">) y como los ejecuta Jest desde frontend/app-web. Sin esta declaracion, Jest lee shared/ui-kit/js/*.js como CommonJS y ninguna prueba del kit puede correr (HU-SAL-005).",
+  "type": "module"
+}

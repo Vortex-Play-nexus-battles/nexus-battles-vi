@@ -108,7 +108,7 @@ function construirBarraBusqueda() {
     if (idPeticion !== idPeticionVigente) {
       return; // Llego una respuesta vieja despues de una tecla mas reciente.
     }
-    mostrarSugerencias(sugerencias, texto);
+    mostrarSugerencias(sugerencias);
   }, ESPERA_DEBOUNCE_MS);
 
   campo.addEventListener('input', () => buscar(campo.value));
@@ -123,7 +123,7 @@ function construirBarraBusqueda() {
     }
   });
 
-  function mostrarSugerencias(sugerencias, texto) {
+  function mostrarSugerencias(sugerencias) {
     listaSugerencias.replaceChildren();
     if (sugerencias.length === 0) {
       ocultarSugerencias();
@@ -204,7 +204,11 @@ async function cargarYRenderizar() {
 
   let pagina;
   try {
-    pagina = await listarSubastas(estado.filtros, estado.pagina, TAMANO_PAGINA);
+    pagina = await listarSubastas(
+      { ...estado.filtros, ordenarPor: estado.ordenarPor },
+      estado.pagina,
+      TAMANO_PAGINA,
+    );
   } catch (error) {
     zona.replaceChildren(
       construirEstado('error', 'No se pudieron cargar las subastas', error.message),
@@ -222,7 +226,7 @@ async function cargarYRenderizar() {
   const vitrina = construirVitrinaSubastas(pagina, {
     alAbrirDetalle: (subasta) => {
       // La vista de detalle todavia no existe (ver pendientes de HU-SUB-011).
-      globalThis.location.href = `/subasta/${subasta.id}`;
+      globalThis.location.href = `./pujas.html?id=${subasta.id}`;
     },
   });
 

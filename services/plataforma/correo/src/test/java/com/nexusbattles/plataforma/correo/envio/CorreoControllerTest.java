@@ -31,6 +31,8 @@ class CorreoControllerTest {
     private static final String AVISO_ACCESO = "/api/v1/correos/aviso-acceso";
     private static final String RECUPERACION = "/api/v1/correos/recuperacion-clave";
     private static final String CONFIRMACION = "/api/v1/correos/confirmacion-cuenta";
+    private static final String MISION = "/api/v1/correos/mision";
+    private static final String SUBASTA = "/api/v1/correos/subasta";
 
     @Autowired
     private MockMvc mockMvc;
@@ -277,5 +279,106 @@ class CorreoControllerTest {
                 .andReturn().getResponse().getContentAsString();
 
         assertThat(cuerpo).contains("\"status\":400").contains("\"title\"");
+    }
+
+    // ----- HU-COR-005: correos de misiones y subastas -----
+
+    @Test
+    void aceptaUnCorreoDeMisionYLoDespachaCuandoDebeEnviarse() throws Exception {
+        mockMvc.perform(post(MISION).contentType(MediaType.APPLICATION_JSON).content("""
+                {"email":"jugador@ejemplo.com","apodo":"ElGuerrero",
+                 "asunto":"Nueva misión disponible","mensaje":"Derrota al dragón",
+                 "debeEnviarCorreo":true}
+                """))
+                .andExpect(status().isAccepted());
+
+        verify(enviador).enviar(eq("jugador@ejemplo.com"), eq("Nueva misión disponible"), eq("email/mision"), any());
+    }
+
+    @Test
+    void noEnviaCorreoDeMisionSiDebeEnviarCorreoEsFalse() throws Exception {
+        // CA-02/CA-03: avisos solo dentro de la app, o categoria apagada.
+        // No es un error -- se responde 202 igual, pero sin despachar nada.
+        mockMvc.perform(post(MISION).contentType(MediaType.APPLICATION_JSON).content("""
+                {"email":"jugador@ejemplo.com","apodo":"ElGuerrero",
+                 "asunto":"Nueva misión disponible","mensaje":"Derrota al dragón",
+                 "debeEnviarCorreo":false}
+                """))
+                .andExpect(status().isAccepted());
+
+        verify(enviador, never()).enviar(anyString(), anyString(), anyString(), any());
+    }
+
+    @Test
+    void elCorreoDeMisionLlevaElAsuntoYMensajeTalCualLlegan() throws Exception {
+        // El servicio no decide el contenido: lo transcribe tal cual lo
+        // manda el modulo de misiones.
+        mockMvc.perform(post(MISION).contentType(MediaType.APPLICATION_JSON).content("""
+                {"email":"jugador@ejemplo.com","apodo":"ElGuerrero",
+                 "asunto":"Nueva misión disponible","mensaje":"Derrota al dragón",
+                 "debeEnviarCorreo":true}
+                """))
+                .andExpect(status().isAccepted());
+
+        @SuppressWarnings("unchecked")
+        Class<Map<String, Object>> tipo = (Class<Map<String, Object>>) (Class<?>) Map.class;
+        org.mockito.ArgumentCaptor<Map<String, Object>> captor = org.mockito.ArgumentCaptor.forClass(tipo);
+        verify(enviador).enviar(anyString(), anyString(), anyString(), captor.capture());
+
+        assertThat(captor.getValue())
+                .containsEntry("apodo", "ElGuerrero")
+                .containsEntry("asunto", "Nueva misión disponible")
+                .containsEntry("mensaje", "Derrota al dragón");
+    }
+
+    @ParameterizedTest(name = "mision rechazada: {0}")
+    @ValueSource(strings = {
+            "{\"apodo\":\"ElGuerrero\",\"asunto\":\"a\",\"mensaje\":\"m\",\"debeEnviarCorreo\":true}",
+            "{\"email\":\"jugador@ejemplo.com\",\"asunto\":\"a\",\"mensaje\":\"m\",\"debeEnviarCorreo\":true}",
+            "{\"email\":\"jugador@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"mensaje\":\"m\",\"debeEnviarCorreo\":true}",
+            "{\"email\":\"jugador@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"asunto\":\"a\",\"debeEnviarCorreo\":true}",
+            "{\"email\":\"jugador@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"asunto\":\"a\",\"mensaje\":\"m\"}",
+    })
+    void rechazaMisionConDatosInvalidos(String cuerpo) throws Exception {
+        mockMvc.perform(post(MISION).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                .andExpect(status().isBadRequest());
+
+        verify(enviador, never()).enviar(anyString(), anyString(), anyString(), any());
+    }
+
+    @Test
+    void aceptaUnCorreoDeSubastaYLoDespachaCuandoDebeEnviarse() throws Exception {
+        mockMvc.perform(post(SUBASTA).contentType(MediaType.APPLICATION_JSON).content("""
+                {"email":"jugador@ejemplo.com","apodo":"ElGuerrero",
+                 "asunto":"Ganaste la subasta","mensaje":"Espada Legendaria",
+                 "debeEnviarCorreo":true}
+                """))
+                .andExpect(status().isAccepted());
+
+        verify(enviador).enviar(eq("jugador@ejemplo.com"), eq("Ganaste la subasta"), eq("email/subasta"), any());
+    }
+
+    @Test
+    void noEnviaCorreoDeSubastaSiDebeEnviarCorreoEsFalse() throws Exception {
+        mockMvc.perform(post(SUBASTA).contentType(MediaType.APPLICATION_JSON).content("""
+                {"email":"jugador@ejemplo.com","apodo":"ElGuerrero",
+                 "asunto":"Ganaste la subasta","mensaje":"Espada Legendaria",
+                 "debeEnviarCorreo":false}
+                """))
+                .andExpect(status().isAccepted());
+
+        verify(enviador, never()).enviar(anyString(), anyString(), anyString(), any());
+    }
+
+    @ParameterizedTest(name = "subasta rechazada: {0}")
+    @ValueSource(strings = {
+            "{\"apodo\":\"ElGuerrero\",\"asunto\":\"a\",\"mensaje\":\"m\",\"debeEnviarCorreo\":true}",
+            "{\"email\":\"jugador@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"asunto\":\"a\",\"mensaje\":\"m\"}",
+    })
+    void rechazaSubastaConDatosInvalidos(String cuerpo) throws Exception {
+        mockMvc.perform(post(SUBASTA).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                .andExpect(status().isBadRequest());
+
+        verify(enviador, never()).enviar(anyString(), anyString(), anyString(), any());
     }
 }

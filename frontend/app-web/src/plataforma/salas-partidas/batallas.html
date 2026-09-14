@@ -130,6 +130,13 @@
       <!-- RNF-USA-003: cargando, vacio y error comparten esta zona. -->
       <div class="estado-vista" data-zona="estado" role="status" aria-live="polite"></div>
 
+      <!--
+        Estado del canal en tiempo real (HU-SAL-002, criterio 3). Se dice con
+        todas las letras si esta conectado o no, en vez de dejar que la persona
+        adivine por que una sala no cambia.
+      -->
+      <p class="t-meta" data-zona="canal" role="status" aria-live="polite" hidden></p>
+
       <div class="rejilla-salas" data-zona="salas" hidden></div>
 
       <nav class="paginacion" data-zona="paginacion" aria-label="Paginas del listado" hidden></nav>
@@ -140,8 +147,23 @@
 
     <script type="module">
       import { montarBatallas } from './batallas.js';
+      import { urlDelCanal } from './canal-sala.js';
+      import { baseDeApi } from './cliente-salas.js';
+      // Transporte STOMP sobre WebSocket nativo del servicio (HU-JUE-015). Es
+      // el unico del monorepo y la pila prohibe traer otro; la sala solo le
+      // pide CONNECT con el JWT y SUBSCRIBE. Su nombre sigue siendo el del
+      // chat porque moverlo a un modulo neutro es una decision con su autor.
+      import { conectarChat } from './cliente-chat.js';
+
+      // El mismo token que adjunta `src/comun/interceptors/http-error.interceptor.js`
+      // a cada peticion HTTP. Sin sesion no hay canal, y la vista lo dice.
+      const token = sessionStorage.getItem('nexus.token');
 
       montarBatallas(document.getElementById('vista-batallas'), {
+        conectarCanal: () =>
+          token
+            ? conectarChat({ url: urlDelCanal({ base: baseDeApi() }), token })
+            : Promise.resolve(null),
         // Entrar lleva a la sala de espera. Esa vista es HU-SAL-004: hasta que
         // exista, se deja el destino sin resolver en vez de inventar una ruta.
         alEntrar: (sala) => console.info('Ingreso aceptado en la sala', sala.id),

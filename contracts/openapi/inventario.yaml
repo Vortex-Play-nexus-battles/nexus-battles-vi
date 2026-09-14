@@ -6,7 +6,8 @@ info:
     Consulta paginada de la vitrina para HU-INV-001, y creacion y modificacion
     de elementos propios del jugador para HU-INV-003, y equipamiento de
     heroes con limites para HU-INV-005, y busqueda indexada de productos
-    propios para HU-INV-002.
+    propios para HU-INV-002. HU-INV-010 registra el bloqueo de los productos
+    publicados en una subasta vigente y evita operarlos mientras siga activo.
     La identidad temporal sigue la convencion X-User-Name de ms-identidad hasta
     que HU-AUT-004 publique el subject del token.
 servers:
@@ -145,6 +146,89 @@ paths:
                 $ref: "#/components/schemas/DetalleDeProblema"
         "503":
           $ref: "#/components/responses/PersistenciaNoDisponible"
+    delete:
+      summary: Elimina un elemento disponible del inventario del jugador autenticado
+      operationId: eliminarElementoPropio
+      parameters:
+        - $ref: "#/components/parameters/ElementoId"
+      responses:
+        "204":
+          description: Elemento eliminado
+        "401":
+          $ref: "#/components/responses/IdentidadRequerida"
+        "403":
+          $ref: "#/components/responses/InventarioAjeno"
+        "404":
+          $ref: "#/components/responses/ElementoNoEncontrado"
+        "409":
+          $ref: "#/components/responses/ElementoNoDisponible"
+        "503":
+          $ref: "#/components/responses/PersistenciaNoDisponible"
+  /api/v1/inventario/elementos/{elementoId}/bloqueo-subasta:
+    put:
+      summary: Bloquea un producto mientras su publicacion en subasta siga vigente
+      description: >
+        HU-INV-010. Operacion idempotente para la misma subasta. El servicio de
+        subastas propaga la identidad del propietario y su clave de idempotencia;
+        un elemento equipado o reservado por otra subasta se rechaza.
+      operationId: bloquearElementoEnSubasta
+      parameters:
+        - $ref: "#/components/parameters/ElementoId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BloquearEnSubasta"
+      responses:
+        "200":
+          description: Producto bloqueado y marcado como no disponible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ElementoInventario"
+        "400":
+          $ref: "#/components/responses/SolicitudInvalida"
+        "401":
+          $ref: "#/components/responses/IdentidadRequerida"
+        "403":
+          $ref: "#/components/responses/InventarioAjeno"
+        "404":
+          $ref: "#/components/responses/ElementoNoEncontrado"
+        "409":
+          $ref: "#/components/responses/ElementoNoDisponible"
+        "503":
+          $ref: "#/components/responses/PersistenciaNoDisponible"
+  /api/v1/inventario/elementos/{elementoId}/bloqueo-subasta/{subastaId}:
+    delete:
+      summary: Libera el producto cuando la subasta se cierra o cancela
+      description: >
+        HU-INV-010. El servicio de subastas envia este aviso al cerrar o
+        cancelar la publicacion. La operacion es idempotente si el producto ya
+        esta disponible. Si subastaId no corresponde al bloqueo vigente,
+        responde 409 y conserva el producto bloqueado.
+      operationId: liberarElementoDeSubasta
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/ElementoId"
+        - $ref: "#/components/parameters/SubastaId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Producto liberado o aviso repetido procesado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ElementoInventario"
+        "400":
+          $ref: "#/components/responses/SolicitudInvalida"
+        "404":
+          $ref: "#/components/responses/ElementoNoEncontrado"
+        "409":
+          $ref: "#/components/responses/ElementoNoDisponible"
+        "503":
+          $ref: "#/components/responses/PersistenciaNoDisponible"
   /api/v1/inventario/heroes/{heroeId}/equipamiento:
     get:
       summary: Consulta las ranuras equipadas de un heroe propio
@@ -272,9 +356,17 @@ components:
         nombrePropio:
           type: string
           minLength: 1
+    BloquearEnSubasta:
+      type: object
+      additionalProperties: false
+      required: [subastaId]
+      properties:
+        subastaId:
+          type: string
+          format: uuid
     ElementoInventario:
       type: object
-      required: [id, productoId, tipo, nombrePropio]
+      required: [id, productoId, tipo, nombrePropio, disponible, subastaId]
       properties:
         id: { type: string }
         productoId: { type: string }
@@ -285,6 +377,14 @@ components:
         parteArmadura:
           oneOf:
             - $ref: "#/components/schemas/ParteArmadura"
+            - type: "null"
+        disponible:
+          type: boolean
+          description: Falso mientras exista un bloqueo por subasta vigente.
+        subastaId:
+          oneOf:
+            - type: string
+              format: uuid
             - type: "null"
     ParteArmadura:
       type: string
@@ -433,6 +533,12 @@ components:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/DetalleDeProblema"
+    ElementoNoDisponible:
+      description: El producto esta equipado o bloqueado por una subasta vigente
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/DetalleDeProblema"
   parameters:
     HeroeId:
       name: heroeId
@@ -444,3 +550,18 @@ components:
       in: path
       required: true
       schema: { type: string }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 100
+    SubastaId:
+      name: subastaId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid

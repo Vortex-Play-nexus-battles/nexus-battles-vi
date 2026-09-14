@@ -8,6 +8,8 @@ import com.nexusbattles.ms_subastas.pujas.repository.PujaRepository;
 import com.nexusbattles.ms_subastas.subastas.model.Subasta;
 import com.nexusbattles.ms_subastas.subastas.repository.SubastaRepository;
 import lombok.RequiredArgsConstructor;
+import com.nexusbattles.ms_subastas.subastas.realtime.SubastaActualizadaEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +39,16 @@ public class PujaApplicationService {
     private final PujaRepository pujaRepository;
     private final MotorPujasService motorPujas;
     private final NotificacionOutbox outbox;
+
+    /**
+     * Alimenta el canal en vivo del listado (HU-SUB-011). Se publica desde aqui
+     * y no desde MotorPujasService: el motor no conoce persistencia ni Spring
+     * —ArchUnit lo verifica— y no sabe cuando una puja quedo guardada.
+     *
+     * <p>Quien traduce el evento a STOMP es SubastaRealtimePublisher, de modo
+     * que aqui no se conoce ni SimpMessagingTemplate ni el nombre del canal.
+     */
+    private final ApplicationEventPublisher eventos;
 
     @Transactional
     public Puja pujar(UUID subastaId, UUID jugadorId, BigDecimal monto, String idempotencyKey) {
@@ -68,11 +80,17 @@ public class PujaApplicationService {
             pujaRepository.saveAndFlush(pujaVigente);
         }
         subastaRepository.save(subasta);
-        return pujaRepository.save(nuevaPuja);
+        Puja persistida = pujaRepository.save(nuevaPuja);
+
+        // Solo si la puja quedo registrada: una rechazada no cambia el listado,
+        // y avisar de todas formas llenaria el canal de ruido —perder la carrera
+        // contra otro postor es el caso normal, no una excepcion.
+        eventos.publishEvent(new SubastaActualizadaEvent(this, subasta));
+        return persistida;
     }
 
     @Transactional
-    public Puja comprarAhora(UUID subastaId, UUID jugadorId) {
+    public Puja comprarAhora(UUID subastaId, UUID jugadorId, String idempotencyKey) {
         Subasta subasta = cargarConLock(subastaId);
         Puja pujaVigente = pujaRepository.findBySubastaIdAndEstado(subastaId, EstadoPuja.ACTIVA).orElse(null);
 
@@ -81,7 +99,7 @@ public class PujaApplicationService {
         // no solo a quien iba ganando.
         List<UUID> postores = pujaRepository.findDistinctJugadorIdBySubastaId(subastaId);
 
-        Puja pujaGanadora = motorPujas.comprarAhora(subasta, pujaVigente, jugadorId);
+        Puja pujaGanadora = motorPujas.comprarAhora(subasta, pujaVigente, jugadorId, idempotencyKey);
 
         // Mismo motivo que en pujar(): la puja vigente debe dejar de ser ACTIVA
         // en la base de datos antes de insertar la ganadora.
@@ -94,6 +112,10 @@ public class PujaApplicationService {
         // Misma transaccion que el cierre: si esto no se escribe, el cierre
         // tampoco, y no se puede perder un aviso.
         outbox.avisarCierrePorCompraInmediata(subastaId, postores, jugadorId);
+
+        // La subasta desaparece del listado en vivo al cerrarse, asi que el
+        // canal tiene que enterarse igual que de una puja.
+        eventos.publishEvent(new SubastaActualizadaEvent(this, subasta));
         return persistida;
     }
 
@@ -117,7 +139,8 @@ public class PujaApplicationService {
 
     private ContextoParticipacion contextoDe(UUID jugadorId, UUID subastaId) {
         return new ContextoParticipacion(
-                pujaRepository.findFirstByJugadorIdOrderByCreadaEnDesc(jugadorId).map(Puja::getCreadaEn).orElse(null),
+                pujaRepository.findFirstByJugadorIdAndSubastaIdOrderByCreadaEnDesc(jugadorId, subastaId)
+                        .map(Puja::getCreadaEn).orElse(null),
                 pujaRepository.countByJugadorIdAndEstado(jugadorId, EstadoPuja.ACTIVA),
                 pujaRepository.contarSubastasActivasExcluyendo(jugadorId, EstadoPuja.ACTIVA, subastaId));
     }

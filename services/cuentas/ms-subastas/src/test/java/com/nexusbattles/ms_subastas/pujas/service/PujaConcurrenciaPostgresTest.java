@@ -59,7 +59,10 @@ import static org.junit.jupiter.api.Assertions.*;
         // Desactiva el bean de produccion del doble para poder inyectar uno al
         // que se le pueda acreditar saldo desde la prueba.
         "app.finanzas.modo=test",
-        "app.pujas.intervalo-minimo-segundos=0"
+        "app.pujas.intervalo-minimo-segundos=0",
+        "app.pujas.emision-automatica-intervalo-ms=3600000",
+        "app.subastas.cierre-intervalo-ms=3600000",
+        "app.notificaciones.drenaje-intervalo-ms=3600000"
 })
 @Testcontainers(disabledWithoutDocker = true)
 class PujaConcurrenciaPostgresTest {

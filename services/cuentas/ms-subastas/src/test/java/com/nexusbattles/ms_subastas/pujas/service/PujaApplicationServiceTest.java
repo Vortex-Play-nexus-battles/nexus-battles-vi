@@ -9,6 +9,9 @@ import com.nexusbattles.ms_subastas.pujas.repository.PujaRepository;
 import com.nexusbattles.ms_subastas.subastas.model.EstadoSubasta;
 import com.nexusbattles.ms_subastas.subastas.model.Subasta;
 import com.nexusbattles.ms_subastas.subastas.repository.SubastaRepository;
+import com.nexusbattles.ms_subastas.subastas.realtime.SubastaActualizadaEvent;
+import org.springframework.context.ApplicationEventPublisher;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -54,6 +57,9 @@ class PujaApplicationServiceTest {
     @Mock
     private NotificacionOutbox outbox;
 
+    @Mock
+    private ApplicationEventPublisher eventos;
+
     private CreditoClientFake creditoClient;
     private PujaApplicationService servicio;
 
@@ -61,7 +67,7 @@ class PujaApplicationServiceTest {
     void setUp() {
         creditoClient = new CreditoClientFake();
         MotorPujasService motor = new MotorPujasService(creditoClient, Clock.fixed(AHORA, ZoneOffset.UTC), new ParametrosPuja());
-        servicio = new PujaApplicationService(subastaRepository, pujaRepository, motor, outbox);
+        servicio = new PujaApplicationService(subastaRepository, pujaRepository, motor, outbox, eventos);
     }
 
     private Subasta subastaActiva() {
@@ -100,9 +106,61 @@ class PujaApplicationServiceTest {
 
         servicio.pujar(subasta.getId(), jugador, new BigDecimal("110"), claveUnica());
 
-        verify(pujaRepository).findFirstByJugadorIdOrderByCreadaEnDesc(jugador);
+        verify(pujaRepository).findFirstByJugadorIdAndSubastaIdOrderByCreadaEnDesc(jugador, subasta.getId());
         verify(pujaRepository).countByJugadorIdAndEstado(jugador, EstadoPuja.ACTIVA);
         verify(pujaRepository).contarSubastasActivasExcluyendo(jugador, EstadoPuja.ACTIVA, subasta.getId());
+    }
+
+    /**
+     * El intervalo minimo es por jugador Y subasta, no por jugador a secas.
+     * Con la consulta global, pujar en una subasta bloqueaba al jugador en
+     * TODAS las demas durante 5 s: con 10 subastas simultaneas (el tope que
+     * permite la propia HU) solo alcanzaba a pujar en una cada 5 s, y su propia
+     * puja automatica en una subasta le bloqueaba pujar a mano en otra.
+     */
+    @Test
+    void pujarEnUnaSubastaNoBloqueaPujarEnOtraDistinta() {
+        Subasta primera = subastaActiva();
+        Subasta segunda = subastaActiva();
+        UUID jugador = UUID.randomUUID();
+        creditoClient.acreditar(jugador, new BigDecimal("1000"));
+
+        // En la segunda subasta no ha pujado nunca, asi que no hay intervalo que
+        // esperar — aunque acabe de pujar en la primera hace un segundo.
+        when(pujaRepository.findFirstByJugadorIdAndSubastaIdOrderByCreadaEnDesc(jugador, segunda.getId()))
+                .thenReturn(Optional.empty());
+        when(subastaRepository.findByIdParaActualizar(segunda.getId())).thenReturn(Optional.of(segunda));
+        when(pujaRepository.findBySubastaIdAndEstado(segunda.getId(), EstadoPuja.ACTIVA)).thenReturn(Optional.empty());
+        when(pujaRepository.save(any(Puja.class))).thenAnswer(invocacion -> invocacion.getArgument(0));
+
+        Puja enLaSegunda = servicio.pujar(segunda.getId(), jugador, new BigDecimal("110"), claveUnica());
+
+        assertEquals(EstadoPuja.ACTIVA, enLaSegunda.getEstado());
+        // La clave: la consulta del intervalo va acotada a ESTA subasta, asi que
+        // lo que el jugador hiciera en la primera no entra en la decision.
+        verify(pujaRepository).findFirstByJugadorIdAndSubastaIdOrderByCreadaEnDesc(jugador, segunda.getId());
+        verify(pujaRepository, never()).findFirstByJugadorIdAndSubastaIdOrderByCreadaEnDesc(jugador, primera.getId());
+    }
+
+    /** Pero dentro de la MISMA subasta el freno sigue en pie. */
+    @Test
+    void pujarDosVecesSeguidasEnLaMismaSubastaSigueRechazandose() {
+        Subasta subasta = subastaActiva();
+        UUID jugador = UUID.randomUUID();
+        creditoClient.acreditar(jugador, new BigDecimal("1000"));
+
+        Puja haceUnSegundo = new Puja(UUID.randomUUID(), subasta.getId(), jugador, new BigDecimal("110"),
+                TipoPuja.MANUAL, EstadoPuja.SUPERADA, AHORA.minusSeconds(1), UUID.randomUUID().toString());
+
+        when(pujaRepository.findFirstByJugadorIdAndSubastaIdOrderByCreadaEnDesc(jugador, subasta.getId()))
+                .thenReturn(Optional.of(haceUnSegundo));
+        when(subastaRepository.findByIdParaActualizar(subasta.getId())).thenReturn(Optional.of(subasta));
+        when(pujaRepository.findBySubastaIdAndEstado(subasta.getId(), EstadoPuja.ACTIVA)).thenReturn(Optional.empty());
+
+        PujaRechazadaException ex = assertThrows(PujaRechazadaException.class,
+                () -> servicio.pujar(subasta.getId(), jugador, new BigDecimal("120"), claveUnica()));
+
+        assertEquals(PujaRechazadaException.Motivo.INTERVALO_MINIMO_NO_CUMPLIDO, ex.getMotivo());
     }
 
     @Test
@@ -155,7 +213,7 @@ class PujaApplicationServiceTest {
         when(pujaRepository.findBySubastaIdAndEstado(subasta.getId(), EstadoPuja.ACTIVA)).thenReturn(Optional.of(pujaVigente));
         when(pujaRepository.save(any(Puja.class))).thenAnswer(invocacion -> invocacion.getArgument(0));
 
-        Puja ganadora = servicio.comprarAhora(subasta.getId(), comprador);
+        Puja ganadora = servicio.comprarAhora(subasta.getId(), comprador, claveUnica());
 
         assertEquals(EstadoSubasta.ADJUDICADA, subasta.getEstado());
         assertEquals(EstadoPuja.GANADORA, ganadora.getEstado());
@@ -185,7 +243,7 @@ class PujaApplicationServiceTest {
         when(pujaRepository.findDistinctJugadorIdBySubastaId(subasta.getId()))
                 .thenReturn(List.of(postorPrevio, postorAntiguo));
 
-        servicio.comprarAhora(subasta.getId(), comprador);
+        servicio.comprarAhora(subasta.getId(), comprador, claveUnica());
 
         // Incluye al postor antiguo que ya estaba SUPERADA: la historia dice
         // "notificando a quienes hubieran pujado", no solo al que iba ganando.
@@ -199,7 +257,7 @@ class PujaApplicationServiceTest {
         when(subastaRepository.findByIdParaActualizar(inexistente)).thenReturn(Optional.empty());
 
         assertThrows(SubastaNoEncontradaException.class,
-                () -> servicio.comprarAhora(inexistente, UUID.randomUUID()));
+                () -> servicio.comprarAhora(inexistente, UUID.randomUUID(), claveUnica()));
     }
 
     @Test
@@ -232,5 +290,66 @@ class PujaApplicationServiceTest {
         assertEquals(EstadoSubasta.ADJUDICADA, subasta.getEstado());
         assertEquals(EstadoPuja.GANADORA, pujaVigente.getEstado());
         assertEquals(new BigDecimal("890"), creditoClient.saldoDisponible(postor));
+    }
+
+    /**
+     * HU-SUB-011 (Cristian) tiene un canal STOMP que transmite el listado en
+     * vivo, pero nadie publicaba el evento que lo alimenta. Se publica aqui y
+     * no en MotorPujasService: el motor no conoce persistencia ni Spring
+     * —ArchUnit lo verifica— y no sabe cuando una puja quedo guardada.
+     */
+    @Test
+    void alRegistrarUnaPujaSeAvisaDelCambioParaElListadoEnVivo() {
+        Subasta subasta = subastaActiva();
+        UUID jugador = UUID.randomUUID();
+        creditoClient.acreditar(jugador, new BigDecimal("1000"));
+
+        when(subastaRepository.findByIdParaActualizar(subasta.getId())).thenReturn(Optional.of(subasta));
+        when(pujaRepository.findBySubastaIdAndEstado(subasta.getId(), EstadoPuja.ACTIVA)).thenReturn(Optional.empty());
+        when(pujaRepository.save(any(Puja.class))).thenAnswer(i -> i.getArgument(0));
+
+        servicio.pujar(subasta.getId(), jugador, new BigDecimal("110"), claveUnica());
+
+        ArgumentCaptor<SubastaActualizadaEvent> capturado = ArgumentCaptor.forClass(SubastaActualizadaEvent.class);
+        verify(eventos).publishEvent(capturado.capture());
+        assertEquals(subasta.getId(), capturado.getValue().getSubasta().getId(),
+                "el evento tiene que llevar la subasta ya actualizada, que es lo que el canal transmite");
+    }
+
+    @Test
+    void alComprarDeFormaInmediataTambienSeAvisaDelCambio() {
+        Subasta subasta = subastaActiva();
+        UUID comprador = UUID.randomUUID();
+        creditoClient.acreditar(comprador, new BigDecimal("1000"));
+
+        when(subastaRepository.findByIdParaActualizar(subasta.getId())).thenReturn(Optional.of(subasta));
+        when(pujaRepository.findBySubastaIdAndEstado(subasta.getId(), EstadoPuja.ACTIVA)).thenReturn(Optional.empty());
+        when(pujaRepository.save(any(Puja.class))).thenAnswer(i -> i.getArgument(0));
+        when(pujaRepository.findDistinctJugadorIdBySubastaId(subasta.getId())).thenReturn(List.of());
+
+        servicio.comprarAhora(subasta.getId(), comprador, claveUnica());
+
+        verify(eventos).publishEvent(any(SubastaActualizadaEvent.class));
+    }
+
+    /**
+     * Si la puja se rechaza no hay nada que transmitir: el listado no cambio.
+     * Avisar de todas formas haria que el canal emitiera ruido en cada intento
+     * fallido, y son frecuentes —perder la carrera contra otro postor es el
+     * caso normal, no una excepcion.
+     */
+    @Test
+    void unaPujaRechazadaNoAvisaDeNingunCambio() {
+        Subasta subasta = subastaActiva();
+        UUID jugador = UUID.randomUUID();
+        creditoClient.acreditar(jugador, new BigDecimal("1000"));
+
+        when(subastaRepository.findByIdParaActualizar(subasta.getId())).thenReturn(Optional.of(subasta));
+        when(pujaRepository.findBySubastaIdAndEstado(subasta.getId(), EstadoPuja.ACTIVA)).thenReturn(Optional.empty());
+
+        assertThrows(PujaRechazadaException.class,
+                () -> servicio.pujar(subasta.getId(), jugador, new BigDecimal("101"), claveUnica()));
+
+        verify(eventos, never()).publishEvent(any(SubastaActualizadaEvent.class));
     }
 }
