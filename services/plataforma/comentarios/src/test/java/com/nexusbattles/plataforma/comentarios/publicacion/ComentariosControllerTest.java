@@ -113,6 +113,20 @@ class ComentariosControllerTest {
     }
 
     @Test
+    @DisplayName("calificación duplicada rechazada por dominio responde 409 con el motivo")
+    void calificacionDuplicadaResponde409() throws Exception {
+        when(servicio.publicar(eq("espada-del-alba"), anyString(), anyString(),
+                anyString(), any(), any()))
+                .thenThrow(new HiloDeComentarios.PublicacionRechazada(
+                        MotivoDeRechazo.CALIFICACION_DUPLICADA,
+                        "Ya calificaste este producto"));
+
+        mvc.perform(post(RUTA).contentType(MediaType.APPLICATION_JSON).content(CUERPO))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.motivo").value("CALIFICACION_DUPLICADA"));
+    }
+
+    @Test
     @DisplayName("los datos invalidos que rechaza el dominio responden 400")
     void datosInvalidosResponden400() throws Exception {
         when(servicio.publicar(eq("espada-del-alba"), anyString(), anyString(),
