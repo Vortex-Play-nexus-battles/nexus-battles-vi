@@ -57,6 +57,12 @@ function construirTarjeta(elemento, alEditar, alEquipar, alAbrirDetalle) {
   tarjeta.dataset.elementoId = elemento.id;
   tarjeta.dataset.productoId = elemento.productoId;
 
+  const disponible = elemento.disponible !== false;
+  if (!disponible) {
+    tarjeta.classList.add('vitrina__producto--no-disponible');
+    tarjeta.setAttribute('aria-label', `${elemento.nombrePropio}, no disponible`);
+  }
+
   const nombre = document.createElement('p');
   nombre.className = 'vitrina__nombre';
   nombre.textContent = elemento.nombrePropio;
@@ -66,6 +72,13 @@ function construirTarjeta(elemento, alEditar, alEquipar, alAbrirDetalle) {
   tipo.textContent = NOMBRE_DEL_TIPO[elemento.tipo] ?? elemento.tipo;
 
   tarjeta.append(nombre, tipo);
+
+  if (!disponible) {
+    const estado = document.createElement('span');
+    estado.className = 'vitrina__disponibilidad';
+    estado.textContent = 'No disponible';
+    tarjeta.appendChild(estado);
+  }
 
   const acciones = document.createElement('div');
   acciones.className = 'vitrina__acciones';
@@ -89,6 +102,7 @@ function construirTarjeta(elemento, alEditar, alEquipar, alAbrirDetalle) {
     botonEditar.type = 'button';
     botonEditar.textContent = 'Editar';
     botonEditar.setAttribute('aria-label', `Editar ${elemento.nombrePropio}`);
+    botonEditar.disabled = !disponible;
     botonEditar.addEventListener('click', () => alEditar(elemento));
     acciones.appendChild(botonEditar);
   }
@@ -98,6 +112,7 @@ function construirTarjeta(elemento, alEditar, alEquipar, alAbrirDetalle) {
     botonEquipo.type = 'button';
     botonEquipo.textContent = 'Equipo';
     botonEquipo.setAttribute('aria-label', `Gestionar equipo de ${elemento.nombrePropio}`);
+    botonEquipo.disabled = !disponible;
     botonEquipo.addEventListener('click', () => alEquipar(elemento));
     acciones.appendChild(botonEquipo);
   }

@@ -2,14 +2,17 @@ package nexus.inventario.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import nexus.inventario.aplicacion.BuscarElementosInventario;
 import nexus.inventario.aplicacion.ConsultarInventarioPaginado;
 import nexus.inventario.aplicacion.GestionarInventario;
+import nexus.inventario.aplicacion.GestionarBloqueoSubasta;
 import nexus.inventario.aplicacion.RepositorioInventariosEnMemoria;
 import nexus.inventario.dominio.ElementoInventario;
 import nexus.inventario.dominio.TipoElementoInventario;
@@ -34,7 +37,8 @@ class InventarioApiTest {
                         new InventarioController(
                                 gestion,
                                 new ConsultarInventarioPaginado(repositorio),
-                                new BuscarElementosInventario(repositorio)))
+                                new BuscarElementosInventario(repositorio)),
+                        new BloqueoSubastaController(new GestionarBloqueoSubasta(repositorio)))
                 .setControllerAdvice(new ManejadorDeErrores())
                 .build();
     }
@@ -209,6 +213,40 @@ class InventarioApiTest {
                 .orElseThrow().elemento(creado.id());
         assertEquals("Amuleto original", persistido.nombrePropio());
         assertEquals("producto-1", persistido.productoId());
+    }
+
+    @Test
+    @DisplayName("un producto publicado figura no disponible y rechaza modificacion y eliminacion")
+    void productoBloqueadoEnSubasta() throws Exception {
+        ElementoInventario creado = gestion.crear(
+                "jugador-A", "producto-1", TipoElementoInventario.ITEM, "Amuleto");
+
+        mvc.perform(put("/api/v1/inventario/elementos/{elementoId}/bloqueo-subasta", creado.id())
+                        .header("X-User-Name", "jugador-A")
+                        .header("Idempotency-Key", "publicar-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"subastaId\":\"89d9040d-52e0-44ae-8d8c-8ec033978afb\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.disponible").value(false))
+                .andExpect(jsonPath("$.subastaId")
+                        .value("89d9040d-52e0-44ae-8d8c-8ec033978afb"));
+
+        mvc.perform(get("/api/v1/inventario/elementos")
+                        .header("X-User-Name", "jugador-A"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.elementos[0].disponible").value(false));
+
+        mvc.perform(patch("/api/v1/inventario/elementos/{elementoId}", creado.id())
+                        .header("X-User-Name", "jugador-A")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nombrePropio\":\"Amuleto cambiado\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Producto no disponible"));
+
+        mvc.perform(delete("/api/v1/inventario/elementos/{elementoId}", creado.id())
+                        .header("X-User-Name", "jugador-A"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Producto no disponible"));
     }
 
     @Test

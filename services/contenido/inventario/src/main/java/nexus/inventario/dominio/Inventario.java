@@ -41,16 +41,47 @@ public record Inventario(
     }
 
     public Inventario renombrarElemento(String elementoId, String nuevoNombre) {
-        boolean existe = elementos.stream().anyMatch(elemento -> elemento.id().equals(elementoId));
-        if (!existe) {
-            throw new ElementoNoEncontradoException();
-        }
+        elemento(elementoId).exigirDisponible();
         List<ElementoInventario> actualizados = elementos.stream()
                 .map(elemento -> elemento.id().equals(elementoId)
                         ? elemento.renombrar(nuevoNombre)
                         : elemento)
                 .toList();
         return new Inventario(id, propietarioId, actualizados, equipamientos);
+    }
+
+    public Inventario eliminarElemento(String elementoId) {
+        ElementoInventario elemento = elemento(elementoId);
+        elemento.exigirDisponible();
+        if (estaEnUso(elementoId)) {
+            throw new ElementoNoDisponibleException(
+                    "El producto esta equipado y no se puede eliminar.");
+        }
+        List<ElementoInventario> actualizados = elementos.stream()
+                .filter(actual -> !actual.id().equals(elementoId))
+                .toList();
+        List<EquipamientoHeroe> equipamientosActualizados = equipamientos.stream()
+                .filter(equipamiento -> !equipamiento.heroeId().equals(elementoId))
+                .toList();
+        return new Inventario(id, propietarioId, actualizados, equipamientosActualizados);
+    }
+
+    public Inventario bloquearEnSubasta(String elementoId, String subastaId) {
+        ElementoInventario elemento = elemento(elementoId);
+        if (estaEnUso(elementoId)) {
+            throw new ElementoNoDisponibleException(
+                    "El producto esta equipado y no se puede publicar en subasta.");
+        }
+        List<ElementoInventario> actualizados = elementos.stream()
+                .map(actual -> actual.id().equals(elementoId)
+                        ? elemento.bloquearEnSubasta(subastaId)
+                        : actual)
+                .toList();
+        return new Inventario(id, propietarioId, actualizados, equipamientos);
+    }
+
+    public boolean estaEnUso(String elementoId) {
+        return equipamientos.stream().anyMatch(equipamiento -> equipamiento.contiene(elementoId));
     }
 
     public ElementoInventario elemento(String elementoId) {
@@ -71,6 +102,7 @@ public record Inventario(
     public Inventario equipar(String heroeId, String elementoId) {
         validarHeroe(heroeId);
         ElementoInventario elemento = elemento(elementoId);
+        elemento.exigirDisponible();
         boolean equipadoEnOtroHeroe = equipamientos.stream()
                 .filter(equipamiento -> !equipamiento.heroeId().equals(heroeId))
                 .anyMatch(equipamiento -> equipamiento.contiene(elementoId));

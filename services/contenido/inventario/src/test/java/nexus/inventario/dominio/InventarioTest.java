@@ -1,6 +1,7 @@
 package nexus.inventario.dominio;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.ArrayList;
@@ -148,6 +149,64 @@ class InventarioTest {
 
         assertThrows(ElementoYaEquipadoException.class,
                 () -> inventario.equipar("heroe-B", "arma-1"));
+    }
+
+    @Test
+    @DisplayName("un producto publicado queda no disponible y conserva la subasta que lo bloqueo")
+    void bloquearProductoEnSubasta() {
+        ElementoInventario arma = new ElementoInventario(
+                "arma-1", "producto-arma", TipoElementoInventario.ARMA, "Espada");
+        Inventario inventario = Inventario.vacio("jugador-A").agregar(arma);
+
+        Inventario bloqueado = inventario.bloquearEnSubasta("arma-1", "subasta-1");
+
+        assertFalse(bloqueado.elemento("arma-1").disponible());
+        assertEquals("subasta-1", bloqueado.elemento("arma-1").subastaId());
+    }
+
+    @Test
+    @DisplayName("repetir el bloqueo de la misma subasta es idempotente")
+    void bloqueoIdempotente() {
+        ElementoInventario arma = new ElementoInventario(
+                "arma-1", "producto-arma", TipoElementoInventario.ARMA, "Espada");
+        Inventario bloqueado = Inventario.vacio("jugador-A").agregar(arma)
+                .bloquearEnSubasta("arma-1", "subasta-1");
+
+        Inventario repetido = bloqueado.bloquearEnSubasta("arma-1", "subasta-1");
+
+        assertEquals(bloqueado, repetido);
+    }
+
+    @Test
+    @DisplayName("un producto bloqueado no se modifica, equipa ni elimina")
+    void impedirOperacionesSobreProductoBloqueado() {
+        ElementoInventario heroe = new ElementoInventario(
+                "heroe-1", "producto-heroe", TipoElementoInventario.HEROE, "Guerrero");
+        ElementoInventario arma = new ElementoInventario(
+                "arma-1", "producto-arma", TipoElementoInventario.ARMA, "Espada");
+        Inventario bloqueado = Inventario.vacio("jugador-A").agregar(heroe).agregar(arma)
+                .bloquearEnSubasta("arma-1", "subasta-1");
+
+        assertThrows(ElementoNoDisponibleException.class,
+                () -> bloqueado.renombrarElemento("arma-1", "Otro nombre"));
+        assertThrows(ElementoNoDisponibleException.class,
+                () -> bloqueado.equipar("heroe-1", "arma-1"));
+        assertThrows(ElementoNoDisponibleException.class,
+                () -> bloqueado.eliminarElemento("arma-1"));
+    }
+
+    @Test
+    @DisplayName("un producto equipado no puede bloquearse para una subasta")
+    void productoEquipadoNoSePublica() {
+        ElementoInventario heroe = new ElementoInventario(
+                "heroe-1", "producto-heroe", TipoElementoInventario.HEROE, "Guerrero");
+        ElementoInventario arma = new ElementoInventario(
+                "arma-1", "producto-arma", TipoElementoInventario.ARMA, "Espada");
+        Inventario inventario = Inventario.vacio("jugador-A").agregar(heroe).agregar(arma)
+                .equipar("heroe-1", "arma-1");
+
+        assertThrows(ElementoNoDisponibleException.class,
+                () -> inventario.bloquearEnSubasta("arma-1", "subasta-1"));
     }
 
     private static Stream<TipoElementoInventario> tiposDeProducto() {

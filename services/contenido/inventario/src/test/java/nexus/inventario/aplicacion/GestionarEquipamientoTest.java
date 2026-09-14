@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import nexus.inventario.dominio.ElementoInventario;
+import nexus.inventario.dominio.ElementoNoDisponibleException;
 import nexus.inventario.dominio.EquipamientoHeroe;
 import nexus.inventario.dominio.Inventario;
 import nexus.inventario.dominio.TipoElementoInventario;
@@ -63,6 +64,17 @@ class GestionarEquipamientoTest {
         assertEquals("heroe-A", gestion.consultar("jugador-A", "heroe-A").heroeId());
         assertThrows(IdentidadRequeridaException.class,
                 () -> gestion.consultar(null, "heroe-A"));
+    }
+
+    @Test
+    @DisplayName("un producto bloqueado por subasta no se puede equipar")
+    void rechazarProductoBloqueado() {
+        guardarInventario("jugador-A", "heroe-A", "arma-A");
+        Inventario inventario = repositorio.buscarPorPropietario("jugador-A").orElseThrow();
+        repositorio.guardar(inventario.bloquearEnSubasta("arma-A", "subasta-1"));
+
+        assertThrows(ElementoNoDisponibleException.class,
+                () -> gestion.equipar("jugador-A", "heroe-A", "arma-A"));
     }
 
     private void guardarInventario(String propietario, String heroeId, String armaId) {

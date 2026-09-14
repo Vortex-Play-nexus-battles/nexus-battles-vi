@@ -102,6 +102,27 @@ describe('Cuadricula de la vitrina a 1360 x 768', () => {
     expect(vitrina.querySelector('.vitrina__equipo')).toBeNull();
   });
 
+  test('un producto bloqueado figura no disponible y no permite editarlo', () => {
+    const pagina = paginaCon(1);
+    pagina.elementos[0].disponible = false;
+    pagina.elementos[0].subastaId = 'subasta-1';
+    const vitrina = construirVitrina(pagina, { alEditar: () => {} });
+
+    const tarjeta = vitrina.querySelector('.vitrina__producto');
+    expect(tarjeta.classList.contains('vitrina__producto--no-disponible')).toBe(true);
+    expect(tarjeta.querySelector('.vitrina__disponibilidad').textContent).toBe('No disponible');
+    expect(tarjeta.querySelector('.vitrina__editar').disabled).toBe(true);
+  });
+
+  test('un heroe bloqueado no permite abrir acciones de equipamiento', () => {
+    const pagina = paginaCon(1);
+    pagina.elementos[0].tipo = 'HEROE';
+    pagina.elementos[0].disponible = false;
+    const vitrina = construirVitrina(pagina, { alEquipar: () => {} });
+
+    expect(vitrina.querySelector('.vitrina__equipo').disabled).toBe(true);
+  });
+
   test('el nombre propio del jugador se escribe como texto y nunca como marcado', () => {
     const pagina = paginaCon(1);
     pagina.elementos[0].nombrePropio = '<img src=x onerror="robar()">';

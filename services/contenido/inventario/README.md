@@ -1,7 +1,8 @@
 # Servicio de inventario
 
-Servicio de inventario de `HU-INV-003` y equipamiento con limites de
-`HU-INV-005`. Usa Java 21, Spring Boot 4.1 y Spring Data MongoDB.
+Servicio de inventario de `HU-INV-003`, equipamiento con limites de
+`HU-INV-005` y bloqueo de productos publicados en subasta de `HU-INV-010`.
+Usa Java 21, Spring Boot 4.1 y Spring Data MongoDB.
 
 ## Modelo
 
@@ -15,7 +16,8 @@ Inventario
    |- id              identificador de la instancia poseida
    |- productoId      referencia al catalogo de productos
    |- tipo            HEROE, HABILIDAD, ARMA, ARMADURA, ITEM o EPICA
-   `- nombrePropio     dato editable de la instancia
+   |- nombrePropio     dato editable de la instancia
+   `- subastaId        nulo si esta disponible; identifica la subasta que lo bloquea
 `- equipamientos
    |- heroeId           instancia HEROE del mismo inventario
    |- armas             maximo dos identificadores de elemento
@@ -52,11 +54,28 @@ token sin cambiar las reglas de propiedad de la aplicacion.
 GET   /api/v1/inventario/elementos/busqueda?criterio={texto}&pagina={numero}
 POST  /api/v1/inventario/elementos
 PATCH /api/v1/inventario/elementos/{elementoId}
+DELETE /api/v1/inventario/elementos/{elementoId}
 ```
 
 `PATCH` solo permite modificar elementos del inventario autenticado. Intentar
 modificar el de otro jugador responde `403` y no altera los datos. El contrato
 completo esta en `contracts/openapi/inventario.yaml`.
+
+## Bloqueo por subasta
+
+`HU-INV-010` persiste el identificador de la subasta en el mismo elemento del
+inventario. Mientras exista ese bloqueo, la consulta devuelve
+`disponible: false` y el producto no se puede renombrar, equipar ni eliminar.
+La misma subasta puede repetir la reserva de forma idempotente; otra subasta
+recibe `409` y no reemplaza el bloqueo vigente.
+
+```text
+PUT /api/v1/inventario/elementos/{elementoId}/bloqueo-subasta
+```
+
+El servicio de subastas debe propagar `X-User-Name`, `Idempotency-Key` y enviar
+el `subastaId` definido en el contrato OpenAPI. La liberacion automatica se
+incorpora en la siguiente subtarea de la historia.
 
 ## Equipamiento con limites
 
