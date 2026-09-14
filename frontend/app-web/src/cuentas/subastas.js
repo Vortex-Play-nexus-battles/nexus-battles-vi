@@ -226,7 +226,7 @@ async function cargarYRenderizar() {
   const vitrina = construirVitrinaSubastas(pagina, {
     alAbrirDetalle: (subasta) => {
       // La vista de detalle todavia no existe (ver pendientes de HU-SUB-011).
-      globalThis.location.href = `/subasta/${subasta.id}`;
+      globalThis.location.href = `./pujas.html?id=${subasta.id}`;
     },
   });
 
