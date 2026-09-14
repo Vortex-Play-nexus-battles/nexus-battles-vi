@@ -26,7 +26,13 @@ import static org.junit.jupiter.api.Assertions.*;
  * HTTP reales, replicando de forma automatizada las mismas pruebas que ya
  * se hicieron a mano con curl.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = {
+                "app.pujas.emision-automatica-intervalo-ms=3600000",
+                "app.subastas.cierre-intervalo-ms=3600000",
+                "app.notificaciones.drenaje-intervalo-ms=3600000"
+        })
 @Testcontainers(disabledWithoutDocker = true)
 class ManejadorDeErroresSubastasIT {
 

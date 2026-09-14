@@ -116,4 +116,81 @@ class MotorPujasServiceConcurrenciaTest {
             }
         }
     }
+
+    @Test
+    void soloUnCompradorGanaLaCompraInmediataBajoConcurrencia() throws InterruptedException {
+        Instant ahora = Instant.parse("2026-09-11T12:00:00Z");
+        CreditoClientFake creditoClient = new CreditoClientFake();
+        com.nexusbattles.ms_subastas.subastas.port.InventarioClientFake inventarioFake =
+                new com.nexusbattles.ms_subastas.subastas.port.InventarioClientFake();
+        ParametrosPuja parametros = new ParametrosPuja();
+        Clock clock = Clock.fixed(ahora, ZoneOffset.UTC);
+        MotorPujasService motor = new MotorPujasService(creditoClient, inventarioFake, clock, parametros);
+
+        UUID vendedor = UUID.randomUUID();
+        String elementoId = "elem-concurrente-compra";
+        inventarioFake.registrarElemento(new com.nexusbattles.ms_subastas.subastas.port.InventarioClient.ElementoInventario(
+                elementoId, UUID.randomUUID(), vendedor, false));
+
+        Subasta subasta = new Subasta(UUID.randomUUID(), UUID.randomUUID(), vendedor, new BigDecimal("100"),
+                new BigDecimal("10"), new BigDecimal("500"), null, EstadoSubasta.ACTIVA, ahora.plusSeconds(86400), 0L);
+        subasta.setElementoInventarioId(elementoId);
+        inventarioFake.reservar(elementoId, vendedor, subasta.getId(), "res-inicial");
+
+        int numeroDeCompradores = 10;
+        List<UUID> compradores = IntStream.range(0, numeroDeCompradores)
+                .mapToObj(i -> UUID.randomUUID())
+                .collect(Collectors.toList());
+        compradores.forEach(c -> creditoClient.acreditar(c, new BigDecimal("10000")));
+
+        Map<UUID, Puja> comprasExitosas = new ConcurrentHashMap<>();
+        ExecutorService executor = Executors.newFixedThreadPool(numeroDeCompradores);
+        CountDownLatch salida = new CountDownLatch(1);
+        CountDownLatch listos = new CountDownLatch(numeroDeCompradores);
+        CountDownLatch terminados = new CountDownLatch(numeroDeCompradores);
+
+        for (int i = 0; i < numeroDeCompradores; i++) {
+            UUID comprador = compradores.get(i);
+            executor.submit(() -> {
+                listos.countDown();
+                try {
+                    salida.await();
+                    synchronized (motor) {
+                        Puja ganadora = motor.comprarAhora(subasta, null, comprador, claveUnica());
+                        comprasExitosas.put(comprador, ganadora);
+                    }
+                } catch (PujaRechazadaException esperada) {
+                    assertEquals(PujaRechazadaException.Motivo.SUBASTA_NO_ACTIVA, esperada.getMotivo());
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    terminados.countDown();
+                }
+            });
+        }
+
+        listos.await();
+        salida.countDown();
+        terminados.await();
+        executor.shutdown();
+
+        assertEquals(1, comprasExitosas.size(), "exactamente una compra inmediata debio completarse");
+        assertEquals(EstadoSubasta.ADJUDICADA, subasta.getEstado());
+
+        UUID compradorGanador = comprasExitosas.keySet().iterator().next();
+        assertEquals(compradorGanador, subasta.getMejorPostorId());
+        assertEquals(new BigDecimal("9500"), creditoClient.saldoDisponible(compradorGanador));
+
+        // Los demas 9 compradores deben conservar sus 10000 creditos intactos
+        for (UUID comprador : compradores) {
+            if (!comprador.equals(compradorGanador)) {
+                assertEquals(new BigDecimal("10000"), creditoClient.saldoDisponible(comprador));
+            }
+        }
+
+        // El inventario debe registrar exactamente 1 transferencia y el nuevo dueño debe ser el comprador ganador
+        assertEquals(1, inventarioFake.getTransferencias().size());
+        assertEquals(compradorGanador, inventarioFake.getTransferencias().get(0).nuevoPropietarioId());
+        assertEquals(compradorGanador, inventarioFake.buscar(elementoId).orElseThrow().propietarioId());
+    }
 }

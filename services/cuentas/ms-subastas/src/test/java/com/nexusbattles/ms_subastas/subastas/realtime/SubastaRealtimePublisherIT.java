@@ -51,7 +51,13 @@ import static org.junit.jupiter.api.Assertions.*;
  * sin una transaccion activa) siga funcionando igual que en produccion
  * (donde si hay transaccion, y el envio espera al AFTER_COMMIT).
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = {
+                "app.pujas.emision-automatica-intervalo-ms=3600000",
+                "app.subastas.cierre-intervalo-ms=3600000",
+                "app.notificaciones.drenaje-intervalo-ms=3600000"
+        })
 @Testcontainers(disabledWithoutDocker = true)
 class SubastaRealtimePublisherIT {
 

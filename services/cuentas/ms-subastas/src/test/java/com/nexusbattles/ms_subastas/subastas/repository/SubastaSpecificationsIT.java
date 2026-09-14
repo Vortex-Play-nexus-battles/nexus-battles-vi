@@ -42,7 +42,11 @@ import static org.junit.jupiter.api.Assertions.*;
  * si no se combina con soloActivas(). Sembrarla es lo que detecta ese
  * error, no evitarla.
  */
-@SpringBootTest
+@SpringBootTest(properties = {
+        "app.pujas.emision-automatica-intervalo-ms=3600000",
+        "app.subastas.cierre-intervalo-ms=3600000",
+        "app.notificaciones.drenaje-intervalo-ms=3600000"
+})
 @Testcontainers(disabledWithoutDocker = true)
 class SubastaSpecificationsIT {
 
@@ -90,8 +94,11 @@ class SubastaSpecificationsIT {
                                     EstadoSubasta estado) {
         Subasta subasta = new Subasta(null, UUID.randomUUID(), UUID.randomUUID(), ofertaVigente,
             new BigDecimal("5.00"), precioCompraInmediata, null, estado, fechaFin, 0L);
+        // elementoInventarioId es NOT NULL desde V4 (Edwin) -- el constructor
+        // historico de 10 parametros no lo asigna, hay que ponerlo a mano o
+        // el saveAll() de abajo revienta por violacion de restriccion.
+        subasta.setElementoInventarioId(UUID.randomUUID().toString());
         subasta.setNombreProducto(nombre);
-        subasta.setElementoInventarioId("elemento-" + UUID.randomUUID());
         subasta.setTipoProducto(tipo);
         subasta.setRareza(rareza);
         subasta.setPrecioInicial(ofertaVigente);

@@ -33,7 +33,11 @@ import static org.junit.jupiter.api.Assertions.*;
  * precioMinimo/tiempoRestante sin soloActivas), esta prueba lo detectaria
  * de inmediato: apareceria primera por popularidad en vez de estar ausente.
  */
-@SpringBootTest
+@SpringBootTest(properties = {
+        "app.pujas.emision-automatica-intervalo-ms=3600000",
+        "app.subastas.cierre-intervalo-ms=3600000",
+        "app.notificaciones.drenaje-intervalo-ms=3600000"
+})
 @Testcontainers(disabledWithoutDocker = true)
 class SubastaRepositoryIT {
 
@@ -61,8 +65,10 @@ class SubastaRepositoryIT {
         Subasta subasta = new Subasta(null, UUID.randomUUID(), UUID.randomUUID(),
             new BigDecimal("50.00"), new BigDecimal("5.00"), null, null,
             estado, Instant.now().plusSeconds(3600), 0L);
+        // elementoInventarioId es NOT NULL desde V4 (Edwin) -- ver mismo
+        // comentario en SubastaSpecificationsIT.
+        subasta.setElementoInventarioId(UUID.randomUUID().toString());
         subasta.setNombreProducto(nombre);
-        subasta.setElementoInventarioId("elemento-" + UUID.randomUUID());
         subasta.setCantidadPujas(cantidadPujas);
         subasta.setFechaPublicacion(Instant.now());
         return subasta;

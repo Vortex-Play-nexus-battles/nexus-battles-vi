@@ -8,7 +8,9 @@ import java.time.Instant;
  * adelante un repositorio JPA); no se consultan aqui para mantener el motor
  * testeable sin base de datos.
  *
- * @param ultimaPujaDelJugador        instante de su ultima puja en cualquier subasta, o null si nunca pujo
+ * @param ultimaPujaDelJugador        instante de su ultima puja EN ESTA SUBASTA, o null si no ha pujado en ella.
+ *                                    Es por subasta, no global: el intervalo de 5 s frena el spam dentro de una
+ *                                    subasta, no la participacion en varias a la vez (la HU permite 10)
  * @param pujasActivasDelJugador      cuantas de sus pujas siguen siendo la oferta vigente de su subasta
  * @param subastasActivasDelJugador   en cuantas subastas distintas participa activamente (sin contar esta, si ya estaba en ella)
  */

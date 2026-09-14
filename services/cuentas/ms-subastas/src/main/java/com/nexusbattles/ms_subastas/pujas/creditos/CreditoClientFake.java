@@ -1,5 +1,8 @@
 package com.nexusbattles.ms_subastas.pujas.creditos;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.math.BigDecimal;
 import java.util.Map;
 import java.util.UUID;
@@ -13,9 +16,54 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class CreditoClientFake implements CreditoClient {
 
+    private static final Logger log = LoggerFactory.getLogger(CreditoClientFake.class);
+
     private final Map<UUID, BigDecimal> saldos = new ConcurrentHashMap<>();
     private final Map<UUID, ReservaCredito> reservas = new ConcurrentHashMap<>();
     private final Map<String, UUID> reservasPorIdempotencyKey = new ConcurrentHashMap<>();
+
+    /**
+     * Saldo con el que aparece un jugador del que no se sabe nada. En las
+     * pruebas es cero y cada una acredita lo que necesita, que es lo correcto:
+     * una prueba de saldo insuficiente no puede depender de un regalo.
+     *
+     * <p>Levantando el servicio en local, en cambio, cero significa que
+     * <b>nadie puede pujar</b>: ms-finanzas no existe todavia y no hay ningun
+     * sitio desde donde acreditar. Con este valor por encima de cero la
+     * funcionalidad se puede ver funcionar de extremo a extremo.
+     */
+    private final BigDecimal saldoInicial;
+
+    /**
+     * Si una reserva que este doble no conoce se trata como ya liberada.
+     *
+     * <p><b>Por que hace falta.</b> Las reservas viven en memoria y las pujas
+     * viven en PostgreSQL. Al reiniciar el servicio, la base de datos sigue
+     * teniendo pujas que apuntan a reservas que este doble ya no tiene, asi
+     * que la siguiente puja sobre esa subasta intenta liberar una reserva
+     * inexistente y la peticion muere con un 500. Reiniciar el servicio a
+     * mitad de desarrollo es lo normal, asi que sin esto la funcionalidad
+     * queda inservible en cuanto se reinicia una vez.
+     *
+     * <p>Queda en false para las pruebas: alli el doble arranca y muere con
+     * cada caso, no hay estado heredado, y una reserva desconocida si es un
+     * error de verdad que no se debe tapar. ms-finanzas, cuando exista,
+     * persiste sus reservas y este problema no se le plantea.
+     */
+    private final boolean tolerarReservasDeOtraEjecucion;
+
+    public CreditoClientFake() {
+        this(BigDecimal.ZERO, false);
+    }
+
+    public CreditoClientFake(BigDecimal saldoInicial) {
+        this(saldoInicial, false);
+    }
+
+    public CreditoClientFake(BigDecimal saldoInicial, boolean tolerarReservasDeOtraEjecucion) {
+        this.saldoInicial = saldoInicial == null ? BigDecimal.ZERO : saldoInicial;
+        this.tolerarReservasDeOtraEjecucion = tolerarReservasDeOtraEjecucion;
+    }
 
     public void acreditar(UUID jugadorId, BigDecimal monto) {
         saldos.merge(jugadorId, monto, BigDecimal::add);
@@ -42,6 +90,15 @@ public class CreditoClientFake implements CreditoClient {
 
     @Override
     public synchronized void liberar(UUID reservaId) {
+        if (tolerarReservasDeOtraEjecucion && !reservas.containsKey(reservaId)) {
+            // Puja escrita antes del ultimo reinicio: su reserva se perdio con
+            // la memoria del proceso anterior. Darla por liberada es lo unico
+            // coherente, porque ya no retiene nada.
+            log.warn("La reserva {} no existe en este doble: se da por liberada. "
+                    + "Viene de una ejecucion anterior, porque las reservas del doble no sobreviven "
+                    + "a un reinicio y las pujas si.", reservaId);
+            return;
+        }
         ReservaCredito reserva = obtenerReserva(reservaId);
         if (reserva.estado() == ReservaCredito.EstadoReserva.LIBERADA) {
             throw new CreditoClientException(CreditoClientException.Motivo.RESERVA_YA_LIBERADA,
@@ -67,7 +124,7 @@ public class CreditoClientFake implements CreditoClient {
 
     @Override
     public synchronized BigDecimal saldoDisponible(UUID jugadorId) {
-        BigDecimal saldo = saldos.getOrDefault(jugadorId, BigDecimal.ZERO);
+        BigDecimal saldo = saldos.computeIfAbsent(jugadorId, quien -> saldoInicial);
         BigDecimal reservado = reservas.values().stream()
                 .filter(r -> r.jugadorId().equals(jugadorId) && r.estado() == ReservaCredito.EstadoReserva.RESERVADA)
                 .map(ReservaCredito::monto)

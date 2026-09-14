@@ -22,6 +22,7 @@ class ReglasDeArquitecturaTest {
     static void importar() {
         clases = new ClassFileImporter()
                 .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
+                .withImportOption(loc -> !loc.contains("/test/"))
                 .importPackages("com.nexusbattles.ms_subastas");
     }
 
@@ -34,7 +35,8 @@ class ReglasDeArquitecturaTest {
                         "com.nexusbattles.ms_ecommerce..",
                         "com.nexusbattles.ms_cumplimiento..",
                         "com.nexusbattles.ms_finanzas..",
-                        "com.nexusbattles.ms_chatbot..")
+                        "com.nexusbattles.ms_chatbot..",
+                        "nexus.inventario..")
                 .because("ningun servicio importa clases internas de otro dominio: "
                         + "la integracion va por REST o por evento, nunca por la clase ni por la BD ajena");
 

@@ -204,7 +204,11 @@ async function cargarYRenderizar() {
 
   let pagina;
   try {
-    pagina = await listarSubastas(estado.filtros, estado.pagina, TAMANO_PAGINA);
+    pagina = await listarSubastas(
+      { ...estado.filtros, ordenarPor: estado.ordenarPor },
+      estado.pagina,
+      TAMANO_PAGINA,
+    );
   } catch (error) {
     zona.replaceChildren(
       construirEstado('error', 'No se pudieron cargar las subastas', error.message),
