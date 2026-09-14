@@ -1,8 +1,8 @@
 {
   "info": {
-    "name": "Servicio de inventario - HU-INV-002, HU-INV-003 y HU-INV-005",
+    "name": "Servicio de inventario - HU-INV-002, HU-INV-003, HU-INV-005 y HU-INV-010",
     "_postman_id": "7c1e4b02-inventario-inv-003-005",
-    "description": "Validacion contra el servicio en ejecucion de HU-INV-002 (busqueda indexada desde cuatro caracteres), HU-INV-003 (creacion y edicion de elementos propios, propiedad, 403 sobre inventario ajeno) y HU-INV-005 (equipamiento con limites: dos armas, seis partes de armadura, dos items). Las peticiones estan encadenadas: cada una guarda los identificadores que usan las siguientes, asi que se corre la coleccion completa y en orden (Run collection o Newman). La identidad viaja en X-User-Name, la convencion temporal hasta HU-AUT-004.",
+    "description": "Validacion contra el servicio en ejecucion de HU-INV-002 (busqueda indexada desde cuatro caracteres), HU-INV-003 (creacion y edicion de elementos propios, propiedad, 403 sobre inventario ajeno), HU-INV-005 (equipamiento con limites: dos armas, seis partes de armadura, dos items) y HU-INV-010 (bloqueo de productos publicados en subasta). Las peticiones estan encadenadas: cada una guarda los identificadores que usan las siguientes, asi que se corre la coleccion completa y en orden (Run collection o Newman). La identidad viaja en X-User-Name, la convencion temporal hasta HU-AUT-004.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "event": [
@@ -409,6 +409,192 @@
           },
           "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
             "pm.test('responde 401', () => pm.response.to.have.status(401));"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "4. HU-INV-010 Bloqueo de producto publicado en subasta",
+      "item": [
+        {
+          "name": "A crea el producto que publicara en subasta (201)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Name", "value": "{{jugadorA}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos",
+            "body": { "mode": "raw", "raw": "{\"productoId\":\"reliquia-subastable\",\"tipo\":\"ITEM\",\"nombrePropio\":\"Reliquia para subasta\"}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const e = pm.response.json();",
+            "pm.test('responde 201', () => pm.response.to.have.status(201));",
+            "pm.test('comienza disponible', () => pm.expect(e.disponible).to.eql(true));",
+            "pm.collectionVariables.set('elementoSubastaId', e.id);",
+            "pm.collectionVariables.set('subastaId', '89d9040d-52e0-44ae-8d8c-8ec033978afb');"
+          ] } }]
+        },
+        {
+          "name": "La publicacion bloquea el producto (200)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Name", "value": "{{jugadorA}}" },
+              { "key": "Idempotency-Key", "value": "publicar-{{subastaId}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos/{{elementoSubastaId}}/bloqueo-subasta",
+            "body": { "mode": "raw", "raw": "{\"subastaId\":\"{{subastaId}}\"}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const e = pm.response.json();",
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('queda ligado a la subasta y no disponible', () => { pm.expect(e.disponible).to.eql(false); pm.expect(e.subastaId).to.eql(pm.collectionVariables.get('subastaId')); });"
+          ] } }]
+        },
+        {
+          "name": "Repetir el bloqueo de la misma subasta es idempotente (200)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Name", "value": "{{jugadorA}}" },
+              { "key": "Idempotency-Key", "value": "publicar-{{subastaId}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos/{{elementoSubastaId}}/bloqueo-subasta",
+            "body": { "mode": "raw", "raw": "{\"subastaId\":\"{{subastaId}}\"}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 200 sin duplicar el bloqueo', () => pm.response.to.have.status(200));",
+            "pm.test('conserva la misma subasta', () => pm.expect(pm.response.json().subastaId).to.eql(pm.collectionVariables.get('subastaId')));"
+          ] } }]
+        },
+        {
+          "name": "La vitrina muestra el producto como no disponible (200)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-User-Name", "value": "{{jugadorA}}" }],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const e = pm.response.json().elementos.find(x => x.id === pm.collectionVariables.get('elementoSubastaId'));",
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('figura no disponible', () => { pm.expect(e).to.not.be.undefined; pm.expect(e.disponible).to.eql(false); });"
+          ] } }]
+        },
+        {
+          "name": "El producto bloqueado no se puede modificar (409)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Name", "value": "{{jugadorA}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos/{{elementoSubastaId}}",
+            "body": { "mode": "raw", "raw": "{\"nombrePropio\":\"Cambio indebido\"}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 409', () => pm.response.to.have.status(409));",
+            "pm.test('explica que no esta disponible', () => pm.expect(pm.response.json().title).to.eql('Producto no disponible'));"
+          ] } }]
+        },
+        {
+          "name": "El producto bloqueado no se puede eliminar (409)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "X-User-Name", "value": "{{jugadorA}}" }],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos/{{elementoSubastaId}}"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 409', () => pm.response.to.have.status(409));",
+            "pm.test('el producto permanece protegido', () => pm.expect(pm.response.json().title).to.eql('Producto no disponible'));"
+          ] } }]
+        },
+        {
+          "name": "Otra subasta no puede tomar el producto bloqueado (409)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-User-Name", "value": "{{jugadorA}}" },
+              { "key": "Idempotency-Key", "value": "publicar-otra-subasta" }
+            ],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos/{{elementoSubastaId}}/bloqueo-subasta",
+            "body": { "mode": "raw", "raw": "{\"subastaId\":\"51326b9d-1aa2-4d8a-bb7d-d3ad593f902d\"}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 409', () => pm.response.to.have.status(409));",
+            "pm.test('no reemplaza la subasta vigente', () => pm.expect(pm.response.json().detail).to.include('otra subasta'));"
+          ] } }]
+        },
+        {
+          "name": "Un aviso de otra subasta no levanta el bloqueo (409)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Idempotency-Key", "value": "cerrar-subasta-anterior" }
+            ],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos/{{elementoSubastaId}}/bloqueo-subasta/51326b9d-1aa2-4d8a-bb7d-d3ad593f902d"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 409', () => pm.response.to.have.status(409));",
+            "pm.test('conserva el bloqueo correcto', () => pm.expect(pm.response.json().detail).to.include('no corresponde'));"
+          ] } }]
+        },
+        {
+          "name": "Sin aviso de subastas el producto permanece bloqueado (200)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-User-Name", "value": "{{jugadorA}}" }],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const e = pm.response.json().elementos.find(x => x.id === pm.collectionVariables.get('elementoSubastaId'));",
+            "pm.test('responde 200 aunque subastas no envie aviso', () => pm.response.to.have.status(200));",
+            "pm.test('aplica falla conservadora', () => { pm.expect(e).to.not.be.undefined; pm.expect(e.disponible).to.eql(false); pm.expect(e.subastaId).to.eql(pm.collectionVariables.get('subastaId')); });"
+          ] } }]
+        },
+        {
+          "name": "El aviso de cierre o cancelacion libera el producto (200)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Idempotency-Key", "value": "cerrar-{{subastaId}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos/{{elementoSubastaId}}/bloqueo-subasta/{{subastaId}}"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const e = pm.response.json();",
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('vuelve a estar disponible', () => { pm.expect(e.disponible).to.eql(true); pm.expect(e.subastaId).to.eql(null); });"
+          ] } }]
+        },
+        {
+          "name": "Repetir el aviso de cierre es idempotente (200)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Idempotency-Key", "value": "cerrar-{{subastaId}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos/{{elementoSubastaId}}/bloqueo-subasta/{{subastaId}}"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('responde 200 sin efectos duplicados', () => pm.response.to.have.status(200));",
+            "pm.test('permanece disponible', () => pm.expect(pm.response.json().disponible).to.eql(true));"
+          ] } }]
+        },
+        {
+          "name": "La vitrina vuelve a mostrar el producto disponible (200)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-User-Name", "value": "{{jugadorA}}" }],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const e = pm.response.json().elementos.find(x => x.id === pm.collectionVariables.get('elementoSubastaId'));",
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('el producto esta disponible', () => { pm.expect(e).to.not.be.undefined; pm.expect(e.disponible).to.eql(true); pm.expect(e.subastaId).to.eql(null); });"
           ] } }]
         }
       ]

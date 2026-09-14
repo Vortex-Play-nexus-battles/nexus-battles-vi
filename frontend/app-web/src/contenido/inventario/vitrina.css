@@ -350,6 +350,25 @@
   background: var(--superficie);
 }
 
+.vitrina__producto--no-disponible {
+  border-color: var(--advertencia);
+  background: #fbeedd;
+}
+
+.vitrina__disponibilidad {
+  align-self: flex-start;
+  margin-top: 8px;
+  color: var(--advertencia);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.vitrina__acciones button:disabled,
+.inventario-equipo button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .vitrina__acciones {
   position: absolute;
   top: 10px;

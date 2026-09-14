@@ -312,12 +312,20 @@ export async function montarInventario(
           : elemento.nombrePropio,
       );
       const estaEquipado = equipados.has(elemento.id);
+      const estaDisponible = elemento.disponible !== false;
+      let textoAccion = 'Equipar';
+      if (estaEquipado) {
+        textoAccion = 'Desequipar';
+      } else if (!estaDisponible) {
+        textoAccion = 'No disponible';
+      }
       const boton = elementoHtml(
         'button',
         estaEquipado ? 'inventario-equipo__desequipar' : 'inventario-equipo__equipar',
-        estaEquipado ? 'Desequipar' : 'Equipar',
+        textoAccion,
       );
       boton.type = 'button';
+      boton.disabled = !estaEquipado && !estaDisponible;
       boton.addEventListener('click', async () => {
         cambiarDisponibilidad(boton, false);
         try {
