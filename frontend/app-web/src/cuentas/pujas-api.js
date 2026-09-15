@@ -50,7 +50,11 @@ const MENSAJES = {
   SALDO_INSUFICIENTE_PARA_LIMITE: 'Tu saldo disponible no cubre el limite que quieres fijar.',
   SALDO_INSUFICIENTE: 'No tienes creditos suficientes para esta operacion.',
   SIN_COMPRA_INMEDIATA: 'Esta subasta no admite compra inmediata.',
-  CONFIRMACION_REQUERIDA: 'Hay que confirmar la compra de forma explicita.'
+  CONFIRMACION_REQUERIDA: 'Hay que confirmar la compra de forma explicita.',
+  // No deberia verlo un jugador: significa que el cliente reutilizo una clave
+  // de idempotencia. Se traduce igual, porque un mensaje en blanco seria peor
+  // que uno generico si alguna vez pasa.
+  CLAVE_REUTILIZADA: 'Hubo un problema al enviar la operacion. Vuelve a intentarlo.'
 };
 
 /**
@@ -172,18 +176,35 @@ export function crearApiSubastas({
     // token solo enriquece la respuesta (marcar las pujas propias).
     if (token) {cabeceras.Authorization = `Bearer ${token}`;}
     if (cuerpo !== null) {cabeceras['Content-Type'] = 'application/json';}
+    // La clave se genera UNA vez, fuera del bucle de reintento: reintentar con
+    // una clave nueva seria pujar otra vez, que es justo lo contrario.
     if (conIdempotencia) {cabeceras['Idempotency-Key'] = claveDeIdempotencia();}
+
+    const opciones = {
+      method: metodo,
+      headers: cabeceras,
+      body: cuerpo === null ? undefined : JSON.stringify(cuerpo)
+    };
 
     let respuesta;
     try {
-      respuesta = await hacerPeticion(`${urlBase}${ruta}`, {
-        method: metodo,
-        headers: cabeceras,
-        body: cuerpo === null ? undefined : JSON.stringify(cuerpo)
-      });
+      respuesta = await hacerPeticion(`${urlBase}${ruta}`, opciones);
     } catch (fallo) {
-      throw new ErrorDeSubastas('No se pudo contactar al servidor de subastas.',
-        { estado: 0, detalle: fallo?.message || null });
+      // Se reintenta SOLO cuando la peticion no llego a tener respuesta y solo
+      // si lleva clave de idempotencia. Sin ella no se sabe si el servidor
+      // llego a procesarla, y repetir una puja a ciegas seria pujar dos veces;
+      // con ella, el servidor devuelve la puja original si la primera si entro.
+      // Un error HTTP no se reintenta: el servidor ya respondio.
+      if (!conIdempotencia) {
+        throw new ErrorDeSubastas('No se pudo contactar al servidor de subastas.',
+          { estado: 0, detalle: fallo?.message || null });
+      }
+      try {
+        respuesta = await hacerPeticion(`${urlBase}${ruta}`, opciones);
+      } catch (segundoFallo) {
+        throw new ErrorDeSubastas('No se pudo contactar al servidor de subastas.',
+          { estado: 0, detalle: segundoFallo?.message || null });
+      }
     }
 
     if (!respuesta.ok) {await lanzarDesde(respuesta);}

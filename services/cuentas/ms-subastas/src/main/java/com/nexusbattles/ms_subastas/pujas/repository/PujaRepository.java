@@ -14,6 +14,13 @@ import java.util.UUID;
 public interface PujaRepository extends JpaRepository<Puja, UUID> {
 
     /** La puja que hoy es la oferta vigente de la subasta. */
+    /**
+     * Busca la puja que ya creo una peticion con esta misma Idempotency-Key.
+     * Es lo que convierte un reintento en una respuesta repetida en vez de en
+     * una puja nueva. Se apoya en el unico parcial uq_pujas_idempotency_key.
+     */
+    Optional<Puja> findByIdempotencyKey(String idempotencyKey);
+
     Optional<Puja> findBySubastaIdAndEstado(UUID subastaId, EstadoPuja estado);
 
     /** Cuantas pujas del jugador siguen siendo oferta vigente (tope de 50). */

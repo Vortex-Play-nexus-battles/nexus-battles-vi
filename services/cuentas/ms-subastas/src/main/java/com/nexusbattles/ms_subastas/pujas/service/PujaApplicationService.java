@@ -67,6 +67,12 @@ public class PujaApplicationService {
 
     private Puja registrar(UUID subastaId, UUID jugadorId, BigDecimal monto, String idempotencyKey, TipoPuja tipo) {
         Subasta subasta = cargarConLock(subastaId);
+
+        Puja yaRegistrada = reproduccionDe(idempotencyKey, subastaId, jugadorId);
+        if (yaRegistrada != null) {
+            return yaRegistrada;
+        }
+
         Puja pujaVigente = pujaRepository.findBySubastaIdAndEstado(subastaId, EstadoPuja.ACTIVA).orElse(null);
 
         Puja nuevaPuja = motorPujas.pujar(subasta, pujaVigente, jugadorId, monto, contextoDe(jugadorId, subastaId), idempotencyKey, tipo);
@@ -92,6 +98,12 @@ public class PujaApplicationService {
     @Transactional
     public Puja comprarAhora(UUID subastaId, UUID jugadorId, String idempotencyKey) {
         Subasta subasta = cargarConLock(subastaId);
+
+        Puja yaComprada = reproduccionDe(idempotencyKey, subastaId, jugadorId);
+        if (yaComprada != null) {
+            return yaComprada;
+        }
+
         Puja pujaVigente = pujaRepository.findBySubastaIdAndEstado(subastaId, EstadoPuja.ACTIVA).orElse(null);
 
         // Se consulta ANTES de cerrar: despues del cierre la lista es la misma,
@@ -117,6 +129,35 @@ public class PujaApplicationService {
         // canal tiene que enterarse igual que de una puja.
         eventos.publishEvent(new SubastaActualizadaEvent(this, subasta));
         return persistida;
+    }
+
+    /**
+     * Devuelve la puja que ya creo una peticion anterior con esta misma
+     * Idempotency-Key, o {@code null} si la clave es nueva.
+     *
+     * <p>Se consulta DESPUES de tomar el lock pesimista de la subasta, y ese
+     * orden es lo que hace segura la reproduccion: dos reintentos simultaneos
+     * se serializan en el lock, asi que el segundo ya ve la puja que escribio
+     * el primero. Consultarlo antes del lock dejaria pasar a los dos y la
+     * segunda insercion moriria contra el unico de la base de datos.
+     *
+     * <p>Si la clave existe pero apunta a otra subasta o a otro jugador, no se
+     * reproduce nada: devolverle a alguien una puja que no es suya seria peor
+     * que rechazar la peticion.
+     */
+    private Puja reproduccionDe(String idempotencyKey, UUID subastaId, UUID jugadorId) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            return null;
+        }
+        Puja anterior = pujaRepository.findByIdempotencyKey(idempotencyKey).orElse(null);
+        if (anterior == null) {
+            return null;
+        }
+        if (!anterior.getSubastaId().equals(subastaId) || !anterior.getJugadorId().equals(jugadorId)) {
+            throw new PujaRechazadaException(PujaRechazadaException.Motivo.CLAVE_REUTILIZADA,
+                    "La clave de idempotencia ya se uso en otra subasta o para otro jugador");
+        }
+        return anterior;
     }
 
     @Transactional

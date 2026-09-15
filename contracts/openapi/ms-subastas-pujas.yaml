@@ -237,10 +237,15 @@ components:
       in: header
       required: true
       description: >-
-        Clave generada por el cliente. Reintentar con la misma clave no debe
-        reservar los créditos dos veces. Es obligatoria a propósito: si el
-        servidor la derivara del reloj, un reintento por expiración produciría
-        una clave distinta y cobraría doble.
+        Clave generada por el cliente. Reintentar con la misma clave no
+        reserva los créditos dos veces ni registra una puja nueva: devuelve la
+        puja que creó la primera petición, con el mismo cuerpo. Es obligatoria
+        a propósito: si el servidor la derivara del reloj, un reintento por
+        expiración produciría una clave distinta y cobraría doble.
+
+        Reutilizarla en otra subasta o para otro jugador se rechaza con
+        `motivo: CLAVE_REUTILIZADA`, porque entonces la clave ya no identifica
+        una sola operación.
       schema:
         type: string
         minLength: 8
@@ -399,6 +404,7 @@ components:
             - CONFIRMACION_REQUERIDA
             - SIN_COMPRA_INMEDIATA
             - SALDO_INSUFICIENTE
+            - CLAVE_REUTILIZADA
 
   responses:
     SolicitudMalFormada:
