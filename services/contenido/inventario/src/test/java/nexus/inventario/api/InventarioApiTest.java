@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import nexus.inventario.aplicacion.BuscarElementosInventario;
+import nexus.inventario.aplicacion.ConsultarElementoInventario;
 import nexus.inventario.aplicacion.ConsultarInventarioPaginado;
 import nexus.inventario.aplicacion.GestionarInventario;
 import nexus.inventario.aplicacion.GestionarBloqueoSubasta;
@@ -40,10 +41,28 @@ class InventarioApiTest {
                         new InventarioController(
                                 gestion,
                                 new ConsultarInventarioPaginado(repositorio),
-                                new BuscarElementosInventario(repositorio)),
+                                new BuscarElementosInventario(repositorio),
+                                new ConsultarElementoInventario(repositorio)),
                         new BloqueoSubastaController(gestionBloqueo))
                 .setControllerAdvice(new ManejadorDeErrores())
                 .build();
+    }
+
+    @Test
+    @DisplayName("GET por id entrega los datos estables que necesita subastas")
+    void consultarElementoPorId() throws Exception {
+        String propietarioUid = "ae8df97e-9ab9-4af5-bd2a-25715919e5f1";
+        String productoId = "113609ca-3c15-42f5-b427-d452ce06f9a8";
+        ElementoInventario creado = gestion.crear(
+                propietarioUid, productoId, TipoElementoInventario.ITEM, "Amuleto");
+
+        mvc.perform(get("/api/v1/inventario/elementos/{elementoId}", creado.id()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.elementoId").value(creado.id()))
+                .andExpect(jsonPath("$.productoId").value(productoId))
+                .andExpect(jsonPath("$.propietarioUid").value(propietarioUid))
+                .andExpect(jsonPath("$.enUso").value(false))
+                .andExpect(jsonPath("$.disponible").value(true));
     }
 
     @Test
