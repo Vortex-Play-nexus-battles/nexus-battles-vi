@@ -304,6 +304,39 @@ async function conEquipamiento(page, { rechazar = false } = {}) {
 }
 
 test.describe('Equipamiento del heroe con limites', () => {
+  test('El equipamiento usa la paleta oficial del sistema de diseno', async ({ page }) => {
+    await conEquipamiento(page);
+    await abrirVitrina(page);
+
+    await page.getByRole('button', { name: 'Gestionar equipo de Ayla' }).click();
+
+    await expect(page.locator('.vitrina-pagina')).toHaveCSS(
+      'background-color',
+      'rgb(215, 222, 237)',
+    );
+    await expect(page.locator('.barra')).toHaveCSS('background-color', 'rgb(28, 35, 64)');
+    await expect(page.locator('.vitrina__producto').first()).toHaveCSS(
+      'background-color',
+      'rgb(255, 255, 255)',
+    );
+    await expect(page.locator('.inventario-equipo__elemento').first()).toHaveCSS(
+      'border-color',
+      'rgb(159, 171, 201)',
+    );
+    await expect(page.getByRole('button', { name: 'Agregar elemento' })).toHaveCSS(
+      'background-color',
+      'rgb(30, 63, 184)',
+    );
+    await expect(page.getByRole('button', { name: 'Equipar', exact: true })).toHaveCSS(
+      'background-color',
+      'rgb(30, 63, 184)',
+    );
+    await expect(page.getByRole('button', { name: 'Equipar', exact: true })).toHaveCSS(
+      'color',
+      'rgb(255, 255, 255)',
+    );
+  });
+
   test('El jugador equipa y desequipa un arma desde la vitrina', async ({ page }) => {
     await conEquipamiento(page);
     await abrirVitrina(page);
