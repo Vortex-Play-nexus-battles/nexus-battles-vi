@@ -69,7 +69,7 @@ public class CreditoClientConfig {
     @ConditionalOnProperty(name = "app.finanzas.modo", havingValue = "http")
     public CreditoClient creditoClientHttp(
             @Value("${app.finanzas.base-url:http://localhost:8093/api/v1}") String baseUrl,
-            @Value("${app.finanzas.timeout-ms:5000}") long timeoutMs,
+            @Value("${app.finanzas.pujas.timeout-ms:1000}") long timeoutMs,
             ObjectMapper objectMapper) {
         log.info("ms-subastas arranca con el cliente HTTP real de creditos (app.finanzas.modo=http): {}", baseUrl);
         return new CreditoClientResiliente(new CreditoClientHttp(baseUrl, timeoutMs, objectMapper));
