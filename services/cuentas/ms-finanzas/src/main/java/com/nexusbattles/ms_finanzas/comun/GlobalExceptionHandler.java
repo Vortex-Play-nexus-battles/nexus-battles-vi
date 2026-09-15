@@ -9,6 +9,8 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import com.nexusbattles.ms_finanzas.common.exception.ReservaNoEncontradaException;
+import com.nexusbattles.ms_finanzas.common.exception.SaldoInsuficienteException;
 import com.nexusbattles.ms_finanzas.transacciones.TransaccionYaRegistradaException;
 
 /**
@@ -35,6 +37,38 @@ public class GlobalExceptionHandler {
         return problema;
     }
 
+    /**
+     * HU-PAG-001, ms-subastas (Andrés) — cuando un jugador no tiene créditos
+     * suficientes para una reserva o débito. Antes caía al catch-all y se
+     * devolvía 500 "inténtalo más tarde", que es un rechazo que va a fallar
+     * idéntico siempre. Con 422 + type URI estable el llamador puede tratarlo
+     * como respuesta de negocio, no como avería.
+     */
+    @ExceptionHandler(SaldoInsuficienteException.class)
+    public ProblemDetail manejarSaldoInsuficiente(SaldoInsuficienteException ex) {
+        ProblemDetail problema = ProblemDetail.forStatusAndDetail(
+                HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage());
+        problema.setType(URI.create(BASE_TYPE + "saldo-insuficiente"));
+        problema.setTitle("Saldo insuficiente");
+        return problema;
+    }
+
+    /**
+     * HU-PAG-001, ms-subastas — cuando se referencia una reserva por id que no
+     * existe. Se distingue del 404 de Spring por rutas inexistentes (que sale
+     * sin `type`) precisamente por el `type` URI: el llamador filtra por type,
+     * no por status, para saber si es un estado real de negocio o un bug de
+     * URL. Detalle señalado por Andrés al probar el servicio en vivo.
+     */
+    @ExceptionHandler(ReservaNoEncontradaException.class)
+    public ProblemDetail manejarReservaNoEncontrada(ReservaNoEncontradaException ex) {
+        ProblemDetail problema = ProblemDetail.forStatusAndDetail(
+                HttpStatus.NOT_FOUND, ex.getMessage());
+        problema.setType(URI.create(BASE_TYPE + "reserva-no-encontrada"));
+        problema.setTitle("Reserva no encontrada");
+        return problema;
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ProblemDetail manejarArgumentoInvalido(IllegalArgumentException ex) {
         ProblemDetail problema = ProblemDetail.forStatusAndDetail(
@@ -48,13 +82,18 @@ public class GlobalExceptionHandler {
     public ProblemDetail manejarInesperada(Exception ex) {
         // Se registra la excepción real en el log pero al cliente se le
         // devuelve un mensaje genérico — no queremos filtrar detalles de
-        // implementación en el cuerpo de la respuesta.
+        // implementación en el cuerpo de la respuesta. Se agrega la clase de
+        // la excepción como propiedad estructurada para que un llamador que
+        // integre contra este servicio pueda distinguir "excepción X no
+        // mapeada" de "excepción Y no mapeada" sin depender del texto libre
+        // ni obligar a leer los logs del servidor.
         log.error("Error no controlado en ms-finanzas", ex);
         ProblemDetail problema = ProblemDetail.forStatusAndDetail(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "Ocurrió un error inesperado. Inténtalo de nuevo más tarde.");
         problema.setType(URI.create(BASE_TYPE + "error-interno"));
         problema.setTitle("Error interno del servidor");
+        problema.setProperty("excepcion", ex.getClass().getSimpleName());
         return problema;
     }
 }
