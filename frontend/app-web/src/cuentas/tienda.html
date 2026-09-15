@@ -4,29 +4,29 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Nexus Battles VI - Tienda</title>
+  <link rel="stylesheet" href="../comun/barra-navegacion.css">
+  <link rel="stylesheet" href="./tema-cuentas.css">
   <link rel="stylesheet" href="tienda.css">
 </head>
 <body>
-<!-- Navbar simulado (Figma) -->
-<header class="navbar">
-  <div class="nav-left">
-    <h1>NEXUS BATTLES VI</h1>
-    <nav>
-      <a href="#">Jugar online</a>
-      <a href="#">Misiones</a>
-      <a href="#">Torneo</a>
-      <a href="#">Mi inventario</a>
-      <a href="#">Subasta</a>
-    </nav>
-  </div>
-  <div class="nav-right">
-    <input type="text" placeholder="Buscar productos..." class="search-bar">
-    <div class="user-info">
-      <span class="user-balance"></span>
-      <div class="user-avatar"></div>
-    </div>
-  </div>
-</header>
+
+<!-- Barra de navegación compartida. Reemplaza el <header class="navbar"> del
+     mockup Figma con enlaces hardcoded (href="#") por el mismo patrón que
+     usan auditoria, perfil, gestion-usuarios y crear-cuenta-admin: un solo
+     componente vivo con búsqueda, secciones y panel de cuenta, servido desde
+     src/comun/barra-navegacion.js. Cambio pedido por Santiago para unificar
+     la navegación del dominio cuentas en la misma barra que todos usan. -->
+<div id="navbar-container"></div>
+
+<script type="module">
+  import { construirBarra } from '../comun/barra-navegacion.js';
+
+  const navbarContainer = document.getElementById('navbar-container');
+  if (navbarContainer) {
+    const barra = construirBarra({ seccionActiva: 'cuenta' });
+    navbarContainer.appendChild(barra);
+  }
+</script>
 
 <main class="main-container">
   <!-- Columna de Productos -->
