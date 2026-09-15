@@ -4,16 +4,16 @@ import com.nexusbattles.ms_finanzas.common.exception.ReservaNoEncontradaExceptio
 import com.nexusbattles.ms_finanzas.common.exception.SaldoInsuficienteException;
 import com.nexusbattles.ms_finanzas.creditos.domain.CuentaCredito;
 import com.nexusbattles.ms_finanzas.creditos.domain.ReservaCredito;
-import com.nexusbattles.ms_finanzas.creditos.domain.TransaccionCredito;
 import com.nexusbattles.ms_finanzas.creditos.dto.CreditoDTOs.*;
 import com.nexusbattles.ms_finanzas.creditos.repository.CuentaCreditoRepository;
 import com.nexusbattles.ms_finanzas.creditos.repository.ReservaCreditoRepository;
-import com.nexusbattles.ms_finanzas.creditos.repository.TransaccionCreditoRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -21,31 +21,36 @@ public class CreditoService {
 
     private final CuentaCreditoRepository cuentaRepository;
     private final ReservaCreditoRepository reservaRepository;
-    private final TransaccionCreditoRepository transaccionRepository;
 
     public CreditoService(CuentaCreditoRepository cuentaRepository,
-                          ReservaCreditoRepository reservaRepository,
-                          TransaccionCreditoRepository transaccionRepository) {
+                          ReservaCreditoRepository reservaRepository) {
         this.cuentaRepository = cuentaRepository;
         this.reservaRepository = reservaRepository;
-        this.transaccionRepository = transaccionRepository;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public SaldoResponse obtenerSaldo(String jugadorUid) {
         CuentaCredito cuenta = obtenerOCrearCuenta(jugadorUid);
-        return new SaldoResponse(cuenta.getJugadorUid(), cuenta.getSaldoBruto(), cuenta.getSaldoReservado(), cuenta.getSaldoDisponible());
+        return new SaldoResponse(
+            cuenta.getJugadorUid(),
+            cuenta.getSaldoBruto(),
+            cuenta.getSaldoReservado(),
+            cuenta.getSaldoDisponible()
+        );
     }
 
     @Transactional
     public ReservaResponse reservar(ReservarRequest req, String idempotencyKey) {
-        var reservaExistente = reservaRepository.findByIdempotencyKey(idempotencyKey);
-        if (reservaExistente.isPresent()) {
-            ReservaCredito r = reservaExistente.get();
-            return new ReservaResponse(r.getId(), r.getJugadorUid(), r.getMonto(), r.getEstado().name(), r.getExpiraEn());
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            Optional<ReservaCredito> reservaExistente = reservaRepository.findByIdempotencyKey(idempotencyKey);
+            if (reservaExistente.isPresent()) {
+                ReservaCredito r = reservaExistente.get();
+                return new ReservaResponse(r.getId(), r.getJugadorUid(), r.getMonto(), r.getEstado().name(), r.getExpiraEn());
+            }
         }
 
         CuentaCredito cuenta = obtenerOCrearCuenta(req.jugadorUid());
+
         if (cuenta.getSaldoDisponible().compareTo(req.monto()) < 0) {
             throw new SaldoInsuficienteException("Saldo insuficiente para reservar " + req.monto() + " créditos.");
         }
@@ -60,7 +65,7 @@ public class CreditoService {
             .referenciaId(req.referenciaId())
             .idempotencyKey(idempotencyKey)
             .estado(ReservaCredito.EstadoReserva.ACTIVA)
-            .expiraEn(OffsetDateTime.now().plusHours(1))
+            .expiraEn(OffsetDateTime.now().plusHours(72)) // Ampliado a 72h para cubrir subastas de 24h/48h sin expirar prematuramente
             .build();
 
         ReservaCredito guardada = reservaRepository.save(reserva);
@@ -115,66 +120,103 @@ public class CreditoService {
 
     @Transactional
     public DebitarResponse debitar(DebitarRequest req) {
-        var txExistente = transaccionRepository.findByRefId(req.refId());
-        if (txExistente.isPresent()) {
-            CuentaCredito c = obtenerOCrearCuenta(req.uid());
-            return new DebitarResponse(txExistente.get().getId().toString(), req.refId(), "EXITOSO", txExistente.get().getMonto(), c.getSaldoDisponible());
+        // Idempotencia por refId para Edwin (evita cobros duplicados ante timeouts)
+        Optional<ReservaCredito> operacionExistente = reservaRepository.findByIdempotencyKey(req.refId());
+        if (operacionExistente.isPresent()) {
+            ReservaCredito op = operacionExistente.get();
+            CuentaCredito cuenta = obtenerOCrearCuenta(req.uid());
+            return new DebitarResponse("TX-DEB-" + op.getId().toString().substring(0, 8).toUpperCase(), req.refId(), "EXITOSO", op.getMonto(), cuenta.getSaldoDisponible());
         }
 
         CuentaCredito cuenta = obtenerOCrearCuenta(req.uid());
+
         if (cuenta.getSaldoDisponible().compareTo(req.monto()) < 0) {
-            throw new SaldoInsuficienteException("Saldo insuficiente para debitar comisión.");
+            throw new SaldoInsuficienteException("Saldo insuficiente para debitar la comisión.");
         }
 
         cuenta.setSaldoBruto(cuenta.getSaldoBruto().subtract(req.monto()));
         cuentaRepository.save(cuenta);
 
-        TransaccionCredito tx = TransaccionCredito.builder()
-            .refId(req.refId())
+        // Registramos la operación usando la tabla de reservas con idempotencyKey = refId para control persistente
+        ReservaCredito registroOp = ReservaCredito.builder()
             .jugadorUid(req.uid())
             .monto(req.monto())
-            .concepto(req.concepto())
-            .tipo("DEBITO")
-            .estado("EXITOSO")
+            .concepto(req.concepto() != null ? req.concepto() : "DEBITO-DIRECTO")
+            .referenciaId(req.refId())
+            .idempotencyKey(req.refId())
+            .estado(ReservaCredito.EstadoReserva.CONSUMIDA)
+            .expiraEn(OffsetDateTime.now().plusDays(72))
             .build();
-        transaccionRepository.save(tx);
+        reservaRepository.save(registroOp);
 
-        return new DebitarResponse(tx.getId().toString(), req.refId(), "EXITOSO", req.monto(), cuenta.getSaldoDisponible());
+        String txId = "TX-DEB-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        return new DebitarResponse(txId, req.refId(), "EXITOSO", req.monto(), cuenta.getSaldoDisponible());
     }
 
     @Transactional
     public ReversarResponse reversar(ReversarRequest req) {
-        TransaccionCredito txOriginal = transaccionRepository.findByRefId(req.refId())
-            .orElseThrow(() -> new ReservaNoEncontradaException("No existe transacción previa con refId: " + req.refId()));
+        // Lógica real de compensación para Edwin: buscar el débito original por refId y devolver el saldo
+        Optional<ReservaCredito> operacionOpt = reservaRepository.findByIdempotencyKey(req.refId());
 
-        if ("REVERSADO".equals(txOriginal.getEstado())) {
-            return new ReversarResponse(req.refId(), "REVERSADO", txOriginal.getMonto(), req.motivo());
+        if (operacionOpt.isEmpty()) {
+            throw new ReservaNoEncontradaException("Operación no encontrada para reversar con refId: " + req.refId());
         }
 
-        CuentaCredito cuenta = obtenerOCrearCuenta(txOriginal.getJugadorUid());
-        cuenta.setSaldoBruto(cuenta.getSaldoBruto().add(txOriginal.getMonto()));
+        ReservaCredito op = operacionOpt.get();
+        if (op.getEstado() == ReservaCredito.EstadoReserva.LIBERADA) {
+            return new ReversarResponse(req.refId(), "YA_REVERSADO", op.getMonto(), req.motivo());
+        }
+
+        CuentaCredito cuenta = obtenerOCrearCuenta(op.getJugadorUid());
+        cuenta.setSaldoBruto(cuenta.getSaldoBruto().add(op.getMonto()));
         cuentaRepository.save(cuenta);
 
-        txOriginal.setEstado("REVERSADO");
-        transaccionRepository.save(txOriginal);
+        op.setEstado(ReservaCredito.EstadoReserva.LIBERADA);
+        reservaRepository.save(op);
 
-        return new ReversarResponse(req.refId(), "REVERSADO", txOriginal.getMonto(), req.motivo());
+        return new ReversarResponse(req.refId(), "REVERSADO", op.getMonto(), req.motivo());
     }
 
     @Transactional(readOnly = true)
     public OperacionResponse consultarOperacionPorRefId(String refId) {
-        TransaccionCredito tx = transaccionRepository.findByRefId(refId)
-            .orElseThrow(() -> new ReservaNoEncontradaException("Operación no encontrada para refId: " + refId));
+        ReservaCredito op = reservaRepository.findByIdempotencyKey(refId)
+            .orElseThrow(() -> new ReservaNoEncontradaException("Operación no encontrada con refId: " + refId));
 
-        return new OperacionResponse(tx.getRefId(), tx.getJugadorUid(), tx.getMonto(), tx.getConcepto(), tx.getEstado(), tx.getCreado());
+        return new OperacionResponse(
+            refId,
+            op.getJugadorUid(),
+            op.getMonto(),
+            op.getConcepto(),
+            op.getEstado().name(),
+            op.getCreado() != null ? op.getCreado() : OffsetDateTime.now()
+        );
+    }
+
+    @Transactional
+    public AcreditarResponse acreditar(AcreditarRequest req) {
+        CuentaCredito cuenta = obtenerOCrearCuenta(req.uid());
+        cuenta.setSaldoBruto(cuenta.getSaldoBruto().add(req.monto()));
+        cuentaRepository.save(cuenta);
+
+        String txId = "TX-ACR-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        return new AcreditarResponse(txId, req.refId(), "APLICADO", req.monto(), cuenta.getSaldoDisponible());
     }
 
     private CuentaCredito obtenerOCrearCuenta(String jugadorUid) {
         return cuentaRepository.findByJugadorUid(jugadorUid)
-            .orElseGet(() -> cuentaRepository.save(CuentaCredito.builder()
-                .jugadorUid(jugadorUid)
-                .saldoBruto(BigDecimal.ZERO)
-                .saldoReservado(BigDecimal.ZERO)
-                .build()));
+            .orElseGet(() -> {
+                try {
+                    return cuentaRepository.save(CuentaCredito.builder()
+                        .jugadorUid(jugadorUid)
+                        .saldoBruto(BigDecimal.ZERO)
+                        .saldoReservado(BigDecimal.ZERO)
+                        .version(0L)
+                        .build());
+                } catch (DataIntegrityViolationException e) {
+                    // Manejo seguro de concurrencia si dos hilos intentan crear la cuenta simultáneamente
+                    return cuentaRepository.findByJugadorUid(jugadorUid)
+                        .orElseThrow(() -> new IllegalStateException("No se pudo crear ni encontrar la cuenta para el uid: " + jugadorUid));
+                }
+            });
     }
 }

@@ -57,4 +57,8 @@ public class CreditoController {
     public ResponseEntity<OperacionResponse> consultarOperacion(@PathVariable("refId") String refId) {
         return ResponseEntity.ok(creditoService.consultarOperacionPorRefId(refId));
     }
+    @PostMapping("/acreditar")
+    public ResponseEntity<AcreditarResponse> acreditar(@RequestBody AcreditarRequest req) {
+        return ResponseEntity.ok(creditoService.acreditar(req));
+    }
 }

@@ -7,7 +7,7 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 @Entity
-@Table(name = "cuenta_credito")
+@Table(name = "cuenta_credito", schema = "finanzas")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -36,9 +36,10 @@ public class CuentaCredito {
     private OffsetDateTime actualizado;
 
     public BigDecimal getSaldoDisponible() {
-        if (saldoBruto == null) return BigDecimal.ZERO;
-        if (saldoReservado == null) return saldoBruto;
-        return saldoBruto.subtract(saldoReservado);
+        BigDecimal bruto = (saldoBruto != null) ? saldoBruto : BigDecimal.ZERO;
+        BigDecimal reservado = (saldoReservado != null) ? saldoReservado : BigDecimal.ZERO;
+        BigDecimal disponible = bruto.subtract(reservado);
+        return disponible.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : disponible;
     }
 
     @PrePersist
