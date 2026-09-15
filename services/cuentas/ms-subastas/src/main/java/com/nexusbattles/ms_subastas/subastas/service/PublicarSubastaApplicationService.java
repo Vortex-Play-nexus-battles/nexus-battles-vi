@@ -55,7 +55,7 @@ public class PublicarSubastaApplicationService {
         String claveUsuario = quien.usuarioId() + ":" + idempotencyKey;
         var adquisicion = idempotencia.adquirir(claveUsuario, huella);
         if (adquisicion.resultado().isPresent()) return adquisicion.resultado().get().respuesta();
-        var ejecucion = new Ejecucion(claveUsuario, adquisicion.titular(), quien.usuarioId(), idempotencyKey);
+        var ejecucion = new Ejecucion(claveUsuario, adquisicion.titular(), idempotencyKey);
         boolean registrada = false;
         try {
             if (TransactionSynchronizationManager.isSynchronizationActive()) {
@@ -83,12 +83,15 @@ public class PublicarSubastaApplicationService {
 
         UUID subastaId = UUID.randomUUID();
         BigDecimal comision = comisiones.calcular(solicitud.duracion(), quien.esMaestroDeJuego());
+        String concepto = switch (solicitud.duracion()) {
+            case H24 -> "comision-publicacion-24h";
+            case H48 -> "comision-publicacion-48h";
+        };
         ejecucion.elemento = elemento.id();
         ejecucion.subasta = subastaId;
-        ejecucion.comision = comision;
         try {
             inventario.reservar(elemento.id(), quien.usuarioId(), subastaId, idempotencyKey); ejecucion.reservado = true;
-            if (comision.signum() > 0) { finanzas.debitarComision(quien.usuarioId(), comision, subastaId, idempotencyKey); ejecucion.debitado = true; }
+            if (comision.signum() > 0) { finanzas.debitarComision(quien.usuarioId(), comision, subastaId, concepto); ejecucion.debitado = true; }
             Instant publicada = Instant.now(clock);
             Subasta subasta = new Subasta();
             subasta.setId(subastaId); subasta.setProductoId(producto.id()); subasta.setElementoInventarioId(elemento.id());
@@ -121,19 +124,16 @@ public class PublicarSubastaApplicationService {
     private final class Ejecucion implements TransactionSynchronization {
         private final String clave;
         private final UUID titular;
-        private final UUID jugador;
         private final String claveExterna;
         private String elemento;
         private UUID subasta;
-        private BigDecimal comision;
         private boolean reservado;
         private boolean debitado;
         private PublicarSubastaResponse respuesta;
 
-        private Ejecucion(String clave, UUID titular, UUID jugador, String claveExterna) {
+        private Ejecucion(String clave, UUID titular, String claveExterna) {
             this.clave = clave;
             this.titular = titular;
-            this.jugador = jugador;
             this.claveExterna = claveExterna;
         }
 
@@ -153,15 +153,15 @@ public class PublicarSubastaApplicationService {
 
         private void revertir() {
             try {
-                compensar(jugador, elemento, subasta, claveExterna, comision, reservado, debitado);
+                compensar(elemento, subasta, claveExterna, reservado, debitado);
             } finally {
                 idempotencia.liberar(clave, titular);
             }
         }
     }
 
-    private void compensar(UUID jugador, String elemento, UUID subasta, String clave, BigDecimal monto, boolean reservado, boolean debitado) {
-        if (debitado) try { finanzas.compensarDebito(jugador, monto, subasta, clave); }
+    private void compensar(String elemento, UUID subasta, String clave, boolean reservado, boolean debitado) {
+        if (debitado) try { finanzas.compensarDebito(subasta, "publicacion-fallida"); }
         catch (RuntimeException fallo) { log.error("No se pudo compensar comision de subasta {}; requiere conciliacion", subasta, fallo); }
         if (reservado) try { inventario.liberarReserva(elemento, subasta, clave); }
         catch (RuntimeException fallo) { log.error("No se pudo liberar reserva de subasta {}; requiere conciliacion", subasta, fallo); }
