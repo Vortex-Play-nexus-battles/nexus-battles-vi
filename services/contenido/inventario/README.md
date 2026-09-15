@@ -75,15 +75,24 @@ cierre o cancelacion con el `subastaId` correcto puede levantarlo. Si subastas
 no responde o no envia el aviso, el producto permanece bloqueado por defecto.
 
 ```text
+GET    /api/v1/inventario/elementos/{elementoId}
 PUT    /api/v1/inventario/elementos/{elementoId}/bloqueo-subasta
 DELETE /api/v1/inventario/elementos/{elementoId}/bloqueo-subasta/{subastaId}
 ```
 
-El servicio de subastas debe propagar `X-User-Name`, `Idempotency-Key` y enviar
-el `subastaId` definido en el contrato OpenAPI. Al cerrar o cancelar la
-publicacion, llama a `DELETE` con el mismo elemento, subasta y una clave de
-idempotencia. Repetir el aviso conserva el producto disponible; un aviso de
-otra subasta responde `409` y no levanta el bloqueo vigente.
+Estas tres operaciones son internas. `ms-subastas` obtiene un JWT mediante
+OAuth2 `client_credentials`; Inventario valida el bearer token y el claim
+`azp: ms-subastas`. El token identifica al servicio, mientras que
+`propietarioUid` viaja como UUID de negocio en el cuerpo del `PUT`, junto con
+`subastaId` e `Idempotency-Key`. Al cerrar o cancelar la publicacion, Subastas
+llama a `DELETE` con el mismo elemento, subasta y una clave de idempotencia.
+Repetir el aviso conserva el producto disponible; un aviso de otra subasta
+responde `409` y no levanta el bloqueo vigente.
+
+Los documentos historicos cuyo propietario o producto aun sea un apodo o una
+referencia no UUID responden `409` en la consulta interna hasta que se ejecute
+su migracion. La compatibilidad queda encapsulada en Inventario y no se filtra
+al contrato nuevo entre servicios.
 
 ## Equipamiento con limites
 

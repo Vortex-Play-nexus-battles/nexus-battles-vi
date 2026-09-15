@@ -197,9 +197,12 @@ paths:
       summary: Bloquea un producto mientras su publicacion en subasta siga vigente
       description: >
         HU-INV-010. Operacion idempotente para la misma subasta. El servicio de
-        subastas propaga la identidad del propietario y su clave de idempotencia;
-        un elemento equipado o reservado por otra subasta se rechaza.
+        subastas se autentica con OAuth2 client_credentials y envia el UUID
+        estable del propietario como dato de negocio. Un elemento equipado o
+        reservado por otra subasta se rechaza.
       operationId: bloquearElementoEnSubasta
+      security:
+        - BearerInterno: []
       parameters:
         - $ref: "#/components/parameters/ElementoId"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -219,9 +222,9 @@ paths:
         "400":
           $ref: "#/components/responses/SolicitudInvalida"
         "401":
-          $ref: "#/components/responses/IdentidadRequerida"
+          $ref: "#/components/responses/AutenticacionInternaRequerida"
         "403":
-          $ref: "#/components/responses/InventarioAjeno"
+          $ref: "#/components/responses/BloqueoSubastaNoAutorizado"
         "404":
           $ref: "#/components/responses/ElementoNoEncontrado"
         "409":
@@ -237,7 +240,8 @@ paths:
         esta disponible. Si subastaId no corresponde al bloqueo vigente,
         responde 409 y conserva el producto bloqueado.
       operationId: liberarElementoDeSubasta
-      security: []
+      security:
+        - BearerInterno: []
       parameters:
         - $ref: "#/components/parameters/ElementoId"
         - $ref: "#/components/parameters/SubastaId"
@@ -251,6 +255,10 @@ paths:
                 $ref: "#/components/schemas/ElementoInventario"
         "400":
           $ref: "#/components/responses/SolicitudInvalida"
+        "401":
+          $ref: "#/components/responses/AutenticacionInternaRequerida"
+        "403":
+          $ref: "#/components/responses/ServicioInternoNoAutorizado"
         "404":
           $ref: "#/components/responses/ElementoNoEncontrado"
         "409":
@@ -392,8 +400,11 @@ components:
     BloquearEnSubasta:
       type: object
       additionalProperties: false
-      required: [subastaId]
+      required: [propietarioUid, subastaId]
       properties:
+        propietarioUid:
+          type: string
+          format: uuid
         subastaId:
           type: string
           format: uuid
@@ -562,6 +573,8 @@ components:
       description: Token Bearer ausente o invalido
     ServicioInternoNoAutorizado:
       description: El token no identifica al cliente OAuth2 autorizado de ms-subastas
+    BloqueoSubastaNoAutorizado:
+      description: El token no identifica a ms-subastas o propietarioUid no es el propietario
     PersistenciaNoDisponible:
       description: La escritura atomica no pudo completarse y no se aplicaron cambios parciales
       content:
