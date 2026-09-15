@@ -1,0 +1,29 @@
+{
+  "info": {
+    "name": "Motor de Combate - HU-JUE-004",
+    "_postman_id": "4737eaf1-1938-45dd-99a3-77fa8e48f9cd",
+    "description": "Validacion HTTP disponible de HU-JUE-004. El comportamiento de dominio se valida con las pruebas Java indicadas en LEEME.md porque aun no existe un endpoint de negocio.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Motor de Combate saludable",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('responde 200', () => pm.response.to.have.status(200));",
+              "pm.test('el servicio esta UP', () => pm.expect(pm.response.json().status).to.eql('UP'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/actuator/health"
+      }
+    }
+  ]
+}
