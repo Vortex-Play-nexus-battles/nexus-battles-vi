@@ -160,9 +160,8 @@ components:
             - EN_REVISION
             - ELIMINADO
         promedio:
-          type: number
+          type: ["number", "null"]
           format: double
-          nullable: true
           description: Promedio de calificaciones publicadas del producto tras esta publicacion; null si no hay calificaciones.
 
     ProblemDetail:
