@@ -128,4 +128,25 @@ class HiloDeComentariosTest {
                 () -> hilo.comentarios().add(null));
         assertTrue(hilo.promedio().isEmpty());
     }
+
+    @Test
+    @DisplayName("el promedio y la lista de visibles excluyen comentarios eliminados (HU-COM-003)")
+    void promedioExcluyeComentariosEliminados() {
+        Comentario publicado1 = new Comentario("com-1", "espada-del-alba", "jugador-1", "Lyra", "texto", List.of(), 5,
+                AHORA, Comentario.Estado.PUBLICADO);
+        Comentario eliminado = new Comentario("com-2", "espada-del-alba", "jugador-2", "Orion", "texto", List.of(), 1,
+                AHORA, Comentario.Estado.ELIMINADO);
+        Comentario publicado2 = new Comentario("com-3", "espada-del-alba", "jugador-3", "Draco", "texto", List.of(), 4,
+                AHORA, Comentario.Estado.PUBLICADO);
+
+        HiloDeComentarios hiloCargado = HiloDeComentarios.reconstituir(
+                "espada-del-alba", FORMATOS, List.of(publicado1, eliminado, publicado2));
+
+        // El promedio debe ser (5 + 4) / 2 = 4.5, ignorando la calificación 1 del
+        // comentario eliminado
+        assertEquals(4.5, hiloCargado.promedio().orElseThrow());
+
+        // Solo 2 comentarios deben ser visibles en el hilo público
+        assertEquals(2, hiloCargado.visibles().size());
+    }
 }

@@ -2,6 +2,7 @@ package com.nexusbattles.plataforma.comentarios.publicacion;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.OptionalDouble;
 import java.util.Set;
 import java.util.UUID;
 
@@ -16,13 +17,15 @@ import com.nexusbattles.plataforma.comentarios.SolicitudDePublicacion;
 /**
  * Publica comentarios aplicando las reglas de HU-COM-001 sobre datos reales.
  *
- * <p>El flujo por publicacion es: cargar de la base los comentarios que el
+ * <p>
+ * El flujo por publicacion es: cargar de la base los comentarios que el
  * producto ya tiene, reconstruir el hilo con ellos, pedir el veredicto del
  * filtro y el estado disciplinario del autor, dejar que el dominio decida, y
  * guardar lo que el dominio devuelva. Las reglas no se repiten aqui: viven en
  * {@link HiloDeComentarios} desde el PR 163 y este servicio solo las alimenta.
  *
- * <p>El filtro se consulta siempre, incluso si la publicacion va a terminar
+ * <p>
+ * El filtro se consulta siempre, incluso si la publicacion va a terminar
  * rechazada por otra causa, porque el orden de los rechazos es decision del
  * dominio y adelantarse aqui seria duplicar esa logica.
  */
@@ -45,16 +48,21 @@ public class ServicioDePublicacionDeComentarios {
         this.formatosAdmitidos = Set.copyOf(formatosImagen);
     }
 
+    /** Encapsula el comentario guardado y el promedio actualizado del producto. */
+    public record ResultadoPublicacion(Comentario comentario, OptionalDouble promedio) {
+    }
+
     /**
      * Publica un comentario sobre un producto.
      *
-     * @return el comentario tal como quedo guardado: sin estrellas si el autor
-     *     ya habia calificado, y en revision si el filtro lo senalo
+     * @return el resultado que contiene el comentario guardado y el promedio del
+     *         hilo
      * @throws HiloDeComentarios.PublicacionRechazada si el autor esta
-     *     silenciado o alguna imagen viene en formato no admitido
+     *                                                silenciado o alguna imagen
+     *                                                viene en formato no admitido
      */
     @Transactional
-    public Comentario publicar(
+    public ResultadoPublicacion publicar(
             String productoId,
             String autorId,
             String apodoAutor,
@@ -68,8 +76,7 @@ public class ServicioDePublicacionDeComentarios {
                 .map(RegistroDeComentario::aDominio)
                 .toList();
 
-        HiloDeComentarios hilo =
-                HiloDeComentarios.reconstituir(productoId, formatosAdmitidos, existentes);
+        HiloDeComentarios hilo = HiloDeComentarios.reconstituir(productoId, formatosAdmitidos, existentes);
 
         SolicitudDePublicacion solicitud = new SolicitudDePublicacion(
                 UUID.randomUUID().toString(),
@@ -86,6 +93,6 @@ public class ServicioDePublicacionDeComentarios {
                 filtro.verificar(texto));
 
         repositorio.save(RegistroDeComentario.desde(comentario));
-        return comentario;
+        return new ResultadoPublicacion(comentario, hilo.promedio());
     }
 }

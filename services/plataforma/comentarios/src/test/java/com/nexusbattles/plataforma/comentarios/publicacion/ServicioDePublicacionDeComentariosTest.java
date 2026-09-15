@@ -71,9 +71,11 @@ class ServicioDePublicacionDeComentariosTest {
         when(sanciones.estadoDe("jugador-1")).thenReturn(HABILITADO);
         when(filtro.verificar("Muy buena espada")).thenReturn(LIMPIO);
 
-        Comentario comentario = servicio.publicar(
+        ServicioDePublicacionDeComentarios.ResultadoPublicacion resultado = servicio.publicar(
                 "espada-del-alba", "jugador-1", "LyraRoja",
                 "Muy buena espada", List.of("captura.jpg"), 4);
+
+        Comentario comentario = resultado.comentario();
 
         assertTrue(comentario.estaPublicado());
         assertEquals(4, comentario.calificacion().orElseThrow());
@@ -109,9 +111,11 @@ class ServicioDePublicacionDeComentariosTest {
         when(sanciones.estadoDe("jugador-2")).thenReturn(HABILITADO);
         when(filtro.verificar("texto senalado")).thenReturn(SENALADO);
 
-        Comentario comentario = servicio.publicar(
+        ServicioDePublicacionDeComentarios.ResultadoPublicacion resultado = servicio.publicar(
                 "espada-del-alba", "jugador-2", "Korrigan",
                 "texto senalado", List.of(), 3);
+
+        Comentario comentario = resultado.comentario();
 
         assertEquals(Comentario.Estado.EN_REVISION, comentario.estado());
         verify(repositorio).save(any(RegistroDeComentario.class));

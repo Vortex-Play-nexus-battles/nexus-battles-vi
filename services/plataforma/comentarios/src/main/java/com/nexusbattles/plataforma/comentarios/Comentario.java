@@ -6,27 +6,37 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Opinion publicada por un jugador sobre un producto. HU-COM-001, requisito RF-COM-001.
+ * Opinion publicada por un jugador sobre un producto. HU-COM-001, requisito
+ * RF-COM-001.
  *
- * <p>La regla RN-CMT-001 fija que el comentario lleva texto e imagenes, y ademas el
- * apodo de quien lo escribio, su calificacion en estrellas y la fecha de publicacion.
- * Los tres ultimos se guardan aqui y no se calculan despues, porque el apodo puede
+ * <p>
+ * La regla RN-CMT-001 fija que el comentario lleva texto e imagenes, y ademas
+ * el
+ * apodo de quien lo escribio, su calificacion en estrellas y la fecha de
+ * publicacion.
+ * Los tres ultimos se guardan aqui y no se calculan despues, porque el apodo
+ * puede
  * cambiar con el tiempo y el comentario debe conservar el que tenia ese dia.
  *
- * <p>La calificacion es opcional a proposito. Un jugador puede comentar un producto
+ * <p>
+ * La calificacion es opcional a proposito. Un jugador puede comentar un
+ * producto
  * cuantas veces quiera pero solo puede calificarlo una vez, asi que del segundo
- * comentario en adelante va sin estrellas. Eso no es un error, es el comportamiento
+ * comentario en adelante va sin estrellas. Eso no es un error, es el
+ * comportamiento
  * que describe la historia.
  *
- * @param id identificador unico del comentario
- * @param productoId producto sobre el que se opina
- * @param autorId jugador que lo escribe
- * @param apodoAutor apodo del jugador en el momento de publicar
- * @param texto contenido escrito
- * @param imagenes adjuntos, puede venir vacia
- * @param estrellas calificacion de 1 a 5, o vacia si el jugador ya habia calificado
+ * @param id               identificador unico del comentario
+ * @param productoId       producto sobre el que se opina
+ * @param autorId          jugador que lo escribe
+ * @param apodoAutor       apodo del jugador en el momento de publicar
+ * @param texto            contenido escrito
+ * @param imagenes         adjuntos, puede venir vacia
+ * @param estrellas        calificacion de 1 a 5, o vacia si el jugador ya habia
+ *                         calificado
  * @param fechaPublicacion momento en que quedo registrado
- * @param estado si quedo publicado o retenido por el filtro
+ * @param estado           si quedo publicado, retenido por el filtro o
+ *                         eliminado
  */
 public record Comentario(
         String id,
@@ -39,12 +49,20 @@ public record Comentario(
         Instant fechaPublicacion,
         Comentario.Estado estado) {
 
-    /** Situacion del comentario despues de pasar por el filtro automatico. */
+    /**
+     * Situacion del comentario despues de pasar por el filtro automatico o accion
+     * manual.
+     */
     public enum Estado {
         /** Visible en el hilo del producto. */
         PUBLICADO,
         /** Retenido por el filtro automatico, a la espera de un moderador. */
-        EN_REVISION
+        EN_REVISION,
+        /**
+         * Eliminado, ya sea por el autor o por moderacion. No visible y no cuenta para
+         * el promedio.
+         */
+        ELIMINADO
     }
 
     public Comentario {
@@ -62,12 +80,15 @@ public record Comentario(
         }
     }
 
-    /** Calificacion asociada, vacia cuando el jugador ya habia calificado el producto. */
+    /**
+     * Calificacion asociada, vacia cuando el jugador ya habia calificado el
+     * producto.
+     */
     public Optional<Integer> calificacion() {
         return Optional.ofNullable(estrellas);
     }
 
-    /** Si el comentario es visible en el hilo. */
+    /** Si el comentario es visible en el hilo y cuenta para promedios. */
     public boolean estaPublicado() {
         return estado == Estado.PUBLICADO;
     }
