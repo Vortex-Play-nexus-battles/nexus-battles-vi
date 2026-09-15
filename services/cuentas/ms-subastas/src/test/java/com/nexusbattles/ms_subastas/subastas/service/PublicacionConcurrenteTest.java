@@ -118,7 +118,7 @@ class PublicacionConcurrenteTest {
                 assertTrue(claves.buscar(a + ":k").isEmpty());
                 assertNotNull(publicar(a, "a"));
                 verify(repo, times(2)).saveAndFlush(any());
-                verify(finanzas, times(1)).compensarDebito(any(), any(), any(), any());
+                verify(finanzas, times(1)).compensarDebito(any(), any());
                 verify(inventario, times(1)).liberarReserva(any(), any(), any());
             } finally { continuar.countDown(); }
         }
@@ -136,7 +136,7 @@ class PublicacionConcurrenteTest {
     void compensacionesFallidasNoOcultanFalloYNoRetienenClave() {
         var original = new IllegalStateException("persistencia");
         when(repo.saveAndFlush(any())).thenThrow(original).thenAnswer(i -> i.getArgument(0));
-        doThrow(new IllegalStateException("compensacion")).when(finanzas).compensarDebito(any(), any(), any(), any());
+        doThrow(new IllegalStateException("compensacion")).when(finanzas).compensarDebito(any(), any());
         doThrow(new IllegalStateException("liberacion")).when(inventario).liberarReserva(any(), any(), any());
         assertSame(original, assertThrows(IllegalStateException.class, () -> publicar(a, "a")));
         verify(inventario).liberarReserva(any(), any(), any());

@@ -47,7 +47,7 @@ class PublicarSubastaApplicationServiceTest {
         assertEquals(new BigDecimal("1"), respuesta.comisionCobrado());
         assertEquals(Instant.parse("2026-09-13T12:00:00Z"), respuesta.fechaFin());
         assertEquals("ACTIVA", respuesta.estado());
-        verify(finanzas).debitarComision(eq(jugador), eq(BigDecimal.ONE), any(), eq("k-1"));
+        verify(finanzas).debitarComision(eq(jugador), eq(BigDecimal.ONE), eq(respuesta.id()), eq("comision-publicacion-24h"));
         verify(inventario).reservar(eq("elemento-1"), eq(jugador), any(), eq("k-1"));
     }
 
@@ -57,7 +57,7 @@ class PublicarSubastaApplicationServiceTest {
         PublicarSubastaResponse primera = servicio.publicar(solicitud, "k-2");
         PublicarSubastaResponse segunda = servicio.publicar(solicitud, "k-2");
         assertEquals(primera, segunda);
-        verify(finanzas, times(1)).debitarComision(any(), any(), any(), eq("k-2"));
+        verify(finanzas, times(1)).debitarComision(eq(jugador), eq(BigDecimal.valueOf(3)), eq(primera.id()), eq("comision-publicacion-48h"));
         verify(inventario, times(1)).reservar(any(), any(), any(), eq("k-2"));
     }
 
@@ -65,8 +65,10 @@ class PublicarSubastaApplicationServiceTest {
     void falloDePersistenciaCompensaDebitoYReserva() {
         when(subastas.saveAndFlush(any())).thenThrow(new RuntimeException("db"));
         assertThrows(RuntimeException.class, () -> servicio.publicar(new PublicarSubastaRequest("elemento-1", productoId, DuracionSubasta.H24, new BigDecimal("10"), null), "k-3"));
-        verify(finanzas).compensarDebito(eq(jugador), eq(BigDecimal.ONE), any(), eq("k-3"));
-        verify(inventario).liberarReserva(eq("elemento-1"), any(), eq("k-3"));
+        var id = org.mockito.ArgumentCaptor.forClass(UUID.class);
+        verify(finanzas).debitarComision(eq(jugador), eq(BigDecimal.ONE), id.capture(), eq("comision-publicacion-24h"));
+        verify(finanzas).compensarDebito(id.getValue(), "publicacion-fallida");
+        verify(inventario).liberarReserva("elemento-1", id.getValue(), "k-3");
     }
 
     private PublicarSubastaRequest solicitud() {
@@ -77,6 +79,7 @@ class PublicarSubastaApplicationServiceTest {
     void publica48HorasConComisionTres() {
         var r = servicio.publicar(new PublicarSubastaRequest("elemento-1", productoId, DuracionSubasta.H48, BigDecimal.TEN, null), "48");
         assertEquals(new BigDecimal("3"), r.comisionCobrado());
+        verify(finanzas).debitarComision(jugador, BigDecimal.valueOf(3), r.id(), "comision-publicacion-48h");
         assertEquals(reloj.instant().plusSeconds(48 * 3600), r.fechaFin());
         assertEquals(jugador, r.vendedorId());
         assertEquals(productoId, r.productoId());
@@ -96,7 +99,7 @@ class PublicarSubastaApplicationServiceTest {
         doThrow(new PublicacionSubastaException("Saldo insuficiente")).when(finanzas).debitarComision(any(), any(), any(), any());
         assertThrows(PublicacionSubastaException.class, () -> servicio.publicar(solicitud(), "saldo"));
         verify(inventario).liberarReserva(eq("elemento-1"), any(), eq("saldo"));
-        verify(finanzas, never()).compensarDebito(any(), any(), any(), any());
+        verify(finanzas, never()).compensarDebito(any(), any());
         verifyNoInteractions(subastas);
     }
 
@@ -170,7 +173,7 @@ class PublicarSubastaApplicationServiceTest {
         var fallo = assertThrows(PublicacionSubastaException.class, () -> servicio.publicar(solicitud(), "x"));
         assertEquals(PublicacionSubastaException.Motivo.CONFLICTO, fallo.getMotivo());
         assertSame(original, fallo.getCause());
-        verify(finanzas).compensarDebito(eq(jugador), eq(BigDecimal.ONE), any(), eq("x"));
+        verify(finanzas).compensarDebito(any(), eq("publicacion-fallida"));
         verify(inventario).liberarReserva(eq("elemento-1"), any(), eq("x"));
     }
 
@@ -184,7 +187,7 @@ class PublicarSubastaApplicationServiceTest {
         when(subastas.saveAndFlush(any())).thenThrow(original);
         assertSame(original, assertThrows(org.springframework.dao.DataIntegrityViolationException.class,
                 () -> servicio.publicar(solicitud(), "otro")));
-        verify(finanzas).compensarDebito(eq(jugador), eq(BigDecimal.ONE), any(), eq("otro"));
+        verify(finanzas).compensarDebito(any(), eq("publicacion-fallida"));
         verify(inventario).liberarReserva(eq("elemento-1"), any(), eq("otro"));
     }
 
@@ -201,12 +204,12 @@ class PublicarSubastaApplicationServiceTest {
     void rollbackDespuesDeFlushCompensaYNoPublicaIdempotencia() {
         org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
         try {
-            servicio.publicar(solicitud(), "rollback");
+            var respuesta = servicio.publicar(solicitud(), "rollback");
             assertTrue(idempotencia.buscar(jugador + ":rollback").isEmpty());
             for (var sync : org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations()) {
                 sync.afterCompletion(org.springframework.transaction.support.TransactionSynchronization.STATUS_ROLLED_BACK);
             }
-            verify(finanzas).compensarDebito(eq(jugador), eq(BigDecimal.ONE), any(), eq("rollback"));
+            verify(finanzas).compensarDebito(respuesta.id(), "publicacion-fallida");
             verify(inventario).liberarReserva(eq("elemento-1"), any(), eq("rollback"));
         } finally { org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization(); }
     }
@@ -222,7 +225,7 @@ class PublicarSubastaApplicationServiceTest {
                 sync.afterCompletion(org.springframework.transaction.support.TransactionSynchronization.STATUS_COMMITTED);
             }
             assertEquals(respuesta, idempotencia.buscar(jugador + ":commit").orElseThrow().respuesta());
-            verify(finanzas, never()).compensarDebito(any(), any(), any(), any());
+            verify(finanzas, never()).compensarDebito(any(), any());
         } finally { org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization(); }
     }
 }
