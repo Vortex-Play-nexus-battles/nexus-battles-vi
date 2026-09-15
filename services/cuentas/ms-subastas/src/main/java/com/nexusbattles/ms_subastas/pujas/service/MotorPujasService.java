@@ -127,7 +127,7 @@ public class MotorPujasService {
                         subasta.getId(), idempotencyKey);
                 transferido = true;
             }
-            creditoClient.consumir(reserva.id());
+            creditoClient.consumir(reserva.id(), subasta.getVendedorId());
         } catch (RuntimeException e) {
             if (transferido) {
                 devolverProductoAlVendedor(subasta, idempotencyKey);
@@ -188,7 +188,7 @@ public class MotorPujasService {
         }
 
         try {
-            creditoClient.consumir(UUID.fromString(pujaVigente.getReservaCreditoId()));
+            creditoClient.consumir(UUID.fromString(pujaVigente.getReservaCreditoId()), subasta.getVendedorId());
         } catch (RuntimeException fallo) {
             // El producto ya salio hacia el ganador y esa llamada es HTTP: no la
             // deshace el rollback de la transaccion, que si revierte el estado

@@ -66,7 +66,7 @@ public class CreditoClientFake implements CreditoClient {
     }
 
     public void acreditar(UUID jugadorId, BigDecimal monto) {
-        saldos.merge(jugadorId, monto, BigDecimal::add);
+        ajustarSaldo(jugadorId, monto);
     }
 
     @Override
@@ -112,24 +112,47 @@ public class CreditoClientFake implements CreditoClient {
     }
 
     @Override
-    public synchronized void consumir(UUID reservaId) {
+    public synchronized void consumir(UUID reservaId, UUID vendedorId) {
         ReservaCredito reserva = obtenerReserva(reservaId);
         if (reserva.estado() != ReservaCredito.EstadoReserva.RESERVADA) {
             throw new CreditoClientException(CreditoClientException.Motivo.RESERVA_YA_CONSUMIDA,
                     "La reserva " + reservaId + " no esta en estado RESERVADA");
         }
-        saldos.merge(reserva.jugadorId(), reserva.monto(), BigDecimal::subtract);
+        ajustarSaldo(reserva.jugadorId(), reserva.monto().negate());
+        // El doble abona al vendedor igual que hace ms-finanzas: si no, las
+        // pruebas darian por bueno un flujo en el que el comprador paga y el
+        // vendedor no cobra.
+        if (vendedorId != null) {
+            ajustarSaldo(vendedorId, reserva.monto());
+        }
         reservas.put(reservaId, new ReservaCredito(reserva.id(), reserva.jugadorId(), reserva.monto(), ReservaCredito.EstadoReserva.CONSUMIDA));
     }
 
     @Override
     public synchronized BigDecimal saldoDisponible(UUID jugadorId) {
-        BigDecimal saldo = saldos.computeIfAbsent(jugadorId, quien -> saldoInicial);
+        BigDecimal saldo = saldoDe(jugadorId);
         BigDecimal reservado = reservas.values().stream()
                 .filter(r -> r.jugadorId().equals(jugadorId) && r.estado() == ReservaCredito.EstadoReserva.RESERVADA)
                 .map(ReservaCredito::monto)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return saldo.subtract(reservado);
+    }
+
+    /**
+     * Suma (o resta, con monto negativo) partiendo del saldo inicial cuando el
+     * jugador no se habia visto antes.
+     *
+     * <p>Con {@code Map.merge} no salia bien: sobre una clave ausente coloca el
+     * valor tal cual en vez de combinarlo, asi que el saldo inicial se perdia.
+     * Un vendedor que nunca habia interactuado pasaba de sus creditos de
+     * partida a solo lo que acababa de cobrar.
+     */
+    private void ajustarSaldo(UUID jugadorId, BigDecimal delta) {
+        saldos.put(jugadorId, saldoDe(jugadorId).add(delta));
+    }
+
+    private BigDecimal saldoDe(UUID jugadorId) {
+        return saldos.computeIfAbsent(jugadorId, quien -> saldoInicial);
     }
 
     private ReservaCredito obtenerReserva(UUID reservaId) {

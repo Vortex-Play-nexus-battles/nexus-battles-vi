@@ -46,8 +46,8 @@ public class CreditoClientResiliente implements CreditoClient {
 
     @Override
     @CircuitBreaker(name = INSTANCIA)
-    public void consumir(UUID reservaId) {
-        delegado.consumir(reservaId);
+    public void consumir(UUID reservaId, UUID vendedorId) {
+        delegado.consumir(reservaId, vendedorId);
     }
 
     @Override

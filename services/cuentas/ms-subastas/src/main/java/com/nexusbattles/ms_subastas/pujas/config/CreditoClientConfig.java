@@ -1,7 +1,9 @@
 package com.nexusbattles.ms_subastas.pujas.config;
 
 import com.nexusbattles.ms_subastas.pujas.creditos.CreditoClient;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexusbattles.ms_subastas.pujas.creditos.CreditoClientFake;
+import com.nexusbattles.ms_subastas.pujas.creditos.CreditoClientHttp;
 import com.nexusbattles.ms_subastas.pujas.creditos.CreditoClientResiliente;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,5 +51,27 @@ public class CreditoClientConfig {
         // reservas que ya no existen. Sin esto, la primera puja sobre una
         // subasta que ya tenia oferta devuelve 500 y no se puede ni demostrar.
         return new CreditoClientResiliente(new CreditoClientFake(saldoInicial, true));
+    }
+
+    /**
+     * Cliente real contra ms-finanzas. Se activa con
+     * {@code app.finanzas.modo=http}.
+     *
+     * <p>No es el modo por defecto todavia, y no por falta de endpoints: los
+     * cuatro existen. Es porque ms-finanzas no tiene manejador de errores, asi
+     * que un saldo insuficiente sale como 500, igual que una caida. Con el
+     * modo http activo, un jugador sin creditos veria "error del servidor" y
+     * ademas empujaria el cortacircuitos, dejando sin creditos al resto.
+     * En cuanto esas excepciones devuelvan 409 y 404, esto pasa a ser el
+     * valor por defecto.
+     */
+    @Bean
+    @ConditionalOnProperty(name = "app.finanzas.modo", havingValue = "http")
+    public CreditoClient creditoClientHttp(
+            @Value("${app.finanzas.base-url:http://localhost:8093/api/v1}") String baseUrl,
+            @Value("${app.finanzas.timeout-ms:5000}") long timeoutMs,
+            ObjectMapper objectMapper) {
+        log.info("ms-subastas arranca con el cliente HTTP real de creditos (app.finanzas.modo=http): {}", baseUrl);
+        return new CreditoClientResiliente(new CreditoClientHttp(baseUrl, timeoutMs, objectMapper));
     }
 }
