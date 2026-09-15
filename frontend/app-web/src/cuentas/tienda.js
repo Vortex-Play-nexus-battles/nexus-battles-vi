@@ -51,6 +51,11 @@ async function cargarVitrina() {
 }
 
 // --- AGREGAR AL CARRITO (POST) ---
+// ESLint la ve sin usar porque solo lee el .js: se invoca desde el
+// onclick que genera la linea 43, y funciona porque tienda.html carga
+// este archivo como script clasico y no como modulo. Si algun dia pasa a
+// type="module" dejara de ser global y el boton se rompe en silencio.
+// eslint-disable-next-line no-unused-vars
 async function agregarAlCarrito(productoId) {
     try {
         const bodyReq = JSON.stringify({
@@ -81,8 +86,13 @@ async function cargarCarrito() {
 
         const carrito = await response.json();
         actualizarUI(carrito);
-    } catch (error) {
-        // Si es 404 (carrito no existe aún), mostramos vacío
+    } catch {
+        // Si es 404 (carrito no existe aún), mostramos vacío.
+        //
+        // OJO: hoy esto no distingue el 404 de nada más. Un 500 o una caída
+        // de red también se pintan como «carrito vacío», y el jugador ve un
+        // carrito sin sus productos sin que nada le avise. Ver la nota del
+        // PR de saneamiento: hace falta decidir qué mostrar en ese caso.
         actualizarUI(null);
     }
 }

@@ -12,7 +12,11 @@ import org.springframework.web.bind.annotation.*;
 import static com.nexusbattles.ms_subastas.subastas.service.PublicacionSubastaException.Motivo.*;
 
 @RestController
-@RequestMapping("/api/v1/subastas")
+// Sin /api/v1: lo antepone server.servlet.context-path, igual que en el resto
+// de controladores del servicio. Con el prefijo repetido, este endpoint
+// quedaba publicado en /api/v1/api/v1/subastas y la ruta que declara
+// ms-subastas-publicar.yaml respondia 405.
+@RequestMapping("/subastas")
 public class PublicacionSubastaController {
     private final ObjectProvider<PublicarSubastaApplicationService> servicio;
     private final IdentidadClient identidad;

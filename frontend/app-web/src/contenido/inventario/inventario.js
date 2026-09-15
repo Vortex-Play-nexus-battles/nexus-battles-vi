@@ -17,6 +17,7 @@ import {
 import { construirVitrina, PRODUCTOS_POR_PAGINA } from './vitrina.js';
 import { construirCarga, construirVacio, construirError } from './estados-vista.js';
 import { abrirFicha } from './ficha-producto.js';
+import { construirPaginacion } from '../../comun/paginacion.js';
 
 const TIPOS = [
   ['HEROE', 'Héroe'],
@@ -42,7 +43,10 @@ const PARTES_ARMADURA = [
  * @param {HTMLElement} contenedor donde se monta la vista.
  * @param {string} identidad jugador autenticado, que viaja en la cabecera.
  * @param {number} numeroPagina pagina pedida, desde cero.
- * @param {{consultar?: Function, alEditar?: Function}} opciones inyeccion para las pruebas.
+ * @param {{consultar?: Function, alEditar?: Function, sigueVigente?: () => boolean}} opciones
+ *   inyeccion para las pruebas. `sigueVigente` permite descartar una respuesta
+ *   que llego tarde: sin el, dos cambios de pagina seguidos pueden pintar el
+ *   resultado del primero encima del segundo (HU-INV-011).
  * @returns {Promise<object|null>} pagina mostrada o null cuando falla la consulta.
  */
 export async function montarVitrina(
@@ -56,6 +60,7 @@ export async function montarVitrina(
     mensajeCarga,
     mensajeVacio,
     detalleVacio,
+    sigueVigente = () => true,
   } = {},
 ) {
   contenedor.replaceChildren(construirCarga(mensajeCarga));
@@ -66,8 +71,16 @@ export async function montarVitrina(
   } catch (fallo) {
     // El detalle tecnico es para el equipo; al jugador se le habla en su idioma.
     console.error('No se pudo cargar la vitrina del inventario', fallo);
-    contenedor.replaceChildren(construirError());
+    if (sigueVigente()) {
+      contenedor.replaceChildren(construirError());
+    }
     return null;
+  }
+
+  // Mientras se esperaba, el jugador pudo pedir otra pagina. Pintar esta
+  // ahora dejaria la vitrina mostrando una pagina que ya nadie pidio.
+  if (!sigueVigente()) {
+    return pagina;
   }
 
   if (!pagina || pagina.elementos.length === 0) {
@@ -192,8 +205,12 @@ function construirGestion() {
   mensaje.setAttribute('aria-live', 'polite');
   const contenido = elementoHtml('div', 'inventario__contenido');
 
+  // HU-INV-011: el control se inserta una vez y se repinta con cada pagina.
+  // Se monta despues de la cuadricula porque es su pie de navegacion.
+  const paginacion = elementoHtml('div', 'inventario__paginacion');
+
   return {
-    elementos: [cabecera, editor, equipo, mensaje, contenido],
+    elementos: [cabecera, editor, equipo, mensaje, contenido, paginacion],
     cabecera,
     botonNuevo,
     busqueda,
@@ -216,6 +233,7 @@ function construirGestion() {
     equipoLista,
     mensaje,
     contenido,
+    paginacion,
   };
 }
 
@@ -240,9 +258,21 @@ export async function montarInventario(
   const vista = construirGestion();
   raiz.replaceChildren(...vista.elementos);
 
-  let paginaActual = numeroPagina;
+  /**
+   * HU-INV-002: criterio de la busqueda activa, o cadena vacia si no hay.
+   * Vive en la vista y no en el control de paginacion, asi que cambiar de
+   * pagina no lo toca: eso es lo que cumple el criterio 3 de HU-INV-011.
+   */
   let criterioBusqueda = '';
+  /**
+   * Unica fuente de la pagina en curso: la que el servicio devolvio y el
+   * jugador esta viendo. No se lleva un contador aparte, porque dos
+   * variables que dicen lo mismo acaban discrepando en cuanto una consulta
+   * llega tarde o falla.
+   */
   let paginaMostrada = null;
+  /** Turno de la ultima consulta pedida, para descartar respuestas tardias. */
+  let ultimoTurno = 0;
   let elementoSeleccionado = null;
   let heroeSeleccionado = null;
   let equipoActual = null;
@@ -312,12 +342,20 @@ export async function montarInventario(
           : elemento.nombrePropio,
       );
       const estaEquipado = equipados.has(elemento.id);
+      const estaDisponible = elemento.disponible !== false;
+      let textoAccion = 'Equipar';
+      if (estaEquipado) {
+        textoAccion = 'Desequipar';
+      } else if (!estaDisponible) {
+        textoAccion = 'No disponible';
+      }
       const boton = elementoHtml(
         'button',
         estaEquipado ? 'inventario-equipo__desequipar' : 'inventario-equipo__equipar',
-        estaEquipado ? 'Desequipar' : 'Equipar',
+        textoAccion,
       );
       boton.type = 'button';
+      boton.disabled = !estaEquipado && !estaDisponible;
       boton.addEventListener('click', async () => {
         cambiarDisponibilidad(boton, false);
         try {
@@ -358,10 +396,56 @@ export async function montarInventario(
     }
   }
 
-  async function actualizar(numero = paginaActual) {
-    paginaActual = numero;
+  /**
+   * HU-INV-011: repinta el control a partir de la pagina que de verdad se
+   * esta mostrando, no de la que se pidio. Si la consulta fallo, el jugador
+   * sigue viendo la anterior y el control debe decir esa misma.
+   */
+  function pintarPaginacion() {
+    const totalPaginas = paginaMostrada?.totalPaginas ?? 0;
+    const numero = paginaMostrada?.numero ?? 0;
+
+    // RNF-ACC-002: repintar el control lo destruye entero, y con el se iria
+    // el foco al body. Quien cambio de pagina con el teclado se quedaria sin
+    // sitio y tendria que tabular otra vez desde arriba. Si el foco estaba
+    // dentro, se devuelve a la casilla de la pagina que ahora se muestra.
+    const veniaEnfocado = vista.paginacion.contains(document.activeElement);
+
+    try {
+      vista.paginacion.replaceChildren(
+        construirPaginacion({ paginaActual: numero, totalPaginas }, (pedida) => {
+          actualizar(pedida);
+        }),
+      );
+      if (veniaEnfocado) {
+        vista.paginacion.querySelector('[aria-current="page"]')?.focus();
+      }
+    } catch (fallo) {
+      // El servicio devolvio una pagina incoherente con su propio total. No
+      // se adivina un control: se deja sin paginar y queda constancia.
+      console.error('Paginacion incoherente en la respuesta del inventario', fallo);
+      vista.paginacion.replaceChildren();
+    }
+  }
+
+  /** La pagina que el jugador esta viendo ahora mismo. */
+  function paginaEnCurso() {
+    return paginaMostrada?.numero ?? numeroPagina;
+  }
+
+  async function actualizar(numero) {
+    // Cada consulta lleva su turno. Si el jugador pide otra pagina antes de
+    // que llegue esta, la respuesta tardia se descarta entera: ni pinta la
+    // vitrina ni mueve el control. Gana siempre lo ultimo que se pidio.
+    const miTurno = ++ultimoTurno;
+    const sigueVigente = () => miTurno === ultimoTurno;
+
+    // HU-INV-002: con una busqueda activa la vitrina pagina sobre sus
+    // resultados. El criterio se lee aqui en cada consulta, asi que el control
+    // de paginacion lo conserva sin necesidad de conocerlo.
     const busquedaActiva = criterioBusqueda !== '';
-    const consultada = await montarVitrina(vista.contenido, identidad, paginaActual, {
+
+    const consultada = await montarVitrina(vista.contenido, identidad, numero, {
       consultar: busquedaActiva
         ? (jugador, pagina) => buscar(jugador, criterioBusqueda, pagina)
         : consultar,
@@ -372,10 +456,19 @@ export async function montarInventario(
       detalleVacio: busquedaActiva
         ? 'Prueba con otro nombre, tipo o identificador de producto.'
         : undefined,
+      sigueVigente,
     });
+
+    if (!sigueVigente()) {
+      return consultada;
+    }
+
+    // La pagina mostrada solo avanza si la consulta trajo algo: asi el
+    // control nunca marca una pagina que el jugador no esta viendo.
     if (consultada) {
       paginaMostrada = consultada;
     }
+    pintarPaginacion();
     return consultada;
   }
 
@@ -439,7 +532,7 @@ export async function montarInventario(
           nombrePropio: vista.nombre.control.value,
         });
         cerrarEditor();
-        await actualizar();
+        await actualizar(paginaEnCurso());
         mostrarMensaje('Elemento actualizado.');
       } else {
         const totalAntes = paginaMostrada?.totalElementos ?? 0;
@@ -468,7 +561,7 @@ export async function montarInventario(
     }
   });
 
-  await actualizar();
+  await actualizar(paginaEnCurso());
 }
 
 function cambiarDisponibilidad(boton, disponible) {

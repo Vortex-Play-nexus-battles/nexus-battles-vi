@@ -1,0 +1,42 @@
+{
+  "realm": "nexus-battles",
+  "enabled": true,
+  "sslRequired": "none",
+  "accessTokenLifespan": 300,
+  "roles": {
+    "realm": [
+      {
+        "name": "SERVICIO_SUBASTAS",
+        "description": "PROVISIONAL (solo pruebas, ADR-001): rol de la cuenta de servicio de ms-subastas. El nombre definitivo lo fijan los tres Scrum Masters."
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "ms-subastas",
+      "name": "ms-subastas (cuenta de servicio de prueba)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "secreto-de-prueba-ms-subastas",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "fullScopeAllowed": true
+    },
+    {
+      "clientId": "otro-servicio",
+      "name": "servicio sin el rol (cuenta de servicio de prueba)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "secreto-de-prueba-otro-servicio",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "fullScopeAllowed": true
+    }
+  ]
+}

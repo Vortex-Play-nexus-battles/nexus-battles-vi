@@ -58,6 +58,16 @@ public class GestionarInventario {
         return guardado.elemento(elementoId);
     }
 
+    public void eliminar(String identidad, String elementoId) {
+        String propietarioId = exigirIdentidad(identidad);
+        Inventario inventario = repositorio.buscarPorElementoId(elementoId)
+                .orElseThrow(ElementoNoEncontradoException::new);
+        if (!inventario.propietarioId().equalsIgnoreCase(propietarioId)) {
+            throw new InventarioAjenoException();
+        }
+        repositorio.guardar(inventario.eliminarElemento(elementoId));
+    }
+
     private String exigirIdentidad(String identidad) {
         if (identidad == null || identidad.isBlank()) {
             throw new IdentidadRequeridaException();

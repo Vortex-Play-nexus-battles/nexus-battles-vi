@@ -1,19 +1,19 @@
 /**
  * Transporte STOMP 1.2 sobre WebSocket nativo, sin dependencia de dominio.
  *
- * Misma pieza que `cliente-chat.js` de HU-JUE-015 (Alexander), sacada de su
- * dominio: aqui no hay destinos de sala ni de notificaciones, solo los cinco
- * frames que un cliente necesita (CONNECT, SUBSCRIBE, SEND, MESSAGE, ERROR).
- * No hay libreria STOMP en el proyecto y agregar una es decision de equipo.
+ * Unico transporte STOMP del frontend: aqui no hay destinos de sala ni de
+ * notificaciones, solo los cinco frames que un cliente necesita (CONNECT,
+ * SUBSCRIBE, SEND, MESSAGE, ERROR). No hay libreria STOMP en el proyecto y
+ * agregar una es decision de equipo.
  *
- * Que va en el CONNECT lo decide quien conecta, por `cabeceras`. Hoy el
- * servicio de notificaciones identifica la conexion en el handshake
- * (`contracts/websocket/notificaciones.yaml`); el dia que el servicio pida el
- * JWT en el CONNECT, como ya lo hace salas-partidas en #222, se pasa
- * `{ Authorization: 'Bearer ...' }` y no cambia nada mas.
+ * Que va en el CONNECT lo decide quien conecta, por `cabeceras`:
+ *  - `plataforma/salas-partidas/cliente-chat.js` pasa el JWT en
+ *    `Authorization`, porque salas-partidas lo exige en el CONNECT (#222).
+ *  - `plataforma/notificaciones/bandeja.js` conecta sin cabeceras: ese servicio
+ *    identifica la conexion en el handshake (`contracts/websocket/notificaciones.yaml`).
  *
- * Candidato a `frontend/app-web/src/comun/` cuando los tres Scrum Masters lo
- * acuerden: mientras tanto vive aqui para no bloquear la historia.
+ * Vive en `src/comun/` desde #351, con aprobacion de los Scrum Masters. Como todo
+ * lo de esta carpeta, cambiarlo requiere su revision (dueños: los tres SM).
  */
 
 const NUL = '\u0000';

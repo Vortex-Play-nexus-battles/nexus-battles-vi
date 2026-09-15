@@ -45,6 +45,7 @@ const previewAvatar = document.getElementById('preview-avatar');
 const btnGuardar = document.getElementById('btn-guardar');
 const btnDescartar = document.getElementById('btn-descartar');
 const btnReintentar = document.getElementById('btn-reintentar');
+const btnVolver = document.getElementById('btn-volver');
 
 const mensajeFormulario = document.getElementById(
     'mensaje-formulario'
@@ -737,6 +738,17 @@ btnConfirmarApodo.addEventListener(
     'click',
     confirmarCambioApodo
 );
+
+
+// El botón "Volver" del encabezado existía en el HTML sin manejador — al hacer
+// clic no hacía nada. Va al menú principal, igual que en gestion-usuarios y
+// crear-cuenta-admin. Guard 'if (btnVolver)' porque perfil.js se importa como
+// módulo y no queremos romper si el markup cambia en el futuro.
+if (btnVolver) {
+    btnVolver.addEventListener('click', () => {
+        window.location.href = './index.html';
+    });
+}
 
 
 /* =========================

@@ -28,6 +28,14 @@ class PublicacionSubastaControllerTest {
     private final PublicarSubastaApplicationService servicio = mock(PublicarSubastaApplicationService.class);
     private final ObjectProvider<PublicarSubastaApplicationService> provider = mock(ObjectProvider.class);
     private final MockHttpServletRequest request = new MockHttpServletRequest();
+    /**
+     * Sin /api/v1 en las rutas: standaloneSetup no aplica
+     * server.servlet.context-path, asi que aqui se pide la ruta tal y como la
+     * declara el controlador. Escribirla con el prefijo hacia que esta prueba
+     * pasara en verde mientras el endpoint real vivia en /api/v1/api/v1/subastas.
+     * Que la ruta del contrato resuelve de verdad lo comprueba RutasPublicadasIT,
+     * que si levanta el servidor.
+     */
     private MockMvc mvc;
 
     @BeforeEach
@@ -60,7 +68,7 @@ class PublicacionSubastaControllerTest {
                  "tipoProducto":"ARMA","rareza":"RARA","miniaturaUrl":"https://catalogo/espada.png",
                  "descripcionCorta":"Espada de hielo","habilidades":"Congelar"}
                 """.formatted(id, producto, vendedor, comision, inicio, fin);
-        mvc.perform(post("/api/v1/subastas").header("Idempotency-Key", "k").contentType("application/json")
+        mvc.perform(post("/subastas").header("Idempotency-Key", "k").contentType("application/json")
                 .content("""
                         {"elementoInventarioId":"unidad","productoId":"%s","duracion":"%s",
                          "precioInicial":10,"precioCompraInmediata":20}
@@ -74,7 +82,7 @@ class PublicacionSubastaControllerTest {
     void integridadNoFuncionalEs500() throws Exception {
         request.addHeader("Authorization", token(UUID.randomUUID().toString(), false));
         when(servicio.publicar(any(), any())).thenThrow(new org.springframework.dao.DataIntegrityViolationException("otra causa"));
-        mvc.perform(post("/api/v1/subastas").header("Idempotency-Key", "k").contentType("application/json")
+        mvc.perform(post("/subastas").header("Idempotency-Key", "k").contentType("application/json")
                 .content(body("24H"))).andExpect(status().isInternalServerError());
     }
 
@@ -92,7 +100,7 @@ class PublicacionSubastaControllerTest {
             default -> token(UUID.randomUUID().toString(), true);
         };
         if (token != null) request.addHeader("Authorization", token);
-        mvc.perform(post("/api/v1/subastas").header("Idempotency-Key", "k").contentType("application/json")
+        mvc.perform(post("/subastas").header("Idempotency-Key", "k").contentType("application/json")
                 .content(body("24H"))).andExpect(status().isUnauthorized());
         verifyNoInteractions(servicio);
     }
@@ -101,20 +109,20 @@ class PublicacionSubastaControllerTest {
     void sinIntegracionesDevuelve503() throws Exception {
         request.addHeader("Authorization", token(UUID.randomUUID().toString(), false));
         when(provider.getIfAvailable()).thenReturn(null);
-        mvc.perform(post("/api/v1/subastas").header("Idempotency-Key", "k").contentType("application/json")
+        mvc.perform(post("/subastas").header("Idempotency-Key", "k").contentType("application/json")
                 .content(body("24H"))).andExpect(status().isServiceUnavailable());
     }
 
     @Test
     void cabeceraObligatoria() throws Exception {
-        mvc.perform(post("/api/v1/subastas").contentType("application/json").content(body("24H")))
+        mvc.perform(post("/subastas").contentType("application/json").content(body("24H")))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
     void propiedadAdicionalNoPuedeSuplantarVendedor() throws Exception {
         var json = body("24H").replace("\"precioInicial\":10", "\"precioInicial\":10,\"vendedorId\":\"otro\"");
-        mvc.perform(post("/api/v1/subastas").header("Idempotency-Key", "k").contentType("application/json")
+        mvc.perform(post("/subastas").header("Idempotency-Key", "k").contentType("application/json")
                 .content(json)).andExpect(status().isBadRequest());
         verifyNoInteractions(servicio);
     }
@@ -124,7 +132,7 @@ class PublicacionSubastaControllerTest {
     void validaLongitudDeClave(String clave) throws Exception {
         request.addHeader("Authorization", token(UUID.randomUUID().toString(), false));
         if (!clave.isBlank()) clave = clave.repeat(11);
-        mvc.perform(post("/api/v1/subastas").header("Idempotency-Key", clave).contentType("application/json")
+        mvc.perform(post("/subastas").header("Idempotency-Key", clave).contentType("application/json")
                 .content(body("24H"))).andExpect(status().isBadRequest());
     }
 
@@ -142,14 +150,14 @@ class PublicacionSubastaControllerTest {
             case REGLA_NEGOCIO -> 422;
             case DEPENDENCIA_NO_DISPONIBLE -> 503;
         };
-        mvc.perform(post("/api/v1/subastas").header("Idempotency-Key", "k").contentType("application/json")
+        mvc.perform(post("/subastas").header("Idempotency-Key", "k").contentType("application/json")
                 .content(body("24H"))).andExpect(status().is(esperado));
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"", "H24", "72H"})
     void duracionInvalida(String duracion) throws Exception {
-        mvc.perform(post("/api/v1/subastas").header("Idempotency-Key", "k").contentType("application/json")
+        mvc.perform(post("/subastas").header("Idempotency-Key", "k").contentType("application/json")
                 .content(body(duracion))).andExpect(status().isBadRequest());
     }
 

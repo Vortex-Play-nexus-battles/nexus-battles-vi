@@ -76,6 +76,7 @@ public class CreditoDTOs {
         String estado,
         OffsetDateTime fecha
     ) {}
+<<<<<<< HEAD
     public record AcreditarRequest(
         String uid,
         BigDecimal monto,
@@ -90,4 +91,6 @@ public class CreditoDTOs {
         BigDecimal montoAcreditado,
         BigDecimal nuevoSaldoDisponible
     ) {}
+=======
+>>>>>>> e9af45ceff232248a1df3b66a07de1db7f4fc854
 }

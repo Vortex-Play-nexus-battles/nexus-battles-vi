@@ -1,6 +1,8 @@
 package com.nexusbattles.ms_subastas.subastas.port;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
@@ -38,6 +40,8 @@ import java.util.UUID;
  * respondera con 403 y el mensaje de abajo lo explica.
  */
 public class InventarioClientHttp implements InventarioClient {
+
+    private static final Logger log = LoggerFactory.getLogger(InventarioClientHttp.class);
 
     private static final String CABECERA_IDENTIDAD = "X-User-Name";
 
@@ -102,6 +106,10 @@ public class InventarioClientHttp implements InventarioClient {
             throw new InventarioClientException(
                     "El elemento " + elementoInventarioId + " esta equipado o ya bloqueado por otra subasta");
         }
+        if (estado == 503) {
+            throw new InventarioNoDisponibleException(
+                    "Inventario no esta disponible para bloquear el elemento " + elementoInventarioId);
+        }
         throw new InventarioClientException(
                 "Respuesta inesperada de inventario al bloquear el elemento: " + estado);
     }
@@ -122,19 +130,62 @@ public class InventarioClientHttp implements InventarioClient {
     }
 
     /**
-     * @throws InventarioClientException siempre. Inventario publica el bloqueo
-     *         pero no su contrario: el unico DELETE de su contrato es
-     *         {@code DELETE /elementos/{elementoId}}, que borra el elemento
-     *         entero. Usarlo aqui destruiria el producto del vendedor en vez de
-     *         desbloquearlo.
+     * Quita el bloqueo al cerrarse o cancelarse la subasta.
+     *
+     * <p>A diferencia del bloqueo, inventario <b>no pide identidad</b> aqui, y
+     * eso es lo que hace que funcione: esta operacion se invoca desde el job de
+     * cierre, donde no hay peticion HTTP ni token de nadie porque la disparo el
+     * reloj. Si exigiera {@code X-User-Name}, este camino seria imposible.
+     *
+     * <p>La idempotencia la garantiza inventario: repetir el aviso sobre un
+     * producto ya disponible responde 200. Por eso el reintento es seguro.
      */
     @Override
     public void liberarReserva(String elementoInventarioId, UUID subastaId, String idempotencyKey) {
+        exigir(elementoInventarioId != null && !elementoInventarioId.isBlank(),
+                "El identificador del elemento de inventario es obligatorio");
+        exigir(subastaId != null, "El identificador de la subasta es obligatorio para liberar el bloqueo");
+
+        HttpRequest.Builder constructor = HttpRequest.newBuilder(
+                        uri("/api/v1/inventario/elementos/" + elementoInventarioId
+                                + "/bloqueo-subasta/" + subastaId))
+                .header("Accept", "application/json")
+                .timeout(timeout)
+                .DELETE();
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            constructor.header("Idempotency-Key", idempotencyKey);
+        }
+
+        HttpResponse<String> respuesta = enviar(constructor.build());
+        int estado = respuesta.statusCode();
+        if (estado >= 200 && estado < 300) {
+            return;
+        }
+        if (estado == 404) {
+            // El elemento ya no existe en inventario, asi que no queda nada que
+            // desbloquear: el efecto buscado ya se cumple. Tratarlo como error
+            // seria peor que inutil — el cierre se invoca dentro de una
+            // transaccion, asi que al fallar revierte el estado, la subasta se
+            // queda ACTIVA y el job la reintenta cada 30 s para siempre sin que
+            // ninguna de esas vueltas pueda salir bien.
+            log.warn("El elemento {} ya no existe en inventario: no hay bloqueo que liberar "
+                    + "y la subasta {} se cierra igualmente.", elementoInventarioId, subastaId);
+            return;
+        }
+        if (estado == 503) {
+            throw new InventarioNoDisponibleException(
+                    "Inventario no esta disponible para liberar el bloqueo del elemento " + elementoInventarioId);
+        }
+        if (estado == 409) {
+            // El elemento esta bloqueado, pero por OTRA subasta. Inventario lo
+            // deja bloqueado a proposito. Liberarlo seria soltar el producto de
+            // una subasta viva, asi que aqui solo se reporta.
+            throw new InventarioClientException(
+                    "El bloqueo del elemento " + elementoInventarioId + " no corresponde a la subasta "
+                            + subastaId + ": pertenece a otra subasta y se conserva.");
+        }
         throw new InventarioClientException(
-                "Inventario no expone como quitar el bloqueo de subasta. Hace falta "
-                        + "DELETE /api/v1/inventario/elementos/{elementoId}/bloqueo-subasta "
-                        + "(pedido a Nicolay, HU-INV-010). Sin eso, una subasta que cierra sin "
-                        + "adjudicacion deja el producto del vendedor bloqueado para siempre.");
+                "Respuesta inesperada de inventario al liberar el bloqueo: " + estado);
     }
 
     /**
@@ -180,10 +231,12 @@ public class InventarioClientHttp implements InventarioClient {
         try {
             return httpClient.send(peticion, HttpResponse.BodyHandlers.ofString());
         } catch (IOException e) {
-            throw new InventarioClientException("No se pudo contactar al servicio de inventario", e);
+            // De disponibilidad, no de negocio: esto si merece reintento y si
+            // debe empujar el cortacircuitos.
+            throw new InventarioNoDisponibleException("No se pudo contactar al servicio de inventario", e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new InventarioClientException("Peticion a inventario interrumpida", e);
+            throw new InventarioNoDisponibleException("Peticion a inventario interrumpida", e);
         }
     }
 

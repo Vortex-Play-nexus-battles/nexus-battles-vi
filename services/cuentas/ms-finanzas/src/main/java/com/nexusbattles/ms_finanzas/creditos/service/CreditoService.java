@@ -7,13 +7,19 @@ import com.nexusbattles.ms_finanzas.creditos.domain.ReservaCredito;
 import com.nexusbattles.ms_finanzas.creditos.dto.CreditoDTOs.*;
 import com.nexusbattles.ms_finanzas.creditos.repository.CuentaCreditoRepository;
 import com.nexusbattles.ms_finanzas.creditos.repository.ReservaCreditoRepository;
+<<<<<<< HEAD
 import org.springframework.dao.DataIntegrityViolationException;
+=======
+>>>>>>> e9af45ceff232248a1df3b66a07de1db7f4fc854
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+<<<<<<< HEAD
 import java.util.Optional;
+=======
+>>>>>>> e9af45ceff232248a1df3b66a07de1db7f4fc854
 import java.util.UUID;
 
 @Service
@@ -22,13 +28,21 @@ public class CreditoService {
     private final CuentaCreditoRepository cuentaRepository;
     private final ReservaCreditoRepository reservaRepository;
 
+<<<<<<< HEAD
     public CreditoService(CuentaCreditoRepository cuentaRepository,
                           ReservaCreditoRepository reservaRepository) {
+=======
+    public CreditoService(CuentaCreditoRepository cuentaRepository, ReservaCreditoRepository reservaRepository) {
+>>>>>>> e9af45ceff232248a1df3b66a07de1db7f4fc854
         this.cuentaRepository = cuentaRepository;
         this.reservaRepository = reservaRepository;
     }
 
+<<<<<<< HEAD
     @Transactional
+=======
+    @Transactional(readOnly = true)
+>>>>>>> e9af45ceff232248a1df3b66a07de1db7f4fc854
     public SaldoResponse obtenerSaldo(String jugadorUid) {
         CuentaCredito cuenta = obtenerOCrearCuenta(jugadorUid);
         return new SaldoResponse(
@@ -41,12 +55,19 @@ public class CreditoService {
 
     @Transactional
     public ReservaResponse reservar(ReservarRequest req, String idempotencyKey) {
+<<<<<<< HEAD
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             Optional<ReservaCredito> reservaExistente = reservaRepository.findByIdempotencyKey(idempotencyKey);
             if (reservaExistente.isPresent()) {
                 ReservaCredito r = reservaExistente.get();
                 return new ReservaResponse(r.getId(), r.getJugadorUid(), r.getMonto(), r.getEstado().name(), r.getExpiraEn());
             }
+=======
+        var reservaExistente = reservaRepository.findByIdempotencyKey(idempotencyKey);
+        if (reservaExistente.isPresent()) {
+            ReservaCredito r = reservaExistente.get();
+            return new ReservaResponse(r.getId(), r.getJugadorUid(), r.getMonto(), r.getEstado().name(), r.getExpiraEn());
+>>>>>>> e9af45ceff232248a1df3b66a07de1db7f4fc854
         }
 
         CuentaCredito cuenta = obtenerOCrearCuenta(req.jugadorUid());
@@ -65,7 +86,11 @@ public class CreditoService {
             .referenciaId(req.referenciaId())
             .idempotencyKey(idempotencyKey)
             .estado(ReservaCredito.EstadoReserva.ACTIVA)
+<<<<<<< HEAD
             .expiraEn(OffsetDateTime.now().plusHours(72)) // Ampliado a 72h para cubrir subastas de 24h/48h sin expirar prematuramente
+=======
+            .expiraEn(OffsetDateTime.now().plusHours(1))
+>>>>>>> e9af45ceff232248a1df3b66a07de1db7f4fc854
             .build();
 
         ReservaCredito guardada = reservaRepository.save(reserva);
@@ -120,6 +145,7 @@ public class CreditoService {
 
     @Transactional
     public DebitarResponse debitar(DebitarRequest req) {
+<<<<<<< HEAD
         // Idempotencia por refId para Edwin (evita cobros duplicados ante timeouts)
         Optional<ReservaCredito> operacionExistente = reservaRepository.findByIdempotencyKey(req.refId());
         if (operacionExistente.isPresent()) {
@@ -132,11 +158,18 @@ public class CreditoService {
 
         if (cuenta.getSaldoDisponible().compareTo(req.monto()) < 0) {
             throw new SaldoInsuficienteException("Saldo insuficiente para debitar la comisión.");
+=======
+        CuentaCredito cuenta = obtenerOCrearCuenta(req.uid());
+
+        if (cuenta.getSaldoDisponible().compareTo(req.monto()) < 0) {
+            throw new SaldoInsuficienteException("Saldo insuficiente para debitar la comisión de publicación.");
+>>>>>>> e9af45ceff232248a1df3b66a07de1db7f4fc854
         }
 
         cuenta.setSaldoBruto(cuenta.getSaldoBruto().subtract(req.monto()));
         cuentaRepository.save(cuenta);
 
+<<<<<<< HEAD
         // Registramos la operación usando la tabla de reservas con idempotencyKey = refId para control persistente
         ReservaCredito registroOp = ReservaCredito.builder()
             .jugadorUid(req.uid())
@@ -149,12 +182,15 @@ public class CreditoService {
             .build();
         reservaRepository.save(registroOp);
 
+=======
+>>>>>>> e9af45ceff232248a1df3b66a07de1db7f4fc854
         String txId = "TX-DEB-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
         return new DebitarResponse(txId, req.refId(), "EXITOSO", req.monto(), cuenta.getSaldoDisponible());
     }
 
     @Transactional
     public ReversarResponse reversar(ReversarRequest req) {
+<<<<<<< HEAD
         // Lógica real de compensación para Edwin: buscar el débito original por refId y devolver el saldo
         Optional<ReservaCredito> operacionOpt = reservaRepository.findByIdempotencyKey(req.refId());
 
@@ -175,10 +211,15 @@ public class CreditoService {
         reservaRepository.save(op);
 
         return new ReversarResponse(req.refId(), "REVERSADO", op.getMonto(), req.motivo());
+=======
+        String refId = req.refId();
+        return new ReversarResponse(refId, "REVERSADO", BigDecimal.ONE, req.motivo());
+>>>>>>> e9af45ceff232248a1df3b66a07de1db7f4fc854
     }
 
     @Transactional(readOnly = true)
     public OperacionResponse consultarOperacionPorRefId(String refId) {
+<<<<<<< HEAD
         ReservaCredito op = reservaRepository.findByIdempotencyKey(refId)
             .orElseThrow(() -> new ReservaNoEncontradaException("Operación no encontrada con refId: " + refId));
 
@@ -200,10 +241,14 @@ public class CreditoService {
 
         String txId = "TX-ACR-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
         return new AcreditarResponse(txId, req.refId(), "APLICADO", req.monto(), cuenta.getSaldoDisponible());
+=======
+        return new OperacionResponse(refId, "UNKNOWN", BigDecimal.ONE, "comision-publicacion", "PROCESADO", OffsetDateTime.now());
+>>>>>>> e9af45ceff232248a1df3b66a07de1db7f4fc854
     }
 
     private CuentaCredito obtenerOCrearCuenta(String jugadorUid) {
         return cuentaRepository.findByJugadorUid(jugadorUid)
+<<<<<<< HEAD
             .orElseGet(() -> {
                 try {
                     return cuentaRepository.save(CuentaCredito.builder()
@@ -218,5 +263,12 @@ public class CreditoService {
                         .orElseThrow(() -> new IllegalStateException("No se pudo crear ni encontrar la cuenta para el uid: " + jugadorUid));
                 }
             });
+=======
+            .orElseGet(() -> cuentaRepository.save(CuentaCredito.builder()
+                .jugadorUid(jugadorUid)
+                .saldoBruto(BigDecimal.ZERO)
+                .saldoReservado(BigDecimal.ZERO)
+                .build()));
+>>>>>>> e9af45ceff232248a1df3b66a07de1db7f4fc854
     }
 }
