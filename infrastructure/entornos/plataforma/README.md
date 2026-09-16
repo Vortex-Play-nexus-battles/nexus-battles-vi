@@ -19,8 +19,13 @@ Fechas: crédito USD 100 (hasta 200 con actividades) · el plan **cierra la cuen
 ## Lo que se creó una sola vez a mano (2026-09-15, CloudShell, cuenta `362403299569`)
 
 - Proveedor OIDC `token.actions.githubusercontent.com`.
-- Rol `github-actions-nexus-dev`: confía solo en `repo:Vortex-Play-nexus-battles/nexus-battles-vi:*`;
-  permisos `PowerUserAccess` + IAM mínimo para perfiles de instancia y presupuestos.
+- Rol `github-actions-nexus-dev`: confía solo en este repositorio. GitHub emite el `sub`
+  con los IDs numéricos de organización y repositorio
+  (`repo:Vortex-Play-nexus-battles@317725248/nexus-battles-vi@1336530373:*`), así que la
+  política de confianza lleva ese patrón y, por si GitHub alterna, también el clásico
+  `repo:Vortex-Play-nexus-battles/nexus-battles-vi:*`. Permisos: `PowerUserAccess` + IAM
+  mínimo para perfiles de instancia y presupuestos. El paso "Mostrar la identidad OIDC"
+  del workflow imprime el `sub` real (nunca el token) para diagnosticar un rechazo.
 - Bucket `nexus-battles-vi-tfstate-362403299569` (versionado, sin acceso público) para el estado.
 - Variables del repositorio: `AWS_ROLE_ARN`, `AWS_REGION`, `TFSTATE_BUCKET`, `AWS_CORREO_ALERTAS`.
 
