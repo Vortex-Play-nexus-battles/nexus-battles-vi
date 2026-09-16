@@ -1,0 +1,8 @@
+# Estado local, proveedores descargados y llaves: nunca al repositorio.
+# El estado real vive en S3 (ver README.md).
+.terraform/
+*.tfstate
+*.tfstate.*
+*.pem
+*.tfvars
+plan.tfplan
