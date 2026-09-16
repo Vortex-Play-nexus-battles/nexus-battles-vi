@@ -2,6 +2,7 @@
  * Subastas - Pruebas unitarias y de integración DOM (HU-SUB-004)
  */
 
+import { jest } from '@jest/globals';
 import {
   calcularSaldoLibre,
   calcularSaldoRetenido,
@@ -552,5 +553,97 @@ describe('HU-SUB-004 - Pruebas Unitarias de Cálculos Nuevos', () => {
     const estado2 = calcularEstadoTopesConcurrencia(subastas10, { maxSubastasSimultaneas: 10, maxPujasActivas: 50 });
     expect(estado2.subastas.topeAlcanzado).toBe(true);
     expect(estado2.subastas.pista).toContain('Has llegado al tope');
+  });
+
+  describe('Alertas accesibles en el DOM sin alert() bloqueante (Defecto C)', () => {
+    let contenedor;
+    let controlador;
+
+    beforeEach(() => {
+      contenedor = document.createElement('div');
+      document.body.appendChild(contenedor);
+      controlador = new ControladorSubastas({
+        contenedor,
+        subastas: SUBASTAS_INICIALES,
+        heroes: HEROES_BASE
+      });
+      controlador.render();
+    });
+
+    afterEach(() => {
+      controlador.destruir();
+      contenedor.remove();
+    });
+
+    test('rechazo de puja inválida muestra error en el contenedor accesible sin llamar alert()', () => {
+      const alertaSpy = jest.spyOn(globalThis, 'alert').mockImplementation(() => {});
+      controlador.abrirDetalle('hacha-obsidiana');
+
+      // Puja por debajo del mínimo (oferta actual 1350, min 1400)
+      const exito = controlador.pujar(1300);
+      expect(exito).toBe(false);
+      expect(alertaSpy).not.toHaveBeenCalled();
+
+      const alerta = contenedor.querySelector('#alerta-pujas');
+      expect(alerta).not.toBeNull();
+      expect(alerta.getAttribute('role')).toBe('alert');
+      expect(alerta.hidden).toBe(false);
+      expect(alerta.textContent).toContain('La oferta debe ser de al menos');
+
+      // Un nuevo intento válido limpia el error previo
+      const exitoNuevo = controlador.pujar(1450);
+      expect(exitoNuevo).toBe(true);
+      expect(alerta.hidden).toBe(true);
+      expect(alerta.textContent).toBe('');
+      alertaSpy.mockRestore();
+    });
+
+    test('rechazo de auto-puja inválida muestra error en el contenedor accesible sin llamar alert()', () => {
+      const alertaSpy = jest.spyOn(globalThis, 'alert').mockImplementation(() => {});
+      controlador.abrirDetalle('hacha-obsidiana');
+
+      // Límite menor al mínimo
+      const exito = controlador.configurarAutoPuja(1000);
+      expect(exito).toBe(false);
+      expect(alertaSpy).not.toHaveBeenCalled();
+
+      const alerta = contenedor.querySelector('#alerta-pujas');
+      expect(alerta).not.toBeNull();
+      expect(alerta.getAttribute('role')).toBe('alert');
+      expect(alerta.hidden).toBe(false);
+      expect(alerta.textContent).toContain('El tope de puja automática debe ser al menos');
+
+      // Al configurar un límite válido se limpia el error
+      const exitoNuevo = controlador.configurarAutoPuja(2500);
+      expect(exitoNuevo).toBe(true);
+      expect(alerta.hidden).toBe(true);
+      expect(alerta.textContent).toBe('');
+      alertaSpy.mockRestore();
+    });
+
+    test('rechazo de compra inmediata por saldo insuficiente muestra error en el DOM sin alert()', () => {
+      const alertaSpy = jest.spyOn(globalThis, 'alert').mockImplementation(() => {});
+      controlador.abrirDetalle('hacha-obsidiana');
+      // hacha-obsidiana compraInmediata es 2800. Forzamos créditos totales menores
+      controlador.config.creditosTotales = 500;
+      controlador.confirmandoCompra = true;
+
+      const exito = controlador.confirmarCompraInmediata();
+      expect(exito).toBe(false);
+      expect(alertaSpy).not.toHaveBeenCalled();
+
+      const alerta = contenedor.querySelector('#alerta-pujas');
+      expect(alerta).not.toBeNull();
+      expect(alerta.getAttribute('role')).toBe('alert');
+      expect(alerta.hidden).toBe(false);
+      expect(alerta.textContent).toContain('No dispones de saldo suficiente');
+
+      // Navegar a otra vista limpia el error
+      controlador.abrirExplorar();
+      const alertaExplorar = contenedor.querySelector('#alerta-pujas');
+      expect(alertaExplorar.hidden).toBe(true);
+      expect(alertaExplorar.textContent).toBe('');
+      alertaSpy.mockRestore();
+    });
   });
 });
