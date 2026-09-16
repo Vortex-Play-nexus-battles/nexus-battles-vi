@@ -5,25 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Nexus Battles VI - Pujar en una subasta</title>
     <link rel="stylesheet" href="../comun/barra-navegacion.css" />
+    <link rel="stylesheet" href="./tema-cuentas.css" />
     <link rel="stylesheet" href="./pujas.css" />
   </head>
   <body>
-    <!-- Barra de Navegación Compartida (HU-INV-004 / src/comun) -->
-    <header id="contenedor-barra">
-      <nav class="barra" aria-label="Navegacion principal">
-        <div class="barra__busqueda">
-          <input type="search" placeholder="Buscar subastas, armas, objetos..." class="barra__campo-busqueda" />
-        </div>
-        <ul class="barra__accesos">
-          <li class="barra__item"><a href="../plataforma/salas-partidas/batallas.html" class="barra__enlace">Jugar online</a></li>
-          <li class="barra__item"><a href="#" class="barra__enlace">Misiones</a></li>
-          <li class="barra__item"><a href="#" class="barra__enlace">Torneo</a></li>
-          <li class="barra__item"><a href="../contenido/inventario/inventario.html" class="barra__enlace">Mi inventario</a></li>
-          <li class="barra__item"><a href="./subastas.html" class="barra__enlace barra__enlace--activo" aria-current="page">Subasta</a></li>
-          <li class="barra__item"><a href="./perfil.html" class="barra__enlace">Mi Cuenta</a></li>
-        </ul>
-      </nav>
-    </header>
+    <!-- Barra de navegación compartida. Mismo patrón vivo que tienda.html -->
+    <div id="navbar-container"></div>
 
     <!-- Contenedor Principal de la Aplicación -->
     <main id="subastas-app" class="contenedor-subastas">
@@ -31,8 +18,65 @@
     </main>
 
     <script type="module">
+      import { construirBarra } from '../comun/barra-navegacion.js';
       import { montarSubastas } from './pujas.js';
       import { crearApiSubastas } from './pujas-api.js';
+
+      // Montar la barra compartida con rutas funcionales y sesión real
+      const navbarContainer = document.getElementById('navbar-container');
+      if (navbarContainer) {
+        const tieneSesion = Boolean(
+          sessionStorage.getItem('nexus.token') ||
+          sessionStorage.getItem('nexus.rolActual') ||
+          sessionStorage.getItem('token') ||
+          sessionStorage.getItem('usuarioId')
+        );
+
+        const RUTAS = {
+          '/jugar': '../plataforma/salas-partidas/batallas.html',
+          '/misiones': './index.html',
+          '/torneo': '../plataforma/salas-partidas/batallas.html',
+          '/inventario': '../contenido/inventario/inventario.html',
+          '/subasta': './subastas.html',
+          '/cuenta': './perfil.html',
+        };
+
+        const barra = construirBarra({
+          seccionActiva: 'subasta',
+          sesion: { autenticado: tieneSesion },
+          navegar: (ruta) => {
+            const destino = RUTAS[ruta] || ruta;
+            window.location.href = destino;
+          },
+        });
+
+        // Enlazar opciones del panel de cuenta
+        barra.querySelectorAll('.barra__opcion-cuenta').forEach((btn) => {
+          if (btn.textContent.includes('Mi perfil')) {
+            btn.addEventListener('click', () => { window.location.href = './perfil.html'; });
+          } else if (btn.textContent.includes('Cerrar sesion')) {
+            btn.addEventListener('click', () => {
+              sessionStorage.clear();
+              window.location.href = './login.html';
+            });
+          } else if (btn.textContent.includes('Registrarse')) {
+            btn.addEventListener('click', () => { window.location.href = './registro.html'; });
+          }
+        });
+
+        // Búsqueda funcional
+        const campoBusqueda = barra.querySelector('.barra__busqueda input');
+        if (campoBusqueda) {
+          campoBusqueda.placeholder = 'Buscar subastas o productos...';
+          campoBusqueda.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && campoBusqueda.value.trim()) {
+              window.location.href = `./subastas.html?criterio=${encodeURIComponent(campoBusqueda.value.trim())}`;
+            }
+          });
+        }
+
+        navbarContainer.appendChild(barra);
+      }
 
       const contenedor = document.getElementById('subastas-app');
       const parametros = new URLSearchParams(location.search);
