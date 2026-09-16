@@ -378,6 +378,15 @@ for par in $SERVICIOS_PUERTOS; do
     fi
     echo "${servicio}:${TAG}:${tag_anterior}" >> ultimo-fallo.txt
     echo "  $servicio: NO paso la verificacion de salud tras $INTENTOS_SALUD intentos"
+    # Fallo visible: el estado del contenedor y sus ultimas lineas quedan en
+    # el log de la corrida, para diagnosticar desde GitHub sin entrar al host.
+    # OOMKilled=true significa que el mem_limit del compose se quedo corto.
+    contenedor="srv-${servicio}"
+    echo "  ---- estado de $contenedor ----"
+    docker inspect --format '  estado={{.State.Status}} salida={{.State.ExitCode}} OOMKilled={{.State.OOMKilled}} reinicios={{.RestartCount}} inicio={{.State.StartedAt}}' "$contenedor" 2>/dev/null || echo "  (el contenedor no existe)"
+    echo "  ---- ultimas 60 lineas de $contenedor ----"
+    docker logs --tail 60 "$contenedor" 2>&1 | sed 's/^/  | /' || true
+    echo "  ---- fin de $contenedor ----"
   fi
 done
 
