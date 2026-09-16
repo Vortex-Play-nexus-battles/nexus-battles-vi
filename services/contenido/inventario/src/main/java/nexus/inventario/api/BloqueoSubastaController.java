@@ -15,7 +15,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/inventario/elementos/{elementoId}/bloqueo-subasta")
 public class BloqueoSubastaController {
 
-    private static final String CABECERA_IDENTIDAD = "X-User-Name";
     private final GestionarBloqueoSubasta gestion;
 
     public BloqueoSubastaController(GestionarBloqueoSubasta gestion) {
@@ -24,12 +23,11 @@ public class BloqueoSubastaController {
 
     @PutMapping
     public ElementoInventarioResponse bloquear(
-            @RequestHeader(name = CABECERA_IDENTIDAD, required = false) String identidad,
             @RequestHeader(name = "Idempotency-Key", required = false) String claveIdempotencia,
             @PathVariable String elementoId,
             @Valid @RequestBody BloquearEnSubastaRequest solicitud) {
         return ElementoInventarioResponse.de(gestion.bloquear(
-                identidad, elementoId, solicitud.subastaId().toString(), claveIdempotencia));
+                solicitud.propietarioUid(), elementoId, solicitud.subastaId(), claveIdempotencia));
     }
 
     @DeleteMapping("/{subastaId}")
@@ -38,6 +36,6 @@ public class BloqueoSubastaController {
             @PathVariable String elementoId,
             @PathVariable UUID subastaId) {
         return ElementoInventarioResponse.de(
-                gestion.liberar(elementoId, subastaId.toString(), claveIdempotencia));
+                gestion.liberar(elementoId, subastaId, claveIdempotencia));
     }
 }

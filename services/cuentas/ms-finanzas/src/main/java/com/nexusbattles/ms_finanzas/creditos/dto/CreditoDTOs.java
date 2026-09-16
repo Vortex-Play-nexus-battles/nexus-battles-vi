@@ -76,4 +76,21 @@ public class CreditoDTOs {
         String estado,
         OffsetDateTime fecha
     ) {}
+<<<<<<< HEAD
+    public record AcreditarRequest(
+        String uid,
+        BigDecimal monto,
+        String refId,
+        String concepto
+    ) {}
+
+    public record AcreditarResponse(
+        String transaccionId,
+        String refId,
+        String estado,
+        BigDecimal montoAcreditado,
+        BigDecimal nuevoSaldoDisponible
+    ) {}
+=======
+>>>>>>> e9af45ceff232248a1df3b66a07de1db7f4fc854
 }

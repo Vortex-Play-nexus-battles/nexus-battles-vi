@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 
+import com.nexusbattles.ms_finanzas.common.exception.ReservaNoEncontradaException;
+import com.nexusbattles.ms_finanzas.common.exception.SaldoInsuficienteException;
 import com.nexusbattles.ms_finanzas.transacciones.TransaccionYaRegistradaException;
 
 class GlobalExceptionHandlerTest {
@@ -26,6 +28,34 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void saldoInsuficiente_esProblemDetail422ConTypeYTitle() {
+        SaldoInsuficienteException ex = new SaldoInsuficienteException(
+                "El jugador no tiene créditos suficientes para reservar 500");
+
+        ProblemDetail respuesta = handler.manejarSaldoInsuficiente(ex);
+
+        assertThat(respuesta.getStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY.value());
+        assertThat(respuesta.getTitle()).isEqualTo("Saldo insuficiente");
+        assertThat(respuesta.getDetail()).contains("créditos suficientes");
+        assertThat(respuesta.getType().toString()).endsWith("/errors/saldo-insuficiente");
+    }
+
+    @Test
+    void reservaNoEncontrada_esProblemDetail404ConTypeYTitle() {
+        ReservaNoEncontradaException ex = new ReservaNoEncontradaException(
+                "No existe la reserva con id abc-123");
+
+        ProblemDetail respuesta = handler.manejarReservaNoEncontrada(ex);
+
+        assertThat(respuesta.getStatus()).isEqualTo(HttpStatus.NOT_FOUND.value());
+        assertThat(respuesta.getTitle()).isEqualTo("Reserva no encontrada");
+        assertThat(respuesta.getDetail()).contains("abc-123");
+        // El type URI distingue este 404 de negocio del 404 de Spring por
+        // rutas inexistentes, que sale sin type.
+        assertThat(respuesta.getType().toString()).endsWith("/errors/reserva-no-encontrada");
+    }
+
+    @Test
     void argumentoInvalido_esProblemDetail400() {
         IllegalArgumentException ex = new IllegalArgumentException("monto no puede ser negativo");
 
@@ -37,8 +67,8 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void excepcionGenerica_esProblemDetail500ConMensajeGenerico() {
-        Exception ex = new RuntimeException("detalle interno que NO debe filtrarse");
+    void excepcionGenerica_esProblemDetail500ConMensajeGenericoYPropiedadExcepcion() {
+        Exception ex = new NullPointerException("detalle interno que NO debe filtrarse");
 
         ProblemDetail respuesta = handler.manejarInesperada(ex);
 
@@ -48,5 +78,9 @@ class GlobalExceptionHandlerTest {
         // en el log del servidor pero afuera se devuelve un mensaje neutro.
         assertThat(respuesta.getDetail()).doesNotContain("detalle interno");
         assertThat(respuesta.getDetail()).contains("inesperado");
+        // El nombre de la clase de la excepción sí se expone como propiedad
+        // estructurada para que quien integre pueda distinguir tipos de
+        // excepciones no mapeadas sin depender del texto libre.
+        assertThat(respuesta.getProperties()).containsEntry("excepcion", "NullPointerException");
     }
 }
