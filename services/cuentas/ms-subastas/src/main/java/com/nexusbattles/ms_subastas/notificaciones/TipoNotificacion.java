@@ -11,7 +11,10 @@ public enum TipoNotificacion {
     SUBASTA_CERRADA_POR_COMPRA_INMEDIATA("La subasta se cerro"),
 
     /** Criterio 4: la puja automatica "se detiene notificando al alcanzar el limite". */
-    LIMITE_AUTOMATICO_ALCANZADO("Tu puja automatica se detuvo");
+    LIMITE_AUTOMATICO_ALCANZADO("Tu puja automatica se detuvo"),
+
+    /** La puja automatica se detiene porque el saldo disponible del jugador no cubre la siguiente oferta. */
+    AUTOMATICA_SIN_SALDO("Tu puja automatica se detuvo por falta de saldo");
 
     private final String titulo;
 

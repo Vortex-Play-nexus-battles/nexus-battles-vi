@@ -332,6 +332,20 @@ class PujaApplicationServiceTest {
         verify(eventos).publishEvent(any(SubastaActualizadaEvent.class));
     }
 
+    @Test
+    void alCerrarPorVencimientoTambienSeAvisaDelCambio() {
+        Subasta subasta = subastaActiva();
+        when(subastaRepository.findByIdParaActualizar(subasta.getId())).thenReturn(Optional.of(subasta));
+        when(pujaRepository.findBySubastaIdAndEstado(subasta.getId(), EstadoPuja.ACTIVA)).thenReturn(Optional.empty());
+
+        servicio.cerrarPorVencimiento(subasta.getId());
+
+        ArgumentCaptor<SubastaActualizadaEvent> capturado = ArgumentCaptor.forClass(SubastaActualizadaEvent.class);
+        verify(eventos).publishEvent(capturado.capture());
+        assertEquals(subasta.getId(), capturado.getValue().getSubasta().getId());
+        assertEquals(EstadoSubasta.SIN_ADJUDICACION, capturado.getValue().getSubasta().getEstado());
+    }
+
     /**
      * Si la puja se rechaza no hay nada que transmitir: el listado no cambio.
      * Avisar de todas formas haria que el canal emitiera ruido en cada intento
