@@ -1,6 +1,7 @@
 package nexus.inventario.aplicacion;
 
 import java.util.Objects;
+import java.util.UUID;
 import nexus.inventario.dominio.ElementoInventario;
 import nexus.inventario.dominio.ElementoNoEncontradoException;
 import nexus.inventario.dominio.Inventario;
@@ -17,44 +18,45 @@ public class GestionarBloqueoSubasta {
     }
 
     public ElementoInventario bloquear(
-            String identidad,
+            UUID propietarioUid,
             String elementoId,
-            String subastaId,
+            UUID subastaId,
             String claveIdempotencia) {
-        String propietarioId = exigirTexto(identidad, "identidad");
+        Objects.requireNonNull(propietarioUid, "propietarioUid es obligatorio");
+        Objects.requireNonNull(subastaId, "subastaId es obligatorio");
         exigirTexto(claveIdempotencia, "claveIdempotencia");
-        Inventario inventario = repositorio.buscarPorElementoId(elementoId)
+        String elementoQueSeBloquea = exigirTexto(elementoId, "elementoId");
+        Inventario inventario = repositorio.buscarPorElementoId(elementoQueSeBloquea)
                 .orElseThrow(ElementoNoEncontradoException::new);
-        if (!inventario.propietarioId().equalsIgnoreCase(propietarioId)) {
+        if (!inventario.propietarioId().equals(propietarioUid.toString())) {
             throw new InventarioAjenoException();
         }
         Inventario guardado = repositorio.guardar(
-                inventario.bloquearEnSubasta(elementoId, exigirTexto(subastaId, "subastaId")));
-        return guardado.elemento(elementoId);
+                inventario.bloquearEnSubasta(elementoQueSeBloquea, subastaId.toString()));
+        return guardado.elemento(elementoQueSeBloquea);
     }
 
     public ElementoInventario liberar(
             String elementoId,
-            String subastaId,
+            UUID subastaId,
             String claveIdempotencia) {
         exigirTexto(claveIdempotencia, "claveIdempotencia");
-        String subastaQueFinalizo = exigirTexto(subastaId, "subastaId");
-        Inventario inventario = repositorio.buscarPorElementoId(exigirTexto(elementoId, "elementoId"))
+        Objects.requireNonNull(subastaId, "subastaId es obligatorio");
+        String subastaQueFinalizo = subastaId.toString();
+        String elementoQueSeLibera = exigirTexto(elementoId, "elementoId");
+        Inventario inventario = repositorio.buscarPorElementoId(elementoQueSeLibera)
                 .orElseThrow(ElementoNoEncontradoException::new);
-        ElementoInventario actual = inventario.elemento(elementoId);
+        ElementoInventario actual = inventario.elemento(elementoQueSeLibera);
         if (actual.disponible()) {
             return actual;
         }
         Inventario guardado = repositorio.guardar(
-                inventario.liberarBloqueoSubasta(elementoId, subastaQueFinalizo));
-        return guardado.elemento(elementoId);
+                inventario.liberarBloqueoSubasta(elementoQueSeLibera, subastaQueFinalizo));
+        return guardado.elemento(elementoQueSeLibera);
     }
 
     private String exigirTexto(String valor, String campo) {
         if (valor == null || valor.isBlank()) {
-            if ("identidad".equals(campo)) {
-                throw new IdentidadRequeridaException();
-            }
             throw new IllegalArgumentException(campo + " no puede estar vacio");
         }
         return valor.trim();

@@ -2,15 +2,14 @@
   "info": {
     "name": "Servicio de inventario - HU-INV-002, HU-INV-003, HU-INV-005 y HU-INV-010",
     "_postman_id": "7c1e4b02-inventario-inv-003-005",
-    "description": "Validacion contra el servicio en ejecucion de HU-INV-002 (busqueda indexada desde cuatro caracteres), HU-INV-003 (creacion y edicion de elementos propios, propiedad, 403 sobre inventario ajeno), HU-INV-005 (equipamiento con limites: dos armas, seis partes de armadura, dos items) y HU-INV-010 (bloqueo de productos publicados en subasta). Las peticiones estan encadenadas: cada una guarda los identificadores que usan las siguientes, asi que se corre la coleccion completa y en orden (Run collection o Newman). La identidad viaja en X-User-Name, la convencion temporal hasta HU-AUT-004.",
+    "description": "Validacion contra el servicio en ejecucion de HU-INV-002, HU-INV-003, HU-INV-005 y HU-INV-010. Las rutas del jugador conservan temporalmente X-User-Name. La consulta, el bloqueo y la liberacion usados por ms-subastas requieren un token OAuth2 client_credentials en s2sAccessToken.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "event": [
     { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
       "if (!pm.collectionVariables.get('jugadorA')) {",
-      "  const sufijo = Date.now();",
-      "  pm.collectionVariables.set('jugadorA', 'jugador-a-' + sufijo);",
-      "  pm.collectionVariables.set('jugadorB', 'jugador-b-' + sufijo);",
+      "  pm.collectionVariables.set('jugadorA', pm.variables.replace('{{$guid}}'));",
+      "  pm.collectionVariables.set('jugadorB', pm.variables.replace('{{$guid}}'));",
       "}"
     ] } }
   ],
@@ -425,7 +424,7 @@
               { "key": "X-User-Name", "value": "{{jugadorA}}" }
             ],
             "url": "{{baseUrl}}/api/v1/inventario/elementos",
-            "body": { "mode": "raw", "raw": "{\"productoId\":\"reliquia-subastable\",\"tipo\":\"ITEM\",\"nombrePropio\":\"Reliquia para subasta\"}" }
+            "body": { "mode": "raw", "raw": "{\"productoId\":\"113609ca-3c15-42f5-b427-d452ce06f9a8\",\"tipo\":\"ITEM\",\"nombrePropio\":\"Reliquia para subasta\"}" }
           },
           "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
             "const e = pm.response.json();",
@@ -436,16 +435,31 @@
           ] } }]
         },
         {
+          "name": "Subastas consulta la unidad concreta (200)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{s2sAccessToken}}" }
+            ],
+            "url": "{{baseUrl}}/api/v1/inventario/elementos/{{elementoSubastaId}}"
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const e = pm.response.json();",
+            "pm.test('responde 200', () => pm.response.to.have.status(200));",
+            "pm.test('expone propietario UUID y estado de uso', () => { pm.expect(e.propietarioUid).to.eql(pm.collectionVariables.get('jugadorA')); pm.expect(e.enUso).to.eql(false); });"
+          ] } }]
+        },
+        {
           "name": "La publicacion bloquea el producto (200)",
           "request": {
             "method": "PUT",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-User-Name", "value": "{{jugadorA}}" },
+              { "key": "Authorization", "value": "Bearer {{s2sAccessToken}}" },
               { "key": "Idempotency-Key", "value": "publicar-{{subastaId}}" }
             ],
             "url": "{{baseUrl}}/api/v1/inventario/elementos/{{elementoSubastaId}}/bloqueo-subasta",
-            "body": { "mode": "raw", "raw": "{\"subastaId\":\"{{subastaId}}\"}" }
+            "body": { "mode": "raw", "raw": "{\"propietarioUid\":\"{{jugadorA}}\",\"subastaId\":\"{{subastaId}}\"}" }
           },
           "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
             "const e = pm.response.json();",
@@ -459,11 +473,11 @@
             "method": "PUT",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-User-Name", "value": "{{jugadorA}}" },
+              { "key": "Authorization", "value": "Bearer {{s2sAccessToken}}" },
               { "key": "Idempotency-Key", "value": "publicar-{{subastaId}}" }
             ],
             "url": "{{baseUrl}}/api/v1/inventario/elementos/{{elementoSubastaId}}/bloqueo-subasta",
-            "body": { "mode": "raw", "raw": "{\"subastaId\":\"{{subastaId}}\"}" }
+            "body": { "mode": "raw", "raw": "{\"propietarioUid\":\"{{jugadorA}}\",\"subastaId\":\"{{subastaId}}\"}" }
           },
           "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
             "pm.test('responde 200 sin duplicar el bloqueo', () => pm.response.to.have.status(200));",
@@ -517,11 +531,11 @@
             "method": "PUT",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-User-Name", "value": "{{jugadorA}}" },
+              { "key": "Authorization", "value": "Bearer {{s2sAccessToken}}" },
               { "key": "Idempotency-Key", "value": "publicar-otra-subasta" }
             ],
             "url": "{{baseUrl}}/api/v1/inventario/elementos/{{elementoSubastaId}}/bloqueo-subasta",
-            "body": { "mode": "raw", "raw": "{\"subastaId\":\"51326b9d-1aa2-4d8a-bb7d-d3ad593f902d\"}" }
+            "body": { "mode": "raw", "raw": "{\"propietarioUid\":\"{{jugadorA}}\",\"subastaId\":\"51326b9d-1aa2-4d8a-bb7d-d3ad593f902d\"}" }
           },
           "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
             "pm.test('responde 409', () => pm.response.to.have.status(409));",
@@ -533,6 +547,7 @@
           "request": {
             "method": "DELETE",
             "header": [
+              { "key": "Authorization", "value": "Bearer {{s2sAccessToken}}" },
               { "key": "Idempotency-Key", "value": "cerrar-subasta-anterior" }
             ],
             "url": "{{baseUrl}}/api/v1/inventario/elementos/{{elementoSubastaId}}/bloqueo-subasta/51326b9d-1aa2-4d8a-bb7d-d3ad593f902d"
@@ -560,6 +575,7 @@
           "request": {
             "method": "DELETE",
             "header": [
+              { "key": "Authorization", "value": "Bearer {{s2sAccessToken}}" },
               { "key": "Idempotency-Key", "value": "cerrar-{{subastaId}}" }
             ],
             "url": "{{baseUrl}}/api/v1/inventario/elementos/{{elementoSubastaId}}/bloqueo-subasta/{{subastaId}}"
@@ -575,6 +591,7 @@
           "request": {
             "method": "DELETE",
             "header": [
+              { "key": "Authorization", "value": "Bearer {{s2sAccessToken}}" },
               { "key": "Idempotency-Key", "value": "cerrar-{{subastaId}}" }
             ],
             "url": "{{baseUrl}}/api/v1/inventario/elementos/{{elementoSubastaId}}/bloqueo-subasta/{{subastaId}}"
@@ -600,5 +617,8 @@
       ]
     }
   ],
-  "variable": [{ "key": "baseUrl", "value": "http://localhost:8080" }]
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "s2sAccessToken", "value": "" }
+  ]
 }
