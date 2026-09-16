@@ -69,10 +69,14 @@ export function construirFiltros({ alCambiar } = {}) {
   };
 
   formulario.addEventListener('change', notificar);
-  // El evento "reset" se dispara cuando el formulario YA quedo en sus
-  // valores por defecto (todas las opciones "Todas" / checkboxes sin
-  // marcar), asi que leer de inmediato ya refleja el estado limpio.
-  formulario.addEventListener('reset', notificar);
+  // HALLAZGO: el evento "reset" se dispara ANTES de que el navegador
+  // limpie los campos, no despues (algoritmo de reset del HTML Living
+  // Standard: primero el evento, y solo si no se cancela, se resetean
+  // los campos DESPUES). Leer el formulario de forma sincrona aqui
+  // devolveria el estado VIEJO (por ejemplo, un radio que el usuario
+  // acababa de marcar), no el limpio -- se difiere con setTimeout(0)
+  // para leer justo despues de que el reset real ya ocurrio.
+  formulario.addEventListener('reset', () => setTimeout(notificar, 0));
   // Sin boton submit, pero Enter dentro de un campo numerico podria
   // intentar enviar el formulario en algunos navegadores -- se evita
   // cualquier navegacion accidental.
@@ -161,7 +165,11 @@ function construirGrupoRadio(nombre, etiquetaGrupo, opciones) {
     boton.name = nombre;
     boton.value = opcion.valor;
     if (opcion.valor === '') {
-      boton.checked = true;
+      // defaultChecked, no checked: establece el valor por defecto real
+      // que form.reset() restaura. Con .checked = true a secas, el
+      // navegador marca esta casilla como "modificada manualmente" (el
+      // dirty checkedness flag de la especificacion).
+      boton.defaultChecked = true;
     }
 
     etiqueta.append(boton, document.createTextNode(opcion.etiqueta));
@@ -182,7 +190,10 @@ function construirGrupoPrecio() {
 
   const fila = document.createElement('div');
   fila.className = 'subastas-filtros__precio';
-  fila.append(construirCampoPrecio('precioMin', 'Mínimo'), construirCampoPrecio('precioMax', 'Máximo'));
+  fila.append(
+    construirCampoPrecio('precioMin', 'Mínimo'),
+    construirCampoPrecio('precioMax', 'Máximo'),
+  );
 
   grupo.appendChild(fila);
   return grupo;
