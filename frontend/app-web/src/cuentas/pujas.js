@@ -451,6 +451,10 @@ export class ControladorSubastas {
     // ejercitan las pruebas unitarias, que no deben depender de que haya un
     // servidor levantado. Con api, manda el servidor.
     this.api = api;
+    // Lo que el jugador tiene en juego en total. Null mientras no se sepa: la
+    // pantalla lo muestra como no disponible en vez de poner un cero, que se
+    // leeria como "no tienes nada retenido".
+    this.resumen = null;
     this.enviando = false;
     this.contenedor = contenedor;
     this.subastas = JSON.parse(JSON.stringify(subastas));
@@ -491,8 +495,13 @@ export class ControladorSubastas {
   async recargar() {
     if (!this.api) {return;}
     try {
-      const subastas = await this.api.listar();
+      const [subastas, resumen] = await Promise.all([
+        this.api.listar(),
+        // Si falla, se sigue sin resumen en vez de tumbar el listado entero.
+        this.intentar(() => this.api.miResumen())
+      ]);
       this.subastas = subastas;
+      this.resumen = resumen;
       this.estadoDatos = subastas.length ? 'exito' : 'vacio';
       this.mensajeError = null;
 
@@ -522,6 +531,14 @@ export class ControladorSubastas {
     }
     this.iniciarTemporizador();
     this.render();
+
+    // Si al terminar la recarga estamos en un detalle, hay que traer tambien
+    // lo que solo sabe el detalle. Se hace aqui y no solo en abrirDetalle
+    // porque hay dos caminos mas que dejan la vista en 'detalle' sin pasar por
+    // ahi: llegar con ?id= desde el listado, y refrescar despues de pujar.
+    if (this.vista === 'detalle' && this.subastaActivaId) {
+      await this.cargarDetalle(this.subastaActivaId);
+    }
   }
 
   /**
@@ -529,12 +546,74 @@ export class ControladorSubastas {
    * jugador sale del campo 'motivo' del problem+json, no del texto libre: ese
    * texto es para depurar.
    */
+  /**
+   * Trae del servidor lo que solo se sabe de una subasta concreta: su historial
+   * y la situacion del jugador que mira. Antes esto se suponia, y lo que se
+   * mostraba era siempre "no vas ganando" y "sin puja automatica", aunque
+   * fuera falso.
+   *
+   * Si falla, se deja el detalle con lo que ya se sabe del listado en vez de
+   * romper la pantalla: poder pujar es mas importante que ver el historial.
+   */
+  async cargarDetalle(id) {
+    if (!this.api) {return;}
+    const sub = this.subastas.find((s) => s.id === id);
+    if (!sub) {return;}
+
+    // Cada consulta por su cuenta y sin dejar escapar el fallo: el historial es
+    // publico y la participacion necesita sesion, asi que una puede fallar sin
+    // la otra. Y si fallan las dos, el detalle se pinta con lo del listado —
+    // poder pujar importa mas que ver el historial.
+    const [historial, participacion] = await Promise.all([
+      this.intentar(() => this.api.historial(id)),
+      this.intentar(() => this.api.miParticipacion(id))
+    ]);
+
+    if (historial) {
+      sub.historial = historial.map((p) => ({
+        apodo: p.esTuya ? 'Tu' : 'Otro jugador',
+        monto: Number(p.monto),
+        tipo: p.tipo === 'AUTOMATICA' ? 'Automática' : 'Manual',
+        cuando: p.creadaEn,
+        esTu: p.esTuya
+      }));
+      sub.historialCargado = true;
+    }
+
+    if (participacion) {
+      sub.ganando = participacion.vasGanando;
+      sub.superado = participacion.teSuperaron;
+      sub.retenido = Number(participacion.retenidoAqui || 0);
+      sub.autoLimite = participacion.automaticaActiva ? Number(participacion.limiteAutomatico || 0) : 0;
+      sub.esperaSegundos = Number(participacion.segundosParaVolverAPujar || 0);
+      sub.participacionCargada = true;
+    }
+
+    this.render();
+  }
+
+  /**
+   * Ejecuta una consulta opcional y devuelve null si falla, sea por red, por
+   * sesion o porque el metodo ni siquiera exista. Envuelve tambien la llamada
+   * para que un fallo sincrono no se escape como rechazo sin capturar.
+   */
+  async intentar(consulta) {
+    try {
+      return await consulta();
+    } catch {
+      return null;
+    }
+  }
+
   async ejecutarContraElServidor(operacion) {
     if (this.enviando) {return false;}
     this.enviando = true;
     this.render();
     try {
       await operacion();
+      // recargar() ya vuelve a traer el detalle si seguimos en el: el listado
+      // no refleja si TU vas ganando ni tu limite, y sin eso la pantalla se
+      // quedaria diciendo lo de antes de pujar.
       await this.recargar();
       return true;
     } catch (fallo) {
@@ -587,6 +666,16 @@ export class ControladorSubastas {
     return calcularSaldoLibre(this.config.creditosTotales, this.subastas);
   }
 
+  /** Retenido real cuando el servidor lo dio; si no, lo que se pueda sumar de lo cargado. */
+  getRetenidoReal() {
+    return this.resumen ? Number(this.resumen.creditosRetenidos || 0) : this.getSaldoRetenido();
+  }
+
+  /** En cuantas subastas va ganando. Null si no se sabe todavia. */
+  getSubastasGanando() {
+    return this.resumen ? this.resumen.subastasGanando : null;
+  }
+
   getSaldoRetenido() {
     return calcularSaldoRetenido(this.subastas);
   }
@@ -622,6 +711,15 @@ export class ControladorSubastas {
   abrirDetalle(id, opciones = {}) {
     if (this.vista !== 'detalle') {
       this.origenVista = this.vista;
+    }
+    // Con servidor, el detalle trae datos que el listado no tiene: el historial
+    // y la situacion propia. Se piden al abrir, no al cargar la lista, para no
+    // hacer dos consultas por cada subasta que solo se esta mirando de pasada.
+    if (this.api && id) {
+      // Sin await: el detalle se pinta ya con lo que traia el listado y estos
+      // datos llegan despues. cargarDetalle no rechaza nunca, asi que esta
+      // promesa suelta no puede acabar en un unhandled rejection.
+      this.cargarDetalle(id);
     }
     this.subastaActivaId = id || this.subastaActivaId || this.subastas[0]?.id;
     this.vista = 'detalle';
@@ -897,7 +995,7 @@ export class ControladorSubastas {
       contenidoHtml = this.generarHtmlDetalle({ total, retenido, libre, superadas });
     } else {
       // 'lista' | 'explorar'
-      contenidoHtml = this.generarHtmlExplorar({ total, retenido, libre, subastasGanando, superadas });
+      contenidoHtml = this.generarHtmlExplorar({ superadas });
     }
 
     if (this.avisoCruzado) {
@@ -935,10 +1033,7 @@ export class ControladorSubastas {
     `;
   }
 
-  generarHtmlExplorar({ total, retenido, libre, subastasGanando, superadas }) {
-    const pctRetenido = total > 0 ? ((retenido / total) * 100).toFixed(1) : 0;
-    const pctLibre = total > 0 ? ((libre / total) * 100).toFixed(1) : 100;
-
+  generarHtmlExplorar({ superadas }) {
     return `
       <div class="subastas-app">
         ${this.generarHtmlPestanas({ superadas })}
@@ -951,29 +1046,19 @@ export class ControladorSubastas {
               <h1 class="titulo-grande">Subastas y Pujas</h1>
             </div>
             <div class="resumen-saldo-total">
-              <span class="etiqueta-saldo">Saldo total</span>
-              <span class="valor-saldo cifra">${formatearCreditos(total)} cr</span>
+              <span class="etiqueta-saldo">Retenido en pujas</span>
+              <span class="valor-saldo cifra">${formatearCreditos(this.getRetenidoReal())} cr</span>
             </div>
-          </div>
-
-          <div class="barra-distribucion">
-            <div class="segmento-retenido" style="width: ${pctRetenido}%;" title="Retenido en pujas: ${formatearCreditos(retenido)} cr"></div>
-            <div class="segmento-libre" style="width: ${pctLibre}%;" title="Libre: ${formatearCreditos(libre)} cr"></div>
           </div>
 
           <div class="resumen-metadatos">
             <div class="chip-info">
               <span class="punto-color punto-retenido"></span>
-              <span>Retenido en pujas: <strong>${formatearCreditos(retenido)} cr</strong></span>
+              <span>Retenido en pujas: <strong>${formatearCreditos(this.getRetenidoReal())} cr</strong></span>
             </div>
-            <div class="chip-info">
-              <span class="punto-color punto-libre"></span>
-              <span>Disponible libre: <strong>${formatearCreditos(libre)} cr</strong></span>
-            </div>
-            <div class="chip-info ${superadas > 0 ? 'alerta-superada' : ''}">
-              <span>Vas ganando en: <strong>${subastasGanando}</strong></span>
-              ${superadas > 0 ? `<span class="badge badge-error">¡Te superaron en ${superadas}!</span>` : ''}
-            </div>
+            ${this.getSubastasGanando() === null
+              ? ''
+              : `<div class="chip-info"><span>Vas ganando en: <strong>${this.getSubastasGanando()}</strong></span></div>`}
             <div class="chip-info">
               <span>Límite activo: <strong>${this.subastas.length} de ${this.config.maxSubastasSimultaneas} subastas</strong></span>
             </div>
@@ -1401,7 +1486,7 @@ export class ControladorSubastas {
             ${textoVolver}
           </button>
           <span class="separador-pipe">|</span>
-          <span class="saldo-contextual">Disponible libre: <strong>${formatearCreditos(libre)} cr</strong> (en esta subasta: <strong>${formatearCreditos(disponibleAqui)} cr</strong>)</span>
+          <span class="saldo-contextual">Retenido en esta subasta: <strong>${formatearCreditos(sub.retenido || 0)} cr</strong></span>
         </div>
 
         <!-- Alerta de resultado final si cerró o se adjudicó -->

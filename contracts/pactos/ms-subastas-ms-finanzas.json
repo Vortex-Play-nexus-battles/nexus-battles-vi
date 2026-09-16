@@ -1,0 +1,467 @@
+{
+  "consumer": {
+    "name": "ms-subastas"
+  },
+  "interactions": [
+    {
+      "description": "una reserva de creditos que excede el saldo",
+      "providerStates": [
+        {
+          "name": "el jugador no tiene saldo disponible suficiente"
+        }
+      ],
+      "request": {
+        "body": {
+          "concepto": "string",
+          "jugadorUid": "77777777-0000-0000-0000-0000000000cc",
+          "monto": 999999,
+          "referenciaId": "aaaaaaaa-0000-0000-0000-000000000001"
+        },
+        "generators": {
+          "body": {
+            "$.concepto": {
+              "size": 20,
+              "type": "RandomString"
+            }
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "Idempotency-Key": "\u2E8E\u9388\u671C\u2973\u7079\u9980"
+        },
+        "matchingRules": {
+          "body": {
+            "$.concepto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.jugadorUid": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.monto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.referenciaId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": ".+"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/creditos/reservar"
+      },
+      "response": {
+        "body": {
+          "detail": "string",
+          "status": 422,
+          "type": "https://nexusbattles.upb.edu.co/errors/saldo-insuficiente"
+        },
+        "generators": {
+          "body": {
+            "$.detail": {
+              "size": 20,
+              "type": "RandomString"
+            }
+          }
+        },
+        "headers": {
+          "Content-Type": "application/problem+json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.detail": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            }
+          }
+        },
+        "status": 422
+      }
+    },
+    {
+      "description": "una reserva de creditos para una puja",
+      "providerStates": [
+        {
+          "name": "el jugador tiene saldo disponible suficiente"
+        }
+      ],
+      "request": {
+        "body": {
+          "concepto": "string",
+          "jugadorUid": "77777777-0000-0000-0000-0000000000cc",
+          "monto": 110,
+          "referenciaId": "aaaaaaaa-0000-0000-0000-000000000001"
+        },
+        "generators": {
+          "body": {
+            "$.concepto": {
+              "size": 20,
+              "type": "RandomString"
+            }
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "Idempotency-Key": "\uA3D2\uF574"
+        },
+        "matchingRules": {
+          "body": {
+            "$.concepto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.jugadorUid": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.monto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.referenciaId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": ".+"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/creditos/reservar"
+      },
+      "response": {
+        "body": {
+          "estado": "ACTIVA",
+          "jugadorUid": "77777777-0000-0000-0000-0000000000cc",
+          "monto": 110.0,
+          "reservaId": "bbbbbbbb-0000-0000-0000-000000000002"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.estado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.jugadorUid": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.monto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "decimal"
+                }
+              ]
+            },
+            "$.reservaId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 201
+      }
+    },
+    {
+      "description": "la consulta del saldo del jugador",
+      "providerStates": [
+        {
+          "name": "el jugador tiene una cuenta de creditos"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/creditos/77777777-0000-0000-0000-0000000000cc/saldo"
+      },
+      "response": {
+        "body": {
+          "jugadorUid": "77777777-0000-0000-0000-0000000000cc",
+          "saldoBruto": 500.0,
+          "saldoDisponible": 300.0,
+          "saldoReservado": 200.0
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.jugadorUid": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.saldoBruto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "decimal"
+                }
+              ]
+            },
+            "$.saldoDisponible": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "decimal"
+                }
+              ]
+            },
+            "$.saldoReservado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "decimal"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "el consumo de la reserva al adjudicar la subasta",
+      "providerStates": [
+        {
+          "name": "existe una reserva activa del comprador"
+        }
+      ],
+      "request": {
+        "body": {
+          "vendedorUid": "88888888-0000-0000-0000-0000000000dd"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.vendedorUid": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/creditos/reservas/bbbbbbbb-0000-0000-0000-000000000002/consumir"
+      },
+      "response": {
+        "body": {
+          "estado": "CONSUMIDA",
+          "montoDebitado": 110.0,
+          "reservaId": "bbbbbbbb-0000-0000-0000-000000000002",
+          "transaccionId": "string",
+          "vendedorUid": "88888888-0000-0000-0000-0000000000dd"
+        },
+        "generators": {
+          "body": {
+            "$.transaccionId": {
+              "size": 20,
+              "type": "RandomString"
+            }
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.estado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.montoDebitado": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "decimal"
+                }
+              ]
+            },
+            "$.reservaId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.transaccionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.vendedorUid": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "la liberacion de una reserva desconocida",
+      "providerStates": [
+        {
+          "name": "no existe ninguna reserva con ese identificador"
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/creditos/reservas/bbbbbbbb-0000-0000-0000-000000000002/liberar"
+      },
+      "response": {
+        "body": {
+          "detail": "string",
+          "status": 404,
+          "type": "https://nexusbattles.upb.edu.co/errors/reserva-no-encontrada"
+        },
+        "generators": {
+          "body": {
+            "$.detail": {
+              "size": 20,
+              "type": "RandomString"
+            }
+          }
+        },
+        "headers": {
+          "Content-Type": "application/problem+json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.detail": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            }
+          }
+        },
+        "status": 404
+      }
+    }
+  ],
+  "metadata": {
+    "pact-jvm": {
+      "version": "4.6.17"
+    },
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  },
+  "provider": {
+    "name": "ms-finanzas"
+  }
+}

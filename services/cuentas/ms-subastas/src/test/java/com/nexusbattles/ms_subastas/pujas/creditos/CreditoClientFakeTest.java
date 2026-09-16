@@ -109,8 +109,28 @@ class CreditoClientFakeTest {
         UUID jugador = UUID.randomUUID();
         ReservaCredito reserva = fake.reservar(jugador, new BigDecimal("300"), UUID.randomUUID(), "clave-1");
 
-        fake.consumir(reserva.id());
+        UUID vendedor = UUID.randomUUID();
+        fake.consumir(reserva.id(), vendedor);
 
         assertEquals(0, new BigDecimal("700").compareTo(fake.saldoDisponible(jugador)));
+    }
+
+    /**
+     * Consumir no es solo cobrarle al comprador: el vendedor tiene que recibir
+     * ese dinero. El doble lo replica porque, si no, las pruebas darian por
+     * bueno un flujo donde el comprador paga y nadie cobra.
+     */
+    @Test
+    void consumirAbonaAlVendedorLoQueSeLeCobraAlComprador() {
+        CreditoClientFake fake = new CreditoClientFake(new BigDecimal("1000"));
+        UUID comprador = UUID.randomUUID();
+        UUID vendedor = UUID.randomUUID();
+        ReservaCredito reserva = fake.reservar(comprador, new BigDecimal("300"), UUID.randomUUID(), "clave-2");
+
+        fake.consumir(reserva.id(), vendedor);
+
+        assertEquals(0, new BigDecimal("700").compareTo(fake.saldoDisponible(comprador)));
+        assertEquals(0, new BigDecimal("1300").compareTo(fake.saldoDisponible(vendedor)),
+                "el vendedor cobra los 300 ademas de los 1000 con los que aparece");
     }
 }

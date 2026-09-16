@@ -352,4 +352,114 @@ class PujaApplicationServiceTest {
 
         verify(eventos, never()).publishEvent(any(SubastaActualizadaEvent.class));
     }
+
+    // --- Reproduccion idempotente -------------------------------------------
+    //
+    // El caso real no es un cliente malicioso: es una respuesta que se pierde
+    // por red. El navegador reintenta con la misma clave y hasta ahora recibia
+    // OFERTA_INSUFICIENTE, porque el precio ya lo habia subido su propia puja
+    // anterior. El jugador se quedaba sin saber si habia pujado o no.
+
+    @Test
+    void reintentarConLaMismaClaveDevuelveLaPujaOriginalSinPujarDosVeces() {
+        Subasta subasta = subastaActiva();
+        UUID jugador = UUID.randomUUID();
+        String clave = claveUnica();
+
+        Puja original = new Puja(UUID.randomUUID(), subasta.getId(), jugador, new BigDecimal("110"),
+                TipoPuja.MANUAL, EstadoPuja.ACTIVA, AHORA, UUID.randomUUID().toString());
+        original.setIdempotencyKey(clave);
+
+        when(subastaRepository.findByIdParaActualizar(subasta.getId())).thenReturn(Optional.of(subasta));
+        when(pujaRepository.findByIdempotencyKey(clave)).thenReturn(Optional.of(original));
+
+        Puja resultado = servicio.pujar(subasta.getId(), jugador, new BigDecimal("110"), clave);
+
+        assertSame(original, resultado);
+        // Lo importante no es lo que devuelve, sino lo que NO hace: ni guarda
+        // otra puja, ni vuelve a mover la subasta, ni reserva creditos de nuevo.
+        verify(pujaRepository, never()).save(any(Puja.class));
+        verify(subastaRepository, never()).save(any(Subasta.class));
+        verify(eventos, never()).publishEvent(any(SubastaActualizadaEvent.class));
+    }
+
+    @Test
+    void reintentarLaCompraInmediataDevuelveLaCompraOriginal() {
+        Subasta subasta = subastaActiva();
+        UUID comprador = UUID.randomUUID();
+        String clave = claveUnica();
+
+        Puja compraOriginal = new Puja(UUID.randomUUID(), subasta.getId(), comprador, new BigDecimal("500"),
+                TipoPuja.MANUAL, EstadoPuja.GANADORA, AHORA, UUID.randomUUID().toString());
+        compraOriginal.setIdempotencyKey(clave);
+
+        when(subastaRepository.findByIdParaActualizar(subasta.getId())).thenReturn(Optional.of(subasta));
+        when(pujaRepository.findByIdempotencyKey(clave)).thenReturn(Optional.of(compraOriginal));
+
+        Puja resultado = servicio.comprarAhora(subasta.getId(), comprador, clave);
+
+        assertSame(compraOriginal, resultado);
+        // Antes de esto el reintento moria en SUBASTA_NO_ACTIVA —la subasta ya
+        // estaba ADJUDICADA por la primera compra— y el comprador no podia
+        // distinguir "ya es tuyo" de "llegaste tarde".
+        verify(pujaRepository, never()).save(any(Puja.class));
+        verify(outbox, never()).avisarCierrePorCompraInmediata(any(), any(), any());
+    }
+
+    @Test
+    void laMismaClaveEnOtraSubastaNoReproduceLaPujaAjena() {
+        Subasta subasta = subastaActiva();
+        UUID jugador = UUID.randomUUID();
+        String clave = claveUnica();
+
+        Puja enOtraSubasta = new Puja(UUID.randomUUID(), UUID.randomUUID(), jugador, new BigDecimal("110"),
+                TipoPuja.MANUAL, EstadoPuja.ACTIVA, AHORA, UUID.randomUUID().toString());
+        enOtraSubasta.setIdempotencyKey(clave);
+
+        when(subastaRepository.findByIdParaActualizar(subasta.getId())).thenReturn(Optional.of(subasta));
+        when(pujaRepository.findByIdempotencyKey(clave)).thenReturn(Optional.of(enOtraSubasta));
+
+        PujaRechazadaException error = assertThrows(PujaRechazadaException.class,
+                () -> servicio.pujar(subasta.getId(), jugador, new BigDecimal("110"), clave));
+
+        assertEquals(PujaRechazadaException.Motivo.CLAVE_REUTILIZADA, error.getMotivo());
+        verify(pujaRepository, never()).save(any(Puja.class));
+    }
+
+    @Test
+    void laMismaClaveDeOtroJugadorNoReproduceLaPujaAjena() {
+        Subasta subasta = subastaActiva();
+        UUID jugador = UUID.randomUUID();
+        String clave = claveUnica();
+
+        Puja deOtroJugador = new Puja(UUID.randomUUID(), subasta.getId(), UUID.randomUUID(), new BigDecimal("110"),
+                TipoPuja.MANUAL, EstadoPuja.ACTIVA, AHORA, UUID.randomUUID().toString());
+        deOtroJugador.setIdempotencyKey(clave);
+
+        when(subastaRepository.findByIdParaActualizar(subasta.getId())).thenReturn(Optional.of(subasta));
+        when(pujaRepository.findByIdempotencyKey(clave)).thenReturn(Optional.of(deOtroJugador));
+
+        PujaRechazadaException error = assertThrows(PujaRechazadaException.class,
+                () -> servicio.pujar(subasta.getId(), jugador, new BigDecimal("110"), clave));
+
+        assertEquals(PujaRechazadaException.Motivo.CLAVE_REUTILIZADA, error.getMotivo());
+    }
+
+    @Test
+    void laPujaRegistradaGuardaLaClaveConLaQueLlego() {
+        Subasta subasta = subastaActiva();
+        UUID jugador = UUID.randomUUID();
+        String clave = claveUnica();
+        creditoClient.acreditar(jugador, new BigDecimal("1000"));
+
+        when(subastaRepository.findByIdParaActualizar(subasta.getId())).thenReturn(Optional.of(subasta));
+        when(pujaRepository.findBySubastaIdAndEstado(subasta.getId(), EstadoPuja.ACTIVA)).thenReturn(Optional.empty());
+        when(pujaRepository.save(any(Puja.class))).thenAnswer(invocacion -> invocacion.getArgument(0));
+
+        Puja resultado = servicio.pujar(subasta.getId(), jugador, new BigDecimal("110"), clave);
+
+        // Sin esto la reproduccion no serviria de nada: la segunda peticion no
+        // encontraria la primera.
+        assertEquals(clave, resultado.getIdempotencyKey());
+    }
 }

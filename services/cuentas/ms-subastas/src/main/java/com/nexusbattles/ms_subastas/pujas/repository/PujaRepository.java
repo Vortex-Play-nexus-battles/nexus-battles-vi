@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -13,6 +14,13 @@ import java.util.UUID;
 public interface PujaRepository extends JpaRepository<Puja, UUID> {
 
     /** La puja que hoy es la oferta vigente de la subasta. */
+    /**
+     * Busca la puja que ya creo una peticion con esta misma Idempotency-Key.
+     * Es lo que convierte un reintento en una respuesta repetida en vez de en
+     * una puja nueva. Se apoya en el unico parcial uq_pujas_idempotency_key.
+     */
+    Optional<Puja> findByIdempotencyKey(String idempotencyKey);
+
     Optional<Puja> findBySubastaIdAndEstado(UUID subastaId, EstadoPuja estado);
 
     /** Cuantas pujas del jugador siguen siendo oferta vigente (tope de 50). */
@@ -35,6 +43,13 @@ public interface PujaRepository extends JpaRepository<Puja, UUID> {
      * Todos los jugadores que pujaron en la subasta, ganando o no. Es la lista
      * de destinatarios de "notificando a quienes hubieran pujado" del criterio 2.
      */
+    /** El historial de la subasta, de la mas reciente a la mas antigua. */
+    List<Puja> findBySubastaIdOrderByCreadaEnDesc(UUID subastaId);
+
+    /** Lo que el jugador tiene retenido ahora mismo: sus pujas que siguen siendo oferta vigente. */
+    @Query("select coalesce(sum(p.monto), 0) from Puja p where p.jugadorId = :jugadorId and p.estado = :estado")
+    BigDecimal sumarMontoPorJugadorYEstado(@Param("jugadorId") UUID jugadorId, @Param("estado") EstadoPuja estado);
+
     @Query("select distinct p.jugadorId from Puja p where p.subastaId = :subastaId")
     List<UUID> findDistinctJugadorIdBySubastaId(@Param("subastaId") UUID subastaId);
 

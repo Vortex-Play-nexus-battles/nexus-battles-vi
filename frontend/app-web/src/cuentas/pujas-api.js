@@ -50,7 +50,11 @@ const MENSAJES = {
   SALDO_INSUFICIENTE_PARA_LIMITE: 'Tu saldo disponible no cubre el limite que quieres fijar.',
   SALDO_INSUFICIENTE: 'No tienes creditos suficientes para esta operacion.',
   SIN_COMPRA_INMEDIATA: 'Esta subasta no admite compra inmediata.',
-  CONFIRMACION_REQUERIDA: 'Hay que confirmar la compra de forma explicita.'
+  CONFIRMACION_REQUERIDA: 'Hay que confirmar la compra de forma explicita.',
+  // No deberia verlo un jugador: significa que el cliente reutilizo una clave
+  // de idempotencia. Se traduce igual, porque un mensaje en blanco seria peor
+  // que uno generico si alguna vez pasa.
+  CLAVE_REUTILIZADA: 'Hubo un problema al enviar la operacion. Vuelve a intentarlo.'
 };
 
 /**
@@ -158,29 +162,49 @@ export function crearApiSubastas({
   leerApodo = () => globalThis.sessionStorage?.getItem(CLAVE_APODO) || null
 } = {}) {
 
-  async function pedir(ruta, { metodo = 'GET', cuerpo = null, conIdempotencia = false } = {}) {
+  async function pedir(
+    ruta,
+    { metodo = 'GET', cuerpo = null, conIdempotencia = false, exigeSesion = true } = {}
+  ) {
     const token = leerToken();
-    if (!token) {
+    if (!token && exigeSesion) {
       throw new ErrorDeSubastas('Inicia sesion para participar en las subastas.', { estado: 401 });
     }
 
-    const cabeceras = {
-      Accept: 'application/json',
-      Authorization: `Bearer ${token}`
-    };
+    const cabeceras = { Accept: 'application/json' };
+    // Sin sesion se manda igual la peticion cuando el endpoint es publico: el
+    // token solo enriquece la respuesta (marcar las pujas propias).
+    if (token) {cabeceras.Authorization = `Bearer ${token}`;}
     if (cuerpo !== null) {cabeceras['Content-Type'] = 'application/json';}
+    // La clave se genera UNA vez, fuera del bucle de reintento: reintentar con
+    // una clave nueva seria pujar otra vez, que es justo lo contrario.
     if (conIdempotencia) {cabeceras['Idempotency-Key'] = claveDeIdempotencia();}
+
+    const opciones = {
+      method: metodo,
+      headers: cabeceras,
+      body: cuerpo === null ? undefined : JSON.stringify(cuerpo)
+    };
 
     let respuesta;
     try {
-      respuesta = await hacerPeticion(`${urlBase}${ruta}`, {
-        method: metodo,
-        headers: cabeceras,
-        body: cuerpo === null ? undefined : JSON.stringify(cuerpo)
-      });
+      respuesta = await hacerPeticion(`${urlBase}${ruta}`, opciones);
     } catch (fallo) {
-      throw new ErrorDeSubastas('No se pudo contactar al servidor de subastas.',
-        { estado: 0, detalle: fallo?.message || null });
+      // Se reintenta SOLO cuando la peticion no llego a tener respuesta y solo
+      // si lleva clave de idempotencia. Sin ella no se sabe si el servidor
+      // llego a procesarla, y repetir una puja a ciegas seria pujar dos veces;
+      // con ella, el servidor devuelve la puja original si la primera si entro.
+      // Un error HTTP no se reintenta: el servidor ya respondio.
+      if (!conIdempotencia) {
+        throw new ErrorDeSubastas('No se pudo contactar al servidor de subastas.',
+          { estado: 0, detalle: fallo?.message || null });
+      }
+      try {
+        respuesta = await hacerPeticion(`${urlBase}${ruta}`, opciones);
+      } catch (segundoFallo) {
+        throw new ErrorDeSubastas('No se pudo contactar al servidor de subastas.',
+          { estado: 0, detalle: segundoFallo?.message || null });
+      }
     }
 
     if (!respuesta.ok) {await lanzarDesde(respuesta);}
@@ -215,6 +239,33 @@ export function crearApiSubastas({
       // se escribio a mano justamente para no serializar el Page de Spring
       // Data, cuyo JSON usa 'content' y no coincidiria.
       return (pagina.contenido || []).map((resumen) => aVistaDeSubasta(resumen, apodo));
+    },
+
+    /**
+     * GET /mis-pujas/resumen — lo que tienes en juego sumando todas las
+     * subastas. No trae saldo total ni disponible: eso lo sabe ms-finanzas, que
+     * todavia no existe, y este servicio no se lo inventa.
+     */
+    async miResumen() {
+      return pedir('/mis-pujas/resumen');
+    },
+
+    /**
+     * GET /subastas/{id}/pujas — historial, de la mas reciente a la mas
+     * antigua. Publico, pero se manda el token si lo hay para que el servidor
+     * marque cuales son propias.
+     */
+    async historial(subastaId) {
+      return pedir(`/subastas/${subastaId}/pujas`, { exigeSesion: false });
+    },
+
+    /**
+     * GET /subastas/{id}/mi-participacion — si vas ganando, tu oferta vigente,
+     * tus creditos retenidos, tu limite automatico y cuanto falta para poder
+     * volver a pujar. Sin esto la pantalla tenia que suponerlo.
+     */
+    async miParticipacion(subastaId) {
+      return pedir(`/subastas/${subastaId}/mi-participacion`);
     },
 
     /** POST /subastas/{id}/pujas */

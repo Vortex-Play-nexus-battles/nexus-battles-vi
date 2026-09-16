@@ -33,7 +33,16 @@ public class PujaRechazadaException extends RuntimeException {
          * historia exige confirmacion explicita, asi que el servidor la exige
          * tambien: una interfaz con un bug no debe poder cerrar una compra.
          */
-        CONFIRMACION_REQUERIDA
+        CONFIRMACION_REQUERIDA,
+
+        /**
+         * La misma Idempotency-Key llego antes para otra subasta u otro
+         * jugador. No se reproduce la puja original —seria devolverle a alguien
+         * una puja que no es suya— ni se registra una nueva, porque la clave ya
+         * no identifica una sola operacion. Es un error del cliente al generar
+         * la clave, no una carrera: reintentar tal cual volveria a fallar.
+         */
+        CLAVE_REUTILIZADA
     }
 
     private final Motivo motivo;

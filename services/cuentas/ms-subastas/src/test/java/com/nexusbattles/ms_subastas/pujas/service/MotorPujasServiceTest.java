@@ -412,7 +412,7 @@ class MotorPujasServiceTest {
         ReservaCredito reserva = new ReservaCredito(UUID.randomUUID(), comprador, new BigDecimal("500"), ReservaCredito.EstadoReserva.RESERVADA);
         when(creditoMock.reservar(eq(comprador), any(BigDecimal.class), eq(subasta.getId()), eq(clave))).thenReturn(reserva);
         doThrow(new RuntimeException("Fallo al consumir creditos en ms-finanzas"))
-                .when(creditoMock).consumir(reserva.id());
+                .when(creditoMock).consumir(eq(reserva.id()), any());
 
         MotorPujasService motorTest = new MotorPujasService(creditoMock, inventarioClient, clock, parametros);
 
@@ -450,7 +450,7 @@ class MotorPujasServiceTest {
 
         CreditoClient creditoMock = mock(CreditoClient.class);
         doThrow(new RuntimeException("Fallo al consumir creditos en ms-finanzas"))
-                .when(creditoMock).consumir(UUID.fromString(reservaId));
+                .when(creditoMock).consumir(eq(UUID.fromString(reservaId)), any());
 
         MotorPujasService motorTest = new MotorPujasService(creditoMock, inventarioClient, clock, parametros);
         Puja pujaVigente = new Puja(UUID.randomUUID(), subasta.getId(), ganador, new BigDecimal("110"),

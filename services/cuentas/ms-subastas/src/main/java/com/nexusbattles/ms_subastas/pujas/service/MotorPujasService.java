@@ -88,8 +88,10 @@ public class MotorPujasService {
         // id nulo a proposito: lo genera la base de datos (@GeneratedValue). Si
         // el dominio lo asignara, Spring Data veria una entidad con id y haria
         // merge (UPDATE de una fila inexistente) en vez de persist.
-        return new Puja(null, subasta.getId(), jugadorId, monto, tipo,
+        Puja nueva = new Puja(null, subasta.getId(), jugadorId, monto, tipo,
                 EstadoPuja.ACTIVA, clock.instant(), reserva.id().toString());
+        nueva.setIdempotencyKey(idempotencyKey);
+        return nueva;
     }
 
     /**
@@ -98,10 +100,12 @@ public class MotorPujasService {
      *                       (jugador, subasta), que protegia incluso frente a un
      *                       cliente que reintentara con una clave distinta; el
      *                       contrato la declara obligatoria, asi que manda la
-     *                       del cliente. El riesgo queda acotado porque tras la
-     *                       primera compra la subasta queda ADJUDICADA y un
-     *                       reintento se corta en SUBASTA_NO_ACTIVA antes de
-     *                       llegar a reservar creditos.
+     *                       del cliente. Un reintento con esa misma clave ya
+     *                       no llega hasta aqui: PujaApplicationService
+     *                       encuentra la compra original por la clave y la
+     *                       devuelve tal cual, en vez de dejar que la subasta
+     *                       —ya ADJUDICADA— lo rechace con SUBASTA_NO_ACTIVA y
+     *                       el comprador se quede sin saber si compro.
      */
     public Puja comprarAhora(Subasta subasta, Puja pujaVigente, UUID jugadorId, String idempotencyKey) {
         if (!subasta.estaActiva()) {
@@ -127,7 +131,7 @@ public class MotorPujasService {
                         subasta.getId(), idempotencyKey);
                 transferido = true;
             }
-            creditoClient.consumir(reserva.id());
+            creditoClient.consumir(reserva.id(), subasta.getVendedorId());
         } catch (RuntimeException e) {
             if (transferido) {
                 devolverProductoAlVendedor(subasta, idempotencyKey);
@@ -153,8 +157,10 @@ public class MotorPujasService {
         subasta.setCantidadPujas(subasta.getCantidadPujas() + 1);
         subasta.setEstado(EstadoSubasta.ADJUDICADA);
 
-        return new Puja(null, subasta.getId(), jugadorId, precio, TipoPuja.MANUAL,
+        Puja ganadora = new Puja(null, subasta.getId(), jugadorId, precio, TipoPuja.MANUAL,
                 EstadoPuja.GANADORA, clock.instant(), reserva.id().toString());
+        ganadora.setIdempotencyKey(idempotencyKey);
+        return ganadora;
     }
 
     /**
@@ -188,7 +194,7 @@ public class MotorPujasService {
         }
 
         try {
-            creditoClient.consumir(UUID.fromString(pujaVigente.getReservaCreditoId()));
+            creditoClient.consumir(UUID.fromString(pujaVigente.getReservaCreditoId()), subasta.getVendedorId());
         } catch (RuntimeException fallo) {
             // El producto ya salio hacia el ganador y esa llamada es HTTP: no la
             // deshace el rollback de la transaccion, que si revierte el estado
