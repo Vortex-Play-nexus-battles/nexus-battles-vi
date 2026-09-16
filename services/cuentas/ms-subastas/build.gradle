@@ -67,6 +67,13 @@ dependencies {
     // falta la implementación de jjwt, no solo su API.
     testImplementation 'io.jsonwebtoken:jjwt-impl:0.12.6'
     testImplementation 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+
+    // Pruebas de contrato del lado consumidor (Pact JVM, pila aprobada en
+    // CLAUDE.md). Solo el consumidor: este servicio no verifica pactos ajenos.
+    // Genera el pacto en contracts/pactos/ para que el proveedor (ms-finanzas,
+    // ms-inventario) pueda verificarlo contra su implementacion sin que
+    // ninguno de los dos tenga que levantar el otro.
+    testImplementation 'au.com.dius.pact.consumer:junit5:4.6.17'
 }
 
 // Subastas tiene pruebas de verdad, así que activa desde ya la compuerta
@@ -77,4 +84,10 @@ tasks.named('jacocoTestCoverageVerification') {
 
 tasks.named('check') {
     dependsOn tasks.named('jacocoTestCoverageVerification')
+}
+
+// El pacto generado se versiona: es un artefacto de contrato, no de build. Su
+// sitio es contracts/, que es donde el proveedor lo va a buscar.
+tasks.named('test') {
+    systemProperty 'pact.rootDir', rootProject.file('contracts/pactos').absolutePath
 }

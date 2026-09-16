@@ -128,7 +128,10 @@ Por orden de lo que mas duele:
 - **El saldo del jugador no se muestra.** Ya no sale un numero inventado —eso se
   quito—, pero tampoco sale el real: el `GET /creditos/{uid}/saldo` que lo daria
   es el que devuelve 500 siempre. La pantalla lo marca como desconocido.
-- Pruebas de contrato (Pact) — ninguna todavia.
+- ~~Pruebas de contrato (Pact)~~ — hechas del lado consumidor: `CreditosPactoTest`
+  e `InventarioPactoTest` generan los pactos en `contracts/pactos/`. Falta que
+  los proveedores los verifiquen contra su implementacion (ver el README de esa
+  carpeta con los estados que hay que poder montar).
 - Los 4 limites de participacion son "configurables desde administracion" solo por variable de entorno.
 
 ## Asunciones tomadas (a validar con el cliente)
