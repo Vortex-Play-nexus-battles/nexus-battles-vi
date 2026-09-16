@@ -55,14 +55,19 @@ de semana) ≈ **11,5 USD/mes**. El crédito de USD 100 cubre el proyecto comple
 
 ## Operación (todo desde GitHub → Actions → "Infra dev (AWS Free Plan)")
 
-| Acción | Qué hace | Confirmación |
+| Acción | Qué hace | Cuándo |
 |---|---|---|
-| `plan` | muestra cambios; corre sola en cada PR que toque esta carpeta y comenta el plan | no |
-| `apply` | crea o actualiza | escribir `apply` |
-| `start` / `stop` | enciende / apaga la instancia | no |
-| `destroy` | borra todo, incluida la IP | escribir `destroy` |
+| `plan` | muestra cambios y los comenta en el PR | sola, en cada PR que toque esta carpeta |
+| `apply` | crea o actualiza | **sola, al fusionar en `develop`** (el plan aprobado en el PR es la confirmación); a mano, escribiendo `apply` |
+| `start` / `stop` | enciende / apaga la instancia | cron (23:00 Colombia apaga; 07:00 lun-vie enciende) o a mano |
+| `destroy` | borra todo, incluida la IP | solo a mano, escribiendo `destroy` |
 
-Programado: `stop` todos los días 23:00 Colombia; `start` lunes a viernes 07:00.
+> Límite de GitHub: el botón *Run workflow* y los `cron` solo funcionan cuando el
+> archivo del workflow está en la rama por defecto (`main`). Hasta que `develop`
+> se promueva a `main`, el apagado nocturno no corre y `start`/`stop`/`destroy`
+> los pide un administrador (o se promueve `develop` → `main`). El `apply` por
+> fusión en `develop` no tiene esa limitación.
+
 Para una demo fuera de horario: `start` manual; el `stop` nocturno la apaga después.
 
 ### Después del primer `apply` (administrador del repo)
