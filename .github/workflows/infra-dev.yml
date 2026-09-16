@@ -11,12 +11,21 @@
 #   AWS_CORREO_ALERTAS  buzon del equipo para presupuestos y recordatorios
 #
 # Acciones:
-#   plan     -> siempre segura; tambien corre sola en cada PR que toque la carpeta.
-#   apply    -> crea/actualiza el host. Exige escribir "apply" en `confirmar`.
+#   plan     -> siempre segura; corre sola en cada PR que toque la carpeta y
+#               deja el plan como comentario: eso es lo que aprueba el revisor.
+#   apply    -> crea/actualiza el host. Corre SOLA al fusionar en develop un
+#               cambio de la carpeta (el plan aprobado en el PR es la
+#               confirmacion humana). A mano exige escribir "apply" en `confirmar`.
 #   start    -> enciende la instancia (tambien por cron lun-vie 07:00 Colombia).
 #   stop     -> apaga la instancia (tambien por cron todos los dias 23:00 Colombia).
 #               Apagada solo factura la IP elastica (3,60 USD/mes) y el disco.
 #   destroy  -> borra TODO lo de esta carpeta, incluida la IP. Exige "destroy".
+#               Nunca corre sola.
+#
+# Limite de GitHub: el boton "Run workflow" y los `cron` solo existen cuando el
+# archivo esta en la rama por defecto (`main`). Hasta que develop se promueva a
+# main, el apagado nocturno no corre solo y start/stop se piden a un
+# administrador. El apply por fusion en develop NO tiene esa limitacion.
 #
 # Politica de la cuenta (Free Plan, USD 0 de bolsillo): ver
 # infrastructure/entornos/plataforma/README.md.
@@ -38,6 +47,12 @@ on:
         required: false
         default: ""
   pull_request:
+    branches: [develop]
+    paths:
+      - "infrastructure/entornos/plataforma/**"
+      - ".github/workflows/infra-dev.yml"
+  # Fusion en develop de un cambio de la carpeta -> apply (GitOps).
+  push:
     branches: [develop]
     paths:
       - "infrastructure/entornos/plataforma/**"
@@ -84,13 +99,14 @@ jobs:
             workflow_dispatch) accion="${{ inputs.accion }}" ;;
             schedule)
               if [ "${{ github.event.schedule }}" = "0 4 * * *" ]; then accion=stop; else accion=start; fi ;;
+            push) accion=apply ;;
             *) accion=plan ;;
           esac
           echo "accion=$accion" >> "$GITHUB_OUTPUT"
           echo "Accion: $accion"
 
-      - name: Exigir confirmacion para apply/destroy
-        if: steps.accion.outputs.accion == 'apply' || steps.accion.outputs.accion == 'destroy'
+      - name: Exigir confirmacion para apply/destroy manuales
+        if: github.event_name == 'workflow_dispatch' && (steps.accion.outputs.accion == 'apply' || steps.accion.outputs.accion == 'destroy')
         working-directory: .
         run: |
           if [ "${{ inputs.confirmar }}" != "${{ steps.accion.outputs.accion }}" ]; then
