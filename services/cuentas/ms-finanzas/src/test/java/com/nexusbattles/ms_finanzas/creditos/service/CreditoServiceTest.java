@@ -1,19 +1,22 @@
 package com.nexusbattles.ms_finanzas.creditos.service;
 
+import com.nexusbattles.ms_finanzas.common.exception.ReservaYaLiberadaException;
 import com.nexusbattles.ms_finanzas.creditos.domain.CuentaCredito;
+import com.nexusbattles.ms_finanzas.creditos.domain.ReservaCredito;
 import com.nexusbattles.ms_finanzas.creditos.dto.CreditoDTOs.*;
 import com.nexusbattles.ms_finanzas.creditos.repository.CuentaCreditoRepository;
 import com.nexusbattles.ms_finanzas.creditos.repository.ReservaCreditoRepository;
-import com.nexusbattles.ms_finanzas.creditos.repository.TransaccionCreditoRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.math.BigDecimal;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -24,10 +27,9 @@ class CreditoServiceTest {
 
     @Mock
     private CuentaCreditoRepository cuentaRepository;
+
     @Mock
     private ReservaCreditoRepository reservaRepository;
-    @Mock
-    private TransaccionCreditoRepository transaccionRepository;
 
     @InjectMocks
     private CreditoService creditoService;
@@ -45,7 +47,7 @@ class CreditoServiceTest {
 
     @Test
     void obtenerSaldo_Exitoso() {
-        when(cuentaRepository.findByJugadorUid("user-123")).thenReturn(Optional.of(cuenta));
+        when(cuentaRepository.findByJugadorUidReadOnly("user-123")).thenReturn(Optional.of(cuenta));
 
         SaldoResponse response = creditoService.obtenerSaldo("user-123");
 
@@ -56,28 +58,28 @@ class CreditoServiceTest {
     @Test
     void acreditar_AumentaSaldoYPersiste() {
         when(cuentaRepository.findByJugadorUid("user-123")).thenReturn(Optional.of(cuenta));
-        when(transaccionRepository.findByRefId("partida-001")).thenReturn(Optional.empty());
 
         AcreditarRequest req = new AcreditarRequest("user-123", new BigDecimal("2.00"), "partida-001", "recompensa-victoria");
         AcreditarResponse resp = creditoService.acreditar(req);
 
         assertEquals("APLICADO", resp.estado());
         assertEquals(new BigDecimal("102.00"), cuenta.getSaldoBruto());
-        verify(transaccionRepository, times(1)).save(any());
+        verify(cuentaRepository, times(1)).save(any());
     }
 
     @Test
     void debitar_DescuentaSaldoYPersiste() {
+        when(reservaRepository.findByIdempotencyKey("sub-001")).thenReturn(Optional.empty());
         when(cuentaRepository.findByJugadorUid("user-123")).thenReturn(Optional.of(cuenta));
-        when(transaccionRepository.findByRefId("sub-001")).thenReturn(Optional.empty());
 
         DebitarRequest req = new DebitarRequest("user-123", new BigDecimal("10.00"), "sub-001", "comision");
         DebitarResponse resp = creditoService.debitar(req);
 
         assertEquals("EXITOSO", resp.estado());
         assertEquals(new BigDecimal("90.00"), cuenta.getSaldoBruto());
-        verify(transaccionRepository, times(1)).save(any());
+        verify(cuentaRepository, times(1)).save(any());
     }
+
     // TEST DEFECTO 1: Validar que consumir() sobre una reserva LIBERADA lanza la excepción correcta y no altera el saldo
     @Test
     void consumir_ReservaLiberada_LanzaReservaYaLiberadaException() {
@@ -112,26 +114,21 @@ class CreditoServiceTest {
             .saldoReservado(BigDecimal.ZERO)
             .build();
 
-        // 1. La primera vez que busca, no la encuentra (empty).
-        // 2. La segunda vez que busca (dentro del catch), sí la encuentra.
         when(cuentaRepository.findByJugadorUid(uid))
             .thenReturn(Optional.empty())
             .thenReturn(Optional.of(cuentaExistente));
 
-        // Simulamos que al intentar guardar, otro hilo nos ganó y la BD lanza la excepción de llave duplicada
         when(cuentaRepository.save(any(CuentaCredito.class)))
-            .thenThrow(new DataIntegrityViolationException("Llave duplicada"));
+            .thenThrow(new DataIntegrityViolationException("Llave duplicada"))
+            .thenAnswer(invocation -> invocation.getArgument(0));
 
-        // Act
-        // Usamos acreditar() porque es un método público que llama a obtenerOCrearCuenta()
         AcreditarRequest req = new AcreditarRequest(uid, BigDecimal.ONE, "ref-1", "concepto");
 
-        // Assert: No debe reventar, debe atrapar el error, buscar de nuevo y sumar el saldo a la cuenta recuperada
+        // Act & Assert
         assertDoesNotThrow(() -> {
             creditoService.acreditar(req);
         });
 
-        // Verificamos que intentó buscar la cuenta 2 veces (antes del try, y dentro del catch)
         verify(cuentaRepository, times(2)).findByJugadorUid(uid);
     }
 
@@ -140,13 +137,13 @@ class CreditoServiceTest {
     void obtenerSaldo_CuentaExistente_RetornaSaldoCorrectamente() {
         // Arrange
         String uid = "jugador-saldo";
-        CuentaCredito cuenta = CuentaCredito.builder()
+        CuentaCredito cuentaTest = CuentaCredito.builder()
             .jugadorUid(uid)
             .saldoBruto(new BigDecimal("150.00"))
             .saldoReservado(new BigDecimal("50.00"))
             .build();
 
-        when(cuentaRepository.findByJugadorUidReadOnly(uid)).thenReturn(Optional.of(cuenta));
+        when(cuentaRepository.findByJugadorUidReadOnly(uid)).thenReturn(Optional.of(cuentaTest));
 
         // Act
         SaldoResponse response = creditoService.obtenerSaldo(uid);
@@ -157,7 +154,6 @@ class CreditoServiceTest {
         assertEquals(new BigDecimal("50.00"), response.saldoReservado());
         assertEquals(new BigDecimal("100.00"), response.saldoDisponible());
 
-        // Verificar que llamó al método seguro de solo lectura
         verify(cuentaRepository).findByJugadorUidReadOnly(uid);
     }
 }
