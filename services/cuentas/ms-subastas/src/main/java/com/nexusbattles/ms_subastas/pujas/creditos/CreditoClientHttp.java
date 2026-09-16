@@ -28,16 +28,15 @@ import java.util.UUID;
  * traducirlo aqui es justamente lo que evita que su nomenclatura se filtre al
  * motor de pujas.
  *
- * <p><b>Limitacion conocida, y es la razon de que el modo por defecto siga
- * siendo el doble:</b> ms-finanzas no tiene manejador de errores, asi que
- * {@code SaldoInsuficienteException} y {@code ReservaNoEncontradaException}
- * salen como <b>500</b>, iguales que una averia real. Desde aqui no hay forma
- * fiable de distinguir "no tienes creditos" —que el jugador debe ver y que no
- * se debe reintentar— de "el servicio se cayo". Se traduce el 500 como averia,
- * que es lo unico prudente: reintentar y cortar ante un fallo del servicio es
- * recuperable, mientras que tratar una caida como saldo insuficiente le diria
- * al jugador algo falso sobre su dinero. Pedido a Juan Diego mapear esas dos
- * excepciones a 409 y 404, como decia su propio borrador de contrato.
+ * <p><b>Los errores se deciden por el {@code type} del problem+json, no por el
+ * codigo de estado.</b> El codigo solo no basta: un 404 de "esa reserva no
+ * existe" y un 404 de "me equivoque de ruta" son el mismo numero, y el segundo
+ * es un fallo propio que no debe disfrazarse de estado de negocio. ms-finanzas
+ * publica {@code .../errors/saldo-insuficiente} (422) y
+ * {@code .../errors/reserva-no-encontrada} (404) desde el 15/09/2026, que es lo
+ * que hace posible separar "no tienes creditos" —que el jugador debe ver y que
+ * no se reintenta— de "el servicio se cayo" —que si se reintenta y si debe
+ * empujar el cortacircuitos.
  */
 public class CreditoClientHttp implements CreditoClient {
 
@@ -98,7 +97,17 @@ public class CreditoClientHttp implements CreditoClient {
                 .POST(HttpRequest.BodyPublishers.noBody())
                 .build();
 
-        exigirExito(enviar(peticion, "liberar la reserva"), "liberar la reserva");
+        HttpResponse<String> respuesta = enviar(peticion, "liberar la reserva");
+
+        // Si la reserva no existe, no queda nada que liberar: el efecto buscado
+        // ya se cumple. Y tratarlo como error seria peor que inutil — liberar se
+        // llama desde el cierre por vencimiento, que corre en transaccion: al
+        // fallar revierte, la subasta se queda ACTIVA y el job la reintenta cada
+        // 30 s para siempre. Mismo criterio que con el 404 de inventario.
+        if (tipoDelProblema(respuesta).endsWith("reserva-no-encontrada")) {
+            return;
+        }
+        exigirExito(respuesta, "liberar la reserva");
     }
 
     @Override
@@ -148,14 +157,47 @@ public class CreditoClientHttp implements CreditoClient {
         if (estado >= 200 && estado < 300) {
             return;
         }
+
+        // Se decide por el 'type' del problem+json, no por el codigo. El codigo
+        // solo no basta: un 404 de "esa reserva no existe" y un 404 de "me
+        // equivoque de ruta" son el mismo numero, y el segundo es un fallo mio
+        // que no debe disfrazarse de estado de negocio. El 'type' los separa.
+        String tipo = tipoDelProblema(respuesta);
+
+        if (tipo.endsWith("saldo-insuficiente")) {
+            throw new CreditoClientException(CreditoClientException.Motivo.SALDO_INSUFICIENTE,
+                    "El jugador no tiene creditos suficientes al " + queSeIntentaba);
+        }
+        if (tipo.endsWith("reserva-no-encontrada")) {
+            throw new CreditoClientException(CreditoClientException.Motivo.RESERVA_INEXISTENTE,
+                    "ms-finanzas no reconoce la reserva al " + queSeIntentaba);
+        }
+
         if (estado >= 500) {
             throw new CreditoNoDisponibleException(
-                    "ms-finanzas respondio " + estado + " al " + queSeIntentaba
-                            + ". Mientras no distinga sus rechazos de negocio del fallo del servidor, "
-                            + "un saldo insuficiente llega tambien como 500 y no se puede separar aqui.");
+                    "ms-finanzas respondio " + estado + " al " + queSeIntentaba);
         }
         throw new CreditoClientException(CreditoClientException.Motivo.RESPUESTA_INESPERADA,
-                "ms-finanzas respondio " + estado + " al " + queSeIntentaba);
+                "ms-finanzas respondio " + estado + " al " + queSeIntentaba
+                        + (tipo.isEmpty() ? " sin type en el cuerpo" : " con type " + tipo));
+    }
+
+    /**
+     * El {@code type} del problem+json, o cadena vacia si la respuesta no lo
+     * trae o no es JSON. Nunca lanza: esto se usa justamente en el camino de
+     * error, y fallar aqui taparia el error de verdad con uno de parseo.
+     */
+    private String tipoDelProblema(HttpResponse<String> respuesta) {
+        String cuerpo = respuesta.body();
+        if (cuerpo == null || cuerpo.isBlank()) {
+            return "";
+        }
+        try {
+            ProblemaJson problema = objectMapper.readValue(cuerpo, ProblemaJson.class);
+            return problema.type() == null ? "" : problema.type();
+        } catch (IOException ilegible) {
+            return "";
+        }
     }
 
     private HttpResponse<String> enviar(HttpRequest peticion, String queSeIntentaba) {
@@ -203,6 +245,10 @@ public class CreditoClientHttp implements CreditoClient {
     private record ReservarRequest(String jugadorUid, BigDecimal monto, String concepto, String referenciaId) { }
 
     private record ConsumirRequest(String vendedorUid) { }
+
+    /** Solo el 'type', que es lo unico del problem+json en lo que nos apoyamos. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record ProblemaJson(String type) { }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record ReservaJson(String reservaId, String jugadorUid, BigDecimal monto, String estado) { }

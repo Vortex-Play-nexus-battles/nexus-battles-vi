@@ -18,6 +18,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -164,9 +165,6 @@ class CreditoClientHttpTest {
                 () -> cliente.liberar(RESERVA));
 
         assertEquals(CreditoClientException.Motivo.SERVICIO_NO_DISPONIBLE, error.getMotivo());
-        // Y el mensaje dice por que no se puede afinar mas: hoy ms-finanzas
-        // manda el saldo insuficiente tambien como 500.
-        assertTrue(error.getMessage().contains("saldo insuficiente"), error.getMessage());
     }
 
     @Test
@@ -195,5 +193,81 @@ class CreditoClientHttpTest {
         respuesta.set("esto no es json");
 
         assertThrows(CreditoClientException.class, () -> cliente.saldoDisponible(JUGADOR));
+    }
+
+    // --- se decide por el type, no por el codigo ---------------------------
+    //
+    // ms-finanzas publica desde el 15/09/2026 un type URI por cada rechazo de
+    // negocio. Eso es lo que permite separar "no tienes creditos" —que el
+    // jugador debe ver y que no se reintenta— de "el servicio se cayo".
+
+    private static final String BASE_TYPE = "https://nexusbattles.upb.edu.co/errors/";
+
+    private void responderProblema(int estado, String tipo) {
+        codigo.set(estado);
+        respuesta.set("{\"type\":\"" + BASE_TYPE + tipo + "\",\"status\":" + estado + "}");
+    }
+
+    @Test
+    void elSaldoInsuficienteEsUnRechazoDeNegocioYNoUnaAveria() {
+        responderProblema(422, "saldo-insuficiente");
+
+        CreditoClientException error = assertThrows(CreditoClientException.class,
+                () -> cliente.reservar(JUGADOR, new BigDecimal("110"), SUBASTA, "clave-de-prueba"));
+
+        assertEquals(CreditoClientException.Motivo.SALDO_INSUFICIENTE, error.getMotivo());
+        // Lo decisivo: no es una averia, asi que ni se reintenta ni empuja el
+        // cortacircuitos. Tratarlo como caida dejaria sin creditos al resto de
+        // jugadores por culpa de uno que se quedo sin saldo.
+        assertFalse(error instanceof CreditoNoDisponibleException);
+    }
+
+    @Test
+    void unaReservaQueMsFinanzasNoReconoceSeDistingueDeUnaAveria() {
+        responderProblema(404, "reserva-no-encontrada");
+
+        CreditoClientException error = assertThrows(CreditoClientException.class,
+                () -> cliente.consumir(RESERVA, VENDEDOR));
+
+        assertEquals(CreditoClientException.Motivo.RESERVA_INEXISTENTE, error.getMotivo());
+        assertFalse(error instanceof CreditoNoDisponibleException);
+    }
+
+    /**
+     * Si la reserva no existe ya no queda nada que liberar, asi que liberar
+     * termina bien. No es indulgencia: liberar lo llama el cierre por
+     * vencimiento dentro de una transaccion, y si fallara, el cierre revertiria,
+     * la subasta se quedaria ACTIVA y el job la reintentaria cada 30 s para
+     * siempre. Mismo criterio que con el 404 de inventario.
+     */
+    @Test
+    void liberarUnaReservaQueYaNoExisteNoEsUnFallo() {
+        responderProblema(404, "reserva-no-encontrada");
+
+        assertDoesNotThrow(() -> cliente.liberar(RESERVA));
+    }
+
+    /**
+     * Y el matiz que justifica mirar el type y no el codigo: un 404 sin type es
+     * una ruta equivocada —un fallo nuestro— y no puede pasar por un estado
+     * legitimo de negocio, ni siquiera al liberar.
+     */
+    @Test
+    void un404SinTypeNoSeConfundeConUnaReservaInexistente() {
+        codigo.set(404);
+        respuesta.set("{\"status\":404,\"title\":\"Not Found\"}");
+
+        CreditoClientException error = assertThrows(CreditoClientException.class,
+                () -> cliente.liberar(RESERVA));
+
+        assertEquals(CreditoClientException.Motivo.RESPUESTA_INESPERADA, error.getMotivo());
+    }
+
+    @Test
+    void un500ConCuerpoIlegibleSigueSiendoUnaAveria() {
+        codigo.set(500);
+        respuesta.set("<html>gateway</html>");
+
+        assertThrows(CreditoNoDisponibleException.class, () -> cliente.liberar(RESERVA));
     }
 }

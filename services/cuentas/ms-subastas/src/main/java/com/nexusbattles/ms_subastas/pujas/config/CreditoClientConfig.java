@@ -57,13 +57,17 @@ public class CreditoClientConfig {
      * Cliente real contra ms-finanzas. Se activa con
      * {@code app.finanzas.modo=http}.
      *
-     * <p>No es el modo por defecto todavia, y no por falta de endpoints: los
-     * cuatro existen. Es porque ms-finanzas no tiene manejador de errores, asi
-     * que un saldo insuficiente sale como 500, igual que una caida. Con el
-     * modo http activo, un jugador sin creditos veria "error del servidor" y
-     * ademas empujaria el cortacircuitos, dejando sin creditos al resto.
-     * En cuanto esas excepciones devuelvan 409 y 404, esto pasa a ser el
-     * valor por defecto.
+     * <p>No es el modo por defecto todavia, y ya no por los errores: desde el
+     * 15/09/2026 ms-finanzas distingue el saldo insuficiente (422) de la
+     * reserva inexistente (404) con su {@code type} URI, y este cliente los
+     * traduce. Lo que falta es mas basico: <b>no hay ninguna forma de acreditar
+     * creditos a una cuenta</b>. Reservar y debitar exigen saldo, y el unico
+     * abono es consumir al vendedor, que exige una reserva previa; toda cuenta
+     * nace en cero, asi que con el modo real toda puja moriria en
+     * SALDO_INSUFICIENTE y la historia no se podria demostrar.
+     *
+     * <p>El dia que exista un endpoint de abono, esto pasa a ser el valor por
+     * defecto sin tocar el motor de pujas.
      */
     @Bean
     @ConditionalOnProperty(name = "app.finanzas.modo", havingValue = "http")
