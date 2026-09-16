@@ -158,3 +158,28 @@ test('El jugador limpia la busqueda y vuelve a ver su inventario', async ({ page
   await expect(campo).toHaveValue('');
   await expect(formulario.getByRole('button', { name: 'Limpiar' })).toBeHidden();
 });
+
+/**
+ * Regresion del PR #295, misma causa que en `resaltado.aceptacion.spec.js`:
+ * `.inventario-busqueda__control` usa el atajo `border`, asi que el `var()`
+ * sin resolver no deja el color por defecto sino que anula la declaracion
+ * completa y el campo se queda literalmente sin borde.
+ */
+test('El campo de busqueda se dibuja con un borde visible', async ({ page }) => {
+  await prepararInventario(page);
+  await abrirVitrina(page);
+
+  const campo = formularioBusqueda(page).getByRole('searchbox');
+  const borde = await campo.evaluate((el) => {
+    const estilo = getComputedStyle(el);
+    return {
+      ancho: estilo.borderTopWidth,
+      estilo: estilo.borderTopStyle,
+      color: estilo.borderTopColor,
+    };
+  });
+
+  expect(borde.estilo).toBe('solid');
+  expect(borde.ancho).toBe('1px');
+  expect(borde.color).toBe('rgb(111, 121, 148)');
+});

@@ -11,6 +11,9 @@ import { test, expect } from '@playwright/test';
 
 const JUGADOR = 'jugador-de-prueba';
 
+/** Token `--borde-interactivo` del sistema de diseno: #6f7994. */
+const BORDE_INTERACTIVO = 'rgb(111, 121, 148)';
+
 function elemento(indice) {
   const tipos = ['HEROE', 'ARMA', 'ARMADURA', 'ITEM', 'EPICA', 'HABILIDAD'];
   return {
@@ -237,5 +240,40 @@ test.describe('Resaltado del producto al senalar', () => {
 
     expect(await aspectoDe(tarjeta)).not.toEqual(enReposo);
     expect(await cajasDeTodas(page)).toEqual(antes);
+  });
+  // --- Regresion del PR #295 --------------------------------------------
+
+  /**
+   * El PR #295 renombro la variable de la paleta a `--borde-int` pero dejo
+   * dos usos con el nombre anterior, que en esta pagina no esta definido.
+   * Un `var()` sin resolver invalida la declaracion entera y `border-color`
+   * cae a `currentColor`: el borde sigue cambiando al senalar —por eso las
+   * pruebas de arriba siguieron en verde— pero se dibuja con el color del
+   * texto en lugar del token del sistema de diseno.
+   *
+   * Por eso esta prueba fija el valor y no la diferencia.
+   */
+  test('El realce usa el borde interactivo del sistema de diseno', async ({ page }) => {
+    await conInventarioDe(page, 16);
+    await abrirVitrina(page);
+
+    const tarjeta = page.locator('.vitrina__producto').first();
+    await tarjeta.hover();
+
+    // `aspectoEstable` no sirve aqui: da por estable tanto el valor previo a
+    // la transicion como el posterior. Se espera al valor, no a que deje de
+    // moverse.
+    await expect.poll(async () => (await aspectoDe(tarjeta)).borde).toBe(BORDE_INTERACTIVO);
+  });
+
+  test('El realce por teclado usa el mismo borde que el puntero', async ({ page }) => {
+    await conInventarioDe(page, 16);
+    await abrirVitrina(page);
+
+    const tarjeta = page.locator('.vitrina__producto').first();
+    // La tarjeta es un <li>: quien recibe el foco es un control de dentro.
+    await tarjeta.locator('button').first().focus();
+
+    await expect.poll(async () => (await aspectoDe(tarjeta)).borde).toBe(BORDE_INTERACTIVO);
   });
 });
