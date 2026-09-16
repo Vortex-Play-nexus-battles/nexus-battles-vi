@@ -159,12 +159,19 @@ jobs:
           esac
 
       # ------------------------------------------------------ plan/apply/destroy
+      # La organizacion solo permite acciones de GitHub, verificadas en el
+      # Marketplace o appleboy/*; opentofu/setup-opentofu no lo es. Se instala
+      # con el script oficial, version fijada (misma que el .terraform.lock.hcl
+      # de entornos/ usa "tofu").
       - name: Instalar OpenTofu
         if: steps.accion.outputs.accion == 'plan' || steps.accion.outputs.accion == 'apply' || steps.accion.outputs.accion == 'destroy'
-        uses: opentofu/setup-opentofu@v1
-        with:
-          tofu_version: "1.10.6"
-          tofu_wrapper: false
+        working-directory: .
+        run: |
+          curl -fsSL https://get.opentofu.org/install-opentofu.sh -o install-opentofu.sh
+          chmod +x install-opentofu.sh
+          sudo ./install-opentofu.sh --install-method standalone --opentofu-version 1.10.6
+          rm -f install-opentofu.sh
+          tofu version
 
       - name: tofu init (estado en S3)
         if: steps.accion.outputs.accion == 'plan' || steps.accion.outputs.accion == 'apply' || steps.accion.outputs.accion == 'destroy'
