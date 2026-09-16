@@ -161,6 +161,18 @@ MS_ECOMMERCE_DB_NAME=${MS_ECOMMERCE_DB_NAME:-}
 MS_ECOMMERCE_DB_USER=${MS_ECOMMERCE_DB_USER:-}
 MS_ECOMMERCE_DB_PASSWORD=${MS_ECOMMERCE_DB_PASSWORD:-}
 EOF
+# Configuracion opcional de los servicios de plataforma (variables del
+# entorno de GitHub, no secrets). Solo se escriben si llegan con valor: una
+# linea "VARIABLE=" vacia en el .env llega a Spring como cadena vacia y
+# ANULA el valor por defecto de ${VARIABLE:defecto} en application.yml;
+# omitirla conserva ese valor por defecto.
+for variable in SMTP_PORT LISTA_NEGRA_VERIFICAR_URL SALAS_WS_ORIGENES CHAT_WS_ORIGENES \
+    CHAT_HISTORIAL_TAMANO NOTIFICACIONES_WS_ORIGENES COMENTARIOS_FORMATOS_IMAGEN; do
+  valor="${!variable:-}"
+  if [ -n "$valor" ]; then
+    echo "$variable=$valor" >> .env
+  fi
+done
 chmod 600 .env
 
 echo "== 2) Guardando el tag estable actual de cada servicio, antes de tocarlo =="
@@ -297,8 +309,33 @@ if [ "$INCLUYE_CONTENIDO" -eq 1 ]; then
   resolver_etiquetas_contenido "$TAG" "$SERVICIOS_PUERTOS"
 fi
 
+# El borde (srv-borde, docker-compose.deploy.yml) vive solo en el host de
+# plataforma: sirve el frontend y enruta /api/v1/* a los servicios. Se
+# levanta en cada corrida de plataforma/cuentas para que recoja el frontend y
+# la configuracion recien copiados a /opt/nexus/web. En el host de contenido
+# no existe (su corrida solo trae servicios de contenido).
+INCLUYE_BORDE=0
+if [ "$INCLUYE_CONTENIDO" -eq 0 ] && [ -d "$DIRECTORIO/web/infrastructure/red-balanceo" ]; then
+  INCLUYE_BORDE=1
+  SERVICIOS_COMPOSE="$SERVICIOS_COMPOSE srv-borde"
+fi
+
 docker compose "${ARCHIVOS_COMPOSE[@]}" pull $SERVICIOS_COMPOSE
 docker compose "${ARCHIVOS_COMPOSE[@]}" up -d $SERVICIOS_COMPOSE
+
+if [ "$INCLUYE_BORDE" -eq 1 ]; then
+  echo "== 3c) Recargando el borde con la configuracion copiada en esta corrida =="
+  # up -d no reinicia un contenedor cuya definicion no cambio, pero el
+  # archivo montado si pudo cambiar: se valida y recarga nginx sin cortar
+  # conexiones. Si la configuracion es invalida, falla aqui con el detalle.
+  docker exec srv-borde nginx -t
+  docker exec srv-borde nginx -s reload
+  if ! curl -fsS http://localhost/salud-borde | grep -q UP; then
+    echo "El borde no responde en http://localhost/salud-borde"
+    exit 1
+  fi
+  echo "  borde: saludable"
+fi
 
 echo "== 4) Verificando /actuator/health de cada servicio desplegado (con reintentos) =="
 # Ruta de salud por servicio: todos los servicios de plataforma y

@@ -48,13 +48,39 @@
 # usa el default declarado en application.properties (spring.profiles.active=dev).
 
 services:
+  # Base de datos PROPIA de ms-identidad (regla 7: aislamiento de datos; no
+  # comparte servidor con plataforma-db). Volumen con nombre para que los
+  # usuarios registrados sobrevivan a un redespliegue y al apagado nocturno
+  # del host. Los tres MS_IDENTIDAD_DB_* apuntan aqui:
+  #   MS_IDENTIDAD_DB_URL=jdbc:postgresql://identidad-db:5432/identidaddb
+  identidad-db:
+    image: postgres:15-alpine
+    container_name: identidad-db
+    restart: unless-stopped
+    mem_limit: 192m
+    environment:
+      POSTGRES_DB: identidaddb
+      POSTGRES_USER: ${MS_IDENTIDAD_DB_USER}
+      POSTGRES_PASSWORD: ${MS_IDENTIDAD_DB_PASSWORD}
+    volumes:
+      - identidad-db-datos:/var/lib/postgresql/data
+
   srv-ms-identidad:
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-ms-identidad:${TAG}
+    container_name: srv-ms-identidad
+    restart: unless-stopped
+    mem_limit: 448m
     ports:
       - "8089:8089"
+    depends_on:
+      - identidad-db
     environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
       DB_URL: ${MS_IDENTIDAD_DB_URL}
       DB_USER: ${MS_IDENTIDAD_DB_USER}
       DB_PASSWORD: ${MS_IDENTIDAD_DB_PASSWORD}
       LISTA_NEGRA_URL: ${LISTA_NEGRA_URL}
       SPRING_PROFILES_ACTIVE: ${MS_IDENTIDAD_SPRING_PROFILES_ACTIVE}
+
+volumes:
+  identidad-db-datos:
