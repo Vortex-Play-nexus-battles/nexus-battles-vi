@@ -40,6 +40,7 @@ class InventarioClientHttpTest {
     private final AtomicReference<String> claveIdempotencia = new AtomicReference<>();
     private final AtomicReference<String> cuerpo = new AtomicReference<>();
     private final AtomicInteger codigo = new AtomicInteger(200);
+    private final AtomicReference<String> cuerpoDeRespuesta = new AtomicReference<>("{}");
 
     @BeforeEach
     void levantar() throws IOException {
@@ -50,7 +51,7 @@ class InventarioClientHttpTest {
             identidad.set(intercambio.getRequestHeaders().getFirst("X-User-Name"));
             claveIdempotencia.set(intercambio.getRequestHeaders().getFirst("Idempotency-Key"));
             cuerpo.set(new String(intercambio.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
-            byte[] respuesta = "{}".getBytes(StandardCharsets.UTF_8);
+            byte[] respuesta = cuerpoDeRespuesta.get().getBytes(StandardCharsets.UTF_8);
             intercambio.getResponseHeaders().add("Content-Type", "application/json");
             intercambio.sendResponseHeaders(codigo.get(), respuesta.length);
             intercambio.getResponseBody().write(respuesta);
@@ -78,11 +79,15 @@ class InventarioClientHttpTest {
 
         assertEquals("PUT", metodo.get());
         assertEquals("/api/v1/inventario/elementos/" + ELEMENTO + "/bloqueo-subasta", ruta.get());
-        assertEquals(propietario.toString(), identidad.get());
         assertEquals("clave-de-prueba", claveIdempotencia.get());
 
         JsonNode json = new ObjectMapper().readTree(cuerpo.get());
         assertEquals(subasta.toString(), json.get("subastaId").asText());
+        // El propietario viaja en el CUERPO como propietarioUid, que es lo que
+        // publico inventario el 15/09. Antes se mandaba el UUID en X-User-Name,
+        // una cabecera que compara contra el apodo: no coincidia nunca.
+        assertEquals(propietario.toString(), json.get("propietarioUid").asText());
+        assertEquals(null, identidad.get(), "ya no se manda cabecera de apodo");
     }
 
     /**
@@ -97,19 +102,18 @@ class InventarioClientHttpTest {
     }
 
     /**
-     * El 403 es el sintoma del desacuerdo de identificadores entre los dos
-     * servicios, y el mensaje tiene que decirlo: si solo dijera "403", el
-     * siguiente que lo vea perdera una tarde averiguando por que.
+     * Ya no es el sintoma del desacuerdo de identificadores —eso se cerro al
+     * publicarse propietarioUid—: ahora un 403 significa lo que dice, que quien
+     * intenta bloquear no es el dueno del elemento.
      */
     @Test
-    void unRechazoPorIdentidadExplicaElDesacuerdoDeIdentificadores() {
+    void unRechazoPorPropietarioAjenoSeExplicaComoTal() {
         codigo.set(403);
 
         InventarioClientException error = assertThrows(InventarioClientException.class,
                 () -> cliente.reservar(ELEMENTO, UUID.randomUUID(), UUID.randomUUID(), "clave"));
 
-        assertTrue(error.getMessage().contains("X-User-Name"), error.getMessage());
-        assertTrue(error.getMessage().contains("apodo"), error.getMessage());
+        assertTrue(error.getMessage().contains("propietarioUid"), error.getMessage());
     }
 
     @Test
@@ -133,21 +137,69 @@ class InventarioClientHttpTest {
                 () -> haciaLaNada.reservar(ELEMENTO, UUID.randomUUID(), UUID.randomUUID(), "clave"));
     }
 
-    // --- las tres que no existen -------------------------------------------
+    // --- consultar un elemento, que Nicolay publico el 15/09 ---------------
+
+    @Test
+    void buscarUsaLaRutaDelElementoYLeeSusCampos() {
+        UUID producto = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002");
+        UUID propietario = UUID.fromString("77777777-0000-0000-0000-0000000000cc");
+        cuerpoDeRespuesta.set("""
+                {"elementoId":"%s","productoId":"%s","propietarioUid":"%s",
+                 "enUso":false,"disponible":true,"subastaId":null}"""
+                .formatted(ELEMENTO, producto, propietario));
+
+        InventarioClient.ElementoInventario elemento = cliente.buscar(ELEMENTO).orElseThrow();
+
+        assertEquals("GET", metodo.get());
+        assertEquals("/api/v1/inventario/elementos/" + ELEMENTO, ruta.get());
+        assertEquals(ELEMENTO, elemento.id());
+        assertEquals(producto, elemento.productoId());
+        assertEquals(propietario, elemento.propietarioId());
+        assertFalse(elemento.enUso());
+    }
 
     /**
-     * Antes llamaban a rutas inventadas y habrian muerto con un 404 en mitad de
-     * una subasta. Ahora fallan aqui, y el mensaje nombra el endpoint que hay
-     * que pedir. Estas tres pruebas se borran el dia que los endpoints existan.
+     * La consulta no pide identidad, y eso es lo que la hace utilizable desde
+     * el job de cierre, donde no hay peticion de nadie.
      */
     @Test
-    void buscarPorIdDiceQueEsEndpointNoExisteYNoInventaUnaRuta() {
-        InventarioClientException error = assertThrows(InventarioClientException.class,
-                () -> cliente.buscar(ELEMENTO));
+    void buscarNoMandaIdentidadDeNadie() {
+        cuerpoDeRespuesta.set("""
+                {"elementoId":"%s","productoId":"bbbbbbbb-0000-0000-0000-000000000002",
+                 "propietarioUid":"77777777-0000-0000-0000-0000000000cc","enUso":false,
+                 "disponible":true,"subastaId":null}""".formatted(ELEMENTO));
 
-        assertTrue(error.getMessage().contains("GET /api/v1/inventario/elementos/{elementoId}"),
-                error.getMessage());
-        assertEquals(null, metodo.get(), "no puede salir ninguna peticion hacia una ruta que no existe");
+        cliente.buscar(ELEMENTO);
+
+        assertEquals(null, identidad.get());
+    }
+
+    /**
+     * Que el elemento ya no exista es un estado normal —lo pudieron borrar
+     * entre publicar la subasta y cerrarla—, no un fallo. Devolver vacio deja
+     * decidir a quien llama; una excepcion lo obligaria a cazarla para nada.
+     */
+    @Test
+    void unElementoQueYaNoExisteDevuelveVacioYNoExplota() {
+        codigo.set(404);
+
+        assertTrue(cliente.buscar(ELEMENTO).isEmpty());
+    }
+
+    @Test
+    void unaRespuestaIlegibleAlConsultarNoPasaPorBuena() {
+        cuerpoDeRespuesta.set("esto no es json");
+
+        assertThrows(InventarioClientException.class, () -> cliente.buscar(ELEMENTO));
+    }
+
+    @Test
+    void siInventarioNoRespondeAlConsultarSeReportaComoAveria() {
+        InventarioClientHttp haciaLaNada = new InventarioClientHttp(
+                URI.create("http://localhost:1"), HttpClient.newHttpClient(),
+                new ObjectMapper(), Duration.ofMillis(300));
+
+        assertThrows(InventarioNoDisponibleException.class, () -> haciaLaNada.buscar(ELEMENTO));
     }
 
     // --- liberar el bloqueo, que Nicolay publico despues -------------------
