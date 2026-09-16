@@ -75,7 +75,14 @@ COMPOSE_MS_ECOMMERCE="$DIRECTORIO/docker-compose.ms-ecommerce.yml"
 # comando solo si algun servicio de contenido viene en esta corrida.
 COMPOSE_CONTENIDO="$DIRECTORIO/docker-compose.contenido.yml"
 SERVICIOS_CONTENIDO="heroes inventario productos motor-combate"
-INTENTOS_SALUD=12
+# Ventana de espera del healthcheck: 36 x 5 s = 3 minutos por servicio.
+# Eran 12 x 5 s = 60 s, pensados para un servidor holgado. En el host de dev
+# real (t3.small: 2 vCPU con creditos de CPU "standard", 2 GiB) arrancar
+# varias JVM de Spring Boot a la vez -- cada una con Flyway y Hibernate --
+# pasa de 60 s, y el PRIMER servicio de la lista es el que peor lo pasa:
+# se verifica cuando los demas todavia estan compitiendo por la CPU. Tres
+# minutos siguen dando un fallo rapido si el servicio esta de verdad roto.
+INTENTOS_SALUD=36
 ESPERA_ENTRE_INTENTOS=5
 
 # Etiqueta de imagen por servicio de contenido. docker-compose.contenido.yml
