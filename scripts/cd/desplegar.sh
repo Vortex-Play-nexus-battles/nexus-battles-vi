@@ -309,8 +309,33 @@ if [ "$INCLUYE_CONTENIDO" -eq 1 ]; then
   resolver_etiquetas_contenido "$TAG" "$SERVICIOS_PUERTOS"
 fi
 
+# El borde (srv-borde, docker-compose.deploy.yml) vive solo en el host de
+# plataforma: sirve el frontend y enruta /api/v1/* a los servicios. Se
+# levanta en cada corrida de plataforma/cuentas para que recoja el frontend y
+# la configuracion recien copiados a /opt/nexus/web. En el host de contenido
+# no existe (su corrida solo trae servicios de contenido).
+INCLUYE_BORDE=0
+if [ "$INCLUYE_CONTENIDO" -eq 0 ] && [ -d "$DIRECTORIO/web/infrastructure/red-balanceo" ]; then
+  INCLUYE_BORDE=1
+  SERVICIOS_COMPOSE="$SERVICIOS_COMPOSE srv-borde"
+fi
+
 docker compose "${ARCHIVOS_COMPOSE[@]}" pull $SERVICIOS_COMPOSE
 docker compose "${ARCHIVOS_COMPOSE[@]}" up -d $SERVICIOS_COMPOSE
+
+if [ "$INCLUYE_BORDE" -eq 1 ]; then
+  echo "== 3c) Recargando el borde con la configuracion copiada en esta corrida =="
+  # up -d no reinicia un contenedor cuya definicion no cambio, pero el
+  # archivo montado si pudo cambiar: se valida y recarga nginx sin cortar
+  # conexiones. Si la configuracion es invalida, falla aqui con el detalle.
+  docker exec srv-borde nginx -t
+  docker exec srv-borde nginx -s reload
+  if ! curl -fsS http://localhost/salud-borde | grep -q UP; then
+    echo "El borde no responde en http://localhost/salud-borde"
+    exit 1
+  fi
+  echo "  borde: saludable"
+fi
 
 echo "== 4) Verificando /actuator/health de cada servicio desplegado (con reintentos) =="
 # Ruta de salud por servicio: todos los servicios de plataforma y

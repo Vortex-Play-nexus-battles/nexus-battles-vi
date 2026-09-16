@@ -37,6 +37,10 @@ services:
   plataforma-db:
     restart: unless-stopped
     mem_limit: 256m
+    # Volumen con nombre: los datos de dev sobreviven a redespliegues y al
+    # apagado nocturno (el base no declara volumen: usa uno anonimo).
+    volumes:
+      - plataforma-db-datos:/var/lib/postgresql/data
 
   plataforma-cache:
     restart: unless-stopped
@@ -45,6 +49,25 @@ services:
   mailpit:
     restart: unless-stopped
     mem_limit: 64m
+    environment:
+      # La bandeja se sirve detras del borde en /mailpit/ (borde-dev.conf).
+      MP_WEBROOT: /mailpit
+
+  # Borde del host (infrastructure/red-balanceo/borde-dev.conf): unico
+  # puerto publico del host, sirve el frontend y enruta /api/v1/* y /ws a
+  # cada servicio por nombre. No existe en docker-compose.yml (desarrollo
+  # local abre cada servicio por su puerto); solo en despliegue. cd.yml deja
+  # el frontend, el ui-kit y esta configuracion en /opt/nexus/web/.
+  srv-borde:
+    image: nginx:1.27-alpine
+    container_name: srv-borde
+    restart: unless-stopped
+    mem_limit: 48m
+    ports:
+      - "80:80"
+    volumes:
+      - /opt/nexus/web:/srv/nexus:ro
+      - /opt/nexus/web/infrastructure/red-balanceo/borde-dev.conf:/etc/nginx/conf.d/default.conf:ro
 
   srv-comentarios:
     <<: *servicio-plataforma
@@ -77,3 +100,6 @@ services:
   srv-admin-parametros:
     <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-admin-parametros:${TAG}
+
+volumes:
+  plataforma-db-datos:

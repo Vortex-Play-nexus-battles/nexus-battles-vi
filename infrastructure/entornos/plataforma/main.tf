@@ -72,9 +72,25 @@ resource "aws_security_group" "plataforma" {
   }
 
   ingress {
+    description = "Borde nginx (infrastructure/red-balanceo/borde-dev.conf): frontend + /api/v1/* + /ws en un solo origen"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
     description = "Servicios de plataforma: comentarios 8081 ... admin-parametros 8088"
     from_port   = local.puerto_inicio
     to_port     = local.puerto_fin
+    protocol    = "tcp"
+    cidr_blocks = var.cidr_servicios
+  }
+
+  ingress {
+    description = "ms-identidad (Cuentas) en el host de plataforma, como lo espera cd.yml"
+    from_port   = 8089
+    to_port     = 8089
     protocol    = "tcp"
     cidr_blocks = var.cidr_servicios
   }
