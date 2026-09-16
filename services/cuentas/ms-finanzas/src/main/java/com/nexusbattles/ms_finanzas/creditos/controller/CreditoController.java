@@ -62,5 +62,4 @@ public class CreditoController {
     public ResponseEntity<AcreditarResponse> acreditar(@RequestBody AcreditarRequest req) {
         return ResponseEntity.ok(creditoService.acreditar(req));
     }
-
 }
