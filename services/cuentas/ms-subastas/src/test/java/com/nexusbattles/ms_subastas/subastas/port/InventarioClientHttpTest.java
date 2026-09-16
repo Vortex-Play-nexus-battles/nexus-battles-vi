@@ -291,4 +291,107 @@ class InventarioClientHttpTest {
         assertTrue(error.getMessage().contains("transferencia"), error.getMessage());
         assertEquals(null, metodo.get());
     }
+
+    // --- lo que se corta antes de salir a la red ---------------------------
+    //
+    // Estas llamadas deciden de quien es un producto. Una peticion mal armada
+    // que llegue a inventario o la rechaza con un 400 que hay que interpretar,
+    // o acaba bloqueando/soltando el elemento equivocado.
+
+    @Test
+    void bloquearExigeElementoPropietarioYSubastaAntesDeSalir() {
+        assertThrows(InventarioClientException.class,
+                () -> cliente.reservar(null, UUID.randomUUID(), UUID.randomUUID(), "clave"));
+        assertThrows(InventarioClientException.class,
+                () -> cliente.reservar("  ", UUID.randomUUID(), UUID.randomUUID(), "clave"));
+        assertThrows(InventarioClientException.class,
+                () -> cliente.reservar(ELEMENTO, null, UUID.randomUUID(), "clave"));
+        assertThrows(InventarioClientException.class,
+                () -> cliente.reservar(ELEMENTO, UUID.randomUUID(), null, "clave"));
+
+        assertEquals(null, metodo.get(), "ninguna puede haber salido a la red");
+    }
+
+    @Test
+    void liberarExigeElementoYSubasta() {
+        assertThrows(InventarioClientException.class,
+                () -> cliente.liberarReserva(null, UUID.randomUUID(), "clave"));
+        assertThrows(InventarioClientException.class,
+                () -> cliente.liberarReserva(ELEMENTO, null, "clave"));
+        assertEquals(null, metodo.get());
+    }
+
+    @Test
+    void buscarExigeElIdentificadorDelElemento() {
+        assertThrows(InventarioClientException.class, () -> cliente.buscar(null));
+        assertThrows(InventarioClientException.class, () -> cliente.buscar("  "));
+        assertEquals(null, metodo.get());
+    }
+
+    /**
+     * A diferencia del bloqueo, liberar admite ir sin clave: lo llama el job de
+     * cierre, e inventario garantiza la idempotencia por su lado (repetir el
+     * aviso sobre un producto ya disponible responde 200).
+     */
+    @Test
+    void liberarSinClaveDeIdempotenciaSiSale() {
+        cliente.liberarReserva(ELEMENTO, UUID.randomUUID(), null);
+
+        assertEquals("DELETE", metodo.get());
+        assertEquals(null, claveIdempotencia.get());
+    }
+
+    // --- averia contra rechazo de negocio ----------------------------------
+
+    /**
+     * El 503 es lo unico que merece reintento y lo unico que debe empujar el
+     * cortacircuitos. Un 409 es una respuesta correcta: reintentarlo da igual.
+     */
+    @Test
+    void un503AlBloquearEsAveriaYNoRechazoDeNegocio() {
+        codigo.set(503);
+
+        assertThrows(InventarioNoDisponibleException.class,
+                () -> cliente.reservar(ELEMENTO, UUID.randomUUID(), UUID.randomUUID(), "clave"));
+    }
+
+    @Test
+    void un503AlConsultarEsAveria() {
+        codigo.set(503);
+
+        assertThrows(InventarioNoDisponibleException.class, () -> cliente.buscar(ELEMENTO));
+    }
+
+    @Test
+    void unaRespuestaInesperadaAlBloquearNoPasaPorBuena() {
+        codigo.set(418);
+
+        InventarioClientException error = assertThrows(InventarioClientException.class,
+                () -> cliente.reservar(ELEMENTO, UUID.randomUUID(), UUID.randomUUID(), "clave"));
+
+        assertFalse(error instanceof InventarioNoDisponibleException);
+        assertTrue(error.getMessage().contains("418"), error.getMessage());
+    }
+
+    @Test
+    void unaRespuestaInesperadaAlConsultarNoPasaPorBuena() {
+        codigo.set(500);
+
+        assertThrows(InventarioClientException.class, () -> cliente.buscar(ELEMENTO));
+    }
+
+    /**
+     * Si inventario no devuelve el elementoId, vale el que se pidio: es el que
+     * identifica al elemento que se acaba de consultar. Dejarlo nulo dejaria la
+     * subasta apuntando a un producto sin identificador.
+     */
+    @Test
+    void siNoVieneElElementoIdValeElQueSePidio() {
+        cuerpoDeRespuesta.set("""
+                {"productoId":"bbbbbbbb-0000-0000-0000-000000000002",
+                 "propietarioUid":"77777777-0000-0000-0000-0000000000cc",
+                 "enUso":false,"disponible":true,"subastaId":null}""");
+
+        assertEquals(ELEMENTO, cliente.buscar(ELEMENTO).orElseThrow().id());
+    }
 }

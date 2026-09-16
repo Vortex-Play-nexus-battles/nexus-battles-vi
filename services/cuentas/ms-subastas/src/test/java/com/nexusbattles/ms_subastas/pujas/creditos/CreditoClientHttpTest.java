@@ -270,4 +270,100 @@ class CreditoClientHttpTest {
 
         assertThrows(CreditoNoDisponibleException.class, () -> cliente.liberar(RESERVA));
     }
+
+    // --- lo que no llega ni a salir de casa --------------------------------
+    //
+    // Cortar aqui no es paranoia: estas llamadas mueven dinero. Una peticion
+    // mal armada que llegue a ms-finanzas o la rechaza con un 400 que hay que
+    // interpretar, o —peor— la acepta con un valor nulo convertido en texto.
+
+    @Test
+    void reservarExigeJugadorMontoYSubastaAntesDeSalir() {
+        assertThrows(CreditoClientException.class,
+                () -> cliente.reservar(null, new BigDecimal("110"), SUBASTA, "clave-de-prueba"));
+        assertThrows(CreditoClientException.class,
+                () -> cliente.reservar(JUGADOR, null, SUBASTA, "clave-de-prueba"));
+        assertThrows(CreditoClientException.class,
+                () -> cliente.reservar(JUGADOR, BigDecimal.ZERO, SUBASTA, "clave-de-prueba"));
+        assertThrows(CreditoClientException.class,
+                () -> cliente.reservar(JUGADOR, new BigDecimal("-10"), SUBASTA, "clave-de-prueba"));
+        assertThrows(CreditoClientException.class,
+                () -> cliente.reservar(JUGADOR, new BigDecimal("110"), null, "clave-de-prueba"));
+
+        assertEquals(null, metodo.get(), "ninguna de esas puede haber salido a la red");
+    }
+
+    @Test
+    void liberarYConsumirExigenLaReserva() {
+        assertThrows(CreditoClientException.class, () -> cliente.liberar(null));
+        assertThrows(CreditoClientException.class, () -> cliente.consumir(null, VENDEDOR));
+        assertEquals(null, metodo.get());
+    }
+
+    @Test
+    void consultarElSaldoExigeElJugador() {
+        assertThrows(CreditoClientException.class, () -> cliente.saldoDisponible(null));
+        assertEquals(null, metodo.get());
+    }
+
+    // --- respuestas que cumplen el formato pero no dicen nada util ---------
+
+    /**
+     * Sin reservaId no se puede guardar la puja: quedaria apuntando a una
+     * reserva que no se sabe cual es, y al cerrarse la subasta no habria nada
+     * que consumir ni que liberar.
+     */
+    @Test
+    void unaReservaSinIdentificadorNoSeDaPorBuena() {
+        codigo.set(201);
+        respuesta.set("{\"jugadorUid\":\"" + JUGADOR + "\",\"estado\":\"ACTIVA\"}");
+
+        CreditoClientException error = assertThrows(CreditoClientException.class,
+                () -> cliente.reservar(JUGADOR, new BigDecimal("110"), SUBASTA, "clave-de-prueba"));
+
+        assertEquals(CreditoClientException.Motivo.RESPUESTA_INESPERADA, error.getMotivo());
+    }
+
+    /**
+     * Si ms-finanzas no devuelve el monto, vale el que se pidio: es el que se
+     * mando y el que el jugador vio. Inventarse un cero seria decirle que no le
+     * retuvieron nada.
+     */
+    @Test
+    void siNoVieneElMontoValeElQueSePidio() {
+        codigo.set(201);
+        respuesta.set("{\"reservaId\":\"" + RESERVA + "\",\"estado\":\"ACTIVA\"}");
+
+        ReservaCredito reserva = cliente.reservar(JUGADOR, new BigDecimal("110"), SUBASTA, "clave-de-prueba");
+
+        assertEquals(0, new BigDecimal("110").compareTo(reserva.monto()));
+        assertEquals(RESERVA, reserva.id());
+    }
+
+    @Test
+    void unSaldoSinElCampoDisponibleNoSeDaPorBueno() {
+        respuesta.set("{\"jugadorUid\":\"" + JUGADOR + "\",\"saldoBruto\":\"500\"}");
+
+        CreditoClientException error = assertThrows(CreditoClientException.class,
+                () -> cliente.saldoDisponible(JUGADOR));
+
+        assertEquals(CreditoClientException.Motivo.RESPUESTA_INESPERADA, error.getMotivo());
+    }
+
+    /**
+     * Un error sin cuerpo tiene que seguir clasificandose. Leer el type es lo
+     * primero que se hace en el camino de error, y si eso reventara taparia el
+     * error de verdad con uno de parseo.
+     */
+    @Test
+    void unErrorSinCuerpoSigueSiendoClasificable() {
+        codigo.set(400);
+        respuesta.set("");
+
+        CreditoClientException error = assertThrows(CreditoClientException.class,
+                () -> cliente.liberar(RESERVA));
+
+        assertEquals(CreditoClientException.Motivo.RESPUESTA_INESPERADA, error.getMotivo());
+        assertTrue(error.getMessage().contains("sin type"), error.getMessage());
+    }
 }
