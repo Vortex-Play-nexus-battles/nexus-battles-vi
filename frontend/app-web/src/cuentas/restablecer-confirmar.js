@@ -6,22 +6,15 @@
 // contraseña por primera vez) o de "RESTABLECIMIENTO" (olvido su
 // contraseña). El cliente nunca distingue cual es -- el backend ya sabe
 // que hacer segun el tipo que tenga guardado ese codigo.
+//
+// La logica de red vive en confirmarRestablecimiento(), exportada y con
+// fetchImpl inyectable (mismo patron que cambiarRol en cambio-rol.js).
+// La validacion de "las dos contraseñas coinciden" es puramente de
+// cliente -- el backend nunca recibe la confirmacion, solo nuevaPassword.
 
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
 
 const URL_CONFIRMAR = '/api/v1/auth/restablecer/confirmar';
-
-/** @type {HTMLFormElement} */
-const form = document.getElementById('formConfirmacion');
-
-/** @type {HTMLButtonElement} */
-const botonEnviar = document.getElementById('botonEnviar');
-
-/** @type {HTMLElement} */
-const estadoConfirmacion = document.getElementById('estadoConfirmacion');
-
-/** @type {HTMLInputElement} */
-const campoConfirmarPassword = document.getElementById('confirmarPassword');
 
 async function cuerpoDe(response) {
   const texto = await response.text();
@@ -38,6 +31,53 @@ async function cuerpoDe(response) {
 }
 
 /**
+ * Canjea un codigo (de activacion o restablecimiento) por una nueva
+ * contraseña.
+ *
+ * @param {string} token
+ * @param {string} nuevaPassword
+ * @param {{fetchImpl?: Function}} [opciones]
+ * @returns {Promise<string>} el mensaje a mostrar al usuario
+ * @throws {Error} si el codigo es invalido, expirado, o ya usado
+ */
+export async function confirmarRestablecimiento(
+  token,
+  nuevaPassword,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const respuesta = await fetchImpl(URL_CONFIRMAR, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, nuevaPassword }),
+  });
+
+  const { body } = await cuerpoDe(respuesta);
+
+  if (!respuesta.ok) {
+    const mensajeServidor = typeof body === 'string' ? body : body?.detail;
+    throw new Error(mensajeServidor || 'No se pudo restablecer la contraseña.');
+  }
+
+  return typeof body === 'string'
+    ? body
+    : 'Contraseña actualizada correctamente. Ya puedes iniciar sesión.';
+}
+
+const form = document.getElementById('formConfirmacion');
+const botonEnviar = document.getElementById('botonEnviar');
+const estadoConfirmacion = document.getElementById('estadoConfirmacion');
+
+// Referencias explicitas a cada campo, en vez de acceso implicito por
+// nombre (form.codigo, form.nuevaPassword) -- ese acceso "magico" que el
+// propio HTML habilita funciona en un navegador real, pero no es
+// confiable en el entorno de pruebas (JSDOM) usado por este proyecto. Ser
+// explicito evita la dependencia de ese comportamiento implicito, y es
+// igual de correcto en produccion.
+const campoCodigo = document.getElementById('codigo');
+const campoNuevaPassword = document.getElementById('nuevaPassword');
+const campoConfirmarPassword = document.getElementById('confirmarPassword');
+
+/**
  * @param {string} texto
  * @param {'carga'|'error'|'exito'} tipo
  */
@@ -51,13 +91,13 @@ function ocultarEstado() {
   estadoConfirmacion.hidden = true;
 }
 
-form.addEventListener('submit', async (evento) => {
+form?.addEventListener('submit', async (evento) => {
   evento.preventDefault();
 
   ocultarEstado();
   campoConfirmarPassword.setCustomValidity('');
 
-  if (form.nuevaPassword.value !== campoConfirmarPassword.value) {
+  if (campoNuevaPassword.value !== campoConfirmarPassword.value) {
     campoConfirmarPassword.setCustomValidity('Las contraseñas no coinciden.');
   }
 
@@ -66,40 +106,22 @@ form.addEventListener('submit', async (evento) => {
     return;
   }
 
-  const payload = {
-    token: form.codigo.value.trim(),
-    nuevaPassword: form.nuevaPassword.value
-  };
-
   botonEnviar.disabled = true;
   setEstado('Restableciendo tu contraseña…', 'carga');
 
   try {
-    const respuesta = await fetchWithHttpErrorInterceptor(URL_CONFIRMAR, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    const { body } = await cuerpoDe(respuesta);
-
-    if (!respuesta.ok) {
-      const mensajeServidor = typeof body === 'string' ? body : body?.detail;
-      setEstado(mensajeServidor || 'No se pudo restablecer la contraseña.', 'error');
-      return;
-    }
-
-    setEstado(
-      typeof body === 'string' ? body : 'Contraseña actualizada correctamente. Ya puedes iniciar sesión.',
-      'exito'
+    const mensaje = await confirmarRestablecimiento(
+      campoCodigo.value.trim(),
+      campoNuevaPassword.value,
     );
-
+    setEstado(mensaje, 'exito');
     form.reset();
 
-    // Da tiempo a leer el mensaje de éxito antes de mandar al login.
     setTimeout(() => {
       window.location.href = './login.html';
     }, 2500);
+  } catch (error) {
+    setEstado(error.message, 'error');
   } finally {
     botonEnviar.disabled = false;
   }
