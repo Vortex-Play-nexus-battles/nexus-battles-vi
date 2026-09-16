@@ -161,6 +161,18 @@ MS_ECOMMERCE_DB_NAME=${MS_ECOMMERCE_DB_NAME:-}
 MS_ECOMMERCE_DB_USER=${MS_ECOMMERCE_DB_USER:-}
 MS_ECOMMERCE_DB_PASSWORD=${MS_ECOMMERCE_DB_PASSWORD:-}
 EOF
+# Configuracion opcional de los servicios de plataforma (variables del
+# entorno de GitHub, no secrets). Solo se escriben si llegan con valor: una
+# linea "VARIABLE=" vacia en el .env llega a Spring como cadena vacia y
+# ANULA el valor por defecto de ${VARIABLE:defecto} en application.yml;
+# omitirla conserva ese valor por defecto.
+for variable in SMTP_PORT LISTA_NEGRA_VERIFICAR_URL SALAS_WS_ORIGENES CHAT_WS_ORIGENES \
+    CHAT_HISTORIAL_TAMANO NOTIFICACIONES_WS_ORIGENES COMENTARIOS_FORMATOS_IMAGEN; do
+  valor="${!variable:-}"
+  if [ -n "$valor" ]; then
+    echo "$variable=$valor" >> .env
+  fi
+done
 chmod 600 .env
 
 echo "== 2) Guardando el tag estable actual de cada servicio, antes de tocarlo =="

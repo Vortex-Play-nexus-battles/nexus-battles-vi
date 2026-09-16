@@ -392,6 +392,18 @@ jobs:
           WEBSOCKET_URL: ${{ secrets.WEBSOCKET_URL }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASS: ${{ secrets.DB_PASS }}
+          # Configuracion NO secreta de los servicios de plataforma (nombres
+          # de .env.example). Son "variables" del entorno dev, no secrets:
+          # URLs internas del compose y origenes CORS. desplegar.sh solo las
+          # escribe en el .env si llegan con valor, para que un servicio sin
+          # variable conserve el valor por defecto de su application.yml.
+          SMTP_PORT: ${{ vars.SMTP_PORT }}
+          LISTA_NEGRA_VERIFICAR_URL: ${{ vars.LISTA_NEGRA_VERIFICAR_URL }}
+          SALAS_WS_ORIGENES: ${{ vars.SALAS_WS_ORIGENES }}
+          CHAT_WS_ORIGENES: ${{ vars.CHAT_WS_ORIGENES }}
+          CHAT_HISTORIAL_TAMANO: ${{ vars.CHAT_HISTORIAL_TAMANO }}
+          NOTIFICACIONES_WS_ORIGENES: ${{ vars.NOTIFICACIONES_WS_ORIGENES }}
+          COMENTARIOS_FORMATOS_IMAGEN: ${{ vars.COMENTARIOS_FORMATOS_IMAGEN }}
           # PENDIENTE (TODO_*): secrets propios de ms-identidad (equipo
           # Cuentas), todavia no creados en GitHub -- ver la validacion de
           # "fallo visible" en desplegar.sh si faltan y ms-identidad esta
@@ -427,7 +439,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,SMTP_PORT,LISTA_NEGRA_VERIFICAR_URL,SALAS_WS_ORIGENES,CHAT_WS_ORIGENES,CHAT_HISTORIAL_TAMANO,NOTIFICACIONES_WS_ORIGENES,COMENTARIOS_FORMATOS_IMAGEN,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -500,11 +512,20 @@ jobs:
 
   # ---------------------------------------------------------------------
   # Job 4: test. Espera a que dev termine y haya pasado salud (needs).
+  #
+  # Solo corre si la variable de repositorio HAY_ENTORNO_TEST vale "true".
+  # La cuenta AWS de la empresa (Free Plan, USD 0 de bolsillo; ver
+  # infrastructure/entornos/plataforma/README.md) tiene UN host de dev y
+  # ningun host de test: sin esta condicion, cada corrida terminaba en rojo
+  # despues de un dev correcto, y ese rojo tapa los fallos reales. Cuando
+  # exista un host de test, se crea la variable y sus secrets *_TEST, sin
+  # tocar este archivo. Produccion depende de test (needs), asi que queda
+  # omitida en cadena.
   # ---------------------------------------------------------------------
   desplegar-test:
     name: Desplegar en Test
     needs: [detectar-servicios, construir-y-publicar, desplegar-dev]
-    if: needs.detectar-servicios.outputs.hay_servicios == 'true'
+    if: needs.detectar-servicios.outputs.hay_servicios == 'true' && vars.HAY_ENTORNO_TEST == 'true'
     runs-on: ubuntu-latest
     environment: test
     steps:
@@ -601,7 +622,8 @@ jobs:
   desplegar-produccion:
     name: Desplegar en Produccion
     needs: [detectar-servicios, construir-y-publicar, desplegar-test]
-    if: needs.detectar-servicios.outputs.hay_servicios == 'true'
+    # Misma logica que test: solo con host propio (variable HAY_ENTORNO_PRODUCCION).
+    if: needs.detectar-servicios.outputs.hay_servicios == 'true' && vars.HAY_ENTORNO_PRODUCCION == 'true'
     runs-on: ubuntu-latest
     environment: produccion
     steps:
