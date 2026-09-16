@@ -24,7 +24,7 @@ output "tipo_instancia" {
 
 output "costo_estimado_usd_mes_24x7" {
   description = "Estimacion con precios oficiales on-demand us-east-1 del 2026-09-15 (instancia + IPv4 + disco), 720 h/mes. Solo orientativo; el saldo real esta en Billing > Credits."
-  value       = format("%.2f", (
+  value = format("%.2f", (
     lookup({
       "t3.micro"       = 0.0104
       "t3.small"       = 0.0208

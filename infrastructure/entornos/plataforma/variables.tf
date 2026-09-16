@@ -72,7 +72,7 @@ variable "tope_mensual_usd" {
 variable "recordatorios" {
   description = "Recordatorios de salida (fecha UTC -> mensaje). El plan free cierra la cuenta el 2027-03-15; el proyecto se entrega el 2026-11-06."
   type        = map(string)
-  default     = {
+  default = {
     "2026-10-30T12:00:00" = "Nexus Battles VI: quedan 7 dias para el cierre del proyecto (6/nov). Respalda datos de dev y programa el DESTROY."
     "2027-01-14T12:00:00" = "Nexus Battles VI: quedan 60 dias para que el Free Plan cierre la cuenta (15/mar/2027). Ejecuta el plan de salida: respaldo, DESTROY y decision sobre la cuenta."
     "2027-02-12T12:00:00" = "Nexus Battles VI: quedan 30 dias para el cierre automatico de la cuenta AWS (15/mar/2027). Verifica que no quede ningun recurso."
