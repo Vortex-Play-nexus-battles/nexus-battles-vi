@@ -717,6 +717,24 @@ body {
   color: var(--acento-relleno);
 }
 
+.alerta-error {
+  background: var(--error-insignia);
+  border: 1px solid var(--error);
+  color: var(--error);
+}
+
+.alerta-pujas {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-weight: 500;
+}
+
+.alerta-pujas[hidden] {
+  display: none !important;
+}
+
 /* Modal */
 .modal-overlay {
   position: fixed;

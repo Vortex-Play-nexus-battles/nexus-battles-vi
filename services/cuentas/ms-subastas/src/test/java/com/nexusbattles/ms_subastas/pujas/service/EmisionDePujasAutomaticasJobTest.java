@@ -1,6 +1,7 @@
 package com.nexusbattles.ms_subastas.pujas.service;
 
 import com.nexusbattles.ms_subastas.notificaciones.NotificacionOutbox;
+import com.nexusbattles.ms_subastas.pujas.creditos.CreditoClientException;
 import com.nexusbattles.ms_subastas.pujas.model.Puja;
 import com.nexusbattles.ms_subastas.pujas.model.PujaAutomatica;
 import com.nexusbattles.ms_subastas.pujas.model.TipoPuja;
@@ -179,5 +180,22 @@ class EmisionDePujasAutomaticasJobTest {
                 .when(pujaApplicationService).pujarAutomaticamente(any(), any(), any(), any());
 
         assertDoesNotThrow(() -> job.emitirPujasAutomaticas());
+    }
+
+    @Test
+    void desactivaLaAutoPujaYNotificaSiElSaldoEsInsuficienteAlEmitir() {
+        Subasta subasta = subastaActiva("100", UUID.randomUUID());
+        PujaAutomatica auto = automatico(subasta.getId(), UUID.randomUUID(), "500");
+        hayUnaSubastaPendiente(subasta, List.of(auto));
+
+        doThrow(new CreditoClientException(CreditoClientException.Motivo.SALDO_INSUFICIENTE, "Saldo insuficiente"))
+                .when(pujaApplicationService)
+                .pujarAutomaticamente(eq(subasta.getId()), eq(auto.getJugadorId()), any(), any());
+
+        job.emitirPujasAutomaticas();
+
+        assertFalse(auto.isActiva(), "Debe desactivar la auto-puja cuando el saldo no alcanza");
+        verify(pujaAutomaticaRepository).save(auto);
+        verify(outbox).avisarAutomaticaSinSaldo(subasta.getId(), auto.getJugadorId());
     }
 }

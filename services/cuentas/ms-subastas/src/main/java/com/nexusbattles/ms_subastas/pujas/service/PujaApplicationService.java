@@ -171,6 +171,10 @@ public class PujaApplicationService {
             pujaRepository.save(pujaVigente);
         }
         subastaRepository.save(subasta);
+
+        // La subasta cambio de estado (ADJUDICADA o SIN_ADJUDICACION), asi que
+        // el listado en vivo tiene que enterarse igual que con una puja o compra.
+        eventos.publishEvent(new SubastaActualizadaEvent(this, subasta));
     }
 
     private Subasta cargarConLock(UUID subastaId) {

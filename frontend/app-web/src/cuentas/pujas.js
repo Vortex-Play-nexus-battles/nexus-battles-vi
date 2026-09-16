@@ -607,6 +607,7 @@ export class ControladorSubastas {
 
   async ejecutarContraElServidor(operacion) {
     if (this.enviando) {return false;}
+    this.limpiarError();
     this.enviando = true;
     this.render();
     try {
@@ -617,13 +618,40 @@ export class ControladorSubastas {
       await this.recargar();
       return true;
     } catch (fallo) {
-      this.mensajeError = fallo?.message || 'No se pudo completar la operacion.';
-      alert(this.mensajeError);
+      const mensaje = fallo?.message || 'No se pudo completar la operacion.';
       await this.recargar();
+      this.mostrarError(mensaje);
       return false;
     } finally {
       this.enviando = false;
     }
+  }
+
+  mostrarError(mensaje) {
+    this.mensajeError = mensaje;
+    const alerta = this.contenedor?.querySelector('#alerta-pujas');
+    if (alerta) {
+      alerta.textContent = mensaje;
+      alerta.hidden = false;
+      alerta.removeAttribute('style');
+    } else if (this.contenedor) {
+      this.render();
+    }
+  }
+
+  limpiarError() {
+    this.mensajeError = null;
+    const alerta = this.contenedor?.querySelector('#alerta-pujas');
+    if (alerta) {
+      alerta.textContent = '';
+      alerta.hidden = true;
+      alerta.style.display = 'none';
+    }
+  }
+
+  generarHtmlAlerta() {
+    const hayError = Boolean(this.mensajeError);
+    return `<div id="alerta-pujas" class="alerta alerta-error alerta-pujas" role="alert" ${hayError ? '' : 'hidden style="display: none;"'}>${hayError ? this.mensajeError : ''}</div>`;
   }
 
   destruir() {
@@ -689,26 +717,31 @@ export class ControladorSubastas {
   }
 
   cambiarVista(nuevaVista) {
+    this.limpiarError();
     this.vista = nuevaVista;
     this.render();
   }
 
   abrirExplorar() {
+    this.limpiarError();
     this.vista = 'explorar';
     this.render();
   }
 
   abrirMisSubastas() {
+    this.limpiarError();
     this.vista = 'mis-subastas';
     this.render();
   }
 
   abrirCierreMultiple() {
+    this.limpiarError();
     this.vista = 'cierre-multiple';
     this.render();
   }
 
   abrirDetalle(id, opciones = {}) {
+    this.limpiarError();
     if (this.vista !== 'detalle') {
       this.origenVista = this.vista;
     }
@@ -731,6 +764,7 @@ export class ControladorSubastas {
   }
 
   volverALista() {
+    this.limpiarError();
     this.vista = destinoDeVuelta(this.origenVista).vista;
     this.subastaActivaId = null;
     this.confirmandoCompra = false;
@@ -771,6 +805,7 @@ export class ControladorSubastas {
   }
 
   pujar(monto) {
+    this.limpiarError();
     const sub = this.getSubastaActiva();
 
     if (this.api) {
@@ -780,7 +815,7 @@ export class ControladorSubastas {
       // rechace algo que el servidor habria aceptado. Lo unico que se filtra
       // es lo que ni siquiera es un monto.
       if (!Number.isFinite(monto) || monto <= 0) {
-        alert('Escribe un monto valido.');
+        this.mostrarError('Escribe un monto valido.');
         return Promise.resolve(false);
       }
       return this.ejecutarContraElServidor(() => this.api.pujar(sub.id, monto));
@@ -790,7 +825,7 @@ export class ControladorSubastas {
     const validacion = validarPuja(monto, sub, saldoLibre, this.config.incrementoMinimo, sub.esperaSegundos);
 
     if (!validacion.valida) {
-      alert(validacion.motivo);
+      this.mostrarError(validacion.motivo);
       return false;
     }
 
@@ -843,11 +878,12 @@ export class ControladorSubastas {
   }
 
   configurarAutoPuja(limite) {
+    this.limpiarError();
     const sub = this.getSubastaActiva();
 
     if (this.api) {
       if (!Number.isFinite(limite) || limite <= 0) {
-        alert('Escribe un limite valido.');
+        this.mostrarError('Escribe un limite valido.');
         return Promise.resolve(false);
       }
       return this.ejecutarContraElServidor(() => this.api.configurarAutomatica(sub.id, limite));
@@ -857,7 +893,7 @@ export class ControladorSubastas {
     const validacion = validarLimiteAuto(limite, sub, saldoLibre, this.config.incrementoMinimo);
 
     if (!validacion.valida) {
-      alert(validacion.motivo);
+      this.mostrarError(validacion.motivo);
       return false;
     }
 
@@ -867,6 +903,7 @@ export class ControladorSubastas {
   }
 
   desactivarAutoPuja() {
+    this.limpiarError();
     const sub = this.getSubastaActiva();
     if (!sub) {return undefined;}
 
@@ -880,6 +917,7 @@ export class ControladorSubastas {
   }
 
   solicitarCompraInmediata() {
+    this.limpiarError();
     this.confirmandoCompra = true;
     this.render();
   }
@@ -890,6 +928,7 @@ export class ControladorSubastas {
   }
 
   confirmarCompraInmediata() {
+    this.limpiarError();
     const sub = this.getSubastaActiva();
 
     if (this.api) {
@@ -907,9 +946,9 @@ export class ControladorSubastas {
     const saldoLibre = this.getSaldoLibre() + (sub.retenido || 0);
 
     if (saldoLibre < sub.compraInmediata) {
-      alert('No dispones de saldo suficiente para comprar de inmediato.');
       this.confirmandoCompra = false;
       this.render();
+      this.mostrarError('No dispones de saldo suficiente para comprar de inmediato.');
       return false;
     }
 
@@ -1037,6 +1076,7 @@ export class ControladorSubastas {
     return `
       <div class="subastas-app">
         ${this.generarHtmlPestanas({ superadas })}
+        ${this.generarHtmlAlerta()}
 
         <!-- Resumen de Saldos y Participación -->
         <header class="panel-resumen">
@@ -1186,6 +1226,7 @@ export class ControladorSubastas {
     return `
       <div class="subastas-app vista-mis-subastas">
         ${this.generarHtmlPestanas({ superadas })}
+        ${this.generarHtmlAlerta()}
 
         <div class="mis-subastas-cabecera">
           <h1 class="titulo-grande">Mis subastas</h1>
@@ -1381,6 +1422,7 @@ export class ControladorSubastas {
     return `
       <div class="subastas-app vista-cierre-multiple">
         ${this.generarHtmlPestanas({ superadas: 0 })}
+        ${this.generarHtmlAlerta()}
 
         <div class="panel-cierre-multiple">
           <div class="cierre-titular-bloque">
@@ -1479,6 +1521,7 @@ export class ControladorSubastas {
     return `
       <div class="subastas-app vista-detalle">
         ${this.generarHtmlPestanas({ superadas })}
+        ${this.generarHtmlAlerta()}
 
         <!-- Barra de navegación contextual -->
         <div class="barra-volver">

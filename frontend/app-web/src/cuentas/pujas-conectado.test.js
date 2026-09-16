@@ -315,8 +315,8 @@ describe('acciones', () => {
     ctrl.destruir();
   });
 
-  test('un rechazo del servidor se le ensena al jugador', async () => {
-    const alerta = jest.spyOn(globalThis, 'alert').mockImplementation(() => {});
+  test('un rechazo del servidor se le ensena al jugador en el DOM sin bloquear', async () => {
+    const alertaSpy = jest.spyOn(globalThis, 'alert').mockImplementation(() => {});
     const api = apiFalsa({
       pujar: jest.fn(async () => {
         throw new ErrorDeSubastas('Alguien se te adelanto: la oferta ya subio. Revisa el nuevo minimo.',
@@ -330,20 +330,52 @@ describe('acciones', () => {
     const exito = await ctrl.pujar(1360);
 
     expect(exito).toBe(false);
-    expect(alerta).toHaveBeenCalledWith(expect.stringContaining('Alguien se te adelanto'));
+    expect(alertaSpy).not.toHaveBeenCalled();
+    const alerta = ctrl.contenedor.querySelector('#alerta-pujas');
+    expect(alerta).not.toBeNull();
+    expect(alerta.getAttribute('role')).toBe('alert');
+    expect(alerta.hidden).toBe(false);
+    expect(alerta.textContent).toContain('Alguien se te adelanto');
+    alertaSpy.mockRestore();
     ctrl.destruir();
   });
 
-  test('un monto que no es numero ni llega al servidor', async () => {
-    jest.spyOn(globalThis, 'alert').mockImplementation(() => {});
+  test('un monto que no es numero ni llega al servidor y ensena aviso en el DOM', async () => {
+    const alertaSpy = jest.spyOn(globalThis, 'alert').mockImplementation(() => {});
+    const api = apiFalsa();
+    const ctrl = new ControladorSubastas({ contenedor: contenedor(), api });
+    await ctrl.iniciar();
+    ctrl.subastaActivaId = 'sub-1';
+
+    const exito = await ctrl.pujar(Number.NaN);
+
+    expect(exito).toBe(false);
+    expect(api.pujar).not.toHaveBeenCalled();
+    expect(alertaSpy).not.toHaveBeenCalled();
+    const alerta = ctrl.contenedor.querySelector('#alerta-pujas');
+    expect(alerta).not.toBeNull();
+    expect(alerta.getAttribute('role')).toBe('alert');
+    expect(alerta.hidden).toBe(false);
+    expect(alerta.textContent).toContain('Escribe un monto valido');
+    alertaSpy.mockRestore();
+    ctrl.destruir();
+  });
+
+  test('un nuevo intento limpia el mensaje de error previo del DOM', async () => {
     const api = apiFalsa();
     const ctrl = new ControladorSubastas({ contenedor: contenedor(), api });
     await ctrl.iniciar();
     ctrl.subastaActivaId = 'sub-1';
 
     await ctrl.pujar(Number.NaN);
+    let alerta = ctrl.contenedor.querySelector('#alerta-pujas');
+    expect(alerta.hidden).toBe(false);
+    expect(alerta.textContent).toContain('Escribe un monto valido');
 
-    expect(api.pujar).not.toHaveBeenCalled();
+    await ctrl.pujar(1500);
+    alerta = ctrl.contenedor.querySelector('#alerta-pujas');
+    expect(alerta.hidden).toBe(true);
+    expect(alerta.textContent).toBe('');
     ctrl.destruir();
   });
 
