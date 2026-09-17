@@ -123,6 +123,78 @@ jobs:
           fi
 
   # ---------------------------------------------------------------------
+  # Job 1b: cambios TRANSVERSALES. El job de arriba solo mira
+  # services/<equipo>/<servicio>/, asi que un cambio en shared/libs,
+  # buildSrc o los contratos no ejecutaba absolutamente nada: una regresion
+  # en plataforma-seguridad, que usan salas-partidas y moderacion-sanciones,
+  # entraba a develop sin que nadie compilara. Aqui se compila y prueba el
+  # monorepo Gradle entero, que es lo unico que cubre ese caso.
+  #
+  # No sustituye al job por servicio: aquel corre siempre que cambia un
+  # servicio y ademas publica cobertura y analisis estatico por modulo.
+  # ---------------------------------------------------------------------
+  ci-transversal:
+    name: CI - cambios transversales
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el repositorio con historial completo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detectar si cambio algo transversal
+        id: detectar
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE=$(git merge-base "origin/${{ github.base_ref }}" "${{ github.sha }}")
+          else
+            BASE="${{ github.event.before }}"
+            ZERO="0000000000000000000000000000000000000000"
+            if [ "$BASE" = "$ZERO" ] || [ -z "$BASE" ]; then
+              BASE=$(git rev-parse "${{ github.sha }}^" 2>/dev/null || echo "4b825dc642cb6eb9a060e54bf8d69288fbee4904")
+            fi
+          fi
+          CAMBIOS=$(git diff --name-only "$BASE" "${{ github.sha }}" \
+            | grep -E '^(shared/libs/|buildSrc/|contracts/|settings\.gradle|build\.gradle|gradle/)' || true)
+          if [ -n "$CAMBIOS" ]; then
+            echo "Cambios transversales detectados:"
+            echo "$CAMBIOS"
+            echo "hay=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Sin cambios transversales."
+            echo "hay=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configurar JDK 21 (Temurin)
+        if: steps.detectar.outputs.hay == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Dar permiso de ejecucion al wrapper
+        if: steps.detectar.outputs.hay == 'true'
+        run: chmod +x ./gradlew
+
+      # Todo el monorepo Gradle: compila los 14 servicios y las bibliotecas
+      # compartidas, y corre sus pruebas (incluidos los IT de arranque, que
+      # levantan contenedores con Testcontainers -- el runner trae Docker).
+      - name: Compilar y probar todo el monorepo Gradle
+        if: steps.detectar.outputs.hay == 'true'
+        run: ./gradlew build --no-daemon
+
+      - name: Publicar los informes de prueba si algo falla
+        if: failure() && steps.detectar.outputs.hay == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: informes-de-prueba-transversal
+          path: "**/build/reports/tests/test/**"
+          retention-days: 7
+
+  # ---------------------------------------------------------------------
   # Job 2: por cada servicio detectado (uno por entrada de la matriz),
   # ejecuta en orden: compilar -> pruebas unitarias -> analisis estatico ->
   # publicar cobertura. fail-fast:false para que la falla de un servicio no
@@ -173,6 +245,19 @@ jobs:
         # "test" ya genera el reporte de cobertura en la ruta fija
         # build/reports/jacoco/test/jacocoTestReport.xml, sin pasos adicionales.
         run: ./gradlew ${{ matrix.rutaGradle }}:test --no-daemon
+
+      # El log de Gradle resume las excepciones; el informe HTML/XML trae el
+      # mensaje completo. Sin esto, diagnosticar un fallo de integracion
+      # obligaba a reproducirlo en la maquina de alguien.
+      - name: Publicar los informes de prueba si algo falla
+        if: failure() && matrix.herramienta == 'gradle'
+        uses: actions/upload-artifact@v4
+        with:
+          name: informes-de-prueba-${{ matrix.servicio }}
+          path: |
+            ${{ matrix.ruta }}/build/reports/tests/test/**
+            ${{ matrix.ruta }}/build/test-results/test/**
+          retention-days: 7
 
       - name: (Gradle) Analisis estatico con SonarQube Cloud
         if: matrix.herramienta == 'gradle'
