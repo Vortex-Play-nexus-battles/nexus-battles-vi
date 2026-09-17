@@ -40,7 +40,7 @@ public class CreditoDTOs {
         String transaccionId
     ) {}
 
-    // DTOs adaptados para la integración directa con Edwin (ms-subastas)
+    // DTOs adaptados para la integraciÃ³n directa con Edwin (ms-subastas)
     public record DebitarRequest(
         String uid,
         BigDecimal monto,
@@ -76,7 +76,6 @@ public class CreditoDTOs {
         String estado,
         OffsetDateTime fecha
     ) {}
-<<<<<<< HEAD
     public record AcreditarRequest(
         String uid,
         BigDecimal monto,
@@ -91,6 +90,4 @@ public class CreditoDTOs {
         BigDecimal montoAcreditado,
         BigDecimal nuevoSaldoDisponible
     ) {}
-=======
->>>>>>> e9af45ceff232248a1df3b66a07de1db7f4fc854
 }

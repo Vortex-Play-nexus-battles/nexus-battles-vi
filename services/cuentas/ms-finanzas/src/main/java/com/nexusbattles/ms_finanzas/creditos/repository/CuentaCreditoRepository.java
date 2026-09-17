@@ -11,16 +11,14 @@ import java.util.Optional;
 @Repository
 public interface CuentaCreditoRepository extends JpaRepository<CuentaCredito, String> {
 
-<<<<<<< HEAD
-    // Búsqueda de solo lectura para endpoints como consultar saldo (evita error con @Transactional(readOnly = true))
-    Optional<CuentaCredito> findByJugadorUid(String jugadorUid);
-
-    // Lock pesimista exclusivo para operaciones de escritura concurrente (reservas, débitos, créditos)
+    // Lock pesimista para evitar condiciones de carrera entre operaciones
+    // concurrentes sobre la misma cuenta (reservar, debitar, acreditar).
+    //
+    // Se mantiene UN SOLO metodo, siempre con bloqueo: la alternativa que
+    // llego en el merge partia esto en dos y anadia findByJugadorUidWithLock,
+    // que Spring Data no puede derivar (no existe la propiedad withLock) y
+    // que ademas no usaba nadie. Los metodos de lectura resuelven el problema
+    // del readOnly quitando ese flag, no quitando el bloqueo.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    Optional<CuentaCredito> findByJugadorUidWithLock(String jugadorUid);
-=======
-    // Lock pesimista para evitar condiciones de carrera en operaciones concurrentes de créditos
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<CuentaCredito> findByJugadorUid(String jugadorUid);
->>>>>>> e9af45ceff232248a1df3b66a07de1db7f4fc854
 }
