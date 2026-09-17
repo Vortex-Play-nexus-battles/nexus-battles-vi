@@ -1,6 +1,7 @@
 package com.nexusbattles.ms_subastas.subastas.port;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,28 +18,18 @@ import java.util.UUID;
 /**
  * Adaptador HTTP hacia el servicio de inventario.
  *
- * <p><b>Solo una de las cuatro operaciones existe al otro lado.</b> La version
- * anterior llamaba a {@code /elementos/{id}/reservas} y
- * {@code /elementos/{id}/transferencias}, que no estan en
- * {@code contracts/openapi/inventario.yaml} ni en el codigo de inventario:
- * nadie los ha construido ni los tiene planeados. Con
- * {@code app.inventario.modo=fake} eso no se notaba; en cuanto se activara el
- * modo http, cada llamada habria muerto con un 404 en mitad de una subasta.
+ * <p>Integra las operaciones acordadas con ms-inventario (HU-INV-010 y HU-SUB-004):
+ * <ul>
+ *   <li>Bloqueo en subasta: {@code PUT /api/v1/inventario/elementos/{elementoId}/bloqueo-subasta} con
+ *       {@code SolicitudReserva} ({@code propietarioUid} y {@code subastaId}) e {@code Idempotency-Key}.</li>
+ *   <li>Liberacion de bloqueo: {@code DELETE /api/v1/inventario/elementos/{elementoId}/bloqueo-subasta/{subastaId}}.</li>
+ *   <li>Consulta de elemento: {@code GET /api/v1/inventario/elementos/{elementoId}}.</li>
+ *   <li>Transferencia de propiedad: {@code POST /api/v1/inventario/elementos/{elementoId}/transferencias} con
+ *       {@code SolicitudTransferencia} ({@code nuevoPropietarioUid} y {@code subastaId}) e {@code Idempotency-Key}.</li>
+ * </ul>
  *
- * <p>Lo unico publicado hoy es
- * {@code PUT /api/v1/inventario/elementos/{elementoId}/bloqueo-subasta}
- * (HU-INV-010). Las otras tres fallan aqui con un mensaje que nombra el
- * endpoint que falta, en vez de inventarse una URL: un fallo claro y temprano
- * es mejor que uno silencioso que ademas parece implementado.
- *
- * <p><b>Falta acordar que identificador cruza esta frontera.</b> Inventario
- * autentica con la cabecera {@code X-User-Name} y compara ese texto contra su
- * {@code propietarioId} con {@code equalsIgnoreCase}, asi que espera un apodo.
- * ms-subastas solo conoce el UUID estable del claim {@code uid} — precisamente
- * porque el apodo es mutable y no sirve como clave. Es el mismo problema de
- * {@code sub} contra {@code uid} que ya se resolvio dentro del token,
- * reapareciendo entre servicios. Hasta que se acuerde, esta llamada se
- * respondera con 403 y el mensaje de abajo lo explica.
+ * <p>Todas las operaciones internas entre servicios usan identidad por UUID estable y tokens
+ * S2S (bearerAuth), sin depender de la cabecera {@code X-User-Name}.
  */
 public class InventarioClientHttp implements InventarioClient {
 
@@ -226,23 +217,63 @@ public class InventarioClientHttp implements InventarioClient {
     }
 
     /**
-     * @throws InventarioClientException siempre. La transferencia de propiedad
-     *         no existe en ningun sitio del monorepo. Es lo que impide que
-     *         HU-SUB-004 entregue de verdad lo que cobra.
+     * Transfiere formalmente la propiedad de un elemento de inventario al ganador de la subasta.
+     * Operacion acordada con Nicolay (ms-inventario):
+     * {@code POST /api/v1/inventario/elementos/{elementoId}/transferencias}.
      */
     @Override
     public void transferirProducto(String elementoInventarioId, UUID nuevoPropietarioId,
                                    UUID subastaId, String idempotencyKey) {
+        exigir(elementoInventarioId != null && !elementoInventarioId.isBlank(),
+                "El identificador del elemento de inventario es obligatorio");
+        exigir(nuevoPropietarioId != null, "El nuevo propietario es obligatorio para la transferencia");
+        exigir(subastaId != null, "El identificador de la subasta es obligatorio para la transferencia");
+
+        HttpRequest.Builder constructor = HttpRequest.newBuilder(
+                        uri("/api/v1/inventario/elementos/" + elementoInventarioId + "/transferencias"))
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .timeout(timeout)
+                .POST(HttpRequest.BodyPublishers.ofString(cuerpoDeTransferencia(nuevoPropietarioId, subastaId)));
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            constructor.header("Idempotency-Key", idempotencyKey);
+        }
+
+        HttpResponse<String> respuesta = enviar(constructor.build());
+        int estado = respuesta.statusCode();
+        if (estado >= 200 && estado < 300) {
+            return;
+        }
+        if (estado == 404) {
+            throw new InventarioClientException(
+                    "Inventario no encontro el elemento " + elementoInventarioId + " para transferir");
+        }
+        if (estado == 409) {
+            throw new InventarioClientException(
+                    "Inventario rechazo la transferencia del elemento " + elementoInventarioId
+                            + ": conflicto con el estado del elemento o subasta");
+        }
+        if (estado == 503) {
+            throw new InventarioNoDisponibleException(
+                    "Inventario no esta disponible para transferir el elemento " + elementoInventarioId);
+        }
         throw new InventarioClientException(
-                "Inventario no expone la transferencia de propiedad. Hace falta un endpoint que "
-                        + "cambie el propietario de un elemento al cerrarse una subasta "
-                        + "(pedido a Nicolay). Sin eso se cobra al ganador y no se le entrega nada.");
+                "Respuesta inesperada de inventario al transferir el elemento: " + estado);
     }
 
     private String cuerpoDeBloqueo(UUID propietarioId, UUID subastaId) {
         try {
             return objectMapper.writeValueAsString(
-                    new BloquearEnSubasta(propietarioId.toString(), subastaId.toString()));
+                    new SolicitudReserva(propietarioId, subastaId));
+        } catch (IOException e) {
+            throw new InventarioClientException("Error al serializar el cuerpo para inventario", e);
+        }
+    }
+
+    private String cuerpoDeTransferencia(UUID nuevoPropietarioId, UUID subastaId) {
+        try {
+            return objectMapper.writeValueAsString(
+                    new SolicitudTransferencia(nuevoPropietarioId, subastaId));
         } catch (IOException e) {
             throw new InventarioClientException("Error al serializar el cuerpo para inventario", e);
         }
@@ -279,17 +310,20 @@ public class InventarioClientHttp implements InventarioClient {
     }
 
     /**
-     * Cuerpo exacto que declara hoy {@code BloquearEnSubastaRequest} de
-     * inventario (HU-INV-010): el propietario viaja como {@code propietarioUid}
-     * en el cuerpo, no en una cabecera de identidad.
-     *
-     * <p>Esto es lo que se acordo con Edwin el 14/09/2026 y Nicolay publico el
-     * 15/09: el apodo no servia porque en tres de las cinco llamadas a
-     * inventario no existe ninguno que propagar —el cierre por vencimiento y la
-     * liberacion los dispara un {@code @Scheduled} sin peticion ni token, y la
-     * compensacion transfiere al vendedor, que no es quien pidio nada.
+     * Solicitud enviada a inventario para bloquear un elemento en subasta (HU-INV-010).
+     * El propietario viaja en el cuerpo como {@code propietarioUid}.
      */
-    private record BloquearEnSubasta(String propietarioUid, String subastaId) { }
+    static record SolicitudReserva(
+            @JsonProperty("propietarioUid") UUID propietarioUid,
+            @JsonProperty("subastaId") UUID subastaId) { }
+
+    /**
+     * Solicitud enviada a inventario para transferir la propiedad al ganador (HU-SUB-004).
+     * El nuevo propietario viaja en el cuerpo como {@code nuevoPropietarioUid}.
+     */
+    static record SolicitudTransferencia(
+            @JsonProperty("nuevoPropietarioUid") UUID nuevoPropietarioUid,
+            @JsonProperty("subastaId") UUID subastaId) { }
 
     /** Forma exacta de {@code DetalleElementoInventarioResponse} de inventario. */
     @JsonIgnoreProperties(ignoreUnknown = true)
