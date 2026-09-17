@@ -132,6 +132,29 @@ class SalasControllerTest {
     }
 
     @Test
+    @DisplayName("con un token de ms-identidad el anfitrion sale de uid, no del apodo del sujeto")
+    void elAnfitrionSaleDeUid() throws Exception {
+        // Forma real del token de ms-identidad tras ADR-002: el sujeto es el
+        // apodo y el identificador estable viaja en uid. Leer el sujeto a secas
+        // reventaba UUID.fromString y devolvia 500 al crear una sala.
+        Sala sala = salaDeEjemplo();
+        when(crearSala.ejecutar(any(), any())).thenReturn(sala);
+
+        mockMvc.perform(post("/api/v1/salas")
+                        .with(jwt().jwt(token -> token
+                                        .subject("demo_grupo6")
+                                        .claim("uid", JUGADOR.toString())
+                                        .claim("preferred_username", "demo_grupo6"))
+                                .authorities(new org.springframework.security.core.authority
+                                        .SimpleGrantedAuthority("ROLE_JUGADOR")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(CUERPO))
+                .andExpect(status().isCreated());
+
+        verify(crearSala).ejecutar(any(), org.mockito.ArgumentMatchers.eq(JUGADOR));
+    }
+
+    @Test
     @DisplayName("sin token no se puede crear una sala")
     void sinToken() throws Exception {
         mockMvc.perform(post("/api/v1/salas")
