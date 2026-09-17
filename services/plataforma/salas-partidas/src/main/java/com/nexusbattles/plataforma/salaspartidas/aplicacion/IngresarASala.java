@@ -23,6 +23,10 @@ import java.util.UUID;
  * primero y RF-JUE-014 lo segundo, pero ambos dependen de modulos de otros
  * equipos que todavia no exponen contrato. Cuando existan, se anaden como
  * puertos igual que se hizo con los creditos en HU-SAL-001.
+ *
+ * <p>El codigo de invitacion se pasa tal cual al agregado: quien decide si vale
+ * es {@link Sala}, no este caso de uso. Aqui no vive ninguna condicion de
+ * ingreso, ni siquiera la de las salas privadas.
  */
 public class IngresarASala {
 
@@ -51,6 +55,19 @@ public class IngresarASala {
      *                            tantas veces seguidas que no se pudo asentar
      */
     public Sala ejecutar(UUID idSala, UUID idJugador) {
+        return ejecutar(idSala, idJugador, null);
+    }
+
+    /**
+     * @param idSala    sala elegida del listado
+     * @param idJugador jugador autenticado que quiere entrar
+     * @param codigo    codigo de invitacion; obligatorio solo si la sala es privada
+     * @return la sala con el jugador dentro
+     * @throws SalaNoEncontrada si el identificador no corresponde a ninguna sala
+     * @throws IngresoNoPermitido si la sala no admite al jugador, o si cambio
+     *                            tantas veces seguidas que no se pudo asentar
+     */
+    public Sala ejecutar(UUID idSala, UUID idJugador, String codigo) {
         Objects.requireNonNull(idSala, "Hace falta la sala a la que se quiere entrar.");
         Objects.requireNonNull(idJugador, "Hace falta el jugador que quiere entrar.");
 
@@ -60,7 +77,7 @@ public class IngresarASala {
 
             // Si unirse rechaza, la excepcion sale antes de guardar: una sala que no
             // admitio a nadie no tiene por que reescribirse, ni anunciarse.
-            sala.unirse(idJugador);
+            sala.unirse(idJugador, codigo);
 
             try {
                 Sala guardada = repositorio.guardar(sala);

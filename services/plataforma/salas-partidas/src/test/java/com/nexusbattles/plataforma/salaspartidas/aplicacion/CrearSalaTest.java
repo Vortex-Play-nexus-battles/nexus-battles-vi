@@ -19,6 +19,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -190,6 +191,29 @@ class CrearSalaTest {
         assertAll(
                 () -> assertEquals(1, creditos.liberadas.size(), "se libero la reserva"),
                 () -> assertEquals(10_000, creditos.saldo, "el jugador recupera su saldo"));
+    }
+
+    @Test
+    @DisplayName("la sala guardada recuerda que reserva le pertenece, para poder devolverla")
+    void laSalaRecuerdaSuReserva() {
+        Sala sala = crearSala.ejecutar(validos(), ANFITRION);
+
+        Sala guardada = repositorio.buscarPorId(sala.id()).orElseThrow();
+        assertAll(
+                () -> assertEquals(creditos.reservas.get(0).id(), guardada.idReservaCreditos()),
+                () -> assertEquals(creditos.reservas.get(0).id(), sala.idReservaCreditos(),
+                        "la sala devuelta al cliente es la misma que se guardo"));
+    }
+
+    @Test
+    @DisplayName("una sala sin recompensa no arrastra ninguna reserva")
+    void sinRecompensaNoHayReserva() {
+        ParametrosDeSala gratis = new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null);
+
+        Sala sala = crearSala.ejecutar(gratis, ANFITRION);
+
+        assertNull(sala.idReservaCreditos(),
+                "sin creditos comprometidos no hay nada que liberar al cancelar");
     }
 
     @Test

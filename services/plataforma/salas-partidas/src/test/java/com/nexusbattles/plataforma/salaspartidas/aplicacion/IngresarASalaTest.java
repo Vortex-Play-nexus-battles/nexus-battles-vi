@@ -165,7 +165,9 @@ class IngresarASalaTest {
 
         ingresarASala.ejecutar(sala.id(), VISITANTE);
 
-        assertEquals(List.of(new CanalDeSalaEspia.Anuncio(sala.id(), VISITANTE, 2)),
+        assertEquals(
+                List.of(new CanalDeSalaEspia.Anuncio(
+                        CanalDeSalaEspia.INGRESO, sala.id(), VISITANTE, 2)),
                 canal.anuncios());
     }
 

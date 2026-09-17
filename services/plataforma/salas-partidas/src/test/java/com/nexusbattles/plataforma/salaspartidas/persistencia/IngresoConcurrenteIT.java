@@ -228,6 +228,20 @@ class IngresoConcurrenteIT {
             anuncios.add(new Anuncio(idJugador, sala.ocupacion()));
         }
 
+        /** Esta prueba solo mira ingresos; las salidas no entran en la carrera. */
+        @Override
+        public void anunciarSalida(Sala sala, UUID idJugador) {
+            // sin uso aqui
+        }
+
+        @Override
+        public void anunciarCancelacion(Sala sala,
+                                        com.nexusbattles.plataforma.salaspartidas.dominio
+                                                .MotivoDeCancelacion motivo,
+                                        int creditosDevueltos) {
+            // sin uso aqui
+        }
+
         List<Anuncio> anuncios() {
             return List.copyOf(anuncios);
         }

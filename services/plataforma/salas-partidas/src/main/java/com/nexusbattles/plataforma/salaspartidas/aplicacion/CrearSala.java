@@ -61,7 +61,10 @@ public class CrearSala {
         ReservaDeCreditos reserva =
                 creditos.reservar(idAnfitrion, sala.recompensaCreditos(), sala.id());
         try {
-            return repositorio.guardar(sala);
+            // La sala guarda que reserva le pertenece: sin ese dato, cancelarla
+            // mas tarde no podria devolver los creditos y quedarian retenidos
+            // para siempre (RF-JUE-014, ver CancelarSala).
+            return repositorio.guardar(sala.conReserva(reserva.id()));
         } catch (RuntimeException falloAlGuardar) {
             creditos.liberar(reserva.id());
             throw falloAlGuardar;

@@ -1,20 +1,26 @@
 package com.nexusbattles.plataforma.salaspartidas.api;
 
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.AbandonarSala;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.CancelarSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CrearSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.IngresarASala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ListarSalas;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.ObtenerSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Modalidad;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Sala;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -37,11 +43,19 @@ public class SalasController {
     private final CrearSala crearSala;
     private final ListarSalas listarSalas;
     private final IngresarASala ingresarASala;
+    private final ObtenerSala obtenerSala;
+    private final AbandonarSala abandonarSala;
+    private final CancelarSala cancelarSala;
 
-    SalasController(CrearSala crearSala, ListarSalas listarSalas, IngresarASala ingresarASala) {
+    SalasController(CrearSala crearSala, ListarSalas listarSalas, IngresarASala ingresarASala,
+                    ObtenerSala obtenerSala, AbandonarSala abandonarSala,
+                    CancelarSala cancelarSala) {
         this.crearSala = crearSala;
         this.listarSalas = listarSalas;
         this.ingresarASala = ingresarASala;
+        this.obtenerSala = obtenerSala;
+        this.abandonarSala = abandonarSala;
+        this.cancelarSala = cancelarSala;
     }
 
     /**
@@ -59,7 +73,10 @@ public class SalasController {
                 .created(UriComponentsBuilder.fromPath("/api/v1/salas/{id}")
                         .buildAndExpand(sala.id())
                         .toUri())
-                .body(SalaResponse.desde(sala));
+                // Quien crea la sala es su anfitrion: esta es la unica respuesta
+                // en la que el codigo de invitacion se entrega sin pedirlo, y es
+                // la que hace utilizable una sala privada.
+                .body(SalaResponse.paraElAnfitrion(sala));
     }
 
     /**
@@ -88,9 +105,56 @@ public class SalasController {
      */
     @PostMapping("/{idSala}/participantes")
     public SalaResponse ingresar(@PathVariable UUID idSala,
+                                 @RequestBody(required = false) IngresoRequest peticion,
                                  @AuthenticationPrincipal Jwt token) {
 
-        return SalaResponse.desde(ingresarASala.ejecutar(idSala, idDe(token)));
+        UUID idJugador = idDe(token);
+        Sala sala = ingresarASala.ejecutar(idSala, idJugador, IngresoRequest.codigoDe(peticion));
+        return SalaResponse.segunQuienPregunta(sala, idJugador);
+    }
+
+    /**
+     * Devuelve una sala concreta (operacion {@code obtenerSala}).
+     *
+     * <p>Es el destino de la cabecera {@code Location} de la creacion y lo que
+     * necesita la vista de sala cuando se llega por enlace directo, sin pasar
+     * por el listado.
+     *
+     * <p>Al anfitrion le llega ademas el codigo de invitacion, para que pueda
+     * volver a consultarlo sin tener que guardar la respuesta de la creacion.
+     */
+    @GetMapping("/{idSala}")
+    public SalaResponse obtener(@PathVariable UUID idSala,
+                                @AuthenticationPrincipal Jwt token) {
+
+        UUID idJugador = idDe(token);
+        return SalaResponse.segunQuienPregunta(obtenerSala.ejecutar(idSala), idJugador);
+    }
+
+    /**
+     * Cancela la sala (operacion {@code cancelarSala}).
+     *
+     * <p>Solo el anfitrion: 403 si lo pide otro, 409 si la partida ya arranco.
+     * Devuelve 204 porque despues de cancelarla no queda nada util que
+     * representar — el estado final ya viaja por el canal, a todos los que
+     * estaban dentro, en el aviso {@code sala.cancelada}.
+     */
+    @DeleteMapping("/{idSala}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void cancelar(@PathVariable UUID idSala, @AuthenticationPrincipal Jwt token) {
+        cancelarSala.ejecutar(idSala, idDe(token));
+    }
+
+    /**
+     * Saca de la sala al jugador autenticado (operacion {@code abandonarSala}).
+     *
+     * <p>El anfitrion no usa este camino: recibe 409 y se le remite a cancelar.
+     * Ver {@code Sala#abandonar}.
+     */
+    @DeleteMapping("/{idSala}/participantes")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void abandonar(@PathVariable UUID idSala, @AuthenticationPrincipal Jwt token) {
+        abandonarSala.ejecutar(idSala, idDe(token));
     }
 
     /** La identidad del jugador es el sujeto del token, nunca un dato del cuerpo. */

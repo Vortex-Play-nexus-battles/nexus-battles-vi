@@ -1,16 +1,21 @@
 package com.nexusbattles.plataforma.salaspartidas.api;
 
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.AbandonarSala;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.CancelarSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CrearSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.IngresarASala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ListarSalas;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.ObtenerSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CreditosInsuficientes;
 import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Modalidad;
+import com.nexusbattles.plataforma.salaspartidas.dominio.NoEsElAnfitrion;
 import com.nexusbattles.plataforma.salaspartidas.dominio.PaginaDeSalas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.ParametrosDeSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.ParametrosInvalidos;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Sala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.SalaNoEncontrada;
+import com.nexusbattles.plataforma.salaspartidas.dominio.SalidaNoPermitida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.SalaPrivadaSinInvitacion;
 import com.nexusbattles.plataforma.salaspartidas.dominio.IngresoNoPermitido;
 import com.nexusbattles.plataforma.salaspartidas.seguridad.SecurityConfig;
@@ -27,9 +32,11 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -71,6 +78,15 @@ class SalasControllerTest {
 
     @MockitoBean
     private IngresarASala ingresarASala;
+
+    @MockitoBean
+    private ObtenerSala obtenerSala;
+
+    @MockitoBean
+    private AbandonarSala abandonarSala;
+
+    @MockitoBean
+    private CancelarSala cancelarSala;
 
     private static Sala salaDeEjemplo() {
         return Sala.crear(new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null), JUGADOR);
@@ -320,7 +336,7 @@ class SalasControllerTest {
     @Test
     @DisplayName("POST participantes admite al jugador y devuelve la sala")
     void ingresa() throws Exception {
-        when(ingresarASala.ejecutar(any(), any())).thenReturn(salaDeEjemplo());
+        when(ingresarASala.ejecutar(any(), any(), any())).thenReturn(salaDeEjemplo());
 
         mockMvc.perform(post("/api/v1/salas/{id}/participantes", ID_SALA).with(jugador()))
                 .andExpect(status().isOk())
@@ -330,7 +346,7 @@ class SalasControllerTest {
     @Test
     @DisplayName("el jugador que entra sale del token, aunque el cuerpo diga otra cosa")
     void elJugadorSaleDelToken() throws Exception {
-        when(ingresarASala.ejecutar(any(), any())).thenReturn(salaDeEjemplo());
+        when(ingresarASala.ejecutar(any(), any(), any())).thenReturn(salaDeEjemplo());
 
         mockMvc.perform(post("/api/v1/salas/{id}/participantes", ID_SALA)
                         .with(jugador())
@@ -338,7 +354,9 @@ class SalasControllerTest {
                         .content("{\"idJugador\": \"99999999-9999-9999-9999-999999999999\"}"))
                 .andExpect(status().isOk());
 
-        verify(ingresarASala).ejecutar(ID_SALA, JUGADOR);
+        // El cuerpo solo aporta el codigo de invitacion; `idJugador` no existe
+        // en IngresoRequest y Jackson lo descarta. La identidad es la del token.
+        verify(ingresarASala).ejecutar(ID_SALA, JUGADOR, null);
     }
 
     @Test
@@ -351,7 +369,7 @@ class SalasControllerTest {
     @Test
     @DisplayName("una sala inexistente responde 404 con su tipo")
     void salaInexistente() throws Exception {
-        when(ingresarASala.ejecutar(any(), any())).thenThrow(new SalaNoEncontrada(ID_SALA));
+        when(ingresarASala.ejecutar(any(), any(), any())).thenThrow(new SalaNoEncontrada(ID_SALA));
 
         mockMvc.perform(post("/api/v1/salas/{id}/participantes", ID_SALA).with(jugador()))
                 .andExpect(status().isNotFound())
@@ -362,7 +380,7 @@ class SalasControllerTest {
     @Test
     @DisplayName("una sala privada responde 403, no 409")
     void salaPrivada() throws Exception {
-        when(ingresarASala.ejecutar(any(), any())).thenThrow(new SalaPrivadaSinInvitacion());
+        when(ingresarASala.ejecutar(any(), any(), any())).thenThrow(new SalaPrivadaSinInvitacion());
 
         mockMvc.perform(post("/api/v1/salas/{id}/participantes", ID_SALA).with(jugador()))
                 .andExpect(status().isForbidden())
@@ -373,7 +391,7 @@ class SalasControllerTest {
     @Test
     @DisplayName("una sala llena responde 409 diciendo el motivo")
     void salaLlena() throws Exception {
-        when(ingresarASala.ejecutar(any(), any()))
+        when(ingresarASala.ejecutar(any(), any(), any()))
                 .thenThrow(new IngresoNoPermitido("La sala ya alcanzo su maximo de participantes."));
 
         mockMvc.perform(post("/api/v1/salas/{id}/participantes", ID_SALA).with(jugador()))
@@ -390,5 +408,194 @@ class SalasControllerTest {
         mockMvc.perform(post("/api/v1/salas/{id}/participantes", ID_SALA)
                         .with(jwt().jwt(t -> t.subject(JUGADOR.toString()))))
                 .andExpect(status().isForbidden());
+    }
+
+    // ---------------------------------------------------------------------
+    // Codigo de invitacion: quien lo ve y quien no.
+    //
+    // Es la parte con mas riesgo de todo el controlador. El codigo abre una
+    // sala privada, asi que cada camino que devuelve una sala tiene su prueba
+    // de que NO lo filtra a quien no le toca.
+    // ---------------------------------------------------------------------
+
+    private static Sala salaPrivada() {
+        return Sala.crear(
+                new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, true, null), JUGADOR);
+    }
+
+    @Test
+    @DisplayName("al crear una sala privada, el anfitrion recibe su codigo de invitacion")
+    void elAnfitrionRecibeElCodigo() throws Exception {
+        Sala sala = salaPrivada();
+        when(crearSala.ejecutar(any(), any())).thenReturn(sala);
+
+        mockMvc.perform(post("/api/v1/salas")
+                        .with(jugador())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(CUERPO))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.codigoInvitacion").value(sala.codigoInvitacion()));
+    }
+
+    @Test
+    @DisplayName("al entrar a una sala privada, el invitado NO recibe el codigo")
+    void elInvitadoNoRecibeElCodigo() throws Exception {
+        // La sala es de OTRO anfitrion: quien entra no es su dueno.
+        Sala sala = Sala.crear(
+                new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, true, null),
+                UUID.fromString("88888888-8888-8888-8888-888888888888"));
+        when(ingresarASala.ejecutar(any(), any(), any())).thenReturn(sala);
+
+        mockMvc.perform(post("/api/v1/salas/{id}/participantes", ID_SALA)
+                        .with(jugador())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"codigoInvitacion\": \"ABCD-2345\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.codigoInvitacion").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("el codigo del cuerpo llega al caso de uso tal cual")
+    void elCodigoViajaAlCasoDeUso() throws Exception {
+        when(ingresarASala.ejecutar(any(), any(), any())).thenReturn(salaDeEjemplo());
+
+        mockMvc.perform(post("/api/v1/salas/{id}/participantes", ID_SALA)
+                        .with(jugador())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"codigoInvitacion\": \"ABCD-2345\"}"))
+                .andExpect(status().isOk());
+
+        verify(ingresarASala).ejecutar(ID_SALA, JUGADOR, "ABCD-2345");
+    }
+
+    // ---------------------------------------------------------------------
+    // GET /salas/{id} — obtenerSala
+    // ---------------------------------------------------------------------
+
+    @Test
+    @DisplayName("GET de una sala devuelve 200 con sus datos")
+    void obtieneLaSala() throws Exception {
+        Sala sala = salaDeEjemplo();
+        when(obtenerSala.ejecutar(ID_SALA)).thenReturn(sala);
+
+        mockMvc.perform(get("/api/v1/salas/{id}", ID_SALA).with(jugador()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(sala.id().toString()))
+                .andExpect(jsonPath("$.estado").value("ABIERTA"));
+    }
+
+    @Test
+    @DisplayName("el anfitrion ve el codigo de su sala al consultarla; otro jugador no")
+    void elCodigoSoloParaElAnfitrion() throws Exception {
+        when(obtenerSala.ejecutar(ID_SALA)).thenReturn(salaPrivada());
+
+        mockMvc.perform(get("/api/v1/salas/{id}", ID_SALA).with(jugador()))
+                .andExpect(jsonPath("$.codigoInvitacion").isNotEmpty());
+
+        mockMvc.perform(get("/api/v1/salas/{id}", ID_SALA).with(otroJugador()))
+                .andExpect(jsonPath("$.codigoInvitacion").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("GET de una sala inexistente responde 404 con su tipo")
+    void obtieneSalaInexistente() throws Exception {
+        when(obtenerSala.ejecutar(ID_SALA)).thenThrow(new SalaNoEncontrada(ID_SALA));
+
+        mockMvc.perform(get("/api/v1/salas/{id}", ID_SALA).with(jugador()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.type")
+                        .value("https://nexusbattles.local/errores/sala-no-encontrada"));
+    }
+
+    @Test
+    @DisplayName("GET de una sala sin token responde 401")
+    void obtieneSinToken() throws Exception {
+        mockMvc.perform(get("/api/v1/salas/{id}", ID_SALA))
+                .andExpect(status().isUnauthorized());
+    }
+
+    // ---------------------------------------------------------------------
+    // DELETE /salas/{id} — cancelarSala
+    // ---------------------------------------------------------------------
+
+    @Test
+    @DisplayName("el anfitrion cancela su sala y recibe 204 sin cuerpo")
+    void cancela() throws Exception {
+        mockMvc.perform(delete("/api/v1/salas/{id}", ID_SALA).with(jugador()))
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+
+        verify(cancelarSala).ejecutar(ID_SALA, JUGADOR);
+    }
+
+    @Test
+    @DisplayName("quien no es el anfitrion recibe 403 con su tipo")
+    void cancelaSinSerAnfitrion() throws Exception {
+        doThrow(new NoEsElAnfitrion()).when(cancelarSala).ejecutar(any(), any());
+
+        mockMvc.perform(delete("/api/v1/salas/{id}", ID_SALA).with(jugador()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.type")
+                        .value("https://nexusbattles.local/errores/no-es-el-anfitrion"));
+    }
+
+    @Test
+    @DisplayName("cancelar una partida ya empezada responde 409")
+    void cancelaPartidaEmpezada() throws Exception {
+        doThrow(new SalidaNoPermitida("La partida ya comenzo: la sala no se puede cancelar."))
+                .when(cancelarSala).ejecutar(any(), any());
+
+        mockMvc.perform(delete("/api/v1/salas/{id}", ID_SALA).with(jugador()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type")
+                        .value("https://nexusbattles.local/errores/salida-no-permitida"));
+    }
+
+    @Test
+    @DisplayName("cancelar sin token responde 401")
+    void cancelaSinToken() throws Exception {
+        mockMvc.perform(delete("/api/v1/salas/{id}", ID_SALA))
+                .andExpect(status().isUnauthorized());
+    }
+
+    // ---------------------------------------------------------------------
+    // DELETE /salas/{id}/participantes — abandonarSala
+    // ---------------------------------------------------------------------
+
+    @Test
+    @DisplayName("abandonar la sala responde 204 y el jugador sale del token")
+    void abandona() throws Exception {
+        mockMvc.perform(delete("/api/v1/salas/{id}/participantes", ID_SALA).with(jugador()))
+                .andExpect(status().isNoContent());
+
+        verify(abandonarSala).ejecutar(ID_SALA, JUGADOR);
+    }
+
+    @Test
+    @DisplayName("el anfitrion que intenta abandonar recibe 409 diciendo que cancele")
+    void elAnfitrionNoAbandona() throws Exception {
+        doThrow(new SalidaNoPermitida("El anfitrion no abandona su sala: la cancela."))
+                .when(abandonarSala).ejecutar(any(), any());
+
+        mockMvc.perform(delete("/api/v1/salas/{id}/participantes", ID_SALA).with(jugador()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value("El anfitrion no abandona su sala: la cancela."));
+    }
+
+    @Test
+    @DisplayName("abandonar sin rol de jugador responde 403")
+    void abandonaSinRol() throws Exception {
+        mockMvc.perform(delete("/api/v1/salas/{id}/participantes", ID_SALA)
+                        .with(jwt().jwt(t -> t.subject(JUGADOR.toString()))))
+                .andExpect(status().isForbidden());
+    }
+
+    /** Un jugador distinto del de {@link #jugador()}, para probar quien ve que. */
+    private static org.springframework.test.web.servlet.request.RequestPostProcessor otroJugador() {
+        return jwt().jwt(token -> token
+                        .subject("88888888-8888-8888-8888-888888888888")
+                        .claim("preferred_username", "Otro"))
+                .authorities(new org.springframework.security.core.authority
+                        .SimpleGrantedAuthority("ROLE_JUGADOR"));
     }
 }
