@@ -27,7 +27,7 @@
         },
         "headers": {
           "Content-Type": "application/json",
-          "Idempotency-Key": "\u2E8E\u9388\u671C\u2973\u7079\u9980"
+          "Idempotency-Key": "\uB230\u5036"
         },
         "matchingRules": {
           "body": {
@@ -143,7 +143,7 @@
         },
         "headers": {
           "Content-Type": "application/json",
-          "Idempotency-Key": "\uA3D2\uF574"
+          "Idempotency-Key": "\uE0E3\u34FC"
         },
         "matchingRules": {
           "body": {

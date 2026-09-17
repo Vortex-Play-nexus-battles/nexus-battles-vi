@@ -1,6 +1,7 @@
 package com.nexusbattles.ms_subastas.pujas.service;
 
 import com.nexusbattles.ms_subastas.pujas.dto.MiParticipacionResponse;
+import com.nexusbattles.ms_subastas.pujas.creditos.CreditoClient;
 import com.nexusbattles.ms_subastas.pujas.dto.MiResumenResponse;
 import com.nexusbattles.ms_subastas.pujas.dto.PujaDelHistorialResponse;
 import com.nexusbattles.ms_subastas.pujas.model.EstadoPuja;
@@ -10,6 +11,7 @@ import com.nexusbattles.ms_subastas.pujas.repository.PujaRepository;
 import com.nexusbattles.ms_subastas.subastas.model.Subasta;
 import com.nexusbattles.ms_subastas.subastas.repository.SubastaRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +31,7 @@ import java.util.UUID;
  * bloquearia las pujas de todos los demas mientras se pinta. Aqui solo se lee.
  */
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class ConsultaDeParticipacionService {
 
@@ -37,6 +40,7 @@ public class ConsultaDeParticipacionService {
     private final PujaAutomaticaRepository pujaAutomaticaRepository;
     private final ParametrosPuja parametros;
     private final Clock clock;
+    private final CreditoClient creditoClient;
 
     /**
      * @param quienMira puede ser null: el historial es publico y se puede ver
@@ -89,7 +93,31 @@ public class ConsultaDeParticipacionService {
     public MiResumenResponse miResumen(UUID jugadorId) {
         return new MiResumenResponse(
                 pujaRepository.sumarMontoPorJugadorYEstado(jugadorId, EstadoPuja.ACTIVA),
+                saldoDisponibleOSinSaber(jugadorId),
                 pujaRepository.countByJugadorIdAndEstado(jugadorId, EstadoPuja.ACTIVA));
+    }
+
+    /**
+     * El saldo libre segun ms-finanzas, o {@code null} si ese servicio no
+     * responde.
+     *
+     * <p>El nulo es deliberado y no se sustituye por cero. Un cero le diria al
+     * jugador que esta arruinado cuando lo unico que pasa es que no se pudo
+     * preguntar, y la pantalla usa este numero para decidir si le deja pujar:
+     * con un cero inventado le bloquearia pujas que si puede pagar.
+     *
+     * <p>Tampoco se deja caer la excepcion. El resumen sirve igual sin el
+     * saldo —el retenido y las subastas que va ganando salen de esta misma base
+     * de datos—, asi que una averia de creditos no debe dejar al jugador sin
+     * pantalla; solo sin esa cifra.
+     */
+    private BigDecimal saldoDisponibleOSinSaber(UUID jugadorId) {
+        try {
+            return creditoClient.saldoDisponible(jugadorId);
+        } catch (RuntimeException noSeSabe) {
+            log.warn("No se pudo consultar el saldo de {}: {}", jugadorId, noSeSabe.getMessage());
+            return null;
+        }
     }
 
     /**

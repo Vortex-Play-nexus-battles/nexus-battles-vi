@@ -125,9 +125,11 @@ Por orden de lo que mas duele:
 - **El producto no cambia de dueno al comprarlo.** La logica esta, pero inventario no expone transferencia de propiedad. De los tres endpoints pedidos a Nicolay ya publico dos —el bloqueo y su liberacion (HU-INV-010), ambos ya implementados en `InventarioClientHttp`—; falta la transferencia y un `GET /elementos/{elementoId}` para resolver un elemento por id.
 - **El identificador de la frontera con inventario: acordado, pendiente de implementar.** Inventario autentica con `X-User-Name`, que es el apodo; este servicio solo conoce el `uid` del token. Se descarto la transicion de pasar ambos porque **en tres de las cinco llamadas a inventario no existe ningun apodo que propagar**: el cierre por vencimiento y la liberacion los dispara un `@Scheduled` sin peticion ni token, y la compensacion transfiere al vendedor, que no es quien hizo la peticion. El `uid`, en cambio, ya queda persistido al crear la subasta y se reutiliza despues. Acordado con Edwin el 14/09/2026: el contrato nuevo nace con `uid`. `InventarioClient` no se toca hasta cerrarlo con Nicolay.
 - **`esMaestroDeJuego` devuelve siempre `false`, y es una decision acordada, no un olvido.** Ese rol no existe formalmente en ms-identidad y no se inventa desde subastas. `false` es el valor seguro porque el Maestro de Juego esta exento de la comision de publicacion, asi que **hasta nuevo aviso todos pagan comision**. Lo define **HU-SUB-010 del Sprint 3**, y ms-identidad sera la fuente de verdad. Acordado con Edwin el 14/09/2026.
-- **El saldo del jugador no se muestra.** Ya no sale un numero inventado —eso se
-  quito—, pero tampoco sale el real: el `GET /creditos/{uid}/saldo` que lo daria
-  es el que devuelve 500 siempre. La pantalla lo marca como desconocido.
+- ~~El saldo del jugador no se muestra.~~ Hecho: `GET /mis-pujas/resumen` trae
+  `saldoDisponible` desde ms-finanzas. **Nulo significa "no se sabe", nunca
+  "cero"**, y con nulo la pantalla no bloquea: deja decidir al servidor, que es
+  quien conoce el dinero de verdad. Un cero inventado le diria al jugador que
+  esta arruinado y le negaria pujas que si puede pagar.
 - ~~Pruebas de contrato (Pact)~~ — hechas del lado consumidor: `CreditosPactoTest`
   e `InventarioPactoTest` generan los pactos en `contracts/pactos/`. Falta que
   los proveedores los verifiquen contra su implementacion (ver el README de esa

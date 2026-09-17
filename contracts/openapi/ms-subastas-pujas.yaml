@@ -117,6 +117,25 @@ paths:
         '404':
           $ref: '#/components/responses/SubastaNoEncontrada'
 
+  /mis-pujas/resumen:
+    get:
+      summary: Lo que el jugador tiene en juego sumando todas las subastas
+      description: >-
+        Cuelga de su propia ruta y no de /subastas/{subastaId} porque no habla
+        de ninguna subasta concreta: colgarlo de ahi obligaria a inventar un
+        identificador para pedirlo.
+      operationId: miResumen
+      tags: [pujas]
+      responses:
+        '200':
+          description: Resumen del jugador
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MiResumen'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+
   /subastas/{subastaId}/compra-inmediata:
     post:
       summary: Comprar de forma inmediata
@@ -299,6 +318,29 @@ components:
         esTuya:
           type: boolean
           description: Falso siempre si se consulta sin sesion.
+
+    MiResumen:
+      type: object
+      required: [creditosRetenidos, subastasGanando]
+      properties:
+        creditosRetenidos:
+          type: string
+          format: decimal
+          description: Suma de tus pujas que siguen siendo oferta vigente.
+        saldoDisponible:
+          type: [string, "null"]
+          format: decimal
+          description: >-
+            Lo que te queda libre segun ms-finanzas, ya neto de reservas.
+
+            **Nulo significa "no se sabe", nunca "cero"**: si ms-finanzas no
+            responde, este servicio prefiere no decir nada antes que inventar
+            una cifra. La interfaz debe mostrarlo como desconocido y dejar que
+            el servidor decida si una puja cabe o no; un cero le diria al
+            jugador que esta arruinado y le bloquearia pujas que si puede pagar.
+        subastasGanando:
+          type: integer
+          description: En cuantas subastas tu puja es la oferta vigente.
 
     MiParticipacion:
       type: object
