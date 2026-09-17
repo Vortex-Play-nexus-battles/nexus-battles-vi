@@ -245,8 +245,18 @@ public class InventarioClientHttp implements InventarioClient {
             return;
         }
         if (estado == 404) {
+            // Dos cosas distintas con el mismo numero, y hoy la segunda es la
+            // probable: ms-inventario todavia NO publica esta ruta —solo el
+            // bloqueo, su liberacion y la consulta por id—, asi que un 404 aqui
+            // seguramente no dice "ese elemento no existe" sino "esa operacion
+            // no existe". Culpar al elemento mandaria a quien lo depure a mirar
+            // la subasta en vez del contrato. Cuando Nicolay la publique, este
+            // mensaje se puede recortar a la primera mitad.
             throw new InventarioClientException(
-                    "Inventario no encontro el elemento " + elementoInventarioId + " para transferir");
+                    "Inventario respondio 404 al transferir el elemento " + elementoInventarioId
+                            + ". O el elemento no existe, o —mas probable hoy— ms-inventario aun no expone "
+                            + "POST /api/v1/inventario/elementos/{elementoId}/transferencias. "
+                            + "Comprobar el contrato antes que el dato.");
         }
         if (estado == 409) {
             throw new InventarioClientException(
