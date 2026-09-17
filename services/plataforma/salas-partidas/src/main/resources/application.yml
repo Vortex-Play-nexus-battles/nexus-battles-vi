@@ -21,11 +21,22 @@ spring:
     problemdetails:
       enabled: true
 
+  # Quien emite los tokens que este servicio acepta.
+  #
+  # Hoy es ms-identidad, que publica su clave publica en /api/v1/auth/jwks.
+  # Se configura jwk-set-uri y no issuer-uri porque ms-identidad no expone
+  # documento de descubrimiento OpenID; a cambio, esta forma sirve igual para
+  # Keycloak el dia que la identidad se mueva alli: solo cambia la URL, por
+  # variable de entorno, sin tocar codigo. Ver
+  # docs/gobierno/ADR-002-identidad-de-usuario.md.
+  #
+  # Los roles y el identificador del usuario los traduce ConversorRolesJwt
+  # (shared/libs/plataforma-seguridad), que entiende las dos formas de token.
   security:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${DIRECTORIO_ACTIVO_URL:http://localhost:8180/realms/nexus-battles}
+          jwk-set-uri: ${IDENTIDAD_JWKS_URL:http://localhost:8089/api/v1/auth/jwks}
 
   datasource:
     url: ${DB_RELACIONAL_URL:jdbc:postgresql://localhost:5432/plataformadb}
