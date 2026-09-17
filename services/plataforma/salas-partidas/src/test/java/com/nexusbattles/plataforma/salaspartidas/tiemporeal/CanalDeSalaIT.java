@@ -323,9 +323,9 @@ class CanalDeSalaIT {
         UUID idPrivada = crearSalaPrivada();
         BlockingQueue<String> recibidos = suscribirseA(conectar(ANFITRION), idPrivada);
 
-        // La invitacion (criterio 3 de HU-SAL-001) todavia no tiene mecanismo: el
-        // dominio rechaza toda entrada a una sala privada con 403. Lo que aqui
-        // se demuestra es la autorizacion del canal, no el ingreso.
+        // Sin codigo, una sala privada sigue rechazando con 403. Lo que aqui se
+        // demuestra es la autorizacion del canal; el ingreso con codigo tiene su
+        // propio caso, mas abajo.
         HttpResponse<String> intento =
                 pedir("/api/v1/salas/" + idPrivada + "/participantes", null, VISITANTE);
         assertEquals(403, intento.statusCode());
@@ -333,12 +333,156 @@ class CanalDeSalaIT {
                 "un ingreso rechazado no se anuncia, tampoco en una sala privada");
     }
 
-    private UUID crearSalaPrivada() throws Exception {
+    // -----------------------------------------------------------------------
+    // Codigo de invitacion, salida y cancelacion (ADR-003)
+    // -----------------------------------------------------------------------
+
+    @Test
+    @DisplayName("con el codigo de invitacion se entra a una sala privada y el ingreso viaja por el canal")
+    void conCodigoSeEntraALaSalaPrivada() throws Exception {
+        SalaPrivada privada = crearSalaPrivadaConCodigo();
+        BlockingQueue<String> recibidos = suscribirseA(conectar(ANFITRION), privada.id());
+
+        HttpResponse<String> ingreso = pedir(
+                "/api/v1/salas/" + privada.id() + "/participantes",
+                "{\"codigoInvitacion\": \"" + privada.codigo() + "\"}",
+                VISITANTE);
+
+        assertEquals(200, ingreso.statusCode(),
+                "con el codigo correcto el ingreso se acepta: " + ingreso.body());
+
+        String aviso = recibidos.poll(10, TimeUnit.SECONDS);
+        assertNotNull(aviso, "el ingreso con invitacion tambien se anuncia");
+        assertAll(
+                () -> assertTrue(aviso.contains("\"tipo\":\"sala.participante.ingreso\""), aviso),
+                () -> assertTrue(aviso.contains("\"ocupacion\":{\"actual\":2,\"maximo\":4}"), aviso),
+                // El invitado NO recibe la llave: entro, no reparte invitaciones.
+                () -> assertTrue(!ingreso.body().contains("codigoInvitacion"), ingreso.body()));
+    }
+
+    @Test
+    @DisplayName("un codigo equivocado sigue siendo 403 y no anuncia nada")
+    void conCodigoEquivocadoNoEntra() throws Exception {
+        SalaPrivada privada = crearSalaPrivadaConCodigo();
+        BlockingQueue<String> recibidos = suscribirseA(conectar(ANFITRION), privada.id());
+
+        HttpResponse<String> intento = pedir(
+                "/api/v1/salas/" + privada.id() + "/participantes",
+                "{\"codigoInvitacion\": \"ZZZZ-9999\"}",
+                VISITANTE);
+
+        assertAll(
+                () -> assertEquals(403, intento.statusCode()),
+                () -> assertNull(recibidos.poll(2, TimeUnit.SECONDS)));
+    }
+
+    @Test
+    @DisplayName("abandonar la sala publica sala.participante.salio con la ocupacion ya rebajada")
+    void laSalidaViajaPorElCanal() throws Exception {
+        UUID idSala = crearSala();
+        assertEquals(200,
+                pedir("/api/v1/salas/" + idSala + "/participantes", null, VISITANTE).statusCode());
+
+        BlockingQueue<String> recibidos = suscribirseA(conectar(ANFITRION), idSala);
+
+        assertEquals(204, borrar("/api/v1/salas/" + idSala + "/participantes", VISITANTE).statusCode());
+
+        String aviso = recibidos.poll(10, TimeUnit.SECONDS);
+        assertNotNull(aviso, "la salida no llego por el canal");
+        assertAll(
+                () -> assertTrue(aviso.contains("\"tipo\":\"sala.participante.salio\""), aviso),
+                () -> assertTrue(aviso.contains("\"idJugador\":\"" + ID_VISITANTE + "\""), aviso),
+                () -> assertTrue(aviso.contains("\"ocupacion\":{\"actual\":1,\"maximo\":4}"), aviso));
+    }
+
+    @Test
+    @DisplayName("cancelar publica sala.cancelada con el motivo del contrato")
+    void laCancelacionViajaPorElCanal() throws Exception {
+        UUID idSala = crearSala();
+        BlockingQueue<String> recibidos = suscribirseA(conectar(ANFITRION), idSala);
+
+        assertEquals(204, borrar("/api/v1/salas/" + idSala, ANFITRION).statusCode());
+
+        String aviso = recibidos.poll(10, TimeUnit.SECONDS);
+        assertNotNull(aviso, "la cancelacion no llego por el canal");
+        assertAll(
+                () -> assertTrue(aviso.contains("\"tipo\":\"sala.cancelada\""), aviso),
+                () -> assertTrue(aviso.contains("\"idSala\":\"" + idSala + "\""), aviso),
+                () -> assertTrue(aviso.contains("\"motivo\":\"CANCELADA_POR_ANFITRION\""), aviso),
+                () -> assertTrue(aviso.contains("\"creditosDevueltos\":0"), aviso));
+    }
+
+    @Test
+    @DisplayName("quien no es el anfitrion no puede cancelar la sala")
+    void soloElAnfitrionCancela() throws Exception {
+        UUID idSala = crearSala();
+        assertEquals(200,
+                pedir("/api/v1/salas/" + idSala + "/participantes", null, VISITANTE).statusCode());
+
+        assertEquals(403, borrar("/api/v1/salas/" + idSala, VISITANTE).statusCode());
+
+        // Y la sala sigue en pie: se puede consultar y sigue abierta.
+        HttpResponse<String> consulta = leer("/api/v1/salas/" + idSala, VISITANTE);
+        assertAll(
+                () -> assertEquals(200, consulta.statusCode()),
+                () -> assertTrue(consulta.body().contains("\"estado\":\"ABIERTA\""), consulta.body()));
+    }
+
+    @Test
+    @DisplayName("GET de la sala: el anfitrion ve el codigo, el invitado no")
+    void elCodigoSoloLoVeElAnfitrion() throws Exception {
+        SalaPrivada privada = crearSalaPrivadaConCodigo();
+
+        HttpResponse<String> delAnfitrion = leer("/api/v1/salas/" + privada.id(), ANFITRION);
+        HttpResponse<String> delOtro = leer("/api/v1/salas/" + privada.id(), VISITANTE);
+
+        assertAll(
+                () -> assertTrue(delAnfitrion.body().contains(privada.codigo()), delAnfitrion.body()),
+                () -> assertTrue(!delOtro.body().contains("codigoInvitacion"), delOtro.body()));
+    }
+
+    /** Sala privada recien creada, con la llave que el 201 le devolvio a su anfitrion. */
+    private record SalaPrivada(UUID id, String codigo) {
+    }
+
+    private SalaPrivada crearSalaPrivadaConCodigo() throws Exception {
         HttpResponse<String> respuesta = pedir("/api/v1/salas", """
                 {"maximoParticipantes": 4, "modalidad": "HASTA_SEIS", "recompensaCreditos": 0, "privada": true}
                 """, ANFITRION);
         assertEquals(201, respuesta.statusCode(), "la sala privada tiene que crearse");
+
+        // Sin analizador de JSON, igual que el resto de la clase: se extrae del
+        // cuerpo literal, lo que ademas demuestra que el campo viaja por el cable.
+        java.util.regex.Matcher codigo = java.util.regex.Pattern
+                .compile("\"codigoInvitacion\":\"([A-Z0-9-]+)\"")
+                .matcher(respuesta.body());
+        assertTrue(codigo.find(),
+                "el 201 de una sala privada tiene que traerle su codigo al anfitrion: "
+                        + respuesta.body());
+
         String ubicacion = respuesta.headers().firstValue("Location").orElseThrow();
-        return UUID.fromString(ubicacion.substring(ubicacion.lastIndexOf('/') + 1));
+        return new SalaPrivada(
+                UUID.fromString(ubicacion.substring(ubicacion.lastIndexOf('/') + 1)),
+                codigo.group(1));
+    }
+
+    private UUID crearSalaPrivada() throws Exception {
+        return crearSalaPrivadaConCodigo().id();
+    }
+
+    private HttpResponse<String> borrar(String ruta, String token) throws Exception {
+        return enviar(HttpRequest.newBuilder(URI.create("http://localhost:" + puerto + ruta))
+                .header("Authorization", "Bearer " + token)
+                .DELETE());
+    }
+
+    private HttpResponse<String> leer(String ruta, String token) throws Exception {
+        return enviar(HttpRequest.newBuilder(URI.create("http://localhost:" + puerto + ruta))
+                .header("Authorization", "Bearer " + token)
+                .GET());
+    }
+
+    private HttpResponse<String> enviar(HttpRequest.Builder peticion) throws Exception {
+        return http.send(peticion.build(), HttpResponse.BodyHandlers.ofString());
     }
 }

@@ -358,8 +358,11 @@ class RepositorioSalasJpaIT {
      */
     private void guardarConEstado(EstadoSala estado, Modalidad modalidad) {
         int maximo = modalidad == Modalidad.HASTA_SEIS ? 6 : 2;
+        boolean privada = estado == EstadoSala.PRIVADA;
+        // Una privada sin codigo la rechaza ck_salas_codigo_solo_si_privada (V5),
+        // y con razon: seria una sala que nadie puede abrir, ni su anfitrion.
         repositorio.guardar(Sala.rehidratar(UUID.randomUUID(), estado, modalidad, maximo, 0,
-                false, estado == EstadoSala.PRIVADA, null, ANFITRION, java.util.Set.of(),
-                java.time.Instant.now()));
+                false, privada, null, ANFITRION, java.util.Set.of(),
+                java.time.Instant.now(), 0L, privada ? "ABCD-2345" : null, null));
     }
 }

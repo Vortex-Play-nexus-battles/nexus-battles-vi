@@ -12,6 +12,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -29,6 +30,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class SalaTest {
 
     private static final UUID ANFITRION = UUID.fromString("11111111-1111-1111-1111-111111111111");
+
+    /**
+     * Jugadores compartidos por los bloques de invitacion, salida y cancelacion.
+     * El bloque {@code Ingreso} tiene los suyos propios, de antes de que hubiera
+     * mas de un bloque que los necesitara.
+     */
+    private static final UUID VISITANTE = UUID.fromString("55555555-5555-5555-5555-555555555555");
+    private static final UUID TERCERO = UUID.fromString("77777777-7777-7777-7777-777777777777");
 
     private static ParametrosDeSala validos() {
         return new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 400, false, false, null);
@@ -341,5 +350,278 @@ class SalaTest {
 
             assertThrows(NullPointerException.class, () -> sala.unirse(null));
         }
+    }
+
+    @Nested
+    @DisplayName("RF-JUE-002 · codigo de invitacion de sala privada")
+    class Invitacion {
+
+        private static ParametrosDeSala privados() {
+            return new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, true, null);
+        }
+
+        @Test
+        @DisplayName("una sala privada nace con codigo y una publica sin el")
+        void soloLasPrivadasTienenCodigo() {
+            Sala privada = Sala.crear(privados(), ANFITRION);
+            Sala publica = Sala.crear(validos(), ANFITRION);
+
+            assertAll(
+                    () -> assertNotNull(privada.codigoInvitacion()),
+                    () -> assertNull(publica.codigoInvitacion(),
+                            "un codigo que no protege nada solo es un secreto que filtrar"));
+        }
+
+        @Test
+        @DisplayName("el codigo no usa caracteres que se confundan al dictarlo")
+        void codigoLegible() {
+            String codigo = Sala.crear(privados(), ANFITRION).codigoInvitacion();
+
+            assertAll(
+                    () -> assertEquals(9, codigo.length(), "ocho caracteres y un guion"),
+                    () -> assertEquals('-', codigo.charAt(4)),
+                    () -> assertTrue(codigo.chars()
+                                    .filter(c -> c != '-')
+                                    .noneMatch(c -> "IO01".indexOf(c) >= 0),
+                            "I, O, 0 y 1 se confunden entre si: " + codigo),
+                    () -> assertEquals(codigo.toUpperCase(java.util.Locale.ROOT), codigo));
+        }
+
+        @Test
+        @DisplayName("dos salas privadas no comparten codigo")
+        void codigosDistintos() {
+            Set<String> codigos = new LinkedHashSet<>();
+            for (int i = 0; i < 50; i++) {
+                codigos.add(Sala.crear(privados(), ANFITRION).codigoInvitacion());
+            }
+
+            assertEquals(50, codigos.size(), "un codigo repetido abre la sala de otro");
+        }
+
+        @Test
+        @DisplayName("con el codigo correcto se entra a una sala privada")
+        void conCodigoEntra() {
+            Sala sala = Sala.crear(privados(), ANFITRION);
+
+            sala.unirse(VISITANTE, sala.codigoInvitacion());
+
+            assertAll(
+                    () -> assertEquals(2, sala.ocupacion()),
+                    () -> assertTrue(sala.participantes().contains(VISITANTE)),
+                    () -> assertEquals(EstadoSala.PRIVADA, sala.estado(),
+                            "sigue siendo privada: no se abre porque haya entrado alguien"));
+        }
+
+        @Test
+        @DisplayName("el codigo se acepta en minusculas y sin guion: se recibe copiado del chat")
+        void codigoNormalizado() {
+            Sala sala = Sala.crear(privados(), ANFITRION);
+            String comoLoPego = sala.codigoInvitacion().replace("-", "")
+                    .toLowerCase(java.util.Locale.ROOT);
+
+            sala.unirse(VISITANTE, comoLoPego);
+
+            assertTrue(sala.participantes().contains(VISITANTE));
+        }
+
+        @Test
+        @DisplayName("con un codigo equivocado se rechaza con 403")
+        void codigoEquivocado() {
+            Sala sala = Sala.crear(privados(), ANFITRION);
+
+            SalaPrivadaSinInvitacion error = assertThrows(SalaPrivadaSinInvitacion.class,
+                    () -> sala.unirse(VISITANTE, "ZZZZ-9999"));
+
+            assertAll(
+                    () -> assertEquals(403, error.estado()),
+                    () -> assertEquals(1, sala.ocupacion(), "un rechazo no deja rastro"));
+        }
+
+        @Test
+        @DisplayName("sin codigo se rechaza con 403, no con 409")
+        void sinCodigo() {
+            Sala sala = Sala.crear(privados(), ANFITRION);
+
+            assertThrows(SalaPrivadaSinInvitacion.class, () -> sala.unirse(VISITANTE));
+        }
+
+        @Test
+        @DisplayName("una sala privada llena rechaza con 409 aunque el codigo sea bueno")
+        void privadaLlenaEsConflicto() {
+            Sala sala = Sala.crear(
+                    new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, true, null),
+                    ANFITRION);
+            sala.unirse(VISITANTE, sala.codigoInvitacion());
+
+            // El aforo se agoto: el estado paso a LLENA y el rechazo ya no es
+            // «esta sala no es para ti» sino «esta sala cambio de estado».
+            assertThrows(IngresoNoPermitido.class,
+                    () -> sala.unirse(TERCERO, sala.codigoInvitacion()));
+        }
+    }
+
+    @Nested
+    @DisplayName("abandonarSala · salida de un participante")
+    class Salida {
+
+        @Test
+        @DisplayName("quien estaba dentro sale y libera su cupo")
+        void saleYLiberaCupo() {
+            Sala sala = Sala.crear(validos(), ANFITRION);
+            sala.unirse(VISITANTE);
+
+            sala.abandonar(VISITANTE);
+
+            assertAll(
+                    () -> assertEquals(1, sala.ocupacion()),
+                    () -> assertTrue(!sala.participantes().contains(VISITANTE)));
+        }
+
+        @Test
+        @DisplayName("una sala llena vuelve a admitir cuando alguien se va")
+        void llenaVuelveAAbrir() {
+            Sala sala = Sala.crear(
+                    new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, false, null),
+                    ANFITRION);
+            sala.unirse(VISITANTE);
+            assertEquals(EstadoSala.LLENA, sala.estado());
+
+            sala.abandonar(VISITANTE);
+
+            assertAll(
+                    () -> assertEquals(EstadoSala.ABIERTA, sala.estado()),
+                    () -> assertEquals(1, sala.ocupacion()));
+        }
+
+        @Test
+        @DisplayName("una privada que se vacia vuelve a PRIVADA, no a ABIERTA")
+        void privadaLlenaVuelveAPrivada() {
+            Sala sala = Sala.crear(
+                    new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, true, null),
+                    ANFITRION);
+            sala.unirse(VISITANTE, sala.codigoInvitacion());
+
+            sala.abandonar(VISITANTE);
+
+            assertEquals(EstadoSala.PRIVADA, sala.estado(),
+                    "una sala no se vuelve publica porque alguien se haya ido");
+        }
+
+        @Test
+        @DisplayName("el anfitrion no abandona: se le remite a cancelar")
+        void elAnfitrionNoAbandona() {
+            Sala sala = Sala.crear(validos(), ANFITRION);
+
+            SalidaNoPermitida error = assertThrows(SalidaNoPermitida.class,
+                    () -> sala.abandonar(ANFITRION));
+
+            assertAll(
+                    () -> assertEquals(409, error.estado()),
+                    () -> assertTrue(error.detalle().toLowerCase().contains("cancela"),
+                            "el error tiene que decir cual es el camino correcto"),
+                    () -> assertEquals(1, sala.ocupacion(), "sigue dentro"));
+        }
+
+        @Test
+        @DisplayName("quien nunca entro no puede salir")
+        void ajenoNoSale() {
+            Sala sala = Sala.crear(validos(), ANFITRION);
+
+            assertThrows(SalidaNoPermitida.class, () -> sala.abandonar(VISITANTE));
+        }
+
+        @Test
+        @DisplayName("con la partida en juego no se abandona la sala")
+        void enJuegoNoSeAbandona() {
+            Sala sala = enEstado(EstadoSala.EN_JUEGO);
+
+            SalidaNoPermitida error = assertThrows(SalidaNoPermitida.class,
+                    () -> sala.abandonar(VISITANTE));
+
+            assertTrue(error.detalle().toLowerCase().contains("comenzo"));
+        }
+
+        @Test
+        @DisplayName("sin jugador identificado no hay salida")
+        void exigeJugador() {
+            Sala sala = Sala.crear(validos(), ANFITRION);
+
+            assertThrows(NullPointerException.class, () -> sala.abandonar(null));
+        }
+    }
+
+    @Nested
+    @DisplayName("cancelarSala · solo el anfitrion, y solo antes de empezar")
+    class Cancelacion {
+
+        @Test
+        @DisplayName("el anfitrion cancela y la sala queda CANCELADA")
+        void elAnfitrionCancela() {
+            Sala sala = Sala.crear(validos(), ANFITRION);
+
+            sala.cancelar(ANFITRION);
+
+            assertAll(
+                    () -> assertEquals(EstadoSala.CANCELADA, sala.estado()),
+                    () -> assertTrue(!sala.estado().apareceEnElListado(),
+                            "una sala cancelada desaparece del listado"));
+        }
+
+        @Test
+        @DisplayName("un participante que no es el anfitrion recibe 403")
+        void otroNoCancela() {
+            Sala sala = Sala.crear(validos(), ANFITRION);
+            sala.unirse(VISITANTE);
+
+            NoEsElAnfitrion error = assertThrows(NoEsElAnfitrion.class,
+                    () -> sala.cancelar(VISITANTE));
+
+            assertAll(
+                    () -> assertEquals(403, error.estado()),
+                    () -> assertEquals(EstadoSala.ABIERTA, sala.estado(), "la sala sigue en pie"),
+                    () -> assertTrue(!error.detalle().contains(ANFITRION.toString()),
+                            "un error no es el sitio para revelar quien es el anfitrion"));
+        }
+
+        @Test
+        @DisplayName("con la partida en juego ya no se cancela: 409")
+        void enJuegoNoSeCancela() {
+            Sala sala = enEstado(EstadoSala.EN_JUEGO);
+
+            SalidaNoPermitida error = assertThrows(SalidaNoPermitida.class,
+                    () -> sala.cancelar(ANFITRION));
+
+            assertEquals(409, error.estado());
+        }
+
+        @Test
+        @DisplayName("cancelar dos veces la misma sala es un conflicto, no un exito silencioso")
+        void noSeCancelaDosVeces() {
+            Sala sala = Sala.crear(validos(), ANFITRION);
+            sala.cancelar(ANFITRION);
+
+            assertThrows(SalidaNoPermitida.class, () -> sala.cancelar(ANFITRION));
+        }
+
+        @Test
+        @DisplayName("la reserva de creditos se anota una sola vez")
+        void laReservaSeAnotaUnaVez() {
+            Sala sala = Sala.crear(validos(), ANFITRION);
+            UUID reserva = UUID.randomUUID();
+
+            Sala conReserva = sala.conReserva(reserva);
+
+            assertAll(
+                    () -> assertEquals(reserva, conReserva.idReservaCreditos()),
+                    () -> assertNull(sala.idReservaCreditos(), "la original no se toca"),
+                    () -> assertThrows(IllegalStateException.class,
+                            () -> conReserva.conReserva(UUID.randomUUID())));
+        }
+    }
+
+    /** Sala en un estado que {@code crear} no produce, para probar los rechazos. */
+    private static Sala enEstado(EstadoSala estado) {
+        return Sala.rehidratar(UUID.randomUUID(), estado, Modalidad.HASTA_SEIS, 4, 0,
+                false, false, null, ANFITRION, Set.of(VISITANTE), Instant.now());
     }
 }

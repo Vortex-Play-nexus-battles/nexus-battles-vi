@@ -598,6 +598,27 @@ components:
           format: uuid
           description: Presente solo cuando la partida ya comenzo.
         creadaEn: { type: string, format: date-time }
+        codigoInvitacion:
+          type: string
+          description: |
+            Llave de acceso de una sala privada. **Solo viaja hacia el
+            anfitrion**, y solo en las respuestas de `crearSala`,
+            `obtenerSala` e `ingresarASala`; a cualquier otro jugador el campo
+            ni siquiera aparece en el JSON. Ausente tambien en las salas
+            publicas, que no tienen codigo.
+
+            Lo genera el servidor al crear la sala —ocho caracteres de un
+            alfabeto sin `I`, `O`, `0` ni `1`, agrupados de cuatro en cuatro—
+            para que se pueda dictar en voz alta sin ambiguedad. El cliente
+            nunca lo elige.
+
+            Se anadio despues del congelado del Sprint 1 porque sin el las
+            salas privadas eran inaccesibles incluso para su anfitrion: el
+            contrato ya exigia `codigoInvitacion` en `IngresoRequest`, pero no
+            habia ninguna operacion que lo entregara. Es un campo opcional
+            nuevo, compatible hacia atras: ningun consumidor que lo ignore se
+            rompe.
+          example: 'H7KM-3PQX'
 
     PaginaDeSalas:
       type: object

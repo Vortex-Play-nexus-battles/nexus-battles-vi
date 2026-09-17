@@ -2,6 +2,7 @@ package com.nexusbattles.plataforma.salaspartidas.dominio;
 
 import com.nexusbattles.comun.error.ErrorDeCampo;
 
+import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -25,6 +26,19 @@ import java.util.UUID;
  * se la saltaria.
  */
 public final class Sala {
+
+    /**
+     * Alfabeto del codigo de invitacion: 32 caracteres sin los cuatro que se
+     * confunden entre si al leerlos o dictarlos ({@code I}, {@code O},
+     * {@code 0}, {@code 1}). Un codigo que hay que deletrear dos veces no
+     * cumple su funcion.
+     */
+    private static final String ALFABETO_DEL_CODIGO = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+    /** Caracteres significativos del codigo, sin contar el guion separador. */
+    private static final int LONGITUD_DEL_CODIGO = 8;
+
+    private static final SecureRandom AZAR = new SecureRandom();
 
     private final UUID id;
 
@@ -53,6 +67,32 @@ public final class Sala {
     private final Instant creadaEn;
 
     /**
+     * Codigo de invitacion de una sala privada. {@code null} en las publicas.
+     *
+     * <p>Lo genera el servidor al crear la sala, no lo elige el anfitrion: un
+     * codigo escogido a mano seria corto, memorable y adivinable, que es justo
+     * lo que no queremos de una llave de acceso. Ver
+     * {@link #generarCodigoDeInvitacion()}.
+     *
+     * <p>Solo se le devuelve al anfitrion (lo filtra la capa de API). Al resto
+     * de participantes les llega la sala sin el: quien ya entro no necesita la
+     * llave, y darsela convertiria a cualquier invitado en repartidor de
+     * invitaciones.
+     */
+    private final String codigoInvitacion;
+
+    /**
+     * Reserva de creditos ligada a esta sala — RF-JUE-014. {@code null} cuando
+     * la sala no compromete creditos.
+     *
+     * <p>Se guarda porque cancelar la sala tiene que devolverlos, y para
+     * devolverlos hay que saber que reserva liberar. Sin este dato, cancelar
+     * dejaria los creditos del anfitrion retenidos para siempre — que es
+     * exactamente lo contrario de lo que promete {@link EstadoSala#CANCELADA}.
+     */
+    private final UUID idReservaCreditos;
+
+    /**
      * Marca de concurrencia — HU-SAL-002.
      *
      * <p>El dominio no razona con ella: la lleva tal cual de la lectura a la
@@ -67,7 +107,8 @@ public final class Sala {
     private Sala(UUID id, EstadoSala estado, Modalidad modalidad,
                  int maximoParticipantes, int recompensaCreditos, boolean incluirHeroeIA,
                  boolean privada, Integer tamanoEquipo, UUID idAnfitrion,
-                 Set<UUID> participantes, Instant creadaEn, long version) {
+                 Set<UUID> participantes, Instant creadaEn, long version,
+                 String codigoInvitacion, UUID idReservaCreditos) {
         this.id = id;
         this.estado = estado;
         this.modalidad = modalidad;
@@ -79,6 +120,8 @@ public final class Sala {
         this.idAnfitrion = idAnfitrion;
         this.creadaEn = creadaEn;
         this.version = version;
+        this.codigoInvitacion = codigoInvitacion;
+        this.idReservaCreditos = idReservaCreditos;
 
         // El anfitrion entra primero, siempre: es participante desde que la sala
         // existe. Despues, el resto de quienes ya estuvieran dentro.
@@ -103,10 +146,24 @@ public final class Sala {
                                   int maximoParticipantes, int recompensaCreditos,
                                   boolean incluirHeroeIA, boolean privada, Integer tamanoEquipo,
                                   UUID idAnfitrion, Set<UUID> participantes, Instant creadaEn,
-                                  long version) {
+                                  long version, String codigoInvitacion, UUID idReservaCreditos) {
         return new Sala(id, estado, modalidad, maximoParticipantes, recompensaCreditos,
                 incluirHeroeIA, privada, tamanoEquipo, idAnfitrion, participantes, creadaEn,
-                version);
+                version, codigoInvitacion, idReservaCreditos);
+    }
+
+    /**
+     * Variante sin codigo de invitacion ni reserva, para salas publicas y para
+     * los dobles de prueba anteriores a ambos campos.
+     */
+    public static Sala rehidratar(UUID id, EstadoSala estado, Modalidad modalidad,
+                                  int maximoParticipantes, int recompensaCreditos,
+                                  boolean incluirHeroeIA, boolean privada, Integer tamanoEquipo,
+                                  UUID idAnfitrion, Set<UUID> participantes, Instant creadaEn,
+                                  long version) {
+        return rehidratar(id, estado, modalidad, maximoParticipantes, recompensaCreditos,
+                incluirHeroeIA, privada, tamanoEquipo, idAnfitrion, participantes, creadaEn,
+                version, null, null);
     }
 
     /** Variante sin marca de concurrencia, para dobles y fixtures que no persisten. */
@@ -160,7 +217,32 @@ public final class Sala {
                 idAnfitrion,
                 Set.of(), // al crearla solo esta el anfitrion, que el constructor anade
                 Instant.now(),
-                0L); // nace sin escrituras; la base la incrementa a partir de aqui
+                0L, // nace sin escrituras; la base la incrementa a partir de aqui
+                parametros.privada() ? generarCodigoDeInvitacion() : null,
+                null); // la reserva la anota el caso de uso, cuando el modulo de creditos responde
+    }
+
+    /**
+     * Genera el codigo de invitacion de una sala privada.
+     *
+     * <p>Ocho caracteres de un alfabeto de 32 —sin {@code I}, {@code O},
+     * {@code 0} ni {@code 1}, que se confunden al dictarlos por voz o al
+     * copiarlos de una captura— son 40 bits: mil millones de veces mas
+     * combinaciones que salas puede haber abiertas a la vez. El grupo de cuatro
+     * con guion es para que se pueda leer en voz alta sin perder la cuenta.
+     *
+     * <p>Se usa {@link SecureRandom} y no {@code Math.random()} a proposito: un
+     * generador predecible convierte el codigo en un tramite, no en una llave.
+     */
+    private static String generarCodigoDeInvitacion() {
+        StringBuilder codigo = new StringBuilder(LONGITUD_DEL_CODIGO + 1);
+        for (int i = 0; i < LONGITUD_DEL_CODIGO; i++) {
+            if (i == LONGITUD_DEL_CODIGO / 2) {
+                codigo.append('-');
+            }
+            codigo.append(ALFABETO_DEL_CODIGO.charAt(AZAR.nextInt(ALFABETO_DEL_CODIGO.length())));
+        }
+        return codigo.toString();
     }
 
     /** RF-JUE-004: cada modalidad admite un rango distinto de participantes. */
@@ -218,23 +300,24 @@ public final class Sala {
      *   <li>aforo completo aunque el estado no se haya actualizado.</li>
      * </ul>
      *
-     * <p><b>Una sala PRIVADA rechaza siempre, de momento.</b> El contrato exige
-     * un 403 cuando el codigo de invitacion falta o no vale, pero ese codigo no
-     * esta modelado en ninguna parte: ni en {@link ParametrosDeSala}, ni aqui,
-     * ni en la migracion de Flyway. Sin forma de demostrar que alguien esta
-     * invitado, dejar entrar a cualquiera seria peor que rechazar: convertiria
-     * «privada» en una etiqueta decorativa. Se rechaza hasta que exista el flujo
-     * real de invitaciones, y no se inventa un codigo para salir del paso.
+     * <p>Una sala <b>PRIVADA</b> solo admite a quien traiga su codigo de
+     * invitacion; sin el, o con uno que no case, el rechazo es 403. La
+     * comparacion es carácter a carácter salvo por mayusculas y guiones, que se
+     * normalizan: quien recibe el codigo por chat suele pegarlo con el formato
+     * cambiado, y rechazarlo por eso seria rechazar a alguien que si esta
+     * invitado.
      *
      * @param idJugador jugador que quiere entrar
-     * @throws IngresoNoPermitido si la sala no lo admite
+     * @param codigo    codigo de invitacion; se ignora si la sala es publica
+     * @throws IngresoNoPermitido        si la sala no lo admite
+     * @throws SalaPrivadaSinInvitacion  si es privada y el codigo falta o no vale
      */
-    public void unirse(UUID idJugador) {
+    public void unirse(UUID idJugador, String codigo) {
         Objects.requireNonNull(idJugador, "Para entrar a una sala hace falta un jugador.");
 
         // La sala privada tiene su propio rechazo, con 403: el contrato lo separa
         // del 409 porque la interfaz reacciona distinto a cada uno.
-        if (estado == EstadoSala.PRIVADA) {
+        if (estado == EstadoSala.PRIVADA && !codigoCoincide(codigo)) {
             throw new SalaPrivadaSinInvitacion();
         }
         if (!estadoAdmiteIngreso()) {
@@ -254,9 +337,139 @@ public final class Sala {
         }
     }
 
-    /** Solo ABIERTA admite. PRIVADA queda fuera hasta que exista la invitacion. */
+    /**
+     * Ingreso sin codigo. Equivale a {@code unirse(idJugador, null)}: sirve para
+     * las salas publicas, y en una privada rechaza, que es lo correcto.
+     */
+    public void unirse(UUID idJugador) {
+        unirse(idJugador, null);
+    }
+
+    /**
+     * Saca a un jugador de la sala — operacion {@code abandonarSala} del contrato.
+     *
+     * <p>Simetrica de {@link #unirse(UUID, String)}: si al entrar la sala pudo
+     * llenarse, al salir puede volver a admitir gente, asi que una sala LLENA
+     * regresa a ABIERTA o a PRIVADA segun como se creo. No se queda en LLENA con
+     * un hueco libre.
+     *
+     * <p><b>El anfitrion no abandona: cancela.</b> Lo rechaza aqui, y el caso de
+     * uso lo encamina a {@link #cancelar(UUID)}. Dejar una sala sin anfitrion
+     * abriria preguntas que ningun requisito responde —quien hereda la sala,
+     * quien recupera los creditos comprometidos, quien puede cancelarla
+     * despues— y responderlas por nuestra cuenta seria inventarlas.
+     *
+     * @param idJugador jugador que se va
+     * @throws SalidaNoPermitida si no esta dentro, si es el anfitrion, o si la
+     *                           partida ya empezo o termino
+     */
+    public void abandonar(UUID idJugador) {
+        Objects.requireNonNull(idJugador, "Para salir de una sala hace falta un jugador.");
+
+        if (idJugador.equals(idAnfitrion)) {
+            throw new SalidaNoPermitida(
+                    "El anfitrion no abandona su sala: la cancela.");
+        }
+        if (!participantes.contains(idJugador)) {
+            throw new SalidaNoPermitida("No estas en esta sala.");
+        }
+        if (estado == EstadoSala.EN_JUEGO) {
+            throw new SalidaNoPermitida("La partida ya comenzo: no puedes abandonar la sala.");
+        }
+        if (estado == EstadoSala.FINALIZADA || estado == EstadoSala.CANCELADA) {
+            throw new SalidaNoPermitida("Esta sala ya no esta activa.");
+        }
+
+        participantes.remove(idJugador);
+
+        // Al liberarse un cupo la sala vuelve a admitir, con la misma etiqueta
+        // con la que nacio: una sala privada no se vuelve publica por que
+        // alguien se haya ido.
+        if (estado == EstadoSala.LLENA) {
+            estado = privada ? EstadoSala.PRIVADA : EstadoSala.ABIERTA;
+        }
+    }
+
+    /**
+     * Cancela la sala — operacion {@code cancelarSala} del contrato.
+     *
+     * <p>Solo el anfitrion, y solo antes de empezar. Los dos rechazos van con el
+     * codigo que fija el contrato: 403 si lo pide otro, 409 si la partida ya
+     * arranco o la sala ya no esta activa.
+     *
+     * <p>No borra la sala: la marca CANCELADA. Un borrado dejaria sin explicacion
+     * a quienes estaban dentro, y las tarjetas del listado se filtran por estado
+     * ({@link EstadoSala#delListado()}), asi que una sala cancelada desaparece
+     * del listado igual, pero conservando su rastro.
+     *
+     * <p>Los creditos los devuelve el caso de uso, con
+     * {@link #idReservaCreditos()}: el dominio no habla con el modulo de creditos.
+     *
+     * @param idSolicitante quien pide cancelarla
+     * @throws NoEsElAnfitrion   si no es quien creo la sala
+     * @throws SalidaNoPermitida si la partida ya empezo o la sala ya no esta activa
+     */
+    public void cancelar(UUID idSolicitante) {
+        Objects.requireNonNull(idSolicitante, "Cancelar una sala requiere saber quien lo pide.");
+
+        if (!idSolicitante.equals(idAnfitrion)) {
+            throw new NoEsElAnfitrion();
+        }
+        if (estado == EstadoSala.EN_JUEGO) {
+            throw new SalidaNoPermitida("La partida ya comenzo: la sala no se puede cancelar.");
+        }
+        if (estado == EstadoSala.CANCELADA) {
+            throw new SalidaNoPermitida("Esta sala ya estaba cancelada.");
+        }
+        if (estado == EstadoSala.FINALIZADA) {
+            throw new SalidaNoPermitida("Esta partida ya termino.");
+        }
+
+        estado = EstadoSala.CANCELADA;
+    }
+
+    /**
+     * Anota la reserva de creditos que quedo ligada a esta sala.
+     *
+     * <p>Lo llama el caso de uso de creacion en cuanto el modulo de creditos
+     * responde, y solo entonces: la reserva no existe hasta que la confirma su
+     * dueno, y el dominio no puede inventarse un identificador que no emitio.
+     *
+     * @throws IllegalStateException si ya habia una reserva anotada
+     */
+    public Sala conReserva(UUID idReserva) {
+        Objects.requireNonNull(idReserva, "Una reserva sin identificador no se puede liberar.");
+        if (idReservaCreditos != null) {
+            throw new IllegalStateException("Esta sala ya tiene una reserva de creditos anotada.");
+        }
+        return new Sala(id, estado, modalidad, maximoParticipantes, recompensaCreditos,
+                incluirHeroeIA, privada, tamanoEquipo, idAnfitrion, participantes, creadaEn,
+                version, codigoInvitacion, idReserva);
+    }
+
+    /**
+     * Compara el codigo recibido con el de la sala, tolerando mayusculas,
+     * espacios sobrantes y guiones puestos de otra forma.
+     */
+    private boolean codigoCoincide(String recibido) {
+        if (codigoInvitacion == null || recibido == null) {
+            return false;
+        }
+        return normalizar(codigoInvitacion).equals(normalizar(recibido));
+    }
+
+    private static String normalizar(String codigo) {
+        return codigo.replace("-", "").replace(" ", "").toUpperCase(java.util.Locale.ROOT);
+    }
+
+    /** Si este jugador es quien creo la sala. */
+    public boolean esAnfitrion(UUID idJugador) {
+        return idAnfitrion.equals(idJugador);
+    }
+
+    /** Solo ABIERTA admite. PRIVADA entra por el camino del codigo de invitacion. */
     private boolean estadoAdmiteIngreso() {
-        return estado == EstadoSala.ABIERTA;
+        return estado == EstadoSala.ABIERTA || estado == EstadoSala.PRIVADA;
     }
 
     /** El motivo se dice en claro: rechazar sin explicar obliga a adivinar. */
@@ -330,6 +543,21 @@ public final class Sala {
     /** Marca de concurrencia leida de la base. Ver el campo. */
     public long version() {
         return version;
+    }
+
+    /**
+     * Codigo de invitacion, o {@code null} si la sala es publica.
+     *
+     * <p><b>Es un secreto:</b> quien lo tenga entra. La capa de API solo se lo
+     * devuelve al anfitrion; ningun otro camino debe exponerlo.
+     */
+    public String codigoInvitacion() {
+        return codigoInvitacion;
+    }
+
+    /** Reserva de creditos ligada a la sala, o {@code null} si no compromete creditos. */
+    public UUID idReservaCreditos() {
+        return idReservaCreditos;
     }
 
     /** Momento de creacion. Viaja en el contrato como {@code creadaEn}. */

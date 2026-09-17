@@ -1,10 +1,13 @@
 package com.nexusbattles.plataforma.salaspartidas.configuracion;
 
 import com.nexusbattles.comun.observabilidad.FiltroDeTraza;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.AbandonarSala;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.CancelarSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CreditosDelJugador;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CrearSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.IngresarASala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ListarSalas;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.ObtenerSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDeSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -35,6 +38,22 @@ public class ConfiguracionDelServicio {
     @Bean
     public IngresarASala ingresarASala(RepositorioDeSalas repositorio, CanalDeSala canal) {
         return new IngresarASala(repositorio, canal);
+    }
+
+    @Bean
+    public ObtenerSala obtenerSala(RepositorioDeSalas repositorio) {
+        return new ObtenerSala(repositorio);
+    }
+
+    @Bean
+    public AbandonarSala abandonarSala(RepositorioDeSalas repositorio, CanalDeSala canal) {
+        return new AbandonarSala(repositorio, canal);
+    }
+
+    @Bean
+    public CancelarSala cancelarSala(RepositorioDeSalas repositorio, CreditosDelJugador creditos,
+                                     CanalDeSala canal) {
+        return new CancelarSala(repositorio, creditos, canal);
     }
 
     /**

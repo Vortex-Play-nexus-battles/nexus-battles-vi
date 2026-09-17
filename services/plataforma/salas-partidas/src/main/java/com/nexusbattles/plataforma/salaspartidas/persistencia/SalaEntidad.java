@@ -97,6 +97,21 @@ class SalaEntidad {
     private Instant creadaEn;
 
     /**
+     * Codigo de invitacion de una sala privada; nulo en las publicas.
+     *
+     * <p>Se guarda en claro y no cifrado ni resumido: hay que poder devolverselo
+     * al anfitrion cuando vuelva a consultar su sala, y un resumen solo serviria
+     * para comprobarlo, no para mostrarlo. Es un codigo de acceso a una sala de
+     * juego, no una credencial de cuenta.
+     */
+    @Column(name = "codigo_invitacion", length = 20)
+    private String codigoInvitacion;
+
+    /** Reserva de creditos ligada a la sala; nula si no compromete creditos. */
+    @Column(name = "id_reserva_creditos")
+    private UUID idReservaCreditos;
+
+    /**
      * Bloqueo optimista — HU-SAL-002. Hibernate anade {@code AND version = ?}
      * a cada UPDATE y lanza {@code OptimisticLockException} si otra escritura
      * se adelanto. Primitivo a proposito: con un {@code Long} nulo Spring Data
@@ -127,6 +142,8 @@ class SalaEntidad {
         // forma de que la columna no pueda contradecir a las identidades.
         entidad.ocupacion = (short) entidad.participantes.size();
         entidad.creadaEn = sala.creadaEn();
+        entidad.codigoInvitacion = sala.codigoInvitacion();
+        entidad.idReservaCreditos = sala.idReservaCreditos();
         // La version que el dominio leyo: es lo que permite detectar que otro
         // ingreso se guardo entre la lectura y esta escritura.
         entidad.version = sala.version();
@@ -146,6 +163,8 @@ class SalaEntidad {
                 idAnfitrion,
                 participantes,
                 creadaEn,
-                version);
+                version,
+                codigoInvitacion,
+                idReservaCreditos);
     }
 }
