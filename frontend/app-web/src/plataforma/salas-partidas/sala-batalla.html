@@ -149,20 +149,6 @@
       const estado = leerEstadoInicial();
       const token = sessionStorage.getItem('nexus.token');
 
-      // Sala desde la que se entro (batallas.html manda ?sala=<id>). Se
-      // muestra para que la persona sepa donde esta: el ingreso lo acepto el
-      // servidor, aunque la partida todavia no haya arrancado. El panel de
-      // vidas sigue esperando `partida.accion.resuelta` del motor de combate.
-      const idSala = new URLSearchParams(globalThis.location.search).get('sala');
-      if (idSala) {
-        const zonaVacia = document.querySelector('[data-zona="sin-partida"] .t-meta');
-        if (zonaVacia) {
-          zonaVacia.textContent =
-            `Estas en la sala ${idSala}. La partida empieza cuando el anfitrion la inicie; ` +
-            'entonces esta vista pinta la vida de cada participante.';
-        }
-      }
-
       // Cabecera: solo lo que el login dejo de verdad en la sesion.
       document.querySelector('[data-zona="apodo"]').textContent =
         sessionStorage.getItem('nexus.apodoActual') ?? '';

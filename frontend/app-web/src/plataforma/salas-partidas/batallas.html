@@ -170,12 +170,9 @@
           token
             ? conectarChat({ url: urlDelCanal({ base: baseDeApi() }), token })
             : Promise.resolve(null),
-        // Entrar lleva a la sala. Antes esto solo escribia en la consola, asi
-        // que el ingreso se aceptaba en el servidor y la persona se quedaba
-        // mirando el listado sin saber que habia entrado.
-        alEntrar: (sala) => {
-          globalThis.location.href = `./sala-batalla.html?sala=${encodeURIComponent(sala.id)}`;
-        },
+        // Entrar lleva a la sala de espera. Esa vista es HU-SAL-004: hasta que
+        // exista, se deja el destino sin resolver en vez de inventar una ruta.
+        alEntrar: (sala) => console.info('Ingreso aceptado en la sala', sala.id),
       });
     </script>
   </body>
