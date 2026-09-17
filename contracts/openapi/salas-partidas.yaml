@@ -664,7 +664,16 @@ components:
         lo que la vista de batalla pinta.
       required: [id, nombre, vidaActual, vidaMaxima]
       properties:
-        id: { type: string, format: uuid }
+        id:
+          type: string
+          minLength: 1
+          description: |
+            Identificador del heroe en el inventario de su dueno. Es una cadena
+            opaca, no un UUID: `ElementoInventario.id` de
+            `contracts/openapi/inventario.yaml` lo declara `type: string` y este
+            servicio no lo interpreta, solo lo devuelve tal cual lo recibe.
+            Exigir aqui formato uuid rompia la verificacion de HU-SAL-003 con
+            inventarios perfectamente validos.
         nombre: { type: string }
         retratoUrl: { type: [string, 'null'], format: uri }
         nivel: { type: [integer, 'null'] }
