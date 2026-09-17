@@ -179,9 +179,22 @@ public class SalasController {
                 verificarHeroe.ejecutar(idSala, jugadorDe(token)));
     }
 
-    /** La identidad del jugador es el sujeto del token, nunca un dato del cuerpo. */
+    /**
+     * El identificador estable del jugador, nunca un dato del cuerpo.
+     *
+     * <p>Sale de {@code uid} cuando el token lo trae, y solo si no, del sujeto.
+     * El {@code sub} que emite {@code ms-identidad} es el <b>apodo</b> —mutable
+     * y no un UUID—, asi que leer el sujeto a secas hacia reventar
+     * {@code UUID.fromString} y devolver 500 en cuanto alguien creaba una sala
+     * con una sesion de verdad: el listado funcionaba y la creacion no.
+     *
+     * <p>Es el mismo criterio que aplica {@code ConversorRolesJwt} al elegir el
+     * nombre del principal, y sigue sirviendo para un token de Keycloak, donde
+     * el sujeto si es el identificador y {@code uid} no existe.
+     */
     private static UUID idDe(Jwt token) {
-        return UUID.fromString(token.getSubject());
+        String uid = token.getClaimAsString("uid");
+        return UUID.fromString(uid != null && !uid.isBlank() ? uid : token.getSubject());
     }
 
     /**
