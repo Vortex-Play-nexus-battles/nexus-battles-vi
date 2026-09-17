@@ -103,7 +103,7 @@
 /frontend/app-web/src/contenido/            @Nicolayyy
 
 # --- grupo-beta / Grupo de Santiago - Cuentas, cumplimiento y economia ------
-/services/cuentas/                          @CristianCamiloChaparro
+/services/cuentas/                          @CristianCamiloChaparro @Vortex-Play-nexus-battles/scrum-masters
 /services/cuentas/identidad-acceso/         @CristianCamiloChaparro
 /services/cuentas/rbac/                     @CristianCamiloChaparro
 /services/cuentas/perfiles-usuario/         @CristianCamiloChaparro
