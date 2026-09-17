@@ -429,6 +429,42 @@ public final class Sala {
     }
 
     /**
+     * Arranca el combate — HU-SAL-004, RF-JUE-017.
+     *
+     * <p>Solo el anfitrion, y solo una vez: al pasar a {@link EstadoSala#EN_JUEGO}
+     * la sala deja de admitir gente (ver {@code estadoAdmiteIngreso}) y un
+     * segundo intento choca con este mismo guardia. Es lo que impide que una
+     * sala tenga dos partidas.
+     *
+     * <p>Una sala de un solo participante no arranca: RF-JUE-004 define las
+     * modalidades como enfrentamientos, y un combate de uno no lo es. La unica
+     * excepcion es la sala con heroe de la IA, que ya trae rival.
+     *
+     * @param idSolicitante quien pide iniciarla
+     * @throws NoEsElAnfitrion   si no es quien creo la sala
+     * @throws IngresoNoPermitido si la sala no esta en un estado que admita empezar
+     */
+    public void iniciarPartida(UUID idSolicitante) {
+        Objects.requireNonNull(idSolicitante, "Iniciar la partida requiere saber quien lo pide.");
+
+        if (!idSolicitante.equals(idAnfitrion)) {
+            throw new NoEsElAnfitrion();
+        }
+        if (estado == EstadoSala.EN_JUEGO) {
+            throw new IngresoNoPermitido("Esta partida ya empezo.");
+        }
+        if (estado == EstadoSala.CANCELADA || estado == EstadoSala.FINALIZADA) {
+            throw new IngresoNoPermitido("Esta sala ya no esta activa.");
+        }
+        if (participantes.size() < 2 && !incluirHeroeIA) {
+            throw new IngresoNoPermitido(
+                    "Hace falta al menos un rival para empezar: invita a alguien o crea la sala con heroe de la IA.");
+        }
+
+        estado = EstadoSala.EN_JUEGO;
+    }
+
+    /**
      * Anota la reserva de creditos que quedo ligada a esta sala.
      *
      * <p>Lo llama el caso de uso de creacion en cuanto el modulo de creditos

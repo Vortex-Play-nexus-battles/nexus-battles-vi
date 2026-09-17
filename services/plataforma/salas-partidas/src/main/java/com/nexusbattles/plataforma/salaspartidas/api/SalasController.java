@@ -4,6 +4,7 @@ import com.nexusbattles.plataforma.salaspartidas.aplicacion.AbandonarSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CancelarSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CrearSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.IngresarASala;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.IniciarPartida;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.JugadorAutenticado;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ListarSalas;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ObtenerSala;
@@ -49,10 +50,13 @@ public class SalasController {
     private final AbandonarSala abandonarSala;
     private final CancelarSala cancelarSala;
     private final VerificarHeroe verificarHeroe;
+    private final IniciarPartida iniciarPartida;
 
     SalasController(CrearSala crearSala, ListarSalas listarSalas, IngresarASala ingresarASala,
                     ObtenerSala obtenerSala, AbandonarSala abandonarSala,
-                    CancelarSala cancelarSala, VerificarHeroe verificarHeroe) {
+                    CancelarSala cancelarSala, VerificarHeroe verificarHeroe,
+                    IniciarPartida iniciarPartida) {
+        this.iniciarPartida = iniciarPartida;
         this.crearSala = crearSala;
         this.listarSalas = listarSalas;
         this.ingresarASala = ingresarASala;
@@ -159,6 +163,34 @@ public class SalasController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void abandonar(@PathVariable UUID idSala, @AuthenticationPrincipal Jwt token) {
         abandonarSala.ejecutar(idSala, idDe(token));
+    }
+
+    /**
+     * Arranca el combate de la sala (HU-SAL-004, RF-JUE-017).
+     *
+     * <p>Solo el anfitrion: 403 si lo pide otro, 409 si la sala ya no admite
+     * empezar —cancelada, terminada, o sin rival—. Devuelve 201 con el estado
+     * inicial de la partida y su {@code Location}, para que el anfitrion no
+     * tenga que volver a preguntarlo.
+     *
+     * <p>A los demas participantes les llega por el canal de la sala el aviso
+     * {@code sala.partida.iniciada}: es lo que los mueve de la sala de espera al
+     * combate sin recargar.
+     *
+     * <p>Pulsar dos veces no es un error: la segunda llamada devuelve la misma
+     * partida.
+     */
+    @PostMapping("/{idSala}/partida")
+    public ResponseEntity<PartidaResponse> iniciar(@PathVariable UUID idSala,
+                                                   @AuthenticationPrincipal Jwt token) {
+
+        var partida = iniciarPartida.ejecutar(idSala, idDe(token));
+
+        return ResponseEntity
+                .created(UriComponentsBuilder.fromPath("/api/v1/partidas/{id}")
+                        .buildAndExpand(partida.id())
+                        .toUri())
+                .body(PartidaResponse.desde(partida));
     }
 
     /**

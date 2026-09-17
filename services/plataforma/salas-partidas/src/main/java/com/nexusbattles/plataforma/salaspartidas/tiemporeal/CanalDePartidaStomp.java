@@ -2,6 +2,7 @@ package com.nexusbattles.plataforma.salaspartidas.tiemporeal;
 
 import com.nexusbattles.plataforma.salaspartidas.dominio.AccionResuelta;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDePartida;
+import com.nexusbattles.plataforma.salaspartidas.dominio.Partida;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 
@@ -36,6 +37,22 @@ class CanalDePartidaStomp implements CanalDePartida {
     @Override
     public void anunciarAccionResuelta(AccionResuelta accion) {
         mensajeria.convertAndSend(destinoDe(accion.idPartida()), AvisoDeAccionResuelta.de(accion));
+    }
+
+    @Override
+    public void anunciarInicio(Partida partida) {
+        mensajeria.convertAndSend(destinoDe(partida.id()), AvisoDeInicioDePartida.de(partida));
+        // El aviso viaja tambien por el canal de la SALA: quien esta en la sala
+        // de espera todavia no conoce el identificador de la partida, asi que no
+        // puede estar suscrito a su tema. Sin esto, el anfitrion entraria al
+        // combate y los demas se quedarian mirando la lista de participantes.
+        mensajeria.convertAndSend(CanalDeSalaStomp.destinoDe(partida.idSala()),
+                AvisoDeInicioDePartida.de(partida));
+    }
+
+    @Override
+    public void anunciarTurno(Partida partida) {
+        mensajeria.convertAndSend(destinoDe(partida.id()), AvisoDeTurno.de(partida));
     }
 
     static String destinoDe(UUID idPartida) {

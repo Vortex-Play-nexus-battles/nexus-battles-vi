@@ -96,6 +96,9 @@ class SalasControllerTest {
     @MockitoBean
     private VerificarHeroe verificarHeroe;
 
+    @MockitoBean
+    private com.nexusbattles.plataforma.salaspartidas.aplicacion.IniciarPartida iniciarPartida;
+
     private static Sala salaDeEjemplo() {
         return Sala.crear(new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null), JUGADOR);
     }
@@ -687,6 +690,73 @@ class SalasControllerTest {
     @DisplayName("sin token no se verifica nada")
     void verificacionSinToken() throws Exception {
         mockMvc.perform(get("/api/v1/salas/{id}/verificacion-heroe", ID_SALA))
+                .andExpect(status().isUnauthorized());
+    }
+
+    // ---------------------------------------------------------------------
+    // POST /salas/{id}/partida — arranque del combate (HU-SAL-004)
+    // ---------------------------------------------------------------------
+
+    private static com.nexusbattles.plataforma.salaspartidas.dominio.Partida partidaDeEjemplo() {
+        Sala sala = Sala.crear(
+                new ParametrosDeSala(2, Modalidad.CONTRA_IA, 320, true, false, null), JUGADOR);
+        return com.nexusbattles.plataforma.salaspartidas.dominio.Partida.iniciar(
+                sala, java.time.Instant.parse("2026-09-17T20:00:00Z"));
+    }
+
+    @Test
+    @DisplayName("el anfitrion arranca el combate y recibe 201 con el estado inicial")
+    void iniciaLaPartida() throws Exception {
+        var partida = partidaDeEjemplo();
+        when(iniciarPartida.ejecutar(any(), any())).thenReturn(partida);
+
+        mockMvc.perform(post("/api/v1/salas/{id}/partida", ID_SALA).with(jugador()))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Location", "/api/v1/partidas/" + partida.id()))
+                .andExpect(jsonPath("$.id").value(partida.id().toString()))
+                .andExpect(jsonPath("$.estado").value("EN_CURSO"))
+                .andExpect(jsonPath("$.turnoActual.idJugador").value(JUGADOR.toString()));
+
+        // Quien arranca sale del token, nunca del cuerpo: la peticion no lleva ninguno.
+        verify(iniciarPartida).ejecutar(ID_SALA, JUGADOR);
+    }
+
+    @Test
+    @DisplayName("quien no es el anfitrion recibe 403, no arranca la partida de otro")
+    void soloElAnfitrionArranca() throws Exception {
+        when(iniciarPartida.ejecutar(any(), any())).thenThrow(new NoEsElAnfitrion());
+
+        mockMvc.perform(post("/api/v1/salas/{id}/partida", ID_SALA).with(otroJugador()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.type")
+                        .value("https://nexusbattles.local/errores/no-es-el-anfitrion"));
+    }
+
+    @Test
+    @DisplayName("una sala que ya no admite empezar responde 409 con su tipo")
+    void salaQueNoPuedeEmpezar() throws Exception {
+        when(iniciarPartida.ejecutar(any(), any()))
+                .thenThrow(new IngresoNoPermitido("La sala necesita al menos un rival."));
+
+        mockMvc.perform(post("/api/v1/salas/{id}/partida", ID_SALA).with(jugador()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type")
+                        .value("https://nexusbattles.local/errores/ingreso-no-permitido"));
+    }
+
+    @Test
+    @DisplayName("una sala que no existe responde 404 tambien al arrancar")
+    void arrancarSalaInexistente() throws Exception {
+        when(iniciarPartida.ejecutar(any(), any())).thenThrow(new SalaNoEncontrada(ID_SALA));
+
+        mockMvc.perform(post("/api/v1/salas/{id}/partida", ID_SALA).with(jugador()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("sin token no se arranca ningun combate")
+    void arrancarSinToken() throws Exception {
+        mockMvc.perform(post("/api/v1/salas/{id}/partida", ID_SALA))
                 .andExpect(status().isUnauthorized());
     }
 

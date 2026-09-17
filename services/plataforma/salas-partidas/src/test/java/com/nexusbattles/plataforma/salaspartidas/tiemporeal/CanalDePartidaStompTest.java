@@ -3,11 +3,16 @@ package com.nexusbattles.plataforma.salaspartidas.tiemporeal;
 import com.nexusbattles.plataforma.salaspartidas.dominio.AccionResuelta;
 import com.nexusbattles.plataforma.salaspartidas.dominio.AccionResuelta.Accion;
 import com.nexusbattles.plataforma.salaspartidas.dominio.AccionResuelta.Afectado;
+import com.nexusbattles.plataforma.salaspartidas.dominio.Modalidad;
+import com.nexusbattles.plataforma.salaspartidas.dominio.ParametrosDeSala;
+import com.nexusbattles.plataforma.salaspartidas.dominio.Partida;
+import com.nexusbattles.plataforma.salaspartidas.dominio.Sala;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -16,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 /**
@@ -112,5 +118,104 @@ class CanalDePartidaStompTest {
         UUID otra = UUID.fromString("99999999-9999-9999-9999-999999999999");
 
         assertEquals("/tema/partidas/" + otra, CanalDePartidaStomp.destinoDe(otra));
+    }
+
+    // =========================================================================
+    // Arranque y turnos — HU-SAL-004, RF-JUE-017
+    // =========================================================================
+
+    private static Partida partidaDeEjemplo() {
+        Sala sala = Sala.crear(
+                new ParametrosDeSala(6, Modalidad.HASTA_SEIS, 0, false, false, null), ANA);
+        sala.unirse(BRUNO);
+        return Partida.iniciar(sala, Instant.parse("2026-09-17T20:00:00Z"));
+    }
+
+    /** Los dos destinos y los dos cuerpos de una publicacion doble, en orden. */
+    private record Doble(List<String> destinos, List<Object> cuerpos) {
+    }
+
+    private Doble capturarDos() {
+        ArgumentCaptor<String> destino = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<Object> cuerpo = ArgumentCaptor.forClass(Object.class);
+        verify(mensajeria, times(2)).convertAndSend(destino.capture(), cuerpo.capture());
+        return new Doble(destino.getAllValues(), cuerpo.getAllValues());
+    }
+
+    @Test
+    @DisplayName("el inicio se anuncia tambien en el canal de la SALA, no solo en el de la partida")
+    void elInicioViajaPorLosDosCanales() {
+        // Quien espera en la sala todavia no conoce el id de la partida, asi que
+        // no puede estar suscrito a su tema. Si el aviso solo fuera por ahi, el
+        // anfitrion entraria al combate y los demas se quedarian esperando.
+        Partida partida = partidaDeEjemplo();
+
+        canal.anunciarInicio(partida);
+
+        assertEquals(
+                List.of("/tema/partidas/" + partida.id(), "/tema/salas/" + partida.idSala()),
+                capturarDos().destinos());
+    }
+
+    @Test
+    @DisplayName("el aviso de inicio lleva los cinco campos obligatorios del contrato")
+    void elAvisoDeInicioCumpleElContrato() {
+        // El tipo y los nombres salen de `PartidaIniciada` en
+        // contracts/websocket/salas-partidas.yaml, no al reves.
+        Partida partida = partidaDeEjemplo();
+
+        canal.anunciarInicio(partida);
+
+        AvisoDeInicioDePartida aviso = (AvisoDeInicioDePartida) capturarDos().cuerpos().get(0);
+        assertAll(
+                () -> assertEquals("sala.partida.iniciada", aviso.tipo()),
+                () -> assertEquals(partida.id(), aviso.idPartida()),
+                () -> assertEquals(partida.idSala(), aviso.idSala()),
+                () -> assertEquals(ANA, aviso.turnoActual().idJugador()),
+                () -> assertEquals(1, aviso.turnoActual().numeroTurno()));
+    }
+
+    @Test
+    @DisplayName("el orden de turnos viaja completo: es una salida que exige el PDF")
+    void elOrdenDeTurnosViajaCompleto() {
+        Partida partida = partidaDeEjemplo();
+
+        canal.anunciarInicio(partida);
+
+        AvisoDeInicioDePartida aviso = (AvisoDeInicioDePartida) capturarDos().cuerpos().get(0);
+        assertAll(
+                () -> assertEquals(List.of(ANA, BRUNO), aviso.ordenDeTurnos()),
+                () -> assertEquals(aviso.ordenDeTurnos().get(0), aviso.turnoActual().idJugador(),
+                        "quien abre es siempre el primero del orden"));
+    }
+
+    @Test
+    @DisplayName("los dos canales reciben el mismo aviso, no dos versiones distintas")
+    void losDosCanalesRecibenLoMismo() {
+        canal.anunciarInicio(partidaDeEjemplo());
+
+        List<Object> cuerpos = capturarDos().cuerpos();
+        assertEquals(cuerpos.get(0), cuerpos.get(1));
+    }
+
+    @Test
+    @DisplayName("el cambio de turno se publica solo en el tema de la partida")
+    void elTurnoSoloEnLaPartida() {
+        Partida partida = partidaDeEjemplo();
+        partida.avanzarTurno();
+
+        canal.anunciarTurno(partida);
+
+        ArgumentCaptor<String> destino = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<Object> cuerpo = ArgumentCaptor.forClass(Object.class);
+        verify(mensajeria).convertAndSend(destino.capture(), cuerpo.capture());
+
+        AvisoDeTurno aviso = (AvisoDeTurno) cuerpo.getValue();
+        assertAll(
+                () -> assertEquals("/tema/partidas/" + partida.id(), destino.getValue()),
+                () -> assertEquals("partida.turno.cambiado", aviso.tipo()),
+                () -> assertEquals(partida.id(), aviso.idPartida()),
+                () -> assertEquals(BRUNO, aviso.idJugador()),
+                () -> assertEquals(2, aviso.numeroTurno()));
     }
 }
