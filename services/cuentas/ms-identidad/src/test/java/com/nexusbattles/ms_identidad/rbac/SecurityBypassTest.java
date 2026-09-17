@@ -4,6 +4,7 @@ import java.util.UUID;
 
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
+import com.nexusbattles.ms_identidad.auth.service.ClavesDeFirma;
 import com.nexusbattles.ms_identidad.auth.service.JwtService;
 import com.nexusbattles.ms_identidad.rbac.controller.AdminActionDemoController;
 import com.nexusbattles.ms_identidad.rbac.repository.RbacMatrixRepository;
@@ -33,9 +34,9 @@ public class SecurityBypassTest {
 
     @BeforeEach
     void setUp() {
-        jwtService = new JwtService();
-        ReflectionTestUtils.setField(jwtService, "claveSecretaTexto", "clave-de-pruebas-suficientemente-larga-para-hmac-sha");
+        jwtService = new JwtService(new ClavesDeFirma(""));
         ReflectionTestUtils.setField(jwtService, "horasExpiracion", 24);
+        ReflectionTestUtils.setField(jwtService, "emisor", "ms-identidad");
 
         RbacMatrixRepository repository = new RbacMatrixRepository();
         RbacAuthorizationService service = new RbacAuthorizationService(repository);
@@ -58,11 +59,11 @@ public class SecurityBypassTest {
                 .content("{\"userId\": \"target_user_123\"}"))
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.status").value(403))
-            .andExpect(jsonPath("$.detail").value("No tienes permiso para esta acción"));
+            .andExpect(jsonPath("$.detail").value("No tienes permiso para esta acciÃ³n"));
     }
 
     @Test
-    @DisplayName("Petición sin Rol ni Token (Anónimo) -> 403 Forbidden (Fail-Closed)")
+    @DisplayName("PeticiÃ³n sin Rol ni Token (AnÃ³nimo) -> 403 Forbidden (Fail-Closed)")
     void testNoTokenIsUnauthorized() throws Exception {
         mockMvc.perform(post("/api/v1/admin/ban")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -83,7 +84,7 @@ public class SecurityBypassTest {
     }
 
     @Test
-    @DisplayName("JWT Válido con rol 'ADMINISTRADOR' -> 200 OK")
+    @DisplayName("JWT VÃ¡lido con rol 'ADMINISTRADOR' -> 200 OK")
     void testValidJwtAdminCanBan() throws Exception {
         String token = jwtService.generarToken("admin_autenticado", "ADMINISTRADOR", 0, UUID.randomUUID());
 
@@ -96,7 +97,7 @@ public class SecurityBypassTest {
     }
 
     @Test
-    @DisplayName("JWT Válido con rol 'JUGADOR' intenta invocar /api/v1/admin/ban -> 403 Forbidden")
+    @DisplayName("JWT VÃ¡lido con rol 'JUGADOR' intenta invocar /api/v1/admin/ban -> 403 Forbidden")
     void testValidJwtJugadorCannotBan() throws Exception {
         String token = jwtService.generarToken("jugador_autenticado", "JUGADOR", 0, UUID.randomUUID());
 
@@ -106,7 +107,7 @@ public class SecurityBypassTest {
                 .content("{\"userId\": \"target_user_123\"}"))
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.status").value(403))
-            .andExpect(jsonPath("$.detail").value("No tienes permiso para esta acción"));
+            .andExpect(jsonPath("$.detail").value("No tienes permiso para esta acciÃ³n"));
     }
 
     @Test
@@ -121,13 +122,13 @@ public class SecurityBypassTest {
                 .content("{\"userId\": \"target_user_123\"}"))
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.status").value(403))
-            .andExpect(jsonPath("$.detail").value("Token de autenticación inválido o expirado"));
+            .andExpect(jsonPath("$.detail").value("Token de autenticaciÃ³n invÃ¡lido o expirado"));
     }
 
     @Test
-    @DisplayName("JWT con versión de token vieja (rol fue cambiado) -> 403 Forbidden (HU-RBAC-003)")
+    @DisplayName("JWT con versiÃ³n de token vieja (rol fue cambiado) -> 403 Forbidden (HU-RBAC-003)")
     void testRevokedTokenVersionIsForbidden() throws Exception {
-        // Generar un JWT con versión 0 (como si el usuario nunca hubiera cambiado de rol)
+        // Generar un JWT con versiÃ³n 0 (como si el usuario nunca hubiera cambiado de rol)
         String tokenViejo = jwtService.generarToken("admin_degradado", "ADMINISTRADOR", 0, UUID.randomUUID());
 
         // Simular que el usuario ahora tiene versionToken=1 (le cambiaron el rol)
@@ -137,7 +138,7 @@ public class SecurityBypassTest {
         UsuarioRepository mockRepo = mock(UsuarioRepository.class);
         when(mockRepo.findByApodo("admin_degradado")).thenReturn(Optional.of(usuario));
 
-        // Construir MockMvc con el interceptor que SÍ tiene UsuarioRepository
+        // Construir MockMvc con el interceptor que SÃ tiene UsuarioRepository
         RbacMatrixRepository repository = new RbacMatrixRepository();
         RbacAuthorizationService service = new RbacAuthorizationService(repository);
         AuditoriaEventClient auditoriaClient = new AuditoriaEventClient("http://localhost:8083/api/v1/admin/auditoria/eventos");
@@ -154,7 +155,7 @@ public class SecurityBypassTest {
                 .content("{\"userId\": \"target_user_123\"}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.status").value(403))
-                .andExpect(jsonPath("$.detail").value("Token de autenticación inválido o expirado"));
+                .andExpect(jsonPath("$.detail").value("Token de autenticaciÃ³n invÃ¡lido o expirado"));
     }
 
     @Test
@@ -182,7 +183,7 @@ public class SecurityBypassTest {
                 .content("{\"userId\": \"target_user_123\"}"))
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.status").value(403))
-            .andExpect(jsonPath("$.detail").value("No tienes permiso para esta acción"));
+            .andExpect(jsonPath("$.detail").value("No tienes permiso para esta acciÃ³n"));
     }
 
     @Test

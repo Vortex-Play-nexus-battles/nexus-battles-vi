@@ -2,6 +2,7 @@ package com.nexusbattles.ms_identidad.auth;
 
 import java.util.UUID;
 
+import com.nexusbattles.ms_identidad.auth.service.ClavesDeFirma;
 import com.nexusbattles.ms_identidad.auth.service.JwtService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -15,14 +16,13 @@ class JwtServiceTest {
 
     private JwtService jwtService;
 
-    private static final String CLAVE_SECRETA_PRUEBA =
-        "clave-de-pruebas-suficientemente-larga-para-hmac-sha";
-
     @BeforeEach
     void setUp() {
-        jwtService = new JwtService();
-        ReflectionTestUtils.setField(jwtService, "claveSecretaTexto", CLAVE_SECRETA_PRUEBA);
+        // Par RSA efimero, el mismo camino que sigue el servicio cuando no se
+        // configura app.jwt.clave-privada (ver ClavesDeFirma).
+        jwtService = new JwtService(new ClavesDeFirma(""));
         ReflectionTestUtils.setField(jwtService, "horasExpiracion", 24);
+        ReflectionTestUtils.setField(jwtService, "emisor", "ms-identidad");
     }
 
     @Test
@@ -50,7 +50,7 @@ class JwtServiceTest {
     void debeRechazarUnTokenAlteradoOInvalido() {
 
         String token = jwtService.generarToken("cristianc", "JUGADOR", 0, UUID.randomUUID());
-        // Se altera el último caracter de la firma, simulando una manipulación.
+        // Se altera el Ãºltimo caracter de la firma, simulando una manipulaciÃ³n.
         String tokenAlterado = token.substring(0, token.length() - 1) + (token.endsWith("X") ? "Y" : "X");
 
         assertThrows(
@@ -80,8 +80,8 @@ class JwtServiceTest {
     @Test
     void debeRechazarComoNoVigenteUnTokenConVersionDesactualizada() {
 
-        // Token generado cuando el usuario tenía versión 1 (antes de un
-        // cambio de rol), comparado contra la versión actual (2).
+        // Token generado cuando el usuario tenÃ­a versiÃ³n 1 (antes de un
+        // cambio de rol), comparado contra la versiÃ³n actual (2).
         String token = jwtService.generarToken("cristianc", "JUGADOR", 1, UUID.randomUUID());
         Claims claims = jwtService.validarYObtenerClaims(token);
 
