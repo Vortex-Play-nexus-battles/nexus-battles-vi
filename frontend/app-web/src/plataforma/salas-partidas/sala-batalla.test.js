@@ -14,15 +14,18 @@ import {
   leerEstadoInicial,
   destinoDePartida,
   suscripcionDePartida,
+  participantesParaElPanel,
 } from './sala-batalla.js';
 
 const ID_PARTIDA = '11111111-1111-1111-1111-111111111111';
 const ANA = '22222222-2222-2222-2222-222222222222';
+const BRUNO = '33333333-3333-3333-3333-333333333333';
+const MAQUINA = '44444444-4444-4444-4444-444444444444';
 
 /** El mismo marcado que trae sala-batalla.html, sin la cabecera. */
 const VISTA = `
   <span class="conexion" data-zona="conexion"></span>
-  <div class="estado-vista" data-zona="sin-partida"></div>
+  <div class="estado-vista" data-zona="sin-partida"><p class="t-meta"></p></div>
   <section class="tarjeta pila" data-zona="panel" hidden>
     <div class="pila" data-zona="vidas"></div>
   </section>
@@ -107,6 +110,93 @@ describe('montarSalaBatalla', () => {
     const barra = document.querySelector(`[data-jugador="${ANA}"]`);
     expect(barra.querySelector('.barra-vida__valor').textContent).toBe('35/100');
     expect(barra.dataset.estado).toBe('bajo');
+  });
+});
+
+describe('participantesParaElPanel · adaptar GET /partidas/{id} al panel', () => {
+  /** Respuesta de `GET /partidas/{id}` tal como la define el OpenAPI. */
+  function partidaDeLaApi(enCombate) {
+    return {
+      id: ID_PARTIDA,
+      idSala: '99999999-9999-9999-9999-999999999999',
+      estado: 'EN_CURSO',
+      participantes: enCombate,
+      turnoActual: { idJugador: ANA, numeroTurno: 1, segundosRestantes: null },
+      recompensaEnJuego: 320,
+      iniciadaEn: '2026-09-17T20:00:00Z',
+    };
+  }
+
+  const conHeroe = {
+    jugador: ANA,
+    heroe: { id: 'h1', nombre: 'Arquero del Norte', vidaActual: 100, vidaMaxima: 100 },
+    esIA: false,
+    listo: true,
+    equipo: 1,
+    creditosApostados: 320,
+  };
+  const sinHeroe = {
+    jugador: BRUNO,
+    heroe: null,
+    esIA: false,
+    listo: true,
+    equipo: null,
+    creditosApostados: 320,
+  };
+  const maquina = {
+    jugador: MAQUINA,
+    heroe: { id: 'h2', nombre: 'Centinela', vidaActual: 80, vidaMaxima: 120 },
+    esIA: true,
+    listo: true,
+    equipo: null,
+    creditosApostados: 0,
+  };
+
+  test('traduce jugador y heroe a la forma que espera el panel', () => {
+    expect(participantesParaElPanel(partidaDeLaApi([conHeroe]))).toEqual([
+      {
+        jugador: { id: ANA },
+        heroe: conHeroe.heroe,
+        esIA: false,
+        equipo: 1,
+      },
+    ]);
+  });
+
+  test('descarta a quien no tiene heroe conocido en vez de inventarle una vida', () => {
+    const adaptados = participantesParaElPanel(partidaDeLaApi([conHeroe, sinHeroe, maquina]));
+
+    expect(adaptados.map((p) => p.jugador.id)).toEqual([ANA, MAQUINA]);
+  });
+
+  test('conserva la marca de la IA: quien mira tiene que distinguirla de una persona', () => {
+    const adaptados = participantesParaElPanel(partidaDeLaApi([maquina]));
+
+    expect(adaptados[0].esIA).toBe(true);
+  });
+
+  test('una partida sin participantes o ausente no revienta', () => {
+    expect(participantesParaElPanel(partidaDeLaApi([]))).toEqual([]);
+    expect(participantesParaElPanel(null)).toEqual([]);
+  });
+
+  describe('montada en la vista', () => {
+    test('con la partida de la API pinta una barra por participante con heroe', () => {
+      montarSalaBatalla(document, { partida: partidaDeLaApi([conHeroe, maquina]) });
+
+      expect(panel().hidden).toBe(false);
+      expect(document.querySelectorAll('.barra-vida')).toHaveLength(2);
+      expect(document.querySelector('[data-zona="vidas"]').dataset.partida).toBe(ID_PARTIDA);
+    });
+
+    test('una partida en curso sin ningun heroe conocido lo explica, no deja un panel vacio', () => {
+      montarSalaBatalla(document, { partida: partidaDeLaApi([sinHeroe]) });
+
+      expect(panel().hidden).toBe(true);
+      expect(sinPartida().hidden).toBe(false);
+      expect(sinPartida().querySelector('.t-meta').textContent).toMatch(/heroe de ninguno/i);
+      expect(document.querySelectorAll('.barra-vida')).toHaveLength(0);
+    });
   });
 });
 
