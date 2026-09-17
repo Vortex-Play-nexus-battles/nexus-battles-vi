@@ -59,6 +59,22 @@ jacoco {
 tasks.named('test') {
     useJUnitPlatform()
     finalizedBy tasks.named('jacocoTestReport')
+
+    // Que el log diga POR QUE fallo, no solo que fallo.
+    //
+    // Por omision Gradle imprime la clase de la excepcion y la linea, pero no
+    // el mensaje ni la causa raiz: en el servidor de integracion continua no
+    // hay forma de abrir el informe HTML, asi que un fallo se leia como
+    // "SchemaManagementException at AbstractSchemaValidator.java:163" y habia
+    // que reproducirlo en local para saber que columna era. Con esto el
+    // mensaje completo y toda la cadena de causas quedan en la corrida.
+    testLogging {
+        events 'failed'
+        exceptionFormat = 'full'
+        showCauses = true
+        showStackTraces = true
+        stackTraceFilters 'ENTRY_POINT'
+    }
 }
 
 jacocoTestReport {

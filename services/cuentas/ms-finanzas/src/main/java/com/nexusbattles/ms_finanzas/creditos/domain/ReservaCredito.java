@@ -40,6 +40,15 @@ public class ReservaCredito {
     @Enumerated(EnumType.STRING)
     private EstadoReserva estado;
 
+    // NUEVO: distingue si esta fila es una reserva de puja (RESERVA), un débito
+    // directo ya cobrado (DEBITO), o un crédito ya otorgado (CREDITO). Sin esto,
+    // reversar() no puede saber si el refId que recibe corresponde a un débito
+    // real (lo único que debe poder revertir) o a otra cosa — confundirlos crea
+    // o destruye saldo incorrectamente (ver el fix en CreditoService.reversar()).
+    @Column(name = "tipo_operacion", nullable = false, length = 32)
+    @Enumerated(EnumType.STRING)
+    private TipoOperacion tipoOperacion;
+
     @Column(name = "creado", updatable = false)
     private OffsetDateTime creado;
 
@@ -48,6 +57,10 @@ public class ReservaCredito {
 
     public enum EstadoReserva {
         ACTIVA, LIBERADA, CONSUMIDA
+    }
+
+    public enum TipoOperacion {
+        RESERVA, DEBITO, CREDITO
     }
 
     @PrePersist

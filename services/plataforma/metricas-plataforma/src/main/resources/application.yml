@@ -50,14 +50,27 @@ latencia:
 disponibilidad:
   umbral-porcentaje: ${DISPONIBILIDAD_UMBRAL:99.95}
   intervalo-ms: ${DISPONIBILIDAD_INTERVALO_MS:30000}
+  # Los puertos son los que declara el application.yml de cada servicio, los
+  # mismos que publica docker-compose.yml y que resuelve puerto_de() en
+  # cd.yml: comentarios 8081, correo 8082, torneos 8083, salas-partidas 8084,
+  # notificaciones 8085, moderacion-sanciones 8086, metricas 8087,
+  # admin-parametros 8088. Hasta 2026-09-17 cuatro de estas entradas
+  # apuntaban a un puerto que pertenece a OTRO servicio (salas al 8083 de
+  # torneos, moderacion al 8084 de salas, admin-parametros al 8086 de
+  # moderacion y torneos al 8088 de admin-parametros), asi que el informe de
+  # HU-DIS-001 media servicios distintos de los que nombraba.
+  #
+  # En un despliegue real NO valen estos valores: dentro de un contenedor,
+  # localhost es el propio servicio. El host inyecta SALUD_* con el nombre de
+  # cada servicio en la red del compose (http://srv-salas-partidas:8084/...).
   servicios:
-    salas-partidas: ${SALUD_SALAS_PARTIDAS:http://localhost:8083/actuator/health}
-    notificaciones: ${SALUD_NOTIFICACIONES:http://localhost:8085/actuator/health}
-    correo: ${SALUD_CORREO:http://localhost:8082/actuator/health}
     comentarios: ${SALUD_COMENTARIOS:http://localhost:8081/actuator/health}
-    moderacion-sanciones: ${SALUD_MODERACION:http://localhost:8084/actuator/health}
-    admin-parametros: ${SALUD_ADMIN_PARAMETROS:http://localhost:8086/actuator/health}
-    torneos: ${SALUD_TORNEOS:http://localhost:8088/actuator/health}
+    correo: ${SALUD_CORREO:http://localhost:8082/actuator/health}
+    torneos: ${SALUD_TORNEOS:http://localhost:8083/actuator/health}
+    salas-partidas: ${SALUD_SALAS_PARTIDAS:http://localhost:8084/actuator/health}
+    notificaciones: ${SALUD_NOTIFICACIONES:http://localhost:8085/actuator/health}
+    moderacion-sanciones: ${SALUD_MODERACION:http://localhost:8086/actuator/health}
+    admin-parametros: ${SALUD_ADMIN_PARAMETROS:http://localhost:8088/actuator/health}
 
 # Regla 3 de plataforma: este servicio tambien expone su propia salud.
 management:
