@@ -93,9 +93,35 @@ services:
     <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-moderacion-sanciones:${TAG}
 
+  # HU-DIS-001: el monitor de disponibilidad necesita saber DONDE preguntar.
+  #
+  # Su application.yml trae, como valores de desarrollo, http://localhost:808x
+  # -- y lo advierte por escrito: «dentro de un contenedor, localhost es el
+  # propio servicio». En el host eso significaba que se sondeaba a si mismo
+  # ocho veces y reportaba INDISPONIBLE para los siete servicios del bloque,
+  # justo mientras el healthcheck del despliegue los daba saludables a todos.
+  # El informe de HU-DIS-001 media, literalmente, nada.
+  #
+  # Aqui se corrige donde corresponde: la topologia de despliegue. Los nombres
+  # son los del compose y la red interna los resuelve; no son secretos, asi que
+  # se versionan (regla 10 habla de valores reales, no de nombres de servicio).
+  # metricas-plataforma no se sondea a si mismo: si estuviera caido no habria
+  # nadie que lo reportara, y su salud la vigila el healthcheck del CD.
   srv-metricas-plataforma:
     <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-metricas-plataforma:${TAG}
+    environment:
+      # Se repite porque el merge de YAML (<<) reemplaza el mapa entero, no lo
+      # fusiona: sin esta linea el servicio perderia el limite de memoria de la
+      # JVM que comparte con los demas.
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      SALUD_COMENTARIOS: http://srv-comentarios:8081/actuator/health
+      SALUD_CORREO: http://srv-correo:8082/actuator/health
+      SALUD_TORNEOS: http://srv-torneos:8083/actuator/health
+      SALUD_SALAS_PARTIDAS: http://srv-salas-partidas:8084/actuator/health
+      SALUD_NOTIFICACIONES: http://srv-notificaciones:8085/actuator/health
+      SALUD_MODERACION: http://srv-moderacion-sanciones:8086/actuator/health
+      SALUD_ADMIN_PARAMETROS: http://srv-admin-parametros:8088/actuator/health
 
   srv-admin-parametros:
     <<: *servicio-plataforma
