@@ -49,6 +49,14 @@ salas:
     endpoint: ${SALAS_WS_ENDPOINT:/ws}
     origenes-permitidos: ${SALAS_WS_ORIGENES:http://localhost:5500,http://127.0.0.1:5500}
 
+  # HU-SAL-003: verificacion de heroe contra el inventario del equipo de
+  # contenido (contracts/openapi/inventario.yaml). Mismo nombre de variable que
+  # usa ms-subastas para el mismo proveedor, para que el entorno se configure
+  # una sola vez. Si el servicio no responde, la verificacion sale 503: no se
+  # inventa un veredicto.
+  inventario:
+    url: ${INVENTARIO_BASE_URL:http://localhost:8080}
+
 # Chat de HU-JUE-015. La lista negra es la de HU-ADM-002 (moderacion-sanciones).
 chat:
   lista-negra:

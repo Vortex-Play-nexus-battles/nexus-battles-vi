@@ -4,8 +4,10 @@ import com.nexusbattles.plataforma.salaspartidas.aplicacion.AbandonarSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CancelarSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CrearSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.IngresarASala;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.JugadorAutenticado;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ListarSalas;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ObtenerSala;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.VerificarHeroe;
 import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Modalidad;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Sala;
@@ -46,16 +48,18 @@ public class SalasController {
     private final ObtenerSala obtenerSala;
     private final AbandonarSala abandonarSala;
     private final CancelarSala cancelarSala;
+    private final VerificarHeroe verificarHeroe;
 
     SalasController(CrearSala crearSala, ListarSalas listarSalas, IngresarASala ingresarASala,
                     ObtenerSala obtenerSala, AbandonarSala abandonarSala,
-                    CancelarSala cancelarSala) {
+                    CancelarSala cancelarSala, VerificarHeroe verificarHeroe) {
         this.crearSala = crearSala;
         this.listarSalas = listarSalas;
         this.ingresarASala = ingresarASala;
         this.obtenerSala = obtenerSala;
         this.abandonarSala = abandonarSala;
         this.cancelarSala = cancelarSala;
+        this.verificarHeroe = verificarHeroe;
     }
 
     /**
@@ -157,8 +161,55 @@ public class SalasController {
         abandonarSala.ejecutar(idSala, idDe(token));
     }
 
+    /**
+     * Verifica el heroe antes de que el jugador pulse Entrar (HU-SAL-003,
+     * RF-JUE-003).
+     *
+     * <p>No tiene efectos: ni ingresa, ni reserva, ni bloquea nada. Solo
+     * responde, para que el dialogo de validacion diga el motivo <b>antes</b> de
+     * la accion y no despues. 404 si la sala no existe; 503 si el inventario no
+     * contesta, porque un veredicto inventado mandaria al jugador a chocar
+     * contra el rechazo que esta ruta existe para evitar.
+     */
+    @GetMapping("/{idSala}/verificacion-heroe")
+    public VerificacionHeroeResponse verificarHeroe(@PathVariable UUID idSala,
+                                                    @AuthenticationPrincipal Jwt token) {
+
+        return VerificacionHeroeResponse.desde(
+                verificarHeroe.ejecutar(idSala, jugadorDe(token)));
+    }
+
     /** La identidad del jugador es el sujeto del token, nunca un dato del cuerpo. */
     private static UUID idDe(Jwt token) {
         return UUID.fromString(token.getSubject());
+    }
+
+    /**
+     * Las dos caras de la identidad, tal como las trae el token.
+     *
+     * <p>El identificador estable manda dentro de este servicio. El apodo solo
+     * hace falta para preguntarle al inventario, que hoy reconoce al jugador por
+     * {@code X-User-Name} (ver {@code JugadorAutenticado}).
+     *
+     * <p>Se busca en {@code preferred_username} —el nombre estandar en OIDC, y
+     * el que emite Keycloak— y si no esta, en {@code apodo}. Como ultimo
+     * recurso queda el sujeto: en los tokens de {@code ms-identidad} anteriores
+     * a ADR-002 el sujeto <i>era</i> el apodo.
+     */
+    private static JugadorAutenticado jugadorDe(Jwt token) {
+        String apodo = primerTextoNoVacio(
+                token.getClaimAsString("preferred_username"),
+                token.getClaimAsString("apodo"),
+                token.getSubject());
+        return new JugadorAutenticado(idDe(token), apodo);
+    }
+
+    private static String primerTextoNoVacio(String... candidatos) {
+        for (String candidato : candidatos) {
+            if (candidato != null && !candidato.isBlank()) {
+                return candidato;
+            }
+        }
+        throw new IllegalStateException("El token no trae ningun nombre con el que identificar al jugador.");
     }
 }

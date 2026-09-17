@@ -7,13 +7,16 @@ import com.nexusbattles.plataforma.salaspartidas.aplicacion.CreditosDelJugador;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CrearSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.IngresarASala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ListarSalas;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.HeroeDelJugador;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ObtenerSala;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.VerificarHeroe;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDeSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
+import org.springframework.web.client.RestClient;
 
 /**
  * Cableado del servicio.
@@ -54,6 +57,24 @@ public class ConfiguracionDelServicio {
     public CancelarSala cancelarSala(RepositorioDeSalas repositorio, CreditosDelJugador creditos,
                                      CanalDeSala canal) {
         return new CancelarSala(repositorio, creditos, canal);
+    }
+
+    /** HU-SAL-003: verificacion previa de heroe, sin efectos. */
+    @Bean
+    public VerificarHeroe verificarHeroe(RepositorioDeSalas repositorio, HeroeDelJugador heroes) {
+        return new VerificarHeroe(repositorio, heroes);
+    }
+
+    /**
+     * Cliente HTTP hacia inventario.
+     *
+     * <p>Propio y no compartido con el del chat: son dos integraciones
+     * distintas, con proveedores distintos, y el dia que una necesite un tiempo
+     * de espera o un interceptor suyo no debe arrastrar a la otra.
+     */
+    @Bean
+    public RestClient restClientInventario() {
+        return RestClient.builder().build();
     }
 
     /**

@@ -6,7 +6,12 @@ import com.nexusbattles.plataforma.salaspartidas.aplicacion.CrearSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.IngresarASala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ListarSalas;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ObtenerSala;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.VerificacionDeIngreso;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.VerificarHeroe;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CreditosInsuficientes;
+import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoDelHeroe;
+import com.nexusbattles.plataforma.salaspartidas.dominio.HeroeDeCombate;
+import com.nexusbattles.plataforma.salaspartidas.dominio.InventarioNoDisponible;
 import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Modalidad;
 import com.nexusbattles.plataforma.salaspartidas.dominio.NoEsElAnfitrion;
@@ -87,6 +92,9 @@ class SalasControllerTest {
 
     @MockitoBean
     private CancelarSala cancelarSala;
+
+    @MockitoBean
+    private VerificarHeroe verificarHeroe;
 
     private static Sala salaDeEjemplo() {
         return Sala.crear(new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null), JUGADOR);
@@ -589,6 +597,74 @@ class SalasControllerTest {
         mockMvc.perform(delete("/api/v1/salas/{id}/participantes", ID_SALA)
                         .with(jwt().jwt(t -> t.subject(JUGADOR.toString()))))
                 .andExpect(status().isForbidden());
+    }
+
+    // ---------------------------------------------------------------------
+    // GET /salas/{id}/verificacion-heroe — HU-SAL-003
+    // ---------------------------------------------------------------------
+
+    @Test
+    @DisplayName("la verificacion sale con la forma del contrato y el apodo del token")
+    void verificaElHeroe() throws Exception {
+        when(verificarHeroe.ejecutar(any(), any())).thenReturn(VerificacionDeIngreso.de(
+                EstadoDelHeroe.disponible(HeroeDeCombate.aPleno("h-1", "Sombra de Vael", 140)), 320));
+
+        mockMvc.perform(get("/api/v1/salas/{id}/verificacion-heroe", ID_SALA).with(jugador()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resultado").value("DISPONIBLE"))
+                .andExpect(jsonPath("$.puedeIngresar").value(true))
+                .andExpect(jsonPath("$.heroe.id").value("h-1"))
+                .andExpect(jsonPath("$.heroe.nombre").value("Sombra de Vael"))
+                .andExpect(jsonPath("$.heroe.vidaActual").value(140))
+                .andExpect(jsonPath("$.heroe.vidaMaxima").value(140))
+                .andExpect(jsonPath("$.creditosRequeridos").value(320));
+
+        // El apodo con el que se pregunta al inventario sale del token, igual
+        // que el identificador: ninguno de los dos viaja en la peticion.
+        verify(verificarHeroe).ejecutar(ID_SALA,
+                new com.nexusbattles.plataforma.salaspartidas.aplicacion.JugadorAutenticado(
+                        JUGADOR, "Simon_P"));
+    }
+
+    @Test
+    @DisplayName("un heroe sin equipar no habilita el ingreso y no manda heroe")
+    void verificacionSinHeroeEquipado() throws Exception {
+        when(verificarHeroe.ejecutar(any(), any()))
+                .thenReturn(VerificacionDeIngreso.de(EstadoDelHeroe.sinHeroeEquipado(), 0));
+
+        mockMvc.perform(get("/api/v1/salas/{id}/verificacion-heroe", ID_SALA).with(jugador()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resultado").value("SIN_HEROE_EQUIPADO"))
+                .andExpect(jsonPath("$.puedeIngresar").value(false))
+                .andExpect(jsonPath("$.heroe").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("si el inventario no responde sale 503, no un veredicto inventado")
+    void verificacionSinInventario() throws Exception {
+        when(verificarHeroe.ejecutar(any(), any()))
+                .thenThrow(new InventarioNoDisponible("apagado"));
+
+        mockMvc.perform(get("/api/v1/salas/{id}/verificacion-heroe", ID_SALA).with(jugador()))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.type")
+                        .value("https://nexusbattles.local/errores/inventario-no-disponible"));
+    }
+
+    @Test
+    @DisplayName("una sala que no existe responde 404 tambien en la verificacion")
+    void verificacionDeSalaInexistente() throws Exception {
+        when(verificarHeroe.ejecutar(any(), any())).thenThrow(new SalaNoEncontrada(ID_SALA));
+
+        mockMvc.perform(get("/api/v1/salas/{id}/verificacion-heroe", ID_SALA).with(jugador()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("sin token no se verifica nada")
+    void verificacionSinToken() throws Exception {
+        mockMvc.perform(get("/api/v1/salas/{id}/verificacion-heroe", ID_SALA))
+                .andExpect(status().isUnauthorized());
     }
 
     /** Un jugador distinto del de {@link #jugador()}, para probar quien ve que. */
