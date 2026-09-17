@@ -20,3 +20,10 @@
 -- (comentario_id, orden).
 ALTER TABLE comentario_imagenes
     ALTER COLUMN orden TYPE integer;
+
+-- Mismo desajuste en la calificacion: RegistroDeComentario.java:58 la declara
+-- Integer y V1 la creo SMALLINT. La restriccion CHECK (estrellas BETWEEN 1
+-- AND 5) sigue vigente: cambiar el tipo de la columna no la toca, y es la que
+-- de verdad protege el rango de la calificacion (RF-COM-002).
+ALTER TABLE comentarios
+    ALTER COLUMN estrellas TYPE integer;
