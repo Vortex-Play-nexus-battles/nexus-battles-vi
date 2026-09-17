@@ -18,8 +18,8 @@ class JwtServiceTest {
 
     @BeforeEach
     void setUp() {
-        // Par RSA efimero, el mismo camino que sigue el servicio cuando no se
-        // configura app.jwt.clave-privada (ver ClavesDeFirma).
+        // Par RSA efímero, el mismo camino que sigue el servicio cuando no se
+        // configura app.jwt.clave-privada (ver ClavesDeFirma y ADR-002).
         jwtService = new JwtService(new ClavesDeFirma(""));
         ReflectionTestUtils.setField(jwtService, "horasExpiracion", 24);
         ReflectionTestUtils.setField(jwtService, "emisor", "ms-identidad");
@@ -50,8 +50,17 @@ class JwtServiceTest {
     void debeRechazarUnTokenAlteradoOInvalido() {
 
         String token = jwtService.generarToken("cristianc", "JUGADOR", 0, UUID.randomUUID());
-        // Se altera el Ãºltimo caracter de la firma, simulando una manipulaciÃ³n.
-        String tokenAlterado = token.substring(0, token.length() - 1) + (token.endsWith("X") ? "Y" : "X");
+        // Se altera el PAYLOAD, no el último caracter de la firma.
+        //
+        // Alterar ese último caracter no basta con RS256: la firma ocupa 256
+        // bytes, que en base64url terminan en un caracter cuyos bits altos son
+        // relleno, así que cambiarlo puede decodificar exactamente los mismos
+        // bytes y el token seguir siendo válido. Manipular el contenido sí
+        // invalida la firma siempre, que es lo que esta prueba quiere demostrar.
+        String[] partes = token.split("\\.");
+        String payloadAlterado = partes[1].substring(0, partes[1].length() - 1)
+            + (partes[1].endsWith("X") ? "Y" : "X");
+        String tokenAlterado = partes[0] + "." + payloadAlterado + "." + partes[2];
 
         assertThrows(
             JwtException.class,
@@ -80,8 +89,8 @@ class JwtServiceTest {
     @Test
     void debeRechazarComoNoVigenteUnTokenConVersionDesactualizada() {
 
-        // Token generado cuando el usuario tenÃ­a versiÃ³n 1 (antes de un
-        // cambio de rol), comparado contra la versiÃ³n actual (2).
+        // Token generado cuando el usuario tenía versión 1 (antes de un
+        // cambio de rol), comparado contra la versión actual (2).
         String token = jwtService.generarToken("cristianc", "JUGADOR", 1, UUID.randomUUID());
         Claims claims = jwtService.validarYObtenerClaims(token);
 
