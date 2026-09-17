@@ -418,7 +418,8 @@ class SalasControllerTest {
     // de que NO lo filtra a quien no le toca.
     // ---------------------------------------------------------------------
 
-    private static Sala salaPrivada() {
+    /** Sala privada cuyo anfitrion es {@code JUGADOR}, el del token de {@link #jugador()}. */
+    private static Sala unaSalaPrivadaDelJugador() {
         return Sala.crear(
                 new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, true, null), JUGADOR);
     }
@@ -426,7 +427,7 @@ class SalasControllerTest {
     @Test
     @DisplayName("al crear una sala privada, el anfitrion recibe su codigo de invitacion")
     void elAnfitrionRecibeElCodigo() throws Exception {
-        Sala sala = salaPrivada();
+        Sala sala = unaSalaPrivadaDelJugador();
         when(crearSala.ejecutar(any(), any())).thenReturn(sala);
 
         mockMvc.perform(post("/api/v1/salas")
@@ -487,7 +488,7 @@ class SalasControllerTest {
     @Test
     @DisplayName("el anfitrion ve el codigo de su sala al consultarla; otro jugador no")
     void elCodigoSoloParaElAnfitrion() throws Exception {
-        when(obtenerSala.ejecutar(ID_SALA)).thenReturn(salaPrivada());
+        when(obtenerSala.ejecutar(ID_SALA)).thenReturn(unaSalaPrivadaDelJugador());
 
         mockMvc.perform(get("/api/v1/salas/{id}", ID_SALA).with(jugador()))
                 .andExpect(jsonPath("$.codigoInvitacion").isNotEmpty());
