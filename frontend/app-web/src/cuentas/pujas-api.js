@@ -12,16 +12,8 @@
 const CLAVE_TOKEN = 'nexus.token';
 const CLAVE_APODO = 'nexus.apodoActual';
 
-/**
- * Ruta relativa: el borde del entorno enruta /api/v1/subastas y
- * /api/v1/mis-pujas a ms-subastas dentro del mismo origen
- * (infrastructure/red-balanceo/borde-dev.conf).
- *
- * Antes era http://localhost:8092/api/v1, que desde cualquier navegador que
- * no fuera el de la maquina de desarrollo apuntaba al equipo de quien miraba
- * la pagina, no al servidor.
- */
-export const URL_BASE_POR_DEFECTO = '/api/v1';
+/** Puerto 8092 + context-path /api/v1, como declara el contrato. */
+export const URL_BASE_POR_DEFECTO = 'http://localhost:8092/api/v1';
 
 /**
  * Fallo de una operacion de subastas.

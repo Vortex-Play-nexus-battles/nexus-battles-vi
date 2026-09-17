@@ -6,14 +6,11 @@
  * separacion que ya usa el proyecto (cliente-inventario.js / vitrina.js).
  */
 
-// Ruta relativa, no host absoluto.
-//
-// Antes apuntaba a http://localhost:8092. Desde un navegador que no sea el de
-// la maquina de desarrollo, "localhost" es el equipo de quien mira la pagina,
-// asi que la vista no cargaba nada en el servidor. El borde del entorno
-// (infrastructure/red-balanceo/borde-dev.conf) enruta /api/v1/subastas a
-// ms-subastas en el mismo origen, igual que hace con el resto de servicios.
-const BASE_URL = '/api/v1/subastas';
+// PENDIENTE: en desarrollo apunta directo al puerto de ms-subastas. Si el
+// proyecto ya tiene un punto central de configuracion de URLs de servicio
+// (no lo hemos visto en los archivos revisados), esta constante deberia
+// moverse ahi en vez de quedar fija aqui.
+const BASE_URL = 'http://localhost:8092/api/v1/subastas';
 
 /**
  * Trae una pagina del listado de subastas activas.
