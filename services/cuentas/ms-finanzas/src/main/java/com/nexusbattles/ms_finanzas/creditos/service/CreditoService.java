@@ -72,6 +72,7 @@ public class CreditoService {
             .referenciaId(req.referenciaId())
             .idempotencyKey(idempotencyKey)
             .estado(ReservaCredito.EstadoReserva.ACTIVA)
+            .tipoOperacion(ReservaCredito.TipoOperacion.RESERVA)
             .expiraEn(OffsetDateTime.now().plusHours(72)) // Ampliado a 72h para cubrir subastas
             .build();
 
@@ -157,6 +158,7 @@ public class CreditoService {
             .referenciaId(req.refId())
             .idempotencyKey(req.refId())
             .estado(ReservaCredito.EstadoReserva.CONSUMIDA)
+            .tipoOperacion(ReservaCredito.TipoOperacion.DEBITO)
             .expiraEn(OffsetDateTime.now().plusDays(72))
             .build();
         reservaRepository.save(registroOp);
@@ -167,10 +169,19 @@ public class CreditoService {
 
     @Transactional
     public ReversarResponse reversar(ReversarRequest req) {
-        // Lógica real de compensación: buscar el débito original por refId y devolver el saldo
+        // Lógica real de compensación: buscar el débito original por refId y devolver el saldo.
+        //
+        // FIX (reporte de Andrés): antes esta búsqueda no distinguía el tipo de
+        // operación, así que un refId que coincidiera con una reserva de puja
+        // ACTIVA (creada por reservar()) o con un crédito ya otorgado (acreditar())
+        // se "reversaba" igual: se sumaba el monto a saldoBruto sin tocar
+        // saldoReservado (creando saldo de la nada) y se marcaba la fila como
+        // LIBERADA (dejando esa reserva inconsumible para siempre). reversar()
+        // solo tiene sentido para compensar un DEBITO real — ahora se valida
+        // explícitamente.
         Optional<ReservaCredito> operacionOpt = reservaRepository.findByIdempotencyKey(req.refId());
 
-        if (operacionOpt.isEmpty()) {
+        if (operacionOpt.isEmpty() || operacionOpt.get().getTipoOperacion() != ReservaCredito.TipoOperacion.DEBITO) {
             throw new ReservaNoEncontradaException("Operación no encontrada para reversar con refId: " + req.refId());
         }
 
@@ -204,8 +215,8 @@ public class CreditoService {
         );
     }
 
-    // FIX: acreditar() ahora es idempotente por refId, igual que debitar().
-    // Sin esto, un reintento de red desde ms-finanzas (llamado por Sanabria en HU-JUE-012)
+    // FIX: acreditar() es idempotente por refId, igual que debitar().
+    // Sin esto, un reintento de red desde el llamador (Sanabria, HU-JUE-012)
     // duplicaría los créditos otorgados por el mismo resultado de partida.
     @Transactional
     public AcreditarResponse acreditar(AcreditarRequest req) {
@@ -235,6 +246,7 @@ public class CreditoService {
             .referenciaId(req.refId())
             .idempotencyKey(req.refId())
             .estado(ReservaCredito.EstadoReserva.CONSUMIDA)
+            .tipoOperacion(ReservaCredito.TipoOperacion.CREDITO)
             .expiraEn(OffsetDateTime.now().plusDays(72))
             .build();
         reservaRepository.save(registroOp);
@@ -243,19 +255,22 @@ public class CreditoService {
         return new AcreditarResponse(txId, req.refId(), "APLICADO", req.monto(), cuenta.getSaldoDisponible());
     }
 
-    // FIX DEFECTO 2: Manejo de Race Condition (concurrencia) al crear cuentas.
+    // FIX DEFECTO 2 (v2, corregido tras reporte de Andrés): Manejo de Race Condition
+    // al crear cuentas.
     //
-    // El bug real: CuentaCredito tiene @Version (Long, objeto). Al construir la entidad
-    // con .version(0L) explícito (no null), Spring Data JPA la trata como "no nueva" y usa
-    // entityManager.merge() en vez de persist(). merge() no ejecuta el INSERT contra la BD
-    // en el momento de save(); Hibernate lo difiere hasta el flush/commit de la transacción,
-    // que ocurre DESPUÉS de que este try-catch ya terminó. Resultado: si dos requests
-    // concurrentes crean la misma cuenta, el conflicto de llave duplicada explota al hacer
-    // commit — fuera de este método, sin que el catch lo capture — y el llamador recibe
-    // un 500 igual que antes del "fix" original.
+    // v1 (incorrecto): construía la entidad con .version(0L) explícito. Con @Version
+    // no nulo, Spring Data la trata como "no nueva" y usa merge() en vez de persist().
+    // merge() sobre una fila que no existe genera un UPDATE que afecta 0 filas, y JPA
+    // lo reporta como ObjectOptimisticLockingFailureException — no como conflicto de
+    // llave duplicada. Resultado: sobre una BD limpia, TODAS las operaciones fallaban,
+    // porque el catch (DataIntegrityViolationException) nunca atrapaba esa excepción.
     //
-    // La solución es forzar el INSERT a ejecutarse dentro del try, usando saveAndFlush,
-    // para que DataIntegrityViolationException se lance aquí mismo y el catch la capture.
+    // v2 (correcto): se deja version en null en el builder. @PrePersist ya asigna
+    // version = 0L al persistir, así que no hace falta setearlo a mano. Con version
+    // null, Spring Data reconoce la entidad como nueva y usa persist() (INSERT real).
+    // Si dos requests concurrentes intentan crear la misma cuenta, el segundo INSERT
+    // choca contra la PK (jugador_uid) y lanza DataIntegrityViolationException, que
+    // el catch sí atrapa correctamente.
     private CuentaCredito obtenerOCrearCuenta(String jugadorUid) {
         Optional<CuentaCredito> cuentaOpt = cuentaRepository.findByJugadorUid(jugadorUid);
         if (cuentaOpt.isPresent()) {
@@ -267,7 +282,6 @@ public class CreditoService {
                 .jugadorUid(jugadorUid)
                 .saldoBruto(BigDecimal.ZERO)
                 .saldoReservado(BigDecimal.ZERO)
-                .version(0L)
                 .build());
         } catch (DataIntegrityViolationException ganamosLaCarrera) {
             return cuentaRepository.findByJugadorUid(jugadorUid)
