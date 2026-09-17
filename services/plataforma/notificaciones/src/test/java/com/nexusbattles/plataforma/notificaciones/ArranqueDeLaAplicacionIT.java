@@ -1,6 +1,6 @@
 package com.nexusbattles.plataforma.notificaciones;
 
-import com.nexusbattles.plataforma.notificaciones.bandeja.CanalStomp;
+import com.nexusbattles.plataforma.notificaciones.bandeja.CanalDeNotificaciones;
 import com.nexusbattles.plataforma.notificaciones.bandeja.NotificacionesController;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -61,11 +61,13 @@ class ArranqueDeLaAplicacionIT {
     @Test
     @DisplayName("el canal STOMP de la bandeja queda publicado")
     void hayCanalEnTiempoReal() {
-        // Es lo que hace util a HU-NOT-006: sin este bean no hay sincronizacion
-        // entre sesiones, y una rebanada web nunca lo levanta.
+        // Es lo que hace util a HU-NOT-006: sin estos beans no hay
+        // sincronizacion entre sesiones, y una rebanada web nunca los levanta.
+        // Se pide por la interfaz, no por CanalStomp, que es de paquete: el
+        // adaptador concreto es un detalle interno de bandeja/.
         assertAll(
                 () -> assertNotNull(contexto.getBean(SimpMessagingTemplate.class)),
-                () -> assertNotNull(contexto.getBean(CanalStomp.class))
+                () -> assertNotNull(contexto.getBean(CanalDeNotificaciones.class))
         );
     }
 }
