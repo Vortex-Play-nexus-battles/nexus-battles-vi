@@ -12,4 +12,11 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-cache'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+
+    // Arranque real de la aplicacion contra PostgreSQL y Redis
+    // (ArranqueDeLaAplicacionIT).
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation platform('org.testcontainers:testcontainers-bom:1.21.4')
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:postgresql'
 }

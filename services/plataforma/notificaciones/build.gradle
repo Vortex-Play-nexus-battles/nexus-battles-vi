@@ -13,4 +13,10 @@ dependencies {
     // Spring porque el docker-compose.yml no levanta ninguno externo todavia y
     // elegirlo es una decision de equipo, no de este modulo.
     implementation 'org.springframework.boot:spring-boot-starter-websocket'
+
+    // Arranque real de la aplicacion contra PostgreSQL (ArranqueDeLaAplicacionIT).
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation platform('org.testcontainers:testcontainers-bom:1.21.4')
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:postgresql'
 }
