@@ -1,19 +1,27 @@
 package com.nexusbattles.ms_subastas.subastas.port;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Flow;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -22,6 +30,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * Contra un servidor HTTP real del JDK, no un mock del cliente: lo que hay que
@@ -68,7 +81,7 @@ class InventarioClientHttpTest {
         servidor.stop(0);
     }
 
-    // --- la unica operacion que existe al otro lado ------------------------
+    // --- la operacion de bloqueo/reserva acordada --------------------------
 
     @Test
     void bloquearUsaElVerboLaRutaYElCuerpoQueDeclaraElContrato() throws Exception {
@@ -82,6 +95,9 @@ class InventarioClientHttpTest {
         assertEquals("clave-de-prueba", claveIdempotencia.get());
 
         JsonNode json = new ObjectMapper().readTree(cuerpo.get());
+        assertTrue(json.has("propietarioUid"), "El JSON de reserva debe contener propietarioUid");
+        assertTrue(json.has("subastaId"), "El JSON de reserva debe contener subastaId");
+        assertFalse(json.has("propietarioId"), "No debe usar propietarioId");
         assertEquals(subasta.toString(), json.get("subastaId").asText());
         // El propietario viaja en el CUERPO como propietarioUid, que es lo que
         // publico inventario el 15/09. Antes se mandaba el UUID en X-User-Name,
@@ -283,13 +299,162 @@ class InventarioClientHttpTest {
         assertFalse(error instanceof InventarioNoDisponibleException, error.getMessage());
     }
 
+    // --- transferir un elemento al ganador (HU-SUB-004) --------------------
+
     @Test
-    void transferirDiceQueEsEndpointNoExiste() {
+    void transferirUsaElVerboLaRutaYElCuerpoQueDeclaraElContrato() throws Exception {
+        UUID nuevoPropietario = UUID.fromString("88888888-0000-0000-0000-0000000000dd");
+        UUID subasta = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
+
+        cliente.transferirProducto(ELEMENTO, nuevoPropietario, subasta, "clave-transferencia");
+
+        assertEquals("POST", metodo.get());
+        assertEquals("/api/v1/inventario/elementos/" + ELEMENTO + "/transferencias", ruta.get());
+        assertEquals("clave-transferencia", claveIdempotencia.get());
+
+        JsonNode json = new ObjectMapper().readTree(cuerpo.get());
+        assertTrue(json.has("nuevoPropietarioUid"), "El JSON de transferencia debe contener nuevoPropietarioUid");
+        assertTrue(json.has("subastaId"), "El JSON de transferencia debe contener subastaId");
+        assertFalse(json.has("nuevoPropietarioId"), "No debe usar nuevoPropietarioId");
+        assertFalse(json.has("propietarioUid"), "No debe usar propietarioUid en transferencias");
+        assertEquals(subasta.toString(), json.get("subastaId").asText());
+        assertEquals(nuevoPropietario.toString(), json.get("nuevoPropietarioUid").asText());
+        assertEquals(null, identidad.get(), "no depende de X-User-Name");
+    }
+
+    @Test
+    void transferirExigeElementoNuevoPropietarioYSubastaAntesDeSalir() {
+        assertThrows(InventarioClientException.class,
+                () -> cliente.transferirProducto(null, UUID.randomUUID(), UUID.randomUUID(), "clave"));
+        assertThrows(InventarioClientException.class,
+                () -> cliente.transferirProducto("  ", UUID.randomUUID(), UUID.randomUUID(), "clave"));
+        assertThrows(InventarioClientException.class,
+                () -> cliente.transferirProducto(ELEMENTO, null, UUID.randomUUID(), "clave"));
+        assertThrows(InventarioClientException.class,
+                () -> cliente.transferirProducto(ELEMENTO, UUID.randomUUID(), null, "clave"));
+
+        assertEquals(null, metodo.get(), "ninguna puede haber salido a la red");
+    }
+
+    @Test
+    void transferirSinClaveDeIdempotenciaSiSale() {
+        cliente.transferirProducto(ELEMENTO, UUID.randomUUID(), UUID.randomUUID(), null);
+
+        assertEquals("POST", metodo.get());
+        assertEquals(null, claveIdempotencia.get());
+    }
+
+    @Test
+    void un503AlTransferirEsAveriaYNoRechazoDeNegocio() {
+        codigo.set(503);
+
+        assertThrows(InventarioNoDisponibleException.class,
+                () -> cliente.transferirProducto(ELEMENTO, UUID.randomUUID(), UUID.randomUUID(), "clave"));
+    }
+
+    @Test
+    void unaRespuestaInesperadaAlTransferirNoPasaPorBuena() {
+        codigo.set(500);
+
         InventarioClientException error = assertThrows(InventarioClientException.class,
                 () -> cliente.transferirProducto(ELEMENTO, UUID.randomUUID(), UUID.randomUUID(), "clave"));
 
-        assertTrue(error.getMessage().contains("transferencia"), error.getMessage());
-        assertEquals(null, metodo.get());
+        assertFalse(error instanceof InventarioNoDisponibleException);
+        assertTrue(error.getMessage().contains("500"), error.getMessage());
+    }
+
+    @Test
+    void siInventarioNoRespondeAlTransferirSeReportaComoFallo() {
+        InventarioClientHttp haciaLaNada = new InventarioClientHttp(
+                URI.create("http://localhost:1"), HttpClient.newHttpClient(),
+                new ObjectMapper(), Duration.ofMillis(300));
+
+        assertThrows(InventarioNoDisponibleException.class,
+                () -> haciaLaNada.transferirProducto(ELEMENTO, UUID.randomUUID(), UUID.randomUUID(), "clave"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void capturarPeticionesVerificaCuerpoYCabecerasConArgumentCaptor() throws Exception {
+        HttpClient mockHttpClient = mock(HttpClient.class);
+        HttpResponse<String> mockResponse = mock(HttpResponse.class);
+        when(mockResponse.statusCode()).thenReturn(200);
+        when(mockResponse.body()).thenReturn("{}");
+        when(mockHttpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(mockResponse);
+
+        InventarioClientHttp clienteConMock = new InventarioClientHttp(
+                URI.create("http://localhost:8080"),
+                mockHttpClient, new ObjectMapper(), Duration.ofSeconds(2));
+
+        UUID nuevoPropietario = UUID.fromString("88888888-0000-0000-0000-0000000000dd");
+        UUID subasta = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
+        clienteConMock.transferirProducto(ELEMENTO, nuevoPropietario, subasta, "clave-captor");
+
+        UUID propietario = UUID.fromString("77777777-0000-0000-0000-0000000000cc");
+        clienteConMock.reservar(ELEMENTO, propietario, subasta, "clave-bloqueo");
+
+        ArgumentCaptor<HttpRequest> captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(mockHttpClient, times(2)).send(captor.capture(), any());
+
+        List<HttpRequest> peticiones = captor.getAllValues();
+
+        HttpRequest peticionTransferencia = peticiones.get(0);
+        assertEquals("POST", peticionTransferencia.method());
+        assertEquals("http://localhost:8080/api/v1/inventario/elementos/" + ELEMENTO + "/transferencias",
+                peticionTransferencia.uri().toString());
+        assertEquals("clave-captor", peticionTransferencia.headers().firstValue("Idempotency-Key").orElse(null));
+        assertEquals("application/json", peticionTransferencia.headers().firstValue("Content-Type").orElse(null));
+
+        JsonNode jsonTransferencia = new ObjectMapper().readTree(extraerCuerpo(peticionTransferencia));
+        assertTrue(jsonTransferencia.has("nuevoPropietarioUid"), "El JSON capturado de transferencia debe contener nuevoPropietarioUid");
+        assertTrue(jsonTransferencia.has("subastaId"), "El JSON capturado de transferencia debe contener subastaId");
+        assertFalse(jsonTransferencia.has("nuevoPropietarioId"), "No debe contener nuevoPropietarioId");
+        assertFalse(jsonTransferencia.has("propietarioUid"), "No debe contener propietarioUid en transferencias");
+        assertEquals(nuevoPropietario.toString(), jsonTransferencia.get("nuevoPropietarioUid").asText());
+        assertEquals(subasta.toString(), jsonTransferencia.get("subastaId").asText());
+
+        HttpRequest peticionReserva = peticiones.get(1);
+        assertEquals("PUT", peticionReserva.method());
+        assertEquals("http://localhost:8080/api/v1/inventario/elementos/" + ELEMENTO + "/bloqueo-subasta",
+                peticionReserva.uri().toString());
+        assertEquals("clave-bloqueo", peticionReserva.headers().firstValue("Idempotency-Key").orElse(null));
+        assertEquals("application/json", peticionReserva.headers().firstValue("Content-Type").orElse(null));
+
+        JsonNode jsonReserva = new ObjectMapper().readTree(extraerCuerpo(peticionReserva));
+        assertTrue(jsonReserva.has("propietarioUid"), "El JSON capturado de reserva debe contener propietarioUid");
+        assertTrue(jsonReserva.has("subastaId"), "El JSON capturado de reserva debe contener subastaId");
+        assertFalse(jsonReserva.has("propietarioId"), "No debe contener propietarioId");
+        assertFalse(jsonReserva.has("nuevoPropietarioUid"), "No debe contener nuevoPropietarioUid en reservas");
+        assertEquals(propietario.toString(), jsonReserva.get("propietarioUid").asText());
+        assertEquals(subasta.toString(), jsonReserva.get("subastaId").asText());
+    }
+
+    private static String extraerCuerpo(HttpRequest peticion) {
+        assertTrue(peticion.bodyPublisher().isPresent(), "La peticion debe tener un BodyPublisher");
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        peticion.bodyPublisher().get().subscribe(new Flow.Subscriber<ByteBuffer>() {
+            @Override
+            public void onSubscribe(Flow.Subscription subscription) {
+                subscription.request(Long.MAX_VALUE);
+            }
+
+            @Override
+            public void onNext(ByteBuffer item) {
+                byte[] buf = new byte[item.remaining()];
+                item.get(buf);
+                baos.write(buf, 0, buf.length);
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+            }
+
+            @Override
+            public void onComplete() {
+            }
+        });
+        return baos.toString(StandardCharsets.UTF_8);
     }
 
     // --- lo que se corta antes de salir a la red ---------------------------
@@ -393,5 +558,118 @@ class InventarioClientHttpTest {
                  "enUso":false,"disponible":true,"subastaId":null}""");
 
         assertEquals(ELEMENTO, cliente.buscar(ELEMENTO).orElseThrow().id());
+    }
+
+    @Test
+    void serializacionDirectaSolicitudesContratosExactos() throws Exception {
+        UUID u1 = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        UUID u2 = UUID.fromString("22222222-2222-2222-2222-222222222222");
+
+        ObjectMapper mapper = new ObjectMapper();
+
+        String jsonTransferencia = mapper.writeValueAsString(
+                new InventarioClientHttp.SolicitudTransferencia(u1, u2));
+        JsonNode nodeTransferencia = mapper.readTree(jsonTransferencia);
+        assertTrue(nodeTransferencia.has("nuevoPropietarioUid"), "Debe contener nuevoPropietarioUid");
+        assertTrue(nodeTransferencia.has("subastaId"), "Debe contener subastaId");
+        assertFalse(nodeTransferencia.has("nuevoPropietarioId"), "No debe contener nuevoPropietarioId");
+        assertFalse(nodeTransferencia.has("propietarioUid"), "No debe contener propietarioUid");
+        assertEquals(u1.toString(), nodeTransferencia.get("nuevoPropietarioUid").asText());
+        assertEquals(u2.toString(), nodeTransferencia.get("subastaId").asText());
+
+        String jsonReserva = mapper.writeValueAsString(
+                new InventarioClientHttp.SolicitudReserva(u1, u2));
+        JsonNode nodeReserva = mapper.readTree(jsonReserva);
+        assertTrue(nodeReserva.has("propietarioUid"), "Debe contener propietarioUid");
+        assertTrue(nodeReserva.has("subastaId"), "Debe contener subastaId");
+        assertFalse(nodeReserva.has("propietarioId"), "No debe contener propietarioId");
+        assertFalse(nodeReserva.has("nuevoPropietarioUid"), "No debe contener nuevoPropietarioUid");
+        assertEquals(u1.toString(), nodeReserva.get("propietarioUid").asText());
+        assertEquals(u2.toString(), nodeReserva.get("subastaId").asText());
+    }
+
+    @Test
+    void un404AlTransferirEsRechazoPorElementoNoEncontrado() {
+        codigo.set(404);
+
+        InventarioClientException error = assertThrows(InventarioClientException.class,
+                () -> cliente.transferirProducto(ELEMENTO, UUID.randomUUID(), UUID.randomUUID(), "clave"));
+
+        assertFalse(error instanceof InventarioNoDisponibleException);
+        assertTrue(error.getMessage().contains("no encontro"), error.getMessage());
+    }
+
+    @Test
+    void un409AlTransferirEsRechazoPorConflicto() {
+        codigo.set(409);
+
+        InventarioClientException error = assertThrows(InventarioClientException.class,
+                () -> cliente.transferirProducto(ELEMENTO, UUID.randomUUID(), UUID.randomUUID(), "clave"));
+
+        assertFalse(error instanceof InventarioNoDisponibleException);
+        assertTrue(error.getMessage().contains("conflicto"), error.getMessage());
+    }
+
+    @Test
+    void errorDeSerializacionAlTransferirOAlBloquearLanzaInventarioClientException() throws Exception {
+        ObjectMapper mockMapper = mock(ObjectMapper.class);
+        when(mockMapper.writeValueAsString(any())).thenThrow(new JsonProcessingException("fallo") {});
+
+        InventarioClientHttp clienteFalloSerializacion = new InventarioClientHttp(
+                URI.create("http://localhost:8080"),
+                HttpClient.newHttpClient(), mockMapper, Duration.ofSeconds(2));
+
+        assertThrows(InventarioClientException.class,
+                () -> clienteFalloSerializacion.transferirProducto(ELEMENTO, UUID.randomUUID(), UUID.randomUUID(), "k"));
+        assertThrows(InventarioClientException.class,
+                () -> clienteFalloSerializacion.reservar(ELEMENTO, UUID.randomUUID(), UUID.randomUUID(), "k"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void siElEnvioEsInterrumpidoSeLanzaInventarioNoDisponible() throws Exception {
+        HttpClient mockHttpClient = mock(HttpClient.class);
+        when(mockHttpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenThrow(new InterruptedException("interrumpido"));
+
+        InventarioClientHttp clienteInterrumpido = new InventarioClientHttp(
+                URI.create("http://localhost:8080"),
+                mockHttpClient, new ObjectMapper(), Duration.ofSeconds(2));
+
+        assertThrows(InventarioNoDisponibleException.class,
+                () -> clienteInterrumpido.transferirProducto(ELEMENTO, UUID.randomUUID(), UUID.randomUUID(), "k"));
+        assertTrue(Thread.interrupted(), "debe restaurar el flag de interrupcion");
+    }
+
+    @Test
+    void liberarRespuestaInesperadaLanzaInventarioClientException() {
+        codigo.set(500);
+
+        InventarioClientException error = assertThrows(InventarioClientException.class,
+                () -> cliente.liberarReserva(ELEMENTO, UUID.randomUUID(), "clave"));
+
+        assertFalse(error instanceof InventarioNoDisponibleException);
+        assertTrue(error.getMessage().contains("500"), error.getMessage());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void baseUriConRutasOBarraFinalSeNormalizaCorrectamente() throws Exception {
+        HttpClient mockHttpClient = mock(HttpClient.class);
+        HttpResponse<String> mockResponse = mock(HttpResponse.class);
+        when(mockResponse.statusCode()).thenReturn(200);
+        when(mockHttpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(mockResponse);
+
+        InventarioClientHttp clienteConContexto = new InventarioClientHttp(
+                URI.create("http://localhost:8080/api-base/"),
+                mockHttpClient, new ObjectMapper(), Duration.ofSeconds(2));
+
+        clienteConContexto.transferirProducto(ELEMENTO, UUID.randomUUID(), UUID.randomUUID(), "k");
+
+        ArgumentCaptor<HttpRequest> captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(mockHttpClient).send(captor.capture(), any());
+        assertEquals("http://localhost:8080/api-base/api/v1/inventario/elementos/" + ELEMENTO + "/transferencias",
+                captor.getValue().uri().toString());
     }
 }
