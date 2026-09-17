@@ -7,7 +7,7 @@
  */
 
 import { jest } from '@jest/globals';
-import { ControladorSubastas } from './pujas.js';
+import { ControladorSubastas, CANAL_SUBASTAS } from './pujas.js';
 import { ErrorDeSubastas } from './pujas-api.js';
 
 function subastaDelServidor(extra = {}) {
@@ -446,5 +446,125 @@ describe('la subasta desaparece mientras se mira', () => {
     expect(ctrl.vista).toBe('explorar');
     expect(ctrl.subastaActivaId).toBeNull();
     ctrl.destruir();
+  });
+});
+
+describe('canal en vivo (HU-SUB-011 publica, esta pantalla escucha)', () => {
+  function canalFalso() {
+    const suscripciones = [];
+    return {
+      cliente: {
+        suscribir: (destino, alRecibir) => { suscripciones.push({ destino, alRecibir }); return 'sub-1'; },
+        enviar: () => {},
+        cerrar: jest.fn()
+      },
+      suscripciones
+    };
+  }
+
+  function apiQueCuenta(subastas) {
+    let llamadas = 0;
+    return {
+      api: {
+        listar: async () => { llamadas += 1; return JSON.parse(JSON.stringify(subastas)); },
+        miResumen: async () => ({ creditosRetenidos: '0', saldoDisponible: '1000', subastasGanando: 0 }),
+        historial: async () => [],
+        miParticipacion: async () => ({ vasGanando: false, teSuperaron: false, creditosRetenidos: '0',
+          automaticaActiva: false, segundosParaVolverAPujar: 0 })
+      },
+      veces: () => llamadas
+    };
+  }
+
+  const SUBASTA = { id: 's1', nombre: 'Hacha', oferta: 100, compraInmediata: 500, segundosRestantes: 600,
+    retenido: 0, ganando: false, superado: false, pujas: [], rareza: 'comun' };
+
+  test('se suscribe al canal que publica el servidor', async () => {
+    const caja = document.createElement('div');
+    const falso = canalFalso();
+    const { api } = apiQueCuenta([SUBASTA]);
+
+    const ctrl = new ControladorSubastas({ contenedor: caja, api, urlCanal: 'ws://servidor/api/v1/ws-subastas',
+      conectarCanal: async () => falso.cliente });
+    await ctrl.iniciar();
+    await ctrl.abrirCanalEnVivo();
+
+    expect(falso.suscripciones[0].destino).toBe(CANAL_SUBASTAS);
+    ctrl.destruir();
+  });
+
+  test('un cambio en una subasta que se esta mirando dispara una relectura', async () => {
+    const caja = document.createElement('div');
+    const falso = canalFalso();
+    const { api, veces } = apiQueCuenta([SUBASTA]);
+
+    const ctrl = new ControladorSubastas({ contenedor: caja, api, urlCanal: 'ws://x/ws-subastas',
+      conectarCanal: async () => falso.cliente });
+    await ctrl.iniciar();
+    const antes = veces();
+
+    // Se relee en vez de pintar lo que llega: el mensaje trae el resumen de la
+    // subasta, pero no sabe si la puja es tuya ni cuanto llevas retenido.
+    const atendido = ctrl.alLlegarActualizacion(JSON.stringify({ id: 's1', ofertaVigente: '150' }));
+
+    expect(atendido).toBe(true);
+    await Promise.resolve();
+    expect(veces()).toBeGreaterThan(antes);
+    ctrl.destruir();
+  });
+
+  test('un cambio en una subasta que no tengo no relee nada', async () => {
+    const caja = document.createElement('div');
+    const falso = canalFalso();
+    const { api, veces } = apiQueCuenta([SUBASTA]);
+
+    const ctrl = new ControladorSubastas({ contenedor: caja, api, urlCanal: 'ws://x/ws-subastas',
+      conectarCanal: async () => falso.cliente });
+    await ctrl.iniciar();
+    const antes = veces();
+
+    expect(ctrl.alLlegarActualizacion(JSON.stringify({ id: 'otra-que-no-miro' }))).toBe(false);
+    expect(veces()).toBe(antes);
+    ctrl.destruir();
+  });
+
+  test('un frame ilegible no rompe la pantalla', async () => {
+    const caja = document.createElement('div');
+    const { api } = apiQueCuenta([SUBASTA]);
+    const ctrl = new ControladorSubastas({ contenedor: caja, api });
+
+    expect(ctrl.alLlegarActualizacion('{esto no es json')).toBe(false);
+  });
+
+  /**
+   * Lo que sostiene el riesgo #7 del acta: si el tiempo real no levanta, la
+   * pantalla degrada a consulta periodica en vez de fallar.
+   */
+  test('si el canal no conecta, la pantalla sigue funcionando con el sondeo', async () => {
+    const caja = document.createElement('div');
+    const { api } = apiQueCuenta([SUBASTA]);
+
+    const ctrl = new ControladorSubastas({ contenedor: caja, api, urlCanal: 'ws://servidor-caido/ws-subastas',
+      conectarCanal: async () => { throw new Error('ECONNREFUSED'); } });
+    await ctrl.iniciar();
+
+    expect(await ctrl.abrirCanalEnVivo()).toBeNull();
+    expect(ctrl.estadoDatos).toBe('exito');
+    expect(ctrl.subastas).toHaveLength(1);
+    ctrl.destruir();
+  });
+
+  test('destruir cierra el canal', async () => {
+    const caja = document.createElement('div');
+    const falso = canalFalso();
+    const { api } = apiQueCuenta([SUBASTA]);
+
+    const ctrl = new ControladorSubastas({ contenedor: caja, api, urlCanal: 'ws://x/ws-subastas',
+      conectarCanal: async () => falso.cliente });
+    await ctrl.iniciar();
+    await ctrl.abrirCanalEnVivo();
+    ctrl.destruir();
+
+    expect(falso.cliente.cerrar).toHaveBeenCalled();
   });
 });

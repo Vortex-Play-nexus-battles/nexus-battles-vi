@@ -16,6 +16,19 @@ const CLAVE_APODO = 'nexus.apodoActual';
 export const URL_BASE_POR_DEFECTO = 'http://localhost:8092/api/v1';
 
 /**
+ * URL del canal en vivo (`/ws-subastas`, registrado por WebSocketConfig bajo el
+ * mismo context-path). Se deriva de la base HTTP en vez de declararla aparte:
+ * dos direcciones al mismo servicio acaban divergiendo, y con https hay que
+ * cambiar a wss sin que nadie se acuerde.
+ *
+ * @param {string} urlBase
+ * @returns {string}
+ */
+export function urlDelCanal(urlBase = URL_BASE_POR_DEFECTO) {
+  return `${urlBase.replace(/^http/, 'ws')}/ws-subastas`;
+}
+
+/**
  * Fallo de una operacion de subastas.
  *
  * @property {number} estado  codigo HTTP.

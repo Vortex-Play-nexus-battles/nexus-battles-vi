@@ -47,6 +47,14 @@ la clave ya no identifica una sola operacion.
 ### Frontend
 
 `frontend/app-web/src/cuentas/pujas.html` + `pujas.js` (vista) + `pujas-api.js` (cliente HTTP).
+
+La pantalla escucha el canal en vivo `/topic/subastas/listado` que publica
+`SubastaRealtimePublisher` (HU-SUB-011), asi que se entera al instante de una
+puja ajena o del cierre por vencimiento. **Es un anadido al sondeo de 5 s, no un
+sustituto**: si el WebSocket no levanta, la pantalla degrada a consulta
+periodica, que es lo que exige el riesgo #7 del acta. Y de un mensaje solo se
+usa el aviso de que algo cambio: se relee del servidor en vez de pintar lo que
+llega, porque ese mensaje no sabe si la puja es tuya ni cuanto llevas retenido.
 Se llaman `pujas.*` y no `subastas.*` porque el listado de HU-SUB-011 (Cristian)
 ya ocupa ese nombre; se entra desde ahi con `pujas.html?id=<subasta>`.
 

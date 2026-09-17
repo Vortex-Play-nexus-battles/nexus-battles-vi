@@ -10,6 +10,11 @@
  * - Sistema de avisos cruzados en vivo tipo toast (esquina inferior derecha)
  */
 
+import { conectarStomp } from '../comun/transporte-stomp.js';
+
+/** Canal que publica ms-subastas en cada cambio (SubastaRealtimePublisher). */
+export const CANAL_SUBASTAS = '/topic/subastas/listado';
+
 export const PALETA_RAREZA = {
   comun: { fondo: '#E7EAF0', texto: '#57627A', borde: '#9FABC9', icono: '🛡️' },
   rara: { fondo: '#DFEEF8', texto: '#095E8C', borde: '#095E8C', icono: '⚔️' },
@@ -465,7 +470,9 @@ export class ControladorSubastas {
     config = CONFIG_REGLAS,
     eventosCierre = EVENTOS_CIERRE_DEFAULT,
     api = null,
-    subastaInicialId = null
+    subastaInicialId = null,
+    urlCanal = null,
+    conectarCanal = conectarStomp
   } = {}) {
     // Subasta que hay que abrir en detalle nada mas cargar. Viene de ?id= en la
     // URL: es la forma de que el listado de HU-SUB-011 entregue una subasta
@@ -497,12 +504,23 @@ export class ControladorSubastas {
     this.mensajeError = null;
     this.intervalId = null;
     this.avisoCruzado = null; // { id, nombre, oferta, rival, segundosRestantes }
+
+    // Canal en vivo (HU-SUB-011 lo publica en /topic/subastas/listado). Es un
+    // ANADIDO al sondeo, no un sustituto: el riesgo #7 del acta exige
+    // degradacion controlada a consulta periodica si el tiempo real se cae.
+    this.urlCanal = urlCanal;
+    this.conectarCanal = conectarCanal;
+    this.canal = null;
   }
 
   iniciar() {
     if (this.api) {
       this.estadoDatos = 'carga';
       this.render();
+      // Sin await: si el canal tarda o no levanta, la pantalla ya funciona con
+      // el sondeo. Encadenarlo aqui retrasaria el primer pintado por algo que
+      // es opcional.
+      this.abrirCanalEnVivo();
       return this.recargar();
     }
     this.iniciarTemporizador();
@@ -678,11 +696,65 @@ export class ControladorSubastas {
     return `<div id="alerta-pujas" class="alerta alerta-error alerta-pujas" role="alert" ${hayError ? '' : 'hidden style="display: none;"'}>${hayError ? this.mensajeError : ''}</div>`;
   }
 
+
+  /**
+   * Abre el canal en vivo y se suscribe al listado. Nunca rechaza: si el
+   * servidor no tiene WebSocket, el navegador lo bloquea o el frame llega
+   * ilegible, la pantalla sigue con el sondeo de 5 s y el jugador no se entera.
+   * Un canal opcional no puede tumbar la pantalla.
+   */
+  async abrirCanalEnVivo() {
+    if (!this.urlCanal || !this.conectarCanal || this.canal) {return null;}
+    try {
+      const canal = await this.conectarCanal({ url: this.urlCanal });
+      canal.suscribir(CANAL_SUBASTAS, (cuerpo) => this.alLlegarActualizacion(cuerpo));
+      this.canal = canal;
+      return canal;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Un cambio publicado por el servidor. Se usa para decidir SI releer, no
+   * para pintar directamente lo que llega: el mensaje trae el resumen de la
+   * subasta, pero no sabe si esa puja es tuya ni cuanto llevas retenido, y
+   * pintarlo a ciegas dejaria la pantalla diciendo "no vas ganando" justo
+   * despues de que ganaras.
+   */
+  alLlegarActualizacion(cuerpo) {
+    let actualizada;
+    try {
+      actualizada = typeof cuerpo === 'string' ? JSON.parse(cuerpo) : cuerpo;
+    } catch {
+      return false;
+    }
+    if (!actualizada || !actualizada.id) {return false;}
+
+    const esLaQueMiro = this.vista === 'detalle' && actualizada.id === this.subastaActivaId;
+    const laTengoEnLista = this.subastas.some((sub) => sub.id === actualizada.id);
+    if (!esLaQueMiro && !laTengoEnLista) {return false;}
+
+    this.recargar();
+    return true;
+  }
+
+  cerrarCanalEnVivo() {
+    if (!this.canal) {return;}
+    try {
+      this.canal.cerrar();
+    } catch {
+      // Cerrar un canal ya caido no es un problema que deba propagarse.
+    }
+    this.canal = null;
+  }
+
   destruir() {
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
+    this.cerrarCanalEnVivo();
   }
 
   iniciarTemporizador() {
