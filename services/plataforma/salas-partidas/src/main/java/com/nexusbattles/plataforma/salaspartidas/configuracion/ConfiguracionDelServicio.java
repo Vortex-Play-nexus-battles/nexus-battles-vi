@@ -8,15 +8,21 @@ import com.nexusbattles.plataforma.salaspartidas.aplicacion.CrearSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.IngresarASala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ListarSalas;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.HeroeDelJugador;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.IniciarPartida;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.ObtenerPartida;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ObtenerSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.VerificarHeroe;
+import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDePartida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDeSala;
+import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDePartidas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 import org.springframework.web.client.RestClient;
+
+import java.time.Clock;
 
 /**
  * Cableado del servicio.
@@ -63,6 +69,19 @@ public class ConfiguracionDelServicio {
     @Bean
     public VerificarHeroe verificarHeroe(RepositorioDeSalas repositorio, HeroeDelJugador heroes) {
         return new VerificarHeroe(repositorio, heroes);
+    }
+
+    /** HU-SAL-004 · RF-JUE-017: arranque del combate. */
+    @Bean
+    public IniciarPartida iniciarPartida(RepositorioDeSalas salas, RepositorioDePartidas partidas,
+                                         CanalDePartida canal) {
+        return new IniciarPartida(salas, partidas, canal, Clock.systemUTC());
+    }
+
+    /** RF-JUE-017: estado de la partida, para pintar y para reconectar. */
+    @Bean
+    public ObtenerPartida obtenerPartida(RepositorioDePartidas partidas) {
+        return new ObtenerPartida(partidas);
     }
 
     /**

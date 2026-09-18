@@ -109,6 +109,8 @@ channels:
       idPartida:
         description: Identificador de la partida
     messages:
+      partidaIniciada:
+        $ref: '#/components/messages/PartidaIniciada'
       turnoCambiado:
         $ref: '#/components/messages/TurnoCambiado'
       accionResuelta:
@@ -347,12 +349,29 @@ components:
       name: partidaIniciada
       title: La sala se lleno y comenzo el combate
       description: |
-        Trae el orden de turnos, que el PDF exige como salida, y la posicion
-        de cada heroe en el campo — RF-JUE-017 la fija aleatoria, la decide el
-        servidor y el cliente solo la pinta.
+        Trae el orden de turnos, que el PDF exige como salida.
+
+        Viaja por DOS canales a proposito. Por `partidaEstado` para quien ya
+        esta en el combate, y por `salaEstado` porque quien espera en la sala
+        todavia no conoce `idPartida` y por tanto no puede estar suscrito al
+        tema de la partida: sin el aviso por la sala, el anfitrion entraria al
+        combate y los demas se quedarian mirando la lista de participantes.
+
+        `participantes` es OPCIONAL y hoy no se emite. La ficha completa de
+        cada participante exige `heroe` con vida actual y maxima, y el heroe
+        equipado lo conoce el inventario, no este servicio: mientras la
+        verificacion de HU-SAL-003 no sea obligatoria en el ingreso
+        (SCRUM-1074), `salas-partidas` no puede llenar ese campo sin
+        inventarlo. Omitirlo dice la verdad; rellenarlo con una vida ficticia
+        pintaria barras falsas. Hasta entonces el cliente resuelve el roster
+        con `GET /partidas/{idPartida}`.
+
+        La posicion aleatoria en el campo que pide RF-JUE-017 viaja en
+        `Participante.posicionEnCampo` y llega con `participantes`, por la
+        misma razon.
       payload:
         type: object
-        required: [tipo, idSala, idPartida, ordenDeTurnos, participantes]
+        required: [tipo, idSala, idPartida, ordenDeTurnos, turnoActual]
         properties:
           tipo: { const: 'sala.partida.iniciada' }
           idSala: { type: string, format: uuid }
@@ -361,6 +380,16 @@ components:
             type: array
             description: Identificadores de jugador en el orden en que jugaran.
             items: { type: string, format: uuid }
+          turnoActual:
+            type: object
+            description: |
+              Quien abre el combate. Es siempre el primero de `ordenDeTurnos`;
+              viaja aparte para que la vista no tenga que deducirlo y para que
+              el mensaje tenga la misma forma que `turnoCambiado`.
+            required: [idJugador, numeroTurno]
+            properties:
+              idJugador: { type: string, format: uuid }
+              numeroTurno: { type: integer, minimum: 1 }
           participantes:
             type: array
             items: { $ref: '#/components/schemas/Participante' }

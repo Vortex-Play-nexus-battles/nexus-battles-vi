@@ -363,6 +363,58 @@ paths:
           $ref: '#/components/responses/SalaNoEncontrada'
 
   # ---------------------------------------------------------------------------
+  # HU-SAL-004 · RF-JUE-017 — Arranque del combate
+  # ---------------------------------------------------------------------------
+  /salas/{idSala}/partida:
+    parameters:
+      - $ref: '#/components/parameters/IdSala'
+    post:
+      tags: [Partidas]
+      summary: Iniciar la partida de una sala
+      description: |
+        Arranca el combate. Solo el anfitrion, y una sola vez por sala: al
+        empezar, la sala pasa a `EN_JUEGO` y deja de admitir ingresos.
+
+        A los demas participantes les llega el aviso `sala.partida.iniciada`
+        (ver `contracts/websocket/salas-partidas.yaml`) tambien por el canal de
+        la SALA, no solo por el de la partida: en la sala de espera todavia no
+        conocen el identificador de la partida y no pueden estar suscritos a su
+        tema.
+
+        Pulsar dos veces no es un error: la segunda llamada devuelve la misma
+        partida, con el mismo identificador.
+      operationId: iniciarPartida
+      responses:
+        '201':
+          description: Partida iniciada, con su estado inicial.
+          headers:
+            Location:
+              description: URI de la partida creada
+              schema: { type: string, format: uri }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Partida'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          description: |
+            Solo el anfitrion inicia la partida.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '404':
+          $ref: '#/components/responses/SalaNoEncontrada'
+        '409':
+          description: |
+            La sala no admite empezar: ya esta en juego, fue cancelada, ya
+            termino, o no hay rival —una sala de un solo participante sin heroe
+            de la IA no es un enfrentamiento (RF-JUE-004)—.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+
+  # ---------------------------------------------------------------------------
   # RF-JUE-017 — Estado de la partida, para pintar la vista y para reconectar
   # ---------------------------------------------------------------------------
   /partidas/{idPartida}:
