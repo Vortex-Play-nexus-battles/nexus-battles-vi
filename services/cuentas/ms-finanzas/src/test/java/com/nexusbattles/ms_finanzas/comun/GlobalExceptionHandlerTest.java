@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 
 import com.nexusbattles.ms_finanzas.common.exception.ReservaNoEncontradaException;
+import com.nexusbattles.ms_finanzas.common.exception.ReservaYaLiberadaException;
 import com.nexusbattles.ms_finanzas.common.exception.SaldoInsuficienteException;
 import com.nexusbattles.ms_finanzas.transacciones.TransaccionYaRegistradaException;
 
@@ -38,6 +39,21 @@ class GlobalExceptionHandlerTest {
         assertThat(respuesta.getTitle()).isEqualTo("Saldo insuficiente");
         assertThat(respuesta.getDetail()).contains("créditos suficientes");
         assertThat(respuesta.getType().toString()).endsWith("/errors/saldo-insuficiente");
+    }
+
+    @Test
+    void reservaYaLiberada_esProblemDetail409ConTypeYTitle() {
+        ReservaYaLiberadaException ex = new ReservaYaLiberadaException(
+                "La reserva ya fue liberada y no puede ser consumida.");
+
+        ProblemDetail respuesta = handler.manejarReservaYaLiberada(ex);
+
+        assertThat(respuesta.getStatus()).isEqualTo(HttpStatus.CONFLICT.value());
+        assertThat(respuesta.getTitle()).isEqualTo("Reserva ya liberada");
+        assertThat(respuesta.getDetail()).contains("liberada");
+        // El type URI distingue este 409 del 409 de transaccion-ya-registrada,
+        // para que Andrés pueda diferenciar los dos casos en su cliente.
+        assertThat(respuesta.getType().toString()).endsWith("/errors/reserva-ya-liberada");
     }
 
     @Test
