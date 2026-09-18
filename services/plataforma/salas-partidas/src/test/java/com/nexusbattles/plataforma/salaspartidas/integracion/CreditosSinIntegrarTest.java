@@ -63,9 +63,9 @@ class CreditosSinIntegrarTest {
     @DisplayName("con el adaptador real, una sala sin recompensa se crea de extremo a extremo")
     void sinRecompensaSeCrea() {
         RepositorioEnMemoria repositorio = new RepositorioEnMemoria();
-        CrearSala crearSala = new CrearSala(repositorio, creditos);
+        CrearSala crearSala = new CrearSala(repositorio, creditos, com.nexusbattles.plataforma.salaspartidas.aplicacion.InventarioEnMemoria.conHeroe());
 
-        Sala sala = crearSala.ejecutar(parametros(0), ANFITRION);
+        Sala sala = crearSala.ejecutar(parametros(0), new com.nexusbattles.plataforma.salaspartidas.aplicacion.JugadorAutenticado(ANFITRION, "anfitrion"));
 
         assertThat(sala.recompensaCreditos()).isZero();
         assertThat(repositorio.cuantasHay()).isEqualTo(1);
@@ -75,9 +75,9 @@ class CreditosSinIntegrarTest {
     @DisplayName("con el adaptador real, una sala con recompensa responde 503 y no se guarda")
     void conRecompensaNoSeGuarda() {
         RepositorioEnMemoria repositorio = new RepositorioEnMemoria();
-        CrearSala crearSala = new CrearSala(repositorio, creditos);
+        CrearSala crearSala = new CrearSala(repositorio, creditos, com.nexusbattles.plataforma.salaspartidas.aplicacion.InventarioEnMemoria.conHeroe());
 
-        assertThatThrownBy(() -> crearSala.ejecutar(parametros(320), ANFITRION))
+        assertThatThrownBy(() -> crearSala.ejecutar(parametros(320), new com.nexusbattles.plataforma.salaspartidas.aplicacion.JugadorAutenticado(ANFITRION, "anfitrion")))
                 .isInstanceOf(CreditosSinIntegrar.IntegracionDeCreditosPendiente.class);
 
         assertThat(repositorio.cuantasHay())

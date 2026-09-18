@@ -35,22 +35,34 @@ public class CrearSala {
 
     private final RepositorioDeSalas repositorio;
     private final CreditosDelJugador creditos;
+    private final HeroeDelJugador heroes;
 
-    public CrearSala(RepositorioDeSalas repositorio, CreditosDelJugador creditos) {
+    public CrearSala(RepositorioDeSalas repositorio, CreditosDelJugador creditos,
+                     HeroeDelJugador heroes) {
         this.repositorio = Objects.requireNonNull(repositorio, "Hace falta un repositorio de salas.");
         this.creditos = Objects.requireNonNull(creditos, "Hace falta el modulo de creditos.");
+        this.heroes = Objects.requireNonNull(heroes, "Sin inventario no se puede abrir la puerta.");
     }
 
     /**
-     * @param parametros  parametros elegidos por el jugador
-     * @param idAnfitrion jugador autenticado que crea la sala
+     * @param parametros parametros elegidos por el jugador
+     * @param anfitrion  jugador autenticado que crea la sala
      * @return la sala ya guardada
-     * @throws ParametrosInvalidos   si algun parametro esta fuera de rango
-     * @throws CreditosInsuficientes si el saldo no cubre la recompensa
+     * @throws ParametrosInvalidos    si algun parametro esta fuera de rango
+     * @throws CreditosInsuficientes  si el saldo no cubre la recompensa
+     * @throws HeroeNoDisponible      si no tiene heroe equipado o el suyo ya combate
+     * @throws InventarioNoDisponible si el inventario no contesta
      */
-    public Sala ejecutar(ParametrosDeSala parametros, UUID idAnfitrion) {
-        Objects.requireNonNull(idAnfitrion, "Solo un jugador identificado puede crear una sala.");
+    public Sala ejecutar(ParametrosDeSala parametros, JugadorAutenticado anfitrion) {
+        Objects.requireNonNull(anfitrion, "Solo un jugador identificado puede crear una sala.");
 
+        // El anfitrion entra a su propia sala en el momento de crearla, asi que
+        // pasa la misma puerta que los demas (SCRUM-1074). Va antes de reservar
+        // creditos: rechazar despues de reservar obligaria a devolverlos, y una
+        // devolucion que falle deja el saldo retenido.
+        PuertaDeHeroe.comprobar(heroes, anfitrion);
+
+        UUID idAnfitrion = anfitrion.id();
         Sala sala = Sala.crear(parametros, idAnfitrion);
 
         if (sala.recompensaCreditos() == 0) {

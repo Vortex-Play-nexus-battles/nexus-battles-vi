@@ -39,9 +39,15 @@ class IniciarPartidaTest {
     private final RepositorioDeSalasEnMemoria salas = new RepositorioDeSalasEnMemoria();
     private final RepositorioDePartidasEnMemoria partidas = new RepositorioDePartidasEnMemoria();
     private final CanalDePartidaEspia canal = new CanalDePartidaEspia();
+    private final InventarioEnMemoria inventario = InventarioEnMemoria.conHeroe();
+
+    /** Un identificador cualquiera, con el apodo que el inventario necesita. */
+    private static JugadorAutenticado como(UUID id) {
+        return new JugadorAutenticado(id, "jugador-" + id.toString().substring(0, 8));
+    }
 
     private final IniciarPartida casoDeUso = new IniciarPartida(
-            salas, partidas, canal, Clock.fixed(AHORA, ZoneOffset.UTC));
+            salas, partidas, canal, inventario, Clock.fixed(AHORA, ZoneOffset.UTC));
 
     private Sala salaConInvitado() {
         Sala sala = Sala.crear(
@@ -55,7 +61,7 @@ class IniciarPartidaTest {
     void arrancaYLaSalaQuedaEnJuego() {
         Sala sala = salaConInvitado();
 
-        Partida partida = casoDeUso.ejecutar(sala.id(), ANFITRION);
+        Partida partida = casoDeUso.ejecutar(sala.id(), como(ANFITRION));
 
         assertAll(
                 () -> assertEquals(sala.id(), partida.idSala()),
@@ -69,7 +75,7 @@ class IniciarPartidaTest {
     void guardaAntesDeAnunciar() {
         Sala sala = salaConInvitado();
 
-        Partida partida = casoDeUso.ejecutar(sala.id(), ANFITRION);
+        Partida partida = casoDeUso.ejecutar(sala.id(), como(ANFITRION));
 
         assertAll(
                 () -> assertTrue(partidas.buscarPorId(partida.id()).isPresent()),
@@ -83,8 +89,8 @@ class IniciarPartidaTest {
     void esIdempotente() {
         Sala sala = salaConInvitado();
 
-        Partida primera = casoDeUso.ejecutar(sala.id(), ANFITRION);
-        Partida segunda = casoDeUso.ejecutar(sala.id(), ANFITRION);
+        Partida primera = casoDeUso.ejecutar(sala.id(), como(ANFITRION));
+        Partida segunda = casoDeUso.ejecutar(sala.id(), como(ANFITRION));
 
         assertAll(
                 () -> assertEquals(primera.id(), segunda.id()),
@@ -97,7 +103,7 @@ class IniciarPartidaTest {
     void soloElAnfitrion() {
         Sala sala = salaConInvitado();
 
-        assertThrows(NoEsElAnfitrion.class, () -> casoDeUso.ejecutar(sala.id(), INVITADO));
+        assertThrows(NoEsElAnfitrion.class, () -> casoDeUso.ejecutar(sala.id(), como(INVITADO)));
     }
 
     @Test
@@ -106,7 +112,7 @@ class IniciarPartidaTest {
         Sala solo = salas.guardar(Sala.crear(
                 new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null), ANFITRION));
 
-        assertThrows(IngresoNoPermitido.class, () -> casoDeUso.ejecutar(solo.id(), ANFITRION));
+        assertThrows(IngresoNoPermitido.class, () -> casoDeUso.ejecutar(solo.id(), como(ANFITRION)));
     }
 
     @Test
@@ -115,7 +121,7 @@ class IniciarPartidaTest {
         Sala conIa = salas.guardar(Sala.crear(
                 new ParametrosDeSala(2, Modalidad.CONTRA_IA, 0, true, false, null), ANFITRION));
 
-        Partida partida = casoDeUso.ejecutar(conIa.id(), ANFITRION);
+        Partida partida = casoDeUso.ejecutar(conIa.id(), como(ANFITRION));
 
         assertEquals(2, partida.participantes().size());
     }
@@ -124,7 +130,7 @@ class IniciarPartidaTest {
     @DisplayName("una sala que no existe es 404, y no se anuncia nada")
     void salaInexistente() {
         assertThrows(SalaNoEncontrada.class,
-                () -> casoDeUso.ejecutar(UUID.randomUUID(), ANFITRION));
+                () -> casoDeUso.ejecutar(UUID.randomUUID(), como(ANFITRION)));
         assertTrue(canal.anuncios.isEmpty());
     }
 
@@ -134,7 +140,7 @@ class IniciarPartidaTest {
         Sala solo = salas.guardar(Sala.crear(
                 new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null), ANFITRION));
 
-        assertThrows(IngresoNoPermitido.class, () -> casoDeUso.ejecutar(solo.id(), ANFITRION));
+        assertThrows(IngresoNoPermitido.class, () -> casoDeUso.ejecutar(solo.id(), como(ANFITRION)));
         assertTrue(partidas.buscarPorSala(solo.id()).isEmpty());
     }
 
@@ -143,7 +149,7 @@ class IniciarPartidaTest {
     void elPrimerTurnoEsDelAnfitrion() {
         Sala sala = salaConInvitado();
 
-        Partida partida = casoDeUso.ejecutar(sala.id(), ANFITRION);
+        Partida partida = casoDeUso.ejecutar(sala.id(), como(ANFITRION));
 
         assertEquals(ANFITRION, partida.turnoActual().idJugador());
     }

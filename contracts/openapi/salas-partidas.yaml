@@ -105,18 +105,35 @@ paths:
           $ref: '#/components/responses/NoAutenticado'
         '422':
           description: |
-            Creditos insuficientes para comprometer la recompensa.
-            `detail` incluye el saldo actual y el requerido.
+            El anfitrion no cumple algun requisito para crear la sala.
+            Distinguir por `type`:
+
+            - `creditos-insuficientes`: el saldo no cubre la recompensa;
+              `detail` incluye el saldo actual y el requerido.
+            - `heroe-no-equipado` / `heroe-ocupado`: RF-JUE-003, SCRUM-1074. El
+              anfitrion entra a su propia sala al crearla, asi que pasa la misma
+              puerta de heroe que los demas.
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
-              example:
-                type: 'https://nexusbattles.local/errores/creditos-insuficientes'
-                title: 'Creditos insuficientes'
-                status: 422
-                detail: 'Tienes 240 creditos y necesitas 400 para crear esta sala.'
-                instance: '/api/v1/salas'
+              examples:
+                creditosInsuficientes:
+                  summary: RF-JUE-014 — saldo insuficiente
+                  value:
+                    type: 'https://nexusbattles.local/errores/creditos-insuficientes'
+                    title: 'Creditos insuficientes'
+                    status: 422
+                    detail: 'Tienes 240 creditos y necesitas 400 para crear esta sala.'
+                    instance: '/api/v1/salas'
+                heroeNoEquipado:
+                  summary: RF-JUE-003 — sin personaje equipado
+                  value:
+                    type: 'https://nexusbattles.local/errores/heroe-no-equipado'
+                    title: 'No tienes un heroe equipado'
+                    status: 422
+                    detail: 'Equipa un heroe en tu inventario antes de entrar a una batalla.'
+                    instance: '/api/v1/salas'
         '503':
           description: |
             Estado transitorio, documentado a proposito: el modulo de creditos
@@ -294,30 +311,7 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ProblemDetail' }
         '422':
-          description: |
-            El jugador no cumple los requisitos para entrar. Distinguir por `type`:
-            heroe no equipado, heroe ocupado en otra partida, o creditos
-            insuficientes para la apuesta.
-          content:
-            application/problem+json:
-              schema: { $ref: '#/components/schemas/ProblemDetail' }
-              examples:
-                heroeNoEquipado:
-                  summary: RF-JUE-003 — sin personaje equipado
-                  value:
-                    type: 'https://nexusbattles.local/errores/heroe-no-equipado'
-                    title: 'No tienes un heroe equipado'
-                    status: 422
-                    detail: 'Equipa un heroe en tu inventario antes de entrar a una batalla.'
-                    instance: '/api/v1/salas/8f2a/participantes'
-                heroeOcupado:
-                  summary: RF-JUE-003 — heroe comprometido en otra partida
-                  value:
-                    type: 'https://nexusbattles.local/errores/heroe-ocupado'
-                    title: 'Tu heroe esta en otra partida'
-                    status: 422
-                    detail: 'Sombra de Vael esta combatiendo en Cacería nocturna. Elige otro heroe.'
-                    instance: '/api/v1/salas/8f2a/participantes'
+          $ref: '#/components/responses/HeroeNoDisponible'
 
     delete:
       tags: [Salas]
@@ -413,6 +407,11 @@ paths:
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '422':
+          # SCRUM-1074: entre entrar a la sala y pulsar «empezar» puede pasar un
+          # buen rato, y en ese rato el heroe del anfitrion puede haber entrado
+          # en otra batalla. La puerta del ingreso no vale para siempre.
+          $ref: '#/components/responses/HeroeNoDisponible'
 
   # ---------------------------------------------------------------------------
   # RF-JUE-017 — Estado de la partida, para pintar la vista y para reconectar
@@ -460,6 +459,33 @@ components:
       schema: { type: string, format: uuid }
 
   responses:
+    # SCRUM-1074 — la puerta de heroe. Misma forma en las tres operaciones que
+    # la aplican (crear, entrar, empezar): quien pinta el dialogo es el mismo
+    # componente y no tiene por que distinguir por ruta.
+    HeroeNoDisponible:
+      description: |
+        El jugador no cumple el requisito de heroe (RF-JUE-003). Distinguir por
+        `type`: `heroe-no-equipado` si no tiene ninguno, `heroe-ocupado` si el
+        suyo ya combate en otra partida.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+          examples:
+            heroeNoEquipado:
+              summary: RF-JUE-003 — sin personaje equipado
+              value:
+                type: 'https://nexusbattles.local/errores/heroe-no-equipado'
+                title: 'No tienes un heroe equipado'
+                status: 422
+                detail: 'Equipa un heroe en tu inventario antes de entrar a una batalla.'
+            heroeOcupado:
+              summary: RF-JUE-003 — heroe comprometido en otra partida
+              value:
+                type: 'https://nexusbattles.local/errores/heroe-ocupado'
+                title: 'Tu heroe esta en otra partida'
+                status: 422
+                detail: 'Sombra de Vael esta combatiendo en Caceria nocturna. Elige otro heroe.'
+
     NoAutenticado:
       description: Falta el token o esta caducado
       content:
