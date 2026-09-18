@@ -151,6 +151,40 @@ class SalaEntidad {
             return fila;
         }
 
+        /**
+         * Igualdad por valor — OBLIGATORIA, no cosmetica.
+         *
+         * <p>Hibernate compara los elementos de una {@code @ElementCollection}
+         * con {@code equals} para decidir que filas ya estaban y cuales son
+         * nuevas. Sin esto cada guardado las considera todas nuevas y reintenta
+         * el INSERT sobre una clave que ya existe; lo destapo
+         * {@code IngresoConcurrenteIT} con un
+         * «duplicate key value violates unique constraint
+         * participantes_de_sala_pk» al guardar dos veces la misma sala.
+         */
+        @Override
+        public boolean equals(Object otro) {
+            if (this == otro) {
+                return true;
+            }
+            if (!(otro instanceof FichaEmbebida ficha)) {
+                return false;
+            }
+            return java.util.Objects.equals(apodo, ficha.apodo)
+                    && java.util.Objects.equals(heroeId, ficha.heroeId)
+                    && java.util.Objects.equals(heroeNombre, ficha.heroeNombre)
+                    && java.util.Objects.equals(heroeRetratoUrl, ficha.heroeRetratoUrl)
+                    && java.util.Objects.equals(heroeNivel, ficha.heroeNivel)
+                    && java.util.Objects.equals(heroeVidaActual, ficha.heroeVidaActual)
+                    && java.util.Objects.equals(heroeVidaMaxima, ficha.heroeVidaMaxima);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(apodo, heroeId, heroeNombre, heroeRetratoUrl,
+                    heroeNivel, heroeVidaActual, heroeVidaMaxima);
+        }
+
         /** {@code null} cuando la fila no trae ficha: no se inventa una vacia. */
         FichaDeParticipante aDominio() {
             if (apodo == null || heroeId == null) {
