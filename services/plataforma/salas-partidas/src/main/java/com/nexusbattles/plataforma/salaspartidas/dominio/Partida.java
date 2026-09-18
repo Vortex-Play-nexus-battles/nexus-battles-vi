@@ -72,10 +72,10 @@ public class Partida {
 
         List<ParticipanteDePartida> enCombate = new ArrayList<>();
         // El anfitrion primero: es quien creo la sala y quien abre el combate.
-        enCombate.add(ParticipanteDePartida.humano(sala.idAnfitrion(), sala.recompensaCreditos()));
+        enCombate.add(deLaSala(sala, sala.idAnfitrion()));
         for (UUID jugador : sala.participantes()) {
             if (!jugador.equals(sala.idAnfitrion())) {
-                enCombate.add(ParticipanteDePartida.humano(jugador, sala.recompensaCreditos()));
+                enCombate.add(deLaSala(sala, jugador));
             }
         }
         if (sala.incluirHeroeIA()) {
@@ -85,6 +85,24 @@ public class Partida {
         return new Partida(UUID.randomUUID(), sala.id(), enCombate,
                 sala.recompensaCreditos(), ahora, EstadoPartida.EN_CURSO,
                 Turno.primero(enCombate.get(0).idJugador()));
+    }
+
+    /**
+     * Participante de combate a partir de lo que la sala guardo al dejarlo
+     * entrar (SCRUM-1074).
+     *
+     * <p>El heroe NO se vuelve a pedir al inventario aqui: al arrancar solo esta
+     * autenticado el anfitrion y este servicio no puede preguntar por el heroe
+     * de otro. Ademas el heroe con el que alguien entro es el que apuesta.
+     *
+     * <p>Si la sala no tiene ficha —participante anterior a V7— el heroe queda
+     * nulo, que es la verdad. Su barra no se pinta; inventarle una vida seria
+     * peor.
+     */
+    private static ParticipanteDePartida deLaSala(Sala sala, UUID jugador) {
+        FichaDeParticipante ficha = sala.fichaDe(jugador);
+        return new ParticipanteDePartida(jugador, ficha == null ? null : ficha.heroe(),
+                false, null, sala.recompensaCreditos());
     }
 
     /** Reconstruye una partida guardada. Solo para la capa de persistencia. */

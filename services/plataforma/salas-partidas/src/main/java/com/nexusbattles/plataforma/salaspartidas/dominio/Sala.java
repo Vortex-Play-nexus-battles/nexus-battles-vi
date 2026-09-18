@@ -6,7 +6,8 @@ import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -62,7 +63,7 @@ public final class Sala {
      * {@link #ocupacion()} se deriva de su tamano, no de un contador aparte.
      * Asi el numero y las identidades no pueden desmentirse entre si.
      */
-    private final Set<UUID> participantes = new LinkedHashSet<>();
+    private final Map<UUID, FichaDeParticipante> participantes = new LinkedHashMap<>();
 
     private final Instant creadaEn;
 
@@ -107,7 +108,7 @@ public final class Sala {
     private Sala(UUID id, EstadoSala estado, Modalidad modalidad,
                  int maximoParticipantes, int recompensaCreditos, boolean incluirHeroeIA,
                  boolean privada, Integer tamanoEquipo, UUID idAnfitrion,
-                 Set<UUID> participantes, Instant creadaEn, long version,
+                 Map<UUID, FichaDeParticipante> participantes, Instant creadaEn, long version,
                  String codigoInvitacion, UUID idReservaCreditos) {
         this.id = id;
         this.estado = estado;
@@ -126,10 +127,12 @@ public final class Sala {
         // El anfitrion entra primero, siempre: es participante desde que la sala
         // existe. Despues, el resto de quienes ya estuvieran dentro.
         if (idAnfitrion != null) {
-            this.participantes.add(idAnfitrion);
+            this.participantes.put(idAnfitrion, null);
         }
         if (participantes != null) {
-            this.participantes.addAll(participantes);
+            // putAll y no un bucle con putIfAbsent: si la fila del anfitrion
+            // trae ficha, esa es la buena y tiene que pisar al null de arriba.
+            this.participantes.putAll(participantes);
         }
     }
 
@@ -145,10 +148,34 @@ public final class Sala {
     public static Sala rehidratar(UUID id, EstadoSala estado, Modalidad modalidad,
                                   int maximoParticipantes, int recompensaCreditos,
                                   boolean incluirHeroeIA, boolean privada, Integer tamanoEquipo,
-                                  UUID idAnfitrion, Set<UUID> participantes, Instant creadaEn,
+                                  UUID idAnfitrion,
+                                  Map<UUID, FichaDeParticipante> participantes, Instant creadaEn,
                                   long version, String codigoInvitacion, UUID idReservaCreditos) {
         return new Sala(id, estado, modalidad, maximoParticipantes, recompensaCreditos,
                 incluirHeroeIA, privada, tamanoEquipo, idAnfitrion, participantes, creadaEn,
+                version, codigoInvitacion, idReservaCreditos);
+    }
+
+    /**
+     * Variante con solo los identificadores, sin ficha.
+     *
+     * <p>La usan las filas anteriores a la migracion V7 y los dobles de prueba
+     * que solo ejercitan reglas de aforo. Las fichas quedan nulas, que es la
+     * verdad: de esos participantes no se sabe con que heroe entraron.
+     */
+    public static Sala rehidratar(UUID id, EstadoSala estado, Modalidad modalidad,
+                                  int maximoParticipantes, int recompensaCreditos,
+                                  boolean incluirHeroeIA, boolean privada, Integer tamanoEquipo,
+                                  UUID idAnfitrion, Set<UUID> participantes, Instant creadaEn,
+                                  long version, String codigoInvitacion, UUID idReservaCreditos) {
+        Map<UUID, FichaDeParticipante> sinFicha = new LinkedHashMap<>();
+        if (participantes != null) {
+            for (UUID jugador : participantes) {
+                sinFicha.put(jugador, null);
+            }
+        }
+        return rehidratar(id, estado, modalidad, maximoParticipantes, recompensaCreditos,
+                incluirHeroeIA, privada, tamanoEquipo, idAnfitrion, sinFicha, creadaEn,
                 version, codigoInvitacion, idReservaCreditos);
     }
 
@@ -192,6 +219,19 @@ public final class Sala {
      * @throws ParametrosInvalidos si algun parametro esta fuera de rango
      */
     public static Sala crear(ParametrosDeSala parametros, UUID idAnfitrion) {
+        return crear(parametros, idAnfitrion, null);
+    }
+
+    /**
+     * Crea la sala con la ficha del anfitrion, la que devolvio la puerta de
+     * heroe al crearla (SCRUM-1074).
+     *
+     * <p>El anfitrion es participante desde que la sala existe, asi que su
+     * heroe se guarda igual que el de cualquiera que entre despues. Sin esto,
+     * seria el unico de la partida sin barra de vida.
+     */
+    public static Sala crear(ParametrosDeSala parametros, UUID idAnfitrion,
+                             FichaDeParticipante fichaDelAnfitrion) {
         Objects.requireNonNull(parametros, "Una sala necesita parametros de creacion.");
         Objects.requireNonNull(idAnfitrion, "Una sala necesita un anfitrion.");
         Objects.requireNonNull(parametros.modalidad(), "Una sala necesita una modalidad.");
@@ -215,7 +255,10 @@ public final class Sala {
                 parametros.privada(),
                 parametros.tamanoEquipo(),
                 idAnfitrion,
-                Set.of(), // al crearla solo esta el anfitrion, que el constructor anade
+                // Al crearla solo esta el anfitrion. El constructor ya lo mete
+                // por su cuenta; aqui viaja su ficha, que el constructor no
+                // puede adivinar.
+                fichaDelAnfitrion == null ? Map.of() : Map.of(idAnfitrion, fichaDelAnfitrion),
                 Instant.now(),
                 0L, // nace sin escrituras; la base la incrementa a partir de aqui
                 parametros.privada() ? generarCodigoDeInvitacion() : null,
@@ -313,6 +356,19 @@ public final class Sala {
      * @throws SalaPrivadaSinInvitacion  si es privada y el codigo falta o no vale
      */
     public void unirse(UUID idJugador, String codigo) {
+        unirse(idJugador, null, codigo);
+    }
+
+    /**
+     * Ingreso con la ficha que devolvio la puerta de heroe (SCRUM-1074).
+     *
+     * <p>Es la forma que usa el caso de uso real. Las variantes sin ficha
+     * quedan para los dobles que solo ejercitan reglas de aforo y para el
+     * anfitrion de las salas creadas antes de que existiera la puerta.
+     *
+     * @param ficha heroe y apodo con los que entra; puede ser {@code null}
+     */
+    public void unirse(UUID idJugador, FichaDeParticipante ficha, String codigo) {
         Objects.requireNonNull(idJugador, "Para entrar a una sala hace falta un jugador.");
 
         // La sala privada tiene su propio rechazo, con 403: el contrato lo separa
@@ -323,14 +379,14 @@ public final class Sala {
         if (!estadoAdmiteIngreso()) {
             throw new IngresoNoPermitido(motivoDelEstado());
         }
-        if (participantes.contains(idJugador)) {
+        if (participantes.containsKey(idJugador)) {
             throw new IngresoNoPermitido("Ya estas en esta sala.");
         }
         if (participantes.size() >= maximoParticipantes) {
             throw new IngresoNoPermitido("La sala ya alcanzo su maximo de participantes.");
         }
 
-        participantes.add(idJugador);
+        participantes.put(idJugador, ficha);
 
         if (participantes.size() == maximoParticipantes) {
             estado = EstadoSala.LLENA;
@@ -370,7 +426,7 @@ public final class Sala {
             throw new SalidaNoPermitida(
                     "El anfitrion no abandona su sala: la cancela.");
         }
-        if (!participantes.contains(idJugador)) {
+        if (!participantes.containsKey(idJugador)) {
             throw new SalidaNoPermitida("No estas en esta sala.");
         }
         if (estado == EstadoSala.EN_JUEGO) {
@@ -528,7 +584,24 @@ public final class Sala {
      * {@link #idAnfitrion()}, no por su posicion.
      */
     public Set<UUID> participantes() {
-        return Collections.unmodifiableSet(participantes);
+        return Collections.unmodifiableSet(participantes.keySet());
+    }
+
+    /**
+     * Ficha con la que entro un participante, o {@code null} si no se conoce.
+     *
+     * <p>Es nula en dos casos legitimos: el anfitrion de una sala creada antes
+     * de SCRUM-1074, y cualquier fila guardada antes de la migracion V7. No se
+     * inventa una: quien la reciba tiene que saber distinguir «no lo se» de un
+     * heroe con vida cero.
+     */
+    public FichaDeParticipante fichaDe(UUID idJugador) {
+        return participantes.get(idJugador);
+    }
+
+    /** Fichas conocidas, en el orden en que entraron. Copia inmutable. */
+    public Map<UUID, FichaDeParticipante> fichas() {
+        return Collections.unmodifiableMap(participantes);
     }
 
     public UUID id() {

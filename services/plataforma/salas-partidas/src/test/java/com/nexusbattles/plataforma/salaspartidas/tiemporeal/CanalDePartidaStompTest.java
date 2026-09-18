@@ -3,6 +3,8 @@ package com.nexusbattles.plataforma.salaspartidas.tiemporeal;
 import com.nexusbattles.plataforma.salaspartidas.dominio.AccionResuelta;
 import com.nexusbattles.plataforma.salaspartidas.dominio.AccionResuelta.Accion;
 import com.nexusbattles.plataforma.salaspartidas.dominio.AccionResuelta.Afectado;
+import com.nexusbattles.plataforma.salaspartidas.dominio.FichaDeParticipante;
+import com.nexusbattles.plataforma.salaspartidas.dominio.HeroeDeCombate;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Modalidad;
 import com.nexusbattles.plataforma.salaspartidas.dominio.ParametrosDeSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Partida;
@@ -124,10 +126,20 @@ class CanalDePartidaStompTest {
     // Arranque y turnos — HU-SAL-004, RF-JUE-017
     // =========================================================================
 
-    private static Partida partidaDeEjemplo() {
+    /** Sala con dos humanos, cada uno con SU heroe: la vida no puede salir igual. */
+    private static Sala salaDeEjemplo() {
         Sala sala = Sala.crear(
-                new ParametrosDeSala(6, Modalidad.HASTA_SEIS, 0, false, false, null), ANA);
-        sala.unirse(BRUNO);
+                new ParametrosDeSala(6, Modalidad.HASTA_SEIS, 0, false, false, null), ANA,
+                new FichaDeParticipante("Ana",
+                        new HeroeDeCombate("h-ana", "Arquero del Norte", null, 5, 120, 120)));
+        sala.unirse(BRUNO,
+                new FichaDeParticipante("Bruno",
+                        new HeroeDeCombate("h-bruno", "Centinela", null, 3, 90, 90)),
+                null);
+        return sala;
+    }
+
+    private static Partida partidaDe(Sala sala) {
         return Partida.iniciar(sala, Instant.parse("2026-09-17T20:00:00Z"));
     }
 
@@ -148,9 +160,10 @@ class CanalDePartidaStompTest {
         // Quien espera en la sala todavia no conoce el id de la partida, asi que
         // no puede estar suscrito a su tema. Si el aviso solo fuera por ahi, el
         // anfitrion entraria al combate y los demas se quedarian esperando.
-        Partida partida = partidaDeEjemplo();
+        Sala sala = salaDeEjemplo();
+        Partida partida = partidaDe(sala);
 
-        canal.anunciarInicio(partida);
+        canal.anunciarInicio(sala, partida);
 
         assertEquals(
                 List.of("/tema/partidas/" + partida.id(), "/tema/salas/" + partida.idSala()),
@@ -162,9 +175,10 @@ class CanalDePartidaStompTest {
     void elAvisoDeInicioCumpleElContrato() {
         // El tipo y los nombres salen de `PartidaIniciada` en
         // contracts/websocket/salas-partidas.yaml, no al reves.
-        Partida partida = partidaDeEjemplo();
+        Sala sala = salaDeEjemplo();
+        Partida partida = partidaDe(sala);
 
-        canal.anunciarInicio(partida);
+        canal.anunciarInicio(sala, partida);
 
         AvisoDeInicioDePartida aviso = (AvisoDeInicioDePartida) capturarDos().cuerpos().get(0);
         assertAll(
@@ -178,9 +192,10 @@ class CanalDePartidaStompTest {
     @Test
     @DisplayName("el orden de turnos viaja completo: es una salida que exige el PDF")
     void elOrdenDeTurnosViajaCompleto() {
-        Partida partida = partidaDeEjemplo();
+        Sala sala = salaDeEjemplo();
+        Partida partida = partidaDe(sala);
 
-        canal.anunciarInicio(partida);
+        canal.anunciarInicio(sala, partida);
 
         AvisoDeInicioDePartida aviso = (AvisoDeInicioDePartida) capturarDos().cuerpos().get(0);
         assertAll(
@@ -192,16 +207,63 @@ class CanalDePartidaStompTest {
     @Test
     @DisplayName("los dos canales reciben el mismo aviso, no dos versiones distintas")
     void losDosCanalesRecibenLoMismo() {
-        canal.anunciarInicio(partidaDeEjemplo());
+        Sala sala = salaDeEjemplo();
+        canal.anunciarInicio(sala, partidaDe(sala));
 
         List<Object> cuerpos = capturarDos().cuerpos();
         assertEquals(cuerpos.get(0), cuerpos.get(1));
     }
 
     @Test
+    @DisplayName("el aviso lleva el roster con el heroe y la vida inicial de cada uno")
+    void elRosterLlevaLosHeroesReales() {
+        // Es lo que P2.4 vino a arreglar: antes el aviso no traia participantes
+        // y la barra de vida no tenia de donde salir.
+        Sala sala = salaDeEjemplo();
+
+        canal.anunciarInicio(sala, partidaDe(sala));
+
+        List<AvisoDeInicioDePartida.Participante> roster =
+                ((AvisoDeInicioDePartida) capturarDos().cuerpos().get(0)).participantes();
+        assertAll(
+                () -> assertEquals(2, roster.size()),
+                () -> assertEquals(ANA, roster.get(0).jugador().id()),
+                () -> assertEquals("Ana", roster.get(0).jugador().apodo()),
+                () -> assertEquals("Arquero del Norte", roster.get(0).heroe().nombre()),
+                () -> assertEquals(120, roster.get(0).heroe().vidaActual()),
+                () -> assertEquals(120, roster.get(0).heroe().vidaMaxima()),
+                // Heroes DISTINTOS: si el segundo saliera con la vida del
+                // primero, la barra estaria copiando en vez de leyendo.
+                () -> assertEquals("Bruno", roster.get(1).jugador().apodo()),
+                () -> assertEquals("Centinela", roster.get(1).heroe().nombre()),
+                () -> assertEquals(90, roster.get(1).heroe().vidaMaxima()),
+                () -> assertEquals(false, roster.get(1).esIA()));
+    }
+
+    @Test
+    @DisplayName("el heroe de la IA viaja en null, no con una vida inventada")
+    void elHeroeDeLaIaNoSeInventa() {
+        Sala conIa = Sala.crear(
+                new ParametrosDeSala(2, Modalidad.CONTRA_IA, 0, true, false, null), ANA,
+                new FichaDeParticipante("Ana",
+                        new HeroeDeCombate("h-ana", "Arquero del Norte", null, 5, 120, 120)));
+
+        canal.anunciarInicio(conIa, partidaDe(conIa));
+
+        List<AvisoDeInicioDePartida.Participante> roster =
+                ((AvisoDeInicioDePartida) capturarDos().cuerpos().get(0)).participantes();
+        assertAll(
+                () -> assertEquals(2, roster.size()),
+                () -> assertTrue(roster.get(1).esIA()),
+                () -> assertNull(roster.get(1).heroe(),
+                        "el heroe de la IA lo decide el motor de combate, no este servicio"),
+                () -> assertEquals("Heroe de la IA", roster.get(1).jugador().apodo()));
+    }
+
+    @Test
     @DisplayName("el cambio de turno se publica solo en el tema de la partida")
     void elTurnoSoloEnLaPartida() {
-        Partida partida = partidaDeEjemplo();
+        Partida partida = partidaDe(salaDeEjemplo());
         partida.avanzarTurno();
 
         canal.anunciarTurno(partida);

@@ -90,7 +90,9 @@ public class IngresarASala {
         // inventario no cambia porque otro jugador gane una carrera por el cupo,
         // y repetir la consulta seria castigar al inventario por una colision
         // que no es suya.
-        PuertaDeHeroe.comprobar(heroes, jugador);
+        com.nexusbattles.plataforma.salaspartidas.dominio.FichaDeParticipante ficha =
+                new com.nexusbattles.plataforma.salaspartidas.dominio.FichaDeParticipante(
+                        jugador.apodo(), PuertaDeHeroe.comprobar(heroes, jugador).heroe());
 
         for (int intento = 1; ; intento++) {
             Sala sala = repositorio.buscarPorId(idSala)
@@ -98,7 +100,7 @@ public class IngresarASala {
 
             // Si unirse rechaza, la excepcion sale antes de guardar: una sala que no
             // admitio a nadie no tiene por que reescribirse, ni anunciarse.
-            sala.unirse(idJugador, codigo);
+            sala.unirse(idJugador, ficha, codigo);
 
             try {
                 Sala guardada = repositorio.guardar(sala);

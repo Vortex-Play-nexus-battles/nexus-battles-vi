@@ -11,6 +11,8 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -90,11 +92,50 @@ class PartidaTest {
         }
 
         @Test
-        @DisplayName("nadie entra al combate con heroe: el inventario todavia no se consulta al ingresar")
+        @DisplayName("sin ficha en la sala el heroe queda nulo, no inventado")
         void sinHeroeConocido() {
+            // Sala anterior a la migracion V7, o participante que entro antes de
+            // que la puerta guardara su heroe. Null dice la verdad.
             Partida partida = Partida.iniciar(salaCon(false, 0, SEGUNDO), AHORA);
 
             assertTrue(partida.participantes().stream().allMatch(p -> p.heroe() == null));
+        }
+
+        @Test
+        @DisplayName("cada participante entra al combate con SU heroe y SU vida (P2.4)")
+        void cadaUnoConSuHeroe() {
+            HeroeDeCombate deAna = new HeroeDeCombate("h-ana", "Arquero del Norte", null, 5, 120, 120);
+            HeroeDeCombate deBruno = new HeroeDeCombate("h-bruno", "Centinela", null, 3, 90, 90);
+            Sala sala = Sala.crear(
+                    new ParametrosDeSala(6, Modalidad.HASTA_SEIS, 0, false, false, null),
+                    ANFITRION, new FichaDeParticipante("Ana", deAna));
+            sala.unirse(SEGUNDO, new FichaDeParticipante("Bruno", deBruno), null);
+
+            Partida partida = Partida.iniciar(sala, AHORA);
+
+            assertAll(
+                    () -> assertEquals(deAna, partida.participantes().get(0).heroe()),
+                    () -> assertEquals(deBruno, partida.participantes().get(1).heroe()),
+                    // Vidas distintas: si salieran iguales, alguien esta copiando
+                    // la ficha del primero en vez de leer la de cada uno.
+                    () -> assertEquals(120, partida.participantes().get(0).heroe().vidaMaxima()),
+                    () -> assertEquals(90, partida.participantes().get(1).heroe().vidaMaxima()));
+        }
+
+        @Test
+        @DisplayName("el heroe de la IA sigue siendo nulo: lo decide el motor de combate")
+        void laIaNoTraeHeroe() {
+            Sala conIa = Sala.crear(
+                    new ParametrosDeSala(2, Modalidad.CONTRA_IA, 0, true, false, null),
+                    ANFITRION,
+                    new FichaDeParticipante("Ana",
+                            new HeroeDeCombate("h-ana", "Arquero del Norte", null, 5, 120, 120)));
+
+            Partida partida = Partida.iniciar(conIa, AHORA);
+
+            assertAll(
+                    () -> assertNotNull(partida.participantes().get(0).heroe()),
+                    () -> assertNull(partida.participantes().get(1).heroe()));
         }
     }
 

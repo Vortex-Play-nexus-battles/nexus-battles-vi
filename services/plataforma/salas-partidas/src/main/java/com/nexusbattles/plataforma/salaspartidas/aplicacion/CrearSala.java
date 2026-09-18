@@ -60,10 +60,12 @@ public class CrearSala {
         // pasa la misma puerta que los demas (SCRUM-1074). Va antes de reservar
         // creditos: rechazar despues de reservar obligaria a devolverlos, y una
         // devolucion que falle deja el saldo retenido.
-        PuertaDeHeroe.comprobar(heroes, anfitrion);
+        com.nexusbattles.plataforma.salaspartidas.dominio.FichaDeParticipante ficha =
+                new com.nexusbattles.plataforma.salaspartidas.dominio.FichaDeParticipante(
+                        anfitrion.apodo(), PuertaDeHeroe.comprobar(heroes, anfitrion).heroe());
 
         UUID idAnfitrion = anfitrion.id();
-        Sala sala = Sala.crear(parametros, idAnfitrion);
+        Sala sala = Sala.crear(parametros, idAnfitrion, ficha);
 
         if (sala.recompensaCreditos() == 0) {
             // Apostar es libre: una sala sin recompensa no molesta al modulo de creditos.

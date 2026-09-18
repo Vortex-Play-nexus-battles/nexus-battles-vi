@@ -351,6 +351,102 @@ class RepositorioSalasJpaIT {
                 () -> assertEquals(2, segundaLectura.ocupacion()));
     }
 
+    // =========================================================================
+    // P2.4 — la ficha del participante (V7)
+    //
+    // El heroe validado al entrar tiene que sobrevivir al viaje: es lo unico de
+    // lo que puede salir la barra de vida de HU-SAL-005 sin inventar numeros.
+    // =========================================================================
+
+    private static final com.nexusbattles.plataforma.salaspartidas.dominio.HeroeDeCombate DE_ANA =
+            new com.nexusbattles.plataforma.salaspartidas.dominio.HeroeDeCombate(
+                    "h-ana", "Arquero del Norte", "https://cdn.local/ana.png", 5, 118, 120);
+
+    private static final com.nexusbattles.plataforma.salaspartidas.dominio.HeroeDeCombate DE_BRUNO =
+            new com.nexusbattles.plataforma.salaspartidas.dominio.HeroeDeCombate(
+                    "h-bruno", "Centinela", null, 3, 90, 90);
+
+    private static com.nexusbattles.plataforma.salaspartidas.dominio.FichaDeParticipante ficha(
+            String apodo, com.nexusbattles.plataforma.salaspartidas.dominio.HeroeDeCombate heroe) {
+        return new com.nexusbattles.plataforma.salaspartidas.dominio.FichaDeParticipante(apodo, heroe);
+    }
+
+    @Test
+    @DisplayName("dos participantes con heroes distintos se recuperan cada uno con el suyo")
+    void cadaUnoConservaSuHeroe() {
+        Sala sala = Sala.crear(
+                new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null), ANFITRION,
+                ficha("Ana", DE_ANA));
+        sala.unirse(BRUNO, ficha("Bruno", DE_BRUNO), null);
+
+        repositorio.guardar(sala);
+        Sala recuperada = repositorio.buscarPorId(sala.id()).orElseThrow();
+
+        assertAll(
+                () -> assertEquals(DE_ANA, recuperada.fichaDe(ANFITRION).heroe()),
+                () -> assertEquals("Ana", recuperada.fichaDe(ANFITRION).apodo()),
+                // Distintos de verdad: si el segundo volviera con la vida del
+                // primero, la barra estaria copiando en vez de leyendo.
+                () -> assertEquals(DE_BRUNO, recuperada.fichaDe(BRUNO).heroe()),
+                () -> assertEquals("Bruno", recuperada.fichaDe(BRUNO).apodo()));
+    }
+
+    @Test
+    @DisplayName("la vida actual no se redondea a la maxima al ir y volver")
+    void conservaLaVidaExacta() {
+        Sala sala = Sala.crear(
+                new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, false, null),
+                ANFITRION, ficha("Ana", DE_ANA));
+
+        repositorio.guardar(sala);
+
+        assertAll(
+                () -> assertEquals(118,
+                        repositorio.buscarPorId(sala.id()).orElseThrow()
+                                .fichaDe(ANFITRION).heroe().vidaActual()),
+                () -> assertEquals(120,
+                        repositorio.buscarPorId(sala.id()).orElseThrow()
+                                .fichaDe(ANFITRION).heroe().vidaMaxima()));
+    }
+
+    @Test
+    @DisplayName("un participante sin ficha vuelve sin ficha, no con una vacia")
+    void sinFichaVuelveSinFicha() {
+        // Es el caso de las salas anteriores a V7: la columna esta, pero nula.
+        Sala sala = Sala.crear(
+                new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null), ANFITRION);
+        sala.unirse(ANA);
+
+        repositorio.guardar(sala);
+        Sala recuperada = repositorio.buscarPorId(sala.id()).orElseThrow();
+
+        assertAll(
+                () -> assertNull(recuperada.fichaDe(ANFITRION)),
+                () -> assertNull(recuperada.fichaDe(ANA)),
+                // Y sigue contando como participante: sin ficha no es sin gente.
+                () -> assertEquals(2, recuperada.ocupacion()));
+    }
+
+    @Test
+    @DisplayName("la ficha se va con quien abandona, y no se queda huerfana")
+    void abandonarSeLlevaLaFicha() {
+        Sala sala = Sala.crear(
+                new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null), ANFITRION,
+                ficha("Ana", DE_ANA));
+        sala.unirse(BRUNO, ficha("Bruno", DE_BRUNO), null);
+        repositorio.guardar(sala);
+
+        Sala recuperada = repositorio.buscarPorId(sala.id()).orElseThrow();
+        recuperada.abandonar(BRUNO);
+        repositorio.guardar(recuperada);
+
+        Sala despues = repositorio.buscarPorId(sala.id()).orElseThrow();
+        assertAll(
+                () -> assertEquals(1, despues.ocupacion()),
+                () -> assertNull(despues.fichaDe(BRUNO)),
+                () -> assertEquals(DE_ANA, despues.fichaDe(ANFITRION).heroe()));
+    }
+
     /**
      * Sala en el estado pedido, tal como la reconstruye la persistencia. Se
      * usa {@code rehidratar} porque {@code crear} solo produce ABIERTA o

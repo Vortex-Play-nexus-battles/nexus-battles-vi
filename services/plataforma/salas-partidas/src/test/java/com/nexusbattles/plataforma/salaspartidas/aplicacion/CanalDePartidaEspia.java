@@ -22,7 +22,8 @@ class CanalDePartidaEspia implements CanalDePartida {
     }
 
     @Override
-    public void anunciarInicio(Partida partida) {
+    public void anunciarInicio(com.nexusbattles.plataforma.salaspartidas.dominio.Sala sala,
+                               Partida partida) {
         anuncios.add(new Anuncio("inicio", partida));
     }
 
