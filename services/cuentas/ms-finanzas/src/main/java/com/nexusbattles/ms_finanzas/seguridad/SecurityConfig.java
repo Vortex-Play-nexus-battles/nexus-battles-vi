@@ -53,15 +53,19 @@ public class SecurityConfig {
         http.authorizeHttpRequests(auth -> auth
                 // Regla 3: actuator queda abierto para la sonda de salud.
                 .requestMatchers("/actuator/**").permitAll()
-                // Temporal (ver javadoc): /creditos/** abierto hasta que
-                // infra registre el cliente m2m en Keycloak y ms-subastas
-                // adopte TokenDeServicio.
+                // Temporal (ver javadoc): /creditos/** y /partidas/** abiertos
+                // hasta que infra registre el cliente m2m en Keycloak y los
+                // servicios llamantes (ms-subastas para créditos, ms-salas-partidas
+                // para partidas/resultado) adopten TokenDeServicio (ADR-001).
                 .requestMatchers("/creditos/**").permitAll()
+                .requestMatchers("/partidas/**").permitAll()
                 // HU-PAG-002: el historial es del propio jugador; cualquier
                 // usuario autenticado puede consultar SU propio historial. La
                 // restricción por uid la aplica el controller leyendo el
                 // principal del Authentication (nunca del path/query).
                 .requestMatchers("/transacciones/**").authenticated()
+                // HU-JUE-012: "Mis cofres" — mismo criterio que el historial.
+                .requestMatchers("/cofres/**").authenticated()
                 .anyRequest().authenticated());
 
         return http.build();

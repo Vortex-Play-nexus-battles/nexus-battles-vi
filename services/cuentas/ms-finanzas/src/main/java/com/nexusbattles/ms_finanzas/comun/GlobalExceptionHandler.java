@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import com.nexusbattles.ms_finanzas.common.exception.ReservaNoEncontradaException;
 import com.nexusbattles.ms_finanzas.common.exception.ReservaYaLiberadaException;
 import com.nexusbattles.ms_finanzas.common.exception.SaldoInsuficienteException;
+import com.nexusbattles.ms_finanzas.partidas.PartidaYaProcesadaException;
 import com.nexusbattles.ms_finanzas.transacciones.TransaccionYaRegistradaException;
 
 /**
@@ -86,6 +87,24 @@ public class GlobalExceptionHandler {
                 HttpStatus.CONFLICT, ex.getMessage());
         problema.setType(URI.create(BASE_TYPE + "reserva-ya-liberada"));
         problema.setTitle("Reserva ya liberada");
+        return problema;
+    }
+
+    /**
+     * HU-JUE-012 — el resultado de una partida se reintenta con el mismo
+     * {@code partidaId} (por ejemplo, ms-salas-partidas perdió la respuesta
+     * y reintentó). El servicio garantiza que no se acredite dos veces y
+     * responde 409 con {@code type} URI estable, análogo al 409 de
+     * transacción ya registrada. El {@code partidaId} viaja como propiedad
+     * estructurada para que el llamador lo pueda reconciliar.
+     */
+    @ExceptionHandler(PartidaYaProcesadaException.class)
+    public ProblemDetail manejarPartidaYaProcesada(PartidaYaProcesadaException ex) {
+        ProblemDetail problema = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT, ex.getMessage());
+        problema.setType(URI.create(BASE_TYPE + "partida-ya-procesada"));
+        problema.setTitle("Partida ya procesada");
+        problema.setProperty("partidaId", ex.getPartidaId());
         return problema;
     }
 
