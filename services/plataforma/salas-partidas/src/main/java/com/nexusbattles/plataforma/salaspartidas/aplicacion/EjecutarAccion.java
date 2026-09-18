@@ -118,10 +118,12 @@ public class EjecutarAccion {
                         golpeado.heroe().vidaMaxima(),
                         -resolucion.danoAplicado()))));
 
-        // El turno se anuncia DESPUES de la accion: quien mira la vista ve
-        // primero moverse la barra y luego de quien es el turno, que es el
-        // orden en el que ocurren las cosas.
-        if (!termino) {
+        // Despues de la accion, y en este orden: quien mira la vista ve primero
+        // la barra bajar y luego el resultado. Al reves habria que animar hacia
+        // atras.
+        if (termino) {
+            canal.anunciarFin(guardada);
+        } else {
             canal.anunciarTurno(guardada);
         }
 

@@ -135,6 +135,15 @@
       <section class="tarjeta pila" data-zona="panel" hidden>
         <h2 class="tarjeta__titulo">Participantes</h2>
         <div class="pila pila--compacta" data-zona="vidas"></div>
+
+        <!--
+          HU-SAL-005 / RF-JUE-017: jugar el turno. Los botones nacen
+          deshabilitados y solo se abren cuando el canal dice que el turno es
+          tuyo: habilitarlos por defecto invitaria a mandar acciones que el
+          servidor va a rechazar.
+        -->
+        <div class="fila" data-zona="acciones"></div>
+        <p class="t-cuerpo" data-zona="resultado" role="status" hidden></p>
       </section>
     </main>
 
@@ -148,7 +157,9 @@
         suscripcionDePartida,
       } from './sala-batalla.js';
       import { urlDelCanal, destinoDeSala, TIPO_PARTIDA_INICIADA } from './canal-sala.js';
+      import { montarControlesDeCombate, enviarAccion, registroDeAvisos } from './combate.js';
       import { baseDeApi, iniciarPartida, obtenerPartida } from './cliente-salas.js';
+      import { usuarioIdDeSesion } from '../../comun/identidad.js';
       // Transporte STOMP sobre WebSocket nativo del servicio, el mismo que usan
       // Batallas (HU-SAL-002) y el chat (HU-JUE-015): CONNECT con el JWT en la
       // cabecera Authorization, SUBSCRIBE a /tema/partidas/{id}. No hay un
@@ -173,13 +184,43 @@
       /** Cliente STOMP, si hay sesion. Se abre una sola vez y se comparte. */
       let canal = null;
 
+      // Quien mira. Sale del claim `uid` del token, igual que en el servidor:
+      // `nexus.usuarioId` no lo escribe nadie y siempre es null.
+      const yo = usuarioIdDeSesion();
+
+      /** Descarta lo repetido al reconectar, antes de tocar las barras. */
+      const registro = registroDeAvisos();
+
       /**
-       * Pinta la vista con lo que haya ahora mismo. Se llama tres veces como
-       * mucho: al cargar, al arrancar el combate desde este navegador, y al
-       * llegar el aviso de que lo arranco otro.
+       * Pinta la vista con lo que haya ahora mismo y engancha los controles de
+       * combate. Se llama tres veces como mucho: al cargar, al arrancar el
+       * combate desde este navegador, y al llegar el aviso de que lo arranco
+       * otro.
        */
       function repintar(suscribir) {
         montarSalaBatalla(document, { partida, suscribir });
+
+        if (!partida || !canal) {
+          return;
+        }
+
+        const controles = montarControlesDeCombate(document, {
+          idPartida: partida.id,
+          yo,
+          participantes: (partida.participantes ?? [])
+            .filter((p) => p.heroe)
+            .map((p) => ({ jugador: { id: p.jugador }, heroe: p.heroe })),
+          alAtacar: (accion) => enviarAccion(canal, partida.id, accion),
+        });
+
+        // El panel de vidas ya escucha por su cuenta; esta suscripcion es para
+        // los turnos y el final. El registro evita que una reconexion vuelva a
+        // disparar el final o duplique el historial.
+        canal.suscribir(`/tema/partidas/${partida.id}`, (aviso) => {
+          if (!registro.yaVisto(aviso)) {
+            controles.recibir(aviso);
+          }
+        });
       }
 
       // ?partida=<id> gana: se llego directamente al combate o se recargo
