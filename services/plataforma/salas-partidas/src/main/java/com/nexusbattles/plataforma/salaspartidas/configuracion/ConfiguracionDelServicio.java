@@ -87,6 +87,30 @@ public class ConfiguracionDelServicio {
         return new com.nexusbattles.plataforma.salaspartidas.aplicacion.AvanzarTurno(partidas, canal);
     }
 
+    /** RF-JUE-006 · RF-JUE-017: la accion se resuelve en el motor y mueve la vida. */
+    @Bean
+    public com.nexusbattles.plataforma.salaspartidas.aplicacion.EjecutarAccion ejecutarAccion(
+            RepositorioDePartidas partidas, CanalDePartida canal,
+            com.nexusbattles.plataforma.salaspartidas.dominio.MotorDeCombate motor) {
+        return new com.nexusbattles.plataforma.salaspartidas.aplicacion.EjecutarAccion(
+                partidas, canal, motor);
+    }
+
+    /**
+     * Cliente hacia el motor de combate.
+     *
+     * <p>Propio y no compartido con el de inventario: son dos integraciones
+     * distintas y el dia que una necesite su propio tiempo de espera no debe
+     * arrastrar a la otra.
+     */
+    @Bean
+    public com.nexusbattles.plataforma.salaspartidas.dominio.MotorDeCombate motorDeCombate(
+            @org.springframework.beans.factory.annotation.Value("${motor.combate.url:http://localhost:8104}")
+            String urlDelMotor) {
+        return new com.nexusbattles.plataforma.salaspartidas.integracion.ClienteMotorCombate(
+                RestClient.builder().build(), urlDelMotor);
+    }
+
     /** RF-JUE-017: estado de la partida, para pintar y para reconectar. */
     @Bean
     public ObtenerPartida obtenerPartida(RepositorioDePartidas partidas) {
