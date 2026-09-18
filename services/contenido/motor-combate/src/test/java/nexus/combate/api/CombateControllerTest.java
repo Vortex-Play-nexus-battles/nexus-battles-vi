@@ -6,6 +6,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -23,7 +25,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * el {@code type} que el contrato promete. La resolucion en si ya esta probada
  * en {@code ResolverAtaqueTest} y no se repite.
  */
+// El arranque vive en `nexus.combate.arranque`, que es un paquete HERMANO de
+// este, no padre: `@WebMvcTest` busca la configuracion hacia arriba y no la
+// encuentra sola. Se le dice cual es. Es el precio -barato- de tener el
+// dominio fuera del escaneo de Spring, y merece la pena.
 @WebMvcTest(controllers = CombateController.class)
+@ContextConfiguration(classes = nexus.combate.arranque.MotorCombateApplication.class)
+@TestPropertySource(properties = "motor.heroes.url=http://localhost:65535")
 class CombateControllerTest {
 
     private static final String CUERPO = """
