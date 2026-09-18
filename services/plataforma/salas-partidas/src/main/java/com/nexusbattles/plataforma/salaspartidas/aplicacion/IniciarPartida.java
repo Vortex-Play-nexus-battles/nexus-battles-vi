@@ -81,7 +81,7 @@ public class IniciarPartida {
         Partida partida = partidas.guardar(Partida.iniciar(sala, reloj.instant()));
         salas.guardar(sala);
 
-        canal.anunciarInicio(partida);
+        canal.anunciarInicio(sala, partida);
 
         return partida;
     }

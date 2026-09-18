@@ -1,6 +1,8 @@
 package com.nexusbattles.plataforma.salaspartidas.persistencia;
 
 import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoSala;
+import com.nexusbattles.plataforma.salaspartidas.dominio.FichaDeParticipante;
+import com.nexusbattles.plataforma.salaspartidas.dominio.HeroeDeCombate;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Modalidad;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Sala;
 import jakarta.persistence.CollectionTable;
@@ -16,7 +18,8 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 
 import java.time.Instant;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -90,8 +93,74 @@ class SalaEntidad {
     @CollectionTable(
             name = "participantes_de_sala",
             joinColumns = @JoinColumn(name = "id_sala"))
-    @Column(name = "id_jugador", nullable = false)
-    private Set<UUID> participantes = new LinkedHashSet<>();
+    @jakarta.persistence.MapKeyColumn(name = "id_jugador")
+    private Map<UUID, FichaEmbebida> participantes = new LinkedHashMap<>();
+
+    /**
+     * Ficha del participante en columnas planas — V7.
+     *
+     * <p>Un {@code @MapKeyColumn} y no un {@code @OrderColumn}: la clave
+     * primaria de la tabla sigue siendo {@code (id_sala, id_jugador)}, que es
+     * lo que impide el duplicado, y anadir una columna de orden la habria
+     * cambiado. A la sala no le importa el orden de ingreso —el del combate lo
+     * fija la partida—, le importa quien esta dentro.
+     *
+     * <p>Todo anulable: las filas anteriores a V7 no tienen ficha y decirlo con
+     * NULL es la verdad.
+     */
+    @jakarta.persistence.Embeddable
+    static class FichaEmbebida {
+
+        @Column(name = "apodo", length = 120)
+        private String apodo;
+
+        @Column(name = "heroe_id", length = 100)
+        private String heroeId;
+
+        @Column(name = "heroe_nombre", length = 120)
+        private String heroeNombre;
+
+        @Column(name = "heroe_retrato_url", length = 500)
+        private String heroeRetratoUrl;
+
+        @Column(name = "heroe_nivel")
+        private Integer heroeNivel;
+
+        @Column(name = "heroe_vida_actual")
+        private Integer heroeVidaActual;
+
+        @Column(name = "heroe_vida_maxima")
+        private Integer heroeVidaMaxima;
+
+        protected FichaEmbebida() {
+            // JPA.
+        }
+
+        static FichaEmbebida desde(FichaDeParticipante ficha) {
+            FichaEmbebida fila = new FichaEmbebida();
+            if (ficha != null) {
+                fila.apodo = ficha.apodo();
+                HeroeDeCombate heroe = ficha.heroe();
+                fila.heroeId = heroe.id();
+                fila.heroeNombre = heroe.nombre();
+                fila.heroeRetratoUrl = heroe.retratoUrl();
+                fila.heroeNivel = heroe.nivel();
+                fila.heroeVidaActual = heroe.vidaActual();
+                fila.heroeVidaMaxima = heroe.vidaMaxima();
+            }
+            return fila;
+        }
+
+        /** {@code null} cuando la fila no trae ficha: no se inventa una vacia. */
+        FichaDeParticipante aDominio() {
+            if (apodo == null || heroeId == null) {
+                return null;
+            }
+            return new FichaDeParticipante(apodo, new HeroeDeCombate(
+                    heroeId, heroeNombre, heroeRetratoUrl, heroeNivel,
+                    heroeVidaActual, heroeVidaMaxima));
+        }
+    }
 
     @Column(name = "creada_en", nullable = false)
     private Instant creadaEn;
@@ -137,7 +206,9 @@ class SalaEntidad {
         entidad.privada = sala.privada();
         entidad.tamanoEquipo = sala.tamanoEquipo() == null ? null : sala.tamanoEquipo().shortValue();
         entidad.idAnfitrion = sala.idAnfitrion();
-        entidad.participantes = new LinkedHashSet<>(sala.participantes());
+        entidad.participantes = new LinkedHashMap<>();
+        sala.fichas().forEach((jugador, ficha) ->
+                entidad.participantes.put(jugador, FichaEmbebida.desde(ficha)));
         // Derivado del conjunto, nunca copiado de otro contador: es la unica
         // forma de que la columna no pueda contradecir a las identidades.
         entidad.ocupacion = (short) entidad.participantes.size();
@@ -148,6 +219,13 @@ class SalaEntidad {
         // ingreso se guardo entre la lectura y esta escritura.
         entidad.version = sala.version();
         return entidad;
+    }
+
+    private Map<UUID, FichaDeParticipante> fichasDeDominio() {
+        Map<UUID, FichaDeParticipante> fichas = new LinkedHashMap<>();
+        participantes.forEach((jugador, fila) ->
+                fichas.put(jugador, fila == null ? null : fila.aDominio()));
+        return fichas;
     }
 
     Sala aDominio() {
@@ -161,7 +239,7 @@ class SalaEntidad {
                 privada,
                 tamanoEquipo == null ? null : tamanoEquipo.intValue(),
                 idAnfitrion,
-                participantes,
+                fichasDeDominio(),
                 creadaEn,
                 version,
                 codigoInvitacion,

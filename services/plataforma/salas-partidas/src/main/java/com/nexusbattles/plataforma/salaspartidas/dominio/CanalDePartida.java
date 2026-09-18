@@ -35,7 +35,7 @@ public interface CanalDePartida {
      * de la lista de participantes a la vista de combate, sin recargar y sin
      * preguntar cada pocos segundos si ya empezo.
      */
-    void anunciarInicio(Partida partida);
+    void anunciarInicio(Sala sala, Partida partida);
 
     /**
      * Anuncia de quien es el turno.

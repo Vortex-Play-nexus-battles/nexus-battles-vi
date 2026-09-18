@@ -40,14 +40,15 @@ class CanalDePartidaStomp implements CanalDePartida {
     }
 
     @Override
-    public void anunciarInicio(Partida partida) {
-        mensajeria.convertAndSend(destinoDe(partida.id()), AvisoDeInicioDePartida.de(partida));
+    public void anunciarInicio(com.nexusbattles.plataforma.salaspartidas.dominio.Sala sala,
+                               Partida partida) {
+        AvisoDeInicioDePartida aviso = AvisoDeInicioDePartida.de(sala, partida);
+        mensajeria.convertAndSend(destinoDe(partida.id()), aviso);
         // El aviso viaja tambien por el canal de la SALA: quien esta en la sala
         // de espera todavia no conoce el identificador de la partida, asi que no
         // puede estar suscrito a su tema. Sin esto, el anfitrion entraria al
         // combate y los demas se quedarian mirando la lista de participantes.
-        mensajeria.convertAndSend(CanalDeSalaStomp.destinoDe(partida.idSala()),
-                AvisoDeInicioDePartida.de(partida));
+        mensajeria.convertAndSend(CanalDeSalaStomp.destinoDe(partida.idSala()), aviso);
     }
 
     @Override
