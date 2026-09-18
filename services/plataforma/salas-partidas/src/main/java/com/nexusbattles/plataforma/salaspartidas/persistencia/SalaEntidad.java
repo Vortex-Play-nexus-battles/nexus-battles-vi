@@ -136,18 +136,32 @@ class SalaEntidad {
             // JPA.
         }
 
+        /**
+         * {@code null} cuando no hay ficha, y NO un embebido con todo a nulo.
+         *
+         * <p>La diferencia no es de estilo. Hibernate colapsa un embebido con
+         * todas sus columnas nulas y lo <b>relee como {@code null}</b>. Si al
+         * guardar se escribiera el embebido vacio, la copia gestionada tendria
+         * {@code null} y la nuestra un objeto: la entrada pareceria nueva y el
+         * siguiente guardado reintentaria el INSERT sobre una clave que ya
+         * existe. Lo destapo {@code IngresoConcurrenteIT} con un «duplicate key
+         * value violates unique constraint participantes_de_sala_pk» sobre el
+         * identificador del anfitrion, que es justo el participante que puede
+         * no tener ficha.
+         */
         static FichaEmbebida desde(FichaDeParticipante ficha) {
-            FichaEmbebida fila = new FichaEmbebida();
-            if (ficha != null) {
-                fila.apodo = ficha.apodo();
-                HeroeDeCombate heroe = ficha.heroe();
-                fila.heroeId = heroe.id();
-                fila.heroeNombre = heroe.nombre();
-                fila.heroeRetratoUrl = heroe.retratoUrl();
-                fila.heroeNivel = heroe.nivel();
-                fila.heroeVidaActual = heroe.vidaActual();
-                fila.heroeVidaMaxima = heroe.vidaMaxima();
+            if (ficha == null) {
+                return null;
             }
+            FichaEmbebida fila = new FichaEmbebida();
+            fila.apodo = ficha.apodo();
+            HeroeDeCombate heroe = ficha.heroe();
+            fila.heroeId = heroe.id();
+            fila.heroeNombre = heroe.nombre();
+            fila.heroeRetratoUrl = heroe.retratoUrl();
+            fila.heroeNivel = heroe.nivel();
+            fila.heroeVidaActual = heroe.vidaActual();
+            fila.heroeVidaMaxima = heroe.vidaMaxima();
             return fila;
         }
 
