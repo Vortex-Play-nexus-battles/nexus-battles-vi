@@ -109,6 +109,8 @@ channels:
       idPartida:
         description: Identificador de la partida
     messages:
+      partidaIniciada:
+        $ref: '#/components/messages/PartidaIniciada'
       turnoCambiado:
         $ref: '#/components/messages/TurnoCambiado'
       accionResuelta:
@@ -347,12 +349,30 @@ components:
       name: partidaIniciada
       title: La sala se lleno y comenzo el combate
       description: |
-        Trae el orden de turnos, que el PDF exige como salida, y la posicion
-        de cada heroe en el campo — RF-JUE-017 la fija aleatoria, la decide el
-        servidor y el cliente solo la pinta.
+        Trae el orden de turnos, que el PDF exige como salida.
+
+        Viaja por DOS canales a proposito. Por `partidaEstado` para quien ya
+        esta en el combate, y por `salaEstado` porque quien espera en la sala
+        todavia no conoce `idPartida` y por tanto no puede estar suscrito al
+        tema de la partida: sin el aviso por la sala, el anfitrion entraria al
+        combate y los demas se quedarian mirando la lista de participantes.
+
+        `participantes` YA SE EMITE (P2.4). La puerta de heroe de SCRUM-1074
+        guarda el heroe validado al entrar a la sala, asi que el aviso trae la
+        ficha completa y la vista de batalla pinta la barra de vida real
+        (RF-JUE-009) sin una segunda peticion.
+
+        `Participante.heroe` es anulable a proposito. Hay dos casos legitimos
+        sin heroe: un participante que entro antes de la migracion V7, y el
+        heroe de la IA, que lo decide el motor de combate y no este servicio.
+        Se dice con null en vez de inventar una vida: una barra a 100/100 falsa
+        es peor que una barra que no se pinta.
+
+        `posicionEnCampo` sigue sin emitirse: RF-JUE-017 la quiere aleatoria y
+        quien la decide es el motor de combate, fuera de este bloque.
       payload:
         type: object
-        required: [tipo, idSala, idPartida, ordenDeTurnos, participantes]
+        required: [tipo, idSala, idPartida, ordenDeTurnos, turnoActual, participantes]
         properties:
           tipo: { const: 'sala.partida.iniciada' }
           idSala: { type: string, format: uuid }
@@ -361,6 +381,16 @@ components:
             type: array
             description: Identificadores de jugador en el orden en que jugaran.
             items: { type: string, format: uuid }
+          turnoActual:
+            type: object
+            description: |
+              Quien abre el combate. Es siempre el primero de `ordenDeTurnos`;
+              viaja aparte para que la vista no tenga que deducirlo y para que
+              el mensaje tenga la misma forma que `turnoCambiado`.
+            required: [idJugador, numeroTurno]
+            properties:
+              idJugador: { type: string, format: uuid }
+              numeroTurno: { type: integer, minimum: 1 }
           participantes:
             type: array
             items: { $ref: '#/components/schemas/Participante' }
@@ -578,11 +608,14 @@ components:
 
     Participante:
       type: object
-      required: [jugador, heroe, esIA]
+      required: [jugador, esIA]
       properties:
         jugador: { $ref: '#/components/schemas/ResumenJugador' }
         heroe:
-          type: object
+          # Anulable desde P2.4: el heroe de la IA lo decide el motor de
+          # combate, y los participantes anteriores a la migracion V7 entraron
+          # antes de que la puerta guardara el suyo. Null dice la verdad.
+          type: ['object', 'null']
           required: [id, nombre, vidaActual, vidaMaxima]
           properties:
             id: { type: string, format: uuid }

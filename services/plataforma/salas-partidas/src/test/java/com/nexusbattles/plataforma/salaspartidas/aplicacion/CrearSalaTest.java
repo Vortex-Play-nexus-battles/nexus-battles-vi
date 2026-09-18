@@ -19,6 +19,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -38,6 +39,13 @@ class CrearSalaTest {
     private RepositorioDeSalasEnMemoria repositorio;
     private CreditosDeMentira creditos;
     private CrearSala crearSala;
+
+    /** Inventario que deja pasar; la puerta se prueba aparte. */
+    private final InventarioEnMemoria inventario = InventarioEnMemoria.conHeroe();
+
+    private static JugadorAutenticado como(java.util.UUID id) {
+        return new JugadorAutenticado(id, "jugador-" + id.toString().substring(0, 8));
+    }
 
     /** Doble del puerto de creditos: reserva de verdad contra un saldo en memoria. */
     private static final class CreditosDeMentira implements CreditosDelJugador {
@@ -90,7 +98,7 @@ class CrearSalaTest {
     void preparar() {
         repositorio = new RepositorioDeSalasEnMemoria();
         creditos = new CreditosDeMentira();
-        crearSala = new CrearSala(repositorio, creditos);
+        crearSala = new CrearSala(repositorio, creditos, inventario);
     }
 
     private static ParametrosDeSala validos() {
@@ -100,7 +108,7 @@ class CrearSalaTest {
     @Test
     @DisplayName("guarda la sala y reserva la recompensa")
     void guardaYReserva() {
-        Sala sala = crearSala.ejecutar(validos(), ANFITRION);
+        Sala sala = crearSala.ejecutar(validos(), como(ANFITRION));
 
         assertAll(
                 () -> assertEquals(1, repositorio.cuantasHay()),
@@ -116,10 +124,10 @@ class CrearSalaTest {
     void laReservaDescuenta() {
         creditos.saldo = 500;
 
-        crearSala.ejecutar(validos(), ANFITRION);
+        crearSala.ejecutar(validos(), como(ANFITRION));
 
         CreditosInsuficientes error = assertThrows(CreditosInsuficientes.class,
-                () -> crearSala.ejecutar(validos(), ANFITRION));
+                () -> crearSala.ejecutar(validos(), como(ANFITRION)));
 
         assertAll(
                 () -> assertEquals(100, error.disponibles()),
@@ -132,7 +140,7 @@ class CrearSalaTest {
     void sinRecompensaNoReserva() {
         ParametrosDeSala gratis = new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null);
 
-        crearSala.ejecutar(gratis, ANFITRION);
+        crearSala.ejecutar(gratis, como(ANFITRION));
 
         assertAll(
                 () -> assertEquals(1, repositorio.cuantasHay()),
@@ -144,7 +152,7 @@ class CrearSalaTest {
     void parametrosInvalidos() {
         ParametrosDeSala invalidos = new ParametrosDeSala(9, Modalidad.HASTA_SEIS, -5, false, false, null);
 
-        assertThrows(ParametrosInvalidos.class, () -> crearSala.ejecutar(invalidos, ANFITRION));
+        assertThrows(ParametrosInvalidos.class, () -> crearSala.ejecutar(invalidos, como(ANFITRION)));
 
         assertAll(
                 () -> assertEquals(0, repositorio.cuantasHay()),
@@ -158,7 +166,7 @@ class CrearSalaTest {
         ParametrosDeSala invalidos = new ParametrosDeSala(9, Modalidad.HASTA_SEIS, -5, false, false, null);
 
         ParametrosInvalidos error = assertThrows(ParametrosInvalidos.class,
-                () -> crearSala.ejecutar(invalidos, ANFITRION));
+                () -> crearSala.ejecutar(invalidos, como(ANFITRION)));
 
         assertEquals(2, error.errores().size(),
                 "maximoParticipantes y recompensaCreditos, de una sola vez");
@@ -170,7 +178,7 @@ class CrearSalaTest {
         creditos.saldo = 240;
 
         CreditosInsuficientes error = assertThrows(CreditosInsuficientes.class,
-                () -> crearSala.ejecutar(validos(), ANFITRION));
+                () -> crearSala.ejecutar(validos(), como(ANFITRION)));
 
         assertAll(
                 () -> assertEquals(240, error.disponibles()),
@@ -182,14 +190,37 @@ class CrearSalaTest {
     @Test
     @DisplayName("si la sala no se puede guardar, los creditos vuelven al jugador")
     void devuelveLosCreditosSiFallaAlGuardar() {
-        CrearSala conRepositorioRoto = new CrearSala(new RepositorioRoto(), creditos);
+        CrearSala conRepositorioRoto = new CrearSala(new RepositorioRoto(), creditos, inventario);
 
         assertThrows(IllegalStateException.class,
-                () -> conRepositorioRoto.ejecutar(validos(), ANFITRION));
+                () -> conRepositorioRoto.ejecutar(validos(), como(ANFITRION)));
 
         assertAll(
                 () -> assertEquals(1, creditos.liberadas.size(), "se libero la reserva"),
                 () -> assertEquals(10_000, creditos.saldo, "el jugador recupera su saldo"));
+    }
+
+    @Test
+    @DisplayName("la sala guardada recuerda que reserva le pertenece, para poder devolverla")
+    void laSalaRecuerdaSuReserva() {
+        Sala sala = crearSala.ejecutar(validos(), como(ANFITRION));
+
+        Sala guardada = repositorio.buscarPorId(sala.id()).orElseThrow();
+        assertAll(
+                () -> assertEquals(creditos.reservas.get(0).id(), guardada.idReservaCreditos()),
+                () -> assertEquals(creditos.reservas.get(0).id(), sala.idReservaCreditos(),
+                        "la sala devuelta al cliente es la misma que se guardo"));
+    }
+
+    @Test
+    @DisplayName("una sala sin recompensa no arrastra ninguna reserva")
+    void sinRecompensaNoHayReserva() {
+        ParametrosDeSala gratis = new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null);
+
+        Sala sala = crearSala.ejecutar(gratis, como(ANFITRION));
+
+        assertNull(sala.idReservaCreditos(),
+                "sin creditos comprometidos no hay nada que liberar al cancelar");
     }
 
     @Test
@@ -201,8 +232,8 @@ class CrearSalaTest {
     @Test
     @DisplayName("dos salas seguidas no comparten identificador")
     void identificadoresDistintos() {
-        Sala primera = crearSala.ejecutar(validos(), ANFITRION);
-        Sala segunda = crearSala.ejecutar(validos(), ANFITRION);
+        Sala primera = crearSala.ejecutar(validos(), como(ANFITRION));
+        Sala segunda = crearSala.ejecutar(validos(), como(ANFITRION));
 
         assertAll(
                 () -> assertTrue(!primera.id().equals(segunda.id())),

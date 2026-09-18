@@ -173,7 +173,7 @@ EOF
 # linea "VARIABLE=" vacia en el .env llega a Spring como cadena vacia y
 # ANULA el valor por defecto de ${VARIABLE:defecto} en application.yml;
 # omitirla conserva ese valor por defecto.
-for variable in SMTP_PORT LISTA_NEGRA_VERIFICAR_URL SALAS_WS_ORIGENES CHAT_WS_ORIGENES \
+for variable in SMTP_PORT LISTA_NEGRA_VERIFICAR_URL SALAS_WS_ORIGENES CHAT_WS_ORIGENES IDENTIDAD_JWKS_URL JWT_CLAVE_PRIVADA \
     CHAT_HISTORIAL_TAMANO NOTIFICACIONES_WS_ORIGENES COMENTARIOS_FORMATOS_IMAGEN; do
   valor="${!variable:-}"
   if [ -n "$valor" ]; then

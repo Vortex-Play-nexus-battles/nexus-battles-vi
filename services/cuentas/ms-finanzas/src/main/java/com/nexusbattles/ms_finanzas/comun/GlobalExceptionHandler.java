@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import com.nexusbattles.ms_finanzas.common.exception.ReservaNoEncontradaException;
+import com.nexusbattles.ms_finanzas.common.exception.ReservaYaLiberadaException;
 import com.nexusbattles.ms_finanzas.common.exception.SaldoInsuficienteException;
 import com.nexusbattles.ms_finanzas.transacciones.TransaccionYaRegistradaException;
 
@@ -66,6 +67,25 @@ public class GlobalExceptionHandler {
                 HttpStatus.NOT_FOUND, ex.getMessage());
         problema.setType(URI.create(BASE_TYPE + "reserva-no-encontrada"));
         problema.setTitle("Reserva no encontrada");
+        return problema;
+    }
+
+    /**
+     * HU-PAG-001 — se intenta consumir una reserva que ya fue liberada.
+     * Antes del arreglo de Juan Diego (mensaje del 16/sep sobre el bug de
+     * dinero) el servicio seguía adelante y volvía a debitar; ahora
+     * {@code CreditoService.consumir()} lanza {@link ReservaYaLiberadaException}
+     * al detectar el estado LIBERADA. Se mapea a 409 con {@code type} URI
+     * estable para que ms-subastas pueda distinguir este caso ("es tarde,
+     * la reserva ya se te devolvió") del 422 de saldo insuficiente y del
+     * 404 de reserva no encontrada.
+     */
+    @ExceptionHandler(ReservaYaLiberadaException.class)
+    public ProblemDetail manejarReservaYaLiberada(ReservaYaLiberadaException ex) {
+        ProblemDetail problema = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT, ex.getMessage());
+        problema.setType(URI.create(BASE_TYPE + "reserva-ya-liberada"));
+        problema.setTitle("Reserva ya liberada");
         return problema;
     }
 

@@ -35,23 +35,37 @@ public class CrearSala {
 
     private final RepositorioDeSalas repositorio;
     private final CreditosDelJugador creditos;
+    private final HeroeDelJugador heroes;
 
-    public CrearSala(RepositorioDeSalas repositorio, CreditosDelJugador creditos) {
+    public CrearSala(RepositorioDeSalas repositorio, CreditosDelJugador creditos,
+                     HeroeDelJugador heroes) {
         this.repositorio = Objects.requireNonNull(repositorio, "Hace falta un repositorio de salas.");
         this.creditos = Objects.requireNonNull(creditos, "Hace falta el modulo de creditos.");
+        this.heroes = Objects.requireNonNull(heroes, "Sin inventario no se puede abrir la puerta.");
     }
 
     /**
-     * @param parametros  parametros elegidos por el jugador
-     * @param idAnfitrion jugador autenticado que crea la sala
+     * @param parametros parametros elegidos por el jugador
+     * @param anfitrion  jugador autenticado que crea la sala
      * @return la sala ya guardada
-     * @throws ParametrosInvalidos   si algun parametro esta fuera de rango
-     * @throws CreditosInsuficientes si el saldo no cubre la recompensa
+     * @throws ParametrosInvalidos    si algun parametro esta fuera de rango
+     * @throws CreditosInsuficientes  si el saldo no cubre la recompensa
+     * @throws HeroeNoDisponible      si no tiene heroe equipado o el suyo ya combate
+     * @throws InventarioNoDisponible si el inventario no contesta
      */
-    public Sala ejecutar(ParametrosDeSala parametros, UUID idAnfitrion) {
-        Objects.requireNonNull(idAnfitrion, "Solo un jugador identificado puede crear una sala.");
+    public Sala ejecutar(ParametrosDeSala parametros, JugadorAutenticado anfitrion) {
+        Objects.requireNonNull(anfitrion, "Solo un jugador identificado puede crear una sala.");
 
-        Sala sala = Sala.crear(parametros, idAnfitrion);
+        // El anfitrion entra a su propia sala en el momento de crearla, asi que
+        // pasa la misma puerta que los demas (SCRUM-1074). Va antes de reservar
+        // creditos: rechazar despues de reservar obligaria a devolverlos, y una
+        // devolucion que falle deja el saldo retenido.
+        com.nexusbattles.plataforma.salaspartidas.dominio.FichaDeParticipante ficha =
+                new com.nexusbattles.plataforma.salaspartidas.dominio.FichaDeParticipante(
+                        anfitrion.apodo(), PuertaDeHeroe.comprobar(heroes, anfitrion).heroe());
+
+        UUID idAnfitrion = anfitrion.id();
+        Sala sala = Sala.crear(parametros, idAnfitrion, ficha);
 
         if (sala.recompensaCreditos() == 0) {
             // Apostar es libre: una sala sin recompensa no molesta al modulo de creditos.
@@ -61,7 +75,10 @@ public class CrearSala {
         ReservaDeCreditos reserva =
                 creditos.reservar(idAnfitrion, sala.recompensaCreditos(), sala.id());
         try {
-            return repositorio.guardar(sala);
+            // La sala guarda que reserva le pertenece: sin ese dato, cancelarla
+            // mas tarde no podria devolver los creditos y quedarian retenidos
+            // para siempre (RF-JUE-014, ver CancelarSala).
+            return repositorio.guardar(sala.conReserva(reserva.id()));
         } catch (RuntimeException falloAlGuardar) {
             creditos.liberar(reserva.id());
             throw falloAlGuardar;

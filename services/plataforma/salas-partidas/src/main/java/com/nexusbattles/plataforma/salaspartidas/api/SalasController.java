@@ -1,20 +1,29 @@
 package com.nexusbattles.plataforma.salaspartidas.api;
 
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.AbandonarSala;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.CancelarSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CrearSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.IngresarASala;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.IniciarPartida;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.JugadorAutenticado;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ListarSalas;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.ObtenerSala;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.VerificarHeroe;
 import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Modalidad;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Sala;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -37,11 +46,24 @@ public class SalasController {
     private final CrearSala crearSala;
     private final ListarSalas listarSalas;
     private final IngresarASala ingresarASala;
+    private final ObtenerSala obtenerSala;
+    private final AbandonarSala abandonarSala;
+    private final CancelarSala cancelarSala;
+    private final VerificarHeroe verificarHeroe;
+    private final IniciarPartida iniciarPartida;
 
-    SalasController(CrearSala crearSala, ListarSalas listarSalas, IngresarASala ingresarASala) {
+    SalasController(CrearSala crearSala, ListarSalas listarSalas, IngresarASala ingresarASala,
+                    ObtenerSala obtenerSala, AbandonarSala abandonarSala,
+                    CancelarSala cancelarSala, VerificarHeroe verificarHeroe,
+                    IniciarPartida iniciarPartida) {
+        this.iniciarPartida = iniciarPartida;
         this.crearSala = crearSala;
         this.listarSalas = listarSalas;
         this.ingresarASala = ingresarASala;
+        this.obtenerSala = obtenerSala;
+        this.abandonarSala = abandonarSala;
+        this.cancelarSala = cancelarSala;
+        this.verificarHeroe = verificarHeroe;
     }
 
     /**
@@ -53,13 +75,16 @@ public class SalasController {
     public ResponseEntity<SalaResponse> crear(@RequestBody CrearSalaRequest peticion,
                                               @AuthenticationPrincipal Jwt token) {
 
-        Sala sala = crearSala.ejecutar(peticion.aParametros(), idDe(token));
+        Sala sala = crearSala.ejecutar(peticion.aParametros(), jugadorDe(token));
 
         return ResponseEntity
                 .created(UriComponentsBuilder.fromPath("/api/v1/salas/{id}")
                         .buildAndExpand(sala.id())
                         .toUri())
-                .body(SalaResponse.desde(sala));
+                // Quien crea la sala es su anfitrion: esta es la unica respuesta
+                // en la que el codigo de invitacion se entrega sin pedirlo, y es
+                // la que hace utilizable una sala privada.
+                .body(SalaResponse.paraElAnfitrion(sala));
     }
 
     /**
@@ -88,13 +113,148 @@ public class SalasController {
      */
     @PostMapping("/{idSala}/participantes")
     public SalaResponse ingresar(@PathVariable UUID idSala,
+                                 @RequestBody(required = false) IngresoRequest peticion,
                                  @AuthenticationPrincipal Jwt token) {
 
-        return SalaResponse.desde(ingresarASala.ejecutar(idSala, idDe(token)));
+        JugadorAutenticado jugador = jugadorDe(token);
+        Sala sala = ingresarASala.ejecutar(idSala, jugador, IngresoRequest.codigoDe(peticion));
+        return SalaResponse.segunQuienPregunta(sala, jugador.id());
     }
 
-    /** La identidad del jugador es el sujeto del token, nunca un dato del cuerpo. */
+    /**
+     * Devuelve una sala concreta (operacion {@code obtenerSala}).
+     *
+     * <p>Es el destino de la cabecera {@code Location} de la creacion y lo que
+     * necesita la vista de sala cuando se llega por enlace directo, sin pasar
+     * por el listado.
+     *
+     * <p>Al anfitrion le llega ademas el codigo de invitacion, para que pueda
+     * volver a consultarlo sin tener que guardar la respuesta de la creacion.
+     */
+    @GetMapping("/{idSala}")
+    public SalaResponse obtener(@PathVariable UUID idSala,
+                                @AuthenticationPrincipal Jwt token) {
+
+        UUID idJugador = idDe(token);
+        return SalaResponse.segunQuienPregunta(obtenerSala.ejecutar(idSala), idJugador);
+    }
+
+    /**
+     * Cancela la sala (operacion {@code cancelarSala}).
+     *
+     * <p>Solo el anfitrion: 403 si lo pide otro, 409 si la partida ya arranco.
+     * Devuelve 204 porque despues de cancelarla no queda nada util que
+     * representar — el estado final ya viaja por el canal, a todos los que
+     * estaban dentro, en el aviso {@code sala.cancelada}.
+     */
+    @DeleteMapping("/{idSala}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void cancelar(@PathVariable UUID idSala, @AuthenticationPrincipal Jwt token) {
+        cancelarSala.ejecutar(idSala, idDe(token));
+    }
+
+    /**
+     * Saca de la sala al jugador autenticado (operacion {@code abandonarSala}).
+     *
+     * <p>El anfitrion no usa este camino: recibe 409 y se le remite a cancelar.
+     * Ver {@code Sala#abandonar}.
+     */
+    @DeleteMapping("/{idSala}/participantes")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void abandonar(@PathVariable UUID idSala, @AuthenticationPrincipal Jwt token) {
+        abandonarSala.ejecutar(idSala, idDe(token));
+    }
+
+    /**
+     * Arranca el combate de la sala (HU-SAL-004, RF-JUE-017).
+     *
+     * <p>Solo el anfitrion: 403 si lo pide otro, 409 si la sala ya no admite
+     * empezar —cancelada, terminada, o sin rival—. Devuelve 201 con el estado
+     * inicial de la partida y su {@code Location}, para que el anfitrion no
+     * tenga que volver a preguntarlo.
+     *
+     * <p>A los demas participantes les llega por el canal de la sala el aviso
+     * {@code sala.partida.iniciada}: es lo que los mueve de la sala de espera al
+     * combate sin recargar.
+     *
+     * <p>Pulsar dos veces no es un error: la segunda llamada devuelve la misma
+     * partida.
+     */
+    @PostMapping("/{idSala}/partida")
+    public ResponseEntity<PartidaResponse> iniciar(@PathVariable UUID idSala,
+                                                   @AuthenticationPrincipal Jwt token) {
+
+        var partida = iniciarPartida.ejecutar(idSala, jugadorDe(token));
+
+        return ResponseEntity
+                .created(UriComponentsBuilder.fromPath("/api/v1/partidas/{id}")
+                        .buildAndExpand(partida.id())
+                        .toUri())
+                .body(PartidaResponse.desde(partida));
+    }
+
+    /**
+     * Verifica el heroe antes de que el jugador pulse Entrar (HU-SAL-003,
+     * RF-JUE-003).
+     *
+     * <p>No tiene efectos: ni ingresa, ni reserva, ni bloquea nada. Solo
+     * responde, para que el dialogo de validacion diga el motivo <b>antes</b> de
+     * la accion y no despues. 404 si la sala no existe; 503 si el inventario no
+     * contesta, porque un veredicto inventado mandaria al jugador a chocar
+     * contra el rechazo que esta ruta existe para evitar.
+     */
+    @GetMapping("/{idSala}/verificacion-heroe")
+    public VerificacionHeroeResponse verificarHeroe(@PathVariable UUID idSala,
+                                                    @AuthenticationPrincipal Jwt token) {
+
+        return VerificacionHeroeResponse.desde(
+                verificarHeroe.ejecutar(idSala, jugadorDe(token)));
+    }
+
+    /**
+     * El identificador estable del jugador, nunca un dato del cuerpo.
+     *
+     * <p>Sale de {@code uid} cuando el token lo trae, y solo si no, del sujeto.
+     * El {@code sub} que emite {@code ms-identidad} es el <b>apodo</b> —mutable
+     * y no un UUID—, asi que leer el sujeto a secas hacia reventar
+     * {@code UUID.fromString} y devolver 500 en cuanto alguien creaba una sala
+     * con una sesion de verdad: el listado funcionaba y la creacion no.
+     *
+     * <p>Es el mismo criterio que aplica {@code ConversorRolesJwt} al elegir el
+     * nombre del principal, y sigue sirviendo para un token de Keycloak, donde
+     * el sujeto si es el identificador y {@code uid} no existe.
+     */
     private static UUID idDe(Jwt token) {
-        return UUID.fromString(token.getSubject());
+        String uid = token.getClaimAsString("uid");
+        return UUID.fromString(uid != null && !uid.isBlank() ? uid : token.getSubject());
+    }
+
+    /**
+     * Las dos caras de la identidad, tal como las trae el token.
+     *
+     * <p>El identificador estable manda dentro de este servicio. El apodo solo
+     * hace falta para preguntarle al inventario, que hoy reconoce al jugador por
+     * {@code X-User-Name} (ver {@code JugadorAutenticado}).
+     *
+     * <p>Se busca en {@code preferred_username} —el nombre estandar en OIDC, y
+     * el que emite Keycloak— y si no esta, en {@code apodo}. Como ultimo
+     * recurso queda el sujeto: en los tokens de {@code ms-identidad} anteriores
+     * a ADR-002 el sujeto <i>era</i> el apodo.
+     */
+    private static JugadorAutenticado jugadorDe(Jwt token) {
+        String apodo = primerTextoNoVacio(
+                token.getClaimAsString("preferred_username"),
+                token.getClaimAsString("apodo"),
+                token.getSubject());
+        return new JugadorAutenticado(idDe(token), apodo);
+    }
+
+    private static String primerTextoNoVacio(String... candidatos) {
+        for (String candidato : candidatos) {
+            if (candidato != null && !candidato.isBlank()) {
+                return candidato;
+            }
+        }
+        throw new IllegalStateException("El token no trae ningun nombre con el que identificar al jugador.");
     }
 }

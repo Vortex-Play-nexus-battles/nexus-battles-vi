@@ -1,16 +1,28 @@
 package com.nexusbattles.plataforma.salaspartidas.configuracion;
 
 import com.nexusbattles.comun.observabilidad.FiltroDeTraza;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.AbandonarSala;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.CancelarSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CreditosDelJugador;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CrearSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.IngresarASala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ListarSalas;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.HeroeDelJugador;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.IniciarPartida;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.ObtenerPartida;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.ObtenerSala;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.VerificarHeroe;
+import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDePartida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDeSala;
+import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDePartidas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
+import org.springframework.web.client.RestClient;
+
+import java.time.Clock;
 
 /**
  * Cableado del servicio.
@@ -23,8 +35,9 @@ import org.springframework.core.Ordered;
 public class ConfiguracionDelServicio {
 
     @Bean
-    public CrearSala crearSala(RepositorioDeSalas repositorio, CreditosDelJugador creditos) {
-        return new CrearSala(repositorio, creditos);
+    public CrearSala crearSala(RepositorioDeSalas repositorio, CreditosDelJugador creditos,
+                               HeroeDelJugador heroes) {
+        return new CrearSala(repositorio, creditos, heroes);
     }
 
     @Bean
@@ -33,8 +46,56 @@ public class ConfiguracionDelServicio {
     }
 
     @Bean
-    public IngresarASala ingresarASala(RepositorioDeSalas repositorio, CanalDeSala canal) {
-        return new IngresarASala(repositorio, canal);
+    public IngresarASala ingresarASala(RepositorioDeSalas repositorio, CanalDeSala canal,
+                                       HeroeDelJugador heroes) {
+        return new IngresarASala(repositorio, canal, heroes);
+    }
+
+    @Bean
+    public ObtenerSala obtenerSala(RepositorioDeSalas repositorio) {
+        return new ObtenerSala(repositorio);
+    }
+
+    @Bean
+    public AbandonarSala abandonarSala(RepositorioDeSalas repositorio, CanalDeSala canal) {
+        return new AbandonarSala(repositorio, canal);
+    }
+
+    @Bean
+    public CancelarSala cancelarSala(RepositorioDeSalas repositorio, CreditosDelJugador creditos,
+                                     CanalDeSala canal) {
+        return new CancelarSala(repositorio, creditos, canal);
+    }
+
+    /** HU-SAL-003: verificacion previa de heroe, sin efectos. */
+    @Bean
+    public VerificarHeroe verificarHeroe(RepositorioDeSalas repositorio, HeroeDelJugador heroes) {
+        return new VerificarHeroe(repositorio, heroes);
+    }
+
+    /** HU-SAL-004 · RF-JUE-017: arranque del combate. */
+    @Bean
+    public IniciarPartida iniciarPartida(RepositorioDeSalas salas, RepositorioDePartidas partidas,
+                                         CanalDePartida canal, HeroeDelJugador heroes) {
+        return new IniciarPartida(salas, partidas, canal, heroes, Clock.systemUTC());
+    }
+
+    /** RF-JUE-017: estado de la partida, para pintar y para reconectar. */
+    @Bean
+    public ObtenerPartida obtenerPartida(RepositorioDePartidas partidas) {
+        return new ObtenerPartida(partidas);
+    }
+
+    /**
+     * Cliente HTTP hacia inventario.
+     *
+     * <p>Propio y no compartido con el del chat: son dos integraciones
+     * distintas, con proveedores distintos, y el dia que una necesite un tiempo
+     * de espera o un interceptor suyo no debe arrastrar a la otra.
+     */
+    @Bean
+    public RestClient restClientInventario() {
+        return RestClient.builder().build();
     }
 
     /**

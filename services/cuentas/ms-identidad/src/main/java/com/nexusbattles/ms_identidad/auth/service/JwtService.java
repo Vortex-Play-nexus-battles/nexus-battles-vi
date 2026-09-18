@@ -3,26 +3,37 @@ package com.nexusbattles.ms_identidad.auth.service;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtBuilder;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import javax.crypto.SecretKey;
-import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.Map;
 import java.util.UUID;
 
+/**
+ * Emision y verificacion de los tokens de acceso.
+ *
+ * <p><b>Firma RSA (RS256), no HMAC.</b> Estos tokens ya no los consume solo
+ * este servicio: la plataforma entera los verifica para aplicar sus reglas por
+ * rol. Con HMAC habria que repartir la clave secreta, y esa misma clave sirve
+ * para emitir: cualquier servicio que la tuviera podria fabricar un token de
+ * cualquier usuario. Con RSA los demas solo reciben la clave publica, por el
+ * JWKS. Ver {@link ClavesDeFirma} y
+ * {@code docs/gobierno/ADR-002-identidad-de-usuario.md}.
+ */
 @Service
 public class JwtService {
 
-    @Value("${app.jwt.clave-secreta}")
-    private String claveSecretaTexto;
+    private final ClavesDeFirma claves;
 
     @Value("${app.jwt.horas-expiracion:24}")
     private int horasExpiracion;
 
-    private SecretKey obtenerClave() {
-        return Keys.hmacShaKeyFor(claveSecretaTexto.getBytes(StandardCharsets.UTF_8));
+    @Value("${app.jwt.emisor:ms-identidad}")
+    private String emisor;
+
+    public JwtService(ClavesDeFirma claves) {
+        this.claves = claves;
     }
 
     /**
@@ -58,9 +69,11 @@ public class JwtService {
         }
 
         return constructor
+            .header().add(Map.of("kid", claves.identificador())).and()
+            .issuer(emisor)
             .issuedAt(ahora)
             .expiration(expiracion)
-            .signWith(obtenerClave())
+            .signWith(claves.privada(), Jwts.SIG.RS256)
             .compact();
     }
 
@@ -73,7 +86,7 @@ public class JwtService {
      */
     public Claims validarYObtenerClaims(String token) {
         return Jwts.parser()
-            .verifyWith(obtenerClave())
+            .verifyWith(claves.publica())
             .build()
             .parseSignedClaims(token)
             .getPayload();

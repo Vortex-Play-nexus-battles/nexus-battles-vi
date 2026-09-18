@@ -4,6 +4,7 @@ import java.util.UUID;
 
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
+import com.nexusbattles.ms_identidad.auth.service.ClavesDeFirma;
 import com.nexusbattles.ms_identidad.auth.service.JwtService;
 import com.nexusbattles.ms_identidad.rbac.controller.AdminActionDemoController;
 import com.nexusbattles.ms_identidad.rbac.repository.RbacMatrixRepository;
@@ -33,9 +34,9 @@ public class SecurityBypassTest {
 
     @BeforeEach
     void setUp() {
-        jwtService = new JwtService();
-        ReflectionTestUtils.setField(jwtService, "claveSecretaTexto", "clave-de-pruebas-suficientemente-larga-para-hmac-sha");
+        jwtService = new JwtService(new ClavesDeFirma(""));
         ReflectionTestUtils.setField(jwtService, "horasExpiracion", 24);
+        ReflectionTestUtils.setField(jwtService, "emisor", "ms-identidad");
 
         RbacMatrixRepository repository = new RbacMatrixRepository();
         RbacAuthorizationService service = new RbacAuthorizationService(repository);

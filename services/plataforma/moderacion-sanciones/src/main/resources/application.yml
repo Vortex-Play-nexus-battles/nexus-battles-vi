@@ -5,11 +5,16 @@ spring:
   mvc:
     problemdetails:
       enabled: true
+  # Quien emite los tokens que este servicio acepta: ms-identidad, que publica
+  # su clave publica en /api/v1/auth/jwks. Misma configuracion que
+  # salas-partidas; el dia que la identidad se mueva a Keycloak solo cambia la
+  # URL, por variable de entorno. Ver
+  # docs/gobierno/ADR-002-identidad-de-usuario.md.
   security:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${DIRECTORIO_ACTIVO_URL:http://localhost:8180/realms/nexus-battles}
+          jwk-set-uri: ${IDENTIDAD_JWKS_URL:http://localhost:8089/api/v1/auth/jwks}
   cache:
     type: redis
   data:

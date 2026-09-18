@@ -27,4 +27,23 @@ public interface CanalDePartida {
      * @param accion resultado ya calculado, con la vida de cada afectado
      */
     void anunciarAccionResuelta(AccionResuelta accion);
+
+    /**
+     * Anuncia que el combate arranco — HU-SAL-004, RF-JUE-017.
+     *
+     * <p>Lo reciben quienes estaban en la sala de espera: es la senal para pasar
+     * de la lista de participantes a la vista de combate, sin recargar y sin
+     * preguntar cada pocos segundos si ya empezo.
+     */
+    void anunciarInicio(Sala sala, Partida partida);
+
+    /**
+     * Anuncia de quien es el turno.
+     *
+     * <p>Va aparte del inicio porque se repite en cada relevo, y aparte de
+     * {@link #anunciarAccionResuelta} porque el turno cambia tambien sin accion
+     * —por abandono o por tiempo agotado— y quien pinta la vista necesita
+     * saberlo igual.
+     */
+    void anunciarTurno(Partida partida);
 }

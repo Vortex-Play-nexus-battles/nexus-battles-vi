@@ -25,6 +25,13 @@
 export const TIPO_INGRESO = 'sala.participante.ingreso';
 
 /**
+ * Arranque del combate — HU-SAL-004. Llega por el canal de la SALA y no solo
+ * por el de la partida porque quien espera aqui todavia no conoce el
+ * identificador de la partida y no puede estar suscrito a su tema.
+ */
+export const TIPO_PARTIDA_INICIADA = 'sala.partida.iniciada';
+
+/**
  * URL del canal STOMP del servicio de salas, `/ws` en el mismo origen que la
  * API (`contracts/websocket/salas-partidas.yaml`).
  *
@@ -83,6 +90,10 @@ export function destinoDeSala(idSala) {
  * Lo ultimo importa: al reconectar puede llegar dos veces el mismo aviso, y
  * contar dos veces al mismo jugador dejaria una ocupacion imposible.
  *
+ * El arranque del combate NO se procesa aqui: no cambia la ocupacion ni quien
+ * esta dentro, cambia a que pantalla pertenece la persona. Eso lo decide la
+ * vista, con `alIniciarPartida`.
+ *
  * @param {{idSala: string, ocupacion: {actual: number, maximo: number}, participantes: string[]}} estado
  * @param {object} aviso mensaje recibido por el canal
  * @returns {object} el estado actualizado, o el mismo objeto si el aviso no aplica
@@ -112,12 +123,29 @@ export function aplicarAviso(estado, aviso) {
  * @param {object} [opciones]
  * @param {(destino: string, alRecibir: (aviso: object) => void) => void} [opciones.suscribir]
  * @param {(estado: object) => void} [opciones.alCambiar] se invoca solo cuando el estado cambia
+ * @param {(aviso: object) => void} [opciones.alIniciarPartida] se invoca una sola vez,
+ *        cuando el anfitrion arranca el combate de ESTA sala
  * @returns {{estado: () => object, recibir: (aviso: object) => void, conectado: boolean}}
  */
-export function seguirSala(estadoInicial, { suscribir, alCambiar = () => {} } = {}) {
+export function seguirSala(
+  estadoInicial,
+  { suscribir, alCambiar = () => {}, alIniciarPartida = () => {} } = {},
+) {
   let estado = estadoInicial;
+  let yaArranco = false;
 
   const recibir = (aviso) => {
+    if (aviso?.tipo === TIPO_PARTIDA_INICIADA && aviso.idSala === estado.idSala) {
+      // Una sola vez: al reconectar puede repetirse el aviso, y mandar dos
+      // veces a la misma persona al combate le borraria lo que estuviera
+      // haciendo en la vista de batalla.
+      if (!yaArranco) {
+        yaArranco = true;
+        alIniciarPartida(aviso);
+      }
+      return;
+    }
+
     const siguiente = aplicarAviso(estado, aviso);
     if (siguiente === estado) {
       return;

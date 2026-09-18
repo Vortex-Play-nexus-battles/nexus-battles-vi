@@ -1,6 +1,8 @@
 package com.nexusbattles.plataforma.salaspartidas.persistencia;
 
 import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoSala;
+import com.nexusbattles.plataforma.salaspartidas.dominio.FichaDeParticipante;
+import com.nexusbattles.plataforma.salaspartidas.dominio.HeroeDeCombate;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Modalidad;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Sala;
 import jakarta.persistence.CollectionTable;
@@ -16,7 +18,8 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 
 import java.time.Instant;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -90,11 +93,154 @@ class SalaEntidad {
     @CollectionTable(
             name = "participantes_de_sala",
             joinColumns = @JoinColumn(name = "id_sala"))
-    @Column(name = "id_jugador", nullable = false)
-    private Set<UUID> participantes = new LinkedHashSet<>();
+    @jakarta.persistence.MapKeyColumn(name = "id_jugador")
+    private Map<UUID, FichaEmbebida> participantes = new LinkedHashMap<>();
+
+    /**
+     * Ficha del participante en columnas planas — V7.
+     *
+     * <p>Un {@code @MapKeyColumn} y no un {@code @OrderColumn}: la clave
+     * primaria de la tabla sigue siendo {@code (id_sala, id_jugador)}, que es
+     * lo que impide el duplicado, y anadir una columna de orden la habria
+     * cambiado. A la sala no le importa el orden de ingreso —el del combate lo
+     * fija la partida—, le importa quien esta dentro.
+     *
+     * <p>Todo anulable: las filas anteriores a V7 no tienen ficha y decirlo con
+     * NULL es la verdad.
+     */
+    @jakarta.persistence.Embeddable
+    static class FichaEmbebida {
+
+        /**
+         * Discriminante. Es lo que impide que la fila quede toda nula: Hibernate
+         * colapsa un embebido con todas sus columnas nulas, lo relee como
+         * {@code null} y entonces <b>descarta la entrada del mapa</b>, con lo
+         * que el participante desaparece de la sala. Lo vio
+         * {@code IngresoConcurrenteIT}: Ana entraba y al releer ya no estaba.
+         */
+        @Column(name = "con_ficha", nullable = false)
+        private boolean conFicha;
+
+        @Column(name = "apodo", length = 120)
+        private String apodo;
+
+        @Column(name = "heroe_id", length = 100)
+        private String heroeId;
+
+        @Column(name = "heroe_nombre", length = 120)
+        private String heroeNombre;
+
+        @Column(name = "heroe_retrato_url", length = 500)
+        private String heroeRetratoUrl;
+
+        @Column(name = "heroe_nivel")
+        private Integer heroeNivel;
+
+        @Column(name = "heroe_vida_actual")
+        private Integer heroeVidaActual;
+
+        @Column(name = "heroe_vida_maxima")
+        private Integer heroeVidaMaxima;
+
+        protected FichaEmbebida() {
+            // JPA.
+        }
+
+        /**
+         * {@code null} cuando no hay ficha, y NO un embebido con todo a nulo.
+         *
+         * <p>La diferencia no es de estilo. Hibernate colapsa un embebido con
+         * todas sus columnas nulas y lo <b>relee como {@code null}</b>. Si al
+         * guardar se escribiera el embebido vacio, la copia gestionada tendria
+         * {@code null} y la nuestra un objeto: la entrada pareceria nueva y el
+         * siguiente guardado reintentaria el INSERT sobre una clave que ya
+         * existe. Lo destapo {@code IngresoConcurrenteIT} con un «duplicate key
+         * value violates unique constraint participantes_de_sala_pk» sobre el
+         * identificador del anfitrion, que es justo el participante que puede
+         * no tener ficha.
+         */
+        static FichaEmbebida desde(FichaDeParticipante ficha) {
+            FichaEmbebida fila = new FichaEmbebida();
+            if (ficha == null) {
+                // Sin ficha, pero CON fila: el participante esta dentro igual.
+                fila.conFicha = false;
+                return fila;
+            }
+            fila.conFicha = true;
+            fila.apodo = ficha.apodo();
+            HeroeDeCombate heroe = ficha.heroe();
+            fila.heroeId = heroe.id();
+            fila.heroeNombre = heroe.nombre();
+            fila.heroeRetratoUrl = heroe.retratoUrl();
+            fila.heroeNivel = heroe.nivel();
+            fila.heroeVidaActual = heroe.vidaActual();
+            fila.heroeVidaMaxima = heroe.vidaMaxima();
+            return fila;
+        }
+
+        /**
+         * Igualdad por valor — OBLIGATORIA, no cosmetica.
+         *
+         * <p>Hibernate compara los elementos de una {@code @ElementCollection}
+         * con {@code equals} para decidir que filas ya estaban y cuales son
+         * nuevas. Sin esto cada guardado las considera todas nuevas y reintenta
+         * el INSERT sobre una clave que ya existe; lo destapo
+         * {@code IngresoConcurrenteIT} con un
+         * «duplicate key value violates unique constraint
+         * participantes_de_sala_pk» al guardar dos veces la misma sala.
+         */
+        @Override
+        public boolean equals(Object otro) {
+            if (this == otro) {
+                return true;
+            }
+            if (!(otro instanceof FichaEmbebida ficha)) {
+                return false;
+            }
+            return conFicha == ficha.conFicha
+                    && java.util.Objects.equals(apodo, ficha.apodo)
+                    && java.util.Objects.equals(heroeId, ficha.heroeId)
+                    && java.util.Objects.equals(heroeNombre, ficha.heroeNombre)
+                    && java.util.Objects.equals(heroeRetratoUrl, ficha.heroeRetratoUrl)
+                    && java.util.Objects.equals(heroeNivel, ficha.heroeNivel)
+                    && java.util.Objects.equals(heroeVidaActual, ficha.heroeVidaActual)
+                    && java.util.Objects.equals(heroeVidaMaxima, ficha.heroeVidaMaxima);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(conFicha, apodo, heroeId, heroeNombre, heroeRetratoUrl,
+                    heroeNivel, heroeVidaActual, heroeVidaMaxima);
+        }
+
+        /** {@code null} cuando la fila no trae ficha: no se inventa una vacia. */
+        FichaDeParticipante aDominio() {
+            if (!conFicha) {
+                return null;
+            }
+            return new FichaDeParticipante(apodo, new HeroeDeCombate(
+                    heroeId, heroeNombre, heroeRetratoUrl, heroeNivel,
+                    heroeVidaActual, heroeVidaMaxima));
+        }
+    }
 
     @Column(name = "creada_en", nullable = false)
     private Instant creadaEn;
+
+    /**
+     * Codigo de invitacion de una sala privada; nulo en las publicas.
+     *
+     * <p>Se guarda en claro y no cifrado ni resumido: hay que poder devolverselo
+     * al anfitrion cuando vuelva a consultar su sala, y un resumen solo serviria
+     * para comprobarlo, no para mostrarlo. Es un codigo de acceso a una sala de
+     * juego, no una credencial de cuenta.
+     */
+    @Column(name = "codigo_invitacion", length = 20)
+    private String codigoInvitacion;
+
+    /** Reserva de creditos ligada a la sala; nula si no compromete creditos. */
+    @Column(name = "id_reserva_creditos")
+    private UUID idReservaCreditos;
 
     /**
      * Bloqueo optimista — HU-SAL-002. Hibernate anade {@code AND version = ?}
@@ -122,15 +268,31 @@ class SalaEntidad {
         entidad.privada = sala.privada();
         entidad.tamanoEquipo = sala.tamanoEquipo() == null ? null : sala.tamanoEquipo().shortValue();
         entidad.idAnfitrion = sala.idAnfitrion();
-        entidad.participantes = new LinkedHashSet<>(sala.participantes());
+        entidad.participantes = new LinkedHashMap<>();
+        sala.fichas().forEach((jugador, ficha) ->
+                entidad.participantes.put(jugador, FichaEmbebida.desde(ficha)));
         // Derivado del conjunto, nunca copiado de otro contador: es la unica
         // forma de que la columna no pueda contradecir a las identidades.
         entidad.ocupacion = (short) entidad.participantes.size();
         entidad.creadaEn = sala.creadaEn();
+        entidad.codigoInvitacion = sala.codigoInvitacion();
+        entidad.idReservaCreditos = sala.idReservaCreditos();
         // La version que el dominio leyo: es lo que permite detectar que otro
         // ingreso se guardo entre la lectura y esta escritura.
         entidad.version = sala.version();
         return entidad;
+    }
+
+    private Map<UUID, FichaDeParticipante> fichasDeDominio() {
+        Map<UUID, FichaDeParticipante> fichas = new LinkedHashMap<>();
+        participantes.forEach((jugador, fila) ->
+                fichas.put(jugador, fila == null ? null : fila.aDominio()));
+        return fichas;
+    }
+
+    /** Marca de concurrencia tal como esta en la base. */
+    long version() {
+        return version;
     }
 
     Sala aDominio() {
@@ -144,8 +306,10 @@ class SalaEntidad {
                 privada,
                 tamanoEquipo == null ? null : tamanoEquipo.intValue(),
                 idAnfitrion,
-                participantes,
+                fichasDeDominio(),
                 creadaEn,
-                version);
+                version,
+                codigoInvitacion,
+                idReservaCreditos);
     }
 }

@@ -2,6 +2,7 @@ package com.nexusbattles.ms_identidad.auth;
 
 import java.util.UUID;
 
+import com.nexusbattles.ms_identidad.auth.service.ClavesDeFirma;
 import com.nexusbattles.ms_identidad.auth.service.JwtService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -15,14 +16,13 @@ class JwtServiceTest {
 
     private JwtService jwtService;
 
-    private static final String CLAVE_SECRETA_PRUEBA =
-        "clave-de-pruebas-suficientemente-larga-para-hmac-sha";
-
     @BeforeEach
     void setUp() {
-        jwtService = new JwtService();
-        ReflectionTestUtils.setField(jwtService, "claveSecretaTexto", CLAVE_SECRETA_PRUEBA);
+        // Par RSA efímero, el mismo camino que sigue el servicio cuando no se
+        // configura app.jwt.clave-privada (ver ClavesDeFirma y ADR-002).
+        jwtService = new JwtService(new ClavesDeFirma(""));
         ReflectionTestUtils.setField(jwtService, "horasExpiracion", 24);
+        ReflectionTestUtils.setField(jwtService, "emisor", "ms-identidad");
     }
 
     @Test
@@ -50,8 +50,17 @@ class JwtServiceTest {
     void debeRechazarUnTokenAlteradoOInvalido() {
 
         String token = jwtService.generarToken("cristianc", "JUGADOR", 0, UUID.randomUUID());
-        // Se altera el último caracter de la firma, simulando una manipulación.
-        String tokenAlterado = token.substring(0, token.length() - 1) + (token.endsWith("X") ? "Y" : "X");
+        // Se altera el PAYLOAD, no el último caracter de la firma.
+        //
+        // Alterar ese último caracter no basta con RS256: la firma ocupa 256
+        // bytes, que en base64url terminan en un caracter cuyos bits altos son
+        // relleno, así que cambiarlo puede decodificar exactamente los mismos
+        // bytes y el token seguir siendo válido. Manipular el contenido sí
+        // invalida la firma siempre, que es lo que esta prueba quiere demostrar.
+        String[] partes = token.split("\\.");
+        String payloadAlterado = partes[1].substring(0, partes[1].length() - 1)
+            + (partes[1].endsWith("X") ? "Y" : "X");
+        String tokenAlterado = partes[0] + "." + payloadAlterado + "." + partes[2];
 
         assertThrows(
             JwtException.class,

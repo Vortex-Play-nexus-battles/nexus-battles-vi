@@ -115,10 +115,21 @@
       -->
       <div class="estado-vista" data-zona="sin-partida">
         <p class="estado-vista__titulo">No hay ninguna partida cargada</p>
-        <p class="t-meta">
-          Esta vista se pinta con los participantes de una partida en curso. El endpoint que los
-          entrega todavia no existe.
-        </p>
+        <p class="t-meta">Esta vista se pinta con los participantes de una partida en curso.</p>
+      </div>
+
+      <!--
+        HU-SAL-004: arranque del combate. Solo aparece cuando se llego desde una
+        sala; quien no sea el anfitrion recibe un 403 del servidor y lo ve aqui
+        mismo. No se oculta el boton adivinando quien es el anfitrion: esta vista
+        no lo sabe, y esconderlo por si acaso dejaria al anfitrion sin forma de
+        empezar cuando la suposicion falle.
+      -->
+      <div class="fila" data-zona="arranque" hidden>
+        <button class="boton boton--primario" type="button" data-accion="iniciar-partida">
+          Iniciar combate
+        </button>
+        <span class="t-meta" data-zona="aviso-arranque" role="status"></span>
       </div>
 
       <section class="tarjeta pila" data-zona="panel" hidden>
@@ -136,42 +147,126 @@
         leerEstadoInicial,
         suscripcionDePartida,
       } from './sala-batalla.js';
-      import { urlDelCanal } from './canal-sala.js';
-      import { baseDeApi } from './cliente-salas.js';
+      import { urlDelCanal, destinoDeSala, TIPO_PARTIDA_INICIADA } from './canal-sala.js';
+      import { baseDeApi, iniciarPartida, obtenerPartida } from './cliente-salas.js';
       // Transporte STOMP sobre WebSocket nativo del servicio, el mismo que usan
       // Batallas (HU-SAL-002) y el chat (HU-JUE-015): CONNECT con el JWT en la
       // cabecera Authorization, SUBSCRIBE a /tema/partidas/{id}. No hay un
       // segundo cliente.
       import { conectarChat } from './cliente-chat.js';
 
-      // El servidor incrustara aqui la partida cuando exista el endpoint. Sin
-      // ese bloque, montarSalaBatalla pinta el estado vacio.
-      const estado = leerEstadoInicial();
+      const parametros = new URLSearchParams(globalThis.location.search);
+      const idSala = parametros.get('sala');
       const token = sessionStorage.getItem('nexus.token');
 
       // Cabecera: solo lo que el login dejo de verdad en la sesion.
       document.querySelector('[data-zona="apodo"]').textContent =
         sessionStorage.getItem('nexus.apodoActual') ?? '';
 
-      // Sin partida o sin sesion no hay nada a que suscribirse: la vista dice
-      // «no conectado» en vez de aparentar. Con ambas, se abre el canal y el
-      // panel de vidas recibe `partida.accion.resuelta` tal como lo define el
-      // AsyncAPI; quien lo emite (motor de combate) es otro bloque.
-      let suscribir;
-      if (estado?.idPartida && token) {
+      const zonaVacia = document.querySelector('[data-zona="sin-partida"] .t-meta');
+      const zonaArranque = document.querySelector('[data-zona="arranque"]');
+      const avisoArranque = document.querySelector('[data-zona="aviso-arranque"]');
+      const botonIniciar = document.querySelector('[data-accion="iniciar-partida"]');
+
+      /** Partida que se esta pintando. Cambia una vez: cuando arranca. */
+      let partida = null;
+      /** Cliente STOMP, si hay sesion. Se abre una sola vez y se comparte. */
+      let canal = null;
+
+      /**
+       * Pinta la vista con lo que haya ahora mismo. Se llama tres veces como
+       * mucho: al cargar, al arrancar el combate desde este navegador, y al
+       * llegar el aviso de que lo arranco otro.
+       */
+      function repintar(suscribir) {
+        montarSalaBatalla(document, { partida, suscribir });
+      }
+
+      // ?partida=<id> gana: se llego directamente al combate o se recargo
+      // dentro de el. Si no, se intenta con el bloque que el servidor pueda
+      // haber incrustado.
+      const idPartidaEnUrl = parametros.get('partida');
+      if (idPartidaEnUrl) {
         try {
-          const cliente = await conectarChat({ url: urlDelCanal({ base: baseDeApi() }), token });
-          suscribir = suscripcionDePartida(cliente, estado.idPartida);
+          partida = await obtenerPartida(idPartidaEnUrl);
         } catch (error) {
-          console.warn('Canal de la partida no disponible:', error?.message);
+          if (zonaVacia) {
+            zonaVacia.textContent = error.detalle ?? error.message;
+          }
         }
       }
 
-      montarSalaBatalla(document, {
-        idPartida: estado?.idPartida,
-        participantes: estado?.participantes,
-        suscribir,
+      const estado = partida ? null : leerEstadoInicial();
+
+      if (!partida && idSala) {
+        if (zonaVacia) {
+          zonaVacia.textContent =
+            `Estas en la sala ${idSala}. El combate empieza cuando el anfitrion lo inicie; ` +
+            'entonces esta vista pinta la vida de cada participante.';
+        }
+        if (zonaArranque && token) {
+          zonaArranque.hidden = false;
+        }
+      }
+
+      if (token) {
+        try {
+          canal = await conectarChat({ url: urlDelCanal({ base: baseDeApi() }), token });
+        } catch (error) {
+          console.warn('Canal no disponible:', error?.message);
+        }
+      }
+
+      /** Engancha el panel de vidas al canal de la partida que este en pantalla. */
+      function suscripcionActual() {
+        return canal && partida ? suscripcionDePartida(canal, partida.id) : undefined;
+      }
+
+      // Quien espera en la sala se entera por el canal de la SALA: aqui todavia
+      // no se conoce el identificador de la partida, asi que no se puede estar
+      // suscrito a su tema.
+      if (canal && idSala) {
+        canal.suscribir(destinoDeSala(idSala), async (aviso) => {
+          if (aviso?.tipo !== TIPO_PARTIDA_INICIADA || partida) {
+            return;
+          }
+          try {
+            partida = await obtenerPartida(aviso.idPartida);
+            if (zonaArranque) {
+              zonaArranque.hidden = true;
+            }
+            repintar(suscripcionActual());
+          } catch (error) {
+            console.warn('No se pudo cargar la partida recien iniciada:', error?.message);
+          }
+        });
+      }
+
+      botonIniciar?.addEventListener('click', async () => {
+        botonIniciar.disabled = true;
+        avisoArranque.textContent = 'Arrancando el combate...';
+        try {
+          partida = await iniciarPartida(idSala);
+          zonaArranque.hidden = true;
+          repintar(suscripcionActual());
+        } catch (error) {
+          // 403 no eres el anfitrion · 409 la sala no puede empezar todavia.
+          // El texto lo redacta el servicio, que es quien sabe el motivo.
+          avisoArranque.textContent = error.detalle ?? error.message;
+          botonIniciar.disabled = false;
+        }
       });
+
+      if (partida) {
+        repintar(suscripcionActual());
+      } else {
+        montarSalaBatalla(document, {
+          idPartida: estado?.idPartida,
+          participantes: estado?.participantes,
+          suscribir:
+            canal && estado?.idPartida ? suscripcionDePartida(canal, estado.idPartida) : undefined,
+        });
+      }
     </script>
   </body>
 </html>
