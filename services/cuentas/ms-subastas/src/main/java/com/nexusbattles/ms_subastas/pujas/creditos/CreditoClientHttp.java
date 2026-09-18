@@ -172,6 +172,14 @@ public class CreditoClientHttp implements CreditoClient {
             throw new CreditoClientException(CreditoClientException.Motivo.RESERVA_INEXISTENTE,
                     "ms-finanzas no reconoce la reserva al " + queSeIntentaba);
         }
+        // Consumir una reserva que ya se devolvio. No es una averia y no se
+        // reintenta —volveria a fallar igual—, pero tampoco se puede tragar:
+        // significa que al ganador no se le va a poder cobrar, y eso tiene que
+        // llegar arriba con su nombre y no disfrazado de "respuesta inesperada".
+        if (tipo.endsWith("reserva-ya-liberada")) {
+            throw new CreditoClientException(CreditoClientException.Motivo.RESERVA_YA_LIBERADA,
+                    "ms-finanzas ya habia liberado la reserva al " + queSeIntentaba);
+        }
 
         if (estado >= 500) {
             throw new CreditoNoDisponibleException(
