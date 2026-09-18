@@ -4,6 +4,7 @@ import com.nexusbattles.plataforma.salaspartidas.aplicacion.AbandonarSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CancelarSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CrearSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.IngresarASala;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.JugadorAutenticado;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ListarSalas;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ObtenerSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.VerificacionDeIngreso;
@@ -22,6 +23,8 @@ import com.nexusbattles.plataforma.salaspartidas.dominio.Sala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.SalaNoEncontrada;
 import com.nexusbattles.plataforma.salaspartidas.dominio.SalidaNoPermitida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.SalaPrivadaSinInvitacion;
+import com.nexusbattles.plataforma.salaspartidas.dominio.HeroeNoDisponible;
+import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoDelHeroe;
 import com.nexusbattles.plataforma.salaspartidas.dominio.IngresoNoPermitido;
 import com.nexusbattles.plataforma.salaspartidas.seguridad.SecurityConfig;
 import org.junit.jupiter.api.DisplayName;
@@ -154,7 +157,11 @@ class SalasControllerTest {
                         .content(CUERPO))
                 .andExpect(status().isCreated());
 
-        verify(crearSala).ejecutar(any(), org.mockito.ArgumentMatchers.eq(JUGADOR));
+        // Las dos mitades del token, cada una de su sitio: el identificador de
+        // `uid` -no del sujeto, que aqui es el apodo- y el apodo de
+        // `preferred_username`, que es lo que el inventario reconoce.
+        verify(crearSala).ejecutar(any(),
+                org.mockito.ArgumentMatchers.eq(new JugadorAutenticado(JUGADOR, "demo_grupo6")));
     }
 
     @Test
@@ -390,7 +397,7 @@ class SalasControllerTest {
 
         // El cuerpo solo aporta el codigo de invitacion; `idJugador` no existe
         // en IngresoRequest y Jackson lo descarta. La identidad es la del token.
-        verify(ingresarASala).ejecutar(ID_SALA, JUGADOR, null);
+        verify(ingresarASala).ejecutar(ID_SALA, new JugadorAutenticado(JUGADOR, "Simon_P"), null);
     }
 
     @Test
@@ -500,7 +507,7 @@ class SalasControllerTest {
                         .content("{\"codigoInvitacion\": \"ABCD-2345\"}"))
                 .andExpect(status().isOk());
 
-        verify(ingresarASala).ejecutar(ID_SALA, JUGADOR, "ABCD-2345");
+        verify(ingresarASala).ejecutar(ID_SALA, new JugadorAutenticado(JUGADOR, "Simon_P"), "ABCD-2345");
     }
 
     // ---------------------------------------------------------------------
@@ -718,7 +725,7 @@ class SalasControllerTest {
                 .andExpect(jsonPath("$.turnoActual.idJugador").value(JUGADOR.toString()));
 
         // Quien arranca sale del token, nunca del cuerpo: la peticion no lleva ninguno.
-        verify(iniciarPartida).ejecutar(ID_SALA, JUGADOR);
+        verify(iniciarPartida).ejecutar(ID_SALA, new JugadorAutenticado(JUGADOR, "Simon_P"));
     }
 
     @Test
@@ -758,6 +765,40 @@ class SalasControllerTest {
     void arrancarSinToken() throws Exception {
         mockMvc.perform(post("/api/v1/salas/{id}/partida", ID_SALA))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("la puerta de heroe cerrada sale como 422 con su tipo y su motivo (SCRUM-1074)")
+    void puertaDeHeroeCerrada() throws Exception {
+        when(ingresarASala.ejecutar(any(), any(), any()))
+                .thenThrow(new HeroeNoDisponible(EstadoDelHeroe.sinHeroeEquipado()));
+
+        mockMvc.perform(post("/api/v1/salas/{id}/participantes", ID_SALA).with(jugador()))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.type")
+                        .value("https://nexusbattles.local/errores/heroe-no-equipado"))
+                // El motivo concreto: la vista distingue «equipa un heroe» de
+                // «tu heroe esta en otra batalla» sin leer el texto.
+                .andExpect(jsonPath("$.detail").value(
+                        org.hamcrest.Matchers.containsString("Equipa un heroe")));
+    }
+
+    @Test
+    @DisplayName("tampoco se arranca el combate con la puerta cerrada")
+    void puertaCerradaTampocoArranca() throws Exception {
+        when(iniciarPartida.ejecutar(any(), any()))
+                .thenThrow(new HeroeNoDisponible(
+                        EstadoDelHeroe.ocupado(
+                                new com.nexusbattles.plataforma.salaspartidas.dominio.HeroeDeCombate(
+                                        "h-1", "Sombra", null, 3, 100, 100),
+                                "Torre del Alba")));
+
+        mockMvc.perform(post("/api/v1/salas/{id}/partida", ID_SALA).with(jugador()))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.type")
+                        .value("https://nexusbattles.local/errores/heroe-ocupado"))
+                .andExpect(jsonPath("$.detail").value(
+                        org.hamcrest.Matchers.containsString("Torre del Alba")));
     }
 
     /** Un jugador distinto del de {@link #jugador()}, para probar quien ve que. */

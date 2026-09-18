@@ -75,7 +75,7 @@ public class SalasController {
     public ResponseEntity<SalaResponse> crear(@RequestBody CrearSalaRequest peticion,
                                               @AuthenticationPrincipal Jwt token) {
 
-        Sala sala = crearSala.ejecutar(peticion.aParametros(), idDe(token));
+        Sala sala = crearSala.ejecutar(peticion.aParametros(), jugadorDe(token));
 
         return ResponseEntity
                 .created(UriComponentsBuilder.fromPath("/api/v1/salas/{id}")
@@ -116,9 +116,9 @@ public class SalasController {
                                  @RequestBody(required = false) IngresoRequest peticion,
                                  @AuthenticationPrincipal Jwt token) {
 
-        UUID idJugador = idDe(token);
-        Sala sala = ingresarASala.ejecutar(idSala, idJugador, IngresoRequest.codigoDe(peticion));
-        return SalaResponse.segunQuienPregunta(sala, idJugador);
+        JugadorAutenticado jugador = jugadorDe(token);
+        Sala sala = ingresarASala.ejecutar(idSala, jugador, IngresoRequest.codigoDe(peticion));
+        return SalaResponse.segunQuienPregunta(sala, jugador.id());
     }
 
     /**
@@ -184,7 +184,7 @@ public class SalasController {
     public ResponseEntity<PartidaResponse> iniciar(@PathVariable UUID idSala,
                                                    @AuthenticationPrincipal Jwt token) {
 
-        var partida = iniciarPartida.ejecutar(idSala, idDe(token));
+        var partida = iniciarPartida.ejecutar(idSala, jugadorDe(token));
 
         return ResponseEntity
                 .created(UriComponentsBuilder.fromPath("/api/v1/partidas/{id}")

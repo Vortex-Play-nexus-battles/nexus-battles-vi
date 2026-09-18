@@ -33,33 +33,48 @@ public class IniciarPartida {
     private final RepositorioDeSalas salas;
     private final RepositorioDePartidas partidas;
     private final CanalDePartida canal;
+    private final HeroeDelJugador heroes;
     private final Clock reloj;
 
     public IniciarPartida(RepositorioDeSalas salas, RepositorioDePartidas partidas,
-                          CanalDePartida canal, Clock reloj) {
+                          CanalDePartida canal, HeroeDelJugador heroes, Clock reloj) {
         this.salas = Objects.requireNonNull(salas);
         this.partidas = Objects.requireNonNull(partidas);
         this.canal = Objects.requireNonNull(canal);
+        this.heroes = Objects.requireNonNull(heroes, "Sin inventario no se puede abrir la puerta.");
         this.reloj = Objects.requireNonNull(reloj);
     }
 
     /**
-     * @param idSala        sala que arranca
-     * @param idSolicitante quien lo pide; solo el anfitrion puede
+     * @param idSala      sala que arranca
+     * @param solicitante quien lo pide; solo el anfitrion puede
      * @return la partida en curso
-     * @throws SalaNoEncontrada si la sala no existe
+     * @throws SalaNoEncontrada       si la sala no existe
+     * @throws HeroeNoDisponible      si su heroe dejo de estar disponible desde que entro
+     * @throws InventarioNoDisponible si el inventario no contesta
      */
-    public Partida ejecutar(UUID idSala, UUID idSolicitante) {
+    public Partida ejecutar(UUID idSala, JugadorAutenticado solicitante) {
         Objects.requireNonNull(idSala, "Hace falta la sala que se quiere iniciar.");
-        Objects.requireNonNull(idSolicitante, "Hace falta quien pide iniciarla.");
+        Objects.requireNonNull(solicitante, "Hace falta quien pide iniciarla.");
+
+        UUID idSolicitante = solicitante.id();
 
         Sala sala = salas.buscarPorId(idSala).orElseThrow(() -> new SalaNoEncontrada(idSala));
 
         // Pulsar dos veces no es un error: se devuelve la partida que ya existe.
+        // Va antes de la puerta a proposito: la segunda pulsacion no crea nada,
+        // asi que no tiene por que volver a molestar al inventario ni fallar si
+        // el heroe se ocupo en el combate que esta misma llamada arranco.
         var yaIniciada = partidas.buscarPorSala(idSala);
         if (yaIniciada.isPresent()) {
             return yaIniciada.get();
         }
+
+        // Entre entrar a la sala y pulsar «empezar» puede pasar un buen rato, y
+        // en ese rato el heroe del anfitrion puede haber entrado en otra
+        // batalla. Se vuelve a comprobar: la puerta del ingreso no vale para
+        // siempre (SCRUM-1074).
+        PuertaDeHeroe.comprobar(heroes, solicitante);
 
         sala.iniciarPartida(idSolicitante);
 

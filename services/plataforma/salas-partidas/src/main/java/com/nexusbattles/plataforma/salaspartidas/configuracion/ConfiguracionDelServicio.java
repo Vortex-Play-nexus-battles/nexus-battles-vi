@@ -35,8 +35,9 @@ import java.time.Clock;
 public class ConfiguracionDelServicio {
 
     @Bean
-    public CrearSala crearSala(RepositorioDeSalas repositorio, CreditosDelJugador creditos) {
-        return new CrearSala(repositorio, creditos);
+    public CrearSala crearSala(RepositorioDeSalas repositorio, CreditosDelJugador creditos,
+                               HeroeDelJugador heroes) {
+        return new CrearSala(repositorio, creditos, heroes);
     }
 
     @Bean
@@ -45,8 +46,9 @@ public class ConfiguracionDelServicio {
     }
 
     @Bean
-    public IngresarASala ingresarASala(RepositorioDeSalas repositorio, CanalDeSala canal) {
-        return new IngresarASala(repositorio, canal);
+    public IngresarASala ingresarASala(RepositorioDeSalas repositorio, CanalDeSala canal,
+                                       HeroeDelJugador heroes) {
+        return new IngresarASala(repositorio, canal, heroes);
     }
 
     @Bean
@@ -74,8 +76,8 @@ public class ConfiguracionDelServicio {
     /** HU-SAL-004 · RF-JUE-017: arranque del combate. */
     @Bean
     public IniciarPartida iniciarPartida(RepositorioDeSalas salas, RepositorioDePartidas partidas,
-                                         CanalDePartida canal) {
-        return new IniciarPartida(salas, partidas, canal, Clock.systemUTC());
+                                         CanalDePartida canal, HeroeDelJugador heroes) {
+        return new IniciarPartida(salas, partidas, canal, heroes, Clock.systemUTC());
     }
 
     /** RF-JUE-017: estado de la partida, para pintar y para reconectar. */
