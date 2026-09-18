@@ -105,6 +105,29 @@ class CanalDeSalaIT {
      * Decodificador de prueba: traduce un token literal a la identidad que
      * representa, con el rol donde lo espera la cadena de seguridad real.
      */
+    /**
+     * Inventario de prueba: siempre deja pasar.
+     *
+     * <p>Desde SCRUM-1074, crear una sala y entrar a ella pasan por la puerta de
+     * heroe, que pregunta al inventario. Esta IT no prueba esa integracion —la
+     * cubre {@code ClienteInventarioHeroesTest} contra HTTP real— sino el canal
+     * STOMP, y sin este doble las diez pruebas de aqui reciben 503 al crear la
+     * sala y no llegan a mirar el canal.
+     *
+     * <p>Se sustituye el <b>puerto</b>, no el cliente HTTP: asi la puerta se
+     * ejecuta de verdad y solo se finge la respuesta del modulo ajeno.
+     */
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private com.nexusbattles.plataforma.salaspartidas.aplicacion.HeroeDelJugador heroes;
+
+    @org.junit.jupiter.api.BeforeEach
+    void elInventarioDejaPasar() {
+        org.mockito.Mockito.when(heroes.consultar(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(com.nexusbattles.plataforma.salaspartidas.dominio.EstadoDelHeroe
+                        .disponible(new com.nexusbattles.plataforma.salaspartidas.dominio
+                                .HeroeDeCombate("h-1", "Sombra de Vael", null, 7, 140, 140)));
+    }
+
     @TestConfiguration
     static class SeguridadDePrueba {
 

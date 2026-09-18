@@ -157,8 +157,11 @@ class SalasControllerTest {
                         .content(CUERPO))
                 .andExpect(status().isCreated());
 
+        // Las dos mitades del token, cada una de su sitio: el identificador de
+        // `uid` -no del sujeto, que aqui es el apodo- y el apodo de
+        // `preferred_username`, que es lo que el inventario reconoce.
         verify(crearSala).ejecutar(any(),
-                org.mockito.ArgumentMatchers.eq(new JugadorAutenticado(JUGADOR, "Simon_P")));
+                org.mockito.ArgumentMatchers.eq(new JugadorAutenticado(JUGADOR, "demo_grupo6")));
     }
 
     @Test
