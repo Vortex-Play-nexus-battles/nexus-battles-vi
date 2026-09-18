@@ -80,6 +80,13 @@ public class ConfiguracionDelServicio {
         return new IniciarPartida(salas, partidas, canal, heroes, Clock.systemUTC());
     }
 
+    /** RF-JUE-017: el turno pasa de manos cuando el jugador juega. */
+    @Bean
+    public com.nexusbattles.plataforma.salaspartidas.aplicacion.AvanzarTurno avanzarTurno(
+            RepositorioDePartidas partidas, CanalDePartida canal) {
+        return new com.nexusbattles.plataforma.salaspartidas.aplicacion.AvanzarTurno(partidas, canal);
+    }
+
     /** RF-JUE-017: estado de la partida, para pintar y para reconectar. */
     @Bean
     public ObtenerPartida obtenerPartida(RepositorioDePartidas partidas) {
