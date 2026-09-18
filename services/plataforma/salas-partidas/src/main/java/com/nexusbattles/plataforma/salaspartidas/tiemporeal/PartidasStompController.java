@@ -1,7 +1,7 @@
 package com.nexusbattles.plataforma.salaspartidas.tiemporeal;
 
 import com.nexusbattles.comun.error.ErrorDeNegocio;
-import com.nexusbattles.plataforma.salaspartidas.aplicacion.AvanzarTurno;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.EjecutarAccion;
 import com.nexusbattles.plataforma.salaspartidas.seguridad.IdentidadDelToken;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -25,13 +25,10 @@ import java.util.UUID;
  * {@code /app/partidas/{idPartida}/acciones}. No se abre un destino nuevo: el
  * contrato ya tenia este y su mensaje {@code EjecutarAccion}.
  *
- * <p><b>Hoy solo pasa el turno.</b> El cuerpo se acepta entero —{@code
- * codigoAccion} y {@code idObjetivo}— pero la accion no se resuelve: el dano y
- * los efectos son del motor de combate, fuera de este bloque. Cuando publique
- * su contrato se intercala aqui: resolver, anunciar
- * {@code partida.accion.resuelta}, y despues rotar el turno. Aceptar el cuerpo
- * completo desde ya evita que el cliente tenga que cambiar el dia que eso
- * ocurra.
+ * <p><b>Resuelve la accion de verdad.</b> El cuerpo llega entero —{@code
+ * codigoAccion} y {@code idObjetivo}— y el caso de uso pide al motor de combate
+ * cuanto dano hace el golpe, lo aplica a la vida que este servicio persiste,
+ * anuncia {@code partida.accion.resuelta} y despues pasa el turno.
  *
  * <p>Los rechazos vuelven por la cola privada de quien envio, no al tema de la
  * partida: que a alguien le rechacen una accion no es asunto de sus rivales.
@@ -39,10 +36,10 @@ import java.util.UUID;
 @Controller
 public class PartidasStompController {
 
-    private final AvanzarTurno avanzarTurno;
+    private final EjecutarAccion ejecutarAccion;
 
-    public PartidasStompController(AvanzarTurno avanzarTurno) {
-        this.avanzarTurno = avanzarTurno;
+    public PartidasStompController(EjecutarAccion ejecutarAccion) {
+        this.ejecutarAccion = ejecutarAccion;
     }
 
     /**
@@ -56,7 +53,9 @@ public class PartidasStompController {
                                @Payload(required = false) EjecutarAccionRequest cuerpo,
                                Principal principal) {
 
-        avanzarTurno.ejecutar(idPartida, jugadorDe(principal));
+        ejecutarAccion.ejecutar(idPartida, jugadorDe(principal),
+                cuerpo == null ? null : cuerpo.idObjetivo(),
+                cuerpo == null ? null : cuerpo.codigoAccion());
     }
 
     /**

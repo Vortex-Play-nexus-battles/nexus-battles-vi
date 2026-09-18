@@ -41,6 +41,26 @@ public record HeroeDeCombate(
     }
 
     /**
+     * El mismo heroe con otra vida actual.
+     *
+     * <p>El record es inmutable a proposito: un golpe no muta al heroe, produce
+     * uno nuevo. Asi el estado anterior sigue siendo valido mientras se anuncia
+     * el cambio, y no hay forma de que dos hilos se pisen la vida.
+     *
+     * <p>La vida no baja de cero: cero es muerto, y un numero negativo no
+     * significa nada que la barra sepa pintar.
+     */
+    public HeroeDeCombate conVida(int vidaActual) {
+        return new HeroeDeCombate(id, nombre, retratoUrl, nivel,
+                Math.max(0, Math.min(vidaActual, vidaMaxima)), vidaMaxima);
+    }
+
+    /** True cuando ya no puede seguir combatiendo. */
+    public boolean derrotado() {
+        return vidaActual == 0;
+    }
+
+    /**
      * Heroe a pleno: antes de empezar la partida la vida actual es la maxima.
      *
      * <p>La vida que se muestra en el dialogo previo no es la de un combate en
