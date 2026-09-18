@@ -56,6 +56,12 @@ class CanalDePartidaStomp implements CanalDePartida {
         mensajeria.convertAndSend(destinoDe(partida.id()), AvisoDeTurno.de(partida));
     }
 
+    @Override
+    public void anunciarFin(Partida partida) {
+        mensajeria.convertAndSend(destinoDe(partida.id()),
+                AvisoDePartidaFinalizada.de(partida));
+    }
+
     static String destinoDe(UUID idPartida) {
         return DESTINO_PARTIDA + idPartida;
     }

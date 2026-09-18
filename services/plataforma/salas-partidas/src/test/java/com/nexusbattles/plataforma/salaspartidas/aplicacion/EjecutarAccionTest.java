@@ -154,9 +154,10 @@ class EjecutarAccionTest {
                 () -> assertEquals(EstadoPartida.FINALIZADA, despues.estado()),
                 () -> assertEquals(0, despues.participantes().get(1).heroe().vidaActual()),
                 () -> assertEquals(ANA, despues.ganador().orElseThrow().idJugador()),
-                // Solo se anuncia la accion: no hay turno siguiente que anunciar.
-                () -> assertEquals(1, canal.anuncios.size()),
-                () -> assertEquals("accion", canal.anuncios.get(0).tipo()));
+                // Accion y DESPUES fin. Nunca turno: no hay siguiente.
+                () -> assertEquals(2, canal.anuncios.size()),
+                () -> assertEquals("accion", canal.anuncios.get(0).tipo()),
+                () -> assertEquals("fin", canal.anuncios.get(1).tipo()));
     }
 
     @Test
