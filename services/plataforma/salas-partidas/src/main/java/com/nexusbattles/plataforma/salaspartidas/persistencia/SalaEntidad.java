@@ -276,6 +276,11 @@ class SalaEntidad {
         return fichas;
     }
 
+    /** Marca de concurrencia tal como esta en la base. */
+    long version() {
+        return version;
+    }
+
     Sala aDominio() {
         return Sala.rehidratar(
                 id,
