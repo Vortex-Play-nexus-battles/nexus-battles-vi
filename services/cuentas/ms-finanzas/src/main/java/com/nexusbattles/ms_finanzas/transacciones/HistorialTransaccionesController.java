@@ -1,5 +1,7 @@
 package com.nexusbattles.ms_finanzas.transacciones;
 
+import java.security.Principal;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -9,24 +11,21 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.nexusbattles.ms_finanzas.seguridad.RequireAutenticacion;
-import com.nexusbattles.ms_finanzas.seguridad.SecurityInterceptor;
-
-import jakarta.servlet.http.HttpServletRequest;
-
 /**
  * Consulta el historial de transacciones (HU-PAG-002). Sirve la pantalla
  * "Historial de transacciones" en Mi Cuenta.
  *
- * <p>El {@code uidActual} lo pone {@link SecurityInterceptor} tras validar el
- * JWT; el controller nunca acepta el uid por query o path, así el usuario no
+ * <p>El {@code uid} se lee del {@link Principal} inyectado por Spring Security:
+ * {@code ConversorRolesJwt} de {@code shared/libs/plataforma-seguridad}
+ * configura {@code principalClaimName = "uid"}, así que
+ * {@code principal.getName()} devuelve el UUID inmutable del usuario. El
+ * controller nunca acepta el uid por query ni por path, así que el usuario no
  * puede consultar transacciones de otro. La consulta administrativa (ver el
- * historial de otro usuario) se agrega en un PR aparte junto con la anotación
- * de rol correspondiente — no está en el alcance de esta HU.
+ * historial de otro usuario) se agrega en un PR aparte junto con la
+ * restricción de rol correspondiente — no está en el alcance de esta HU.
  */
 @RestController
 @RequestMapping("/transacciones")
-@RequireAutenticacion
 public class HistorialTransaccionesController {
 
     /**
@@ -44,11 +43,11 @@ public class HistorialTransaccionesController {
 
     @GetMapping("/mi-historial")
     public ResponseEntity<Page<ResumenTransaccion>> miHistorial(
-            HttpServletRequest request,
+            Principal principal,
             @RequestParam(name = "page", defaultValue = "0") int pagina,
             @RequestParam(name = "size", defaultValue = "20") int tamanoPagina) {
 
-        String uid = (String) request.getAttribute(SecurityInterceptor.ATTR_UID);
+        String uid = principal.getName();
         Pageable pageable = PageRequest.of(
                 Math.max(pagina, 0),
                 Math.min(Math.max(tamanoPagina, 1), TAMANO_MAXIMO_PAGINA));
