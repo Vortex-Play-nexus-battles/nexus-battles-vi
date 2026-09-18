@@ -15,6 +15,8 @@ import {
   listarSalas,
   ingresarASala,
   verificarHeroe,
+  iniciarPartida,
+  obtenerPartida,
   baseDeApi,
   ErrorDeApi,
 } from './cliente-salas.js';
@@ -371,5 +373,105 @@ describe('baseDeApi', () => {
     await listarSalas({}, { fetchImpl });
 
     expect(fetchImpl).toHaveBeenCalledWith('http://127.0.0.1:8083/api/v1/salas');
+  });
+});
+
+// ===========================================================================
+// HU-SAL-004 · RF-JUE-017 — arranque del combate y estado de la partida
+// ===========================================================================
+
+describe('iniciarPartida', () => {
+  test('llama a la subruta de partida sin cuerpo: el anfitrion sale del token', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(201, { id: 'p1' }));
+
+    await iniciarPartida('abc', { fetchImpl });
+
+    const [url, opciones] = fetchImpl.mock.calls[0];
+    expect(url).toBe('/api/v1/salas/abc/partida');
+    expect(opciones.method).toBe('POST');
+    expect(opciones.body).toBeUndefined();
+  });
+
+  test('devuelve la partida iniciada tal como la manda el servicio', async () => {
+    const partida = { id: 'p1', estado: 'EN_CURSO', participantes: [] };
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(201, partida));
+
+    await expect(iniciarPartida('abc', { fetchImpl })).resolves.toEqual(partida);
+  });
+
+  test('un 403 de quien no es el anfitrion llega con su tipo', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(
+      respuesta(403, {
+        type: 'https://nexusbattles.local/errores/no-es-el-anfitrion',
+        title: 'No eres el anfitrion de esta sala',
+        detail: 'Solo quien creo la sala puede iniciarla.',
+        status: 403,
+      }),
+    );
+
+    const error = await iniciarPartida('abc', { fetchImpl }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ErrorDeApi);
+    expect(error.tipo).toBe('https://nexusbattles.local/errores/no-es-el-anfitrion');
+    expect(error.estado).toBe(403);
+  });
+
+  test('un 409 de sala que todavia no puede empezar llega interpretado', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(
+      respuesta(409, {
+        type: 'https://nexusbattles.local/errores/ingreso-no-permitido',
+        title: 'No puedes entrar a esta sala',
+        detail: 'La sala necesita al menos un rival o el heroe de la IA.',
+        status: 409,
+      }),
+    );
+
+    const error = await iniciarPartida('abc', { fetchImpl }).catch((e) => e);
+
+    expect(error.estado).toBe(409);
+    expect(error.detalle).toMatch(/rival/i);
+  });
+
+  test('el identificador de la sala se codifica: no se pega crudo en la URL', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(201, {}));
+
+    await iniciarPartida('a b/c', { fetchImpl });
+
+    expect(fetchImpl.mock.calls[0][0]).toBe('/api/v1/salas/a%20b%2Fc/partida');
+  });
+});
+
+describe('obtenerPartida', () => {
+  test('cuelga de /api/v1/partidas, no de /api/v1/salas', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, { id: 'p1' }));
+
+    await obtenerPartida('p1', { fetchImpl });
+
+    expect(fetchImpl.mock.calls[0][0]).toBe('/api/v1/partidas/p1');
+  });
+
+  test('es una lectura: va sin opciones de peticion', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, { id: 'p1' }));
+
+    await obtenerPartida('p1', { fetchImpl });
+
+    expect(fetchImpl.mock.calls[0][1]).toBeUndefined();
+  });
+
+  test('una partida que no existe llega como 404 con su tipo', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(
+      respuesta(404, {
+        type: 'https://nexusbattles.local/errores/partida-no-encontrada',
+        title: 'La partida no existe',
+        detail: 'No hay ninguna partida con ese identificador.',
+        status: 404,
+      }),
+    );
+
+    const error = await obtenerPartida('p1', { fetchImpl }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ErrorDeApi);
+    expect(error.tipo).toBe('https://nexusbattles.local/errores/partida-no-encontrada');
+    expect(error.estado).toBe(404);
   });
 });

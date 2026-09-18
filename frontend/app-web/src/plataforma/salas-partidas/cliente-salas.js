@@ -176,6 +176,62 @@ export async function verificarHeroe(idSala, { fetchImpl = fetchWithHttpErrorInt
 }
 
 /**
+ * Arranca el combate de una sala — HU-SAL-004, RF-JUE-017.
+ *
+ * Solo el anfitrion puede, y el servidor lo comprueba con el token: por eso
+ * aqui no viaja ningun identificador de jugador, igual que al crear y al
+ * entrar.
+ *
+ * Pulsar dos veces no es un error ni crea dos partidas: la segunda llamada
+ * devuelve la misma. La vista puede reintentar sin comprobar nada antes.
+ *
+ * @param {string} idSala
+ * @param {{fetchImpl?: Function}} [opciones] inyeccion para las pruebas
+ * @returns {Promise<object>} la partida iniciada, segun el esquema Partida
+ * @throws {ErrorDeApi} 403 no eres el anfitrion · 404 no existe · 409 la sala no puede empezar
+ */
+export async function iniciarPartida(idSala, { fetchImpl = fetchWithHttpErrorInterceptor } = {}) {
+  const respuesta = await fetchImpl(ruta(`/${encodeURIComponent(idSala)}/partida`), {
+    method: 'POST',
+  });
+
+  if (respuesta.ok) {
+    return respuesta.json();
+  }
+
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+}
+
+/**
+ * Trae el estado de una partida — RF-JUE-017.
+ *
+ * Es para pintar la vista de combate la primera vez y para ponerse al dia tras
+ * una caida del canal. El avance turno a turno llega por WebSocket: si la vista
+ * llamara a esto en bucle, el canal sobraria.
+ *
+ * Cuelga de `/api/v1/partidas`, no de `/api/v1/salas`, asi que no usa `ruta()`.
+ *
+ * @param {string} idPartida
+ * @param {{fetchImpl?: Function}} [opciones] inyeccion para las pruebas
+ * @returns {Promise<object>} segun el esquema Partida del contrato
+ * @throws {ErrorDeApi} 404 si la partida no existe
+ */
+export async function obtenerPartida(
+  idPartida,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const respuesta = await fetchImpl(
+    `${baseDeApi()}/api/v1/partidas/${encodeURIComponent(idPartida)}`,
+  );
+
+  if (respuesta.ok) {
+    return respuesta.json();
+  }
+
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+}
+
+/**
  * True cuando detras de la ruta no hay ninguna API, sino un servidor de
  * ficheros. Un servidor estatico responde 405 a un POST sobre una ruta que
  * para el es un fichero (`http-server` lo hace con `text/plain`), y devuelve
