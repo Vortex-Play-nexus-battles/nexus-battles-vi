@@ -111,6 +111,16 @@ class SalaEntidad {
     @jakarta.persistence.Embeddable
     static class FichaEmbebida {
 
+        /**
+         * Discriminante. Es lo que impide que la fila quede toda nula: Hibernate
+         * colapsa un embebido con todas sus columnas nulas, lo relee como
+         * {@code null} y entonces <b>descarta la entrada del mapa</b>, con lo
+         * que el participante desaparece de la sala. Lo vio
+         * {@code IngresoConcurrenteIT}: Ana entraba y al releer ya no estaba.
+         */
+        @Column(name = "con_ficha", nullable = false)
+        private boolean conFicha;
+
         @Column(name = "apodo", length = 120)
         private String apodo;
 
@@ -150,10 +160,13 @@ class SalaEntidad {
          * no tener ficha.
          */
         static FichaEmbebida desde(FichaDeParticipante ficha) {
-            if (ficha == null) {
-                return null;
-            }
             FichaEmbebida fila = new FichaEmbebida();
+            if (ficha == null) {
+                // Sin ficha, pero CON fila: el participante esta dentro igual.
+                fila.conFicha = false;
+                return fila;
+            }
+            fila.conFicha = true;
             fila.apodo = ficha.apodo();
             HeroeDeCombate heroe = ficha.heroe();
             fila.heroeId = heroe.id();
@@ -184,7 +197,8 @@ class SalaEntidad {
             if (!(otro instanceof FichaEmbebida ficha)) {
                 return false;
             }
-            return java.util.Objects.equals(apodo, ficha.apodo)
+            return conFicha == ficha.conFicha
+                    && java.util.Objects.equals(apodo, ficha.apodo)
                     && java.util.Objects.equals(heroeId, ficha.heroeId)
                     && java.util.Objects.equals(heroeNombre, ficha.heroeNombre)
                     && java.util.Objects.equals(heroeRetratoUrl, ficha.heroeRetratoUrl)
@@ -195,13 +209,13 @@ class SalaEntidad {
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(apodo, heroeId, heroeNombre, heroeRetratoUrl,
+            return java.util.Objects.hash(conFicha, apodo, heroeId, heroeNombre, heroeRetratoUrl,
                     heroeNivel, heroeVidaActual, heroeVidaMaxima);
         }
 
         /** {@code null} cuando la fila no trae ficha: no se inventa una vacia. */
         FichaDeParticipante aDominio() {
-            if (apodo == null || heroeId == null) {
+            if (!conFicha) {
                 return null;
             }
             return new FichaDeParticipante(apodo, new HeroeDeCombate(

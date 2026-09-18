@@ -15,7 +15,12 @@
 -- puerta guardara nada: de esas no se sabe con que heroe se entro, y decirlo
 -- con NULL es la verdad. Poner un valor por defecto pintaria barras falsas
 -- justo en las salas que la demo tiene abiertas.
+-- Discriminante, NOT NULL. Sin ella una fila sin ficha tendria todas sus
+-- columnas nuevas nulas; Hibernate colapsa ese embebido a NULL, descarta la
+-- entrada del mapa y el participante desaparece de la sala al releerla. Con
+-- Set<UUID> no hacia falta porque no habia embebido que colapsar.
 ALTER TABLE participantes_de_sala
+    ADD COLUMN con_ficha         boolean NOT NULL DEFAULT false,
     ADD COLUMN apodo             varchar(120),
     ADD COLUMN heroe_id          varchar(100),
     ADD COLUMN heroe_nombre      varchar(120),
@@ -30,9 +35,10 @@ ALTER TABLE participantes_de_sala
 ALTER TABLE participantes_de_sala
     ADD CONSTRAINT ck_participantes_sala_ficha_completa
         CHECK (
-            (apodo IS NULL AND heroe_id IS NULL AND heroe_nombre IS NULL
+            (con_ficha = false AND apodo IS NULL AND heroe_id IS NULL AND heroe_nombre IS NULL
                 AND heroe_vida_actual IS NULL AND heroe_vida_maxima IS NULL)
-            OR (apodo IS NOT NULL AND heroe_id IS NOT NULL AND heroe_nombre IS NOT NULL
+            OR (con_ficha = true AND apodo IS NOT NULL AND heroe_id IS NOT NULL
+                AND heroe_nombre IS NOT NULL
                 AND heroe_vida_actual IS NOT NULL AND heroe_vida_maxima IS NOT NULL)
         );
 
