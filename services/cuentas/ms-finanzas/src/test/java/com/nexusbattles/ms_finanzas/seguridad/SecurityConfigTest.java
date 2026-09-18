@@ -2,6 +2,7 @@ package com.nexusbattles.ms_finanzas.seguridad;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
@@ -61,14 +62,29 @@ class SecurityConfigTest {
     }
 
     @Test
-    void creditosEstaAbiertoTemporalmente() throws Exception {
+    void creditosOtrosEndpointsSiguenAbiertos() throws Exception {
         // La ruta no existe en este @WebMvcTest (solo cargó el
         // HistorialTransaccionesController), así que Spring devuelve 404
         // en vez de 401. Lo importante es que NO devuelve 401: el filter
-        // chain deja pasar sin JWT — cuando cambie a authenticated() en
-        // el futuro, este test empezará a devolver 401 y se ajustará.
-        mockMvc.perform(get("/creditos/no-importa"))
+        // chain deja pasar sin JWT para todos los /creditos/** salvo
+        // /creditos/acreditar — cuando el resto cambie a authenticated()
+        // (cuando llegue el client m2m de Keycloak), este test empezará
+        // a devolver 401 y se ajustará.
+        mockMvc.perform(get("/creditos/algun-uid/saldo"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void postCreditosAcreditar_sinJwt_devuelve401() throws Exception {
+        // Excepción específica al permitAll de /creditos/**: /creditos/acreditar
+        // CREA saldo y no debe ser accesible sin autenticación. Andrés lo
+        // reportó como agujero explotable el 18/sep — verifica que el filter
+        // chain lo bloquea antes de llegar al controller (que ni siquiera
+        // existe en este @WebMvcTest, pero el 401 sale antes del 404).
+        mockMvc.perform(post("/creditos/acreditar")
+                        .contentType("application/json")
+                        .content("{\"uid\":\"x\",\"monto\":1000,\"refId\":\"regalo\",\"concepto\":\"lol\"}"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

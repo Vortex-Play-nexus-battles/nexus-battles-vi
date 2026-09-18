@@ -2,6 +2,7 @@ package com.nexusbattles.ms_finanzas.seguridad;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.web.SecurityFilterChain;
@@ -53,9 +54,28 @@ public class SecurityConfig {
         http.authorizeHttpRequests(auth -> auth
                 // Regla 3: actuator queda abierto para la sonda de salud.
                 .requestMatchers("/actuator/**").permitAll()
-                // Temporal (ver javadoc): /creditos/** abierto hasta que
-                // infra registre el cliente m2m en Keycloak y ms-subastas
-                // adopte TokenDeServicio.
+                // Excepción específica: POST /creditos/acreditar es el único
+                // endpoint del módulo créditos que CREA saldo "de la nada".
+                // Andrés reportó el 18/sep que estaba abierto y con
+                // idempotencia efectiva rota (probado en vivo: dos
+                // llamadas con el mismo refId sumaban dos veces), o sea que
+                // cualquiera con acceso al servicio podía regalarse créditos.
+                // Ms-subastas NO consume /creditos/acreditar (verificado por
+                // Andrés — su CreditoClientHttp solo usa reservar/liberar/
+                // consumir/saldo), así que cerrar este endpoint concreto no
+                // rompe HU-SUB-001/004 y sí quita el agujero grande sin
+                // esperar al cliente m2m de Keycloak. Este matcher va ANTES
+                // del permitAll genérico de /creditos/** porque Spring toma
+                // el primero que coincide y este es más específico.
+                //
+                // El bug de idempotencia sigue siendo responsabilidad de
+                // Juan Diego (CreditoService.acreditar) y se le pasó por
+                // separado; con la ruta cerrada por auth, al menos deja de
+                // ser explotable desde fuera aunque el bug siga latente.
+                .requestMatchers(HttpMethod.POST, "/creditos/acreditar").authenticated()
+                // Temporal (ver javadoc): el resto de /creditos/** sigue
+                // abierto hasta que infra registre el cliente m2m en Keycloak
+                // y ms-subastas adopte TokenDeServicio.
                 .requestMatchers("/creditos/**").permitAll()
                 // HU-PAG-002: el historial es del propio jugador; cualquier
                 // usuario autenticado puede consultar SU propio historial. La
