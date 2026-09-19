@@ -55,6 +55,11 @@ public record HeroeDeCombate(
                 Math.max(0, Math.min(vidaActual, vidaMaxima)), vidaMaxima);
     }
 
+    /** El mismo heroe con la vida al maximo. */
+    public HeroeDeCombate aPlenaVida() {
+        return conVida(vidaMaxima);
+    }
+
     /** True cuando ya no puede seguir combatiendo. */
     public boolean derrotado() {
         return vidaActual == 0;
