@@ -413,9 +413,9 @@ jobs:
           set -uo pipefail
           XML="${{ matrix.ruta }}/build/reports/jacoco/test/jacocoTestReport.xml"
           [ -f "$XML" ] || { echo "Sin informe de JaCoCo: el fallo fue antes."; exit 0; }
-          echo "Clases con lineas sin cubrir en ${{ matrix.servicio }}:"
+          echo "Clases con lineas sin cubrir en ${{ matrix.servicio }} (sin cubrir / cubiertas):"
           grep -o '<class name="[^"]*"[^>]*>.\{0,400\}' "$XML" \
-            | sed -E 's/<class name="([^"]*)".*counter type="LINE" missed="([0-9]+)" covered="([0-9]+)".*/\2 sin cubrir de \$((\2+\3))  \1/' \
+            | sed -E 's|<class name="([^"]*)".*counter type="LINE" missed="([0-9]+)" covered="([0-9]+)".*|\2 sin cubrir, \3 cubiertas  \1|' \
             | grep -vE '^0 ' | sort -rn | head -25 || true
 
       - name: (Gradle) Analisis estatico con SonarQube Cloud

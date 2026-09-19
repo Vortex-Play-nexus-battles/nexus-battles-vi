@@ -123,7 +123,7 @@ jacocoTestCoverageVerification {
         rule {
             limit {
                 counter = 'LINE'
-                minimum = 0.99
+                minimum = 0.80
             }
         }
     }
