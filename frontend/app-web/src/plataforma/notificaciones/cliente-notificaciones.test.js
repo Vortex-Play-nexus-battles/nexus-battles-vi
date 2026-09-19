@@ -87,6 +87,24 @@ describe('leerSesion', () => {
     const almacen = almacenFalso({ 'nexus.usuarioId': 'u-1', 'nexus.apodoActual': 'Simon_P' });
     expect(leerSesion(almacen)).toEqual({ usuarioId: 'u-1', apodo: 'Simon_P' });
   });
+
+  test('el destinatario sale del token, no de la clave que pisa el panel de administracion', () => {
+    // `gestion-usuarios.js` escribe en `nexus.usuarioId` el id del usuario que
+    // el administrador acaba de seleccionar. Suscribirse con eso le entregaria
+    // las notificaciones de esa persona a quien no son.
+    const uid = '44444444-4444-4444-4444-444444444444';
+    const cuerpo = btoa(JSON.stringify({ uid }))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+    const almacen = almacenFalso({
+      'nexus.usuarioId': '99',
+      'nexus.apodoActual': 'Simon_P',
+      'nexus.token': `eyJ.${cuerpo}.firma`,
+    });
+
+    expect(leerSesion(almacen).usuarioId).toBe(uid);
+  });
 });
 
 describe('HTTP', () => {

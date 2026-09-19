@@ -26,22 +26,27 @@
  */
 
 import { publicarComentario, ErrorDeApi, MOTIVO, ESTADO } from './cliente-comentarios.js';
+import { usuarioIdDeSesion } from '../../comun/identidad.js';
 
-/** Claves de sesion que ya usan las vistas de cuentas (`perfil.js`). */
-const CLAVE_USUARIO_ID = 'nexus.usuarioId';
 const CLAVE_APODO = 'nexus.apodoActual';
 
 const MAXIMO_ESTRELLAS = 5;
 
 /**
- * Lee la identidad del jugador que las vistas de cuentas dejan en la sesion.
+ * Lee la identidad del jugador de esta sesion.
+ *
+ * El identificador sale de `comun/identidad.js`, no de `nexus.usuarioId` a
+ * pelo: esa clave la escribe el login con la clave primaria de la tabla, y
+ * `gestion-usuarios.js` la pisa con el id del usuario que el administrador
+ * esta consultando. Un comentario firmado con la identidad de otra persona no
+ * es un detalle cosmetico.
  *
  * @param {Storage} [almacen=sessionStorage]
  * @returns {{usuarioId: string|null, apodo: string|null}}
  */
 export function leerSesion(almacen = globalThis.sessionStorage) {
   return {
-    usuarioId: almacen?.getItem?.(CLAVE_USUARIO_ID) ?? null,
+    usuarioId: usuarioIdDeSesion(almacen),
     apodo: almacen?.getItem?.(CLAVE_APODO) ?? null,
   };
 }
