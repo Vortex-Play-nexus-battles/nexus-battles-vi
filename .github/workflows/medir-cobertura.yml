@@ -35,19 +35,17 @@ jobs:
       - name: Preparar Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # TODOS los modulos Gradle del monorepo, no solo los nuestros: la
+      # convencion de buildSrc es compartida, asi que activar la compuerta
+      # afecta a los tres equipos y no se puede decidir sin sus numeros.
       - name: Ejecutar pruebas y generar los informes de JaCoCo
         continue-on-error: true
         run: |
           ./gradlew --no-daemon --continue \
-            :services:plataforma:admin-parametros:test :services:plataforma:admin-parametros:jacocoTestReport \
-            :services:plataforma:comentarios:test :services:plataforma:comentarios:jacocoTestReport \
-            :services:plataforma:correo:test :services:plataforma:correo:jacocoTestReport \
-            :services:plataforma:metricas-plataforma:test :services:plataforma:metricas-plataforma:jacocoTestReport \
-            :services:plataforma:moderacion-sanciones:test :services:plataforma:moderacion-sanciones:jacocoTestReport \
-            :services:plataforma:notificaciones:test :services:plataforma:notificaciones:jacocoTestReport \
-            :services:plataforma:salas-partidas:test :services:plataforma:salas-partidas:jacocoTestReport \
-            :services:plataforma:torneos:test :services:plataforma:torneos:jacocoTestReport \
-            :services:contenido:motor-combate:test :services:contenido:motor-combate:jacocoTestReport
+            $(sed -n 's/^include //p' settings.gradle | tr -d "'" \
+              | sed -e 's/^/:/' -e 's/$/:test/' | tr '\n' ' ') \
+            $(sed -n 's/^include //p' settings.gradle | tr -d "'" \
+              | sed -e 's/^/:/' -e 's/$/:jacocoTestReport/' | tr '\n' ' ')
 
       - name: Leer los XML y publicar la tabla
         if: always()
@@ -58,7 +56,7 @@ jobs:
           printf '%.0s-' {1..72}; echo
           total_c=0; total_t=0
           while IFS= read -r xml; do
-            servicio=$(echo "$xml" | sed -E 's|^\./services/||; s|/build/reports/.*$||')
+            servicio=$(echo "$xml" | sed -E 's|^\./||; s|^services/||; s|/build/reports/.*$||')
             # El ultimo <counter type="LINE"> del XML es el del informe entero.
             linea=$(grep -o '<counter type="LINE"[^/]*/>' "$xml" | tail -1)
             missed=$(echo "$linea" | sed -E 's/.*missed="([0-9]+)".*/\1/')
