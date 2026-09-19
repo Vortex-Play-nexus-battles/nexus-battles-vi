@@ -4,6 +4,7 @@ import com.nexusbattles.plataforma.salaspartidas.dominio.AccionResuelta;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDePartida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoPartida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.MotorDeCombate;
+import com.nexusbattles.plataforma.salaspartidas.dominio.MotorNoDisponible;
 import com.nexusbattles.plataforma.salaspartidas.dominio.NoEsTuTurno;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Partida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.PartidaNoEncontrada;
