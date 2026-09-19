@@ -41,11 +41,16 @@ jobs:
       - name: Ejecutar pruebas y generar los informes de JaCoCo
         continue-on-error: true
         run: |
+          # Solo los modulos que aplican la convencion: son los unicos que
+          # tienen la tarea de JaCoCo, y son exactamente los que la compuerta
+          # afectaria. shared/libs/plataforma-comun y -seguridad no la aplican.
+          MODULOS=$(grep -rl "nexus.spring-conventions" --include=build.gradle . \
+            | sed -e 's|^\./||' -e 's|/build.gradle$||' -e 's|/|:|g' -e 's|^|:|' \
+            | grep -v '^:services:plataforma$' | sort)
+          echo "Modulos con la convencion:"; echo "$MODULOS"
           ./gradlew --no-daemon --continue \
-            $(sed -n 's/^include //p' settings.gradle | tr -d "'" \
-              | sed -e 's/^/:/' -e 's/$/:test/' | tr '\n' ' ') \
-            $(sed -n 's/^include //p' settings.gradle | tr -d "'" \
-              | sed -e 's/^/:/' -e 's/$/:jacocoTestReport/' | tr '\n' ' ')
+            $(echo "$MODULOS" | sed 's/$/:test/' | tr '\n' ' ') \
+            $(echo "$MODULOS" | sed 's/$/:jacocoTestReport/' | tr '\n' ' ')
 
       - name: Leer los XML y publicar la tabla
         if: always()
