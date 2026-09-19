@@ -73,6 +73,12 @@
   </aside>
 </main>
 
-<script src="tienda.js"></script>
+<!--
+  type="module" desde P3.1: el archivo importa el interceptor
+  compartido, la base de la API y la identidad de la sesion. Los
+  botones ya no usan onclick -no funcionaria en un modulo-: la
+  escucha esta delegada en la rejilla.
+-->
+<script type="module" src="tienda.js"></script>
 </body>
 </html>
