@@ -125,6 +125,30 @@
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 			</plugin>
+			<!--
+				Surefire solo recoge *Test, Test*, *Tests y *TestCase. El
+				sufijo *IT es de Failsafe, que aqui no esta configurado y que
+				ademas se ata a la fase "verify" — y el CI ejecuta "mvn test".
+				Sin esta inclusion, ArranqueDeLaAplicacionIT se queda sin
+				ejecutar y el build sale verde sin haberla corrido: lo
+				comprobamos en la corrida 35414172038, donde el job dijo
+				"Tests run: 3" con la prueba de arranque ya en el repo.
+
+				Se mantiene el sufijo *IT porque es el que usan los IT de
+				Testcontainers de los otros dieciseis servicios; lo que se
+				ajusta es quien los recoge.
+			-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<includes>
+						<include>**/*Test.java</include>
+						<include>**/*Tests.java</include>
+						<include>**/*IT.java</include>
+					</includes>
+				</configuration>
+			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
