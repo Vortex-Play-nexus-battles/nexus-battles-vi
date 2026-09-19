@@ -7,6 +7,10 @@
  * copiarlo otra vez — que es como `tienda.js` acabó con una constante global
  * sin declarar.
  *
+ * **Pendiente:** esos cuatro clientes siguen con su copia. Sustituirlas por
+ * este módulo es un cambio mecánico, pero toca cuatro archivos de tres módulos
+ * distintos, así que va en su propio PR y no colado en otro.
+ *
  * **Vacío por omisión, es decir mismo origen.** Así es como Spring Boot sirve
  * estas vistas en la ejecución integrada, y por eso no hay ningún `localhost`
  * escrito en el código.

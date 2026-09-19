@@ -290,6 +290,11 @@ jobs:
       # entera, y la deuda se apaga sola conforme sus duenos toquen esos
       # archivos. Los dos pasos informativos de abajo la mantienen a la vista
       # para que no crezca en silencio.
+      #
+      # Alcance: `frontend/app-web/src/`. `shared/ui-kit/` queda fuera porque
+      # tampoco lo cubren hoy `npm run lint` ni `npm run format:check` (los dos
+      # apuntan a `src`), y meterlo aqui sin meterlo alli dejaria dos
+      # comportamientos distintos para la misma carpeta. Es una decision aparte.
       - name: ESLint y Prettier sobre lo que cambia (bloqueante)
         if: steps.detectar.outputs.hay == 'true'
         working-directory: frontend/app-web
