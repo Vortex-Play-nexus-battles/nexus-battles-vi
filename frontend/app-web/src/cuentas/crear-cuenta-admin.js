@@ -389,15 +389,18 @@ try {
     );
 
 
-} catch (error) {
+} catch (fallo) {
 
+    // Se llama 'fallo' y no 'error' porque en la linea 311 ya hay un
+    // 'error' con el mensaje de validacion. Con los dos llamados igual,
+    // dentro de este bloque no habia forma de leer el de fuera.
     console.error(
         'Error creando cuenta administrativa:',
-        error
+        fallo
     );
 
     mostrarError(
-        error.message ||
+        fallo.message ||
         'No fue posible crear la cuenta administrativa.'
     );
 
@@ -698,6 +701,9 @@ if (exito) {
 
 function volverInicio() {
 
-window.location.href = '../index.html';
+// El menú principal (index.html) vive en la MISMA carpeta que esta página
+// (frontend/app-web/src/cuentas/), no un nivel arriba: '../index.html' no
+// existe y devolvía 404 al usuario que hacía clic en Volver.
+window.location.href = './index.html';
 
 }

@@ -1,6 +1,7 @@
 package com.nexusbattles.plataforma.salaspartidas.tiemporeal;
 
 import com.nexusbattles.plataforma.salaspartidas.dominio.Modalidad;
+import com.nexusbattles.plataforma.salaspartidas.dominio.MotivoDeCancelacion;
 import com.nexusbattles.plataforma.salaspartidas.dominio.ParametrosDeSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Sala;
 import org.junit.jupiter.api.DisplayName;
@@ -98,5 +99,55 @@ class CanalDeSalaStompTest {
         UUID otra = UUID.fromString("99999999-9999-9999-9999-999999999999");
 
         assertEquals("/tema/salas/" + otra, CanalDeSalaStomp.destinoDe(otra));
+    }
+
+    /** Destino y cuerpo de la unica publicacion, sin suponer el tipo del cuerpo. */
+    private record PublicadoCrudo(String destino, Object cuerpo) {
+    }
+
+    private PublicadoCrudo capturarCrudo() {
+        ArgumentCaptor<String> destino = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<Object> cuerpo = ArgumentCaptor.forClass(Object.class);
+        verify(mensajeria).convertAndSend(destino.capture(), cuerpo.capture());
+        return new PublicadoCrudo(destino.getValue(), cuerpo.getValue());
+    }
+
+    @Test
+    @DisplayName("la salida viaja como sala.participante.salio, simetrica del ingreso")
+    void anunciaLaSalida() {
+        Sala sala = salaConDosDentro();
+        sala.abandonar(VISITANTE);
+
+        canal.anunciarSalida(sala, VISITANTE);
+
+        PublicadoCrudo publicado = capturarCrudo();
+        AvisoDeSalida aviso = (AvisoDeSalida) publicado.cuerpo();
+        assertAll(
+                () -> assertEquals("/tema/salas/" + sala.id(), publicado.destino(),
+                        "mismo destino que el ingreso: es el canal salaEstado"),
+                () -> assertEquals("sala.participante.salio", aviso.tipo()),
+                () -> assertEquals(sala.id(), aviso.idSala()),
+                () -> assertEquals(VISITANTE, aviso.idJugador()),
+                () -> assertEquals(1, aviso.ocupacion().actual(),
+                        "la ocupacion ya sin quien se fue"),
+                () -> assertEquals(6, aviso.ocupacion().maximo()));
+    }
+
+    @Test
+    @DisplayName("la cancelacion lleva el motivo como enumerado y los creditos devueltos")
+    void anunciaLaCancelacion() {
+        Sala sala = salaConDosDentro();
+        sala.cancelar(ANFITRION);
+
+        canal.anunciarCancelacion(sala, MotivoDeCancelacion.CANCELADA_POR_ANFITRION, 320);
+
+        PublicadoCrudo publicado = capturarCrudo();
+        AvisoDeCancelacion aviso = (AvisoDeCancelacion) publicado.cuerpo();
+        assertAll(
+                () -> assertEquals("/tema/salas/" + sala.id(), publicado.destino()),
+                () -> assertEquals("sala.cancelada", aviso.tipo()),
+                () -> assertEquals(sala.id(), aviso.idSala()),
+                () -> assertEquals(MotivoDeCancelacion.CANCELADA_POR_ANFITRION, aviso.motivo()),
+                () -> assertEquals(320, aviso.creditosDevueltos()));
     }
 }

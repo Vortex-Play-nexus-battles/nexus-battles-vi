@@ -1,138 +1,217 @@
-// --- CONFIGURACIÓN ---
-API_BASE_URL = '/api/v1';
-const USER_ID = 'usr_test_123'; // Simulación del ID que provee ms-identidad
+/**
+ * Vitrina y carrito — HU-CAR-001.
+ *
+ * Habla con `ms-ecommerce`: `GET /api/v1/productos`, `GET /api/v1/carrito` y
+ * `POST /api/v1/carrito/items`.
+ *
+ * ## Qué se corrigió aquí (P3.1)
+ *
+ * 1. **La identidad era falsa.** Había un `const USER_ID = 'usr_test_123'` que
+ *    viajaba como `X-User-Id` en cada petición: *todos* los compradores eran el
+ *    mismo usuario de prueba. Ahora sale del token de la sesión, igual que en
+ *    el resto del frontend.
+ * 2. **`API_BASE_URL` no estaba declarada.** Creaba un global implícito — no
+ *    reventaba porque la página la cargaba como script clásico, pero eran
+ *    cuatro errores de ESLint y una trampa: el propio archivo avisaba de que al
+ *    pasar a módulo se rompería. Ahora usa `baseDeApi()`, el mismo mecanismo
+ *    que el resto de clientes.
+ * 3. **El interceptor era una copia local de seis líneas** que perdía el
+ *    formato de error de la plataforma. Ahora usa el compartido, que además
+ *    adjunta el `Authorization: Bearer`.
+ * 4. **Los botones iban por `onclick` en el HTML generado.** Al pasar a módulo
+ *    dejarían de encontrar la función —tal como avisaba el comentario— así que
+ *    se sustituyen por delegación de eventos.
+ *
+ * @module tienda
+ */
 
-// Configuración genérica para los headers requeridos
-const getHeaders = () => ({
-    'Content-Type': 'application/json',
-    'X-User-Id': USER_ID
-});
+import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
+import { rutaDeApi } from '../comun/base-api.js';
+import { usuarioIdDeSesion } from '../comun/identidad.js';
 
-// --- INICIALIZACIÓN ---
-document.addEventListener('DOMContentLoaded', () => {
-    cargarVitrina();
-    cargarCarrito();
-});
+/**
+ * Cabeceras de cada petición.
+ *
+ * `X-User-Id` lo exige `CarritoController` de `ms-ecommerce`, así que se manda;
+ * lo que cambia es que ahora lleva **al usuario de verdad**. Sin sesión se
+ * omite: mejor que el backend responda 400 a que el carrito de alguien se
+ * mezcle con el de otro.
+ */
+function cabeceras() {
+  const usuario = usuarioIdDeSesion();
+  const base = { 'Content-Type': 'application/json' };
+  return usuario ? { ...base, 'X-User-Id': usuario } : base;
+}
+
+/** @returns {boolean} true si hay una sesión utilizable */
+export function haySesion() {
+  return usuarioIdDeSesion() !== null;
+}
 
 // --- RENDERIZADO DE PRODUCTOS (HU-CAR-001) ---
-async function cargarVitrina() {
-    try {
-        // Usa el interceptor de tu equipo
-        const response = await fetchWithHttpErrorInterceptor(`${API_BASE_URL}/productos`, {
-            method: 'GET',
-            headers: getHeaders()
-        });
 
-        const data = await response.json();
-        const productosGrid = document.getElementById('productos-grid');
-        productosGrid.innerHTML = ''; // Limpiar loader
-
-        // Iteramos sobre la lista de productos (data.content según el JSON de Spring)
-        data.content.forEach(producto => {
-            // Se asignan colores dinámicos a la imagen según el tipo para simular el Figma
-            const colorBox = producto.tipo === 'ARMA' ? '#006b8f' : '#6a1b9a';
-
-            const card = document.createElement('div');
-            card.className = 'product-card';
-            card.innerHTML = `
-                <div class="product-image" style="background-color: ${colorBox};"></div>
-                <h4>${producto.nombre}</h4>
-                <p>${producto.descripcion}</p>
-                <div class="product-footer">
-                    <span class="product-price">${producto.precioFinal} ${producto.moneda}</span>
-                    <button class="btn-anadir" onclick="agregarAlCarrito(${producto.id})">Añadir</button>
-                </div>
-            `;
-            productosGrid.appendChild(card);
-        });
-    } catch (error) {
-        console.error("Error al cargar la vitrina:", error);
-    }
-}
-
-// --- AGREGAR AL CARRITO (POST) ---
-async function agregarAlCarrito(productoId) {
-    try {
-        const bodyReq = JSON.stringify({
-            productoId: productoId,
-            cantidad: 1 // Por defecto añade 1 como en el Figma
-        });
-
-        await fetchWithHttpErrorInterceptor(`${API_BASE_URL}/carrito/items`, {
-            method: 'POST',
-            headers: getHeaders(),
-            body: bodyReq
-        });
-
-        // Refrescar la vista del carrito tras añadir
-        cargarCarrito();
-    } catch (error) {
-        console.error("Error al agregar ítem:", error);
-    }
-}
-
-// --- RENDERIZADO DEL CARRITO ---
-async function cargarCarrito() {
-    try {
-        const response = await fetchWithHttpErrorInterceptor(`${API_BASE_URL}/carrito`, {
-            method: 'GET',
-            headers: getHeaders()
-        });
-
-        const carrito = await response.json();
-        actualizarUI(carrito);
-    } catch (error) {
-        // Si es 404 (carrito no existe aún), mostramos vacío
-        actualizarUI(null);
-    }
-}
-
-function actualizarUI(carrito) {
-    const itemsContainer = document.getElementById('cart-items');
-    const subtotalEl = document.getElementById('cart-subtotal');
-    const totalEl = document.getElementById('cart-total');
-    const btnPagar = document.getElementById('btn-pagar');
-
-    itemsContainer.innerHTML = '';
-
-    if (!carrito || !carrito.items || carrito.items.length === 0) {
-        itemsContainer.innerHTML = '<p class="empty-cart-msg">Tu carrito está vacío</p>';
-        subtotalEl.textContent = '0 COP';
-        totalEl.textContent = '0 COP';
-        btnPagar.disabled = true;
-        return;
-    }
-
-    // Renderizar cada ítem del carrito
-    carrito.items.forEach(item => {
-        // Asegúrate de que tu backend devuelve item.producto.nombre en el JSON de respuesta
-        const nombreProducto = item.producto ? item.producto.nombre : 'Producto';
-
-        const itemEl = document.createElement('div');
-        itemEl.className = 'cart-item';
-        itemEl.innerHTML = `
-            <div class="item-info">
-                <h5>${nombreProducto}</h5>
-                <span>x${item.cantidad}</span>
-            </div>
-            <div class="item-price">
-                ${item.subtotal} COP
-            </div>
-        `;
-        itemsContainer.appendChild(itemEl);
+export async function cargarVitrina(doc = document) {
+  const rejilla = doc.getElementById('productos-grid');
+  try {
+    const respuesta = await fetchWithHttpErrorInterceptor(rutaDeApi('/productos'), {
+      method: 'GET',
+      headers: cabeceras(),
     });
 
-    // Actualizar Totales
-    subtotalEl.textContent = `${carrito.total} COP`;
-    totalEl.textContent = `${carrito.total} COP`;
-    btnPagar.disabled = false;
+    const datos = await respuesta.json();
+    rejilla.innerHTML = '';
+
+    for (const producto of datos.content ?? []) {
+      rejilla.appendChild(tarjetaDeProducto(producto, doc));
+    }
+  } catch (error) {
+    // Antes esto no existía: un fallo dejaba el cargador girando para siempre.
+    rejilla.innerHTML =
+      '<p class="empty-cart-msg">No se pudo cargar la vitrina. Vuelve a intentarlo.</p>';
+    console.error('Error al cargar la vitrina:', error);
+  }
 }
 
-// Simulación del interceptor del equipo por si necesitas probarlo independiente
-async function fetchWithHttpErrorInterceptor(url, options) {
-    const res = await fetch(url, options);
-    if (!res.ok) {
-        throw new Error(`Error HTTP: ${res.status}`);
+/**
+ * Tarjeta de un producto.
+ *
+ * El color sale del tipo, como en la maqueta. El botón NO lleva `onclick`: la
+ * escucha está delegada en la rejilla (ver `montarTienda`), que es lo único que
+ * funciona cuando este archivo se carga como módulo.
+ */
+function tarjetaDeProducto(producto, doc) {
+  const colorCaja = producto.tipo === 'ARMA' ? '#006b8f' : '#6a1b9a';
+
+  const tarjeta = doc.createElement('div');
+  tarjeta.className = 'product-card';
+  tarjeta.innerHTML = `
+    <div class="product-image" style="background-color: ${colorCaja};"></div>
+    <h4></h4>
+    <p></p>
+    <div class="product-footer">
+      <span class="price"></span>
+      <button class="btn-add" type="button">Añadir</button>
+    </div>
+  `;
+  // textContent y no innerHTML: el nombre y la descripción vienen del
+  // catálogo, y un producto con `<script>` en el nombre no debe ejecutarse.
+  tarjeta.querySelector('h4').textContent = producto.nombre ?? '';
+  tarjeta.querySelector('p').textContent = producto.descripcion ?? '';
+  tarjeta.querySelector('.price').textContent = `${producto.precio ?? 0} COP`;
+  tarjeta.querySelector('.btn-add').dataset.producto = producto.id;
+
+  return tarjeta;
+}
+
+// --- CARRITO ---
+
+export async function agregarAlCarrito(productoId, doc = document) {
+  try {
+    await fetchWithHttpErrorInterceptor(rutaDeApi('/carrito/items'), {
+      method: 'POST',
+      headers: cabeceras(),
+      body: JSON.stringify({ productoId, cantidad: 1 }),
+    });
+
+    await cargarCarrito(doc);
+  } catch (error) {
+    console.error('Error al agregar item:', error);
+  }
+}
+
+export async function cargarCarrito(doc = document) {
+  try {
+    const respuesta = await fetchWithHttpErrorInterceptor(rutaDeApi('/carrito'), {
+      method: 'GET',
+      headers: cabeceras(),
+    });
+
+    actualizarUI(await respuesta.json(), doc);
+  } catch (error) {
+    // Un 404 es un carrito que todavía no existe, y eso SÍ es un carrito
+    // vacío. Cualquier otro fallo no lo es: pintar «vacío» ante un 500 le
+    // esconde al jugador que sus productos siguen ahí.
+    if (error?.estado === 404 || error?.status === 404) {
+      actualizarUI(null, doc);
+      return;
     }
-    return res;
+    mostrarFalloDelCarrito(doc);
+    console.error('Error al cargar el carrito:', error);
+  }
+}
+
+function mostrarFalloDelCarrito(doc) {
+  const contenedor = doc.getElementById('cart-items');
+  const botonPagar = doc.getElementById('btn-pagar');
+  if (contenedor) {
+    contenedor.innerHTML =
+      '<p class="empty-cart-msg">No se pudo cargar tu carrito. Vuelve a intentarlo.</p>';
+  }
+  if (botonPagar) {
+    // No se paga lo que no se ha podido leer.
+    botonPagar.disabled = true;
+  }
+}
+
+export function actualizarUI(carrito, doc = document) {
+  const contenedor = doc.getElementById('cart-items');
+  const subtotal = doc.getElementById('cart-subtotal');
+  const total = doc.getElementById('cart-total');
+  const botonPagar = doc.getElementById('btn-pagar');
+
+  contenedor.innerHTML = '';
+
+  if (!carrito || !carrito.items || carrito.items.length === 0) {
+    contenedor.innerHTML = '<p class="empty-cart-msg">Tu carrito está vacío</p>';
+    subtotal.textContent = '0 COP';
+    total.textContent = '0 COP';
+    botonPagar.disabled = true;
+    return;
+  }
+
+  for (const item of carrito.items) {
+    const fila = doc.createElement('div');
+    fila.className = 'cart-item';
+    fila.innerHTML = `
+      <div class="item-info"><h5></h5><span></span></div>
+      <div class="item-price"></div>
+    `;
+    fila.querySelector('h5').textContent = item.producto ? item.producto.nombre : 'Producto';
+    fila.querySelector('span').textContent = `x${item.cantidad}`;
+    fila.querySelector('.item-price').textContent = `${item.subtotal} COP`;
+    contenedor.appendChild(fila);
+  }
+
+  subtotal.textContent = `${carrito.total} COP`;
+  total.textContent = `${carrito.total} COP`;
+  botonPagar.disabled = false;
+}
+
+/**
+ * Engancha la vista.
+ *
+ * La escucha va **delegada en la rejilla**, no en cada botón: las tarjetas se
+ * crean después, y así no hay que volver a enganchar nada al repintar.
+ *
+ * @param {ParentNode} [doc]
+ * @returns {Promise<void>} resuelve cuando la primera carga terminó de pintar
+ */
+export function montarTienda(doc = document) {
+  const rejilla = doc.getElementById('productos-grid');
+
+  rejilla?.addEventListener('click', (evento) => {
+    const boton = evento.target.closest('[data-producto]');
+    if (boton) {
+      agregarAlCarrito(boton.dataset.producto, doc);
+    }
+  });
+
+  // Se devuelve la promesa para que quien monte la vista pueda esperar a que
+  // esté pintada. En el navegador nadie la espera; en las pruebas, sí.
+  return Promise.all([cargarVitrina(doc), cargarCarrito(doc)]).then(() => undefined);
+}
+
+// Arranque automático solo en el navegador; en las pruebas se monta a mano.
+if (globalThis.document?.addEventListener) {
+  globalThis.document.addEventListener('DOMContentLoaded', () => montarTienda());
 }

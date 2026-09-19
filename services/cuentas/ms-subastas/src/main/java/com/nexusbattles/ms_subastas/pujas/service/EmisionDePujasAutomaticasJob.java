@@ -1,6 +1,7 @@
 package com.nexusbattles.ms_subastas.pujas.service;
 
 import com.nexusbattles.ms_subastas.notificaciones.NotificacionOutbox;
+import com.nexusbattles.ms_subastas.pujas.creditos.CreditoClientException;
 import com.nexusbattles.ms_subastas.pujas.model.Puja;
 import com.nexusbattles.ms_subastas.pujas.model.PujaAutomatica;
 import com.nexusbattles.ms_subastas.pujas.repository.PujaAutomaticaRepository;
@@ -90,9 +91,25 @@ public class EmisionDePujasAutomaticasJob {
             return;
         }
 
-        motorAutomatico.calcularRespuesta(subasta, automatica).ifPresent(monto ->
+        motorAutomatico.calcularRespuesta(subasta, automatica).ifPresent(monto -> {
+            try {
                 pujaApplicationService.pujarAutomaticamente(subastaId, automatica.getJugadorId(), monto,
-                        claveDeIdempotencia(subastaId, automatica.getJugadorId(), monto)));
+                        claveDeIdempotencia(subastaId, automatica.getJugadorId(), monto));
+            } catch (CreditoClientException e) {
+                if (e.getMotivo() == CreditoClientException.Motivo.SALDO_INSUFICIENTE) {
+                    // Si el jugador se gasto el saldo despues de configurar la
+                    // automatica, esta no puede seguir emitiendo: se desactiva y
+                    // se encola el aviso para no reintentar inutilmente en cada sondeo.
+                    log.info("Auto-puja de {} en subasta {} desactivada por saldo insuficiente",
+                            automatica.getJugadorId(), subastaId);
+                    automatica.setActiva(false);
+                    pujaAutomaticaRepository.save(automatica);
+                    outbox.avisarAutomaticaSinSaldo(subastaId, automatica.getJugadorId());
+                } else {
+                    throw e;
+                }
+            }
+        });
     }
 
     /**

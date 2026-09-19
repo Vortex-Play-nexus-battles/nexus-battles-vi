@@ -1,6 +1,7 @@
 package com.nexusbattles.plataforma.salaspartidas.tiemporeal;
 
 import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDeSala;
+import com.nexusbattles.plataforma.salaspartidas.dominio.MotivoDeCancelacion;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Sala;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
@@ -34,6 +35,17 @@ class CanalDeSalaStomp implements CanalDeSala {
     @Override
     public void anunciarIngreso(Sala sala, UUID idJugador) {
         mensajeria.convertAndSend(destinoDe(sala.id()), AvisoDeIngreso.de(sala, idJugador));
+    }
+
+    @Override
+    public void anunciarSalida(Sala sala, UUID idJugador) {
+        mensajeria.convertAndSend(destinoDe(sala.id()), AvisoDeSalida.de(sala, idJugador));
+    }
+
+    @Override
+    public void anunciarCancelacion(Sala sala, MotivoDeCancelacion motivo, int creditosDevueltos) {
+        mensajeria.convertAndSend(destinoDe(sala.id()),
+                AvisoDeCancelacion.de(sala, motivo, creditosDevueltos));
     }
 
     static String destinoDe(UUID idSala) {

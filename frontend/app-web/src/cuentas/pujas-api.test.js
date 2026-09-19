@@ -108,6 +108,50 @@ describe('peticiones que mueven creditos', () => {
   });
 });
 
+describe('reintento de una peticion que no llego a tener respuesta', () => {
+  test('si la red falla, se reintenta UNA vez con la MISMA clave', async () => {
+    const claves = [];
+    const falso = jest.fn(async (url, opciones) => {
+      claves.push(opciones.headers['Idempotency-Key']);
+      if (claves.length === 1) {throw new TypeError('Failed to fetch');}
+      return respuesta({ status: 201, cuerpo: { id: 'p1', estado: 'ACTIVA' } });
+    });
+
+    const puja = await apiCon(falso).pujar('s1', '110');
+
+    expect(falso).toHaveBeenCalledTimes(2);
+    // Lo esencial: la misma clave. Con una clave nueva el reintento seria una
+    // puja distinta y el jugador acabaria pujando dos veces.
+    expect(claves[0]).toBe(claves[1]);
+    expect(puja.id).toBe('p1');
+  });
+
+  test('si la red falla dos veces se avisa, no se reintenta sin fin', async () => {
+    const falso = jest.fn(async () => {throw new TypeError('Failed to fetch');});
+
+    await expect(apiCon(falso).pujar('s1', '110')).rejects.toBeInstanceOf(ErrorDeSubastas);
+    expect(falso).toHaveBeenCalledTimes(2);
+  });
+
+  test('un error del servidor NO se reintenta: ya respondio', async () => {
+    const falso = jest.fn(async () => respuesta({
+      ok: false,
+      status: 409,
+      cuerpo: { motivo: 'OFERTA_INSUFICIENTE' }
+    }));
+
+    await expect(apiCon(falso).pujar('s1', '110')).rejects.toBeInstanceOf(ErrorDeSubastas);
+    expect(falso).toHaveBeenCalledTimes(1);
+  });
+
+  test('una peticion sin clave de idempotencia no se reintenta a ciegas', async () => {
+    const falso = jest.fn(async () => {throw new TypeError('Failed to fetch');});
+
+    await expect(apiCon(falso).miResumen()).rejects.toBeInstanceOf(ErrorDeSubastas);
+    expect(falso).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('traduccion de errores', () => {
   test('el mensaje sale del motivo, no del texto tecnico del servidor', async () => {
     const falso = jest.fn(async () => respuesta({

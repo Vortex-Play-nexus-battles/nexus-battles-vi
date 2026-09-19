@@ -51,6 +51,11 @@ public class NotificacionOutbox {
                 "Tu puja automatica se detuvo: la siguiente oferta superaria tu limite de " + limite + " creditos."));
     }
 
+    public void avisarAutomaticaSinSaldo(UUID subastaId, UUID jugadorId) {
+        repositorio.save(nuevoAviso(TipoNotificacion.AUTOMATICA_SIN_SALDO, jugadorId, subastaId,
+                "Tu puja automatica se detuvo: tu saldo disponible no alcanza para cubrir la siguiente oferta."));
+    }
+
     private NotificacionPendiente nuevoAviso(TipoNotificacion tipo, UUID destinatarioId, UUID subastaId, String detalle) {
         return new NotificacionPendiente(null, tipo, destinatarioId, subastaId, detalle, clock.instant(), null);
     }

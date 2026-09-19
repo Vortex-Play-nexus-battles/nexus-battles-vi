@@ -12,11 +12,13 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * clases de reglas del juego siguen siendo Java puro, sin anotaciones y sin
  * dependencia de Spring, y se prueban sin levantar contexto.</p>
  *
- * <p>El servicio no expone todavia ninguna operacion de negocio: solo salud y
- * metricas de Actuator, como exige la regla 3 de plataforma. Las operaciones
- * llegan cuando se acuerde el contrato del motor, que es el paso siguiente.</p>
+ * <p>Desde que existe {@code contracts/openapi/motor-combate.yaml}, el servicio
+ * expone la resolucion de ataques ademas de la salud y las metricas de
+ * Actuator. La capa web vive en {@code nexus.combate.api}, que se escanea
+ * explicitamente: el dominio de {@code nexus.combate} sigue fuera del escaneo y
+ * por tanto sigue siendo Java puro.</p>
  */
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = {"nexus.combate.arranque", "nexus.combate.api"})
 public class MotorCombateApplication {
 
     public static void main(String[] args) {

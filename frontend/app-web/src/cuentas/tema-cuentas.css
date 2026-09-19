@@ -62,7 +62,9 @@ body {
   padding: 12px 16px;
   margin-bottom: 20px;
 }
-.aviso[hidden] { display: none; }
+.aviso[hidden] {
+  display: none;
+}
 
 .tarjeta {
   background: var(--superficie);
@@ -118,7 +120,9 @@ button:focus {
   font-size: 13px;
   font-weight: 600;
 }
-.estado[hidden] { display: none; }
+.estado[hidden] {
+  display: none;
+}
 
 .estado.carga {
   background: var(--info-fondo);
@@ -277,8 +281,10 @@ form > label,
 .pagina-auth input[type='text'],
 .pagina-auth input[type='email'],
 .pagina-auth input[type='password'] {
-  transition: border-color 0.15s ease, box-shadow 0.15s ease,
-  transform 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
 }
 .pagina-auth select:hover,
 .pagina-auth input[type='text']:hover,
@@ -301,7 +307,9 @@ form > label,
   border-radius: 8px;
   text-transform: uppercase;
   letter-spacing: 0.02em;
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
 }
 .pagina-auth .btn-primario:hover {
   transform: translateY(-1px) scale(1.01);
@@ -316,7 +324,9 @@ form > label,
   color: var(--accion);
   text-decoration: none;
 }
-.enlace-secundario:hover { text-decoration: underline; }
+.enlace-secundario:hover {
+  text-decoration: underline;
+}
 
 input[aria-invalid='true'] {
   border-color: var(--error);
@@ -334,21 +344,44 @@ input[aria-invalid='true'] {
 }
 
 @keyframes flotar1 {
-  0%   { transform: translate(0, 0); }
-  25%  { transform: translate(220px, 120px); }
-  50%  { transform: translate(100px, 280px); }
-  75%  { transform: translate(-120px, 100px); }
-  100% { transform: translate(0, 0); }
+  0% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(220px, 120px);
+  }
+  50% {
+    transform: translate(100px, 280px);
+  }
+  75% {
+    transform: translate(-120px, 100px);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
 }
 
 @keyframes flotar2 {
-  0%   { transform: translate(0, 0); }
-  25%  { transform: translate(-200px, -100px); }
-  50%  { transform: translate(-80px, -260px); }
-  75%  { transform: translate(140px, -90px); }
-  100% { transform: translate(0, 0); }
+  0% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(-200px, -100px);
+  }
+  50% {
+    transform: translate(-80px, -260px);
+  }
+  75% {
+    transform: translate(140px, -90px);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * { transition: none !important; animation: none !important; }
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
 }

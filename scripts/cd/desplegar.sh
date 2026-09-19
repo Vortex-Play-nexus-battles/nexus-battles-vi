@@ -43,10 +43,10 @@
 #   MS_ECOMMERCE_DB_NAME, MS_ECOMMERCE_DB_USER, MS_ECOMMERCE_DB_PASSWORD.
 #   Mismo prefijo por la misma razon que ms-cumplimiento. Ver
 #   docker-compose.ms-ecommerce.yml para el mapeo. OJO: a diferencia de
-#   ms-identidad y ms-cumplimiento, ms-ecommerce tiene
-#   server.servlet.context-path=/api/v1 -- su /actuator/health real vive en
-#   /api/v1/actuator/health, no en /actuator/health. Ver "ruta_salud_de" en
-#   el paso 4 de este script.
+#   ms-identidad y ms-cumplimiento, ms-ecommerce tiene un context-path, y es
+#   /ecommerce (application.properties linea 2) -- NO /api/v1, como decia
+#   aqui hasta hoy. Su /actuator/health real vive en
+#   /ecommerce/actuator/health. Ver "ruta_salud_de" en el paso 4.
 #
 # Este script NUNCA decide si hay que revertir: eso lo hace un step aparte en
 # cd.yml (solo en el job de produccion) leyendo el archivo
@@ -75,7 +75,14 @@ COMPOSE_MS_ECOMMERCE="$DIRECTORIO/docker-compose.ms-ecommerce.yml"
 # comando solo si algun servicio de contenido viene en esta corrida.
 COMPOSE_CONTENIDO="$DIRECTORIO/docker-compose.contenido.yml"
 SERVICIOS_CONTENIDO="heroes inventario productos motor-combate"
-INTENTOS_SALUD=12
+# Ventana de espera del healthcheck: 36 x 5 s = 3 minutos por servicio.
+# Eran 12 x 5 s = 60 s, pensados para un servidor holgado. En el host de dev
+# real (t3.small: 2 vCPU con creditos de CPU "standard", 2 GiB) arrancar
+# varias JVM de Spring Boot a la vez -- cada una con Flyway y Hibernate --
+# pasa de 60 s, y el PRIMER servicio de la lista es el que peor lo pasa:
+# se verifica cuando los demas todavia estan compitiendo por la CPU. Tres
+# minutos siguen dando un fallo rapido si el servicio esta de verdad roto.
+INTENTOS_SALUD=36
 ESPERA_ENTRE_INTENTOS=5
 
 # Etiqueta de imagen por servicio de contenido. docker-compose.contenido.yml
@@ -161,6 +168,18 @@ MS_ECOMMERCE_DB_NAME=${MS_ECOMMERCE_DB_NAME:-}
 MS_ECOMMERCE_DB_USER=${MS_ECOMMERCE_DB_USER:-}
 MS_ECOMMERCE_DB_PASSWORD=${MS_ECOMMERCE_DB_PASSWORD:-}
 EOF
+# Configuracion opcional de los servicios de plataforma (variables del
+# entorno de GitHub, no secrets). Solo se escriben si llegan con valor: una
+# linea "VARIABLE=" vacia en el .env llega a Spring como cadena vacia y
+# ANULA el valor por defecto de ${VARIABLE:defecto} en application.yml;
+# omitirla conserva ese valor por defecto.
+for variable in SMTP_PORT LISTA_NEGRA_VERIFICAR_URL SALAS_WS_ORIGENES CHAT_WS_ORIGENES IDENTIDAD_JWKS_URL JWT_CLAVE_PRIVADA \
+    CHAT_HISTORIAL_TAMANO NOTIFICACIONES_WS_ORIGENES COMENTARIOS_FORMATOS_IMAGEN; do
+  valor="${!variable:-}"
+  if [ -n "$valor" ]; then
+    echo "$variable=$valor" >> .env
+  fi
+done
 chmod 600 .env
 
 echo "== 2) Guardando el tag estable actual de cada servicio, antes de tocarlo =="
@@ -297,22 +316,53 @@ if [ "$INCLUYE_CONTENIDO" -eq 1 ]; then
   resolver_etiquetas_contenido "$TAG" "$SERVICIOS_PUERTOS"
 fi
 
+# El borde (srv-borde, docker-compose.deploy.yml) vive solo en el host de
+# plataforma: sirve el frontend y enruta /api/v1/* a los servicios. Se
+# levanta en cada corrida de plataforma/cuentas para que recoja el frontend y
+# la configuracion recien copiados a /opt/nexus/web. En el host de contenido
+# no existe (su corrida solo trae servicios de contenido).
+INCLUYE_BORDE=0
+if [ "$INCLUYE_CONTENIDO" -eq 0 ] && [ -d "$DIRECTORIO/web/infrastructure/red-balanceo" ]; then
+  INCLUYE_BORDE=1
+  SERVICIOS_COMPOSE="$SERVICIOS_COMPOSE srv-borde"
+fi
+
 docker compose "${ARCHIVOS_COMPOSE[@]}" pull $SERVICIOS_COMPOSE
 docker compose "${ARCHIVOS_COMPOSE[@]}" up -d $SERVICIOS_COMPOSE
+
+if [ "$INCLUYE_BORDE" -eq 1 ]; then
+  echo "== 3c) Recargando el borde con la configuracion copiada en esta corrida =="
+  # up -d no reinicia un contenedor cuya definicion no cambio, pero el
+  # archivo montado si pudo cambiar: se valida y recarga nginx sin cortar
+  # conexiones. Si la configuracion es invalida, falla aqui con el detalle.
+  docker exec srv-borde nginx -t
+  docker exec srv-borde nginx -s reload
+  if ! curl -fsS http://localhost/salud-borde | grep -q UP; then
+    echo "El borde no responde en http://localhost/salud-borde"
+    exit 1
+  fi
+  echo "  borde: saludable"
+fi
 
 echo "== 4) Verificando /actuator/health de cada servicio desplegado (con reintentos) =="
 # Ruta de salud por servicio: todos los servicios de plataforma y
 # ms-identidad/ms-cumplimiento NO tienen server.servlet.context-path, asi
 # que su Actuator vive en la raiz (/actuator/health). ms-ecommerce es la
 # UNICA excepcion confirmada hasta ahora: su application.properties declara
-# server.servlet.context-path=/api/v1, entonces Spring monta TODOS sus
-# endpoints (incluido Actuator) bajo ese prefijo -- su salud real esta en
-# /api/v1/actuator/health. Se resuelve por funcion (no con un valor fijo)
-# para no romper el healthcheck generico de los demas servicios, que siguen
-# usando la ruta sin prefijo.
+# server.servlet.context-path=/ecommerce (linea 2), entonces Spring monta
+# TODOS sus endpoints -Actuator incluido- bajo ese prefijo, y su salud real
+# esta en /ecommerce/actuator/health. Se resuelve por funcion (no con un
+# valor fijo) para no romper el healthcheck generico de los demas servicios,
+# que siguen usando la ruta sin prefijo.
+#
+# Hasta hoy aqui ponia /api/v1/actuator/health, copiado de un comentario de
+# docker-compose.ms-ecommerce.yml que afirmaba un context-path que el
+# servicio nunca tuvo. El servicio habria arrancado bien y el despliegue lo
+# habria dado por muerto tras tres minutos de reintentos. Lo fija ahora
+# ArranqueDeLaAplicacionIT de ms-ecommerce, que comprueba las dos rutas.
 ruta_salud_de() {
   case "$1" in
-    ms-ecommerce) echo "/api/v1/actuator/health" ;;
+    ms-ecommerce) echo "/ecommerce/actuator/health" ;;
     *) echo "/actuator/health" ;;
   esac
 }
@@ -341,6 +391,15 @@ for par in $SERVICIOS_PUERTOS; do
     fi
     echo "${servicio}:${TAG}:${tag_anterior}" >> ultimo-fallo.txt
     echo "  $servicio: NO paso la verificacion de salud tras $INTENTOS_SALUD intentos"
+    # Fallo visible: el estado del contenedor y sus ultimas lineas quedan en
+    # el log de la corrida, para diagnosticar desde GitHub sin entrar al host.
+    # OOMKilled=true significa que el mem_limit del compose se quedo corto.
+    contenedor="srv-${servicio}"
+    echo "  ---- estado de $contenedor ----"
+    docker inspect --format '  estado={{.State.Status}} salida={{.State.ExitCode}} OOMKilled={{.State.OOMKilled}} reinicios={{.RestartCount}} inicio={{.State.StartedAt}}' "$contenedor" 2>/dev/null || echo "  (el contenedor no existe)"
+    echo "  ---- ultimas 60 lineas de $contenedor ----"
+    docker logs --tail 60 "$contenedor" 2>&1 | sed 's/^/  | /' || true
+    echo "  ---- fin de $contenedor ----"
   fi
 done
 

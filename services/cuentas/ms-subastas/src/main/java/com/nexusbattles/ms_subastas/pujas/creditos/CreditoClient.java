@@ -23,8 +23,18 @@ public interface CreditoClient {
     /** Libera una reserva (el ofertante fue superado, o la subasta cerro sin adjudicacion). */
     void liberar(UUID reservaId);
 
-    /** Convierte la reserva en debito real (la puja gano la subasta). */
-    void consumir(UUID reservaId);
+    /**
+     * Convierte la reserva en debito real (la puja gano la subasta) y abona al
+     * vendedor.
+     *
+     * @param vendedorId quien recibe los creditos. Lo abona ms-finanzas dentro
+     *                   de esta misma llamada y en su transaccion local, que es
+     *                   la unica forma de que cobrar al comprador y pagar al
+     *                   vendedor sean atomicos: son dos cuentas de su dominio,
+     *                   no del nuestro. Sin este dato el comprador paga y el
+     *                   vendedor no cobra.
+     */
+    void consumir(UUID reservaId, UUID vendedorId);
 
     /** Saldo disponible del jugador, ya neto de sus reservas activas. */
     BigDecimal saldoDisponible(UUID jugadorId);

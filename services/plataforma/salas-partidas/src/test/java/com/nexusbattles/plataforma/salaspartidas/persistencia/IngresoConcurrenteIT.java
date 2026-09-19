@@ -87,7 +87,7 @@ class IngresoConcurrenteIT {
         CyclicBarrier ambosLeyeron = new CyclicBarrier(2);
         RepositorioDeSalas coordinado = new EsperaTrasLaPrimeraLectura(repositorio, ambosLeyeron);
         CanalConcurrente canal = new CanalConcurrente();
-        IngresarASala ingresar = new IngresarASala(coordinado, canal);
+        IngresarASala ingresar = new IngresarASala(coordinado, canal, com.nexusbattles.plataforma.salaspartidas.aplicacion.InventarioEnMemoria.conHeroe());
 
         ExecutorService hilos = Executors.newFixedThreadPool(2);
         try {
@@ -161,7 +161,9 @@ class IngresoConcurrenteIT {
 
     private static Object intentar(IngresarASala ingresar, UUID idSala, UUID idJugador) {
         try {
-            return ingresar.ejecutar(idSala, idJugador);
+            return ingresar.ejecutar(idSala,
+                    new com.nexusbattles.plataforma.salaspartidas.aplicacion.JugadorAutenticado(
+                            idJugador, "jugador-" + idJugador.toString().substring(0, 8)));
         } catch (IngresoNoPermitido rechazo) {
             return rechazo;
         }
@@ -226,6 +228,20 @@ class IngresoConcurrenteIT {
         @Override
         public void anunciarIngreso(Sala sala, UUID idJugador) {
             anuncios.add(new Anuncio(idJugador, sala.ocupacion()));
+        }
+
+        /** Esta prueba solo mira ingresos; las salidas no entran en la carrera. */
+        @Override
+        public void anunciarSalida(Sala sala, UUID idJugador) {
+            // sin uso aqui
+        }
+
+        @Override
+        public void anunciarCancelacion(Sala sala,
+                                        com.nexusbattles.plataforma.salaspartidas.dominio
+                                                .MotivoDeCancelacion motivo,
+                                        int creditosDevueltos) {
+            // sin uso aqui
         }
 
         List<Anuncio> anuncios() {

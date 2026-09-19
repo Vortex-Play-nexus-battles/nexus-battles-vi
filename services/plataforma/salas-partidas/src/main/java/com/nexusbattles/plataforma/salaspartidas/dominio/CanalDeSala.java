@@ -31,4 +31,32 @@ public interface CanalDeSala {
      * @param idJugador quien acaba de entrar
      */
     void anunciarIngreso(Sala sala, UUID idJugador);
+
+    /**
+     * Anuncia que un jugador acaba de salir — mensaje {@code sala.participante.salio}.
+     *
+     * <p>Misma regla que el ingreso: se invoca <b>despues</b> de guardar. Sin
+     * este aviso, quien sigue dentro ve un cupo ocupado por alguien que ya no
+     * esta, y solo se entera al recargar — justo lo que el tercer criterio de
+     * HU-SAL-002 vino a evitar.
+     *
+     * @param sala      sala ya actualizada, sin el jugador
+     * @param idJugador quien acaba de salir
+     */
+    void anunciarSalida(Sala sala, UUID idJugador);
+
+    /**
+     * Anuncia que el anfitrion cancelo la sala — mensaje {@code sala.cancelada}.
+     *
+     * <p>Es el unico aviso que obliga a la interfaz a sacar a la persona de la
+     * vista: la sala deja de existir para efectos practicos. Por eso lleva el
+     * motivo, para que la pantalla pueda decir por que se cerro en vez de
+     * limitarse a desaparecer.
+     *
+     * @param sala               sala ya cancelada
+     * @param motivo             por que se cerro
+     * @param creditosDevueltos  creditos que vuelven al anfitrion; 0 si no habia
+     *                           recompensa comprometida o si no se pudo liberar
+     */
+    void anunciarCancelacion(Sala sala, MotivoDeCancelacion motivo, int creditosDevueltos);
 }

@@ -101,4 +101,22 @@ class NotificacionOutboxTest {
         assertTrue(encolada.getDetalle().contains("200.00"),
                 "el aviso debe decirle al jugador cual era su limite");
     }
+
+    @Test
+    void encolaElAvisoDeAutomaticaSinSaldo() {
+        UUID subastaId = UUID.randomUUID();
+        UUID jugador = UUID.randomUUID();
+
+        outbox.avisarAutomaticaSinSaldo(subastaId, jugador);
+
+        ArgumentCaptor<NotificacionPendiente> captor = ArgumentCaptor.captor();
+        verify(repositorio).save(captor.capture());
+
+        NotificacionPendiente encolada = captor.getValue();
+        assertEquals(TipoNotificacion.AUTOMATICA_SIN_SALDO, encolada.getTipo());
+        assertEquals(jugador, encolada.getDestinatarioId());
+        assertEquals(subastaId, encolada.getSubastaId());
+        assertTrue(encolada.getDetalle().contains("saldo disponible no alcanza"),
+                "el aviso debe ser honesto y explicar que la causa fue la falta de saldo");
+    }
 }

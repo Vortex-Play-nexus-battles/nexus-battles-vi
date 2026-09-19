@@ -105,18 +105,35 @@ paths:
           $ref: '#/components/responses/NoAutenticado'
         '422':
           description: |
-            Creditos insuficientes para comprometer la recompensa.
-            `detail` incluye el saldo actual y el requerido.
+            El anfitrion no cumple algun requisito para crear la sala.
+            Distinguir por `type`:
+
+            - `creditos-insuficientes`: el saldo no cubre la recompensa;
+              `detail` incluye el saldo actual y el requerido.
+            - `heroe-no-equipado` / `heroe-ocupado`: RF-JUE-003, SCRUM-1074. El
+              anfitrion entra a su propia sala al crearla, asi que pasa la misma
+              puerta de heroe que los demas.
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
-              example:
-                type: 'https://nexusbattles.local/errores/creditos-insuficientes'
-                title: 'Creditos insuficientes'
-                status: 422
-                detail: 'Tienes 240 creditos y necesitas 400 para crear esta sala.'
-                instance: '/api/v1/salas'
+              examples:
+                creditosInsuficientes:
+                  summary: RF-JUE-014 — saldo insuficiente
+                  value:
+                    type: 'https://nexusbattles.local/errores/creditos-insuficientes'
+                    title: 'Creditos insuficientes'
+                    status: 422
+                    detail: 'Tienes 240 creditos y necesitas 400 para crear esta sala.'
+                    instance: '/api/v1/salas'
+                heroeNoEquipado:
+                  summary: RF-JUE-003 — sin personaje equipado
+                  value:
+                    type: 'https://nexusbattles.local/errores/heroe-no-equipado'
+                    title: 'No tienes un heroe equipado'
+                    status: 422
+                    detail: 'Equipa un heroe en tu inventario antes de entrar a una batalla.'
+                    instance: '/api/v1/salas'
         '503':
           description: |
             Estado transitorio, documentado a proposito: el modulo de creditos
@@ -294,30 +311,7 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ProblemDetail' }
         '422':
-          description: |
-            El jugador no cumple los requisitos para entrar. Distinguir por `type`:
-            heroe no equipado, heroe ocupado en otra partida, o creditos
-            insuficientes para la apuesta.
-          content:
-            application/problem+json:
-              schema: { $ref: '#/components/schemas/ProblemDetail' }
-              examples:
-                heroeNoEquipado:
-                  summary: RF-JUE-003 — sin personaje equipado
-                  value:
-                    type: 'https://nexusbattles.local/errores/heroe-no-equipado'
-                    title: 'No tienes un heroe equipado'
-                    status: 422
-                    detail: 'Equipa un heroe en tu inventario antes de entrar a una batalla.'
-                    instance: '/api/v1/salas/8f2a/participantes'
-                heroeOcupado:
-                  summary: RF-JUE-003 — heroe comprometido en otra partida
-                  value:
-                    type: 'https://nexusbattles.local/errores/heroe-ocupado'
-                    title: 'Tu heroe esta en otra partida'
-                    status: 422
-                    detail: 'Sombra de Vael esta combatiendo en Cacería nocturna. Elige otro heroe.'
-                    instance: '/api/v1/salas/8f2a/participantes'
+          $ref: '#/components/responses/HeroeNoDisponible'
 
     delete:
       tags: [Salas]
@@ -361,6 +355,63 @@ paths:
           $ref: '#/components/responses/NoAutenticado'
         '404':
           $ref: '#/components/responses/SalaNoEncontrada'
+
+  # ---------------------------------------------------------------------------
+  # HU-SAL-004 · RF-JUE-017 — Arranque del combate
+  # ---------------------------------------------------------------------------
+  /salas/{idSala}/partida:
+    parameters:
+      - $ref: '#/components/parameters/IdSala'
+    post:
+      tags: [Partidas]
+      summary: Iniciar la partida de una sala
+      description: |
+        Arranca el combate. Solo el anfitrion, y una sola vez por sala: al
+        empezar, la sala pasa a `EN_JUEGO` y deja de admitir ingresos.
+
+        A los demas participantes les llega el aviso `sala.partida.iniciada`
+        (ver `contracts/websocket/salas-partidas.yaml`) tambien por el canal de
+        la SALA, no solo por el de la partida: en la sala de espera todavia no
+        conocen el identificador de la partida y no pueden estar suscritos a su
+        tema.
+
+        Pulsar dos veces no es un error: la segunda llamada devuelve la misma
+        partida, con el mismo identificador.
+      operationId: iniciarPartida
+      responses:
+        '201':
+          description: Partida iniciada, con su estado inicial.
+          headers:
+            Location:
+              description: URI de la partida creada
+              schema: { type: string, format: uri }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Partida'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          description: |
+            Solo el anfitrion inicia la partida.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '404':
+          $ref: '#/components/responses/SalaNoEncontrada'
+        '409':
+          description: |
+            La sala no admite empezar: ya esta en juego, fue cancelada, ya
+            termino, o no hay rival —una sala de un solo participante sin heroe
+            de la IA no es un enfrentamiento (RF-JUE-004)—.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '422':
+          # SCRUM-1074: entre entrar a la sala y pulsar «empezar» puede pasar un
+          # buen rato, y en ese rato el heroe del anfitrion puede haber entrado
+          # en otra batalla. La puerta del ingreso no vale para siempre.
+          $ref: '#/components/responses/HeroeNoDisponible'
 
   # ---------------------------------------------------------------------------
   # RF-JUE-017 — Estado de la partida, para pintar la vista y para reconectar
@@ -408,6 +459,33 @@ components:
       schema: { type: string, format: uuid }
 
   responses:
+    # SCRUM-1074 — la puerta de heroe. Misma forma en las tres operaciones que
+    # la aplican (crear, entrar, empezar): quien pinta el dialogo es el mismo
+    # componente y no tiene por que distinguir por ruta.
+    HeroeNoDisponible:
+      description: |
+        El jugador no cumple el requisito de heroe (RF-JUE-003). Distinguir por
+        `type`: `heroe-no-equipado` si no tiene ninguno, `heroe-ocupado` si el
+        suyo ya combate en otra partida.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+          examples:
+            heroeNoEquipado:
+              summary: RF-JUE-003 — sin personaje equipado
+              value:
+                type: 'https://nexusbattles.local/errores/heroe-no-equipado'
+                title: 'No tienes un heroe equipado'
+                status: 422
+                detail: 'Equipa un heroe en tu inventario antes de entrar a una batalla.'
+            heroeOcupado:
+              summary: RF-JUE-003 — heroe comprometido en otra partida
+              value:
+                type: 'https://nexusbattles.local/errores/heroe-ocupado'
+                title: 'Tu heroe esta en otra partida'
+                status: 422
+                detail: 'Sombra de Vael esta combatiendo en Caceria nocturna. Elige otro heroe.'
+
     NoAutenticado:
       description: Falta el token o esta caducado
       content:
@@ -598,6 +676,27 @@ components:
           format: uuid
           description: Presente solo cuando la partida ya comenzo.
         creadaEn: { type: string, format: date-time }
+        codigoInvitacion:
+          type: string
+          description: |
+            Llave de acceso de una sala privada. **Solo viaja hacia el
+            anfitrion**, y solo en las respuestas de `crearSala`,
+            `obtenerSala` e `ingresarASala`; a cualquier otro jugador el campo
+            ni siquiera aparece en el JSON. Ausente tambien en las salas
+            publicas, que no tienen codigo.
+
+            Lo genera el servidor al crear la sala —ocho caracteres de un
+            alfabeto sin `I`, `O`, `0` ni `1`, agrupados de cuatro en cuatro—
+            para que se pueda dictar en voz alta sin ambiguedad. El cliente
+            nunca lo elige.
+
+            Se anadio despues del congelado del Sprint 1 porque sin el las
+            salas privadas eran inaccesibles incluso para su anfitrion: el
+            contrato ya exigia `codigoInvitacion` en `IngresoRequest`, pero no
+            habia ninguna operacion que lo entregara. Es un campo opcional
+            nuevo, compatible hacia atras: ningun consumidor que lo ignore se
+            rompe.
+          example: 'H7KM-3PQX'
 
     PaginaDeSalas:
       type: object
@@ -643,7 +742,16 @@ components:
         lo que la vista de batalla pinta.
       required: [id, nombre, vidaActual, vidaMaxima]
       properties:
-        id: { type: string, format: uuid }
+        id:
+          type: string
+          minLength: 1
+          description: |
+            Identificador del heroe en el inventario de su dueno. Es una cadena
+            opaca, no un UUID: `ElementoInventario.id` de
+            `contracts/openapi/inventario.yaml` lo declara `type: string` y este
+            servicio no lo interpreta, solo lo devuelve tal cual lo recibe.
+            Exigir aqui formato uuid rompia la verificacion de HU-SAL-003 con
+            inventarios perfectamente validos.
         nombre: { type: string }
         retratoUrl: { type: [string, 'null'], format: uri }
         nivel: { type: [integer, 'null'] }

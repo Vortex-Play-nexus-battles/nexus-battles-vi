@@ -288,6 +288,76 @@ class PujasApiIT {
     }
 
     /**
+     * El caso que motiva toda la cabecera Idempotency-Key: la puja entra, la
+     * respuesta se pierde de vuelta y el navegador reintenta. Antes el
+     * reintento llegaba con el precio ya subido por su propia puja y se
+     * rechazaba con OFERTA_INSUFICIENTE, de modo que el jugador no podia saber
+     * si habia pujado. Ahora recibe su misma puja.
+     */
+    @Test
+    void reintentarLaMismaPujaConLaMismaClaveDevuelveLaPujaOriginal() throws Exception {
+        UUID jugador = jugadorConSaldo("1000");
+        Subasta subasta = subastaActiva(UUID.randomUUID(), "100", "500");
+        String clave = claveNueva();
+
+        HttpResponse<String> primera = enviar("POST", "/subastas/" + subasta.getId() + "/pujas",
+                "{\"monto\":\"110\"}", tokenDe(jugador), clave);
+        assertEquals(201, primera.statusCode(), primera.body());
+
+        HttpResponse<String> reintento = enviar("POST", "/subastas/" + subasta.getId() + "/pujas",
+                "{\"monto\":\"110\"}", tokenDe(jugador), clave);
+
+        assertEquals(201, reintento.statusCode(), reintento.body());
+        assertEquals(mapper.readTree(primera.body()).get("id").asText(),
+                mapper.readTree(reintento.body()).get("id").asText(),
+                "el reintento debe devolver la misma puja, no una nueva");
+
+        // Y sobre todo: la subasta no se movio dos veces.
+        Subasta recargada = subastas.findById(subasta.getId()).orElseThrow();
+        assertEquals(1, recargada.getCantidadPujas(),
+                "un reintento no puede contar como una segunda puja");
+        assertEquals(0, new BigDecimal("110.00").compareTo(recargada.getOfertaVigente()));
+    }
+
+    @Test
+    void reintentarLaCompraInmediataConLaMismaClaveDevuelveLaCompraOriginal() throws Exception {
+        UUID comprador = jugadorConSaldo("1000");
+        Subasta subasta = subastaActiva(UUID.randomUUID(), "100", "500");
+        String clave = claveNueva();
+
+        HttpResponse<String> primera = enviar("POST", "/subastas/" + subasta.getId() + "/compra-inmediata",
+                "{\"confirmado\":true}", tokenDe(comprador), clave);
+        assertEquals(201, primera.statusCode(), primera.body());
+
+        // Sin reproduccion esto devolveria 409 SUBASTA_NO_ACTIVA: la subasta ya
+        // esta ADJUDICADA por la primera compra, y el comprador no podria
+        // distinguir "ya es tuyo" de "llegaste tarde".
+        HttpResponse<String> reintento = enviar("POST", "/subastas/" + subasta.getId() + "/compra-inmediata",
+                "{\"confirmado\":true}", tokenDe(comprador), clave);
+
+        assertEquals(201, reintento.statusCode(), reintento.body());
+        assertEquals(mapper.readTree(primera.body()).get("id").asText(),
+                mapper.readTree(reintento.body()).get("id").asText());
+    }
+
+    @Test
+    void reutilizarLaClaveEnOtraSubastaSeRechazaConSuMotivo() throws Exception {
+        UUID jugador = jugadorConSaldo("1000");
+        Subasta primera = subastaActiva(UUID.randomUUID(), "100", "500");
+        Subasta otra = subastaActiva(UUID.randomUUID(), "100", "500");
+        String clave = claveNueva();
+
+        assertEquals(201, enviar("POST", "/subastas/" + primera.getId() + "/pujas",
+                "{\"monto\":\"110\"}", tokenDe(jugador), clave).statusCode());
+
+        HttpResponse<String> enOtra = enviar("POST", "/subastas/" + otra.getId() + "/pujas",
+                "{\"monto\":\"110\"}", tokenDe(jugador), clave);
+
+        assertEquals(422, enOtra.statusCode(), enOtra.body());
+        assertEquals("CLAVE_REUTILIZADA", motivoDe(enOtra));
+    }
+
+    /**
      * 409 y no 422: cuando la interfaz pinto la pantalla la puja era valida, y
      * dejo de serlo porque otro se adelanto. Releer y reintentar tiene sentido.
      */

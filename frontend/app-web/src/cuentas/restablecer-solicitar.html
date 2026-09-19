@@ -1,35 +1,37 @@
 <!doctype html>
 <html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Recuperar contraseña — NEXUS BATTLES VI</title>
-  <link rel="stylesheet" href="./login.css">
-</head>
-<body>
-<main class="pagina-auth">
-  <section class="tarjeta">
-    <h1 class="titulo-grande">NEXUS BATTLES VI</h1>
-    <p class="titulo-mediano">Recuperar contraseña</p>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Recuperar contraseña — NEXUS BATTLES VI</title>
+    <link rel="stylesheet" href="./login.css" />
+  </head>
+  <body>
+    <main class="pagina-auth">
+      <section class="tarjeta">
+        <h1 class="titulo-grande">NEXUS BATTLES VI</h1>
+        <p class="titulo-mediano">Recuperar contraseña</p>
 
-    <p class="ayuda">Ingresa tu correo y te enviaremos un código para restablecer tu contraseña.</p>
+        <p class="ayuda">
+          Ingresa tu correo y te enviaremos un código para restablecer tu contraseña.
+        </p>
 
-    <p class="estado" id="estadoSolicitud" hidden role="status"></p>
+        <p class="estado" id="estadoSolicitud" hidden role="status"></p>
 
-    <form id="formSolicitud" novalidate>
-      <label>
-        Correo electrónico
-        <input type="email" id="email" name="email" required autocomplete="email">
-      </label>
+        <form id="formSolicitud" novalidate>
+          <label>
+            Correo electrónico
+            <input type="email" id="email" name="email" required autocomplete="email" />
+          </label>
 
-      <button type="submit" class="btn-primario" id="botonEnviar">Enviar código</button>
-    </form>
+          <button type="submit" class="btn-primario" id="botonEnviar">Enviar código</button>
+        </form>
 
-    <a class="enlace-secundario" href="./restablecer-confirmar.html">Ya tengo un código</a>
-    <a class="enlace-secundario" href="./login.html">Volver a iniciar sesión</a>
-  </section>
-</main>
+        <a class="enlace-secundario" href="./restablecer-confirmar.html">Ya tengo un código</a>
+        <a class="enlace-secundario" href="./login.html">Volver a iniciar sesión</a>
+      </section>
+    </main>
 
-<script type="module" src="./restablecer-solicitar.js"></script>
-</body>
+    <script type="module" src="./restablecer-solicitar.js"></script>
+  </body>
 </html>

@@ -126,6 +126,24 @@ describe('leerSesion', () => {
   test('sin sesion devuelve nulos, no cadenas vacias', () => {
     expect(leerSesion({ getItem: () => null })).toEqual({ usuarioId: null, apodo: null });
   });
+
+  test('el autor sale del token, no de la clave que pisa el panel de administracion', () => {
+    // `gestion-usuarios.js` escribe en `nexus.usuarioId` el id del usuario que
+    // el administrador acaba de seleccionar. Si el comentario se firmara con
+    // eso, quedaria a nombre de otra persona.
+    const uid = '44444444-4444-4444-4444-444444444444';
+    const cuerpo = btoa(JSON.stringify({ uid }))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+    const almacen = new Map([
+      ['nexus.usuarioId', '99'],
+      ['nexus.apodoActual', 'Simon_P'],
+      ['nexus.token', `eyJ.${cuerpo}.firma`],
+    ]);
+
+    expect(leerSesion({ getItem: (k) => almacen.get(k) ?? null }).usuarioId).toBe(uid);
+  });
 });
 
 describe('leerFormulario', () => {

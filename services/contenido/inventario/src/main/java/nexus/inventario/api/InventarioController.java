@@ -3,6 +3,7 @@ package nexus.inventario.api;
 import jakarta.validation.Valid;
 import java.net.URI;
 import nexus.inventario.aplicacion.BuscarElementosInventario;
+import nexus.inventario.aplicacion.ConsultarElementoInventario;
 import nexus.inventario.aplicacion.ConsultarInventarioPaginado;
 import nexus.inventario.aplicacion.GestionarInventario;
 import nexus.inventario.dominio.ElementoInventario;
@@ -26,14 +27,17 @@ public class InventarioController {
     private final GestionarInventario gestion;
     private final ConsultarInventarioPaginado consulta;
     private final BuscarElementosInventario busqueda;
+    private final ConsultarElementoInventario consultaElemento;
 
     public InventarioController(
             GestionarInventario gestion,
             ConsultarInventarioPaginado consulta,
-            BuscarElementosInventario busqueda) {
+            BuscarElementosInventario busqueda,
+            ConsultarElementoInventario consultaElemento) {
         this.gestion = gestion;
         this.consulta = consulta;
         this.busqueda = busqueda;
+        this.consultaElemento = consultaElemento;
     }
 
     /**
@@ -55,6 +59,11 @@ public class InventarioController {
             @RequestParam String criterio,
             @RequestParam(name = "pagina", defaultValue = "0") int pagina) {
         return PaginaInventarioResponse.de(busqueda.buscar(identidad, criterio, pagina));
+    }
+
+    @GetMapping("/{elementoId}")
+    public DetalleElementoInventarioResponse consultarElemento(@PathVariable String elementoId) {
+        return DetalleElementoInventarioResponse.de(consultaElemento.consultar(elementoId));
     }
 
     @PostMapping

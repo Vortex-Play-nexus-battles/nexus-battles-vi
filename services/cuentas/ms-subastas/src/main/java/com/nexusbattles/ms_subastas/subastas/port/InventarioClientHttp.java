@@ -1,5 +1,7 @@
 package com.nexusbattles.ms_subastas.subastas.port;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,34 +18,23 @@ import java.util.UUID;
 /**
  * Adaptador HTTP hacia el servicio de inventario.
  *
- * <p><b>Solo una de las cuatro operaciones existe al otro lado.</b> La version
- * anterior llamaba a {@code /elementos/{id}/reservas} y
- * {@code /elementos/{id}/transferencias}, que no estan en
- * {@code contracts/openapi/inventario.yaml} ni en el codigo de inventario:
- * nadie los ha construido ni los tiene planeados. Con
- * {@code app.inventario.modo=fake} eso no se notaba; en cuanto se activara el
- * modo http, cada llamada habria muerto con un 404 en mitad de una subasta.
+ * <p>Integra las operaciones acordadas con ms-inventario (HU-INV-010 y HU-SUB-004):
+ * <ul>
+ *   <li>Bloqueo en subasta: {@code PUT /api/v1/inventario/elementos/{elementoId}/bloqueo-subasta} con
+ *       {@code SolicitudReserva} ({@code propietarioUid} y {@code subastaId}) e {@code Idempotency-Key}.</li>
+ *   <li>Liberacion de bloqueo: {@code DELETE /api/v1/inventario/elementos/{elementoId}/bloqueo-subasta/{subastaId}}.</li>
+ *   <li>Consulta de elemento: {@code GET /api/v1/inventario/elementos/{elementoId}}.</li>
+ *   <li>Transferencia de propiedad: {@code POST /api/v1/inventario/elementos/{elementoId}/transferencias} con
+ *       {@code SolicitudTransferencia} ({@code nuevoPropietarioUid} y {@code subastaId}) e {@code Idempotency-Key}.</li>
+ * </ul>
  *
- * <p>Lo unico publicado hoy es
- * {@code PUT /api/v1/inventario/elementos/{elementoId}/bloqueo-subasta}
- * (HU-INV-010). Las otras tres fallan aqui con un mensaje que nombra el
- * endpoint que falta, en vez de inventarse una URL: un fallo claro y temprano
- * es mejor que uno silencioso que ademas parece implementado.
- *
- * <p><b>Falta acordar que identificador cruza esta frontera.</b> Inventario
- * autentica con la cabecera {@code X-User-Name} y compara ese texto contra su
- * {@code propietarioId} con {@code equalsIgnoreCase}, asi que espera un apodo.
- * ms-subastas solo conoce el UUID estable del claim {@code uid} — precisamente
- * porque el apodo es mutable y no sirve como clave. Es el mismo problema de
- * {@code sub} contra {@code uid} que ya se resolvio dentro del token,
- * reapareciendo entre servicios. Hasta que se acuerde, esta llamada se
- * respondera con 403 y el mensaje de abajo lo explica.
+ * <p>Todas las operaciones internas entre servicios usan identidad por UUID estable y tokens
+ * S2S (bearerAuth), sin depender de la cabecera {@code X-User-Name}.
  */
 public class InventarioClientHttp implements InventarioClient {
 
     private static final Logger log = LoggerFactory.getLogger(InventarioClientHttp.class);
 
-    private static final String CABECERA_IDENTIDAD = "X-User-Name";
 
     private final URI baseUri;
     private final HttpClient httpClient;
@@ -84,10 +75,9 @@ public class InventarioClientHttp implements InventarioClient {
                         uri("/api/v1/inventario/elementos/" + elementoInventarioId + "/bloqueo-subasta"))
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
-                .header(CABECERA_IDENTIDAD, propietarioId.toString())
                 .header("Idempotency-Key", idempotencyKey)
                 .timeout(timeout)
-                .PUT(HttpRequest.BodyPublishers.ofString(cuerpoDeBloqueo(subastaId)))
+                .PUT(HttpRequest.BodyPublishers.ofString(cuerpoDeBloqueo(propietarioId, subastaId)))
                 .build();
 
         HttpResponse<String> respuesta = enviar(peticion);
@@ -97,10 +87,8 @@ public class InventarioClientHttp implements InventarioClient {
         }
         if (estado == 403) {
             throw new InventarioClientException(
-                    "Inventario rechazo el bloqueo del elemento " + elementoInventarioId + " por identidad ajena. "
-                            + "Se envio el UUID del jugador en " + CABECERA_IDENTIDAD + ", pero inventario compara "
-                            + "esa cabecera contra su propietarioId, que guarda el apodo. Falta acordar que "
-                            + "identificador cruza esta frontera.");
+                    "Inventario rechazo el bloqueo del elemento " + elementoInventarioId
+                            + ": el propietarioUid enviado no es el dueno del elemento");
         }
         if (estado == 409) {
             throw new InventarioClientException(
@@ -115,18 +103,58 @@ public class InventarioClientHttp implements InventarioClient {
     }
 
     /**
-     * @throws InventarioClientException siempre. No hay endpoint: el contrato de
-     *         inventario solo expone {@code GET /elementos} (la vitrina del
-     *         jugador autenticado) y {@code GET /elementos/busqueda}, ninguno de
-     *         los dos sirve para resolver un elemento por su id sin saber de
-     *         quien es.
+     * Resuelve un elemento por su identificador contra
+     * {@code GET /api/v1/inventario/elementos/{elementoId}}, publicado por
+     * Nicolay el 15/09/2026 (HU-INV-010). Hasta entonces esta operacion no
+     * existia y este metodo fallaba siempre.
+     *
+     * <p>No manda identidad: la consulta no la pide, y es justo lo que la hace
+     * utilizable desde el job de cierre, donde no hay peticion de nadie.
+     *
+     * @return vacio si inventario responde 404. Que un elemento ya no exista es
+     *         un estado normal —lo pudieron borrar entre la publicacion y el
+     *         cierre—, no un fallo, asi que quien llama decide que hacer en vez
+     *         de recibir una excepcion.
      */
     @Override
     public Optional<ElementoInventario> buscar(String elementoInventarioId) {
-        throw new InventarioClientException(
-                "Inventario no expone una consulta de elemento por id. Hace falta "
-                        + "GET /api/v1/inventario/elementos/{elementoId} en su contrato "
-                        + "(pedido a Nicolay, HU-INV-010). Mientras tanto, app.inventario.modo=fake.");
+        exigir(elementoInventarioId != null && !elementoInventarioId.isBlank(),
+                "El identificador del elemento de inventario es obligatorio");
+
+        HttpRequest peticion = HttpRequest.newBuilder(
+                        uri("/api/v1/inventario/elementos/" + elementoInventarioId))
+                .header("Accept", "application/json")
+                .timeout(timeout)
+                .GET()
+                .build();
+
+        HttpResponse<String> respuesta = enviar(peticion);
+        int estado = respuesta.statusCode();
+        if (estado == 404) {
+            return Optional.empty();
+        }
+        if (estado == 503) {
+            throw new InventarioNoDisponibleException(
+                    "Inventario no esta disponible para consultar el elemento " + elementoInventarioId);
+        }
+        if (estado < 200 || estado >= 300) {
+            throw new InventarioClientException(
+                    "Respuesta inesperada de inventario al consultar el elemento: " + estado);
+        }
+
+        DetalleElemento detalle;
+        try {
+            detalle = objectMapper.readValue(respuesta.body(), DetalleElemento.class);
+        } catch (IOException e) {
+            throw new InventarioClientException(
+                    "Respuesta de inventario ilegible al consultar el elemento " + elementoInventarioId, e);
+        }
+        // 'enUso' de inventario es "equipado por su dueno". Un elemento
+        // bloqueado por una subasta no esta en uso, y esa distincion importa:
+        // confundirlas dejaria fuera de subasta a todo lo ya publicado.
+        return Optional.of(new ElementoInventario(
+                detalle.elementoId() == null ? elementoInventarioId : detalle.elementoId(),
+                detalle.productoId(), detalle.propietarioUid(), detalle.enUso()));
     }
 
     /**
@@ -189,22 +217,73 @@ public class InventarioClientHttp implements InventarioClient {
     }
 
     /**
-     * @throws InventarioClientException siempre. La transferencia de propiedad
-     *         no existe en ningun sitio del monorepo. Es lo que impide que
-     *         HU-SUB-004 entregue de verdad lo que cobra.
+     * Transfiere formalmente la propiedad de un elemento de inventario al ganador de la subasta.
+     * Operacion acordada con Nicolay (ms-inventario):
+     * {@code POST /api/v1/inventario/elementos/{elementoId}/transferencias}.
      */
     @Override
     public void transferirProducto(String elementoInventarioId, UUID nuevoPropietarioId,
                                    UUID subastaId, String idempotencyKey) {
+        exigir(elementoInventarioId != null && !elementoInventarioId.isBlank(),
+                "El identificador del elemento de inventario es obligatorio");
+        exigir(nuevoPropietarioId != null, "El nuevo propietario es obligatorio para la transferencia");
+        exigir(subastaId != null, "El identificador de la subasta es obligatorio para la transferencia");
+
+        HttpRequest.Builder constructor = HttpRequest.newBuilder(
+                        uri("/api/v1/inventario/elementos/" + elementoInventarioId + "/transferencias"))
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .timeout(timeout)
+                .POST(HttpRequest.BodyPublishers.ofString(cuerpoDeTransferencia(nuevoPropietarioId, subastaId)));
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            constructor.header("Idempotency-Key", idempotencyKey);
+        }
+
+        HttpResponse<String> respuesta = enviar(constructor.build());
+        int estado = respuesta.statusCode();
+        if (estado >= 200 && estado < 300) {
+            return;
+        }
+        if (estado == 404) {
+            // Dos cosas distintas con el mismo numero, y hoy la segunda es la
+            // probable: ms-inventario todavia NO publica esta ruta —solo el
+            // bloqueo, su liberacion y la consulta por id—, asi que un 404 aqui
+            // seguramente no dice "ese elemento no existe" sino "esa operacion
+            // no existe". Culpar al elemento mandaria a quien lo depure a mirar
+            // la subasta en vez del contrato. Cuando Nicolay la publique, este
+            // mensaje se puede recortar a la primera mitad.
+            throw new InventarioClientException(
+                    "Inventario respondio 404 al transferir el elemento " + elementoInventarioId
+                            + ". O el elemento no existe, o —mas probable hoy— ms-inventario aun no expone "
+                            + "POST /api/v1/inventario/elementos/{elementoId}/transferencias. "
+                            + "Comprobar el contrato antes que el dato.");
+        }
+        if (estado == 409) {
+            throw new InventarioClientException(
+                    "Inventario rechazo la transferencia del elemento " + elementoInventarioId
+                            + ": conflicto con el estado del elemento o subasta");
+        }
+        if (estado == 503) {
+            throw new InventarioNoDisponibleException(
+                    "Inventario no esta disponible para transferir el elemento " + elementoInventarioId);
+        }
         throw new InventarioClientException(
-                "Inventario no expone la transferencia de propiedad. Hace falta un endpoint que "
-                        + "cambie el propietario de un elemento al cerrarse una subasta "
-                        + "(pedido a Nicolay). Sin eso se cobra al ganador y no se le entrega nada.");
+                "Respuesta inesperada de inventario al transferir el elemento: " + estado);
     }
 
-    private String cuerpoDeBloqueo(UUID subastaId) {
+    private String cuerpoDeBloqueo(UUID propietarioId, UUID subastaId) {
         try {
-            return objectMapper.writeValueAsString(new BloquearEnSubasta(subastaId.toString()));
+            return objectMapper.writeValueAsString(
+                    new SolicitudReserva(propietarioId, subastaId));
+        } catch (IOException e) {
+            throw new InventarioClientException("Error al serializar el cuerpo para inventario", e);
+        }
+    }
+
+    private String cuerpoDeTransferencia(UUID nuevoPropietarioId, UUID subastaId) {
+        try {
+            return objectMapper.writeValueAsString(
+                    new SolicitudTransferencia(nuevoPropietarioId, subastaId));
         } catch (IOException e) {
             throw new InventarioClientException("Error al serializar el cuerpo para inventario", e);
         }
@@ -240,6 +319,24 @@ public class InventarioClientHttp implements InventarioClient {
         }
     }
 
-    /** Cuerpo exacto que declara el contrato de inventario para el bloqueo. */
-    private record BloquearEnSubasta(String subastaId) { }
+    /**
+     * Solicitud enviada a inventario para bloquear un elemento en subasta (HU-INV-010).
+     * El propietario viaja en el cuerpo como {@code propietarioUid}.
+     */
+    static record SolicitudReserva(
+            @JsonProperty("propietarioUid") UUID propietarioUid,
+            @JsonProperty("subastaId") UUID subastaId) { }
+
+    /**
+     * Solicitud enviada a inventario para transferir la propiedad al ganador (HU-SUB-004).
+     * El nuevo propietario viaja en el cuerpo como {@code nuevoPropietarioUid}.
+     */
+    static record SolicitudTransferencia(
+            @JsonProperty("nuevoPropietarioUid") UUID nuevoPropietarioUid,
+            @JsonProperty("subastaId") UUID subastaId) { }
+
+    /** Forma exacta de {@code DetalleElementoInventarioResponse} de inventario. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record DetalleElemento(String elementoId, UUID productoId, UUID propietarioUid,
+                                   boolean enUso, boolean disponible, UUID subastaId) { }
 }

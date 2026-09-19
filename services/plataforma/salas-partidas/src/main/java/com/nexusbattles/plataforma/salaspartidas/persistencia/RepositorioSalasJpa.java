@@ -58,10 +58,30 @@ public class RepositorioSalasJpa implements RepositorioDeSalas {
     @Transactional
     public Sala guardar(Sala sala) {
         try {
+            // La marca se comprueba ANTES de tocar nada, y no solo con el
+            // `WHERE version = ?` del UPDATE.
+            //
+            // Por que hizo falta (P2.4): desde que los participantes llevan
+            // ficha, la coleccion es un Map de embebidos y Hibernate la
+            // sincroniza borrando e insertando filas. Esos DELETE se ejecutan
+            // en el mismo flush que el UPDATE de la sala, y con una lectura
+            // vieja llegaban a borrar a un participante que SI estaba antes de
+            // que la marca detuviera la escritura. `IngresoConcurrenteIT` lo
+            // vio tal cual: la escritura rechazada de Bruno se llevaba por
+            // delante a Ana. Comprobar antes es una consulta mas por guardado
+            // a cambio de que una escritura rechazada no toque nada.
+            datos.findById(sala.id()).ifPresent(actual -> {
+                if (actual.version() != sala.version()) {
+                    throw new SalaModificadaConcurrentemente(sala.id());
+                }
+            });
+
             // saveAndFlush y no save: el UPDATE con `WHERE version = ?` tiene
             // que ejecutarse DENTRO de este metodo, no al confirmar la
             // transaccion despues de salir, para que el conflicto se pueda
             // traducir aqui y no escape como excepcion de infraestructura.
+            // Se conserva: cubre la carrera que se cuela entre la comprobacion
+            // de arriba y este flush.
             datos.saveAndFlush(SalaEntidad.desde(sala));
         } catch (OptimisticLockingFailureException | jakarta.persistence.OptimisticLockException otroSeAdelanto) {
             throw new SalaModificadaConcurrentemente(sala.id());

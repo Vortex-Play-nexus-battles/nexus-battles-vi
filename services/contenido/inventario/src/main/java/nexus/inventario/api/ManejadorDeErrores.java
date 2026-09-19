@@ -2,6 +2,7 @@ package nexus.inventario.api;
 
 import nexus.inventario.aplicacion.CriterioBusquedaInvalidoException;
 import nexus.inventario.aplicacion.IdentidadRequeridaException;
+import nexus.inventario.aplicacion.IdentificadorHistoricoException;
 import nexus.inventario.aplicacion.InventarioAjenoException;
 import nexus.inventario.aplicacion.ProductoNoEncontradoException;
 import nexus.inventario.dominio.ElementoNoEncontradoException;
@@ -33,6 +34,11 @@ public class ManejadorDeErrores {
     @ExceptionHandler(InventarioAjenoException.class)
     public ProblemDetail inventarioAjeno(InventarioAjenoException error) {
         return problema(HttpStatus.FORBIDDEN, "Inventario ajeno", error.getMessage());
+    }
+
+    @ExceptionHandler(IdentificadorHistoricoException.class)
+    public ProblemDetail identificadorHistorico(IdentificadorHistoricoException error) {
+        return problema(HttpStatus.CONFLICT, "Inventario pendiente de migracion", error.getMessage());
     }
 
     @ExceptionHandler(ElementoNoEncontradoException.class)

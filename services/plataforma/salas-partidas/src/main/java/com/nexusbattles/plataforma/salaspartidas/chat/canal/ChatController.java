@@ -14,6 +14,7 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.annotation.SendToUser;
 import org.springframework.messaging.simp.annotation.SubscribeMapping;
+import com.nexusbattles.plataforma.salaspartidas.seguridad.IdentidadDelToken;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -86,7 +87,10 @@ public class ChatController {
             throw new AccessDeniedException("El chat necesita un jugador autenticado.");
         }
         Jwt jwt = token.getToken();
-        String apodo = jwt.getClaimAsString("preferred_username");
-        return new Autor(UUID.fromString(jwt.getSubject()), apodo == null ? jwt.getSubject() : apodo);
+        // NO `UUID.fromString(jwt.getSubject())`: tras ADR-002 el sujeto de
+        // ms-identidad es el APODO, no un UUID, y eso reventaba con un 500. Se
+        // corrigio en SalasController (PR #404) y aqui se habia quedado el
+        // fallo: la regla vive ahora en un solo sitio.
+        return new Autor(IdentidadDelToken.idDe(jwt), IdentidadDelToken.apodoDe(jwt));
     }
 }

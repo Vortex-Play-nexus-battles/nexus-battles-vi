@@ -49,11 +49,19 @@ class IngresarASalaTest {
     private CanalDeSalaEspia canal;
     private IngresarASala ingresarASala;
 
+    /** Inventario que deja pasar. La puerta en si se prueba mas abajo. */
+    private InventarioEnMemoria inventario = InventarioEnMemoria.conHeroe();
+
+    /** Un identificador cualquiera, con el apodo que el inventario necesita. */
+    private static JugadorAutenticado como(UUID id) {
+        return new JugadorAutenticado(id, "jugador-" + id.toString().substring(0, 8));
+    }
+
     @BeforeEach
     void preparar() {
         repositorio = new RepositorioDeSalasEnMemoria();
         canal = new CanalDeSalaEspia();
-        ingresarASala = new IngresarASala(repositorio, canal);
+        ingresarASala = new IngresarASala(repositorio, canal, inventario);
     }
 
     private Sala salaAbierta() {
@@ -67,7 +75,7 @@ class IngresarASalaTest {
     void ingresa() {
         Sala sala = salaAbierta();
 
-        Sala resultado = ingresarASala.ejecutar(sala.id(), VISITANTE);
+        Sala resultado = ingresarASala.ejecutar(sala.id(), como(VISITANTE));
 
         assertAll(
                 () -> assertEquals(2, resultado.ocupacion()),
@@ -79,7 +87,7 @@ class IngresarASalaTest {
     void elIngresoPersiste() {
         Sala sala = salaAbierta();
 
-        ingresarASala.ejecutar(sala.id(), VISITANTE);
+        ingresarASala.ejecutar(sala.id(), como(VISITANTE));
 
         Sala guardada = repositorio.buscarPorId(sala.id()).orElseThrow();
         assertTrue(guardada.participantes().contains(VISITANTE));
@@ -89,7 +97,7 @@ class IngresarASalaTest {
     @DisplayName("una sala que no existe se distingue de un rechazo por reglas: 404")
     void salaInexistente() {
         SalaNoEncontrada error = assertThrows(SalaNoEncontrada.class,
-                () -> ingresarASala.ejecutar(UUID.randomUUID(), VISITANTE));
+                () -> ingresarASala.ejecutar(UUID.randomUUID(), como(VISITANTE)));
 
         assertEquals(404, error.estado());
     }
@@ -103,7 +111,7 @@ class IngresarASalaTest {
         repositorio.guardar(sala);
 
         IngresoNoPermitido error = assertThrows(IngresoNoPermitido.class,
-                () -> ingresarASala.ejecutar(sala.id(), UUID.randomUUID()));
+                () -> ingresarASala.ejecutar(sala.id(), como(UUID.randomUUID())));
 
         assertEquals(409, error.estado());
     }
@@ -116,7 +124,7 @@ class IngresarASalaTest {
         repositorio.guardar(sala);
 
         SalaPrivadaSinInvitacion error = assertThrows(SalaPrivadaSinInvitacion.class,
-                () -> ingresarASala.ejecutar(sala.id(), VISITANTE));
+                () -> ingresarASala.ejecutar(sala.id(), como(VISITANTE)));
 
         assertEquals(403, error.estado());
     }
@@ -125,10 +133,10 @@ class IngresarASalaTest {
     @DisplayName("quien ya esta dentro no vuelve a entrar")
     void ingresoRepetido() {
         Sala sala = salaAbierta();
-        ingresarASala.ejecutar(sala.id(), VISITANTE);
+        ingresarASala.ejecutar(sala.id(), como(VISITANTE));
 
         assertThrows(IngresoNoPermitido.class,
-                () -> ingresarASala.ejecutar(sala.id(), VISITANTE));
+                () -> ingresarASala.ejecutar(sala.id(), como(VISITANTE)));
     }
 
     @Test
@@ -140,7 +148,7 @@ class IngresarASalaTest {
         repositorio.guardar(sala);
 
         assertThrows(IngresoNoPermitido.class,
-                () -> ingresarASala.ejecutar(sala.id(), UUID.randomUUID()));
+                () -> ingresarASala.ejecutar(sala.id(), como(UUID.randomUUID())));
 
         Sala guardada = repositorio.buscarPorId(sala.id()).orElseThrow();
         assertAll(
@@ -163,9 +171,11 @@ class IngresarASalaTest {
     void anunciaElIngreso() {
         Sala sala = salaAbierta();
 
-        ingresarASala.ejecutar(sala.id(), VISITANTE);
+        ingresarASala.ejecutar(sala.id(), como(VISITANTE));
 
-        assertEquals(List.of(new CanalDeSalaEspia.Anuncio(sala.id(), VISITANTE, 2)),
+        assertEquals(
+                List.of(new CanalDeSalaEspia.Anuncio(
+                        CanalDeSalaEspia.INGRESO, sala.id(), VISITANTE, 2)),
                 canal.anuncios());
     }
 
@@ -174,7 +184,7 @@ class IngresarASalaTest {
     void anunciaDespuesDeGuardar() {
         Sala sala = salaAbierta();
 
-        ingresarASala.ejecutar(sala.id(), VISITANTE);
+        ingresarASala.ejecutar(sala.id(), como(VISITANTE));
 
         // Si el anuncio se hubiera emitido antes de persistir, la ocupacion
         // anunciada y la guardada podrian no coincidir.
@@ -191,7 +201,7 @@ class IngresarASalaTest {
         repositorio.guardar(sala);
 
         assertThrows(IngresoNoPermitido.class,
-                () -> ingresarASala.ejecutar(sala.id(), UUID.randomUUID()));
+                () -> ingresarASala.ejecutar(sala.id(), como(UUID.randomUUID())));
 
         assertTrue(canal.noAnuncioNada());
     }
@@ -204,7 +214,7 @@ class IngresarASalaTest {
         repositorio.guardar(sala);
 
         assertThrows(SalaPrivadaSinInvitacion.class,
-                () -> ingresarASala.ejecutar(sala.id(), VISITANTE));
+                () -> ingresarASala.ejecutar(sala.id(), como(VISITANTE)));
 
         assertTrue(canal.noAnuncioNada());
     }
@@ -213,7 +223,7 @@ class IngresarASalaTest {
     @DisplayName("una sala que no existe no anuncia nada")
     void elSalaInexistenteNoAnuncia() {
         assertThrows(SalaNoEncontrada.class,
-                () -> ingresarASala.ejecutar(UUID.randomUUID(), VISITANTE));
+                () -> ingresarASala.ejecutar(UUID.randomUUID(), como(VISITANTE)));
 
         assertTrue(canal.noAnuncioNada());
     }
@@ -225,7 +235,7 @@ class IngresarASalaTest {
 
         assertAll(
                 () -> assertThrows(NullPointerException.class,
-                        () -> ingresarASala.ejecutar(null, VISITANTE)),
+                        () -> ingresarASala.ejecutar(null, como(VISITANTE))),
                 () -> assertThrows(NullPointerException.class,
                         () -> ingresarASala.ejecutar(sala.id(), null)));
     }
@@ -240,14 +250,14 @@ class IngresarASalaTest {
     @DisplayName("si otro ingreso se adelanto, vuelve a leer y entra si todavia cabe")
     void reintentaTrasUnaEscrituraAdelantada() {
         RepositorioQueSeAdelanta almacen = new RepositorioQueSeAdelanta(1);
-        ingresarASala = new IngresarASala(almacen, canal);
+        ingresarASala = new IngresarASala(almacen, canal, inventario);
         Sala sala = Sala.crear(
                 new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null), ANFITRION);
         // La semilla es una escritura «de fuera»: no debe consumir el fallo
         // programado para el caso de uso.
         almacen.sobreescribir(sala);
 
-        Sala resultado = ingresarASala.ejecutar(sala.id(), VISITANTE);
+        Sala resultado = ingresarASala.ejecutar(sala.id(), como(VISITANTE));
 
         assertAll(
                 () -> assertTrue(resultado.participantes().contains(VISITANTE)),
@@ -260,7 +270,7 @@ class IngresarASalaTest {
     @DisplayName("si otro ocupo el ultimo cupo en medio, el segundo recibe el rechazo de sala llena y no se anuncia")
     void elPerdedorDeLaCarreraRecibeSalaLlena() {
         RepositorioQueSeAdelanta almacen = new RepositorioQueSeAdelanta(1);
-        ingresarASala = new IngresarASala(almacen, canal);
+        ingresarASala = new IngresarASala(almacen, canal, inventario);
         Sala sala = Sala.crear(
                 new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, false, null), ANFITRION);
         // La semilla es una escritura «de fuera»: no debe consumir el fallo
@@ -279,7 +289,7 @@ class IngresarASalaTest {
         });
 
         IngresoNoPermitido rechazo = assertThrows(IngresoNoPermitido.class,
-                () -> ingresarASala.ejecutar(sala.id(), VISITANTE));
+                () -> ingresarASala.ejecutar(sala.id(), como(VISITANTE)));
 
         assertAll(
                 () -> assertTrue(rechazo.detalle().contains("maximo de participantes")),
@@ -293,7 +303,7 @@ class IngresarASalaTest {
     @DisplayName("si la sala no deja de cambiar, tras los intentos previstos se rinde con un 409 y sin anunciar")
     void seRindeTrasLosIntentosPrevistos() {
         RepositorioQueSeAdelanta almacen = new RepositorioQueSeAdelanta(Integer.MAX_VALUE);
-        ingresarASala = new IngresarASala(almacen, canal);
+        ingresarASala = new IngresarASala(almacen, canal, inventario);
         Sala sala = Sala.crear(
                 new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null), ANFITRION);
         // La semilla es una escritura «de fuera»: no debe consumir el fallo
@@ -301,7 +311,7 @@ class IngresarASalaTest {
         almacen.sobreescribir(sala);
 
         IngresoNoPermitido rechazo = assertThrows(IngresoNoPermitido.class,
-                () -> ingresarASala.ejecutar(sala.id(), VISITANTE));
+                () -> ingresarASala.ejecutar(sala.id(), como(VISITANTE)));
 
         assertAll(
                 () -> assertEquals(409, rechazo.estado()),

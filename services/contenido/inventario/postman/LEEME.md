@@ -11,7 +11,7 @@ la coleccion **completa y en orden**.
 
 | Archivo | Que es |
 |---|---|
-| `inventario.postman_collection.json` | 35 peticiones agrupadas por historia |
+| `inventario.postman_collection.json` | 52 peticiones agrupadas por historia |
 | `local.postman_environment.json` | Entorno local: `baseUrl` |
 
 ## Requisitos
@@ -22,9 +22,12 @@ la coleccion **completa y en orden**.
 SPRING_DATA_MONGODB_URI=mongodb://localhost:27017/inventario ./gradlew :services:contenido:inventario:bootRun
 ```
 
-- La identidad viaja en la cabecera `X-User-Name` (convencion temporal hasta
-  HU-AUT-004). La coleccion crea dos jugadores con sufijo de fecha para que
-  cada corrida use inventarios nuevos y no dependa de datos previos.
+- Las rutas del jugador conservan temporalmente `X-User-Name`. La coleccion
+  genera dos UUID nuevos para que cada corrida use inventarios independientes.
+- Para las operaciones internas, obtener con OAuth2 `client_credentials` un
+  access token cuyo cliente sea `ms-subastas` y asignarlo a la variable de
+  coleccion `s2sAccessToken`. El token autentica al servicio y
+  `propietarioUid` viaja por separado como dato del negocio.
 
 ## Con la app de Postman
 
@@ -57,6 +60,7 @@ Contra otro puerto: `--env-var baseUrl=http://localhost:8082`.
 | HU-INV-005 | Liberar ranura | Desequipar el arma 1 → cabe el arma 3 |
 | HU-INV-005 | Propiedad | B consulta el heroe de A → 403; sin identidad → 401 |
 | HU-INV-010 | Bloqueo y liberacion por subasta | Reserva → 200; queda no disponible; aviso ajeno → 409; cierre/cancelacion → 200 y vuelve a estar disponible |
+| HU-INV-010 | Consulta interna de una unidad | Bearer de `ms-subastas` → 200 con `productoId`, `propietarioUid` y `enUso` |
 | HU-INV-010 | No se vende dos veces | Repetir la misma reserva → 200; reservar para otra subasta → 409 |
 | HU-INV-010 | Operaciones bloqueadas | Modificar y eliminar el producto reservado → 409 "Producto no disponible" |
 | HU-INV-010 | Falla conservadora | Sin aviso del servicio de subastas, una nueva consulta conserva `disponible: false` y el mismo `subastaId` |

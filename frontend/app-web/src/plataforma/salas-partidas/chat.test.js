@@ -66,7 +66,11 @@ test('CA-01: el historial se pinta al suscribirse y los mensajes en vivo se agre
   const cliente = clienteFalso();
   const contenedor = raiz();
 
-  await montarChat(contenedor, { canal: { idSala: ID_SALA }, token: 't', conectar: async () => cliente });
+  await montarChat(contenedor, {
+    canal: { idSala: ID_SALA },
+    token: 't',
+    conectar: async () => cliente,
+  });
   cliente.suscripciones[`/app/salas/${ID_SALA}/chat/historial`]([MENSAJE]);
   cliente.suscripciones[`/tema/salas/${ID_SALA}/chat`]({ ...MENSAJE, id: '2', texto: 'listo' });
 
@@ -143,5 +147,7 @@ test('si el servidor rechaza la conexion, la vista lo dice y bloquea el envio', 
   });
 
   expect(contenedor.querySelector('[data-zona="conexion"]').className).toContain('sin-conexion');
-  expect(contenedor.querySelector('[data-zona="aviso"] .aviso').className).toContain('aviso--error');
+  expect(contenedor.querySelector('[data-zona="aviso"] .aviso').className).toContain(
+    'aviso--error',
+  );
 });

@@ -21,9 +21,8 @@
  */
 
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
+import { usuarioIdDeSesion } from '../../comun/identidad.js';
 
-/** Claves de sesion que ya usan las vistas de cuentas (`perfil.js`). */
-const CLAVE_USUARIO_ID = 'nexus.usuarioId';
 const CLAVE_APODO = 'nexus.apodoActual';
 
 /**
@@ -61,7 +60,12 @@ export function baseDeApi() {
  */
 export function leerSesion(almacen = globalThis.sessionStorage) {
   return {
-    usuarioId: almacen?.getItem?.(CLAVE_USUARIO_ID) ?? null,
+    // Por `comun/identidad.js` y no por `nexus.usuarioId` a pelo: esa clave la
+    // escribe el login con la clave primaria de la tabla, y
+    // `gestion-usuarios.js` la pisa con el usuario que el administrador esta
+    // consultando. Suscribirse al canal de otra persona le entregaria sus
+    // notificaciones a quien no son.
+    usuarioId: usuarioIdDeSesion(almacen),
     apodo: almacen?.getItem?.(CLAVE_APODO) ?? null,
   };
 }

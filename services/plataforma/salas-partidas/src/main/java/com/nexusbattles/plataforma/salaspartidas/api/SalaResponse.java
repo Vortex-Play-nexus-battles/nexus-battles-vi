@@ -1,5 +1,6 @@
 package com.nexusbattles.plataforma.salaspartidas.api;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Modalidad;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Sala;
@@ -22,6 +23,12 @@ import java.util.UUID;
  * servicio no puede leer su base de datos (regla 7 de plataforma) ni tiene
  * motivo para copiarlo: ninguna pantalla de HU-SAL-002 lo muestra. Un
  * participante es un identificador.
+ *
+ * <p><b>El codigo de invitacion es la excepcion, y por eso hay dos fabricas.</b>
+ * {@link #desde(Sala)} lo omite siempre; {@link #paraElAnfitrion(Sala)} lo
+ * incluye. Quien llama tiene que elegir a proposito, con el token delante: es
+ * mas dificil filtrar un secreto cuando hay que pedirlo por su nombre que
+ * cuando viene puesto y hay que acordarse de quitarlo.
  */
 public record SalaResponse(
         UUID id,
@@ -36,9 +43,41 @@ public record SalaResponse(
         UUID idAnfitrion,
         List<UUID> participantes,
         UUID idPartida,
-        Instant creadaEn) {
+        Instant creadaEn,
 
+        /*
+         * Se omite del JSON cuando es nulo, en vez de salir como
+         * "codigoInvitacion": null. Los demas campos nulos si viajan —idPartida
+         * es nulo hasta que la partida arranca y el contrato lo declara
+         * nullable— pero un secreto es distinto: que el campo ni aparezca deja
+         * claro que no hay nada que ver, en lugar de anunciar que existe algo
+         * llamado asi y que a esta persona le toco un nulo.
+         */
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        String codigoInvitacion) {
+
+    /** La sala sin su codigo de invitacion. Es lo que ve todo el mundo. */
     static SalaResponse desde(Sala sala) {
+        return construir(sala, null);
+    }
+
+    /**
+     * La sala con su codigo de invitacion, para que el anfitrion pueda repartirlo.
+     *
+     * <p>Solo debe usarse cuando el token dice que quien pregunta es el
+     * anfitrion. En una sala publica el campo sale nulo igual, porque no hay
+     * codigo que dar.
+     */
+    static SalaResponse paraElAnfitrion(Sala sala) {
+        return construir(sala, sala.codigoInvitacion());
+    }
+
+    /** El codigo solo si quien pregunta es el anfitrion; si no, la sala pelada. */
+    static SalaResponse segunQuienPregunta(Sala sala, UUID idJugador) {
+        return sala.esAnfitrion(idJugador) ? paraElAnfitrion(sala) : desde(sala);
+    }
+
+    private static SalaResponse construir(Sala sala, String codigoInvitacion) {
         return new SalaResponse(
                 sala.id(),
                 sala.estado(),
@@ -52,6 +91,7 @@ public record SalaResponse(
                 sala.idAnfitrion(),
                 List.copyOf(sala.participantes()),
                 null, // la partida no existe hasta que la sala arranca (HU-SAL-004)
-                sala.creadaEn());
+                sala.creadaEn(),
+                codigoInvitacion);
     }
 }
