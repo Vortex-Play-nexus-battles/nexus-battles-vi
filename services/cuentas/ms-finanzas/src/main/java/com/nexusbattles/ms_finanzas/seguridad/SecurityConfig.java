@@ -53,12 +53,23 @@ public class SecurityConfig {
         http.authorizeHttpRequests(auth -> auth
                 // Regla 3: actuator queda abierto para la sonda de salud.
                 .requestMatchers("/actuator/**").permitAll()
-                // Temporal (ver javadoc): /creditos/** y /partidas/** abiertos
-                // hasta que infra registre el cliente m2m en Keycloak y los
-                // servicios llamantes (ms-subastas para créditos, ms-salas-partidas
-                // para partidas/resultado) adopten TokenDeServicio (ADR-001).
+                // Temporal (ver javadoc): /creditos/** abierto hasta que infra
+                // registre el cliente m2m en Keycloak y ms-subastas adopte
+                // TokenDeServicio (ADR-001). Los tres flujos @Scheduled de
+                // ms-subastas no tienen JWT de jugador que reenviar.
                 .requestMatchers("/creditos/**").permitAll()
-                .requestMatchers("/partidas/**").permitAll()
+                // POST /partidas/resultado CREA saldo (acredita créditos al
+                // ganador y participantes vía AcreditacionPartidaService que
+                // llama a CreditoService.acreditar como bean local — se salta
+                // el filter chain de /creditos/acreditar). Sin autenticación
+                // sería exactamente el mismo agujero por otra puerta:
+                // cualquiera POST-ea un resultado inventado con su uid como
+                // ganador y se autoacredita. Cerrado con authenticated tras
+                // el catch de Andrés (18/sep). Consecuencia: ms-salas-partidas
+                // necesita el token de servicio de Keycloak para llamar,
+                // igual que ms-subastas ahora sabe con /creditos/**. Sin
+                // eso, en dev/local se prueba con un JWT de jugador válido.
+                .requestMatchers("/partidas/**").authenticated()
                 // HU-PAG-002: el historial es del propio jugador; cualquier
                 // usuario autenticado puede consultar SU propio historial. La
                 // restricción por uid la aplica el controller leyendo el

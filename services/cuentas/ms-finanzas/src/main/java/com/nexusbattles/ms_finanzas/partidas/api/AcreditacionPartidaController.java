@@ -19,14 +19,14 @@ import com.nexusbattles.ms_finanzas.partidas.ResultadoPartidaResponse;
  * endpoint es la responsabilidad de acreditación de HU-JUE-012, distinto
  * de los endpoints de HU-PAG-001 que son consumidos por otros flujos.
  *
- * <p><b>Seguridad:</b> el {@code SecurityConfig} de este servicio deja
- * {@code /partidas/**} sin restricción por ahora, en coherencia con
- * {@code /creditos/**} — ambos endpoints tienen que ser llamados por otros
- * microservicios (ms-salas-partidas para éste), y hasta que infra registre
- * el cliente m2m en el realm Keycloak y ms-plataforma adopte
- * {@code TokenDeServicio} (ADR-001), cerrarlos rompería las integraciones.
- * Cuando el cliente esté registrado, se cambia una línea del
- * {@code SecurityConfig} y estas rutas exigen token de servicio.
+ * <p><b>Seguridad:</b> el {@code SecurityConfig} cierra {@code /partidas/**}
+ * con {@code authenticated()} — este endpoint CREA saldo (acredita créditos
+ * a los participantes) y sin auth cualquiera podría inventar un resultado
+ * de partida con su propio uid como ganador y regalarse créditos, saltándose
+ * el cierre de {@code /creditos/acreditar} porque el service se llama como
+ * bean local. Consecuencia: ms-salas-partidas necesita el token de servicio
+ * de Keycloak (ADR-001) para llamar. Mientras infra no registre el cliente
+ * m2m, en dev/local se prueba con un JWT de jugador válido.
  */
 @RestController
 @RequestMapping("/partidas")
