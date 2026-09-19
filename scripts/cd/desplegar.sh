@@ -43,10 +43,10 @@
 #   MS_ECOMMERCE_DB_NAME, MS_ECOMMERCE_DB_USER, MS_ECOMMERCE_DB_PASSWORD.
 #   Mismo prefijo por la misma razon que ms-cumplimiento. Ver
 #   docker-compose.ms-ecommerce.yml para el mapeo. OJO: a diferencia de
-#   ms-identidad y ms-cumplimiento, ms-ecommerce tiene
-#   server.servlet.context-path=/api/v1 -- su /actuator/health real vive en
-#   /api/v1/actuator/health, no en /actuator/health. Ver "ruta_salud_de" en
-#   el paso 4 de este script.
+#   ms-identidad y ms-cumplimiento, ms-ecommerce tiene un context-path, y es
+#   /ecommerce (application.properties linea 2) -- NO /api/v1, como decia
+#   aqui hasta hoy. Su /actuator/health real vive en
+#   /ecommerce/actuator/health. Ver "ruta_salud_de" en el paso 4.
 #
 # Este script NUNCA decide si hay que revertir: eso lo hace un step aparte en
 # cd.yml (solo en el job de produccion) leyendo el archivo
@@ -349,14 +349,20 @@ echo "== 4) Verificando /actuator/health de cada servicio desplegado (con reinte
 # ms-identidad/ms-cumplimiento NO tienen server.servlet.context-path, asi
 # que su Actuator vive en la raiz (/actuator/health). ms-ecommerce es la
 # UNICA excepcion confirmada hasta ahora: su application.properties declara
-# server.servlet.context-path=/api/v1, entonces Spring monta TODOS sus
-# endpoints (incluido Actuator) bajo ese prefijo -- su salud real esta en
-# /api/v1/actuator/health. Se resuelve por funcion (no con un valor fijo)
-# para no romper el healthcheck generico de los demas servicios, que siguen
-# usando la ruta sin prefijo.
+# server.servlet.context-path=/ecommerce (linea 2), entonces Spring monta
+# TODOS sus endpoints -Actuator incluido- bajo ese prefijo, y su salud real
+# esta en /ecommerce/actuator/health. Se resuelve por funcion (no con un
+# valor fijo) para no romper el healthcheck generico de los demas servicios,
+# que siguen usando la ruta sin prefijo.
+#
+# Hasta hoy aqui ponia /api/v1/actuator/health, copiado de un comentario de
+# docker-compose.ms-ecommerce.yml que afirmaba un context-path que el
+# servicio nunca tuvo. El servicio habria arrancado bien y el despliegue lo
+# habria dado por muerto tras tres minutos de reintentos. Lo fija ahora
+# ArranqueDeLaAplicacionIT de ms-ecommerce, que comprueba las dos rutas.
 ruta_salud_de() {
   case "$1" in
-    ms-ecommerce) echo "/api/v1/actuator/health" ;;
+    ms-ecommerce) echo "/ecommerce/actuator/health" ;;
     *) echo "/actuator/health" ;;
   esac
 }
