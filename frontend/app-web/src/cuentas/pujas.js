@@ -10,6 +10,11 @@
  * - Sistema de avisos cruzados en vivo tipo toast (esquina inferior derecha)
  */
 
+import { conectarStomp } from '../comun/transporte-stomp.js';
+
+/** Canal que publica ms-subastas en cada cambio (SubastaRealtimePublisher). */
+export const CANAL_SUBASTAS = '/topic/subastas/listado';
+
 export const PALETA_RAREZA = {
   comun: { fondo: '#E7EAF0', texto: '#57627A', borde: '#9FABC9', icono: '🛡️' },
   rara: { fondo: '#DFEEF8', texto: '#095E8C', borde: '#095E8C', icono: '⚔️' },
@@ -172,7 +177,10 @@ export const HEROES_BASE = [
 ];
 
 export const CONFIG_REGLAS = {
-  creditosTotales: 6200,
+  // Sin creditosTotales: el saldo lo sabe ms-finanzas y llega en
+  // /mis-pujas/resumen. Tenerlo aqui significaba validar las pujas contra una
+  // cifra inventada, que es peor que no ensenarla: bloqueaba o dejaba pasar
+  // pujas segun un numero que no tenia nada que ver con el dinero del jugador.
   incrementoMinimo: 50,
   intervaloSegundos: 5,
   maxSubastasSimultaneas: 10,
@@ -265,6 +273,13 @@ export function validarPuja(monto, subasta, saldoLibre, incremento = CONFIG_REGL
   if (monto < min) {
     return { valida: false, motivo: `La oferta debe ser de al menos ${formatearCreditos(min)} cr (+${incremento} cr).` };
   }
+  // Saldo desconocido: no se bloquea. El servidor es la autoridad sobre el
+  // dinero y responde SALDO_INSUFICIENTE si no alcanza. Frenar aqui por no
+  // haber podido preguntar le negaria al jugador una puja que si puede pagar,
+  // que es peor que dejarle intentarlo y recibir un no con motivo.
+  if (saldoLibre === null || saldoLibre === undefined) {
+    return { valida: true };
+  }
   const disponibleParaEsta = saldoLibre + (subasta.retenido || 0);
   if (monto > disponibleParaEsta) {
     return { valida: false, motivo: `Saldo insuficiente. Tienes ${formatearCreditos(disponibleParaEsta)} cr disponibles para esta subasta.` };
@@ -277,6 +292,13 @@ export function validarLimiteAuto(limite, subasta, saldoLibre, incremento = CONF
   const min = calcularMinimoPuja(subasta.oferta, incremento);
   if (limite < min) {
     return { valida: false, motivo: `El tope de puja automática debe ser al menos ${formatearCreditos(min)} cr.` };
+  }
+  // Saldo desconocido: no se bloquea. El servidor es la autoridad sobre el
+  // dinero y responde SALDO_INSUFICIENTE si no alcanza. Frenar aqui por no
+  // haber podido preguntar le negaria al jugador una puja que si puede pagar,
+  // que es peor que dejarle intentarlo y recibir un no con motivo.
+  if (saldoLibre === null || saldoLibre === undefined) {
+    return { valida: true };
   }
   const disponibleParaEsta = saldoLibre + (subasta.retenido || 0);
   if (limite > disponibleParaEsta) {
@@ -312,10 +334,14 @@ export function verificarSobreCompromiso(total, subastas = []) {
   return { sobreCompromiso, sumaTopes, total, faltante };
 }
 
-export function calcularBalanceNetoCierre(eventosCierre = [], saldoTotal = CONFIG_REGLAS.creditosTotales, retenidoEnOtras = 720) {
+export function calcularBalanceNetoCierre(eventosCierre = [], saldoTotal = null, retenidoEnOtras = 0) {
   const cobrado = eventosCierre.reduce((acc, ev) => acc + (Number(ev.montoCobrado) || 0), 0);
   const devuelto = eventosCierre.reduce((acc, ev) => acc + (Number(ev.montoDevuelto) || 0), 0);
-  const saldoLibre = Math.max(0, saldoTotal - retenidoEnOtras - cobrado);
+  // saldoTotal null = no se sabe. Se propaga como null en vez de convertirse
+  // en cero, para que la pantalla lo muestre como desconocido.
+  const saldoLibre = saldoTotal === null || saldoTotal === undefined
+    ? null
+    : Math.max(0, saldoTotal - retenidoEnOtras - cobrado);
   return {
     cobrado,
     devuelto,
@@ -324,7 +350,7 @@ export function calcularBalanceNetoCierre(eventosCierre = [], saldoTotal = CONFI
   };
 }
 
-export function generarConsejoTactico(eventoCierre, saldoLibre = 4130) {
+export function generarConsejoTactico(eventoCierre, saldoLibre = null) {
   if (!eventoCierre) {return null;}
   const nombre = eventoCierre.nombre || 'el objeto';
   const tope = eventoCierre.topePropio || 0;
@@ -335,7 +361,10 @@ export function generarConsejoTactico(eventoCierre, saldoLibre = 4130) {
 
   return {
     titulo: `El ${nombreCorto} se te escapó por ${formatearCreditos(diferencia)} cr.`,
-    cuerpo: `Tu tope estaba en ${formatearCreditos(tope)} y cerró en ${formatearCreditos(montoFinal)}. Con ${formatearCreditos(margenRecomendado)} cr más de margen era tuyo — y tenías ${formatearCreditos(saldoLibre)} libres.`,
+    cuerpo: `Tu tope estaba en ${formatearCreditos(tope)} y cerró en ${formatearCreditos(montoFinal)}. Con ${formatearCreditos(margenRecomendado)} cr más de margen era tuyo${
+      saldoLibre === null || saldoLibre === undefined
+        ? '.'
+        : ` — y tenías ${formatearCreditos(saldoLibre)} libres.`}`,
     diferencia,
     margenRecomendado
   };
@@ -441,7 +470,9 @@ export class ControladorSubastas {
     config = CONFIG_REGLAS,
     eventosCierre = EVENTOS_CIERRE_DEFAULT,
     api = null,
-    subastaInicialId = null
+    subastaInicialId = null,
+    urlCanal = null,
+    conectarCanal = conectarStomp
   } = {}) {
     // Subasta que hay que abrir en detalle nada mas cargar. Viene de ?id= en la
     // URL: es la forma de que el listado de HU-SUB-011 entregue una subasta
@@ -473,12 +504,23 @@ export class ControladorSubastas {
     this.mensajeError = null;
     this.intervalId = null;
     this.avisoCruzado = null; // { id, nombre, oferta, rival, segundosRestantes }
+
+    // Canal en vivo (HU-SUB-011 lo publica en /topic/subastas/listado). Es un
+    // ANADIDO al sondeo, no un sustituto: el riesgo #7 del acta exige
+    // degradacion controlada a consulta periodica si el tiempo real se cae.
+    this.urlCanal = urlCanal;
+    this.conectarCanal = conectarCanal;
+    this.canal = null;
   }
 
   iniciar() {
     if (this.api) {
       this.estadoDatos = 'carga';
       this.render();
+      // Sin await: si el canal tarda o no levanta, la pantalla ya funciona con
+      // el sondeo. Encadenarlo aqui retrasaria el primer pintado por algo que
+      // es opcional.
+      this.abrirCanalEnVivo();
       return this.recargar();
     }
     this.iniciarTemporizador();
@@ -654,11 +696,65 @@ export class ControladorSubastas {
     return `<div id="alerta-pujas" class="alerta alerta-error alerta-pujas" role="alert" ${hayError ? '' : 'hidden style="display: none;"'}>${hayError ? this.mensajeError : ''}</div>`;
   }
 
+
+  /**
+   * Abre el canal en vivo y se suscribe al listado. Nunca rechaza: si el
+   * servidor no tiene WebSocket, el navegador lo bloquea o el frame llega
+   * ilegible, la pantalla sigue con el sondeo de 5 s y el jugador no se entera.
+   * Un canal opcional no puede tumbar la pantalla.
+   */
+  async abrirCanalEnVivo() {
+    if (!this.urlCanal || !this.conectarCanal || this.canal) {return null;}
+    try {
+      const canal = await this.conectarCanal({ url: this.urlCanal });
+      canal.suscribir(CANAL_SUBASTAS, (cuerpo) => this.alLlegarActualizacion(cuerpo));
+      this.canal = canal;
+      return canal;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Un cambio publicado por el servidor. Se usa para decidir SI releer, no
+   * para pintar directamente lo que llega: el mensaje trae el resumen de la
+   * subasta, pero no sabe si esa puja es tuya ni cuanto llevas retenido, y
+   * pintarlo a ciegas dejaria la pantalla diciendo "no vas ganando" justo
+   * despues de que ganaras.
+   */
+  alLlegarActualizacion(cuerpo) {
+    let actualizada;
+    try {
+      actualizada = typeof cuerpo === 'string' ? JSON.parse(cuerpo) : cuerpo;
+    } catch {
+      return false;
+    }
+    if (!actualizada || !actualizada.id) {return false;}
+
+    const esLaQueMiro = this.vista === 'detalle' && actualizada.id === this.subastaActivaId;
+    const laTengoEnLista = this.subastas.some((sub) => sub.id === actualizada.id);
+    if (!esLaQueMiro && !laTengoEnLista) {return false;}
+
+    this.recargar();
+    return true;
+  }
+
+  cerrarCanalEnVivo() {
+    if (!this.canal) {return;}
+    try {
+      this.canal.cerrar();
+    } catch {
+      // Cerrar un canal ya caido no es un problema que deba propagarse.
+    }
+    this.canal = null;
+  }
+
   destruir() {
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
+    this.cerrarCanalEnVivo();
   }
 
   iniciarTemporizador() {
@@ -690,8 +786,19 @@ export class ControladorSubastas {
     }, 1000);
   }
 
+  /**
+   * Saldo libre segun el servidor, o null si todavia no se sabe.
+   *
+   * Null NO es cero: cero le diria al jugador que esta arruinado cuando lo
+   * unico que pasa es que no se ha podido preguntar. Quien lo consuma tiene
+   * que distinguirlos.
+   */
   getSaldoLibre() {
-    return calcularSaldoLibre(this.config.creditosTotales, this.subastas);
+    if (!this.resumen || this.resumen.saldoDisponible === null
+        || this.resumen.saldoDisponible === undefined) {
+      return null;
+    }
+    return Number(this.resumen.saldoDisponible);
   }
 
   /** Retenido real cuando el servidor lo dio; si no, lo que se pueda sumar de lo cargado. */
@@ -706,6 +813,15 @@ export class ControladorSubastas {
 
   getSaldoRetenido() {
     return calcularSaldoRetenido(this.subastas);
+  }
+
+  /**
+   * Saldo bruto: lo libre mas lo retenido en pujas vivas. Null si no se sabe
+   * lo libre, porque entonces el total tampoco se sabe.
+   */
+  getSaldoTotal() {
+    const libre = this.getSaldoLibre();
+    return libre === null ? null : libre + this.getRetenidoReal();
   }
 
   getSubastaActiva() {
@@ -943,9 +1059,18 @@ export class ControladorSubastas {
         });
     }
 
-    const saldoLibre = this.getSaldoLibre() + (sub.retenido || 0);
+    // El null se comprueba ANTES de sumar: en JavaScript `null + 0` es 0, asi
+    // que sumar primero convertiria "no se sabe" en "no tiene nada" y
+    // bloquearia la compra.
+    const libre = this.getSaldoLibre();
+    const disponibleParaEsta = libre === null || libre === undefined
+      ? null
+      : libre + (sub.retenido || 0);
 
-    if (saldoLibre < sub.compraInmediata) {
+    // Mismo criterio que en validarPuja: si no se sabe el saldo, decide el
+    // servidor. Bloquear aqui por no haber podido preguntar le negaria una
+    // compra que si puede pagar.
+    if (disponibleParaEsta !== null && disponibleParaEsta < sub.compraInmediata) {
       this.confirmandoCompra = false;
       this.render();
       this.mostrarError('No dispones de saldo suficiente para comprar de inmediato.');
@@ -1018,7 +1143,9 @@ export class ControladorSubastas {
       return;
     }
 
-    const total = this.config.creditosTotales;
+    // Null cuando el servidor todavia no dio el saldo. Las vistas lo pintan
+    // como desconocido; ninguna lo convierte en cero.
+    const total = this.getSaldoTotal();
     const retenido = this.getSaldoRetenido();
     const libre = this.getSaldoLibre();
     const subastasGanando = this.subastas.filter((s) => s.ganando).length;

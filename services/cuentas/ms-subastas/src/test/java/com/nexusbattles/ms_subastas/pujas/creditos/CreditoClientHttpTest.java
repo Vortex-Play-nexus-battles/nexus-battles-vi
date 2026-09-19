@@ -366,4 +366,21 @@ class CreditoClientHttpTest {
         assertEquals(CreditoClientException.Motivo.RESPUESTA_INESPERADA, error.getMotivo());
         assertTrue(error.getMessage().contains("sin type"), error.getMessage());
     }
+
+    /**
+     * El tercer type que publica ms-finanzas (PR #407). Sin este caso, un 409
+     * caia en RESPUESTA_INESPERADA y el motivo real —que al ganador no se le
+     * puede cobrar porque su reserva ya se devolvio— se perdia por el camino.
+     */
+    @Test
+    void consumirUnaReservaYaLiberadaLlegaConSuPropioMotivo() {
+        responderProblema(409, "reserva-ya-liberada");
+
+        CreditoClientException error = assertThrows(CreditoClientException.class,
+                () -> cliente.consumir(RESERVA, VENDEDOR));
+
+        assertEquals(CreditoClientException.Motivo.RESERVA_YA_LIBERADA, error.getMotivo());
+        assertFalse(error instanceof CreditoNoDisponibleException,
+                "no es una averia: reintentarlo da lo mismo y no debe abrir el cortacircuitos");
+    }
 }

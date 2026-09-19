@@ -589,14 +589,14 @@ class InventarioClientHttpTest {
     }
 
     @Test
-    void un404AlTransferirEsRechazoPorElementoNoEncontrado() {
+    void un404AlTransferirNoEsUnaAveria() {
         codigo.set(404);
 
         InventarioClientException error = assertThrows(InventarioClientException.class,
                 () -> cliente.transferirProducto(ELEMENTO, UUID.randomUUID(), UUID.randomUUID(), "clave"));
 
-        assertFalse(error instanceof InventarioNoDisponibleException);
-        assertTrue(error.getMessage().contains("no encontro"), error.getMessage());
+        assertFalse(error instanceof InventarioNoDisponibleException,
+                "un 404 no se reintenta ni debe abrir el cortacircuitos");
     }
 
     @Test
@@ -671,5 +671,23 @@ class InventarioClientHttpTest {
         verify(mockHttpClient).send(captor.capture(), any());
         assertEquals("http://localhost:8080/api-base/api/v1/inventario/elementos/" + ELEMENTO + "/transferencias",
                 captor.getValue().uri().toString());
+    }
+
+    /**
+     * Un 404 al transferir tiene hoy dos lecturas y la mas probable no es la
+     * obvia: ms-inventario todavia no publica esa ruta. El mensaje tiene que
+     * nombrar las dos, o el siguiente que lo depure se pasa la tarde mirando
+     * la subasta cuando el problema esta en el contrato.
+     */
+    @Test
+    void un404AlTransferirNoCulpaSoloAlElemento() {
+        codigo.set(404);
+
+        InventarioClientException error = assertThrows(InventarioClientException.class,
+                () -> cliente.transferirProducto(ELEMENTO, UUID.randomUUID(), UUID.randomUUID(), "clave"));
+
+        assertTrue(error.getMessage().contains("transferencias"), error.getMessage());
+        assertTrue(error.getMessage().contains("no existe") || error.getMessage().contains("aun no expone"),
+                error.getMessage());
     }
 }
