@@ -25,7 +25,7 @@
   --texto-2: #48536a;
   --texto-3: #57627a;
   --borde: #9fabc9;
-  --borde-int: #6f7994;
+  --borde-interactivo: #6f7994;
   --primaria: #2244bf;
   --primaria-relleno: #1e3fb8;
   --acento-relleno: #5b27b4;
@@ -106,7 +106,7 @@
 .inventario-equipo__cerrar:hover,
 .inventario-equipo__equipar:hover,
 .inventario-equipo__desequipar:hover {
-  border-color: var(--borde-int);
+  border-color: var(--borde-interactivo);
 }
 
 .inventario__nuevo,
