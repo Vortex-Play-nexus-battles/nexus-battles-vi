@@ -362,11 +362,15 @@ components:
         ficha completa y la vista de batalla pinta la barra de vida real
         (RF-JUE-009) sin una segunda peticion.
 
-        `Participante.heroe` es anulable a proposito. Hay dos casos legitimos
-        sin heroe: un participante que entro antes de la migracion V7, y el
-        heroe de la IA, que lo decide el motor de combate y no este servicio.
-        Se dice con null en vez de inventar una vida: una barra a 100/100 falsa
-        es peor que una barra que no se pinta.
+        `Participante.heroe` es anulable a proposito, y desde HU-SAL-004 queda
+        un solo caso legitimo sin heroe: un participante que entro antes de la
+        migracion V7. Se dice con null en vez de inventar una vida: una barra a
+        100/100 falsa es peor que una barra que no se pinta.
+
+        La IA SI trae heroe: el del anfitrion a plena vida. No se le inventa uno
+        -con que heroe juega la maquina no lo fija ninguna HU- sino que se usa
+        el unico dato de combate que la partida ya conoce, y de paso la pelea
+        queda pareja.
 
         `posicionEnCampo` sigue sin emitirse: RF-JUE-017 la quiere aleatoria y
         quien la decide es el motor de combate, fuera de este bloque.

@@ -79,7 +79,16 @@ public class Partida {
             }
         }
         if (sala.incluirHeroeIA()) {
-            enCombate.add(ParticipanteDePartida.inteligenciaArtificial(UUID.randomUUID()));
+            // La maquina combate con el heroe del anfitrion a vida completa.
+            // Ver `ParticipanteDePartida.inteligenciaArtificial`: no se inventa
+            // un heroe, se usa el unico que esta partida conoce, y de paso la
+            // pelea queda pareja.
+            FichaDeParticipante delAnfitrion = sala.fichaDe(sala.idAnfitrion());
+            HeroeDeCombate heroeDeLaMaquina = delAnfitrion == null
+                    ? null
+                    : delAnfitrion.heroe().aPlenaVida();
+            enCombate.add(ParticipanteDePartida.inteligenciaArtificial(
+                    UUID.randomUUID(), heroeDeLaMaquina));
         }
 
         return new Partida(UUID.randomUUID(), sala.id(), enCombate,
