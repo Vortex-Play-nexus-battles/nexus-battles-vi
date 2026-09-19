@@ -158,6 +158,11 @@ components:
           enum:
             - PUBLICADO
             - EN_REVISION
+            - ELIMINADO
+        promedio:
+          type: ["number", "null"]
+          format: double
+          description: Promedio de calificaciones publicadas del producto tras esta publicacion; null si no hay calificaciones.
 
     ProblemDetail:
       type: object
