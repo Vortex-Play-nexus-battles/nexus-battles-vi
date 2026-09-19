@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mis cofres — Nexus Battles VI</title>
+  <link rel="stylesheet" href="../comun/barra-navegacion.css" />
+  <link rel="stylesheet" href="./tema-cuentas.css" />
+  <link rel="stylesheet" href="./mis-cofres.css" />
+</head>
+<body>
+
+<div id="navbar-container"></div>
+
+<div class="contenedor">
+  <header class="encabezado">
+    <div class="encabezado-contenido">
+      <div>
+        <h1 class="titulo">Mis cofres</h1>
+        <p class="ayuda">
+          Los cofres que has ganado acumulando créditos en tus partidas.
+          Cada 20 créditos ganados en una semana entrega un cofre — con
+          un máximo de 2 cofres por semana.
+        </p>
+      </div>
+      <button id="btn-volver" type="button" class="btn-contorno">Volver</button>
+    </div>
+  </header>
+
+  <section class="tarjeta">
+    <div id="cofres-lista" class="cofres-lista">
+      <!-- filas insertadas por mis-cofres.js -->
+    </div>
+    <p id="cofres-estado" class="estado" hidden></p>
+  </section>
+
+  <nav class="paginacion" aria-label="Paginación">
+    <button type="button" id="btn-anterior" class="btn-contorno" disabled>Anterior</button>
+    <span id="cofres-pagina-actual" class="ayuda">Página 1</span>
+    <button type="button" id="btn-siguiente" class="btn-contorno" disabled>Siguiente</button>
+  </nav>
+</div>
+
+<script type="module">
+  import { construirBarra } from '../comun/barra-navegacion.js';
+  const navbarContainer = document.getElementById('navbar-container');
+  if (navbarContainer) {
+    const barra = construirBarra({
+      seccionActiva: 'cuenta',
+      sesion: { autenticado: !!sessionStorage.getItem('nexus.rolActual') }
+    });
+    navbarContainer.appendChild(barra);
+  }
+</script>
+
+<script type="module" src="./mis-cofres.js"></script>
+</body>
+</html>
