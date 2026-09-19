@@ -1,0 +1,306 @@
+openapi: 3.1.0
+
+# =============================================================================
+# Nexus Battles VI — Motor de combate (M?? · equipo de Contenido y juego)
+#
+# Regla 1 de plataforma: contrato primero. Este documento se escribe A PARTIR
+# del dominio que ya existe en `services/contenido/motor-combate`, no al reves:
+# cada operacion de aqui corresponde a una capacidad que las clases de
+# `nexus.combate` ya implementan y tienen probada. No se ha inventado ninguna
+# regla de juego.
+#
+# ---------------------------------------------------------------------------
+# POR QUE ESTE SERVICIO NO GESTIONA PARTIDAS
+#
+# `nexus.combate.Partida` existe y es el agregado del combate, pero HOY no
+# tiene identificador, no tiene persistencia y no expone accesores de lectura:
+# vive en memoria dentro de una sola llamada. Exponer `POST /partidas` obligaria
+# a inventarle un almacen y un ciclo de vida que su dominio no tiene, y a
+# duplicar el estado que `salas-partidas` ya persiste (tablas `partidas` y
+# `partida_participantes`, migracion V6).
+#
+# Se contrata por tanto lo que el motor SI sabe hacer y nadie mas sabe: resolver
+# el resultado de un ataque. El estado del combate se queda donde ya vive, en
+# `salas-partidas`, que llama aqui para cada accion y aplica el resultado sobre
+# la vida que el guarda.
+#
+# El dia que `Partida` tenga identificador y almacen, este contrato crece con
+# `/partidas`; nada de lo de aqui tendria que cambiar.
+#
+# ---------------------------------------------------------------------------
+# DECISION FUNCIONAL PENDIENTE (no bloquea nada de lo de aqui)
+#
+# `DistribucionEfectos` tiene seis prototipos —GUERRERO_TANQUE, GUERRERO_ARMAS,
+# MAGO_FUEGO, MAGO_HIELO, PICARO_VENENO, PICARO_MACHETE— pero el catalogo de
+# heroes tiene mas tipos (Chaman, Medico, Nigromante...) y en NINGUN sitio del
+# repositorio existe el mapeo heroe -> prototipo. No se inventa: el prototipo
+# viaja como parametro de entrada y lo elige quien llama. Cuando el Product
+# Owner fije ese mapeo, se puede anadir aqui un valor por defecto derivado del
+# heroe sin romper a nadie.
+# =============================================================================
+
+info:
+  title: Nexus Battles VI — Motor de combate
+  version: 1.0.0
+  description: |
+    Resuelve el resultado de un ataque segun las reglas del juego: tirada de
+    dados, comparacion con la defensa, sorteo del efecto sobre la tabla de
+    8.000 filas y calculo del dano aplicado.
+
+    **Sin estado.** Cada peticion se resuelve entera y no deja rastro. Quien
+    lleva el combate —de quien es el turno, cuanta vida queda, quien gano— es
+    `salas-partidas`.
+
+    **La aleatoriedad es real.** El indice de la tabla se sortea con una
+    distribucion normal (`GeneradorIndiceTabla`) y el porcentaje del critico con
+    un uniforme, ambos sobre `SecureRandom`. Dos peticiones identicas pueden dar
+    resultados distintos, y eso es el juego, no un defecto. Para pruebas
+    reproducibles existe `semilla`.
+  license:
+    name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
+
+servers:
+  - url: http://localhost:8080
+    description: Entorno local
+  - url: http://srv-motor-combate:8080
+    description: Red interna de contenedores
+
+tags:
+  - name: Combate
+    description: Resolucion de acciones de combate (RF-JUE-003, RF-JUE-006)
+
+paths:
+
+  /api/v1/combate/ataques:
+    post:
+      tags: [Combate]
+      operationId: resolverAtaque
+      summary: Resuelve un ataque de principio a fin
+      description: |
+        Hace las tres cosas que el dominio ya sabe hacer, en orden:
+
+        1. Pide al servicio de heroes las estadisticas del atacante
+           (`ClienteHeroes`): su defensa y su formula de ataque.
+        2. Tira los dados de esa formula (`TiradorDados`).
+        3. Compara con la defensa del objetivo y sortea el efecto
+           (`ResolutorCombate.resolverCompleto`).
+
+        Es la operacion que `salas-partidas` necesita para cada accion del
+        turno: le devuelve cuanto dano aplicar, y el se encarga de restarlo a la
+        vida que persiste y de anunciarlo por el canal.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PeticionDeAtaque'
+      responses:
+        '200':
+          description: |
+            Ataque resuelto. Ojo: un ataque que no supera la defensa tambien es
+            un 200 con `categoria: SIN_EFECTO` y `danoAplicado: 0`. No es un
+            error: fallar es un resultado legitimo del combate.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolucionDeAtaque'
+        '400':
+          description: Peticion mal formada (campos fuera de rango, distribucion que no suma 100)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '404':
+          description: El heroe atacante no existe en el catalogo
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+              example:
+                type: 'https://nexusbattles.local/errores/heroe-no-encontrado'
+                title: 'El heroe no existe'
+                status: 404
+                detail: 'No hay ningun heroe llamado "Arquero del Sur" en el catalogo.'
+        '422':
+          description: |
+            El heroe existe pero no puede atacar: no tiene formula de ataque.
+            Es el caso de los sanadores, que el catalogo marca con
+            `ataqueDetalle: null`.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+              example:
+                type: 'https://nexusbattles.local/errores/heroe-sin-ataque'
+                title: 'Este heroe no ataca'
+                status: 422
+                detail: 'Chaman no tiene formula de ataque: es un heroe sanador.'
+        '503':
+          description: |
+            El catalogo de heroes no responde. Se dice en vez de resolver el
+            ataque con estadisticas inventadas: un combate decidido con numeros
+            falsos es peor que un combate que no avanza.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+
+  /api/v1/combate/distribuciones:
+    get:
+      tags: [Combate]
+      operationId: listarDistribuciones
+      summary: Prototipos de distribucion de efectos disponibles
+      description: |
+        Los seis prototipos que el dominio define, con su reparto porcentual.
+        Sirve para que quien llama pueda elegir uno sin tener que copiarse los
+        numeros, y para que la interfaz pueda explicar por que un heroe falla
+        mas que otro.
+
+        Es una lectura de constantes: no cambia entre llamadas.
+      responses:
+        '200':
+          description: Los seis prototipos
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PrototipoDeDistribucion' }
+
+components:
+
+  schemas:
+
+    PeticionDeAtaque:
+      type: object
+      required: [heroeAtacante, defensaObjetivo, distribucion]
+      properties:
+        heroeAtacante:
+          type: string
+          description: |
+            Nombre del heroe tal como lo conoce el catalogo. Se usa para pedir
+            sus estadisticas; es la misma clave que acepta
+            `GET /api/v1/heroes/{nombre}`.
+          example: 'Guerrero Tanque'
+        defensaObjetivo:
+          type: integer
+          minimum: 0
+          description: Defensa del objetivo. Quien la conoce es quien lleva el combate.
+          example: 11
+        distribucion:
+          $ref: '#/components/schemas/Distribucion'
+        contexto:
+          $ref: '#/components/schemas/ContextoDeAccion'
+        semilla:
+          type: [integer, 'null']
+          format: int64
+          description: |
+            Solo para pruebas reproducibles. Con semilla, la aleatoriedad deja
+            de ser segura y pasa a ser predecible: **no usar en partidas
+            reales**. Sin ella se usa `SecureRandom`, que es lo que hace el
+            dominio en produccion.
+
+    Distribucion:
+      type: object
+      description: |
+        Reparto porcentual de los seis efectos. Los seis valores suman
+        exactamente 100 y ninguno es negativo; el dominio lo exige y una
+        peticion que no lo cumpla es un 400.
+
+        Se puede mandar por `prototipo` (uno de los seis del dominio) o campo a
+        campo. Si vienen los dos, mandan los campos: es lo que permite aplicar
+        el efecto del equipamiento sobre un prototipo base (RF-JUE-004).
+      properties:
+        prototipo:
+          $ref: '#/components/schemas/NombreDePrototipo'
+        causarDano: { type: integer, minimum: 0, maximum: 100 }
+        causarDanoCritico: { type: integer, minimum: 0, maximum: 100 }
+        evadirElGolpe: { type: integer, minimum: 0, maximum: 100 }
+        resistirElGolpe: { type: integer, minimum: 0, maximum: 100 }
+        escaparAlGolpe: { type: integer, minimum: 0, maximum: 100 }
+        sinEfecto: { type: integer, minimum: 0, maximum: 100 }
+
+    NombreDePrototipo:
+      type: string
+      description: Los seis prototipos que define `DistribucionEfectos`.
+      enum:
+        - GUERRERO_TANQUE
+        - GUERRERO_ARMAS
+        - MAGO_FUEGO
+        - MAGO_HIELO
+        - PICARO_VENENO
+        - PICARO_MACHETE
+
+    ContextoDeAccion:
+      type: object
+      description: |
+        Propiedades de la accion que pueden anular el ataque antes de tirar
+        nada. Cubre HU-JUE-008: en combate cooperativo, una accion que apunta a
+        un companero y no permite afectar aliados no le hace nada.
+
+        Si se omite, el ataque se resuelve sin esa proteccion.
+      required: [combateCooperativo, relacionObjetivo, permiteAfectarAliados]
+      properties:
+        combateCooperativo: { type: boolean }
+        relacionObjetivo:
+          type: string
+          enum: [MISMO_EQUIPO, EQUIPO_CONTRARIO]
+        permiteAfectarAliados: { type: boolean }
+
+    ResolucionDeAtaque:
+      type: object
+      required: [categoria, danoAplicado, ataqueResuelto, defensaObjetivo]
+      properties:
+        categoria:
+          $ref: '#/components/schemas/CategoriaEfecto'
+        danoAplicado:
+          type: integer
+          minimum: 0
+          description: |
+            Dano final, ya con el porcentaje de la categoria aplicado. Es el
+            numero que hay que restar a la vida del objetivo. Cero cuando el
+            ataque no supera la defensa o la accion protege a un companero.
+        ataqueResuelto:
+          type: integer
+          description: |
+            Resultado de la tirada de dados del atacante. Se devuelve para que
+            el combate sea auditable: sin el, un dano de 0 no se distingue de un
+            fallo de integracion.
+        defensaObjetivo:
+          type: integer
+          description: La defensa contra la que se comparo, tal como se recibio.
+        indiceTabla:
+          type: [integer, 'null']
+          minimum: 1
+          maximum: 8000
+          description: |
+            Fila sorteada de la tabla de 8.000. Nula cuando no se llego a
+            sortear —ataque fallido o companero protegido—.
+
+    CategoriaEfecto:
+      type: string
+      description: |
+        Efecto sorteado. El porcentaje de dano que aplica cada uno lo fija el
+        dominio y **no es intuitivo**: `EVADIR_EL_GOLPE` aplica el 80 % del
+        dano, no cero. Esta documentado asi a proposito para que nadie lo
+        "corrija" al leerlo.
+      enum:
+        - CAUSAR_DANO            # 100 %
+        - CAUSAR_DANO_CRITICO    # entre 120 % y 180 %, sorteado
+        - EVADIR_EL_GOLPE        # 80 %
+        - RESISTIR_EL_GOLPE      # 60 %
+        - ESCAPAR_AL_GOLPE       # 20 %
+        - SIN_EFECTO             # 0 %
+
+    PrototipoDeDistribucion:
+      type: object
+      required: [nombre, distribucion]
+      properties:
+        nombre: { $ref: '#/components/schemas/NombreDePrototipo' }
+        distribucion: { $ref: '#/components/schemas/Distribucion' }
+
+    ProblemDetail:
+      type: object
+      description: Formato de error estandar de la plataforma (regla 4, RFC 7807).
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }

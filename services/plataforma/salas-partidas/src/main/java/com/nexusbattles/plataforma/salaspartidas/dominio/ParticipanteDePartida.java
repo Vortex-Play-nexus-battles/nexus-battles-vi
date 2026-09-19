@@ -38,6 +38,22 @@ public record ParticipanteDePartida(
     }
 
     /** Participante humano sin heroe conocido todavia. */
+    /** El mismo participante con su heroe actualizado tras recibir un golpe. */
+    public ParticipanteDePartida conHeroe(HeroeDeCombate heroe) {
+        return new ParticipanteDePartida(idJugador, heroe, esIA, equipo, creditosApostados);
+    }
+
+    /**
+     * True cuando sigue en pie.
+     *
+     * <p>Un participante sin heroe conocido cuenta como vivo: no se le puede
+     * dar por derrotado por una integracion que no llego. Lo que no se sabe no
+     * se decide.
+     */
+    public boolean enPie() {
+        return heroe == null || !heroe.derrotado();
+    }
+
     public static ParticipanteDePartida humano(UUID idJugador, int creditosApostados) {
         return new ParticipanteDePartida(idJugador, null, false, null, creditosApostados);
     }

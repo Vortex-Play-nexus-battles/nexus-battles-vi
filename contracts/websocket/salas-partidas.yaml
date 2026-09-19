@@ -460,7 +460,12 @@ components:
         RF-JUE-017 pide de alto impacto.
       payload:
         type: object
-        required: [tipo, idPartida, ganadores, reparto]
+        # `reparto` es OPCIONAL y `salas-partidas` no lo emite. Quien reparte
+        # creditos y cofres es la economia del juego (HU-JUE-012, ms-finanzas):
+        # este servicio sabe QUIEN gano, no CUANTO le corresponde. Emitir un
+        # reparto calculado aqui seria inventar la regla de otro modulo y
+        # ademas divergiria el dia que esa HU la cambie.
+        required: [tipo, idPartida, ganadores]
         properties:
           tipo: { const: 'partida.finalizada' }
           idPartida: { type: string, format: uuid }

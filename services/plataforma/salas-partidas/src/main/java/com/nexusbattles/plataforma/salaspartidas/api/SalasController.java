@@ -242,11 +242,9 @@ public class SalasController {
      * a ADR-002 el sujeto <i>era</i> el apodo.
      */
     private static JugadorAutenticado jugadorDe(Jwt token) {
-        String apodo = primerTextoNoVacio(
-                token.getClaimAsString("preferred_username"),
-                token.getClaimAsString("apodo"),
-                token.getSubject());
-        return new JugadorAutenticado(idDe(token), apodo);
+        return new JugadorAutenticado(
+                com.nexusbattles.plataforma.salaspartidas.seguridad.IdentidadDelToken.idDe(token),
+                com.nexusbattles.plataforma.salaspartidas.seguridad.IdentidadDelToken.apodoDe(token));
     }
 
     private static String primerTextoNoVacio(String... candidatos) {

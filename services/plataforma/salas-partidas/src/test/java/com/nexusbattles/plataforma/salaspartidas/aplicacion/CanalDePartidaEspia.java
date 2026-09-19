@@ -31,4 +31,9 @@ class CanalDePartidaEspia implements CanalDePartida {
     public void anunciarTurno(Partida partida) {
         anuncios.add(new Anuncio("turno", partida));
     }
+
+    @Override
+    public void anunciarFin(Partida partida) {
+        anuncios.add(new Anuncio("fin", partida));
+    }
 }
