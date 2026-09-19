@@ -1,74 +1,73 @@
 <!doctype html>
 <html lang="es">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Historial de transacciones — Nexus Battles VI</title>
-  <link rel="stylesheet" href="../comun/barra-navegacion.css" />
-  <link rel="stylesheet" href="./tema-cuentas.css" />
-  <link rel="stylesheet" href="./historial-transacciones.css" />
-</head>
-<body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Historial de transacciones — Nexus Battles VI</title>
+    <link rel="stylesheet" href="../comun/barra-navegacion.css" />
+    <link rel="stylesheet" href="./tema-cuentas.css" />
+    <link rel="stylesheet" href="./historial-transacciones.css" />
+  </head>
+  <body>
+    <!-- Barra de navegación compartida (mismo patrón que auditoria/perfil/etc.). -->
+    <div id="navbar-container"></div>
 
-<!-- Barra de navegación compartida (mismo patrón que auditoria/perfil/etc.). -->
-<div id="navbar-container"></div>
+    <div class="contenedor">
+      <header class="encabezado">
+        <div class="encabezado-contenido">
+          <div>
+            <h1 class="titulo">Historial de transacciones</h1>
+            <p class="ayuda">
+              Todas tus transacciones en moneda real: cargas, compras y reversos. El listado es solo
+              tuyo.
+            </p>
+          </div>
+          <button id="btn-volver" type="button" class="btn-contorno">Volver</button>
+        </div>
+      </header>
 
-<div class="contenedor">
-  <header class="encabezado">
-    <div class="encabezado-contenido">
-      <div>
-        <h1 class="titulo">Historial de transacciones</h1>
-        <p class="ayuda">
-          Todas tus transacciones en moneda real: cargas, compras y
-          reversos. El listado es solo tuyo.
-        </p>
-      </div>
-      <button id="btn-volver" type="button" class="btn-contorno">Volver</button>
+      <section class="tarjeta">
+        <div class="tabla-envoltorio">
+          <table class="tabla-historial">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Concepto</th>
+                <th class="celda-monto">Monto</th>
+                <th>Moneda</th>
+                <th>Resultado</th>
+                <th>Comprobante</th>
+              </tr>
+            </thead>
+            <tbody id="historial-tbody">
+              <!-- filas insertadas por historial-transacciones.js -->
+            </tbody>
+          </table>
+        </div>
+
+        <p id="historial-estado" class="estado" hidden></p>
+      </section>
+
+      <nav class="paginacion" aria-label="Paginación">
+        <button type="button" id="btn-anterior" class="btn-contorno" disabled>Anterior</button>
+        <span id="historial-pagina-actual" class="ayuda">Página 1</span>
+        <button type="button" id="btn-siguiente" class="btn-contorno" disabled>Siguiente</button>
+      </nav>
     </div>
-  </header>
 
-  <section class="tarjeta">
-    <div class="tabla-envoltorio">
-      <table class="tabla-historial">
-        <thead>
-          <tr>
-            <th>Fecha</th>
-            <th>Concepto</th>
-            <th class="celda-monto">Monto</th>
-            <th>Moneda</th>
-            <th>Resultado</th>
-            <th>Comprobante</th>
-          </tr>
-        </thead>
-        <tbody id="historial-tbody">
-          <!-- filas insertadas por historial-transacciones.js -->
-        </tbody>
-      </table>
-    </div>
+    <script type="module">
+      import { construirBarra } from '../comun/barra-navegacion.js';
 
-    <p id="historial-estado" class="estado" hidden></p>
-  </section>
+      const navbarContainer = document.getElementById('navbar-container');
+      if (navbarContainer) {
+        const barra = construirBarra({
+          seccionActiva: 'cuenta',
+          sesion: { autenticado: !!sessionStorage.getItem('nexus.rolActual') },
+        });
+        navbarContainer.appendChild(barra);
+      }
+    </script>
 
-  <nav class="paginacion" aria-label="Paginación">
-    <button type="button" id="btn-anterior" class="btn-contorno" disabled>Anterior</button>
-    <span id="historial-pagina-actual" class="ayuda">Página 1</span>
-    <button type="button" id="btn-siguiente" class="btn-contorno" disabled>Siguiente</button>
-  </nav>
-</div>
-
-<script type="module">
-  import { construirBarra } from '../comun/barra-navegacion.js';
-
-  const navbarContainer = document.getElementById('navbar-container');
-  if (navbarContainer) {
-    const barra = construirBarra({
-      seccionActiva: 'cuenta',
-      sesion: { autenticado: !!sessionStorage.getItem('nexus.rolActual') }
-    });
-    navbarContainer.appendChild(barra);
-  }
-</script>
-
-<script type="module" src="./historial-transacciones.js"></script>
-</body>
+    <script type="module" src="./historial-transacciones.js"></script>
+  </body>
 </html>

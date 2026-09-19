@@ -22,15 +22,10 @@ describe('Login - aislamiento de credenciales por ambiente', () => {
   test('muestra un rechazo explícito cuando las credenciales no pertenecen al ambiente', async () => {
     const { mensajeDeError } = await import('./login.js');
 
-    const mensaje = mensajeDeError(
-      401,
-      'Correo o contraseña incorrectos.',
-    );
+    const mensaje = mensajeDeError(401, 'Correo o contraseña incorrectos.');
 
     expect(mensaje).toContain('Acceso rechazado');
-    expect(mensaje).toContain(
-      'estas credenciales no están registradas en este ambiente',
-    );
+    expect(mensaje).toContain('estas credenciales no están registradas en este ambiente');
   });
 
   test('no expone información que permita saber si el correo existe', async () => {
@@ -46,10 +41,7 @@ describe('Login - aislamiento de credenciales por ambiente', () => {
   test('mantiene el mensaje específico enviado por el backend para un 403', async () => {
     const { mensajeDeError } = await import('./login.js');
 
-    const mensaje = mensajeDeError(
-      403,
-      'Esta cuenta ha sido suspendida.',
-    );
+    const mensaje = mensajeDeError(403, 'Esta cuenta ha sido suspendida.');
 
     expect(mensaje).toBe('Esta cuenta ha sido suspendida.');
   });
@@ -57,10 +49,7 @@ describe('Login - aislamiento de credenciales por ambiente', () => {
   test('mantiene el mensaje de bloqueo temporal para un 423', async () => {
     const { mensajeDeError } = await import('./login.js');
 
-    const mensaje = mensajeDeError(
-      423,
-      'Cuenta bloqueada temporalmente.',
-    );
+    const mensaje = mensajeDeError(423, 'Cuenta bloqueada temporalmente.');
 
     expect(mensaje).toBe('Cuenta bloqueada temporalmente.');
   });
