@@ -96,6 +96,12 @@
 			<scope>test</scope>
 		</dependency>
 
+    <dependency>
+      <groupId>org.springframework.cloud</groupId>
+      <artifactId>spring-cloud-starter-openfeign</artifactId>
+      <version>4.1.0</version>
+    </dependency>
+
 		<!--
 			Testcontainers: la prueba de arranque necesita el PostgreSQL de
 			verdad. Con H2 el contexto levantaria con otro dialecto y otro
@@ -118,6 +124,7 @@
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
+
 
 	<build>
 		<plugins>
