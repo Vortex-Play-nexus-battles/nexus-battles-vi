@@ -1,0 +1,83 @@
+# TEMPORAL — Medir la cobertura real de los servicios Gradle
+#
+# Por que existe: la regla 11 de plataforma y el punto (d) del Definition of
+# Done exigen cobertura >= 80 %, pero jacocoTestCoverageVerification esta
+# declarado y COMENTADO en buildSrc (nexus.spring-conventions.gradle:108-110),
+# y el CI ejecuta ":test", no ":check". O sea que esa compuerta nunca se ha
+# ejecutado y nadie sabe en cuanto estamos de verdad.
+#
+# Este workflow corre una vez para sacar la linea base de los nueve servicios
+# a la vez y se borra en el mismo PR que active la compuerta. No es una
+# compuerta: no falla si la cobertura es baja, solo la imprime.
+#
+# Se dispara solo con un push a una rama medicion/** (no necesita estar en la
+# rama por defecto, a diferencia de workflow_dispatch).
+name: Medir cobertura (temporal)
+
+on:
+  push:
+    branches:
+      - "medicion/**"
+
+jobs:
+  medir:
+    name: Cobertura de LINE por servicio
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Preparar Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Ejecutar pruebas y generar los informes de JaCoCo
+        continue-on-error: true
+        run: |
+          ./gradlew --no-daemon --continue \
+            :services:plataforma:admin-parametros:test :services:plataforma:admin-parametros:jacocoTestReport \
+            :services:plataforma:comentarios:test :services:plataforma:comentarios:jacocoTestReport \
+            :services:plataforma:correo:test :services:plataforma:correo:jacocoTestReport \
+            :services:plataforma:metricas-plataforma:test :services:plataforma:metricas-plataforma:jacocoTestReport \
+            :services:plataforma:moderacion-sanciones:test :services:plataforma:moderacion-sanciones:jacocoTestReport \
+            :services:plataforma:notificaciones:test :services:plataforma:notificaciones:jacocoTestReport \
+            :services:plataforma:salas-partidas:test :services:plataforma:salas-partidas:jacocoTestReport \
+            :services:plataforma:torneos:test :services:plataforma:torneos:jacocoTestReport \
+            :services:contenido:motor-combate:test :services:contenido:motor-combate:jacocoTestReport
+
+      - name: Leer los XML y publicar la tabla
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          printf '%-42s %8s %8s %8s\n' "SERVICIO" "LINEAS" "CUBIERTAS" "%"
+          printf '%.0s-' {1..72}; echo
+          total_c=0; total_t=0
+          while IFS= read -r xml; do
+            servicio=$(echo "$xml" | sed -E 's|^\./services/||; s|/build/reports/.*$||')
+            # El ultimo <counter type="LINE"> del XML es el del informe entero.
+            linea=$(grep -o '<counter type="LINE"[^/]*/>' "$xml" | tail -1)
+            missed=$(echo "$linea" | sed -E 's/.*missed="([0-9]+)".*/\1/')
+            covered=$(echo "$linea" | sed -E 's/.*covered="([0-9]+)".*/\1/')
+            [ -z "${missed:-}" ] && continue
+            tot=$((missed + covered))
+            if [ "$tot" -eq 0 ]; then pct="sin codigo"; else pct=$(awk "BEGIN{printf \"%.1f\", $covered*100/$tot}"); fi
+            printf '%-42s %8s %8s %8s\n' "$servicio" "$tot" "$covered" "$pct"
+            total_c=$((total_c + covered)); total_t=$((total_t + tot))
+          done < <(find . -path '*/build/reports/jacoco/test/jacocoTestReport.xml' | sort)
+          printf '%.0s-' {1..72}; echo
+          if [ "$total_t" -gt 0 ]; then
+            printf '%-42s %8s %8s %8s\n' "TOTAL" "$total_t" "$total_c" "$(awk "BEGIN{printf \"%.1f\", $total_c*100/$total_t}")"
+          fi
+
+      - name: Guardar los informes por si hace falta mirarlos a mano
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: informes-jacoco
+          path: "**/build/reports/jacoco/test/jacocoTestReport.xml"
+          if-no-files-found: warn
