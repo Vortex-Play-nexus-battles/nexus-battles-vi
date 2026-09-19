@@ -16,6 +16,9 @@ de entrada público del host de plataforma en AWS: `http://<ip-del-host>/`.
 | `/api/v1/lista-negra`, `/api/v1/sanciones` | `srv-moderacion-sanciones:8086` |
 | `/api/v1/{latencia,disponibilidad,consultas,degradacion}` | `srv-metricas-plataforma:8087` |
 | `/api/v1/{auth,perfiles,rbac,admin}` | `srv-ms-identidad:8089` |
+| `/api/v1/carrito…` | `srv-ms-ecommerce:8090`, reescrito a `/ecommerce/api/v1/carrito…` |
+| `GET /api/v1/productos` (exacto) | `srv-ms-ecommerce:8090` → `/ecommerce/api/v1/productos` (vitrina) |
+| `/api/v1/productos…` (resto) | `srv-productos:8080` (catálogo de contenido) |
 | `/ws` | `srv-salas-partidas:8084`; con `?usuario=…` → `srv-notificaciones:8085` |
 | `/mailpit/` | bandeja del SMTP de pruebas |
 | `/salud-borde` | `UP` (lo comprueba `desplegar.sh`) |
@@ -29,6 +32,33 @@ ese prefijo.
 
 **Registrar un prefijo nuevo:** añadir la `location` aquí, el puerto en
 `puerto_de()` de `cd.yml` y el servicio en `docker-compose.deploy.yml`.
+
+### Cómo se comprueba el reparto — `pruebas/`
+
+Leer el archivo no basta. `proxy_pass` con **variable y URI a la vez** no añade
+el resto de la ruta: manda la URI escrita, tal cual. Por eso
+`POST /api/v1/carrito/items` llegaba al servicio como `/ecommerce/api/v1/carrito`
+y añadir al carrito nunca funcionó a través del borde.
+
+`pruebas/` levanta este mismo `borde-dev.conf` contra servicios de mentira que
+responden con la ruta exacta que reciben:
+
+```bash
+cd infrastructure/red-balanceo/pruebas
+docker compose up -d && sleep 5
+./comprobar-rutas.sh      # devuelve 0 si cada ruta va donde debe
+docker compose down -v
+```
+
+No cuesta nada, no toca AWS y no necesita ningún servicio real.
+
+### Colisión conocida: `/api/v1/productos`
+
+`contenido/productos` y `cuentas/ms-ecommerce` declaran los dos ese prefijo.
+No se pisan de hecho —contenido no publica un `GET` sin sufijo—, así que el
+borde reparte por método y solo en la ruta exacta. Es una **capa de adaptación**
+mientras sus dueños deciden de quién es el prefijo (#421), no una decisión de
+contrato tomada aquí. `comprobar-rutas.sh` falla en cuanto ese reparto cambie.
 
 **Cómo llega al host:** `cd.yml` (job *Desplegar en Dev*) copia
 `frontend/app-web/src`, `shared/ui-kit` y este archivo a `/opt/nexus/web/`;
