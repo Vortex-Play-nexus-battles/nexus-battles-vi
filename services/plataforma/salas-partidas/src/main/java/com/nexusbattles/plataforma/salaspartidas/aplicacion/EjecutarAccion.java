@@ -4,6 +4,7 @@ import com.nexusbattles.plataforma.salaspartidas.dominio.AccionResuelta;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDePartida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoPartida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.MotorDeCombate;
+import com.nexusbattles.plataforma.salaspartidas.dominio.MotorNoDisponible;
 import com.nexusbattles.plataforma.salaspartidas.dominio.NoEsTuTurno;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Partida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.PartidaNoEncontrada;
@@ -123,10 +124,97 @@ public class EjecutarAccion {
         // atras.
         if (termino) {
             canal.anunciarFin(guardada);
+            return guardada;
+        }
+        canal.anunciarTurno(guardada);
+
+        return jugarTurnosDeLaMaquina(guardada);
+    }
+
+    /**
+     * La maquina juega sus turnos — HU-SAL-004, SCRUM-1078/1079.
+     *
+     * <p>Sin esto, una partida contra la IA se queda colgada: el turno pasa a
+     * un participante que nadie va a jugar nunca, y la vista espera a alguien
+     * que no existe. Era lo que impedia que la modalidad funcionara.
+     *
+     * <p>Encadena mientras el turno sea de una maquina, porque en una partida
+     * de seis puede haber varias seguidas. La guarda del bucle es el numero de
+     * participantes: mas vueltas que participantes significa que el turno no
+     * avanza, y eso hay que verlo, no dar vueltas.
+     */
+    private Partida jugarTurnosDeLaMaquina(Partida partida) {
+        Partida actual = partida;
+        int guarda = actual.participantes().size();
+
+        while (guarda-- > 0 && actual.estado() != EstadoPartida.FINALIZADA) {
+            ParticipanteDePartida enTurno = participante(actual, actual.turnoActual().idJugador());
+            if (!enTurno.esIA()) {
+                return actual;
+            }
+            actual = jugarTurnoDeLaMaquina(actual, enTurno);
+        }
+        return actual;
+    }
+
+    /**
+     * Un turno de la maquina.
+     *
+     * <p>Si el motor no contesta, la maquina <b>pasa turno</b> en vez de
+     * propagar el 503: quien mando la accion ya la vio resuelta, y devolverle
+     * un error por un fallo que ocurrio despues de la suya seria mentirle sobre
+     * su propia jugada. El combate sigue y el siguiente intento lo reintenta.
+     */
+    private Partida jugarTurnoDeLaMaquina(Partida partida, ParticipanteDePartida maquina) {
+        ParticipanteDePartida objetivo;
+        try {
+            objetivo = elegirObjetivo(partida, maquina.idJugador(), null);
+        } catch (SinObjetivoPosible sinRivales) {
+            return partida;
+        }
+
+        if (maquina.heroe() == null || objetivo.heroe() == null) {
+            return pasarTurnoDe(partida);
+        }
+
+        ResolucionDelMotor resolucion;
+        try {
+            resolucion = motor.resolver(maquina.heroe(), objetivo.heroe());
+        } catch (MotorNoDisponible noResponde) {
+            return pasarTurnoDe(partida);
+        }
+
+        ParticipanteDePartida golpeado =
+                partida.aplicarDano(objetivo.idJugador(), resolucion.danoAplicado());
+
+        boolean termino = partida.terminarSiSoloQuedaUno();
+        if (!termino) {
+            partida.avanzarTurno();
+        }
+        Partida guardada = partidas.guardar(partida);
+
+        canal.anunciarAccionResuelta(new AccionResuelta(
+                guardada.id(), maquina.idJugador(),
+                new AccionResuelta.Accion(ACCION_BASICA, resolucion.categoria(), null),
+                List.of(new AccionResuelta.Afectado(
+                        golpeado.idJugador(),
+                        golpeado.heroe().vidaActual(),
+                        golpeado.heroe().vidaMaxima(),
+                        -resolucion.danoAplicado()))));
+
+        if (termino) {
+            canal.anunciarFin(guardada);
         } else {
             canal.anunciarTurno(guardada);
         }
+        return guardada;
+    }
 
+    /** Pasa el turno sin golpear, guarda y lo anuncia. */
+    private Partida pasarTurnoDe(Partida partida) {
+        partida.avanzarTurno();
+        Partida guardada = partidas.guardar(partida);
+        canal.anunciarTurno(guardada);
         return guardada;
     }
 
@@ -138,10 +226,12 @@ public class EjecutarAccion {
      * historial del combate.
      */
     private Partida soloPasarTurno(Partida partida) {
-        partida.avanzarTurno();
-        Partida guardada = partidas.guardar(partida);
-        canal.anunciarTurno(guardada);
-        return guardada;
+        return jugarTurnosDeLaMaquina(pasarTurnoDe(partida));
+    }
+
+    private static boolean esDeLaMaquina(Partida partida, UUID id) {
+        return partida.participantes().stream()
+                .anyMatch(p -> p.idJugador().equals(id) && p.esIA());
     }
 
     private static ParticipanteDePartida participante(Partida partida, UUID id) {
@@ -168,10 +258,15 @@ public class EjecutarAccion {
             throw new SinObjetivoPosible("No queda nadie en pie a quien atacar.");
         }
         if (idObjetivo == null) {
-            if (rivales.size() > 1) {
+            if (rivales.size() > 1 && !esDeLaMaquina(partida, atacante)) {
                 throw new SinObjetivoPosible(
                         "Hay mas de un rival en pie: indica a quien atacas.");
             }
+            // La maquina golpea al primer rival en pie, en orden de turno. Es
+            // deliberadamente la regla mas simple que existe: cualquier otra
+            // -el mas debil, el que mas dano hace- seria una estrategia, y la
+            // estrategia de la IA no la fija ninguna HU. Cuando el PO la
+            // defina, se cambia esta linea.
             return rivales.get(0);
         }
         return rivales.stream()

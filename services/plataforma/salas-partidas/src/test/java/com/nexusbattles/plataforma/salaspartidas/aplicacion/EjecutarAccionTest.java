@@ -257,18 +257,20 @@ class EjecutarAccionTest {
     void sinHeroeSoloPasaTurno() {
         // Es el caso de la IA -su heroe lo decide el motor- y el de los
         // participantes anteriores a la puerta de SCRUM-1074.
+        // Sala anterior a la puerta de SCRUM-1074: nadie tiene ficha, asi que
+        // tampoco la IA -que copia la del anfitrion-.
         MotorDeMentira motor = MotorDeMentira.queHace(50);
         Sala conIa = Sala.crear(
-                new ParametrosDeSala(2, Modalidad.CONTRA_IA, 0, true, false, null), ANA,
-                new FichaDeParticipante("Ana", heroe("Arquero", 100)));
+                new ParametrosDeSala(2, Modalidad.CONTRA_IA, 0, true, false, null), ANA);
         Partida partida = partidas.guardar(Partida.iniciar(conIa, AHORA));
 
         Partida despues = casoDeUso(motor).ejecutar(partida.id(), ANA, null, null);
 
         assertAll(
                 () -> assertTrue(motor.consultas.isEmpty(), "no se pregunta por un heroe que no hay"),
-                () -> assertEquals(1, canal.anuncios.size()),
-                () -> assertEquals("turno", canal.anuncios.get(0).tipo()),
+                // Pasan turno los dos -humano y maquina- sin golpear.
+                () -> assertTrue(canal.anuncios.stream().allMatch(a -> "turno".equals(a.tipo())),
+                        "nadie golpea: solo se pasa turno"),
                 () -> assertEquals(EstadoPartida.EN_CURSO, despues.estado()));
     }
 }
