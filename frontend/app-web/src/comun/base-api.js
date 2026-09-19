@@ -37,6 +37,6 @@ export function baseDeApi(documento = globalThis.document) {
  * @param {ParentNode} [documento]
  * @returns {string}
  */
-export function rutaDeApi(recurso, documento) {
+export   function   rutaDeApi(recurso, documento) {
   return `${baseDeApi(documento)}/api/v1${recurso}`;
 }
