@@ -77,24 +77,48 @@ tasks.named('test') {
     }
 }
 
+// La clase de arranque no cuenta para la cobertura.
+//
+// `XApplication` son tres lineas: la declaracion, el constructor implicito y
+// `SpringApplication.run(...)`. Ese `main` no se puede ejercitar desde una
+// prueba unitaria -arrancaria la aplicacion entera-, y lo que de verdad importa
+// de el, que el contexto levante, ya lo comprueba el IT de arranque de cada
+// servicio. Contarlo solo anade ruido: en los servicios con codigo son dos
+// lineas perdidas entre cientos, pero en los que todavia son andamiaje es el
+// 100 % del modulo y arrastra el porcentaje a 33 %.
+//
+// Mismo criterio que motor-combate, que ya excluye `nexus/combate/arranque/**`.
+def clasesFueraDeLaCobertura = ['**/*Application.class']
+
 jacocoTestReport {
     dependsOn tasks.named('test')
     reports {
         xml.required = true
         html.required = true
     }
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: clasesFueraDeLaCobertura)
+        }))
+    }
 }
 
-// Regla 11 de plataforma: cobertura minima del 80 %.
+// Regla 11 de plataforma y punto (d) del Definition of Done: cobertura minima
+// del 80 %. ACTIVA desde el bloque B1 (19 sep 2026).
 //
-// La regla queda declarada aqui para que sea la misma en los veinte modulos,
-// pero TODAVIA NO esta enganchada a 'check'. Si se engancha hoy, los modulos
-// que aun son andamiaje (una clase @SpringBootApplication y ninguna prueba)
-// reportan 0 % y dejan el build en rojo para todo el mundo.
+// Estuvo declarada y comentada desde agosto porque los modulos que aun son
+// andamiaje reportaban 0 % y habrian dejado el build en rojo para los tres
+// equipos. Se midio antes de encenderla, y el motivo resulto ser mas pequeño de
+// lo que parecia: lo unico sin cubrir en esos modulos era su `XApplication`,
+// que ahora queda fuera del computo por lo que explica el bloque de arriba.
 //
-// Se activa descomentando el bloque de abajo, y eso se hace cuando los modulos
-// tengan pruebas de verdad. Es una decision de equipo, no de un archivo.
+// Linea base medida el 19 sep 2026 (corrida "Medir cobertura"), antes de anadir
+// una sola prueba: comentarios 98,0 · metricas-plataforma 94,6 · correo 93,8 ·
+// notificaciones 93,7 · salas-partidas 89,6 · motor-combate 88,0 ·
+// moderacion-sanciones 86,4. Ninguno estaba por debajo del umbral: lo que
+// faltaba no era cobertura, era la compuerta.
 jacocoTestCoverageVerification {
+    dependsOn tasks.named('test')
     violationRules {
         rule {
             limit {
@@ -103,8 +127,13 @@ jacocoTestCoverageVerification {
             }
         }
     }
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: clasesFueraDeLaCobertura)
+        }))
+    }
 }
 
-// tasks.named('check') {
-//     dependsOn tasks.named('jacocoTestCoverageVerification')
-// }
+tasks.named('check') {
+    dependsOn tasks.named('jacocoTestCoverageVerification')
+}

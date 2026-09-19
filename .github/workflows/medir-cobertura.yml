@@ -77,6 +77,20 @@ jobs:
             printf '%-42s %8s %8s %8s\n' "TOTAL" "$total_t" "$total_c" "$(awk "BEGIN{printf \"%.1f\", $total_c*100/$total_t}")"
           fi
 
+      # La prueba en ROJO de la compuerta: se ejecuta `check` en TODOS los
+      # modulos para ver a cuales les fallaria antes de encenderla en develop.
+      # Con --continue, para tener la lista entera y no solo el primero.
+      - name: Que modulos NO pasarian la compuerta
+        if: always()
+        continue-on-error: true
+        run: |
+          MODULOS=$(grep -rl "nexus.spring-conventions" --include=build.gradle . \
+            | sed -e 's|^\./||' -e 's|/build.gradle$||' -e 's|/|:|g' -e 's|^|:|' \
+            | grep -v '^:services:plataforma$' | sort)
+          ./gradlew --no-daemon --continue \
+            $(echo "$MODULOS" | sed 's/$/:jacocoTestCoverageVerification/' | tr '\n' ' ') \
+            2>&1 | grep -E "Rule violated|FAILED|BUILD" || true
+
       - name: Guardar los informes por si hace falta mirarlos a mano
         if: always()
         uses: actions/upload-artifact@v4
