@@ -25,13 +25,16 @@ const el = {
   btnVolver: document.getElementById('btn-volver'),
 };
 
-const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun',
-               'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
 function formatearFecha(isoString) {
-  if (!isoString) { return '—'; }
+  if (!isoString) {
+    return '—';
+  }
   const fecha = new Date(isoString);
-  if (Number.isNaN(fecha.getTime())) { return isoString; }
+  if (Number.isNaN(fecha.getTime())) {
+    return isoString;
+  }
   const dia = fecha.getDate();
   const mes = MESES[fecha.getMonth()];
   const horas = String(fecha.getHours()).padStart(2, '0');
@@ -40,7 +43,9 @@ function formatearFecha(isoString) {
 }
 
 function formatearMonto(monto) {
-  if (monto === null || monto === undefined) { return '—'; }
+  if (monto === null || monto === undefined) {
+    return '—';
+  }
   return new Intl.NumberFormat('es-CO', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -55,7 +60,9 @@ function mostrarEstado(texto, tipo) {
   el.estado.hidden = false;
   el.estado.textContent = texto;
   el.estado.classList.remove('carga', 'error', 'vacio', 'exito');
-  if (tipo) { el.estado.classList.add(tipo); }
+  if (tipo) {
+    el.estado.classList.add(tipo);
+  }
 }
 
 function ocultarEstado() {

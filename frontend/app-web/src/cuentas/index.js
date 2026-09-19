@@ -42,7 +42,7 @@ function montarBarraNavegacion() {
     sesion: { autenticado: true },
     navegar: (ruta) => {
       window.location.href = ruta;
-    }
+    },
   });
 
   document.body.prepend(barra);
@@ -66,9 +66,7 @@ function filtrarTarjetasPorRol() {
   const tarjetas = document.querySelectorAll('[data-roles]');
 
   tarjetas.forEach((tarjeta) => {
-    const rolesPermitidos = tarjeta.dataset.roles
-      .split(',')
-      .map((rol) => rol.trim());
+    const rolesPermitidos = tarjeta.dataset.roles.split(',').map((rol) => rol.trim());
 
     tarjeta.hidden = !rolesPermitidos.includes(rolActual);
   });
@@ -84,9 +82,7 @@ function ocultarSeccionesVacias() {
 
   secciones.forEach((seccion) => {
     const tarjetas = seccion.querySelectorAll('.tarjeta-acceso');
-    const tieneTarjetaVisible = Array.from(tarjetas).some(
-      (tarjeta) => !tarjeta.hidden
-    );
+    const tieneTarjetaVisible = Array.from(tarjetas).some((tarjeta) => !tarjeta.hidden);
 
     seccion.hidden = !tieneTarjetaVisible;
   });
