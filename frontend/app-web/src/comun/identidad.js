@@ -20,9 +20,25 @@
  * identificador es el mismo error que provocó el 500 del PR #404 y que se
  * arrastró hasta el chat.
  *
- * Se conserva `nexus.usuarioId` como primera opción para no romper a quien ya
- * lo escriba —o llegue a escribirlo— y para que las pruebas existentes sigan
- * valiendo.
+ * ## Por qué el token manda sobre `nexus.usuarioId` (corregido en P3.3)
+ *
+ * Cuando se escribió este módulo, `nexus.usuarioId` no lo ponía nadie y se dejó
+ * como primera opción para no romper a quien llegara a escribirlo. Resulta que
+ * sí lo escriben, y con dos valores distintos que **no son** el identificador de
+ * ADR-002:
+ *
+ * 1. `cuentas/login.js` guarda `body.usuarioId`, que en `LoginResponse` es un
+ *    `Long` —la clave primaria de la tabla—, así que la clave contiene `"7"`.
+ *    Devolverlo dejaba a `usuarioIdDeSesion()` sin llegar nunca al token en una
+ *    sesión real, y los consumidores que comparan contra los UUID que manda el
+ *    servidor no acertaban ni una.
+ * 2. `cuentas/gestion-usuarios.js` guarda ahí el id del **usuario que el
+ *    administrador acaba de seleccionar** en el panel. Desde ese momento la
+ *    sesión del administrador llevaba la identidad de otra persona.
+ *
+ * Por eso ahora el orden es: `uid` del token primero, y `nexus.usuarioId` solo
+ * de respaldo cuando no hay token legible. El token lo firma el servidor y no
+ * lo puede pisar una vista por descuido.
  *
  * @module identidad
  */
@@ -67,21 +83,22 @@ export function cuerpoDelToken(token) {
  * @returns {string|null} el UUID, o null si no hay sesión utilizable
  */
 export function usuarioIdDeSesion(almacen = globalThis.sessionStorage) {
-  const guardado = almacen?.getItem?.(CLAVE_USUARIO_ID);
-  if (guardado) {
-    return guardado;
-  }
   const cuerpo = cuerpoDelToken(almacen?.getItem?.(CLAVE_TOKEN));
-  if (!cuerpo) {
-    return null;
-  }
+
   // `uid` manda. `sub` solo vale de respaldo si es un UUID: en los tokens de
   // ms-identidad posteriores a ADR-002 es el apodo, y devolverlo como
   // identificador sería mentir.
-  if (cuerpo.uid) {
+  if (cuerpo?.uid) {
     return String(cuerpo.uid);
   }
-  return pareceUuid(cuerpo.sub) ? String(cuerpo.sub) : null;
+  if (pareceUuid(cuerpo?.sub)) {
+    return String(cuerpo.sub);
+  }
+
+  // Sin token utilizable, lo guardado es mejor que nada — pero solo entonces,
+  // porque ahí acaban tanto la clave primaria que escribe el login como el
+  // usuario que el administrador consultó en el panel.
+  return almacen?.getItem?.(CLAVE_USUARIO_ID) || null;
 }
 
 const FORMA_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
