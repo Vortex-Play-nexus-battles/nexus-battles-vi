@@ -243,6 +243,15 @@ jobs:
             echo "Sin cambios en el frontend."
             echo "hay=false" >> "$GITHUB_OUTPUT"
           fi
+          # La lista se guarda para el paso de calidad de mas abajo, que solo
+          # exige ESLint y Prettier sobre lo que este cambio toca. Se filtran
+          # los borrados: un archivo que ya no existe no se puede analizar.
+          echo "$CAMBIOS" \
+            | grep -E '^frontend/app-web/src/' \
+            | while read -r archivo; do [ -f "$archivo" ] && echo "${archivo#frontend/app-web/}"; done \
+            > "$RUNNER_TEMP/cambios-frontend.txt" || true
+          echo "Archivos que tendran que pasar ESLint y Prettier:"
+          cat "$RUNNER_TEMP/cambios-frontend.txt"
 
       - name: Configurar Node 22
         if: steps.detectar.outputs.hay == 'true'
@@ -266,23 +275,58 @@ jobs:
         working-directory: frontend/app-web
         run: npm test
 
-      # ESLint y Prettier todavia NO bloquean, y no por comodidad: `develop` ya
-      # llega con 5 errores de ESLint y una quincena de ficheros sin formatear,
-      # casi todos en `src/cuentas/`, que es de grupo-beta. Hacerlos bloqueantes
-      # hoy dejaria a los tres equipos sin poder fusionar por deuda que no es
-      # suya arreglar en su PR, y arreglarsela nosotros seria tocar la carpeta
-      # de otro grupo sin coordinarlo.
+      # ESLint y Prettier SI bloquean, sobre los archivos que el cambio toca.
       #
-      # Se dejan visibles para que la deuda no siga creciendo en silencio. En
-      # cuanto su dueno cierre esos errores, quitar `continue-on-error` de los
-      # dos pasos y anadir este check al ruleset de develop.
-      - name: Analisis estatico (ESLint) — informativo
+      # El umbral es el de siempre: cero errores de ESLint y formato de
+      # Prettier. Lo que se acota es el ALCANCE, y por un motivo concreto:
+      # `develop` arrastra 1 error de ESLint y 22 archivos sin formatear, y los
+      # 23 estan dentro de PR abiertos de otros equipos (#270, #390, #408,
+      # #419). Exigirlos hoy en todo el arbol dejaria a los tres equipos sin
+      # poder fusionar por deuda que no les toca arreglar en su PR, y
+      # arreglarsela nosotros seria reformatear cientos de lineas de archivos
+      # que otra persona tiene abiertos.
+      #
+      # Con este alcance, todo lo que entre a partir de ahora pasa la compuerta
+      # entera, y la deuda se apaga sola conforme sus duenos toquen esos
+      # archivos. Los dos pasos informativos de abajo la mantienen a la vista
+      # para que no crezca en silencio.
+      #
+      # Alcance: `frontend/app-web/src/`. `shared/ui-kit/` queda fuera porque
+      # tampoco lo cubren hoy `npm run lint` ni `npm run format:check` (los dos
+      # apuntan a `src`), y meterlo aqui sin meterlo alli dejaria dos
+      # comportamientos distintos para la misma carpeta. Es una decision aparte.
+      - name: ESLint y Prettier sobre lo que cambia (bloqueante)
+        if: steps.detectar.outputs.hay == 'true'
+        working-directory: frontend/app-web
+        shell: bash
+        run: |
+          set -euo pipefail
+          LISTA="$RUNNER_TEMP/cambios-frontend.txt"
+          if [ ! -s "$LISTA" ]; then
+            echo "El cambio no toca ningun archivo de src/: nada que analizar."
+            exit 0
+          fi
+
+          mapfile -t TODOS < "$LISTA"
+          mapfile -t JS < <(grep -E '\.(js|mjs|cjs)$' "$LISTA" || true)
+
+          if [ "${#JS[@]}" -gt 0 ]; then
+            echo "== ESLint sobre ${#JS[@]} archivo(s)"
+            npx eslint "${JS[@]}"
+          fi
+
+          echo "== Prettier sobre ${#TODOS[@]} archivo(s)"
+          npx prettier --check "${TODOS[@]}"
+
+      # Los dos de abajo miran TODO el arbol y no bloquean: son el termometro
+      # de la deuda heredada, no una compuerta.
+      - name: Analisis estatico de todo src (ESLint) — informativo
         if: steps.detectar.outputs.hay == 'true'
         continue-on-error: true
         working-directory: frontend/app-web
         run: npm run lint
 
-      - name: Formato (Prettier) — informativo
+      - name: Formato de todo src (Prettier) — informativo
         if: steps.detectar.outputs.hay == 'true'
         continue-on-error: true
         working-directory: frontend/app-web
