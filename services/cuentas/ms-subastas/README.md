@@ -153,6 +153,37 @@ El backlog solo deja una pregunta abierta (el valor por defecto del incremento m
 3. **Anti-sniping:** no implementado, porque la HU no lo menciona. Sin extension de tiempo, una puja manual en el ultimo segundo es inalcanzable para el motor automatico, que debe esperar su intervalo.
 4. **Revocacion de rol:** `ValidadorDeToken` comprueba firma y expiracion, no si el rol sigue vigente. Comparar la version del claim `ver` exigiria leer la tabla de usuarios de otro dominio (ArchUnit lo prohibe) o llamar a ms-identidad dentro del lock pesimista. Consecuencia aceptada: un token revocado sirve aqui hasta que expire solo.
 
+## Ver la historia funcionando con creditos reales
+
+`./gradlew ... check` demuestra que el codigo hace lo que dice. Esto demuestra
+otra cosa: que la integracion con ms-finanzas funciona de verdad.
+
+```bash
+docker compose -f services/cuentas/ms-finanzas/docker-compose.yml up -d
+docker compose -f services/cuentas/ms-subastas/docker-compose.yml up -d
+
+DB_PASSWORD=finanzas_password ./gradlew :services:cuentas:ms-finanzas:bootRun
+# en otra terminal, OJO con FINANZAS_MODO=http
+DB_PASSWORD=subastas_password FINANZAS_MODO=http \
+  ./gradlew :services:cuentas:ms-subastas:bootRun
+
+# y con los dos arriba
+services/cuentas/ms-subastas/scripts/demo-local.sh
+```
+
+Siembra una subasta, acredita creditos y comprueba seis cosas por HTTP: que
+pujar sin saldo se rechaza con `SALDO_INSUFICIENTE` y no con un 500, que con
+saldo entra, que los creditos quedan retenidos de verdad, que un reintento con
+la misma clave devuelve **la misma** puja sin retener dos veces, que al superado
+se le devuelven sus creditos, y que el saldo que ve la pantalla es el real.
+
+Es repetible: cada ejecucion usa jugadores y claves nuevos, asi que no depende
+de que la base de datos este limpia.
+
+**La subasta se siembra con SQL a proposito.** Publicarla por la API es
+HU-SUB-001 y arrastra catalogo, inventario y finanzas en modo http a la vez;
+para ver pujar no hacen falta.
+
 ## Correr las pruebas
 
 Desde la raiz del monorepo, porque este servicio es un modulo del build raiz
