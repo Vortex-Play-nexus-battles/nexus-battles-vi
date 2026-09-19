@@ -40,7 +40,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class TurnoDeLaMaquinaTest {
 
     private static final UUID ANA = UUID.fromString("11111111-1111-1111-1111-111111111111");
-    private static final UUID BRUNO = UUID.fromString("22222222-2222-2222-2222-222222222222");
     private static final Instant AHORA = Instant.parse("2026-09-18T18:00:00Z");
 
     /** Motor que hace siempre el mismo dano y anota cada consulta. */
@@ -216,7 +215,6 @@ class TurnoDeLaMaquinaTest {
         MotorDeMentira motor = MotorDeMentira.queHace(30);
         Sala vieja = Sala.crear(
                 new ParametrosDeSala(2, Modalidad.CONTRA_IA, 0, true, false, null), ANA);
-        vieja.unirse(BRUNO);
         Partida partida = partidas.guardar(Partida.iniciar(vieja, AHORA));
 
         Partida despues = casoDeUso(motor).ejecutar(partida.id(), ANA, null, null);

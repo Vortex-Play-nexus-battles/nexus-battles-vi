@@ -241,8 +241,8 @@ class CanalDePartidaStompTest {
     }
 
     @Test
-    @DisplayName("el heroe de la IA viaja en null, no con una vida inventada")
-    void elHeroeDeLaIaNoSeInventa() {
+    @DisplayName("la IA viaja con el heroe del anfitrion, no con uno inventado (HU-SAL-004)")
+    void laIaViajaConElHeroeDelAnfitrion() {
         Sala conIa = Sala.crear(
                 new ParametrosDeSala(2, Modalidad.CONTRA_IA, 0, true, false, null), ANA,
                 new FichaDeParticipante("Ana",
@@ -255,8 +255,9 @@ class CanalDePartidaStompTest {
         assertAll(
                 () -> assertEquals(2, roster.size()),
                 () -> assertTrue(roster.get(1).esIA()),
-                () -> assertNull(roster.get(1).heroe(),
-                        "el heroe de la IA lo decide el motor de combate, no este servicio"),
+                () -> assertEquals("Arquero del Norte", roster.get(1).heroe().nombre(),
+                        "la IA usa el heroe del anfitrion: el unico que la partida conoce"),
+                () -> assertEquals(120, roster.get(1).heroe().vidaActual()),
                 () -> assertEquals("Heroe de la IA", roster.get(1).jugador().apodo()));
     }
 

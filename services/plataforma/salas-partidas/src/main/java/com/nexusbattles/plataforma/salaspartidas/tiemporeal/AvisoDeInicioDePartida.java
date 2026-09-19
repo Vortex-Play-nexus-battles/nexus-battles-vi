@@ -82,10 +82,12 @@ record AvisoDeInicioDePartida(String tipo, UUID idSala, UUID idPartida,
     }
 
     /**
-     * Heroe en el cable. Nulo cuando no se conoce —participante de una sala
-     * anterior a la migracion V7, o el heroe de la IA, que lo decide el motor
-     * de combate—. Se dice con null en vez de inventar una vida: una barra a
-     * 100/100 falsa es peor que una barra que no se pinta.
+     * Heroe en el cable. Nulo cuando no se conoce: participante de una sala
+     * anterior a la migracion V7. Se dice con null en vez de inventar una
+     * vida, porque una barra a 100/100 falsa es peor que una que no se pinta.
+     *
+     * <p>Desde HU-SAL-004 la IA si trae heroe —el del anfitrion a plena vida—,
+     * asi que ya no es un caso sin heroe.
      */
     record Heroe(String id, String nombre, String retratoUrl, Integer nivel,
                  int vidaActual, int vidaMaxima) {
