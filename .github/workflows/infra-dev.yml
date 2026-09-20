@@ -57,11 +57,28 @@ on:
     paths:
       - "infrastructure/entornos/plataforma/**"
       - ".github/workflows/infra-dev.yml"
+  # OJO con la hora exacta. Estas tareas estaban a las 04:00 y 12:00 en punto,
+  # y GitHub retrasa las programadas cuando hay carga —el arranque de cada
+  # hora es justo el peor momento— y, si el retraso es grande, las DESCARTA.
+  # Medido en este repositorio: el apagado de las 04:00 corrio a las 08:38 y a
+  # las 09:08; el encendido de las 12:00 del 19 de septiembre no llego a
+  # correr nunca, y el despliegue de esa tarde murio contra un host apagado.
+  #
+  # Dos cambios: minutos fuera de punto, y cada accion se intenta DOS veces
+  # con una hora de diferencia. Repetir no molesta porque la accion es
+  # idempotente: si ya esta en el estado pedido, el paso dice "Nada que hacer".
   schedule:
-    # 04:00 UTC = 23:00 Colombia, todos los dias: apagar.
-    - cron: "0 4 * * *"
-    # 12:00 UTC = 07:00 Colombia, lunes a viernes: encender.
-    - cron: "0 12 * * 1-5"
+    # Apagar: 04:23 y 05:23 UTC = 23:23 y 00:23 Colombia, todos los dias.
+    # El segundo intento importa mas que el primero: una noche sin apagar se
+    # come credito del Free Plan.
+    - cron: "23 4 * * *"
+    - cron: "23 5 * * *"
+    # Encender: 12:17 y 13:17 UTC = 07:17 y 08:17 Colombia, de lunes a viernes.
+    # Los fines de semana el host queda apagado a proposito, por coste; quien
+    # necesite desplegar un sabado no tiene que hacer nada: el propio CD lo
+    # enciende (ver "Asegurar que el host esta encendido" en cd.yml).
+    - cron: "17 12 * * 1-5"
+    - cron: "17 13 * * 1-5"
 
 permissions:
   id-token: write
@@ -98,7 +115,15 @@ jobs:
           case "${{ github.event_name }}" in
             workflow_dispatch) accion="${{ inputs.accion }}" ;;
             schedule)
-              if [ "${{ github.event.schedule }}" = "0 4 * * *" ]; then accion=stop; else accion=start; fi ;;
+              # Explicito en los dos sentidos: un cron que no este en esta
+              # lista es un error de configuracion, no un "start" por defecto.
+              # Dejarlo caer en start dejaria el host encendido gastando
+              # credito sin que nadie se entere.
+              case "${{ github.event.schedule }}" in
+                "23 4 * * *"|"23 5 * * *")       accion=stop ;;
+                "17 12 * * 1-5"|"17 13 * * 1-5") accion=start ;;
+                *) echo "::error::Cron no reconocido: '${{ github.event.schedule }}'. Revisa el bloque schedule de este workflow."; exit 1 ;;
+              esac ;;
             push) accion=apply ;;
             *) accion=plan ;;
           esac
