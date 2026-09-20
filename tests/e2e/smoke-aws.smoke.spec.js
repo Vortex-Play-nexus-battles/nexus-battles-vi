@@ -71,9 +71,7 @@ test.describe('Smoke del entorno desplegado', () => {
 
     // Y el sistema de diseño cargó: si el CSS diera 404, el fondo sería el
     // del navegador. Esto detecta las rutas relativas rotas de #425.
-    const fondo = await page.evaluate(
-      () => getComputedStyle(document.body).backgroundColor,
-    );
+    const fondo = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     expect(fondo).not.toBe('rgba(0, 0, 0, 0)');
   });
 
@@ -92,7 +90,11 @@ test.describe('Smoke del entorno desplegado', () => {
 
     const registro = await api.post('/api/v1/auth/registro', {
       multipart: {
-        nombres: 'Smoke', apellidos: 'De Prueba', email, password: CLAVE, apodo,
+        nombres: 'Smoke',
+        apellidos: 'De Prueba',
+        email,
+        password: CLAVE,
+        apodo,
       },
     });
     expect([200, 201], `registro: ${await registro.text()}`).toContain(registro.status());
@@ -104,9 +106,7 @@ test.describe('Smoke del entorno desplegado', () => {
     jugador = await login.json();
 
     const claims = cuerpoDelToken(jugador.token);
-    expect(claims.uid).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-    );
+    expect(claims.uid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
     expect(claims.preferred_username ?? claims.apodo).toBe(apodo);
     expect(jugador.apodo).toBe(apodo);
   });
@@ -149,8 +149,9 @@ test.describe('Smoke del entorno desplegado', () => {
     // que el frontend pagina.
     expect(pagina).toHaveProperty('salas');
     expect(Array.isArray(pagina.salas)).toBe(true);
-    expect(typeof pagina.total === 'number' || typeof pagina.totalElementos === 'number')
-      .toBe(true);
+    expect(typeof pagina.total === 'number' || typeof pagina.totalElementos === 'number').toBe(
+      true,
+    );
   });
 
   test('LIMITACION DE DEV: crear sala falla porque inventario no esta desplegado', async () => {
@@ -162,8 +163,9 @@ test.describe('Smoke del entorno desplegado', () => {
       data: { maximoParticipantes: 2, modalidad: 'UNO_VS_UNO', recompensaCreditos: 0 },
     });
 
-    expect(r.status(), 'si esto ya no es 503, inventario esta desplegado: borra esta prueba')
-      .toBe(503);
+    expect(r.status(), 'si esto ya no es 503, inventario esta desplegado: borra esta prueba').toBe(
+      503,
+    );
     const problema = await r.json();
     expect(problema.detail ?? '').toMatch(/inventario|vitrina/i);
   });
@@ -217,10 +219,16 @@ test.describe('Smoke del entorno desplegado', () => {
     const porNombre = Object.fromEntries(servicios.map((s) => [s.servicio, s.estado]));
     // No se comprueba "alguno esta arriba": se comprueba que estos, que son
     // los del bloque, lo estan.
-    for (const esperado of ['comentarios', 'correo', 'salas-partidas', 'notificaciones',
-      'moderacion-sanciones', 'admin-parametros', 'torneos']) {
-      expect(porNombre[esperado], `${esperado} no aparece o no esta disponible`)
-        .toBe('DISPONIBLE');
+    for (const esperado of [
+      'comentarios',
+      'correo',
+      'salas-partidas',
+      'notificaciones',
+      'moderacion-sanciones',
+      'admin-parametros',
+      'torneos',
+    ]) {
+      expect(porNombre[esperado], `${esperado} no aparece o no esta disponible`).toBe('DISPONIBLE');
     }
 
     // Y cada comprobacion trae su momento: una foto vieja no vale.

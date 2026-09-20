@@ -199,8 +199,7 @@ test.describe('Sala de batalla de punta a punta', () => {
     expect(partida.participantes).toHaveLength(2);
     expect(partida.turnoActual.numeroTurno).toBe(1);
     // El turno es de alguien que está en la partida, no de un id cualquiera.
-    expect(partida.participantes.map((p) => p.jugador))
-      .toContain(partida.turnoActual.idJugador);
+    expect(partida.participantes.map((p) => p.jugador)).toContain(partida.turnoActual.idJugador);
 
     for (const p of partida.participantes) {
       expect(p.heroe.vidaActual).toBe(p.heroe.vidaMaxima);
@@ -230,19 +229,30 @@ test.describe('Sala de batalla de punta a punta', () => {
 
   const VISTA = '/frontend/app-web/src/plataforma/salas-partidas/sala-batalla.html';
 
-  /** Vida que pinta la barra de un jugador, leida del DOM. */
-  async function vidaEnPantalla(page, idJugador) {
-    return page.evaluate((id) => {
-      const barra = document.querySelector(`[data-barra-vida][data-jugador="${id}"]`)
-        ?? [...document.querySelectorAll('[data-barra-vida]')]
-          .find((b) => b.closest(`[data-jugador="${id}"]`));
-      if (!barra) return null;
-      return {
-        actual: Number(barra.dataset.vidaActual),
-        maxima: Number(barra.dataset.vidaMaxima),
-        estado: barra.dataset.estado,
-      };
-    }, idJugador);
+  /**
+   * Vida de cada barra, leida del DOM.
+   *
+   * Se lee de `aria-valuenow` / `aria-valuemax` y no de `data-vida-actual`:
+   * `barra-vida.js#actualizar` escribe los atributos ARIA y `data-estado`,
+   * pero NO reescribe los `data-vida-*` —esos solo los lee `inicializar` para
+   * el primer pintado—. Ademas ARIA es el contrato accesible de la barra, que
+   * es lo que de verdad ve quien usa un lector de pantalla.
+   */
+  function barras(page) {
+    return page.locator('[data-barra-vida]').evaluateAll((bs) =>
+      bs.map((b) => ({
+        jugador: b.dataset.jugador,
+        actual: Number(b.getAttribute('aria-valuenow')),
+        maxima: Number(b.getAttribute('aria-valuemax')),
+        estado: b.dataset.estado,
+        texto: b.querySelector('.barra-vida__valor')?.textContent ?? '',
+      })),
+    );
+  }
+
+  /** Suma de la vida en pantalla: baja en cuanto alguien recibe un golpe. */
+  async function vidaTotal(page) {
+    return (await barras(page)).reduce((t, b) => t + b.actual, 0);
   }
 
   test('el navegador abre la sala, se conecta al canal y pinta las dos barras a tope', async ({
@@ -255,14 +265,20 @@ test.describe('Sala de batalla de punta a punta', () => {
     // pidio la partida por el borde y la pinto.
     await expect(page.locator('[data-barra-vida]')).toHaveCount(2, { timeout: 20000 });
 
-    const estados = await page.locator('[data-barra-vida]').evaluateAll((bs) =>
-      bs.map((b) => ({ estado: b.dataset.estado, actual: b.dataset.vidaActual })));
+    const pintadas = await barras(page);
 
-    for (const barra of estados) {
+    for (const barra of pintadas) {
       // A plena vida la barra es verde: por encima del 60 %.
-      expect(barra.estado, JSON.stringify(estados)).toBe('alto');
-      expect(Number(barra.actual)).toBeGreaterThan(0);
+      expect(barra.estado, JSON.stringify(pintadas)).toBe('alto');
+      expect(barra.actual, JSON.stringify(barra)).toBe(barra.maxima);
+      // El color nunca es el unico indicador: el valor tambien se escribe.
+      expect(barra.texto).toBe(`${barra.actual}/${barra.maxima}`);
     }
+
+    // Y el canal esta vivo de verdad: la vista solo pinta «conectado» cuando
+    // recibio una funcion de suscripcion, y eso solo pasa si el CONNECT de
+    // STOMP con el JWT prospero.
+    await expect(page.locator('[data-zona="conexion"]')).toHaveText(/conectado/i);
   });
 
   test('atacar desde la vista baja la vida del rival, y el aviso llega por STOMP', async ({
@@ -278,8 +294,15 @@ test.describe('Sala de batalla de punta a punta', () => {
     const boton = page.locator('[data-zona="acciones"] [data-atacar]').first();
     await expect(boton).toBeVisible({ timeout: 20000 });
 
-    const sumaAntes = await page.locator('[data-barra-vida]')
-      .evaluateAll((bs) => bs.reduce((t, b) => t + Number(b.dataset.vidaActual), 0));
+    // El defecto que esto cierra: los botones nacian deshabilitados y solo los
+    // abria un `partida.turno.cambiado`, mensaje que el servidor unicamente
+    // emite DESPUES de que alguien juegue. En el turno 1 nadie ha jugado, asi
+    // que el combate no se podia arrancar desde el navegador.
+    await expect(boton, 'a quien le toca no puede atacar en el turno 1').toBeEnabled();
+    // Y solo hay boton para el rival: a uno mismo no se ataca.
+    await expect(page.locator('[data-atacar]')).toHaveCount(1);
+
+    const sumaAntes = await vidaTotal(page);
 
     await boton.click();
 
@@ -287,16 +310,20 @@ test.describe('Sala de batalla de punta a punta', () => {
     // la accion contra motor-combate, la persista y la anuncie por
     // `/tema/partidas/{id}`, y que la vista repinte con lo que llego.
     await expect
-      .poll(
-        async () =>
-          page.locator('[data-barra-vida]')
-            .evaluateAll((bs) => bs.reduce((t, b) => t + Number(b.dataset.vidaActual), 0)),
-        { timeout: 25000, message: 'la vida no cambio tras atacar' },
-      )
+      .poll(() => vidaTotal(page), {
+        timeout: 25000,
+        message: 'la vida no cambio tras atacar',
+      })
       .toBeLessThan(sumaAntes);
 
-    // Y el resultado se le cuenta a quien ataco, no solo se mueve la barra.
-    await expect(page.locator('[data-zona="resultado"]')).not.toBeEmpty();
+    // El golpe cayo sobre el rival, no sobre quien ataco.
+    const despues = await barras(page);
+    const rival = despues.find((b) => b.jugador !== quien.claims.uid);
+    expect(rival.actual, JSON.stringify(despues)).toBeLessThan(rival.maxima);
+
+    // Y el turno paso a la otra parte: el boton se cierra solo, por el aviso
+    // `partida.turno.cambiado` que llego por el canal.
+    await expect(boton).toBeDisabled({ timeout: 15000 });
   });
 
   test('la vida que se ve en pantalla es la que quedo guardada en la base', async ({ page }) => {
@@ -306,16 +333,14 @@ test.describe('Sala de batalla de punta a punta', () => {
     await page.goto(`${BORDE}${VISTA}?sala=${sala.id}&partida=${partida.id}`);
     await expect(page.locator('[data-barra-vida]')).toHaveCount(2, { timeout: 20000 });
 
-    const enPantalla = await page.locator('[data-barra-vida]')
-      .evaluateAll((bs) => bs.map((b) => Number(b.dataset.vidaActual)).sort((a, b) => a - b));
+    const enPantalla = (await barras(page)).map((b) => b.actual).sort((a, b) => a - b);
 
     const r = await api.get(`/api/v1/partidas/${partida.id}`, {
       headers: conToken(anfitriona.token),
     });
     expect(r.status()).toBe(200);
     const releida = await r.json();
-    const enBase = releida.participantes
-      .map((p) => p.heroe.vidaActual).sort((a, b) => a - b);
+    const enBase = releida.participantes.map((p) => p.heroe.vidaActual).sort((a, b) => a - b);
 
     expect(enPantalla).toEqual(enBase);
     // Y alguien ya recibio un golpe: no estamos comparando dos estados iniciales.
@@ -330,15 +355,79 @@ test.describe('Sala de batalla de punta a punta', () => {
     // verdad y viajando por STOMP, no con numeros inventados en una prueba.
     test.setTimeout(180000);
 
-    const vistos = new Set();
+    const vistos = new Set(['alto']); // ya comprobado a plena vida, mas arriba
+    const recorrido = [];
     let turnos = 0;
 
-    while (turnos < 40 && !(vistos.has('medio') && vistos.has('bajo'))) {
-      const enCurso = await (await api.get(`/api/v1/partidas/${partida.id}`, {
-        headers: conToken(anfitriona.token),
-      })).json();
+    while (turnos < 40 && !vistos.has('bajo')) {
+      const enCurso = await (
+        await api.get(`/api/v1/partidas/${partida.id}`, {
+          headers: conToken(anfitriona.token),
+        })
+      ).json();
       if (enCurso.estado !== 'EN_CURSO') break;
 
+      const esAnfitriona = enCurso.turnoActual.idJugador === anfitriona.claims.uid;
+      const quien = esAnfitriona ? anfitriona : invitado;
+
+      // Se recarga la vista con la sesion de quien tiene el turno. Recargar a
+      // mitad de partida y poder seguir jugando es, en si mismo, lo que el
+      // defecto de `turnoDe` rompia.
+      await conSesion(page, quien, esAnfitriona ? ANFITRION : INVITADO);
+      await page.goto(`${BORDE}${VISTA}?sala=${sala.id}&partida=${partida.id}`);
+
+      const boton = page.locator('[data-zona="acciones"] [data-atacar]').first();
+      await expect(boton, `turno ${turnos + 1}: el boton no se abrio`).toBeEnabled({
+        timeout: 20000,
+      });
+      await boton.click();
+
+      // Esperar al repintado en vez de dormir un rato fijo: el evento llega
+      // por STOMP y tarda lo que tarde el motor.
+      const objetivo = enCurso.participantes
+        .filter((p) => p.jugador !== enCurso.turnoActual.idJugador)
+        .map((p) => p.heroe.vidaActual)
+        .reduce((a, b) => a + b, 0);
+      await expect
+        .poll(
+          async () =>
+            (await barras(page))
+              .filter((b) => b.jugador !== enCurso.turnoActual.idJugador)
+              .reduce((t, b) => t + b.actual, 0),
+          { timeout: 25000, message: `turno ${turnos + 1}: la vida del rival no bajo` },
+        )
+        .toBeLessThan(objetivo);
+
+      for (const barra of await barras(page)) {
+        vistos.add(barra.estado);
+        recorrido.push(`${barra.actual}/${barra.maxima}=${barra.estado}`);
+      }
+      turnos += 1;
+    }
+
+    // Los tres colores de RF-JUE-009, alcanzados con el daño que calculo el
+    // motor de verdad: verde por encima del 60 %, amarillo entre 60 y 40, rojo
+    // por debajo del 40 %.
+    expect([...vistos].sort(), `recorrido en ${turnos} turnos: ${recorrido.join(' ')}`).toEqual([
+      'alto',
+      'bajo',
+      'medio',
+    ]);
+  });
+
+  test('a fuerza de golpes alguien cae, y la vista lo dice', async ({ page }) => {
+    // HU-JUE-005 / RF-JUE-017: el combate acaba de verdad. Se sigue golpeando
+    // desde donde lo dejo la prueba anterior hasta que la partida cierre.
+    test.setTimeout(180000);
+
+    let enCurso = await (
+      await api.get(`/api/v1/partidas/${partida.id}`, {
+        headers: conToken(anfitriona.token),
+      })
+    ).json();
+
+    let turnos = 0;
+    while (enCurso.estado === 'EN_CURSO' && turnos < 40) {
       const esAnfitriona = enCurso.turnoActual.idJugador === anfitriona.claims.uid;
       const quien = esAnfitriona ? anfitriona : invitado;
 
@@ -346,34 +435,50 @@ test.describe('Sala de batalla de punta a punta', () => {
       await page.goto(`${BORDE}${VISTA}?sala=${sala.id}&partida=${partida.id}`);
 
       const boton = page.locator('[data-zona="acciones"] [data-atacar]').first();
-      if (!(await boton.count())) break;
+      await expect(boton).toBeEnabled({ timeout: 20000 });
       await boton.click();
-      await page.waitForTimeout(1200);
 
-      for (const estado of await page.locator('[data-barra-vida]')
-        .evaluateAll((bs) => bs.map((b) => b.dataset.estado))) {
-        vistos.add(estado);
-      }
+      // El ultimo golpe cierra la partida: se espera a que el servidor lo
+      // haya persistido, no a un tiempo fijo.
+      await expect
+        .poll(
+          async () =>
+            (
+              await (
+                await api.get(`/api/v1/partidas/${partida.id}`, {
+                  headers: conToken(anfitriona.token),
+                })
+              ).json()
+            ).turnoActual.numeroTurno,
+          { timeout: 25000, message: `turno ${turnos + 1}: el turno no avanzo` },
+        )
+        .toBeGreaterThan(enCurso.turnoActual.numeroTurno);
+
+      enCurso = await (
+        await api.get(`/api/v1/partidas/${partida.id}`, {
+          headers: conToken(anfitriona.token),
+        })
+      ).json();
       turnos += 1;
     }
 
-    expect([...vistos].sort(), `estados vistos en ${turnos} turnos`).toEqual(
-      expect.arrayContaining(['alto', 'medio']),
-    );
-    expect(vistos.has('bajo'), 'nunca se llego a rojo por debajo del 40 %').toBe(true);
-  });
+    expect(enCurso.estado, `no termino en ${turnos} turnos`).toBe('FINALIZADA');
 
-  test('a fuerza de golpes la partida termina y queda un ganador', async () => {
-    const enCurso = await (await api.get(`/api/v1/partidas/${partida.id}`, {
-      headers: conToken(anfitriona.token),
-    })).json();
-
-    // Si la prueba anterior ya la acabo, esto solo lo comprueba.
-    expect(['EN_CURSO', 'FINALIZADA']).toContain(enCurso.estado);
-
-    if (enCurso.estado === 'FINALIZADA') {
-      const caidos = enCurso.participantes.filter((p) => p.heroe.vidaActual === 0);
-      expect(caidos.length).toBeGreaterThanOrEqual(1);
+    // Alguien quedo en cero: no es un final por abandono ni por tiempo.
+    const caidos = enCurso.participantes.filter((p) => p.heroe.vidaActual === 0);
+    expect(caidos.length).toBeGreaterThanOrEqual(1);
+    // Y su barra es la roja.
+    const barrasFinales = await barras(page);
+    for (const caido of caidos) {
+      expect(barrasFinales.find((b) => b.jugador === caido.jugador)?.estado).toBe('bajo');
     }
+
+    // La vista de quien dio el ultimo golpe cuenta el desenlace y retira los
+    // botones: el aviso `partida.finalizada` llego por el canal.
+    await expect(page.locator('[data-zona="resultado"]')).toHaveText(
+      /has ganado|has perdido|empate/i,
+      { timeout: 20000 },
+    );
+    await expect(page.locator('[data-zona="acciones"]')).toBeHidden();
   });
 });

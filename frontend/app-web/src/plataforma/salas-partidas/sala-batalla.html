@@ -210,6 +210,10 @@
           participantes: (partida.participantes ?? [])
             .filter((p) => p.heroe)
             .map((p) => ({ jugador: { id: p.jugador }, heroe: p.heroe })),
+          // El turno en curso viene en la propia partida. Sin pasarlo, los
+          // botones esperarian un `partida.turno.cambiado` que en el turno 1
+          // no existe todavia: nadie podria dar el primer golpe.
+          turnoDe: partida.turnoActual?.idJugador,
           alAtacar: (accion) => enviarAccion(canal, partida.id, accion),
         });
 

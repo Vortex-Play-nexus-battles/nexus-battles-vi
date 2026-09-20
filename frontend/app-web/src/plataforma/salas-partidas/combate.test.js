@@ -163,6 +163,59 @@ describe('montarControlesDeCombate', () => {
     expect(document.querySelector('[data-atacar]').disabled).toBe(true);
   });
 
+  // Los tres que siguen cierran el defecto que destapo el E2E del corte
+  // vertical: los botones solo se abrian al recibir `partida.turno.cambiado`,
+  // y ese mensaje SOLO lo emite `AvanzarTurno`, es decir, despues de que
+  // alguien haya jugado. En el turno 1 nadie ha jugado todavia, asi que nadie
+  // podia dar el primer golpe desde el navegador: el combate no arrancaba. Y
+  // quien recargaba a mitad de partida se quedaba sin poder jugar hasta que
+  // actuara el rival.
+  //
+  // El turno en curso ya viaja en `GET /partidas/{id}` (`turnoActual`), asi
+  // que la vista lo sabe al montar y no hace falta esperar ningun mensaje.
+  test('si al montar ya se sabe que el turno es mio, los botones nacen abiertos', () => {
+    montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      turnoDe: ANA,
+      alAtacar: () => {},
+    });
+
+    expect(document.querySelector('[data-atacar]').disabled).toBe(false);
+  });
+
+  test('si el turno es del rival, siguen cerrados', () => {
+    montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      turnoDe: BRUNO,
+      alAtacar: () => {},
+    });
+
+    expect(document.querySelector('[data-atacar]').disabled).toBe(true);
+  });
+
+  test('el turno del montaje no le gana al que llega despues por el canal', () => {
+    const controles = montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      turnoDe: ANA,
+      alAtacar: () => {},
+    });
+
+    controles.recibir({
+      tipo: TURNO_CAMBIADO,
+      idPartida: PARTIDA,
+      idJugador: BRUNO,
+      numeroTurno: 2,
+    });
+
+    expect(document.querySelector('[data-atacar]').disabled).toBe(true);
+  });
+
   test('se habilitan cuando llega el turno propio, y no con el ajeno', () => {
     const controles = montarControlesDeCombate(document, {
       idPartida: PARTIDA,
