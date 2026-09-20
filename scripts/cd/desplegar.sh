@@ -408,4 +408,25 @@ if [ "$HUBO_FALLO" -eq 1 ]; then
   exit 1
 fi
 
+# ---------------------------------------------------------------------------
+# Higiene de disco. SOLO despues de que todo este saludable: mientras algun
+# servicio pueda necesitar una reversion, su imagen anterior no se toca.
+#
+# Cada despliegue deja una imagen nueva por servicio y la anterior se queda.
+# Medido el 20 de septiembre con el workflow de diagnostico: 60 imagenes, 7,26
+# GB, de los cuales 6,06 GB recuperables, sobre un disco de 20 GB al 60 %. A
+# ese ritmo el disco se llena, y un host sin espacio no arranca contenedores
+# ni escribe en la base de datos: seria una caida de verdad, no como la del 19
+# de septiembre, que fue una instancia apagada.
+#
+# `--filter until=72h` conserva lo de los ultimos tres dias, que cubre de
+# sobra la ventana de reversion. No se usa `-a` sin filtro: eso borraria las
+# imagenes base y el siguiente despliegue tendria que bajarlas otra vez.
+echo "== 5) Limpiando imagenes viejas (conserva las ultimas 72 h) =="
+antes=$(docker system df --format '{{.Size}}' 2>/dev/null | head -1 || echo "?")
+docker image prune -af --filter "until=72h" 2>&1 | tail -3 || true
+despues=$(docker system df --format '{{.Size}}' 2>/dev/null | head -1 || echo "?")
+echo "  Imagenes: $antes -> $despues"
+df -h / | tail -1 | awk '{print "  Disco: " $4 " libres de " $2 " (" $5 " usado)"}'
+
 echo "Despliegue de TAG=$TAG completado y saludable para: $SERVICIOS_PUERTOS"
