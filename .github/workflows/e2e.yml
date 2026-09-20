@@ -111,7 +111,12 @@ jobs:
           for s in srv-ms-identidad srv-heroes srv-productos srv-inventario \
                    srv-motor-combate srv-salas-partidas srv-borde; do
             echo "=============== $s ==============="
-            docker compose -f tests/e2e/compose.yml logs --tail 120 "$s" || true
+            # Primero la cabecera de las excepciones: con `--tail` a secas se
+            # ve el final de una pila de cien lineas y no la causa.
+            docker compose -f tests/e2e/compose.yml logs "$s" 2>&1 \
+              | grep -E "ERROR|WARN|Exception|Caused by" | tail -25 || true
+            echo "  --- ultimas lineas ---"
+            docker compose -f tests/e2e/compose.yml logs --tail 40 "$s" || true
           done
           echo "=============== estado ==============="
           docker compose -f tests/e2e/compose.yml ps

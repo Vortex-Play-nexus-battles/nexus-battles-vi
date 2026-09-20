@@ -28,16 +28,41 @@ PROTOTIPO="Guerrero Tanque"
 echo "== 1) Productos: un heroe y un arma, directos en Mongo =="
 # El alta por API exige JWT de administrador; el resolutor de inventario solo
 # lee nombre, tipo y prototipo, asi que con eso basta.
+# Se escriben SOLO los campos que el resolutor necesita (nombre, tipo y, para
+# el heroe, prototipo) mas `_class`. Los demas se dejan fuera a proposito:
+# `Producto` es un record con tipos exigentes -`tasaDeCaida` esta mapeado a
+# DECIMAL128 y `estado` es un enum-, y un numero suelto escrito desde mongosh
+# llega como Int32 y revienta la conversion. Un campo ausente es un valor por
+# defecto; un campo con el tipo equivocado es un 500.
 $COMPOSE exec -T e2e-contenido-mongo mongosh --quiet productos --eval '
   db.productos.deleteMany({ _id: { $in: ["p-heroe-e2e", "p-arma-e2e"] } });
   db.productos.insertMany([
-    { _id: "p-heroe-e2e", nombre: "Guerrero de prueba", tipo: "HEROE",
-      prototipo: "Guerrero Tanque", estado: "ACTIVO", premium: false },
-    { _id: "p-arma-e2e", nombre: "Espada de prueba", tipo: "ARMA",
-      estado: "ACTIVO", premium: false, poderDeAtaque: 12, tasaDeCaida: 50 }
+    { _id: "p-heroe-e2e", _class: "nexus.dominio.Producto",
+      nombre: "Guerrero de prueba", tipo: "HEROE", prototipo: "Guerrero Tanque" },
+    { _id: "p-arma-e2e", _class: "nexus.dominio.Producto",
+      nombre: "Espada de prueba", tipo: "ARMA" }
   ]);
   print("  productos sembrados: " + db.productos.countDocuments({ _id: /e2e/ }));
 '
+
+# Comprobar YA que productos los sirve. Si esto falla, el 500 de
+# /estadisticas viene de aqui y no de inventario, y conviene saberlo antes de
+# perseguirlo en el servicio equivocado.
+for p in p-heroe-e2e p-arma-e2e; do
+  codigo=$(curl -sS -o /tmp/prod-$p.json -w '%{http_code}' "$BORDE/api/v1/productos/$p")
+  echo "  GET /api/v1/productos/$p -> $codigo"
+  if [ "$codigo" != "200" ]; then
+    echo "::error::productos no sirve $p. Respuesta:"; cat "/tmp/prod-$p.json"; echo
+    echo "Documento tal como quedo en Mongo:"
+    $COMPOSE exec -T e2e-contenido-mongo mongosh --quiet productos \
+      --eval "printjson(db.productos.findOne({_id: \"$p\"}))"
+    exit 1
+  fi
+done
+
+echo "  prototipos que publica heroes:"
+curl -sS "$BORDE/api/v1/heroes" | jq -r '.[]?.nombre // .[]?.prototipo // empty' 2>/dev/null \
+  | head -8 | sed 's/^/    /' || echo "    (no se pudo leer el catalogo)"
 
 # Con jq y no con sed: la primera version sacaba el `id` con una expresion
 # regular y cogia el del ARMA cuando buscaba el del HEROE, porque el orden de
