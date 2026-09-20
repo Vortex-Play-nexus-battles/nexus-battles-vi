@@ -267,6 +267,48 @@ test.describe('Sala de batalla de punta a punta', () => {
   // verdad y la barra de vida de verdad.
   // ===================================================================
 
+  /**
+   * Engancha la consola del navegador y los errores de pagina a un array.
+   *
+   * Sin esto, un fallo dentro del modulo de la vista es invisible: la prueba
+   * solo ve «la barra no cambio» y hay que adivinar por que. Se vuelca en el
+   * mensaje de la afirmacion que falle.
+   */
+  function vozDelNavegador(page) {
+    const dicho = [];
+    page.on('console', (m) => dicho.push(`[${m.type()}] ${m.text()}`));
+    page.on('pageerror', (e) => dicho.push(`[pageerror] ${e.message}`));
+    page.on('requestfailed', (r) => dicho.push(`[fallo] ${r.method()} ${r.url()}`));
+    return dicho;
+  }
+
+  /**
+   * Estado real del WebSocket de la vista, no el del indicador.
+   *
+   * `conectarChat` devuelve un objeto que sigue existiendo aunque el socket se
+   * haya cerrado despues, asi que «hay canal» no implica «hay conexion». Esto
+   * mira el `readyState` de verdad, interceptando el constructor antes de que
+   * la pagina cargue.
+   */
+  async function conSocketVigilado(page) {
+    await page.addInitScript(() => {
+      globalThis.__sockets = [];
+      const Original = globalThis.WebSocket;
+      globalThis.WebSocket = function (...args) {
+        const socket = new Original(...args);
+        globalThis.__sockets.push(socket);
+        return socket;
+      };
+      Object.assign(globalThis.WebSocket, Original);
+      globalThis.WebSocket.prototype = Original.prototype;
+    });
+  }
+
+  /** @returns {Promise<number[]>} readyState de cada socket abierto (1 = OPEN) */
+  function estadoDeSockets(page) {
+    return page.evaluate(() => (globalThis.__sockets ?? []).map((s) => s.readyState));
+  }
+
   /** Deja la sesion puesta antes de que cargue cualquier script de la vista. */
   async function conSesion(page, jugador, apodo) {
     await page.addInitScript(
@@ -339,11 +381,22 @@ test.describe('Sala de batalla de punta a punta', () => {
     const quien = atacanteEsAnfitriona ? anfitriona : invitado;
     const apodo = atacanteEsAnfitriona ? ANFITRION : INVITADO;
 
+    const dicho = vozDelNavegador(page);
+    await conSocketVigilado(page);
     await conSesion(page, quien, apodo);
     await page.goto(`${BORDE}${VISTA}?sala=${sala.id}&partida=${partida.id}`);
 
     const boton = page.locator('[data-zona="acciones"] [data-atacar]').first();
     await expect(boton).toBeVisible({ timeout: 20000 });
+
+    // El canal tiene que estar ABIERTO, no solo haber estado. `conectarChat`
+    // devuelve un objeto que sigue ahi aunque el socket se cierre despues:
+    // sin esta comprobacion, un envio a un socket cerrado se ve exactamente
+    // igual que una accion que el servidor ignora.
+    expect(
+      await estadoDeSockets(page),
+      `sockets al atacar (1 = OPEN). Consola:\n${dicho.join('\n')}`,
+    ).toEqual([1]);
 
     // El defecto que esto cierra: los botones nacian deshabilitados y solo los
     // abria un `partida.turno.cambiado`, mensaje que el servidor unicamente
@@ -360,12 +413,20 @@ test.describe('Sala de batalla de punta a punta', () => {
     // Lo que se espera NO es una respuesta HTTP: es que el servidor resuelva
     // la accion contra motor-combate, la persista y la anuncie por
     // `/tema/partidas/{id}`, y que la vista repinte con lo que llego.
-    await expect
-      .poll(() => vidaTotal(page), {
-        timeout: 25000,
-        message: 'la vida no cambio tras atacar',
-      })
-      .toBeLessThan(sumaAntes);
+    try {
+      await expect.poll(() => vidaTotal(page), { timeout: 25000 }).toBeLessThan(sumaAntes);
+    } catch (fallo) {
+      // Se vuelve a lanzar con lo que hace falta para diagnosticarlo: el
+      // mensaje pelado de Playwright («recibido 88, esperado < 88») no dice
+      // si el envio salio, si el socket estaba abierto, ni si el modulo de la
+      // vista reventó por el camino.
+      fallo.message =
+        `${fallo.message}\n\n--- estado al fallar ---\n` +
+        `sockets (1 = OPEN): ${JSON.stringify(await estadoDeSockets(page))}\n` +
+        `barras: ${JSON.stringify(await barras(page))}\n` +
+        `consola del navegador:\n${dicho.join('\n') || '(nada)'}`;
+      throw fallo;
+    }
 
     // El golpe cayo sobre el rival, no sobre quien ataco.
     const despues = await barras(page);
