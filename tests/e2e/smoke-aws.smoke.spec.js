@@ -105,9 +105,13 @@ test.describe('Smoke del entorno desplegado', () => {
     expect(login.status(), `login: ${await login.text()}`).toBe(200);
     jugador = await login.json();
 
+    // ADR-002: el apodo va en `sub` y el identificador estable en `uid`.
+    // `JwtService` emite subject(apodo) + los claims `uid`, `rol` y `ver`.
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const claims = cuerpoDelToken(jugador.token);
-    expect(claims.uid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
-    expect(claims.preferred_username ?? claims.apodo).toBe(apodo);
+    expect(claims.uid, JSON.stringify(claims)).toMatch(uuid);
+    expect(claims.sub, JSON.stringify(claims)).toBe(apodo);
+    expect(claims.sub).not.toMatch(uuid);
     expect(jugador.apodo).toBe(apodo);
   });
 

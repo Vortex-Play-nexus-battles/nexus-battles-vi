@@ -97,12 +97,19 @@ test.describe('Sala de batalla de punta a punta', () => {
 
   test('el token trae el uid estable y el apodo, no un apodo por identificador', async () => {
     // El defecto que esto cierra: leer `sub` como identificador provocó el 500
-    // del PR #404. Tras ADR-002 el `sub` es el apodo y el UUID vive en `uid`.
+    // del PR #404. Tras ADR-002 el `sub` es el apodo —mutable— y el UUID
+    // estable vive en `uid`. `JwtService` emite exactamente eso: subject(apodo)
+    // mas los claims `uid`, `rol` y `ver`; no hay `preferred_username`.
     const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const claims = anfitriona.claims;
 
-    expect(anfitriona.claims.uid, JSON.stringify(anfitriona.claims)).toMatch(uuid);
-    expect(anfitriona.claims.preferred_username ?? anfitriona.claims.apodo).toBe(ANFITRION);
-    expect(anfitriona.claims.uid).not.toBe(invitado.claims.uid);
+    expect(claims.uid, JSON.stringify(claims)).toMatch(uuid);
+    // El apodo va en `sub`, y `sub` NO es un UUID: esa confusion es justo la
+    // que rompio el servicio.
+    expect(claims.sub, JSON.stringify(claims)).toBe(ANFITRION);
+    expect(claims.sub).not.toMatch(uuid);
+    expect(claims.uid).not.toBe(invitado.claims.uid);
+    expect(invitado.claims.sub).toBe(INVITADO);
   });
 
   // ===================================================================
