@@ -97,6 +97,14 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
 
+      # Las pruebas viven en `tests/e2e/`, que es su sitio segun la estructura
+      # del monorepo, pero `node_modules` esta en `frontend/app-web/`. Node
+      # resuelve los imports subiendo directorios desde el archivo, asi que un
+      # enlace en la raiz hace que `tests/e2e/*.js` encuentre
+      # `@playwright/test`. Es un enlace del runner, no un cambio del repo.
+      - name: Enlazar node_modules en la raiz para las pruebas de tests/
+        run: ln -sfn frontend/app-web/node_modules node_modules
+
       - name: Jugar la partida
         working-directory: frontend/app-web
         env:

@@ -53,6 +53,13 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
 
+      # Las pruebas viven en `tests/e2e/` y `node_modules` en
+      # `frontend/app-web/`. Node resuelve los imports subiendo directorios
+      # desde el archivo, asi que un enlace en la raiz hace que las pruebas
+      # de `tests/` encuentren `@playwright/test`.
+      - name: Enlazar node_modules en la raiz para las pruebas de tests/
+        run: ln -sfn frontend/app-web/node_modules node_modules
+
       # El host puede estar arrancando: los servicios tardan unos tres minutos
       # en estar todos arriba tras un start. Esperar aqui evita un rojo que
       # solo significa "llegamos pronto".
