@@ -257,6 +257,27 @@
       if (token) {
         try {
           canal = await conectarChat({ url: urlDelCanal({ base: baseDeApi() }), token });
+
+          // Un canal que se muere en silencio es peor que uno que no abre: la
+          // vista sigue diciendo «conectado», los botones siguen puestos y
+          // cada acción se va a un socket cerrado sin que nadie se entere. El
+          // Project Charter lo pide explícitamente (riesgo #7): nunca fallar
+          // en silencio.
+          const perdido = (motivo) => {
+            console.warn('Canal de la partida perdido:', motivo);
+            const zona = document.querySelector('[data-zona="conexion"]');
+            if (zona) {
+              zona.className = 'conexion conexion--sin-conexion';
+              zona.textContent = 'Canal en tiempo real no conectado. Recarga la página.';
+            }
+            // Sin canal no se puede jugar el turno: dejar los botones vivos
+            // invita a mandar acciones que no llegan a ningún sitio.
+            for (const boton of document.querySelectorAll('[data-atacar]')) {
+              boton.disabled = true;
+            }
+          };
+          canal.alError = (error) => perdido(error?.message ?? 'error del canal');
+          canal.alCerrar = () => perdido('la conexión se cerró');
         } catch (error) {
           console.warn('Canal no disponible:', error?.message);
         }
