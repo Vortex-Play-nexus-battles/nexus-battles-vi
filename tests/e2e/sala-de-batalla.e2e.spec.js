@@ -31,6 +31,8 @@ import { test, expect, request as apiRequest } from '@playwright/test';
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const ANFITRION = process.env.E2E_ANFITRION ?? 'anfitriona_e2e';
 const INVITADO = process.env.E2E_INVITADO ?? 'invitado_e2e';
+/** Tercero con héroe, para poder probar el código de invitación de verdad. */
+const CURIOSO = process.env.E2E_CURIOSO ?? 'curioso_e2e';
 const CLAVE = 'Contrasena-E2E-2026';
 
 /** Cuerpo de un JWT, sin verificar la firma: aquí solo se lee para afirmar. */
@@ -121,22 +123,47 @@ test.describe('Sala de batalla de punta a punta', () => {
       headers: conToken(anfitriona.token),
       data: {
         maximoParticipantes: 2,
-        modalidad: 'UNO_VS_UNO',
+        // El nombre exacto del enum `Modalidad`, no una abreviatura: Jackson
+        // no deserializa `UNO_VS_UNO` y el servicio responde 400.
+        modalidad: 'UNO_CONTRA_UNO',
         recompensaCreditos: 0,
         privada: true,
       },
     });
 
+    // Que esto sea 201 y no 422 YA prueba que la puerta de héroe consultó al
+    // inventario real y encontró el héroe equipado: `CrearSala` pasa por
+    // `PuertaDeHeroe`, que lanza `HeroeNoDisponible` (422) si falta.
     expect(r.status(), `crear sala: ${await r.text()}`).toBe(201);
     sala = await r.json();
 
-    const anfitrionEnSala = sala.participantes.find((p) => p.jugador === anfitriona.claims.uid);
-    expect(anfitrionEnSala, JSON.stringify(sala)).toBeTruthy();
-    // Lo que de verdad prueba que inventario contestó: el héroe viaja con la
-    // sala, con su vida, y no es un hueco.
-    expect(anfitrionEnSala.heroe).toBeTruthy();
-    expect(anfitrionEnSala.heroe.vidaActual).toBeGreaterThan(0);
-    expect(anfitrionEnSala.heroe.vidaActual).toBe(anfitrionEnSala.heroe.vidaMaxima);
+    // `SalaResponse.participantes` es una lista de identificadores, no de
+    // fichas: el héroe no viaja con la sala, solo con la partida.
+    expect(sala.participantes, JSON.stringify(sala)).toContain(anfitriona.claims.uid);
+    expect(sala.idAnfitrion).toBe(anfitriona.claims.uid);
+    expect(sala.ocupacion).toBe(1);
+  });
+
+  test('la ruta de verificación cuenta qué héroe encontró en el inventario', async () => {
+    // HU-SAL-003 de frente: este endpoint existe para que el diálogo diga el
+    // motivo ANTES de pulsar Entrar. Aquí demuestra, ademas, que el héroe que
+    // sembramos en inventario es el que ve salas-partidas.
+    const r = await api.get(`/api/v1/salas/${sala.id}/verificacion-heroe`, {
+      headers: conToken(invitado.token),
+    });
+
+    expect(r.status(), `verificacion: ${await r.text()}`).toBe(200);
+    const veredicto = await r.json();
+
+    expect(veredicto.resultado, JSON.stringify(veredicto)).toBe('DISPONIBLE');
+    expect(veredicto.puedeIngresar).toBe(true);
+    // El héroe llega con nombre y vida: si inventario no hubiera contestado,
+    // `ClienteInventarioHeroes` falla cerrado y esto seria 503.
+    expect(veredicto.heroe, JSON.stringify(veredicto)).toBeTruthy();
+    expect(veredicto.heroe.nombre).toBeTruthy();
+    expect(veredicto.heroe.vidaMaxima).toBeGreaterThan(0);
+    expect(veredicto.heroe.vidaActual).toBe(veredicto.heroe.vidaMaxima);
+    expect(veredicto.salaQueLoOcupa).toBeNull();
   });
 
   test('una sala privada nace con código de invitación', async () => {
@@ -154,17 +181,20 @@ test.describe('Sala de batalla de punta a punta', () => {
       data: { codigoInvitacion: sala.codigoInvitacion },
     });
 
-    expect(r.status()).toBe(422);
+    expect(r.status(), `sin heroe: ${await r.text()}`).toBe(422);
     const problema = await r.json();
-    expect(problema.title ?? '').toMatch(/heroe|héroe/i);
-    expect(problema.detail ?? '').toMatch(/equipa/i);
+    // El texto nombra el caso concreto: «no puedes entrar» a secas obligaria a
+    // adivinar si falta equipar un heroe o si el suyo esta en otra batalla.
+    expect(problema.title, JSON.stringify(problema)).toMatch(/no tienes un heroe equipado/i);
+    expect(problema.detail).toMatch(/equipa un heroe en tu inventario/i);
+    expect(problema.type).toMatch(/heroe/i);
   });
 
   // ===================================================================
   // HU-SAL-002 · el segundo jugador entra por código
   // ===================================================================
 
-  test('el invitado entra con el código y el roster pasa a dos, cada uno con su héroe', async () => {
+  test('el invitado entra con el código y el roster pasa a dos', async () => {
     const r = await api.post(`/api/v1/salas/${sala.id}/participantes`, {
       headers: conToken(invitado.token),
       data: { codigoInvitacion: sala.codigoInvitacion },
@@ -173,21 +203,35 @@ test.describe('Sala de batalla de punta a punta', () => {
     expect(r.status(), `ingresar: ${await r.text()}`).toBe(200);
     const actualizada = await r.json();
 
-    expect(actualizada.participantes).toHaveLength(2);
-    for (const p of actualizada.participantes) {
-      expect(p.heroe, `${p.jugador} entró sin héroe`).toBeTruthy();
-      expect(p.heroe.vidaActual).toBeGreaterThan(0);
-    }
+    expect(actualizada.participantes, JSON.stringify(actualizada)).toHaveLength(2);
+    expect(actualizada.participantes).toContain(invitado.claims.uid);
+    expect(actualizada.ocupacion).toBe(2);
+    // A quien no es anfitrión no se le entrega el código. El campo ni siquiera
+    // aparece —`@JsonInclude(NON_NULL)`—: que no exista deja claro que no hay
+    // nada que ver, en vez de anunciar que existe algo así y le tocó un nulo.
+    expect(actualizada.codigoInvitacion).toBeUndefined();
   });
 
   test('un código equivocado no abre la sala', async () => {
-    const otro = await sesionDe(api, `curioso_${Date.now()}`);
+    // `curioso_e2e` SÍ tiene héroe (lo siembra `sembrar.sh`): sin él la puerta
+    // de héroe lo rechazaría con un 422 antes de mirar el código, y esta
+    // prueba no estaría probando el código.
+    const otro = await sesionDe(api, CURIOSO);
     const r = await api.post(`/api/v1/salas/${sala.id}/participantes`, {
       headers: conToken(otro.token),
       data: { codigoInvitacion: 'NO-ES-ESTE' },
     });
 
-    expect([403, 409, 422]).toContain(r.status());
+    // 409 y no 403: no es un problema de permisos, es que la sala no admite
+    // la operación. Lo fija el contrato OpenAPI.
+    expect(r.status(), `codigo malo: ${await r.text()}`).toBe(409);
+    const problema = await r.json();
+    expect(problema.title, JSON.stringify(problema)).toBe('No puedes entrar a esta sala');
+    // Y la sala sigue con dos: el intento no ocupó cupo.
+    const despues = await api.get(`/api/v1/salas/${sala.id}`, {
+      headers: conToken(anfitriona.token),
+    });
+    expect((await despues.json()).ocupacion).toBe(2);
   });
 
   // ===================================================================

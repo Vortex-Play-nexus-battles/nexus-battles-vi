@@ -164,7 +164,7 @@ test.describe('Smoke del entorno desplegado', () => {
     // forma de que la limitacion no se quede solo escrita en un issue.
     const r = await api.post('/api/v1/salas', {
       headers: { Authorization: `Bearer ${jugador.token}`, 'Content-Type': 'application/json' },
-      data: { maximoParticipantes: 2, modalidad: 'UNO_VS_UNO', recompensaCreditos: 0 },
+      data: { maximoParticipantes: 2, modalidad: 'UNO_CONTRA_UNO', recompensaCreditos: 0 },
     });
 
     expect(r.status(), 'si esto ya no es 503, inventario esta desplegado: borra esta prueba').toBe(

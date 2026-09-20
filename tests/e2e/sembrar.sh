@@ -21,6 +21,11 @@ COMPOSE="docker compose -f $(dirname "$0")/compose.yml"
 # X-User-Name, y tiene que coincidir CARACTER A CARACTER con propietarioId.
 ANFITRION="${E2E_ANFITRION:-anfitriona_e2e}"
 INVITADO="${E2E_INVITADO:-invitado_e2e}"
+# Tercero: el que prueba a entrar con un codigo equivocado. Necesita heroe
+# aunque no vaya a entrar nunca — sin el, `IngresarASala` lo rechaza por la
+# puerta de heroe (422) ANTES de mirar el codigo, y la prueba del codigo no
+# estaria probando el codigo.
+CURIOSO="${E2E_CURIOSO:-curioso_e2e}"
 
 # Prototipo que el catalogo de heroes siembra solo (CatalogoEnMongo).
 PROTOTIPO="Guerrero Tanque"
@@ -127,12 +132,13 @@ sembrar_jugador() {
 
 sembrar_jugador "$ANFITRION"
 sembrar_jugador "$INVITADO"
+sembrar_jugador "$CURIOSO"
 
 echo "== 3) Comprobando el camino completo de la verificacion =="
 # Las mismas tres llamadas que hace ClienteInventarioHeroes, en el mismo
 # orden. Si alguna de las tres falla, la puerta de heroe responde 503 y no se
 # puede crear ninguna sala: mejor enterarse aqui que a mitad de la prueba.
-for apodo in "$ANFITRION" "$INVITADO"; do
+for apodo in "$ANFITRION" "$INVITADO" "$CURIOSO"; do
   elementos=$(curl -sS "$BORDE/api/v1/inventario/elementos?pagina=0" -H "X-User-Name: $apodo")
   heroe=$(echo "$elementos" | jq -r '[.elementos[]? | select(.tipo == "HEROE")][0].id // empty')
   [ -n "$heroe" ] || { echo "::error::$apodo no tiene heroe en la vitrina"; echo "$elementos" | jq .; exit 1; }
