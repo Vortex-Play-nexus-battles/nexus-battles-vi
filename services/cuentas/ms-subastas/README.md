@@ -47,6 +47,14 @@ la clave ya no identifica una sola operacion.
 ### Frontend
 
 `frontend/app-web/src/cuentas/pujas.html` + `pujas.js` (vista) + `pujas-api.js` (cliente HTTP).
+
+La pantalla escucha el canal en vivo `/topic/subastas/listado` que publica
+`SubastaRealtimePublisher` (HU-SUB-011), asi que se entera al instante de una
+puja ajena o del cierre por vencimiento. **Es un anadido al sondeo de 5 s, no un
+sustituto**: si el WebSocket no levanta, la pantalla degrada a consulta
+periodica, que es lo que exige el riesgo #7 del acta. Y de un mensaje solo se
+usa el aviso de que algo cambio: se relee del servidor en vez de pintar lo que
+llega, porque ese mensaje no sabe si la puja es tuya ni cuanto llevas retenido.
 Se llaman `pujas.*` y no `subastas.*` porque el listado de HU-SUB-011 (Cristian)
 ya ocupa ese nombre; se entra desde ahi con `pujas.html?id=<subasta>`.
 
@@ -125,9 +133,11 @@ Por orden de lo que mas duele:
 - **El producto no cambia de dueno al comprarlo.** La logica esta, pero inventario no expone transferencia de propiedad. De los tres endpoints pedidos a Nicolay ya publico dos —el bloqueo y su liberacion (HU-INV-010), ambos ya implementados en `InventarioClientHttp`—; falta la transferencia y un `GET /elementos/{elementoId}` para resolver un elemento por id.
 - **El identificador de la frontera con inventario: acordado, pendiente de implementar.** Inventario autentica con `X-User-Name`, que es el apodo; este servicio solo conoce el `uid` del token. Se descarto la transicion de pasar ambos porque **en tres de las cinco llamadas a inventario no existe ningun apodo que propagar**: el cierre por vencimiento y la liberacion los dispara un `@Scheduled` sin peticion ni token, y la compensacion transfiere al vendedor, que no es quien hizo la peticion. El `uid`, en cambio, ya queda persistido al crear la subasta y se reutiliza despues. Acordado con Edwin el 14/09/2026: el contrato nuevo nace con `uid`. `InventarioClient` no se toca hasta cerrarlo con Nicolay.
 - **`esMaestroDeJuego` devuelve siempre `false`, y es una decision acordada, no un olvido.** Ese rol no existe formalmente en ms-identidad y no se inventa desde subastas. `false` es el valor seguro porque el Maestro de Juego esta exento de la comision de publicacion, asi que **hasta nuevo aviso todos pagan comision**. Lo define **HU-SUB-010 del Sprint 3**, y ms-identidad sera la fuente de verdad. Acordado con Edwin el 14/09/2026.
-- **El saldo del jugador no se muestra.** Ya no sale un numero inventado —eso se
-  quito—, pero tampoco sale el real: el `GET /creditos/{uid}/saldo` que lo daria
-  es el que devuelve 500 siempre. La pantalla lo marca como desconocido.
+- ~~El saldo del jugador no se muestra.~~ Hecho: `GET /mis-pujas/resumen` trae
+  `saldoDisponible` desde ms-finanzas. **Nulo significa "no se sabe", nunca
+  "cero"**, y con nulo la pantalla no bloquea: deja decidir al servidor, que es
+  quien conoce el dinero de verdad. Un cero inventado le diria al jugador que
+  esta arruinado y le negaria pujas que si puede pagar.
 - ~~Pruebas de contrato (Pact)~~ — hechas del lado consumidor: `CreditosPactoTest`
   e `InventarioPactoTest` generan los pactos en `contracts/pactos/`. Falta que
   los proveedores los verifiquen contra su implementacion (ver el README de esa
@@ -142,6 +152,37 @@ El backlog solo deja una pregunta abierta (el valor por defecto del incremento m
 2. **Saldo de la puja automatica:** se valida al *configurar*, no al emitir, para avisar al jugador en el momento en vez de que falle en silencio despues.
 3. **Anti-sniping:** no implementado, porque la HU no lo menciona. Sin extension de tiempo, una puja manual en el ultimo segundo es inalcanzable para el motor automatico, que debe esperar su intervalo.
 4. **Revocacion de rol:** `ValidadorDeToken` comprueba firma y expiracion, no si el rol sigue vigente. Comparar la version del claim `ver` exigiria leer la tabla de usuarios de otro dominio (ArchUnit lo prohibe) o llamar a ms-identidad dentro del lock pesimista. Consecuencia aceptada: un token revocado sirve aqui hasta que expire solo.
+
+## Ver la historia funcionando con creditos reales
+
+`./gradlew ... check` demuestra que el codigo hace lo que dice. Esto demuestra
+otra cosa: que la integracion con ms-finanzas funciona de verdad.
+
+```bash
+docker compose -f services/cuentas/ms-finanzas/docker-compose.yml up -d
+docker compose -f services/cuentas/ms-subastas/docker-compose.yml up -d
+
+DB_PASSWORD=finanzas_password ./gradlew :services:cuentas:ms-finanzas:bootRun
+# en otra terminal, OJO con FINANZAS_MODO=http
+DB_PASSWORD=subastas_password FINANZAS_MODO=http \
+  ./gradlew :services:cuentas:ms-subastas:bootRun
+
+# y con los dos arriba
+services/cuentas/ms-subastas/scripts/demo-local.sh
+```
+
+Siembra una subasta, acredita creditos y comprueba seis cosas por HTTP: que
+pujar sin saldo se rechaza con `SALDO_INSUFICIENTE` y no con un 500, que con
+saldo entra, que los creditos quedan retenidos de verdad, que un reintento con
+la misma clave devuelve **la misma** puja sin retener dos veces, que al superado
+se le devuelven sus creditos, y que el saldo que ve la pantalla es el real.
+
+Es repetible: cada ejecucion usa jugadores y claves nuevos, asi que no depende
+de que la base de datos este limpia.
+
+**La subasta se siembra con SQL a proposito.** Publicarla por la API es
+HU-SUB-001 y arrastra catalogo, inventario y finanzas en modo http a la vez;
+para ver pujar no hacen falta.
 
 ## Correr las pruebas
 

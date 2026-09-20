@@ -53,6 +53,36 @@ de semana) ≈ **11,5 USD/mes**. El crédito de USD 100 cubre el proyecto comple
 > a la vez no caben: hace falta un segundo `t3.small` (mismo costo otra vez)
 > o un `c7i-flex.large` (4 GiB, 61 USD/mes 24×7 — solo con apagado estricto).
 
+### Limitación conocida de DEV: el combate no se puede probar entero aquí
+
+El camino completo de combate —acción → `motor-combate` → vida → STOMP → barra—
+necesita `motor-combate` **y** `heroes`, que son de Contenido y se despliegan a
+su propio host. Ese host no existe bajo la política de USD 0.
+
+**Se decidió NO meterlos en este `t3.small`**, y la razón es la de arriba: ya
+corre el perfil completo de plataforma más el borde y dos bases. Dos servicios
+Java más (~320 MB cada uno) dejan la instancia al límite, y cuando el OOM killer
+entra no elige: puede llevarse por delante `salas-partidas`, que es justo lo que
+la demo necesita en pie. Un segundo host resolvería el problema y duplicaría el
+gasto.
+
+Qué pasa entonces en DEV si alguien juega un turno: `salas-partidas` responde
+**503 `motor-de-combate-no-disponible`** por la cola privada del jugador. Es el
+comportamiento correcto y está probado — no se inventa un daño para disimular—,
+pero no es el camino feliz.
+
+Dónde SÍ está probado el camino completo:
+
+- `EjecutarAccionTest` — la coordinación entera con el motor como doble.
+- `CombateControllerTest` y `ResolverAtaqueTest` (en `motor-combate`) — el otro
+  lado del mismo contrato.
+- `combate.test.js` — la vista: enviar la acción, umbrales, reconexión sin
+  duplicados y el final del combate.
+
+Para levantarlo entero cuando haya presupuesto: añadir `srv-motor-combate` y
+`srv-heroes` al compose de plataforma con `mem_limit: 320m`, o desplegar el host
+de contenido.
+
 ## Operación (todo desde GitHub → Actions → "Infra dev (AWS Free Plan)")
 
 | Acción | Qué hace | Cuándo |

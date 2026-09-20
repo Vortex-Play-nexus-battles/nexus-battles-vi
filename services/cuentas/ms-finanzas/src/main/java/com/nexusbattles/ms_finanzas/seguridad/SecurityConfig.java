@@ -56,32 +56,49 @@ public class SecurityConfig {
                 .requestMatchers("/actuator/**").permitAll()
                 // Excepción específica: POST /creditos/acreditar es el único
                 // endpoint del módulo créditos que CREA saldo "de la nada".
-                // Andrés reportó el 18/sep que estaba abierto y con
-                // idempotencia efectiva rota (probado en vivo: dos
-                // llamadas con el mismo refId sumaban dos veces), o sea que
-                // cualquiera con acceso al servicio podía regalarse créditos.
-                // Ms-subastas NO consume /creditos/acreditar (verificado por
-                // Andrés — su CreditoClientHttp solo usa reservar/liberar/
-                // consumir/saldo), así que cerrar este endpoint concreto no
-                // rompe HU-SUB-001/004 y sí quita el agujero grande sin
-                // esperar al cliente m2m de Keycloak. Este matcher va ANTES
-                // del permitAll genérico de /creditos/** porque Spring toma
-                // el primero que coincide y este es más específico.
-                //
-                // El bug de idempotencia sigue siendo responsabilidad de
-                // Juan Diego (CreditoService.acreditar) y se le pasó por
-                // separado; con la ruta cerrada por auth, al menos deja de
-                // ser explotable desde fuera aunque el bug siga latente.
+                // Andrés lo reportó el 18/sep — estaba abierto y con la
+                // idempotencia efectiva rota (probado en vivo: dos llamadas
+                // con el mismo refId sumaban dos veces), es decir cualquiera
+                // con acceso al servicio podía regalarse créditos. Aun
+                // después de que Juan Diego arreglara la idempotencia (que
+                // ya está funcionando contra develop), sigue valiendo la
+                // pena cerrar la ruta: idempotente o no, no debe aceptar
+                // peticiones anónimas. Ms-subastas NO consume
+                // /creditos/acreditar (verificado por Andrés — su
+                // CreditoClientHttp solo usa reservar/liberar/consumir/saldo),
+                // así que cerrar este endpoint concreto no rompe HU-SUB-001/004
+                // y sí quita el agujero sin esperar al cliente m2m de
+                // Keycloak. Este matcher va ANTES del permitAll genérico de
+                // /creditos/** porque Spring toma el primero que coincide y
+                // este es más específico. Mi propio AcreditacionPartidaService
+                // consume acreditar como bean local en el mismo módulo Java,
+                // no por HTTP, así que la ruta cerrada no lo afecta.
                 .requestMatchers(HttpMethod.POST, "/creditos/acreditar").authenticated()
                 // Temporal (ver javadoc): el resto de /creditos/** sigue
                 // abierto hasta que infra registre el cliente m2m en Keycloak
-                // y ms-subastas adopte TokenDeServicio.
+                // y ms-subastas adopte TokenDeServicio (ADR-001). Los tres
+                // flujos @Scheduled de ms-subastas no tienen JWT de jugador
+                // que reenviar.
                 .requestMatchers("/creditos/**").permitAll()
+                // POST /partidas/resultado CREA saldo (acredita créditos al
+                // ganador y participantes vía AcreditacionPartidaService que
+                // llama a CreditoService.acreditar como bean local — se salta
+                // el filter chain de /creditos/acreditar). Sin autenticación
+                // sería exactamente el mismo agujero por otra puerta:
+                // cualquiera POST-ea un resultado inventado con su uid como
+                // ganador y se autoacredita. Cerrado con authenticated tras
+                // el catch de Andrés (18/sep). Consecuencia: ms-salas-partidas
+                // necesita el token de servicio de Keycloak para llamar,
+                // igual que ms-subastas ahora sabe con /creditos/**. Sin
+                // eso, en dev/local se prueba con un JWT de jugador válido.
+                .requestMatchers("/partidas/**").authenticated()
                 // HU-PAG-002: el historial es del propio jugador; cualquier
                 // usuario autenticado puede consultar SU propio historial. La
                 // restricción por uid la aplica el controller leyendo el
                 // principal del Authentication (nunca del path/query).
                 .requestMatchers("/transacciones/**").authenticated()
+                // HU-JUE-012: "Mis cofres" — mismo criterio que el historial.
+                .requestMatchers("/cofres/**").authenticated()
                 .anyRequest().authenticated());
 
         return http.build();

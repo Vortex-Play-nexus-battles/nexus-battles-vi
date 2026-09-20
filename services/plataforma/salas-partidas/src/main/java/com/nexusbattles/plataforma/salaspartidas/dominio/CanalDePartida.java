@@ -46,4 +46,14 @@ public interface CanalDePartida {
      * saberlo igual.
      */
     void anunciarTurno(Partida partida);
+
+    /**
+     * El combate termino — HU-JUE-005, RF-JUE-017.
+     *
+     * <p>Se anuncia aparte del ultimo golpe: la vista tiene que poder pintar
+     * primero la barra bajando a cero y despues el resultado, que es el orden
+     * en el que ocurren. Un solo mensaje con las dos cosas obligaria a la vista
+     * a animar hacia atras.
+     */
+    void anunciarFin(Partida partida);
 }

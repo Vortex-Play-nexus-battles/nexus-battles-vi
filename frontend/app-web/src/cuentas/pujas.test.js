@@ -410,8 +410,9 @@ describe('ControladorSubastas - Interacción y Flujo DOM', () => {
       expect(cajaConsejo.textContent).toContain('se te escapó por 50 cr');
       expect(cajaConsejo.textContent).toContain('Tu tope estaba en 2.400');
       expect(cajaConsejo.textContent).toContain('cerró en 2.450');
-      expect(cajaConsejo.textContent).toContain('tenías 4.130 libres');
       expect(cajaConsejo.textContent).toContain('más de margen era tuyo');
+      // Sin saldo del servidor, el consejo NO afirma cuanto tenia libre.
+      expect(cajaConsejo.textContent).not.toContain('libres');
     });
 
     test('el botón "Ver" de una subasta adjudicada la abre en modo cerrado/victoria', () => {
@@ -520,11 +521,19 @@ describe('HU-SUB-004 - Pruebas Unitarias de Cálculos Nuevos', () => {
       { montoCobrado: 0, montoDevuelto: 880 },
       { montoCobrado: 0, montoDevuelto: 2400 }
     ];
-    const balance = calcularBalanceNetoCierre(eventos, 6200);
+    const balance = calcularBalanceNetoCierre(eventos, 6200, 720);
     expect(balance.cobrado).toBe(1350);
     expect(balance.devuelto).toBe(3280);
     expect(balance.neto).toBe(1930);
     expect(balance.saldoLibre).toBe(4130);
+  });
+
+  // El saldo total ya no tiene valor por defecto: sin el no se puede calcular
+  // lo libre, y devolver un numero seria inventarlo.
+  test('calcularBalanceNetoCierre deja el saldo libre en null si no se sabe el total', () => {
+    const balance = calcularBalanceNetoCierre([{ montoCobrado: 100, montoDevuelto: 0 }]);
+    expect(balance.cobrado).toBe(100);
+    expect(balance.saldoLibre).toBeNull();
   });
 
   test('generarConsejoTactico calcula la diferencia y el margen necesario', () => {
@@ -624,8 +633,10 @@ describe('HU-SUB-004 - Pruebas Unitarias de Cálculos Nuevos', () => {
     test('rechazo de compra inmediata por saldo insuficiente muestra error en el DOM sin alert()', () => {
       const alertaSpy = jest.spyOn(globalThis, 'alert').mockImplementation(() => {});
       controlador.abrirDetalle('hacha-obsidiana');
-      // hacha-obsidiana compraInmediata es 2800. Forzamos créditos totales menores
-      controlador.config.creditosTotales = 500;
+      // hacha-obsidiana compraInmediata es 2800. El saldo ahora viene del
+      // servidor, así que se simula un resumen con 500 cr disponibles: solo
+      // con un saldo CONOCIDO y corto se puede rechazar aquí.
+      controlador.resumen = { saldoDisponible: '500', creditosRetenidos: '0', subastasGanando: 0 };
       controlador.confirmandoCompra = true;
 
       const exito = controlador.confirmarCompraInmediata();

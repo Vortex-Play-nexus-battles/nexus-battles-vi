@@ -34,6 +34,9 @@ on:
 permissions:
   contents: read
   packages: write
+  # Para encender el host si esta apagado, por OIDC y sin claves guardadas.
+  # Ver el paso "Asegurar que el host esta encendido" del job de dev.
+  id-token: write
 
 # A diferencia de ci.yml, NUNCA cancelamos una corrida de CD a mitad de
 # camino: podria dejar un ambiente a medio desplegar.
@@ -390,6 +393,72 @@ jobs:
         run: |
           LISTA=$(echo '${{ needs.detectar-servicios.outputs.servicios }}' | jq -r '[.[] | select(.ruta | startswith("services/contenido/") | not) | "\(.servicio):\(.puerto)"] | join(" ")')
           echo "lista=$LISTA" >> "$GITHUB_OUTPUT"
+
+      # ------------------------------------------------------------------
+      # El host de dev se apaga todas las noches para no gastar credito, y
+      # solo se enciende de lunes a viernes. Ademas, las tareas programadas de
+      # GitHub se retrasan horas cuando hay carga y a veces se descartan: el
+      # 19 de septiembre el "start" de las 12:00 UTC no llego a ejecutarse, y
+      # el despliegue de las 20:15 murio con "dial tcp :22: i/o timeout" tras
+      # un minuto de espera, sin decir por que.
+      #
+      # Un despliegue no deberia depender de que un cron se haya cumplido. Si
+      # el host esta apagado se enciende aqui, que es justo lo que hace falta
+      # para desplegar y no cuesta nada de mas: la instancia iba a encenderse
+      # igual. Si ya esta encendido, este paso no hace nada.
+      # ------------------------------------------------------------------
+      - name: Asumir el rol de AWS por OIDC (sin claves)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-session-name: cd-dev-${{ github.run_id }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Asegurar que el host esta encendido
+        run: |
+          set -euo pipefail
+          id=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=nexus-plataforma-dev" \
+                      "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+            --query 'Reservations[].Instances[].InstanceId' --output text)
+          if [ -z "$id" ] || [ "$id" = "None" ]; then
+            echo "::error::No existe la instancia nexus-plataforma-dev. Lanza 'Infra dev' con accion=apply."
+            exit 1
+          fi
+
+          estado=$(aws ec2 describe-instances --instance-ids "$id" \
+            --query 'Reservations[0].Instances[0].State.Name' --output text)
+          echo "Instancia $id en estado $estado"
+
+          if [ "$estado" = "stopping" ]; then
+            echo "Esperando a que termine de apagarse para poder encenderla."
+            aws ec2 wait instance-stopped --instance-ids "$id"
+            estado=stopped
+          fi
+
+          if [ "$estado" = "stopped" ]; then
+            echo "Estaba apagada: se enciende para poder desplegar."
+            aws ec2 start-instances --instance-ids "$id" >/dev/null
+            aws ec2 wait instance-running --instance-ids "$id"
+            # "running" solo dice que el hipervisor la arranco; SSH tarda mas.
+            aws ec2 wait instance-status-ok --instance-ids "$id"
+            echo "Encendida y con los chequeos de EC2 en verde."
+          fi
+
+          # Ultimo filtro antes de gastar el minuto del scp: que el 22 conteste
+          # de verdad. Asi un fallo aqui dice "SSH no responde" y no
+          # "i/o timeout" a secas desde dentro de una accion de terceros.
+          ip=$(aws ec2 describe-instances --instance-ids "$id" \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
+          for intento in $(seq 1 30); do
+            if nc -z -w 3 "$ip" 22 2>/dev/null; then
+              echo "SSH responde en el intento $intento."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::El host esta encendido pero el puerto 22 no responde tras 150 s."
+          exit 1
 
       - name: Copiar docker-compose.yml, docker-compose.deploy.yml y el script de despliegue
         uses: appleboy/scp-action@v0.1.7

@@ -38,6 +38,22 @@ public record ParticipanteDePartida(
     }
 
     /** Participante humano sin heroe conocido todavia. */
+    /** El mismo participante con su heroe actualizado tras recibir un golpe. */
+    public ParticipanteDePartida conHeroe(HeroeDeCombate heroe) {
+        return new ParticipanteDePartida(idJugador, heroe, esIA, equipo, creditosApostados);
+    }
+
+    /**
+     * True cuando sigue en pie.
+     *
+     * <p>Un participante sin heroe conocido cuenta como vivo: no se le puede
+     * dar por derrotado por una integracion que no llego. Lo que no se sabe no
+     * se decide.
+     */
+    public boolean enPie() {
+        return heroe == null || !heroe.derrotado();
+    }
+
     public static ParticipanteDePartida humano(UUID idJugador, int creditosApostados) {
         return new ParticipanteDePartida(idJugador, null, false, null, creditosApostados);
     }
@@ -50,6 +66,25 @@ public record ParticipanteDePartida(
      * demas para dirigirle las acciones.
      */
     public static ParticipanteDePartida inteligenciaArtificial(UUID id) {
-        return new ParticipanteDePartida(id, null, true, null, 0);
+        return inteligenciaArtificial(id, null);
+    }
+
+    /**
+     * Participante controlado por la IA, con el heroe con el que combatira.
+     *
+     * <p><b>De donde sale ese heroe: es el mismo del anfitrion, a vida
+     * completa.</b> Ni el Product Backlog ni ningun contrato dicen con que
+     * heroe juega la maquina, y no se inventa uno: se usa el unico dato de
+     * combate que esta partida ya conoce. Ademas hace justa la partida contra
+     * la IA —mismas estadisticas para los dos— que es lo minimo compatible con
+     * RF-JUE-004, donde la modalidad se elige por comodidad y no por ventaja.
+     *
+     * <p>Queda anotado como decision funcional pendiente: si el PO fija que la
+     * IA use un heroe propio del catalogo, se cambia aqui y en ningun sitio mas.
+     *
+     * <p>No apuesta creditos: la maquina no tiene bolsa (RF-JUE-014).
+     */
+    public static ParticipanteDePartida inteligenciaArtificial(UUID id, HeroeDeCombate heroe) {
+        return new ParticipanteDePartida(id, heroe, true, null, 0);
     }
 }

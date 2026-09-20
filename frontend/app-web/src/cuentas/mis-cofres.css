@@ -1,0 +1,103 @@
+/* ============================================================
+   mis-cofres.css — HU-JUE-012 · listado de cofres del jugador.
+   Usa los tokens de tema-cuentas.css importado desde el HTML.
+   ============================================================ */
+
+body {
+  margin: 0;
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: var(--tipografia-cuerpo, Inter, system-ui, sans-serif);
+}
+
+.contenedor {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.encabezado-contenido {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 0;
+}
+
+.titulo {
+  margin: 0 0 4px;
+  font-family: var(--tipografia-titulo);
+  font-size: 24px;
+}
+
+.ayuda {
+  margin: 0;
+  color: var(--texto-2, #48536a);
+  font-size: 14px;
+}
+
+.tarjeta {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 16px;
+  margin-top: 8px;
+}
+
+.cofres-lista {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.cofre-tarjeta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.cofre-icono {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.cofre-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.cofre-titulo {
+  margin: 0 0 4px;
+  font-family: var(--tipografia-titulo);
+  font-size: 16px;
+  text-transform: capitalize;
+}
+
+.cofre-fecha {
+  margin: 0;
+  color: var(--texto-2, #48536a);
+  font-size: 13px;
+}
+
+.paginacion {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.estado {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radio);
+  font-size: 14px;
+}
+
+.estado.carga { background: #ddeef7; color: #095e8c; }
+.estado.error { background: #fbe4e4; color: #b81a1a; }
+.estado.vacio { background: #f2f4f8; color: var(--texto-2, #48536a); }

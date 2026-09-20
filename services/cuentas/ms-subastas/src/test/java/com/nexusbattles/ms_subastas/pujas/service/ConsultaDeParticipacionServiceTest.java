@@ -6,6 +6,11 @@ import com.nexusbattles.ms_subastas.pujas.model.EstadoPuja;
 import com.nexusbattles.ms_subastas.pujas.model.Puja;
 import com.nexusbattles.ms_subastas.pujas.model.PujaAutomatica;
 import com.nexusbattles.ms_subastas.pujas.model.TipoPuja;
+import com.nexusbattles.ms_subastas.pujas.creditos.CreditoClient;
+import com.nexusbattles.ms_subastas.pujas.creditos.CreditoNoDisponibleException;
+import com.nexusbattles.ms_subastas.pujas.creditos.ReservaCredito;
+import com.nexusbattles.ms_subastas.pujas.dto.MiResumenResponse;
+import com.nexusbattles.ms_subastas.pujas.creditos.CreditoClientFake;
 import com.nexusbattles.ms_subastas.pujas.repository.PujaAutomaticaRepository;
 import com.nexusbattles.ms_subastas.pujas.repository.PujaRepository;
 import com.nexusbattles.ms_subastas.subastas.model.EstadoSubasta;
@@ -25,6 +30,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -55,12 +61,15 @@ class ConsultaDeParticipacionServiceTest {
     @Mock
     private PujaAutomaticaRepository pujaAutomaticaRepository;
 
+    private CreditoClientFake creditoClient;
     private ConsultaDeParticipacionService servicio;
 
     @BeforeEach
     void setUp() {
+        creditoClient = new CreditoClientFake(BigDecimal.ZERO, false);
         servicio = new ConsultaDeParticipacionService(subastaRepository, pujaRepository,
-                pujaAutomaticaRepository, new ParametrosPuja(), Clock.fixed(AHORA, ZoneOffset.UTC));
+                pujaAutomaticaRepository, new ParametrosPuja(), Clock.fixed(AHORA, ZoneOffset.UTC),
+                creditoClient);
     }
 
     private Subasta subastaCon(UUID mejorPostor) {
@@ -234,5 +243,49 @@ class ConsultaDeParticipacionServiceTest {
 
         assertThrows(SubastaNoEncontradaException.class, () -> servicio.historial(inexistente, YO));
         assertThrows(SubastaNoEncontradaException.class, () -> servicio.miParticipacion(inexistente, YO));
+    }
+
+    // --- el saldo del resumen -----------------------------------------------
+
+    @Test
+    void elResumenTraeElSaldoDisponibleDelJugador() {
+        creditoClient.acreditar(YO, new BigDecimal("450"));
+
+        MiResumenResponse resumen = servicio.miResumen(YO);
+
+        assertEquals(0, new BigDecimal("450").compareTo(resumen.saldoDisponible()));
+    }
+
+    /**
+     * Lo importante no es que devuelva null: es que NO devuelva cero. Un cero
+     * le diria al jugador que esta arruinado cuando lo unico que pasa es que no
+     * se pudo preguntar, y la pantalla usa esta cifra para decidir si le deja
+     * pujar: con un cero inventado le bloquearia pujas que si puede pagar.
+     */
+    @Test
+    void siCreditosNoRespondeElSaldoViajaComoDesconocidoYNoComoCero() {
+        CreditoClient roto = new CreditoClient() {
+            @Override public ReservaCredito reservar(UUID j, BigDecimal m, UUID s, String k) {
+                throw new UnsupportedOperationException();
+            }
+            @Override public void liberar(UUID reservaId) { throw new UnsupportedOperationException(); }
+            @Override public void consumir(UUID reservaId, UUID vendedorId) { throw new UnsupportedOperationException(); }
+            @Override public BigDecimal saldoDisponible(UUID jugadorId) {
+                throw new CreditoNoDisponibleException("ms-finanzas no responde");
+            }
+        };
+        ConsultaDeParticipacionService conCreditosCaidos = new ConsultaDeParticipacionService(
+                subastaRepository, pujaRepository, pujaAutomaticaRepository, new ParametrosPuja(),
+                Clock.fixed(AHORA, ZoneOffset.UTC), roto);
+
+        when(pujaRepository.sumarMontoPorJugadorYEstado(YO, EstadoPuja.ACTIVA))
+                .thenReturn(new BigDecimal("300"));
+
+        MiResumenResponse resumen = conCreditosCaidos.miResumen(YO);
+
+        assertNull(resumen.saldoDisponible(), "desconocido no es cero");
+        // Y el resto del resumen sigue sirviendo: sale de esta misma base de
+        // datos, asi que una averia de creditos no deja al jugador sin pantalla.
+        assertEquals(0, new BigDecimal("300").compareTo(resumen.creditosRetenidos()));
     }
 }

@@ -217,9 +217,7 @@ async function cargarYRenderizar() {
   }
 
   if (pagina.contenido.length === 0) {
-    zona.replaceChildren(
-      construirEstado('vacio', 'No hay subastas que coincidan con tu búsqueda'),
-    );
+    zona.replaceChildren(construirEstado('vacio', 'No hay subastas que coincidan con tu búsqueda'));
     return;
   }
 
@@ -284,7 +282,12 @@ function construirPaginacion(pagina) {
   }
 
   nav.appendChild(
-    construirBotonPagina('Siguiente', pagina.pagina + 1, pagina.pagina + 1 < pagina.totalPaginas, irA),
+    construirBotonPagina(
+      'Siguiente',
+      pagina.pagina + 1,
+      pagina.pagina + 1 < pagina.totalPaginas,
+      irA,
+    ),
   );
 
   return nav;

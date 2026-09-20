@@ -123,8 +123,8 @@ class PartidaTest {
         }
 
         @Test
-        @DisplayName("el heroe de la IA sigue siendo nulo: lo decide el motor de combate")
-        void laIaNoTraeHeroe() {
+        @DisplayName("la IA combate con el heroe del anfitrion, a plena vida (HU-SAL-004)")
+        void laIaTraeElHeroeDelAnfitrion() {
             Sala conIa = Sala.crear(
                     new ParametrosDeSala(2, Modalidad.CONTRA_IA, 0, true, false, null),
                     ANFITRION,
@@ -133,9 +133,14 @@ class PartidaTest {
 
             Partida partida = Partida.iniciar(conIa, AHORA);
 
+            // No se le inventa un heroe: se le da el unico que la partida
+            // conoce, y de paso la pelea queda pareja.
             assertAll(
                     () -> assertNotNull(partida.participantes().get(0).heroe()),
-                    () -> assertNull(partida.participantes().get(1).heroe()));
+                    () -> assertNotNull(partida.participantes().get(1).heroe()),
+                    () -> assertEquals("Arquero del Norte",
+                            partida.participantes().get(1).heroe().nombre()),
+                    () -> assertEquals(120, partida.participantes().get(1).heroe().vidaActual()));
         }
     }
 

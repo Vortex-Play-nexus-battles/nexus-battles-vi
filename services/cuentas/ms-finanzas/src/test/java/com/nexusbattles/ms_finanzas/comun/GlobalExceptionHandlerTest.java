@@ -9,6 +9,7 @@ import org.springframework.http.ProblemDetail;
 import com.nexusbattles.ms_finanzas.common.exception.ReservaNoEncontradaException;
 import com.nexusbattles.ms_finanzas.common.exception.ReservaYaLiberadaException;
 import com.nexusbattles.ms_finanzas.common.exception.SaldoInsuficienteException;
+import com.nexusbattles.ms_finanzas.partidas.PartidaYaProcesadaException;
 import com.nexusbattles.ms_finanzas.transacciones.TransaccionYaRegistradaException;
 
 class GlobalExceptionHandlerTest {
@@ -69,6 +70,19 @@ class GlobalExceptionHandlerTest {
         // El type URI distingue este 404 de negocio del 404 de Spring por
         // rutas inexistentes, que sale sin type.
         assertThat(respuesta.getType().toString()).endsWith("/errors/reserva-no-encontrada");
+    }
+
+    @Test
+    void partidaYaProcesada_esProblemDetail409ConPartidaIdEnPropiedad() {
+        PartidaYaProcesadaException ex = new PartidaYaProcesadaException("partida-abc-123");
+
+        ProblemDetail respuesta = handler.manejarPartidaYaProcesada(ex);
+
+        assertThat(respuesta.getStatus()).isEqualTo(HttpStatus.CONFLICT.value());
+        assertThat(respuesta.getTitle()).isEqualTo("Partida ya procesada");
+        assertThat(respuesta.getDetail()).contains("partida-abc-123");
+        assertThat(respuesta.getType().toString()).endsWith("/errors/partida-ya-procesada");
+        assertThat(respuesta.getProperties()).containsEntry("partidaId", "partida-abc-123");
     }
 
     @Test

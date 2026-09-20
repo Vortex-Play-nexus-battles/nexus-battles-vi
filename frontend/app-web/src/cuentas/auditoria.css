@@ -121,15 +121,42 @@
   white-space: nowrap;
 }
 
-.badge--creacion            { background: var(--exito-fondo); color: var(--exito); }
-.badge--aprobacion          { background: var(--exito-fondo); color: var(--exito); }
-.badge--actualizacion       { background: var(--info-fondo); color: var(--info); }
-.badge--suspension          { background: var(--advertencia-fondo); color: var(--advertencia); }
-.badge--sancion             { background: var(--error-fondo); color: var(--error); }
-.badge--rechazo             { background: var(--error-fondo); color: var(--error); }
-.badge--cambio_rol          { background: #efe6f7; color: var(--acento); }
-.badge--eliminacion_logica  { background: var(--fondo); color: var(--texto-secundario); }
-.badge--otro                { background: var(--fondo); color: var(--texto-secundario); }
+.badge--creacion {
+  background: var(--exito-fondo);
+  color: var(--exito);
+}
+.badge--aprobacion {
+  background: var(--exito-fondo);
+  color: var(--exito);
+}
+.badge--actualizacion {
+  background: var(--info-fondo);
+  color: var(--info);
+}
+.badge--suspension {
+  background: var(--advertencia-fondo);
+  color: var(--advertencia);
+}
+.badge--sancion {
+  background: var(--error-fondo);
+  color: var(--error);
+}
+.badge--rechazo {
+  background: var(--error-fondo);
+  color: var(--error);
+}
+.badge--cambio_rol {
+  background: #efe6f7;
+  color: var(--acento);
+}
+.badge--eliminacion_logica {
+  background: var(--fondo);
+  color: var(--texto-secundario);
+}
+.badge--otro {
+  background: var(--fondo);
+  color: var(--texto-secundario);
+}
 
 /* Paginación */
 

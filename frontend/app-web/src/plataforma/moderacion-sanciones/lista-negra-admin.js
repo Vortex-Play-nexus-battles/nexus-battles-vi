@@ -218,9 +218,16 @@ async function eliminarTermino(termino) {
  * redirigido a la pantalla principal. El interceptor compartido (comun/) ya
  * dispara este evento en cada 403 -- no hace falta tocar ese archivo, solo
  * escucharlo desde esta vista.
+ *
+ * El destino era `/`, y el borde responde a esa ruta con un 302 al LOGIN
+ * (`location = /` de borde-dev.conf). Un administrador con sesion valida que
+ * recibia un 403 acababa en la pantalla de acceso, como si se le hubiera
+ * caducado la sesion. La pantalla principal es el menu, y se resuelve contra
+ * la URL de este modulo para acertar tanto servido por el borde
+ * (/frontend/app-web/src/...) como por `npm run dev` (raiz en src/).
  */
 window.addEventListener('nexus:rbac-forbidden', () => {
-  window.location.href = '/';
+  window.location.href = new URL('../../cuentas/index.html', import.meta.url).href;
 });
 
 formulario.addEventListener('submit', agregarTermino);

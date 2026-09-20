@@ -79,7 +79,16 @@ public class Partida {
             }
         }
         if (sala.incluirHeroeIA()) {
-            enCombate.add(ParticipanteDePartida.inteligenciaArtificial(UUID.randomUUID()));
+            // La maquina combate con el heroe del anfitrion a vida completa.
+            // Ver `ParticipanteDePartida.inteligenciaArtificial`: no se inventa
+            // un heroe, se usa el unico que esta partida conoce, y de paso la
+            // pelea queda pareja.
+            FichaDeParticipante delAnfitrion = sala.fichaDe(sala.idAnfitrion());
+            HeroeDeCombate heroeDeLaMaquina = delAnfitrion == null
+                    ? null
+                    : delAnfitrion.heroe().aPlenaVida();
+            enCombate.add(ParticipanteDePartida.inteligenciaArtificial(
+                    UUID.randomUUID(), heroeDeLaMaquina));
         }
 
         return new Partida(UUID.randomUUID(), sala.id(), enCombate,
@@ -132,6 +141,82 @@ public class Partida {
     }
 
     /**
+     * Aplica el dano que resolvio el motor y devuelve como queda el objetivo.
+     *
+     * <p>La vida vive aqui, no en el motor: el motor resuelve cuanto dano hace
+     * un golpe y se olvida; quien lleva la cuenta es la partida, que es quien
+     * la persiste.
+     *
+     * <p>Si el objetivo no tiene heroe conocido no se le puede restar nada y se
+     * devuelve tal cual. No se inventa una vida para poder golpearle.
+     *
+     * @return el participante ya actualizado
+     * @throws PartidaYaTerminada  si el combate acabo
+     * @throws SinObjetivoPosible  si ese participante no esta en la partida
+     */
+    public ParticipanteDePartida aplicarDano(UUID idObjetivo, int dano) {
+        if (estado == EstadoPartida.FINALIZADA) {
+            throw new PartidaYaTerminada(id);
+        }
+        if (dano < 0) {
+            throw new IllegalArgumentException("El dano no puede ser negativo.");
+        }
+
+        int posicion = indiceDe(idObjetivo, "El objetivo no esta en esta partida.");
+        ParticipanteDePartida objetivo = participantes.get(posicion);
+
+        if (objetivo.heroe() == null) {
+            return objetivo;
+        }
+
+        ParticipanteDePartida golpeado = objetivo.conHeroe(
+                objetivo.heroe().conVida(objetivo.heroe().vidaActual() - dano));
+        participantes.set(posicion, golpeado);
+
+        return golpeado;
+    }
+
+    /** Participantes que siguen en pie, en el orden de los turnos. */
+    public List<ParticipanteDePartida> enPie() {
+        return participantes.stream().filter(ParticipanteDePartida::enPie).toList();
+    }
+
+    /**
+     * Termina el combate si ya solo queda uno en pie — HU-JUE-005.
+     *
+     * <p>Se comprueba <b>despues</b> de cada golpe y no antes: el que acaba de
+     * caer todavia cuenta para el turno en el que cayo.
+     *
+     * @return true si este golpe acabo la partida
+     */
+    public boolean terminarSiSoloQuedaUno() {
+        if (estado == EstadoPartida.FINALIZADA) {
+            return false;
+        }
+        if (enPie().size() > 1) {
+            return false;
+        }
+        terminar();
+        return true;
+    }
+
+    /**
+     * Quien gano, si la partida termino con alguien en pie.
+     *
+     * <p>Vacio cuando sigue en curso, y tambien cuando acabo sin nadie en pie
+     * —dos caidas simultaneas—: eso es un empate, y declarar ganador a uno de
+     * los dos seria inventarlo. El criterio de desempate es una decision del
+     * Product Owner que todavia no esta tomada.
+     */
+    public java.util.Optional<ParticipanteDePartida> ganador() {
+        if (estado != EstadoPartida.FINALIZADA) {
+            return java.util.Optional.empty();
+        }
+        List<ParticipanteDePartida> vivos = enPie();
+        return vivos.size() == 1 ? java.util.Optional.of(vivos.get(0)) : java.util.Optional.empty();
+    }
+
+    /**
      * Da el combate por terminado.
      *
      * <p>Idempotente: terminar dos veces una partida ya terminada no es un error
@@ -152,6 +237,16 @@ public class Partida {
         // estado guardado y los participantes no cuadran y hay que verlo.
         throw new IllegalStateException(
                 "El turno de la partida " + id + " es de alguien que no esta en ella.");
+    }
+
+    /** Igual, pero para un objetivo elegido por el jugador: eso es un 409, no un fallo. */
+    private int indiceDe(UUID idJugador, String siNoEsta) {
+        for (int i = 0; i < participantes.size(); i++) {
+            if (participantes.get(i).idJugador().equals(idJugador)) {
+                return i;
+            }
+        }
+        throw new SinObjetivoPosible(siNoEsta);
     }
 
     public UUID id() {

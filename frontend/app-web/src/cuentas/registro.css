@@ -140,7 +140,7 @@
   font-weight: 600;
   color: var(--texto-secundario);
 }
-.recorte-zoom-label input[type="range"] {
+.recorte-zoom-label input[type='range'] {
   width: 100%;
 }
 

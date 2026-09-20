@@ -27,11 +27,17 @@
 # choca con DB_USER/DB_PASS de plataforma ni con el DB_URL de ms-identidad.
 #
 # OJO context-path: application.properties de ms-ecommerce declara
-# server.servlet.context-path=/api/v1 -- a diferencia de ms-identidad y
-# ms-cumplimiento (que no tienen context-path), su /actuator/health real
-# queda en /api/v1/actuator/health. Esto NO se resuelve aqui (este archivo
-# solo mapea variables de entorno de base de datos): lo maneja
-# scripts/cd/desplegar.sh, que elige la ruta de salud por servicio.
+# server.servlet.context-path=/ecommerce (linea 2) -- a diferencia de
+# ms-identidad y ms-cumplimiento (que no tienen context-path), su
+# /actuator/health real queda en /ecommerce/actuator/health. Esto NO se
+# resuelve aqui (este archivo solo mapea variables de entorno de base de
+# datos): lo maneja scripts/cd/desplegar.sh, que elige la ruta de salud por
+# servicio.
+#
+# Este comentario decia /api/v1 y era falso; desplegar.sh se fio de el y
+# buscaba la salud donde no estaba, de modo que el despliegue habria dado
+# por muerto un servicio sano. Corregido en P3.2 y fijado por
+# ArranqueDeLaAplicacionIT de ms-ecommerce, que comprueba ambas rutas.
 #
 # Todas las variables quedan PENDIENTES por ahora (ver los secrets TODO_*
 # en cd.yml, mismo patron de placeholder que ms-identidad y ms-cumplimiento).

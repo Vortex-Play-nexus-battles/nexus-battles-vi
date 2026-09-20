@@ -2,7 +2,7 @@
  * HU-INV-004 - Barra superior de navegacion.
  * Fuente: Proyecto Integrador II, secciones 7.1-7.1.1, pp. 34-35.
  */
-import { construirBarra, SECCIONES } from './barra-navegacion.js';
+import { construirBarra, destinoDe, SECCIONES } from './barra-navegacion.js';
 
 function accesos(barra) {
   return [...barra.querySelectorAll('.barra__acceso')];
@@ -66,6 +66,49 @@ describe('Barra superior de navegacion', () => {
       .click();
 
     expect(visitadas).toEqual(['/misiones']);
+  });
+
+  // --- Los accesos llevan a una vista que existe --------------------------
+  //
+  // Las rutas de SECCIONES son identificadores logicos: ninguna corresponde a
+  // un archivo del repo ni a una `location` del borde. La navegacion por
+  // omision las mandaba tal cual a `location.href`, asi que los cinco accesos
+  // daban 404 en las nueve vistas que montan la barra sin pasar su propio
+  // `navegar`. Esto fija a donde van de verdad.
+
+  describe('destinoDe', () => {
+    const BASE = 'http://ejemplo/frontend/app-web/src/comun/barra-navegacion.js';
+
+    test.each([
+      ['/jugar', '/frontend/app-web/src/plataforma/salas-partidas/batallas.html'],
+      ['/misiones', '/frontend/app-web/src/cuentas/index.html'],
+      ['/torneo', '/frontend/app-web/src/plataforma/salas-partidas/batallas.html'],
+      ['/inventario', '/frontend/app-web/src/contenido/inventario/inventario.html'],
+      ['/subasta', '/frontend/app-web/src/cuentas/subastas.html'],
+      ['/cuenta', '/frontend/app-web/src/cuentas/perfil.html'],
+    ])('%s lleva a una vista que existe', (ruta, esperado) => {
+      expect(new URL(destinoDe(ruta, BASE)).pathname).toBe(esperado);
+    });
+
+    test('las seis secciones tienen destino: ninguna se queda en el identificador', () => {
+      for (const seccion of SECCIONES) {
+        expect(destinoDe(seccion.ruta, BASE)).not.toBe(seccion.ruta);
+      }
+    });
+
+    test('funciona igual servido desde src/, no solo desde el borde', () => {
+      // `npm run dev` sirve `src` como raiz; el borde sirve el repo entero.
+      // Resolver contra la URL del modulo acierta en los dos.
+      const desdeSrc = 'http://localhost:8080/comun/barra-navegacion.js';
+
+      expect(new URL(destinoDe('/inventario', desdeSrc)).pathname).toBe(
+        '/contenido/inventario/inventario.html',
+      );
+    });
+
+    test('una ruta desconocida se devuelve tal cual, sin inventar destino', () => {
+      expect(destinoDe('/otra-cosa', BASE)).toBe('/otra-cosa');
+    });
   });
 
   // --- Criterio 3 ---------------------------------------------------------

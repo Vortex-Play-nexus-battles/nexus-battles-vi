@@ -1,8 +1,5 @@
 import { jest } from '@jest/globals';
-import {
-  setCurrentRole,
-  setPermissionMatrix,
-} from './directives/has-permission.directive.js';
+import { setCurrentRole, setPermissionMatrix } from './directives/has-permission.directive.js';
 import { cargarMatrizYVerificarAcceso } from './gestion-usuarios.js';
 
 const MATRIZ_BACKEND = {

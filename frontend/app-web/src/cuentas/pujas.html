@@ -20,7 +20,7 @@
     <script type="module">
       import { construirBarra } from '../comun/barra-navegacion.js';
       import { montarSubastas } from './pujas.js';
-      import { crearApiSubastas } from './pujas-api.js';
+      import { crearApiSubastas, urlDelCanal } from './pujas-api.js';
 
       // Montar la barra compartida con rutas funcionales y sesión real
       const navbarContainer = document.getElementById('navbar-container');
@@ -93,8 +93,11 @@
       // responde engana justo cuando mas importa saberlo, y en una
       // sustentacion haria creer que funciona algo que no esta funcionando.
       // Si el servicio no esta, la pantalla lo dice y ofrece reintentar.
+      // urlCanal es opcional: si el WebSocket no levanta, la pantalla sigue
+      // con el sondeo de 5 s. Anade inmediatez, no la sustituye.
       montarSubastas(contenedor, {
         api: crearApiSubastas(),
+        urlCanal: urlDelCanal(),
         ...(subastaId ? { subastaInicialId: subastaId } : {})
       });
     </script>

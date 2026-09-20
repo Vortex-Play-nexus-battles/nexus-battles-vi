@@ -1,22 +1,27 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Subastas · Nexus Battles VI</title>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Subastas · Nexus Battles VI</title>
 
-  <link rel="stylesheet" href="/shared/ui-kit/css/tokens.css">
-  <link rel="stylesheet" href="/shared/ui-kit/css/base.css">
-  <link rel="stylesheet" href="/comun/barra-navegacion.css">
-  <link rel="stylesheet" href="subastas-vitrina.css">
-  <link rel="stylesheet" href="subastas-filtros.css">
-  <link rel="stylesheet" href="subastas-busqueda.css">
-</head>
-<body class="subastas-pagina">
+    <!--
+    Rutas relativas, como en las otras nueve vistas. Antes las tres primeras
+    eran absolutas y se contradecian entre si: /shared/... solo resuelve si la
+    raiz es la del repo (como la sirve el borde) y /comun/... solo si la raiz
+    es src/ (como la sirve `npm run dev`). No habia raiz bajo la cual las tres
+    cargaran, asi que la barra de navegacion siempre salia sin estilos.
+  -->
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../comun/barra-navegacion.css" />
+    <link rel="stylesheet" href="subastas-vitrina.css" />
+    <link rel="stylesheet" href="subastas-filtros.css" />
+    <link rel="stylesheet" href="subastas-busqueda.css" />
+  </head>
+  <body class="subastas-pagina">
+    <div id="raiz-subastas"></div>
 
-<div id="raiz-subastas"></div>
-
-<script type="module" src="subastas.js"></script>
-
-</body>
+    <script type="module" src="subastas.js"></script>
+  </body>
 </html>
