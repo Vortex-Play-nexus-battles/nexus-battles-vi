@@ -26,21 +26,44 @@ INVITADO="${E2E_INVITADO:-invitado_e2e}"
 PROTOTIPO="Guerrero Tanque"
 
 echo "== 1) Productos: un heroe y un arma, directos en Mongo =="
-# El alta por API exige JWT de administrador; el resolutor de inventario solo
-# lee nombre, tipo y prototipo, asi que con eso basta.
-# Se escriben SOLO los campos que el resolutor necesita (nombre, tipo y, para
-# el heroe, prototipo) mas `_class`. Los demas se dejan fuera a proposito:
-# `Producto` es un record con tipos exigentes -`tasaDeCaida` esta mapeado a
-# DECIMAL128 y `estado` es un enum-, y un numero suelto escrito desde mongosh
-# llega como Int32 y revienta la conversion. Un campo ausente es un valor por
-# defecto; un campo con el tipo equivocado es un 500.
+# El alta por API exige JWT de administrador, asi que se inserta directo.
+#
+# El documento lleva TODOS los campos del record `Producto`, con su tipo
+# exacto. No es verbosidad gratuita: con la version corta -solo nombre, tipo
+# y prototipo- productos devolvia 500 al leerlos.
+#
+# `Producto` es un record, asi que Spring Data lo construye por su constructor
+# canonico y no tolera huecos en los primitivos (`int tiraje`,
+# `boolean premium`, `int version`). Y dos campos estan mapeados a DECIMAL128:
+# un numero suelto escrito desde mongosh llega como Int32 y la conversion
+# falla. De ahi `NumberDecimal`.
 $COMPOSE exec -T e2e-contenido-mongo mongosh --quiet productos --eval '
   db.productos.deleteMany({ _id: { $in: ["p-heroe-e2e", "p-arma-e2e"] } });
+  const base = {
+    _class: "nexus.dominio.Producto",
+    imagen: null, descripcion: "Producto de prueba del E2E",
+    tiraje: 1, precioCreditos: 100,
+    precioMonedaReal: NumberDecimal("0"),
+    premium: false,
+    heroe: null, costoPoder: null,
+    multiplicadorNivel: NumberDecimal("1"),
+    turnosCarga: null, turnosRecarga: null,
+    efectoGeneral: null, efectoPotenciado: null,
+    defensa: null, parte: null, efecto: null,
+    estado: "ACTIVO", version: 0,
+    creadoEn: new Date(), modificadoEn: new Date()
+  };
   db.productos.insertMany([
-    { _id: "p-heroe-e2e", _class: "nexus.dominio.Producto",
-      nombre: "Guerrero de prueba", tipo: "HEROE", prototipo: "Guerrero Tanque" },
-    { _id: "p-arma-e2e", _class: "nexus.dominio.Producto",
-      nombre: "Espada de prueba", tipo: "ARMA" }
+    Object.assign({}, base, {
+      _id: "p-heroe-e2e", nombre: "Guerrero de prueba", tipo: "HEROE",
+      prototipo: "Guerrero Tanque",
+      poderDeAtaque: null, tasaDeCaida: NumberDecimal("0")
+    }),
+    Object.assign({}, base, {
+      _id: "p-arma-e2e", nombre: "Espada de prueba", tipo: "ARMA",
+      prototipo: null,
+      poderDeAtaque: 12, tasaDeCaida: NumberDecimal("50")
+    })
   ]);
   print("  productos sembrados: " + db.productos.countDocuments({ _id: /e2e/ }));
 '
