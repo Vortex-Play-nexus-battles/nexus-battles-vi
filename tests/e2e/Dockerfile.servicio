@@ -1,0 +1,30 @@
+# Imagen minima para el banco de pruebas E2E.
+#
+# Los Dockerfile de cada servicio son de dos estilos: unos esperan el jar ya
+# construido (salas-partidas) y otros compilan el monorepo entero dentro
+# (inventario). Usar los segundos aqui significaria compilar Gradle seis
+# veces, una por imagen.
+#
+# Este construye los jars UNA vez en el runner y los mete en una imagen que
+# solo copia. No sustituye a los Dockerfile de produccion -esos siguen siendo
+# el contrato de cada servicio, regla 9-: es el arnes de pruebas.
+FROM eclipse-temurin:21-jre
+
+ARG JAR
+ARG PUERTO=8080
+
+# La imagen de temurin no trae curl, y los healthcheck del compose lo usan
+# para preguntar por /actuator/health. Sin esto, `docker compose up --wait`
+# da por no saludable a un servicio que esta perfectamente arriba.
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY ${JAR} app.jar
+
+# Mismo techo de memoria que en el host de dev, para que un E2E que pase aqui
+# no sea optimista respecto a lo que aguanta produccion.
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+
+EXPOSE ${PUERTO}
+ENTRYPOINT ["java", "-jar", "app.jar"]

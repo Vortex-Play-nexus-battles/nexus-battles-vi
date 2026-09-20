@@ -1,0 +1,87 @@
+# Smoke del entorno desplegado, despues de cada despliegue a dev.
+#
+# ## Por que aqui y no en cada PR
+#
+# Apunta al host de AWS, que se apaga por las noches y los fines de semana
+# para no gastar credito. Exigirlo en cada PR pondria en rojo los PR de un
+# sabado por algo que no es culpa de nadie. El sitio donde importa es justo
+# despues de desplegar: comprobar que lo que acaba de subir hace su trabajo,
+# y no solo que responde a /actuator/health.
+#
+# `desplegar.sh` ya comprueba la salud de cada servicio. Esto comprueba otra
+# cosa: que registrarse funciona, que el token trae la identidad de ADR-002,
+# que un correo llega de verdad a Mailpit y que metricas ve a los servicios.
+name: Smoke del entorno dev
+
+on:
+  workflow_run:
+    workflows: ["CD - Distribucion continua"]
+    types: [completed]
+    branches: [develop]
+  workflow_dispatch:
+
+concurrency:
+  group: smoke-dev
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Comportamiento de lo desplegado
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Si el despliegue fallo, el smoke no aporta: el fallo ya esta reportado.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/app-web/package-lock.json
+
+      - name: Instalar dependencias y el navegador
+        working-directory: frontend/app-web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      # El host puede estar arrancando: los servicios tardan unos tres minutos
+      # en estar todos arriba tras un start. Esperar aqui evita un rojo que
+      # solo significa "llegamos pronto".
+      - name: Esperar a que el borde responda
+        run: |
+          for i in $(seq 1 40); do
+            if curl -fsS --max-time 5 "http://${{ secrets.DEPLOY_HOST_DEV }}/salud-borde" \
+                 | grep -q UP; then
+              echo "El borde responde en el intento $i."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::El borde no respondio en 400 s. ¿Esta encendido el host?"
+          exit 1
+
+      - name: Smoke
+        working-directory: frontend/app-web
+        env:
+          E2E_AWS: http://${{ secrets.DEPLOY_HOST_DEV }}
+        run: npx playwright test --config=playwright.smoke.config.js
+
+      - name: Guardar el informe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: informe-smoke-dev
+          path: |
+            frontend/app-web/playwright-report/**
+            frontend/app-web/test-results/**
+          retention-days: 7
+          if-no-files-found: ignore

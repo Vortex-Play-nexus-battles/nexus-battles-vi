@@ -1,0 +1,220 @@
+# Banco de pruebas E2E — el corte vertical de la sala de batalla.
+#
+# ## Por que existe
+#
+# El flujo de sala NO se puede demostrar en el host de dev (#435): la puerta
+# de heroe de HU-SAL-003 consulta a `inventario`, que no esta desplegado en
+# AWS, y `ClienteInventarioHeroes` falla cerrado a proposito. Meterlo en el
+# `t3.small` tampoco cabe: quedan 171 MiB y ya hay 907 MB en swap (#430).
+#
+# Aqui estan los seis servicios de verdad, con sus bases de datos de verdad,
+# y el MISMO `borde-dev.conf` que corre en AWS. Ningun mock: si el contrato
+# entre dos servicios se rompe, esto se pone rojo.
+#
+# ## Como se usa
+#
+#   ./gradlew :services:plataforma:salas-partidas:bootJar ...   (ver levantar.sh)
+#   docker compose -f tests/e2e/compose.yml up -d --build
+#   ./tests/e2e/sembrar.sh
+#   npx playwright test --config=playwright.e2e.config.js
+#   docker compose -f tests/e2e/compose.yml down -v
+#
+# El contexto de build es la raiz del repositorio, para que cada imagen pueda
+# copiar el jar de su servicio.
+
+name: nexus-e2e
+
+services:
+  # --------------------------------------------------------------- datos
+  e2e-identidad-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: identidaddb
+      POSTGRES_USER: identidad
+      POSTGRES_PASSWORD: identidad
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U identidad -d identidaddb"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  e2e-plataforma-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: plataformadb
+      POSTGRES_USER: plataforma
+      POSTGRES_PASSWORD: plataforma
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U plataforma -d plataformadb"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # Una sola Mongo para los tres servicios de contenido, con una base por
+  # servicio: es como esta en docker-compose.contenido.yml.
+  e2e-contenido-mongo:
+    image: mongo:8
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+  # ----------------------------------------------------------- identidad
+  srv-ms-identidad:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/cuentas/ms-identidad/target/*.jar
+        PUERTO: "8089"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: jdbc:postgresql://e2e-identidad-db:5432/identidaddb
+      SPRING_DATASOURCE_USERNAME: identidad
+      SPRING_DATASOURCE_PASSWORD: identidad
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      # El registro avisa por correo, pero es fail-open (Resilience4j): sin
+      # servicio de correo la cuenta se crea igual. Por eso correo y mailpit
+      # no estan en este compose.
+      SERVER_PORT: "8089"
+    depends_on:
+      e2e-identidad-db: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8089/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  # ----------------------------------------------------------- contenido
+  srv-heroes:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/contenido/heroes/build/libs/*.jar
+    environment:
+      # El perfil `mongo` es el que siembra los ocho prototipos
+      # (CatalogoEnMongo). Sin el, /api/v1/heroes/{prototipo} da 404 y la
+      # verificacion de heroe muere con un 503.
+      SPRING_PROFILES_ACTIVE: mongo
+      SPRING_MONGODB_URI: mongodb://e2e-contenido-mongo:27017/heroes
+      SPRING_DATA_MONGODB_URI: mongodb://e2e-contenido-mongo:27017/heroes
+    depends_on:
+      e2e-contenido-mongo: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  srv-productos:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/contenido/productos/build/libs/*.jar
+    environment:
+      SPRING_MONGODB_URI: mongodb://e2e-contenido-mongo:27017/productos
+      SPRING_DATA_MONGODB_URI: mongodb://e2e-contenido-mongo:27017/productos
+      # Productos exige JWT en sus rutas de escritura y valida contra este
+      # JWKS. Las de lectura, que son las que usa inventario, van abiertas.
+      KEYCLOAK_JWK_SET_URI: http://srv-ms-identidad:8089/api/v1/auth/jwks
+    depends_on:
+      e2e-contenido-mongo: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  srv-inventario:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/contenido/inventario/build/libs/*.jar
+    environment:
+      SPRING_MONGODB_URI: mongodb://e2e-contenido-mongo:27017/inventario
+      SPRING_DATA_MONGODB_URI: mongodb://e2e-contenido-mongo:27017/inventario
+      # /estadisticas resuelve el producto y el prototipo por HTTP: si estos
+      # dos no responden, la verificacion de heroe sale 503.
+      HEROES_BASE_URL: http://srv-heroes:8080
+      PRODUCTOS_BASE_URL: http://srv-productos:8080
+      KEYCLOAK_JWK_SET_URI: http://srv-ms-identidad:8089/api/v1/auth/jwks
+    depends_on:
+      e2e-contenido-mongo: { condition: service_healthy }
+      srv-heroes: { condition: service_healthy }
+      srv-productos: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  srv-motor-combate:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/contenido/motor-combate/build/libs/*.jar
+    environment:
+      MOTOR_HEROES_URL: http://srv-heroes:8080
+    depends_on:
+      srv-heroes: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  # ---------------------------------------------------------- plataforma
+  srv-salas-partidas:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/plataforma/salas-partidas/build/libs/*.jar
+        PUERTO: "8084"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://e2e-plataforma-db:5432/plataformadb
+      SPRING_DATASOURCE_USERNAME: plataforma
+      SPRING_DATASOURCE_PASSWORD: plataforma
+      # Estas dos son las que NO estan puestas en el despliegue de dev, y por
+      # eso alli la sala no se puede crear (#435). Aqui si.
+      INVENTARIO_BASE_URL: http://srv-inventario:8080
+      MOTOR_COMBATE_URL: http://srv-motor-combate:8080
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      # El navegador llega por el borde, asi que el origen permitido del
+      # canal STOMP es el del borde, no el del servicio.
+      SALAS_WS_ORIGENES: http://localhost:8099,http://127.0.0.1:8099
+      CHAT_WS_ORIGENES: http://localhost:8099,http://127.0.0.1:8099
+    depends_on:
+      e2e-plataforma-db: { condition: service_healthy }
+      srv-inventario: { condition: service_healthy }
+      srv-motor-combate: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8084/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  # ---------------------------------------------------------------- borde
+  # El MISMO archivo que corre en AWS, sin una linea distinta. Si el reparto
+  # de rutas se rompe, se rompe aqui antes que en la demo.
+  srv-borde:
+    image: nginx:1.27-alpine
+    ports:
+      - "8099:80"
+    volumes:
+      - ../../infrastructure/red-balanceo/borde-dev.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../../frontend:/srv/nexus/frontend:ro
+      - ../../shared:/srv/nexus/shared:ro
+    depends_on:
+      srv-salas-partidas: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost/salud-borde | grep -q UP"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
