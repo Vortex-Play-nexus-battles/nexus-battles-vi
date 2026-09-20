@@ -39,13 +39,17 @@ $COMPOSE exec -T e2e-contenido-mongo mongosh --quiet productos --eval '
   print("  productos sembrados: " + db.productos.countDocuments({ _id: /e2e/ }));
 '
 
+# Con jq y no con sed: la primera version sacaba el `id` con una expresion
+# regular y cogia el del ARMA cuando buscaba el del HEROE, porque el orden de
+# los campos del JSON no es el que uno supone. Un JSON se lee con un lector de
+# JSON.
 crear_elemento() {
   local apodo="$1" producto="$2" tipo="$3" nombre="$4"
   curl -sS -X POST "$BORDE/api/v1/inventario/elementos" \
     -H "Content-Type: application/json" \
     -H "X-User-Name: $apodo" \
     -d "{\"productoId\":\"$producto\",\"tipo\":\"$tipo\",\"nombrePropio\":\"$nombre\"}" \
-    | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1
+    | jq -r '.id // empty'
 }
 
 sembrar_jugador() {
@@ -77,22 +81,29 @@ sembrar_jugador "$ANFITRION"
 sembrar_jugador "$INVITADO"
 
 echo "== 3) Comprobando el camino completo de la verificacion =="
+# Las mismas tres llamadas que hace ClienteInventarioHeroes, en el mismo
+# orden. Si alguna de las tres falla, la puerta de heroe responde 503 y no se
+# puede crear ninguna sala: mejor enterarse aqui que a mitad de la prueba.
 for apodo in "$ANFITRION" "$INVITADO"; do
-  # Las tres llamadas que hace ClienteInventarioHeroes, en el mismo orden.
   elementos=$(curl -sS "$BORDE/api/v1/inventario/elementos?pagina=0" -H "X-User-Name: $apodo")
-  heroe=$(echo "$elementos" | sed -n 's/.*"tipo"[[:space:]]*:[[:space:]]*"HEROE".*/&/p' \
-    | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
-  [ -n "$heroe" ] || { echo "::error::$apodo no tiene heroe en la vitrina"; echo "$elementos"; exit 1; }
+  heroe=$(echo "$elementos" | jq -r '[.elementos[]? | select(.tipo == "HEROE")][0].id // empty')
+  [ -n "$heroe" ] || { echo "::error::$apodo no tiene heroe en la vitrina"; echo "$elementos" | jq .; exit 1; }
 
-  equipo=$(curl -sS -o /dev/null -w '%{http_code}' \
-    "$BORDE/api/v1/inventario/heroes/$heroe/equipamiento" -H "X-User-Name: $apodo")
+  equipamiento=$(curl -sS "$BORDE/api/v1/inventario/heroes/$heroe/equipamiento" \
+    -H "X-User-Name: $apodo")
+  armas=$(echo "$equipamiento" | jq -r '(.armas // []) | length')
+  # `estaEquipado` es cierto si hay algo equipado. Con cero armas, la puerta
+  # responderia SIN_HEROE_EQUIPADO.
+  [ "${armas:-0}" -gt 0 ] || { echo "::error::$apodo tiene el heroe sin equipar: $equipamiento"; exit 1; }
+
   stats=$(curl -sS "$BORDE/api/v1/inventario/heroes/$heroe/estadisticas" -H "X-User-Name: $apodo")
-  vida=$(echo "$stats" | sed -n 's/.*"vida"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p')
-
-  echo "  $apodo: equipamiento=$equipo vida=${vida:-sin dato}"
-  # La vida importa: es la que acaba en la barra de HU-SAL-005. Un 404 aqui
-  # tumbaria la verificacion entera con un 503.
+  vida=$(echo "$stats" | jq -r '.vida // empty')
+  # La vida es la que acaba en la barra de HU-SAL-005. Un error aqui tumba la
+  # verificacion entera: el cliente envuelve cualquier fallo HTTP en
+  # InventarioNoDisponible.
   [ -n "$vida" ] || { echo "::error::$apodo sin estadisticas: $stats"; exit 1; }
+
+  echo "  $apodo: heroe=$heroe armas=$armas vida=$vida"
 done
 
 echo "Semilla lista."
