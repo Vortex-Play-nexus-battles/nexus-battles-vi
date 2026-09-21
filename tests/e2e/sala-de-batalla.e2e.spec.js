@@ -389,6 +389,7 @@ test.describe('Sala de batalla de punta a punta', () => {
   test('atacar desde la vista baja la vida del rival, y el aviso llega por STOMP', async ({
     page,
   }) => {
+    test.setTimeout(150000);
     const atacanteEsAnfitriona = partida.turnoActual.idJugador === anfitriona.claims.uid;
     const quien = atacanteEsAnfitriona ? anfitriona : invitado;
     const apodo = atacanteEsAnfitriona ? ANFITRION : INVITADO;
@@ -421,6 +422,7 @@ test.describe('Sala de batalla de punta a punta', () => {
     const sumaAntes = await vidaTotal(page);
 
     await boton.click();
+    let golpes = 1;
 
     // Lo que se espera NO es una respuesta HTTP: es que el servidor resuelva
     // la accion contra motor-combate, la persista y la anuncie por
@@ -432,25 +434,41 @@ test.describe('Sala de batalla de punta a punta', () => {
     // legitimo del combate. Lo que se afirma es que atacando se acaba haciendo
     // dano, no que el primer golpe entre. Antes del arreglo de la defensa esto
     // no era cuestion de insistir: con la vida (44) como defensa, la tirada
-    // maxima (16) no la superaba NUNCA y el bucle se agotaba entero.
-    let golpes = 0;
+    // maxima (16) no la superaba NUNCA.
+    //
+    // Se turnan los dos jugadores. Insistir solo con el primero no sirve: tras
+    // su golpe el turno pasa al rival, y si nadie juega por el rival la partida
+    // se queda parada para siempre.
     try {
       await expect
         .poll(
           async () => {
             const ahora = await vidaTotal(page);
-            if (ahora < sumaAntes) {
+            if (ahora < sumaAntes || golpes >= 12) {
               return ahora;
             }
-            // Si el turno volvio a ser nuestro, se insiste; si es del rival,
-            // se espera a que le toque otra vez.
-            if (golpes < 12 && (await boton.isEnabled())) {
-              golpes += 1;
-              await boton.click();
+
+            const estado = await (
+              await api.get(`/api/v1/partidas/${partida.id}`, {
+                headers: conToken(anfitriona.token),
+              })
+            ).json();
+            if (estado.estado !== 'EN_CURSO') {
+              return ahora;
             }
-            return ahora;
+
+            const leToca = estado.turnoActual.idJugador === anfitriona.claims.uid;
+            await conSesion(page, leToca ? anfitriona : invitado, leToca ? ANFITRION : INVITADO);
+            await page.goto(`${BORDE}${VISTA}?sala=${sala.id}&partida=${partida.id}`);
+
+            const suyo = page.locator('[data-zona="acciones"] [data-atacar]').first();
+            if (await suyo.isEnabled({ timeout: 10000 }).catch(() => false)) {
+              golpes += 1;
+              await suyo.click();
+            }
+            return await vidaTotal(page);
           },
-          { timeout: 60000, intervals: [1000] },
+          { timeout: 90000, intervals: [1500] },
         )
         .toBeLessThan(sumaAntes);
     } catch (fallo) {
@@ -592,27 +610,27 @@ test.describe('Sala de batalla de punta a punta', () => {
       await expect(boton).toBeEnabled({ timeout: 20000 });
       await boton.click();
 
-      // El ultimo golpe cierra la partida: se espera a que el servidor lo
-      // haya persistido, no a un tiempo fijo.
+      // Se espera a que el servidor haya persistido el golpe, no a un tiempo
+      // fijo. Vale cualquiera de las dos senales: que el turno rote, o que la
+      // partida se cierre. Y hay que aceptar las dos porque el ULTIMO golpe no
+      // rota nada: `AvanzarTurno` rechaza una partida ya terminada, asi que el
+      // numero de turno se queda congelado justo en el golpe que la acaba
+      // —que es precisamente el que esta prueba persigue—.
+      const turnoPrevio = enCurso.turnoActual.numeroTurno;
       await expect
         .poll(
-          async () =>
-            (
-              await (
-                await api.get(`/api/v1/partidas/${partida.id}`, {
-                  headers: conToken(anfitriona.token),
-                })
-              ).json()
-            ).turnoActual.numeroTurno,
-          { timeout: 25000, message: `turno ${turnos + 1}: el turno no avanzo` },
+          async () => {
+            enCurso = await (
+              await api.get(`/api/v1/partidas/${partida.id}`, {
+                headers: conToken(anfitriona.token),
+              })
+            ).json();
+            return enCurso.estado !== 'EN_CURSO' || enCurso.turnoActual.numeroTurno > turnoPrevio;
+          },
+          { timeout: 25000, message: `turno ${turnos + 1}: ni rota el turno ni acaba` },
         )
-        .toBeGreaterThan(enCurso.turnoActual.numeroTurno);
+        .toBe(true);
 
-      enCurso = await (
-        await api.get(`/api/v1/partidas/${partida.id}`, {
-          headers: conToken(anfitriona.token),
-        })
-      ).json();
       turnos += 1;
     }
 
