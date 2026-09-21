@@ -7,6 +7,10 @@ WORKDIR /repo
 COPY gradlew settings.gradle build.gradle gradle.properties ./
 COPY gradle gradle
 COPY buildSrc buildSrc
+# settings.gradle incluye las librerias de shared/ desde el 13-sep (#321): Gradle
+# exige que exista la carpeta de cada proyecto incluido aunque este servicio no
+# las use, si no falla al configurar (corrida de CD 35552724237, 21-sep).
+COPY shared shared
 COPY services services
 
 RUN sh gradlew --no-daemon :services:contenido:inventario:bootJar
