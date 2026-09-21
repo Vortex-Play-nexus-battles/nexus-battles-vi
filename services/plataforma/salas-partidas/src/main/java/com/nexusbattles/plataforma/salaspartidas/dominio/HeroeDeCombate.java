@@ -16,6 +16,14 @@ import java.util.Objects;
  *
  * @param id          identificador del heroe en el inventario del jugador
  * @param nombre      nombre propio que le puso su dueno
+ * @param prototipo   prototipo del catalogo del que sale este heroe, o
+ *                    {@code null} si no se conoce. <b>No es lo mismo que el
+ *                    nombre</b>, y confundirlos es lo que rompia el combate: el
+ *                    nombre es de quien lo compro («Aquiles»), el prototipo es
+ *                    la entrada del catalogo de heroes («Guerrero Tanque»), que
+ *                    es lo unico que el motor de combate sabe buscar. Anulable
+ *                    porque las filas anteriores a V8 no lo guardaron y porque
+ *                    productos puede no contestar.
  * @param retratoUrl  retrato para la vista de batalla, o {@code null}
  * @param nivel       nivel del heroe, o {@code null} si no se conoce
  * @param vidaActual  vida con la que llega a la sala
@@ -24,10 +32,25 @@ import java.util.Objects;
 public record HeroeDeCombate(
         String id,
         String nombre,
+        String prototipo,
         String retratoUrl,
         Integer nivel,
         int vidaActual,
         int vidaMaxima) {
+
+    /**
+     * El heroe sin prototipo conocido.
+     *
+     * <p>Existe para los sitios que nunca lo supieron —las fichas anteriores a
+     * V8 y las pruebas a las que el prototipo no les dice nada—, y para que
+     * anadirlo no obligara a tocar dos docenas de llamadas que no tienen
+     * opinion sobre el. Un heroe construido asi combate como se combatia antes
+     * de V8: mandando su nombre al motor.
+     */
+    public HeroeDeCombate(String id, String nombre, String retratoUrl, Integer nivel,
+                          int vidaActual, int vidaMaxima) {
+        this(id, nombre, null, retratoUrl, nivel, vidaActual, vidaMaxima);
+    }
 
     public HeroeDeCombate {
         Objects.requireNonNull(id, "Un heroe sin identificador no se puede llevar a una sala.");
@@ -51,7 +74,7 @@ public record HeroeDeCombate(
      * significa nada que la barra sepa pintar.
      */
     public HeroeDeCombate conVida(int vidaActual) {
-        return new HeroeDeCombate(id, nombre, retratoUrl, nivel,
+        return new HeroeDeCombate(id, nombre, prototipo, retratoUrl, nivel,
                 Math.max(0, Math.min(vidaActual, vidaMaxima)), vidaMaxima);
     }
 
@@ -74,6 +97,12 @@ public record HeroeDeCombate(
      * eso necesita las dos cifras aunque de momento sean la misma.
      */
     public static HeroeDeCombate aPleno(String id, String nombre, int vidaMaxima) {
-        return new HeroeDeCombate(id, nombre, null, null, vidaMaxima, vidaMaxima);
+        return aPleno(id, nombre, null, vidaMaxima);
+    }
+
+    /** Igual, con el prototipo del catalogo ya resuelto. */
+    public static HeroeDeCombate aPleno(String id, String nombre, String prototipo,
+                                        int vidaMaxima) {
+        return new HeroeDeCombate(id, nombre, prototipo, null, null, vidaMaxima, vidaMaxima);
     }
 }

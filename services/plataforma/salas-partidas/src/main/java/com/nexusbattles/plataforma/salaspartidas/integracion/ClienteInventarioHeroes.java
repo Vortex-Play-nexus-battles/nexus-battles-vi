@@ -27,6 +27,10 @@ import java.util.Map;
  *       puesto. Sin nada puesto, no esta equipado (RF-JUE-003).</li>
  *   <li>{@code GET /api/v1/inventario/heroes/{id}/estadisticas} — de donde sale
  *       la vida maxima con el equipamiento ya aplicado.</li>
+ *   <li>{@code GET /api/v1/productos/{productoId}} — el prototipo del catalogo
+ *       del que sale el heroe. No es de inventario sino de productos, y es
+ *       lectura publica; hace falta porque el motor de combate busca al
+ *       atacante por prototipo y no por el nombre que le puso su dueno.</li>
  * </ol>
  *
  * <p><b>La identidad va en {@code X-User-Name}</b> porque es lo que inventario
@@ -51,11 +55,14 @@ class ClienteInventarioHeroes implements HeroeDelJugador {
 
     private final RestClient restClient;
     private final String urlBase;
+    private final String urlProductos;
 
     ClienteInventarioHeroes(RestClient restClientInventario,
-                            @Value("${salas.inventario.url}") String urlBase) {
+                            @Value("${salas.inventario.url}") String urlBase,
+                            @Value("${salas.productos.url}") String urlProductos) {
         this.restClient = restClientInventario;
         this.urlBase = urlBase.replaceAll("/+$", "");
+        this.urlProductos = urlProductos.replaceAll("/+$", "");
     }
 
     @Override
@@ -136,7 +143,46 @@ class ClienteInventarioHeroes implements HeroeDelJugador {
         int vida = estadisticas == null || estadisticas.vida() == null || estadisticas.vida() < 1
                 ? 1
                 : estadisticas.vida();
-        return HeroeDeCombate.aPleno(heroe.id(), heroe.nombrePropio(), vida);
+        return HeroeDeCombate.aPleno(heroe.id(), heroe.nombrePropio(),
+                prototipoDe(heroe), vida);
+    }
+
+    /**
+     * Prototipo del catalogo del que sale este heroe.
+     *
+     * <p><b>Por que hace falta.</b> El motor de combate busca al atacante en el
+     * catalogo de heroes, que indexa por prototipo («Guerrero Tanque»). Hasta
+     * ahora se le mandaba el {@code nombrePropio} —el que le puso su dueno,
+     * «Aquiles»— y el catalogo respondia 404: <b>ningun ataque se resolvia</b>,
+     * y el error se iba a la cola privada del jugador, que la vista no escucha.
+     * Lo destapo el E2E del corte vertical.
+     *
+     * <p><b>Por que por aqui.</b> Inventario ya resuelve el prototipo por dentro
+     * para calcular las estadisticas, pero no lo publica en su respuesta.
+     * Pedirselo seria cambiar un contrato que no es nuestro. El producto, en
+     * cambio, si lo expone en {@code GET /api/v1/productos/{id}}, que es publico
+     * y de solo lectura: se consume un campo que ya existe, sin tocar nada
+     * ajeno.
+     *
+     * <p><b>Por que no revienta si falla.</b> Un prototipo desconocido degrada
+     * el combate, no la entrada a la sala: la verificacion de HU-SAL-003 sigue
+     * pudiendo decir «si» y la barra de vida sigue teniendo sus dos cifras.
+     * Fallar aqui dejaria sin jugar a quien solo queria entrar.
+     */
+    private String prototipoDe(ElementoInventario heroe) {
+        if (heroe.productoId() == null || heroe.productoId().isBlank()) {
+            return null;
+        }
+        try {
+            Producto producto = restClient.get()
+                    .uri(urlProductos + "/api/v1/productos/" + heroe.productoId())
+                    .header("Accept", "application/json")
+                    .retrieve()
+                    .body(Producto.class);
+            return producto == null ? null : producto.prototipo();
+        } catch (RestClientException productoNoDisponible) {
+            return null;
+        }
     }
 
     /** Lo que retiene al heroe, con el detalle que inventario da: la subasta. */
@@ -164,7 +210,11 @@ class ClienteInventarioHeroes implements HeroeDelJugador {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record ElementoInventario(String id, String tipo, String nombrePropio,
-                              boolean disponible, String subastaId) { }
+                              String productoId, boolean disponible, String subastaId) { }
+
+    /** Solo el prototipo: de la ficha del producto no hace falta nada mas. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record Producto(String prototipo) { }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record Equipamiento(List<String> armas, Map<String, String> armaduras, List<String> items) {

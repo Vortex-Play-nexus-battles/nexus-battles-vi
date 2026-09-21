@@ -93,6 +93,47 @@ class ClienteMotorCombateTest {
     }
 
     @Test
+    @DisplayName("manda el PROTOTIPO del heroe, no el nombre que le puso su dueno")
+    void mandaElPrototipoYNoElNombrePropio() {
+        // El defecto que cierra, destapado por el E2E del corte vertical: el
+        // motor resuelve al atacante contra GET /api/v1/heroes/{nombre}, que
+        // indexa por prototipo. Mandandole «Aquiles» —el nombre propio— el
+        // catalogo devolvia 404 y NINGUN ataque se resolvia; el error se iba a
+        // la cola privada del jugador, que la vista no escucha, asi que el
+        // combate se quedaba quieto sin decir nada.
+        HeroeDeCombate aquiles = new HeroeDeCombate(
+                "h-9", "Aquiles", "Guerrero Tanque", null, 5, 100, 100);
+
+        motor.expect(requestTo(BASE + "/api/v1/combate/ataques"))
+                .andExpect(jsonPath("$.heroeAtacante").value("Guerrero Tanque"))
+                .andRespond(withSuccess(
+                        "{\"categoria\":\"CAUSAR_DANO\",\"danoAplicado\":5,\"ataqueResuelto\":20}",
+                        MediaType.APPLICATION_JSON));
+
+        cliente.resolver(aquiles, mago(90));
+
+        motor.verify();
+    }
+
+    @Test
+    @DisplayName("sin prototipo conocido cae al nombre: degradar, no callarse")
+    void sinPrototipoCaeAlNombre() {
+        // Fichas anteriores a V8, o productos sin contestar. Se manda lo que
+        // hay: funciona si el heroe se llama como su prototipo y falla igual
+        // que antes si no. Fijado para que el dia que deje de hacer falta, se
+        // quite a proposito.
+        motor.expect(requestTo(BASE + "/api/v1/combate/ataques"))
+                .andExpect(jsonPath("$.heroeAtacante").value("Arquero del Norte"))
+                .andRespond(withSuccess(
+                        "{\"categoria\":\"CAUSAR_DANO\",\"danoAplicado\":5,\"ataqueResuelto\":20}",
+                        MediaType.APPLICATION_JSON));
+
+        cliente.resolver(arquero(), mago(90));
+
+        motor.verify();
+    }
+
+    @Test
     @DisplayName("manda la vida actual del objetivo como defensa: la simplificacion queda fijada")
     void laDefensaEsLaVidaActual() {
         // No es una regla acordada en ninguna HU —esta anotada como pendiente en

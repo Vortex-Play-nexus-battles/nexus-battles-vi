@@ -184,6 +184,9 @@ services:
       # eso alli la sala no se puede crear (#435). Aqui si.
       INVENTARIO_BASE_URL: http://srv-inventario:8080
       MOTOR_COMBATE_URL: http://srv-motor-combate:8080
+      # De aqui sale el prototipo del heroe. Sin el, al motor le llega el
+      # nombre propio y responde 404: ningun ataque se resuelve.
+      PRODUCTOS_BASE_URL: http://srv-productos:8080
       IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
       # El navegador llega por el borde, asi que el origen permitido del
       # canal STOMP es el del borde, no el del servicio.
@@ -198,6 +201,7 @@ services:
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
       srv-inventario: { condition: service_healthy }
+      srv-productos: { condition: service_healthy }
       srv-motor-combate: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }
     healthcheck:

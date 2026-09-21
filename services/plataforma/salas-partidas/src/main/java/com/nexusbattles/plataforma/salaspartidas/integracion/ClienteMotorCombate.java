@@ -51,7 +51,7 @@ public class ClienteMotorCombate implements MotorDeCombate {
         try {
             Respuesta respuesta = http.post()
                     .uri(base + "/api/v1/combate/ataques")
-                    .body(new Peticion(atacante.nombre(), defensaDe(objetivo),
+                    .body(new Peticion(nombreParaElMotor(atacante), defensaDe(objetivo),
                             new Peticion.Distribucion(PROTOTIPO_POR_DEFECTO)))
                     .retrieve()
                     .body(Respuesta.class);
@@ -85,6 +85,27 @@ public class ClienteMotorCombate implements MotorDeCombate {
      */
     private static int defensaDe(HeroeDeCombate objetivo) {
         return objetivo.vidaActual();
+    }
+
+    /**
+     * Lo que el motor busca en el catalogo: el <b>prototipo</b>, no el nombre.
+     *
+     * <p>El motor resuelve al atacante con {@code GET /api/v1/heroes/{nombre}},
+     * y ese catalogo indexa por prototipo —«Guerrero Tanque»—. Aqui se mandaba
+     * {@code atacante.nombre()}, que es el nombre propio que le puso su dueno
+     * —«Aquiles»—: el catalogo devolvia 404 y <b>ningun ataque se resolvia</b>.
+     * El fallo era invisible porque el error viajaba a la cola privada del
+     * jugador, que la vista no escuchaba. Lo destapo el E2E del corte vertical.
+     *
+     * <p>El prototipo lo resuelve {@code ClienteInventarioHeroes} contra
+     * productos al construir la ficha. Cuando no se conoce —fichas anteriores a
+     * V8, o productos sin contestar— se manda el nombre, que es lo que habia:
+     * funciona si el heroe se llama como su prototipo y falla igual que antes si
+     * no. Es peor callar el caso que degradar al comportamiento anterior.
+     */
+    private static String nombreParaElMotor(HeroeDeCombate atacante) {
+        String prototipo = atacante.prototipo();
+        return prototipo == null || prototipo.isBlank() ? atacante.nombre() : prototipo;
     }
 
     /** Espejo de {@code PeticionDeAtaque} del contrato del motor. */
