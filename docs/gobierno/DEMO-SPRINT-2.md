@@ -9,7 +9,7 @@ bus de notificaciones y comentarios**.
 | Entorno | Qué corre | Qué se demuestra allí |
 |---|---|---|
 | **AWS dev** (`http://35.168.124.119`, un `t3.small`) | borde nginx, ms-identidad, salas-partidas, comentarios, notificaciones, correo, moderación-sanciones, métricas, torneos, admin-parámetros | Registro y login reales, listado de salas por el borde, canal STOMP con JWT, comentarios, bandeja de notificaciones, correo de bienvenida (Mailpit), informe de disponibilidad, degradación controlada (`seccion-no-disponible`), reversión automática (acta en `SIMULACRO-REVERSION.md`). Lo comprueba el smoke `smoke-dev.yml` en cada despliegue. |
-| **Banco E2E** (`tests/e2e/compose.yml`, en un portátil) | identidad, héroes, productos, inventario, motor-combate, **ms-finanzas**, salas-partidas y el **mismo** `borde-dev.conf` | El corte vertical completo de la batalla: héroe equipado → sala → segundo jugador → modalidad → partida → combate → barra de vida → final → **apuesta liquidada en el libro real**. |
+| **Banco E2E** (`tests/e2e/compose.yml`, en un portátil) | identidad, héroes, productos, inventario, motor-combate, **ms-finanzas**, moderación-sanciones (lista negra y sanciones del chat), salas-partidas y el **mismo** `borde-dev.conf` | El corte vertical completo de la batalla: héroe equipado → sala → segundo jugador → modalidad → partida → combate → barra de vida → final → **apuesta liquidada en el libro real**. |
 
 El host de dev no puede correr la batalla porque `inventario` (MongoDB) y
 `ms-finanzas` no caben en 2 GiB junto con lo que ya hay (#435, #430), y la
@@ -35,7 +35,8 @@ con contenedores apagados).
 # Desde la raíz del monorepo. Docker en marcha; JDK 21 y Node 22 instalados.
 ./gradlew -x test :services:contenido:heroes:bootJar :services:contenido:productos:bootJar \
           :services:contenido:inventario:bootJar :services:contenido:motor-combate:bootJar \
-          :services:cuentas:ms-finanzas:bootJar :services:plataforma:salas-partidas:bootJar
+          :services:cuentas:ms-finanzas:bootJar :services:plataforma:moderacion-sanciones:bootJar \
+          :services:plataforma:salas-partidas:bootJar
 (cd services/cuentas/ms-identidad && ./mvnw -B -DskipTests package)
 
 docker compose -f tests/e2e/compose.yml up -d --build --wait

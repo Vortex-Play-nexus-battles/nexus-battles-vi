@@ -62,7 +62,7 @@ jobs:
       # Los jars se construyen UNA vez aqui y las imagenes solo los copian.
       # Usar los Dockerfile de produccion significaria compilar el monorepo
       # dentro de cada imagen: seis veces lo mismo.
-      - name: Construir los jars de los cinco servicios Gradle
+      - name: Construir los jars de los seis servicios Gradle
         run: |
           chmod +x ./gradlew
           ./gradlew --no-daemon -x test \
@@ -71,6 +71,7 @@ jobs:
             :services:contenido:inventario:bootJar \
             :services:contenido:motor-combate:bootJar \
             :services:cuentas:ms-finanzas:bootJar \
+            :services:plataforma:moderacion-sanciones:bootJar \
             :services:plataforma:salas-partidas:bootJar
 
       - name: Construir el jar de ms-identidad (Maven)
@@ -118,7 +119,7 @@ jobs:
         if: failure()
         run: |
           for s in srv-ms-identidad srv-ms-finanzas srv-heroes srv-productos srv-inventario \
-                   srv-motor-combate srv-salas-partidas srv-borde; do
+                   srv-motor-combate srv-moderacion-sanciones srv-salas-partidas srv-borde; do
             echo "=============== $s ==============="
             # Primero la cabecera de las excepciones: con `--tail` a secas se
             # ve el final de una pila de cien lineas y no la causa.
