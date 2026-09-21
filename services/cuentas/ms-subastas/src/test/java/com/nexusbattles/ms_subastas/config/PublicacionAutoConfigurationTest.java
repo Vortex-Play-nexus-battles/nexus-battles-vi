@@ -1,5 +1,7 @@
 package com.nexusbattles.ms_subastas.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nexusbattles.comun.seguridad.servicio.TokenDeServicio;
 import com.nexusbattles.ms_subastas.subastas.port.*;
 import com.nexusbattles.ms_subastas.subastas.service.*;
 import com.nexusbattles.ms_subastas.subastas.repository.SubastaRepository;
@@ -12,9 +14,11 @@ import static org.mockito.Mockito.mock;
 
 class PublicacionAutoConfigurationTest {
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
+            .withUserConfiguration(InventarioClientConfig.class)
             .withConfiguration(AutoConfigurations.of(PublicacionAutoConfiguration.class))
+            .withBean(ObjectMapper.class, ObjectMapper::new)
+            .withBean(TokenDeServicio.class, () -> () -> "token-servicio-prueba")
             .withBean(SubastaRepository.class, () -> mock(SubastaRepository.class))
-            .withBean(InventarioClient.class, InventarioClientFake::new)
             .withBean(CatalogoProductosClient.class, () -> mock(CatalogoProductosClient.class))
             .withBean(IdentidadClient.class, () -> mock(IdentidadClient.class))
             .withBean(SancionesClient.class, () -> mock(SancionesClient.class))
@@ -23,31 +27,43 @@ class PublicacionAutoConfigurationTest {
             .withBean(Clock.class, Clock::systemUTC);
 
     @Test
-    void sinFinanzasNoActivaPublicacion() {
-        runner.run(context -> assertThat(context).doesNotHaveBean(PublicarSubastaApplicationService.class));
-    }
-
-    @Test
-    void todosLosPuertosActivanElServicio() {
-        runner.withBean(FinanzasPublicacionClient.class, () -> mock(FinanzasPublicacionClient.class))
-                .withBean(InventarioPublicacionClient.class, () -> mock(InventarioPublicacionClient.class))
-                .run(context -> assertThat(context).hasSingleBean(PublicarSubastaApplicationService.class));
-    }
-
-    @Test
-    void finanzasYFakeDePujasNoActivanPublicacion() {
-        runner.withBean(FinanzasPublicacionClient.class, () -> mock(FinanzasPublicacionClient.class))
+    void httpComparteUnSoloClienteYActivaPublicacion() {
+        runner.withPropertyValues("app.inventario.modo=http", "app.subastas.incremento-minimo=1")
+                .withUserConfiguration(FinanzasPublicacionClientHttp.class)
                 .run(context -> {
-                    assertThat(context).hasSingleBean(InventarioClient.class);
-                    assertThat(context).doesNotHaveBean(PublicarSubastaApplicationService.class);
+                    assertThat(context).hasNotFailed().hasSingleBean(InventarioClient.class)
+                            .hasSingleBean(InventarioPublicacionClient.class)
+                            .hasSingleBean(PublicarSubastaApplicationService.class)
+                            .hasSingleBean(FinanzasPublicacionClient.class);
+                    assertThat(context.getBean(InventarioClient.class))
+                            .isSameAs(context.getBean(InventarioPublicacionClient.class))
+                            .isInstanceOf(InventarioClientResiliente.class);
                 });
     }
 
     @Test
-    void clienteHttpSinCapacidadDePublicacionTampocoActiva() {
-        runner.withBean(FinanzasPublicacionClient.class, () -> mock(FinanzasPublicacionClient.class))
-                .withBean(InventarioClientHttp.class, () -> new InventarioClientHttp("http://localhost:8080", 1000,
-                        new com.fasterxml.jackson.databind.ObjectMapper()))
-                .run(context -> assertThat(context).doesNotHaveBean(PublicarSubastaApplicationService.class));
+    void fakeDisponibleParaPujasNoActivaPublicacion() {
+        runner.withPropertyValues("app.inventario.modo=fake")
+                .withUserConfiguration(FinanzasPublicacionClientHttp.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed().hasSingleBean(InventarioClient.class)
+                            .doesNotHaveBean(InventarioPublicacionClient.class)
+                            .doesNotHaveBean(PublicarSubastaApplicationService.class);
+                    assertThat(context.getBean(InventarioClient.class)).isInstanceOf(InventarioClientFake.class);
+                });
+    }
+
+    @Test
+    void sinFinanzasNoActivaPublicacion() {
+        runner.withPropertyValues("app.inventario.modo=http")
+                .run(context -> assertThat(context).hasSingleBean(InventarioPublicacionClient.class)
+                        .doesNotHaveBean(PublicarSubastaApplicationService.class));
+    }
+
+    @Test
+    void modoPredeterminadoMantieneFake() {
+        runner.run(context -> assertThat(context).hasSingleBean(InventarioClient.class)
+                .doesNotHaveBean(InventarioPublicacionClient.class)
+                .doesNotHaveBean(PublicarSubastaApplicationService.class));
     }
 }

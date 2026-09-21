@@ -28,7 +28,7 @@ import java.util.UUID;
  * porque inventario las declara idempotentes por {@code Idempotency-Key} y por
  * {@code subastaId} respectivamente.
  */
-public class InventarioClientResiliente implements InventarioClient {
+public class InventarioClientResiliente implements InventarioClient, InventarioPublicacionClient {
 
     private static final String INSTANCIA = "inventario";
 
