@@ -260,8 +260,13 @@ test.describe('Smoke del entorno desplegado', () => {
     // dueno con el DTO delante.
   });
 
-  test('la bandeja de notificaciones responde con su forma y cuenta las no leidas', async () => {
-    const r = await api.get(`/api/v1/users/${cuerpoDelToken(jugador.token).uid}/notifications`);
+  test('la bandeja de notificaciones es del dueno del token: 200 con el suyo, 401 sin token', async () => {
+    const ruta = `/api/v1/users/${cuerpoDelToken(jugador.token).uid}/notifications`;
+
+    const sinToken = await api.get(ruta);
+    expect(sinToken.status(), 'la bandeja ya no se lee sin token (contrato 1.1.0)').toBe(401);
+
+    const r = await api.get(ruta, { headers: { Authorization: `Bearer ${jugador.token}` } });
     expect(r.status()).toBe(200);
 
     const bandeja = await r.json();

@@ -27,6 +27,7 @@ import {
   consultarBandeja as consultarBandejaHttp,
   marcarLeida as marcarLeidaHttp,
   entregarPendientes as entregarPendientesHttp,
+  tokenDeSesion,
   urlDelCanal,
 } from './cliente-notificaciones.js';
 import { conectarStomp } from '../../comun/transporte-stomp.js';
@@ -70,7 +71,10 @@ const ESPERAS_POR_OMISION = [1000, 2000, 5000, 10000, 30000];
  * @param {object} opciones
  * @param {string} opciones.usuarioId
  * @param {string} opciones.sesionId identificador estable de esta sesion
- * @param {Function} [opciones.conectar] `({url}) => Promise<canal>`; por omision STOMP real
+ * @param {Function} [opciones.conectar] `({url, token}) => Promise<canal>`; por omision STOMP
+ *   real con el JWT en la cabecera `Authorization` del CONNECT
+ * @param {Function} [opciones.token] `() => string|null`; el JWT de la sesion, por omision
+ *   el de `sessionStorage`
  * @param {{consultarBandeja?: Function, marcarLeida?: Function, entregarPendientes?: Function}} [opciones.cliente]
  * @param {Function} [opciones.esperar] `(ms) => Promise`; inyeccion para las pruebas
  * @param {number[]} [opciones.esperas] espera creciente entre reintentos de conexion, en ms
@@ -82,7 +86,9 @@ const ESPERAS_POR_OMISION = [1000, 2000, 5000, 10000, 30000];
 export function crearBandeja({
   usuarioId,
   sesionId,
-  conectar = ({ url }) => conectarStomp({ url }),
+  conectar = ({ url, token: jwt }) =>
+    conectarStomp({ url, cabeceras: jwt ? { Authorization: `Bearer ${jwt}` } : {} }),
+  token = tokenDeSesion,
   cliente = {},
   esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   esperas = ESPERAS_POR_OMISION,
@@ -169,12 +175,15 @@ export function crearBandeja({
   }
 
   async function abrirCanal() {
-    const url = urlDelCanal({ usuarioId, sesionId });
-    const abierto = await conectar({ url });
+    // La identidad va en el CONNECT (JWT), no en la URL: el servidor resuelve
+    // la cola privada por el uid del token.
+    const url = urlDelCanal();
+    const abierto = await conectar({ url, token: token() });
     canal = abierto;
     abierto.suscribir(CANAL.COLA_PRIVADA, alMensaje);
     // CA-02: la sesion se anuncia y el servidor le devuelve lo que se perdio.
-    abierto.enviar(CANAL.ALTA_DE_SESION, { usuarioId, sesionId });
+    // El usuario es el de la conexion; solo viaja el identificador de sesion.
+    abierto.enviar(CANAL.ALTA_DE_SESION, { sesionId });
     abierto.alCerrar = () => {
       if (canal === abierto) {
         canal = null;

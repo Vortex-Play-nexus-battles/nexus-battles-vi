@@ -17,7 +17,7 @@ asyncapi: 3.0.0
 
 info:
   title: Nexus Battles VI - Notificaciones en tiempo real
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Canal WebSocket + STOMP del modulo `notificaciones`.
 
@@ -39,12 +39,19 @@ info:
     tiene sin leer. El identificador de sesion de STOMP se renueva en cada
     reconexion, asi que no sirve para eso. Por eso el cliente envia su propio
     identificador estable al registrarse, uno que sobrevive a la reconexion
-    porque lo guarda el navegador. Ese mismo par viaja tambien en la URL del
-    handshake (`/ws?usuario={usuarioId}&sesion={sesionId}`) mientras OAuth2
-    este diferido: de ahi sale el Principal que resuelve la cola privada y el
-    cierre de la sesion cuando la conexion se cae sin despedirse. Queda
-    documentado aqui porque es una
-    decision de diseno, no un detalle de implementacion.
+    porque lo guarda el navegador.
+
+    Sobre la identidad del usuario (1.1.0). El canal se autentica igual que la
+    API HTTP: el JWT de la sesion viaja en la cabecera `Authorization` del
+    frame CONNECT (`Bearer <token>`, ADR-002), como ya hace salas-partidas.
+    Sin token valido el servidor responde ERROR y no abre sesion. El Principal
+    de la conexion es el `uid` del token; de ahi sale la cola privada
+    (`/usuario/cola/notificaciones` llega solo a las conexiones de ese uid) y
+    el cierre de la sesion cuando la conexion se cae sin despedirse. Por la
+    URL del handshake no viaja nada que identifique al usuario: hasta la
+    1.0.0 iba en `?usuario=` sin verificar, y quien escribiera el id de otro
+    recibia sus avisos. El handshake pasa a `/ws/notificaciones` para que el
+    borde enrute por la ruta y no por ese parametro.
 
     Sobre el origen de los avisos. Este modulo no inventa eventos: los recibe
     de los demas modulos. Mientras no exista bus de eventos ni broker en
@@ -58,13 +65,13 @@ servers:
   local:
     host: localhost:8085
     protocol: ws
-    pathname: /ws
+    pathname: /ws/notificaciones
     description: Entorno local de desarrollo
   desplegado:
     host: api.nexusbattles.local
     protocol: wss
-    pathname: /notificaciones/ws
-    description: Entorno desplegado
+    pathname: /ws/notificaciones
+    description: Entorno desplegado, detras del borde (misma ruta)
 
 channels:
 
@@ -147,10 +154,15 @@ components:
       contentType: application/json
       payload:
         type: object
-        required: [usuarioId, sesionId]
+        required: [sesionId]
         properties:
           usuarioId:
             type: string
+            deprecated: true
+            description: >
+              Obsoleto desde la 1.1.0: se ignora. El usuario es el de la
+              conexion (uid del JWT del CONNECT); nadie da de alta una
+              sesion a nombre de otro.
           sesionId:
             type: string
             description: >
