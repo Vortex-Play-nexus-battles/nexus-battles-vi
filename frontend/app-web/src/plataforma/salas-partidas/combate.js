@@ -105,7 +105,11 @@ function huellaDe(aviso) {
     // final dos veces a proposito: primero sin `reparto` (el libro de creditos
     // no respondio, HU-JUE-014 CA-06) y despues con el, cuando la liquidacion
     // se cierra. Ese segundo aviso no es un duplicado: trae lo que faltaba.
-    return `${aviso.tipo}#${aviso.idPartida}#${Array.isArray(aviso.reparto) && aviso.reparto.length > 0 ? 'con-reparto' : 'sin-reparto'}`;
+    // Lo mismo con `recompensa` (HU-JUE-012): sale cuando el libro acredita
+    // los creditos por jugar, y puede llegar en un aviso posterior.
+    const conReparto = Array.isArray(aviso.reparto) && aviso.reparto.length > 0;
+    const conRecompensa = Array.isArray(aviso.recompensa) && aviso.recompensa.length > 0;
+    return `${aviso.tipo}#${aviso.idPartida}#${conReparto ? 'con-reparto' : 'sin-reparto'}#${conRecompensa ? 'con-recompensa' : 'sin-recompensa'}`;
   }
   return null;
 }
@@ -150,7 +154,48 @@ export function textoDelResultado(aviso, yo, miEquipo = null) {
   } else if (ganadores.length > 0) {
     base = ganadores.includes(yo) ? 'Has ganado el combate.' : 'Has perdido el combate.';
   }
-  return `${base}${textoDelReparto(aviso, yo)}`;
+  return `${base}${textoDelReparto(aviso, yo)}${textoDeLaRecompensa(aviso, yo)}`;
+}
+
+/**
+ * Lo que el libro acredito por jugar a quien mira (HU-JUE-012): `{creditos,
+ * ganador, cofre}` o `null` si el aviso no trae su recompensa (pendiente, ya
+ * anunciada, o sancionado).
+ *
+ * @param {{recompensa?: Array<{idJugador: string, creditos: number, ganador: boolean, cofre?: string}>}} aviso
+ * @param {string} yo
+ * @returns {{creditos: number, ganador: boolean, cofre: string|null}|null}
+ */
+export function recompensaDe(aviso, yo) {
+  const entrada = (aviso?.recompensa ?? []).find((r) => r?.idJugador === yo);
+  if (!entrada || !Number.isFinite(entrada.creditos)) {
+    return null;
+  }
+  return {
+    creditos: entrada.creditos,
+    ganador: entrada.ganador === true,
+    cofre: entrada.cofre ?? null,
+  };
+}
+
+/**
+ * Coletilla de la recompensa por jugar (HU-JUE-012): cuantos creditos se
+ * ganaron por ganar o por participar, y el cofre si toco uno. Vacia si el
+ * aviso no la trae.
+ *
+ * @param {object} aviso
+ * @param {string} yo
+ * @returns {string}
+ */
+function textoDeLaRecompensa(aviso, yo) {
+  const recompensa = recompensaDe(aviso, yo);
+  if (recompensa === null) {
+    return '';
+  }
+  const plural = recompensa.creditos === 1 ? 'credito' : 'creditos';
+  const motivo = recompensa.ganador ? 'por ganar' : 'por participar';
+  const cofre = recompensa.cofre ? ' Ademas te llevas un cofre.' : '';
+  return ` Ganas ${recompensa.creditos} ${plural} ${motivo}.${cofre}`;
 }
 
 /**

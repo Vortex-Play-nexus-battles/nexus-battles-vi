@@ -10,6 +10,7 @@ import { jest } from '@jest/globals';
 
 import {
   creditosDe,
+  recompensaDe,
   destinoDeAccion,
   enviarAccion,
   registroDeAvisos,
@@ -530,5 +531,45 @@ describe('montarControlesDeCombate · motor degradado (HU-DIS-003)', () => {
     });
 
     expect(controles.rechazar(motorCaido())).toBe(false);
+  });
+});
+
+describe('recompensa por jugar (HU-JUE-012)', () => {
+  const fin = {
+    tipo: 'partida.finalizada',
+    idPartida: 'p1',
+    ganadores: [ANA],
+    recompensa: [
+      { idJugador: ANA, creditos: 2, ganador: true },
+      { idJugador: BRUNO, creditos: 1, ganador: false, cofre: 'cofre-1' },
+    ],
+  };
+
+  test('el texto dice cuantos creditos se ganan y por que, para quien mira', () => {
+    expect(textoDelResultado(fin, ANA)).toBe('Has ganado el combate. Ganas 2 creditos por ganar.');
+    expect(textoDelResultado(fin, BRUNO)).toBe(
+      'Has perdido el combate. Ganas 1 credito por participar. Ademas te llevas un cofre.',
+    );
+  });
+
+  test('con apuesta y recompensa, las dos coletillas van en orden: primero la apuesta', () => {
+    const conApuesta = { ...fin, reparto: [{ idJugador: ANA, creditos: 100 }] };
+    expect(textoDelResultado(conApuesta, ANA)).toBe(
+      'Has ganado el combate. Te llevas 100 creditos de la apuesta. Ganas 2 creditos por ganar.',
+    );
+  });
+
+  test('sin recompensa en el aviso (pendiente o sancionado) no se inventa nada', () => {
+    expect(recompensaDe({ ganadores: [ANA] }, ANA)).toBeNull();
+    expect(recompensaDe(fin, 'otro')).toBeNull();
+    expect(textoDelResultado({ ganadores: [ANA] }, ANA)).toBe('Has ganado el combate.');
+  });
+
+  test('el aviso que llega despues con la recompensa no es un duplicado del que llego sin ella', () => {
+    const registro = registroDeAvisos();
+    const sin = { tipo: PARTIDA_FINALIZADA, idPartida: 'p1', ganadores: [ANA] };
+    expect(registro.yaVisto(sin)).toBe(false);
+    expect(registro.yaVisto(fin)).toBe(false);
+    expect(registro.yaVisto(fin)).toBe(true);
   });
 });

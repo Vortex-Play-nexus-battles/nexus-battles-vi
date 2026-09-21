@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** El reintento periodico cierra lo pendiente y vuelve a anunciar el fin con el reparto. */
-@DisplayName("ReintentarLiquidaciones · HU-JUE-014 CA-06")
+@DisplayName("ReintentarLiquidaciones · HU-JUE-014 CA-06 y HU-JUE-012 CA-05")
 class ReintentarLiquidacionesTest {
 
     private static final UUID ANA = UUID.fromString("11111111-1111-1111-1111-111111111111");
@@ -36,8 +36,12 @@ class ReintentarLiquidacionesTest {
     private final CanalDePartidaEspia canal = new CanalDePartidaEspia();
     private final LiquidarApuesta liquidar = new LiquidarApuesta(salas, liquidaciones, libro,
             Clock.fixed(AHORA, ZoneOffset.UTC), LiquidarApuesta.SiGanaLaMaquina.LIBERAR);
+    private final RepositorioDeRecompensasEnMemoria recompensas = new RepositorioDeRecompensasEnMemoria();
+    private final AcreditadorEnMemoria libroDeRecompensas = new AcreditadorEnMemoria();
+    private final AcreditarRecompensa acreditar = new AcreditarRecompensa(salas, recompensas, libroDeRecompensas,
+            new SancionesEnMemoria(), Clock.fixed(AHORA, ZoneOffset.UTC));
     private final ReintentarLiquidaciones reintentar =
-            new ReintentarLiquidaciones(liquidaciones, partidas, liquidar, canal);
+            new ReintentarLiquidaciones(liquidaciones, recompensas, partidas, liquidar, acreditar, canal);
 
     private static HeroeDeCombate heroe(String nombre) {
         return new HeroeDeCombate("h-" + nombre, nombre, null, 5, 100, 100);
@@ -114,5 +118,56 @@ class ReintentarLiquidacionesTest {
     void sinPendientes() {
         assertEquals(0, reintentar.ejecutar());
         assertTrue(canal.anuncios.isEmpty());
+    }
+
+    /* HU-JUE-012, CA-05: las recompensas pendientes se cierran en la misma vuelta. */
+
+    /** Partida sin apuesta que termino con el libro de recompensas caido. */
+    private Partida recompensaPendienteGanadaPor(UUID ganador) {
+        Sala sala = Sala.crear(new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, false, null),
+                ANA, new FichaDeParticipante("Ana", heroe("A")));
+        sala.unirse(BRUNO, new FichaDeParticipante("Bruno", heroe("B")), null);
+        salas.guardar(sala);
+        Partida partida = Partida.iniciar(sala, AHORA);
+        partida.aplicarDano(ganador.equals(ANA) ? BRUNO : ANA, 100);
+        partida.terminarSiSoloQuedaUno();
+        partidas.guardar(partida);
+        libroDeRecompensas.caido = true;
+        assertTrue(acreditar.alTerminar(partida).isEmpty());
+        libroDeRecompensas.caido = false;
+        return partida;
+    }
+
+    @Test
+    @DisplayName("cierra la recompensa pendiente y vuelve a anunciar el fin con lo acreditado")
+    void cierraLaRecompensaYAnuncia() {
+        Partida partida = recompensaPendienteGanadaPor(ANA);
+
+        int cerradas = reintentar.ejecutar();
+
+        assertAll(
+                () -> assertEquals(1, cerradas),
+                () -> assertEquals(com.nexusbattles.plataforma.salaspartidas.dominio.RecompensaDePartida.Estado.ACREDITADA,
+                        recompensas.buscarPorPartida(partida.id()).orElseThrow().estado()),
+                () -> assertEquals(1, canal.anuncios.size()),
+                () -> assertEquals(partida.id(), canal.anuncios.get(0).partida().id()),
+                () -> assertTrue(canal.repartos.get(0).isEmpty(), "sin apuesta no hay reparto"),
+                () -> assertEquals(List.of(
+                                new com.nexusbattles.plataforma.salaspartidas.dominio.CreditoPorPartida(ANA, 2, true, null),
+                                new com.nexusbattles.plataforma.salaspartidas.dominio.CreditoPorPartida(BRUNO, 1, false, null)),
+                        canal.recompensas.get(0)));
+    }
+
+    @Test
+    @DisplayName("si el libro ya la tenia, se cierra sin volver a anunciar: no hay nada nuevo que decir")
+    void elLibroYaLaTenia() {
+        Partida partida = recompensaPendienteGanadaPor(ANA);
+        libroDeRecompensas.procesadas.add(partida.id());
+
+        int cerradas = reintentar.ejecutar();
+
+        assertAll(
+                () -> assertEquals(1, cerradas),
+                () -> assertTrue(canal.anuncios.isEmpty()));
     }
 }

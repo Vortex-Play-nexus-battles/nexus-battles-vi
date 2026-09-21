@@ -19,6 +19,9 @@ class CanalDePartidaEspia implements CanalDePartida {
     /** Reparto que acompano a cada aviso de fin, en orden. */
     final List<List<com.nexusbattles.plataforma.salaspartidas.dominio.RepartoDeCreditos>> repartos = new ArrayList<>();
 
+    /** Recompensa por jugar (HU-JUE-012) de cada aviso de fin, en orden. */
+    final List<List<com.nexusbattles.plataforma.salaspartidas.dominio.CreditoPorPartida>> recompensas = new ArrayList<>();
+
     @Override
     public void anunciarAccionResuelta(AccionResuelta accion) {
         anuncios.add(new Anuncio("accion", null));
@@ -38,7 +41,15 @@ class CanalDePartidaEspia implements CanalDePartida {
     @Override
     public void anunciarFin(Partida partida,
                             java.util.List<com.nexusbattles.plataforma.salaspartidas.dominio.RepartoDeCreditos> reparto) {
+        anunciarFin(partida, reparto, List.of());
+    }
+
+    @Override
+    public void anunciarFin(Partida partida,
+                            java.util.List<com.nexusbattles.plataforma.salaspartidas.dominio.RepartoDeCreditos> reparto,
+                            java.util.List<com.nexusbattles.plataforma.salaspartidas.dominio.CreditoPorPartida> recompensa) {
         anuncios.add(new Anuncio("fin", partida));
         repartos.add(reparto);
+        recompensas.add(recompensa);
     }
 }

@@ -100,7 +100,8 @@ class PartidasStompControllerTest {
         };
 
         return new EjecutarAccion(sinUso, canalMudo, motorMudo,
-                com.nexusbattles.plataforma.salaspartidas.aplicacion.LiquidacionSinApuesta.nueva()) {
+                com.nexusbattles.plataforma.salaspartidas.aplicacion.LiquidacionSinApuesta.nueva(),
+                com.nexusbattles.plataforma.salaspartidas.aplicacion.RecompensaSinLibro.nueva()) {
             @Override
             public Partida ejecutar(UUID idPartida, UUID idJugador, UUID idObjetivo,
                                     String codigo) {
