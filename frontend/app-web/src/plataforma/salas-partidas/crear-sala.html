@@ -121,7 +121,7 @@
               value="4"
               inputmode="numeric"
             />
-            <p class="campo__pista">Entre 2 y 6 jugadores.</p>
+            <p class="campo__pista" data-zona="pista-participantes">Entre 2 y 6 jugadores.</p>
           </div>
 
           <div class="campo">
@@ -185,19 +185,49 @@
               />
               <label class="modalidad__cara" for="modalidad-seis">
                 <span class="modalidad__titulo">Hasta seis</span>
-                <span class="modalidad__detalle">Combate multiple, todos contra todos.</span>
+                <span class="modalidad__detalle">Combate multiple, suelto o por equipos.</span>
               </label>
             </div>
           </div>
         </fieldset>
 
-        <label class="casilla casilla--caja">
-          <input class="casilla__entrada" type="checkbox" name="incluirHeroeIA" />
-          <span class="casilla__etiqueta">
-            Incluir un heroe aleatorio controlado por la IA
-            <small class="campo__pista">Se anadira un combatiente automatico a la sala.</small>
-          </span>
-        </label>
+        <!--
+          HU-SAL-004 (RF-JUE-004). Contra la IA la maquina va siempre: no se
+          pregunta, se dice. Lo que si se elige es en hasta seis: cuantos
+          cupos son de la IA y si se juega por equipos. El script muestra
+          cada bloque segun la modalidad; los limites reales los pone el
+          servicio y el formulario solo evita ofrecer lo que va a rechazar.
+        -->
+        <p class="campo__pista" data-zona="nota-contra-ia" hidden>
+          Un rival controlado por la IA ocupa el segundo cupo: la sala nace completa.
+        </p>
+
+        <div class="fila" data-zona="opciones-hasta-seis" hidden>
+          <div class="campo">
+            <label class="campo__etiqueta" for="heroesIA">Heroes controlados por la IA</label>
+            <input
+              class="campo__control"
+              id="heroesIA"
+              name="heroesIA"
+              type="number"
+              min="0"
+              max="5"
+              value="0"
+              inputmode="numeric"
+            />
+            <p class="campo__pista">Cada uno ocupa un cupo; tu siempre juegas.</p>
+          </div>
+
+          <div class="campo">
+            <label class="campo__etiqueta" for="tamanoEquipo">Equipos</label>
+            <select class="campo__control" id="tamanoEquipo" name="tamanoEquipo">
+              <option value="">Sin equipos: todos contra todos</option>
+              <option value="2">Equipos de 2</option>
+              <option value="3">Equipos de 3</option>
+            </select>
+            <p class="campo__pista">Se forman por orden de entrada; maximo 3 por equipo.</p>
+          </div>
+        </div>
 
         <label class="casilla casilla--caja">
           <input class="casilla__entrada" type="checkbox" name="privada" />

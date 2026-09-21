@@ -25,12 +25,17 @@ import java.util.UUID;
  * empate, y declarar ganador a uno de los dos seria inventarlo: el criterio de
  * desempate es una decision del Product Owner que todavia no esta tomada.
  *
- * @param tipo      discriminador del canal
- * @param idPartida partida que termino
- * @param ganadores quien quedo en pie; vacio si nadie
- * @param reparto   saldo neto de la apuesta por participante; ausente sin apuesta
+ * <p>{@code equipoGanador} (HU-SAL-004) solo viaja en el modo cooperativo:
+ * entonces {@code ganadores} son todos los de ese equipo que quedaron en pie.
+ *
+ * @param tipo          discriminador del canal
+ * @param idPartida     partida que termino
+ * @param ganadores     quien quedo en pie; vacio si nadie
+ * @param equipoGanador equipo que gano, solo con equipos; ausente si no
+ * @param reparto       saldo neto de la apuesta por participante; ausente sin apuesta
  */
 record AvisoDePartidaFinalizada(String tipo, UUID idPartida, List<UUID> ganadores,
+                                @JsonInclude(JsonInclude.Include.NON_NULL) Integer equipoGanador,
                                 @JsonInclude(JsonInclude.Include.NON_EMPTY) List<Reparto> reparto) {
 
     static final String TIPO = "partida.finalizada";
@@ -45,8 +50,8 @@ record AvisoDePartidaFinalizada(String tipo, UUID idPartida, List<UUID> ganadore
 
     static AvisoDePartidaFinalizada de(Partida partida, List<RepartoDeCreditos> reparto) {
         return new AvisoDePartidaFinalizada(TIPO, partida.id(),
-                partida.ganador().map(ParticipanteDePartida::idJugador).map(List::of)
-                        .orElseGet(List::of),
+                partida.ganadores().stream().map(ParticipanteDePartida::idJugador).toList(),
+                partida.equipoGanador().orElse(null),
                 reparto == null ? List.of() : reparto.stream().map(Reparto::de).toList());
     }
 }

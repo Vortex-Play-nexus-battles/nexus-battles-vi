@@ -47,7 +47,8 @@ class ObtenerSalaTest {
         assertAll(
                 () -> assertEquals(guardada.id(), sala.id()),
                 () -> assertEquals(320, sala.recompensaCreditos()),
-                () -> assertEquals(1, sala.ocupacion()));
+                // Anfitrion + la maquina: desde HU-SAL-004 la IA ocupa cupo.
+                () -> assertEquals(2, sala.ocupacion()));
     }
 
     @Test

@@ -336,4 +336,84 @@ class EjecutarAccionTest {
                     () -> assertEquals(100, libro.reservadoDe(ANA), "nada se perdio: las reservas siguen vivas"));
         }
     }
+
+    /**
+     * RF-JUE-004 — HU-SAL-004: modo cooperativo. Equipos de dos: Ana y Bruno
+     * contra Carla y Dario. Ana abre.
+     */
+    @org.junit.jupiter.api.Nested
+    @DisplayName("en equipos (HU-SAL-004)")
+    class EnEquipos {
+
+        private static final UUID DARIO = UUID.fromString("44444444-4444-4444-4444-444444444444");
+
+        private Partida dosContraDos(int vidaDeCarla, int vidaDeDario) {
+            Sala sala = Sala.crear(
+                    new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, 0, false, 2), ANA,
+                    new FichaDeParticipante("Ana", heroe("Arquero", 100)));
+            sala.unirse(BRUNO, new FichaDeParticipante("Bruno", heroe("Centinela", 100)), null);
+            sala.unirse(CARLA, new FichaDeParticipante("Carla", heroe("Maga", vidaDeCarla)), null);
+            sala.unirse(DARIO, new FichaDeParticipante("Dario", heroe("Guerrero", vidaDeDario)), null);
+            return partidas.guardar(Partida.iniciar(sala, AHORA));
+        }
+
+        @Test
+        @DisplayName("no se ataca a un companero: se rechaza diciendo que es de tu equipo")
+        void noSeAtacaAlCompanero() {
+            Partida partida = dosContraDos(100, 100);
+            EjecutarAccion casoDeUso = casoDeUso(MotorDeMentira.queHace(30));
+
+            SinObjetivoPosible rechazo = assertThrows(SinObjetivoPosible.class,
+                    () -> casoDeUso.ejecutar(partida.id(), ANA, BRUNO, null));
+
+            assertAll(
+                    () -> assertTrue(rechazo.getMessage().contains("equipo"), rechazo.getMessage()),
+                    () -> assertEquals(100, partidas.buscarPorId(partida.id()).orElseThrow()
+                            .participantes().get(1).heroe().vidaActual(), "Bruno intacto"));
+        }
+
+        @Test
+        @DisplayName("con un solo rival en pie no hace falta apuntar, aunque el companero siga vivo")
+        void unSoloRivalSeResuelveSolo() {
+            // Dario cae antes de empezar a contar: solo queda Carla como rival.
+            Partida partida = dosContraDos(100, 100);
+            partida.aplicarDano(DARIO, 100);
+            partidas.guardar(partida);
+            MotorDeMentira motor = MotorDeMentira.queHace(10);
+
+            casoDeUso(motor).ejecutar(partida.id(), ANA, null, null);
+
+            assertEquals(List.of("Arquero -> Maga"), motor.consultas);
+        }
+
+        @Test
+        @DisplayName("el turno salta a quien ya cayo, sea del equipo que sea")
+        void elTurnoSaltaALosCaidos() {
+            Partida partida = dosContraDos(100, 100);
+            partida.aplicarDano(BRUNO, 100);
+            partidas.guardar(partida);
+
+            Partida despues = casoDeUso(MotorDeMentira.queHace(10)).ejecutar(partida.id(), ANA, CARLA, null);
+
+            assertEquals(CARLA, despues.turnoActual().idJugador(), "Bruno cayo: de Ana pasa a Carla");
+        }
+
+        @Test
+        @DisplayName("la partida termina cuando cae el ultimo del otro equipo, y ganan los dos del equipo en pie")
+        void ganaElEquipo() {
+            Partida partida = dosContraDos(10, 100);
+            partida.aplicarDano(DARIO, 100);
+            partidas.guardar(partida);
+
+            Partida despues = casoDeUso(MotorDeMentira.queHace(50)).ejecutar(partida.id(), ANA, CARLA, null);
+
+            assertAll(
+                    () -> assertEquals(EstadoPartida.FINALIZADA, despues.estado()),
+                    () -> assertEquals(java.util.Optional.of(1), despues.equipoGanador()),
+                    () -> assertEquals(List.of(ANA, BRUNO), despues.ganadores().stream()
+                            .map(com.nexusbattles.plataforma.salaspartidas.dominio.ParticipanteDePartida::idJugador)
+                            .toList()),
+                    () -> assertEquals("fin", canal.anuncios.get(canal.anuncios.size() - 1).tipo()));
+        }
+    }
 }

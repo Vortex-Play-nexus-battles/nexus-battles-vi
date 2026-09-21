@@ -169,6 +169,155 @@ class SalaTest {
         }
     }
 
+    /**
+     * RF-JUE-004: «uno contra la inteligencia artificial» y «hasta seis en las
+     * que cualquiera puede ser controlado por la IA». La maquina es un
+     * participante mas: ocupa cupo, y la modalidad decide cuantas caben.
+     */
+    @Nested
+    @DisplayName("RF-JUE-004 · heroes de la IA y cupos (HU-SAL-004)")
+    class HeroesDeLaIA {
+
+        @Test
+        @DisplayName("contra la IA la maquina va siempre, aunque el formulario no la pida")
+        void contraIaFuerzaLaMaquina() {
+            ParametrosDeSala sinPedirla =
+                    new ParametrosDeSala(2, Modalidad.CONTRA_IA, 0, false, false, null);
+
+            Sala sala = Sala.crear(sinPedirla, ANFITRION);
+
+            assertAll(
+                    () -> assertEquals(1, sala.heroesIA()),
+                    () -> assertTrue(sala.incluirHeroeIA()));
+        }
+
+        @Test
+        @DisplayName("contra la IA la sala nace llena: el segundo cupo es de la maquina")
+        void contraIaNaceLlena() {
+            Sala sala = Sala.crear(
+                    new ParametrosDeSala(2, Modalidad.CONTRA_IA, 0, true, false, null), ANFITRION);
+
+            assertAll(
+                    () -> assertEquals(EstadoSala.LLENA, sala.estado()),
+                    () -> assertEquals(2, sala.ocupacion(), "anfitrion + maquina"),
+                    () -> assertThrows(IngresoNoPermitido.class, () -> sala.unirse(VISITANTE),
+                            "no cabe un segundo humano: seria 2 contra la IA"));
+        }
+
+        @Test
+        @DisplayName("contra la IA es un solo rival de la maquina; pedir mas se rechaza diciendo el limite")
+        void contraIaConDosMaquinas() {
+            ParametrosDeSala dos =
+                    new ParametrosDeSala(2, Modalidad.CONTRA_IA, 0, 2, false, null);
+
+            ParametrosInvalidos error = assertThrows(ParametrosInvalidos.class,
+                    () -> Sala.crear(dos, ANFITRION));
+            assertAll(
+                    () -> assertEquals("heroesIA", error.errores().get(0).campo()),
+                    () -> assertTrue(error.errores().get(0).mensaje().contains("1"),
+                            "dice el limite: " + error.errores().get(0).mensaje()));
+        }
+
+        @Test
+        @DisplayName("uno contra uno es entre dos personas: con maquina seria contra la IA")
+        void dueloSinMaquina() {
+            ParametrosDeSala dueloConIa =
+                    new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, true, false, null);
+
+            ParametrosInvalidos error = assertThrows(ParametrosInvalidos.class,
+                    () -> Sala.crear(dueloConIa, ANFITRION));
+            assertEquals("heroesIA", error.errores().get(0).campo());
+        }
+
+        @Test
+        @DisplayName("hasta seis: cualquiera de los cupos puede ser de la IA, menos el del anfitrion")
+        void hastaSeisConVariasMaquinas() {
+            Sala sala = Sala.crear(
+                    new ParametrosDeSala(6, Modalidad.HASTA_SEIS, 0, 5, false, null), ANFITRION);
+
+            assertAll(
+                    () -> assertEquals(5, sala.heroesIA()),
+                    () -> assertEquals(EstadoSala.LLENA, sala.estado(), "1 humano + 5 maquinas = 6"),
+                    () -> assertEquals(6, sala.ocupacion()));
+        }
+
+        @Test
+        @DisplayName("hasta seis: mas maquinas que cupos libres se rechaza diciendo cuantas caben")
+        void masMaquinasQueCupos() {
+            ParametrosDeSala seisMaquinasEnSeis =
+                    new ParametrosDeSala(6, Modalidad.HASTA_SEIS, 0, 6, false, null);
+
+            ParametrosInvalidos error = assertThrows(ParametrosInvalidos.class,
+                    () -> Sala.crear(seisMaquinasEnSeis, ANFITRION));
+            assertAll(
+                    () -> assertEquals("heroesIA", error.errores().get(0).campo()),
+                    () -> assertTrue(error.errores().get(0).mensaje().contains("5"),
+                            "dice el limite: " + error.errores().get(0).mensaje()));
+        }
+
+        @Test
+        @DisplayName("las maquinas ocupan cupo: con dos de cuatro, solo entra un humano mas")
+        void lasMaquinasOcupanCupo() {
+            Sala sala = Sala.crear(
+                    new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, 2, false, null), ANFITRION);
+
+            sala.unirse(VISITANTE);
+
+            assertAll(
+                    () -> assertEquals(EstadoSala.LLENA, sala.estado()),
+                    () -> assertEquals(4, sala.ocupacion()),
+                    () -> assertThrows(IngresoNoPermitido.class, () -> sala.unirse(TERCERO)));
+        }
+
+        @Test
+        @DisplayName("si alguien se va, el cupo que se libera es el suyo, no el de la maquina")
+        void alSalirSigueLaMaquina() {
+            Sala sala = Sala.crear(
+                    new ParametrosDeSala(3, Modalidad.HASTA_SEIS, 0, 1, false, null), ANFITRION);
+            sala.unirse(VISITANTE);
+            assertEquals(EstadoSala.LLENA, sala.estado());
+
+            sala.abandonar(VISITANTE);
+
+            assertAll(
+                    () -> assertEquals(EstadoSala.ABIERTA, sala.estado()),
+                    () -> assertEquals(1, sala.heroesIA()),
+                    () -> assertEquals(2, sala.ocupacion()));
+        }
+
+        @Test
+        @DisplayName("un anfitrion solo con una maquina ya tiene rival: la partida arranca")
+        void conMaquinaArranca() {
+            Sala sala = Sala.crear(
+                    new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, 1, false, null), ANFITRION);
+
+            sala.iniciarPartida(ANFITRION);
+
+            assertEquals(EstadoSala.EN_JUEGO, sala.estado());
+        }
+
+        @Test
+        @DisplayName("sin maquina y sin nadie mas, no hay a quien enfrentar")
+        void sinRivalNoArranca() {
+            Sala sala = Sala.crear(
+                    new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, 0, false, null), ANFITRION);
+
+            assertThrows(IngresoNoPermitido.class, () -> sala.iniciarPartida(ANFITRION));
+        }
+
+        @Test
+        @DisplayName("el booleano de RF-JUE-001 sigue valiendo: true es una maquina, false ninguna")
+        void elBooleanoSigueValiendo() {
+            assertAll(
+                    () -> assertEquals(1, Sala.crear(
+                            new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, true, false, null),
+                            ANFITRION).heroesIA()),
+                    () -> assertEquals(0, Sala.crear(
+                            new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null),
+                            ANFITRION).heroesIA()));
+        }
+    }
+
     @Nested
     @DisplayName("RF-JUE-014 · recompensa como parametro")
     class Recompensa {

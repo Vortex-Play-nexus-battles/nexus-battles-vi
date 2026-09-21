@@ -124,14 +124,24 @@ export function creditosDe(aviso, yo) {
  * Sin ganadores es empate: el servidor lo deja vacío cuando nadie quedó en pie,
  * y decirlo es más honesto que inventar un vencedor.
  *
- * @param {{ganadores?: string[]}} aviso
+ * En el modo cooperativo (HU-SAL-004) el aviso trae `equipoGanador` y se dice
+ * el equipo: quien mira puede haber caido y aun asi haber ganado con los suyos.
+ *
+ * @param {{ganadores?: string[], equipoGanador?: number}} aviso
  * @param {string} yo identificador del jugador que mira
+ * @param {number|null} [miEquipo] equipo de quien mira, si la partida es por equipos
  * @returns {string}
  */
-export function textoDelResultado(aviso, yo) {
+export function textoDelResultado(aviso, yo, miEquipo = null) {
   const ganadores = aviso?.ganadores ?? [];
+  const equipo = aviso?.equipoGanador;
   let base = 'Combate terminado en empate.';
-  if (ganadores.length > 0) {
+  if (Number.isInteger(equipo) && equipo > 0) {
+    const gane = ganadores.includes(yo) || (miEquipo !== null && miEquipo === equipo);
+    base = gane
+      ? `Tu equipo (${equipo}) ha ganado el combate.`
+      : `Gana el equipo ${equipo}. Tu equipo ha perdido.`;
+  } else if (ganadores.length > 0) {
     base = ganadores.includes(yo) ? 'Has ganado el combate.' : 'Has perdido el combate.';
   }
   return `${base}${textoDelReparto(aviso, yo)}`;
@@ -187,8 +197,13 @@ export function montarControlesDeCombate(
   const registro = registroDeAvisos();
   const doc = raiz.ownerDocument ?? document;
 
-  /** Rivales: a uno mismo no se ataca. */
-  const rivales = (participantes ?? []).filter((p) => p.jugador?.id !== yo);
+  // Rivales: a uno mismo no se ataca, ni a un companero de equipo en el modo
+  // cooperativo (HU-SAL-004): el servidor lo rechazaria, y ofrecer el boton
+  // seria invitar al error.
+  const miEquipo = (participantes ?? []).find((p) => p.jugador?.id === yo)?.equipo ?? null;
+  const rivales = (participantes ?? []).filter(
+    (p) => p.jugador?.id !== yo && (miEquipo === null || p.equipo !== miEquipo),
+  );
 
   if (zona) {
     zona.innerHTML = '';
@@ -234,7 +249,7 @@ export function montarControlesDeCombate(
           zona.hidden = true;
         }
         if (aviso) {
-          aviso.textContent = textoDelResultado(mensaje, yo);
+          aviso.textContent = textoDelResultado(mensaje, yo, miEquipo);
           aviso.hidden = false;
         }
       }
