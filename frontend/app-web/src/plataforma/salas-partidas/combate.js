@@ -127,10 +127,21 @@ export function textoDelResultado(aviso, yo) {
  * @param {string} opciones.idPartida
  * @param {string} opciones.yo identificador del jugador de esta sesión
  * @param {Array<object>} opciones.participantes esquema del panel: `{jugador:{id}}`
+ * @param {string} [opciones.turnoDe]
+ *   De quién es el turno AHORA MISMO, si ya se sabe: `turnoActual.idJugador`
+ *   de `GET /partidas/{id}`. Sin esto los botones nacen cerrados y solo los
+ *   abre un `partida.turno.cambiado`, que el servidor únicamente emite
+ *   DESPUÉS de que alguien juegue (`AvanzarTurno`). En el turno 1 nadie ha
+ *   jugado todavía, así que el combate no podía arrancar desde el navegador,
+ *   y recargar a mitad de partida dejaba al jugador sin poder actuar hasta
+ *   que lo hiciera el rival.
  * @param {(accion: object) => void} opciones.alAtacar
  * @returns {{recibir: (aviso: object) => void}}
  */
-export function montarControlesDeCombate(raiz, { idPartida, yo, participantes, alAtacar }) {
+export function montarControlesDeCombate(
+  raiz,
+  { idPartida, yo, participantes, turnoDe, alAtacar },
+) {
   const zona = raiz.querySelector('[data-zona="acciones"]');
   const aviso = raiz.querySelector('[data-zona="resultado"]');
   const registro = registroDeAvisos();
@@ -164,7 +175,9 @@ export function montarControlesDeCombate(raiz, { idPartida, yo, participantes, a
     }
   }
 
-  habilitar(false);
+  // Con `turnoDe` conocido se decide ya; sin él, cerrados, que es lo prudente:
+  // abrir un botón que el servidor va a rechazar es peor que hacer esperar.
+  habilitar(Boolean(turnoDe) && turnoDe === yo);
 
   return {
     recibir(mensaje) {

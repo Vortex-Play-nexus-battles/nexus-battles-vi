@@ -93,12 +93,77 @@ class ClienteMotorCombateTest {
     }
 
     @Test
-    @DisplayName("manda la vida actual del objetivo como defensa: la simplificacion queda fijada")
-    void laDefensaEsLaVidaActual() {
-        // No es una regla acordada en ninguna HU —esta anotada como pendiente en
-        // el javadoc de la clase—, pero es lo que hace hoy y tiene consecuencia
-        // observable: un heroe herido se defiende peor. Se fija para que el dia
-        // que cambie, cambie a proposito.
+    @DisplayName("manda el PROTOTIPO del heroe, no el nombre que le puso su dueno")
+    void mandaElPrototipoYNoElNombrePropio() {
+        // El defecto que cierra, destapado por el E2E del corte vertical: el
+        // motor resuelve al atacante contra GET /api/v1/heroes/{nombre}, que
+        // indexa por prototipo. Mandandole «Aquiles» —el nombre propio— el
+        // catalogo devolvia 404 y NINGUN ataque se resolvia; el error se iba a
+        // la cola privada del jugador, que la vista no escucha, asi que el
+        // combate se quedaba quieto sin decir nada.
+        HeroeDeCombate aquiles = new HeroeDeCombate(
+                "h-9", "Aquiles", "Guerrero Tanque", null, 5, 100, 100, 11);
+
+        motor.expect(requestTo(BASE + "/api/v1/combate/ataques"))
+                .andExpect(jsonPath("$.heroeAtacante").value("Guerrero Tanque"))
+                .andRespond(withSuccess(
+                        "{\"categoria\":\"CAUSAR_DANO\",\"danoAplicado\":5,\"ataqueResuelto\":20}",
+                        MediaType.APPLICATION_JSON));
+
+        cliente.resolver(aquiles, mago(90));
+
+        motor.verify();
+    }
+
+    @Test
+    @DisplayName("sin prototipo conocido cae al nombre: degradar, no callarse")
+    void sinPrototipoCaeAlNombre() {
+        // Fichas anteriores a V8, o productos sin contestar. Se manda lo que
+        // hay: funciona si el heroe se llama como su prototipo y falla igual
+        // que antes si no. Fijado para que el dia que deje de hacer falta, se
+        // quite a proposito.
+        motor.expect(requestTo(BASE + "/api/v1/combate/ataques"))
+                .andExpect(jsonPath("$.heroeAtacante").value("Arquero del Norte"))
+                .andRespond(withSuccess(
+                        "{\"categoria\":\"CAUSAR_DANO\",\"danoAplicado\":5,\"ataqueResuelto\":20}",
+                        MediaType.APPLICATION_JSON));
+
+        cliente.resolver(arquero(), mago(90));
+
+        motor.verify();
+    }
+
+    @Test
+    @DisplayName("manda la DEFENSA del objetivo, no su vida: con la vida no se acierta nunca")
+    void laDefensaEsLaDefensaYNoLaVida() {
+        // El defecto que cierra, y es aritmetico, no de suerte. El motor acierta
+        // si `ataqueResuelto > defensa`. «Guerrero Tanque» ataca con 10+1d6 —de
+        // 11 a 16— y tiene defensa 11 y vida 44. Mandando la VIDA como defensa,
+        // el maximo ataque posible (16) queda muy por debajo de 44: ningun
+        // ataque podia acertar JAMAS, con ningun prototipo, porque la vida de
+        // todos esta muy por encima de cualquier tirada. El combate no era
+        // dificil: era imposible. Lo destapo el E2E del corte vertical, que
+        // recibia SIN_EFECTO en cada golpe.
+        HeroeDeCombate objetivo = new HeroeDeCombate(
+                "h-2", "Mago de Hielo", "Mago Hielo", null, 4, 35, 120, 11);
+
+        motor.expect(requestTo(BASE + "/api/v1/combate/ataques"))
+                .andExpect(jsonPath("$.defensaObjetivo").value(11))
+                .andRespond(withSuccess(
+                        "{\"categoria\":\"CAUSAR_DANO\",\"danoAplicado\":6,\"ataqueResuelto\":14}",
+                        MediaType.APPLICATION_JSON));
+
+        cliente.resolver(arquero(), objetivo);
+
+        motor.verify();
+    }
+
+    @Test
+    @DisplayName("sin defensa conocida cae a la vida actual: degradar, no callarse")
+    void sinDefensaCaeALaVida() {
+        // Fichas anteriores a V8, o el catalogo sin contestar. Se manda lo que
+        // hay. Queda fijado para que el dia que deje de hacer falta, se quite a
+        // proposito y no por descuido.
         motor.expect(requestTo(BASE + "/api/v1/combate/ataques"))
                 .andExpect(jsonPath("$.defensaObjetivo").value(35))
                 .andRespond(withSuccess(
