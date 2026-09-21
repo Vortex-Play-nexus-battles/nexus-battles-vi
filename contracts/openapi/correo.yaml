@@ -13,10 +13,19 @@ info:
     Consumidores: ms-identidad (registro, confirmacion de cuenta, aviso de
     acceso y recuperacion de contrasena), y en Sprint 2 misiones y subastas
     (correos de evento segun preferencia del jugador).
-  version: 1.0.0
+
+    Desde la 1.1.0 toda ruta exige una credencial de servicio (ADR-001 via el
+    emisor transitorio de ADR-005): `Authorization: Bearer` con un token de
+    `rol=SERVICIO`. Sin credencial responde 401; con un token de usuario, 403:
+    correo es un servicio entre servicios y nunca lo llama un navegador. Por
+    eso el borde tampoco expone `/api/v1/correos`. Es version menor porque
+    rutas y cuerpos no cambian.
+  version: 1.1.0
 servers:
   - url: http://localhost:8082/api/v1
     description: Entorno local de desarrollo
+security:
+  - servicio: []
 
 paths:
   /correos/bienvenida:
@@ -158,6 +167,16 @@ paths:
           $ref: '#/components/responses/SolicitudInvalida'
 
 components:
+  securitySchemes:
+    servicio:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Credencial de servicio (client_credentials contra ms-identidad,
+        ADR-005): `sub` y `azp` = client_id del servicio que llama,
+        `rol=SERVICIO`. Se verifica contra el JWKS de ms-identidad.
+
   parameters:
     TraceId:
       name: X-Trace-Id
