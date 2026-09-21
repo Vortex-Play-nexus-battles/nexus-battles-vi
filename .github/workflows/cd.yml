@@ -29,6 +29,18 @@ on:
         type: string
         required: false
         default: ""
+      # HU-CICD-002 CA-02: simulacro de reversion en dev. El servicio indicado
+      # (uno de `servicios`) se despliega con la imagen buena pero con
+      # SERVER_PORT movido a un puerto que nadie publica (ver desplegar.sh):
+      # falla la salud, se escribe ultimo-fallo.txt, corre revertir.sh y se
+      # comprueba que volvio el tag estable anterior. Es la unica manera de
+      # ejercitar la reversion sin publicar una imagen rota a proposito.
+      # Vacio (lo normal) = ningun simulacro; los push nunca lo activan.
+      simulacro_reversion:
+        description: "SOLO simulacro (HU-CICD-002): nombre de UN servicio de 'servicios' al que se le inyecta un fallo de salud para ejercitar la reversion automatica en dev. Vacio = sin simulacro."
+        type: string
+        required: false
+        default: ""
 
 # Minimo necesario: leer el repo y escribir paquetes (para publicar en ghcr.io).
 permissions:
@@ -487,7 +499,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -514,6 +526,10 @@ jobs:
       # generar el .env efimero del servidor.
       - name: Desplegar en Dev
         id: desplegar
+        # Solo durante un simulacro de reversion el fallo de este step no
+        # detiene el job: hacen falta los steps de reversion y comprobacion
+        # de abajo. En un push normal sigue como siempre: rojo y se para.
+        continue-on-error: ${{ github.event_name == 'workflow_dispatch' && inputs.simulacro_reversion != '' }}
         uses: appleboy/ssh-action@v1.0.3
         env:
           TAG: ${{ needs.detectar-servicios.outputs.tag }}
@@ -522,6 +538,8 @@ jobs:
           GHCR_USER: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SERVICIOS_PUERTOS: ${{ steps.lista.outputs.lista }}
+          # HU-CICD-002 CA-02: vacio salvo en el simulacro a demanda.
+          SIMULACRO_REVERSION: ${{ inputs.simulacro_reversion }}
           APP_ENV: ${{ secrets.APP_ENV }}
           LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
           DB_RELACIONAL_URL: ${{ secrets.DB_RELACIONAL_URL }}
@@ -590,7 +608,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,SMTP_PORT,LISTA_NEGRA_VERIFICAR_URL,SALAS_WS_ORIGENES,CHAT_WS_ORIGENES,CHAT_HISTORIAL_TAMANO,NOTIFICACIONES_WS_ORIGENES,COMENTARIOS_FORMATOS_IMAGEN,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,SIMULACRO_REVERSION,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,SMTP_PORT,LISTA_NEGRA_VERIFICAR_URL,SALAS_WS_ORIGENES,CHAT_WS_ORIGENES,CHAT_HISTORIAL_TAMANO,NOTIFICACIONES_WS_ORIGENES,COMENTARIOS_FORMATOS_IMAGEN,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -598,9 +616,82 @@ jobs:
       # CA-02 en dev/test: si /actuator/health no pasa, el step de arriba ya
       # termino en error (desplegar.sh hace "exit 1") y este job queda en
       # rojo -- eso automaticamente bloquea "desplegar-test" (depende de
-      # este job via needs). No hay reversion automatica en dev/test: el
-      # diseÃ±o acordado con Santiago Gonzalez la reserva para produccion
-      # (ver el job "desplegar-produccion" mas abajo).
+      # este job via needs). No hay reversion automatica en dev/test en un
+      # push normal: el diseno acordado con Santiago Gonzalez la reserva
+      # para produccion (ver el job "desplegar-produccion" mas abajo).
+      #
+      # Lo que SI hay es el SIMULACRO a demanda (entrada simulacro_reversion):
+      # como produccion no existe todavia (D-08), es la unica forma de
+      # ejercitar revertir.sh de verdad -- mismo script, mismo step con el
+      # mismo nombre, mismo host donde corre el MVP. Los tres steps de abajo
+      # solo existen cuando el simulacro esta activo.
+      - name: Reversion automatica por fallo de salud
+        if: github.event_name == 'workflow_dispatch' && inputs.simulacro_reversion != '' && steps.desplegar.outcome == 'failure'
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          # Por si la imagen del tag estable ya no esta en el host y hay que
+          # bajarla de ghcr.io: mismo token de la corrida que usa desplegar.sh.
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          envs: GHCR_USER,GHCR_TOKEN
+          script: |
+            chmod +x /opt/nexus/scripts/cd/revertir.sh
+            /opt/nexus/scripts/cd/revertir.sh
+
+      # La reversion no vale nada si no se comprueba: el contenedor tiene que
+      # estar corriendo el tag estable ANTERIOR (no el de esta corrida) y su
+      # /actuator/health tiene que volver a estar UP en su puerto de siempre.
+      - name: Comprobar que el servicio volvio al tag estable y esta sano
+        if: github.event_name == 'workflow_dispatch' && inputs.simulacro_reversion != '' && steps.desplegar.outcome == 'failure'
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          SIMULACRO_REVERSION: ${{ inputs.simulacro_reversion }}
+          TAG: ${{ needs.detectar-servicios.outputs.tag }}
+          SERVICIOS_PUERTOS: ${{ steps.lista.outputs.lista }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          envs: SIMULACRO_REVERSION,TAG,SERVICIOS_PUERTOS
+          script: |
+            set -euo pipefail
+            cd /opt/nexus
+            servicio="$SIMULACRO_REVERSION"
+            esperado=$(cat "ultimo-tag-estable-${servicio}.txt")
+            actual=$(docker inspect --format '{{.Config.Image}}' "srv-${servicio}" | sed 's/^.*://')
+            echo "tag de la corrida (fallido): $TAG | tag estable esperado: $esperado | tag que corre ahora: $actual"
+            if [ "$actual" != "$esperado" ] || [ "$actual" = "$TAG" ]; then
+              echo "La reversion NO dejo el tag estable anterior."; exit 1
+            fi
+            puerto=""
+            for par in $SERVICIOS_PUERTOS; do
+              if [ "${par%%:*}" = "$servicio" ]; then puerto="${par##*:}"; fi
+            done
+            for intento in $(seq 1 36); do
+              if curl -fsS "http://localhost:${puerto}/actuator/health" | grep -q '"status":"UP"'; then
+                echo "srv-${servicio} (puerto $puerto) volvio a estar UP en el intento $intento con el tag $actual"
+                echo "ultimo-fallo.txt registro el fallo: $(grep "^${servicio}:" ultimo-fallo.txt || echo '(sin linea)')"
+                exit 0
+              fi
+              sleep 5
+            done
+            echo "srv-${servicio} no volvio a estar sano tras la reversion"; exit 1
+
+      # Veredicto: un simulacro solo se supera si el fallo inyectado se
+      # detecto. Si el despliegue paso la salud con SERVER_PORT movido, el
+      # healthcheck no esta mirando donde cree, y eso es un defecto del CD.
+      - name: Veredicto del simulacro de reversion
+        if: github.event_name == 'workflow_dispatch' && inputs.simulacro_reversion != ''
+        run: |
+          if [ "${{ steps.desplegar.outcome }}" != "failure" ]; then
+            echo "::error::El simulacro no provoco ningun fallo de salud: el healthcheck de desplegar.sh no detecto SERVER_PORT movido. Revisar el paso 4 del script."
+            exit 1
+          fi
+          echo "Simulacro superado: fallo de salud detectado, reversion ejecutada y comprobada (ver los dos steps anteriores)."
 
   # ---------------------------------------------------------------------
   # Job 3b: dev de CONTENIDO, en el host propio del dominio. Mismo script
@@ -882,10 +973,16 @@ jobs:
       - name: Reversion automatica por fallo de salud
         if: steps.desplegar.outcome == 'failure'
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          # Lo destapo el simulacro en dev: sin sesion en ghcr.io, un pull de la
+          # imagen estable fallaba justo cuando mas falta hacia.
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
+          envs: GHCR_USER,GHCR_TOKEN
           script: |
             chmod +x /opt/nexus/scripts/cd/revertir.sh
             /opt/nexus/scripts/cd/revertir.sh

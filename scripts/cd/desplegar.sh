@@ -49,7 +49,7 @@
 #   /ecommerce/actuator/health. Ver "ruta_salud_de" en el paso 4.
 #
 # Este script NUNCA decide si hay que revertir: eso lo hace un step aparte en
-# cd.yml (solo en el job de produccion) leyendo el archivo
+# cd.yml (en los jobs de dev y de produccion) leyendo el archivo
 # ultimo-fallo.txt que este script deja escrito cuando algo no queda sano.
 # Asi la reversion queda como un paso propio y visible en GitHub Actions, con
 # nombre explicito, en vez de escondida dentro de este script.
@@ -243,6 +243,48 @@ for par in $SERVICIOS_PUERTOS; do
   fi
 done
 
+# ---------------------------------------------------------------------------
+# Simulacro de reversion (HU-CICD-002, CA-02). Con SIMULACRO_REVERSION=<servicio>
+# (entrada `simulacro_reversion` de cd.yml, solo a demanda) el servicio indicado
+# se despliega con la imagen BUENA de esta corrida pero con SERVER_PORT movido a
+# un puerto que nadie publica: el contenedor arranca, el healthcheck del paso 4
+# no lo encuentra donde debe, este script termina en fallo con
+# ultimo-fallo.txt escrito, y el step "Reversion automatica por fallo de salud"
+# de cd.yml lo devuelve al tag estable anterior. Es la unica forma honesta de
+# ejercitar la reversion sin publicar una imagen rota a proposito: el fallo es
+# de configuracion, reproducible, y no toca ni la imagen ni la base de datos.
+#
+# Solo un servicio por corrida, y tiene que venir en SERVICIOS_PUERTOS: si no,
+# se aborta antes de tocar nada. La ventana de salud se acorta a 60 s porque
+# aqui NO se espera que el servicio llegue a estar sano.
+COMPOSE_SIMULACRO="$DIRECTORIO/docker-compose.simulacro.yml"
+rm -f "$COMPOSE_SIMULACRO"
+if [ -n "${SIMULACRO_REVERSION:-}" ]; then
+  en_corrida=0
+  for par in $SERVICIOS_PUERTOS; do
+    if [ "${par%%:*}" = "$SIMULACRO_REVERSION" ]; then en_corrida=1; fi
+  done
+  if [ "$en_corrida" -ne 1 ]; then
+    echo "SIMULACRO_REVERSION=$SIMULACRO_REVERSION no esta entre los servicios de esta corrida ($SERVICIOS_PUERTOS): se aborta sin tocar nada."
+    exit 1
+  fi
+  if [ ! -f "ultimo-tag-estable-${SIMULACRO_REVERSION}.txt" ]; then
+    echo "SIMULACRO_REVERSION=$SIMULACRO_REVERSION no tiene tag estable previo: sin a donde revertir, el simulacro no tiene sentido. Se aborta."
+    exit 1
+  fi
+  cat > "$COMPOSE_SIMULACRO" <<EOF
+# Generado por desplegar.sh SOLO durante un simulacro de reversion. No se
+# versiona ni lo usa revertir.sh: al revertir, el servicio vuelve con su
+# entorno normal.
+services:
+  srv-${SIMULACRO_REVERSION}:
+    environment:
+      SERVER_PORT: "8999"
+EOF
+  INTENTOS_SALUD=12
+  echo "== SIMULACRO DE REVERSION: $SIMULACRO_REVERSION se despliega con SERVER_PORT=8999 (nadie lo publica); debe fallar la salud y revertirse al tag $(cat "ultimo-tag-estable-${SIMULACRO_REVERSION}.txt") =="
+fi
+
 echo "== 3) Desplegando TAG=$TAG para: $SERVICIOS_PUERTOS =="
 export TAG
 SERVICIOS_COMPOSE=""
@@ -341,6 +383,9 @@ if [ "$INCLUYE_MS_ECOMMERCE" -eq 1 ]; then
 fi
 if [ "$INCLUYE_CONTENIDO" -eq 1 ]; then
   ARCHIVOS_COMPOSE+=(-f "$COMPOSE_CONTENIDO")
+fi
+if [ -f "$COMPOSE_SIMULACRO" ]; then
+  ARCHIVOS_COMPOSE+=(-f "$COMPOSE_SIMULACRO")
 fi
 
 # Las imagenes de ghcr.io son privadas (paquetes de la organizacion): el
