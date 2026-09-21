@@ -95,7 +95,9 @@ services:
       # Emisor transitorio de credenciales de servicio (ADR-005): la que usa
       # salas-partidas para hablarle a inventario. Secreto de banco de
       # pruebas, no de ningun entorno real.
-      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas
+      # e2e-banco: credencial con la que sembrar.sh acredita el saldo inicial en
+      # ms-finanzas, que desde #455 solo atiende a servicios (ROLE_SERVICIO).
+      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas
     depends_on:
       e2e-identidad-db: { condition: service_healthy }
     healthcheck:

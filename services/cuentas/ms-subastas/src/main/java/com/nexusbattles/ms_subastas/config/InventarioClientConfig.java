@@ -7,7 +7,10 @@ import com.nexusbattles.ms_subastas.subastas.port.InventarioClientHttp;
 import com.nexusbattles.ms_subastas.subastas.port.InventarioClientResiliente;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
+import com.nexusbattles.comun.seguridad.servicio.TokenDeServicio;
+import com.nexusbattles.ms_subastas.seguridad.CredencialSaliente;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -30,11 +33,14 @@ public class InventarioClientConfig {
     public InventarioClient inventarioClientHttp(
             @Value("${app.inventario.base-url:http://localhost:8080}") String baseUrl,
             @Value("${app.inventario.timeout-ms:5000}") long timeoutMs,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            ObjectProvider<TokenDeServicio> tokenDeServicio) {
         log.info("ms-subastas arranca con el cliente HTTP real de inventario (app.inventario.modo=http): {}", baseUrl);
         // Envuelto en cortacircuitos: estas llamadas ocurren dentro del lock
         // pesimista de la subasta, asi que un inventario lento congela todas
         // las pujas de esa subasta hasta que se corte.
-        return new InventarioClientResiliente(new InventarioClientHttp(baseUrl, timeoutMs, objectMapper));
+        // ADR-005 / #451: operar sobre el inventario de otro exige credencial.
+        return new InventarioClientResiliente(new InventarioClientHttp(baseUrl, timeoutMs, objectMapper,
+                CredencialSaliente.obligatoria(tokenDeServicio, "inventario")));
     }
 }

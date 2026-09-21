@@ -95,8 +95,11 @@ salas-partidas                       ms-identidad                        inventa
 ## Consecuencias
 
 - Los seis servicios del bloque pueden exigir `ROLE_SERVICIO` en sus rutas
-  internas hoy, y `ms-finanzas` puede cerrar `/creditos/**` cuando
-  `ms-subastas` adopte `TokenDeServicio` (ADR-001, migración gradual).
+  internas hoy. **`ms-finanzas` cerró `/creditos/**` y `/partidas/**` a
+  `ROLE_SERVICIO` el 21-sep-2026 (#455)**: `ms-subastas` adoptó
+  `TokenDeServicio` en sus tres adaptadores (`PortadorDeServicio`) y el saldo
+  solo lo consulta un servicio o el propio usuario. Contrato `creditos.yaml`
+  1.1.0.
 - Un token de servicio filtrado vale 15 minutos y no sirve como usuario en
   ningún servicio: en `ms-identidad`, `Role.valueOf("SERVICIO")` falla; en la
   plataforma, `hasRole("JUGADOR")` no lo admite.

@@ -23,6 +23,16 @@ dependencies {
     // todas las pujas si no se corta rápido.
     implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
 
+    // Credencial de servicio (ADR-001 / ADR-005): ms-finanzas cerro /creditos/**
+    // a ROLE_SERVICIO (#455) e inventario exige token de servicio para operar
+    // sobre el inventario de otro (#451). TokenDeServicioOAuth2 pide el token
+    // por client_credentials a ms-identidad (DIRECTORIO_ACTIVO_*) y lo cachea.
+    // La biblioteca arrastra spring-security: SeguridadWebConfig deja la cadena
+    // en permitAll porque las rutas de este servicio siguen protegidas por
+    // ValidadorDeToken/IdentidadDesdeToken hasta su migracion al servidor de
+    // recursos compartido.
+    implementation project(':shared:libs:plataforma-seguridad')
+
     // Validación del JWT que emite ms-identidad. Misma versión que ese servicio
     // (0.12.6) para no divergir en el formato del token. Aquí solo se valida
     // firma y expiración: este servicio nunca emite tokens.

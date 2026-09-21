@@ -7,7 +7,10 @@ import com.nexusbattles.ms_subastas.pujas.creditos.CreditoClientHttp;
 import com.nexusbattles.ms_subastas.pujas.creditos.CreditoClientResiliente;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
+import com.nexusbattles.comun.seguridad.servicio.TokenDeServicio;
+import com.nexusbattles.ms_subastas.seguridad.CredencialSaliente;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -74,8 +77,11 @@ public class CreditoClientConfig {
     public CreditoClient creditoClientHttp(
             @Value("${app.finanzas.base-url:http://localhost:8093/api/v1}") String baseUrl,
             @Value("${app.finanzas.pujas.timeout-ms:1000}") long timeoutMs,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            ObjectProvider<TokenDeServicio> tokenDeServicio) {
         log.info("ms-subastas arranca con el cliente HTTP real de creditos (app.finanzas.modo=http): {}", baseUrl);
-        return new CreditoClientResiliente(new CreditoClientHttp(baseUrl, timeoutMs, objectMapper));
+        // ADR-005 / #455: ms-finanzas solo atiende a servicios con credencial.
+        return new CreditoClientResiliente(new CreditoClientHttp(baseUrl, timeoutMs, objectMapper,
+                CredencialSaliente.obligatoria(tokenDeServicio, "ms-finanzas")));
     }
 }
