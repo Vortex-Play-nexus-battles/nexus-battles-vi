@@ -5,6 +5,7 @@ import static com.nexusbattles.plataforma.comentarios.HiloDeComentarios.EstadoDe
 import static com.nexusbattles.plataforma.comentarios.HiloDeComentarios.ResultadoDelFiltro.LIMPIO;
 import static com.nexusbattles.plataforma.comentarios.HiloDeComentarios.ResultadoDelFiltro.SENALADO;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -71,11 +72,13 @@ class ServicioDePublicacionDeComentariosTest {
         when(sanciones.estadoDe("jugador-1")).thenReturn(HABILITADO);
         when(filtro.verificar("Muy buena espada")).thenReturn(LIMPIO);
 
-        Comentario comentario = servicio.publicar(
+        ServicioDePublicacionDeComentarios.Publicado publicado = servicio.publicar(
                 "espada-del-alba", "jugador-1", "LyraRoja",
                 "Muy buena espada", List.of("captura.jpg"), 4);
+        Comentario comentario = publicado.comentario();
 
         assertTrue(comentario.estaPublicado());
+        assertFalse(publicado.calificacionDescartada());
         assertEquals(4, comentario.calificacion().orElseThrow());
 
         ArgumentCaptor<RegistroDeComentario> captor = ArgumentCaptor.forClass(RegistroDeComentario.class);
@@ -84,20 +87,50 @@ class ServicioDePublicacionDeComentariosTest {
     }
 
     @Test
-    @DisplayName("la calificación previa cargada de la base rechaza una segunda calificación")
+    @DisplayName("la calificación previa cargada de la base descarta la segunda: el comentario se guarda sin estrellas y se dice")
     void descartaLaSegundaCalificacionDelMismoAutor() {
         when(repositorio.findByProductoIdOrderByFechaPublicacionAsc("espada-del-alba"))
                 .thenReturn(List.of(guardado("jugador-1", 5)));
         when(sanciones.estadoDe("jugador-1")).thenReturn(HABILITADO);
         when(filtro.verificar("Sigue siendo buena")).thenReturn(LIMPIO);
 
-        HiloDeComentarios.PublicacionRechazada excepcion = assertThrows(
-                HiloDeComentarios.PublicacionRechazada.class,
-                () -> servicio.publicar(
-                        "espada-del-alba", "jugador-1", "LyraRoja",
-                        "Sigue siendo buena", List.of(), 3));
+        ServicioDePublicacionDeComentarios.Publicado publicado = servicio.publicar(
+                "espada-del-alba", "jugador-1", "LyraRoja",
+                "Sigue siendo buena", List.of(), 3);
 
-        assertEquals(HiloDeComentarios.MotivoDeRechazo.CALIFICACION_DUPLICADA, excepcion.motivo());
+        assertTrue(publicado.calificacionDescartada());
+        assertTrue(publicado.comentario().calificacion().isEmpty());
+        verify(repositorio).save(any(RegistroDeComentario.class));
+    }
+
+    @Test
+    @DisplayName("retirar un comentario propio lo guarda como ELIMINADO sin estrellas (HU-COM-004)")
+    void retiraElPropio() {
+        RegistroDeComentario mio = guardado("jugador-1", 5);
+        when(repositorio.findByProductoIdOrderByFechaPublicacionAsc("espada-del-alba"))
+                .thenReturn(List.of(mio));
+
+        Comentario retirado = servicio.eliminar("espada-del-alba", mio.getId(), "jugador-1");
+
+        assertEquals(Comentario.Estado.ELIMINADO, retirado.estado());
+        assertTrue(retirado.calificacion().isEmpty());
+        org.mockito.ArgumentCaptor<RegistroDeComentario> guardadoCaptor =
+                org.mockito.ArgumentCaptor.forClass(RegistroDeComentario.class);
+        verify(repositorio).save(guardadoCaptor.capture());
+        assertEquals(Comentario.Estado.ELIMINADO, guardadoCaptor.getValue().aDominio().estado());
+    }
+
+    @Test
+    @DisplayName("retirar el de otro o uno inexistente no toca la base")
+    void noRetiraLoAjenoNiLoInexistente() {
+        RegistroDeComentario deOtro = guardado("jugador-2", 4);
+        when(repositorio.findByProductoIdOrderByFechaPublicacionAsc("espada-del-alba"))
+                .thenReturn(List.of(deOtro));
+
+        assertThrows(HiloDeComentarios.ComentarioAjeno.class,
+                () -> servicio.eliminar("espada-del-alba", deOtro.getId(), "jugador-1"));
+        assertThrows(HiloDeComentarios.ComentarioNoEncontrado.class,
+                () -> servicio.eliminar("espada-del-alba", "no-existe", "jugador-1"));
         verify(repositorio, never()).save(any(RegistroDeComentario.class));
     }
 
@@ -111,7 +144,7 @@ class ServicioDePublicacionDeComentariosTest {
 
         Comentario comentario = servicio.publicar(
                 "espada-del-alba", "jugador-2", "Korrigan",
-                "texto senalado", List.of(), 3);
+                "texto senalado", List.of(), 3).comentario();
 
         assertEquals(Comentario.Estado.EN_REVISION, comentario.estado());
         verify(repositorio).save(any(RegistroDeComentario.class));

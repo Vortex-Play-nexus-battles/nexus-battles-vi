@@ -309,6 +309,33 @@ services:
       timeout: 5s
       retries: 40
 
+  # Comentarios sobre productos (HU-COM-001..004). Mismo esquema de plataforma,
+  # lista negra y sanciones en moderacion-sanciones (fail-closed, D-14), token
+  # de ms-identidad. Sin el, el E2E de comentarios no tendria nada real.
+  srv-comentarios:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/plataforma/comentarios/build/libs/*.jar
+        PUERTO: "8081"
+    environment:
+      DB_RELACIONAL_URL: jdbc:postgresql://e2e-plataforma-db:5432/plataformadb
+      DB_USER: plataforma
+      DB_PASS: plataforma
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      LISTA_NEGRA_VERIFICAR_URL: http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar
+      SANCIONES_URL: http://srv-moderacion-sanciones:8086/api/v1
+    depends_on:
+      e2e-plataforma-db: { condition: service_healthy }
+      srv-moderacion-sanciones: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8081/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
   srv-salas-partidas:
     build:
       context: ../..

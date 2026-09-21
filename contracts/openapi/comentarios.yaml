@@ -15,7 +15,16 @@ info:
     no 400: por eso es una version menor y no una mayor. Publicar exige un
     usuario autenticado (401 sin token; 403 con un token que no es de usuario,
     como uno de servicio); leer el hilo sigue siendo publico.
-  version: 1.1.0
+
+    1.2.0 (HU-COM-002/003/004, #483 #484 #485): la segunda calificacion de un
+    jugador sobre un producto YA NO es 409 — el comentario entra sin estrellas
+    y `calificacionDescartada: true` lo dice (RF-COM-002, decision D-07); el
+    409 queda solo para la colision concurrente. Nuevo `DELETE
+    /products/{productId}/comments/{commentId}` para retirar un comentario
+    propio: 204 (idempotente), 403 ajeno, 404 inexistente; un comentario
+    retirado no sale en el hilo ni cuenta en `calificacionPromedio`. Todo
+    compatible con clientes 1.1.0: por eso es menor.
+  version: 1.2.0
 servers:
   - url: http://localhost:8081/api/v1
     description: Entorno local de desarrollo
@@ -122,8 +131,11 @@ paths:
                 $ref: "#/components/schemas/ProblemDetail"
         "409":
           description: >
-            El usuario intentó enviar una calificación para un producto que ya había calificado,
-            o bien hubo una colisión concurrente (dos solicitudes intentaron calificar al mismo tiempo).
+            Colisión concurrente: dos solicitudes del mismo jugador intentaron
+            calificar el mismo producto a la vez y la segunda chocó con el
+            índice único. Reintentar sin calificación. (Desde 1.2.0 la segunda
+            calificación en secuencia no es 409: entra sin estrellas con
+            `calificacionDescartada: true`.)
           content:
             application/problem+json:
               schema:
@@ -135,6 +147,52 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProblemDetail"
 
+  /products/{productId}/comments/{commentId}:
+    delete:
+      operationId: eliminarComentario
+      summary: Retira un comentario propio (HU-COM-004, RF-COM-004)
+      description: >
+        Solo el autor retira su comentario; quién es sale del `uid` del token,
+        nunca del cuerpo. Un comentario retirado desaparece del hilo y su
+        calificación deja de contar en el promedio (y libera la única
+        calificación del autor sobre el producto: puede volver a calificar en
+        un comentario nuevo, decisión D-19). Idempotente: retirar uno ya
+        retirado responde 204.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: commentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Retirado (o ya lo estaba)
+        "401":
+          description: Sin token, caducado o firmado por otro
+        "403":
+          description: >
+            El comentario es de otro jugador (`type` =
+            `https://nexusbattles.local/errores/comentario-ajeno`), o el token
+            no es de usuario
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: >
+            No hay ningún comentario con ese id en el hilo de ese producto
+            (`type` = `https://nexusbattles.local/errores/comentario-no-encontrado`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
 components:
   securitySchemes:
     bearerAuth:
@@ -220,6 +278,15 @@ components:
           enum:
             - PUBLICADO
             - EN_REVISION
+            - ELIMINADO
+        calificacionDescartada:
+          type: boolean
+          default: false
+          description: >
+            (1.2.0) `true` en la respuesta de publicar cuando las estrellas que
+            venían se descartaron porque el jugador ya había calificado el
+            producto (RF-COM-002, D-07). El comentario entró igual. En el hilo
+            siempre `false`.
 
     HiloDeComentariosResponse:
       type: object
@@ -278,5 +345,7 @@ components:
             - FORMATO_DE_IMAGEN_NO_ADMITIDO
             - CALIFICACION_DUPLICADA
           description: >
-            Presente en los rechazos de publicación (403, 409 y 422), para que
-            el cliente distinga el motivo sin interpretar el texto del detalle.
+            Presente en los rechazos de publicación (403 y 422), para que el
+            cliente distinga el motivo sin interpretar el texto del detalle.
+            `CALIFICACION_DUPLICADA` ya no rechaza desde 1.2.0; se conserva
+            por compatibilidad con clientes 1.1.0.

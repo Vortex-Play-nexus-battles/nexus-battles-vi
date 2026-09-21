@@ -29,6 +29,7 @@ docs/
 !services/contenido/inventario/build/libs/*.jar
 !services/contenido/motor-combate/build/libs/*.jar
 !services/plataforma/salas-partidas/build/libs/*.jar
+!services/plataforma/comentarios/build/libs/*.jar
 !services/cuentas/ms-finanzas/build/libs/*.jar
 # ms-subastas fija su carpeta de build en build.nosync (build.gradle).
 !services/cuentas/ms-subastas/build.nosync/libs/*.jar

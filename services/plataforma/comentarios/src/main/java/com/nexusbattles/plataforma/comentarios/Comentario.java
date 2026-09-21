@@ -44,7 +44,9 @@ public record Comentario(
         /** Visible en el hilo del producto. */
         PUBLICADO,
         /** Retenido por el filtro automatico, a la espera de un moderador. */
-        EN_REVISION
+        EN_REVISION,
+        /** Retirado por su autor (HU-COM-004): no se muestra ni califica. */
+        ELIMINADO
     }
 
     public Comentario {
@@ -70,6 +72,28 @@ public record Comentario(
     /** Si el comentario es visible en el hilo. */
     public boolean estaPublicado() {
         return estado == Estado.PUBLICADO;
+    }
+
+    /** Si su autor lo retiro. */
+    public boolean estaEliminado() {
+        return estado == Estado.ELIMINADO;
+    }
+
+    /** Si es de ese jugador. */
+    public boolean esDe(String autor) {
+        return autorId.equals(autor);
+    }
+
+    /**
+     * El mismo comentario, retirado por su autor — HU-COM-004.
+     *
+     * <p>Se le retira tambien la calificacion: deja de contar en el promedio
+     * (CA-01) y libera la unica calificacion del autor sobre el producto, que
+     * asi puede volver a calificar en un comentario nuevo (decision D-19).
+     */
+    public Comentario eliminado() {
+        return new Comentario(id, productoId, autorId, apodoAutor, texto, imagenes, null,
+                fechaPublicacion, Estado.ELIMINADO);
     }
 
     private static void exigirTexto(String valor, String campo) {
