@@ -39,6 +39,25 @@ legend { padding: 0; }
    real lo destapo, con los campos ocupando el ancho entero de la ventana y
    pegados unos a otros. Dos utilidades, no una rejilla completa. */
 
+/* El atributo `hidden` tiene que ganar SIEMPRE.
+
+   El navegador lo aplica con `[hidden] { display: none }` en su hoja de
+   usuario-agente, que pierde contra cualquier clase que fije `display`. Y las
+   dos utilidades de aqui abajo -.pila y .fila- fijan `display: flex`. El
+   resultado: `elemento.hidden = true` no ocultaba nada, en las tres equipos y
+   en las 19 vistas que usan el atributo.
+
+   Lo destapo el E2E del corte vertical: al acabar el combate, la vista pone
+   `zona.hidden = true` sobre el `.fila` de las acciones y los botones de
+   atacar seguian en pantalla. Igual pasaba con el boton «Iniciar combate»,
+   que nace `hidden` y se veia siempre, y con el panel de participantes.
+
+   `!important` aqui es correcto y no un parche: `hidden` significa «esto no
+   esta», y ninguna regla de presentacion deberia poder contradecirlo. */
+[hidden] {
+  display: none !important;
+}
+
 /* Contenedor de pagina. 1360 px es la resolucion de referencia del SRS. */
 .pagina {
   max-width: 1360px;

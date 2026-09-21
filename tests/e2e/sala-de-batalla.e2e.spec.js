@@ -384,6 +384,13 @@ test.describe('Sala de batalla de punta a punta', () => {
     // recibio una funcion de suscripcion, y eso solo pasa si el CONNECT de
     // STOMP con el JWT prospero.
     await expect(page.locator('[data-zona="conexion"]')).toHaveText(/conectado/i);
+
+    // Con la partida ya cargada no hay nada que arrancar, y el estado vacio no
+    // pinta. Los dos llevan el atributo `hidden`, que no ocultaba nada: la
+    // hoja del navegador lo aplica con `display: none`, que pierde contra el
+    // `display: flex` de `.fila` y `.pila`. Se veian los dos a la vez.
+    await expect(page.locator('[data-zona="arranque"]')).toBeHidden();
+    await expect(page.locator('[data-zona="sin-partida"]')).toBeHidden();
   });
 
   test('atacar desde la vista baja la vida del rival, y el aviso llega por STOMP', async ({
