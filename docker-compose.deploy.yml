@@ -134,6 +134,9 @@ services:
       # por /internal/notifications de notificaciones, que corre en este host,
       # con la credencial de servicio propia (ADR-005; secreto de desplegar.sh).
       NOTIFICACIONES_URL: ${NOTIFICACIONES_URL:-http://srv-notificaciones:8085/api/v1}
+      # HU-ADM-001 (CA-04): rango de la suspension y plazo de apelacion desde
+      # admin-parametros, con las variables de entorno como respaldo.
+      PARAMETROS_URL: ${PARAMETROS_URL:-http://srv-admin-parametros:8088/api/v1}
       DIRECTORIO_ACTIVO_URL: ${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}
       DIRECTORIO_ACTIVO_CLIENT_ID: moderacion-sanciones
       DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_MODERACION_SANCIONES:-}
@@ -171,6 +174,15 @@ services:
   srv-admin-parametros:
     <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-admin-parametros:${TAG}
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      # HU-AUD-001: ms-cumplimiento NO corre en el host de dev (capacidad);
+      # sin AUDITORIA_URL cada cambio queda en el historial local y en la
+      # bitacora. Cuando corra, apuntar aqui a su /admin/auditoria/eventos.
+      AUDITORIA_URL: ${AUDITORIA_URL:-}
+      DIRECTORIO_ACTIVO_URL: ${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}
+      DIRECTORIO_ACTIVO_CLIENT_ID: admin-parametros
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_ADMIN_PARAMETROS:-}
 
 volumes:
   plataforma-db-datos:

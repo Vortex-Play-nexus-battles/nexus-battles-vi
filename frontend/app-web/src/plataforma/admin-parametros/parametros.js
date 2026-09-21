@@ -1,0 +1,294 @@
+/**
+ * Parametros del sistema — HU-ADM-001, sobre contracts/openapi/admin-parametros.yaml 1.0.0.
+ *
+ * El catalogo se pinta como tabla; cada editable tiene su formulario con el
+ * rango (o las opciones) que publica el propio servicio, motivo obligatorio y
+ * vigencia futura opcional (CA-03). Los inalterables (Charter) se muestran
+ * bloqueados y lo dicen (CA-05). El historial de un parametro se abre bajo
+ * demanda (CA-01). Todo error llega como problem details y se decide por
+ * `motivo`, nunca por el texto (`shared/ui-kit/MAPEO-ERRORES.md`).
+ */
+
+import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
+
+export const ROLES_DE_ADMINISTRACION = Object.freeze(['ADMINISTRADOR', 'SUPER_ADMINISTRADOR']);
+
+function baseDeApi() {
+  const meta = globalThis.document?.querySelector?.('meta[name="nexus-api-base"]');
+  return String(meta?.content ?? '').replace(/\/+$/, '');
+}
+
+export class ErrorDeParametros extends Error {
+  constructor(problema, estado) {
+    super(problema?.detail ?? problema?.title ?? `Error ${estado}`);
+    this.name = 'ErrorDeParametros';
+    this.estado = estado;
+    this.titulo = problema?.title ?? 'No se pudo completar';
+    this.detalle = problema?.detail ?? '';
+    this.motivo = problema?.motivo ?? null;
+  }
+}
+
+async function pedir(ruta, opciones = {}, fetchImpl = fetchWithHttpErrorInterceptor) {
+  const respuesta = await fetchImpl(`${baseDeApi()}${ruta}`, {
+    ...opciones,
+    headers: { Accept: 'application/json', ...(opciones.headers ?? {}) },
+  });
+  if (respuesta.ok) {
+    return respuesta.json();
+  }
+  let problema = null;
+  try {
+    problema = await respuesta.json();
+  } catch {
+    problema = null;
+  }
+  throw new ErrorDeParametros(problema, respuesta.status);
+}
+
+export const api = {
+  listar: (f) => pedir('/api/v1/parametros', {}, f),
+  cambiar: (clave, cuerpo, f) =>
+    pedir(
+      `/api/v1/parametros/${encodeURIComponent(clave)}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cuerpo),
+      },
+      f,
+    ),
+  historial: (clave, f) =>
+    pedir(`/api/v1/parametros/${encodeURIComponent(clave)}/historial`, {}, f),
+};
+
+/* ---- Presentación (puro, probado) ---- */
+
+/** Texto del rango u opciones que admite un parametro. */
+export function reglaDe(parametro) {
+  if (parametro.inalterable) {
+    return `Inalterable (${parametro.origen})`;
+  }
+  if (Array.isArray(parametro.opciones) && parametro.opciones.length > 0) {
+    return parametro.opciones.join(' | ');
+  }
+  const partes = [];
+  if (parametro.minimo !== null && parametro.minimo !== undefined) {
+    partes.push(`min ${parametro.minimo}`);
+  }
+  if (parametro.maximo !== null && parametro.maximo !== undefined) {
+    partes.push(`max ${parametro.maximo}`);
+  }
+  const tipo = parametro.tipo.toLowerCase();
+  return partes.length > 0 ? `${tipo}, ${partes.join(', ')}` : tipo;
+}
+
+/** Valor vigente legible: «sin definir (pendiente del PO)» cuando es null. */
+export function valorDe(parametro) {
+  if (parametro.valor === null || parametro.valor === undefined || parametro.valor === '') {
+    return 'sin definir (pendiente del PO)';
+  }
+  return parametro.unidad ? `${parametro.valor} ${parametro.unidad}` : String(parametro.valor);
+}
+
+/** Cuerpo del PUT a partir del formulario; `vigenteDesde` solo si se dio. */
+export function cambioDesde(datos) {
+  const leer = (clave) => (datos instanceof FormData ? datos.get(clave) : datos[clave]) ?? '';
+  const valor = String(leer('valor')).trim();
+  const vigencia = String(leer('vigenteDesde')).trim();
+  const cuerpo = { valor: valor === '' ? null : valor, motivo: String(leer('motivo')).trim() };
+  if (vigencia) {
+    cuerpo.vigenteDesde = new Date(vigencia).toISOString();
+  }
+  return cuerpo;
+}
+
+/* ---- DOM ---- */
+
+function nodo(etiqueta, clase, texto) {
+  const el = document.createElement(etiqueta);
+  if (clase) {
+    el.className = clase;
+  }
+  if (texto !== undefined) {
+    el.textContent = texto;
+  }
+  return el;
+}
+
+export function pintarAviso(zona, { tono, titulo, detalle }) {
+  zona.className = `aviso aviso--${tono}`;
+  zona.replaceChildren(
+    nodo('strong', 'aviso__titulo', titulo),
+    nodo('p', 'aviso__detalle', detalle ?? ''),
+  );
+  zona.hidden = false;
+}
+
+function avisarError(zona, error) {
+  const deNegocio = error instanceof ErrorDeParametros;
+  pintarAviso(zona, {
+    tono: deNegocio && error.estado < 500 ? 'advertencia' : 'error',
+    titulo: deNegocio ? error.titulo : 'No pudimos contactar con el servicio',
+    detalle: deNegocio ? error.detalle : 'Revisa tu conexion e intentalo de nuevo.',
+  });
+}
+
+export function filaDeParametro(parametro, { administra, alCambiar, alVerHistorial } = {}) {
+  const fila = nodo('article', 'tarjeta pila pila--ajustada');
+  fila.dataset.clave = parametro.clave;
+  fila.dataset.inalterable = String(parametro.inalterable);
+  const titulo = nodo('strong', 'tarjeta__titulo', parametro.clave);
+  fila.appendChild(titulo);
+  fila.appendChild(nodo('p', 't-cuerpo', parametro.descripcion));
+  const valor = nodo('p', 't-cuerpo');
+  valor.dataset.campo = 'valor';
+  valor.textContent = `Vigente: ${valorDe(parametro)} · v${parametro.version}`;
+  fila.appendChild(valor);
+  if (parametro.valorProgramado !== null && parametro.valorProgramado !== undefined) {
+    const programado = nodo(
+      'p',
+      'aviso aviso--info',
+      `Programado: ${parametro.valorProgramado} desde ${new Date(parametro.vigenteDesde).toLocaleString('es-CO')}`,
+    );
+    programado.dataset.campo = 'programado';
+    fila.appendChild(programado);
+  }
+  fila.appendChild(nodo('p', 't-meta', `${reglaDe(parametro)} · origen: ${parametro.origen}`));
+
+  if (parametro.inalterable) {
+    const bloqueado = nodo(
+      'p',
+      't-meta',
+      'Fijado por el Project Charter: no se edita desde el panel.',
+    );
+    bloqueado.dataset.campo = 'bloqueado';
+    fila.appendChild(bloqueado);
+    return fila;
+  }
+  if (!administra) {
+    return fila;
+  }
+  const form = nodo('form', 'fila');
+  form.dataset.zona = 'cambio';
+  const opciones = Array.isArray(parametro.opciones) && parametro.opciones.length > 0;
+  form.innerHTML = `
+    <label class="campo"><span class="campo__etiqueta">Nuevo valor${parametro.unidad ? ` (${parametro.unidad})` : ''}</span>
+      ${
+        opciones
+          ? `<select class="campo__control" name="valor">${parametro.opciones.map((o) => `<option value="${o}">${o}</option>`).join('')}</select>`
+          : `<input class="campo__control" name="valor" ${parametro.tipo === 'ENTERO' || parametro.tipo === 'DECIMAL' ? 'inputmode="decimal"' : ''} placeholder="vacio = sin definir" />`
+      }</label>
+    <label class="campo"><span class="campo__etiqueta">Motivo</span>
+      <input class="campo__control" name="motivo" minlength="3" maxlength="500" required /></label>
+    <label class="campo"><span class="campo__etiqueta">Vigente desde (opcional)</span>
+      <input class="campo__control" type="datetime-local" name="vigenteDesde" /></label>
+    <button class="boton boton--primario boton--pequeno" type="submit" data-accion="guardar">Guardar</button>
+    <button class="boton boton--secundario boton--pequeno" type="button" data-accion="historial">Historial</button>`;
+  if (opciones && parametro.valor) {
+    form.querySelector('[name="valor"]').value = parametro.valor;
+  }
+  form.addEventListener('submit', (evento) => {
+    evento.preventDefault();
+    alCambiar?.(parametro, cambioDesde(new FormData(form)), form);
+  });
+  form
+    .querySelector('[data-accion="historial"]')
+    .addEventListener('click', () => alVerHistorial?.(parametro, fila));
+  fila.appendChild(form);
+  return fila;
+}
+
+export function listaDeHistorial(versiones) {
+  const ul = nodo('ul', 'pila pila--ajustada');
+  ul.dataset.zona = 'historial';
+  if (versiones.length === 0) {
+    ul.appendChild(nodo('li', 't-meta', 'Sin cambios: valor inicial del catalogo.'));
+  }
+  versiones.forEach((v) => {
+    ul.appendChild(
+      nodo(
+        'li',
+        't-meta',
+        `v${v.version} · ${v.valorAnterior ?? 'sin definir'} → ${v.valorNuevo ?? 'sin definir'} · ${v.motivo} · ${new Date(v.cambiadoEn).toLocaleString('es-CO')}${
+          Date.parse(v.vigenteDesde) > Date.parse(v.cambiadoEn) + 1000
+            ? ` (vigente desde ${new Date(v.vigenteDesde).toLocaleString('es-CO')})`
+            : ''
+        }`,
+      ),
+    );
+  });
+  return ul;
+}
+
+/**
+ * Monta la vista: `[data-zona="aviso"]`, `[data-zona="catalogo"]`.
+ *
+ * @param {ParentNode} raiz
+ * @param {{rol?: string|null, fetchImpl?: Function}} [opciones]
+ */
+export function montarParametros(raiz, { rol = null, fetchImpl } = {}) {
+  const zonaAviso = raiz.querySelector('[data-zona="aviso"]');
+  const zonaCatalogo = raiz.querySelector('[data-zona="catalogo"]');
+  const administra = ROLES_DE_ADMINISTRACION.includes(rol);
+
+  if (!administra) {
+    pintarAviso(zonaAviso, {
+      tono: 'info',
+      titulo: 'Solo lectura',
+      detalle: 'Configurar parametros es de administracion; tu rol solo consulta.',
+    });
+  }
+
+  async function cargar() {
+    try {
+      const catalogo = await api.listar(fetchImpl);
+      zonaCatalogo.replaceChildren();
+      if (catalogo.length === 0) {
+        zonaCatalogo.appendChild(nodo('p', 't-meta', 'El catalogo esta vacio.'));
+      }
+      catalogo.forEach((p) =>
+        zonaCatalogo.appendChild(
+          filaDeParametro(p, {
+            administra,
+            alCambiar: async (parametro, cambio, form) => {
+              const boton = form.querySelector('[data-accion="guardar"]');
+              boton.disabled = true;
+              zonaAviso.hidden = true;
+              try {
+                const actualizado = await api.cambiar(parametro.clave, cambio, fetchImpl);
+                pintarAviso(zonaAviso, {
+                  tono: 'exito',
+                  titulo:
+                    actualizado.valorProgramado !== null &&
+                    actualizado.valorProgramado !== undefined
+                      ? 'Cambio programado'
+                      : 'Parametro actualizado',
+                  detalle: `${actualizado.clave} · vigente: ${valorDe(actualizado)} · v${actualizado.version}. Queda versionado y auditado.`,
+                });
+                await cargar();
+              } catch (error) {
+                avisarError(zonaAviso, error);
+                boton.disabled = false;
+              }
+            },
+            alVerHistorial: async (parametro, fila) => {
+              fila.querySelector('[data-zona="historial"]')?.remove();
+              try {
+                const versiones = await api.historial(parametro.clave, fetchImpl);
+                fila.appendChild(listaDeHistorial(versiones));
+              } catch (error) {
+                avisarError(zonaAviso, error);
+              }
+            },
+          }),
+        ),
+      );
+    } catch (error) {
+      avisarError(zonaAviso, error);
+    }
+  }
+
+  cargar();
+  return { cargar };
+}

@@ -2,7 +2,6 @@ package com.nexusbattles.plataforma.moderacionsanciones.sanciones;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,26 +38,26 @@ public class SancionesService {
 
     private static final Logger BITACORA = LoggerFactory.getLogger(SancionesService.class);
 
-    /** Plazo para apelar desde la emision (HU-USR-007, historia). */
-    static final Duration PLAZO_DE_APELACION = Duration.ofDays(30);
-
     private final SancionRepository sanciones;
     private final ApelacionRepository apelaciones;
     private final AvisoPendienteRepository avisos;
     private final Clock reloj;
-    private final Duration suspensionMinima;
-    private final Duration suspensionMaxima;
+    private final LimitesDeSancion limites;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public SancionesService(SancionRepository sanciones, ApelacionRepository apelaciones,
-                            AvisoPendienteRepository avisos, Clock reloj,
-                            @Value("${sanciones.suspension.minima-horas:1}") long minimaHoras,
-                            @Value("${sanciones.suspension.maxima-dias:30}") long maximaDias) {
+                            AvisoPendienteRepository avisos, Clock reloj, LimitesDeSancion limites) {
         this.sanciones = Objects.requireNonNull(sanciones);
         this.apelaciones = Objects.requireNonNull(apelaciones);
         this.avisos = Objects.requireNonNull(avisos);
         this.reloj = Objects.requireNonNull(reloj);
-        this.suspensionMinima = Duration.ofHours(minimaHoras);
-        this.suspensionMaxima = Duration.ofDays(maximaDias);
+        this.limites = Objects.requireNonNull(limites);
+    }
+
+    /** Limites fijos (pruebas): rango de la suspension y plazo de apelacion de 30 dias. */
+    public SancionesService(SancionRepository sanciones, ApelacionRepository apelaciones,
+                            AvisoPendienteRepository avisos, Clock reloj, long minimaHoras, long maximaDias) {
+        this(sanciones, apelaciones, avisos, reloj, LimitesDeSancion.Fijos.de(minimaHoras, maximaDias, 30));
     }
 
     /** Lo que se pide al emitir. {@code confirmacion} solo se mira en el baneo (CA-01 de HU-USR-006). */
@@ -173,9 +172,10 @@ public class SancionesService {
             throw new SancionRechazada(SancionRechazada.Motivo.APELACION_NO_PROCEDE,
                     "la sancion ya no esta vigente: no hay nada que apelar");
         }
-        if (ahora.isAfter(sancion.emitidaEn().plus(PLAZO_DE_APELACION))) {
+        Duration plazo = limites.plazoDeApelacion();
+        if (ahora.isAfter(sancion.emitidaEn().plus(plazo))) {
             throw new SancionRechazada(SancionRechazada.Motivo.APELACION_NO_PROCEDE,
-                    "el plazo para apelar (30 dias desde la sancion) ya paso");
+                    "el plazo para apelar (" + plazo.toDays() + " dias desde la sancion) ya paso");
         }
         if (apelaciones.findBySancionIdAndEstado(sancionId, Apelacion.Estado.PENDIENTE).isPresent()) {
             throw new SancionRechazada(SancionRechazada.Motivo.APELACION_NO_PROCEDE,
@@ -260,10 +260,11 @@ public class SancionesService {
                     "la suspension lleva su duracion en horas");
         }
         Duration duracion = Duration.ofHours(horas);
-        if (duracion.compareTo(suspensionMinima) < 0 || duracion.compareTo(suspensionMaxima) > 0) {
+        Duration minima = limites.suspensionMinima();
+        Duration maxima = limites.suspensionMaxima();
+        if (duracion.compareTo(minima) < 0 || duracion.compareTo(maxima) > 0) {
             throw new SancionRechazada(SancionRechazada.Motivo.SOLICITUD_INVALIDA,
-                    "la suspension va de " + suspensionMinima.toHours() + " horas a "
-                            + suspensionMaxima.toDays() + " dias");
+                    "la suspension va de " + minima.toHours() + " horas a " + maxima.toDays() + " dias");
         }
         return duracion;
     }
