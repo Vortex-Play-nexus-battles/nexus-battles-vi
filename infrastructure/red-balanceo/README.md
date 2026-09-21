@@ -12,7 +12,7 @@ de entrada público del host de plataforma en AWS: `http://<ip-del-host>/`.
 | `/api/v1/salas` | `srv-salas-partidas:8084` |
 | `/api/v1/users` | `srv-notificaciones:8085` |
 | `/api/v1/products` | `srv-comentarios:8081` |
-| `/api/v1/correos` | `srv-correo:8082` |
+| `/api/v1/correos` | **no se expone**: correo es entre servicios (ADR-005); desde fuera, 404 |
 | `/api/v1/lista-negra`, `/api/v1/sanciones` | `srv-moderacion-sanciones:8086` |
 | `/api/v1/{latencia,disponibilidad,consultas,degradacion}` | `srv-metricas-plataforma:8087` |
 | `/api/v1/{auth,perfiles,rbac,admin}` | `srv-ms-identidad:8089` |

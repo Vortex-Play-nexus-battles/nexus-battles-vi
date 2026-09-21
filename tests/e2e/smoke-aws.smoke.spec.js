@@ -271,15 +271,17 @@ test.describe('Smoke del entorno desplegado', () => {
     expect(typeof bandeja.noLeidas).toBe('number');
   });
 
-  test('un correo enviado llega de verdad a la bandeja de pruebas', async () => {
-    // De punta a punta: correo -> SMTP -> Mailpit. Un 202 del servicio no
-    // prueba que el mensaje saliera.
+  test('el correo del registro llega de verdad a la bandeja de pruebas, y correo no se alcanza desde fuera', async () => {
+    // De punta a punta por el camino real: ms-identidad (registro de arriba)
+    // -> correo con su credencial de servicio (ADR-005) -> SMTP -> Mailpit.
+    // Ya no se puede POSTear a correo desde fuera: el borde no lo expone y
+    // el servicio exige ROLE_SERVICIO. Eso tambien se afirma.
     const destinatario = `${apodo}@nexus.test`;
 
-    const envio = await api.post('/api/v1/correos/bienvenida', {
+    const desdeFuera = await api.post('/api/v1/correos/bienvenida', {
       data: { email: destinatario, apodo, nombres: 'Smoke', apellidos: 'De Prueba' },
     });
-    expect([200, 201, 202], `envio: ${await envio.text()}`).toContain(envio.status());
+    expect(desdeFuera.status(), 'correo no debe ser alcanzable desde el borde').toBe(404);
 
     await expect
       .poll(
@@ -290,7 +292,7 @@ test.describe('Smoke del entorno desplegado', () => {
           if (!bandeja.ok()) return 0;
           return (await bandeja.json()).messages_count ?? 0;
         },
-        { timeout: 30000, message: 'el correo no llego a Mailpit' },
+        { timeout: 30000, message: 'el correo del registro no llego a Mailpit' },
       )
       .toBeGreaterThan(0);
   });

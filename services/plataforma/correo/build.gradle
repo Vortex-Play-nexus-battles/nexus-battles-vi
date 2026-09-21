@@ -1,5 +1,8 @@
 plugins {
     id 'nexus.spring-conventions'
+    // Servidor de recursos (ADR-002/ADR-005): correo solo atiende a servicios
+    // con credencial. Trae plataforma-seguridad y sus fixtures de prueba.
+    id 'nexus.seguridad-conventions'
 }
 
 dependencies {
