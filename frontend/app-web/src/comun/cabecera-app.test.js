@@ -23,11 +23,18 @@ const BASE = 'http://localhost:8099/frontend/app-web/src/comun/cabecera-app.js';
 const UID = '7a1e1c4e-2d2b-4b6e-9a0f-0d1c2b3a4f55';
 
 function tokenCon(claims) {
-  const cuerpo = Buffer.from(JSON.stringify(claims)).toString('base64url');
+  const cuerpo = btoa(JSON.stringify(claims))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
   return `cabecera.${cuerpo}.firma`;
 }
 
-function conSesion({ apodo = 'Ana', rol = 'JUGADOR', exp = Math.floor(Date.now() / 1000) + 3600 } = {}) {
+function conSesion({
+  apodo = 'Ana',
+  rol = 'JUGADOR',
+  exp = Math.floor(Date.now() / 1000) + 3600,
+} = {}) {
   sessionStorage.setItem(CLAVES.token, tokenCon({ uid: UID, sub: apodo, rol, exp }));
   sessionStorage.setItem(CLAVES.apodo, apodo);
   sessionStorage.setItem(CLAVES.rol, rol);
@@ -48,8 +55,22 @@ describe('navegacion (HU-INV-004)', () => {
   test('presenta las seis secciones del alcance, en su orden, y ninguna mas', () => {
     const { elemento } = montar();
     const destinos = [...elemento.querySelectorAll('.cabecera__destino')].map((d) => d.textContent);
-    expect(destinos).toEqual(['Jugar online', 'Misiones', 'Torneo', 'Mi inventario', 'Subasta', 'Mi Cuenta']);
-    expect(SECCIONES.map((s) => s.id)).toEqual(['jugar', 'misiones', 'torneo', 'inventario', 'subasta', 'cuenta']);
+    expect(destinos).toEqual([
+      'Jugar online',
+      'Misiones',
+      'Torneo',
+      'Mi inventario',
+      'Subasta',
+      'Mi Cuenta',
+    ]);
+    expect(SECCIONES.map((s) => s.id)).toEqual([
+      'jugar',
+      'misiones',
+      'torneo',
+      'inventario',
+      'subasta',
+      'cuenta',
+    ]);
   });
 
   test('marca como activa la seccion indicada, y solo esa', () => {
@@ -64,7 +85,9 @@ describe('navegacion (HU-INV-004)', () => {
     conSesion();
     const { elemento } = montar();
     const jugar = elemento.querySelector('[data-seccion="jugar"]');
-    expect(jugar.href).toBe('http://localhost:8099/frontend/app-web/src/plataforma/salas-partidas/batallas.html');
+    expect(jugar.href).toBe(
+      'http://localhost:8099/frontend/app-web/src/plataforma/salas-partidas/batallas.html',
+    );
     const misiones = elemento.querySelector('[data-seccion="misiones"]');
     expect(misiones.hasAttribute('href')).toBe(false);
     expect(misiones.getAttribute('aria-disabled')).toBe('true');
@@ -73,15 +96,21 @@ describe('navegacion (HU-INV-004)', () => {
 
   test('funciona igual servido desde src/, no solo desde el borde', () => {
     const { elemento } = montar({ base: 'http://localhost:5173/src/comun/cabecera-app.js' });
-    expect(elemento.querySelector('[data-seccion="subasta"]').href).toBe('http://localhost:5173/src/cuentas/subastas.html');
-    expect(resolver('../cuentas/login.html', 'http://localhost:5173/src/comun/x.js')).toBe('http://localhost:5173/src/cuentas/login.html');
+    expect(elemento.querySelector('[data-seccion="subasta"]').href).toBe(
+      'http://localhost:5173/src/cuentas/subastas.html',
+    );
+    expect(resolver('../cuentas/login.html', 'http://localhost:5173/src/comun/x.js')).toBe(
+      'http://localhost:5173/src/cuentas/login.html',
+    );
   });
 
   test('sin sesion, una seccion privada lleva al login con vuelta a ella; la publica no', () => {
     const { elemento } = montar();
     const inventario = new URL(elemento.querySelector('[data-seccion="inventario"]').href);
     expect(inventario.pathname).toBe('/frontend/app-web/src/cuentas/login.html');
-    expect(inventario.searchParams.get('volver')).toBe('/frontend/app-web/src/contenido/inventario/inventario.html');
+    expect(inventario.searchParams.get('volver')).toBe(
+      '/frontend/app-web/src/contenido/inventario/inventario.html',
+    );
     expect(elemento.querySelector('[data-seccion="subasta"]').href).toMatch(/subastas\.html$/);
   });
 });
@@ -90,7 +119,9 @@ describe('sesion', () => {
   test('sin sesion: Iniciar sesion y Registrarse, sin avatar ni campana', () => {
     const { elemento, sesion } = montar();
     expect(sesion.autenticado).toBe(false);
-    const botones = [...elemento.querySelectorAll('[data-zona="sesion"] a')].map((a) => a.textContent);
+    const botones = [...elemento.querySelectorAll('[data-zona="sesion"] a')].map(
+      (a) => a.textContent,
+    );
     expect(botones).toEqual(['Iniciar sesion', 'Registrarse']);
     expect(elemento.querySelector('[data-zona="cuenta"]')).toBeNull();
     expect(elemento.querySelector('.cabecera__campana')).toBeNull();
@@ -116,7 +147,13 @@ describe('sesion', () => {
     expect(menu.hidden).toBe(false);
     expect(boton.getAttribute('aria-expanded')).toBe('true');
     const opciones = [...menu.querySelectorAll('[role="menuitem"]')].map((o) => o.textContent);
-    expect(opciones).toEqual(['Mi perfil', 'Historial de transacciones', 'Mis cofres', 'Tienda', 'Cerrar sesion']);
+    expect(opciones).toEqual([
+      'Mi perfil',
+      'Historial de transacciones',
+      'Mis cofres',
+      'Tienda',
+      'Cerrar sesion',
+    ]);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(menu.hidden).toBe(true);
   });
@@ -125,7 +162,9 @@ describe('sesion', () => {
     conSesion({ rol: 'ADMINISTRADOR' });
     const { elemento } = montar();
     const opciones = [...elemento.querySelectorAll('[role="menuitem"]')].map((o) => o.textContent);
-    expect(opciones).toEqual(expect.arrayContaining(['Gestion de usuarios', 'Lista negra', 'Auditoria']));
+    expect(opciones).toEqual(
+      expect.arrayContaining(['Gestion de usuarios', 'Lista negra', 'Auditoria']),
+    );
     expect(elemento.querySelector('[data-zona="rol"]').textContent).toBe('administrador');
   });
 
@@ -138,7 +177,9 @@ describe('sesion', () => {
     for (const clave of Object.values(CLAVES)) {
       expect(sessionStorage.getItem(clave)).toBeNull();
     }
-    expect(navegar).toHaveBeenCalledWith('http://localhost:8099/frontend/app-web/src/cuentas/login.html');
+    expect(navegar).toHaveBeenCalledWith(
+      'http://localhost:8099/frontend/app-web/src/cuentas/login.html',
+    );
   });
 
   test('un token caducado no es sesion: se ofrece iniciar sesion y se dice por que', () => {
@@ -171,13 +212,20 @@ describe('rutas privadas', () => {
     expect(resultado).toBeNull();
     const destino = new URL(navegar.mock.calls[0][0]);
     expect(destino.pathname).toBe('/frontend/app-web/src/cuentas/login.html');
-    expect(destino.searchParams.get('volver')).toBe('/frontend/app-web/src/cuentas/perfil.html?tab=2');
+    expect(destino.searchParams.get('volver')).toBe(
+      '/frontend/app-web/src/cuentas/perfil.html?tab=2',
+    );
   });
 
   test('exigirSesion con sesion caducada la borra y lo dice en el motivo', () => {
     conSesion({ exp: 1 });
     const navegar = jest.fn();
-    exigirSesion({ almacen: sessionStorage, ubicacion: { pathname: '/x', search: '' }, navegar, base: BASE });
+    exigirSesion({
+      almacen: sessionStorage,
+      ubicacion: { pathname: '/x', search: '' },
+      navegar,
+      base: BASE,
+    });
     expect(sessionStorage.getItem(CLAVES.token)).toBeNull();
     expect(new URL(navegar.mock.calls[0][0]).searchParams.get('motivo')).toBe('caducada');
   });
@@ -185,15 +233,22 @@ describe('rutas privadas', () => {
   test('exigirSesion con sesion valida no navega y la devuelve', () => {
     conSesion();
     const navegar = jest.fn();
-    const sesion = exigirSesion({ almacen: sessionStorage, ubicacion: { pathname: '/x', search: '' }, navegar, base: BASE });
+    const sesion = exigirSesion({
+      almacen: sessionStorage,
+      ubicacion: { pathname: '/x', search: '' },
+      navegar,
+      base: BASE,
+    });
     expect(sesion.autenticado).toBe(true);
     expect(navegar).not.toHaveBeenCalled();
   });
 
   test('la ruta de vuelta solo admite rutas del propio origen', () => {
-    expect(rutaDeVuelta('?volver=%2Ffrontend%2Fapp-web%2Fsrc%2Fplataforma%2Fsalas-partidas%2Fbatallas.html')).toBe(
-      '/frontend/app-web/src/plataforma/salas-partidas/batallas.html',
-    );
+    expect(
+      rutaDeVuelta(
+        '?volver=%2Ffrontend%2Fapp-web%2Fsrc%2Fplataforma%2Fsalas-partidas%2Fbatallas.html',
+      ),
+    ).toBe('/frontend/app-web/src/plataforma/salas-partidas/batallas.html');
     expect(rutaDeVuelta('?volver=https%3A%2F%2Fmalo.example%2F')).toBeNull();
     expect(rutaDeVuelta('?volver=%2F%2Fmalo.example')).toBeNull();
     expect(rutaDeVuelta('')).toBeNull();
@@ -219,7 +274,9 @@ describe('buscador solo donde aplica', () => {
     const { elemento } = montar({ buscador: { placeholder: 'Buscar productos', alBuscar } });
     const campo = elemento.querySelector('input[type="search"]');
     campo.value = '  espada  ';
-    elemento.querySelector('[role="search"]').dispatchEvent(new Event('submit', { cancelable: true }));
+    elemento
+      .querySelector('[role="search"]')
+      .dispatchEvent(new Event('submit', { cancelable: true }));
     expect(alBuscar).toHaveBeenCalledWith('espada');
   });
 });

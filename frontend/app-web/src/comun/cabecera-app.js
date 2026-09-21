@@ -41,10 +41,20 @@ export const CLAVES = Object.freeze({
  * (`/frontend/app-web/src/`) como por `npm run dev` (`src/`).
  */
 export const SECCIONES = Object.freeze([
-  { id: 'jugar', etiqueta: 'Jugar online', destino: '../plataforma/salas-partidas/batallas.html', privada: true },
+  {
+    id: 'jugar',
+    etiqueta: 'Jugar online',
+    destino: '../plataforma/salas-partidas/batallas.html',
+    privada: true,
+  },
   { id: 'misiones', etiqueta: 'Misiones', pendiente: 'HU-MIS (grupo-2)' },
   { id: 'torneo', etiqueta: 'Torneo', pendiente: 'HU-TOR-008 (#493, Sprint 3)' },
-  { id: 'inventario', etiqueta: 'Mi inventario', destino: '../contenido/inventario/inventario.html', privada: true },
+  {
+    id: 'inventario',
+    etiqueta: 'Mi inventario',
+    destino: '../contenido/inventario/inventario.html',
+    privada: true,
+  },
   { id: 'subasta', etiqueta: 'Subasta', destino: '../cuentas/subastas.html', privada: false },
   { id: 'cuenta', etiqueta: 'Mi Cuenta', destino: '../cuentas/perfil.html', privada: true },
 ]);
@@ -97,7 +107,12 @@ export function leerSesion(almacen = globalThis.sessionStorage, ahora = () => Da
   return {
     autenticado: !caducada,
     caducada,
-    apodo: almacen.getItem(CLAVES.apodo) ?? claims.preferred_username ?? claims.apodo ?? claims.sub ?? '',
+    apodo:
+      almacen.getItem(CLAVES.apodo) ??
+      claims.preferred_username ??
+      claims.apodo ??
+      claims.sub ??
+      '',
     uid: claims.uid ?? almacen.getItem(CLAVES.usuarioId) ?? null,
     rol: almacen.getItem(CLAVES.rol) ?? claims.rol ?? null,
     token,
@@ -170,7 +185,10 @@ function icono(nombre, base, clase = 'icono') {
   svg.setAttribute('class', clase);
   svg.setAttribute('aria-hidden', 'true');
   const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
-  use.setAttribute('href', `${resolver('../../../../shared/ui-kit/iconos/sprite.svg', base)}#${nombre}`);
+  use.setAttribute(
+    'href',
+    `${resolver('../../../../shared/ui-kit/iconos/sprite.svg', base)}#${nombre}`,
+  );
   svg.appendChild(use);
   return svg;
 }
@@ -219,7 +237,11 @@ export function montarCabecera(
   // --- marca + navegación --------------------------------------------------
   const grupoMarca = document.createElement('div');
   grupoMarca.className = 'cabecera__grupo-marca';
-  const marca = enlace('NEXUS BATTLES VI', resolver(sesion.autenticado ? RUTAS.inicio : RUTAS.login, base), 'cabecera__marca');
+  const marca = enlace(
+    'NEXUS BATTLES VI',
+    resolver(sesion.autenticado ? RUTAS.inicio : RUTAS.login, base),
+    'cabecera__marca',
+  );
   marca.setAttribute('aria-label', 'Nexus Battles VI — inicio');
   grupoMarca.appendChild(marca);
 
@@ -289,10 +311,17 @@ export function montarCabecera(
     zona.dataset.zona = 'sesion';
     const login = new URL(resolver(RUTAS.login, base));
     if (globalThis.location?.pathname) {
-      login.searchParams.set('volver', `${globalThis.location.pathname}${globalThis.location.search ?? ''}`);
+      login.searchParams.set(
+        'volver',
+        `${globalThis.location.pathname}${globalThis.location.search ?? ''}`,
+      );
     }
-    zona.appendChild(enlace('Iniciar sesion', login.href, 'boton boton--secundario boton--pequeno'));
-    zona.appendChild(enlace('Registrarse', resolver(RUTAS.registro, base), 'boton boton--primario boton--pequeno'));
+    zona.appendChild(
+      enlace('Iniciar sesion', login.href, 'boton boton--secundario boton--pequeno'),
+    );
+    zona.appendChild(
+      enlace('Registrarse', resolver(RUTAS.registro, base), 'boton boton--primario boton--pequeno'),
+    );
     if (sesion.caducada) {
       const aviso = document.createElement('span');
       aviso.className = 'cabecera__aviso-sesion';
@@ -369,7 +398,10 @@ export function montarCabecera(
       ['Tienda', RUTAS.tienda],
     ];
     if (ROLES_ADMINISTRATIVOS.includes(sesion.rol)) {
-      opciones.push(['Gestion de usuarios', RUTAS.gestionUsuarios], ['Lista negra', RUTAS.listaNegra]);
+      opciones.push(
+        ['Gestion de usuarios', RUTAS.gestionUsuarios],
+        ['Lista negra', RUTAS.listaNegra],
+      );
       if (sesion.rol !== 'MODERADOR') {
         opciones.push(['Auditoria', RUTAS.auditoria], ['Panel de observabilidad', RUTAS.metricas]);
       }
