@@ -186,12 +186,10 @@ describe('montarSalaDeEspera · salir (CA-01)', () => {
   });
 
   test('si el servidor rechaza (409: ya empezo), se muestra el motivo y no se sale', async () => {
-    const abandonar = jest
-      .fn()
-      .mockRejectedValue({
-        estado: 409,
-        detalle: 'La partida ya comenzo: no puedes abandonar la sala.',
-      });
+    const abandonar = jest.fn().mockRejectedValue({
+      estado: 409,
+      detalle: 'La partida ya comenzo: no puedes abandonar la sala.',
+    });
     const alSalir = jest.fn();
     montarSalaDeEspera(document, {
       sala: sala(),
