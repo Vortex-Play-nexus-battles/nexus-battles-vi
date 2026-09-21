@@ -126,6 +126,10 @@ class PartidaEntidad {
         @Column(name = "heroe_prototipo", length = 120)
         private String heroePrototipo;
 
+        /** Defensa del prototipo (V8). Con la vida en su lugar, nadie acertaba. */
+        @Column(name = "heroe_defensa")
+        private Integer heroeDefensa;
+
         @Column(name = "heroe_retrato_url", length = 500)
         private String heroeRetratoUrl;
 
@@ -153,6 +157,7 @@ class PartidaEntidad {
                 fila.heroeId = heroe.id();
                 fila.heroeNombre = heroe.nombre();
                 fila.heroePrototipo = heroe.prototipo();
+                fila.heroeDefensa = heroe.defensa();
                 fila.heroeRetratoUrl = heroe.retratoUrl();
                 fila.heroeNivel = heroe.nivel();
                 fila.heroeVidaActual = heroe.vidaActual();
@@ -164,7 +169,7 @@ class PartidaEntidad {
         ParticipanteDePartida aDominio() {
             HeroeDeCombate heroe = heroeId == null ? null
                     : new HeroeDeCombate(heroeId, heroeNombre, heroePrototipo, heroeRetratoUrl,
-                            heroeNivel, heroeVidaActual, heroeVidaMaxima);
+                            heroeNivel, heroeVidaActual, heroeVidaMaxima, heroeDefensa);
             return new ParticipanteDePartida(idJugador, heroe, esIA, equipo, creditosApostados);
         }
     }

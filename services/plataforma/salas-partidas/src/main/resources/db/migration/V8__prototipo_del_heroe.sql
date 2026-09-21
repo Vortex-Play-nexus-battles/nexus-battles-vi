@@ -23,10 +23,12 @@
 -- combatible.
 
 ALTER TABLE partida_participantes
-    ADD COLUMN heroe_prototipo varchar(120);
+    ADD COLUMN heroe_prototipo varchar(120),
+    ADD COLUMN heroe_defensa   integer;
 
 ALTER TABLE participantes_de_sala
-    ADD COLUMN heroe_prototipo varchar(120);
+    ADD COLUMN heroe_prototipo varchar(120),
+    ADD COLUMN heroe_defensa   integer;
 
 COMMENT ON COLUMN partida_participantes.heroe_prototipo IS
     'Prototipo del catalogo de heroes, lo unico que motor-combate sabe buscar. NULL en filas anteriores a V8.';

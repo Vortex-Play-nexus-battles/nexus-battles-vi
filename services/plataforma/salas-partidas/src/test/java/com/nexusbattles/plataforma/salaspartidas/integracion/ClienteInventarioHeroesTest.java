@@ -40,6 +40,9 @@ class ClienteInventarioHeroesTest {
     /** De aqui sale el prototipo, que es lo que el motor sabe buscar. */
     private static final String PRODUCTOS = "http://productos:8080";
     private static final String PRODUCTO_DEL_HEROE = PRODUCTOS + "/api/v1/productos/p-1";
+    /** Y de aqui la defensa del prototipo, que es lo que el motor compara. */
+    private static final String HEROES = "http://heroes:8080";
+    private static final String FICHA_DEL_PROTOTIPO = HEROES + "/api/v1/heroes/Guerrero Tanque";
 
     private static final JugadorAutenticado JUGADOR =
             new JugadorAutenticado(UUID.fromString("11111111-1111-1111-1111-111111111111"), "vael");
@@ -51,7 +54,7 @@ class ClienteInventarioHeroesTest {
     void montarInventarioSimulado() {
         RestClient.Builder constructor = RestClient.builder();
         servidor = MockRestServiceServer.bindTo(constructor).build();
-        cliente = new ClienteInventarioHeroes(constructor.build(), BASE, PRODUCTOS);
+        cliente = new ClienteInventarioHeroes(constructor.build(), BASE, PRODUCTOS, HEROES);
     }
 
     private static String vitrinaCon(String elementos) {
@@ -79,6 +82,19 @@ class ClienteInventarioHeroesTest {
                 MediaType.APPLICATION_JSON));
     }
 
+    /**
+     * La ficha del prototipo, de donde sale la DEFENSA.
+     *
+     * <p>El motor acierta si la tirada de ataque supera la defensa del
+     * objetivo. Mandandole la vida en su lugar, ningun golpe acertaba nunca.
+     */
+    private void esperarFichaDePrototipo(int defensa) {
+        servidor.expect(requestTo(FICHA_DEL_PROTOTIPO)).andRespond(withSuccess(
+                "{\"nombre\":\"Guerrero Tanque\",\"estadisticasNivel1\":{\"poder\":10,"
+                        + "\"vida\":44,\"defensa\":" + defensa + "}}",
+                MediaType.APPLICATION_JSON));
+    }
+
     private void esperarVitrina(String cuerpo) {
         servidor.expect(requestTo(VITRINA))
                 .andExpect(header("X-User-Name", "vael"))
@@ -96,6 +112,7 @@ class ClienteInventarioHeroesTest {
                 "{\"heroeId\":\"h-1\",\"poder\":10,\"vida\":140,\"defensa\":4}",
                 MediaType.APPLICATION_JSON));
         esperarProducto("Guerrero Tanque");
+        esperarFichaDePrototipo(11);
 
         EstadoDelHeroe estado = cliente.consultar(JUGADOR);
 
@@ -106,8 +123,35 @@ class ClienteInventarioHeroesTest {
                 // del catalogo. Son cosas distintas, y confundirlas es lo que
                 // hacia que el motor devolviera 404 en cada ataque.
                 () -> assertEquals("Guerrero Tanque", estado.heroe().prototipo()),
+                // La defensa viene del CATALOGO (11), no de la vida (140). Con
+                // la vida en su lugar, la tirada de ataque -como mucho 16- no
+                // podia superarla nunca y ningun golpe acertaba.
+                () -> assertEquals(11, estado.heroe().defensa()),
                 () -> assertEquals(140, estado.heroe().vidaMaxima()),
                 () -> assertEquals(140, estado.heroe().vidaActual()));
+        servidor.verify();
+    }
+
+    @Test
+    @DisplayName("si el catalogo no contesta, el heroe entra igual pero sin defensa")
+    void sinCatalogoElHeroeEntraIgual() {
+        esperarVitrina(vitrinaCon(heroe("h-1", "Sombra de Vael", true, null)));
+        servidor.expect(requestTo(EQUIPAMIENTO)).andRespond(withSuccess(
+                "{\"heroeId\":\"h-1\",\"armas\":[\"a-1\"],\"armaduras\":{},\"items\":[]}",
+                MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo(ESTADISTICAS)).andRespond(withSuccess(
+                "{\"heroeId\":\"h-1\",\"poder\":10,\"vida\":140,\"defensa\":4}",
+                MediaType.APPLICATION_JSON));
+        esperarProducto("Guerrero Tanque");
+        servidor.expect(requestTo(FICHA_DEL_PROTOTIPO)).andRespond(withServerError());
+
+        EstadoDelHeroe estado = cliente.consultar(JUGADOR);
+
+        assertAll(
+                () -> assertEquals(ResultadoVerificacion.DISPONIBLE, estado.resultado()),
+                () -> assertEquals("Guerrero Tanque", estado.heroe().prototipo()),
+                () -> assertNull(estado.heroe().defensa()),
+                () -> assertEquals(140, estado.heroe().vidaMaxima()));
         servidor.verify();
     }
 
@@ -175,6 +219,7 @@ class ClienteInventarioHeroesTest {
                 "{\"heroeId\":\"h-1\",\"poder\":10,\"vida\":90,\"defensa\":4}",
                 MediaType.APPLICATION_JSON));
         esperarProducto("Guerrero Tanque");
+        esperarFichaDePrototipo(11);
 
         EstadoDelHeroe estado = cliente.consultar(JUGADOR);
 
@@ -202,6 +247,7 @@ class ClienteInventarioHeroesTest {
         servidor.expect(requestTo(ESTADISTICAS)).andRespond(withSuccess(
                 "{\"heroeId\":\"h-1\",\"poder\":10,\"defensa\":4}", MediaType.APPLICATION_JSON));
         esperarProducto("Guerrero Tanque");
+        esperarFichaDePrototipo(11);
 
         EstadoDelHeroe estado = cliente.consultar(JUGADOR);
 

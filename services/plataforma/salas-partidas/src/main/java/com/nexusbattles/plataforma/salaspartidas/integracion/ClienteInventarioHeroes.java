@@ -56,13 +56,16 @@ class ClienteInventarioHeroes implements HeroeDelJugador {
     private final RestClient restClient;
     private final String urlBase;
     private final String urlProductos;
+    private final String urlHeroes;
 
     ClienteInventarioHeroes(RestClient restClientInventario,
                             @Value("${salas.inventario.url}") String urlBase,
-                            @Value("${salas.productos.url}") String urlProductos) {
+                            @Value("${salas.productos.url}") String urlProductos,
+                            @Value("${salas.heroes.url}") String urlHeroes) {
         this.restClient = restClientInventario;
         this.urlBase = urlBase.replaceAll("/+$", "");
         this.urlProductos = urlProductos.replaceAll("/+$", "");
+        this.urlHeroes = urlHeroes.replaceAll("/+$", "");
     }
 
     @Override
@@ -143,8 +146,46 @@ class ClienteInventarioHeroes implements HeroeDelJugador {
         int vida = estadisticas == null || estadisticas.vida() == null || estadisticas.vida() < 1
                 ? 1
                 : estadisticas.vida();
+        String prototipo = prototipoDe(heroe);
         return HeroeDeCombate.aPleno(heroe.id(), heroe.nombrePropio(),
-                prototipoDe(heroe), vida);
+                prototipo, vida, defensaDe(prototipo));
+    }
+
+    /**
+     * Defensa del prototipo, del catalogo de heroes.
+     *
+     * <p><b>Por que hace falta.</b> El motor acierta si la tirada de ataque
+     * supera la defensa del objetivo. Sin este dato se le mandaba la vida
+     * actual, y las dos cifras no estan en la misma escala: «Guerrero Tanque»
+     * ataca con {@code 10+1d6} —de 11 a 16— y tiene 44 de vida. Ningun golpe
+     * podia acertar nunca; el combate entero era imposible de ganar.
+     *
+     * <p>Se lee de {@code GET /api/v1/heroes/{prototipo}}, la misma ruta que ya
+     * consume inventario para calcular las estadisticas. Lectura publica, sin
+     * cambiar ningun contrato.
+     *
+     * <p>Como el prototipo: si falla, se devuelve {@code null} y el combate
+     * degrada, pero entrar a la sala sigue funcionando.
+     */
+    private Integer defensaDe(String prototipo) {
+        if (prototipo == null || prototipo.isBlank()) {
+            return null;
+        }
+        try {
+            FichaDeHeroe ficha = restClient.get()
+                    // Sin URLEncoder: los nombres de prototipo llevan espacios
+                    // y el encoder los convierte en '+', que el catalogo no
+                    // reconoce. Mismo cuidado que tiene inventario.
+                    .uri(urlHeroes + "/api/v1/heroes/{prototipo}", prototipo)
+                    .header("Accept", "application/json")
+                    .retrieve()
+                    .body(FichaDeHeroe.class);
+            return ficha == null || ficha.estadisticasNivel1() == null
+                    ? null
+                    : ficha.estadisticasNivel1().defensa();
+        } catch (RestClientException catalogoNoDisponible) {
+            return null;
+        }
     }
 
     /**
@@ -215,6 +256,14 @@ class ClienteInventarioHeroes implements HeroeDelJugador {
     /** Solo el prototipo: de la ficha del producto no hace falta nada mas. */
     @JsonIgnoreProperties(ignoreUnknown = true)
     record Producto(String prototipo) { }
+
+    /** Del catalogo de heroes solo interesa la defensa del nivel 1. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record FichaDeHeroe(EstadisticasDelPrototipo estadisticasNivel1) {
+
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        record EstadisticasDelPrototipo(Integer defensa) { }
+    }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record Equipamiento(List<String> armas, Map<String, String> armaduras, List<String> items) {

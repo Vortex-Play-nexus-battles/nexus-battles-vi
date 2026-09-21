@@ -28,6 +28,13 @@ import java.util.Objects;
  * @param nivel       nivel del heroe, o {@code null} si no se conoce
  * @param vidaActual  vida con la que llega a la sala
  * @param vidaMaxima  vida maxima con su equipamiento aplicado
+ * @param defensa     defensa del prototipo, o {@code null} si no se conoce.
+ *                    <b>No es la vida.</b> El motor acierta si la tirada de
+ *                    ataque supera la defensa: mandando la vida en su lugar
+ *                    —44 en «Guerrero Tanque», contra un ataque maximo de 16—
+ *                    ningun golpe podia acertar nunca. Anulable por lo mismo
+ *                    que el prototipo: filas anteriores a V8 y catalogo que no
+ *                    contesta.
  */
 public record HeroeDeCombate(
         String id,
@@ -36,7 +43,8 @@ public record HeroeDeCombate(
         String retratoUrl,
         Integer nivel,
         int vidaActual,
-        int vidaMaxima) {
+        int vidaMaxima,
+        Integer defensa) {
 
     /**
      * El heroe sin prototipo conocido.
@@ -49,7 +57,7 @@ public record HeroeDeCombate(
      */
     public HeroeDeCombate(String id, String nombre, String retratoUrl, Integer nivel,
                           int vidaActual, int vidaMaxima) {
-        this(id, nombre, null, retratoUrl, nivel, vidaActual, vidaMaxima);
+        this(id, nombre, null, retratoUrl, nivel, vidaActual, vidaMaxima, null);
     }
 
     public HeroeDeCombate {
@@ -75,7 +83,7 @@ public record HeroeDeCombate(
      */
     public HeroeDeCombate conVida(int vidaActual) {
         return new HeroeDeCombate(id, nombre, prototipo, retratoUrl, nivel,
-                Math.max(0, Math.min(vidaActual, vidaMaxima)), vidaMaxima);
+                Math.max(0, Math.min(vidaActual, vidaMaxima)), vidaMaxima, defensa);
     }
 
     /** El mismo heroe con la vida al maximo. */
@@ -103,6 +111,12 @@ public record HeroeDeCombate(
     /** Igual, con el prototipo del catalogo ya resuelto. */
     public static HeroeDeCombate aPleno(String id, String nombre, String prototipo,
                                         int vidaMaxima) {
-        return new HeroeDeCombate(id, nombre, prototipo, null, null, vidaMaxima, vidaMaxima);
+        return aPleno(id, nombre, prototipo, vidaMaxima, null);
+    }
+
+    /** Igual, con la defensa del prototipo tambien resuelta. */
+    public static HeroeDeCombate aPleno(String id, String nombre, String prototipo,
+                                        int vidaMaxima, Integer defensa) {
+        return new HeroeDeCombate(id, nombre, prototipo, null, null, vidaMaxima, vidaMaxima, defensa);
     }
 }
