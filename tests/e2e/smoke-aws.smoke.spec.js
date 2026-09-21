@@ -150,12 +150,26 @@ test.describe('Smoke del entorno desplegado', () => {
 
     const pagina = await conToken.json();
     // Forma de página, no un array pelado: es lo que el contrato declara y lo
-    // que el frontend pagina.
-    expect(pagina).toHaveProperty('salas');
-    expect(Array.isArray(pagina.salas)).toBe(true);
-    expect(typeof pagina.total === 'number' || typeof pagina.totalElementos === 'number').toBe(
-      true,
-    );
+    // que el frontend pagina. Los nombres son los de
+    // `PaginaDeSalasResponse` —`contenido`, no `salas`—, comprobados contra
+    // el DTO y no supuestos.
+    expect(Array.isArray(pagina.contenido), JSON.stringify(pagina)).toBe(true);
+    expect(typeof pagina.pagina).toBe('number');
+    expect(typeof pagina.tamano).toBe('number');
+    expect(typeof pagina.totalElementos).toBe('number');
+    expect(typeof pagina.totalPaginas).toBe('number');
+
+    // Y si hay salas, cada una trae su forma: el listado de RF-JUE-002 se
+    // pinta con estos campos.
+    for (const sala of pagina.contenido) {
+      expect(sala.id, JSON.stringify(sala)).toBeTruthy();
+      expect(sala.estado).toBeTruthy();
+      expect(sala.modalidad).toBeTruthy();
+      expect(typeof sala.ocupacion).toBe('number');
+      expect(sala.ocupacion).toBeLessThanOrEqual(sala.maximoParticipantes);
+      // El codigo de invitacion NO viaja en el listado: es de su anfitrion.
+      expect(sala.codigoInvitacion).toBeUndefined();
+    }
   });
 
   test('LIMITACION DE DEV: crear sala falla porque inventario no esta desplegado', async () => {
@@ -177,6 +191,67 @@ test.describe('Smoke del entorno desplegado', () => {
   // ===================================================================
   // Notificaciones, correo y metricas
   // ===================================================================
+
+  test('el canal en tiempo real acepta el CONNECT con el JWT desplegado', async ({ page }) => {
+    // HU-JUE-015 y HU-SAL-005 viajan los dos por aqui. Un 200 de
+    // `/actuator/health` no dice nada del canal: el handshake de WebSocket
+    // pasa por el borde con cabeceras de upgrade y el CONNECT de STOMP lleva
+    // el token. Se prueba lo que de verdad puede romperse.
+    // Se abre desde una pagina del propio host: el canal comprueba el Origin
+    // (`setAllowedOriginPatterns`), y desde `about:blank` viajaria como
+    // `null` y lo rechazaria por un motivo que no es el que se quiere probar.
+    await page.goto(`${AWS}/frontend/app-web/src/cuentas/login.html`);
+
+    const url = `${AWS.replace(/^http/, 'ws')}/ws`;
+    const resultado = await page.evaluate(
+      ([destino, token]) =>
+        new Promise((resolver) => {
+          const NUL = ' ';
+          const socket = new WebSocket(destino);
+          const cortar = setTimeout(() => resolver('sin respuesta en 15 s'), 15000);
+          socket.onopen = () =>
+            socket.send(
+              `CONNECT\naccept-version:1.2\nheart-beat:0,0\n` +
+                `Authorization:Bearer ${token}\n\n${NUL}`,
+            );
+          socket.onmessage = (evento) => {
+            clearTimeout(cortar);
+            resolver(String(evento.data).split('\n')[0]);
+          };
+          socket.onerror = () => {
+            clearTimeout(cortar);
+            resolver('error de transporte');
+          };
+          socket.onclose = () => {
+            clearTimeout(cortar);
+            resolver('cerrado sin CONNECTED');
+          };
+        }),
+      [url, jugador.token],
+    );
+
+    expect(resultado, `respuesta del canal en ${url}`).toBe('CONNECTED');
+  });
+
+  test('comentarios esta enrutado y protege la publicacion', async () => {
+    // HU-COM-001. Publicar existe; LEER no: `ComentariosController` solo tiene
+    // `@PostMapping`, asi que un GET da 405. Ese 405 ya demuestra lo que el
+    // smoke quiere saber —que el prefijo llega al servicio y no al 404
+    // generico del borde—, y de paso deja escrita la ausencia del endpoint de
+    // lectura, que hace falta para la vitrina de HU-INV-014.
+    const lectura = await api.get('/api/v1/products/smoke-inexistente/comments');
+    expect(
+      lectura.status(),
+      'si esto deja de ser 405, ya hay endpoint de lectura: actualiza la prueba',
+    ).toBe(405);
+
+    // No se afirma aqui la postura de seguridad del POST: el servicio valida
+    // el cuerpo antes que el token —un POST sin autenticar con un cuerpo
+    // inventado responde 400, no 401—, asi que desde fuera no se puede
+    // distinguir «rechazado por el cuerpo» de «rechazado por el token». Eso lo
+    // prueba su dueno con el DTO delante; aqui se quedaria en una afirmacion
+    // que parece decir algo y no lo dice.
+  });
 
   test('la bandeja de notificaciones responde con su forma y cuenta las no leidas', async () => {
     const r = await api.get(`/api/v1/users/${cuerpoDelToken(jugador.token).uid}/notifications`);
