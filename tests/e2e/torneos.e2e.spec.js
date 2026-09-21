@@ -399,6 +399,12 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     expect(partida.estado, `no termino en ${golpes} golpes`).toBe('FINALIZADA');
     const humana = partida.participantes.find((p) => !p.esIA);
     const ganoLaHumana = humana.heroe.vidaActual > 0;
+    // Evidencia en el informe: que rama se ejercito en esta corrida (el
+    // combate es real y no se fuerza el resultado).
+    console.log(
+      `[HU-TOR-004] partida ${partida.id} terminada en ${golpes} golpes: ` +
+        (ganoLaHumana ? 'gano la anfitriona -> lo informa salas-partidas' : 'gano la maquina -> D-26, lo registra el administrador'),
+    );
 
     if (ganoLaHumana) {
       // CA-04: el resultado lo puso la partida, no una persona.
