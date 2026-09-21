@@ -56,4 +56,19 @@ class CredencialesDeServicioAutoConfigurationTest {
                     assertThat(ctx).doesNotHaveBean(TokenDeServicioOAuth2.class);
                 });
     }
+
+    @Test
+    @DisplayName("con un Clock propio del servicio no se crea otro: un solo reloj para todos (#572)")
+    void unRelojPropioNoSeDuplica() {
+        java.time.Clock fijo = java.time.Clock.fixed(java.time.Instant.parse("2026-09-21T00:00:00Z"),
+                java.time.ZoneOffset.UTC);
+        contexto.withPropertyValues("seguridad.servicio.client-id=x", "seguridad.servicio.client-secret=s",
+                        "seguridad.servicio.url=http://localhost:1/token")
+                .withBean("clock", java.time.Clock.class, () -> fijo)
+                .run(ctx -> {
+                    assertThat(ctx).hasSingleBean(java.time.Clock.class);
+                    assertThat(ctx).doesNotHaveBean("relojDeCredenciales");
+                    assertThat(ctx).hasSingleBean(TokenDeServicioOAuth2.class);
+                });
+    }
 }
