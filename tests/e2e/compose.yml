@@ -251,6 +251,10 @@ services:
       # Reintento rapido de liquidaciones pendientes, para que el E2E pueda
       # observarlo sin esperar el minuto por defecto.
       APUESTAS_REINTENTO_MS: "5000"
+      # HU-DIS-003: corta circuitos cortos, para que degradacion.e2e.spec.js
+      # vea abrirse el circuito con dos fallos y recuperarse en dos segundos.
+      RESILIENCIA_FALLOS_PARA_ABRIR: "2"
+      RESILIENCIA_REINTENTAR_EN_SEGUNDOS: "2"
       # El navegador llega por el borde, asi que el origen permitido del
       # canal STOMP es el del borde, no el del servicio.
       SALAS_WS_ORIGENES: http://localhost:8099,http://127.0.0.1:8099

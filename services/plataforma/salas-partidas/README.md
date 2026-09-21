@@ -45,15 +45,35 @@ Los errores salen como problem details (RFC 7807) y la interfaz decide por
 
 | Puerto | Adaptador hoy | Qué falta y de quién |
 |---|---|---|
-| `CreditosDelJugador` (reservar/liberar/consumir la apuesta, HU-JUE-014) | `ClienteCreditos` contra `ms-finanzas` por `contracts/openapi/creditos.yaml` (`CREDITOS_URL`), con la credencial de servicio de ADR-005. Sin el libro: `503 creditos-no-disponibles` y nada reservado; una partida ya terminada deja su liquidacion `PENDIENTE` (tabla `liquidaciones_de_apuesta`, V9) y `ReintentarLiquidaciones` la cierra despues. | Que Cuentas cierre `/creditos/**` a `ROLE_SERVICIO` (hoy `permitAll`) y desplegar `ms-finanzas` en el host de dev cuando quepa. |
-| Héroe activo del jugador (HU-SAL-003) | — | Ninguna ruta de `inventario.yaml`/`heroes.yaml` parte del jugador autenticado. Contenido (#27). |
-| Productor de `partida.accion.resuelta` | — | Resultado de la acción: motor de combate, fuera de este bloque. Grupo 2 (#31). |
-| `SancionesSinIntegrar` (chat) | Doble que no sanciona | Consulta de sanción activa de moderación-sanciones. |
-| Autenticación de estas llamadas | — | Patrón de ADR-001 (`docs/gobierno/`), pendiente de aprobación. |
+| `CreditosDelJugador` (reservar/liberar/consumir la apuesta, HU-JUE-014) | `ClienteCreditos` contra `ms-finanzas` por `contracts/openapi/creditos.yaml` (`CREDITOS_URL`), con la credencial de servicio de ADR-005. Si el libro contesta algo que no sirve: `503 creditos-no-disponibles`; si no responde: degradación (abajo). Nada queda reservado; una partida ya terminada deja su liquidacion `PENDIENTE` (tabla `liquidaciones_de_apuesta`, V9) y `ReintentarLiquidaciones` la cierra despues. | Que Cuentas cierre `/creditos/**` a `ROLE_SERVICIO` (hoy `permitAll`) y desplegar `ms-finanzas` en el host de dev cuando quepa. |
+| `HeroeDelJugador` (puerta de héroe, HU-SAL-003) | `ClienteInventarioHeroes` contra `inventario.yaml` (`INVENTARIO_BASE_URL`) con la credencial de servicio; prototipo y defensa de `productos`/`heroes` (degradan solos). | Que inventario publique «el héroe activo»: hoy se toma el primero disponible y equipado. Contenido (#27). |
+| `MotorDeCombate` (resultado de la acción) | `ClienteMotorCombate` contra `motor-combate.yaml` (`MOTOR_COMBATE_URL`). | Mapeo héroe → prototipo de distribución (hoy `GUERRERO_ARMAS` para todos). Grupo 2 (#31). |
+| Sanción activa (chat, HU-JUE-015) | `ClienteSanciones` contra `moderacion-sanciones-consulta.yaml` (`SANCIONES_URL`); sin respuesta, `503 sanciones-no-disponibles` y nada sale al canal (D-14). | Tipo de sanción en el contrato, si el PO distingue silencio de otras. |
+
+## Degradación controlada (HU-DIS-003)
+
+Cada dependencia de arriba va detrás de su propio `CortaCircuitos`
+(`shared/libs/plataforma-resiliencia`, `ConfiguracionDeResiliencia`): inventario
+→ sección «Inventario», motor → «Motor de combate», libro → «Apuesta de
+creditos». Cuando una **no responde** (conexión, tiempo, 5xx, credencial de
+servicio que no se pudo obtener) la operación sale `503` con `type`
+`seccion-no-disponible`, `seccion`, `reintentarEnSegundos` y `Retry-After`; tras
+`RESILIENCIA_FALLOS_PARA_ABRIR` fallos seguidos se deja de llamar durante
+`RESILIENCIA_REINTENTAR_EN_SEGUNDOS` y luego pasa **una** llamada de prueba. Un
+4xx es una respuesta, no una caída: no abre nada (`Contestacion`). Por STOMP,
+el mismo problem detail vuelve por `/usuario/cola/salas`. El frontend lo pinta
+con `Seccion degradada` (`comun/degradacion/aviso-degradacion.js`) en
+`crear-sala`, `batallas`, `validacion-heroe` y los controles de combate, y el
+resto de la vista sigue. Probado apagando contenedores de verdad en
+`tests/e2e/degradacion.e2e.spec.js` y con `DegradacionDeInventarioIT`.
 
 ## Variables de entorno
 
 `DB_RELACIONAL_URL`, `DB_USER`, `DB_PASS`, `DIRECTORIO_ACTIVO_URL`,
+`DIRECTORIO_ACTIVO_CLIENT_ID`, `DIRECTORIO_ACTIVO_CLIENT_SECRET`,
+`INVENTARIO_BASE_URL`, `PRODUCTOS_BASE_URL`, `HEROES_BASE_URL`,
+`MOTOR_COMBATE_URL`, `CREDITOS_URL`, `SANCIONES_URL`,
+`RESILIENCIA_FALLOS_PARA_ABRIR`, `RESILIENCIA_REINTENTAR_EN_SEGUNDOS`,
 `SALAS_WS_ENDPOINT`, `SALAS_WS_ORIGENES`, `LISTA_NEGRA_VERIFICAR_URL`,
 `CHAT_WS_ORIGENES`, `CHAT_HISTORIAL_TAMANO`. Ningún valor real en el repo
 (regla 10); los valores tras `:` en `application.yml` son los del entorno local.

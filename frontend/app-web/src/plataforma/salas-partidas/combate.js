@@ -10,6 +10,12 @@
  * @module combate
  */
 
+import {
+  esSeccionDegradada,
+  pintarSeccionDegradada,
+  limpiarSeccionDegradada,
+} from '../../comun/degradacion/aviso-degradacion.js';
+
 /** Destino `accionDelJugador` del AsyncAPI. Prefijo de envío `/app`. */
 export function destinoDeAccion(idPartida) {
   return `/app/partidas/${idPartida}/acciones`;
@@ -186,7 +192,7 @@ function textoDelReparto(aviso, yo) {
  *   y recargar a mitad de partida dejaba al jugador sin poder actuar hasta
  *   que lo hiciera el rival.
  * @param {(accion: object) => void} opciones.alAtacar
- * @returns {{recibir: (aviso: object) => void}}
+ * @returns {{recibir: (aviso: object) => void, rechazar: (problema: object) => boolean}}
  */
 export function montarControlesDeCombate(
   raiz,
@@ -194,8 +200,14 @@ export function montarControlesDeCombate(
 ) {
   const zona = raiz.querySelector('[data-zona="acciones"]');
   const aviso = raiz.querySelector('[data-zona="resultado"]');
+  // HU-DIS-003: hueco de «Seccion degradada» cuando el motor de combate no
+  // responde; y la zona para los demas rechazos de la cola privada.
+  const zonaDegradacion = raiz.querySelector('[data-zona="degradacion"]');
+  const zonaRechazo = raiz.querySelector('[data-zona="rechazo"]');
   const registro = registroDeAvisos();
   const doc = raiz.ownerDocument ?? document;
+  /** La ultima accion enviada, para poder reintentarla tal cual. */
+  let ultimaAccion = null;
 
   // Rivales: a uno mismo no se ataca, ni a un companero de equipo en el modo
   // cooperativo (HU-SAL-004): el servidor lo rechazaria, y ofrecer el boton
@@ -218,9 +230,19 @@ export function montarControlesDeCombate(
     zona.addEventListener('click', (evento) => {
       const boton = evento.target.closest('[data-atacar]');
       if (boton && !boton.disabled) {
-        alAtacar({ idObjetivo: boton.dataset.atacar, codigoAccion: 'ATAQUE_BASICO' });
+        atacar({ idObjetivo: boton.dataset.atacar, codigoAccion: 'ATAQUE_BASICO' });
       }
     });
+  }
+
+  function atacar(accion) {
+    ultimaAccion = accion;
+    limpiarSeccionDegradada(zonaDegradacion);
+    if (zonaRechazo) {
+      zonaRechazo.hidden = true;
+      zonaRechazo.textContent = '';
+    }
+    alAtacar(accion);
   }
 
   /** Solo se puede atacar en el turno propio. */
@@ -235,8 +257,49 @@ export function montarControlesDeCombate(
   habilitar(Boolean(turnoDe) && turnoDe === yo);
 
   return {
+    /**
+     * Un rechazo llegado por la cola privada del jugador (`errorDeCanal`).
+     *
+     * Si es una seccion degradada (HU-DIS-003: el motor no responde), se
+     * pinta el componente comun sobre los controles, que siguen vivos porque
+     * la accion no se aplico y el turno sigue siendo del jugador; Reintentar
+     * vuelve a mandar la misma accion. Cualquier otro rechazo va a la zona
+     * de rechazo con el texto del servicio. Devuelve si lo gestiono.
+     *
+     * @param {object} problema problem detail del contrato
+     * @returns {boolean}
+     */
+    rechazar(problema) {
+      if (esSeccionDegradada(problema)) {
+        if (!zonaDegradacion) {
+          return false;
+        }
+        pintarSeccionDegradada(zonaDegradacion, problema, {
+          alReintentar: () => {
+            if (ultimaAccion) {
+              atacar(ultimaAccion);
+            } else {
+              limpiarSeccionDegradada(zonaDegradacion);
+            }
+          },
+        });
+        return true;
+      }
+      if (!zonaRechazo) {
+        return false;
+      }
+      zonaRechazo.textContent = problema?.detail ?? problema?.title ?? 'La accion fue rechazada.';
+      zonaRechazo.hidden = false;
+      return true;
+    },
+
     recibir(mensaje) {
       if (registro.yaVisto(mensaje)) {
+        return;
+      }
+      if (mensaje?.tipo === ACCION_RESUELTA && mensaje.idPartida === idPartida) {
+        // El motor volvio a contestar: la degradacion, si la habia, ya paso.
+        limpiarSeccionDegradada(zonaDegradacion);
         return;
       }
       if (mensaje?.tipo === TURNO_CAMBIADO && mensaje.idPartida === idPartida) {

@@ -19,6 +19,11 @@
  * simplemente no se pinta, en vez de rellenarse con un valor de ejemplo.
  */
 
+import {
+  esSeccionDegradada,
+  pintarSeccionDegradada,
+} from '../../comun/degradacion/aviso-degradacion.js';
+
 /** Resultados del esquema `VerificacionHeroe` del contrato OpenAPI. */
 export const RESULTADOS = {
   DISPONIBLE: 'DISPONIBLE',
@@ -237,8 +242,35 @@ export async function montarValidacionDeHeroe(
   try {
     pintarValidacion(raiz, await verificar(idSala), { alCancelar, alConfirmar });
   } catch (error) {
+    if (esSeccionDegradada(error?.problema)) {
+      // HU-DIS-003: el inventario no responde. No hay veredicto que pintar
+      // -ni se inventa-, asi que el dialogo dice que Inventario esta
+      // limitado y deja reintentar la misma verificacion.
+      pintarInventarioDegradado(raiz, error.problema, alCancelar, () =>
+        montarValidacionDeHeroe(raiz, { idSala, verificar, alCancelar, alConfirmar }),
+      );
+      return;
+    }
     pintarFalloDeVerificacion(raiz, error, alCancelar);
   }
+}
+
+/**
+ * Seccion degradada dentro del dialogo — HU-DIS-003, MAPEO-ERRORES §5.5.
+ *
+ * No es el estado de error de RNF-USA-003: aqui el dialogo esta bien y es
+ * una parte -la respuesta del inventario- la que no esta. Se pinta el
+ * componente comun en el hueco del veredicto, con Cancelar como salida.
+ */
+function pintarInventarioDegradado(raiz, problema, alCancelar, alReintentar) {
+  const doc = raiz.ownerDocument;
+  prepararDialogo(raiz, 'DEGRADADO');
+  const hueco = doc.createElement('div');
+  hueco.dataset.zona = 'degradacion';
+  hueco.dataset.seccion = 'Inventario';
+  pintarSeccionDegradada(hueco, problema, { alReintentar });
+  raiz.append(tituloDelDialogo(doc), hueco, accionesSoloCancelar(doc, alCancelar));
+  enfocarTitulo(raiz);
 }
 
 /**

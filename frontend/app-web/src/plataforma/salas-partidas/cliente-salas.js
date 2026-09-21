@@ -61,6 +61,14 @@ export class ErrorDeApi extends Error {
     this.estado = problema?.status ?? estado;
     /** @type {Array<{campo: string, mensaje: string}>} */
     this.errores = Array.isArray(problema?.errores) ? problema.errores : [];
+    /**
+     * El problem detail entero, tal como llego. Hace falta para las
+     * propiedades que no son de la regla 4 base -`seccion`,
+     * `reintentarEnSegundos` de HU-DIS-003- y que decide otro componente
+     * (`comun/degradacion/aviso-degradacion.js`), no este.
+     * @type {object}
+     */
+    this.problema = problema && typeof problema === 'object' ? problema : {};
   }
 
   /** True cuando el rechazo se puede corregir campo a campo en el formulario. */

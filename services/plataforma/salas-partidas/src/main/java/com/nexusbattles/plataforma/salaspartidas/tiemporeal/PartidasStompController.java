@@ -1,8 +1,11 @@
 package com.nexusbattles.plataforma.salaspartidas.tiemporeal;
 
 import com.nexusbattles.comun.error.ErrorDeNegocio;
+import com.nexusbattles.plataforma.resiliencia.DependenciaDegradada;
+import com.nexusbattles.plataforma.resiliencia.ErroresDeDegradacion;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.EjecutarAccion;
 import com.nexusbattles.comun.seguridad.IdentidadDelToken;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
@@ -37,9 +40,12 @@ import java.util.UUID;
 public class PartidasStompController {
 
     private final EjecutarAccion ejecutarAccion;
+    private final long reintentarEnSegundos;
 
-    public PartidasStompController(EjecutarAccion ejecutarAccion) {
+    public PartidasStompController(EjecutarAccion ejecutarAccion,
+                                   @Value("${resiliencia.reintentar-en-segundos:30}") long reintentarEnSegundos) {
         this.ejecutarAccion = ejecutarAccion;
+        this.reintentarEnSegundos = reintentarEnSegundos;
     }
 
     /**
@@ -70,6 +76,21 @@ public class PartidasStompController {
         problema.setType(error.tipo());
         problema.setTitle(error.titulo());
         return problema;
+    }
+
+    /**
+     * HU-DIS-003: el motor de combate no responde. Mismo problem detail que
+     * produce {@code ManejadorDeDegradacion} en la API HTTP —{@code type}
+     * {@code seccion-no-disponible}, {@code seccion}, {@code reintentarEnSegundos}—
+     * para que el navegador lo pinte con el mismo componente ({@code Seccion
+     * degradada}) llegue por donde llegue. Por la cola privada: el resto de la
+     * partida no tiene por que enterarse de que a este jugador no le salio el
+     * golpe.
+     */
+    @MessageExceptionHandler(DependenciaDegradada.class)
+    @SendToUser(destinations = "/cola/salas", broadcast = false)
+    public ProblemDetail seccionNoDisponible(DependenciaDegradada degradada) {
+        return ErroresDeDegradacion.problema(degradada, reintentarEnSegundos);
     }
 
     private static UUID jugadorDe(Principal principal) {

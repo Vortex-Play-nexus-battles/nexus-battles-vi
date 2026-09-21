@@ -26,6 +26,7 @@ const HTML = `
     <select name="modalidad"><option value="">todas</option><option value="CONTRA_IA">IA</option></select>
     <select name="estado"><option value="">todos</option><option value="ABIERTA">Abierta</option></select>
     <div class="estado-vista" data-zona="estado"></div>
+    <div data-zona="degradacion" data-seccion="Inventario" hidden></div>
     <p data-zona="canal" hidden></p>
     <div class="rejilla-salas" data-zona="salas" hidden></div>
     <nav class="paginacion" data-zona="paginacion" hidden></nav>
@@ -222,6 +223,54 @@ describe('montarBatallas', () => {
     const estado = raiz.querySelector('[data-zona="estado"]');
     expect(estado.hidden).toBe(false);
     expect(estado.textContent).toContain('Necesitas un codigo de invitacion');
+  });
+
+  // HU-DIS-003 · CA-02 y CA-03: si el inventario no responde al entrar, el
+  // listado NO desaparece; se pinta Seccion degradada aparte y se puede
+  // reintentar la misma sala.
+  test('inventario degradado al entrar: el listado sigue y aparece Seccion degradada con reintento', async () => {
+    const raiz = preparar();
+    const degradado = new ErrorDeApi(
+      {
+        type: 'https://nexusbattles.local/errores/seccion-no-disponible',
+        title: 'Inventario no disponible temporalmente',
+        status: 503,
+        detail: 'La seccion de Inventario no esta disponible temporalmente.',
+        seccion: 'Inventario',
+        reintentarEnSegundos: 3,
+      },
+      503,
+    );
+    const ingresar = jest
+      .fn()
+      .mockRejectedValueOnce(degradado)
+      .mockResolvedValueOnce(sala({ ocupacion: 5 }));
+    const alEntrar = jest.fn();
+
+    montarBatallas(raiz, {
+      listar: jest.fn().mockResolvedValue(pagina([sala()])),
+      ingresar,
+      alEntrar,
+    });
+    await asentar();
+
+    raiz.querySelector('[data-sala]').click();
+    await asentar();
+
+    const degradada = raiz.querySelector('[data-zona="degradacion"] .seccion-degradada');
+    expect(degradada).not.toBeNull();
+    expect(degradada.textContent).toContain('Inventario no disponible temporalmente');
+    expect(raiz.querySelector('[data-zona="salas"]').hidden).toBe(false);
+    expect(raiz.querySelector('[data-zona="estado"]').hidden).toBe(true);
+    expect(alEntrar).not.toHaveBeenCalled();
+
+    degradada.querySelector('.seccion-degradada__reintentar').click();
+    await asentar();
+
+    expect(ingresar).toHaveBeenCalledTimes(2);
+    expect(ingresar).toHaveBeenLastCalledWith(sala().id);
+    expect(raiz.querySelector('[data-zona="degradacion"] .seccion-degradada')).toBeNull();
+    expect(alEntrar).toHaveBeenCalledWith(expect.objectContaining({ ocupacion: 5 }));
   });
 
   test('un fallo al listar no deja la vista en blanco', async () => {

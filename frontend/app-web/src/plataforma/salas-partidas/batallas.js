@@ -19,6 +19,11 @@
 
 import { listarSalas, ingresarASala } from './cliente-salas.js';
 import { seguirSala, estadoDesdeFicha } from './canal-sala.js';
+import {
+  esSeccionDegradada,
+  pintarSeccionDegradada,
+  limpiarSeccionDegradada,
+} from '../../comun/degradacion/aviso-degradacion.js';
 
 /** Etiqueta de la insignia por estado. Son las del componente `Insignia`. */
 const ETIQUETA_DE_ESTADO = {
@@ -200,6 +205,10 @@ export function montarBatallas(raiz, puertos = {}) {
   const zonaPaginacion = raiz.querySelector('[data-zona="paginacion"]');
   const subtitulo = raiz.querySelector('[data-zona="subtitulo"]');
   const zonaCanal = raiz.querySelector('[data-zona="canal"]');
+  // HU-DIS-003: hueco de «Seccion degradada» cuando entrar a una sala falla
+  // porque el inventario (o el libro de creditos) no responde. Aparte del
+  // estado de vista a proposito: el listado sigue siendo util y no se oculta.
+  const zonaDegradacion = raiz.querySelector('[data-zona="degradacion"]');
   const filtroModalidad = raiz.querySelector('[name="modalidad"]');
   const filtroEstado = raiz.querySelector('[name="estado"]');
 
@@ -383,9 +392,14 @@ export function montarBatallas(raiz, puertos = {}) {
     if (!tarjeta || tarjeta.disabled) {
       return;
     }
+    await entrarA(tarjeta.dataset.sala);
+  });
 
+  /** Entra a una sala; reutilizable por el reintento de la seccion degradada. */
+  async function entrarA(idSala) {
+    limpiarSeccionDegradada(zonaDegradacion);
     try {
-      const dentro = await ingresar(tarjeta.dataset.sala);
+      const dentro = await ingresar(idSala);
       // Ya se es participante: ahora si se puede seguir la sala aunque sea
       // privada, y la tarjeta refleja la entrada sin esperar al canal.
       if (dentro && dentro.id) {
@@ -398,6 +412,15 @@ export function montarBatallas(raiz, puertos = {}) {
       }
       alEntrar(dentro);
     } catch (error) {
+      if (zonaDegradacion && esSeccionDegradada(error?.problema)) {
+        // HU-DIS-003: no es que no se pueda entrar, es que quien lo comprueba
+        // no responde. El listado se queda; se dice que seccion esta limitada
+        // y se ofrece reintentar la misma sala.
+        pintarSeccionDegradada(zonaDegradacion, error.problema, {
+          alReintentar: () => entrarA(idSala),
+        });
+        return;
+      }
       // Los tres rechazos del contrato -403 privada, 404 no existe, 409 llena-
       // llegan aqui ya interpretados por el cliente. La vista los muestra tal
       // cual: el texto lo redacta el servicio, que es quien sabe el motivo.
@@ -407,7 +430,7 @@ export function montarBatallas(raiz, puertos = {}) {
         error.detalle ?? error.message,
       );
     }
-  });
+  }
 
   for (const filtro of [filtroModalidad, filtroEstado]) {
     filtro?.addEventListener('change', () => {

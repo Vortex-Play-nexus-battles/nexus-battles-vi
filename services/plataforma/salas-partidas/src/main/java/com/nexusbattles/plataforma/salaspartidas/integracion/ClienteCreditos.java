@@ -1,11 +1,13 @@
 package com.nexusbattles.plataforma.salaspartidas.integracion;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.nexusbattles.plataforma.resiliencia.CortaCircuitos;
+import com.nexusbattles.plataforma.resiliencia.DependenciaDegradada;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CreditosDelJugador;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ReservaDeCreditos;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CreditosInsuficientes;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CreditosNoDisponibles;
-import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
@@ -37,11 +39,17 @@ import java.util.UUID;
  * asi que quien vuelve a entrar despues de irse consigue una reserva nueva y
  * no la que ya se le devolvio (ver {@code CreditosDelJugador#reservar}).
  *
- * <p><b>Fallo cerrado.</b> Si el libro no contesta o responde algo que no se
- * entiende, se lanza {@link CreditosNoDisponibles} (503) y no se inventa
- * ninguna reserva. Un 409 al consumir («la reserva ya se libero») tambien es
- * un fallo: significa que este servicio y el libro no coinciden, y eso hay que
- * verlo, no taparlo.
+ * <p><b>Fallo cerrado, en dos formas.</b> Si el libro <i>no contesta</i>
+ * (conexion rechazada, tiempo agotado, 5xx) la llamada atraviesa el corta
+ * circuitos de HU-DIS-003 y sale como {@link DependenciaDegradada}: 503 con
+ * {@code type} {@code seccion-no-disponible}, la seccion «Apuesta de creditos»
+ * y {@code Retry-After}; tras varios fallos seguidos el circuito se abre y se
+ * deja de llamar hasta que toque reintentar. Si el libro <i>contesta algo que
+ * no sirve</i> (un 4xx distinto de 422, una reserva sin identificador) se lanza
+ * {@link CreditosNoDisponibles} (503, {@code creditos-no-disponibles}): el libro
+ * esta vivo y el circuito no se abre. En ninguno de los dos casos se inventa una
+ * reserva. Un 409 al consumir («la reserva ya se libero») es de los segundos:
+ * este servicio y el libro no coinciden, y eso hay que verlo, no taparlo.
  *
  * <p><b>Autenticacion.</b> El {@code RestClient} que recibe ya lleva el
  * interceptor de credencial de servicio (ADR-001/ADR-005) cuando esta
@@ -56,10 +64,12 @@ public class ClienteCreditos implements CreditosDelJugador {
 
     private final RestClient http;
     private final String base;
+    private final CortaCircuitos corta;
 
-    public ClienteCreditos(RestClient http, String base) {
+    public ClienteCreditos(RestClient http, String base, CortaCircuitos corta) {
         this.http = http;
         this.base = base.replaceAll("/+$", "");
+        this.corta = corta;
     }
 
     /** Clave unica por (sala, jugador, ingreso); visible para la prueba de contrato. */
@@ -72,58 +82,56 @@ public class ClienteCreditos implements CreditosDelJugador {
         if (creditos <= 0) {
             throw new IllegalArgumentException("Solo se reserva una cantidad positiva de creditos.");
         }
-        try {
-            Reserva respuesta = http.post()
-                    .uri(base + "/creditos/reservar")
-                    .header("Idempotency-Key", claveDeIdempotencia(idSala, idJugador, ingreso))
-                    .body(new PeticionDeReserva(idJugador.toString(), BigDecimal.valueOf(creditos),
-                            CONCEPTO, "sala-" + idSala))
-                    .retrieve()
-                    .body(Reserva.class);
+        // Detras del corta circuitos: lo que no responde sale como
+        // DependenciaDegradada; lo que el libro contesta (4xx) llega aqui.
+        Contestacion<Reserva> contestacion = Contestacion.protegida(corta, () -> http.post()
+                .uri(base + "/creditos/reservar")
+                .header("Idempotency-Key", claveDeIdempotencia(idSala, idJugador, ingreso))
+                .body(new PeticionDeReserva(idJugador.toString(), BigDecimal.valueOf(creditos),
+                        CONCEPTO, "sala-" + idSala))
+                .retrieve()
+                .body(Reserva.class));
 
-            if (respuesta == null || respuesta.reservaId() == null || respuesta.monto() == null) {
-                throw new CreditosNoDisponibles("el libro respondio una reserva que no se entiende");
-            }
-            return new ReservaDeCreditos(respuesta.reservaId(), enteros(respuesta.monto()));
-
-        } catch (HttpClientErrorException error) {
+        if (contestacion.rechazada()) {
             // Por valor, no por constante: Spring 7 tiene dos constantes para
             // 422 (UNPROCESSABLE_CONTENT y la vieja UNPROCESSABLE_ENTITY) y una
             // respuesta real resuelve a la primera. Con `==` el 422 del libro
             // se convertia en 503 — lo destapo el E2E.
-            if (error.getStatusCode().value() == SALDO_INSUFICIENTE) {
+            if (contestacion.estado() == SALDO_INSUFICIENTE) {
                 throw new CreditosInsuficientes(saldoDisponibleDe(idJugador), creditos);
             }
-            throw new CreditosNoDisponibles("el libro rechazo la reserva con " + error.getStatusCode().value());
-        } catch (RestClientException noResponde) {
-            throw new CreditosNoDisponibles(noResponde.getMessage());
+            throw new CreditosNoDisponibles("el libro rechazo la reserva con " + contestacion.estado());
         }
+
+        Reserva respuesta = contestacion.cuerpo();
+        if (respuesta == null || respuesta.reservaId() == null || respuesta.monto() == null) {
+            throw new CreditosNoDisponibles("el libro respondio una reserva que no se entiende");
+        }
+        return new ReservaDeCreditos(respuesta.reservaId(), enteros(respuesta.monto()));
     }
 
     @Override
     public void liberar(UUID idReserva) {
-        try {
-            http.post()
-                    .uri(base + "/creditos/reservas/{id}/liberar", idReserva)
-                    .retrieve()
-                    .toBodilessEntity();
-        } catch (RestClientException noResponde) {
+        Contestacion<ResponseEntity<Void>> contestacion = Contestacion.protegida(corta, () -> http.post()
+                .uri(base + "/creditos/reservas/{id}/liberar", idReserva)
+                .retrieve()
+                .toBodilessEntity());
+        if (contestacion.rechazada()) {
             throw new CreditosNoDisponibles("no se pudo liberar la reserva " + idReserva
-                    + ": " + noResponde.getMessage());
+                    + ": el libro respondio " + contestacion.estado());
         }
     }
 
     @Override
     public void consumir(UUID idReserva, UUID idBeneficiario) {
-        try {
-            http.post()
-                    .uri(base + "/creditos/reservas/{id}/consumir", idReserva)
-                    .body(new PeticionDeConsumo(idBeneficiario == null ? null : idBeneficiario.toString()))
-                    .retrieve()
-                    .toBodilessEntity();
-        } catch (RestClientException noResponde) {
+        Contestacion<ResponseEntity<Void>> contestacion = Contestacion.protegida(corta, () -> http.post()
+                .uri(base + "/creditos/reservas/{id}/consumir", idReserva)
+                .body(new PeticionDeConsumo(idBeneficiario == null ? null : idBeneficiario.toString()))
+                .retrieve()
+                .toBodilessEntity());
+        if (contestacion.rechazada()) {
             throw new CreditosNoDisponibles("no se pudo cobrar la reserva " + idReserva
-                    + ": " + noResponde.getMessage());
+                    + ": el libro respondio " + contestacion.estado());
         }
     }
 

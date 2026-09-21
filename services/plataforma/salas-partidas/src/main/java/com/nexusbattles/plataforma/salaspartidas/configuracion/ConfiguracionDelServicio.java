@@ -1,6 +1,7 @@
 package com.nexusbattles.plataforma.salaspartidas.configuracion;
 
 import com.nexusbattles.comun.observabilidad.FiltroDeTraza;
+import com.nexusbattles.plataforma.resiliencia.CortaCircuitos;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.AbandonarSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CancelarSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CreditosDelJugador;
@@ -16,6 +17,7 @@ import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDePartida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDeSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDePartidas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -140,11 +142,12 @@ public class ConfiguracionDelServicio {
     public CreditosDelJugador creditosDelJugador(
             @org.springframework.beans.factory.annotation.Value("${salas.creditos.url}") String urlDelLibro,
             org.springframework.beans.factory.ObjectProvider<
-                    com.nexusbattles.comun.seguridad.servicio.InterceptorDePortadorDeServicio> credencial) {
+                    com.nexusbattles.comun.seguridad.servicio.InterceptorDePortadorDeServicio> credencial,
+            @Qualifier("cortaCreditos") CortaCircuitos corta) {
         RestClient.Builder constructor = RestClient.builder();
         credencial.ifAvailable(constructor::requestInterceptor);
         return new com.nexusbattles.plataforma.salaspartidas.integracion.ClienteCreditos(
-                constructor.build(), urlDelLibro);
+                constructor.build(), urlDelLibro, corta);
     }
 
     /**
@@ -152,14 +155,16 @@ public class ConfiguracionDelServicio {
      *
      * <p>Propio y no compartido con el de inventario: son dos integraciones
      * distintas y el dia que una necesite su propio tiempo de espera no debe
-     * arrastrar a la otra.
+     * arrastrar a la otra. Por eso mismo cada uno lleva su corta circuitos
+     * (HU-DIS-003, ver {@link ConfiguracionDeResiliencia}).
      */
     @Bean
     public com.nexusbattles.plataforma.salaspartidas.dominio.MotorDeCombate motorDeCombate(
             @org.springframework.beans.factory.annotation.Value("${motor.combate.url:http://localhost:8104}")
-            String urlDelMotor) {
+            String urlDelMotor,
+            @Qualifier("cortaMotorCombate") CortaCircuitos corta) {
         return new com.nexusbattles.plataforma.salaspartidas.integracion.ClienteMotorCombate(
-                RestClient.builder().build(), urlDelMotor);
+                RestClient.builder().build(), urlDelMotor, corta);
     }
 
     /** RF-JUE-017: estado de la partida, para pintar y para reconectar. */

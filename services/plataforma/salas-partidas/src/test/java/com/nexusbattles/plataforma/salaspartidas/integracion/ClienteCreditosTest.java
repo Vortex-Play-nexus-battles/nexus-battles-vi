@@ -1,6 +1,11 @@
 package com.nexusbattles.plataforma.salaspartidas.integracion;
 
+import com.nexusbattles.plataforma.resiliencia.CortaCircuitos;
+import com.nexusbattles.plataforma.resiliencia.DependenciaDegradada;
+import com.nexusbattles.plataforma.resiliencia.EstadoDelCorta;
+import com.nexusbattles.plataforma.resiliencia.RegistroDeDegradacion;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ReservaDeCreditos;
+import com.nexusbattles.plataforma.salaspartidas.configuracion.ConfiguracionDeResiliencia;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CreditosInsuficientes;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CreditosNoDisponibles;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,10 +23,16 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
@@ -53,12 +64,42 @@ class ClienteCreditosTest {
 
     private MockRestServiceServer libro;
     private ClienteCreditos cliente;
+    private RelojManual reloj;
+    private CortaCircuitos corta;
 
     @BeforeEach
     void prepararElLibro() {
         RestClient.Builder constructor = RestClient.builder();
         libro = MockRestServiceServer.bindTo(constructor).build();
-        cliente = new ClienteCreditos(constructor.build(), BASE + "/");
+        reloj = new RelojManual();
+        corta = new CortaCircuitos(ConfiguracionDeResiliencia.MS_FINANZAS,
+                ConfiguracionDeResiliencia.SECCION_APUESTAS, 3, Duration.ofSeconds(30), reloj,
+                new RegistroDeDegradacion());
+        cliente = new ClienteCreditos(constructor.build(), BASE + "/", corta);
+    }
+
+    /** Reloj que solo avanza cuando la prueba lo dice: nada de dormir el hilo. */
+    static final class RelojManual extends Clock {
+        private Instant ahora = Instant.parse("2026-09-21T10:00:00Z");
+
+        void avanzar(Duration cuanto) {
+            ahora = ahora.plus(cuanto);
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zona) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return ahora;
+        }
     }
 
     private static String reservaJson(String estado) {
@@ -139,26 +180,27 @@ class ClienteCreditosTest {
         }
 
         @Test
-        @DisplayName("CA-06: si el libro no responde, 503 con type estable y sin reserva")
+        @DisplayName("CA-06 / HU-DIS-003: si el libro no responde, la seccion de apuestas queda degradada y nada se reserva")
         void libroCaido() {
             libro.expect(requestTo(BASE + "/creditos/reservar"))
                     .andRespond(withException(new IOException("connection refused")));
 
-            CreditosNoDisponibles error = assertThrows(CreditosNoDisponibles.class,
+            DependenciaDegradada error = assertThrows(DependenciaDegradada.class,
                     () -> cliente.reservar(JUGADOR, 150, SALA, 0));
 
             assertAll(
-                    () -> assertEquals(503, error.estado()),
-                    () -> assertEquals(CreditosNoDisponibles.TIPO, error.tipo()),
-                    () -> assertTrue(error.detalle().contains("Nada quedo reservado")));
+                    () -> assertEquals(ConfiguracionDeResiliencia.MS_FINANZAS, error.dependencia()),
+                    () -> assertEquals(ConfiguracionDeResiliencia.SECCION_APUESTAS, error.seccion()),
+                    () -> assertTrue(error.getCause().getMessage().contains("connection refused"),
+                            "la causa real viaja para la bitacora: " + error.getCause()));
         }
 
         @Test
-        @DisplayName("un 500 del libro tambien es 503 de este lado, no un 500 propio")
+        @DisplayName("un 500 del libro tambien es degradacion de este lado, no un 500 propio")
         void errorDelLibro() {
             libro.expect(requestTo(BASE + "/creditos/reservar")).andRespond(withServerError());
 
-            assertThrows(CreditosNoDisponibles.class, () -> cliente.reservar(JUGADOR, 150, SALA, 0));
+            assertThrows(DependenciaDegradada.class, () -> cliente.reservar(JUGADOR, 150, SALA, 0));
         }
 
         @Test
@@ -208,14 +250,110 @@ class ClienteCreditosTest {
         }
 
         @Test
-        @DisplayName("si el libro no responde, propaga 503 con la reserva en el detalle")
+        @DisplayName("si el libro no responde, propaga la degradacion: quien libera decide que hacer con ella")
         void noResponde() {
             libro.expect(requestTo(BASE + "/creditos/reservas/" + RESERVA + "/liberar"))
                     .andRespond(withException(new IOException("timeout")));
 
+            DependenciaDegradada error = assertThrows(DependenciaDegradada.class, () -> cliente.liberar(RESERVA));
+
+            assertEquals(ConfiguracionDeResiliencia.MS_FINANZAS, error.dependencia());
+        }
+
+        @Test
+        @DisplayName("un 4xx al liberar es un desacuerdo con el libro, no una caida: 503 con la reserva en el detalle")
+        void rechazada() {
+            libro.expect(requestTo(BASE + "/creditos/reservas/" + RESERVA + "/liberar"))
+                    .andRespond(withStatus(HttpStatus.NOT_FOUND));
+
             CreditosNoDisponibles error = assertThrows(CreditosNoDisponibles.class, () -> cliente.liberar(RESERVA));
 
-            assertTrue(error.detalle().contains(RESERVA.toString()));
+            assertAll(
+                    () -> assertTrue(error.detalle().contains(RESERVA.toString())),
+                    () -> assertTrue(error.detalle().contains("404")),
+                    () -> assertEquals(EstadoDelCorta.CERRADO, corta.estado(), "un 4xx no abre el circuito"));
+        }
+    }
+
+    // =====================================================================
+    // HU-DIS-003: el corta circuitos protege a ESTE servicio, no al libro
+    // =====================================================================
+
+    @Nested
+    @DisplayName("corta circuitos (HU-DIS-003)")
+    class CortaCircuitosDelLibro {
+
+        private void elLibroNoContesta(int veces) {
+            for (int i = 0; i < veces; i++) {
+                libro.expect(requestTo(BASE + "/creditos/reservar"))
+                        .andRespond(withException(new IOException("connection refused")));
+            }
+        }
+
+        @Test
+        @DisplayName("tres fallos seguidos abren el circuito y la cuarta llamada ya no toca el libro")
+        void seAbreTrasTresFallos() {
+            elLibroNoContesta(3);
+
+            for (int intento = 0; intento < 3; intento++) {
+                assertThrows(DependenciaDegradada.class, () -> cliente.reservar(JUGADOR, 150, SALA, 0));
+            }
+            assertEquals(EstadoDelCorta.ABIERTO, corta.estado());
+
+            // Sin expectativa para una cuarta peticion: si el cliente la hiciera,
+            // el servidor simulado la rechazaria y esta prueba fallaria.
+            DependenciaDegradada sinLlamar = assertThrows(DependenciaDegradada.class,
+                    () -> cliente.reservar(JUGADOR, 150, SALA, 0));
+
+            libro.verify();
+            assertAll(
+                    () -> assertEquals(ConfiguracionDeResiliencia.SECCION_APUESTAS, sinLlamar.seccion()),
+                    () -> assertNull(sinLlamar.getCause(), "con el circuito abierto no hay llamada que falle"));
+        }
+
+        @Test
+        @DisplayName("un 422 es una respuesta del libro, no un fallo: tres seguidos no abren nada")
+        void elSaldoInsuficienteNoCuenta() {
+            for (int i = 0; i < 3; i++) {
+                libro.expect(requestTo(BASE + "/creditos/reservar"))
+                        .andRespond(withStatus(HttpStatusCode.valueOf(422)));
+                libro.expect(requestTo(BASE + "/creditos/" + JUGADOR + "/saldo"))
+                        .andRespond(withSuccess("{\"saldoDisponible\":10.00}", MediaType.APPLICATION_JSON));
+            }
+            libro.expect(requestTo(BASE + "/creditos/reservar"))
+                    .andRespond(withStatus(HttpStatus.CREATED)
+                            .contentType(MediaType.APPLICATION_JSON).body(reservaJson("ACTIVA")));
+
+            for (int intento = 0; intento < 3; intento++) {
+                assertThrows(CreditosInsuficientes.class, () -> cliente.reservar(JUGADOR, 150, SALA, 0));
+            }
+            ReservaDeCreditos reserva = cliente.reservar(JUGADOR, 150, SALA, 0);
+
+            libro.verify();
+            assertAll(
+                    () -> assertEquals(RESERVA, reserva.id()),
+                    () -> assertEquals(EstadoDelCorta.CERRADO, corta.estado()));
+        }
+
+        @Test
+        @DisplayName("pasada la espera deja pasar UNA llamada de prueba, y si el libro contesta el circuito se cierra")
+        void seRecuperaCuandoElLibroVuelve() {
+            elLibroNoContesta(3);
+            libro.expect(requestTo(BASE + "/creditos/reservar"))
+                    .andRespond(withStatus(HttpStatus.CREATED)
+                            .contentType(MediaType.APPLICATION_JSON).body(reservaJson("ACTIVA")));
+
+            for (int intento = 0; intento < 3; intento++) {
+                assertThrows(DependenciaDegradada.class, () -> cliente.reservar(JUGADOR, 150, SALA, 0));
+            }
+            reloj.avanzar(Duration.ofSeconds(31));
+
+            ReservaDeCreditos reserva = cliente.reservar(JUGADOR, 150, SALA, 0);
+
+            libro.verify();
+            assertAll(
+                    () -> assertEquals(150, reserva.creditos()),
+                    () -> assertEquals(EstadoDelCorta.CERRADO, corta.estado()));
         }
     }
 

@@ -1,5 +1,6 @@
 package com.nexusbattles.plataforma.salaspartidas.aplicacion;
 
+import com.nexusbattles.plataforma.resiliencia.DependenciaDegradada;
 import com.nexusbattles.plataforma.salaspartidas.dominio.AccionResuelta;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDePartida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoPartida;
@@ -196,7 +197,10 @@ public class EjecutarAccion {
         ResolucionDelMotor resolucion;
         try {
             resolucion = motor.resolver(maquina.heroe(), objetivo.heroe());
-        } catch (MotorNoDisponible noResponde) {
+        } catch (MotorNoDisponible | DependenciaDegradada noResponde) {
+            // Tanto si el motor contesto algo raro como si no contesto (HU-DIS-003):
+            // la maquina pasa y el combate sigue. El aviso de seccion degradada
+            // se lo lleva el humano cuando le toque a el, por su propia accion.
             return pasarTurnoDe(partida);
         }
 

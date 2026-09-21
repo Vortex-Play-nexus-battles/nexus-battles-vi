@@ -1,11 +1,12 @@
 package com.nexusbattles.plataforma.salaspartidas.integracion;
 
+import com.nexusbattles.plataforma.resiliencia.CortaCircuitos;
+import com.nexusbattles.plataforma.resiliencia.DependenciaDegradada;
 import com.nexusbattles.plataforma.salaspartidas.dominio.HeroeDeCombate;
 import com.nexusbattles.plataforma.salaspartidas.dominio.MotorDeCombate;
 import com.nexusbattles.plataforma.salaspartidas.dominio.MotorNoDisponible;
 import com.nexusbattles.plataforma.salaspartidas.dominio.ResolucionDelMotor;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
 
 /**
  * Adaptador hacia el motor de combate — espejo de
@@ -20,9 +21,13 @@ import org.springframework.web.client.RestClientException;
  * defensa. Este servicio no conoce la defensa real de un heroe: no la guarda ni
  * la debe guardar. Ver la nota de abajo.
  *
- * <p><b>Cualquier fallo es {@link MotorNoDisponible}</b>, incluido un cuerpo que
- * no se entiende. No se traduce a un dano de cero: un cero se confunde con un
- * ataque fallido y decidiria el combate con un numero que nadie calculo.
+ * <p><b>Ningun fallo se traduce a un dano de cero</b>: un cero se confunde con
+ * un ataque fallido y decidiria el combate con un numero que nadie calculo. Si
+ * el motor <i>no responde</i> (conexion, tiempo, 5xx) la llamada sale por el
+ * corta circuitos de HU-DIS-003 como {@link DependenciaDegradada}, seccion
+ * «Motor de combate»; si <i>responde algo que no sirve</i> (un 4xx, un cuerpo
+ * sin categoria) es {@link MotorNoDisponible}, y el circuito no se abre porque
+ * el motor esta vivo.
  */
 public class ClienteMotorCombate implements MotorDeCombate {
 
@@ -40,31 +45,32 @@ public class ClienteMotorCombate implements MotorDeCombate {
 
     private final RestClient http;
     private final String base;
+    private final CortaCircuitos corta;
 
-    public ClienteMotorCombate(RestClient http, String base) {
+    public ClienteMotorCombate(RestClient http, String base, CortaCircuitos corta) {
         this.http = http;
         this.base = base;
+        this.corta = corta;
     }
 
     @Override
     public ResolucionDelMotor resolver(HeroeDeCombate atacante, HeroeDeCombate objetivo) {
-        try {
-            Respuesta respuesta = http.post()
-                    .uri(base + "/api/v1/combate/ataques")
-                    .body(new Peticion(nombreParaElMotor(atacante), defensaDe(objetivo),
-                            new Peticion.Distribucion(PROTOTIPO_POR_DEFECTO)))
-                    .retrieve()
-                    .body(Respuesta.class);
+        Contestacion<Respuesta> contestacion = Contestacion.protegida(corta, () -> http.post()
+                .uri(base + "/api/v1/combate/ataques")
+                .body(new Peticion(nombreParaElMotor(atacante), defensaDe(objetivo),
+                        new Peticion.Distribucion(PROTOTIPO_POR_DEFECTO)))
+                .retrieve()
+                .body(Respuesta.class));
 
-            if (respuesta == null || respuesta.categoria() == null) {
-                throw new MotorNoDisponible("el motor respondio un cuerpo que no se entiende");
-            }
-            return new ResolucionDelMotor(respuesta.categoria(),
-                    respuesta.danoAplicado(), respuesta.ataqueResuelto());
-
-        } catch (RestClientException noResponde) {
-            throw new MotorNoDisponible(noResponde.getMessage());
+        if (contestacion.rechazada()) {
+            throw new MotorNoDisponible("el motor rechazo el ataque con " + contestacion.estado());
         }
+        Respuesta respuesta = contestacion.cuerpo();
+        if (respuesta == null || respuesta.categoria() == null) {
+            throw new MotorNoDisponible("el motor respondio un cuerpo que no se entiende");
+        }
+        return new ResolucionDelMotor(respuesta.categoria(),
+                respuesta.danoAplicado(), respuesta.ataqueResuelto());
     }
 
     /**

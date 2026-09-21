@@ -8,6 +8,13 @@ dependencies {
     // Formato de error comun a los 20 modulos (regla 4 de plataforma).
     implementation project(':shared:libs:plataforma-comun')
 
+    // Degradacion controlada (HU-DIS-003): un corta circuitos por cada llamada
+    // saliente -inventario, motor de combate, libro de creditos- y el problem
+    // detail `seccion-no-disponible` que pinta el frontend. La biblioteca no se
+    // reparte desde buildSrc a proposito: la declara quien tiene llamadas
+    // salientes, y este servicio tiene tres.
+    implementation project(':shared:libs:plataforma-resiliencia')
+
     // Canal en tiempo real de la sala (HU-SAL-002) y del chat (HU-JUE-015),
     // segun contracts/websocket/salas-partidas.yaml. Mismo starter que usa
     // notificaciones para HU-NOT-006, con los mismos prefijos STOMP.

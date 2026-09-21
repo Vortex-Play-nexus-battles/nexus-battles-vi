@@ -424,3 +424,111 @@ describe('montarControlesDeCombate', () => {
     expect(document.querySelector('[data-zona="acciones"]').hidden).toBe(true);
   });
 });
+
+// HU-DIS-003 · el motor de combate no responde durante la partida. El rechazo
+// llega por la cola privada (errorDeCanal, contrato 1.3.0): los controles
+// dicen que el combate esta limitado, siguen ahi, y se puede reintentar.
+describe('montarControlesDeCombate · motor degradado (HU-DIS-003)', () => {
+  const motorCaido = () => ({
+    type: 'https://nexusbattles.local/errores/seccion-no-disponible',
+    title: 'Motor de combate no disponible temporalmente',
+    status: 503,
+    detail: 'La seccion de Motor de combate no esta disponible temporalmente.',
+    seccion: 'Motor de combate',
+    reintentarEnSegundos: 4,
+    dependencia: 'motor-combate',
+  });
+
+  function conHueco() {
+    document.body.innerHTML = `${VISTA}<div data-zona="degradacion" data-seccion="Combate" hidden></div>`;
+  }
+
+  test('pinta Seccion degradada sobre los controles y los deja vivos: el turno sigue siendo mio', () => {
+    conHueco();
+    const controles = montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      turnoDe: ANA,
+      alAtacar: () => {},
+    });
+
+    expect(controles.rechazar(motorCaido())).toBe(true);
+
+    const degradada = document.querySelector('[data-zona="degradacion"] .seccion-degradada');
+    expect(degradada).not.toBeNull();
+    expect(degradada.textContent).toContain('Motor de combate no disponible temporalmente');
+    expect(degradada.textContent).toContain('4 segundos');
+    expect(document.querySelector('[data-atacar]').disabled).toBe(false);
+    expect(document.querySelector('[data-zona="acciones"]').hidden).toBe(false);
+  });
+
+  test('Reintentar quita el aviso y vuelve a mandar la ultima accion', () => {
+    conHueco();
+    const alAtacar = jest.fn();
+    const controles = montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      turnoDe: ANA,
+      alAtacar,
+    });
+    document.querySelector('[data-atacar]').click();
+    controles.rechazar(motorCaido());
+
+    document.querySelector('.seccion-degradada__reintentar').click();
+
+    expect(alAtacar).toHaveBeenCalledTimes(2);
+    expect(alAtacar).toHaveBeenLastCalledWith({ idObjetivo: BRUNO, codigoAccion: 'ATAQUE_BASICO' });
+    expect(document.querySelector('.seccion-degradada')).toBeNull();
+  });
+
+  test('una accion resuelta despues limpia el aviso: el motor volvio', () => {
+    conHueco();
+    const controles = montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      alAtacar: () => {},
+    });
+    controles.rechazar(motorCaido());
+
+    controles.recibir(accionResuelta(80));
+
+    expect(document.querySelector('.seccion-degradada')).toBeNull();
+  });
+
+  test('otro rechazo (no es tu turno) se dice en la zona de rechazo, no como degradacion', () => {
+    document.body.innerHTML = `${VISTA}<div data-zona="degradacion" hidden></div><p data-zona="rechazo" role="alert" hidden></p>`;
+    const controles = montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      alAtacar: () => {},
+    });
+
+    const gestionado = controles.rechazar({
+      type: 'https://nexusbattles.local/errores/no-es-tu-turno',
+      title: 'No es tu turno',
+      status: 409,
+      detail: 'Espera a que juegue tu rival.',
+    });
+
+    expect(gestionado).toBe(true);
+    expect(document.querySelector('.seccion-degradada')).toBeNull();
+    const rechazo = document.querySelector('[data-zona="rechazo"]');
+    expect(rechazo.hidden).toBe(false);
+    expect(rechazo.textContent).toContain('Espera a que juegue tu rival.');
+  });
+
+  test('sin hueco de degradacion en la vista no revienta: devuelve false', () => {
+    const controles = montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      alAtacar: () => {},
+    });
+
+    expect(controles.rechazar(motorCaido())).toBe(false);
+  });
+});

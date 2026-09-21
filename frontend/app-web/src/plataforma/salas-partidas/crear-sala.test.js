@@ -23,6 +23,7 @@ import { ErrorDeApi } from './cliente-salas.js';
 const HTML = `
   <form id="f" novalidate>
     <div data-zona="aviso" hidden></div>
+    <div data-zona="degradacion" data-seccion="Inventario" hidden></div>
 
     <div class="campo">
       <label class="campo__etiqueta" for="maximoParticipantes">Participantes</label>
@@ -394,5 +395,85 @@ describe('montarCrearSala', () => {
     expect(aviso.className).toContain('aviso--error');
     expect(aviso.textContent).toMatch(/conexion/i);
     expect(formulario.querySelector('[type="submit"]').disabled).toBe(false);
+  });
+});
+
+// HU-DIS-003 · CA-02: cuando la seccion depende de un servicio caido, el
+// jugador ve QUE funcion esta limitada, que el resto sigue, y puede reintentar.
+describe('montarCrearSala · seccion degradada (HU-DIS-003)', () => {
+  const inventarioCaido = () =>
+    new ErrorDeApi(
+      {
+        type: 'https://nexusbattles.local/errores/seccion-no-disponible',
+        title: 'Inventario no disponible temporalmente',
+        status: 503,
+        detail:
+          'La seccion de Inventario no esta disponible temporalmente. El resto del juego sigue funcionando.',
+        seccion: 'Inventario',
+        reintentarEnSegundos: 7,
+        dependencia: 'inventario',
+      },
+      503,
+    );
+
+  test('pinta Seccion degradada con la funcion limitada, no un Aviso de error', async () => {
+    const formulario = preparar();
+    const crearSalaImpl = jest.fn().mockRejectedValue(inventarioCaido());
+    montarCrearSala(formulario, { crearSalaImpl });
+
+    formulario.dispatchEvent(new Event('submit'));
+    await asentar();
+
+    const degradada = formulario.querySelector('.seccion-degradada');
+    expect(degradada).not.toBeNull();
+    expect(degradada.getAttribute('role')).toBe('status');
+    expect(degradada.textContent).toContain('Inventario no disponible temporalmente');
+    expect(degradada.textContent).toContain('El resto del juego sigue funcionando');
+    expect(degradada.textContent).toContain('7 segundos');
+    expect(document.querySelector('.aviso')).toBeNull();
+    // MAPEO-ERRORES §3: ni type ni dependencia se muestran.
+    expect(degradada.textContent).not.toContain('nexusbattles.local');
+    expect(degradada.textContent).not.toContain('inventario');
+    expect(formulario.querySelector('[type="submit"]').disabled).toBe(false);
+  });
+
+  test('Reintentar vuelve a enviar el formulario y, si el servicio volvio, la sala se crea', async () => {
+    const formulario = preparar();
+    const crearSalaImpl = jest
+      .fn()
+      .mockRejectedValueOnce(inventarioCaido())
+      .mockResolvedValueOnce({ id: 's-1', maximoParticipantes: 4, recompensaCreditos: 0 });
+    montarCrearSala(formulario, { crearSalaImpl });
+
+    formulario.dispatchEvent(new Event('submit'));
+    await asentar();
+    formulario.querySelector('.seccion-degradada__reintentar').click();
+    await asentar();
+
+    expect(crearSalaImpl).toHaveBeenCalledTimes(2);
+    expect(formulario.querySelector('.seccion-degradada')).toBeNull();
+    expect(document.querySelector('.aviso--exito').textContent).toContain('Sala creada');
+  });
+
+  test('un 503 con otro type sigue siendo un Aviso de error: se decide por type, no por status', async () => {
+    const formulario = preparar();
+    const crearSalaImpl = jest.fn().mockRejectedValue(
+      new ErrorDeApi(
+        {
+          type: 'https://nexusbattles.local/errores/creditos-no-disponibles',
+          title: 'El libro de creditos no esta disponible ahora mismo',
+          status: 503,
+          detail: 'No se pudieron comprometer los creditos.',
+        },
+        503,
+      ),
+    );
+    montarCrearSala(formulario, { crearSalaImpl });
+
+    formulario.dispatchEvent(new Event('submit'));
+    await asentar();
+
+    expect(formulario.querySelector('.seccion-degradada')).toBeNull();
+    expect(document.querySelector('.aviso--error')).not.toBeNull();
   });
 });

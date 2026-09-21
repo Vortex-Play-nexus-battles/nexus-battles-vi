@@ -12,6 +12,11 @@
  */
 
 import { crearSala, ErrorDeApi } from './cliente-salas.js';
+import {
+  esSeccionDegradada,
+  pintarSeccionDegradada,
+  limpiarSeccionDegradada,
+} from '../../comun/degradacion/aviso-degradacion.js';
 
 /** Codigo HTTP -> variante del componente Aviso (tabla 4 del mapeo). */
 export function tonoPara(estado) {
@@ -240,6 +245,11 @@ function cargando(boton, activo) {
  */
 export function montarCrearSala(formulario, { crearSalaImpl = crearSala, alCrear } = {}) {
   const zonaAviso = formulario.querySelector('[data-zona="aviso"]');
+  // HU-DIS-003: el hueco donde se pinta `Seccion degradada` cuando el
+  // inventario (o el libro de creditos) no responde. Distinto del aviso:
+  // MAPEO-ERRORES §5.5 dice que no es un fallo de la accion sino una
+  // seccion limitada, con reintentar y sin tapar el resto del formulario.
+  const zonaDegradacion = formulario.querySelector('[data-zona="degradacion"]');
   const boton = formulario.querySelector('[type="submit"]');
 
   // RF-JUE-004: la modalidad manda sobre el resto del formulario, desde el
@@ -252,12 +262,11 @@ export function montarCrearSala(formulario, { crearSalaImpl = crearSala, alCrear
     }
   });
 
-  formulario.addEventListener('submit', async (evento) => {
-    evento.preventDefault();
-
+  async function enviar() {
     limpiarErroresDeCampo(formulario);
     zonaAviso.hidden = true;
     zonaAviso.innerHTML = '';
+    limpiarSeccionDegradada(zonaDegradacion);
     cargando(boton, true);
 
     try {
@@ -282,6 +291,15 @@ export function montarCrearSala(formulario, { crearSalaImpl = crearSala, alCrear
         if (primero) {
           primero.focus();
         }
+      } else if (
+        error instanceof ErrorDeApi &&
+        zonaDegradacion &&
+        esSeccionDegradada(error.problema)
+      ) {
+        // Un servicio del que depende crear la sala no responde. Se dice
+        // cual, que el resto sigue, y se deja reintentar sin volver a
+        // rellenar nada: el formulario queda tal cual.
+        pintarSeccionDegradada(zonaDegradacion, error.problema, { alReintentar: enviar });
       } else if (error instanceof ErrorDeApi) {
         pintarAviso(zonaAviso, {
           tono: tonoPara(error.estado),
@@ -298,5 +316,10 @@ export function montarCrearSala(formulario, { crearSalaImpl = crearSala, alCrear
     } finally {
       cargando(boton, false);
     }
+  }
+
+  formulario.addEventListener('submit', (evento) => {
+    evento.preventDefault();
+    enviar();
   });
 }

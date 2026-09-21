@@ -1,25 +1,35 @@
 package com.nexusbattles.plataforma.salaspartidas.integracion;
 
+import com.nexusbattles.plataforma.resiliencia.CortaCircuitos;
+import com.nexusbattles.plataforma.resiliencia.DependenciaDegradada;
+import com.nexusbattles.plataforma.resiliencia.EstadoDelCorta;
+import com.nexusbattles.plataforma.resiliencia.RegistroDeDegradacion;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.JugadorAutenticado;
+import com.nexusbattles.plataforma.salaspartidas.configuracion.ConfiguracionDeResiliencia;
 import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoDelHeroe;
 import com.nexusbattles.plataforma.salaspartidas.dominio.InventarioNoDisponible;
 import com.nexusbattles.plataforma.salaspartidas.dominio.ResultadoVerificacion;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
+import java.time.Clock;
+import java.time.Duration;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /**
@@ -55,12 +65,17 @@ class ClienteInventarioHeroesTest {
 
     private MockRestServiceServer servidor;
     private ClienteInventarioHeroes cliente;
+    /** Dos fallos abren: suficiente para probar el corte sin alargar las pruebas. */
+    private CortaCircuitos corta;
 
     @BeforeEach
     void montarInventarioSimulado() {
         RestClient.Builder constructor = RestClient.builder();
         servidor = MockRestServiceServer.bindTo(constructor).build();
-        cliente = new ClienteInventarioHeroes(constructor.build(), BASE, PRODUCTOS, HEROES);
+        corta = new CortaCircuitos(ConfiguracionDeResiliencia.INVENTARIO,
+                ConfiguracionDeResiliencia.SECCION_INVENTARIO, 2, Duration.ofSeconds(30),
+                Clock.systemUTC(), new RegistroDeDegradacion());
+        cliente = new ClienteInventarioHeroes(constructor.build(), BASE, PRODUCTOS, HEROES, corta);
     }
 
     private static String vitrinaCon(String elementos) {
@@ -236,15 +251,51 @@ class ClienteInventarioHeroesTest {
     }
 
     @Test
-    @DisplayName("si el inventario falla, 503: no se responde un veredicto inventado")
+    @DisplayName("si el inventario falla, la seccion queda degradada: no se responde un veredicto inventado (HU-DIS-003)")
     void inventarioCaidoNoInventaVeredicto() {
         servidor.expect(requestTo(VITRINA)).andRespond(withServerError());
 
-        assertThrows(InventarioNoDisponible.class, () -> cliente.consultar(JUGADOR));
+        DependenciaDegradada error = assertThrows(DependenciaDegradada.class, () -> cliente.consultar(JUGADOR));
+
+        assertAll(
+                () -> assertEquals(ConfiguracionDeResiliencia.INVENTARIO, error.dependencia()),
+                () -> assertEquals(ConfiguracionDeResiliencia.SECCION_INVENTARIO, error.seccion()));
     }
 
     @Test
-    @DisplayName("sin credencial de servicio no hay llamada: es «inventario no disponible» (503), no un 500")
+    @DisplayName("un 4xx del inventario es una respuesta, no una caida: 503 propio y el circuito sigue cerrado")
+    void inventarioRechazaLaConsulta() {
+        servidor.expect(requestTo(VITRINA)).andRespond(withStatus(HttpStatus.UNAUTHORIZED));
+
+        InventarioNoDisponible error = assertThrows(InventarioNoDisponible.class,
+                () -> cliente.consultar(JUGADOR));
+
+        assertAll(
+                () -> assertEquals(503, error.estado()),
+                () -> assertTrue(error.detalle().contains("401"), error.detalle()),
+                () -> assertEquals(EstadoDelCorta.CERRADO, corta.estado()));
+    }
+
+    @Test
+    @DisplayName("con el circuito abierto no se consulta la vitrina: la degradacion se responde sin llamar")
+    void conElCircuitoAbiertoNoHayLlamada() {
+        servidor.expect(requestTo(VITRINA)).andRespond(withServerError());
+        servidor.expect(requestTo(VITRINA)).andRespond(withServerError());
+
+        assertThrows(DependenciaDegradada.class, () -> cliente.consultar(JUGADOR));
+        assertThrows(DependenciaDegradada.class, () -> cliente.consultar(JUGADOR));
+        assertEquals(EstadoDelCorta.ABIERTO, corta.estado());
+
+        // Sin tercera expectativa: una tercera peticion real haria fallar la prueba.
+        DependenciaDegradada sinLlamar = assertThrows(DependenciaDegradada.class,
+                () -> cliente.consultar(JUGADOR));
+
+        servidor.verify();
+        assertNull(sinLlamar.getCause());
+    }
+
+    @Test
+    @DisplayName("sin credencial de servicio no hay llamada: es degradacion (503), no un 500")
     void sinCredencialDeServicioFallaCerrado() {
         // Lo que paso en el host de dev: el emisor de credenciales no estaba
         // donde decia la configuracion, el interceptor lanzaba por encima del
@@ -259,11 +310,13 @@ class ClienteInventarioHeroesTest {
                 })
                 .build();
         ClienteInventarioHeroes sinCredencial =
-                new ClienteInventarioHeroes(conCredencialCaida, BASE, PRODUCTOS, HEROES);
+                new ClienteInventarioHeroes(conCredencialCaida, BASE, PRODUCTOS, HEROES, corta);
 
-        InventarioNoDisponible error = assertThrows(InventarioNoDisponible.class,
+        DependenciaDegradada error = assertThrows(DependenciaDegradada.class,
                 () -> sinCredencial.consultar(JUGADOR));
-        assertEquals(503, error.estado());
+        assertTrue(error.getCause() instanceof
+                com.nexusbattles.comun.seguridad.servicio.CredencialDeServicioNoDisponible,
+                "la causa real queda para la bitacora: " + error.getCause());
     }
 
     @Test

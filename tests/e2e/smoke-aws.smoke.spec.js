@@ -186,6 +186,11 @@ test.describe('Smoke del entorno desplegado', () => {
     );
     const problema = await r.json();
     expect(problema.detail ?? '').toMatch(/inventario|vitrina/i);
+    // HU-DIS-003: la caida de una dependencia sale como seccion degradada,
+    // con la funcion limitada nombrada, y no como un 503 anonimo.
+    expect(problema.type).toBe('https://nexusbattles.local/errores/seccion-no-disponible');
+    expect(problema.seccion).toBe('Inventario');
+    expect(r.headers()['retry-after']).toBeDefined();
   });
 
   // ===================================================================

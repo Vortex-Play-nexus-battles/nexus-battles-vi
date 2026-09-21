@@ -210,6 +210,32 @@ class TurnoDeLaMaquinaTest {
     }
 
     @Test
+    @DisplayName("HU-DIS-003: si el motor esta degradado (corta circuitos) en el turno de la maquina, tambien pasa")
+    void motorDegradadoEnElTurnoDeLaMaquina() {
+        // La misma regla que para MotorNoDisponible, con la excepcion que lanza
+        // el corta circuitos cuando el motor no responde o esta abierto.
+        Partida partida = contraLaMaquina();
+        List<String> consultas = new ArrayList<>();
+        MotorDeCombate motor = (atacante, objetivo) -> {
+            consultas.add(atacante.nombre());
+            if (consultas.size() >= 2) {
+                throw new com.nexusbattles.plataforma.resiliencia.DependenciaDegradada(
+                        "motor-combate", "Motor de combate", null);
+            }
+            return new ResolucionDelMotor("CAUSAR_DANO", 15, 14);
+        };
+
+        Partida despues = new EjecutarAccion(partidas, canal, motor, LiquidacionSinApuesta.nueva())
+                .ejecutar(partida.id(), ANA, null, null);
+
+        assertAll(
+                () -> assertEquals(85, despues.participantes().get(1).heroe().vidaActual()),
+                () -> assertEquals(100, despues.participantes().get(0).heroe().vidaActual()),
+                () -> assertEquals(EstadoPartida.EN_CURSO, despues.estado()),
+                () -> assertEquals(ANA, despues.turnoActual().idJugador()));
+    }
+
+    @Test
     @DisplayName("una maquina sin heroe pasa turno en vez de golpear a ciegas")
     void maquinaSinHeroePasaTurno() {
         MotorDeMentira motor = MotorDeMentira.queHace(30);
