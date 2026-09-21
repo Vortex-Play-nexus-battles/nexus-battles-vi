@@ -345,7 +345,10 @@ jobs:
         working-directory: frontend/app-web
         run: |
           npx playwright install --with-deps chromium
-          npx playwright test --config=playwright.config.js --reporter=list
+          # Tiempo por prueba acotado: mientras #581 siga abierto, 45 de 46
+          # esperan a un locator que nunca llega y con 30 s cada una este
+          # paso informativo tardaba 8 minutos. 8 s bastan para las que pasan.
+          npx playwright test --config=playwright.config.js --reporter=list --timeout=8000
 
       - name: Guardar el informe de aceptacion
         if: always() && steps.detectar.outputs.hay == 'true'
