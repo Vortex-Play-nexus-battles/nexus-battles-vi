@@ -17,8 +17,9 @@ set -euo pipefail
 BORDE="${BORDE:-http://localhost:8099}"
 COMPOSE="docker compose -f $(dirname "$0")/compose.yml"
 
-# Los dos jugadores del E2E. El apodo es lo que viaja a inventario en
-# X-User-Name, y tiene que coincidir CARACTER A CARACTER con propietarioId.
+# Los dos jugadores del E2E. Inventario guarda propietarioId por apodo y lo
+# lee del JWT del jugador (el sujeto), asi que el apodo con el que se
+# registran aqui es el que tiene que coincidir CARACTER A CARACTER.
 ANFITRION="${E2E_ANFITRION:-anfitriona_e2e}"
 INVITADO="${E2E_INVITADO:-invitado_e2e}"
 # Tercero: el que prueba a entrar con un codigo equivocado. Necesita heroe
@@ -26,9 +27,41 @@ INVITADO="${E2E_INVITADO:-invitado_e2e}"
 # puerta de heroe (422) ANTES de mirar el codigo, y la prueba del codigo no
 # estaria probando el codigo.
 CURIOSO="${E2E_CURIOSO:-curioso_e2e}"
+# Cuarto: tiene heroe pero NI UN credito. Es el que prueba el 422 de
+# HU-JUE-014 CA-02 (creditos-insuficientes) en apuesta-de-creditos.e2e.spec.js.
+POBRE="${E2E_POBRE:-pobre_e2e}"
+# La misma clave que usa sala-de-batalla.e2e.spec.js: el spec vuelve a
+# registrar (tolera 400/409) e inicia sesion con ella.
+CLAVE="${E2E_CLAVE:-Contrasena-E2E-2026}"
 
 # Prototipo que el catalogo de heroes siembra solo (CatalogoEnMongo).
 PROTOTIPO="Guerrero Tanque"
+
+# Inventario ya no cree en X-User-Name a secas: un jugador es quien dice su
+# JWT. Asi que cada jugador se registra e inicia sesion en ms-identidad (el
+# mismo camino que usara el navegador) y siembra su inventario con su token.
+declare -A TOKEN_DE
+token_de() {
+  local apodo="$1"
+  if [ -z "${TOKEN_DE[$apodo]:-}" ]; then
+    local email="$apodo@nexus.test"
+    # 409/400 si ya existe de una corrida anterior: no es un fallo. El aviso
+    # va a stderr para no mezclarse con el token que devuelve esta funcion.
+    curl -sS -o /dev/null -w "  registro de $apodo -> %{http_code}\n" \
+      -X POST "$BORDE/api/v1/auth/registro" \
+      -F "nombres=Jugadora" -F "apellidos=De Prueba" -F "email=$email" \
+      -F "password=$CLAVE" -F "apodo=$apodo" >&2
+    local token
+    token=$(curl -sS -X POST "$BORDE/api/v1/auth/login" \
+      -H "Content-Type: application/json" \
+      -d "{\"email\":\"$email\",\"password\":\"$CLAVE\"}" | jq -r '.token // empty')
+    if [ -z "$token" ]; then
+      echo "::error::No se pudo iniciar sesion como $apodo en ms-identidad"; exit 1
+    fi
+    TOKEN_DE[$apodo]="$token"
+  fi
+  printf '%s' "${TOKEN_DE[$apodo]}"
+}
 
 echo "== 1) Productos: un heroe y un arma, directos en Mongo =="
 # El alta por API exige JWT de administrador, asi que se inserta directo.
@@ -100,7 +133,7 @@ crear_elemento() {
   local apodo="$1" producto="$2" tipo="$3" nombre="$4"
   curl -sS -X POST "$BORDE/api/v1/inventario/elementos" \
     -H "Content-Type: application/json" \
-    -H "X-User-Name: $apodo" \
+    -H "Authorization: Bearer $(token_de "$apodo")" \
     -d "{\"productoId\":\"$producto\",\"tipo\":\"$tipo\",\"nombrePropio\":\"$nombre\"}" \
     | jq -r '.id // empty'
 }
@@ -116,7 +149,7 @@ sembrar_jugador() {
   if [ -z "$heroe" ] || [ -z "$arma" ]; then
     echo "::error::No se pudieron crear los elementos de $apodo. Respuesta de inventario:"
     curl -sS -X POST "$BORDE/api/v1/inventario/elementos" \
-      -H "Content-Type: application/json" -H "X-User-Name: $apodo" \
+      -H "Content-Type: application/json" -H "Authorization: Bearer $(token_de "$apodo")" \
       -d '{"productoId":"p-heroe-e2e","tipo":"HEROE","nombrePropio":"diagnostico"}'
     exit 1
   fi
@@ -125,7 +158,7 @@ sembrar_jugador() {
   # de heroe responde SIN_HEROE_EQUIPADO y no se puede crear una sala.
   curl -sS -o /dev/null -w '  equipar -> %{http_code}\n' \
     -X PUT "$BORDE/api/v1/inventario/heroes/$heroe/equipamiento/$arma" \
-    -H "X-User-Name: $apodo"
+    -H "Authorization: Bearer $(token_de "$apodo")"
 
   echo "  heroe=$heroe arma=$arma"
 }
@@ -133,24 +166,25 @@ sembrar_jugador() {
 sembrar_jugador "$ANFITRION"
 sembrar_jugador "$INVITADO"
 sembrar_jugador "$CURIOSO"
+sembrar_jugador "$POBRE"
 
 echo "== 3) Comprobando el camino completo de la verificacion =="
 # Las mismas tres llamadas que hace ClienteInventarioHeroes, en el mismo
 # orden. Si alguna de las tres falla, la puerta de heroe responde 503 y no se
 # puede crear ninguna sala: mejor enterarse aqui que a mitad de la prueba.
-for apodo in "$ANFITRION" "$INVITADO" "$CURIOSO"; do
-  elementos=$(curl -sS "$BORDE/api/v1/inventario/elementos?pagina=0" -H "X-User-Name: $apodo")
+for apodo in "$ANFITRION" "$INVITADO" "$CURIOSO" "$POBRE"; do
+  elementos=$(curl -sS "$BORDE/api/v1/inventario/elementos?pagina=0" -H "Authorization: Bearer $(token_de "$apodo")")
   heroe=$(echo "$elementos" | jq -r '[.elementos[]? | select(.tipo == "HEROE")][0].id // empty')
   [ -n "$heroe" ] || { echo "::error::$apodo no tiene heroe en la vitrina"; echo "$elementos" | jq .; exit 1; }
 
   equipamiento=$(curl -sS "$BORDE/api/v1/inventario/heroes/$heroe/equipamiento" \
-    -H "X-User-Name: $apodo")
+    -H "Authorization: Bearer $(token_de "$apodo")")
   armas=$(echo "$equipamiento" | jq -r '(.armas // []) | length')
   # `estaEquipado` es cierto si hay algo equipado. Con cero armas, la puerta
   # responderia SIN_HEROE_EQUIPADO.
   [ "${armas:-0}" -gt 0 ] || { echo "::error::$apodo tiene el heroe sin equipar: $equipamiento"; exit 1; }
 
-  stats=$(curl -sS "$BORDE/api/v1/inventario/heroes/$heroe/estadisticas" -H "X-User-Name: $apodo")
+  stats=$(curl -sS "$BORDE/api/v1/inventario/heroes/$heroe/estadisticas" -H "Authorization: Bearer $(token_de "$apodo")")
   vida=$(echo "$stats" | jq -r '.vida // empty')
   # La vida es la que acaba en la barra de HU-SAL-005. Un error aqui tumba la
   # verificacion entera: el cliente envuelve cualquier fallo HTTP en
@@ -158,6 +192,41 @@ for apodo in "$ANFITRION" "$INVITADO" "$CURIOSO"; do
   [ -n "$vida" ] || { echo "::error::$apodo sin estadisticas: $stats"; exit 1; }
 
   echo "  $apodo: heroe=$heroe armas=$armas vida=$vida"
+done
+
+echo "== 4) Creditos (HU-JUE-014): saldo inicial en ms-finanzas ==="
+# El libro de creditos no esta detras del borde (ms-finanzas no corre en el
+# host de dev), asi que se le habla por el puerto que el compose expone.
+# Acreditar es idempotente por refId: repetir la semilla no duplica saldo.
+FINANZAS="${FINANZAS:-http://localhost:8093/api/v1}"
+SALDO_INICIAL="${E2E_SALDO_INICIAL:-500}"
+
+# El `uid` es el identificador estable del jugador (ADR-002): sale del
+# token, no del apodo. Se lee del cuerpo del JWT (base64url, sin firma).
+uid_de() {
+  local token cuerpo
+  token=$(token_de "$1")
+  cuerpo=$(printf '%s' "$token" | cut -d. -f2 | tr '_-' '/+')
+  # Relleno de base64 hasta multiplo de 4.
+  while [ $(( ${#cuerpo} % 4 )) -ne 0 ]; do cuerpo="$cuerpo="; done
+  printf '%s' "$cuerpo" | base64 -d 2>/dev/null | jq -r '.uid // empty'
+}
+
+# El curioso tambien: su intento con codigo equivocado reserva antes de que
+# la sala lo rechace, y sin saldo recibiria 422 en vez del 409 que se prueba.
+# El pobre, a proposito, se queda sin nada.
+for apodo in "$ANFITRION" "$INVITADO" "$CURIOSO"; do
+  uid=$(uid_de "$apodo")
+  [ -n "$uid" ] || { echo "::error::el token de $apodo no trae uid"; exit 1; }
+  codigo=$(curl -sS -o /tmp/acreditar-$apodo.json -w '%{http_code}' \
+    -X POST "$FINANZAS/creditos/acreditar" \
+    -H "Content-Type: application/json" \
+    -d "{\"uid\":\"$uid\",\"monto\":$SALDO_INICIAL,\"refId\":\"semilla-e2e-$apodo\",\"concepto\":\"semilla-e2e\"}")
+  if [ "$codigo" != "200" ]; then
+    echo "::error::ms-finanzas no acredito a $apodo ($codigo):"; cat "/tmp/acreditar-$apodo.json"; echo; exit 1
+  fi
+  disponible=$(curl -sS "$FINANZAS/creditos/$uid/saldo" | jq -r '.saldoDisponible // empty')
+  echo "  $apodo: uid=$uid disponible=$disponible"
 done
 
 echo "Semilla lista."

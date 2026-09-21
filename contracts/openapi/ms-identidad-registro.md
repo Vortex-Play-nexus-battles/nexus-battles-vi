@@ -120,3 +120,48 @@ El body es un string de texto plano. Casos:
 - El token no existe.
 - El token ya fue utilizado.
 - El token expiró (vencimiento configurable, por defecto 24 horas desde su generación).
+- La contraseña nueva no cumple la política (misma regla que el registro).
+
+---
+
+## PUT /api/v1/auth/password
+El usuario autenticado cambia su propia contraseña desde «Mi Cuenta» (HU-AUT-006, RF-AUT-006).
+
+### Autenticación
+`Authorization: Bearer <token de login>`. El sujeto del token es quien cambia; el cuerpo no
+identifica a nadie. Requiere el permiso `MODIFICAR_PERFIL_PROPIO` (cualquier rol lo tiene).
+
+### Request Body (JSON)
+```json
+{
+  "passwordActual": "string (obligatorio)",
+  "nuevaPassword": "string (obligatorio, mín. 9 caracteres, con mayúscula, minúscula, número y símbolo)",
+  "confirmacion": "string (obligatorio, igual a nuevaPassword)"
+}
+```
+
+### Respuesta exitosa — `200 OK`
+```json
+{
+  "token": "string — token nuevo para ESTA sesión",
+  "mensaje": "Contraseña actualizada. Las demás sesiones abiertas se cerraron."
+}
+```
+El cambio sube la versión del token del usuario: todos los tokens emitidos antes dejan de valer
+(las demás sesiones se cierran, CA-04). El cliente debe sustituir el token guardado por el
+devuelto. Se envía un correo de aviso a la cuenta (CA-01) y se registra en auditoría; ninguno de
+los dos frena el cambio si no responde.
+
+### Respuestas de error
+Problem details (`application/problem+json`) con `type`, `title`, `status` y `detail`. El
+`detail` dice qué regla falla, para que la interfaz lo muestre tal cual (CA-03, CA-06).
+
+| Caso | `type` (bajo `https://nexusbattles.upb.edu.co/errors/`) | Código HTTP |
+|---|---|---|
+| Contraseña actual incorrecta (cuenta como intento fallido, RF-AUT-009) | `contrasena-actual-incorrecta` | `422 Unprocessable Content` |
+| Confirmación distinta de la nueva | `contrasena-confirmacion-no-coincide` | `422 Unprocessable Content` |
+| La nueva no cumple la política | `contrasena-no-cumple-politica` | `422 Unprocessable Content` |
+| La nueva es igual a la actual | `contrasena-repetida` | `422 Unprocessable Content` |
+| Cuenta bloqueada por intentos fallidos | `cuenta-bloqueada` | `423 Locked` |
+| Sin token o token de una versión anterior | — | `401 Unauthorized` |
+| Campo vacío | — | `400 Bad Request` |

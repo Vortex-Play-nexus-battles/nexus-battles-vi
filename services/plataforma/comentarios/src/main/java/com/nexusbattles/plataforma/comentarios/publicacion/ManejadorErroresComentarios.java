@@ -38,4 +38,13 @@ public class ManejadorErroresComentarios {
     public ProblemDetail manejarSolicitudInvalida(IllegalArgumentException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
+
+    /** RF-USR-004 (HU-COM-001, CA-03): sin poder comprobar la sancion no se publica. */
+    @ExceptionHandler(SancionesNoDisponibles.class)
+    public ProblemDetail manejarSancionesNoDisponibles(SancionesNoDisponibles ex) {
+        ProblemDetail problema = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+        problema.setType(java.net.URI.create("https://nexusbattles.local/errores/sanciones-no-disponibles"));
+        problema.setTitle("No se pudo comprobar tu estado para publicar");
+        return problema;
+    }
 }

@@ -53,7 +53,14 @@ public final class Sala {
     private final Modalidad modalidad;
     private final int maximoParticipantes;
     private final int recompensaCreditos;
-    private final boolean incluirHeroeIA;
+
+    /**
+     * Cupos de la maquina — HU-SAL-004. <b>Cuentan en el aforo:</b> una sala
+     * contra la IA con dos cupos esta llena con el anfitrion solo, y en una de
+     * seis con dos maquinas caben cuatro personas. Sin esto, la partida tendria
+     * mas combatientes que el maximo elegido.
+     */
+    private final int heroesIA;
     private final boolean privada;
     private final Integer tamanoEquipo;
     private final UUID idAnfitrion;
@@ -106,7 +113,7 @@ public final class Sala {
     private final long version;
 
     private Sala(UUID id, EstadoSala estado, Modalidad modalidad,
-                 int maximoParticipantes, int recompensaCreditos, boolean incluirHeroeIA,
+                 int maximoParticipantes, int recompensaCreditos, int heroesIA,
                  boolean privada, Integer tamanoEquipo, UUID idAnfitrion,
                  Map<UUID, FichaDeParticipante> participantes, Instant creadaEn, long version,
                  String codigoInvitacion, UUID idReservaCreditos) {
@@ -115,7 +122,7 @@ public final class Sala {
         this.modalidad = modalidad;
         this.maximoParticipantes = maximoParticipantes;
         this.recompensaCreditos = recompensaCreditos;
-        this.incluirHeroeIA = incluirHeroeIA;
+        this.heroesIA = heroesIA;
         this.privada = privada;
         this.tamanoEquipo = tamanoEquipo;
         this.idAnfitrion = idAnfitrion;
@@ -147,13 +154,25 @@ public final class Sala {
      */
     public static Sala rehidratar(UUID id, EstadoSala estado, Modalidad modalidad,
                                   int maximoParticipantes, int recompensaCreditos,
-                                  boolean incluirHeroeIA, boolean privada, Integer tamanoEquipo,
+                                  int heroesIA, boolean privada, Integer tamanoEquipo,
                                   UUID idAnfitrion,
                                   Map<UUID, FichaDeParticipante> participantes, Instant creadaEn,
                                   long version, String codigoInvitacion, UUID idReservaCreditos) {
         return new Sala(id, estado, modalidad, maximoParticipantes, recompensaCreditos,
-                incluirHeroeIA, privada, tamanoEquipo, idAnfitrion, participantes, creadaEn,
+                heroesIA, privada, tamanoEquipo, idAnfitrion, participantes, creadaEn,
                 version, codigoInvitacion, idReservaCreditos);
+    }
+
+    /** Con el booleano de antes de HU-SAL-004: una maquina o ninguna. */
+    public static Sala rehidratar(UUID id, EstadoSala estado, Modalidad modalidad,
+                                  int maximoParticipantes, int recompensaCreditos,
+                                  boolean incluirHeroeIA, boolean privada, Integer tamanoEquipo,
+                                  UUID idAnfitrion,
+                                  Map<UUID, FichaDeParticipante> participantes, Instant creadaEn,
+                                  long version, String codigoInvitacion, UUID idReservaCreditos) {
+        return rehidratar(id, estado, modalidad, maximoParticipantes, recompensaCreditos,
+                incluirHeroeIA ? 1 : 0, privada, tamanoEquipo, idAnfitrion, participantes,
+                creadaEn, version, codigoInvitacion, idReservaCreditos);
     }
 
     /**
@@ -237,21 +256,35 @@ public final class Sala {
         Objects.requireNonNull(parametros.modalidad(), "Una sala necesita una modalidad.");
 
         List<ErrorDeCampo> errores = new ArrayList<>();
-        validarParticipantes(parametros, errores);
+        boolean aforoValido = validarParticipantes(parametros, errores);
         validarEquipo(parametros, errores);
+        validarHeroesIA(parametros, aforoValido, errores);
         validarRecompensa(parametros.recompensaCreditos(), errores);
 
         if (!errores.isEmpty()) {
             throw new ParametrosInvalidos(errores);
         }
 
+        // Contra la IA la maquina va siempre, la pida el formulario o no: es la
+        // modalidad, no una opcion.
+        int heroesIA = Math.max(parametros.heroesIA(), parametros.modalidad().minimoHeroesIA());
+
+        // Nace LLENA si la maquina ya ocupa lo que quedaba: contra la IA, o
+        // hasta seis con todos los cupos menos uno para la maquina.
+        EstadoSala alNacer;
+        if (1 + heroesIA >= parametros.maximoParticipantes()) {
+            alNacer = EstadoSala.LLENA;
+        } else {
+            alNacer = parametros.privada() ? EstadoSala.PRIVADA : EstadoSala.ABIERTA;
+        }
+
         return new Sala(
                 UUID.randomUUID(),
-                parametros.privada() ? EstadoSala.PRIVADA : EstadoSala.ABIERTA,
+                alNacer,
                 parametros.modalidad(),
                 parametros.maximoParticipantes(),
                 parametros.recompensaCreditos(),
-                parametros.incluirHeroeIA(),
+                heroesIA,
                 parametros.privada(),
                 parametros.tamanoEquipo(),
                 idAnfitrion,
@@ -288,17 +321,59 @@ public final class Sala {
         return codigo.toString();
     }
 
-    /** RF-JUE-004: cada modalidad admite un rango distinto de participantes. */
-    private static void validarParticipantes(ParametrosDeSala parametros, List<ErrorDeCampo> errores) {
+    /**
+     * RF-JUE-004: cada modalidad admite un rango distinto de participantes.
+     *
+     * @return si el aforo es valido; con uno invalido no tiene sentido medir
+     *         contra el cuantas maquinas caben
+     */
+    private static boolean validarParticipantes(ParametrosDeSala parametros, List<ErrorDeCampo> errores) {
         Modalidad modalidad = parametros.modalidad();
         if (modalidad.admite(parametros.maximoParticipantes())) {
-            return;
+            return true;
         }
         String rango = modalidad.minimoParticipantes() == modalidad.maximoParticipantes()
                 ? "exactamente " + modalidad.minimoParticipantes()
                 : "entre " + modalidad.minimoParticipantes() + " y " + modalidad.maximoParticipantes();
         errores.add(new ErrorDeCampo("maximoParticipantes",
                 "Esta modalidad admite " + rango + " jugadores."));
+        return false;
+    }
+
+    /**
+     * RF-JUE-004 — HU-SAL-004: cuantos cupos puede ocupar la maquina en cada
+     * modalidad. Fuera de limite se rechaza diciendo el limite (CA-04).
+     *
+     * <p>Contra la IA pedir cero no es un error —la modalidad ya la trae— pero
+     * pedir dos si: un duelo contra la maquina es contra una. Uno contra uno no
+     * lleva maquina: si se quiere una, la modalidad es otra. Hasta seis admite
+     * cualquier cupo para la IA menos el del anfitrion, que siempre juega.
+     */
+    private static void validarHeroesIA(ParametrosDeSala parametros, boolean aforoValido,
+                                        List<ErrorDeCampo> errores) {
+        int pedidos = parametros.heroesIA();
+        Modalidad modalidad = parametros.modalidad();
+        if (pedidos < 0) {
+            errores.add(new ErrorDeCampo("heroesIA", "Los heroes de la IA no pueden ser negativos."));
+            return;
+        }
+        if (modalidad == Modalidad.UNO_CONTRA_UNO && pedidos > 0) {
+            errores.add(new ErrorDeCampo("heroesIA",
+                    "Uno contra uno es entre dos jugadores, sin heroes de la IA: "
+                            + "para jugar contra la maquina elige la modalidad contra la IA."));
+            return;
+        }
+        if (!aforoValido) {
+            return;
+        }
+        int caben = modalidad.maximoHeroesIA(parametros.maximoParticipantes());
+        if (pedidos > caben) {
+            String limite = modalidad == Modalidad.CONTRA_IA
+                    ? "Contra la IA se enfrenta a un solo heroe de la maquina: como maximo 1."
+                    : "Con " + parametros.maximoParticipantes() + " participantes caben como maximo "
+                            + caben + " heroes de la IA: el anfitrion siempre juega.";
+            errores.add(new ErrorDeCampo("heroesIA", limite));
+        }
     }
 
     /** RF-JUE-004: equipos de un maximo de tres integrantes, y solo en cooperativo. */
@@ -382,13 +457,15 @@ public final class Sala {
         if (participantes.containsKey(idJugador)) {
             throw new IngresoNoPermitido("Ya estas en esta sala.");
         }
-        if (participantes.size() >= maximoParticipantes) {
+        // Los cupos de la maquina cuentan (HU-SAL-004): no se admite a alguien
+        // en un puesto que ya es de la IA.
+        if (ocupacion() >= maximoParticipantes) {
             throw new IngresoNoPermitido("La sala ya alcanzo su maximo de participantes.");
         }
 
         participantes.put(idJugador, ficha);
 
-        if (participantes.size() == maximoParticipantes) {
+        if (ocupacion() == maximoParticipantes) {
             estado = EstadoSala.LLENA;
         }
     }
@@ -512,7 +589,7 @@ public final class Sala {
         if (estado == EstadoSala.CANCELADA || estado == EstadoSala.FINALIZADA) {
             throw new IngresoNoPermitido("Esta sala ya no esta activa.");
         }
-        if (participantes.size() < 2 && !incluirHeroeIA) {
+        if (ocupacion() < 2) {
             throw new IngresoNoPermitido(
                     "Hace falta al menos un rival para empezar: invita a alguien o crea la sala con heroe de la IA.");
         }
@@ -535,7 +612,7 @@ public final class Sala {
             throw new IllegalStateException("Esta sala ya tiene una reserva de creditos anotada.");
         }
         return new Sala(id, estado, modalidad, maximoParticipantes, recompensaCreditos,
-                incluirHeroeIA, privada, tamanoEquipo, idAnfitrion, participantes, creadaEn,
+                heroesIA, privada, tamanoEquipo, idAnfitrion, participantes, creadaEn,
                 version, codigoInvitacion, idReserva);
     }
 
@@ -624,8 +701,14 @@ public final class Sala {
         return recompensaCreditos;
     }
 
+    /** Si la maquina ocupa al menos un cupo (la forma de RF-JUE-001). */
     public boolean incluirHeroeIA() {
-        return incluirHeroeIA;
+        return heroesIA > 0;
+    }
+
+    /** Cuantos cupos son de la maquina — HU-SAL-004. Cuentan en {@link #ocupacion()}. */
+    public int heroesIA() {
+        return heroesIA;
     }
 
     public boolean privada() {
@@ -640,13 +723,14 @@ public final class Sala {
         return idAnfitrion;
     }
 
-    /** Cuantos hay dentro ahora mismo. Al crear la sala, solo el anfitrion. */
     /**
-     * Aforo ocupado. <b>Derivado</b> del conjunto de participantes: no existe un
-     * contador que pueda quedarse desfasado respecto a quienes estan dentro.
+     * Aforo ocupado: las personas dentro mas los cupos de la maquina.
+     * <b>Derivado</b> del conjunto de participantes: no existe un contador que
+     * pueda quedarse desfasado respecto a quienes estan dentro. Al crear la
+     * sala, el anfitrion y las maquinas que pidio.
      */
     public int ocupacion() {
-        return participantes.size();
+        return participantes.size() + heroesIA;
     }
 
     /** Marca de concurrencia leida de la base. Ver el campo. */
@@ -664,9 +748,53 @@ public final class Sala {
         return codigoInvitacion;
     }
 
-    /** Reserva de creditos ligada a la sala, o {@code null} si no compromete creditos. */
+    /**
+     * Reserva de creditos <b>del anfitrion</b>, o {@code null} si la sala no
+     * compromete creditos.
+     *
+     * <p>Desde HU-JUE-014 cada participante tiene la suya: la del anfitrion se
+     * anota aqui al crear la sala (columna de V5) y la de los demas viaja en su
+     * {@link FichaDeParticipante} al entrar (V9). Para verlas todas juntas,
+     * {@link #reservasDeCreditos()}.
+     */
     public UUID idReservaCreditos() {
         return idReservaCreditos;
+    }
+
+    /**
+     * Reserva de creditos de un participante concreto — HU-JUE-014.
+     *
+     * <p>Vacio si no esta dentro, si la sala no tiene recompensa, o si entro
+     * antes de que existiera la apuesta (fila anterior a V9). Se consulta
+     * <b>antes</b> de sacarlo de la sala: una vez fuera, la sala ya no sabe
+     * nada de el.
+     */
+    public java.util.Optional<UUID> reservaDe(UUID idJugador) {
+        if (idJugador == null || !participantes.containsKey(idJugador)) {
+            return java.util.Optional.empty();
+        }
+        if (idJugador.equals(idAnfitrion)) {
+            return java.util.Optional.ofNullable(idReservaCreditos);
+        }
+        FichaDeParticipante ficha = participantes.get(idJugador);
+        return ficha == null ? java.util.Optional.empty()
+                : java.util.Optional.ofNullable(ficha.idReservaCreditos());
+    }
+
+    /**
+     * Todas las reservas comprometidas en la sala, por participante, con el
+     * anfitrion primero — HU-JUE-014.
+     *
+     * <p>Es lo que hay que devolver al cancelar y lo que hay que liquidar al
+     * terminar. Solo aparecen quienes tienen reserva: en una sala sin
+     * recompensa el mapa esta vacio y nadie molesta al libro de creditos.
+     */
+    public Map<UUID, UUID> reservasDeCreditos() {
+        Map<UUID, UUID> reservas = new LinkedHashMap<>();
+        for (UUID jugador : participantes.keySet()) {
+            reservaDe(jugador).ifPresent(reserva -> reservas.put(jugador, reserva));
+        }
+        return Collections.unmodifiableMap(reservas);
     }
 
     /** Momento de creacion. Viaja en el contrato como {@code creadaEn}. */

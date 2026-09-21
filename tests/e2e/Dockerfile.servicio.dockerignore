@@ -22,11 +22,12 @@ frontend/app-web/playwright-report/
 frontend/app-web/test-results/
 docs/
 
-# Los jars que copian las imagenes del arnes.
+# Los jars que copian las imagenes del arnes (HU-JUE-014 anadio ms-finanzas).
 !services/contenido/heroes/build/libs/*.jar
 !services/contenido/productos/build/libs/*.jar
 !services/contenido/inventario/build/libs/*.jar
 !services/contenido/motor-combate/build/libs/*.jar
 !services/plataforma/salas-partidas/build/libs/*.jar
+!services/cuentas/ms-finanzas/build/libs/*.jar
 
 # ms-identidad es Maven: su jar vive en `target/`, que no esta excluido.

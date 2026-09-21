@@ -34,7 +34,7 @@ asyncapi: 3.0.0
 
 info:
   title: Nexus Battles VI — Canal de salas y partidas
-  version: 1.0.0
+  version: 1.2.0
   description: |
     Canal WebSocket + STOMP del modulo `salas-partidas`.
 
@@ -464,18 +464,38 @@ components:
         RF-JUE-017 pide de alto impacto.
       payload:
         type: object
-        # `reparto` es OPCIONAL y `salas-partidas` no lo emite. Quien reparte
-        # creditos y cofres es la economia del juego (HU-JUE-012, ms-finanzas):
-        # este servicio sabe QUIEN gano, no CUANTO le corresponde. Emitir un
-        # reparto calculado aqui seria inventar la regla de otro modulo y
-        # ademas divergiria el dia que esa HU la cambie.
+        # `reparto` es OPCIONAL. Desde HU-JUE-014 (1.1.0) `salas-partidas` SI
+        # lo emite, y lo que lleva es el resultado neto de la APUESTA por
+        # participante: negativo si perdio lo apostado, positivo si se llevo lo
+        # de los demas, cero si se le devolvio (empate, o partida contra la
+        # maquina). NO incluye la recompensa por jugar (2/4 creditos al ganador,
+        # 1 por participar) ni los cofres: eso es HU-JUE-012 y lo reparte
+        # ms-finanzas; `experiencia` y `cofre` viajan nulos/ausentes por eso.
+        #
+        # Se OMITE en dos casos: la partida no tenia apuesta, y el libro de
+        # creditos no respondio al terminar (CA-06). En el segundo, el mismo
+        # mensaje se vuelve a emitir CON reparto cuando la liquidacion se
+        # cierra; la interfaz no debe tratarlo como duplicado.
         required: [tipo, idPartida, ganadores]
         properties:
           tipo: { const: 'partida.finalizada' }
           idPartida: { type: string, format: uuid }
           ganadores:
             type: array
+            description: |
+              Quienes quedaron en pie: uno, o —en el modo cooperativo de
+              RF-JUE-004 (HU-SAL-004, 1.2.0)— todos los del equipo ganador.
+              Vacio si nadie quedo en pie (empate; el desempate es del PO).
             items: { type: string, format: uuid }
+          equipoGanador:
+            type: integer
+            minimum: 1
+            description: |
+              Solo en el modo cooperativo (1.2.0): el equipo que gano. Ausente
+              en todos contra todos. Con equipo ganador de mas de uno en pie
+              `reparto`, si hay apuesta, devuelve lo apostado a todos: el
+              reparto entre companeros es una decision pendiente del PO
+              (D-12 en docs/gobierno/DECISIONES-PENDIENTES-DEL-PO.md).
           reparto:
             type: array
             items:

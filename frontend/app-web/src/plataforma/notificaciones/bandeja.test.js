@@ -101,6 +101,33 @@ describe('formas de los mensajes del contrato', () => {
   });
 });
 
+describe('identidad del canal', () => {
+  test('conecta a /ws/notificaciones con el JWT de la sesion, nunca con el usuario en la URL', async () => {
+    const conectar = jest.fn(async () => canalFalso());
+    sessionStorage.setItem('nexus.token', 'jwt-de-prueba');
+    const bandeja = crearBandeja({
+      usuarioId: 'u-1',
+      sesionId: 's-1',
+      conectar,
+      cliente: {
+        consultarBandeja: jest.fn(async () => ({ usuarioId: 'u-1', noLeidas: 0, avisos: [] })),
+        marcarLeida: jest.fn(),
+        entregarPendientes: jest.fn(async () => []),
+      },
+    });
+
+    await bandeja.iniciar();
+
+    expect(conectar).toHaveBeenCalledTimes(1);
+    const [{ url, token }] = conectar.mock.calls[0];
+    expect(url).toMatch(/\/ws\/notificaciones$/);
+    expect(url).not.toContain('usuario=');
+    expect(url).not.toContain('u-1');
+    expect(token).toBe('jwt-de-prueba');
+    sessionStorage.removeItem('nexus.token');
+  });
+});
+
 describe('iniciar', () => {
   test('pinta la bandeja por HTTP, conecta, se suscribe a la cola privada y anuncia la sesion (CA-02)', async () => {
     const { bandeja, cliente, canales } = preparar({
@@ -116,8 +143,10 @@ describe('iniciar', () => {
     expect(cliente.consultarBandeja).toHaveBeenCalledWith('u-1');
     expect(canales).toHaveLength(1);
     expect(canales[0].suscripciones.has(CANAL.COLA_PRIVADA)).toBe(true);
+    // El usuario es el de la conexion (JWT del CONNECT): en el alta solo
+    // viaja la sesion; ya no se declara el usuario en el cuerpo.
     expect(canales[0].enviados).toEqual([
-      { destino: CANAL.ALTA_DE_SESION, cuerpo: { usuarioId: 'u-1', sesionId: 's-1' } },
+      { destino: CANAL.ALTA_DE_SESION, cuerpo: { sesionId: 's-1' } },
     ]);
     expect(bandeja.estado.canal).toBe(ESTADO_CANAL.ESTABLE);
     expect(bandeja.estado.noLeidas).toBe(1);

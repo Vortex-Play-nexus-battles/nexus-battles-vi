@@ -89,14 +89,16 @@ class PartidasStompControllerTest {
             }
 
             @Override
-            public void anunciarFin(Partida partida) {
+            public void anunciarFin(Partida partida,
+                                    java.util.List<com.nexusbattles.plataforma.salaspartidas.dominio.RepartoDeCreditos> reparto) {
             }
         };
         MotorDeCombate motorMudo = (atacante, objetivo) -> {
             throw new IllegalStateException("no deberia llamarse");
         };
 
-        return new EjecutarAccion(sinUso, canalMudo, motorMudo) {
+        return new EjecutarAccion(sinUso, canalMudo, motorMudo,
+                com.nexusbattles.plataforma.salaspartidas.aplicacion.LiquidacionSinApuesta.nueva()) {
             @Override
             public Partida ejecutar(UUID idPartida, UUID idJugador, UUID idObjetivo,
                                     String codigo) {

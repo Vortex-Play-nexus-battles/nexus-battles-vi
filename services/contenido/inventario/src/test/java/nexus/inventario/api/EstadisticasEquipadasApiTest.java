@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import nexus.inventario.configuracion.IdentidadDelLlamador;
 import nexus.inventario.aplicacion.CalcularEstadisticasEquipadas;
 import nexus.inventario.aplicacion.ConsultarEstadisticasEquipadas;
 import nexus.inventario.aplicacion.ResolutorDeEstadisticasHeroe;
@@ -81,7 +82,7 @@ class EstadisticasEquipadasApiTest {
 
         MockMvc mvc = construirMvc(productos, heroes);
 
-        mvc.perform(get(ruta(HEROE_ELEMENTO_ID)).header("X-User-Name", JUGADOR_ID))
+        mvc.perform(get(ruta(HEROE_ELEMENTO_ID)).with(ComoLlamador.servicio()).header("X-User-Name", JUGADOR_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.heroeId").value(HEROE_ELEMENTO_ID))
                 .andExpect(jsonPath("$.vida").value(44))
@@ -115,7 +116,7 @@ class EstadisticasEquipadasApiTest {
 
             MockMvc mvc = construirMvc(productos, new ResolutorDeEstadisticasHeroeEnMemoria());
 
-            String cuerpo = mvc.perform(get(ruta(HEROE_ELEMENTO_ID)).header("X-User-Name", JUGADOR_ID))
+            String cuerpo = mvc.perform(get(ruta(HEROE_ELEMENTO_ID)).with(ComoLlamador.servicio()).header("X-User-Name", JUGADOR_ID))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.title").value("Producto no encontrado"))
                     .andReturn().getResponse().getContentAsString();
@@ -129,7 +130,7 @@ class EstadisticasEquipadasApiTest {
     private MockMvc construirMvc(ResolutorDeProducto productos, ResolutorDeEstadisticasHeroe heroes) {
         CalcularEstadisticasEquipadas calculo = new CalcularEstadisticasEquipadas(productos, heroes);
         ConsultarEstadisticasEquipadas consulta = new ConsultarEstadisticasEquipadas(repositorio, calculo);
-        return MockMvcBuilders.standaloneSetup(new EstadisticasEquipadasController(consulta))
+        return MockMvcBuilders.standaloneSetup(new EstadisticasEquipadasController(consulta, new IdentidadDelLlamador()))
                 .setControllerAdvice(new ManejadorDeErrores())
                 .build();
     }

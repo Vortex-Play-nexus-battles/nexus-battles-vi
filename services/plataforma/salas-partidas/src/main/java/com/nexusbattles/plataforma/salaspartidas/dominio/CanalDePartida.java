@@ -48,12 +48,19 @@ public interface CanalDePartida {
     void anunciarTurno(Partida partida);
 
     /**
-     * El combate termino — HU-JUE-005, RF-JUE-017.
+     * El combate termino — HU-JUE-005, RF-JUE-017, HU-JUE-014.
      *
      * <p>Se anuncia aparte del ultimo golpe: la vista tiene que poder pintar
      * primero la barra bajando a cero y despues el resultado, que es el orden
      * en el que ocurren. Un solo mensaje con las dos cosas obligaria a la vista
      * a animar hacia atras.
+     *
+     * @param partida la partida ya terminada
+     * @param reparto resultado economico de la apuesta por participante
+     *                (CA-04). Vacio cuando no habia apuesta o cuando el libro
+     *                de creditos no respondio y la liquidacion quedo pendiente;
+     *                en ese segundo caso se vuelve a anunciar el fin, con el
+     *                reparto, cuando el reintento la cierre.
      */
-    void anunciarFin(Partida partida);
+    void anunciarFin(Partida partida, java.util.List<RepartoDeCreditos> reparto);
 }

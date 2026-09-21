@@ -244,6 +244,29 @@ class ClienteInventarioHeroesTest {
     }
 
     @Test
+    @DisplayName("sin credencial de servicio no hay llamada: es «inventario no disponible» (503), no un 500")
+    void sinCredencialDeServicioFallaCerrado() {
+        // Lo que paso en el host de dev: el emisor de credenciales no estaba
+        // donde decia la configuracion, el interceptor lanzaba por encima del
+        // catch del adaptador y crear una sala respondia 500 sin explicacion.
+        // El interceptor real pide el token dentro del RestClient; aqui se
+        // reproduce con uno que falla igual que
+        // InterceptorDePortadorDeServicio cuando TokenDeServicio no responde.
+        RestClient conCredencialCaida = RestClient.builder()
+                .requestInterceptor((peticion, cuerpo, ejecucion) -> {
+                    throw new com.nexusbattles.comun.seguridad.servicio.CredencialDeServicioNoDisponible(
+                            "No se pudo obtener la credencial del servicio salas-partidas: emisor caido", null);
+                })
+                .build();
+        ClienteInventarioHeroes sinCredencial =
+                new ClienteInventarioHeroes(conCredencialCaida, BASE, PRODUCTOS, HEROES);
+
+        InventarioNoDisponible error = assertThrows(InventarioNoDisponible.class,
+                () -> sinCredencial.consultar(JUGADOR));
+        assertEquals(503, error.estado());
+    }
+
+    @Test
     @DisplayName("sin estadisticas el heroe sigue siendo utilizable: la vida solo adorna")
     void sinEstadisticasElHeroeSirve() {
         esperarVitrina(vitrinaCon(heroe("h-1", "Sombra de Vael", true, null)));

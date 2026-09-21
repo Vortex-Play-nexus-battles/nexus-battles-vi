@@ -8,6 +8,7 @@ import com.nexusbattles.ms_identidad.auth.model.TokenCredencial;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.repository.TokenCredencialRepository;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
+import com.nexusbattles.ms_identidad.auth.validation.PasswordPolicyValidator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -42,6 +43,12 @@ public class TokenCredencialService {
 
     @Autowired
     private CorreoClient correoClient;
+
+    // HU-AUT-006 (hallazgo de #441): el canje de recuperacion aceptaba
+    // cualquier contraseña nueva; la politica de RF-AUT-002 solo se aplicaba
+    // en el registro. Misma pieza que el registro y el cambio de contraseña.
+    @Autowired
+    private PasswordPolicyValidator passwordPolicyValidator;
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -115,6 +122,10 @@ public class TokenCredencialService {
         if (LocalDateTime.now().isAfter(tokenCredencial.getFechaExpiracion())) {
             throw new TokenInvalidoException("Este enlace ha expirado.");
         }
+
+        // La politica se comprueba con el codigo ya validado y ANTES de
+        // marcarlo usado: un rechazo por politica no puede quemar el codigo.
+        passwordPolicyValidator.validar(nuevaPassword);
 
         Usuario usuario = tokenCredencial.getUsuario();
         usuario.setPassword(passwordEncoder.encode(nuevaPassword));

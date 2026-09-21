@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_identidad.rbac.service;
 
+import com.nexusbattles.ms_identidad.auth.servicio.CredencialPropia;
 import com.nexusbattles.ms_identidad.rbac.model.Role;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -17,9 +18,17 @@ public class AuditoriaCambioRolClient {
     private final RestClient restClient;
     private final String urlAuditoria;
 
+    /**
+     * @param urlAuditoria misma propiedad y mismo valor por defecto que
+     *                     {@code AuditoriaClient}: el puerto real de
+     *                     ms-cumplimiento es 8091, no 8080
+     * @param credencial   credencial de servicio de ms-identidad (ADR-005), la
+     *                     misma que llevan los demas clientes salientes
+     */
     public AuditoriaCambioRolClient(
-        @Value("${app.auditoria.url:http://ms-cumplimiento:8080/api/v1/admin/auditoria/eventos}")
-        String urlAuditoria) {
+        @Value("${app.auditoria.url:http://localhost:8091/api/v1/admin/auditoria/eventos}")
+        String urlAuditoria,
+        CredencialPropia credencial) {
 
         SimpleClientHttpRequestFactory requestFactory =
             new SimpleClientHttpRequestFactory();
@@ -29,6 +38,7 @@ public class AuditoriaCambioRolClient {
 
         this.restClient = RestClient.builder()
             .requestFactory(requestFactory)
+            .requestInterceptor(credencial)
             .build();
 
         this.urlAuditoria = urlAuditoria;

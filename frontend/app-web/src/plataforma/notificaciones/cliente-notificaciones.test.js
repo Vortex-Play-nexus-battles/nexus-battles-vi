@@ -15,6 +15,7 @@ import {
   ErrorDeApi,
   CANAL,
   CLAVE_SESION_CANAL,
+  tokenDeSesion,
 } from './cliente-notificaciones.js';
 
 function respuesta(estado, cuerpo) {
@@ -35,34 +36,40 @@ afterEach(() => {
 });
 
 describe('urlDelCanal', () => {
-  test('deriva ws:// del origen de la pagina y lleva usuario y sesion como exige el contrato', () => {
+  test('deriva ws:// del origen de la pagina, sin usuario ni sesion en la URL', () => {
     const location = { protocol: 'http:', host: 'localhost:8085' };
-    expect(urlDelCanal({ base: '', usuarioId: 'u-1', sesionId: 's-1', location })).toBe(
-      'ws://localhost:8085/ws?usuario=u-1&sesion=s-1',
-    );
+    expect(urlDelCanal({ base: '', location })).toBe('ws://localhost:8085/ws/notificaciones');
   });
 
   test('con base https la URL es wss y respeta la base declarada', () => {
     document.head.innerHTML =
       '<meta name="nexus-api-base" content="https://api.nexusbattles.local/notificaciones" />';
-    expect(urlDelCanal({ usuarioId: 'u', sesionId: 's', location: {} })).toBe(
-      'wss://api.nexusbattles.local/ws?usuario=u&sesion=s',
-    );
+    expect(urlDelCanal({ location: {} })).toBe('wss://api.nexusbattles.local/ws/notificaciones');
   });
 
-  test('por la URL del canal NO viaja el token de sesion', () => {
+  test('por la URL del canal NO viaja ni el token ni el usuario: la identidad va en el CONNECT', () => {
     sessionStorage.setItem('nexus.token', 'jwt-secreto');
-    const url = urlDelCanal({ base: 'http://x', usuarioId: 'u', sesionId: 's', location: {} });
+    const url = urlDelCanal({ base: 'http://x', location: {} });
     expect(url).not.toContain('jwt-secreto');
+    expect(url).not.toContain('usuario=');
+    expect(url).not.toContain('sesion=');
     sessionStorage.removeItem('nexus.token');
   });
 
   test('los destinos son los del contrato AsyncAPI', () => {
     expect(CANAL).toEqual({
-      RUTA_HANDSHAKE: '/ws',
+      RUTA_HANDSHAKE: '/ws/notificaciones',
       COLA_PRIVADA: '/usuario/cola/notificaciones',
       ALTA_DE_SESION: '/app/notificaciones/sesion',
     });
+  });
+});
+
+describe('tokenDeSesion', () => {
+  test('es el JWT que dejo el login, el mismo que lleva la API HTTP', () => {
+    expect(tokenDeSesion(almacenFalso({ 'nexus.token': 'jwt-1' }))).toBe('jwt-1');
+    expect(tokenDeSesion(almacenFalso())).toBeNull();
+    expect(tokenDeSesion(null)).toBeNull();
   });
 });
 

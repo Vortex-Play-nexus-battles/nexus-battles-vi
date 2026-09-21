@@ -157,6 +157,23 @@ class PlantillaCorreoServiceTest {
                 .contains("Derrota al dragón");
     }
 
+    // ----- HU-AUT-006: aviso de cambio de contraseña -----
+
+    @Test
+    void laPlantillaDeCambioDeClaveVaSobreLaCorporativaYNuncaMuestraContrasenas() {
+        String html = service.renderizar("email/cambio-clave",
+                Map.of("apodo", "ElGuerrero", "ip", "190.85.12.44", "fechaHora", "21/09/2026 a las 15:00 (GMT-05:00)"));
+
+        assertThat(html)
+                .contains("THE NEXUS BATTLES VI")
+                .contains("Tu contraseña cambió")
+                .contains("ElGuerrero")
+                .contains("190.85.12.44")
+                .contains("21/09/2026 a las 15:00")
+                .contains("Olvidé mi contraseña")
+                .doesNotContain("${");
+    }
+
     @Test
     void laPlantillaDeSubastaVaSobreLaPlantillaCorporativaYMuestraElContenido() {
         String html = service.renderizar("email/subasta",

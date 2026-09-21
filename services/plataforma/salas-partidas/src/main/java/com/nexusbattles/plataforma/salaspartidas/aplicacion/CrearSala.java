@@ -72,8 +72,10 @@ public class CrearSala {
             return repositorio.guardar(sala);
         }
 
+        // La sala acaba de nacer (version 0) y su identificador es nuevo: la
+        // clave de idempotencia es unica por sala creada.
         ReservaDeCreditos reserva =
-                creditos.reservar(idAnfitrion, sala.recompensaCreditos(), sala.id());
+                creditos.reservar(idAnfitrion, sala.recompensaCreditos(), sala.id(), sala.version());
         try {
             // La sala guarda que reserva le pertenece: sin ese dato, cancelarla
             // mas tarde no podria devolver los creditos y quedarian retenidos

@@ -55,8 +55,17 @@ class SalaEntidad {
     @Column(name = "recompensa_creditos", nullable = false)
     private int recompensaCreditos;
 
+    /**
+     * Se conserva por compatibilidad con las filas anteriores a V10 y con
+     * quien lea la tabla a mano; la verdad desde HU-SAL-004 es {@code heroesIA}
+     * y esta columna se escribe como su resumen (mayor que cero).
+     */
     @Column(name = "incluir_heroe_ia", nullable = false)
     private boolean incluirHeroeIA;
+
+    /** Cupos de la maquina (V10). Cuentan en el aforo. */
+    @Column(name = "heroes_ia", nullable = false)
+    private short heroesIA;
 
     @Column(nullable = false)
     private boolean privada;
@@ -150,6 +159,10 @@ class SalaEntidad {
         @Column(name = "heroe_vida_maxima")
         private Integer heroeVidaMaxima;
 
+        /** Reserva de creditos del participante (V9, HU-JUE-014). Nula sin apuesta. */
+        @Column(name = "id_reserva_creditos")
+        private UUID idReservaCreditos;
+
         protected FichaEmbebida() {
             // JPA.
         }
@@ -185,6 +198,7 @@ class SalaEntidad {
             fila.heroeNivel = heroe.nivel();
             fila.heroeVidaActual = heroe.vidaActual();
             fila.heroeVidaMaxima = heroe.vidaMaxima();
+            fila.idReservaCreditos = ficha.idReservaCreditos();
             return fila;
         }
 
@@ -216,14 +230,15 @@ class SalaEntidad {
                     && java.util.Objects.equals(heroeRetratoUrl, ficha.heroeRetratoUrl)
                     && java.util.Objects.equals(heroeNivel, ficha.heroeNivel)
                     && java.util.Objects.equals(heroeVidaActual, ficha.heroeVidaActual)
-                    && java.util.Objects.equals(heroeVidaMaxima, ficha.heroeVidaMaxima);
+                    && java.util.Objects.equals(heroeVidaMaxima, ficha.heroeVidaMaxima)
+                    && java.util.Objects.equals(idReservaCreditos, ficha.idReservaCreditos);
         }
 
         @Override
         public int hashCode() {
             return java.util.Objects.hash(conFicha, apodo, heroeId, heroeNombre, heroePrototipo, heroeDefensa,
                     heroeRetratoUrl,
-                    heroeNivel, heroeVidaActual, heroeVidaMaxima);
+                    heroeNivel, heroeVidaActual, heroeVidaMaxima, idReservaCreditos);
         }
 
         /** {@code null} cuando la fila no trae ficha: no se inventa una vacia. */
@@ -233,7 +248,7 @@ class SalaEntidad {
             }
             return new FichaDeParticipante(apodo, new HeroeDeCombate(
                     heroeId, heroeNombre, heroePrototipo, heroeRetratoUrl, heroeNivel,
-                    heroeVidaActual, heroeVidaMaxima, heroeDefensa));
+                    heroeVidaActual, heroeVidaMaxima, heroeDefensa), idReservaCreditos);
         }
     }
 
@@ -278,15 +293,17 @@ class SalaEntidad {
         entidad.maximoParticipantes = (short) sala.maximoParticipantes();
         entidad.recompensaCreditos = sala.recompensaCreditos();
         entidad.incluirHeroeIA = sala.incluirHeroeIA();
+        entidad.heroesIA = (short) sala.heroesIA();
         entidad.privada = sala.privada();
         entidad.tamanoEquipo = sala.tamanoEquipo() == null ? null : sala.tamanoEquipo().shortValue();
         entidad.idAnfitrion = sala.idAnfitrion();
         entidad.participantes = new LinkedHashMap<>();
         sala.fichas().forEach((jugador, ficha) ->
                 entidad.participantes.put(jugador, FichaEmbebida.desde(ficha)));
-        // Derivado del conjunto, nunca copiado de otro contador: es la unica
-        // forma de que la columna no pueda contradecir a las identidades.
-        entidad.ocupacion = (short) entidad.participantes.size();
+        // Derivado del conjunto mas los cupos de la maquina, nunca copiado de
+        // otro contador: es la unica forma de que la columna no pueda
+        // contradecir a las identidades. Igual que `Sala.ocupacion()`.
+        entidad.ocupacion = (short) (entidad.participantes.size() + entidad.heroesIA);
         entidad.creadaEn = sala.creadaEn();
         entidad.codigoInvitacion = sala.codigoInvitacion();
         entidad.idReservaCreditos = sala.idReservaCreditos();
@@ -315,7 +332,7 @@ class SalaEntidad {
                 modalidad,
                 maximoParticipantes,
                 recompensaCreditos,
-                incluirHeroeIA,
+                (int) heroesIA,
                 privada,
                 tamanoEquipo == null ? null : tamanoEquipo.intValue(),
                 idAnfitrion,

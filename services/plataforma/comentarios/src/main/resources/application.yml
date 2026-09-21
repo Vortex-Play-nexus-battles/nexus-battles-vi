@@ -5,6 +5,15 @@ spring:
   mvc:
     problemdetails:
       enabled: true
+  # Clave publica con la que se verifican los tokens de usuario (ADR-002).
+  # Hoy la publica ms-identidad; con Keycloak solo cambia la URL, por
+  # variable de entorno. Los roles y el uid los traduce ConversorRolesJwt
+  # (shared/libs/plataforma-seguridad).
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${IDENTIDAD_JWKS_URL:http://localhost:8089/api/v1/auth/jwks}
   datasource:
     url: ${DB_RELACIONAL_URL:jdbc:postgresql://localhost:5432/plataformadb}
     username: ${DB_USER:usuario_nexus}
@@ -23,6 +32,10 @@ comentarios:
     # Endpoint de verificacion publicado por moderacion-sanciones en
     # contracts/openapi/moderacion-lista-negra.yaml (HU-ADM-002)
     url: ${LISTA_NEGRA_VERIFICAR_URL:http://localhost:8086/api/v1/lista-negra/verificar}
+  sanciones:
+    # Consulta de sancion activa del autor (RF-USR-004), en el mismo servicio:
+    # contracts/openapi/moderacion-sanciones-consulta.yaml
+    url: ${SANCIONES_URL:http://localhost:8086/api/v1}
   # Los formatos de imagen admitidos estan pendientes de definir con el
   # Product Owner (issue 34); mientras tanto se configuran por variable de
   # entorno y el valor local por defecto es el que usan las pruebas.

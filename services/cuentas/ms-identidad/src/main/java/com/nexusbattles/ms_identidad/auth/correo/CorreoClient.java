@@ -2,6 +2,7 @@ package com.nexusbattles.ms_identidad.auth.correo;
 
 import com.nexusbattles.ms_identidad.auth.correo.dto.CorreoAvisoAccesoRequest;
 import com.nexusbattles.ms_identidad.auth.correo.dto.CorreoBienvenidaRequest;
+import com.nexusbattles.ms_identidad.auth.correo.dto.CorreoCambioClaveRequest;
 import com.nexusbattles.ms_identidad.auth.correo.dto.CorreoConfirmacionCuentaRequest;
 import com.nexusbattles.ms_identidad.auth.correo.dto.CorreoRecuperacionClaveRequest;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
@@ -34,8 +35,32 @@ public class CorreoClient {
     @Value("${app.correo.url-confirmacion-cuenta}")
     private String urlConfirmacionCuenta;
 
+    // HU-AUT-006 CA-01: aviso de que la contraseña cambió.
+    @Value("${app.correo.url-cambio-clave}")
+    private String urlCambioClave;
+
     public CorreoClient(RestClient correoRestClient) {
         this.restClient = correoRestClient;
+    }
+
+    /**
+     * Aviso de cambio de contraseña (HU-AUT-006). Informativo, como el aviso
+     * de acceso: si el correo no sale, el cambio ya está hecho y no se
+     * deshace; se deja constancia y se sigue.
+     */
+    @Retry(name = "correo", fallbackMethod = "enviarCambioClaveConFallback")
+    @CircuitBreaker(name = "correo")
+    public void enviarCambioClave(CorreoCambioClaveRequest datos) {
+        restClient.post()
+            .uri(urlCambioClave)
+            .body(datos)
+            .retrieve()
+            .toBodilessEntity();
+    }
+
+    private void enviarCambioClaveConFallback(CorreoCambioClaveRequest datos, Throwable ex) {
+        log.warn("Servicio de correo no disponible, no se pudo enviar el aviso de cambio de contraseña a '{}'. Motivo: {}",
+            datos.getEmail(), ex.getMessage());
     }
 
     // Orden por defecto de Resilience4j: Retry envuelve a CircuitBreaker.

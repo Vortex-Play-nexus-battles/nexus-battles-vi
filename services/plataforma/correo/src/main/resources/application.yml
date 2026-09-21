@@ -8,6 +8,14 @@ spring:
   mvc:
     problemdetails:
       enabled: true
+  # Clave publica con la que se verifican las credenciales de servicio que
+  # llegan (ADR-002/ADR-005). Hoy la publica ms-identidad; con Keycloak solo
+  # cambia la URL, por variable de entorno.
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${IDENTIDAD_JWKS_URL:http://localhost:8089/api/v1/auth/jwks}
   jackson:
     datatype:
       datetime:

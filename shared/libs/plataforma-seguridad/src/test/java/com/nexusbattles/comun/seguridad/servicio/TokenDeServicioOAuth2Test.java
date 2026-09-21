@@ -150,6 +150,15 @@ class TokenDeServicioOAuth2Test {
     }
 
     @Test
+    @DisplayName("una URL que ya termina en /token se usa tal cual: es el emisor transitorio de ms-identidad (ADR-005)")
+    void endpointDeTokenExplicito() {
+        assertThat(TokenDeServicioOAuth2.endpointDeToken("http://srv-ms-identidad:8089/api/v1/auth/token"))
+                .isEqualTo("http://srv-ms-identidad:8089/api/v1/auth/token");
+        assertThat(TokenDeServicioOAuth2.endpointDeToken("http://srv-ms-identidad:8089/api/v1/auth/token/"))
+                .isEqualTo("http://srv-ms-identidad:8089/api/v1/auth/token");
+    }
+
+    @Test
     @DisplayName("sin URL, client_id o secreto no arranca: mejor fallar al construir que en la primera llamada")
     void configuracionIncompleta() {
         assertThatThrownBy(() -> new TokenDeServicioOAuth2("", "id", "s", reloj))

@@ -233,28 +233,40 @@ test.describe('Smoke del entorno desplegado', () => {
     expect(resultado, `respuesta del canal en ${url}`).toBe('CONNECTED');
   });
 
-  test('comentarios esta enrutado y protege la publicacion', async () => {
-    // HU-COM-001. Publicar existe; LEER no: `ComentariosController` solo tiene
-    // `@PostMapping`, asi que un GET da 405. Ese 405 ya demuestra lo que el
-    // smoke quiere saber —que el prefijo llega al servicio y no al 404
-    // generico del borde—, y de paso deja escrita la ausencia del endpoint de
-    // lectura, que hace falta para la vitrina de HU-INV-014.
+  test('el hilo de comentarios de un producto se puede leer, aunque este vacio', async () => {
+    // HU-COM-001 (#34) y lado proveedor de HU-INV-014 (#233). Hasta #438 solo
+    // existia el POST: lo publicado no lo veia nadie. Un producto sin
+    // comentarios responde 200 con el hilo vacio y promedio nulo, no 404: no
+    // tener comentarios es un estado normal, y la ficha lo pinta como vacio.
     const lectura = await api.get('/api/v1/products/smoke-inexistente/comments');
-    expect(
-      lectura.status(),
-      'si esto deja de ser 405, ya hay endpoint de lectura: actualiza la prueba',
-    ).toBe(405);
+    expect(lectura.status(), await lectura.text()).toBe(200);
+
+    const hilo = await lectura.json();
+    expect(hilo.productoId).toBe('smoke-inexistente');
+    expect(Array.isArray(hilo.comentarios)).toBe(true);
+    expect(hilo.total).toBe(hilo.comentarios.length);
+    expect(typeof hilo.totalCalificaciones).toBe('number');
+    // Sin calificaciones el promedio es nulo, nunca un cero que parezca nota.
+    if (hilo.totalCalificaciones === 0) {
+      expect(hilo.calificacionPromedio).toBeNull();
+    } else {
+      expect(hilo.calificacionPromedio).toBeGreaterThanOrEqual(1);
+      expect(hilo.calificacionPromedio).toBeLessThanOrEqual(5);
+    }
 
     // No se afirma aqui la postura de seguridad del POST: el servicio valida
-    // el cuerpo antes que el token —un POST sin autenticar con un cuerpo
-    // inventado responde 400, no 401—, asi que desde fuera no se puede
-    // distinguir «rechazado por el cuerpo» de «rechazado por el token». Eso lo
-    // prueba su dueno con el DTO delante; aqui se quedaria en una afirmacion
-    // que parece decir algo y no lo dice.
+    // el cuerpo antes que el token, asi que desde fuera no se distingue
+    // «rechazado por el cuerpo» de «rechazado por el token». Eso lo prueba su
+    // dueno con el DTO delante.
   });
 
-  test('la bandeja de notificaciones responde con su forma y cuenta las no leidas', async () => {
-    const r = await api.get(`/api/v1/users/${cuerpoDelToken(jugador.token).uid}/notifications`);
+  test('la bandeja de notificaciones es del dueno del token: 200 con el suyo, 401 sin token', async () => {
+    const ruta = `/api/v1/users/${cuerpoDelToken(jugador.token).uid}/notifications`;
+
+    const sinToken = await api.get(ruta);
+    expect(sinToken.status(), 'la bandeja ya no se lee sin token (contrato 1.1.0)').toBe(401);
+
+    const r = await api.get(ruta, { headers: { Authorization: `Bearer ${jugador.token}` } });
     expect(r.status()).toBe(200);
 
     const bandeja = await r.json();
@@ -264,15 +276,17 @@ test.describe('Smoke del entorno desplegado', () => {
     expect(typeof bandeja.noLeidas).toBe('number');
   });
 
-  test('un correo enviado llega de verdad a la bandeja de pruebas', async () => {
-    // De punta a punta: correo -> SMTP -> Mailpit. Un 202 del servicio no
-    // prueba que el mensaje saliera.
+  test('el correo del registro llega de verdad a la bandeja de pruebas, y correo no se alcanza desde fuera', async () => {
+    // De punta a punta por el camino real: ms-identidad (registro de arriba)
+    // -> correo con su credencial de servicio (ADR-005) -> SMTP -> Mailpit.
+    // Ya no se puede POSTear a correo desde fuera: el borde no lo expone y
+    // el servicio exige ROLE_SERVICIO. Eso tambien se afirma.
     const destinatario = `${apodo}@nexus.test`;
 
-    const envio = await api.post('/api/v1/correos/bienvenida', {
+    const desdeFuera = await api.post('/api/v1/correos/bienvenida', {
       data: { email: destinatario, apodo, nombres: 'Smoke', apellidos: 'De Prueba' },
     });
-    expect([200, 201, 202], `envio: ${await envio.text()}`).toContain(envio.status());
+    expect(desdeFuera.status(), 'correo no debe ser alcanzable desde el borde').toBe(404);
 
     await expect
       .poll(
@@ -283,7 +297,7 @@ test.describe('Smoke del entorno desplegado', () => {
           if (!bandeja.ok()) return 0;
           return (await bandeja.json()).messages_count ?? 0;
         },
-        { timeout: 30000, message: 'el correo no llego a Mailpit' },
+        { timeout: 30000, message: 'el correo del registro no llego a Mailpit' },
       )
       .toBeGreaterThan(0);
   });

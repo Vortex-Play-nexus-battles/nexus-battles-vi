@@ -141,13 +141,27 @@
     mostrarEstado('Cargando...', 'carga');
 
     try {
+      // El JWT de la sesion, el mismo que lleva el resto de la API: la
+      // bitacora la consulta un SUPER_ADMINISTRADOR con su token (ADR-002).
+      // Antes iba `credentials: 'include'`, y ms-cumplimiento no tiene cookies.
+      const token = sessionStorage.getItem('nexus.token');
       const respuesta = await fetch(construirUrl(), {
-        credentials: 'include', // ajustar a header Authorization si el proyecto usa JWT
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
+
+      if (respuesta.status === 401) {
+        mostrarEstado(
+          'Inicia sesion como Super Administrador para consultar este registro.',
+          'error',
+        );
+        el.btnAnterior.disabled = true;
+        el.btnSiguiente.disabled = true;
+        return;
+      }
 
       if (respuesta.status === 403) {
         mostrarEstado(
-          'No tienes permisos de Super Administrador (con 2FA verificado) para consultar este registro.',
+          'No tienes permisos de Super Administrador para consultar este registro.',
           'error',
         );
         el.btnAnterior.disabled = true;

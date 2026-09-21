@@ -12,14 +12,15 @@ de entrada público del host de plataforma en AWS: `http://<ip-del-host>/`.
 | `/api/v1/salas` | `srv-salas-partidas:8084` |
 | `/api/v1/users` | `srv-notificaciones:8085` |
 | `/api/v1/products` | `srv-comentarios:8081` |
-| `/api/v1/correos` | `srv-correo:8082` |
+| `/api/v1/correos` | **no se expone**: correo es entre servicios (ADR-005); desde fuera, 404 |
 | `/api/v1/lista-negra`, `/api/v1/sanciones` | `srv-moderacion-sanciones:8086` |
 | `/api/v1/{latencia,disponibilidad,consultas,degradacion}` | `srv-metricas-plataforma:8087` |
 | `/api/v1/{auth,perfiles,rbac,admin}` | `srv-ms-identidad:8089` |
 | `/api/v1/carrito…` | `srv-ms-ecommerce:8090`, reescrito a `/ecommerce/api/v1/carrito…` |
 | `GET /api/v1/productos` (exacto) | `srv-ms-ecommerce:8090` → `/ecommerce/api/v1/productos` (vitrina) |
 | `/api/v1/productos…` (resto) | `srv-productos:8080` (catálogo de contenido) |
-| `/ws` | `srv-salas-partidas:8084`; con `?usuario=…` → `srv-notificaciones:8085` |
+| `/ws/notificaciones` | `srv-notificaciones:8085` |
+| `/ws` | `srv-salas-partidas:8084` |
 | `/mailpit/` | bandeja del SMTP de pruebas |
 | `/salud-borde` | `UP` (lo comprueba `desplegar.sh`) |
 | otro `/api/…` | 404 problem details "ruta sin servicio en el borde" |

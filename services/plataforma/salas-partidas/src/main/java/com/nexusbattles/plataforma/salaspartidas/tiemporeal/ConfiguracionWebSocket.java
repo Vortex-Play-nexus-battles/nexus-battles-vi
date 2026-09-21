@@ -1,6 +1,7 @@
 package com.nexusbattles.plataforma.salaspartidas.tiemporeal;
 
-import com.nexusbattles.plataforma.salaspartidas.chat.canal.AutenticacionStomp;
+import com.nexusbattles.comun.seguridad.ConversorRolesJwt;
+import com.nexusbattles.comun.seguridad.tiemporeal.AutenticacionStomp;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
@@ -49,6 +50,7 @@ class ConfiguracionWebSocket implements WebSocketMessageBrokerConfigurer {
     private final String endpoint;
     private final Set<String> origenesPermitidos = new LinkedHashSet<>();
     private final JwtDecoder decodificador;
+    private final ConversorRolesJwt conversor;
     private final RepositorioDeSalas salas;
 
     ConfiguracionWebSocket(
@@ -59,6 +61,7 @@ class ConfiguracionWebSocket implements WebSocketMessageBrokerConfigurer {
             // ya configurados.
             @Value("${chat.ws.origenes:}") String[] origenesDelChat,
             JwtDecoder decodificador,
+            ConversorRolesJwt conversor,
             RepositorioDeSalas salas) {
         this.endpoint = endpoint;
         for (String origen : origenesDeSalas) {
@@ -72,6 +75,7 @@ class ConfiguracionWebSocket implements WebSocketMessageBrokerConfigurer {
             }
         }
         this.decodificador = decodificador;
+        this.conversor = conversor;
         this.salas = salas;
     }
 
@@ -91,8 +95,10 @@ class ConfiguracionWebSocket implements WebSocketMessageBrokerConfigurer {
     @Override
     public void configureClientInboundChannel(ChannelRegistration registro) {
         // El orden importa: primero quien eres, despues que puedes seguir.
+        // El mismo conversor que la cadena HTTP: el usuario de la sesion se
+        // llama por su uid y trae sus roles (plataforma-seguridad, ADR-002).
         registro.interceptors(
-                new AutenticacionStomp(decodificador),
+                new AutenticacionStomp(decodificador, conversor),
                 new AutorizacionDeDestinos(salas));
     }
 }

@@ -252,6 +252,27 @@ jobs:
             fi
           fi
 
+          # 7) Lo que NO cabe en el host de dev. El t3.small (1,9 GB) corre 9
+          #    servicios + borde con ~330 MB libres y 1,1 GB ya en swap
+          #    (diagnostico-dev del 21/sep). Meter otra JVM no "desplegaria un
+          #    servicio mas": tumbaria los que sostienen el MVP. Hasta que haya
+          #    un segundo host (fuera del plan gratuito, decision del cliente),
+          #    estos se quedan fuera del flujo automatico -- ni imagen ni
+          #    despliegue -- en vez de fallar por secrets que nadie va a crear
+          #    (corrida 35571690523). Sus pruebas y su compuerta de calidad
+          #    siguen corriendo en ci.yml. A demanda (workflow_dispatch) SI se
+          #    intentan: quien los pide sabe lo que hace y ve el fallo con sus
+          #    secrets faltantes.
+          FUERA_DEL_HOST_DEV="ms-cumplimiento ms-ecommerce"
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            for fuera in $FUERA_DEL_HOST_DEV; do
+              if echo "$MATRIZ" | jq -e --arg s "$fuera" 'any(.[]; .servicio == $s)' > /dev/null; then
+                echo "::warning::$fuera cambio, pero no se despliega en el host de dev por capacidad (ver #430); solo se publica su imagen. Para intentarlo igual: despliegue a demanda."
+                MATRIZ=$(echo "$MATRIZ" | jq -c --arg s "$fuera" '[.[] | select(.servicio != $s)]')
+              fi
+            done
+          fi
+
           echo "Servicios a desplegar: $MATRIZ"
           echo "servicios=$MATRIZ" >> "$GITHUB_OUTPUT"
 

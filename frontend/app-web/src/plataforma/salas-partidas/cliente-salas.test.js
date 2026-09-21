@@ -17,6 +17,9 @@ import {
   verificarHeroe,
   iniciarPartida,
   obtenerPartida,
+  obtenerSala,
+  abandonarSala,
+  cancelarSala,
   baseDeApi,
   ErrorDeApi,
 } from './cliente-salas.js';
@@ -473,5 +476,83 @@ describe('obtenerPartida', () => {
     expect(error).toBeInstanceOf(ErrorDeApi);
     expect(error.tipo).toBe('https://nexusbattles.local/errores/partida-no-encontrada');
     expect(error.estado).toBe(404);
+  });
+});
+
+// ===========================================================================
+// HU-SAL-006 — salir y cancelar antes de empezar
+// ===========================================================================
+
+describe('obtenerSala', () => {
+  test('pide la sala por su identificador y la devuelve tal cual', async () => {
+    const sala = { id: 's1', idAnfitrion: 'a', ocupacion: 2, maximoParticipantes: 4 };
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, sala));
+
+    expect(await obtenerSala('s1', { fetchImpl })).toEqual(sala);
+    expect(fetchImpl.mock.calls[0][0]).toBe('/api/v1/salas/s1');
+  });
+
+  test('un 404 llega interpretado', async () => {
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValue(respuesta(404, { type: 'x', title: 'No existe', status: 404 }));
+
+    const error = await obtenerSala('s1', { fetchImpl }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ErrorDeApi);
+    expect(error.estado).toBe(404);
+  });
+});
+
+describe('abandonarSala', () => {
+  test('hace DELETE a /participantes sin cuerpo: quien sale es quien firma el token', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(204, undefined));
+
+    await abandonarSala('s1', { fetchImpl });
+
+    expect(fetchImpl.mock.calls[0][0]).toBe('/api/v1/salas/s1/participantes');
+    expect(fetchImpl.mock.calls[0][1]).toEqual({ method: 'DELETE' });
+  });
+
+  test('el 409 del anfitrion (su camino es cancelar) llega interpretado', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(
+      respuesta(409, {
+        type: 'https://nexusbattles.local/errores/salida-no-permitida',
+        title: 'No puedes salir de esta sala',
+        detail: 'El anfitrion no abandona su sala: la cancela.',
+        status: 409,
+      }),
+    );
+
+    const error = await abandonarSala('s1', { fetchImpl }).catch((e) => e);
+
+    expect(error.estado).toBe(409);
+    expect(error.detalle).toContain('la cancela');
+  });
+});
+
+describe('cancelarSala', () => {
+  test('hace DELETE a la sala', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(204, undefined));
+
+    await cancelarSala('s1', { fetchImpl });
+
+    expect(fetchImpl.mock.calls[0][0]).toBe('/api/v1/salas/s1');
+    expect(fetchImpl.mock.calls[0][1]).toEqual({ method: 'DELETE' });
+  });
+
+  test('quien no es el anfitrion recibe el 403 interpretado', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(
+      respuesta(403, {
+        type: 'https://nexusbattles.local/errores/no-es-el-anfitrion',
+        title: 'Solo el anfitrion puede hacer esto',
+        status: 403,
+      }),
+    );
+
+    const error = await cancelarSala('s1', { fetchImpl }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ErrorDeApi);
+    expect(error.estado).toBe(403);
   });
 });

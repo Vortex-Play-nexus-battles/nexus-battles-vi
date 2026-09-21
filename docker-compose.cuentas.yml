@@ -79,8 +79,26 @@ services:
       DB_URL: ${MS_IDENTIDAD_DB_URL}
       DB_USER: ${MS_IDENTIDAD_DB_USER}
       DB_PASSWORD: ${MS_IDENTIDAD_DB_PASSWORD}
-      LISTA_NEGRA_URL: ${LISTA_NEGRA_URL}
+      # Integraciones dentro de la red de compose. Sin estos valores el
+      # servicio caia a sus defaults de localhost (correo, notificaciones y
+      # auditoria dentro de SU contenedor): el registro respondia 201 pero el
+      # correo de bienvenida nunca salia y nadie lo veia porque CorreoClient
+      # es fail-open. Todos los -f de compose forman un solo proyecto, asi que
+      # los nombres de servicio de plataforma resuelven desde aqui.
+      LISTA_NEGRA_URL: ${LISTA_NEGRA_URL:-http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar}
+      CORREO_BIENVENIDA_URL: ${CORREO_BIENVENIDA_URL:-http://srv-correo:8082/api/v1/correos/bienvenida}
+      CORREO_AVISO_ACCESO_URL: ${CORREO_AVISO_ACCESO_URL:-http://srv-correo:8082/api/v1/correos/aviso-acceso}
+      CORREO_RECUPERACION_CLAVE_URL: ${CORREO_RECUPERACION_CLAVE_URL:-http://srv-correo:8082/api/v1/correos/recuperacion-clave}
+      CORREO_CONFIRMACION_CUENTA_URL: ${CORREO_CONFIRMACION_CUENTA_URL:-http://srv-correo:8082/api/v1/correos/confirmacion-cuenta}
+      CORREO_CAMBIO_CLAVE_URL: ${CORREO_CAMBIO_CLAVE_URL:-http://srv-correo:8082/api/v1/correos/cambio-clave}
+      NOTIFICACIONES_URL: ${NOTIFICACIONES_URL:-http://srv-notificaciones:8085/api/v1/internal/notifications}
+      AUDITORIA_URL: ${AUDITORIA_URL:-http://srv-ms-cumplimiento:8091/api/v1/admin/auditoria/eventos}
       SPRING_PROFILES_ACTIVE: ${MS_IDENTIDAD_SPRING_PROFILES_ACTIVE}
+      # Emisor transitorio de credenciales de servicio (ADR-005): los
+      # clientes y sus secretos los genera desplegar.sh en el host.
+      AUTH_CLIENTES_SERVICIO: ${AUTH_CLIENTES_SERVICIO:-}
+      # Clave de firma estable (ADR-002); sin valor se genera una efimera.
+      JWT_CLAVE_PRIVADA: ${JWT_CLAVE_PRIVADA:-}
 
 volumes:
   identidad-db-datos:

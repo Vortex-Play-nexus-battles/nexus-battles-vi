@@ -40,7 +40,7 @@ class AbandonarSalaTest {
     void preparar() {
         almacen = new RepositorioDeSalasEnMemoria();
         canal = new CanalDeSalaEspia();
-        abandonar = new AbandonarSala(almacen, canal);
+        abandonar = new AbandonarSala(almacen, canal, new CreditosEnMemoria());
     }
 
     /** Sala de dos cupos con el anfitrion y un visitante dentro. Queda LLENA. */
@@ -123,5 +123,71 @@ class AbandonarSalaTest {
                         () -> abandonar.ejecutar(null, VISITANTE)),
                 () -> assertThrows(NullPointerException.class,
                         () -> abandonar.ejecutar(UUID.randomUUID(), null)));
+    }
+
+    /* HU-JUE-014, CA-03: quien se va antes de empezar recupera su apuesta. */
+    @org.junit.jupiter.api.Nested
+    @DisplayName("con apuesta (HU-JUE-014)")
+    class ConApuesta {
+
+        private CreditosEnMemoria creditos;
+
+        @BeforeEach
+        void conLibro() {
+            creditos = new CreditosEnMemoria().conSaldo(VISITANTE, 500);
+            abandonar = new AbandonarSala(almacen, canal, creditos);
+        }
+
+        /** Sala con apuesta, el visitante dentro y su reserva viva en el libro. */
+        private Sala salaApostada() {
+            Sala sala = Sala.crear(
+                    new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 150, false, false, null), ANFITRION);
+            UUID reserva = creditos.reservar(VISITANTE, 150, sala.id(), 0).id();
+            sala.unirse(VISITANTE, new com.nexusbattles.plataforma.salaspartidas.dominio.FichaDeParticipante(
+                    "Visitante", InventarioEnMemoria.SOMBRA, reserva), null);
+            return almacen.guardar(sala);
+        }
+
+        @Test
+        @DisplayName("al salir, la reserva se libera y el saldo vuelve a estar disponible")
+        void devuelveLaReserva() {
+            Sala sala = salaApostada();
+            assertEquals(350, creditos.disponibleDe(VISITANTE), "antes: comprometido");
+
+            abandonar.ejecutar(sala.id(), VISITANTE);
+
+            assertAll(
+                    () -> assertEquals(500, creditos.disponibleDe(VISITANTE)),
+                    () -> assertEquals(0, creditos.reservadoDe(VISITANTE)),
+                    () -> assertTrue(!almacen.buscarPorId(sala.id()).orElseThrow().participantes().contains(VISITANTE)),
+                    () -> assertEquals(1, canal.anuncios().size(), "la salida se anuncia igual"));
+        }
+
+        @Test
+        @DisplayName("si el libro no responde, la salida se sostiene y la deuda queda en la bitacora")
+        void elFalloAlLiberarNoDeshaceLaSalida() {
+            Sala sala = salaApostada();
+            creditos.fallaAlLiberar = true;
+
+            abandonar.ejecutar(sala.id(), VISITANTE);
+
+            assertAll(
+                    () -> assertTrue(!almacen.buscarPorId(sala.id()).orElseThrow().participantes().contains(VISITANTE),
+                            "quien salio no puede acabar creyendo que sigue dentro"),
+                    () -> assertEquals(150, creditos.reservadoDe(VISITANTE), "la reserva sigue viva, para devolverla a mano"),
+                    () -> assertEquals(1, canal.anuncios().size()));
+        }
+
+        @Test
+        @DisplayName("un rechazo no toca el libro")
+        void unRechazoNoLibera() {
+            Sala sala = salaApostada();
+
+            assertThrows(SalidaNoPermitida.class, () -> abandonar.ejecutar(sala.id(), AJENO));
+
+            assertAll(
+                    () -> assertEquals(150, creditos.reservadoDe(VISITANTE)),
+                    () -> assertTrue(creditos.liberadas.isEmpty()));
+        }
     }
 }

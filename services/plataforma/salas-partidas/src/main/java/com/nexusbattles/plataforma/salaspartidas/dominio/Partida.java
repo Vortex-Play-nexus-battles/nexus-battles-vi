@@ -78,12 +78,13 @@ public class Partida {
                 enCombate.add(deLaSala(sala, jugador));
             }
         }
-        if (sala.incluirHeroeIA()) {
-            // La maquina combate con el heroe del anfitrion a vida completa.
-            // Ver `ParticipanteDePartida.inteligenciaArtificial`: no se inventa
-            // un heroe, se usa el unico que esta partida conoce, y de paso la
-            // pelea queda pareja.
-            FichaDeParticipante delAnfitrion = sala.fichaDe(sala.idAnfitrion());
+        // Un participante por cada cupo de la maquina (HU-SAL-004), detras de
+        // las personas. Cada una combate con el heroe del anfitrion a vida
+        // completa. Ver `ParticipanteDePartida.inteligenciaArtificial`: no se
+        // inventa un heroe, se usa el unico que esta partida conoce, y de paso
+        // la pelea queda pareja.
+        FichaDeParticipante delAnfitrion = sala.fichaDe(sala.idAnfitrion());
+        for (int i = 0; i < sala.heroesIA(); i++) {
             HeroeDeCombate heroeDeLaMaquina = delAnfitrion == null
                     ? null
                     : delAnfitrion.heroe().aPlenaVida();
@@ -91,9 +92,30 @@ public class Partida {
                     UUID.randomUUID(), heroeDeLaMaquina));
         }
 
-        return new Partida(UUID.randomUUID(), sala.id(), enCombate,
+        return new Partida(UUID.randomUUID(), sala.id(), repartirEnEquipos(enCombate, sala.tamanoEquipo()),
                 sala.recompensaCreditos(), ahora, EstadoPartida.EN_CURSO,
                 Turno.primero(enCombate.get(0).idJugador()));
+    }
+
+    /**
+     * Equipos del modo cooperativo — RF-JUE-004, HU-SAL-004.
+     *
+     * <p>Se llenan en el orden de la lista, que es el orden de entrada: el
+     * anfitrion abre el equipo 1, y cada equipo se completa antes de abrir el
+     * siguiente. Es la regla mas simple que respeta el unico dato que fija el
+     * requisito (el tamano maximo); no se baraja ni se equilibra porque ninguna
+     * HU lo pide. Sin tamano de equipo, nadie tiene equipo: todos contra todos.
+     */
+    private static List<ParticipanteDePartida> repartirEnEquipos(List<ParticipanteDePartida> enCombate,
+                                                                 Integer tamanoEquipo) {
+        if (tamanoEquipo == null || tamanoEquipo < 1) {
+            return enCombate;
+        }
+        List<ParticipanteDePartida> conEquipo = new ArrayList<>(enCombate.size());
+        for (int i = 0; i < enCombate.size(); i++) {
+            conEquipo.add(enCombate.get(i).conEquipo(i / tamanoEquipo + 1));
+        }
+        return conEquipo;
     }
 
     /**
@@ -136,6 +158,18 @@ public class Partida {
             throw new PartidaYaTerminada(id);
         }
         int actual = indiceDe(turnoActual.idJugador());
+        // Quien ya cayo no juega (HU-SAL-004, SCRUM-1079): en una partida de
+        // seis el turno saltaria a heroes derrotados y la vista esperaria a
+        // alguien que no puede actuar. Se busca al siguiente en pie; si no
+        // hubiera ninguno —no deberia pasar con la partida en curso— se rota
+        // igual, para no quedarse quieto.
+        for (int paso = 1; paso <= participantes.size(); paso++) {
+            ParticipanteDePartida candidato = participantes.get((actual + paso) % participantes.size());
+            if (candidato.enPie()) {
+                turnoActual = turnoActual.siguiente(candidato.idJugador());
+                return;
+            }
+        }
         int siguiente = (actual + 1) % participantes.size();
         turnoActual = turnoActual.siguiente(participantes.get(siguiente).idJugador());
     }
@@ -193,7 +227,7 @@ public class Partida {
         if (estado == EstadoPartida.FINALIZADA) {
             return false;
         }
-        if (enPie().size() > 1) {
+        if (bandosEnPie() > 1) {
             return false;
         }
         terminar();
@@ -201,19 +235,84 @@ public class Partida {
     }
 
     /**
-     * Quien gano, si la partida termino con alguien en pie.
+     * Cuantos bandos siguen en pie. En el modo cooperativo un bando es un
+     * equipo (HU-SAL-004): el combate no acaba mientras queden dos equipos
+     * con alguien en pie. Sin equipos, cada participante es su propio bando.
+     */
+    private long bandosEnPie() {
+        List<ParticipanteDePartida> vivos = enPie();
+        if (!conEquipos()) {
+            return vivos.size();
+        }
+        return vivos.stream().map(ParticipanteDePartida::equipo).distinct().count();
+    }
+
+    /** Si la partida se juega por equipos (modo cooperativo de RF-JUE-004). */
+    public boolean conEquipos() {
+        return participantes.stream().anyMatch(p -> p.equipo() != null);
+    }
+
+    /** Si dos participantes comparten equipo. Sin equipos, nadie es companero de nadie. */
+    public boolean sonDelMismoEquipo(UUID uno, UUID otro) {
+        Integer equipoDeUno = equipoDe(uno);
+        return equipoDeUno != null && equipoDeUno.equals(equipoDe(otro));
+    }
+
+    private Integer equipoDe(UUID idJugador) {
+        // Sin map(): Optional no admite un equipo nulo, que es lo normal fuera
+        // del modo cooperativo.
+        for (ParticipanteDePartida p : participantes) {
+            if (p.idJugador().equals(idJugador)) {
+                return p.equipo();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Quien gano, si la partida termino con <b>una sola persona</b> en pie.
      *
      * <p>Vacio cuando sigue en curso, y tambien cuando acabo sin nadie en pie
      * —dos caidas simultaneas—: eso es un empate, y declarar ganador a uno de
      * los dos seria inventarlo. El criterio de desempate es una decision del
-     * Product Owner que todavia no esta tomada.
+     * Product Owner que todavia no esta tomada. Vacio tambien en el modo
+     * cooperativo, siempre: ahi gana un equipo ({@link #equipoGanador()},
+     * {@link #ganadores()}), no una persona, y como se reparte la apuesta
+     * entre companeros —o si el companero caido pierde la suya— tampoco esta
+     * decidido (D-12). Declarar ganador al unico en pie le daria lo apostado
+     * por su propio companero.
      */
     public java.util.Optional<ParticipanteDePartida> ganador() {
-        if (estado != EstadoPartida.FINALIZADA) {
+        if (estado != EstadoPartida.FINALIZADA || conEquipos()) {
             return java.util.Optional.empty();
         }
         List<ParticipanteDePartida> vivos = enPie();
         return vivos.size() == 1 ? java.util.Optional.of(vivos.get(0)) : java.util.Optional.empty();
+    }
+
+    /**
+     * Quienes quedaron en pie al terminar: uno, o todo el equipo ganador.
+     * Vacio si sigue en curso o si nadie quedo en pie.
+     */
+    public List<ParticipanteDePartida> ganadores() {
+        return estado == EstadoPartida.FINALIZADA ? enPie() : List.of();
+    }
+
+    /** El equipo que gano, si la partida era por equipos y termino con alguien en pie. */
+    public java.util.Optional<Integer> equipoGanador() {
+        if (estado != EstadoPartida.FINALIZADA || !conEquipos()) {
+            return java.util.Optional.empty();
+        }
+        List<Integer> equiposEnPie = enPie().stream()
+                .map(ParticipanteDePartida::equipo)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        // Exactamente uno: con ninguno es empate, y con dos la partida no
+        // deberia haber terminado.
+        return equiposEnPie.size() == 1
+                ? java.util.Optional.of(equiposEnPie.get(0))
+                : java.util.Optional.empty();
     }
 
     /**
