@@ -215,6 +215,7 @@ export function montarTienda(doc = document) {
 if (globalThis.document?.addEventListener) {
   globalThis.document.addEventListener('DOMContentLoaded', () => montarTienda());
 }
+
 // Referencias al DOM
 const btnPagar = document.getElementById('btn-pagar');
 const checkoutModal = document.getElementById('checkout-modal');
@@ -223,64 +224,72 @@ const paymentForm = document.getElementById('payment-form');
 const paymentMessage = document.getElementById('payment-message');
 
 // Abrir modal al hacer clic en PAGAR
-btnPagar.addEventListener('click', () => {
-    // Aquí puedes clonar el HTML de tu carrito actual hacia #checkout-summary para mostrar el resumen
-    document.getElementById('checkout-summary').innerHTML = document.getElementById('cart-items').innerHTML;
-    checkoutModal.classList.remove('hidden');
-});
+if (btnPagar) {
+    btnPagar.addEventListener('click', () => {
+        // Aquí puedes clonar el HTML de tu carrito actual hacia #checkout-summary para mostrar el resumen
+        document.getElementById('checkout-summary').innerHTML = document.getElementById('cart-items').innerHTML;
+        if (checkoutModal) checkoutModal.classList.remove('hidden');
+    });
+}
 
 // Cerrar modal
-closeModal.addEventListener('click', () => {
-    checkoutModal.classList.add('hidden');
-});
+if (closeModal) {
+    closeModal.addEventListener('click', () => {
+        if (checkoutModal) checkoutModal.classList.add('hidden');
+    });
+}
 
 // Interceptar el formulario de pago
-paymentForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
+if (paymentForm) {
+    paymentForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
 
-    const btnConfirm = document.getElementById('btn-confirm-payment');
-    btnConfirm.disabled = true;
-    btnConfirm.textContent = 'Procesando...';
-
-    // Construir el payload. Los datos van a viajar en el body.
-    // NOTA: En un entorno real esto debe viajar por HTTPS.
-    const payload = {
-        carritoId: 1, // ID dinámico de tu carrito actual
-        tarjeta: {
-            titular: document.getElementById('card-name').value,
-            numero: document.getElementById('card-number').value,
-            fechaExpiracion: document.getElementById('card-expiry').value,
-            cvv: document.getElementById('card-cvv').value
+        const btnConfirm = document.getElementById('btn-confirm-payment');
+        if (btnConfirm) {
+            btnConfirm.disabled = true;
+            btnConfirm.textContent = 'Procesando...';
         }
-    };
 
-    try {
-        const response = await fetch(`${API_BASE_URL}/checkout`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-User-Id': 'usr_test_123' // ID del usuario autenticado
-            },
-            body: JSON.stringify(payload)
-        });
+        // Construir el payload. Los datos van a viajar en el body.
+        const payload = {
+            carritoId: 1, // ID dinámico de tu carrito actual
+            tarjeta: {
+                titular: document.getElementById('card-name').value,
+                numero: document.getElementById('card-number').value,
+                fechaExpiracion: document.getElementById('card-expiry').value,
+                cvv: document.getElementById('card-cvv').value
+            }
+        };
 
-        const result = await response.json();
+        try {
+            // Utilizamos fetchWithHttpErrorInterceptor y rutaDeApi para ser compatibles con el estándar del equipo
+            const response = await fetchWithHttpErrorInterceptor(rutaDeApi('/checkout'), {
+                method: 'POST',
+                headers: cabeceras(),
+                body: JSON.stringify(payload)
+            });
 
-        if (response.ok) {
-            paymentMessage.textContent = '¡Pago aprobado! Los productos han sido añadidos a tu inventario. Revisa tu correo.';
-            paymentMessage.className = 'success-msg';
+            // fetchWithHttpErrorInterceptor devuelve la respuesta cruda si todo sale bien
+            const result = await response.json();
+
+            if (paymentMessage) {
+                paymentMessage.textContent = '¡Pago aprobado! Los productos han sido añadidos a tu inventario. Revisa tu correo.';
+                paymentMessage.className = 'success-msg';
+            }
             paymentForm.reset();
-            // Aquí puedes vaciar el carrito visualmente
-        } else {
-            paymentMessage.textContent = `Error: ${result.mensaje || 'Pago rechazado por la pasarela'}`;
-            paymentMessage.className = 'error-msg';
+
+        } catch (error) {
+            if (paymentMessage) {
+                // Maneja los errores arrojados por el interceptor del equipo
+                paymentMessage.textContent = `Error: ${error.mensaje || 'Pago rechazado o error de conexión'}`;
+                paymentMessage.className = 'error-msg';
+            }
+        } finally {
+            if (paymentMessage) paymentMessage.classList.remove('hidden');
+            if (btnConfirm) {
+                btnConfirm.disabled = false;
+                btnConfirm.textContent = 'Confirmar Pago';
+            }
         }
-    } catch (error) {
-        paymentMessage.textContent = 'Error de conexión con el servidor.';
-        paymentMessage.className = 'error-msg';
-    } finally {
-        paymentMessage.classList.remove('hidden');
-        btnConfirm.disabled = false;
-        btnConfirm.textContent = 'Confirmar Pago';
-    }
-});
+    });
+}
