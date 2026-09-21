@@ -1,0 +1,131 @@
+openapi: 3.1.0
+info:
+  title: Nexus Battles VI - Tienda (ms-ecommerce): carrito y vitrina
+  version: 1.0.0
+  description: >
+    Contrato de lo que ms-ecommerce publica hoy (bloque de identidad/seguridad,
+    #441): la vitrina paginada del catalogo y el carrito del jugador. No existia
+    contrato para este servicio; se documenta lo implementado, sin inventar
+    operaciones.
+
+    Identidad (ADR-002). El carrito es del `uid` del token de acceso: hasta
+    ahora el servicio leia la cabecera `X-User-Id`, que escribia el navegador
+    y cualquiera podia poner el identificador de otro. Sin token 401; con un
+    token que no es de usuario (por ejemplo, de servicio) 403. La vitrina es
+    publica.
+
+    Este servicio declara el context-path `/ecommerce`; el borde reescribe
+    `/api/v1/carrito` y `GET /api/v1/productos` hacia el (ver
+    infrastructure/red-balanceo/borde-dev.conf y el issue #421 sobre la
+    colision de prefijo con contenido/productos).
+servers:
+  - url: http://localhost:8090/ecommerce/api/v1
+    description: Entorno local de desarrollo
+paths:
+  /productos:
+    get:
+      summary: Vitrina paginada del catalogo
+      operationId: vitrina
+      security: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: size
+          in: query
+          description: Dieciseis por norma de la vista de referencia.
+          schema: { type: integer, minimum: 1, default: 16 }
+        - name: moneda
+          in: query
+          schema: { type: string, default: COP }
+      responses:
+        "200":
+          description: Pagina de Spring Data con los productos de la vitrina
+  /carrito:
+    get:
+      summary: Carrito del jugador autenticado (se crea vacio si no existe)
+      operationId: obtenerCarrito
+      responses:
+        "200":
+          description: El carrito del uid del token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Carrito"
+        "401":
+          description: Sin token de acceso, o caducado / no verificable
+        "403":
+          description: El token no es de un usuario
+  /carrito/items:
+    post:
+      summary: Agregar un producto al carrito del jugador autenticado
+      operationId: agregarItem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productoId, cantidad]
+              properties:
+                productoId: { type: integer, format: int64 }
+                cantidad: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Carrito actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Carrito"
+        "400":
+          description: Cuerpo invalido
+        "401":
+          description: Sin token de acceso
+        "403":
+          description: El token no es de un usuario
+  /carrito/items/{itemId}:
+    delete:
+      summary: Quitar un item del carrito del jugador autenticado
+      operationId: eliminarItem
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        "200":
+          description: Carrito actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Carrito"
+        "401":
+          description: Sin token de acceso
+        "403":
+          description: El token no es de un usuario
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Token de acceso emitido por ms-identidad (RS256, JWKS). El carrito es
+        del claim `uid` (o del sujeto con Keycloak). Roles de usuario:
+        JUGADOR, MODERADOR, ADMINISTRADOR, SUPER_ADMINISTRADOR.
+  schemas:
+    Carrito:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        usuarioId:
+          type: string
+          description: El uid del token que lo creo.
+        items:
+          type: array
+          items:
+            type: object
+        total:
+          type: number
