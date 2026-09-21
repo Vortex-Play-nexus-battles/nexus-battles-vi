@@ -12,7 +12,7 @@ import { construirBarra } from '../comun/barra-navegacion.js';
 import { cambiarRol, ROLES_DISPONIBLES } from './cambio-rol.js';
 
 
-const BASE_API = '/api/admin/usuarios';
+const BASE_API = '/api/v1/admin/usuarios';
 const MATRIZ_RBAC_API = '/api/v1/rbac/matrix';
 
 const CLAVE_ROL = 'nexus.rolActual';
@@ -1074,6 +1074,9 @@ try {
 
 function volverInicio() {
 
-window.location.href = '../index.html';
+// El menú principal (index.html) vive en la MISMA carpeta que esta página
+// (frontend/app-web/src/cuentas/), no un nivel arriba: '../index.html' no
+// existe y devolvía 404 al usuario que hacía clic en Volver.
+window.location.href = './index.html';
 
 }

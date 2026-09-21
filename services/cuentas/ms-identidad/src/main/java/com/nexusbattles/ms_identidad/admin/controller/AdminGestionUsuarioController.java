@@ -15,7 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/admin/usuarios")
+@RequestMapping("/api/v1/admin/usuarios")
 public class AdminGestionUsuarioController {
 
     private final AdminGestionUsuarioService adminGestionUsuarioService;

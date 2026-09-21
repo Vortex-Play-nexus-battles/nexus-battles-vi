@@ -1,0 +1,93 @@
+plugins {
+    id 'nexus.spring-conventions'
+}
+
+layout.buildDirectory.set(file("build.nosync"))
+
+group = 'nexus'
+version = '0.0.1-SNAPSHOT'
+
+// Web MVC, Actuator, Java 21, JUnit 5 y JaCoCo provienen de la convención.
+// Aquí solo van las dependencias propias de Subastas.
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // El esquema lo gobierna Flyway, nunca ddl-auto (regla 8 de plataforma).
+    implementation 'org.springframework.boot:spring-boot-starter-flyway'
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-database-postgresql'
+
+    // Cortacircuitos hacia ms-finanzas: esa llamada ocurre dentro del lock
+    // pesimista de la subasta, así que una caída de ese servicio congelaría
+    // todas las pujas si no se corta rápido.
+    implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
+
+    // Validación del JWT que emite ms-identidad. Misma versión que ese servicio
+    // (0.12.6) para no divergir en el formato del token. Aquí solo se valida
+    // firma y expiración: este servicio nunca emite tokens.
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+
+    // HU-SUB-011: contador en vivo del listado, vía STOMP sobre WebSocket
+    // (backend-spring.md: "Tiempo real: Spring WebSocket + STOMP").
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
+
+    // MappingJackson2MessageConverter (para serializar SubastaResumenResponse
+    // sobre STOMP) necesita jackson-databind explicito en este modulo -- no
+    // se resuelve solo como transitiva de starter-websocket, aunque si esta
+    // disponible para el controlador REST via la convencion compartida.
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+
+    // Idem para Instant/LocalDate/etc: Jackson no los soporta por defecto
+    // sin este modulo, y el ObjectMapper armado a mano para el cliente
+    // STOMP de prueba no hereda la configuracion automatica que si aplica
+    // Spring MVC a las respuestas REST normales.
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
+
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    testCompileOnly 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+
+    runtimeOnly 'org.postgresql:postgresql'
+    runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'org.testcontainers:testcontainers-postgresql'
+    testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+
+    // Falla el build si un servicio importa clases internas de otro dominio.
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.3.0'
+
+    // El validador se prueba generando tokens reales, así que en pruebas hace
+    // falta la implementación de jjwt, no solo su API.
+    testImplementation 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    testImplementation 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+
+    // Pruebas de contrato del lado consumidor (Pact JVM, pila aprobada en
+    // CLAUDE.md). Solo el consumidor: este servicio no verifica pactos ajenos.
+    // Genera el pacto en contracts/pactos/ para que el proveedor (ms-finanzas,
+    // ms-inventario) pueda verificarlo contra su implementacion sin que
+    // ninguno de los dos tenga que levantar el otro.
+    testImplementation 'au.com.dius.pact.consumer:junit5:4.6.17'
+}
+
+// Subastas tiene pruebas de verdad, así que activa desde ya la compuerta
+// corporativa del 80 % declarada en nexus.spring-conventions.
+tasks.named('jacocoTestCoverageVerification') {
+    dependsOn tasks.named('test')
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('jacocoTestCoverageVerification')
+}
+
+// El pacto generado se versiona: es un artefacto de contrato, no de build. Su
+// sitio es contracts/, que es donde el proveedor lo va a buscar.
+tasks.named('test') {
+    systemProperty 'pact.rootDir', rootProject.file('contracts/pactos').absolutePath
+}

@@ -1,0 +1,147 @@
+# E2E de aceptacion — el corte vertical de la sala de batalla.
+#
+# ## Por que no corre en cada PR
+#
+# Levanta seis servicios de verdad con sus bases de datos y juega una partida
+# entera: son doce o quince minutos. Exigirlo en cada PR convertiria el
+# pipeline en algo que la gente aprende a ignorar. Corre al fusionar en
+# `develop`, que es donde importa que el sistema siga funcionando entero, y a
+# mano cuando alguien quiera comprobarlo antes.
+#
+# ## Por que existe
+#
+# El flujo de sala NO se puede demostrar en el host de dev (#435): la puerta
+# de heroe consulta a `inventario`, que no esta desplegado en AWS, y meterlo
+# en el `t3.small` no cabe (#430). Esto es lo que demuestra que el MVP
+# funciona de punta a punta.
+name: E2E de aceptacion
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - "services/**"
+      - "frontend/app-web/src/**"
+      - "shared/**"
+      - "tests/e2e/**"
+      - "infrastructure/red-balanceo/borde-dev.conf"
+      - ".github/workflows/e2e.yml"
+  # Tambien en los PR que tocan el propio arnes: si se cambia el compose, la
+  # semilla o la prueba, hay que comprobarlo antes de fusionar. Los PR de
+  # servicio NO lo disparan, para no meter quince minutos en cada uno.
+  pull_request:
+    branches: [develop]
+    paths:
+      - "tests/e2e/**"
+      - ".github/workflows/e2e.yml"
+      - "frontend/app-web/playwright.e2e.config.js"
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  corte-vertical:
+    name: Sala de batalla de punta a punta
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      # Los jars se construyen UNA vez aqui y las imagenes solo los copian.
+      # Usar los Dockerfile de produccion significaria compilar el monorepo
+      # dentro de cada imagen: seis veces lo mismo.
+      - name: Construir los jars de los cinco servicios Gradle
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon -x test \
+            :services:contenido:heroes:bootJar \
+            :services:contenido:productos:bootJar \
+            :services:contenido:inventario:bootJar \
+            :services:contenido:motor-combate:bootJar \
+            :services:plataforma:salas-partidas:bootJar
+
+      - name: Construir el jar de ms-identidad (Maven)
+        working-directory: services/cuentas/ms-identidad
+        run: ./mvnw -B -DskipTests package
+
+      - name: Levantar el entorno
+        run: docker compose -f tests/e2e/compose.yml up -d --build --wait
+
+      - name: Sembrar el inventario y comprobar el camino de la verificacion
+        run: |
+          chmod +x tests/e2e/sembrar.sh
+          ./tests/e2e/sembrar.sh
+
+      - name: Configurar Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/app-web/package-lock.json
+
+      - name: Instalar dependencias y el navegador
+        working-directory: frontend/app-web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      # Las pruebas viven en `tests/e2e/`, que es su sitio segun la estructura
+      # del monorepo, pero `node_modules` esta en `frontend/app-web/`. Node
+      # resuelve los imports subiendo directorios desde el archivo, asi que un
+      # enlace en la raiz hace que `tests/e2e/*.js` encuentre
+      # `@playwright/test`. Es un enlace del runner, no un cambio del repo.
+      - name: Enlazar node_modules en la raiz para las pruebas de tests/
+        run: ln -sfn frontend/app-web/node_modules node_modules
+
+      - name: Jugar la partida
+        working-directory: frontend/app-web
+        env:
+          E2E_BORDE: http://localhost:8099
+        run: npx playwright test --config=playwright.e2e.config.js
+
+      # Cuando esto falla, lo que hace falta es el log del servicio que fallo,
+      # no el de Playwright. Sin este paso habria que reproducirlo a mano.
+      - name: Logs de los servicios si algo fallo
+        if: failure()
+        run: |
+          for s in srv-ms-identidad srv-heroes srv-productos srv-inventario \
+                   srv-motor-combate srv-salas-partidas srv-borde; do
+            echo "=============== $s ==============="
+            # Primero la cabecera de las excepciones: con `--tail` a secas se
+            # ve el final de una pila de cien lineas y no la causa.
+            docker compose -f tests/e2e/compose.yml logs "$s" 2>&1 \
+              | grep -E "ERROR|WARN|Exception|Caused by" | tail -25 || true
+            echo "  --- ultimas lineas ---"
+            docker compose -f tests/e2e/compose.yml logs --tail 40 "$s" || true
+          done
+          echo "=============== estado ==============="
+          docker compose -f tests/e2e/compose.yml ps
+
+      - name: Guardar el informe de Playwright
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: informe-e2e
+          path: |
+            frontend/app-web/playwright-report/**
+            frontend/app-web/test-results/**
+          retention-days: 7
+          if-no-files-found: ignore
+
+      # Siempre, tambien si la prueba fallo: un runner no deberia quedarse con
+      # contenedores ni volumenes colgando.
+      - name: Desmontar
+        if: always()
+        run: docker compose -f tests/e2e/compose.yml down -v --remove-orphans

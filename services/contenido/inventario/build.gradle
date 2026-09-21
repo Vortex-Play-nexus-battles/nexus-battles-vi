@@ -1,5 +1,6 @@
 plugins {
     id 'nexus.spring-conventions'
+    id 'nexus.seguridad-conventions'
 }
 
 group = 'nexus'

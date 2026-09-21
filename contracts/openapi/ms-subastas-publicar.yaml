@@ -1,0 +1,80 @@
+openapi: 3.1.0
+info:
+  title: Nexus Battles VI - Publicación de subastas
+  version: 0.1.0-draft
+  description: Contrato de HU-SUB-001. La publicación requiere identidad, inventario, catálogo y finanzas.
+servers:
+  - url: http://localhost:8092/api/v1
+security:
+  - bearerJwt: []
+paths:
+  /subastas:
+    post:
+      summary: Publicar un elemento propio en subasta
+      operationId: publicarSubasta
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicarSubastaRequest'
+      responses:
+        '201':
+          description: Subasta creada en estado ACTIVA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicarSubastaResponse'
+        '400': { description: Solicitud inválida }
+        '401': { description: Usuario no autenticado }
+        '403': { description: Propiedad inválida o sanción activa }
+        '404': { description: Elemento o producto inexistente }
+        '409': { description: Elemento ya publicado o clave de idempotencia conflictiva }
+        '422': { description: Saldo insuficiente o regla de negocio inválida }
+        '503': { description: Dependencia no disponible }
+components:
+  securitySchemes:
+    bearerJwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 100 }
+  schemas:
+    PublicarSubastaRequest:
+      type: object
+      additionalProperties: false
+      required: [elementoInventarioId, productoId, duracion, precioInicial]
+      properties:
+        elementoInventarioId: { type: string, minLength: 1 }
+        productoId: { type: string, format: uuid }
+        duracion: { type: string, enum: [24H, 48H] }
+        precioInicial: { type: number, format: decimal, exclusiveMinimum: 0 }
+        precioCompraInmediata: { type: number, format: decimal, exclusiveMinimum: 0, nullable: true }
+    PublicarSubastaResponse:
+      type: object
+      required: [id, productoId, elementoInventarioId, vendedorId, precioInicial, ofertaVigente, estado, fechaPublicacion, fechaFin, comisionCobrado]
+      properties:
+        id: { type: string, format: uuid }
+        productoId: { type: string, format: uuid }
+        elementoInventarioId: { type: string }
+        vendedorId: { type: string, format: uuid }
+        precioInicial: { type: number, format: decimal }
+        ofertaVigente: { type: number, format: decimal }
+        precioCompraInmediata: { type: number, format: decimal, nullable: true }
+        estado: { type: string, enum: [ACTIVA, ADJUDICADA, SIN_ADJUDICACION] }
+        fechaPublicacion: { type: string, format: date-time }
+        fechaFin: { type: string, format: date-time }
+        comisionCobrado: { type: number, format: decimal }
+        nombreProducto: { type: string, nullable: true }
+        tipoProducto: { type: string, nullable: true }
+        rareza: { type: string, nullable: true }
+        miniaturaUrl: { type: string, nullable: true }
+        descripcionCorta: { type: string, nullable: true }
+        habilidades: { type: string, nullable: true }

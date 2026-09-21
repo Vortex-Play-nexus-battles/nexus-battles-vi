@@ -1,0 +1,134 @@
+/* ============================================================
+   historial-transacciones.css — HU-PAG-002
+   Usa los tokens de tema-cuentas.css importado desde el HTML.
+   ============================================================ */
+
+body {
+  margin: 0;
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: var(--tipografia-cuerpo, Inter, system-ui, sans-serif);
+}
+
+.contenedor {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.encabezado-contenido {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 0;
+}
+
+.titulo {
+  margin: 0 0 4px;
+  font-family: var(--tipografia-titulo);
+  font-size: 24px;
+}
+
+.ayuda {
+  margin: 0;
+  color: var(--texto-2, #48536a);
+  font-size: 14px;
+}
+
+.tarjeta {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 12px;
+  margin-top: 8px;
+}
+
+.tabla-envoltorio {
+  overflow-x: auto;
+}
+
+.tabla-historial {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.tabla-historial th,
+.tabla-historial td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--borde);
+  text-align: left;
+  vertical-align: top;
+}
+
+.tabla-historial thead th {
+  font-family: var(--tipografia-titulo);
+  font-weight: 600;
+  color: var(--texto-2, #48536a);
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.tabla-historial .celda-fecha {
+  white-space: nowrap;
+  color: var(--texto-2, #48536a);
+}
+
+.tabla-historial .celda-monto {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  font-weight: 600;
+}
+
+/* Insignias por estado — colores tomados de la guía de estilo AA. */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badge--aprobado {
+  color: #086b31;
+  background: #e4f5e9;
+}
+
+.badge--rechazado {
+  color: #b81a1a;
+  background: #fbe4e4;
+}
+
+.badge--indeterminado {
+  color: #8a4a00;
+  background: #fbeeed;
+}
+
+.paginacion {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+/* Estados de la tabla. */
+.estado {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radio);
+  font-size: 14px;
+}
+
+.estado.carga {
+  background: #ddeef7;
+  color: #095e8c;
+}
+.estado.error {
+  background: #fbe4e4;
+  color: #b81a1a;
+}
+.estado.vacio {
+  background: #f2f4f8;
+  color: var(--texto-2, #48536a);
+}

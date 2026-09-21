@@ -8,6 +8,11 @@ La integración de `HU-INV-003` añade la creación por `POST` y la edición del
 nombre por `PATCH`. Después de cada escritura, la vista vuelve a consultar el
 inventario persistido y muestra el resultado en la cuadrícula.
 
+`HU-INV-002` incorpora un campo de búsqueda que consulta
+`GET /api/v1/inventario/elementos/busqueda?criterio=texto&pagina=N`. La vista
+exige cuatro caracteres, conserva los estados de carga, éxito, vacío y error,
+y permite limpiar el criterio para volver al inventario completo.
+
 ## Alcance actual
 
 **Cuadricula de referencia**:
@@ -17,6 +22,7 @@ inventario persistido y muestra el resultado en la cuadrícula.
 - nombre propio del jugador escrito como texto, nunca como marcado;
 - rechazo ruidoso de una pagina que exceda los 16 elementos acordados;
 - cliente HTTP de la consulta paginada, con `fetch` inyectable.
+- campo de búsqueda por nombre, tipo o identificador de producto;
 - formulario para crear elementos y editar el nombre de elementos propios;
 - actualización de la vitrina después de guardar, incluida la página donde
   queda el elemento nuevo cuando el inventario supera los 16 elementos.
@@ -33,6 +39,9 @@ inventario persistido y muestra el resultado en la cuadrícula.
 
 **Pruebas de aceptacion**:
 
+- los escenarios de `HU-INV-002-busqueda-inventario.feature` ejecutados en
+  Chromium para localizar productos por nombre, identificador, tipo y parte
+  de armadura, validar el mínimo y restaurar la vitrina al limpiar;
 - los cuatro escenarios de `HU-INV-001-vitrina-del-inventario.feature`
   traducidos uno a uno a Playwright sobre Chromium, con el esquema del
   criterio 2 expandido a sus tres resoluciones;
@@ -75,9 +84,9 @@ horizontal.
 
 - La tarjeta y la paginacion de dieciseis son **componentes de `shared/ui-kit`**
   segun la pila; ese directorio esta vacio, asi que viven aqui provisionalmente.
-- El tema de `vitrina.css` es provisional: la paleta y las tipografias
-  autoalojadas (Rajdhani e Inter) salen de la propuesta de diseno, que aun no
-  esta en el repositorio.
+- `vitrina.css` usa la paleta oficial del sistema de diseno de Figma
+  (`iMcw1JhmSAD6XjzDZuYlIz`) y los mismos nombres de token publicados en
+  `shared/ui-kit/css/tokens.css`.
 - Los cuatro estados de `RNF-USA-003` ya existen en `estados-vista.js`, pero la
   pila los quiere **centralizados para los veinte modulos**. Su hogar es
   `shared/ui-kit`; se mudan sin cambiar la interfaz.

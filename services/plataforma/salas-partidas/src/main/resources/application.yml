@@ -1,2 +1,104 @@
+# Salas y partidas — HU-SAL-001 a HU-SAL-005.
+#
+# Mismas convenciones que moderacion-sanciones: un solo PostgreSQL para la
+# plataforma y un esquema por servicio, para cumplir la regla 7 sin pagar una
+# instancia por microservicio.
+#
+# Regla 10: ningun valor real vive aqui. Todo baja de variable de entorno; lo
+# que aparece detras de los dos puntos son los valores de desarrollo local que
+# levanta el docker-compose de la raiz.
+
 server:
   port: 8084
+
+spring:
+  application:
+    name: salas-partidas
+
+  # Regla 4: los errores salen en formato problem details (RFC 7807).
+  # La correspondencia con la interfaz esta en shared/ui-kit/MAPEO-ERRORES.md.
+  mvc:
+    problemdetails:
+      enabled: true
+
+  # Quien emite los tokens que este servicio acepta.
+  #
+  # Hoy es ms-identidad, que publica su clave publica en /api/v1/auth/jwks.
+  # Se configura jwk-set-uri y no issuer-uri porque ms-identidad no expone
+  # documento de descubrimiento OpenID; a cambio, esta forma sirve igual para
+  # Keycloak el dia que la identidad se mueva alli: solo cambia la URL, por
+  # variable de entorno, sin tocar codigo. Ver
+  # docs/gobierno/ADR-002-identidad-de-usuario.md.
+  #
+  # Los roles y el identificador del usuario los traduce ConversorRolesJwt
+  # (shared/libs/plataforma-seguridad), que entiende las dos formas de token.
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${IDENTIDAD_JWKS_URL:http://localhost:8089/api/v1/auth/jwks}
+
+  datasource:
+    url: ${DB_RELACIONAL_URL:jdbc:postgresql://localhost:5432/plataformadb}
+    username: ${DB_USER:usuario_nexus}
+    password: ${DB_PASS:password_secreta_123}
+
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        default_schema: salas_partidas
+
+  flyway:
+    schemas: salas_partidas
+    default-schema: salas_partidas
+
+# Canal en tiempo real de la sala — HU-SAL-002, contracts/websocket/salas-partidas.yaml.
+# Mismos prefijos que notificaciones (HU-NOT-006): /tema, /cola, /app, /usuario.
+salas:
+  websocket:
+    endpoint: ${SALAS_WS_ENDPOINT:/ws}
+    origenes-permitidos: ${SALAS_WS_ORIGENES:http://localhost:5500,http://127.0.0.1:5500}
+
+  # HU-SAL-003: verificacion de heroe contra el inventario del equipo de
+  # contenido (contracts/openapi/inventario.yaml). Mismo nombre de variable que
+  # usa ms-subastas para el mismo proveedor, para que el entorno se configure
+  # una sola vez. Si el servicio no responde, la verificacion sale 503: no se
+  # inventa un veredicto.
+  inventario:
+    url: ${INVENTARIO_BASE_URL:http://localhost:8080}
+
+  # El prototipo del heroe, que es lo unico que motor-combate sabe buscar en el
+  # catalogo. Inventario lo resuelve por dentro pero no lo publica; productos si
+  # lo expone en GET /api/v1/productos/{id}, y es lectura publica. Sin esta URL
+  # el combate degrada al comportamiento anterior a V8 -mandar el nombre propio
+  # al motor, que responde 404-, pero entrar a la sala sigue funcionando.
+  productos:
+    url: ${PRODUCTOS_BASE_URL:http://localhost:8080}
+
+  # La DEFENSA del prototipo. El motor acierta si la tirada supera la defensa
+  # del objetivo; mandandole la vida en su lugar -44 en "Guerrero Tanque",
+  # contra un ataque maximo de 16- ningun golpe acertaba NUNCA. Misma ruta que
+  # ya consume inventario para las estadisticas: GET /api/v1/heroes/{prototipo}.
+  heroes:
+    url: ${HEROES_BASE_URL:http://localhost:8080}
+
+# Chat de HU-JUE-015. La lista negra es la de HU-ADM-002 (moderacion-sanciones).
+chat:
+  lista-negra:
+    url: ${LISTA_NEGRA_VERIFICAR_URL:http://localhost:8086/api/v1/lista-negra/verificar}
+  ws:
+    origenes: ${CHAT_WS_ORIGENES:http://localhost:5173}
+  historial:
+    tamano: ${CHAT_HISTORIAL_TAMANO:50}
+
+# Regla 3: todo servicio expone salud y metricas.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true

@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sala en batalla · The Nexus Battles VI</title>
+
+    <!--
+      Sistema de diseno compartido. Ningun estilo propio de esta vista.
+      Rutas relativas, igual que crear-sala.html.
+    -->
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
+  </head>
+
+  <body>
+    <!--
+      Cabecera de 64 px con los seis destinos de RF-INV-008 y el buscador de
+      productos de RF-INV-004. Se repite en cada vista mientras no exista una
+      forma acordada de compartir fragmentos de HTML sin framework.
+    -->
+    <header class="cabecera">
+      <div class="cabecera__grupo-marca">
+        <span class="cabecera__marca">NEXUS BATTLES VI</span>
+        <nav class="cabecera__nav" aria-label="Navegacion principal">
+          <a class="cabecera__destino activo" href="./batallas.html" aria-current="page"
+            >Jugar online</a
+          >
+          <a
+            class="cabecera__destino cabecera__destino--pendiente"
+            aria-disabled="true"
+            data-pendiente="grupo-alpha"
+            title="Todavia no publicada: grupo-alpha"
+            >Misiones</a
+          >
+          <a
+            class="cabecera__destino cabecera__destino--pendiente"
+            aria-disabled="true"
+            data-pendiente="HU-TOR, sprint 3"
+            title="Todavia no publicada: HU-TOR, sprint 3"
+            >Torneo</a
+          >
+          <a class="cabecera__destino" href="../../contenido/inventario/inventario.html"
+            >Mi inventario</a
+          >
+          <a class="cabecera__destino" href="../../cuentas/subastas.html">Subasta</a>
+        </nav>
+      </div>
+
+      <label class="cabecera__buscador">
+        <svg class="icono icono--menudo" aria-hidden="true">
+          <use href="../../../../../shared/ui-kit/iconos/sprite.svg#buscar" />
+        </svg>
+        <span class="solo-lectores">Buscar productos</span>
+        <input class="cabecera__buscador-texto" type="search" placeholder="Buscar productos" />
+      </label>
+
+      <div class="cabecera__acciones">
+        <!--
+          Sin datos de ejemplo en la cabecera (mismo criterio que #358). El saldo
+          se pinta cuando exista el contrato de creditos (#29); hasta entonces
+          queda oculto en vez de mostrar un numero inventado.
+        -->
+        <span class="cabecera__dato" data-zona="creditos" hidden>
+          <svg class="icono icono--menudo" aria-hidden="true">
+            <use href="../../../../../shared/ui-kit/iconos/sprite.svg#moneda" />
+          </svg>
+          <span data-zona="saldo"></span>
+        </span>
+
+        <a
+          class="cabecera__campana"
+          href="../notificaciones/notificaciones.html"
+          aria-label="Notificaciones"
+        >
+          <svg class="icono" aria-hidden="true">
+            <use href="../../../../../shared/ui-kit/iconos/sprite.svg#campana" />
+          </svg>
+          <span class="cabecera__contador" data-zona="contador" aria-hidden="true" hidden>0</span>
+        </a>
+
+        <span class="cabecera__cuenta">
+          <span class="cabecera__avatar" aria-hidden="true"></span>
+          <span class="cabecera__identidad">
+            <!-- El apodo lo escribe el login en sessionStorage (nexus.apodoActual). -->
+            <span class="cabecera__apodo" data-zona="apodo"></span>
+          </span>
+        </span>
+      </div>
+    </header>
+
+    <main class="pagina pila">
+      <div class="pila pila--compacta">
+        <h1>Sala en batalla</h1>
+        <p class="t-cuerpo">
+          La vida de cada participante con su valor numerico. El color cambia al 60 % y al 40 %.
+        </p>
+      </div>
+
+      <!--
+        Dice lo que hay de verdad. Mientras no exista el transporte del canal,
+        esta vista NO aparenta estar conectada: lo pinta el script segun reciba
+        o no una funcion de suscripcion.
+      -->
+      <div class="fila">
+        <span class="conexion conexion--sin-conexion" data-zona="conexion" role="status">
+          Canal en tiempo real no conectado
+        </span>
+      </div>
+
+      <!--
+        Estado vacio de RNF-USA-003. Es lo que se ve mientras no haya partida
+        cargada: no se inventan participantes de ejemplo.
+      -->
+      <div class="estado-vista" data-zona="sin-partida">
+        <p class="estado-vista__titulo">No hay ninguna partida cargada</p>
+        <p class="t-meta">Esta vista se pinta con los participantes de una partida en curso.</p>
+      </div>
+
+      <!--
+        HU-SAL-004: arranque del combate. Solo aparece cuando se llego desde una
+        sala; quien no sea el anfitrion recibe un 403 del servidor y lo ve aqui
+        mismo. No se oculta el boton adivinando quien es el anfitrion: esta vista
+        no lo sabe, y esconderlo por si acaso dejaria al anfitrion sin forma de
+        empezar cuando la suposicion falle.
+      -->
+      <div class="fila" data-zona="arranque" hidden>
+        <button class="boton boton--primario" type="button" data-accion="iniciar-partida">
+          Iniciar combate
+        </button>
+        <span class="t-meta" data-zona="aviso-arranque" role="status"></span>
+      </div>
+
+      <section class="tarjeta pila" data-zona="panel" hidden>
+        <h2 class="tarjeta__titulo">Participantes</h2>
+        <div class="pila pila--compacta" data-zona="vidas"></div>
+
+        <!--
+          HU-SAL-005 / RF-JUE-017: jugar el turno. Los botones nacen
+          deshabilitados y solo se abren cuando el canal dice que el turno es
+          tuyo: habilitarlos por defecto invitaria a mandar acciones que el
+          servidor va a rechazar.
+        -->
+        <div class="fila" data-zona="acciones"></div>
+        <p class="t-cuerpo" data-zona="resultado" role="status" hidden></p>
+      </section>
+    </main>
+
+    <!-- RNF-DIS-002: el chatbot esta en todas las vistas, sin excepcion. -->
+    <button class="chatbot-flotante" type="button" aria-label="Abrir el asistente">IA</button>
+
+    <script type="module">
+      import {
+        montarSalaBatalla,
+        leerEstadoInicial,
+        suscripcionDePartida,
+      } from './sala-batalla.js';
+      import { urlDelCanal, destinoDeSala, TIPO_PARTIDA_INICIADA } from './canal-sala.js';
+      import { montarControlesDeCombate, enviarAccion, registroDeAvisos } from './combate.js';
+      import { baseDeApi, iniciarPartida, obtenerPartida } from './cliente-salas.js';
+      import { usuarioIdDeSesion } from '../../comun/identidad.js';
+      // Transporte STOMP sobre WebSocket nativo del servicio, el mismo que usan
+      // Batallas (HU-SAL-002) y el chat (HU-JUE-015): CONNECT con el JWT en la
+      // cabecera Authorization, SUBSCRIBE a /tema/partidas/{id}. No hay un
+      // segundo cliente.
+      import { conectarChat } from './cliente-chat.js';
+
+      const parametros = new URLSearchParams(globalThis.location.search);
+      const idSala = parametros.get('sala');
+      const token = sessionStorage.getItem('nexus.token');
+
+      // Cabecera: solo lo que el login dejo de verdad en la sesion.
+      document.querySelector('[data-zona="apodo"]').textContent =
+        sessionStorage.getItem('nexus.apodoActual') ?? '';
+
+      const zonaVacia = document.querySelector('[data-zona="sin-partida"] .t-meta');
+      const zonaArranque = document.querySelector('[data-zona="arranque"]');
+      const avisoArranque = document.querySelector('[data-zona="aviso-arranque"]');
+      const botonIniciar = document.querySelector('[data-accion="iniciar-partida"]');
+
+      /** Partida que se esta pintando. Cambia una vez: cuando arranca. */
+      let partida = null;
+      /** Cliente STOMP, si hay sesion. Se abre una sola vez y se comparte. */
+      let canal = null;
+
+      // Quien mira. Sale del claim `uid` del token, igual que en el servidor:
+      // `nexus.usuarioId` no lo escribe nadie y siempre es null.
+      const yo = usuarioIdDeSesion();
+
+      /** Descarta lo repetido al reconectar, antes de tocar las barras. */
+      const registro = registroDeAvisos();
+
+      /**
+       * Pinta la vista con lo que haya ahora mismo y engancha los controles de
+       * combate. Se llama tres veces como mucho: al cargar, al arrancar el
+       * combate desde este navegador, y al llegar el aviso de que lo arranco
+       * otro.
+       */
+      function repintar(suscribir) {
+        montarSalaBatalla(document, { partida, suscribir });
+
+        if (!partida || !canal) {
+          return;
+        }
+
+        const controles = montarControlesDeCombate(document, {
+          idPartida: partida.id,
+          yo,
+          participantes: (partida.participantes ?? [])
+            .filter((p) => p.heroe)
+            .map((p) => ({ jugador: { id: p.jugador }, heroe: p.heroe })),
+          // El turno en curso viene en la propia partida. Sin pasarlo, los
+          // botones esperarian un `partida.turno.cambiado` que en el turno 1
+          // no existe todavia: nadie podria dar el primer golpe.
+          turnoDe: partida.turnoActual?.idJugador,
+          alAtacar: (accion) => enviarAccion(canal, partida.id, accion),
+        });
+
+        // El panel de vidas ya escucha por su cuenta; esta suscripcion es para
+        // los turnos y el final. El registro evita que una reconexion vuelva a
+        // disparar el final o duplique el historial.
+        canal.suscribir(`/tema/partidas/${partida.id}`, (aviso) => {
+          if (!registro.yaVisto(aviso)) {
+            controles.recibir(aviso);
+          }
+        });
+      }
+
+      // ?partida=<id> gana: se llego directamente al combate o se recargo
+      // dentro de el. Si no, se intenta con el bloque que el servidor pueda
+      // haber incrustado.
+      const idPartidaEnUrl = parametros.get('partida');
+      if (idPartidaEnUrl) {
+        try {
+          partida = await obtenerPartida(idPartidaEnUrl);
+        } catch (error) {
+          if (zonaVacia) {
+            zonaVacia.textContent = error.detalle ?? error.message;
+          }
+        }
+      }
+
+      const estado = partida ? null : leerEstadoInicial();
+
+      if (!partida && idSala) {
+        if (zonaVacia) {
+          zonaVacia.textContent =
+            `Estas en la sala ${idSala}. El combate empieza cuando el anfitrion lo inicie; ` +
+            'entonces esta vista pinta la vida de cada participante.';
+        }
+        if (zonaArranque && token) {
+          zonaArranque.hidden = false;
+        }
+      }
+
+      if (token) {
+        try {
+          canal = await conectarChat({ url: urlDelCanal({ base: baseDeApi() }), token });
+
+          // Un canal que se muere en silencio es peor que uno que no abre: la
+          // vista sigue diciendo «conectado», los botones siguen puestos y
+          // cada acción se va a un socket cerrado sin que nadie se entere. El
+          // Project Charter lo pide explícitamente (riesgo #7): nunca fallar
+          // en silencio.
+          const perdido = (motivo) => {
+            console.warn('Canal de la partida perdido:', motivo);
+            const zona = document.querySelector('[data-zona="conexion"]');
+            if (zona) {
+              zona.className = 'conexion conexion--sin-conexion';
+              zona.textContent = 'Canal en tiempo real no conectado. Recarga la página.';
+            }
+            // Sin canal no se puede jugar el turno: dejar los botones vivos
+            // invita a mandar acciones que no llegan a ningún sitio.
+            for (const boton of document.querySelectorAll('[data-atacar]')) {
+              boton.disabled = true;
+            }
+          };
+          canal.alError = (error) => perdido(error?.message ?? 'error del canal');
+          canal.alCerrar = () => perdido('la conexión se cerró');
+        } catch (error) {
+          console.warn('Canal no disponible:', error?.message);
+        }
+      }
+
+      /** Engancha el panel de vidas al canal de la partida que este en pantalla. */
+      function suscripcionActual() {
+        return canal && partida ? suscripcionDePartida(canal, partida.id) : undefined;
+      }
+
+      // Quien espera en la sala se entera por el canal de la SALA: aqui todavia
+      // no se conoce el identificador de la partida, asi que no se puede estar
+      // suscrito a su tema.
+      if (canal && idSala) {
+        canal.suscribir(destinoDeSala(idSala), async (aviso) => {
+          if (aviso?.tipo !== TIPO_PARTIDA_INICIADA || partida) {
+            return;
+          }
+          try {
+            partida = await obtenerPartida(aviso.idPartida);
+            if (zonaArranque) {
+              zonaArranque.hidden = true;
+            }
+            repintar(suscripcionActual());
+          } catch (error) {
+            console.warn('No se pudo cargar la partida recien iniciada:', error?.message);
+          }
+        });
+      }
+
+      botonIniciar?.addEventListener('click', async () => {
+        botonIniciar.disabled = true;
+        avisoArranque.textContent = 'Arrancando el combate...';
+        try {
+          partida = await iniciarPartida(idSala);
+          zonaArranque.hidden = true;
+          repintar(suscripcionActual());
+        } catch (error) {
+          // 403 no eres el anfitrion · 409 la sala no puede empezar todavia.
+          // El texto lo redacta el servicio, que es quien sabe el motivo.
+          avisoArranque.textContent = error.detalle ?? error.message;
+          botonIniciar.disabled = false;
+        }
+      });
+
+      if (partida) {
+        repintar(suscripcionActual());
+      } else {
+        montarSalaBatalla(document, {
+          idPartida: estado?.idPartida,
+          participantes: estado?.participantes,
+          suscribir:
+            canal && estado?.idPartida ? suscripcionDePartida(canal, estado.idPartida) : undefined,
+        });
+      }
+    </script>
+  </body>
+</html>

@@ -2,11 +2,13 @@ package nexus.inventario.api;
 
 import jakarta.validation.Valid;
 import java.net.URI;
+import nexus.inventario.aplicacion.BuscarElementosInventario;
+import nexus.inventario.aplicacion.ConsultarElementoInventario;
 import nexus.inventario.aplicacion.ConsultarInventarioPaginado;
 import nexus.inventario.aplicacion.GestionarInventario;
-import nexus.inventario.aplicacion.PaginaInventario;
 import nexus.inventario.dominio.ElementoInventario;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -24,11 +26,18 @@ public class InventarioController {
     private static final String CABECERA_IDENTIDAD = "X-User-Name";
     private final GestionarInventario gestion;
     private final ConsultarInventarioPaginado consulta;
+    private final BuscarElementosInventario busqueda;
+    private final ConsultarElementoInventario consultaElemento;
 
     public InventarioController(
-            GestionarInventario gestion, ConsultarInventarioPaginado consulta) {
+            GestionarInventario gestion,
+            ConsultarInventarioPaginado consulta,
+            BuscarElementosInventario busqueda,
+            ConsultarElementoInventario consultaElemento) {
         this.gestion = gestion;
         this.consulta = consulta;
+        this.busqueda = busqueda;
+        this.consultaElemento = consultaElemento;
     }
 
     /**
@@ -38,10 +47,23 @@ public class InventarioController {
      * el jugador no tenga nada no es un error.</p>
      */
     @GetMapping
-    public PaginaInventario consultarPagina(
+    public PaginaInventarioResponse consultarPagina(
             @RequestHeader(name = CABECERA_IDENTIDAD, required = false) String identidad,
             @RequestParam(name = "pagina", defaultValue = "0") int pagina) {
-        return consulta.consultar(identidad, pagina);
+        return PaginaInventarioResponse.de(consulta.consultar(identidad, pagina));
+    }
+
+    @GetMapping("/busqueda")
+    public PaginaInventarioResponse buscar(
+            @RequestHeader(name = CABECERA_IDENTIDAD, required = false) String identidad,
+            @RequestParam String criterio,
+            @RequestParam(name = "pagina", defaultValue = "0") int pagina) {
+        return PaginaInventarioResponse.de(busqueda.buscar(identidad, criterio, pagina));
+    }
+
+    @GetMapping("/{elementoId}")
+    public DetalleElementoInventarioResponse consultarElemento(@PathVariable String elementoId) {
+        return DetalleElementoInventarioResponse.de(consultaElemento.consultar(elementoId));
     }
 
     @PostMapping
@@ -63,5 +85,13 @@ public class InventarioController {
             @Valid @RequestBody ModificarElementoRequest solicitud) {
         return ElementoInventarioResponse.de(
                 gestion.modificarNombre(identidad, elementoId, solicitud.nombrePropio()));
+    }
+
+    @DeleteMapping("/{elementoId}")
+    public ResponseEntity<Void> eliminar(
+            @RequestHeader(name = CABECERA_IDENTIDAD, required = false) String identidad,
+            @PathVariable String elementoId) {
+        gestion.eliminar(identidad, elementoId);
+        return ResponseEntity.noContent().build();
     }
 }

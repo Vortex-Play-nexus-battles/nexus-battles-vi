@@ -17,6 +17,36 @@
   margin: 0 0 6px;
 }
 
+/* Fix para la alineación del formulario de filtros y fechas */
+.tarjeta.fila {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.tarjeta.fila label {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--texto-secundario);
+  gap: 4px;
+}
+
+.tarjeta.fila input,
+.tarjeta.fila select {
+  box-sizing: border-box;
+  height: 38px;
+  min-width: 160px;
+}
+
+.acciones-filtros {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 /* El .aviso base de tema-cuentas.css usa los colores de "info" (azul).
    Para el banner de inmutabilidad usamos el tono de advertencia (ámbar),
    reutilizando los tokens que ya existen — sin inventar colores nuevos. */
@@ -91,15 +121,42 @@
   white-space: nowrap;
 }
 
-.badge--creacion            { background: var(--exito-fondo); color: var(--exito); }
-.badge--aprobacion          { background: var(--exito-fondo); color: var(--exito); }
-.badge--actualizacion       { background: var(--info-fondo); color: var(--info); }
-.badge--suspension          { background: var(--advertencia-fondo); color: var(--advertencia); }
-.badge--sancion             { background: var(--error-fondo); color: var(--error); }
-.badge--rechazo             { background: var(--error-fondo); color: var(--error); }
-.badge--cambio_rol          { background: #efe6f7; color: var(--acento); }
-.badge--eliminacion_logica  { background: var(--fondo); color: var(--texto-secundario); }
-.badge--otro                { background: var(--fondo); color: var(--texto-secundario); }
+.badge--creacion {
+  background: var(--exito-fondo);
+  color: var(--exito);
+}
+.badge--aprobacion {
+  background: var(--exito-fondo);
+  color: var(--exito);
+}
+.badge--actualizacion {
+  background: var(--info-fondo);
+  color: var(--info);
+}
+.badge--suspension {
+  background: var(--advertencia-fondo);
+  color: var(--advertencia);
+}
+.badge--sancion {
+  background: var(--error-fondo);
+  color: var(--error);
+}
+.badge--rechazo {
+  background: var(--error-fondo);
+  color: var(--error);
+}
+.badge--cambio_rol {
+  background: #efe6f7;
+  color: var(--acento);
+}
+.badge--eliminacion_logica {
+  background: var(--fondo);
+  color: var(--texto-secundario);
+}
+.badge--otro {
+  background: var(--fondo);
+  color: var(--texto-secundario);
+}
 
 /* Paginación */
 

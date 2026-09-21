@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Restablecer contraseña — NEXUS BATTLES VI</title>
+    <link rel="stylesheet" href="./login.css" />
+  </head>
+  <body>
+    <main class="pagina-auth">
+      <section class="tarjeta">
+        <h1 class="titulo-grande">NEXUS BATTLES VI</h1>
+        <p class="titulo-mediano">Restablecer contraseña</p>
+
+        <p class="ayuda">Ingresa el código que recibiste por correo y tu nueva contraseña.</p>
+
+        <p class="estado" id="estadoConfirmacion" hidden role="status"></p>
+
+        <form id="formConfirmacion" novalidate>
+          <label>
+            Código
+            <!-- El backend genera codigos de 10 caracteres, mayusculas y
+             digitos, sin 0/O ni 1/I (TokenCredencialService). No se
+             fuerza mayusculas por CSS/JS: el usuario podria copiar y
+             pegar el codigo tal cual viene en el correo. -->
+            <input
+              type="text"
+              id="codigo"
+              name="codigo"
+              required
+              minlength="10"
+              maxlength="10"
+              autocomplete="one-time-code"
+              placeholder="Ej: 82AEN4P56Z"
+            />
+          </label>
+
+          <label>
+            Nueva contraseña
+            <input
+              type="password"
+              id="nuevaPassword"
+              name="nuevaPassword"
+              required
+              autocomplete="new-password"
+            />
+          </label>
+
+          <label>
+            Confirmar nueva contraseña
+            <input
+              type="password"
+              id="confirmarPassword"
+              name="confirmarPassword"
+              required
+              autocomplete="new-password"
+            />
+          </label>
+
+          <button type="submit" class="btn-primario" id="botonEnviar">
+            Restablecer contraseña
+          </button>
+        </form>
+
+        <a class="enlace-secundario" href="./login.html">Volver a iniciar sesión</a>
+      </section>
+    </main>
+
+    <script type="module" src="./restablecer-confirmar.js"></script>
+  </body>
+</html>

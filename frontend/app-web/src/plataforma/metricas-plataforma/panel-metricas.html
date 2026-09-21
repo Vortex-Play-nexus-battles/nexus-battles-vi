@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Panel de observabilidad · The Nexus Battles VI</title>
+
+    <!--
+      Ejecucion INTEGRADA (Spring Boot sirve esta vista): la API vive en el
+      mismo origen y no hay que declarar nada.
+      Para apuntar a un backend que corra en otro sitio, descomenta y ajusta:
+      <meta name="nexus-api-base" content="http://127.0.0.1:8087" />
+    -->
+
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
+    <link rel="stylesheet" href="./panel-metricas.css" />
+  </head>
+
+  <body>
+    <main class="contenido">
+      <h1>Panel de observabilidad</h1>
+
+      <p class="campo__pista">
+        Latencia extremo a extremo medida por
+        <code>shared/libs/plataforma-observabilidad</code>, con las lecturas y las escrituras
+        separadas (HU-REN-002). Los numeros los calcula el servicio de metricas: esta pantalla no
+        recalcula nada.
+      </p>
+
+      <!-- El panel se pinta aqui: cargando, informe, vacio o error. -->
+      <div id="panel-metricas" data-panel-metricas></div>
+
+      <p class="campo__pista">
+        <button type="button" class="boton boton--secundario" data-accion="copiar-informe">
+          Copiar informe para el acta
+        </button>
+      </p>
+    </main>
+
+    <script type="module">
+      import { iniciarPanel } from './panel-metricas.js';
+
+      const contenedor = document.querySelector('[data-panel-metricas]');
+      iniciarPanel(contenedor);
+
+      // La exportacion usa el texto que el panel ya dejo preparado con los
+      // mismos datos que se estan viendo: no se vuelve a consultar el
+      // servidor, asi que lo copiado y lo mostrado no pueden discrepar.
+      document.querySelector('[data-accion="copiar-informe"]').addEventListener('click', () => {
+        const texto = contenedor.dataset.ultimoInforme;
+        if (texto) {
+          navigator.clipboard?.writeText(texto);
+        }
+      });
+    </script>
+  </body>
+</html>

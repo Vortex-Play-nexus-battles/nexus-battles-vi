@@ -1,0 +1,32 @@
+# Reglas de contexto SOLO para el Dockerfile del arnes E2E.
+#
+# BuildKit busca primero `<ruta-del-Dockerfile>.dockerignore` y, si no existe,
+# cae al `.dockerignore` de la raiz del contexto. El de la raiz excluye
+# `**/build/`, que es justo donde estan los jars que estas imagenes copian:
+# con el, el COPY falla con "no such file or directory".
+#
+# Aqui se repite la exclusion -el contexto es el monorepo entero y subir
+# `build/` completo serian cientos de megas- pero se dejan pasar los jars de
+# los cinco servicios del corte vertical, uno por uno. Mismo patron que la
+# excepcion que el `.dockerignore` de la raiz ya tenia para heroes.
+#
+# No se toca el de la raiz: alli la exclusion es correcta para las imagenes
+# de produccion, que compilan dentro o reciben el jar por otra via.
+
+.git/
+**/.gradle/
+**/build/
+**/node_modules/
+**/.venv/
+frontend/app-web/playwright-report/
+frontend/app-web/test-results/
+docs/
+
+# Los jars que copian las imagenes del arnes.
+!services/contenido/heroes/build/libs/*.jar
+!services/contenido/productos/build/libs/*.jar
+!services/contenido/inventario/build/libs/*.jar
+!services/contenido/motor-combate/build/libs/*.jar
+!services/plataforma/salas-partidas/build/libs/*.jar
+
+# ms-identidad es Maven: su jar vive en `target/`, que no esta excluido.

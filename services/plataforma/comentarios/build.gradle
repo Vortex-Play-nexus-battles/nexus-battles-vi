@@ -1,3 +1,25 @@
 plugins {
     id 'nexus.spring-conventions'
 }
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-flyway'
+    implementation 'org.flywaydb:flyway-database-postgresql'
+    runtimeOnly 'org.postgresql:postgresql'
+
+    // ConfiguracionClientesHttp inyecta RestClient.Builder para llamar a la
+    // lista negra. En Spring Boot 4 ese bean NO viene con el starter de web:
+    // lo publica RestClientAutoConfiguration, que vive en este modulo aparte
+    // (org.springframework.boot.restclient.autoconfigure). Sin el, el
+    // contexto no arranca -- la aplicacion murio asi en el host de dev el
+    // 2026-09-17 con "required a bean of type RestClient$Builder that could
+    // not be found", aunque el build estaba verde.
+    implementation 'org.springframework.boot:spring-boot-restclient'
+
+    // Arranque real de la aplicacion contra PostgreSQL (ArranqueDeLaAplicacionIT).
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation platform('org.testcontainers:testcontainers-bom:1.21.4')
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:postgresql'
+}

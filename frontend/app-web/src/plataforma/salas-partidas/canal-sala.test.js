@@ -8,7 +8,15 @@
 
 import { jest } from '@jest/globals';
 
-import { seguirSala, aplicarAviso, destinoDeSala, TIPO_INGRESO } from './canal-sala.js';
+import {
+  seguirSala,
+  aplicarAviso,
+  destinoDeSala,
+  urlDelCanal,
+  estadoDesdeFicha,
+  TIPO_INGRESO,
+  TIPO_PARTIDA_INICIADA,
+} from './canal-sala.js';
 
 const SALA = '11111111-1111-1111-1111-111111111111';
 const ANFITRION = 'aaaaaaaa-0000-0000-0000-000000000001';
@@ -133,5 +141,127 @@ describe('seguirSala', () => {
 
     canal.recibir(avisoDeIngreso());
     expect(canal.estado().ocupacion.actual).toBe(2);
+  });
+});
+
+describe('urlDelCanal', () => {
+  test('en la ejecucion integrada el canal vive en el mismo origen que la pagina', () => {
+    expect(urlDelCanal({ location: { protocol: 'http:', host: 'localhost:8084' } })).toBe(
+      'ws://localhost:8084/ws',
+    );
+    expect(urlDelCanal({ location: { protocol: 'https:', host: 'juego.nexus.local' } })).toBe(
+      'wss://juego.nexus.local/ws',
+    );
+  });
+
+  test('con base declarada, el canal sigue a la API y cambia http por ws', () => {
+    expect(urlDelCanal({ base: 'http://127.0.0.1:8083' })).toBe('ws://127.0.0.1:8083/ws');
+    expect(urlDelCanal({ base: 'https://api.nexus.local/' })).toBe('wss://api.nexus.local/ws');
+  });
+
+  test('el token nunca forma parte de la URL', () => {
+    expect(urlDelCanal({ base: 'http://127.0.0.1:8083' })).not.toMatch(/token|Bearer|\?/);
+  });
+});
+
+describe('estadoDesdeFicha', () => {
+  test('traduce la ficha del listado a la forma que entiende el canal', () => {
+    expect(
+      estadoDesdeFicha({
+        id: SALA,
+        ocupacion: 3,
+        maximoParticipantes: 6,
+        participantes: [ANFITRION, VISITANTE],
+      }),
+    ).toEqual({
+      idSala: SALA,
+      ocupacion: { actual: 3, maximo: 6 },
+      participantes: [ANFITRION, VISITANTE],
+    });
+  });
+
+  test('sin lista de participantes arranca vacia, no rota', () => {
+    expect(estadoDesdeFicha({ id: SALA, ocupacion: 1, maximoParticipantes: 2 })).toEqual({
+      idSala: SALA,
+      ocupacion: { actual: 1, maximo: 2 },
+      participantes: [],
+    });
+  });
+});
+
+// ===========================================================================
+// HU-SAL-004 — el combate arranca y la sala de espera se entera
+//
+// El aviso llega por el canal de la SALA porque quien espera todavia no conoce
+// el identificador de la partida. Lo que aqui importa es que se avise una sola
+// vez, que no se confunda con un ingreso, y que no altere el estado de la sala.
+// ===========================================================================
+
+function avisoDeArranque(cambios = {}) {
+  return {
+    tipo: TIPO_PARTIDA_INICIADA,
+    idSala: SALA,
+    idPartida: '55555555-5555-5555-5555-555555555555',
+    ordenDeTurnos: [ANFITRION, VISITANTE],
+    turnoActual: { idJugador: ANFITRION, numeroTurno: 1 },
+    ...cambios,
+  };
+}
+
+describe('arranque del combate (HU-SAL-004)', () => {
+  test('avisa a la vista con el mensaje completo', () => {
+    const alIniciarPartida = jest.fn();
+    const canal = seguirSala(estado(), { alIniciarPartida });
+
+    canal.recibir(avisoDeArranque());
+
+    expect(alIniciarPartida).toHaveBeenCalledWith(avisoDeArranque());
+  });
+
+  test('avisa una sola vez aunque el aviso se repita al reconectar', () => {
+    const alIniciarPartida = jest.fn();
+    const canal = seguirSala(estado(), { alIniciarPartida });
+
+    canal.recibir(avisoDeArranque());
+    canal.recibir(avisoDeArranque());
+
+    expect(alIniciarPartida).toHaveBeenCalledTimes(1);
+  });
+
+  test('el arranque de otra sala no mueve a nadie de pantalla', () => {
+    const alIniciarPartida = jest.fn();
+    const canal = seguirSala(estado(), { alIniciarPartida });
+
+    canal.recibir(avisoDeArranque({ idSala: 'ffffffff-0000-0000-0000-000000000009' }));
+
+    expect(alIniciarPartida).not.toHaveBeenCalled();
+  });
+
+  test('no toca la ocupacion ni los participantes: cambia de pantalla, no de sala', () => {
+    const alCambiar = jest.fn();
+    const canal = seguirSala(estado(), { alCambiar, alIniciarPartida: () => {} });
+
+    canal.recibir(avisoDeArranque());
+
+    expect(alCambiar).not.toHaveBeenCalled();
+    expect(canal.estado()).toEqual(estado());
+  });
+
+  test('sin manejador el aviso se ignora en silencio, no rompe la vista', () => {
+    const canal = seguirSala(estado());
+
+    expect(() => canal.recibir(avisoDeArranque())).not.toThrow();
+    expect(canal.estado()).toEqual(estado());
+  });
+
+  test('un ingreso posterior al arranque sigue procesandose con normalidad', () => {
+    const alCambiar = jest.fn();
+    const canal = seguirSala(estado(), { alCambiar, alIniciarPartida: () => {} });
+
+    canal.recibir(avisoDeArranque());
+    canal.recibir(avisoDeIngreso());
+
+    expect(alCambiar).toHaveBeenCalledTimes(1);
+    expect(canal.estado().participantes).toEqual([ANFITRION, VISITANTE]);
   });
 });

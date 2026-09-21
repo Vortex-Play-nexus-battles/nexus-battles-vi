@@ -123,6 +123,216 @@ jobs:
           fi
 
   # ---------------------------------------------------------------------
+  # Job 1b: cambios TRANSVERSALES. El job de arriba solo mira
+  # services/<equipo>/<servicio>/, asi que un cambio en shared/libs,
+  # buildSrc o los contratos no ejecutaba absolutamente nada: una regresion
+  # en plataforma-seguridad, que usan salas-partidas y moderacion-sanciones,
+  # entraba a develop sin que nadie compilara. Aqui se compila y prueba el
+  # monorepo Gradle entero, que es lo unico que cubre ese caso.
+  #
+  # No sustituye al job por servicio: aquel corre siempre que cambia un
+  # servicio y ademas publica cobertura y analisis estatico por modulo.
+  # ---------------------------------------------------------------------
+  ci-transversal:
+    name: CI - cambios transversales
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el repositorio con historial completo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detectar si cambio algo transversal
+        id: detectar
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE=$(git merge-base "origin/${{ github.base_ref }}" "${{ github.sha }}")
+          else
+            BASE="${{ github.event.before }}"
+            ZERO="0000000000000000000000000000000000000000"
+            if [ "$BASE" = "$ZERO" ] || [ -z "$BASE" ]; then
+              BASE=$(git rev-parse "${{ github.sha }}^" 2>/dev/null || echo "4b825dc642cb6eb9a060e54bf8d69288fbee4904")
+            fi
+          fi
+          CAMBIOS=$(git diff --name-only "$BASE" "${{ github.sha }}" \
+            | grep -E '^(shared/libs/|buildSrc/|contracts/|settings\.gradle|build\.gradle|gradle/)' || true)
+          if [ -n "$CAMBIOS" ]; then
+            echo "Cambios transversales detectados:"
+            echo "$CAMBIOS"
+            echo "hay=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Sin cambios transversales."
+            echo "hay=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configurar JDK 21 (Temurin)
+        if: steps.detectar.outputs.hay == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Dar permiso de ejecucion al wrapper
+        if: steps.detectar.outputs.hay == 'true'
+        run: chmod +x ./gradlew
+
+      # Todo el monorepo Gradle: compila los 14 servicios y las bibliotecas
+      # compartidas, y corre sus pruebas (incluidos los IT de arranque, que
+      # levantan contenedores con Testcontainers -- el runner trae Docker).
+      - name: Compilar y probar todo el monorepo Gradle
+        if: steps.detectar.outputs.hay == 'true'
+        run: ./gradlew build --no-daemon
+
+      - name: Publicar los informes de prueba si algo falla
+        if: failure() && steps.detectar.outputs.hay == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: informes-de-prueba-transversal
+          path: "**/build/reports/tests/test/**"
+          retention-days: 7
+
+  # ---------------------------------------------------------------------
+  # Job 1-bis: el frontend.
+  #
+  # Hasta ahora la compuerta de calidad solo miraba Java: un PR que tocaba
+  # unicamente `frontend/app-web/` entraba a develop sin ejecutar una sola
+  # prueba de JavaScript, aunque el arnes de Jest existe desde el Sprint 1 y
+  # tiene cientos de casos. Quedo demostrado en el PR #409, que se fusiono con
+  # la matriz de servicios en "skipped" y ninguna prueba de front ejecutada.
+  # La regla 11 no distingue lenguajes: esto lo corrige.
+  #
+  # Corre siempre, y decide dentro si hay algo que probar. Asi el check existe
+  # en todos los PR y se puede exigir en el ruleset sin bloquear a los que no
+  # tocan el frontend.
+  # ---------------------------------------------------------------------
+  ci-frontend:
+    name: CI - frontend app-web
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el repositorio con historial completo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detectar si cambio el frontend
+        id: detectar
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE=$(git merge-base "origin/${{ github.base_ref }}" "${{ github.sha }}")
+          else
+            BASE="${{ github.event.before }}"
+            ZERO="0000000000000000000000000000000000000000"
+            if [ "$BASE" = "$ZERO" ] || [ -z "$BASE" ]; then
+              BASE=$(git rev-parse "${{ github.sha }}^" 2>/dev/null || echo "4b825dc642cb6eb9a060e54bf8d69288fbee4904")
+            fi
+          fi
+          # shared/ui-kit tambien cuenta: las vistas importan sus modulos JS
+          # (barra-vida.js entre otros) y romperlo rompe el frontend.
+          CAMBIOS=$(git diff --name-only "$BASE" "${{ github.sha }}" \
+            | grep -E '^(frontend/app-web/|shared/ui-kit/)' || true)
+          if [ -n "$CAMBIOS" ]; then
+            echo "Cambios en el frontend:"
+            echo "$CAMBIOS"
+            echo "hay=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Sin cambios en el frontend."
+            echo "hay=false" >> "$GITHUB_OUTPUT"
+          fi
+          # La lista se guarda para el paso de calidad de mas abajo, que solo
+          # exige ESLint y Prettier sobre lo que este cambio toca. Se filtran
+          # los borrados: un archivo que ya no existe no se puede analizar.
+          echo "$CAMBIOS" \
+            | grep -E '^frontend/app-web/src/' \
+            | while read -r archivo; do [ -f "$archivo" ] && echo "${archivo#frontend/app-web/}"; done \
+            > "$RUNNER_TEMP/cambios-frontend.txt" || true
+          echo "Archivos que tendran que pasar ESLint y Prettier:"
+          cat "$RUNNER_TEMP/cambios-frontend.txt"
+
+      - name: Configurar Node 22
+        if: steps.detectar.outputs.hay == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/app-web/package-lock.json
+
+      # `npm ci` y no `npm install`: instala exactamente lo del lock, que es lo
+      # unico reproducible (regla de entornos, HU-POR-003).
+      - name: Instalar dependencias
+        if: steps.detectar.outputs.hay == 'true'
+        working-directory: frontend/app-web
+        run: npm ci
+
+      # Las 43 suites de Jest estan en verde sobre develop (556 casos
+      # comprobados antes de anadir este job), asi que este paso SI bloquea.
+      - name: Pruebas unitarias (Jest)
+        if: steps.detectar.outputs.hay == 'true'
+        working-directory: frontend/app-web
+        run: npm test
+
+      # ESLint y Prettier SI bloquean, sobre los archivos que el cambio toca.
+      #
+      # El umbral es el de siempre: cero errores de ESLint y formato de
+      # Prettier. Lo que se acota es el ALCANCE, y por un motivo concreto:
+      # `develop` arrastra 1 error de ESLint y 22 archivos sin formatear, y los
+      # 23 estan dentro de PR abiertos de otros equipos (#270, #390, #408,
+      # #419). Exigirlos hoy en todo el arbol dejaria a los tres equipos sin
+      # poder fusionar por deuda que no les toca arreglar en su PR, y
+      # arreglarsela nosotros seria reformatear cientos de lineas de archivos
+      # que otra persona tiene abiertos.
+      #
+      # Con este alcance, todo lo que entre a partir de ahora pasa la compuerta
+      # entera, y la deuda se apaga sola conforme sus duenos toquen esos
+      # archivos. Los dos pasos informativos de abajo la mantienen a la vista
+      # para que no crezca en silencio.
+      #
+      # Alcance: `frontend/app-web/src/`. `shared/ui-kit/` queda fuera porque
+      # tampoco lo cubren hoy `npm run lint` ni `npm run format:check` (los dos
+      # apuntan a `src`), y meterlo aqui sin meterlo alli dejaria dos
+      # comportamientos distintos para la misma carpeta. Es una decision aparte.
+      - name: ESLint y Prettier sobre lo que cambia (bloqueante)
+        if: steps.detectar.outputs.hay == 'true'
+        working-directory: frontend/app-web
+        shell: bash
+        run: |
+          set -euo pipefail
+          LISTA="$RUNNER_TEMP/cambios-frontend.txt"
+          if [ ! -s "$LISTA" ]; then
+            echo "El cambio no toca ningun archivo de src/: nada que analizar."
+            exit 0
+          fi
+
+          mapfile -t TODOS < "$LISTA"
+          mapfile -t JS < <(grep -E '\.(js|mjs|cjs)$' "$LISTA" || true)
+
+          if [ "${#JS[@]}" -gt 0 ]; then
+            echo "== ESLint sobre ${#JS[@]} archivo(s)"
+            npx eslint "${JS[@]}"
+          fi
+
+          echo "== Prettier sobre ${#TODOS[@]} archivo(s)"
+          npx prettier --check "${TODOS[@]}"
+
+      # Los dos de abajo miran TODO el arbol y no bloquean: son el termometro
+      # de la deuda heredada, no una compuerta.
+      - name: Analisis estatico de todo src (ESLint) — informativo
+        if: steps.detectar.outputs.hay == 'true'
+        continue-on-error: true
+        working-directory: frontend/app-web
+        run: npm run lint
+
+      - name: Formato de todo src (Prettier) — informativo
+        if: steps.detectar.outputs.hay == 'true'
+        continue-on-error: true
+        working-directory: frontend/app-web
+        run: npm run format:check
+
+  # ---------------------------------------------------------------------
   # Job 2: por cada servicio detectado (uno por entrada de la matriz),
   # ejecuta en orden: compilar -> pruebas unitarias -> analisis estatico ->
   # publicar cobertura. fail-fast:false para que la falla de un servicio no
@@ -166,13 +376,47 @@ jobs:
         if: matrix.herramienta == 'gradle'
         run: ./gradlew ${{ matrix.rutaGradle }}:compileJava ${{ matrix.rutaGradle }}:compileTestJava --no-daemon
 
-      - name: (Gradle) Ejecutar pruebas unitarias
+      - name: (Gradle) Ejecutar pruebas y la compuerta de cobertura
         if: matrix.herramienta == 'gradle'
+        # "check" y no "test": arrastra las pruebas MAS
+        # jacocoTestCoverageVerification, que es la compuerta del 80 % que
+        # exigen la regla 11 de plataforma y el punto (d) del Definition of
+        # Done. Con ":test" la verificacion no se ejecutaba nunca, ni siquiera
+        # en motor-combate, que era el unico modulo que la tenia enganchada.
+        #
         # jacoco se configura una sola vez en buildSrc/nexus.spring-conventions.gradle
-        # (finalizedBy jacocoTestReport, con xml.required=true), asi que correr
-        # "test" ya genera el reporte de cobertura en la ruta fija
-        # build/reports/jacoco/test/jacocoTestReport.xml, sin pasos adicionales.
-        run: ./gradlew ${{ matrix.rutaGradle }}:test --no-daemon
+        # (finalizedBy jacocoTestReport, con xml.required=true), asi que el
+        # informe sigue quedando en build/reports/jacoco/test/jacocoTestReport.xml.
+        run: ./gradlew ${{ matrix.rutaGradle }}:check --no-daemon
+
+      # El log de Gradle resume las excepciones; el informe HTML/XML trae el
+      # mensaje completo. Sin esto, diagnosticar un fallo de integracion
+      # obligaba a reproducirlo en la maquina de alguien.
+      - name: Publicar los informes de prueba si algo falla
+        if: failure() && matrix.herramienta == 'gradle'
+        uses: actions/upload-artifact@v4
+        with:
+          name: informes-de-prueba-${{ matrix.servicio }}
+          path: |
+            ${{ matrix.ruta }}/build/reports/tests/test/**
+            ${{ matrix.ruta }}/build/test-results/test/**
+            ${{ matrix.ruta }}/build/reports/jacoco/test/**
+          retention-days: 7
+
+      # Cuando la compuerta de cobertura falla, Gradle dice "Rule violated" y el
+      # porcentaje, pero no QUE clases faltan. Esto lo deja en el log para no
+      # tener que descargar el informe.
+      - name: (Gradle) Que quedo sin cubrir, si la compuerta fallo
+        if: failure() && matrix.herramienta == 'gradle'
+        shell: bash
+        run: |
+          set -uo pipefail
+          XML="${{ matrix.ruta }}/build/reports/jacoco/test/jacocoTestReport.xml"
+          [ -f "$XML" ] || { echo "Sin informe de JaCoCo: el fallo fue antes."; exit 0; }
+          echo "Clases con lineas sin cubrir en ${{ matrix.servicio }} (sin cubrir / cubiertas):"
+          grep -o '<class name="[^"]*"[^>]*>.\{0,400\}' "$XML" \
+            | sed -E 's|<class name="([^"]*)".*counter type="LINE" missed="([0-9]+)" covered="([0-9]+)".*|\2 sin cubrir, \3 cubiertas  \1|' \
+            | grep -vE '^0 ' | sort -rn | head -25 || true
 
       - name: (Gradle) Analisis estatico con SonarQube Cloud
         if: matrix.herramienta == 'gradle'

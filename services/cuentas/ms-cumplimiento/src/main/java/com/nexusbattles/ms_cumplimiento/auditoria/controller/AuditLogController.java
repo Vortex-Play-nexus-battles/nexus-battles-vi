@@ -16,6 +16,7 @@ import java.time.Instant;
 
 @RestController
 @RequestMapping("/api/v1/admin/auditoria")
+@CrossOrigin(origins = "*")
 public class AuditLogController {
 
     private final AuditLogService auditLogService;

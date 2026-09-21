@@ -16,11 +16,27 @@ name: CD - Distribucion continua
 on:
   push:
     branches: [develop]
+  # Despliegue a demanda de servicios concretos con la version actual de
+  # develop (promocion manual, HU-CICD-002): util para levantar un servicio
+  # que no cambio en el ultimo push (p. ej. ms-identidad en un host nuevo)
+  # o para volver a desplegar tras cambiar secrets/variables del entorno.
+  # Se ejecuta desde la rama que tenga este archivo; el tag es el sha corto
+  # de ese commit y las imagenes se construyen desde el, igual que en push.
+  workflow_dispatch:
+    inputs:
+      servicios:
+        description: "Servicios a desplegar, separados por coma (ej: salas-partidas,notificaciones,ms-identidad). Vacio = solo frontend y borde."
+        type: string
+        required: false
+        default: ""
 
 # Minimo necesario: leer el repo y escribir paquetes (para publicar en ghcr.io).
 permissions:
   contents: read
   packages: write
+  # Para encender el host si esta apagado, por OIDC y sin claves guardadas.
+  # Ver el paso "Asegurar que el host esta encendido" del job de dev.
+  id-token: write
 
 # A diferencia de ci.yml, NUNCA cancelamos una corrida de CD a mitad de
 # camino: podria dejar un ambiente a medio desplegar.
@@ -37,7 +53,7 @@ jobs:
   # ---------------------------------------------------------------------
   # Job 1: que servicios de plataforma cambiaron en este push a develop.
   #
-  # DECISION DE DISEÑO: esta logica ya existe en ci.yml (job
+  # DECISION DE DISEÃ‘O: esta logica ya existe en ci.yml (job
   # "detectar-servicios"), pero aqui la DUPLICAMOS en vez de extraerla a un
   # job/workflow compartido. Razones:
   #   1) ci.yml compara contra dos casos (push Y pull_request); cd.yml SOLO
@@ -101,7 +117,24 @@ jobs:
           #    que ya esten registrados en puerto_de() y en
           #    docker-compose.contenido.yml. Un servicio sin puerto
           #    registrado se omite mas abajo con un mensaje, no rompe nada.
-          ARCHIVOS=$(git diff --name-only "$BASE" "$HEAD")
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Despliegue a demanda: se fabrica la misma lista de rutas que
+            # produciria un push, una por servicio pedido, para reutilizar
+            # sin cambios la deteccion de abajo. Los nombres de cuentas y
+            # contenido se reconocen por su lista fija; el resto es plataforma.
+            ARCHIVOS=""
+            for s in $(echo "${{ inputs.servicios }}" | tr ',' ' '); do
+              case "$s" in
+                ms-identidad|ms-cumplimiento|ms-ecommerce) ARCHIVOS="$ARCHIVOS services/cuentas/$s/a-demanda" ;;
+                heroes|inventario|productos|motor-combate) ARCHIVOS="$ARCHIVOS services/contenido/$s/a-demanda" ;;
+                *) ARCHIVOS="$ARCHIVOS services/plataforma/$s/a-demanda" ;;
+              esac
+            done
+            ARCHIVOS=$(echo "$ARCHIVOS" | tr ' ' '\n' | sed '/^$/d')
+            echo "Despliegue a demanda de: ${{ inputs.servicios }}"
+          else
+            ARCHIVOS=$(git diff --name-only "$BASE" "$HEAD")
+          fi
           CARPETAS=$(echo "$ARCHIVOS" | grep -E '^services/(plataforma|contenido)/[^/]+/' | awk -F'/' '{print $1"/"$2"/"$3}' | sort -u || true)
 
           # 3) Puerto fijo por servicio, mismo orden que docker-compose.yml
@@ -233,8 +266,15 @@ jobs:
           # "desplegar-contenido-dev"); todo lo demas en el de plataforma.
           CONTENIDO=$(echo "$MATRIZ" | jq '[.[] | select(.ruta | startswith("services/contenido/"))] | length')
           PLATAFORMA=$(echo "$MATRIZ" | jq '[.[] | select(.ruta | startswith("services/contenido/") | not)] | length')
+          # El host de plataforma tambien sirve el frontend (borde nginx, ver
+          # infrastructure/red-balanceo/borde-dev.conf): un cambio en las
+          # vistas, el ui-kit o el propio borde se despliega aunque ningun
+          # servicio haya cambiado. Un despliegue a demanda sin servicios
+          # hace lo mismo (refresca frontend y borde).
+          FRONTEND=$(echo "$ARCHIVOS" | grep -cE '^(frontend/app-web/src/|shared/ui-kit/|infrastructure/red-balanceo/)' || true)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "$PLATAFORMA" -eq 0 ] && [ "$CONTENIDO" -eq 0 ]; then FRONTEND=1; fi
           if [ "$CONTENIDO" -gt 0 ]; then echo "hay_contenido=true" >> "$GITHUB_OUTPUT"; else echo "hay_contenido=false" >> "$GITHUB_OUTPUT"; fi
-          if [ "$PLATAFORMA" -gt 0 ]; then echo "hay_plataforma=true" >> "$GITHUB_OUTPUT"; else echo "hay_plataforma=false" >> "$GITHUB_OUTPUT"; fi
+          if [ "$PLATAFORMA" -gt 0 ] || [ "$FRONTEND" -gt 0 ]; then echo "hay_plataforma=true" >> "$GITHUB_OUTPUT"; else echo "hay_plataforma=false" >> "$GITHUB_OUTPUT"; fi
 
           # TAG unico para toda esta corrida: se usa para nombrar las
           # imagenes en ghcr.io y para saber que version desplegar despues.
@@ -337,8 +377,11 @@ jobs:
     name: Desplegar en Dev
     needs: [detectar-servicios, construir-y-publicar]
     # Solo plataforma y cuentas: los servicios de contenido van al host de
-    # contenido (job "desplegar-contenido-dev"), nunca a este.
-    if: needs.detectar-servicios.outputs.hay_plataforma == 'true'
+    # contenido (job "desplegar-contenido-dev"), nunca a este. Corre tambien
+    # cuando solo cambio el frontend/borde (construir-y-publicar queda
+    # omitido, no fallido): de ahi el !cancelled() y la comprobacion del
+    # resultado en vez del "needs" implicito.
+    if: ${{ !cancelled() && needs.detectar-servicios.outputs.hay_plataforma == 'true' && needs.construir-y-publicar.result != 'failure' }}
     runs-on: ubuntu-latest
     environment: dev
     steps:
@@ -351,6 +394,72 @@ jobs:
           LISTA=$(echo '${{ needs.detectar-servicios.outputs.servicios }}' | jq -r '[.[] | select(.ruta | startswith("services/contenido/") | not) | "\(.servicio):\(.puerto)"] | join(" ")')
           echo "lista=$LISTA" >> "$GITHUB_OUTPUT"
 
+      # ------------------------------------------------------------------
+      # El host de dev se apaga todas las noches para no gastar credito, y
+      # solo se enciende de lunes a viernes. Ademas, las tareas programadas de
+      # GitHub se retrasan horas cuando hay carga y a veces se descartan: el
+      # 19 de septiembre el "start" de las 12:00 UTC no llego a ejecutarse, y
+      # el despliegue de las 20:15 murio con "dial tcp :22: i/o timeout" tras
+      # un minuto de espera, sin decir por que.
+      #
+      # Un despliegue no deberia depender de que un cron se haya cumplido. Si
+      # el host esta apagado se enciende aqui, que es justo lo que hace falta
+      # para desplegar y no cuesta nada de mas: la instancia iba a encenderse
+      # igual. Si ya esta encendido, este paso no hace nada.
+      # ------------------------------------------------------------------
+      - name: Asumir el rol de AWS por OIDC (sin claves)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-session-name: cd-dev-${{ github.run_id }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Asegurar que el host esta encendido
+        run: |
+          set -euo pipefail
+          id=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=nexus-plataforma-dev" \
+                      "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+            --query 'Reservations[].Instances[].InstanceId' --output text)
+          if [ -z "$id" ] || [ "$id" = "None" ]; then
+            echo "::error::No existe la instancia nexus-plataforma-dev. Lanza 'Infra dev' con accion=apply."
+            exit 1
+          fi
+
+          estado=$(aws ec2 describe-instances --instance-ids "$id" \
+            --query 'Reservations[0].Instances[0].State.Name' --output text)
+          echo "Instancia $id en estado $estado"
+
+          if [ "$estado" = "stopping" ]; then
+            echo "Esperando a que termine de apagarse para poder encenderla."
+            aws ec2 wait instance-stopped --instance-ids "$id"
+            estado=stopped
+          fi
+
+          if [ "$estado" = "stopped" ]; then
+            echo "Estaba apagada: se enciende para poder desplegar."
+            aws ec2 start-instances --instance-ids "$id" >/dev/null
+            aws ec2 wait instance-running --instance-ids "$id"
+            # "running" solo dice que el hipervisor la arranco; SSH tarda mas.
+            aws ec2 wait instance-status-ok --instance-ids "$id"
+            echo "Encendida y con los chequeos de EC2 en verde."
+          fi
+
+          # Ultimo filtro antes de gastar el minuto del scp: que el 22 conteste
+          # de verdad. Asi un fallo aqui dice "SSH no responde" y no
+          # "i/o timeout" a secas desde dentro de una accion de terceros.
+          ip=$(aws ec2 describe-instances --instance-ids "$id" \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
+          for intento in $(seq 1 30); do
+            if nc -z -w 3 "$ip" 22 2>/dev/null; then
+              echo "SSH responde en el intento $intento."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::El host esta encendido pero el puerto 22 no responde tras 150 s."
+          exit 1
+
       - name: Copiar docker-compose.yml, docker-compose.deploy.yml y el script de despliegue
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -360,6 +469,22 @@ jobs:
           source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh"
           target: "/opt/nexus"
           strip_components: 0
+
+      # El borde (nginx) sirve las vistas y el ui-kit tal cual estan en el
+      # repo, con la misma jerarquia de carpetas (las vistas referencian
+      # ../../../../../shared/ui-kit): por eso se copia el arbol completo a
+      # /opt/nexus/web/ sin recortar componentes. La configuracion del borde
+      # viaja en el mismo arbol y desplegar.sh la recarga.
+      - name: Copiar frontend, ui-kit y configuracion del borde
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          source: "frontend/app-web/src,shared/ui-kit,infrastructure/red-balanceo/borde-dev.conf"
+          target: "/opt/nexus/web"
+          strip_components: 0
+          overwrite: true
 
       # Los 16 nombres vienen de .env.example. Los valores reales viven SOLO
       # como secrets de GitHub (nunca en este yml). "envs:" es lo que hace
@@ -383,6 +508,11 @@ jobs:
           DB_MEMORIA_URL: ${{ secrets.DB_MEMORIA_URL }}
           COLA_MENSAJES_URL: ${{ secrets.COLA_MENSAJES_URL }}
           DIRECTORIO_ACTIVO_URL: ${{ secrets.DIRECTORIO_ACTIVO_URL }}
+          # ADR-002: de donde baja la plataforma la clave publica con la que
+          # verifica los tokens de usuario. Hoy la publica ms-identidad; el dia
+          # que sea Keycloak, cambia esta variable y nada mas.
+          IDENTIDAD_JWKS_URL: ${{ vars.IDENTIDAD_JWKS_URL }}
+          JWT_CLAVE_PRIVADA: ${{ secrets.JWT_CLAVE_PRIVADA }}
           DIRECTORIO_ACTIVO_CLIENT_ID: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_ID }}
           DIRECTORIO_ACTIVO_CLIENT_SECRET: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_SECRET }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
@@ -392,6 +522,18 @@ jobs:
           WEBSOCKET_URL: ${{ secrets.WEBSOCKET_URL }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASS: ${{ secrets.DB_PASS }}
+          # Configuracion NO secreta de los servicios de plataforma (nombres
+          # de .env.example). Son "variables" del entorno dev, no secrets:
+          # URLs internas del compose y origenes CORS. desplegar.sh solo las
+          # escribe en el .env si llegan con valor, para que un servicio sin
+          # variable conserve el valor por defecto de su application.yml.
+          SMTP_PORT: ${{ vars.SMTP_PORT }}
+          LISTA_NEGRA_VERIFICAR_URL: ${{ vars.LISTA_NEGRA_VERIFICAR_URL }}
+          SALAS_WS_ORIGENES: ${{ vars.SALAS_WS_ORIGENES }}
+          CHAT_WS_ORIGENES: ${{ vars.CHAT_WS_ORIGENES }}
+          CHAT_HISTORIAL_TAMANO: ${{ vars.CHAT_HISTORIAL_TAMANO }}
+          NOTIFICACIONES_WS_ORIGENES: ${{ vars.NOTIFICACIONES_WS_ORIGENES }}
+          COMENTARIOS_FORMATOS_IMAGEN: ${{ vars.COMENTARIOS_FORMATOS_IMAGEN }}
           # PENDIENTE (TODO_*): secrets propios de ms-identidad (equipo
           # Cuentas), todavia no creados en GitHub -- ver la validacion de
           # "fallo visible" en desplegar.sh si faltan y ms-identidad esta
@@ -427,7 +569,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,SMTP_PORT,LISTA_NEGRA_VERIFICAR_URL,SALAS_WS_ORIGENES,CHAT_WS_ORIGENES,CHAT_HISTORIAL_TAMANO,NOTIFICACIONES_WS_ORIGENES,COMENTARIOS_FORMATOS_IMAGEN,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -436,7 +578,7 @@ jobs:
       # termino en error (desplegar.sh hace "exit 1") y este job queda en
       # rojo -- eso automaticamente bloquea "desplegar-test" (depende de
       # este job via needs). No hay reversion automatica en dev/test: el
-      # diseño acordado con Santiago Gonzalez la reserva para produccion
+      # diseÃ±o acordado con Santiago Gonzalez la reserva para produccion
       # (ver el job "desplegar-produccion" mas abajo).
 
   # ---------------------------------------------------------------------
@@ -500,11 +642,20 @@ jobs:
 
   # ---------------------------------------------------------------------
   # Job 4: test. Espera a que dev termine y haya pasado salud (needs).
+  #
+  # Solo corre si la variable de repositorio HAY_ENTORNO_TEST vale "true".
+  # La cuenta AWS de la empresa (Free Plan, USD 0 de bolsillo; ver
+  # infrastructure/entornos/plataforma/README.md) tiene UN host de dev y
+  # ningun host de test: sin esta condicion, cada corrida terminaba en rojo
+  # despues de un dev correcto, y ese rojo tapa los fallos reales. Cuando
+  # exista un host de test, se crea la variable y sus secrets *_TEST, sin
+  # tocar este archivo. Produccion depende de test (needs), asi que queda
+  # omitida en cadena.
   # ---------------------------------------------------------------------
   desplegar-test:
     name: Desplegar en Test
     needs: [detectar-servicios, construir-y-publicar, desplegar-dev]
-    if: needs.detectar-servicios.outputs.hay_servicios == 'true'
+    if: needs.detectar-servicios.outputs.hay_servicios == 'true' && vars.HAY_ENTORNO_TEST == 'true'
     runs-on: ubuntu-latest
     environment: test
     steps:
@@ -544,6 +695,11 @@ jobs:
           DB_MEMORIA_URL: ${{ secrets.DB_MEMORIA_URL }}
           COLA_MENSAJES_URL: ${{ secrets.COLA_MENSAJES_URL }}
           DIRECTORIO_ACTIVO_URL: ${{ secrets.DIRECTORIO_ACTIVO_URL }}
+          # ADR-002: de donde baja la plataforma la clave publica con la que
+          # verifica los tokens de usuario. Hoy la publica ms-identidad; el dia
+          # que sea Keycloak, cambia esta variable y nada mas.
+          IDENTIDAD_JWKS_URL: ${{ vars.IDENTIDAD_JWKS_URL }}
+          JWT_CLAVE_PRIVADA: ${{ secrets.JWT_CLAVE_PRIVADA }}
           DIRECTORIO_ACTIVO_CLIENT_ID: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_ID }}
           DIRECTORIO_ACTIVO_CLIENT_SECRET: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_SECRET }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
@@ -579,7 +735,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -601,7 +757,8 @@ jobs:
   desplegar-produccion:
     name: Desplegar en Produccion
     needs: [detectar-servicios, construir-y-publicar, desplegar-test]
-    if: needs.detectar-servicios.outputs.hay_servicios == 'true'
+    # Misma logica que test: solo con host propio (variable HAY_ENTORNO_PRODUCCION).
+    if: needs.detectar-servicios.outputs.hay_servicios == 'true' && vars.HAY_ENTORNO_PRODUCCION == 'true'
     runs-on: ubuntu-latest
     environment: produccion
     steps:
@@ -644,6 +801,11 @@ jobs:
           DB_MEMORIA_URL: ${{ secrets.DB_MEMORIA_URL }}
           COLA_MENSAJES_URL: ${{ secrets.COLA_MENSAJES_URL }}
           DIRECTORIO_ACTIVO_URL: ${{ secrets.DIRECTORIO_ACTIVO_URL }}
+          # ADR-002: de donde baja la plataforma la clave publica con la que
+          # verifica los tokens de usuario. Hoy la publica ms-identidad; el dia
+          # que sea Keycloak, cambia esta variable y nada mas.
+          IDENTIDAD_JWKS_URL: ${{ vars.IDENTIDAD_JWKS_URL }}
+          JWT_CLAVE_PRIVADA: ${{ secrets.JWT_CLAVE_PRIVADA }}
           DIRECTORIO_ACTIVO_CLIENT_ID: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_ID }}
           DIRECTORIO_ACTIVO_CLIENT_SECRET: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_SECRET }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
@@ -686,7 +848,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh

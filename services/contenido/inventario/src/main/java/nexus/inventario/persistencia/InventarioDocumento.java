@@ -10,6 +10,7 @@ import nexus.inventario.dominio.TipoElementoInventario;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.PersistenceCreator;
 import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.index.TextIndexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 @Document(collection = "inventarios")
@@ -58,19 +59,34 @@ record InventarioDocumento(
 
 record ElementoDocumento(
         String id,
-        String productoId,
-        TipoElementoInventario tipo,
-        String nombrePropio,
-        ParteArmadura parteArmadura) {
+        @TextIndexed String productoId,
+        @TextIndexed TipoElementoInventario tipo,
+        @TextIndexed(weight = 2) String nombrePropio,
+        @TextIndexed ParteArmadura parteArmadura,
+        String subastaId) {
+
+    @PersistenceCreator
+    ElementoDocumento {
+    }
+
+    ElementoDocumento(
+            String id,
+            String productoId,
+            TipoElementoInventario tipo,
+            String nombrePropio,
+            ParteArmadura parteArmadura) {
+        this(id, productoId, tipo, nombrePropio, parteArmadura, null);
+    }
 
     static ElementoDocumento de(ElementoInventario elemento) {
         return new ElementoDocumento(
                 elemento.id(), elemento.productoId(), elemento.tipo(),
-                elemento.nombrePropio(), elemento.parteArmadura());
+                elemento.nombrePropio(), elemento.parteArmadura(), elemento.subastaId());
     }
 
     ElementoInventario aDominio() {
-        return new ElementoInventario(id, productoId, tipo, nombrePropio, parteArmadura);
+        return new ElementoInventario(
+                id, productoId, tipo, nombrePropio, parteArmadura, subastaId);
     }
 }
 

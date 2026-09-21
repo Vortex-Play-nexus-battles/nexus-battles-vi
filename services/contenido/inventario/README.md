@@ -1,7 +1,8 @@
 # Servicio de inventario
 
-Servicio de inventario de `HU-INV-003` y equipamiento con limites de
-`HU-INV-005`. Usa Java 21, Spring Boot 4.1 y Spring Data MongoDB.
+Servicio de inventario de `HU-INV-003`, equipamiento con limites de
+`HU-INV-005` y bloqueo de productos publicados en subasta de `HU-INV-010`.
+Usa Java 21, Spring Boot 4.1 y Spring Data MongoDB.
 
 ## Modelo
 
@@ -15,7 +16,8 @@ Inventario
    |- id              identificador de la instancia poseida
    |- productoId      referencia al catalogo de productos
    |- tipo            HEROE, HABILIDAD, ARMA, ARMADURA, ITEM o EPICA
-   `- nombrePropio     dato editable de la instancia
+   |- nombrePropio     dato editable de la instancia
+   `- subastaId        nulo si esta disponible; identifica la subasta que lo bloquea
 `- equipamientos
    |- heroeId           instancia HEROE del mismo inventario
    |- armas             maximo dos identificadores de elemento
@@ -27,6 +29,15 @@ Inventario
 El inventario conserva referencias al catalogo y no copia imagenes,
 estadisticas, habilidades, efectos ni precios. Asi, las modificaciones globales
 de productos pueden propagarse a todas las instancias, como exige `RF-ADM-10`.
+
+`SCRUM-322` crea un indice de texto MongoDB sobre la informacion que si pertenece
+al inventario: referencia del producto, tipo, nombre propio y parte de armadura.
+Este indice prepara la busqueda sin duplicar datos administrados por el servicio
+de productos.
+
+`SCRUM-323` expone la consulta indexada del inventario propio. Exige un criterio
+de al menos cuatro caracteres, busca por referencia de producto, tipo, nombre
+propio o parte de armadura y conserva la paginacion de dieciseis elementos.
 
 El agregado es inmutable y se guarda como un documento por propietario. Esta
 decision permite que los cambios de una instancia se persistan atomicamente y
@@ -40,13 +51,48 @@ La API deriva el propietario de `X-User-Name`, la convencion temporal de
 token sin cambiar las reglas de propiedad de la aplicacion.
 
 ```text
+GET   /api/v1/inventario/elementos/busqueda?criterio={texto}&pagina={numero}
 POST  /api/v1/inventario/elementos
 PATCH /api/v1/inventario/elementos/{elementoId}
+DELETE /api/v1/inventario/elementos/{elementoId}
 ```
 
 `PATCH` solo permite modificar elementos del inventario autenticado. Intentar
 modificar el de otro jugador responde `403` y no altera los datos. El contrato
 completo esta en `contracts/openapi/inventario.yaml`.
+
+## Bloqueo por subasta
+
+`HU-INV-010` persiste el identificador de la subasta en el mismo elemento del
+inventario. Mientras exista ese bloqueo, la consulta devuelve
+`disponible: false` y el producto no se puede renombrar, equipar ni eliminar.
+La misma subasta puede repetir la reserva de forma idempotente; otra subasta
+recibe `409` y no reemplaza el bloqueo vigente.
+
+La consulta del inventario no depende de una llamada en vivo al servicio de
+subastas. Evalua `disponible` desde el bloqueo persistido y solo un aviso de
+cierre o cancelacion con el `subastaId` correcto puede levantarlo. Si subastas
+no responde o no envia el aviso, el producto permanece bloqueado por defecto.
+
+```text
+GET    /api/v1/inventario/elementos/{elementoId}
+PUT    /api/v1/inventario/elementos/{elementoId}/bloqueo-subasta
+DELETE /api/v1/inventario/elementos/{elementoId}/bloqueo-subasta/{subastaId}
+```
+
+Estas tres operaciones son internas. `ms-subastas` obtiene un JWT mediante
+OAuth2 `client_credentials`; Inventario valida el bearer token y el claim
+`azp: ms-subastas`. El token identifica al servicio, mientras que
+`propietarioUid` viaja como UUID de negocio en el cuerpo del `PUT`, junto con
+`subastaId` e `Idempotency-Key`. Al cerrar o cancelar la publicacion, Subastas
+llama a `DELETE` con el mismo elemento, subasta y una clave de idempotencia.
+Repetir el aviso conserva el producto disponible; un aviso de otra subasta
+responde `409` y no levanta el bloqueo vigente.
+
+Los documentos historicos cuyo propietario o producto aun sea un apodo o una
+referencia no UUID responden `409` en la consulta interna hasta que se ejecute
+su migracion. La compatibilidad queda encapsulada en Inventario y no se filtra
+al contrato nuevo entre servicios.
 
 ## Equipamiento con limites
 

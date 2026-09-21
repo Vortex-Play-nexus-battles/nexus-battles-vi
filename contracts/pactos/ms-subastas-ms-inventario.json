@@ -1,0 +1,211 @@
+{
+  "consumer": {
+    "name": "ms-subastas"
+  },
+  "interactions": [
+    {
+      "description": "la liberacion del bloqueo al cerrar la subasta",
+      "providerStates": [
+        {
+          "name": "el elemento esta bloqueado por esa subasta"
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "path": "/api/v1/inventario/elementos/elem-hacha-01/bloqueo-subasta/aaaaaaaa-0000-0000-0000-000000000001"
+      },
+      "response": {
+        "body": {
+          "elementoId": "elem-hacha-01"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.elementoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "el bloqueo del elemento al publicar la subasta",
+      "providerStates": [
+        {
+          "name": "el elemento existe, esta disponible y es del propietario indicado"
+        }
+      ],
+      "request": {
+        "body": {
+          "propietarioUid": "77777777-0000-0000-0000-0000000000cc",
+          "subastaId": "aaaaaaaa-0000-0000-0000-000000000001"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "Idempotency-Key": "\u352A"
+        },
+        "matchingRules": {
+          "body": {
+            "$.propietarioUid": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.subastaId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": ".+"
+                }
+              ]
+            }
+          }
+        },
+        "method": "PUT",
+        "path": "/api/v1/inventario/elementos/elem-hacha-01/bloqueo-subasta"
+      },
+      "response": {
+        "body": {
+          "elementoId": "elem-hacha-01"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.elementoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "la consulta de un elemento por su identificador",
+      "providerStates": [
+        {
+          "name": "el elemento existe"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/inventario/elementos/elem-hacha-01"
+      },
+      "response": {
+        "body": {
+          "disponible": true,
+          "elementoId": "elem-hacha-01",
+          "enUso": false,
+          "productoId": "bbbbbbbb-0000-0000-0000-000000000002",
+          "propietarioUid": "77777777-0000-0000-0000-0000000000cc"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.disponible": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.elementoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.enUso": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.productoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.propietarioUid": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "la consulta de un elemento que ya no esta",
+      "providerStates": [
+        {
+          "name": "el elemento no existe"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/inventario/elementos/elem-hacha-01"
+      },
+      "response": {
+        "status": 404
+      }
+    }
+  ],
+  "metadata": {
+    "pact-jvm": {
+      "version": "4.6.17"
+    },
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  },
+  "provider": {
+    "name": "ms-inventario"
+  }
+}

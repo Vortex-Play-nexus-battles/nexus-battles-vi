@@ -1,7 +1,10 @@
 package com.nexusbattles.ms_identidad.rbac;
 
+import java.util.UUID;
+
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
+import com.nexusbattles.ms_identidad.auth.service.ClavesDeFirma;
 import com.nexusbattles.ms_identidad.auth.service.JwtService;
 import com.nexusbattles.ms_identidad.rbac.controller.AdminActionDemoController;
 import com.nexusbattles.ms_identidad.rbac.repository.RbacMatrixRepository;
@@ -31,9 +34,9 @@ public class SecurityBypassTest {
 
     @BeforeEach
     void setUp() {
-        jwtService = new JwtService();
-        ReflectionTestUtils.setField(jwtService, "claveSecretaTexto", "clave-de-pruebas-suficientemente-larga-para-hmac-sha");
+        jwtService = new JwtService(new ClavesDeFirma(""));
         ReflectionTestUtils.setField(jwtService, "horasExpiracion", 24);
+        ReflectionTestUtils.setField(jwtService, "emisor", "ms-identidad");
 
         RbacMatrixRepository repository = new RbacMatrixRepository();
         RbacAuthorizationService service = new RbacAuthorizationService(repository);
@@ -83,7 +86,7 @@ public class SecurityBypassTest {
     @Test
     @DisplayName("JWT Válido con rol 'ADMINISTRADOR' -> 200 OK")
     void testValidJwtAdminCanBan() throws Exception {
-        String token = jwtService.generarToken("admin_autenticado", "ADMINISTRADOR", 0);
+        String token = jwtService.generarToken("admin_autenticado", "ADMINISTRADOR", 0, UUID.randomUUID());
 
         mockMvc.perform(post("/api/v1/admin/ban")
                 .header("Authorization", "Bearer " + token)
@@ -96,7 +99,7 @@ public class SecurityBypassTest {
     @Test
     @DisplayName("JWT Válido con rol 'JUGADOR' intenta invocar /api/v1/admin/ban -> 403 Forbidden")
     void testValidJwtJugadorCannotBan() throws Exception {
-        String token = jwtService.generarToken("jugador_autenticado", "JUGADOR", 0);
+        String token = jwtService.generarToken("jugador_autenticado", "JUGADOR", 0, UUID.randomUUID());
 
         mockMvc.perform(post("/api/v1/admin/ban")
                 .header("Authorization", "Bearer " + token)
@@ -110,7 +113,7 @@ public class SecurityBypassTest {
     @Test
     @DisplayName("JWT Alterado/Manipulado -> 403 Forbidden (Fail-Closed)")
     void testTamperedJwtIsForbidden() throws Exception {
-        String token = jwtService.generarToken("hacker", "SUPER_ADMINISTRADOR", 0);
+        String token = jwtService.generarToken("hacker", "SUPER_ADMINISTRADOR", 0, UUID.randomUUID());
         String tamperedToken = token.substring(0, token.length() - 2) + "ZZ";
 
         mockMvc.perform(post("/api/v1/admin/ban")
@@ -126,7 +129,7 @@ public class SecurityBypassTest {
     @DisplayName("JWT con versión de token vieja (rol fue cambiado) -> 403 Forbidden (HU-RBAC-003)")
     void testRevokedTokenVersionIsForbidden() throws Exception {
         // Generar un JWT con versión 0 (como si el usuario nunca hubiera cambiado de rol)
-        String tokenViejo = jwtService.generarToken("admin_degradado", "ADMINISTRADOR", 0);
+        String tokenViejo = jwtService.generarToken("admin_degradado", "ADMINISTRADOR", 0, UUID.randomUUID());
 
         // Simular que el usuario ahora tiene versionToken=1 (le cambiaron el rol)
         Usuario usuario = mock(Usuario.class);
@@ -153,5 +156,57 @@ public class SecurityBypassTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.status").value(403))
                 .andExpect(jsonPath("$.detail").value("Token de autenticación inválido o expirado"));
+    }
+
+    @Test
+    @DisplayName("Fail-closed: con el respaldo X-User-Role deshabilitado (produccion), "
+        + "un ADMINISTRADOR sin JWT recibe 403 aunque el header diga que es admin")
+    void headerRolDeshabilitadoNoAcreditaRol() throws Exception {
+        RbacMatrixRepository repository = new RbacMatrixRepository();
+        RbacAuthorizationService service = new RbacAuthorizationService(repository);
+        AuditoriaEventClient auditoriaClient =
+            new AuditoriaEventClient("http://localhost:8083/api/v1/admin/auditoria/eventos");
+
+        // permitirHeaderRol = false -> configuracion de produccion
+        SecurityInterceptor interceptorProd =
+            new SecurityInterceptor(service, auditoriaClient, jwtService, null, false);
+
+        MockMvc mockMvcProd = MockMvcBuilders
+            .standaloneSetup(new AdminActionDemoController())
+            .addInterceptors(interceptorProd)
+            .build();
+
+        mockMvcProd.perform(post("/api/v1/admin/ban")
+                .header("X-User-Name", "atacante")
+                .header("X-User-Role", "ADMINISTRADOR")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"userId\": \"target_user_123\"}"))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.status").value(403))
+            .andExpect(jsonPath("$.detail").value("No tienes permiso para esta acción"));
+    }
+
+    @Test
+    @DisplayName("Dev: con el respaldo habilitado, el mismo header SI acredita al ADMINISTRADOR -> 200")
+    void headerRolHabilitadoSoloEnDesarrollo() throws Exception {
+        RbacMatrixRepository repository = new RbacMatrixRepository();
+        RbacAuthorizationService service = new RbacAuthorizationService(repository);
+        AuditoriaEventClient auditoriaClient =
+            new AuditoriaEventClient("http://localhost:8083/api/v1/admin/auditoria/eventos");
+
+        SecurityInterceptor interceptorDev =
+            new SecurityInterceptor(service, auditoriaClient, jwtService, null, true);
+
+        MockMvc mockMvcDev = MockMvcBuilders
+            .standaloneSetup(new AdminActionDemoController())
+            .addInterceptors(interceptorDev)
+            .build();
+
+        mockMvcDev.perform(post("/api/v1/admin/ban")
+                .header("X-User-Name", "admin_demo")
+                .header("X-User-Role", "ADMINISTRADOR")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"userId\": \"target_user_123\"}"))
+            .andExpect(status().isOk());
     }
 }

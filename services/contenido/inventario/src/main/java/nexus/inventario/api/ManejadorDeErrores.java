@@ -1,9 +1,12 @@
 package nexus.inventario.api;
 
+import nexus.inventario.aplicacion.CriterioBusquedaInvalidoException;
 import nexus.inventario.aplicacion.IdentidadRequeridaException;
+import nexus.inventario.aplicacion.IdentificadorHistoricoException;
 import nexus.inventario.aplicacion.InventarioAjenoException;
 import nexus.inventario.aplicacion.ProductoNoEncontradoException;
 import nexus.inventario.dominio.ElementoNoEncontradoException;
+import nexus.inventario.dominio.ElementoNoDisponibleException;
 import nexus.inventario.dominio.ElementoNoEquipableException;
 import nexus.inventario.dominio.ElementoYaEquipadoException;
 import nexus.inventario.dominio.FalloPersistenciaInventarioException;
@@ -18,6 +21,11 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class ManejadorDeErrores {
 
+    @ExceptionHandler(CriterioBusquedaInvalidoException.class)
+    public ProblemDetail criterioBusquedaInvalido(CriterioBusquedaInvalidoException error) {
+        return problema(HttpStatus.BAD_REQUEST, "Criterio de busqueda invalido", error.getMessage());
+    }
+
     @ExceptionHandler(IdentidadRequeridaException.class)
     public ProblemDetail identidadRequerida(IdentidadRequeridaException error) {
         return problema(HttpStatus.UNAUTHORIZED, "Identidad requerida", error.getMessage());
@@ -28,9 +36,19 @@ public class ManejadorDeErrores {
         return problema(HttpStatus.FORBIDDEN, "Inventario ajeno", error.getMessage());
     }
 
+    @ExceptionHandler(IdentificadorHistoricoException.class)
+    public ProblemDetail identificadorHistorico(IdentificadorHistoricoException error) {
+        return problema(HttpStatus.CONFLICT, "Inventario pendiente de migracion", error.getMessage());
+    }
+
     @ExceptionHandler(ElementoNoEncontradoException.class)
     public ProblemDetail elementoNoEncontrado(ElementoNoEncontradoException error) {
         return problema(HttpStatus.NOT_FOUND, "Elemento no encontrado", error.getMessage());
+    }
+
+    @ExceptionHandler(ElementoNoDisponibleException.class)
+    public ProblemDetail elementoNoDisponible(ElementoNoDisponibleException error) {
+        return problema(HttpStatus.CONFLICT, "Producto no disponible", error.getMessage());
     }
 
     @ExceptionHandler(ProductoNoEncontradoException.class)

@@ -3,6 +3,7 @@ package com.nexusbattles.ms_identidad.admin.service;
 import com.nexusbattles.ms_identidad.auditoria.client.AuditoriaClient;
 import com.nexusbattles.ms_identidad.auth.service.AuthAdminService;
 import com.nexusbattles.ms_identidad.auth.service.AvatarStorageService;
+import com.nexusbattles.ms_identidad.notificaciones.client.NotificacionClient;
 import com.nexusbattles.ms_identidad.perfiles.model.PerfilUsuario;
 import com.nexusbattles.ms_identidad.perfiles.service.PerfilUsuarioService;
 import org.junit.jupiter.api.Test;
@@ -51,6 +52,9 @@ class AuditoriaRollbackTest {
 
     @Mock
     private AvatarStorageService avatarStorageService;
+
+    @Mock
+    private NotificacionClient notificacionClient;
 
     @InjectMocks
     private AdminGestionUsuarioService service;

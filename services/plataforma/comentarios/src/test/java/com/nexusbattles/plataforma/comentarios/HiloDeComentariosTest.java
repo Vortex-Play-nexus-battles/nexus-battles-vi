@@ -21,8 +21,10 @@ import org.junit.jupiter.api.Test;
  * Pruebas de HU-COM-001 - Publicacion de comentarios con texto e imagenes.
  *
  * Fuente: Proyecto Integrador II, seccion 7.1, p. 34 y seccion 7.7.9, p. 55.
- * Regla RN-CMT-001: el comentario lleva texto e imagenes, mas el apodo del jugador,
- * la calificacion en estrellas y la fecha de publicacion. Un jugador comenta cuantas
+ * Regla RN-CMT-001: el comentario lleva texto e imagenes, mas el apodo del
+ * jugador,
+ * la calificacion en estrellas y la fecha de publicacion. Un jugador comenta
+ * cuantas
  * veces quiera pero califica una sola vez.
  */
 class HiloDeComentariosTest {
@@ -61,22 +63,25 @@ class HiloDeComentariosTest {
     }
 
     @Test
-    @DisplayName("del segundo comentario en adelante va sin estrellas y el promedio no se mueve")
-    void aceptaComentariosSinLimitePeroUnaSolaCalificacion() {
+    @DisplayName("rechaza la segunda calificación pero admite múltiples comentarios sin estrellas")
+    void rechazaSegundaCalificacionPeroAceptaMasComentarios() {
+        // CP-03: Primera calificación válida entra al sistema
         hilo.publicar(solicitud("com-1", "jugador-1", List.of(), 4), HABILITADO, LIMPIO);
         assertTrue(hilo.yaCalifico("jugador-1"));
 
-        Comentario segundo = hilo.publicar(
-                solicitud("com-2", "jugador-1", List.of(), 5), HABILITADO, LIMPIO);
+        // CP-01: Segunda calificación con estrellas se rechaza con excepción
+        HiloDeComentarios.PublicacionRechazada excepcion = assertThrows(
+                HiloDeComentarios.PublicacionRechazada.class,
+                () -> hilo.publicar(solicitud("com-2", "jugador-1", List.of(), 5), HABILITADO, LIMPIO));
+        assertEquals(HiloDeComentarios.MotivoDeRechazo.CALIFICACION_DUPLICADA, excepcion.motivo());
 
-        assertTrue(segundo.calificacion().isEmpty());
-        assertTrue(segundo.estaPublicado());
-        assertEquals(4.0, hilo.promedio().orElseThrow());
-
+        // CP-02: Comentarios adicionales sin estrellas sí se admiten
         for (int i = 3; i <= 7; i++) {
             hilo.publicar(solicitud("com-" + i, "jugador-1", List.of(), null), HABILITADO, LIMPIO);
         }
-        assertEquals(7, hilo.visibles().size());
+
+        // 1 comentario inicial + 5 comentarios sin estrellas del ciclo = 6 visibles
+        assertEquals(6, hilo.visibles().size());
         assertEquals(4.0, hilo.promedio().orElseThrow());
     }
 
