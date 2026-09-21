@@ -4,7 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Historial de transacciones — Nexus Battles VI</title>
-    <link rel="stylesheet" href="../comun/barra-navegacion.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
     <link rel="stylesheet" href="./tema-cuentas.css" />
     <link rel="stylesheet" href="./historial-transacciones.css" />
   </head>
@@ -56,16 +57,13 @@
     </div>
 
     <script type="module">
-      import { construirBarra } from '../comun/barra-navegacion.js';
+      import { montarCabecera, exigirSesion } from '../comun/cabecera-app.js';
 
-      const navbarContainer = document.getElementById('navbar-container');
-      if (navbarContainer) {
-        const barra = construirBarra({
-          seccionActiva: 'cuenta',
-          sesion: { autenticado: !!sessionStorage.getItem('nexus.rolActual') },
-        });
-        navbarContainer.appendChild(barra);
+      if (!exigirSesion()) {
+        throw new Error('sin sesion: redirigiendo al login');
       }
+      // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
+      montarCabecera(document.getElementById('navbar-container'), { seccionActiva: 'cuenta' });
     </script>
 
     <script type="module" src="./historial-transacciones.js"></script>

@@ -1,25 +1,35 @@
 package com.nexusbattles.plataforma.salaspartidas.integracion;
 
+import com.nexusbattles.plataforma.resiliencia.CortaCircuitos;
+import com.nexusbattles.plataforma.resiliencia.DependenciaDegradada;
+import com.nexusbattles.plataforma.resiliencia.EstadoDelCorta;
+import com.nexusbattles.plataforma.resiliencia.RegistroDeDegradacion;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.JugadorAutenticado;
+import com.nexusbattles.plataforma.salaspartidas.configuracion.ConfiguracionDeResiliencia;
 import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoDelHeroe;
 import com.nexusbattles.plataforma.salaspartidas.dominio.InventarioNoDisponible;
 import com.nexusbattles.plataforma.salaspartidas.dominio.ResultadoVerificacion;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
+import java.time.Clock;
+import java.time.Duration;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /**
@@ -37,18 +47,35 @@ class ClienteInventarioHeroesTest {
     private static final String VITRINA = BASE + "/api/v1/inventario/elementos?pagina=0";
     private static final String EQUIPAMIENTO = BASE + "/api/v1/inventario/heroes/h-1/equipamiento";
     private static final String ESTADISTICAS = BASE + "/api/v1/inventario/heroes/h-1/estadisticas";
+    /** De aqui sale el prototipo, que es lo que el motor sabe buscar. */
+    private static final String PRODUCTOS = "http://productos:8080";
+    private static final String PRODUCTO_DEL_HEROE = PRODUCTOS + "/api/v1/productos/p-1";
+    /** Y de aqui la defensa del prototipo, que es lo que el motor compara. */
+    private static final String HEROES = "http://heroes:8080";
+    /**
+     * Con {@code %20}, no con un espacio crudo: los nombres de prototipo llevan
+     * espacios y {@code RestClient} los codifica asi al expandir la plantilla.
+     * Es lo correcto —{@code URLEncoder} pondria un {@code +}, que el catalogo
+     * no reconoce— y es lo mismo que hace inventario.
+     */
+    private static final String FICHA_DEL_PROTOTIPO = HEROES + "/api/v1/heroes/Guerrero%20Tanque";
 
     private static final JugadorAutenticado JUGADOR =
             new JugadorAutenticado(UUID.fromString("11111111-1111-1111-1111-111111111111"), "vael");
 
     private MockRestServiceServer servidor;
     private ClienteInventarioHeroes cliente;
+    /** Dos fallos abren: suficiente para probar el corte sin alargar las pruebas. */
+    private CortaCircuitos corta;
 
     @BeforeEach
     void montarInventarioSimulado() {
         RestClient.Builder constructor = RestClient.builder();
         servidor = MockRestServiceServer.bindTo(constructor).build();
-        cliente = new ClienteInventarioHeroes(constructor.build(), BASE);
+        corta = new CortaCircuitos(ConfiguracionDeResiliencia.INVENTARIO,
+                ConfiguracionDeResiliencia.SECCION_INVENTARIO, 2, Duration.ofSeconds(30),
+                Clock.systemUTC(), new RegistroDeDegradacion());
+        cliente = new ClienteInventarioHeroes(constructor.build(), BASE, PRODUCTOS, HEROES, corta);
     }
 
     private static String vitrinaCon(String elementos) {
@@ -60,6 +87,33 @@ class ClienteInventarioHeroesTest {
         return "{\"id\":\"" + id + "\",\"productoId\":\"p-1\",\"tipo\":\"HEROE\",\"nombrePropio\":\""
                 + nombre + "\",\"disponible\":" + disponible + ",\"subastaId\":"
                 + (subastaId == null ? "null" : "\"" + subastaId + "\"") + "}";
+    }
+
+    /**
+     * La ficha del producto, de donde sale el prototipo del catalogo.
+     *
+     * <p>Se pide DESPUES de las estadisticas: conVida resuelve primero la
+     * vida y luego el prototipo. El motor de combate busca al atacante por
+     * prototipo, no por el nombre propio que le puso su dueno.
+     */
+    private void esperarProducto(String prototipo) {
+        servidor.expect(requestTo(PRODUCTO_DEL_HEROE)).andRespond(withSuccess(
+                "{\"id\":\"p-1\",\"nombre\":\"Guerrero de catalogo\",\"tipo\":\"HEROE\","
+                        + "\"prototipo\":\"" + prototipo + "\"}",
+                MediaType.APPLICATION_JSON));
+    }
+
+    /**
+     * La ficha del prototipo, de donde sale la DEFENSA.
+     *
+     * <p>El motor acierta si la tirada de ataque supera la defensa del
+     * objetivo. Mandandole la vida en su lugar, ningun golpe acertaba nunca.
+     */
+    private void esperarFichaDePrototipo(int defensa) {
+        servidor.expect(requestTo(FICHA_DEL_PROTOTIPO)).andRespond(withSuccess(
+                "{\"nombre\":\"Guerrero Tanque\",\"estadisticasNivel1\":{\"poder\":10,"
+                        + "\"vida\":44,\"defensa\":" + defensa + "}}",
+                MediaType.APPLICATION_JSON));
     }
 
     private void esperarVitrina(String cuerpo) {
@@ -78,14 +132,73 @@ class ClienteInventarioHeroesTest {
         servidor.expect(requestTo(ESTADISTICAS)).andRespond(withSuccess(
                 "{\"heroeId\":\"h-1\",\"poder\":10,\"vida\":140,\"defensa\":4}",
                 MediaType.APPLICATION_JSON));
+        esperarProducto("Guerrero Tanque");
+        esperarFichaDePrototipo(11);
 
         EstadoDelHeroe estado = cliente.consultar(JUGADOR);
 
         assertAll(
                 () -> assertEquals(ResultadoVerificacion.DISPONIBLE, estado.resultado()),
                 () -> assertEquals("Sombra de Vael", estado.heroe().nombre()),
+                // El nombre es el que puso su dueno; el prototipo es la entrada
+                // del catalogo. Son cosas distintas, y confundirlas es lo que
+                // hacia que el motor devolviera 404 en cada ataque.
+                () -> assertEquals("Guerrero Tanque", estado.heroe().prototipo()),
+                // La defensa viene del CATALOGO (11), no de la vida (140). Con
+                // la vida en su lugar, la tirada de ataque -como mucho 16- no
+                // podia superarla nunca y ningun golpe acertaba.
+                () -> assertEquals(11, estado.heroe().defensa()),
                 () -> assertEquals(140, estado.heroe().vidaMaxima()),
                 () -> assertEquals(140, estado.heroe().vidaActual()));
+        servidor.verify();
+    }
+
+    @Test
+    @DisplayName("si el catalogo no contesta, el heroe entra igual pero sin defensa")
+    void sinCatalogoElHeroeEntraIgual() {
+        esperarVitrina(vitrinaCon(heroe("h-1", "Sombra de Vael", true, null)));
+        servidor.expect(requestTo(EQUIPAMIENTO)).andRespond(withSuccess(
+                "{\"heroeId\":\"h-1\",\"armas\":[\"a-1\"],\"armaduras\":{},\"items\":[]}",
+                MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo(ESTADISTICAS)).andRespond(withSuccess(
+                "{\"heroeId\":\"h-1\",\"poder\":10,\"vida\":140,\"defensa\":4}",
+                MediaType.APPLICATION_JSON));
+        esperarProducto("Guerrero Tanque");
+        servidor.expect(requestTo(FICHA_DEL_PROTOTIPO)).andRespond(withServerError());
+
+        EstadoDelHeroe estado = cliente.consultar(JUGADOR);
+
+        assertAll(
+                () -> assertEquals(ResultadoVerificacion.DISPONIBLE, estado.resultado()),
+                () -> assertEquals("Guerrero Tanque", estado.heroe().prototipo()),
+                () -> assertNull(estado.heroe().defensa()),
+                () -> assertEquals(140, estado.heroe().vidaMaxima()));
+        servidor.verify();
+    }
+
+    @Test
+    @DisplayName("si productos no contesta, el heroe entra igual pero sin prototipo")
+    void sinProductosElHeroeEntraIgual() {
+        // Degradar, no bloquear: un prototipo desconocido empeora el combate,
+        // pero quedarse sin ENTRAR a la sala por una consulta de adorno seria
+        // cambiar un problema pequeno por uno grande. La verificacion de
+        // HU-SAL-003 sigue pudiendo decir que si.
+        esperarVitrina(vitrinaCon(heroe("h-1", "Sombra de Vael", true, null)));
+        servidor.expect(requestTo(EQUIPAMIENTO)).andRespond(withSuccess(
+                "{\"heroeId\":\"h-1\",\"armas\":[\"a-1\"],\"armaduras\":{},\"items\":[]}",
+                MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo(ESTADISTICAS)).andRespond(withSuccess(
+                "{\"heroeId\":\"h-1\",\"poder\":10,\"vida\":140,\"defensa\":4}",
+                MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo(PRODUCTO_DEL_HEROE))
+                .andRespond(withServerError());
+
+        EstadoDelHeroe estado = cliente.consultar(JUGADOR);
+
+        assertAll(
+                () -> assertEquals(ResultadoVerificacion.DISPONIBLE, estado.resultado()),
+                () -> assertNull(estado.heroe().prototipo()),
+                () -> assertEquals(140, estado.heroe().vidaMaxima()));
         servidor.verify();
     }
 
@@ -126,6 +239,8 @@ class ClienteInventarioHeroesTest {
         servidor.expect(requestTo(ESTADISTICAS)).andRespond(withSuccess(
                 "{\"heroeId\":\"h-1\",\"poder\":10,\"vida\":90,\"defensa\":4}",
                 MediaType.APPLICATION_JSON));
+        esperarProducto("Guerrero Tanque");
+        esperarFichaDePrototipo(11);
 
         EstadoDelHeroe estado = cliente.consultar(JUGADOR);
 
@@ -136,11 +251,72 @@ class ClienteInventarioHeroesTest {
     }
 
     @Test
-    @DisplayName("si el inventario falla, 503: no se responde un veredicto inventado")
+    @DisplayName("si el inventario falla, la seccion queda degradada: no se responde un veredicto inventado (HU-DIS-003)")
     void inventarioCaidoNoInventaVeredicto() {
         servidor.expect(requestTo(VITRINA)).andRespond(withServerError());
 
-        assertThrows(InventarioNoDisponible.class, () -> cliente.consultar(JUGADOR));
+        DependenciaDegradada error = assertThrows(DependenciaDegradada.class, () -> cliente.consultar(JUGADOR));
+
+        assertAll(
+                () -> assertEquals(ConfiguracionDeResiliencia.INVENTARIO, error.dependencia()),
+                () -> assertEquals(ConfiguracionDeResiliencia.SECCION_INVENTARIO, error.seccion()));
+    }
+
+    @Test
+    @DisplayName("un 4xx del inventario es una respuesta, no una caida: 503 propio y el circuito sigue cerrado")
+    void inventarioRechazaLaConsulta() {
+        servidor.expect(requestTo(VITRINA)).andRespond(withStatus(HttpStatus.UNAUTHORIZED));
+
+        InventarioNoDisponible error = assertThrows(InventarioNoDisponible.class,
+                () -> cliente.consultar(JUGADOR));
+
+        assertAll(
+                () -> assertEquals(503, error.estado()),
+                () -> assertTrue(error.detalle().contains("401"), error.detalle()),
+                () -> assertEquals(EstadoDelCorta.CERRADO, corta.estado()));
+    }
+
+    @Test
+    @DisplayName("con el circuito abierto no se consulta la vitrina: la degradacion se responde sin llamar")
+    void conElCircuitoAbiertoNoHayLlamada() {
+        servidor.expect(requestTo(VITRINA)).andRespond(withServerError());
+        servidor.expect(requestTo(VITRINA)).andRespond(withServerError());
+
+        assertThrows(DependenciaDegradada.class, () -> cliente.consultar(JUGADOR));
+        assertThrows(DependenciaDegradada.class, () -> cliente.consultar(JUGADOR));
+        assertEquals(EstadoDelCorta.ABIERTO, corta.estado());
+
+        // Sin tercera expectativa: una tercera peticion real haria fallar la prueba.
+        DependenciaDegradada sinLlamar = assertThrows(DependenciaDegradada.class,
+                () -> cliente.consultar(JUGADOR));
+
+        servidor.verify();
+        assertNull(sinLlamar.getCause());
+    }
+
+    @Test
+    @DisplayName("sin credencial de servicio no hay llamada: es degradacion (503), no un 500")
+    void sinCredencialDeServicioFallaCerrado() {
+        // Lo que paso en el host de dev: el emisor de credenciales no estaba
+        // donde decia la configuracion, el interceptor lanzaba por encima del
+        // catch del adaptador y crear una sala respondia 500 sin explicacion.
+        // El interceptor real pide el token dentro del RestClient; aqui se
+        // reproduce con uno que falla igual que
+        // InterceptorDePortadorDeServicio cuando TokenDeServicio no responde.
+        RestClient conCredencialCaida = RestClient.builder()
+                .requestInterceptor((peticion, cuerpo, ejecucion) -> {
+                    throw new com.nexusbattles.comun.seguridad.servicio.CredencialDeServicioNoDisponible(
+                            "No se pudo obtener la credencial del servicio salas-partidas: emisor caido", null);
+                })
+                .build();
+        ClienteInventarioHeroes sinCredencial =
+                new ClienteInventarioHeroes(conCredencialCaida, BASE, PRODUCTOS, HEROES, corta);
+
+        DependenciaDegradada error = assertThrows(DependenciaDegradada.class,
+                () -> sinCredencial.consultar(JUGADOR));
+        assertTrue(error.getCause() instanceof
+                com.nexusbattles.comun.seguridad.servicio.CredencialDeServicioNoDisponible,
+                "la causa real queda para la bitacora: " + error.getCause());
     }
 
     @Test
@@ -152,6 +328,8 @@ class ClienteInventarioHeroesTest {
                 MediaType.APPLICATION_JSON));
         servidor.expect(requestTo(ESTADISTICAS)).andRespond(withSuccess(
                 "{\"heroeId\":\"h-1\",\"poder\":10,\"defensa\":4}", MediaType.APPLICATION_JSON));
+        esperarProducto("Guerrero Tanque");
+        esperarFichaDePrototipo(11);
 
         EstadoDelHeroe estado = cliente.consultar(JUGADOR);
 

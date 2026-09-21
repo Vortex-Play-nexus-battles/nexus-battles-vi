@@ -1,0 +1,276 @@
+openapi: 3.1.0
+info:
+  title: Nexus Battles VI - Moderacion y Sanciones (emision y apelaciones)
+  description: >
+    Historial disciplinario de los jugadores: advertencias (RF-USR-004),
+    suspensiones temporales (RF-USR-005), baneos definitivos (RF-USR-006) y
+    apelaciones (RF-USR-007). Grupo 6, servicio `moderacion-sanciones`.
+
+    Quien actua sale SIEMPRE del token (claims `uid` y `rol`, ADR-002), nunca
+    del cuerpo. Reglas de rol (Tabla 24 del documento oficial): moderador,
+    administrador y super administrador emiten advertencias y suspensiones;
+    el moderador solo sanciones temporales, asi que el BANEO es de
+    administrador o super administrador y exige `confirmacion: true`. Las
+    apelaciones las abre el sancionado (una abierta por sancion, dentro de 30
+    dias desde la emision) y las resuelve un administrador con decision
+    motivada: MANTENIDA, REDUCIDA (nueva fecha fin) o REVERTIDA.
+
+    Lo que este contrato NO cubre: el estado de la cuenta en ms-identidad
+    (rechazar el inicio de sesion, cerrar sesiones: HU-AUT-004 #50, Grupo 4)
+    ni el correo (HU-NOT-005 por correo: pendiente de un contrato de lectura
+    de correo por uid). El aviso en la app SI: cada emision y cada resolucion
+    llegan a la bandeja del jugador por `POST /internal/notifications` con la
+    credencial de servicio de este modulo (CA-06 de HU-NOT-005), con reintento
+    (CA-04). Ninguna sancion se borra: revertir o reducir actualiza (CA-04 de
+    HU-USR-006). Todo cambio incompatible abre version nueva (regla 2).
+  version: 1.0.0
+servers:
+  - url: http://localhost:8086/api/v1
+    description: Entorno local de desarrollo
+
+security:
+  - tokenDeUsuario: []
+
+paths:
+  /sanciones:
+    post:
+      summary: Emitir una sancion (advertencia, suspension o baneo)
+      operationId: emitirSancion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmitirSancionRequest'
+            examples:
+              advertencia:
+                value: { usuarioId: 11111111-1111-1111-1111-111111111111, tipo: ADVERTENCIA, motivo: Lenguaje ofensivo en el chat, politica: Normas de convivencia }
+              suspension:
+                value: { usuarioId: 11111111-1111-1111-1111-111111111111, tipo: SUSPENSION, motivo: Reincidencia, duracionHoras: 48 }
+              baneo:
+                value: { usuarioId: 11111111-1111-1111-1111-111111111111, tipo: BANEO, motivo: Fraude comprobado en subastas, confirmacion: true }
+      responses:
+        '201':
+          description: Sancion emitida y anotada en el historial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sancion'
+        '400':
+          description: Sin motivo, duracion fuera de rango, baneo sin confirmacion, autosancion (`solicitud-invalida`)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+        '401':
+          description: Sin token o token invalido
+        '403':
+          description: El rol no alcanza (jugador; moderador baneando; token de servicio) (`permiso-insuficiente`)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+        '409':
+          description: El usuario ya esta baneado; no procede ninguna sancion mas (`usuario-baneado`)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+
+  /sanciones/usuarios/{usuarioId}:
+    get:
+      summary: Historial de sanciones de un usuario (el propio usuario o quien modera)
+      operationId: historialDeSanciones
+      parameters:
+        - $ref: '#/components/parameters/UsuarioId'
+      responses:
+        '200':
+          description: Del mas reciente al mas antiguo; vacio si nunca fue sancionado
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Sancion' }
+        '403':
+          description: Un jugador pidiendo el historial de otro
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+
+  /sanciones/{sancionId}:
+    get:
+      summary: Una sancion
+      operationId: obtenerSancion
+      parameters:
+        - $ref: '#/components/parameters/SancionId'
+      responses:
+        '200':
+          content: { application/json: { schema: { $ref: '#/components/schemas/Sancion' } } }
+        '403':
+          description: No es tuya y no moderas
+        '404':
+          description: No existe (`no-encontrada`)
+
+  /sanciones/{sancionId}/apelaciones:
+    post:
+      summary: Apelar una sancion propia (HU-USR-007)
+      operationId: apelarSancion
+      parameters:
+        - $ref: '#/components/parameters/SancionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [argumento]
+              properties:
+                argumento: { type: string, maxLength: 2000 }
+      responses:
+        '201':
+          description: Apelacion abierta, asignada al panel de revision
+          content: { application/json: { schema: { $ref: '#/components/schemas/Apelacion' } } }
+        '400':
+          description: Sin argumento (`solicitud-invalida`)
+        '404':
+          description: No existe la sancion (`no-encontrada`)
+        '422':
+          description: No procede — no es tuya, ya no esta vigente, fuera de los 30 dias, o ya hay una abierta (`apelacion-no-procede`)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+
+  /apelaciones:
+    get:
+      summary: Apelaciones pendientes (panel) o las propias
+      operationId: listarApelaciones
+      parameters:
+        - name: mias
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: "`true`: las del propio usuario, con su estado. `false` (por omision): las pendientes, solo para quien modera."
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Apelacion' }
+        '403':
+          description: Un jugador pidiendo el panel
+
+  /apelaciones/{apelacionId}/resolucion:
+    post:
+      summary: Resolver una apelacion (administrador o super administrador)
+      operationId: resolverApelacion
+      parameters:
+        - name: apelacionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision, motivo]
+              properties:
+                decision:
+                  type: string
+                  enum: [MANTENIDA, REDUCIDA, REVERTIDA]
+                motivo: { type: string, maxLength: 1000 }
+                nuevaVigencia:
+                  type: string
+                  format: date-time
+                  description: Obligatoria con REDUCIDA; anterior a la fecha fin actual y posterior a ahora.
+      responses:
+        '200':
+          description: Resuelta; con REDUCIDA o REVERTIDA la sancion ya cambio (CA-04) y el jugador queda avisado
+          content: { application/json: { schema: { $ref: '#/components/schemas/Apelacion' } } }
+        '400':
+          description: Sin motivo, REDUCIDA sin fecha, fecha invalida, reducir algo que no es suspension
+        '403':
+          description: El rol no alcanza (`permiso-insuficiente`)
+        '404':
+          description: No existe (`no-encontrada`)
+        '409':
+          description: Ya estaba resuelta (`apelacion-resuelta`)
+
+components:
+  securitySchemes:
+    tokenDeUsuario:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token de sesion de ms-identidad (ADR-002) con claims `uid` y `rol`.
+
+  parameters:
+    UsuarioId:
+      name: usuarioId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+      description: Claim `uid` del jugador, no su id interno.
+    SancionId:
+      name: sancionId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  schemas:
+    EmitirSancionRequest:
+      type: object
+      required: [usuarioId, tipo, motivo]
+      properties:
+        usuarioId: { type: string, format: uuid }
+        tipo:
+          type: string
+          enum: [ADVERTENCIA, SUSPENSION, BANEO]
+        motivo: { type: string, maxLength: 1000, description: Causal especifica; obligatorio siempre }
+        politica: { type: string, maxLength: 200, description: Politica violada, si aplica }
+        comentarioId: { type: string, maxLength: 64, description: Comentario que origino la sancion (HU-COM-006/008), si aplica }
+        duracionHoras:
+          type: integer
+          minimum: 1
+          description: Solo SUSPENSION. Rango configurable (por omision 1 hora a 30 dias, D-20).
+        confirmacion:
+          type: boolean
+          default: false
+          description: Solo BANEO. Debe ser `true` (CA-01 de HU-USR-006).
+
+    Sancion:
+      type: object
+      required: [id, usuarioId, tipo, motivo, emitidaPor, rolEmisor, emitidaEn, vigente]
+      properties:
+        id: { type: string, format: uuid }
+        usuarioId: { type: string, format: uuid }
+        tipo: { type: string, enum: [ADVERTENCIA, SUSPENSION, BANEO] }
+        motivo: { type: string }
+        politica: { type: [string, 'null'] }
+        comentarioId: { type: [string, 'null'] }
+        emitidaPor: { type: string, format: uuid }
+        rolEmisor: { type: string }
+        emitidaEn: { type: string, format: date-time }
+        vigenteHasta: { type: [string, 'null'], format: date-time, description: Solo SUSPENSION }
+        revertidaEn: { type: [string, 'null'], format: date-time }
+        motivoReversion: { type: [string, 'null'] }
+        vigente:
+          type: boolean
+          description: No revertida y, si es suspension, no vencida. Una advertencia vigente no restringe.
+
+    Apelacion:
+      type: object
+      required: [id, sancionId, usuarioId, argumento, creadaEn, estado]
+      properties:
+        id: { type: string, format: uuid }
+        sancionId: { type: string, format: uuid }
+        usuarioId: { type: string, format: uuid }
+        argumento: { type: string }
+        creadaEn: { type: string, format: date-time }
+        estado: { type: string, enum: [PENDIENTE, MANTENIDA, REDUCIDA, REVERTIDA] }
+        decisionMotivo: { type: [string, 'null'] }
+        resueltaPor: { type: [string, 'null'], format: uuid }
+        resueltaEn: { type: [string, 'null'], format: date-time }
+        nuevaVigencia: { type: [string, 'null'], format: date-time }
+
+    ProblemDetail:
+      type: object
+      description: RFC 9457. `type` = https://nexusbattles.local/errores/<motivo-en-kebab>; `motivo` repite el motivo en mayusculas.
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        motivo:
+          type: string
+          enum: [PERMISO_INSUFICIENTE, SOLICITUD_INVALIDA, USUARIO_BANEADO, NO_ENCONTRADA, APELACION_NO_PROCEDE, APELACION_RESUELTA]

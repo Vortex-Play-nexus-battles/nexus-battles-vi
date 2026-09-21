@@ -1,11 +1,14 @@
 package com.nexusbattles.plataforma.salaspartidas.integracion;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.nexusbattles.plataforma.resiliencia.CortaCircuitos;
+import com.nexusbattles.plataforma.resiliencia.DependenciaDegradada;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.HeroeDelJugador;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.JugadorAutenticado;
 import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoDelHeroe;
 import com.nexusbattles.plataforma.salaspartidas.dominio.HeroeDeCombate;
 import com.nexusbattles.plataforma.salaspartidas.dominio.InventarioNoDisponible;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -27,6 +30,10 @@ import java.util.Map;
  *       puesto. Sin nada puesto, no esta equipado (RF-JUE-003).</li>
  *   <li>{@code GET /api/v1/inventario/heroes/{id}/estadisticas} — de donde sale
  *       la vida maxima con el equipamiento ya aplicado.</li>
+ *   <li>{@code GET /api/v1/productos/{productoId}} — el prototipo del catalogo
+ *       del que sale el heroe. No es de inventario sino de productos, y es
+ *       lectura publica; hace falta porque el motor de combate busca al
+ *       atacante por prototipo y no por el nombre que le puso su dueno.</li>
  * </ol>
  *
  * <p><b>La identidad va en {@code X-User-Name}</b> porque es lo que inventario
@@ -40,6 +47,16 @@ import java.util.Map;
  * primero que este disponible y equipado, recorriendo la vitrina en el orden en
  * que la devuelve su dueno. Si ninguno lo esta, el resultado explica cual de las
  * dos cosas falla, que es lo que el dialogo necesita para decir que hacer.
+ *
+ * <p><b>Si inventario no responde</b> (conexion, tiempo, 5xx, o la credencial
+ * de servicio que no se pudo obtener), las tres llamadas a inventario salen por
+ * el corta circuitos de HU-DIS-003 como {@link DependenciaDegradada}: 503 con
+ * la seccion «Inventario» —el ejemplo literal de la HU— y {@code Retry-After},
+ * y tras varios fallos seguidos se deja de llamar hasta que toque reintentar.
+ * Un 4xx (inventario contesto, pero rechazo la consulta) es
+ * {@link InventarioNoDisponible} y no abre nada. Las llamadas a productos y al
+ * catalogo de heroes no van por aqui: ya degradan solas y son de otras
+ * dependencias.
  */
 @Component
 class ClienteInventarioHeroes implements HeroeDelJugador {
@@ -51,11 +68,20 @@ class ClienteInventarioHeroes implements HeroeDelJugador {
 
     private final RestClient restClient;
     private final String urlBase;
+    private final String urlProductos;
+    private final String urlHeroes;
+    private final CortaCircuitos corta;
 
     ClienteInventarioHeroes(RestClient restClientInventario,
-                            @Value("${salas.inventario.url}") String urlBase) {
+                            @Value("${salas.inventario.url}") String urlBase,
+                            @Value("${salas.productos.url}") String urlProductos,
+                            @Value("${salas.heroes.url}") String urlHeroes,
+                            @Qualifier("cortaInventario") CortaCircuitos corta) {
         this.restClient = restClientInventario;
         this.urlBase = urlBase.replaceAll("/+$", "");
+        this.urlProductos = urlProductos.replaceAll("/+$", "");
+        this.urlHeroes = urlHeroes.replaceAll("/+$", "");
+        this.corta = corta;
     }
 
     @Override
@@ -136,7 +162,84 @@ class ClienteInventarioHeroes implements HeroeDelJugador {
         int vida = estadisticas == null || estadisticas.vida() == null || estadisticas.vida() < 1
                 ? 1
                 : estadisticas.vida();
-        return HeroeDeCombate.aPleno(heroe.id(), heroe.nombrePropio(), vida);
+        String prototipo = prototipoDe(heroe);
+        return HeroeDeCombate.aPleno(heroe.id(), heroe.nombrePropio(),
+                prototipo, vida, defensaDe(prototipo));
+    }
+
+    /**
+     * Defensa del prototipo, del catalogo de heroes.
+     *
+     * <p><b>Por que hace falta.</b> El motor acierta si la tirada de ataque
+     * supera la defensa del objetivo. Sin este dato se le mandaba la vida
+     * actual, y las dos cifras no estan en la misma escala: «Guerrero Tanque»
+     * ataca con {@code 10+1d6} —de 11 a 16— y tiene 44 de vida. Ningun golpe
+     * podia acertar nunca; el combate entero era imposible de ganar.
+     *
+     * <p>Se lee de {@code GET /api/v1/heroes/{prototipo}}, la misma ruta que ya
+     * consume inventario para calcular las estadisticas. Lectura publica, sin
+     * cambiar ningun contrato.
+     *
+     * <p>Como el prototipo: si falla, se devuelve {@code null} y el combate
+     * degrada, pero entrar a la sala sigue funcionando.
+     */
+    private Integer defensaDe(String prototipo) {
+        if (prototipo == null || prototipo.isBlank()) {
+            return null;
+        }
+        try {
+            FichaDeHeroe ficha = restClient.get()
+                    // Sin URLEncoder: los nombres de prototipo llevan espacios
+                    // y el encoder los convierte en '+', que el catalogo no
+                    // reconoce. Mismo cuidado que tiene inventario.
+                    .uri(urlHeroes + "/api/v1/heroes/{prototipo}", prototipo)
+                    .header("Accept", "application/json")
+                    .retrieve()
+                    .body(FichaDeHeroe.class);
+            return ficha == null || ficha.estadisticasNivel1() == null
+                    ? null
+                    : ficha.estadisticasNivel1().defensa();
+        } catch (RestClientException catalogoNoDisponible) {
+            return null;
+        }
+    }
+
+    /**
+     * Prototipo del catalogo del que sale este heroe.
+     *
+     * <p><b>Por que hace falta.</b> El motor de combate busca al atacante en el
+     * catalogo de heroes, que indexa por prototipo («Guerrero Tanque»). Hasta
+     * ahora se le mandaba el {@code nombrePropio} —el que le puso su dueno,
+     * «Aquiles»— y el catalogo respondia 404: <b>ningun ataque se resolvia</b>,
+     * y el error se iba a la cola privada del jugador, que la vista no escucha.
+     * Lo destapo el E2E del corte vertical.
+     *
+     * <p><b>Por que por aqui.</b> Inventario ya resuelve el prototipo por dentro
+     * para calcular las estadisticas, pero no lo publica en su respuesta.
+     * Pedirselo seria cambiar un contrato que no es nuestro. El producto, en
+     * cambio, si lo expone en {@code GET /api/v1/productos/{id}}, que es publico
+     * y de solo lectura: se consume un campo que ya existe, sin tocar nada
+     * ajeno.
+     *
+     * <p><b>Por que no revienta si falla.</b> Un prototipo desconocido degrada
+     * el combate, no la entrada a la sala: la verificacion de HU-SAL-003 sigue
+     * pudiendo decir «si» y la barra de vida sigue teniendo sus dos cifras.
+     * Fallar aqui dejaria sin jugar a quien solo queria entrar.
+     */
+    private String prototipoDe(ElementoInventario heroe) {
+        if (heroe.productoId() == null || heroe.productoId().isBlank()) {
+            return null;
+        }
+        try {
+            Producto producto = restClient.get()
+                    .uri(urlProductos + "/api/v1/productos/" + heroe.productoId())
+                    .header("Accept", "application/json")
+                    .retrieve()
+                    .body(Producto.class);
+            return producto == null ? null : producto.prototipo();
+        } catch (RestClientException productoNoDisponible) {
+            return null;
+        }
     }
 
     /** Lo que retiene al heroe, con el detalle que inventario da: la subasta. */
@@ -144,17 +247,25 @@ class ClienteInventarioHeroes implements HeroeDelJugador {
         return heroe.subastaId() == null ? null : "una subasta en curso";
     }
 
+    /**
+     * Una consulta a inventario, detras del corta circuitos.
+     *
+     * @throws DependenciaDegradada  si inventario no responde o el circuito
+     *                               esta abierto (HU-DIS-003)
+     * @throws InventarioNoDisponible si inventario contesto con un 4xx: no es
+     *                               una caida, pero tampoco hay veredicto
+     */
     private <T> T pedir(String url, JugadorAutenticado jugador, Class<T> tipo) {
-        try {
-            return restClient.get()
-                    .uri(url)
-                    .header("X-User-Name", jugador.apodo())
-                    .header("Accept", "application/json")
-                    .retrieve()
-                    .body(tipo);
-        } catch (RestClientException ex) {
-            throw new InventarioNoDisponible(ex);
+        Contestacion<T> contestacion = Contestacion.protegida(corta, () -> restClient.get()
+                .uri(url)
+                .header("X-User-Name", jugador.apodo())
+                .header("Accept", "application/json")
+                .retrieve()
+                .body(tipo));
+        if (contestacion.rechazada()) {
+            throw new InventarioNoDisponible("inventario rechazo la consulta con " + contestacion.estado());
         }
+        return contestacion.cuerpo();
     }
 
     // -- Formas exactas de las respuestas de inventario -----------------------
@@ -164,7 +275,19 @@ class ClienteInventarioHeroes implements HeroeDelJugador {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record ElementoInventario(String id, String tipo, String nombrePropio,
-                              boolean disponible, String subastaId) { }
+                              String productoId, boolean disponible, String subastaId) { }
+
+    /** Solo el prototipo: de la ficha del producto no hace falta nada mas. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record Producto(String prototipo) { }
+
+    /** Del catalogo de heroes solo interesa la defensa del nivel 1. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record FichaDeHeroe(EstadisticasDelPrototipo estadisticasNivel1) {
+
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        record EstadisticasDelPrototipo(Integer defensa) { }
+    }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record Equipamiento(List<String> armas, Map<String, String> armaduras, List<String> items) {

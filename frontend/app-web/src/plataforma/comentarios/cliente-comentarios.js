@@ -1,7 +1,8 @@
 /**
- * HU-COM-001 — Acceso HTTP a la publicacion de comentarios sobre productos.
+ * HU-COM-001/002/003/004 — Acceso HTTP a los comentarios sobre productos.
  *
- * Habla con `POST /api/v1/products/{productId}/comments` tal como lo define
+ * Habla con `GET`, `POST` y `DELETE` de `/api/v1/products/{productId}/comments`
+ * (contrato 1.2.0) tal como lo define
  * `contracts/openapi/comentarios.yaml` (PR #197, servicio
  * `services/plataforma/comentarios`). Este modulo NO define nada que el
  * contrato no diga: si el contrato cambia, cambia aqui.
@@ -34,6 +35,7 @@ export const MOTIVO = Object.freeze({
 export const ESTADO = Object.freeze({
   PUBLICADO: 'PUBLICADO',
   EN_REVISION: 'EN_REVISION',
+  ELIMINADO: 'ELIMINADO',
 });
 
 /**
@@ -126,5 +128,57 @@ export async function publicarComentario(
     return { comentario, estado };
   }
 
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+}
+
+/**
+ * El hilo de un producto — HU-COM-003 (CA-01/CA-03) y HU-INV-014. Publico:
+ * no hace falta sesion para leerlo.
+ *
+ * @param {string} productoId
+ * @param {{fetchImpl?: Function}} [opciones]
+ * @returns {Promise<{productoId: string, comentarios: object[], total: number,
+ *   calificacionPromedio: number|null, totalCalificaciones: number}>}
+ *   `HiloDeComentariosResponse` del contrato. `calificacionPromedio` viene
+ *   `null` cuando nadie ha calificado: la vista lo pinta como «sin
+ *   calificaciones», nunca como 0.
+ * @throws {ErrorDeApi}
+ */
+export async function consultarHilo(
+  productoId,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const respuesta = await fetchImpl(rutaDeComentarios(productoId), {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+  });
+  if (respuesta.ok) {
+    return respuesta.json();
+  }
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+}
+
+/**
+ * Retira un comentario propio — HU-COM-004. Quien retira es el `uid` del
+ * token (lo pone el interceptor); 204 tambien si ya estaba retirado.
+ *
+ * @param {string} productoId
+ * @param {string} comentarioId
+ * @param {{fetchImpl?: Function}} [opciones]
+ * @returns {Promise<void>}
+ * @throws {ErrorDeApi} 403 si es de otro (`comentario-ajeno`), 404 si no existe
+ */
+export async function eliminarComentario(
+  productoId,
+  comentarioId,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const respuesta = await fetchImpl(
+    `${rutaDeComentarios(productoId)}/${encodeURIComponent(comentarioId)}`,
+    { method: 'DELETE', headers: { Accept: 'application/problem+json' } },
+  );
+  if (respuesta.ok) {
+    return;
+  }
   throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
 }

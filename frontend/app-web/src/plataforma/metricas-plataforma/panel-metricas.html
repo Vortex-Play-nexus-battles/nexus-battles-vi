@@ -19,8 +19,15 @@
   </head>
 
   <body>
+    <div data-cabecera-app></div>
     <main class="contenido">
       <h1>Panel de observabilidad</h1>
+
+      <p class="campo__pista">
+        <a href="./tablero-tecnico.html"
+          >Tablero tecnico y de moderacion (HU-MET-004 / HU-MET-001)</a
+        >
+      </p>
 
       <p class="campo__pista">
         Latencia extremo a extremo medida por
@@ -54,6 +61,15 @@
           navigator.clipboard?.writeText(texto);
         }
       });
+    </script>
+    <script type="module">
+      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+
+      if (!exigirSesion()) {
+        throw new Error('sin sesion: redirigiendo al login');
+      }
+      // Cabecera unica de la aplicacion (HU-UX-001).
+      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'cuenta' });
     </script>
   </body>
 </html>

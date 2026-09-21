@@ -1,5 +1,10 @@
 plugins {
     id 'nexus.spring-conventions'
+    // Servidor de recursos contra el JWKS de ms-identidad (ADR-002): el mismo
+    // que usan los demas servicios. Hasta el 21-sep este servicio validaba el
+    // token con una clave HS256 propia (app.jwt.clave-secreta) que ms-identidad
+    // nunca uso (firma RS256), asi que todo inicio de sesion real acababa en 401.
+    id 'nexus.seguridad-conventions'
 }
 
 layout.buildDirectory.set(file("build.nosync"))
@@ -23,12 +28,12 @@ dependencies {
     // todas las pujas si no se corta rápido.
     implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
 
-    // Validación del JWT que emite ms-identidad. Misma versión que ese servicio
-    // (0.12.6) para no divergir en el formato del token. Aquí solo se valida
-    // firma y expiración: este servicio nunca emite tokens.
-    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
-    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
-    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+    // Credencial de servicio (ADR-001 / ADR-005): ms-finanzas cerro /creditos/**
+    // a ROLE_SERVICIO (#455) e inventario exige token de servicio para operar
+    // sobre el inventario de otro (#451). TokenDeServicioOAuth2 pide el token
+    // por client_credentials a ms-identidad (DIRECTORIO_ACTIVO_*) y lo cachea.
+    // (La convencion de seguridad ya la trae; se deja explicita por claridad.)
+    implementation project(':shared:libs:plataforma-seguridad')
 
     // HU-SUB-011: contador en vivo del listado, vía STOMP sobre WebSocket
     // (backend-spring.md: "Tiempo real: Spring WebSocket + STOMP").
@@ -62,11 +67,6 @@ dependencies {
 
     // Falla el build si un servicio importa clases internas de otro dominio.
     testImplementation 'com.tngtech.archunit:archunit-junit5:1.3.0'
-
-    // El validador se prueba generando tokens reales, así que en pruebas hace
-    // falta la implementación de jjwt, no solo su API.
-    testImplementation 'io.jsonwebtoken:jjwt-impl:0.12.6'
-    testImplementation 'io.jsonwebtoken:jjwt-jackson:0.12.6'
 
     // Pruebas de contrato del lado consumidor (Pact JVM, pila aprobada en
     // CLAUDE.md). Solo el consumidor: este servicio no verifica pactos ajenos.

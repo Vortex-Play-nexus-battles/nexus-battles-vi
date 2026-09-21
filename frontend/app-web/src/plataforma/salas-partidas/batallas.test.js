@@ -12,6 +12,7 @@ import { jest } from '@jest/globals';
 
 import {
   montarBatallas,
+  mostrarAvisoDeSala,
   fichaEnVivo,
   metaDeLaSala,
   subtituloDeSalas,
@@ -25,6 +26,7 @@ const HTML = `
     <select name="modalidad"><option value="">todas</option><option value="CONTRA_IA">IA</option></select>
     <select name="estado"><option value="">todos</option><option value="ABIERTA">Abierta</option></select>
     <div class="estado-vista" data-zona="estado"></div>
+    <div data-zona="degradacion" data-seccion="Inventario" hidden></div>
     <p data-zona="canal" hidden></p>
     <div class="rejilla-salas" data-zona="salas" hidden></div>
     <nav class="paginacion" data-zona="paginacion" hidden></nav>
@@ -72,6 +74,15 @@ describe('metaDeLaSala', () => {
   test('anade el sufijo de la IA solo cuando la hay', () => {
     expect(metaDeLaSala(sala({ incluirHeroeIA: true }))).toBe(
       '4 de 6 jugadores · 320 creditos · Con heroe de la IA',
+    );
+  });
+
+  test('con varios cupos de la IA dice cuantos (HU-SAL-004)', () => {
+    expect(metaDeLaSala(sala({ incluirHeroeIA: true, heroesIA: 3 }))).toBe(
+      '4 de 6 jugadores · 320 creditos · Con 3 heroes de la IA',
+    );
+    expect(metaDeLaSala(sala({ incluirHeroeIA: true, heroesIA: 1 }))).toMatch(
+      /Con heroe de la IA$/,
     );
   });
 
@@ -212,6 +223,54 @@ describe('montarBatallas', () => {
     const estado = raiz.querySelector('[data-zona="estado"]');
     expect(estado.hidden).toBe(false);
     expect(estado.textContent).toContain('Necesitas un codigo de invitacion');
+  });
+
+  // HU-DIS-003 · CA-02 y CA-03: si el inventario no responde al entrar, el
+  // listado NO desaparece; se pinta Seccion degradada aparte y se puede
+  // reintentar la misma sala.
+  test('inventario degradado al entrar: el listado sigue y aparece Seccion degradada con reintento', async () => {
+    const raiz = preparar();
+    const degradado = new ErrorDeApi(
+      {
+        type: 'https://nexusbattles.local/errores/seccion-no-disponible',
+        title: 'Inventario no disponible temporalmente',
+        status: 503,
+        detail: 'La seccion de Inventario no esta disponible temporalmente.',
+        seccion: 'Inventario',
+        reintentarEnSegundos: 3,
+      },
+      503,
+    );
+    const ingresar = jest
+      .fn()
+      .mockRejectedValueOnce(degradado)
+      .mockResolvedValueOnce(sala({ ocupacion: 5 }));
+    const alEntrar = jest.fn();
+
+    montarBatallas(raiz, {
+      listar: jest.fn().mockResolvedValue(pagina([sala()])),
+      ingresar,
+      alEntrar,
+    });
+    await asentar();
+
+    raiz.querySelector('[data-sala]').click();
+    await asentar();
+
+    const degradada = raiz.querySelector('[data-zona="degradacion"] .seccion-degradada');
+    expect(degradada).not.toBeNull();
+    expect(degradada.textContent).toContain('Inventario no disponible temporalmente');
+    expect(raiz.querySelector('[data-zona="salas"]').hidden).toBe(false);
+    expect(raiz.querySelector('[data-zona="estado"]').hidden).toBe(true);
+    expect(alEntrar).not.toHaveBeenCalled();
+
+    degradada.querySelector('.seccion-degradada__reintentar').click();
+    await asentar();
+
+    expect(ingresar).toHaveBeenCalledTimes(2);
+    expect(ingresar).toHaveBeenLastCalledWith(sala().id);
+    expect(raiz.querySelector('[data-zona="degradacion"] .seccion-degradada')).toBeNull();
+    expect(alEntrar).toHaveBeenCalledWith(expect.objectContaining({ ocupacion: 5 }));
   });
 
   test('un fallo al listar no deja la vista en blanco', async () => {
@@ -427,5 +486,51 @@ describe('canal en tiempo real en el listado', () => {
     await asentar();
 
     expect(raiz.querySelector('[data-zona="canal"]').dataset.estado).toBe('sin-sesion');
+  });
+});
+
+// ===========================================================================
+// HU-SAL-006 — por que se volvio al listado
+// ===========================================================================
+
+describe('mostrarAvisoDeSala', () => {
+  const ZONA = `
+    <div class="aviso" data-zona="aviso-sala" hidden>
+      <p class="aviso__titulo" data-zona="aviso-sala-titulo"></p>
+      <p class="t-cuerpo" data-zona="aviso-sala-detalle"></p>
+    </div>
+  `;
+
+  test('pinta titulo, detalle y tono, y destapa la zona', () => {
+    document.body.innerHTML = ZONA;
+
+    const mostrado = mostrarAvisoDeSala(document, {
+      tono: 'advertencia',
+      titulo: 'La sala se cerro',
+      detalle: 'El anfitrion cancelo la sala. Se te devolvieron 150 creditos.',
+    });
+
+    const zona = document.querySelector('[data-zona="aviso-sala"]');
+    expect(mostrado).toBe(true);
+    expect(zona.hidden).toBe(false);
+    expect(zona.className).toBe('aviso aviso--advertencia');
+    expect(zona.querySelector('[data-zona="aviso-sala-titulo"]').textContent).toBe(
+      'La sala se cerro',
+    );
+    expect(zona.querySelector('[data-zona="aviso-sala-detalle"]').textContent).toContain(
+      '150 creditos',
+    );
+  });
+
+  test('sin aviso no toca nada; sin detalle lo esconde; un tono desconocido cae a info', () => {
+    document.body.innerHTML = ZONA;
+
+    expect(mostrarAvisoDeSala(document, null)).toBe(false);
+    expect(document.querySelector('[data-zona="aviso-sala"]').hidden).toBe(true);
+
+    mostrarAvisoDeSala(document, { tono: 'raro', titulo: 'Saliste de la sala.' });
+    const zona = document.querySelector('[data-zona="aviso-sala"]');
+    expect(zona.className).toBe('aviso aviso--info');
+    expect(zona.querySelector('[data-zona="aviso-sala-detalle"]').hidden).toBe(true);
   });
 });

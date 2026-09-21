@@ -432,3 +432,56 @@ describe('montarValidacionDeHeroe', () => {
     expect(d.querySelector('[data-accion="confirmar"]')).toBeNull();
   });
 });
+
+// HU-DIS-003 · CA-02: la verificacion depende del inventario; si no responde,
+// el dialogo dice que Inventario esta limitado y deja reintentar sin cerrarse.
+describe('montarValidacionDeHeroe · inventario degradado (HU-DIS-003)', () => {
+  const inventarioCaido = () =>
+    new ErrorDeApi(
+      {
+        type: 'https://nexusbattles.local/errores/seccion-no-disponible',
+        title: 'Inventario no disponible temporalmente',
+        status: 503,
+        detail: 'La seccion de Inventario no esta disponible temporalmente.',
+        seccion: 'Inventario',
+        reintentarEnSegundos: 5,
+        dependencia: 'inventario',
+      },
+      503,
+    );
+
+  test('pinta Seccion degradada dentro del dialogo, sin veredicto y sin alerta', async () => {
+    const d = raiz();
+    const verificar = jest.fn().mockRejectedValue(inventarioCaido());
+
+    await montarValidacionDeHeroe(d, { idSala: 's1', verificar });
+    await asentar();
+
+    const degradada = d.querySelector('.seccion-degradada');
+    expect(d.dataset.resultado).toBe('DEGRADADO');
+    expect(degradada).not.toBeNull();
+    expect(degradada.textContent).toContain('Inventario no disponible temporalmente');
+    expect(degradada.textContent).toContain('El resto del juego sigue funcionando');
+    expect(d.querySelector('.aviso--error')).toBeNull();
+    expect(d.querySelector('[data-accion="confirmar"]')).toBeNull();
+    expect(d.querySelector('[data-accion="cancelar"]')).not.toBeNull();
+  });
+
+  test('Reintentar vuelve a verificar y, si el inventario volvio, pinta el veredicto', async () => {
+    const d = raiz();
+    const verificar = jest
+      .fn()
+      .mockRejectedValueOnce(inventarioCaido())
+      .mockResolvedValueOnce(disponible());
+
+    await montarValidacionDeHeroe(d, { idSala: 's1', verificar });
+    await asentar();
+    d.querySelector('.seccion-degradada__reintentar').click();
+    await asentar();
+
+    expect(verificar).toHaveBeenCalledTimes(2);
+    expect(d.dataset.resultado).toBe('DISPONIBLE');
+    expect(d.querySelector('.seccion-degradada')).toBeNull();
+    expect(d.querySelector('[data-accion="confirmar"]')).not.toBeNull();
+  });
+});

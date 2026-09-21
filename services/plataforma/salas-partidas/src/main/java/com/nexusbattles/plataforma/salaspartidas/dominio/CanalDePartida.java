@@ -48,12 +48,36 @@ public interface CanalDePartida {
     void anunciarTurno(Partida partida);
 
     /**
-     * El combate termino — HU-JUE-005, RF-JUE-017.
+     * El combate termino — HU-JUE-005, RF-JUE-017, HU-JUE-014.
      *
      * <p>Se anuncia aparte del ultimo golpe: la vista tiene que poder pintar
      * primero la barra bajando a cero y despues el resultado, que es el orden
      * en el que ocurren. Un solo mensaje con las dos cosas obligaria a la vista
      * a animar hacia atras.
+     *
+     * @param partida la partida ya terminada
+     * @param reparto resultado economico de la apuesta por participante
+     *                (CA-04). Vacio cuando no habia apuesta o cuando el libro
+     *                de creditos no respondio y la liquidacion quedo pendiente;
+     *                en ese segundo caso se vuelve a anunciar el fin, con el
+     *                reparto, cuando el reintento la cierre.
      */
-    void anunciarFin(Partida partida);
+    void anunciarFin(Partida partida, java.util.List<RepartoDeCreditos> reparto);
+
+    /**
+     * Igual que {@link #anunciarFin(Partida, java.util.List)}, con la
+     * recompensa por jugar de HU-JUE-012. El adaptador real la incluye en el
+     * mismo mensaje; por omision se descarta, para los dobles que no la miran.
+     *
+     * @param recompensa lo que el libro de creditos acredito por jugar (2/4 al
+     *                   ganador, 1 por participar, cofre si hubo). Vacio si el
+     *                   libro no respondio y quedo pendiente; entonces el fin se
+     *                   vuelve a anunciar, con la recompensa, cuando el reintento
+     *                   entre. Es distinto de {@code reparto}: uno es la apuesta
+     *                   y el otro el premio por jugar, y viajan separados.
+     */
+    default void anunciarFin(Partida partida, java.util.List<RepartoDeCreditos> reparto,
+                             java.util.List<CreditoPorPartida> recompensa) {
+        anunciarFin(partida, reparto);
+    }
 }

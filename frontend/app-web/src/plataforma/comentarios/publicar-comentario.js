@@ -25,7 +25,14 @@
  * en esta sesion y lo dice.
  */
 
-import { publicarComentario, ErrorDeApi, MOTIVO, ESTADO } from './cliente-comentarios.js';
+import {
+  publicarComentario,
+  consultarHilo,
+  eliminarComentario,
+  ErrorDeApi,
+  MOTIVO,
+  ESTADO,
+} from './cliente-comentarios.js';
 import { usuarioIdDeSesion } from '../../comun/identidad.js';
 
 const CLAVE_APODO = 'nexus.apodoActual';
@@ -418,15 +425,55 @@ function nodoDeEstrellas(valor) {
 }
 
 /**
+ * Texto de la calificacion promedio del producto — HU-COM-003.
+ *
+ * `null` (o ausente) es «sin calificaciones», nunca un 0: un producto que nadie
+ * ha calificado no es un producto malo (CA-03).
+ *
+ * @param {{calificacionPromedio?: number|null, totalCalificaciones?: number}} hilo
+ * @returns {string}
+ */
+export function textoDelPromedio(hilo) {
+  const promedio = hilo?.calificacionPromedio;
+  const total = Number.isInteger(hilo?.totalCalificaciones) ? hilo.totalCalificaciones : 0;
+  if (!Number.isFinite(promedio) || total === 0) {
+    return 'Sin calificaciones todavia.';
+  }
+  const plural = total === 1 ? 'calificacion' : 'calificaciones';
+  return `Calificacion promedio: ${promedio.toFixed(2)} de ${MAXIMO_ESTRELLAS} (${total} ${plural}).`;
+}
+
+/**
+ * Pinta el promedio y el total en la zona `[data-zona="promedio"]` del hilo.
+ *
+ * @param {HTMLElement} zonaHilo
+ * @param {object} hilo `HiloDeComentariosResponse`
+ */
+export function pintarPromedio(zonaHilo, hilo) {
+  const zona = zonaHilo.querySelector('[data-zona="promedio"]');
+  if (zona) {
+    zona.textContent = textoDelPromedio(hilo);
+  }
+}
+
+/**
  * Anade un comentario publicado al hilo, con apodo, calificacion y fecha
  * (RN-CMT-001). Un comentario sin `estrellas` es normal, no un error: es el
  * segundo comentario del mismo jugador sobre el producto (CA-02).
  *
+ * Si el comentario es de quien mira (`opciones.yo` = `autorId`), lleva el boton
+ * «Eliminar» (HU-COM-004, CA-04); pulsarlo llama a `opciones.alEliminar(id)`.
+ *
  * @param {HTMLElement} zonaHilo elemento con `[data-zona="hilo"]`
  * @param {object} comentario `ComentarioResponse` del contrato
+ * @param {{yo?: string|null, alEliminar?: (id: string) => void, alFinal?: boolean}} [opciones]
  * @returns {HTMLElement} el articulo pintado
  */
-export function agregarAlHilo(zonaHilo, comentario) {
+export function agregarAlHilo(
+  zonaHilo,
+  comentario,
+  { yo = null, alEliminar, alFinal = false } = {},
+) {
   const vacio = zonaHilo.querySelector('[data-zona="hilo-vacio"]');
   if (vacio) {
     vacio.hidden = true;
@@ -477,9 +524,107 @@ export function agregarAlHilo(zonaHilo, comentario) {
     articulo.appendChild(imagenes);
   }
 
+  if (yo && comentario.autorId === yo && typeof alEliminar === 'function') {
+    const acciones = document.createElement('div');
+    acciones.className = 'fila';
+    const eliminar = document.createElement('button');
+    eliminar.type = 'button';
+    eliminar.className = 'boton boton--secundario boton--pequeno';
+    eliminar.dataset.accion = 'eliminar';
+    eliminar.textContent = 'Eliminar';
+    eliminar.addEventListener('click', () => alEliminar(comentario.id, articulo));
+    acciones.appendChild(eliminar);
+    articulo.appendChild(acciones);
+  }
+
   const lista = zonaHilo.querySelector('[data-zona="hilo-lista"]') ?? zonaHilo;
-  lista.prepend(articulo);
+  if (alFinal) {
+    lista.appendChild(articulo);
+  } else {
+    lista.prepend(articulo);
+  }
   return articulo;
+}
+
+/**
+ * Quita un articulo del hilo y, si no queda ninguno, vuelve a mostrar el vacio.
+ *
+ * @param {HTMLElement} zonaHilo
+ * @param {HTMLElement} articulo
+ */
+export function quitarDelHilo(zonaHilo, articulo) {
+  articulo.remove();
+  const lista = zonaHilo.querySelector('[data-zona="hilo-lista"]') ?? zonaHilo;
+  const vacio = zonaHilo.querySelector('[data-zona="hilo-vacio"]');
+  if (vacio && lista.children.length === 0) {
+    vacio.hidden = false;
+  }
+}
+
+/**
+ * Vuelve a leer el promedio del servicio, sin tocar la lista: el servicio es
+ * quien lo calcula (regla 7), la vista no lo estima.
+ *
+ * @param {HTMLElement} zonaHilo
+ * @param {{productoId: string, consultarImpl?: Function}} opciones
+ */
+export async function actualizarPromedio(zonaHilo, { productoId, consultarImpl = consultarHilo }) {
+  try {
+    pintarPromedio(zonaHilo, await consultarImpl(productoId));
+  } catch {
+    // El promedio anterior sigue en pantalla; no se inventa uno nuevo.
+  }
+}
+
+/**
+ * Carga el hilo del servicio y lo pinta: promedio arriba y los comentarios
+ * del mas reciente al mas antiguo, con «Eliminar» en los propios
+ * (HU-COM-003, HU-COM-004).
+ *
+ * @param {HTMLElement} zonaHilo
+ * @param {object} opciones
+ * @param {string} opciones.productoId
+ * @param {string|null} [opciones.yo] `autorId` de quien mira
+ * @param {Function} [opciones.consultarImpl]
+ * @param {(id: string, articulo: HTMLElement) => void} [opciones.alEliminar]
+ * @returns {Promise<object|null>} el hilo, o `null` si no se pudo cargar
+ */
+export async function cargarHilo(
+  zonaHilo,
+  { productoId, yo = null, consultarImpl = consultarHilo, alEliminar } = {},
+) {
+  const indicador = zonaHilo.querySelector('[data-zona="hilo-cargando"]');
+  const vacio = zonaHilo.querySelector('[data-zona="hilo-vacio"]');
+  const lista = zonaHilo.querySelector('[data-zona="hilo-lista"]') ?? zonaHilo;
+  if (indicador) {
+    indicador.hidden = false;
+  }
+  try {
+    const hilo = await consultarImpl(productoId);
+    lista.replaceChildren();
+    pintarPromedio(zonaHilo, hilo);
+    const comentarios = Array.isArray(hilo?.comentarios) ? hilo.comentarios : [];
+    // El servicio los da del mas antiguo al mas reciente; el hilo se lee al reves.
+    comentarios.forEach((comentario) => {
+      agregarAlHilo(zonaHilo, comentario, { yo, alEliminar });
+    });
+    if (vacio) {
+      vacio.hidden = comentarios.length > 0;
+    }
+    return hilo;
+  } catch {
+    // Sin hilo no se bloquea la publicacion: la vista sigue sirviendo para
+    // comentar y lo dice en la zona del promedio, sin inventar cifras.
+    const zona = zonaHilo.querySelector('[data-zona="promedio"]');
+    if (zona) {
+      zona.textContent = 'No pudimos cargar el hilo. Intentalo de nuevo en un momento.';
+    }
+    return null;
+  } finally {
+    if (indicador) {
+      indicador.hidden = true;
+    }
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -499,7 +644,15 @@ export function agregarAlHilo(zonaHilo, comentario) {
  */
 export function montarPublicarComentario(
   formulario,
-  { productoId, sesion = leerSesion(), publicarImpl = publicarComentario, hilo, alPublicar } = {},
+  {
+    productoId,
+    sesion = leerSesion(),
+    publicarImpl = publicarComentario,
+    consultarImpl = consultarHilo,
+    eliminarImpl = eliminarComentario,
+    hilo,
+    alPublicar,
+  } = {},
 ) {
   const zonaAviso = formulario.querySelector('[data-zona="aviso"]');
   const boton = formulario.querySelector('[type="submit"]');
@@ -508,6 +661,46 @@ export function montarPublicarComentario(
 
   montarCalificacion(formulario);
   montarZonaDeCarga(formulario);
+
+  // HU-COM-004: retirar un comentario propio. El servicio decide si es mio
+  // (403 si no); la vista solo pinta el boton en los mios (CA-04) y, tras el
+  // 204, recarga el promedio, que ya no cuenta esa calificacion (CA-01).
+  const alEliminar = async (comentarioId, articulo) => {
+    const botonEliminar = articulo.querySelector('[data-accion="eliminar"]');
+    if (botonEliminar) {
+      botonEliminar.disabled = true;
+    }
+    try {
+      await eliminarImpl(idProducto, comentarioId);
+      quitarDelHilo(zonaHilo, articulo);
+      pintarAviso(zonaAviso, {
+        tono: 'exito',
+        titulo: 'Comentario eliminado',
+        detalle: 'Ya no aparece en el hilo y su calificacion dejo de contar.',
+      });
+      await actualizarPromedio(zonaHilo, { productoId: idProducto, consultarImpl });
+    } catch (error) {
+      if (botonEliminar) {
+        botonEliminar.disabled = false;
+      }
+      const deApi = error instanceof ErrorDeApi;
+      pintarAviso(zonaAviso, {
+        tono: deApi ? tonoPara(error.estado) : 'error',
+        titulo: deApi ? error.titulo : 'No pudimos contactar con el servicio',
+        detalle: deApi ? error.detalle : 'Revisa tu conexion e intentalo de nuevo.',
+      });
+    }
+  };
+
+  // HU-COM-003: el hilo real, con su promedio, desde el primer momento.
+  if (zonaHilo && idProducto) {
+    cargarHilo(zonaHilo, {
+      productoId: idProducto,
+      yo: sesion?.usuarioId,
+      consultarImpl,
+      alEliminar,
+    });
+  }
 
   // Sin sesion no hay autor ni apodo que mandar: el contrato los exige.
   if (!sesion?.usuarioId || !sesion?.apodo) {
@@ -552,15 +745,31 @@ export function montarPublicarComentario(
             'El filtro automatico lo senalo. Quedo guardado y un moderador lo revisara antes de publicarlo.',
         });
       } else {
+        // RF-COM-002 / D-07: la segunda calificacion no es un error. El
+        // servicio publica sin estrellas y lo dice (calificacionDescartada).
+        // Tambien si un servicio 1.1.0 quito las estrellas sin decirlo.
+        const descartada =
+          comentario.calificacionDescartada === true ||
+          (Number.isInteger(cuerpo.estrellas) && !Number.isInteger(comentario.estrellas));
+        let detalle = 'Ya aparece en el hilo del producto.';
+        if (descartada) {
+          detalle =
+            'Ya habias calificado este producto: el comentario va sin estrellas y tu calificacion anterior se mantiene.';
+        } else if (Number.isInteger(comentario.estrellas)) {
+          detalle = 'Ya aparece en el hilo del producto con tu calificacion.';
+        }
         pintarAviso(zonaAviso, {
           tono: 'exito',
           titulo: 'Comentario publicado',
-          detalle: Number.isInteger(comentario.estrellas)
-            ? 'Ya aparece en el hilo del producto con tu calificacion.'
-            : 'Ya aparece en el hilo del producto. Como ya habias calificado este producto, va sin estrellas.',
+          detalle,
         });
         if (zonaHilo) {
-          agregarAlHilo(zonaHilo, comentario);
+          agregarAlHilo(zonaHilo, comentario, { yo: sesion?.usuarioId, alEliminar });
+          if (Number.isInteger(comentario.estrellas)) {
+            // Con estrellas nuevas el promedio cambio: se lee del servicio,
+            // que es quien lo calcula (regla 7), no se estima aqui.
+            actualizarPromedio(zonaHilo, { productoId: idProducto, consultarImpl });
+          }
         }
       }
 

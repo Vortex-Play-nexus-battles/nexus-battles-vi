@@ -10,17 +10,26 @@
 // Misma linea que ya tiene inventario.test.js.
 import { jest } from '@jest/globals';
 
-import { montarCrearSala, leerFormulario, tonoPara } from './crear-sala.js';
+import {
+  montarCrearSala,
+  leerFormulario,
+  tonoPara,
+  limitesDe,
+  maximoDeMaquinas,
+  ajustarPorModalidad,
+} from './crear-sala.js';
 import { ErrorDeApi } from './cliente-salas.js';
 
 const HTML = `
   <form id="f" novalidate>
     <div data-zona="aviso" hidden></div>
+    <div data-zona="degradacion" data-seccion="Inventario" hidden></div>
 
     <div class="campo">
       <label class="campo__etiqueta" for="maximoParticipantes">Participantes</label>
       <input class="campo__control" id="maximoParticipantes" name="maximoParticipantes"
-             type="number" value="4" />
+             type="number" min="2" max="6" value="4" />
+      <p class="campo__pista" data-zona="pista-participantes">Entre 2 y 6 jugadores.</p>
     </div>
 
     <div class="campo">
@@ -30,8 +39,18 @@ const HTML = `
     </div>
 
     <input type="radio" name="modalidad" value="UNO_CONTRA_UNO" />
+    <input type="radio" name="modalidad" value="CONTRA_IA" />
     <input type="radio" name="modalidad" value="HASTA_SEIS" checked />
-    <input type="checkbox" name="incluirHeroeIA" />
+
+    <p data-zona="nota-contra-ia" hidden>Un rival controlado por la IA ocupa el segundo cupo.</p>
+    <div data-zona="opciones-hasta-seis" hidden>
+      <input name="heroesIA" type="number" min="0" max="5" value="0" />
+      <select name="tamanoEquipo">
+        <option value="" selected>Sin equipos</option>
+        <option value="2">Equipos de 2</option>
+        <option value="3">Equipos de 3</option>
+      </select>
+    </div>
     <input type="checkbox" name="privada" />
 
     <button type="submit">CREAR SALA</button>
@@ -41,6 +60,13 @@ const HTML = `
 function preparar() {
   document.body.innerHTML = HTML;
   return document.getElementById('f');
+}
+
+function elegir(formulario, modalidad) {
+  formulario.querySelector(`[value="${modalidad}"]`).checked = true;
+  formulario
+    .querySelector(`[value="${modalidad}"]`)
+    .dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 /** Deja que se resuelvan las promesas encadenadas del manejador de submit. */
@@ -55,16 +81,135 @@ describe('leerFormulario', () => {
       modalidad: 'HASTA_SEIS',
       recompensaCreditos: 0,
       incluirHeroeIA: false,
+      heroesIA: 0,
       privada: false,
       tamanoEquipo: null,
     });
   });
 
-  test('no manda tamanoEquipo en una modalidad que no admite equipos', () => {
+  test('no manda tamanoEquipo ni maquinas en una modalidad que no las admite', () => {
     const formulario = preparar();
+    formulario.querySelector('[name="heroesIA"]').value = '3';
+    formulario.querySelector('[name="tamanoEquipo"]').value = '2';
     formulario.querySelector('[value="UNO_CONTRA_UNO"]').checked = true;
 
-    expect(leerFormulario(formulario).tamanoEquipo).toBeNull();
+    const cuerpo = leerFormulario(formulario);
+    expect(cuerpo.tamanoEquipo).toBeNull();
+    expect(cuerpo.heroesIA).toBe(0);
+    expect(cuerpo.incluirHeroeIA).toBe(false);
+  });
+
+  test('contra la IA la maquina va siempre, aunque el campo diga cero', () => {
+    const formulario = preparar();
+    formulario.querySelector('[value="CONTRA_IA"]').checked = true;
+
+    const cuerpo = leerFormulario(formulario);
+    expect(cuerpo.heroesIA).toBe(1);
+    expect(cuerpo.incluirHeroeIA).toBe(true);
+  });
+
+  test('hasta seis manda las maquinas y el tamano de equipo elegidos', () => {
+    const formulario = preparar();
+    formulario.querySelector('[name="heroesIA"]').value = '2';
+    formulario.querySelector('[name="tamanoEquipo"]').value = '3';
+
+    const cuerpo = leerFormulario(formulario);
+    expect(cuerpo.heroesIA).toBe(2);
+    expect(cuerpo.incluirHeroeIA).toBe(true);
+    expect(cuerpo.tamanoEquipo).toBe(3);
+  });
+
+  test('la casilla antigua de RF-JUE-001 sigue valiendo por una maquina', () => {
+    document.body.innerHTML = `
+      <form id="f">
+        <input name="maximoParticipantes" value="4" />
+        <input type="radio" name="modalidad" value="HASTA_SEIS" checked />
+        <input type="checkbox" name="incluirHeroeIA" checked />
+      </form>`;
+
+    expect(leerFormulario(document.getElementById('f')).heroesIA).toBe(1);
+  });
+});
+
+describe('limites por modalidad (RF-JUE-004)', () => {
+  test('cada modalidad tiene su aforo y su cupo de maquinas, como el contrato', () => {
+    expect(limitesDe('UNO_CONTRA_UNO')).toEqual({
+      participantes: { min: 2, max: 2 },
+      heroesIA: null,
+      equipos: false,
+    });
+    expect(limitesDe('CONTRA_IA').heroesIA).toEqual({ min: 1, max: 1 });
+    expect(limitesDe('HASTA_SEIS')).toEqual({
+      participantes: { min: 2, max: 6 },
+      heroesIA: { min: 0, max: 5 },
+      equipos: true,
+    });
+  });
+
+  test('las maquinas nunca ocupan el cupo del anfitrion', () => {
+    expect(maximoDeMaquinas('HASTA_SEIS', 6)).toBe(5);
+    expect(maximoDeMaquinas('HASTA_SEIS', 3)).toBe(2);
+    expect(maximoDeMaquinas('CONTRA_IA', 2)).toBe(1);
+    expect(maximoDeMaquinas('UNO_CONTRA_UNO', 2)).toBe(0);
+  });
+
+  test('al elegir 1 contra 1 el aforo se fija en 2 y se esconden las opciones de hasta seis', () => {
+    const formulario = preparar();
+    montarCrearSala(formulario, { crearSalaImpl: jest.fn() });
+    const participantes = formulario.querySelector('[name="maximoParticipantes"]');
+    expect(formulario.querySelector('[data-zona="opciones-hasta-seis"]').hidden).toBe(false);
+
+    elegir(formulario, 'UNO_CONTRA_UNO');
+
+    expect(participantes.value).toBe('2');
+    expect(participantes.max).toBe('2');
+    expect(participantes.readOnly).toBe(true);
+    expect(formulario.querySelector('[data-zona="pista-participantes"]').textContent).toBe(
+      'Exactamente 2 jugadores.',
+    );
+    expect(formulario.querySelector('[data-zona="opciones-hasta-seis"]').hidden).toBe(true);
+    expect(formulario.querySelector('[data-zona="nota-contra-ia"]').hidden).toBe(true);
+  });
+
+  test('contra la IA muestra la nota de que la maquina ocupa el segundo cupo', () => {
+    const formulario = preparar();
+    montarCrearSala(formulario, { crearSalaImpl: jest.fn() });
+
+    elegir(formulario, 'CONTRA_IA');
+
+    expect(formulario.querySelector('[data-zona="nota-contra-ia"]').hidden).toBe(false);
+    expect(formulario.querySelector('[name="maximoParticipantes"]').value).toBe('2');
+  });
+
+  test('en hasta seis el tope de maquinas sigue al aforo y recorta lo que sobra', () => {
+    const formulario = preparar();
+    montarCrearSala(formulario, { crearSalaImpl: jest.fn() });
+    const participantes = formulario.querySelector('[name="maximoParticipantes"]');
+    const maquinas = formulario.querySelector('[name="heroesIA"]');
+    maquinas.value = '5';
+
+    participantes.value = '3';
+    participantes.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(maquinas.max).toBe('2');
+    expect(maquinas.value).toBe('2');
+    expect(ajustarPorModalidad(formulario)).toEqual({
+      modalidad: 'HASTA_SEIS',
+      participantes: { min: 2, max: 6 },
+    });
+  });
+
+  test('volver a hasta seis reabre el aforo sin perder el valor valido', () => {
+    const formulario = preparar();
+    montarCrearSala(formulario, { crearSalaImpl: jest.fn() });
+    elegir(formulario, 'UNO_CONTRA_UNO');
+
+    elegir(formulario, 'HASTA_SEIS');
+
+    const participantes = formulario.querySelector('[name="maximoParticipantes"]');
+    expect(participantes.readOnly).toBe(false);
+    expect(participantes.max).toBe('6');
+    expect(participantes.value).toBe('2');
   });
 });
 
@@ -250,5 +395,85 @@ describe('montarCrearSala', () => {
     expect(aviso.className).toContain('aviso--error');
     expect(aviso.textContent).toMatch(/conexion/i);
     expect(formulario.querySelector('[type="submit"]').disabled).toBe(false);
+  });
+});
+
+// HU-DIS-003 · CA-02: cuando la seccion depende de un servicio caido, el
+// jugador ve QUE funcion esta limitada, que el resto sigue, y puede reintentar.
+describe('montarCrearSala · seccion degradada (HU-DIS-003)', () => {
+  const inventarioCaido = () =>
+    new ErrorDeApi(
+      {
+        type: 'https://nexusbattles.local/errores/seccion-no-disponible',
+        title: 'Inventario no disponible temporalmente',
+        status: 503,
+        detail:
+          'La seccion de Inventario no esta disponible temporalmente. El resto del juego sigue funcionando.',
+        seccion: 'Inventario',
+        reintentarEnSegundos: 7,
+        dependencia: 'inventario',
+      },
+      503,
+    );
+
+  test('pinta Seccion degradada con la funcion limitada, no un Aviso de error', async () => {
+    const formulario = preparar();
+    const crearSalaImpl = jest.fn().mockRejectedValue(inventarioCaido());
+    montarCrearSala(formulario, { crearSalaImpl });
+
+    formulario.dispatchEvent(new Event('submit'));
+    await asentar();
+
+    const degradada = formulario.querySelector('.seccion-degradada');
+    expect(degradada).not.toBeNull();
+    expect(degradada.getAttribute('role')).toBe('status');
+    expect(degradada.textContent).toContain('Inventario no disponible temporalmente');
+    expect(degradada.textContent).toContain('El resto del juego sigue funcionando');
+    expect(degradada.textContent).toContain('7 segundos');
+    expect(document.querySelector('.aviso')).toBeNull();
+    // MAPEO-ERRORES §3: ni type ni dependencia se muestran.
+    expect(degradada.textContent).not.toContain('nexusbattles.local');
+    expect(degradada.textContent).not.toContain('inventario');
+    expect(formulario.querySelector('[type="submit"]').disabled).toBe(false);
+  });
+
+  test('Reintentar vuelve a enviar el formulario y, si el servicio volvio, la sala se crea', async () => {
+    const formulario = preparar();
+    const crearSalaImpl = jest
+      .fn()
+      .mockRejectedValueOnce(inventarioCaido())
+      .mockResolvedValueOnce({ id: 's-1', maximoParticipantes: 4, recompensaCreditos: 0 });
+    montarCrearSala(formulario, { crearSalaImpl });
+
+    formulario.dispatchEvent(new Event('submit'));
+    await asentar();
+    formulario.querySelector('.seccion-degradada__reintentar').click();
+    await asentar();
+
+    expect(crearSalaImpl).toHaveBeenCalledTimes(2);
+    expect(formulario.querySelector('.seccion-degradada')).toBeNull();
+    expect(document.querySelector('.aviso--exito').textContent).toContain('Sala creada');
+  });
+
+  test('un 503 con otro type sigue siendo un Aviso de error: se decide por type, no por status', async () => {
+    const formulario = preparar();
+    const crearSalaImpl = jest.fn().mockRejectedValue(
+      new ErrorDeApi(
+        {
+          type: 'https://nexusbattles.local/errores/creditos-no-disponibles',
+          title: 'El libro de creditos no esta disponible ahora mismo',
+          status: 503,
+          detail: 'No se pudieron comprometer los creditos.',
+        },
+        503,
+      ),
+    );
+    montarCrearSala(formulario, { crearSalaImpl });
+
+    formulario.dispatchEvent(new Event('submit'));
+    await asentar();
+
+    expect(formulario.querySelector('.seccion-degradada')).toBeNull();
+    expect(document.querySelector('.aviso--error')).not.toBeNull();
   });
 });

@@ -7,19 +7,71 @@ info:
     RF-COM-001, RF-COM-002 y RF-COM-007; el contenido del comentario sigue
     RN-CMT-001). El filtro se apoya en la lista negra de
     HU-ADM-002, consumida por REST segun contracts/openapi/moderacion-lista-negra.yaml.
-    El autor y su apodo viajan en el cuerpo mientras se acuerda con el modulo de
-    identidad que claim del token los aporta; al integrar el resource server este
-    contrato abrira una version nueva en lugar de modificar esta.
-  version: 1.0.0
+
+    Desde la 1.1.0 el autor y su apodo salen del token de acceso (ADR-002:
+    identificador estable `uid` y apodo), no del cuerpo. Los campos `autorId`
+    y `apodoAutor` de `PublicacionComentarioRequest` se conservan como
+    obsoletos y se ignoran, asi un cliente de la 1.0.0 sigue recibiendo 201 y
+    no 400: por eso es una version menor y no una mayor. Publicar exige un
+    usuario autenticado (401 sin token; 403 con un token que no es de usuario,
+    como uno de servicio); leer el hilo sigue siendo publico.
+
+    1.2.0 (HU-COM-002/003/004, #483 #484 #485): la segunda calificacion de un
+    jugador sobre un producto YA NO es 409 — el comentario entra sin estrellas
+    y `calificacionDescartada: true` lo dice (RF-COM-002, decision D-07); el
+    409 queda solo para la colision concurrente. Nuevo `DELETE
+    /products/{productId}/comments/{commentId}` para retirar un comentario
+    propio: 204 (idempotente), 403 ajeno, 404 inexistente; un comentario
+    retirado no sale en el hilo ni cuenta en `calificacionPromedio`. Todo
+    compatible con clientes 1.1.0: por eso es menor.
+  version: 1.2.0
 servers:
   - url: http://localhost:8081/api/v1
     description: Entorno local de desarrollo
 paths:
   /products/{productId}/comments:
+    get:
+      summary: Leer el hilo de comentarios de un producto
+      operationId: consultarHilo
+      description: >
+        Devuelve los comentarios PUBLICADOS de un producto, del mas antiguo al
+        mas reciente, junto con el promedio de calificacion en cinco estrellas.
+        Es el lado proveedor de HU-INV-014 (la ficha de producto pinta este
+        hilo) y cierra el criterio CA-01 de HU-COM-001: un comentario "se suma
+        al hilo", y el hilo tiene que poder leerse.
+
+        Los comentarios EN_REVISION no salen: estan a la espera de un
+        moderador y no son publicos. No mueven el promedio.
+
+        Un producto sin comentarios responde 200 con la lista vacia y sin
+        promedio, nunca 404: no tener comentarios es un estado normal de un
+        producto, no un error, y la ficha lo pinta como estado vacio. La
+        existencia del producto no se verifica contra el catalogo, igual que
+        en la publicacion.
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: El hilo del producto, aunque este vacio
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HiloDeComentariosResponse"
     post:
       summary: Publicar un comentario sobre un producto
       operationId: publicarComentario
+      security:
+        - bearerAuth: []
       description: >
+        Exige un usuario autenticado: el autor es el `uid` del token y el
+        apodo, su sujeto. Sin token responde 401; con un token de servicio,
+        403.
+
+
         La retencion y el rechazo no son lo mismo. Si el filtro senala el texto,
         el comentario si se guarda pero queda esperando a un moderador y la
         respuesta es 202, no 201. Si el autor esta silenciado (403) o alguna
@@ -66,16 +118,24 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/ProblemDetail"
+        "401":
+          description: Sin token de acceso, o con un token caducado o no verificable
         "403":
-          description: El autor tiene una sancion activa de silencio y no puede publicar
+          description: >
+            El autor tiene una sancion activa de silencio y no puede publicar
+            (problem detail con motivo AUTOR_SILENCIADO), o el token no es de
+            un usuario (por ejemplo, un token de servicio; sin cuerpo)
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/ProblemDetail"
         "409":
           description: >
-            El usuario intentó enviar una calificación para un producto que ya había calificado,
-            o bien hubo una colisión concurrente (dos solicitudes intentaron calificar al mismo tiempo).
+            Colisión concurrente: dos solicitudes del mismo jugador intentaron
+            calificar el mismo producto a la vez y la segunda chocó con el
+            índice único. Reintentar sin calificación. (Desde 1.2.0 la segunda
+            calificación en secuencia no es 409: entra sin estrellas con
+            `calificacionDescartada: true`.)
           content:
             application/problem+json:
               schema:
@@ -87,21 +147,81 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProblemDetail"
 
+  /products/{productId}/comments/{commentId}:
+    delete:
+      operationId: eliminarComentario
+      summary: Retira un comentario propio (HU-COM-004, RF-COM-004)
+      description: >
+        Solo el autor retira su comentario; quién es sale del `uid` del token,
+        nunca del cuerpo. Un comentario retirado desaparece del hilo y su
+        calificación deja de contar en el promedio (y libera la única
+        calificación del autor sobre el producto: puede volver a calificar en
+        un comentario nuevo, decisión D-19). Idempotente: retirar uno ya
+        retirado responde 204.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: commentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Retirado (o ya lo estaba)
+        "401":
+          description: Sin token, caducado o firmado por otro
+        "403":
+          description: >
+            El comentario es de otro jugador (`type` =
+            `https://nexusbattles.local/errores/comentario-ajeno`), o el token
+            no es de usuario
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: >
+            No hay ningún comentario con ese id en el hilo de ese producto
+            (`type` = `https://nexusbattles.local/errores/comentario-no-encontrado`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Token de acceso emitido por ms-identidad (RS256, verificado contra su
+        JWKS, ADR-002). El autor del comentario es el claim `uid`; el apodo,
+        el sujeto (o `preferred_username` con Keycloak). Cualquiera de los
+        roles de usuario (JUGADOR, MODERADOR, ADMINISTRADOR,
+        SUPER_ADMINISTRADOR) puede publicar; un token de servicio no.
   schemas:
     PublicacionComentarioRequest:
       type: object
       required:
-        - autorId
-        - apodoAutor
         - texto
       properties:
         autorId:
           type: string
-          description: Identificador del jugador que publica
+          deprecated: true
+          description: >
+            Obsoleto desde la 1.1.0: se ignora. El autor es el `uid` del token.
+            Se conserva para que un cliente de la 1.0.0 no reciba 400.
         apodoAutor:
           type: string
-          description: Apodo del jugador en el momento de publicar
+          deprecated: true
+          description: >
+            Obsoleto desde la 1.1.0: se ignora. El apodo sale del token.
         texto:
           type: string
           description: >
@@ -158,6 +278,47 @@ components:
           enum:
             - PUBLICADO
             - EN_REVISION
+            - ELIMINADO
+        calificacionDescartada:
+          type: boolean
+          default: false
+          description: >
+            (1.2.0) `true` en la respuesta de publicar cuando las estrellas que
+            venían se descartaron porque el jugador ya había calificado el
+            producto (RF-COM-002, D-07). El comentario entró igual. En el hilo
+            siempre `false`.
+
+    HiloDeComentariosResponse:
+      type: object
+      required:
+        - productoId
+        - comentarios
+        - total
+        - totalCalificaciones
+      properties:
+        productoId:
+          type: string
+        comentarios:
+          type: array
+          description: Solo los PUBLICADOS, del mas antiguo al mas reciente.
+          items:
+            $ref: "#/components/schemas/ComentarioResponse"
+        total:
+          type: integer
+          description: Cuantos comentarios trae la lista.
+        calificacionPromedio:
+          type:
+            - number
+            - "null"
+          minimum: 1
+          maximum: 5
+          description: >
+            Promedio de las estrellas de los comentarios publicados que
+            calificaron, con dos decimales. Nulo si nadie ha calificado: la
+            ficha debe mostrar "sin valoraciones", no un cero.
+        totalCalificaciones:
+          type: integer
+          description: Cuantos de los comentarios publicados traen estrellas.
 
     ProblemDetail:
       type: object
@@ -184,5 +345,7 @@ components:
             - FORMATO_DE_IMAGEN_NO_ADMITIDO
             - CALIFICACION_DUPLICADA
           description: >
-            Presente en los rechazos de publicación (403, 409 y 422), para que
-            el cliente distinga el motivo sin interpretar el texto del detalle.
+            Presente en los rechazos de publicación (403 y 422), para que el
+            cliente distinga el motivo sin interpretar el texto del detalle.
+            `CALIFICACION_DUPLICADA` ya no rechaza desde 1.2.0; se conserva
+            por compatibilidad con clientes 1.1.0.

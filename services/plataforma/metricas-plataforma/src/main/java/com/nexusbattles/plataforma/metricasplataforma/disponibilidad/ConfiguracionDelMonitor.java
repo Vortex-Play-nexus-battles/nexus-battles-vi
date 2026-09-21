@@ -6,6 +6,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.web.client.RestClient;
@@ -28,9 +29,19 @@ public class ConfiguracionDelMonitor {
         return Clock.systemUTC();
     }
 
+    /**
+     * El almacen es PostgreSQL (esquema {@code metricas}, migrado por Flyway
+     * al arrancar): las interrupciones sobreviven a los redespliegues, que
+     * es cuando mas caidas hay que contar.
+     */
     @Bean
-    RegistroDeDisponibilidad registroDeDisponibilidad() {
-        return new RegistroDeDisponibilidad();
+    AlmacenDeDisponibilidad almacenDeDisponibilidad(JdbcClient jdbc) {
+        return new AlmacenEnPostgres(jdbc);
+    }
+
+    @Bean
+    RegistroDeDisponibilidad registroDeDisponibilidad(AlmacenDeDisponibilidad almacen) {
+        return new RegistroDeDisponibilidad(almacen);
     }
 
     @Bean

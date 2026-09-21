@@ -12,8 +12,7 @@ import com.nexusbattles.ms_subastas.subastas.model.Subasta;
 import com.nexusbattles.ms_subastas.subastas.port.InventarioClient;
 import com.nexusbattles.ms_subastas.subastas.port.InventarioClientFake;
 import com.nexusbattles.ms_subastas.subastas.repository.SubastaRepository;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
+import com.nexusbattles.comun.seguridad.pruebas.EmisorDeTokensDePrueba;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -21,20 +20,19 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import javax.crypto.SecretKey;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Date;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -62,7 +60,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
                 "app.finanzas.modo=prueba",
-                "app.jwt.clave-secreta=" + PujasApiIT.CLAVE_DE_FIRMA,
                 "app.pujas.emision-automatica-intervalo-ms=3600000",
                 "app.subastas.cierre-intervalo-ms=3600000",
                 // El drenador intentaria entregar los avisos a un modulo de
@@ -73,7 +70,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Testcontainers(disabledWithoutDocker = true)
 class PujasApiIT {
 
-    static final String CLAVE_DE_FIRMA = "clave-de-prueba-para-el-jwt-de-ms-subastas-de-mas-de-32-bytes";
+    /** Tokens con la forma real de ms-identidad (RS256 + JWKS), como en produccion. */
+    @DynamicPropertySource
+    static void jwks(DynamicPropertyRegistry registro) {
+        EmisorDeTokensDePrueba.registrarJwks(registro);
+    }
 
     @Container
     @ServiceConnection
@@ -134,20 +135,13 @@ class PujasApiIT {
         return subastas.saveAndFlush(subasta);
     }
 
+    /** Token de jugador firmado por el emisor de prueba; sin uid, el sujeto es solo el apodo. */
     private String tokenDe(UUID jugadorId) {
-        var constructor = Jwts.builder()
-                .subject("jugador_" + (jugadorId == null ? "sin_uid" : jugadorId.toString().substring(0, 8)))
-                .claim("rol", "JUGADOR")
-                .claim("ver", 1)
-                .expiration(Date.from(Instant.now().plus(Duration.ofHours(1))));
-        if (jugadorId != null) {
-            constructor.claim("uid", jugadorId.toString());
+        EmisorDeTokensDePrueba emisor = EmisorDeTokensDePrueba.emisor();
+        if (jugadorId == null) {
+            return emisor.token().sujeto("jugador_sin_uid").rol("JUGADOR").firmar();
         }
-        return constructor.signWith(clave()).compact();
-    }
-
-    private static SecretKey clave() {
-        return Keys.hmacShaKeyFor(CLAVE_DE_FIRMA.getBytes(StandardCharsets.UTF_8));
+        return emisor.tokenDeJugador("jugador_" + jugadorId.toString().substring(0, 8), jugadorId);
     }
 
     private HttpResponse<String> enviar(String metodo, String ruta, String cuerpo, String token, String idempotencyKey)
@@ -248,12 +242,7 @@ class PujasApiIT {
     @Test
     void pujarConUnTokenFirmadoConOtraClaveDevuelve401() throws Exception {
         Subasta subasta = subastaActiva(UUID.randomUUID(), "100", "500");
-        String ajeno = Jwts.builder()
-                .subject("intruso").claim("rol", "JUGADOR").claim("ver", 1)
-                .claim("uid", UUID.randomUUID().toString())
-                .expiration(Date.from(Instant.now().plus(Duration.ofHours(1))))
-                .signWith(Keys.hmacShaKeyFor("otra-clave-igual-de-larga-pero-que-no-es-la-del-servicio".getBytes(StandardCharsets.UTF_8)))
-                .compact();
+        String ajeno = EmisorDeTokensDePrueba.emisor().tokenFirmadoPorOtro("intruso", UUID.randomUUID());
 
         HttpResponse<String> respuesta = enviar("POST", "/subastas/" + subasta.getId() + "/pujas",
                 "{\"monto\":\"110\"}", ajeno, claveNueva());

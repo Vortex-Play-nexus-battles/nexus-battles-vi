@@ -86,7 +86,9 @@ public class AuthController {
         try {
             tokenCredencialService.canjearToken(datos.getToken(), datos.getNuevaPassword());
             return ResponseEntity.ok("Contraseña actualizada correctamente. Ya puedes iniciar sesión.");
-        } catch (TokenInvalidoException e) {
+        } catch (TokenInvalidoException | IllegalArgumentException e) {
+            // IllegalArgumentException: la nueva contraseña no cumple la
+            // politica (RF-AUT-002); el mensaje dice que regla falla.
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
         }
     }

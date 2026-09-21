@@ -1,300 +1,259 @@
-<!DOCTYPE html>
+<!doctype html>
 
 <html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <title>Mi perfil - Nexus Battles</title>
+    <title>Mi perfil - Nexus Battles</title>
 
-  <link rel="stylesheet" href="../comun/barra-navegacion.css">
-  <link rel="stylesheet" href="./tema-cuentas.css">
-  <link rel="stylesheet" href="./perfil.css">
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
+    <link rel="stylesheet" href="./tema-cuentas.css" />
+    <link rel="stylesheet" href="./perfil.css" />
+  </head>
 
-</head>
+  <body>
+    <header class="encabezado">
+      <div class="encabezado-contenido">
+        <div>
+          <h1>Mi perfil</h1>
+          <p>Administra tu información personal y preferencias.</p>
+        </div>
 
-<body>
+        <button id="btn-volver" type="button" class="btn btn-secundario">Volver</button>
+      </div>
+    </header>
 
-<header class="encabezado">
-
-  <div class="encabezado-contenido">
-
-    <div>
-      <h1>Mi perfil</h1>
-      <p>Administra tu información personal y preferencias.</p>
-    </div>
-
-    <button
-      id="btn-volver"
-      type="button"
-      class="btn btn-secundario">
-      Volver
-    </button>
-
-  </div>
-
-</header>
-
-<main class="contenedor-principal">
-
-  <!-- =====================================================
+    <main class="contenedor-principal">
+      <!-- =====================================================
        MENSAJE DE SESIÓN
        ===================================================== -->
 
-  <section
-    id="mensaje-sesion"
-    class="mensaje mensaje-error"
-    hidden>
-  </section>
+      <section id="mensaje-sesion" class="mensaje mensaje-error" hidden></section>
 
-
-  <!-- =====================================================
+      <!-- =====================================================
        CONTENIDO DEL PERFIL
        ===================================================== -->
 
-  <section id="perfil-contenedor" hidden>
-
-
-    <!-- =================================================
+      <section id="perfil-contenedor" hidden>
+        <!-- =================================================
          INFORMACIÓN PERSONAL
          ================================================= -->
 
-    <section class="tarjeta">
+        <section class="tarjeta">
+          <div class="tarjeta-cabecera">
+            <div>
+              <h2>Información personal</h2>
 
-      <div class="tarjeta-cabecera">
-
-        <div>
-          <h2>Información personal</h2>
-
-          <p>
-            Actualiza los datos que aparecen en tu perfil.
-          </p>
-        </div>
-
-      </div>
-
-
-      <form id="formulario-perfil">
-
-        <div class="formulario-grid">
-
-
-          <div class="campo">
-
-            <label for="nombres">
-              Nombres
-            </label>
-
-            <input
-              id="nombres"
-              name="nombres"
-              type="text"
-              autocomplete="given-name"
-              required>
-
+              <p>Actualiza los datos que aparecen en tu perfil.</p>
+            </div>
           </div>
 
+          <form id="formulario-perfil">
+            <div class="formulario-grid">
+              <div class="campo">
+                <label for="nombres"> Nombres </label>
 
-          <div class="campo">
+                <input id="nombres" name="nombres" type="text" autocomplete="given-name" required />
+              </div>
 
-            <label for="apellidos">
-              Apellidos
-            </label>
+              <div class="campo">
+                <label for="apellidos"> Apellidos </label>
 
-            <input
-              id="apellidos"
-              name="apellidos"
-              type="text"
-              autocomplete="family-name"
-              required>
+                <input
+                  id="apellidos"
+                  name="apellidos"
+                  type="text"
+                  autocomplete="family-name"
+                  required
+                />
+              </div>
 
-          </div>
+              <div class="campo">
+                <label for="apodo"> Apodo </label>
 
+                <input id="apodo" name="apodo" type="text" autocomplete="nickname" required />
 
-          <div class="campo">
+                <small> Cambiar el apodo requiere confirmación y validación. </small>
+              </div>
+            </div>
 
-            <label for="apodo">
-              Apodo
-            </label>
-
-            <input
-              id="apodo"
-              name="apodo"
-              type="text"
-              autocomplete="nickname"
-              required>
-
-            <small>
-              Cambiar el apodo requiere confirmación y validación.
-            </small>
-
-          </div>
-
-
-        </div>
-
-
-        <!-- =========================================
+            <!-- =========================================
              PREFERENCIAS
              ========================================= -->
 
-        <div class="campo">
+            <div class="campo">
+              <label for="preferencias"> Preferencias </label>
 
-          <label for="preferencias">
-            Preferencias
-          </label>
+              <textarea
+                id="preferencias"
+                name="preferencias"
+                rows="5"
+                placeholder="Escribe tus preferencias..."
+              >
+              </textarea>
+            </div>
 
-          <textarea
-            id="preferencias"
-            name="preferencias"
-            rows="5"
-            placeholder="Escribe tus preferencias...">
-                </textarea>
-
-        </div>
-
-
-        <!-- =========================================
+            <!-- =========================================
              AVATAR
              ========================================= -->
 
-        <div class="seccion-avatar">
+            <div class="seccion-avatar">
+              <div class="seccion-avatar-cabecera">
+                <div>
+                  <h3>Avatar</h3>
 
-          <div class="seccion-avatar-cabecera">
+                  <p>Sube una foto tuya (JPG, PNG o WEBP).</p>
+                </div>
+              </div>
 
-            <div>
-              <h3>Avatar</h3>
+              <img id="preview-avatar" class="oculto" alt="Vista previa del avatar" />
 
-              <p>
-                Sube una foto tuya (JPG, PNG o WEBP).
-              </p>
+              <input
+                type="file"
+                id="campo-avatar-archivo"
+                name="avatar"
+                accept="image/jpeg,image/png,image/webp"
+              />
             </div>
 
-          </div>
-
-          <img
-            id="preview-avatar"
-            class="oculto"
-            alt="Vista previa del avatar">
-
-          <input
-            type="file"
-            id="campo-avatar-archivo"
-            name="avatar"
-            accept="image/jpeg,image/png,image/webp">
-
-        </div>
-
-
-        <!-- =========================================
+            <!-- =========================================
              MENSAJE
              ========================================= -->
 
-        <div
-          id="mensaje-perfil"
-          class="mensaje"
-          role="alert"
-          aria-live="polite"
-          hidden>
-        </div>
+            <div id="mensaje-perfil" class="mensaje" role="alert" aria-live="polite" hidden></div>
 
-
-        <!-- =========================================
+            <!-- =========================================
              ACCIONES
              ========================================= -->
 
-        <div class="acciones-formulario">
+            <div class="acciones-formulario">
+              <button id="btn-descartar" type="button" class="btn btn-secundario">
+                Descartar cambios
+              </button>
 
-          <button
-            id="btn-descartar"
-            type="button"
-            class="btn btn-secundario">
-            Descartar cambios
-          </button>
+              <button id="btn-guardar" type="submit" class="btn btn-principal">
+                Guardar cambios
+              </button>
+            </div>
+          </form>
+        </section>
 
-          <button
-            id="btn-guardar"
-            type="submit"
-            class="btn btn-principal">
-            Guardar cambios
-          </button>
+        <!-- =================================================
+         CAMBIAR CONTRASEÑA — HU-AUT-006 (RF-AUT-006)
+         ================================================= -->
 
-        </div>
+        <section class="tarjeta" data-zona="cambiar-password">
+          <div class="tarjeta-cabecera">
+            <div>
+              <h2>Cambiar contraseña</h2>
 
-      </form>
+              <p>
+                Indica tu contraseña actual y la nueva. Debe tener más de 8 caracteres con
+                mayúscula, minúscula, número y símbolo. Las demás sesiones abiertas se cerrarán.
+              </p>
+            </div>
+          </div>
 
-    </section>
+          <form id="formulario-password" autocomplete="off">
+            <div class="formulario-grid">
+              <div class="campo">
+                <label for="password-actual">Contraseña actual</label>
+                <input
+                  id="password-actual"
+                  name="passwordActual"
+                  type="password"
+                  autocomplete="current-password"
+                  required
+                />
+              </div>
 
+              <div class="campo">
+                <label for="password-nueva">Contraseña nueva</label>
+                <input
+                  id="password-nueva"
+                  name="nuevaPassword"
+                  type="password"
+                  autocomplete="new-password"
+                  required
+                />
+              </div>
 
-    <!-- =================================================
+              <div class="campo">
+                <label for="password-confirmacion">Confirmar contraseña nueva</label>
+                <input
+                  id="password-confirmacion"
+                  name="confirmacion"
+                  type="password"
+                  autocomplete="new-password"
+                  required
+                />
+              </div>
+            </div>
+
+            <div
+              class="mensaje"
+              data-zona="mensaje-password"
+              role="alert"
+              aria-live="polite"
+              hidden
+            ></div>
+
+            <div class="acciones-formulario">
+              <button type="button" class="btn btn-secundario" data-accion="cancelar-password">
+                Cancelar
+              </button>
+
+              <button type="submit" class="btn btn-principal" data-accion="guardar-password">
+                Cambiar contraseña
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <!-- =================================================
          INFORMACIÓN DE LA CUENTA
          ================================================= -->
 
-    <section class="tarjeta">
+        <section class="tarjeta">
+          <div class="tarjeta-cabecera">
+            <div>
+              <h2>Información de la cuenta</h2>
 
-      <div class="tarjeta-cabecera">
+              <p>Información básica asociada a tu cuenta.</p>
+            </div>
+          </div>
 
-        <div>
-          <h2>Información de la cuenta</h2>
+          <div class="informacion-cuenta">
+            <div class="dato-cuenta">
+              <span> ID de usuario </span>
 
-          <p>
-            Información básica asociada a tu cuenta.
-          </p>
-        </div>
+              <strong id="usuario-id"> - </strong>
+            </div>
 
-      </div>
+            <div class="dato-cuenta">
+              <span> Correo electrónico </span>
 
+              <strong id="email"> - </strong>
+            </div>
 
-      <div class="informacion-cuenta">
+            <div class="dato-cuenta">
+              <span> Rol </span>
 
-        <div class="dato-cuenta">
+              <strong id="rol"> - </strong>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
 
-                <span>
-                    ID de usuario
-                </span>
+    <script type="module" src="./perfil.js"></script>
+    <!-- HU-AUT-006: modulo propio, con sus pruebas; no toca perfil.js. -->
+    <script type="module">
+      import { montarCambioDePassword } from './cambiar-password.js';
 
-          <strong id="usuario-id">
-            -
-          </strong>
-
-        </div>
-
-
-        <div class="dato-cuenta">
-
-                <span>
-                    Correo electrónico
-                </span>
-
-          <strong id="email">
-            -
-          </strong>
-
-        </div>
-
-
-        <div class="dato-cuenta">
-
-                <span>
-                    Rol
-                </span>
-
-          <strong id="rol">
-            -
-          </strong>
-
-        </div>
-
-      </div>
-
-    </section>
-
-
-  </section>
-
-</main>
-
-<script type="module" src="./perfil.js"></script>
-
-</body>
+      montarCambioDePassword(document);
+    </script>
+  </body>
 </html>

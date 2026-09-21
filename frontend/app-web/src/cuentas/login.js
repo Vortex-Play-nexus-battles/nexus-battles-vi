@@ -2,6 +2,7 @@
 // Vista de inicio de sesión — HU-AUT-004.
 
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
+import { rutaDeVuelta } from '../comun/cabecera-app.js';
 import { setCurrentRole } from './directives/has-permission.directive.js';
 
 const URL_LOGIN = '/api/v1/auth/login';
@@ -161,8 +162,8 @@ form.addEventListener('submit', async (evento) => {
 
     ocultarEstado();
 
-    // TODO equipo: apuntar a la pantalla real post-login cuando exista.
-    window.location.href = './index.html';
+    // HU-UX-001: si se llego al login desde una vista privada, se vuelve a ella.
+    window.location.href = rutaDeVuelta(window.location.search) ?? './index.html';
   } finally {
     botonEnviar.disabled = false;
   }

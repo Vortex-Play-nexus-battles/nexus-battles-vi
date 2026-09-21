@@ -1,6 +1,7 @@
 package com.nexusbattles.plataforma.salaspartidas.configuracion;
 
 import com.nexusbattles.comun.observabilidad.FiltroDeTraza;
+import com.nexusbattles.plataforma.resiliencia.CortaCircuitos;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.AbandonarSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CancelarSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CreditosDelJugador;
@@ -16,10 +17,12 @@ import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDePartida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDeSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDePartidas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
+import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 import java.time.Clock;
@@ -47,8 +50,8 @@ public class ConfiguracionDelServicio {
 
     @Bean
     public IngresarASala ingresarASala(RepositorioDeSalas repositorio, CanalDeSala canal,
-                                       HeroeDelJugador heroes) {
-        return new IngresarASala(repositorio, canal, heroes);
+                                       HeroeDelJugador heroes, CreditosDelJugador creditos) {
+        return new IngresarASala(repositorio, canal, heroes, creditos);
     }
 
     @Bean
@@ -57,8 +60,9 @@ public class ConfiguracionDelServicio {
     }
 
     @Bean
-    public AbandonarSala abandonarSala(RepositorioDeSalas repositorio, CanalDeSala canal) {
-        return new AbandonarSala(repositorio, canal);
+    public AbandonarSala abandonarSala(RepositorioDeSalas repositorio, CanalDeSala canal,
+                                       CreditosDelJugador creditos) {
+        return new AbandonarSala(repositorio, canal, creditos);
     }
 
     @Bean
@@ -91,9 +95,98 @@ public class ConfiguracionDelServicio {
     @Bean
     public com.nexusbattles.plataforma.salaspartidas.aplicacion.EjecutarAccion ejecutarAccion(
             RepositorioDePartidas partidas, CanalDePartida canal,
-            com.nexusbattles.plataforma.salaspartidas.dominio.MotorDeCombate motor) {
+            com.nexusbattles.plataforma.salaspartidas.dominio.MotorDeCombate motor,
+            com.nexusbattles.plataforma.salaspartidas.aplicacion.LiquidarApuesta apuesta,
+            com.nexusbattles.plataforma.salaspartidas.aplicacion.AcreditarRecompensa recompensa) {
         return new com.nexusbattles.plataforma.salaspartidas.aplicacion.EjecutarAccion(
-                partidas, canal, motor);
+                partidas, canal, motor, apuesta, recompensa);
+    }
+
+    /**
+     * HU-JUE-012: al terminar, el resultado se informa al libro para que
+     * acredite la recompensa por jugar. La sancion activa de cada humano se
+     * consulta al mismo servicio que silencia el chat (D-14).
+     */
+    @Bean
+    public com.nexusbattles.plataforma.salaspartidas.aplicacion.AcreditarRecompensa acreditarRecompensa(
+            RepositorioDeSalas salas,
+            com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeRecompensas recompensas,
+            com.nexusbattles.plataforma.salaspartidas.aplicacion.AcreditadorDePartidas libro,
+            com.nexusbattles.plataforma.salaspartidas.chat.SancionesDelJugador sanciones) {
+        return new com.nexusbattles.plataforma.salaspartidas.aplicacion.AcreditarRecompensa(
+                salas, recompensas, libro, sanciones, Clock.systemUTC());
+    }
+
+    /**
+     * HU-JUE-014: liquidacion de la apuesta al terminar.
+     *
+     * <p>{@code salas.apuestas.si-gana-la-maquina} es una decision funcional
+     * que ninguna HU toma (la IA no tiene bolsa a la que pagar); por defecto
+     * se devuelve lo apostado. Ver {@code LiquidarApuesta}.
+     */
+    @Bean
+    public com.nexusbattles.plataforma.salaspartidas.aplicacion.LiquidarApuesta liquidarApuesta(
+            RepositorioDeSalas salas,
+            com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeLiquidaciones liquidaciones,
+            CreditosDelJugador creditos,
+            @org.springframework.beans.factory.annotation.Value("${salas.apuestas.si-gana-la-maquina:LIBERAR}")
+            com.nexusbattles.plataforma.salaspartidas.aplicacion.LiquidarApuesta.SiGanaLaMaquina siGanaLaMaquina) {
+        return new com.nexusbattles.plataforma.salaspartidas.aplicacion.LiquidarApuesta(
+                salas, liquidaciones, creditos, Clock.systemUTC(), siGanaLaMaquina);
+    }
+
+    /** HU-JUE-014, CA-06: las liquidaciones que el libro dejo pendientes se reintentan. */
+    @Bean
+    public com.nexusbattles.plataforma.salaspartidas.aplicacion.ReintentarLiquidaciones reintentarLiquidaciones(
+            com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeLiquidaciones liquidaciones,
+            com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeRecompensas recompensas,
+            RepositorioDePartidas partidas,
+            com.nexusbattles.plataforma.salaspartidas.aplicacion.LiquidarApuesta liquidar,
+            com.nexusbattles.plataforma.salaspartidas.aplicacion.AcreditarRecompensa acreditar,
+            CanalDePartida canal) {
+        return new com.nexusbattles.plataforma.salaspartidas.aplicacion.ReintentarLiquidaciones(
+                liquidaciones, recompensas, partidas, liquidar, acreditar, canal);
+    }
+
+    /**
+     * Cliente hacia el libro de creditos (ms-finanzas, contrato
+     * {@code contracts/openapi/creditos.yaml}) — HU-JUE-014.
+     *
+     * <p>Propio, como los demas. Lleva la credencial de servicio (ADR-005)
+     * cuando esta configurada, igual que el de inventario: ms-finanzas cierra
+     * {@code /creditos/**} y {@code /partidas/**} a {@code ROLE_SERVICIO}
+     * (#455), asi que sin credencial el libro responde 401.
+     */
+    @Bean
+    public CreditosDelJugador creditosDelJugador(
+            @org.springframework.beans.factory.annotation.Value("${salas.creditos.url}") String urlDelLibro,
+            org.springframework.beans.factory.ObjectProvider<
+                    com.nexusbattles.comun.seguridad.servicio.InterceptorDePortadorDeServicio> credencial,
+            @Qualifier("cortaCreditos") CortaCircuitos corta,
+            ClientHttpRequestFactory fabricaConTiempos) {
+        RestClient.Builder constructor = RestClient.builder().requestFactory(fabricaConTiempos);
+        credencial.ifAvailable(constructor::requestInterceptor);
+        return new com.nexusbattles.plataforma.salaspartidas.integracion.ClienteCreditos(
+                constructor.build(), urlDelLibro, corta);
+    }
+
+    /**
+     * Cliente hacia el mismo libro para informar el resultado de la partida
+     * (HU-JUE-012). Comparte URL, credencial y corta circuitos con
+     * {@link #creditosDelJugador}: es el mismo servicio, y si esta caido lo
+     * esta para las dos cosas.
+     */
+    @Bean
+    public com.nexusbattles.plataforma.salaspartidas.aplicacion.AcreditadorDePartidas acreditadorDePartidas(
+            @org.springframework.beans.factory.annotation.Value("${salas.creditos.url}") String urlDelLibro,
+            org.springframework.beans.factory.ObjectProvider<
+                    com.nexusbattles.comun.seguridad.servicio.InterceptorDePortadorDeServicio> credencial,
+            @Qualifier("cortaCreditos") CortaCircuitos corta,
+            ClientHttpRequestFactory fabricaConTiempos) {
+        RestClient.Builder constructor = RestClient.builder().requestFactory(fabricaConTiempos);
+        credencial.ifAvailable(constructor::requestInterceptor);
+        return new com.nexusbattles.plataforma.salaspartidas.integracion.ClienteAcreditacionDePartidas(
+                constructor.build(), urlDelLibro, corta);
     }
 
     /**
@@ -101,14 +194,17 @@ public class ConfiguracionDelServicio {
      *
      * <p>Propio y no compartido con el de inventario: son dos integraciones
      * distintas y el dia que una necesite su propio tiempo de espera no debe
-     * arrastrar a la otra.
+     * arrastrar a la otra. Por eso mismo cada uno lleva su corta circuitos
+     * (HU-DIS-003, ver {@link ConfiguracionDeResiliencia}).
      */
     @Bean
     public com.nexusbattles.plataforma.salaspartidas.dominio.MotorDeCombate motorDeCombate(
             @org.springframework.beans.factory.annotation.Value("${motor.combate.url:http://localhost:8104}")
-            String urlDelMotor) {
+            String urlDelMotor,
+            @Qualifier("cortaMotorCombate") CortaCircuitos corta,
+            ClientHttpRequestFactory fabricaConTiempos) {
         return new com.nexusbattles.plataforma.salaspartidas.integracion.ClienteMotorCombate(
-                RestClient.builder().build(), urlDelMotor);
+                RestClient.builder().requestFactory(fabricaConTiempos).build(), urlDelMotor, corta);
     }
 
     /** RF-JUE-017: estado de la partida, para pintar y para reconectar. */
@@ -123,10 +219,25 @@ public class ConfiguracionDelServicio {
      * <p>Propio y no compartido con el del chat: son dos integraciones
      * distintas, con proveedores distintos, y el dia que una necesite un tiempo
      * de espera o un interceptor suyo no debe arrastrar a la otra.
+     *
+     * <p>Lleva la credencial de servicio de salas-partidas (ADR-001 via el
+     * emisor transitorio de ADR-005) cuando esta configurada
+     * ({@code DIRECTORIO_ACTIVO_*}): inventario ya no cree en
+     * {@code X-User-Name} a secas, solo cuando se la manda un servicio
+     * autenticado. Sin credencial configurada el cliente sale sin
+     * {@code Authorization} y la puerta de heroe respondera 503, que es lo que
+     * corresponde: mejor un fallo visible que verificar el heroe de nadie.
      */
     @Bean
-    public RestClient restClientInventario() {
-        return RestClient.builder().build();
+    public RestClient restClientInventario(
+            org.springframework.beans.factory.ObjectProvider<
+                    com.nexusbattles.comun.seguridad.servicio.InterceptorDePortadorDeServicio> credencial,
+            ClientHttpRequestFactory fabricaConTiempos) {
+        // Con tiempos de espera acotados (HU-DIS-003): ver
+        // ConfiguracionDeResiliencia.fabricaDePeticionesConTiempos.
+        RestClient.Builder constructor = RestClient.builder().requestFactory(fabricaConTiempos);
+        credencial.ifAvailable(constructor::requestInterceptor);
+        return constructor.build();
     }
 
     /**

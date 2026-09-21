@@ -104,6 +104,9 @@ public class PublicarSubastaApplicationService {
             subasta.setHabilidades(producto.habilidades()); subasta.setCantidadPujas(0); subasta.setEsMaestroDeJuego(quien.esMaestroDeJuego()); subasta.setVistas(0);
             PublicarSubastaResponse respuesta = PublicarSubastaResponse.desde(subastas.saveAndFlush(subasta), comision);
             return respuesta;
+        } catch (FinanzasPublicacionClientException e) {
+            ejecucion.finanzasInciertas = e.resultadoIncierto();
+            throw e;
         } catch (DataIntegrityViolationException e) {
             if (esUnidadActivaDuplicada(e)) {
                 throw new PublicacionSubastaException(CONFLICTO, "El elemento ya tiene una subasta activa", e);
@@ -129,6 +132,7 @@ public class PublicarSubastaApplicationService {
         private UUID subasta;
         private boolean reservado;
         private boolean debitado;
+        private boolean finanzasInciertas;
         private PublicarSubastaResponse respuesta;
 
         private Ejecucion(String clave, UUID titular, String claveExterna) {
@@ -153,18 +157,26 @@ public class PublicarSubastaApplicationService {
 
         private void revertir() {
             try {
-                compensar(elemento, subasta, claveExterna, reservado, debitado);
+                if (!compensar(elemento, subasta, claveExterna, reservado, debitado)) finanzasInciertas = true;
             } finally {
-                idempotencia.liberar(clave, titular);
+                if (finanzasInciertas) {
+                    idempotencia.marcarIncierta(clave, titular);
+                    log.error("Resultado financiero incierto para subasta {}; requiere conciliacion", subasta);
+                } else idempotencia.liberar(clave, titular);
             }
         }
     }
 
-    private void compensar(String elemento, UUID subasta, String clave, boolean reservado, boolean debitado) {
+    private boolean compensar(String elemento, UUID subasta, String clave, boolean reservado, boolean debitado) {
+        boolean finanzasResueltas = true;
         if (debitado) try { finanzas.compensarDebito(subasta, "publicacion-fallida"); }
-        catch (RuntimeException fallo) { log.error("No se pudo compensar comision de subasta {}; requiere conciliacion", subasta, fallo); }
+        catch (RuntimeException fallo) {
+            finanzasResueltas = false;
+            log.error("No se pudo compensar comision de subasta {}; requiere conciliacion", subasta, fallo);
+        }
         if (reservado) try { inventario.liberarReserva(elemento, subasta, clave); }
         catch (RuntimeException fallo) { log.error("No se pudo liberar reserva de subasta {}; requiere conciliacion", subasta, fallo); }
+        return finanzasResueltas;
     }
     private static String huella(PublicarSubastaRequest s) {
         String texto = s.elementoInventarioId()+"|"+s.productoId()+"|"+s.duracion()+"|"+s.precioInicial()+"|"+s.precioCompraInmediata();

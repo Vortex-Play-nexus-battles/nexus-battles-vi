@@ -98,6 +98,7 @@ public final class HiloDeComentarios {
     private final Set<String> formatosAdmitidos;
     private final List<Comentario> comentarios = new ArrayList<>();
     private final Set<String> yaCalificaron = new LinkedHashSet<>();
+    private boolean ultimaCalificacionDescartada;
 
     private HiloDeComentarios(String productoId, Set<String> formatosAdmitidos) {
         this.productoId = productoId;
@@ -195,11 +196,12 @@ public final class HiloDeComentarios {
             }
         }
 
+        // RF-COM-002 / D-07: la segunda calificacion no se rechaza; el
+        // comentario entra sin estrellas y se dice (calificacionDescartada).
         Integer estrellas = solicitud.estrellas();
-        if (estrellas != null && yaCalificaron.contains(solicitud.autorId())) {
-            throw new PublicacionRechazada(
-                    MotivoDeRechazo.CALIFICACION_DUPLICADA,
-                    "Ya calificaste este producto");
+        boolean calificacionDescartada = estrellas != null && yaCalificaron.contains(solicitud.autorId());
+        if (calificacionDescartada) {
+            estrellas = null;
         }
 
         Comentario comentario = new Comentario(
@@ -219,7 +221,64 @@ public final class HiloDeComentarios {
             yaCalificaron.add(solicitud.autorId());
         }
         comentarios.add(comentario);
+        ultimaCalificacionDescartada = calificacionDescartada;
         return comentario;
+    }
+
+    /**
+     * Si la ultima publicacion entro sin la calificacion que traia porque el
+     * autor ya habia calificado (RF-COM-002, D-07). Para que la respuesta lo
+     * diga sin tratarlo como error.
+     */
+    public boolean ultimaCalificacionDescartada() {
+        return ultimaCalificacionDescartada;
+    }
+
+    /**
+     * Retira un comentario propio — HU-COM-004.
+     *
+     * <p>Idempotente: retirar uno ya retirado devuelve el mismo, sin error
+     * (CA-03). El de otro jugador es {@link ComentarioAjeno} (CA-02) y uno que
+     * no esta en este hilo es {@link ComentarioNoEncontrado}. Al retirarlo se
+     * libera su calificacion (ver {@link Comentario#eliminado()}).
+     *
+     * @return el comentario ya retirado
+     */
+    public Comentario eliminar(String comentarioId, String autorId) {
+        Objects.requireNonNull(autorId, "hace falta saber quien retira el comentario");
+        for (int i = 0; i < comentarios.size(); i++) {
+            Comentario comentario = comentarios.get(i);
+            if (!comentario.id().equals(comentarioId)) {
+                continue;
+            }
+            if (!comentario.esDe(autorId)) {
+                throw new ComentarioAjeno(comentarioId);
+            }
+            if (comentario.estaEliminado()) {
+                return comentario;
+            }
+            Comentario retirado = comentario.eliminado();
+            comentarios.set(i, retirado);
+            if (comentario.calificacion().isPresent()) {
+                yaCalificaron.remove(autorId);
+            }
+            return retirado;
+        }
+        throw new ComentarioNoEncontrado(comentarioId);
+    }
+
+    /** El comentario no esta en este hilo (o nunca existio). */
+    public static final class ComentarioNoEncontrado extends RuntimeException {
+        public ComentarioNoEncontrado(String comentarioId) {
+            super("no hay ningun comentario " + comentarioId + " en este producto");
+        }
+    }
+
+    /** El comentario es de otro jugador: solo su autor puede retirarlo. */
+    public static final class ComentarioAjeno extends RuntimeException {
+        public ComentarioAjeno(String comentarioId) {
+            super("el comentario " + comentarioId + " no es tuyo");
+        }
     }
 
     /** Si ese jugador ya gasto su unica calificacion sobre este producto. */

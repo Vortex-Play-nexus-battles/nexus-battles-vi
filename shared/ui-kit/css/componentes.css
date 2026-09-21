@@ -293,6 +293,52 @@
 
 
 /* =======================================================================
+   Seccion degradada — HU-DIS-003 · RNF-DIS-003 · MAPEO-ERRORES §5.5
+   Se pinta EN EL HUECO de la seccion que depende de un servicio caido;
+   el resto de la vista queda como esta. No es un Aviso (§5.2) ni un
+   Estado de vista (§5.1): el tono es de advertencia, no de error, porque
+   la degradacion es temporal y lo demas sigue funcionando.
+   Lo rellena frontend/app-web/src/comun/degradacion/aviso-degradacion.js.
+   ======================================================================= */
+
+.seccion-degradada {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--advertencia);
+  border-left-width: 4px;
+  border-radius: var(--radio);
+  background: var(--advertencia-insignia);
+  font-size: var(--t-cuerpo-tam);
+  color: var(--texto);
+}
+
+.seccion-degradada__titulo {
+  font-family: var(--t-etiqueta-familia);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.seccion-degradada__espera { color: var(--texto-2); }
+
+/* El reintento es el boton secundario del kit: la degradacion no es la
+   accion principal de la vista, es la salida de un estado temporal. */
+.seccion-degradada__reintentar {
+  align-self: flex-start;
+  padding: var(--e-2) var(--e-4);
+  border: 1px solid var(--primaria-relleno);
+  border-radius: var(--radio);
+  background: transparent;
+  color: var(--primaria-relleno);
+  font-family: var(--t-etiqueta-familia);
+  font-weight: var(--t-etiqueta-peso);
+  cursor: pointer;
+}
+
+.seccion-degradada__reintentar:hover { background: var(--fondo); }
+
+
+/* =======================================================================
    Barra de vida
    HU-SAL-005 · RF-JUE-009 y RN-COM-005
    -----------------------------------------------------------------------
@@ -2261,3 +2307,151 @@
 }
 
 .chatbot-flotante:hover { background: var(--acento-relleno); }
+
+/* =======================================================================
+   Cabecera de la aplicación — HU-UX-001 (src/comun/cabecera-app.js)
+   Lo que la barra única añade sobre `.cabecera` de Figma: la marca como
+   enlace, el estado sin sesión, el botón de cuenta con su menú y el
+   comportamiento en pantallas estrechas. Ninguna vista escribe su propia
+   barra: todas montan esta.
+   ======================================================================= */
+
+/* Vistas que todavía no cargan base.css (cuentas, inventario, subastas):
+   sin esto el contador de la campana y el menú cerrado se pintan igual. */
+.cabecera [hidden] {
+  display: none !important;
+}
+
+/* La cabecera fija su propia tipografía y ancho: no hereda la de la vista
+   (vitrina.css, tema-cuentas.css), que la desalineaba y partía la navegación. */
+.cabecera {
+  box-sizing: border-box;
+  width: 100%;
+  font-family: var(--fuente-texto, inherit);
+  font-size: 1rem;
+}
+.cabecera *,
+.cabecera *::before,
+.cabecera *::after {
+  box-sizing: border-box;
+}
+.cabecera__nav {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.cabecera__marca,
+.cabecera__marca:hover,
+.cabecera__marca:visited {
+  color: inherit;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.cabecera__marca:focus-visible,
+.cabecera__destino:focus-visible,
+.cabecera__campana:focus-visible,
+.cabecera__cuenta-boton:focus-visible {
+  outline: 2px solid var(--acento-relleno);
+  outline-offset: 2px;
+  border-radius: var(--radio);
+}
+
+.cabecera__destino:hover:not(.cabecera__destino--pendiente) {
+  border-bottom-color: var(--pista);
+}
+
+/* Sin sesión: dos botones y, si la sesión caducó, la razón. */
+.cabecera__sesion {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+}
+
+.cabecera__aviso-sesion {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--pista);
+  margin-right: var(--e-2);
+}
+
+/* Con sesión: el grupo de cuenta es un botón que despliega el menú. */
+.cabecera__cuenta {
+  position: relative;
+}
+
+.cabecera__cuenta-boton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+  padding: var(--e-1) var(--e-2);
+  border: 0;
+  border-radius: var(--radio);
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.cabecera__cuenta-boton:hover,
+.cabecera__cuenta-boton[aria-expanded='true'] {
+  background: var(--cromo-elevado);
+}
+
+/* El avatar sin imagen muestra la inicial del apodo. */
+.cabecera__avatar {
+  display: inline-grid;
+  place-items: center;
+  color: var(--texto-sobre-color);
+  font-family: var(--t-etiqueta-familia);
+  font-weight: var(--t-etiqueta-peso);
+  font-size: var(--t-etiqueta-tam);
+}
+
+.cabecera__menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--e-2));
+  z-index: 30;
+  color: var(--texto);
+  text-transform: none;
+}
+
+.cabecera__menu .menu__grupo {
+  padding: 0;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.cabecera__menu .menu__opcion {
+  text-decoration: none;
+  font-size: var(--t-cuerpo-tam);
+}
+.cabecera__menu .menu__opcion:first-child {
+  border-top: 0;
+}
+
+/* Pantallas estrechas: la navegación baja a una segunda fila, nunca se
+   pierde un destino (RF-INV-004 exige los seis). RNF-USA-001. */
+@media (max-width: 860px) {
+  .cabecera {
+    flex-wrap: wrap;
+    row-gap: var(--e-2);
+    padding: var(--e-2) var(--e-4);
+  }
+  .cabecera__grupo-marca {
+    flex-wrap: wrap;
+    gap: var(--e-4);
+  }
+  .cabecera__nav {
+    order: 3;
+    flex-basis: 100%;
+    flex-wrap: wrap;
+    gap: var(--e-4);
+  }
+  .cabecera__acciones {
+    margin-left: auto;
+  }
+  .cabecera__identidad {
+    display: none;
+  }
+}

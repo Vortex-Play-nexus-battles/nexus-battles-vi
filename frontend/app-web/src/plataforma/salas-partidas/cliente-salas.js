@@ -61,6 +61,14 @@ export class ErrorDeApi extends Error {
     this.estado = problema?.status ?? estado;
     /** @type {Array<{campo: string, mensaje: string}>} */
     this.errores = Array.isArray(problema?.errores) ? problema.errores : [];
+    /**
+     * El problem detail entero, tal como llego. Hace falta para las
+     * propiedades que no son de la regla 4 base -`seccion`,
+     * `reintentarEnSegundos` de HU-DIS-003- y que decide otro componente
+     * (`comun/degradacion/aviso-degradacion.js`), no este.
+     * @type {object}
+     */
+    this.problema = problema && typeof problema === 'object' ? problema : {};
   }
 
   /** True cuando el rechazo se puede corregir campo a campo en el formulario. */
@@ -143,6 +151,74 @@ export async function ingresarASala(idSala, { fetchImpl = fetchWithHttpErrorInte
 
   if (respuesta.ok) {
     return respuesta.json();
+  }
+
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+}
+
+/**
+ * Trae una sala por su identificador — `GET /salas/{idSala}`.
+ *
+ * La vista de espera lo necesita para saber quien es el anfitrion (y por
+ * tanto si ofrece «Cancelar sala» o «Salir de la sala», HU-SAL-006) y cuanta
+ * gente hay dentro. Al anfitrion le llega ademas el codigo de invitacion.
+ *
+ * @param {string} idSala
+ * @param {{fetchImpl?: Function}} [opciones] inyeccion para las pruebas
+ * @returns {Promise<object>} segun el esquema Sala del contrato
+ * @throws {ErrorDeApi} 404 si no existe
+ */
+export async function obtenerSala(idSala, { fetchImpl = fetchWithHttpErrorInterceptor } = {}) {
+  const respuesta = await fetchImpl(ruta(`/${encodeURIComponent(idSala)}`));
+
+  if (respuesta.ok) {
+    return respuesta.json();
+  }
+
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+}
+
+/**
+ * Sale de una sala antes de que empiece — HU-SAL-006, operacion
+ * `abandonarSala` del contrato (`DELETE /salas/{idSala}/participantes`).
+ *
+ * Quien sale es quien firma el token: no viaja ningun identificador. Si la
+ * sala tenia recompensa, el servidor devuelve la reserva (HU-JUE-014).
+ *
+ * @param {string} idSala
+ * @param {{fetchImpl?: Function}} [opciones] inyeccion para las pruebas
+ * @returns {Promise<void>}
+ * @throws {ErrorDeApi} 404 no existe · 409 no estas dentro, eres el anfitrion o ya empezo
+ */
+export async function abandonarSala(idSala, { fetchImpl = fetchWithHttpErrorInterceptor } = {}) {
+  const respuesta = await fetchImpl(ruta(`/${encodeURIComponent(idSala)}/participantes`), {
+    method: 'DELETE',
+  });
+
+  if (respuesta.ok) {
+    return;
+  }
+
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+}
+
+/**
+ * Cancela una sala — HU-SAL-006, operacion `cancelarSala` del contrato
+ * (`DELETE /salas/{idSala}`). Solo el anfitrion, y solo antes de empezar; el
+ * servidor lo comprueba con el token.
+ *
+ * @param {string} idSala
+ * @param {{fetchImpl?: Function}} [opciones] inyeccion para las pruebas
+ * @returns {Promise<void>}
+ * @throws {ErrorDeApi} 403 no eres el anfitrion · 404 no existe · 409 ya empezo o ya no esta activa
+ */
+export async function cancelarSala(idSala, { fetchImpl = fetchWithHttpErrorInterceptor } = {}) {
+  const respuesta = await fetchImpl(ruta(`/${encodeURIComponent(idSala)}`), {
+    method: 'DELETE',
+  });
+
+  if (respuesta.ok) {
+    return;
   }
 
   throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);

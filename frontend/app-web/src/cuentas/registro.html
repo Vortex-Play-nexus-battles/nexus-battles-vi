@@ -4,9 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Crear cuenta — NEXUS BATTLES VI</title>
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
     <link rel="stylesheet" href="./registro.css" />
   </head>
   <body>
+    <div data-cabecera-app></div>
     <main class="pagina-auth">
       <section class="tarjeta">
         <h1 class="titulo-grande">NEXUS BATTLES VI</h1>
@@ -131,5 +134,11 @@
     </dialog>
 
     <script type="module" src="./registro.js"></script>
+    <script type="module">
+      import { montarCabecera } from '../comun/cabecera-app.js';
+
+      // Cabecera unica de la aplicacion (HU-UX-001).
+      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: null });
+    </script>
   </body>
 </html>

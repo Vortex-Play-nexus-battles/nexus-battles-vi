@@ -10,6 +10,12 @@
  * @module combate
  */
 
+import {
+  esSeccionDegradada,
+  pintarSeccionDegradada,
+  limpiarSeccionDegradada,
+} from '../../comun/degradacion/aviso-degradacion.js';
+
 /** Destino `accionDelJugador` del AsyncAPI. Prefijo de envío `/app`. */
 export function destinoDeAccion(idPartida) {
   return `/app/partidas/${idPartida}/acciones`;
@@ -95,10 +101,31 @@ function huellaDe(aviso) {
     return `${aviso.tipo}#${aviso.idPartida}#${aviso.numeroTurno}`;
   }
   if (aviso.tipo === PARTIDA_FINALIZADA) {
-    // Una partida termina una sola vez.
-    return `${aviso.tipo}#${aviso.idPartida}`;
+    // Una partida termina una sola vez... pero el servidor puede anunciar el
+    // final dos veces a proposito: primero sin `reparto` (el libro de creditos
+    // no respondio, HU-JUE-014 CA-06) y despues con el, cuando la liquidacion
+    // se cierra. Ese segundo aviso no es un duplicado: trae lo que faltaba.
+    // Lo mismo con `recompensa` (HU-JUE-012): sale cuando el libro acredita
+    // los creditos por jugar, y puede llegar en un aviso posterior.
+    const conReparto = Array.isArray(aviso.reparto) && aviso.reparto.length > 0;
+    const conRecompensa = Array.isArray(aviso.recompensa) && aviso.recompensa.length > 0;
+    return `${aviso.tipo}#${aviso.idPartida}#${conReparto ? 'con-reparto' : 'sin-reparto'}#${conRecompensa ? 'con-recompensa' : 'sin-recompensa'}`;
   }
   return null;
+}
+
+/**
+ * Cuantos creditos netos gano o perdio quien mira, segun el `reparto` del
+ * aviso de fin (HU-JUE-014, CA-04). `null` si el aviso no trae reparto: sin
+ * apuesta, o con la liquidacion todavia pendiente.
+ *
+ * @param {{reparto?: Array<{idJugador: string, creditos: number}>}} aviso
+ * @param {string} yo
+ * @returns {number|null}
+ */
+export function creditosDe(aviso, yo) {
+  const entrada = (aviso?.reparto ?? []).find((r) => r?.idJugador === yo);
+  return entrada && Number.isFinite(entrada.creditos) ? entrada.creditos : null;
 }
 
 /**
@@ -107,16 +134,90 @@ function huellaDe(aviso) {
  * Sin ganadores es empate: el servidor lo deja vacío cuando nadie quedó en pie,
  * y decirlo es más honesto que inventar un vencedor.
  *
- * @param {{ganadores?: string[]}} aviso
+ * En el modo cooperativo (HU-SAL-004) el aviso trae `equipoGanador` y se dice
+ * el equipo: quien mira puede haber caido y aun asi haber ganado con los suyos.
+ *
+ * @param {{ganadores?: string[], equipoGanador?: number}} aviso
  * @param {string} yo identificador del jugador que mira
+ * @param {number|null} [miEquipo] equipo de quien mira, si la partida es por equipos
  * @returns {string}
  */
-export function textoDelResultado(aviso, yo) {
+export function textoDelResultado(aviso, yo, miEquipo = null) {
   const ganadores = aviso?.ganadores ?? [];
-  if (ganadores.length === 0) {
-    return 'Combate terminado en empate.';
+  const equipo = aviso?.equipoGanador;
+  let base = 'Combate terminado en empate.';
+  if (Number.isInteger(equipo) && equipo > 0) {
+    const gane = ganadores.includes(yo) || (miEquipo !== null && miEquipo === equipo);
+    base = gane
+      ? `Tu equipo (${equipo}) ha ganado el combate.`
+      : `Gana el equipo ${equipo}. Tu equipo ha perdido.`;
+  } else if (ganadores.length > 0) {
+    base = ganadores.includes(yo) ? 'Has ganado el combate.' : 'Has perdido el combate.';
   }
-  return ganadores.includes(yo) ? 'Has ganado el combate.' : 'Has perdido el combate.';
+  return `${base}${textoDelReparto(aviso, yo)}${textoDeLaRecompensa(aviso, yo)}`;
+}
+
+/**
+ * Lo que el libro acredito por jugar a quien mira (HU-JUE-012): `{creditos,
+ * ganador, cofre}` o `null` si el aviso no trae su recompensa (pendiente, ya
+ * anunciada, o sancionado).
+ *
+ * @param {{recompensa?: Array<{idJugador: string, creditos: number, ganador: boolean, cofre?: string}>}} aviso
+ * @param {string} yo
+ * @returns {{creditos: number, ganador: boolean, cofre: string|null}|null}
+ */
+export function recompensaDe(aviso, yo) {
+  const entrada = (aviso?.recompensa ?? []).find((r) => r?.idJugador === yo);
+  if (!entrada || !Number.isFinite(entrada.creditos)) {
+    return null;
+  }
+  return {
+    creditos: entrada.creditos,
+    ganador: entrada.ganador === true,
+    cofre: entrada.cofre ?? null,
+  };
+}
+
+/**
+ * Coletilla de la recompensa por jugar (HU-JUE-012): cuantos creditos se
+ * ganaron por ganar o por participar, y el cofre si toco uno. Vacia si el
+ * aviso no la trae.
+ *
+ * @param {object} aviso
+ * @param {string} yo
+ * @returns {string}
+ */
+function textoDeLaRecompensa(aviso, yo) {
+  const recompensa = recompensaDe(aviso, yo);
+  if (recompensa === null) {
+    return '';
+  }
+  const plural = recompensa.creditos === 1 ? 'credito' : 'creditos';
+  const motivo = recompensa.ganador ? 'por ganar' : 'por participar';
+  const cofre = recompensa.cofre ? ' Ademas te llevas un cofre.' : '';
+  return ` Ganas ${recompensa.creditos} ${plural} ${motivo}.${cofre}`;
+}
+
+/**
+ * Coletilla economica del resultado (HU-JUE-014, CA-04): que paso con la
+ * apuesta de quien mira. Vacia si el aviso no trae reparto.
+ *
+ * @param {object} aviso
+ * @param {string} yo
+ * @returns {string}
+ */
+function textoDelReparto(aviso, yo) {
+  const creditos = creditosDe(aviso, yo);
+  if (creditos === null) {
+    return '';
+  }
+  if (creditos > 0) {
+    return ` Te llevas ${creditos} creditos de la apuesta.`;
+  }
+  if (creditos < 0) {
+    return ` Pierdes los ${-creditos} creditos que apostaste.`;
+  }
+  return ' Se te devuelven los creditos apostados.';
 }
 
 /**
@@ -127,17 +228,39 @@ export function textoDelResultado(aviso, yo) {
  * @param {string} opciones.idPartida
  * @param {string} opciones.yo identificador del jugador de esta sesión
  * @param {Array<object>} opciones.participantes esquema del panel: `{jugador:{id}}`
+ * @param {string} [opciones.turnoDe]
+ *   De quién es el turno AHORA MISMO, si ya se sabe: `turnoActual.idJugador`
+ *   de `GET /partidas/{id}`. Sin esto los botones nacen cerrados y solo los
+ *   abre un `partida.turno.cambiado`, que el servidor únicamente emite
+ *   DESPUÉS de que alguien juegue (`AvanzarTurno`). En el turno 1 nadie ha
+ *   jugado todavía, así que el combate no podía arrancar desde el navegador,
+ *   y recargar a mitad de partida dejaba al jugador sin poder actuar hasta
+ *   que lo hiciera el rival.
  * @param {(accion: object) => void} opciones.alAtacar
- * @returns {{recibir: (aviso: object) => void}}
+ * @returns {{recibir: (aviso: object) => void, rechazar: (problema: object) => boolean}}
  */
-export function montarControlesDeCombate(raiz, { idPartida, yo, participantes, alAtacar }) {
+export function montarControlesDeCombate(
+  raiz,
+  { idPartida, yo, participantes, turnoDe, alAtacar },
+) {
   const zona = raiz.querySelector('[data-zona="acciones"]');
   const aviso = raiz.querySelector('[data-zona="resultado"]');
+  // HU-DIS-003: hueco de «Seccion degradada» cuando el motor de combate no
+  // responde; y la zona para los demas rechazos de la cola privada.
+  const zonaDegradacion = raiz.querySelector('[data-zona="degradacion"]');
+  const zonaRechazo = raiz.querySelector('[data-zona="rechazo"]');
   const registro = registroDeAvisos();
   const doc = raiz.ownerDocument ?? document;
+  /** La ultima accion enviada, para poder reintentarla tal cual. */
+  let ultimaAccion = null;
 
-  /** Rivales: a uno mismo no se ataca. */
-  const rivales = (participantes ?? []).filter((p) => p.jugador?.id !== yo);
+  // Rivales: a uno mismo no se ataca, ni a un companero de equipo en el modo
+  // cooperativo (HU-SAL-004): el servidor lo rechazaria, y ofrecer el boton
+  // seria invitar al error.
+  const miEquipo = (participantes ?? []).find((p) => p.jugador?.id === yo)?.equipo ?? null;
+  const rivales = (participantes ?? []).filter(
+    (p) => p.jugador?.id !== yo && (miEquipo === null || p.equipo !== miEquipo),
+  );
 
   if (zona) {
     zona.innerHTML = '';
@@ -152,9 +275,19 @@ export function montarControlesDeCombate(raiz, { idPartida, yo, participantes, a
     zona.addEventListener('click', (evento) => {
       const boton = evento.target.closest('[data-atacar]');
       if (boton && !boton.disabled) {
-        alAtacar({ idObjetivo: boton.dataset.atacar, codigoAccion: 'ATAQUE_BASICO' });
+        atacar({ idObjetivo: boton.dataset.atacar, codigoAccion: 'ATAQUE_BASICO' });
       }
     });
+  }
+
+  function atacar(accion) {
+    ultimaAccion = accion;
+    limpiarSeccionDegradada(zonaDegradacion);
+    if (zonaRechazo) {
+      zonaRechazo.hidden = true;
+      zonaRechazo.textContent = '';
+    }
+    alAtacar(accion);
   }
 
   /** Solo se puede atacar en el turno propio. */
@@ -164,11 +297,54 @@ export function montarControlesDeCombate(raiz, { idPartida, yo, participantes, a
     }
   }
 
-  habilitar(false);
+  // Con `turnoDe` conocido se decide ya; sin él, cerrados, que es lo prudente:
+  // abrir un botón que el servidor va a rechazar es peor que hacer esperar.
+  habilitar(Boolean(turnoDe) && turnoDe === yo);
 
   return {
+    /**
+     * Un rechazo llegado por la cola privada del jugador (`errorDeCanal`).
+     *
+     * Si es una seccion degradada (HU-DIS-003: el motor no responde), se
+     * pinta el componente comun sobre los controles, que siguen vivos porque
+     * la accion no se aplico y el turno sigue siendo del jugador; Reintentar
+     * vuelve a mandar la misma accion. Cualquier otro rechazo va a la zona
+     * de rechazo con el texto del servicio. Devuelve si lo gestiono.
+     *
+     * @param {object} problema problem detail del contrato
+     * @returns {boolean}
+     */
+    rechazar(problema) {
+      if (esSeccionDegradada(problema)) {
+        if (!zonaDegradacion) {
+          return false;
+        }
+        pintarSeccionDegradada(zonaDegradacion, problema, {
+          alReintentar: () => {
+            if (ultimaAccion) {
+              atacar(ultimaAccion);
+            } else {
+              limpiarSeccionDegradada(zonaDegradacion);
+            }
+          },
+        });
+        return true;
+      }
+      if (!zonaRechazo) {
+        return false;
+      }
+      zonaRechazo.textContent = problema?.detail ?? problema?.title ?? 'La accion fue rechazada.';
+      zonaRechazo.hidden = false;
+      return true;
+    },
+
     recibir(mensaje) {
       if (registro.yaVisto(mensaje)) {
+        return;
+      }
+      if (mensaje?.tipo === ACCION_RESUELTA && mensaje.idPartida === idPartida) {
+        // El motor volvio a contestar: la degradacion, si la habia, ya paso.
+        limpiarSeccionDegradada(zonaDegradacion);
         return;
       }
       if (mensaje?.tipo === TURNO_CAMBIADO && mensaje.idPartida === idPartida) {
@@ -181,7 +357,7 @@ export function montarControlesDeCombate(raiz, { idPartida, yo, participantes, a
           zona.hidden = true;
         }
         if (aviso) {
-          aviso.textContent = textoDelResultado(mensaje, yo);
+          aviso.textContent = textoDelResultado(mensaje, yo, miEquipo);
           aviso.hidden = false;
         }
       }

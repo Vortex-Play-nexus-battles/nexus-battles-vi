@@ -32,3 +32,36 @@ spring:
   flyway:
     schemas: moderacion_sanciones
     default-schema: moderacion_sanciones
+
+# --- Sanciones (HU-USR-004..007) y sus avisos (HU-NOT-005) -------------------
+sanciones:
+  suspension:
+    # Rango de una suspension temporal. La ficha habla de horas, dias o
+    # semanas y no fija el tope: 30 dias por defecto, decision D-20.
+    minima-horas: ${SANCIONES_SUSPENSION_MINIMA_HORAS:1}
+    maxima-dias: ${SANCIONES_SUSPENSION_MAXIMA_DIAS:30}
+  notificaciones:
+    # Bandeja del jugador (contracts/openapi/notificaciones.yaml, /internal
+    # exige la credencial de servicio de ADR-005: DIRECTORIO_ACTIVO_*).
+    url: ${NOTIFICACIONES_URL:http://localhost:8085/api/v1}
+  avisos:
+    # Cada cuanto se reintentan los avisos que no entraron (CA-04 de HU-NOT-005).
+    reintento-ms: ${SANCIONES_AVISOS_REINTENTO_MS:15000}
+
+# Credencial de servicio (ADR-005) con la que este servicio habla a
+# notificaciones. Sin client-id no se crea ninguna: en local los avisos
+# quedan pendientes y en la bitacora.
+seguridad:
+  servicio:
+    url: ${DIRECTORIO_ACTIVO_URL:}
+    client-id: ${DIRECTORIO_ACTIVO_CLIENT_ID:}
+    client-secret: ${DIRECTORIO_ACTIVO_CLIENT_SECRET:}
+
+# Regla 3 de plataforma: todo servicio expone salud Y metricas. Hasta el
+# 2026-09-21 este servicio solo exponia health (valor por omision de Actuator)
+# y el tablero tecnico de HU-MET-004 lo veia como brecha de observabilidad.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus

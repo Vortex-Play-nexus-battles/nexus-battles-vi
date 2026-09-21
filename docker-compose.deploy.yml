@@ -72,6 +72,12 @@ services:
   srv-comentarios:
     <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-comentarios:${TAG}
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      # HU-COM-001 / RF-USR-004: la sancion activa del autor se consulta en
+      # moderacion-sanciones, que corre en este host (misma nota que en
+      # srv-salas-partidas: sin esto localhost seria el propio contenedor).
+      SANCIONES_URL: ${SANCIONES_URL:-http://srv-moderacion-sanciones:8086/api/v1}
 
   srv-correo:
     <<: *servicio-plataforma
@@ -80,10 +86,40 @@ services:
   srv-torneos:
     <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-torneos:${TAG}
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      # M13: lista negra y sanciones en moderacion-sanciones (este host); el
+      # libro de creditos NO corre en dev (ver srv-salas-partidas): una
+      # inscripcion con costo > 0 responde 503 libro-no-disponible y un torneo
+      # gratuito (costo 0) funciona completo. Credencial propia (ADR-005).
+      LISTA_NEGRA_VERIFICAR_URL: ${LISTA_NEGRA_VERIFICAR_URL:-http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar}
+      SANCIONES_URL: ${SANCIONES_URL:-http://srv-moderacion-sanciones:8086/api/v1}
+      CREDITOS_URL: ${CREDITOS_URL:-http://srv-ms-finanzas:8093/api/v1}
+      DIRECTORIO_ACTIVO_URL: ${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}
+      DIRECTORIO_ACTIVO_CLIENT_ID: torneos
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_TORNEOS:-}
 
   srv-salas-partidas:
     <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-salas-partidas:${TAG}
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      # Credencial de servicio propia (ADR-005) para hablar con inventario.
+      # El .env es compartido, asi que el client_id va aqui y el secreto
+      # sale de la variable por servicio que genera desplegar.sh.
+      DIRECTORIO_ACTIVO_CLIENT_ID: salas-partidas
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_SALAS_PARTIDAS:-}
+      # HU-JUE-014: el libro de creditos. ms-finanzas NO corre en el host de
+      # dev (no cabe en el t3.small sin sacrificar el MVP), asi que en dev
+      # toda sala con recompensa > 0 responde 503 creditos-no-disponibles y
+      # nada queda reservado; las salas sin recompensa no pasan por aqui. El
+      # dia que se despliegue, esta URL ya apunta a donde estara.
+      CREDITOS_URL: ${CREDITOS_URL:-http://srv-ms-finanzas:8093/api/v1}
+      # HU-JUE-015 / RF-USR-004: el chat consulta la sancion activa del autor
+      # en moderacion-sanciones, que SI corre en este host. Sin esta URL el
+      # valor por defecto es localhost, que dentro del contenedor es el propio
+      # servicio, y todo mensaje se bloquearia con «sanciones no disponibles».
+      SANCIONES_URL: ${SANCIONES_URL:-http://srv-moderacion-sanciones:8086/api/v1}
 
   srv-notificaciones:
     <<: *servicio-plataforma
@@ -92,6 +128,15 @@ services:
   srv-moderacion-sanciones:
     <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-moderacion-sanciones:${TAG}
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      # HU-NOT-005: el aviso de sancion/apelacion va a la bandeja del jugador
+      # por /internal/notifications de notificaciones, que corre en este host,
+      # con la credencial de servicio propia (ADR-005; secreto de desplegar.sh).
+      NOTIFICACIONES_URL: ${NOTIFICACIONES_URL:-http://srv-notificaciones:8085/api/v1}
+      DIRECTORIO_ACTIVO_URL: ${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}
+      DIRECTORIO_ACTIVO_CLIENT_ID: moderacion-sanciones
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_MODERACION_SANCIONES:-}
 
   # HU-DIS-001: el monitor de disponibilidad necesita saber DONDE preguntar.
   #
@@ -122,6 +167,8 @@ services:
       SALUD_NOTIFICACIONES: http://srv-notificaciones:8085/actuator/health
       SALUD_MODERACION: http://srv-moderacion-sanciones:8086/actuator/health
       SALUD_ADMIN_PARAMETROS: http://srv-admin-parametros:8088/actuator/health
+      # HU-MET-001: agregados de moderacion desde moderacion-sanciones.
+      SANCIONES_URL: ${SANCIONES_URL:-http://srv-moderacion-sanciones:8086/api/v1}
 
   srv-admin-parametros:
     <<: *servicio-plataforma

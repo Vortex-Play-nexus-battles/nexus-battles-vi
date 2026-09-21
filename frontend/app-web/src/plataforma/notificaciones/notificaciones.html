@@ -27,62 +27,7 @@
 
       La campana de esta cabecera es la de verdad: la monta `campana.js`.
     -->
-    <header class="cabecera">
-      <div class="cabecera__grupo-marca">
-        <span class="cabecera__marca">NEXUS BATTLES VI</span>
-        <nav class="cabecera__nav" aria-label="Navegacion principal">
-          <a class="cabecera__destino" href="../salas-partidas/batallas.html">Jugar online</a>
-          <a
-            class="cabecera__destino cabecera__destino--pendiente"
-            aria-disabled="true"
-            data-pendiente="grupo-alpha"
-            title="Todavia no publicada: grupo-alpha"
-            >Misiones</a
-          >
-          <a
-            class="cabecera__destino cabecera__destino--pendiente"
-            aria-disabled="true"
-            data-pendiente="HU-TOR, sprint 3"
-            title="Todavia no publicada: HU-TOR, sprint 3"
-            >Torneo</a
-          >
-          <a class="cabecera__destino" href="../../contenido/inventario/inventario.html"
-            >Mi inventario</a
-          >
-          <a class="cabecera__destino" href="../../cuentas/subastas.html">Subasta</a>
-        </nav>
-      </div>
-
-      <label class="cabecera__buscador">
-        <svg class="icono icono--menudo" aria-hidden="true">
-          <use href="../../../../../shared/ui-kit/iconos/sprite.svg#buscar" />
-        </svg>
-        <span class="solo-lectores">Buscar productos</span>
-        <input class="cabecera__buscador-texto" type="search" placeholder="Buscar productos" />
-      </label>
-
-      <div class="cabecera__acciones">
-        <button
-          class="cabecera__campana"
-          type="button"
-          data-zona="boton"
-          aria-controls="panel-notificaciones"
-          aria-expanded="false"
-        >
-          <svg class="icono" aria-hidden="true">
-            <use href="../../../../../shared/ui-kit/iconos/sprite.svg#campana" />
-          </svg>
-          <span class="cabecera__contador" data-zona="contador" aria-hidden="true" hidden>0</span>
-        </button>
-
-        <span class="cabecera__cuenta">
-          <span class="cabecera__avatar" aria-hidden="true"></span>
-          <span class="cabecera__identidad">
-            <span class="cabecera__apodo" data-zona="apodo"></span>
-          </span>
-        </span>
-      </div>
-    </header>
+    <div data-cabecera-app></div>
 
     <main class="pagina pila">
       <!--
@@ -124,9 +69,20 @@
     <script type="module">
       import { montarCampana } from './campana.js';
       import { leerSesion, identificadorDeSesion } from './cliente-notificaciones.js';
+      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+
+      // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
+      if (!exigirSesion()) {
+        throw new Error('sin sesion: redirigiendo al login');
+      }
+      // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
+      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: null });
+      // En esta vista la campana de la cabecera abre el panel de aqui mismo.
+      const campana = document.querySelector('[data-cabecera-app] .cabecera__campana');
+      campana.dataset.zona = 'boton';
+      campana.addEventListener('click', (evento) => evento.preventDefault());
 
       const sesion = leerSesion();
-      document.querySelector('[data-zona="apodo"]').textContent = sesion.apodo ?? 'Sin sesion';
 
       if (!sesion.usuarioId) {
         document.querySelector('[data-zona="sin-sesion"]').hidden = false;

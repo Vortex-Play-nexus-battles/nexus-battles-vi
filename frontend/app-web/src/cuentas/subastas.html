@@ -12,14 +12,15 @@
     es src/ (como la sirve `npm run dev`). No habia raiz bajo la cual las tres
     cargaran, asi que la barra de navegacion siempre salia sin estilos.
   -->
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
-    <link rel="stylesheet" href="../comun/barra-navegacion.css" />
     <link rel="stylesheet" href="subastas-vitrina.css" />
     <link rel="stylesheet" href="subastas-filtros.css" />
     <link rel="stylesheet" href="subastas-busqueda.css" />
   </head>
   <body class="subastas-pagina">
+    <div data-cabecera-app></div>
     <div id="raiz-subastas"></div>
 
     <script type="module" src="subastas.js"></script>

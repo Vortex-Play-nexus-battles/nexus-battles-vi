@@ -2,6 +2,7 @@ package com.nexusbattles.plataforma.salaspartidas.tiemporeal;
 
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Sala;
+import com.nexusbattles.comun.seguridad.IdentidadDelToken;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.stomp.StompCommand;
@@ -9,6 +10,7 @@ import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
 import java.security.Principal;
 import java.util.Optional;
@@ -94,13 +96,38 @@ public class AutorizacionDeDestinos implements ChannelInterceptor {
     }
 
     /**
-     * El identificador del jugador es el {@code sub} del JWT, que
-     * {@code AutenticacionStomp} dejo como nombre del usuario de la sesion. Sin
-     * usuario no hay suscripcion posible: la autenticacion va antes en la cadena
-     * y ya habria cortado, pero no se confia en el orden para algo de seguridad.
+     * Identificador estable del jugador de la sesion STOMP.
+     *
+     * <p><b>Sale del claim {@code uid}, NO del nombre del principal.</b>
+     * {@code AutenticacionStomp} deja un {@link JwtAuthenticationToken}, cuyo
+     * {@code getName()} es el sujeto del JWT; y tras ADR-002 el sujeto de
+     * {@code ms-identidad} es el <i>apodo</i>, no un UUID. Leerlo como UUID
+     * hacia saltar {@link IllegalArgumentException} para todo jugador real, se
+     * traducia en {@link AccessDeniedException}, y Spring cerraba la conexion
+     * tras el frame {@code ERROR}: nadie podia seguir el canal de su sala, y de
+     * paso se llevaba por delante el canal de la partida abierto sobre la misma
+     * conexion. Es el mismo error que {@link IdentidadDelToken} existe para no
+     * repetir; este era justo el sitio que se habia quedado con la copia mala.
+     *
+     * <p>Se conserva el camino del nombre para principales que no son JWT.
+     *
+     * <p>Sin usuario no hay suscripcion posible: la autenticacion va antes en la
+     * cadena y ya habria cortado, pero no se confia en el orden para algo de
+     * seguridad.
      */
     private static UUID jugadorDe(Principal usuario) {
-        if (usuario == null || usuario.getName() == null) {
+        if (usuario == null) {
+            throw new AccessDeniedException("Hace falta estar identificado para suscribirse.");
+        }
+        if (usuario instanceof JwtAuthenticationToken token) {
+            try {
+                return IdentidadDelToken.idDe(token.getToken());
+            } catch (IllegalArgumentException sinIdentificador) {
+                throw new AccessDeniedException(
+                        "El token de la sesion no trae un identificador de jugador.");
+            }
+        }
+        if (usuario.getName() == null) {
             throw new AccessDeniedException("Hace falta estar identificado para suscribirse.");
         }
         try {

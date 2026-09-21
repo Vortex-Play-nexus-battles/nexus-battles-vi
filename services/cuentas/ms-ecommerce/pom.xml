@@ -64,6 +64,26 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-actuator</artifactId>
     </dependency>
+    <!--
+      Servidor de recursos (ADR-002): el carrito es del uid del token, no de
+      una cabecera X-User-Id que cualquiera podia escribir. Este modulo sigue
+      en Maven (settings.gradle lo lista como pendiente de migrar), asi que no
+      puede enlazar shared/libs/plataforma-seguridad y trae los starters
+      directamente; SeguridadConfig reproduce el conversor de roles minimo.
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.security</groupId>
+      <artifactId>spring-security-test</artifactId>
+      <scope>test</scope>
+    </dependency>
     <dependency>
       <groupId>org.springdoc</groupId>
       <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
@@ -155,6 +175,33 @@
 						<include>**/*IT.java</include>
 					</includes>
 				</configuration>
+			</plugin>
+			<!--
+				JaCoCo: el informe que lee SonarQube Cloud
+				(sonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+				en ci.yml). Sin el, Sonar veia 0 % de cobertura en todo lo nuevo y
+				la compuerta (80 %) fallaba aunque las pruebas existieran. Misma
+				configuracion que ms-cumplimiento; la compuerta la aplica Sonar.
+			-->
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>0.8.12</version>
+				<executions>
+					<execution>
+						<id>prepare-agent</id>
+						<goals>
+							<goal>prepare-agent</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>report</id>
+						<phase>test</phase>
+						<goals>
+							<goal>report</goal>
+						</goals>
+					</execution>
+				</executions>
 			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>

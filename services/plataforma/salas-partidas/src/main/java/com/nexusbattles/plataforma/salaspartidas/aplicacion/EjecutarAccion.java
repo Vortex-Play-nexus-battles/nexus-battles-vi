@@ -1,7 +1,9 @@
 package com.nexusbattles.plataforma.salaspartidas.aplicacion;
 
+import com.nexusbattles.plataforma.resiliencia.DependenciaDegradada;
 import com.nexusbattles.plataforma.salaspartidas.dominio.AccionResuelta;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDePartida;
+import com.nexusbattles.plataforma.salaspartidas.dominio.CreditoPorPartida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoPartida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.MotorDeCombate;
 import com.nexusbattles.plataforma.salaspartidas.dominio.MotorNoDisponible;
@@ -10,6 +12,7 @@ import com.nexusbattles.plataforma.salaspartidas.dominio.Partida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.PartidaNoEncontrada;
 import com.nexusbattles.plataforma.salaspartidas.dominio.PartidaYaTerminada;
 import com.nexusbattles.plataforma.salaspartidas.dominio.ParticipanteDePartida;
+import com.nexusbattles.plataforma.salaspartidas.dominio.RepartoDeCreditos;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDePartidas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.ResolucionDelMotor;
 import com.nexusbattles.plataforma.salaspartidas.dominio.SinObjetivoPosible;
@@ -49,12 +52,16 @@ public class EjecutarAccion {
     private final RepositorioDePartidas partidas;
     private final CanalDePartida canal;
     private final MotorDeCombate motor;
+    private final LiquidarApuesta apuesta;
+    private final AcreditarRecompensa recompensa;
 
     public EjecutarAccion(RepositorioDePartidas partidas, CanalDePartida canal,
-                          MotorDeCombate motor) {
+                          MotorDeCombate motor, LiquidarApuesta apuesta, AcreditarRecompensa recompensa) {
         this.partidas = Objects.requireNonNull(partidas);
         this.canal = Objects.requireNonNull(canal);
         this.motor = Objects.requireNonNull(motor, "Sin motor no hay combate.");
+        this.apuesta = Objects.requireNonNull(apuesta, "Sin liquidacion la apuesta se perderia.");
+        this.recompensa = Objects.requireNonNull(recompensa, "Sin recompensa jugar no daria creditos.");
     }
 
     /**
@@ -123,12 +130,30 @@ public class EjecutarAccion {
         // la barra bajar y luego el resultado. Al reves habria que animar hacia
         // atras.
         if (termino) {
-            canal.anunciarFin(guardada);
+            anunciarFin(guardada);
             return guardada;
         }
         canal.anunciarTurno(guardada);
 
         return jugarTurnosDeLaMaquina(guardada);
+    }
+
+    /**
+     * La partida termino: se liquida la apuesta (HU-JUE-014, CA-04), se
+     * informa el resultado al libro para la recompensa por jugar (HU-JUE-012)
+     * y se anuncia el resultado con las dos cosas.
+     *
+     * <p>Los dos movimientos van ANTES del aviso para que viajen en el mismo
+     * mensaje, y en este orden (HU-JUE-012, CA-03): primero la apuesta, luego
+     * la recompensa. Si el libro de creditos no responde, cada uno queda
+     * anotado como pendiente por su lado y devuelve vacio: el aviso sale igual
+     * y el reintento lo completara despues. El ultimo golpe ya se dio y esta
+     * guardado; un fallo del libro no puede deshacerlo ni esconderlo.
+     */
+    private void anunciarFin(Partida terminada) {
+        List<RepartoDeCreditos> reparto = apuesta.alTerminar(terminada);
+        List<CreditoPorPartida> premio = recompensa.alTerminar(terminada);
+        canal.anunciarFin(terminada, reparto, premio);
     }
 
     /**
@@ -180,7 +205,10 @@ public class EjecutarAccion {
         ResolucionDelMotor resolucion;
         try {
             resolucion = motor.resolver(maquina.heroe(), objetivo.heroe());
-        } catch (MotorNoDisponible noResponde) {
+        } catch (MotorNoDisponible | DependenciaDegradada noResponde) {
+            // Tanto si el motor contesto algo raro como si no contesto (HU-DIS-003):
+            // la maquina pasa y el combate sigue. El aviso de seccion degradada
+            // se lo lleva el humano cuando le toque a el, por su propia accion.
             return pasarTurnoDe(partida);
         }
 
@@ -203,7 +231,7 @@ public class EjecutarAccion {
                         -resolucion.danoAplicado()))));
 
         if (termino) {
-            canal.anunciarFin(guardada);
+            anunciarFin(guardada);
         } else {
             canal.anunciarTurno(guardada);
         }
@@ -247,11 +275,21 @@ public class EjecutarAccion {
      * <p>Con un solo rival en pie se resuelve solo: en un 1v1 no hay ambiguedad
      * y pedir el identificador seria burocracia. Con dos o mas, elegir por el
      * jugador seria decidir su jugada, asi que se exige.
+     *
+     * <p>En el modo cooperativo (HU-SAL-004) los companeros de equipo no son
+     * rivales: no se les puede apuntar, ni la maquina los elige. «Cooperativo»
+     * no admite otra lectura.
      */
     private static ParticipanteDePartida elegirObjetivo(Partida partida, UUID atacante,
                                                         UUID idObjetivo) {
+        if (idObjetivo != null && !idObjetivo.equals(atacante)
+                && partida.sonDelMismoEquipo(atacante, idObjetivo)) {
+            throw new SinObjetivoPosible("Es de tu equipo: en el modo cooperativo no se ataca a un companero.");
+        }
+
         List<ParticipanteDePartida> rivales = partida.enPie().stream()
                 .filter(p -> !p.idJugador().equals(atacante))
+                .filter(p -> !partida.sonDelMismoEquipo(atacante, p.idJugador()))
                 .toList();
 
         if (rivales.isEmpty()) {

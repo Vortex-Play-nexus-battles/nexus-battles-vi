@@ -26,7 +26,17 @@ SPRING_DATA_MONGODB_URI=mongodb://localhost:27017/inventario ./gradlew :services
   genera dos UUID nuevos para que cada corrida use inventarios independientes.
 - Para las operaciones internas, obtener con OAuth2 `client_credentials` un
   access token cuyo cliente sea `ms-subastas` y asignarlo a la variable de
-  coleccion `s2sAccessToken`. El token autentica al servicio y
+  coleccion `s2sAccessToken`.
+
+  **Sin Keycloak (instancia de contenido y local con Compose):** inventario
+  apunta al JWKS de desarrollo (`jwks-dev`, ver
+  `services/contenido/productos/postman/LEEME.md`) y el token de servicio se
+  emite con la clave privada de desarrollo:
+
+  ```bash
+  S2S=$(node ../../productos/postman/jwks-dev/emitir-token.mjs ~/.nexus/productos-jwks-dev.pem --azp ms-subastas)
+  npx --yes newman run inventario.postman_collection.json -e local.postman_environment.json --env-var baseUrl=http://34.193.90.11:8102 --env-var s2sAccessToken=$S2S
+  ``` El token autentica al servicio y
   `propietarioUid` viaja por separado como dato del negocio.
 
 ## Con la app de Postman

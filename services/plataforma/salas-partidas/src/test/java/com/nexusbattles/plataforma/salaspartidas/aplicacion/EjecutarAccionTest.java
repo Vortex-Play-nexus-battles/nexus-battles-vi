@@ -91,7 +91,7 @@ class EjecutarAccionTest {
     }
 
     private EjecutarAccion casoDeUso(MotorDeMentira motor) {
-        return new EjecutarAccion(partidas, canal, motor);
+        return new EjecutarAccion(partidas, canal, motor, LiquidacionSinApuesta.nueva(), RecompensaSinLibro.nueva());
     }
 
     @Test
@@ -272,5 +272,185 @@ class EjecutarAccionTest {
                 () -> assertTrue(canal.anuncios.stream().allMatch(a -> "turno".equals(a.tipo())),
                         "nadie golpea: solo se pasa turno"),
                 () -> assertEquals(EstadoPartida.EN_CURSO, despues.estado()));
+    }
+
+    /* HU-JUE-014, CA-04: el fin lleva el reparto de la apuesta. */
+    @org.junit.jupiter.api.Nested
+    @DisplayName("con apuesta en juego (HU-JUE-014)")
+    class ConApuesta {
+
+        private final RepositorioDeSalasEnMemoria salas = new RepositorioDeSalasEnMemoria();
+        private final CreditosEnMemoria libro = new CreditosEnMemoria().conSaldo(ANA, 1_000).conSaldo(BRUNO, 1_000);
+
+        private final AcreditadorEnMemoria libroDeRecompensas = new AcreditadorEnMemoria();
+
+        private EjecutarAccion casoDeUsoConApuesta(MotorDeMentira motor) {
+            LiquidarApuesta liquidar = new LiquidarApuesta(salas, new RepositorioDeLiquidacionesEnMemoria(), libro,
+                    java.time.Clock.fixed(AHORA, java.time.ZoneOffset.UTC),
+                    LiquidarApuesta.SiGanaLaMaquina.LIBERAR);
+            AcreditarRecompensa recompensa = new AcreditarRecompensa(salas, new RepositorioDeRecompensasEnMemoria(),
+                    libroDeRecompensas, new SancionesEnMemoria(),
+                    java.time.Clock.fixed(AHORA, java.time.ZoneOffset.UTC));
+            return new EjecutarAccion(partidas, canal, motor, liquidar, recompensa);
+        }
+
+        /** Ana y Bruno apuestan 100; Bruno tiene 10 de vida: cae al primer golpe. */
+        private Partida partidaApostada() {
+            Sala sala = Sala.crear(
+                    new ParametrosDeSala(6, Modalidad.HASTA_SEIS, 100, false, false, null), ANA,
+                    new FichaDeParticipante("Ana", heroe("Arquero", 100)));
+            sala = sala.conReserva(libro.reservar(ANA, 100, sala.id(), 0).id());
+            sala.unirse(BRUNO, new FichaDeParticipante("Bruno", heroe("Centinela", 10),
+                    libro.reservar(BRUNO, 100, sala.id(), 1).id()), null);
+            salas.guardar(sala);
+            return partidas.guardar(Partida.iniciar(sala, AHORA));
+        }
+
+        @Test
+        @DisplayName("al terminar, el aviso de fin lleva el reparto y el libro ya movio los creditos")
+        void elFinLlevaElReparto() {
+            Partida partida = partidaApostada();
+
+            casoDeUsoConApuesta(MotorDeMentira.queHace(50)).ejecutar(partida.id(), ANA, BRUNO, "ATAQUE_BASICO");
+
+            assertAll(
+                    () -> assertEquals("fin", canal.anuncios.get(canal.anuncios.size() - 1).tipo()),
+                    () -> assertEquals(List.of(
+                                    new com.nexusbattles.plataforma.salaspartidas.dominio.RepartoDeCreditos(ANA, 100),
+                                    new com.nexusbattles.plataforma.salaspartidas.dominio.RepartoDeCreditos(BRUNO, -100)),
+                            canal.repartos.get(0)),
+                    () -> assertEquals(1_100, libro.saldoDe(ANA)),
+                    () -> assertEquals(900, libro.saldoDe(BRUNO)));
+        }
+
+        @Test
+        @DisplayName("HU-JUE-012 CA-03: con apuesta, el mismo fin lleva ademas la recompensa por jugar, aparte del reparto")
+        void elFinLlevaLaRecompensa() {
+            Partida partida = partidaApostada();
+
+            casoDeUsoConApuesta(MotorDeMentira.queHace(50)).ejecutar(partida.id(), ANA, BRUNO, "ATAQUE_BASICO");
+
+            assertAll(
+                    () -> assertEquals(1, libroDeRecompensas.informes.size(), "se informo una vez"),
+                    () -> assertEquals(partida.id(), libroDeRecompensas.informes.get(0).idPartida()),
+                    () -> assertEquals(List.of(ANA), libroDeRecompensas.informes.get(0).ganadores()),
+                    () -> assertEquals(List.of(
+                                    new com.nexusbattles.plataforma.salaspartidas.dominio.CreditoPorPartida(ANA, 4, true, null),
+                                    new com.nexusbattles.plataforma.salaspartidas.dominio.CreditoPorPartida(BRUNO, 1, false, null)),
+                            canal.recompensas.get(0), "hasta seis es grupal: 4 al ganador"),
+                    () -> assertEquals(2, canal.repartos.get(0).size(), "y el reparto de la apuesta sigue ahi"));
+        }
+
+        @Test
+        @DisplayName("HU-JUE-012 CA-05: si solo falla la recompensa, la apuesta se liquida igual y el fin sale sin recompensa")
+        void soloLaRecompensaCaida() {
+            Partida partida = partidaApostada();
+            libroDeRecompensas.caido = true;
+
+            casoDeUsoConApuesta(MotorDeMentira.queHace(50)).ejecutar(partida.id(), ANA, BRUNO, "ATAQUE_BASICO");
+
+            assertAll(
+                    () -> assertEquals(1_100, libro.saldoDe(ANA), "la apuesta se liquido"),
+                    () -> assertEquals(2, canal.repartos.get(0).size()),
+                    () -> assertTrue(canal.recompensas.get(0).isEmpty(), "la recompensa queda pendiente"));
+        }
+
+        @Test
+        @DisplayName("CA-06: si el libro no responde al terminar, la partida termina igual y el fin sale sin reparto")
+        void libroCaidoAlTerminar() {
+            Partida partida = partidaApostada();
+            libro.caido = true;
+
+            Partida despues = casoDeUsoConApuesta(MotorDeMentira.queHace(50))
+                    .ejecutar(partida.id(), ANA, BRUNO, "ATAQUE_BASICO");
+
+            assertAll(
+                    () -> assertEquals(EstadoPartida.FINALIZADA, despues.estado()),
+                    () -> assertEquals(EstadoPartida.FINALIZADA,
+                            partidas.buscarPorId(partida.id()).orElseThrow().estado(), "el ultimo golpe quedo guardado"),
+                    () -> assertEquals("fin", canal.anuncios.get(canal.anuncios.size() - 1).tipo()),
+                    () -> assertTrue(canal.repartos.get(0).isEmpty(), "sin reparto: queda pendiente, no se inventa"),
+                    () -> assertEquals(100, libro.reservadoDe(ANA), "nada se perdio: las reservas siguen vivas"));
+        }
+    }
+
+    /**
+     * RF-JUE-004 — HU-SAL-004: modo cooperativo. Equipos de dos: Ana y Bruno
+     * contra Carla y Dario. Ana abre.
+     */
+    @org.junit.jupiter.api.Nested
+    @DisplayName("en equipos (HU-SAL-004)")
+    class EnEquipos {
+
+        private static final UUID DARIO = UUID.fromString("44444444-4444-4444-4444-444444444444");
+
+        private Partida dosContraDos(int vidaDeCarla, int vidaDeDario) {
+            Sala sala = Sala.crear(
+                    new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, 0, false, 2), ANA,
+                    new FichaDeParticipante("Ana", heroe("Arquero", 100)));
+            sala.unirse(BRUNO, new FichaDeParticipante("Bruno", heroe("Centinela", 100)), null);
+            sala.unirse(CARLA, new FichaDeParticipante("Carla", heroe("Maga", vidaDeCarla)), null);
+            sala.unirse(DARIO, new FichaDeParticipante("Dario", heroe("Guerrero", vidaDeDario)), null);
+            return partidas.guardar(Partida.iniciar(sala, AHORA));
+        }
+
+        @Test
+        @DisplayName("no se ataca a un companero: se rechaza diciendo que es de tu equipo")
+        void noSeAtacaAlCompanero() {
+            Partida partida = dosContraDos(100, 100);
+            EjecutarAccion casoDeUso = casoDeUso(MotorDeMentira.queHace(30));
+
+            SinObjetivoPosible rechazo = assertThrows(SinObjetivoPosible.class,
+                    () -> casoDeUso.ejecutar(partida.id(), ANA, BRUNO, null));
+
+            assertAll(
+                    () -> assertTrue(rechazo.getMessage().contains("equipo"), rechazo.getMessage()),
+                    () -> assertEquals(100, partidas.buscarPorId(partida.id()).orElseThrow()
+                            .participantes().get(1).heroe().vidaActual(), "Bruno intacto"));
+        }
+
+        @Test
+        @DisplayName("con un solo rival en pie no hace falta apuntar, aunque el companero siga vivo")
+        void unSoloRivalSeResuelveSolo() {
+            // Dario cae antes de empezar a contar: solo queda Carla como rival.
+            Partida partida = dosContraDos(100, 100);
+            partida.aplicarDano(DARIO, 100);
+            partidas.guardar(partida);
+            MotorDeMentira motor = MotorDeMentira.queHace(10);
+
+            casoDeUso(motor).ejecutar(partida.id(), ANA, null, null);
+
+            assertEquals(List.of("Arquero -> Maga"), motor.consultas);
+        }
+
+        @Test
+        @DisplayName("el turno salta a quien ya cayo, sea del equipo que sea")
+        void elTurnoSaltaALosCaidos() {
+            Partida partida = dosContraDos(100, 100);
+            partida.aplicarDano(BRUNO, 100);
+            partidas.guardar(partida);
+
+            Partida despues = casoDeUso(MotorDeMentira.queHace(10)).ejecutar(partida.id(), ANA, CARLA, null);
+
+            assertEquals(CARLA, despues.turnoActual().idJugador(), "Bruno cayo: de Ana pasa a Carla");
+        }
+
+        @Test
+        @DisplayName("la partida termina cuando cae el ultimo del otro equipo, y ganan los dos del equipo en pie")
+        void ganaElEquipo() {
+            Partida partida = dosContraDos(10, 100);
+            partida.aplicarDano(DARIO, 100);
+            partidas.guardar(partida);
+
+            Partida despues = casoDeUso(MotorDeMentira.queHace(50)).ejecutar(partida.id(), ANA, CARLA, null);
+
+            assertAll(
+                    () -> assertEquals(EstadoPartida.FINALIZADA, despues.estado()),
+                    () -> assertEquals(java.util.Optional.of(1), despues.equipoGanador()),
+                    () -> assertEquals(List.of(ANA, BRUNO), despues.ganadores().stream()
+                            .map(com.nexusbattles.plataforma.salaspartidas.dominio.ParticipanteDePartida::idJugador)
+                            .toList()),
+                    () -> assertEquals("fin", canal.anuncios.get(canal.anuncios.size() - 1).tipo()));
+        }
     }
 }

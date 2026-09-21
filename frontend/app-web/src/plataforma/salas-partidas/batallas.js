@@ -19,6 +19,11 @@
 
 import { listarSalas, ingresarASala } from './cliente-salas.js';
 import { seguirSala, estadoDesdeFicha } from './canal-sala.js';
+import {
+  esSeccionDegradada,
+  pintarSeccionDegradada,
+  limpiarSeccionDegradada,
+} from '../../comun/degradacion/aviso-degradacion.js';
 
 /** Etiqueta de la insignia por estado. Son las del componente `Insignia`. */
 const ETIQUETA_DE_ESTADO = {
@@ -46,11 +51,50 @@ const CLASE_DE_ESTADO = {
  *          recompensaCreditos: number, incluirHeroeIA: boolean}} sala
  * @returns {string}
  */
+/**
+ * Muestra, una sola vez, por que se volvio al listado — HU-SAL-006.
+ *
+ * Pinta sobre `[data-zona="aviso-sala"]` con el tono del sistema de diseno
+ * (`aviso--info`, `aviso--advertencia`...). Sin aviso, no toca nada.
+ *
+ * @param {ParentNode} raiz
+ * @param {{tono?: string, titulo: string, detalle?: string} | null} aviso
+ * @returns {boolean} true si se mostro algo
+ */
+export function mostrarAvisoDeSala(raiz, aviso) {
+  const zona = raiz.querySelector('[data-zona="aviso-sala"]');
+  if (!zona || !aviso?.titulo) {
+    return false;
+  }
+  const tonos = ['info', 'exito', 'advertencia', 'error'];
+  const tono = tonos.includes(aviso.tono) ? aviso.tono : 'info';
+  zona.className = `aviso aviso--${tono}`;
+  const titulo = zona.querySelector('[data-zona="aviso-sala-titulo"]');
+  const detalle = zona.querySelector('[data-zona="aviso-sala-detalle"]');
+  if (titulo) {
+    titulo.textContent = aviso.titulo;
+  }
+  if (detalle) {
+    detalle.textContent = aviso.detalle ?? '';
+    detalle.hidden = !aviso.detalle;
+  }
+  zona.hidden = false;
+  return true;
+}
+
 export function metaDeLaSala(sala) {
   const base =
     `${sala.ocupacion} de ${sala.maximoParticipantes} jugadores` +
     ` · ${sala.recompensaCreditos} creditos`;
-  return sala.incluirHeroeIA ? `${base} · Con heroe de la IA` : base;
+  if (!sala.incluirHeroeIA) {
+    return base;
+  }
+  // Con varios cupos de la IA (HU-SAL-004) se dice cuantos; con uno, la
+  // linea exacta del diseno.
+  const maquinas = Number(sala.heroesIA) || 1;
+  return maquinas > 1
+    ? `${base} · Con ${maquinas} heroes de la IA`
+    : `${base} · Con heroe de la IA`;
 }
 
 /**
@@ -161,6 +205,10 @@ export function montarBatallas(raiz, puertos = {}) {
   const zonaPaginacion = raiz.querySelector('[data-zona="paginacion"]');
   const subtitulo = raiz.querySelector('[data-zona="subtitulo"]');
   const zonaCanal = raiz.querySelector('[data-zona="canal"]');
+  // HU-DIS-003: hueco de «Seccion degradada» cuando entrar a una sala falla
+  // porque el inventario (o el libro de creditos) no responde. Aparte del
+  // estado de vista a proposito: el listado sigue siendo util y no se oculta.
+  const zonaDegradacion = raiz.querySelector('[data-zona="degradacion"]');
   const filtroModalidad = raiz.querySelector('[name="modalidad"]');
   const filtroEstado = raiz.querySelector('[name="estado"]');
 
@@ -344,9 +392,14 @@ export function montarBatallas(raiz, puertos = {}) {
     if (!tarjeta || tarjeta.disabled) {
       return;
     }
+    await entrarA(tarjeta.dataset.sala);
+  });
 
+  /** Entra a una sala; reutilizable por el reintento de la seccion degradada. */
+  async function entrarA(idSala) {
+    limpiarSeccionDegradada(zonaDegradacion);
     try {
-      const dentro = await ingresar(tarjeta.dataset.sala);
+      const dentro = await ingresar(idSala);
       // Ya se es participante: ahora si se puede seguir la sala aunque sea
       // privada, y la tarjeta refleja la entrada sin esperar al canal.
       if (dentro && dentro.id) {
@@ -359,6 +412,15 @@ export function montarBatallas(raiz, puertos = {}) {
       }
       alEntrar(dentro);
     } catch (error) {
+      if (zonaDegradacion && esSeccionDegradada(error?.problema)) {
+        // HU-DIS-003: no es que no se pueda entrar, es que quien lo comprueba
+        // no responde. El listado se queda; se dice que seccion esta limitada
+        // y se ofrece reintentar la misma sala.
+        pintarSeccionDegradada(zonaDegradacion, error.problema, {
+          alReintentar: () => entrarA(idSala),
+        });
+        return;
+      }
       // Los tres rechazos del contrato -403 privada, 404 no existe, 409 llena-
       // llegan aqui ya interpretados por el cliente. La vista los muestra tal
       // cual: el texto lo redacta el servicio, que es quien sabe el motivo.
@@ -368,7 +430,7 @@ export function montarBatallas(raiz, puertos = {}) {
         error.detalle ?? error.message,
       );
     }
-  });
+  }
 
   for (const filtro of [filtroModalidad, filtroEstado]) {
     filtro?.addEventListener('change', () => {

@@ -49,7 +49,7 @@
 #   /ecommerce/actuator/health. Ver "ruta_salud_de" en el paso 4.
 #
 # Este script NUNCA decide si hay que revertir: eso lo hace un step aparte en
-# cd.yml (solo en el job de produccion) leyendo el archivo
+# cd.yml (en los jobs de dev y de produccion) leyendo el archivo
 # ultimo-fallo.txt que este script deja escrito cuando algo no queda sano.
 # Asi la reversion queda como un paso propio y visible en GitHub Actions, con
 # nombre explicito, en vez de escondida dentro de este script.
@@ -182,6 +182,50 @@ for variable in SMTP_PORT LISTA_NEGRA_VERIFICAR_URL SALAS_WS_ORIGENES CHAT_WS_OR
 done
 chmod 600 .env
 
+# Credenciales de servicio (ADR-001 via el emisor transitorio de ADR-005).
+#
+# No son secrets de GitHub: se generan UNA vez en el host y se persisten en
+# secretos-servicios.env (fuera del .env efimero), de modo que cada
+# despliegue reparta los mismos valores al emisor (ms-identidad lee
+# AUTH_CLIENTES_SERVICIO) y a cada cliente (SECRETO_SERVICIO_<CLIENTE>, que
+# docker-compose.deploy.yml inyecta como DIRECTORIO_ACTIVO_CLIENT_SECRET del
+# servicio correspondiente). Rotar uno = borrar su linea de ese archivo y
+# volver a desplegar. Nunca se imprimen.
+SECRETOS_SERVICIOS="$DIRECTORIO/secretos-servicios.env"
+CLIENTES_DE_SERVICIO="salas-partidas comentarios notificaciones ms-subastas ms-finanzas moderacion-sanciones torneos"
+touch "$SECRETOS_SERVICIOS"
+chmod 600 "$SECRETOS_SERVICIOS"
+AUTH_CLIENTES_SERVICIO=""
+for cliente in $CLIENTES_DE_SERVICIO; do
+  clave="SECRETO_SERVICIO_$(echo "$cliente" | tr 'a-z-' 'A-Z_')"
+  valor=$(grep "^${clave}=" "$SECRETOS_SERVICIOS" | head -n1 | cut -d= -f2- || true)
+  if [ -z "$valor" ]; then
+    if command -v openssl >/dev/null 2>&1; then
+      valor=$(openssl rand -hex 24)
+    else
+      valor=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
+    fi
+    echo "${clave}=${valor}" >> "$SECRETOS_SERVICIOS"
+    echo "  credencial de servicio generada para $cliente"
+  fi
+  echo "${clave}=${valor}" >> .env
+  AUTH_CLIENTES_SERVICIO="${AUTH_CLIENTES_SERVICIO:+${AUTH_CLIENTES_SERVICIO};}${cliente}=${valor}"
+done
+echo "AUTH_CLIENTES_SERVICIO=${AUTH_CLIENTES_SERVICIO}" >> .env
+# El emisor de esas credenciales es ms-identidad dentro de la red de compose
+# (ADR-005), SIEMPRE, mientras ese ADR este vigente: en este host no hay
+# Keycloak. El secret de GitHub DIRECTORIO_ACTIVO_URL viene de ADR-001 (la URL
+# del realm) y se creo antes de ADR-005; respetarlo aqui mandaba a cada
+# servicio a pedir su token a un Keycloak inexistente, la peticion moria
+# antes de llegar a inventario/finanzas y crear una sala respondia 500
+# (smoke de dev rojo desde c50452d). Cuando vuelva Keycloak, esta es la linea
+# que cambia (ADR-005, "Como se revierte"), no el secret.
+EMISOR_ADR_005="http://srv-ms-identidad:8089/api/v1/auth/token"
+if [ -n "${DIRECTORIO_ACTIVO_URL:-}" ] && [ "${DIRECTORIO_ACTIVO_URL}" != "$EMISOR_ADR_005" ]; then
+  echo "  DIRECTORIO_ACTIVO_URL del secret se ignora: bajo ADR-005 el emisor es ms-identidad (no se imprime el valor)"
+fi
+sed -i "s#^DIRECTORIO_ACTIVO_URL=.*#DIRECTORIO_ACTIVO_URL=${EMISOR_ADR_005}#" .env
+
 echo "== 2) Guardando el tag estable actual de cada servicio, antes de tocarlo =="
 # Si el servicio ya estaba corriendo con algun tag, lo guardamos en un
 # archivo simple ANTES de sobreescribirlo. Si el servicio nunca se ha
@@ -198,6 +242,48 @@ for par in $SERVICIOS_PUERTOS; do
     echo "  $servicio: no habia despliegue previo, no hay tag estable que guardar"
   fi
 done
+
+# ---------------------------------------------------------------------------
+# Simulacro de reversion (HU-CICD-002, CA-02). Con SIMULACRO_REVERSION=<servicio>
+# (entrada `simulacro_reversion` de cd.yml, solo a demanda) el servicio indicado
+# se despliega con la imagen BUENA de esta corrida pero con SERVER_PORT movido a
+# un puerto que nadie publica: el contenedor arranca, el healthcheck del paso 4
+# no lo encuentra donde debe, este script termina en fallo con
+# ultimo-fallo.txt escrito, y el step "Reversion automatica por fallo de salud"
+# de cd.yml lo devuelve al tag estable anterior. Es la unica forma honesta de
+# ejercitar la reversion sin publicar una imagen rota a proposito: el fallo es
+# de configuracion, reproducible, y no toca ni la imagen ni la base de datos.
+#
+# Solo un servicio por corrida, y tiene que venir en SERVICIOS_PUERTOS: si no,
+# se aborta antes de tocar nada. La ventana de salud se acorta a 60 s porque
+# aqui NO se espera que el servicio llegue a estar sano.
+COMPOSE_SIMULACRO="$DIRECTORIO/docker-compose.simulacro.yml"
+rm -f "$COMPOSE_SIMULACRO"
+if [ -n "${SIMULACRO_REVERSION:-}" ]; then
+  en_corrida=0
+  for par in $SERVICIOS_PUERTOS; do
+    if [ "${par%%:*}" = "$SIMULACRO_REVERSION" ]; then en_corrida=1; fi
+  done
+  if [ "$en_corrida" -ne 1 ]; then
+    echo "SIMULACRO_REVERSION=$SIMULACRO_REVERSION no esta entre los servicios de esta corrida ($SERVICIOS_PUERTOS): se aborta sin tocar nada."
+    exit 1
+  fi
+  if [ ! -f "ultimo-tag-estable-${SIMULACRO_REVERSION}.txt" ]; then
+    echo "SIMULACRO_REVERSION=$SIMULACRO_REVERSION no tiene tag estable previo: sin a donde revertir, el simulacro no tiene sentido. Se aborta."
+    exit 1
+  fi
+  cat > "$COMPOSE_SIMULACRO" <<EOF
+# Generado por desplegar.sh SOLO durante un simulacro de reversion. No se
+# versiona ni lo usa revertir.sh: al revertir, el servicio vuelve con su
+# entorno normal.
+services:
+  srv-${SIMULACRO_REVERSION}:
+    environment:
+      SERVER_PORT: "8999"
+EOF
+  INTENTOS_SALUD=12
+  echo "== SIMULACRO DE REVERSION: $SIMULACRO_REVERSION se despliega con SERVER_PORT=8999 (nadie lo publica); debe fallar la salud y revertirse al tag $(cat "ultimo-tag-estable-${SIMULACRO_REVERSION}.txt") =="
+fi
 
 echo "== 3) Desplegando TAG=$TAG para: $SERVICIOS_PUERTOS =="
 export TAG
@@ -297,6 +383,9 @@ if [ "$INCLUYE_MS_ECOMMERCE" -eq 1 ]; then
 fi
 if [ "$INCLUYE_CONTENIDO" -eq 1 ]; then
   ARCHIVOS_COMPOSE+=(-f "$COMPOSE_CONTENIDO")
+fi
+if [ -f "$COMPOSE_SIMULACRO" ]; then
+  ARCHIVOS_COMPOSE+=(-f "$COMPOSE_SIMULACRO")
 fi
 
 # Las imagenes de ghcr.io son privadas (paquetes de la organizacion): el
@@ -407,5 +496,26 @@ if [ "$HUBO_FALLO" -eq 1 ]; then
   echo "Uno o mas servicios no pasaron /actuator/health. Detalle en $DIRECTORIO/ultimo-fallo.txt"
   exit 1
 fi
+
+# ---------------------------------------------------------------------------
+# Higiene de disco. SOLO despues de que todo este saludable: mientras algun
+# servicio pueda necesitar una reversion, su imagen anterior no se toca.
+#
+# Cada despliegue deja una imagen nueva por servicio y la anterior se queda.
+# Medido el 20 de septiembre con el workflow de diagnostico: 60 imagenes, 7,26
+# GB, de los cuales 6,06 GB recuperables, sobre un disco de 20 GB al 60 %. A
+# ese ritmo el disco se llena, y un host sin espacio no arranca contenedores
+# ni escribe en la base de datos: seria una caida de verdad, no como la del 19
+# de septiembre, que fue una instancia apagada.
+#
+# `--filter until=72h` conserva lo de los ultimos tres dias, que cubre de
+# sobra la ventana de reversion. No se usa `-a` sin filtro: eso borraria las
+# imagenes base y el siguiente despliegue tendria que bajarlas otra vez.
+echo "== 5) Limpiando imagenes viejas (conserva las ultimas 72 h) =="
+antes=$(docker system df --format '{{.Size}}' 2>/dev/null | head -1 || echo "?")
+docker image prune -af --filter "until=72h" 2>&1 | tail -3 || true
+despues=$(docker system df --format '{{.Size}}' 2>/dev/null | head -1 || echo "?")
+echo "  Imagenes: $antes -> $despues"
+df -h / | tail -1 | awk '{print "  Disco: " $4 " libres de " $2 " (" $5 " usado)"}'
 
 echo "Despliegue de TAG=$TAG completado y saludable para: $SERVICIOS_PUERTOS"

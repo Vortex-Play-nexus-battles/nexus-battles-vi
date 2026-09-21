@@ -20,75 +20,7 @@
       productos de RF-INV-004. Se repite en cada vista mientras no exista una
       forma acordada de compartir fragmentos de HTML sin framework.
     -->
-    <header class="cabecera">
-      <div class="cabecera__grupo-marca">
-        <span class="cabecera__marca">NEXUS BATTLES VI</span>
-        <nav class="cabecera__nav" aria-label="Navegacion principal">
-          <a class="cabecera__destino activo" href="./batallas.html" aria-current="page"
-            >Jugar online</a
-          >
-          <a
-            class="cabecera__destino cabecera__destino--pendiente"
-            aria-disabled="true"
-            data-pendiente="grupo-alpha"
-            title="Todavia no publicada: grupo-alpha"
-            >Misiones</a
-          >
-          <a
-            class="cabecera__destino cabecera__destino--pendiente"
-            aria-disabled="true"
-            data-pendiente="HU-TOR, sprint 3"
-            title="Todavia no publicada: HU-TOR, sprint 3"
-            >Torneo</a
-          >
-          <a class="cabecera__destino" href="../../contenido/inventario/inventario.html"
-            >Mi inventario</a
-          >
-          <a class="cabecera__destino" href="../../cuentas/subastas.html">Subasta</a>
-        </nav>
-      </div>
-
-      <label class="cabecera__buscador">
-        <svg class="icono icono--menudo" aria-hidden="true">
-          <use href="../../../../../shared/ui-kit/iconos/sprite.svg#buscar" />
-        </svg>
-        <span class="solo-lectores">Buscar productos</span>
-        <input class="cabecera__buscador-texto" type="search" placeholder="Buscar productos" />
-      </label>
-
-      <div class="cabecera__acciones">
-        <!--
-          Sin datos de ejemplo en la cabecera (mismo criterio que #358). El saldo
-          se pinta cuando exista el contrato de creditos (#29); hasta entonces
-          queda oculto en vez de mostrar un numero inventado.
-        -->
-        <span class="cabecera__dato" data-zona="creditos" hidden>
-          <svg class="icono icono--menudo" aria-hidden="true">
-            <use href="../../../../../shared/ui-kit/iconos/sprite.svg#moneda" />
-          </svg>
-          <span data-zona="saldo"></span>
-        </span>
-
-        <a
-          class="cabecera__campana"
-          href="../notificaciones/notificaciones.html"
-          aria-label="Notificaciones"
-        >
-          <svg class="icono" aria-hidden="true">
-            <use href="../../../../../shared/ui-kit/iconos/sprite.svg#campana" />
-          </svg>
-          <span class="cabecera__contador" data-zona="contador" aria-hidden="true" hidden>0</span>
-        </a>
-
-        <span class="cabecera__cuenta">
-          <span class="cabecera__avatar" aria-hidden="true"></span>
-          <span class="cabecera__identidad">
-            <!-- El apodo lo escribe el login en sessionStorage (nexus.apodoActual). -->
-            <span class="cabecera__apodo" data-zona="apodo"></span>
-          </span>
-        </span>
-      </div>
-    </header>
+    <div data-cabecera-app></div>
 
     <main class="pagina pila">
       <div class="pila pila--compacta">
@@ -107,6 +39,14 @@
         <span class="conexion conexion--sin-conexion" data-zona="conexion" role="status">
           Canal en tiempo real no conectado
         </span>
+        <!--
+          HU-JUE-015: el chat de ESTA sala. Solo aparece cuando se llego con
+          `?sala=`: el script pone el enlace con el identificador. Antes la
+          vista del chat existia sin que ninguna pantalla llevara a ella.
+        -->
+        <a class="boton boton--secundario" data-zona="enlace-chat-sala" href="./chat.html" hidden
+          >Chat de la sala</a
+        >
       </div>
 
       <!--
@@ -132,6 +72,23 @@
         <span class="t-meta" data-zona="aviso-arranque" role="status"></span>
       </div>
 
+      <!--
+        HU-SAL-006: salir o cancelar ANTES de que empiece. Se ofrece el boton
+        que corresponde a quien mira (la vista lo sabe por `idAnfitrion` de
+        GET /salas/{id}) y ninguno de los dos cuando la partida ya arranco.
+        Cancelar pide confirmacion porque expulsa a los demas; salir no.
+      -->
+      <div class="fila" data-zona="espera" hidden>
+        <span class="t-meta" data-zona="ocupacion" role="status" aria-live="polite"></span>
+        <button class="boton boton--secundario" type="button" data-accion="salir-de-sala" hidden>
+          Salir de la sala
+        </button>
+        <button class="boton boton--peligro" type="button" data-accion="cancelar-sala" hidden>
+          Cancelar sala
+        </button>
+        <span class="t-meta" data-zona="aviso-espera" role="alert"></span>
+      </div>
+
       <section class="tarjeta pila" data-zona="panel" hidden>
         <h2 class="tarjeta__titulo">Participantes</h2>
         <div class="pila pila--compacta" data-zona="vidas"></div>
@@ -143,6 +100,14 @@
           servidor va a rechazar.
         -->
         <div class="fila" data-zona="acciones"></div>
+        <!--
+          HU-DIS-003: si el motor de combate no responde al jugar, aqui se pinta
+          «Seccion degradada» (los botones se quedan: la accion no se aplico y
+          el turno sigue siendo tuyo). Cualquier otro rechazo del servidor a
+          la accion va en la zona de rechazo, con su texto.
+        -->
+        <div data-zona="degradacion" data-seccion="Motor de combate" hidden></div>
+        <p class="t-cuerpo" data-zona="rechazo" role="alert" hidden></p>
         <p class="t-cuerpo" data-zona="resultado" role="status" hidden></p>
       </section>
     </main>
@@ -155,24 +120,49 @@
         montarSalaBatalla,
         leerEstadoInicial,
         suscripcionDePartida,
+        participantesParaElPanel,
       } from './sala-batalla.js';
-      import { urlDelCanal, destinoDeSala, TIPO_PARTIDA_INICIADA } from './canal-sala.js';
+      import {
+        urlDelCanal,
+        estadoDesdeFicha,
+        seguirSala,
+        textoDeCancelacion,
+      } from './canal-sala.js';
       import { montarControlesDeCombate, enviarAccion, registroDeAvisos } from './combate.js';
-      import { baseDeApi, iniciarPartida, obtenerPartida } from './cliente-salas.js';
+      import {
+        baseDeApi,
+        iniciarPartida,
+        obtenerPartida,
+        obtenerSala,
+        abandonarSala,
+        cancelarSala,
+      } from './cliente-salas.js';
+      import { montarSalaDeEspera, salidaAlListado } from './sala-de-espera.js';
       import { usuarioIdDeSesion } from '../../comun/identidad.js';
       // Transporte STOMP sobre WebSocket nativo del servicio, el mismo que usan
       // Batallas (HU-SAL-002) y el chat (HU-JUE-015): CONNECT con el JWT en la
       // cabecera Authorization, SUBSCRIBE a /tema/partidas/{id}. No hay un
       // segundo cliente.
       import { conectarChat } from './cliente-chat.js';
+      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+
+      // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
+      if (!exigirSesion()) {
+        throw new Error('sin sesion: redirigiendo al login');
+      }
+      // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
+      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'jugar' });
 
       const parametros = new URLSearchParams(globalThis.location.search);
       const idSala = parametros.get('sala');
       const token = sessionStorage.getItem('nexus.token');
 
-      // Cabecera: solo lo que el login dejo de verdad en la sesion.
-      document.querySelector('[data-zona="apodo"]').textContent =
-        sessionStorage.getItem('nexus.apodoActual') ?? '';
+      // HU-JUE-015: el chat de esta sala, con su identificador en la URL.
+      const enlaceChat = document.querySelector('[data-zona="enlace-chat-sala"]');
+      if (enlaceChat && idSala) {
+        enlaceChat.href = `./chat.html?sala=${encodeURIComponent(idSala)}`;
+        enlaceChat.hidden = false;
+      }
 
       const zonaVacia = document.querySelector('[data-zona="sin-partida"] .t-meta');
       const zonaArranque = document.querySelector('[data-zona="arranque"]');
@@ -183,6 +173,9 @@
       let partida = null;
       /** Cliente STOMP, si hay sesion. Se abre una sola vez y se comparte. */
       let canal = null;
+      /** Los controles de combate montados ahora mismo, para los rechazos. */
+      let controlesActuales = null;
+      let colaPrivadaSuscrita = false;
 
       // Quien mira. Sale del claim `uid` del token, igual que en el servidor:
       // `nexus.usuarioId` no lo escribe nadie y siempre es null.
@@ -207,9 +200,13 @@
         const controles = montarControlesDeCombate(document, {
           idPartida: partida.id,
           yo,
-          participantes: (partida.participantes ?? [])
-            .filter((p) => p.heroe)
-            .map((p) => ({ jugador: { id: p.jugador }, heroe: p.heroe })),
+          // La misma forma que usa el panel de vidas: con `esIA` y `equipo`,
+          // que es lo que decide a quien se puede atacar (HU-SAL-004).
+          participantes: participantesParaElPanel(partida),
+          // El turno en curso viene en la propia partida. Sin pasarlo, los
+          // botones esperarian un `partida.turno.cambiado` que en el turno 1
+          // no existe todavia: nadie podria dar el primer golpe.
+          turnoDe: partida.turnoActual?.idJugador,
           alAtacar: (accion) => enviarAccion(canal, partida.id, accion),
         });
 
@@ -221,6 +218,20 @@
             controles.recibir(aviso);
           }
         });
+
+        // Los rechazos a MI accion vuelven por mi cola privada (errorDeCanal
+        // del contrato), no por el tema de la partida. Sin escucharla, un
+        // motor caido (HU-DIS-003) o un «no es tu turno» se perdian en
+        // silencio, que es justo lo que el Charter (riesgo #7) prohibe. Una
+        // sola suscripcion aunque se repinte: el rechazo va a los controles
+        // que esten montados en ese momento.
+        controlesActuales = controles;
+        if (!colaPrivadaSuscrita) {
+          colaPrivadaSuscrita = true;
+          canal.suscribir('/usuario/cola/salas', (problema) => {
+            controlesActuales?.rechazar(problema);
+          });
+        }
       }
 
       // ?partida=<id> gana: se llego directamente al combate o se recargo
@@ -239,6 +250,18 @@
 
       const estado = partida ? null : leerEstadoInicial();
 
+      /** La sala de espera, mientras no haya partida (HU-SAL-006). */
+      let espera = null;
+      /** La ficha de la sala, si se pudo leer. */
+      let sala = null;
+
+      // Vuelve al listado dejando dicho por que — una sola vez por pagina: al
+      // anfitrion que cancela le llega el mismo hecho por su boton y por el
+      // canal, y navegar dos veces aborta la primera navegacion.
+      const volverAlListado = salidaAlListado(sessionStorage, (destino) => {
+        globalThis.location.href = destino;
+      });
+
       if (!partida && idSala) {
         if (zonaVacia) {
           zonaVacia.textContent =
@@ -248,11 +271,61 @@
         if (zonaArranque && token) {
           zonaArranque.hidden = false;
         }
+        if (token) {
+          try {
+            sala = await obtenerSala(idSala);
+            espera = montarSalaDeEspera(document, {
+              sala,
+              yo,
+              abandonar: abandonarSala,
+              cancelar: cancelarSala,
+              confirmar: (texto) => globalThis.confirm(texto),
+              alSalir: ({ motivo }) =>
+                volverAlListado(
+                  motivo === 'cancelada'
+                    ? { tono: 'info', titulo: 'Cancelaste la sala.' }
+                    : { tono: 'info', titulo: 'Saliste de la sala.' },
+                ),
+            });
+            // Solo el anfitrion puede arrancar: a los demas se les ahorra un
+            // boton que el servidor rechazaria con 403.
+            if (zonaArranque && !espera.esAnfitrion) {
+              zonaArranque.hidden = true;
+            }
+          } catch (error) {
+            // Sin ficha no hay sala de espera, pero la vista sigue diciendo la
+            // verdad: el mensaje del servicio (404, 401...) va donde se ve.
+            if (zonaVacia) {
+              zonaVacia.textContent = error.detalle ?? error.message;
+            }
+          }
+        }
       }
 
       if (token) {
         try {
           canal = await conectarChat({ url: urlDelCanal({ base: baseDeApi() }), token });
+
+          // Un canal que se muere en silencio es peor que uno que no abre: la
+          // vista sigue diciendo «conectado», los botones siguen puestos y
+          // cada acción se va a un socket cerrado sin que nadie se entere. El
+          // Project Charter lo pide explícitamente (riesgo #7): nunca fallar
+          // en silencio.
+          const perdido = (motivo) => {
+            console.warn('Canal de la partida perdido:', motivo);
+            const zona = document.querySelector('[data-zona="conexion"]');
+            if (zona) {
+              zona.className = 'conexion conexion--sin-conexion';
+              zona.textContent = 'Canal en tiempo real no conectado. Recarga la página.';
+            }
+            // Sin canal no se puede jugar el turno: dejar los botones vivos
+            // invita a mandar acciones que no llegan a ningún sitio.
+            for (const boton of document.querySelectorAll('[data-atacar]')) {
+              boton.disabled = true;
+            }
+          };
+          canal.alError = (error) => perdido(error?.message ?? 'error del canal');
+          canal.alCerrar = () => perdido('la conexión se cerró');
         } catch (error) {
           console.warn('Canal no disponible:', error?.message);
         }
@@ -265,22 +338,55 @@
 
       // Quien espera en la sala se entera por el canal de la SALA: aqui todavia
       // no se conoce el identificador de la partida, asi que no se puede estar
-      // suscrito a su tema.
-      if (canal && idSala) {
-        canal.suscribir(destinoDeSala(idSala), async (aviso) => {
-          if (aviso?.tipo !== TIPO_PARTIDA_INICIADA || partida) {
-            return;
-          }
-          try {
-            partida = await obtenerPartida(aviso.idPartida);
-            if (zonaArranque) {
-              zonaArranque.hidden = true;
-            }
-            repintar(suscripcionActual());
-          } catch (error) {
-            console.warn('No se pudo cargar la partida recien iniciada:', error?.message);
-          }
-        });
+      // suscrito a su tema. Por el mismo canal llegan quien entra, quien sale
+      // (HU-SAL-006) y la cancelacion del anfitrion.
+      if (canal && idSala && !partida) {
+        seguirSala(
+          sala
+            ? estadoDesdeFicha(sala)
+            : { idSala, ocupacion: { actual: 0, maximo: 0 }, participantes: [] },
+          {
+            suscribir: (destino, alRecibir) => canal.suscribir(destino, alRecibir),
+            alCambiar: (estadoDeLaSala) => espera?.actualizar(estadoDeLaSala),
+            alIniciarPartida: async (aviso) => {
+              if (partida) {
+                return;
+              }
+              try {
+                partida = await obtenerPartida(aviso.idPartida);
+                if (zonaArranque) {
+                  zonaArranque.hidden = true;
+                }
+                // CA-03: en curso ya no se sale ni se cancela desde aqui.
+                espera?.ocultar();
+                repintar(suscripcionActual());
+              } catch (error) {
+                console.warn('No se pudo cargar la partida recien iniciada:', error?.message);
+              }
+            },
+            // El anfitrion cancelo: a los demas se les devuelve al listado
+            // con el motivo (CA-02). Al propio anfitrion el aviso le llega
+            // tambien por el canal (antes o despues de la respuesta de su
+            // boton): se le dice lo mismo por los dos caminos para que no
+            // dependa del orden.
+            alCancelar: (aviso) =>
+              volverAlListado(
+                espera?.esAnfitrion
+                  ? { tono: 'info', titulo: 'Cancelaste la sala.' }
+                  : {
+                      tono: 'advertencia',
+                      titulo: 'La sala se cerro',
+                      detalle: textoDeCancelacion(aviso),
+                    },
+              ),
+          },
+        );
+        // Senal de que la sala de espera ya escucha el canal: la usan las
+        // pruebas de aceptacion para no cancelar antes de que el otro oiga.
+        const zonaEspera = document.querySelector('[data-zona="espera"]');
+        if (zonaEspera) {
+          zonaEspera.dataset.canal = 'suscrito';
+        }
       }
 
       botonIniciar?.addEventListener('click', async () => {
@@ -289,6 +395,7 @@
         try {
           partida = await iniciarPartida(idSala);
           zonaArranque.hidden = true;
+          espera?.ocultar();
           repintar(suscripcionActual());
         } catch (error) {
           // 403 no eres el anfitrion · 409 la sala no puede empezar todavia.

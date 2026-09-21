@@ -73,7 +73,8 @@ class RepositorioSalasJpaIT {
                 () -> assertTrue(recuperada.incluirHeroeIA()),
                 () -> assertEquals(2, recuperada.tamanoEquipo()),
                 () -> assertEquals(ANFITRION, recuperada.idAnfitrion()),
-                () -> assertEquals(1, recuperada.ocupacion()));
+                // Anfitrion + la maquina: desde HU-SAL-004 la IA ocupa cupo.
+                () -> assertEquals(2, recuperada.ocupacion()));
     }
 
     @Test
@@ -97,6 +98,35 @@ class RepositorioSalasJpaIT {
         repositorio.guardar(sala);
 
         assertNull(repositorio.buscarPorId(sala.id()).orElseThrow().tamanoEquipo());
+    }
+
+    @Test
+    @DisplayName("los cupos de la maquina (V10) van y vuelven, y la ocupacion los cuenta (HU-SAL-004)")
+    void conservaLosCuposDeLaMaquina() {
+        Sala sala = Sala.crear(new ParametrosDeSala(6, Modalidad.HASTA_SEIS, 0, 3, false, null), ANFITRION);
+
+        repositorio.guardar(sala);
+        Sala recuperada = repositorio.buscarPorId(sala.id()).orElseThrow();
+
+        assertAll(
+                () -> assertEquals(3, recuperada.heroesIA()),
+                () -> assertTrue(recuperada.incluirHeroeIA()),
+                () -> assertEquals(4, recuperada.ocupacion(), "anfitrion + 3 maquinas"),
+                () -> assertEquals(EstadoSala.ABIERTA, recuperada.estado()));
+    }
+
+    @Test
+    @DisplayName("contra la IA se guarda llena, con la maquina en el segundo cupo")
+    void contraLaIaSeGuardaLlena() {
+        Sala sala = Sala.crear(new ParametrosDeSala(2, Modalidad.CONTRA_IA, 0, false, false, null), ANFITRION);
+
+        repositorio.guardar(sala);
+        Sala recuperada = repositorio.buscarPorId(sala.id()).orElseThrow();
+
+        assertAll(
+                () -> assertEquals(1, recuperada.heroesIA()),
+                () -> assertEquals(EstadoSala.LLENA, recuperada.estado()),
+                () -> assertEquals(2, recuperada.ocupacion()));
     }
 
     @Test
@@ -445,6 +475,45 @@ class RepositorioSalasJpaIT {
                 () -> assertEquals(1, despues.ocupacion()),
                 () -> assertNull(despues.fichaDe(BRUNO)),
                 () -> assertEquals(DE_ANA, despues.fichaDe(ANFITRION).heroe()));
+    }
+
+    // =========================================================================
+    // HU-JUE-014 — la reserva de cada participante (V9)
+    // =========================================================================
+
+    @Test
+    @DisplayName("la reserva de creditos de cada participante sobrevive al viaje, cada uno con la suya")
+    void cadaUnoConservaSuReserva() {
+        UUID delAnfitrion = UUID.randomUUID();
+        UUID deBruno = UUID.randomUUID();
+        Sala sala = Sala.crear(
+                new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 250, false, false, null), ANFITRION,
+                ficha("Ana", DE_ANA)).conReserva(delAnfitrion);
+        sala.unirse(BRUNO, ficha("Bruno", DE_BRUNO).conReserva(deBruno), null);
+
+        repositorio.guardar(sala);
+        Sala recuperada = repositorio.buscarPorId(sala.id()).orElseThrow();
+
+        assertAll(
+                () -> assertEquals(java.util.Optional.of(delAnfitrion), recuperada.reservaDe(ANFITRION)),
+                () -> assertEquals(java.util.Optional.of(deBruno), recuperada.reservaDe(BRUNO)),
+                () -> assertEquals(java.util.Map.of(ANFITRION, delAnfitrion, BRUNO, deBruno),
+                        recuperada.reservasDeCreditos()),
+                () -> assertEquals(DE_BRUNO, recuperada.fichaDe(BRUNO).heroe(), "la ficha sigue entera"));
+    }
+
+    @Test
+    @DisplayName("dos participantes no pueden apuntar a la misma reserva: lo impide la base (ux_participantes_sala_reserva)")
+    void unaReservaEsDeUnSoloParticipante() {
+        UUID compartida = UUID.randomUUID();
+        Sala sala = Sala.crear(
+                new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 250, false, false, null), ANFITRION,
+                ficha("Ana", DE_ANA));
+        sala.unirse(BRUNO, ficha("Bruno", DE_BRUNO).conReserva(compartida), null);
+        sala.unirse(ANA, ficha("Ana2", DE_ANA).conReserva(compartida), null);
+
+        assertThrows(org.springframework.dao.DataIntegrityViolationException.class,
+                () -> repositorio.guardar(sala));
     }
 
     /**

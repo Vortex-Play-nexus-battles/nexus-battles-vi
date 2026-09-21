@@ -38,6 +38,10 @@ class TokenCredencialServiceTest {
     @Mock
     private CorreoClient correoClient;
 
+    /** La politica se prueba aparte (PasswordPolicyValidatorTest); aqui solo se afirma que se consulta. */
+    @Mock
+    private com.nexusbattles.ms_identidad.auth.validation.PasswordPolicyValidator passwordPolicyValidator;
+
     @InjectMocks
     private TokenCredencialService tokenCredencialService;
 
@@ -288,5 +292,33 @@ class TokenCredencialServiceTest {
         assertEquals("ACTIVO", usuario.getEstado());
         assertTrue(new BCryptPasswordEncoder().matches("NuevaClave123!", usuario.getPassword()));
         assertTrue(tokenCredencial.isUsado());
+        verify(passwordPolicyValidator).validar("NuevaClave123!");
+    }
+
+    /**
+     * HU-AUT-006 / hallazgo de #441: el canje aplica la politica de RF-AUT-002.
+     * Y un rechazo por politica no quema el codigo: el usuario puede volver a
+     * intentarlo con una contraseña valida y el mismo enlace.
+     */
+    @Test
+    void unaContrasenaQueIncumpleLaPoliticaNoSeGuardaNiQuemaElCodigo() {
+        Usuario usuario = usuarioDePrueba();
+        usuario.setPassword("hash-anterior");
+        TokenCredencial tokenCredencial = new TokenCredencial(
+            usuario, "token-valido", "RESTABLECIMIENTO", LocalDateTime.now().plusHours(1)
+        );
+        when(tokenCredencialRepository.findByToken("token-valido"))
+            .thenReturn(Optional.of(tokenCredencial));
+        org.mockito.Mockito.doThrow(new IllegalArgumentException("La contraseña no cumple la política: debe incluir al menos un número."))
+            .when(passwordPolicyValidator).validar("sinNumeros!!");
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> tokenCredencialService.canjearToken("token-valido", "sinNumeros!!"));
+
+        assertTrue(error.getMessage().contains("un número"));
+        assertEquals("hash-anterior", usuario.getPassword());
+        assertFalse(tokenCredencial.isUsado());
+        verify(usuarioRepository, org.mockito.Mockito.never()).save(usuario);
+        verify(tokenCredencialRepository, org.mockito.Mockito.never()).save(tokenCredencial);
     }
 }

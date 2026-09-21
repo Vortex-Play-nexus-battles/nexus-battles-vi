@@ -24,58 +24,7 @@
       productos de RF-INV-004. Se repite en cada vista mientras no exista una
       forma acordada de compartir fragmentos de HTML sin framework.
     -->
-    <header class="cabecera">
-      <div class="cabecera__grupo-marca">
-        <span class="cabecera__marca">NEXUS BATTLES VI</span>
-        <nav class="cabecera__nav" aria-label="Navegacion principal">
-          <a class="cabecera__destino" href="../salas-partidas/batallas.html">Jugar online</a>
-          <a
-            class="cabecera__destino cabecera__destino--pendiente"
-            aria-disabled="true"
-            data-pendiente="grupo-alpha"
-            title="Todavia no publicada: grupo-alpha"
-            >Misiones</a
-          >
-          <a
-            class="cabecera__destino cabecera__destino--pendiente"
-            aria-disabled="true"
-            data-pendiente="HU-TOR, sprint 3"
-            title="Todavia no publicada: HU-TOR, sprint 3"
-            >Torneo</a
-          >
-          <a class="cabecera__destino" href="../../contenido/inventario/inventario.html"
-            >Mi inventario</a
-          >
-          <a class="cabecera__destino" href="../../cuentas/subastas.html">Subasta</a>
-        </nav>
-      </div>
-
-      <label class="cabecera__buscador">
-        <svg class="icono icono--menudo" aria-hidden="true">
-          <use href="../../../../../shared/ui-kit/iconos/sprite.svg#buscar" />
-        </svg>
-        <span class="solo-lectores">Buscar productos</span>
-        <input class="cabecera__buscador-texto" type="search" placeholder="Buscar productos" />
-      </label>
-
-      <div class="cabecera__acciones">
-        <a
-          class="cabecera__campana"
-          href="../notificaciones/notificaciones.html"
-          aria-label="Notificaciones"
-        >
-          <svg class="icono" aria-hidden="true">
-            <use href="../../../../../shared/ui-kit/iconos/sprite.svg#campana" />
-          </svg>
-        </a>
-        <span class="cabecera__cuenta">
-          <span class="cabecera__avatar" aria-hidden="true"></span>
-          <span class="cabecera__identidad">
-            <span class="cabecera__apodo" data-zona="apodo"></span>
-          </span>
-        </span>
-      </div>
-    </header>
+    <div data-cabecera-app></div>
 
     <main class="pagina pila">
       <div class="pila pila--compacta">
@@ -238,15 +187,17 @@
       </form>
 
       <!--
-        Hilo del producto. Muestra lo publicado en esta sesion: el contrato de
-        comentarios no define todavia una consulta del hilo existente, y la
-        vista no lo disimula.
+        Hilo del producto (HU-COM-003 / HU-INV-014): se carga del servicio al
+        abrir la vista y se completa con lo que se publique. La calificacion
+        promedio va arriba; sin calificaciones se dice, no se pinta un 0.
+        Solo los comentarios propios traen «Eliminar» (HU-COM-004, CA-04).
       -->
       <section class="pila pila--compacta" data-zona="hilo" hidden>
         <h2>Hilo del producto</h2>
+        <p class="t-meta" data-zona="promedio" aria-live="polite">Sin calificaciones todavia.</p>
+        <p class="t-meta" data-zona="hilo-cargando" hidden>Cargando el hilo…</p>
         <p class="t-meta" data-zona="hilo-vacio">
-          Aqui aparece lo que publiques. La lectura del hilo completo llegara cuando el contrato de
-          comentarios defina la consulta.
+          Todavia nadie ha comentado este producto. Se el primero.
         </p>
         <div class="pila pila--compacta" data-zona="hilo-lista"></div>
       </section>
@@ -257,13 +208,19 @@
 
     <script type="module">
       import { montarPublicarComentario, leerSesion } from './publicar-comentario.js';
+      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+
+      // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
+      if (!exigirSesion()) {
+        throw new Error('sin sesion: redirigiendo al login');
+      }
+      // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
+      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'subasta' });
 
       const productoId = new URLSearchParams(location.search).get('producto');
       const formulario = document.getElementById('formulario-comentario');
       const hilo = document.querySelector('[data-zona="hilo"]');
       const sesion = leerSesion();
-
-      document.querySelector('[data-zona="apodo"]').textContent = sesion.apodo ?? 'Sin sesion';
 
       if (!productoId) {
         document.querySelector('[data-zona="sin-producto"]').hidden = false;

@@ -45,6 +45,7 @@ public class PlantillaCorreoService {
             "email/aviso-acceso",
             "email/confirmacion-cuenta",
             "email/recuperacion-clave",
+            "email/cambio-clave",
             "email/mision",
             "email/subasta",
             "email/plantilla-prueba");

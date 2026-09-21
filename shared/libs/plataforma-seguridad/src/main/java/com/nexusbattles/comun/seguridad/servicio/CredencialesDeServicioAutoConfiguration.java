@@ -34,8 +34,16 @@ import java.time.Clock;
 @ConditionalOnExpression("!'${seguridad.servicio.client-id:${DIRECTORIO_ACTIVO_CLIENT_ID:}}'.isBlank()")
 public class CredencialesDeServicioAutoConfiguration {
 
+    /**
+     * Reloj para la caducidad del token cacheado. Por TIPO, no por nombre: un
+     * servicio con su propio {@code Clock} (ms-subastas lo define para las
+     * pruebas de tiempo) lo usa tambien aqui; si esta biblioteca creara otro,
+     * cualquier bean que pida {@code Clock} a secas —el filtro de latencia de
+     * plataforma-observabilidad— encontraria dos y el servicio no arrancaria
+     * (lo destapo el banco E2E al meter ms-subastas, #572).
+     */
     @Bean
-    @ConditionalOnMissingBean(name = "relojDeCredenciales")
+    @ConditionalOnMissingBean(Clock.class)
     public Clock relojDeCredenciales() {
         return Clock.systemUTC();
     }

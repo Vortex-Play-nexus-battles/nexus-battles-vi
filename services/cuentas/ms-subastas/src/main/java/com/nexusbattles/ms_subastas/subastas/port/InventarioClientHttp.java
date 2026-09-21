@@ -12,8 +12,12 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+
+import com.nexusbattles.comun.seguridad.servicio.CredencialDeServicioNoDisponible;
+import com.nexusbattles.ms_subastas.seguridad.PortadorDeServicio;
 
 /**
  * Adaptador HTTP hacia el servicio de inventario.
@@ -31,7 +35,7 @@ import java.util.UUID;
  * <p>Todas las operaciones internas entre servicios usan identidad por UUID estable y tokens
  * S2S (bearerAuth), sin depender de la cabecera {@code X-User-Name}.
  */
-public class InventarioClientHttp implements InventarioClient {
+public class InventarioClientHttp implements InventarioClient, InventarioPublicacionClient {
 
     private static final Logger log = LoggerFactory.getLogger(InventarioClientHttp.class);
 
@@ -40,19 +44,37 @@ public class InventarioClientHttp implements InventarioClient {
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final Duration timeout;
+    private final PortadorDeServicio credencial;
 
     public InventarioClientHttp(String baseUrl, long timeoutMs, ObjectMapper objectMapper) {
+        this(baseUrl, timeoutMs, objectMapper, PortadorDeServicio.ninguno());
+    }
+
+    /**
+     * @param credencial la de ms-subastas ante inventario (ADR-005): inventario
+     *        solo acepta operar sobre el inventario de otro jugador a un
+     *        servicio con {@code ROLE_SERVICIO} (contrato 1.1.0, #451).
+     */
+    public InventarioClientHttp(String baseUrl, long timeoutMs, ObjectMapper objectMapper,
+                                PortadorDeServicio credencial) {
         this(URI.create(baseUrl),
                 HttpClient.newBuilder().connectTimeout(Duration.ofMillis(timeoutMs)).build(),
                 objectMapper,
-                Duration.ofMillis(timeoutMs));
+                Duration.ofMillis(timeoutMs),
+                credencial);
     }
 
     public InventarioClientHttp(URI baseUri, HttpClient httpClient, ObjectMapper objectMapper, Duration timeout) {
+        this(baseUri, httpClient, objectMapper, timeout, PortadorDeServicio.ninguno());
+    }
+
+    public InventarioClientHttp(URI baseUri, HttpClient httpClient, ObjectMapper objectMapper, Duration timeout,
+                                PortadorDeServicio credencial) {
         this.baseUri = baseUri;
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
         this.timeout = timeout;
+        this.credencial = Objects.requireNonNull(credencial, "credencial");
     }
 
     /**
@@ -71,8 +93,8 @@ public class InventarioClientHttp implements InventarioClient {
         exigir(idempotencyKey != null && !idempotencyKey.isBlank(),
                 "La clave de idempotencia es obligatoria: inventario la exige para el bloqueo");
 
-        HttpRequest peticion = HttpRequest.newBuilder(
-                        uri("/api/v1/inventario/elementos/" + elementoInventarioId + "/bloqueo-subasta"))
+        HttpRequest peticion = firmada(HttpRequest.newBuilder(
+                        uri("/api/v1/inventario/elementos/" + elementoInventarioId + "/bloqueo-subasta")))
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
                 .header("Idempotency-Key", idempotencyKey)
@@ -121,8 +143,8 @@ public class InventarioClientHttp implements InventarioClient {
         exigir(elementoInventarioId != null && !elementoInventarioId.isBlank(),
                 "El identificador del elemento de inventario es obligatorio");
 
-        HttpRequest peticion = HttpRequest.newBuilder(
-                        uri("/api/v1/inventario/elementos/" + elementoInventarioId))
+        HttpRequest peticion = firmada(HttpRequest.newBuilder(
+                        uri("/api/v1/inventario/elementos/" + elementoInventarioId)))
                 .header("Accept", "application/json")
                 .timeout(timeout)
                 .GET()
@@ -174,9 +196,9 @@ public class InventarioClientHttp implements InventarioClient {
                 "El identificador del elemento de inventario es obligatorio");
         exigir(subastaId != null, "El identificador de la subasta es obligatorio para liberar el bloqueo");
 
-        HttpRequest.Builder constructor = HttpRequest.newBuilder(
+        HttpRequest.Builder constructor = firmada(HttpRequest.newBuilder(
                         uri("/api/v1/inventario/elementos/" + elementoInventarioId
-                                + "/bloqueo-subasta/" + subastaId))
+                                + "/bloqueo-subasta/" + subastaId)))
                 .header("Accept", "application/json")
                 .timeout(timeout)
                 .DELETE();
@@ -229,8 +251,8 @@ public class InventarioClientHttp implements InventarioClient {
         exigir(nuevoPropietarioId != null, "El nuevo propietario es obligatorio para la transferencia");
         exigir(subastaId != null, "El identificador de la subasta es obligatorio para la transferencia");
 
-        HttpRequest.Builder constructor = HttpRequest.newBuilder(
-                        uri("/api/v1/inventario/elementos/" + elementoInventarioId + "/transferencias"))
+        HttpRequest.Builder constructor = firmada(HttpRequest.newBuilder(
+                        uri("/api/v1/inventario/elementos/" + elementoInventarioId + "/transferencias")))
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
                 .timeout(timeout)
@@ -286,6 +308,19 @@ public class InventarioClientHttp implements InventarioClient {
                     new SolicitudTransferencia(nuevoPropietarioId, subastaId));
         } catch (IOException e) {
             throw new InventarioClientException("Error al serializar el cuerpo para inventario", e);
+        }
+    }
+
+    /**
+     * Pone la credencial de ms-subastas (ADR-005). Sin ella la llamada no
+     * sale y se trata como inventario no disponible (reintento y cortacircuitos).
+     */
+    private HttpRequest.Builder firmada(HttpRequest.Builder peticion) {
+        try {
+            return credencial.firmar(peticion);
+        } catch (CredencialDeServicioNoDisponible sinCredencial) {
+            throw new InventarioNoDisponibleException(
+                    "Sin credencial de servicio no se puede llamar a inventario", sinCredencial);
         }
     }
 

@@ -50,6 +50,7 @@ class InventarioPactoTest {
     private static final UUID PROPIETARIO = UUID.fromString("77777777-0000-0000-0000-0000000000cc");
     private static final UUID PRODUCTO = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002");
     private static final UUID SUBASTA = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
+    private static final UUID NUEVO_DUENO = UUID.fromString("99999999-0000-0000-0000-0000000000ee");
 
     private InventarioClientHttp clienteContra(MockServer servidor) {
         return new InventarioClientHttp(URI.create(servidor.getUrl()),
@@ -154,5 +155,80 @@ class InventarioPactoTest {
         // Estado normal, no fallo: lo pudieron borrar entre publicar la subasta
         // y cerrarla. Quien llama decide, en vez de cazar una excepcion.
         assertTrue(clienteContra(servidor).buscar(ELEMENTO).isEmpty());
+    }
+
+    // --- transferencia de propiedad: LA UNICA QUE FALTA POR PUBLICAR --------
+    //
+    // Estas interacciones describen un endpoint que ms-inventario todavia no
+    // expone. Estan aqui a proposito y no cuando exista: son la especificacion
+    // ejecutable de lo que este servicio necesita, para que quien lo implemente
+    // pueda verificar contra ella en vez de adivinar por un mensaje de chat.
+    // El pacto se genera igual; lo que hoy falla si se verifica es el lado del
+    // proveedor, y eso es informacion util, no un fallo nuestro.
+
+    @Pact(consumer = CONSUMIDOR)
+    public RequestResponsePact transferenciaAlGanador(PactDslWithProvider constructor) {
+        return constructor
+                .given("el elemento esta bloqueado por esa subasta y va a adjudicarse")
+                .uponReceiving("la transferencia del producto al ganador al cerrar la subasta")
+                .path("/api/v1/inventario/elementos/" + ELEMENTO + "/transferencias")
+                .method("POST")
+                .matchHeader("Idempotency-Key", ".+")
+                .headers(Map.of("Content-Type", "application/json"))
+                .body(new PactDslJsonBody()
+                        // El nuevo dueno viaja como UUID en el cuerpo, igual que
+                        // propietarioUid en el bloqueo. No puede salir de una
+                        // cabecera de identidad: dos de las tres llamadas a esta
+                        // operacion las dispara un @Scheduled sin token, y la
+                        // tercera transfiere AL VENDEDOR, que no es quien pidio nada.
+                        .uuid("nuevoPropietarioUid", NUEVO_DUENO)
+                        .uuid("subastaId", SUBASTA))
+                .willRespondWith()
+                .status(200)
+                .headers(Map.of("Content-Type", "application/json"))
+                .body(new PactDslJsonBody()
+                        .stringType("elementoId", ELEMENTO)
+                        .uuid("propietarioUid", NUEVO_DUENO))
+                .toPact();
+    }
+
+    @Test
+    @PactTestFor(pactMethod = "transferenciaAlGanador")
+    void laTransferenciaLlevaAlNuevoDuenoComoUuidEnElCuerpo(MockServer servidor) {
+        assertDoesNotThrow(() -> clienteContra(servidor)
+                .transferirProducto(ELEMENTO, NUEVO_DUENO, SUBASTA, "clave-de-cierre"));
+    }
+
+    /**
+     * Importa que sea idempotente: el cierre por vencimiento corre dentro de una
+     * transaccion y el job reintenta la misma subasta a los 30 s. Sin
+     * idempotencia, la segunda pasada vuelve a mover el producto.
+     */
+    @Pact(consumer = CONSUMIDOR)
+    public RequestResponsePact transferenciaRepetida(PactDslWithProvider constructor) {
+        return constructor
+                .given("ese elemento ya se transfirio con esa misma clave de idempotencia")
+                .uponReceiving("el reintento de una transferencia ya aplicada")
+                .path("/api/v1/inventario/elementos/" + ELEMENTO + "/transferencias")
+                .method("POST")
+                .matchHeader("Idempotency-Key", ".+")
+                .headers(Map.of("Content-Type", "application/json"))
+                .body(new PactDslJsonBody()
+                        .uuid("nuevoPropietarioUid", NUEVO_DUENO)
+                        .uuid("subastaId", SUBASTA))
+                .willRespondWith()
+                .status(200)
+                .headers(Map.of("Content-Type", "application/json"))
+                .body(new PactDslJsonBody()
+                        .stringType("elementoId", ELEMENTO)
+                        .uuid("propietarioUid", NUEVO_DUENO))
+                .toPact();
+    }
+
+    @Test
+    @PactTestFor(pactMethod = "transferenciaRepetida")
+    void repetirLaTransferenciaConLaMismaClaveTerminaBien(MockServer servidor) {
+        assertDoesNotThrow(() -> clienteContra(servidor)
+                .transferirProducto(ELEMENTO, NUEVO_DUENO, SUBASTA, "clave-de-cierre"));
     }
 }

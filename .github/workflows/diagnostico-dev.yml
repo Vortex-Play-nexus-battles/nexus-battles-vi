@@ -1,0 +1,156 @@
+# Diagnostico del host de DEV — M16A (infraestructura, red, datos, DR).
+#
+# Por que existe: el 19 de septiembre el despliegue fallo con
+# "dial tcp :22: i/o timeout" y averiguar por que costo veinte minutos de ir
+# mirando corridas una por una. La respuesta resulto ser sencilla —la instancia
+# estaba apagada—, pero no habia forma de saberlo sin reconstruir el historial.
+#
+# Este workflow contesta en una corrida: si el host esta encendido, desde
+# cuando, cuanta memoria y disco le quedan, que contenedores hay y cuales se
+# han reiniciado, si el nucleo mato algo por falta de memoria, y como respondio
+# cada servicio. No cambia nada: solo mira.
+#
+# No cuesta nada: un runner de GitHub y una sesion SSH.
+name: Diagnostico del host DEV
+
+on:
+  workflow_dispatch:
+    inputs:
+      ambiente:
+        description: "Que host mirar"
+        type: choice
+        required: true
+        default: dev
+        options: [dev]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  diagnostico:
+    name: Estado del host de ${{ inputs.ambiente }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.ambiente }}
+    steps:
+      - name: Asumir el rol de AWS por OIDC (sin claves)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-session-name: diagnostico-${{ github.run_id }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # Lo primero, porque es la causa mas probable y la mas barata de
+      # descartar: si la instancia esta apagada, todo lo demas sobra.
+      - name: Estado de la instancia en EC2
+        run: |
+          set -euo pipefail
+          # Mismo nombre de etiqueta que infra-dev.yml (NOMBRE_INSTANCIA).
+          id=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=nexus-plataforma-dev" \
+                      "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+            --query 'Reservations[].Instances[].InstanceId' --output text)
+          if [ -z "$id" ] || [ "$id" = "None" ]; then
+            echo "::warning::No existe la instancia. O no se ha hecho apply, o se destruyo."
+            exit 0
+          fi
+          aws ec2 describe-instances --instance-ids "$id" \
+            --query 'Reservations[0].Instances[0].{Id:InstanceId,Estado:State.Name,Tipo:InstanceType,IP:PublicIpAddress,Arranco:LaunchTime}' \
+            --output table
+          estado=$(aws ec2 describe-instances --instance-ids "$id" \
+            --query 'Reservations[0].Instances[0].State.Name' --output text)
+          if [ "$estado" != "running" ]; then
+            echo "::error::La instancia esta $estado. Enciendela con el workflow 'Infra dev', accion start."
+            exit 1
+          fi
+
+      # Ojo con el orden de las comprobaciones: memoria y disco ANTES que
+      # docker, porque si falta cualquiera de las dos, lo que docker cuente es
+      # consecuencia y no causa.
+      - name: Que dice el host por dentro
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          command_timeout: 3m
+          script: |
+            echo "===================== ARRANQUE Y CARGA ====================="
+            uptime
+            echo "Ultimo arranque: $(who -b 2>/dev/null || stat -c %y /proc/1 2>/dev/null)"
+
+            echo
+            echo "===================== MEMORIA (MiB) ========================"
+            free -m
+            echo
+            echo "Los cinco procesos que mas memoria usan:"
+            ps -eo rss,comm --sort=-rss | head -6 | awk 'NR==1{print "  RSS(KB) PROCESO"} NR>1{printf "  %7d %s\n", $1, $2}'
+
+            echo
+            echo "===================== DISCO ================================"
+            df -h / /var/lib/docker 2>/dev/null | sed 's/^/  /'
+            echo "  Espacio que ocupa Docker:"
+            sudo docker system df 2>/dev/null | sed 's/^/    /' || docker system df | sed 's/^/    /'
+
+            echo
+            echo "============ ¿EL NUCLEO MATO ALGO POR MEMORIA? ============="
+            # Si esto imprime algo, la causa de una caida es OOM y no otra cosa.
+            if sudo dmesg -T 2>/dev/null | grep -iE "out of memory|oom-killer|killed process" | tail -15; then :; else
+              echo "  Nada en dmesg."
+            fi
+            sudo journalctl -k --since "7 days ago" 2>/dev/null \
+              | grep -iE "out of memory|oom-killer" | tail -10 || echo "  Nada en journalctl."
+
+            echo
+            echo "===================== CONTENEDORES ========================="
+            sudo docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.RestartCount}}' 2>/dev/null \
+              || sudo docker ps -a --format 'table {{.Names}}\t{{.Status}}'
+            echo
+            echo "  Reinicios por contenedor (un numero alto es un servicio que no levanta):"
+            for c in $(sudo docker ps -aq); do
+              n=$(sudo docker inspect -f '{{.Name}}' "$c" | tr -d /)
+              r=$(sudo docker inspect -f '{{.RestartCount}}' "$c")
+              p=$(sudo docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' "$c")
+              printf '    %-28s reinicios=%-4s politica=%s\n' "$n" "$r" "$p"
+            done
+
+            echo
+            echo "===================== MEMORIA POR CONTENEDOR ==============="
+            sudo docker stats --no-stream \
+              --format 'table {{.Name}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.CPUPerc}}'
+
+            echo
+            echo "===================== SALUD DE CADA SERVICIO ==============="
+            # El puerto y la ruta salen de scripts/cd/desplegar.sh; ms-ecommerce
+            # es la excepcion porque tiene context-path /ecommerce.
+            for par in "comentarios:8081" "correo:8082" "salas-partidas:8084" \
+                       "notificaciones:8085" "moderacion-sanciones:8086" \
+                       "metricas-plataforma:8087" "admin-parametros:8088" \
+                       "torneos:8083" "ms-identidad:8089"; do
+              s=${par%%:*}; p=${par##*:}
+              r=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://localhost:$p/actuator/health" || echo "---")
+              printf '    %-24s %s\n' "$s" "$r"
+            done
+            r=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:8090/ecommerce/actuator/health || echo "---")
+            printf '    %-24s %s\n' "ms-ecommerce" "$r"
+
+            echo
+            echo "===================== BORDE ================================"
+            curl -s --max-time 5 http://localhost/salud-borde || echo "  el borde no responde"
+
+            echo
+            echo "===================== ULTIMOS ERRORES POR SERVICIO ========="
+            # Lo que el smoke no cuenta: POR QUE falla. Solo lineas de error de
+            # la ultima hora, recortadas, sin cuerpos de peticion. Un servicio
+            # sano imprime "(sin errores)". Se mira tambien la URL del emisor
+            # de credenciales de cada uno (ADR-005): es configuracion, no
+            # secreto, y una URL equivocada aqui explica un 500 en cadena.
+            for c in $(sudo docker ps --format '{{.Names}}' | grep '^srv-' | sort); do
+              echo "  -- $c"
+              emisor=$(sudo docker exec "$c" sh -c 'echo "${DIRECTORIO_ACTIVO_URL:-}"' 2>/dev/null || true)
+              [ -n "$emisor" ] && echo "     emisor de credenciales: $emisor"
+              errores=$(sudo docker logs --since 1h "$c" 2>&1 \
+                | grep -iE '"level":"(ERROR|WARN)"|ERROR|Exception' \
+                | grep -viE 'DEBUG|TRACE' | tail -8 | cut -c1-220 || true)
+              if [ -n "$errores" ]; then echo "$errores" | sed 's/^/     /'; else echo "     (sin errores en la ultima hora)"; fi
+            done

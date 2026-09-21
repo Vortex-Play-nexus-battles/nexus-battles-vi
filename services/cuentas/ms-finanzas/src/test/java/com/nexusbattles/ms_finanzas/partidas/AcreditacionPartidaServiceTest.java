@@ -160,4 +160,56 @@ class AcreditacionPartidaServiceTest {
 
     // Wrapper para eq() en el mock con anyInt de manera legible.
     private static <T> T eq(T value) { return org.mockito.ArgumentMatchers.eq(value); }
+
+    // HU-JUE-012 CA-02 (contrato 1.2.0): en una partida por equipos gana todo el equipo.
+    @Test
+    void grupalPorEquipos_cadaIntegranteDelEquipoGanadorRecibe4() {
+        when(partidaProcesadaRepositorio.existsById(any())).thenReturn(false);
+
+        ResultadoPartidaResponse resp = servicio.procesarResultadoPartida(new ResultadoPartidaRequest(
+                "partida-equipos", TipoPartida.GRUPAL, null, List.of("uid-a", "uid-b"),
+                List.of(
+                        new ParticipantePartidaRequest("uid-a", false),
+                        new ParticipantePartidaRequest("uid-b", false),
+                        new ParticipantePartidaRequest("uid-c", false),
+                        new ParticipantePartidaRequest("uid-d", false))));
+
+        assertThat(resp.acreditaciones()).extracting("uid", "monto", "esGanador")
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("uid-a", 4, true),
+                        org.assertj.core.groups.Tuple.tuple("uid-b", 4, true),
+                        org.assertj.core.groups.Tuple.tuple("uid-c", 1, false),
+                        org.assertj.core.groups.Tuple.tuple("uid-d", 1, false));
+    }
+
+    @Test
+    void sinGanadores_todosRecibenSoloLoDeParticipar() {
+        when(partidaProcesadaRepositorio.existsById(any())).thenReturn(false);
+
+        ResultadoPartidaResponse resp = servicio.procesarResultadoPartida(new ResultadoPartidaRequest(
+                "partida-empate", TipoPartida.UNO_A_UNO, null, List.of(),
+                List.of(
+                        new ParticipantePartidaRequest("uid-a", false),
+                        new ParticipantePartidaRequest("uid-b", false))));
+
+        assertThat(resp.acreditaciones()).extracting("monto").containsExactly(1, 1);
+    }
+
+    @Test
+    void informeInvalido_es400YNoTocaElLibro() {
+        org.junit.jupiter.api.Assertions.assertAll(
+                () -> org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                        () -> servicio.procesarResultadoPartida(new ResultadoPartidaRequest(
+                                " ", TipoPartida.UNO_A_UNO, null, List.of(new ParticipantePartidaRequest("u", false))))),
+                () -> org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                        () -> servicio.procesarResultadoPartida(new ResultadoPartidaRequest(
+                                "p", null, null, List.of(new ParticipantePartidaRequest("u", false))))),
+                () -> org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                        () -> servicio.procesarResultadoPartida(new ResultadoPartidaRequest(
+                                "p", TipoPartida.UNO_A_UNO, null, List.of()))),
+                () -> org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                        () -> servicio.procesarResultadoPartida(new ResultadoPartidaRequest(
+                                "p", TipoPartida.UNO_A_UNO, "otro", List.of(new ParticipantePartidaRequest("u", false))))));
+        org.mockito.Mockito.verify(creditoService, org.mockito.Mockito.never()).acreditar(any());
+    }
 }

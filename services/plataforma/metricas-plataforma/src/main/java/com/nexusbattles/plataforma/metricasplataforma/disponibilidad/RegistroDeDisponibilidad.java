@@ -28,19 +28,47 @@ import java.util.Map;
  *       el informe pero no descuenta disponibilidad.
  * </ul>
  *
- * <p>Es dominio puro: sin Spring, sin reloj propio y sin base de datos, para
- * que las reglas del calculo se puedan probar sin levantar nada.
+ * <p>Es dominio puro: sin Spring ni reloj propio, para que las reglas del
+ * calculo se puedan probar sin levantar nada. Lo que si tiene es un
+ * {@link AlmacenDeDisponibilidad} al que escribe cada interrupcion que abre
+ * o cierra y cada ventana que programa, y del que se recarga al construirse:
+ * sin eso el informe se vaciaba con cada redespliegue (#441), que es justo
+ * cuando mas caidas hay que contar. En las pruebas de dominio el almacen es
+ * el de memoria y no cambia nada.
  */
 public class RegistroDeDisponibilidad {
 
+    private final AlmacenDeDisponibilidad almacen;
     private final List<Interrupcion> interrupciones = new ArrayList<>();
     private final Map<String, Comprobacion> ultimaComprobacion = new LinkedHashMap<>();
     private final Map<String, Interrupcion> abiertas = new LinkedHashMap<>();
     private final List<VentanaDeMantenimiento> ventanas = new ArrayList<>();
 
+    /** Sin persistencia: para las pruebas de dominio. */
+    public RegistroDeDisponibilidad() {
+        this(new AlmacenEnMemoria());
+    }
+
+    /**
+     * Con persistencia: recarga lo guardado. Una interrupcion que quedo
+     * abierta antes de un reinicio sigue abierta aqui, y la cerrara la
+     * primera comprobacion sana de ese servicio.
+     */
+    public RegistroDeDisponibilidad(AlmacenDeDisponibilidad almacen) {
+        this.almacen = almacen;
+        for (Interrupcion guardada : almacen.interrupciones()) {
+            interrupciones.add(guardada);
+            if (guardada.abierta()) {
+                abiertas.put(guardada.servicio(), guardada);
+            }
+        }
+        ventanas.addAll(almacen.ventanas());
+    }
+
     /** Declara una ventana de mantenimiento programado (DEC-01). */
     public void programarMantenimiento(VentanaDeMantenimiento ventana) {
         ventanas.add(ventana);
+        almacen.guardarVentana(ventana);
     }
 
     /**
@@ -57,6 +85,9 @@ public class RegistroDeDisponibilidad {
             if (abierta != null) {
                 abierta.cerrar(comprobacion.instante());
                 abiertas.remove(comprobacion.servicio());
+                if (abierta.id() != null) {
+                    almacen.cerrar(abierta.id(), comprobacion.instante());
+                }
             }
             return;
         }
@@ -65,6 +96,7 @@ public class RegistroDeDisponibilidad {
         if (abierta == null) {
             Interrupcion nueva =
                     new Interrupcion(comprobacion.servicio(), comprobacion.instante(), comprobacion.detalle());
+            nueva.identificar(almacen.abrir(nueva));
             interrupciones.add(nueva);
             abiertas.put(comprobacion.servicio(), nueva);
         }

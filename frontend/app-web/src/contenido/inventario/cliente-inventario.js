@@ -1,9 +1,11 @@
 /**
  * HU-INV-001 - Acceso HTTP a la consulta paginada del inventario.
  *
- * El servicio identifica al jugador por la cabecera `X-User-Name`, la misma
- * que usan las operaciones de creacion y modificacion. Cuando llegue el
- * contrato de identidad (HU-INF-009) esa cabecera la pondra la sesion.
+ * El servicio identifica al jugador por el JWT de la sesion (`Authorization:
+ * Bearer`, que pone `fetchWithHttpErrorInterceptor`): el propietario es el
+ * sujeto del token, contrato de inventario 1.1.0 / ADR-002. La cabecera
+ * `X-User-Name` que aun se manda es informativa para un jugador —el servicio
+ * la ignora— y solo cuenta cuando la manda otro servicio con credencial.
  *
  * Las peticiones salen por el envoltorio comun de `src/comun/`, no por `fetch`
  * pelado: asi el manejo de Problem Details es el mismo en los veinte modulos.

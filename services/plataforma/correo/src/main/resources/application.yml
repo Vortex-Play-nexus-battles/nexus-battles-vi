@@ -8,6 +8,14 @@ spring:
   mvc:
     problemdetails:
       enabled: true
+  # Clave publica con la que se verifican las credenciales de servicio que
+  # llegan (ADR-002/ADR-005). Hoy la publica ms-identidad; con Keycloak solo
+  # cambia la URL, por variable de entorno.
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${IDENTIDAD_JWKS_URL:http://localhost:8089/api/v1/auth/jwks}
   jackson:
     datatype:
       datetime:
@@ -18,3 +26,12 @@ spring:
         # En Jackson 3 esta opción dejó de estar en DeserializationFeature y
         # pasó a DateTimeFeature, de ahí la ruta 'datatype.datetime'.
         adjust-dates-to-context-time-zone: false
+
+# Regla 3 de plataforma: todo servicio expone salud Y metricas. Hasta el
+# 2026-09-21 este servicio solo exponia health (valor por omision de Actuator)
+# y el tablero tecnico de HU-MET-004 lo veia como brecha de observabilidad.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus

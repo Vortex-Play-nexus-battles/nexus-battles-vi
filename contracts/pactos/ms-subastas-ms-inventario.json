@@ -4,6 +4,90 @@
   },
   "interactions": [
     {
+      "description": "la transferencia del producto al ganador al cerrar la subasta",
+      "providerStates": [
+        {
+          "name": "el elemento esta bloqueado por esa subasta y va a adjudicarse"
+        }
+      ],
+      "request": {
+        "body": {
+          "nuevoPropietarioUid": "99999999-0000-0000-0000-0000000000ee",
+          "subastaId": "aaaaaaaa-0000-0000-0000-000000000001"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "Idempotency-Key": "{"
+        },
+        "matchingRules": {
+          "body": {
+            "$.nuevoPropietarioUid": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.subastaId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": ".+"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/inventario/elementos/elem-hacha-01/transferencias"
+      },
+      "response": {
+        "body": {
+          "elementoId": "elem-hacha-01",
+          "propietarioUid": "99999999-0000-0000-0000-0000000000ee"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.elementoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.propietarioUid": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
       "description": "la liberacion del bloqueo al cerrar la subasta",
       "providerStates": [
         {
@@ -50,7 +134,7 @@
         },
         "headers": {
           "Content-Type": "application/json",
-          "Idempotency-Key": "\u352A"
+          "Idempotency-Key": "\u5D10\uAB77\uAC31\u7A1B\uE7CE"
         },
         "matchingRules": {
           "body": {
@@ -194,6 +278,90 @@
       },
       "response": {
         "status": 404
+      }
+    },
+    {
+      "description": "el reintento de una transferencia ya aplicada",
+      "providerStates": [
+        {
+          "name": "ese elemento ya se transfirio con esa misma clave de idempotencia"
+        }
+      ],
+      "request": {
+        "body": {
+          "nuevoPropietarioUid": "99999999-0000-0000-0000-0000000000ee",
+          "subastaId": "aaaaaaaa-0000-0000-0000-000000000001"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "Idempotency-Key": "\uAF6E\u38B5\uDA29"
+        },
+        "matchingRules": {
+          "body": {
+            "$.nuevoPropietarioUid": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.subastaId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": ".+"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/inventario/elementos/elem-hacha-01/transferencias"
+      },
+      "response": {
+        "body": {
+          "elementoId": "elem-hacha-01",
+          "propietarioUid": "99999999-0000-0000-0000-0000000000ee"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.elementoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.propietarioUid": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
       }
     }
   ],

@@ -68,10 +68,76 @@ salas:
   inventario:
     url: ${INVENTARIO_BASE_URL:http://localhost:8080}
 
-# Chat de HU-JUE-015. La lista negra es la de HU-ADM-002 (moderacion-sanciones).
+  # El prototipo del heroe, que es lo unico que motor-combate sabe buscar en el
+  # catalogo. Inventario lo resuelve por dentro pero no lo publica; productos si
+  # lo expone en GET /api/v1/productos/{id}, y es lectura publica. Sin esta URL
+  # el combate degrada al comportamiento anterior a V8 -mandar el nombre propio
+  # al motor, que responde 404-, pero entrar a la sala sigue funcionando.
+  productos:
+    url: ${PRODUCTOS_BASE_URL:http://localhost:8080}
+
+  # La DEFENSA del prototipo. El motor acierta si la tirada supera la defensa
+  # del objetivo; mandandole la vida en su lugar -44 en "Guerrero Tanque",
+  # contra un ataque maximo de 16- ningun golpe acertaba NUNCA. Misma ruta que
+  # ya consume inventario para las estadisticas: GET /api/v1/heroes/{prototipo}.
+  heroes:
+    url: ${HEROES_BASE_URL:http://localhost:8080}
+
+  # HU-JUE-014: el libro de creditos (ms-finanzas, equipo de Cuentas,
+  # contracts/openapi/creditos.yaml). Incluye el context-path /api/v1 del
+  # propio servicio. Si no responde, crear o entrar a una sala con recompensa
+  # sale 503 (creditos-no-disponibles) y nada queda reservado a medias; una
+  # partida ya en curso no se pierde: su liquidacion queda pendiente y se
+  # reintenta.
+  creditos:
+    url: ${CREDITOS_URL:http://localhost:8093/api/v1}
+
+  apuestas:
+    # Cada cuanto se reintentan las liquidaciones que el libro dejo pendientes.
+    reintento-ms: ${APUESTAS_REINTENTO_MS:60000}
+    # Decision funcional NO tomada por ninguna HU: que pasa con lo apostado por
+    # los humanos cuando gana la IA, que no tiene bolsa. LIBERAR (por defecto)
+    # lo devuelve; CONSUMIR lo cobra sin beneficiario. Ver LiquidarApuesta.
+    si-gana-la-maquina: ${APUESTAS_SI_GANA_LA_MAQUINA:LIBERAR}
+
+# HU-DIS-003: degradacion controlada. Cada dependencia externa (inventario,
+# motor de combate, libro de creditos) va detras de su propio corta circuitos
+# (shared/libs/plataforma-resiliencia). Cuando una no responde, la seccion que
+# depende de ella sale 503 con type `seccion-no-disponible`, la propiedad
+# `seccion` y la cabecera Retry-After; el resto del servicio sigue sirviendo.
+resiliencia:
+  # Fallos seguidos que abren el circuito. Un fallo aislado no abre nada.
+  fallos-para-abrir: ${RESILIENCIA_FALLOS_PARA_ABRIR:3}
+  # Lo que dura abierto antes de dejar pasar UNA llamada de prueba, y lo mismo
+  # que se le dice al cliente en Retry-After / reintentarEnSegundos: una sola
+  # cifra, porque son la misma promesa.
+  reintentar-en-segundos: ${RESILIENCIA_REINTENTAR_EN_SEGUNDOS:30}
+  # Tiempos de espera de TODA llamada saliente. Sin ellos, una direccion sin
+  # nadie detras (contenedor apagado) colgaba el connect dos minutos y el
+  # borde respondia 504 antes que este servicio: lo destapo el E2E de
+  # inyeccion de fallos. Muy por debajo de los 60 s del borde.
+  tiempo-conexion-ms: ${RESILIENCIA_TIEMPO_CONEXION_MS:2000}
+  tiempo-respuesta-ms: ${RESILIENCIA_TIEMPO_RESPUESTA_MS:10000}
+
+# Credencial de servicio con la que este servicio le habla a inventario y al
+# libro de creditos (ADR-001, emisor transitorio ADR-005). Las lee
+# CredencialesDeServicioAutoConfiguration (plataforma-seguridad): sin
+# client-id no se registra ningun interceptor y las llamadas salen sin
+# Authorization. En el host las genera desplegar.sh; en el E2E van en el
+# compose de tests/e2e.
+seguridad:
+  servicio:
+    url: ${DIRECTORIO_ACTIVO_URL:http://localhost:8089/api/v1/auth/token}
+    client-id: ${DIRECTORIO_ACTIVO_CLIENT_ID:}
+    client-secret: ${DIRECTORIO_ACTIVO_CLIENT_SECRET:}
+
+# Chat de HU-JUE-015. La lista negra es la de HU-ADM-002 y las sanciones las
+# de RF-USR-004: las dos viven en moderacion-sanciones.
 chat:
   lista-negra:
     url: ${LISTA_NEGRA_VERIFICAR_URL:http://localhost:8086/api/v1/lista-negra/verificar}
+  sanciones:
+    url: ${SANCIONES_URL:http://localhost:8086/api/v1}
   ws:
     origenes: ${CHAT_WS_ORIGENES:http://localhost:5173}
   historial:

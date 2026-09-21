@@ -57,25 +57,30 @@ describe('identidad', () => {
     expect(haySesion()).toBe(false);
   });
 
-  test('X-User-Id lleva al usuario REAL, no al de prueba que habia antes', async () => {
-    // El defecto: `const USER_ID = 'usr_test_123'` viajaba en cada peticion,
-    // asi que todos los compradores eran el mismo usuario.
+  test('la identidad viaja en el Bearer, nunca en X-User-Id ni como usuario de prueba', async () => {
+    // El defecto original: `const USER_ID = 'usr_test_123'` viajaba en cada
+    // peticion, asi que todos los compradores eran el mismo usuario. Despues
+    // viajo el uid en X-User-Id, que el navegador podia poner a su gusto.
+    // Ahora ms-ecommerce lee el uid del JWT (ADR-002).
     globalThis.fetch.mockResolvedValue(respuesta({ content: [] }));
 
     await cargarVitrina(document);
 
     const cabeceras = globalThis.fetch.mock.calls[0][1].headers;
-    expect(cabeceras['X-User-Id']).toBe(UID);
+    expect(cabeceras['X-User-Id']).toBeUndefined();
+    expect(cabeceras.Authorization).toBe(`Bearer ${sessionStorage.getItem('nexus.token')}`);
     expect(JSON.stringify(cabeceras)).not.toContain('usr_test_123');
   });
 
-  test('sin sesion NO se manda X-User-Id: mejor un 400 que mezclar carritos', async () => {
+  test('sin sesion no viaja ninguna identidad: el backend respondera 401', async () => {
     sessionStorage.clear();
     globalThis.fetch.mockResolvedValue(respuesta({ content: [] }));
 
     await cargarVitrina(document);
 
-    expect(globalThis.fetch.mock.calls[0][1].headers['X-User-Id']).toBeUndefined();
+    const cabeceras = globalThis.fetch.mock.calls[0][1].headers;
+    expect(cabeceras['X-User-Id']).toBeUndefined();
+    expect(cabeceras.Authorization).toBeUndefined();
   });
 });
 

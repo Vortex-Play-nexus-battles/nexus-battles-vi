@@ -6,11 +6,10 @@
  * SUBSCRIBE, SEND, MESSAGE, ERROR). No hay libreria STOMP en el proyecto y
  * agregar una es decision de equipo.
  *
- * Que va en el CONNECT lo decide quien conecta, por `cabeceras`:
- *  - `plataforma/salas-partidas/cliente-chat.js` pasa el JWT en
- *    `Authorization`, porque salas-partidas lo exige en el CONNECT (#222).
- *  - `plataforma/notificaciones/bandeja.js` conecta sin cabeceras: ese servicio
- *    identifica la conexion en el handshake (`contracts/websocket/notificaciones.yaml`).
+ * Que va en el CONNECT lo decide quien conecta, por `cabeceras`. Hoy los dos
+ * canales de la plataforma —`plataforma/salas-partidas/cliente-chat.js` (#222)
+ * y `plataforma/notificaciones/bandeja.js` (contrato 1.1.0)— pasan el JWT en
+ * `Authorization`: el servidor no abre sesion sin el.
  *
  * Vive en `src/comun/` desde #351, con aprobacion de los Scrum Masters. Como todo
  * lo de esta carpeta, cambiarlo requiere su revision (dueños: los tres SM).

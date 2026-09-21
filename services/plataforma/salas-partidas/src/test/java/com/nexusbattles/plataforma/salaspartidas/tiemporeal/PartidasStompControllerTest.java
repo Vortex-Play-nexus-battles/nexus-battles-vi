@@ -1,5 +1,7 @@
 package com.nexusbattles.plataforma.salaspartidas.tiemporeal;
 
+import com.nexusbattles.plataforma.resiliencia.DependenciaDegradada;
+import com.nexusbattles.plataforma.resiliencia.ErroresDeDegradacion;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.EjecutarAccion;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDePartida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.MotorDeCombate;
@@ -89,14 +91,17 @@ class PartidasStompControllerTest {
             }
 
             @Override
-            public void anunciarFin(Partida partida) {
+            public void anunciarFin(Partida partida,
+                                    java.util.List<com.nexusbattles.plataforma.salaspartidas.dominio.RepartoDeCreditos> reparto) {
             }
         };
         MotorDeCombate motorMudo = (atacante, objetivo) -> {
             throw new IllegalStateException("no deberia llamarse");
         };
 
-        return new EjecutarAccion(sinUso, canalMudo, motorMudo) {
+        return new EjecutarAccion(sinUso, canalMudo, motorMudo,
+                com.nexusbattles.plataforma.salaspartidas.aplicacion.LiquidacionSinApuesta.nueva(),
+                com.nexusbattles.plataforma.salaspartidas.aplicacion.RecompensaSinLibro.nueva()) {
             @Override
             public Partida ejecutar(UUID idPartida, UUID idJugador, UUID idObjetivo,
                                     String codigo) {
@@ -130,7 +135,7 @@ class PartidasStompControllerTest {
     void laIdentidadSaleDelToken() {
         // Tras ADR-002 el `sub` de ms-identidad es el APODO, no un UUID.
         // Leerlo como identificador es el defecto que provoco el 500 del PR #404.
-        new PartidasStompController(espia())
+        controlador()
                 .ejecutarAccion(PARTIDA, new EjecutarAccionRequest("ATAQUE", BRUNO),
                         jugador(ANA));
 
@@ -140,7 +145,7 @@ class PartidasStompControllerTest {
     @Test
     @DisplayName("sin token no se juega: no se cae con NullPointer, se deniega")
     void sinTokenNoSeJuega() {
-        PartidasStompController controlador = new PartidasStompController(espia());
+        PartidasStompController controlador = controlador();
         Principal cualquiera = new UsernamePasswordAuthenticationToken(
                 "alguien", "clave", AuthorityUtils.NO_AUTHORITIES);
 
@@ -160,7 +165,7 @@ class PartidasStompControllerTest {
     @Test
     @DisplayName("la partida sale del destino y el objetivo y la accion del cuerpo")
     void elCuerpoLlegaEntero() {
-        new PartidasStompController(espia())
+        controlador()
                 .ejecutarAccion(PARTIDA, new EjecutarAccionRequest("GOLPE_FUERTE", BRUNO),
                         jugador(ANA));
 
@@ -177,7 +182,7 @@ class PartidasStompControllerTest {
         // El cuerpo es `@Payload(required = false)`: un cliente puede mandar el
         // ataque basico sin decir nada mas. Si esto lanzara NullPointer, el
         // jugador veria el canal caerse en vez de un turno jugado.
-        new PartidasStompController(espia()).ejecutarAccion(PARTIDA, null, jugador(ANA));
+        controlador().ejecutarAccion(PARTIDA, null, jugador(ANA));
 
         Llamada llamada = llamadas.get(0);
         assertAll(
@@ -197,12 +202,34 @@ class PartidasStompControllerTest {
         // aprender dos maneras de leer un error segun venga por REST o por STOMP.
         MotorNoDisponible caido = new MotorNoDisponible("apagado");
 
-        ProblemDetail problema = new PartidasStompController(espia()).errorDeNegocio(caido);
+        ProblemDetail problema = controlador().errorDeNegocio(caido);
 
         assertAll(
                 () -> assertEquals(503, problema.getStatus()),
                 () -> assertEquals(MotorNoDisponible.TIPO, problema.getType()),
                 () -> assertEquals(caido.titulo(), problema.getTitle()),
                 () -> assertEquals(caido.detalle(), problema.getDetail()));
+    }
+
+    @Test
+    @DisplayName("HU-DIS-003: el motor caido vuelve como seccion-no-disponible, con la seccion y cuando reintentar")
+    void laDegradacionLlegaConSuSeccion() {
+        // Mismo problem detail que produce la API HTTP para la misma caida
+        // (ErroresDeDegradacion): el frontend lo pinta con el mismo componente
+        // venga por REST o por la cola privada del jugador.
+        DependenciaDegradada caido = new DependenciaDegradada("motor-combate", "Motor de combate", null);
+
+        ProblemDetail problema = new PartidasStompController(espia(), 12).seccionNoDisponible(caido);
+
+        assertAll(
+                () -> assertEquals(503, problema.getStatus()),
+                () -> assertEquals(ErroresDeDegradacion.TIPO, problema.getType()),
+                () -> assertEquals("Motor de combate", problema.getProperties().get("seccion")),
+                () -> assertEquals(12L, problema.getProperties().get("reintentarEnSegundos")),
+                () -> assertEquals("motor-combate", problema.getProperties().get("dependencia")));
+    }
+
+    private PartidasStompController controlador() {
+        return new PartidasStompController(espia(), 30);
     }
 }

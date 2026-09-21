@@ -11,6 +11,8 @@ import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
 import java.security.Principal;
 import java.time.Instant;
@@ -118,6 +120,74 @@ class AutorizacionDeDestinosTest {
     void sinUsuario() {
         assertThrows(AccessDeniedException.class,
                 () -> autorizacion.preSend(suscripcion("/tema/salas/" + ID_PUBLICA, null), null));
+    }
+
+    /**
+     * Sesion tal como la deja {@code AutenticacionStomp}: un
+     * {@link JwtAuthenticationToken} con el JWT de verdad que emite
+     * {@code ms-identidad}. Es lo que faltaba: los demas casos falsifican el
+     * principal como un UUID en texto, y con esa forma el defecto de identidad
+     * era invisible.
+     *
+     * @param apodo lo que va en {@code sub} tras ADR-002: un apodo, no un UUID
+     * @param uid   identificador estable, en su claim
+     */
+    private static Principal sesionDeAdr002(String apodo, UUID uid) {
+        Jwt jwt = Jwt.withTokenValue("no-importa")
+                .header("alg", "RS256")
+                .subject(apodo)
+                .claim("uid", uid.toString())
+                .claim("rol", "JUGADOR")
+                .issuedAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(3600))
+                .build();
+        return new JwtAuthenticationToken(jwt);
+    }
+
+    private static Message<byte[]> suscripcionDe(String destino, Principal usuario) {
+        StompHeaderAccessor cabeceras = StompHeaderAccessor.create(StompCommand.SUBSCRIBE);
+        cabeceras.setDestination(destino);
+        cabeceras.setSubscriptionId("sub-1");
+        cabeceras.setUser(usuario);
+        cabeceras.setLeaveMutable(true);
+        return MessageBuilder.createMessage(new byte[0], cabeceras.getMessageHeaders());
+    }
+
+    @Test
+    @DisplayName("con el token real de ADR-002 el participante entra: el apodo del sub no es su id")
+    void participanteConTokenReal() {
+        // El defecto que cierra: `getName()` de un JwtAuthenticationToken es el
+        // sujeto, y tras ADR-002 el sujeto es el apodo. Leerlo como UUID
+        // rechazaba a TODO jugador real, Spring mandaba ERROR y cerraba la
+        // conexion, llevandose tambien el canal de la partida.
+        Message<byte[]> frame = suscripcionDe(
+                "/tema/salas/" + ID_PRIVADA, sesionDeAdr002("invitado_e2e", INVITADO));
+
+        assertSame(frame, autorizacion.preSend(frame, null));
+    }
+
+    @Test
+    @DisplayName("con el token real, a la sala privada ajena se le sigue diciendo que no")
+    void ajenoConTokenReal() {
+        assertThrows(AccessDeniedException.class, () -> autorizacion.preSend(
+                suscripcionDe("/tema/salas/" + ID_PRIVADA, sesionDeAdr002("intrusa", INTRUSO)),
+                null));
+    }
+
+    @Test
+    @DisplayName("un token sin uid ni sujeto utilizable no autoriza nada")
+    void tokenSinIdentificador() {
+        Jwt sinUid = Jwt.withTokenValue("no-importa")
+                .header("alg", "RS256")
+                .subject("solo_un_apodo")
+                .claim("rol", "JUGADOR")
+                .issuedAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(3600))
+                .build();
+
+        assertThrows(AccessDeniedException.class, () -> autorizacion.preSend(
+                suscripcionDe("/tema/salas/" + ID_PRIVADA, new JwtAuthenticationToken(sinUid)),
+                null));
     }
 
     @Test

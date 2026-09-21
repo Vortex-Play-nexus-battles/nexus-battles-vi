@@ -1,0 +1,530 @@
+openapi: 3.1.0
+
+# =============================================================================
+# Nexus Battles VI — Libro de creditos (ms-finanzas · equipo de Cuentas y
+# comercio, Grupo 4)
+#
+# Regla 1 de plataforma: contrato primero. Este documento se escribe A PARTIR
+# de lo que `services/cuentas/ms-finanzas` YA implementa y tiene probado
+# (`CreditoController`, `CreditoService`, `GlobalExceptionHandler`), operacion
+# por operacion y campo por campo. No se ha inventado ninguna regla: quien es
+# dueno del saldo, de la reserva y de su expiracion es ms-finanzas.
+#
+# Dueno del contrato: Grupo 4 (ms-finanzas). Consumidor: salas-partidas
+# (HU-JUE-014, #442). Cualquier cambio incompatible abre version nueva
+# (regla 2); lo de aqui es lo que ms-finanzas responde hoy.
+#
+# ---------------------------------------------------------------------------
+# COMO LO USA salas-partidas (HU-JUE-014)
+#
+#   crear / entrar a una sala con recompensa > 0 ->  reservar   (una por jugador)
+#   abandonar antes de empezar, cancelar la sala ->  liberar    (la suya / todas)
+#   la partida termina con ganador               ->  consumir   (cada reserva de
+#                                                    los demas, con el ganador
+#                                                    como beneficiario) y liberar
+#                                                    la del propio ganador
+#   la partida termina en empate                 ->  liberar    (todas)
+#
+# Todas las operaciones de escritura son idempotentes del lado de ms-finanzas
+# (`Idempotency-Key` en reservar; liberar y consumir devuelven el estado que ya
+# tenia la reserva), asi que salas-partidas puede reintentar una liquidacion a
+# medias sin mover creditos dos veces.
+#
+# ---------------------------------------------------------------------------
+# RECOMPENSA POR JUGAR (1.2.0, HU-JUE-012 #470 — RF-JUE-012)
+#
+#   la partida termina (con o sin apuesta)       ->  POST /partidas/resultado
+#
+# salas-partidas INFORMA quien jugo, de que tipo era la partida y quien gano;
+# ms-finanzas DECIDE y acredita: 2 al ganador de un uno contra uno, 4 a cada
+# ganador de una grupal, 1 por participar, y entrega los cofres de HU-JUE-013.
+# Las cifras son de la ficha oficial y no se parametrizan. Idempotente por
+# `partidaId`: la segunda vez responde 409 `partida-ya-procesada`, que el
+# consumidor toma como «ya esta hecho». `ganadoresUid` (lista) es lo nuevo de
+# 1.2.0: en una partida por equipos gana todo el equipo; `ganadorUid` (uno)
+# se conserva para el uno contra uno y por compatibilidad. Es una adicion
+# compatible: por eso 1.2.0 y no 2.0.0.
+#
+# ---------------------------------------------------------------------------
+# SEGURIDAD (1.1.0, #455 — ADR-001 / ADR-005)
+#
+# El libro solo lo mueven los servicios: reservar, liberar y consumir exigen
+# un token de servicio (`rol=SERVICIO`, emitido por ms-identidad con
+# client_credentials; el `azp` dice que servicio habla). El jugador afectado
+# viaja SIEMPRE en la peticion (`jugadorUid`, `vendedorUid`), nunca se deduce
+# del token. Un jugador con su propio token recibe 403 aunque el uid sea el
+# suyo. Excepcion unica: `GET /creditos/{uid}/saldo` lo puede consultar el
+# propio usuario (uid de la ruta = claim `uid` de su token).
+#
+# Hasta 1.0.0 estas rutas estaban abiertas (`permitAll`) y el contrato lo
+# decia; cerrarlas cambia quien puede llamar, no la forma de la llamada, y
+# los consumidores conocidos (salas-partidas, ms-subastas) ya mandaban o
+# mandan la credencial: por eso es 1.1.0 y no 2.0.0.
+# =============================================================================
+
+info:
+  title: Nexus Battles VI — Libro de creditos
+  version: 1.2.0
+  description: |
+    Saldo, reservas y movimientos de creditos de los jugadores.
+
+    **Reservar no descuenta.** Una reserva aparta creditos del saldo
+    disponible sin quitarlos del saldo bruto; el jugador no puede gastarlos
+    en otra cosa mientras la reserva este `ACTIVA`. Se cierra de una de dos
+    formas: **liberar** (vuelven a estar disponibles) o **consumir** (se
+    descuentan del bruto y, si hay beneficiario, se le acreditan a el).
+
+    **Expiracion.** Una reserva caduca a las 72 horas de crearse (lo fija
+    ms-finanzas; `expiraEn` lo dice). Que pasa con una reserva expirada que
+    nadie libero es una decision de ms-finanzas, no de este contrato.
+
+    Errores en formato problem details (regla 4) con `type` estable bajo
+    `https://nexusbattles.upb.edu.co/errors/`.
+  license:
+    name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
+
+servers:
+  - url: http://localhost:8093/api/v1
+    description: Desarrollo local (context-path /api/v1 del propio servicio)
+  - url: http://srv-ms-finanzas:8093/api/v1
+    description: Red de compose
+
+tags:
+  - name: creditos
+    description: Saldo y reservas del libro de creditos (HU-PAG-001)
+
+# Por defecto, todo el libro exige credencial de servicio. Las operaciones
+# que admiten ademas al propio usuario lo declaran explicitamente.
+security:
+  - credencialDeServicio: []
+
+paths:
+  /creditos/{uid}/saldo:
+    get:
+      tags: [creditos]
+      operationId: consultarSaldo
+      summary: Saldo bruto, reservado y disponible de un jugador
+      description: |
+        Un jugador sin cuenta todavia responde 200 con todo a cero: la cuenta
+        se crea con su primera operacion.
+
+        Lo consulta un servicio (cualquier `uid`) o el propio usuario (el
+        `uid` de la ruta tiene que ser el claim `uid` de su token; otro uid
+        responde 403).
+      security:
+        - credencialDeServicio: []
+        - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/Uid'
+      responses:
+        '401':
+          $ref: '#/components/responses/SinCredencial'
+        '403':
+          $ref: '#/components/responses/NoAutorizado'
+        '200':
+          description: Saldo actual
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Saldo'
+              example:
+                jugadorUid: 6f1c2a7e-3d6b-4b9a-8f0e-1c2d3e4f5a6b
+                saldoBruto: 500
+                saldoReservado: 120
+                saldoDisponible: 380
+
+  /creditos/reservar:
+    post:
+      tags: [creditos]
+      operationId: reservarCreditos
+      summary: Reserva creditos del jugador
+      description: |
+        Comprueba y aparta en una sola operacion del lado del proveedor: no
+        hay hueco entre «me alcanza» y «quedan apartados».
+
+        **Idempotente** por `Idempotency-Key`: repetir la peticion con la
+        misma clave devuelve la reserva ya creada (201 igual), sin apartar
+        dos veces. La clave es del llamador; ms-finanzas solo garantiza que
+        dos peticiones con la misma clave son la misma reserva. Reutilizar
+        una clave de una reserva ya cerrada devuelve esa reserva cerrada, no
+        una nueva: quien reserva de nuevo (por ejemplo, un jugador que vuelve
+        a entrar a la misma sala) tiene que usar una clave distinta.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservarCreditos'
+            example:
+              jugadorUid: 6f1c2a7e-3d6b-4b9a-8f0e-1c2d3e4f5a6b
+              monto: 120
+              concepto: apuesta-sala
+              referenciaId: sala-1b4e28ba-2fa1-11d2-883f-0016d3cca427
+      responses:
+        '401':
+          $ref: '#/components/responses/SinCredencial'
+        '403':
+          $ref: '#/components/responses/NoAutorizado'
+        '201':
+          description: Reserva creada (o ya existente con esa clave)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reserva'
+        '422':
+          description: |
+            Saldo disponible insuficiente. `type` =
+            `https://nexusbattles.upb.edu.co/errors/saldo-insuficiente`.
+            El cuerpo no trae las cifras: quien necesite decir «tienes X y
+            necesitas Y» consulta el saldo aparte.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemaDeCreditos'
+              example:
+                type: https://nexusbattles.upb.edu.co/errors/saldo-insuficiente
+                title: Saldo insuficiente
+                status: 422
+                detail: Saldo insuficiente para reservar 120 créditos.
+        '400':
+          description: Cuerpo invalido (monto no positivo, uid vacio...)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemaDeCreditos'
+
+  /creditos/reservas/{reservaId}/liberar:
+    post:
+      tags: [creditos]
+      operationId: liberarReserva
+      summary: Devuelve una reserva al saldo disponible
+      description: |
+        **Idempotente:** liberar una reserva que ya no esta `ACTIVA` responde
+        200 con el estado que tenia (`LIBERADA` o `CONSUMIDA`) y no mueve
+        nada. Solo una reserva `ACTIVA` cambia de estado.
+      parameters:
+        - $ref: '#/components/parameters/ReservaId'
+      responses:
+        '401':
+          $ref: '#/components/responses/SinCredencial'
+        '403':
+          $ref: '#/components/responses/NoAutorizado'
+        '200':
+          description: Estado de la reserva tras la operacion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reserva'
+        '404':
+          description: |
+            No existe una reserva con ese identificador. `type` =
+            `https://nexusbattles.upb.edu.co/errors/reserva-no-encontrada`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemaDeCreditos'
+
+  /creditos/reservas/{reservaId}/consumir:
+    post:
+      tags: [creditos]
+      operationId: consumirReserva
+      summary: Cobra una reserva y, si hay beneficiario, se la acredita
+      description: |
+        Descuenta el monto del saldo bruto del jugador que reservo y lo suma
+        al saldo bruto de `vendedorUid` si viene informado; sin beneficiario
+        los creditos simplemente se descuentan.
+
+        **Idempotente:** consumir una reserva ya `CONSUMIDA` responde 200
+        con `transaccionId = TX-EXISTENTE` y no vuelve a cobrar. Consumir una
+        reserva `LIBERADA` es un conflicto (409): el dinero ya se devolvio.
+      parameters:
+        - $ref: '#/components/parameters/ReservaId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsumirReserva'
+            example:
+              vendedorUid: 9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d
+      responses:
+        '401':
+          $ref: '#/components/responses/SinCredencial'
+        '403':
+          $ref: '#/components/responses/NoAutorizado'
+        '200':
+          description: Reserva cobrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Consumo'
+        '404':
+          description: Reserva inexistente (`reserva-no-encontrada`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemaDeCreditos'
+        '409':
+          description: |
+            La reserva ya fue liberada. `type` =
+            `https://nexusbattles.upb.edu.co/errors/reserva-ya-liberada`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemaDeCreditos'
+
+  /partidas/resultado:
+    post:
+      tags: [partidas]
+      operationId: informarResultadoDePartida
+      summary: Informa el resultado de una partida y acredita la recompensa por jugar
+      description: |
+        RF-JUE-012 (HU-JUE-012). Acredita **2** creditos al ganador de un
+        `UNO_A_UNO`, **4** a cada ganador de una `GRUPAL` y **1** a cada
+        participante que no gano, y registra los creditos ganados para los
+        cofres de RF-JUE-013 (`cofreId` cuando toca uno). Un participante
+        `sancionado` no recibe nada y vuelve en `sancionadosExcluidos`: la
+        sancion la sabe quien llama (moderacion), no este servicio.
+
+        **Idempotente por `partidaId`:** la segunda vez responde 409
+        `partida-ya-procesada` y no acredita de nuevo. El consumidor debe
+        tratar ese 409 como «ya esta hecho», no como fallo.
+
+        **Ganadores:** `ganadoresUid` manda si viene con elementos (todo el
+        equipo ganador, cada uno con lo del ganador); si no, `ganadorUid`.
+        Los dos ausentes o vacios = nadie gano (empate, o gano la maquina):
+        todos reciben solo lo de participar. La maquina no se informa: no
+        tiene cuenta.
+      security:
+        - credencialDeServicio: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResultadoDePartida'
+            example:
+              partidaId: 7c2d1f0e-1b2a-4c3d-8e9f-0a1b2c3d4e5f
+              tipoPartida: GRUPAL
+              ganadoresUid: [3f2a1b0c-9d8e-4f7a-b6c5-d4e3f2a1b0c9, 5e4d3c2b-1a0f-4e9d-8c7b-6a5f4e3d2c1b]
+              participantes:
+                - { uid: 3f2a1b0c-9d8e-4f7a-b6c5-d4e3f2a1b0c9, sancionado: false }
+                - { uid: 5e4d3c2b-1a0f-4e9d-8c7b-6a5f4e3d2c1b, sancionado: false }
+                - { uid: 9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d, sancionado: true }
+      responses:
+        '401':
+          $ref: '#/components/responses/SinCredencial'
+        '403':
+          $ref: '#/components/responses/NoAutorizado'
+        '200':
+          description: Recompensa acreditada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcreditacionDePartida'
+        '400':
+          description: |
+            Informe invalido (`argumento-invalido`): sin `partidaId`, sin
+            `tipoPartida`, sin participantes, o un ganador que no jugo.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemaDeCreditos'
+        '409':
+          description: |
+            Esa partida ya se proceso. `type` =
+            `https://nexusbattles.upb.edu.co/errors/partida-ya-procesada`;
+            trae `partidaId`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemaDeCreditos'
+
+components:
+  securitySchemes:
+    credencialDeServicio:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Token de servicio (ADR-005): `rol=SERVICIO`, `azp=<client_id>`,
+        obtenido por `client_credentials` en `POST /api/v1/auth/token` de
+        ms-identidad y verificado contra su JWKS. Es la credencial de un
+        servicio (salas-partidas, ms-subastas...), nunca la de un jugador.
+    tokenDeUsuario:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token de sesion de un usuario (ADR-002), con claim `uid`.
+
+  responses:
+    SinCredencial:
+      description: Sin token, token caducado o firmado por otra clave.
+    NoAutorizado:
+      description: |
+        El token es valido pero no puede hacer esto: un usuario intentando
+        mover saldo, o consultando el saldo de otro.
+
+  parameters:
+    Uid:
+      name: uid
+      in: path
+      required: true
+      description: Identificador estable del jugador (`uid` del token, ADR-002)
+      schema:
+        type: string
+        maxLength: 64
+    ReservaId:
+      name: reservaId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        Clave elegida por el llamador, unica por reserva que quiere crear.
+        Maximo 128 caracteres.
+      schema:
+        type: string
+        maxLength: 128
+
+  schemas:
+    Saldo:
+      type: object
+      required: [jugadorUid, saldoBruto, saldoReservado, saldoDisponible]
+      properties:
+        jugadorUid: { type: string }
+        saldoBruto:
+          type: number
+          description: Todo lo que el jugador tiene, reservado incluido
+        saldoReservado:
+          type: number
+          description: Apartado por reservas ACTIVAS
+        saldoDisponible:
+          type: number
+          description: bruto - reservado; lo que puede gastar o reservar
+
+    ReservarCreditos:
+      type: object
+      required: [jugadorUid, monto, concepto, referenciaId]
+      properties:
+        jugadorUid: { type: string, maxLength: 64 }
+        monto:
+          type: number
+          exclusiveMinimum: 0
+        concepto:
+          type: string
+          maxLength: 128
+          description: Para que se reserva (`apuesta-sala`, `puja`...)
+        referenciaId:
+          type: string
+          maxLength: 128
+          description: Identificador del objeto del dominio llamador (la sala, la subasta)
+
+    Reserva:
+      type: object
+      required: [reservaId, jugadorUid, monto, estado, expiraEn]
+      properties:
+        reservaId: { type: string, format: uuid }
+        jugadorUid: { type: string }
+        monto: { type: number }
+        estado:
+          type: string
+          enum: [ACTIVA, LIBERADA, CONSUMIDA]
+        expiraEn: { type: string, format: date-time }
+
+    ConsumirReserva:
+      type: object
+      properties:
+        vendedorUid:
+          type: [string, 'null']
+          description: |
+            A quien se le acreditan los creditos cobrados. Nulo o vacio: se
+            descuentan sin acreditar a nadie.
+
+    Consumo:
+      type: object
+      required: [reservaId, estado, montoDebitado, transaccionId]
+      properties:
+        reservaId: { type: string, format: uuid }
+        estado:
+          type: string
+          enum: [CONSUMIDA]
+        montoDebitado: { type: number }
+        vendedorUid: { type: [string, 'null'] }
+        transaccionId:
+          type: string
+          description: '`TX-CRED-...` en el primer cobro; `TX-EXISTENTE` en las repeticiones'
+
+    ResultadoDePartida:
+      type: object
+      required: [partidaId, tipoPartida, participantes]
+      properties:
+        partidaId:
+          type: string
+          maxLength: 128
+          description: Identificador de la partida en salas-partidas; clave de idempotencia
+        tipoPartida:
+          type: string
+          enum: [UNO_A_UNO, GRUPAL]
+          description: |
+            `UNO_A_UNO`: dos contendientes (incluida la modalidad contra la
+            maquina). `GRUPAL`: mas de dos, con o sin equipos.
+        ganadorUid:
+          type: [string, 'null']
+          description: Ganador unico. Ignorado si `ganadoresUid` trae elementos.
+        ganadoresUid:
+          type: array
+          items: { type: string }
+          description: Ganadores (todo el equipo ganador). Vacio o ausente = nadie gano.
+        participantes:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [uid, sancionado]
+            properties:
+              uid: { type: string }
+              sancionado:
+                type: boolean
+                description: Con sancion activa al terminar; no recibe creditos
+
+    AcreditacionDePartida:
+      type: object
+      required: [partidaId, acreditaciones, sancionadosExcluidos]
+      properties:
+        partidaId: { type: string }
+        acreditaciones:
+          type: array
+          items:
+            type: object
+            required: [uid, monto, esGanador]
+            properties:
+              uid: { type: string }
+              monto:
+                type: integer
+                description: 2, 4 o 1 segun el caso
+              esGanador: { type: boolean }
+              cofreId:
+                type: [string, 'null']
+                format: uuid
+                description: Cofre entregado con estos creditos (RF-JUE-013), si toco
+        sancionadosExcluidos:
+          type: array
+          items: { type: string }
+
+    ProblemaDeCreditos:
+      type: object
+      description: RFC 7807 con `type` estable bajo https://nexusbattles.upb.edu.co/errors/
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }

@@ -1,5 +1,6 @@
 package com.nexusbattles.plataforma.notificaciones.bandeja;
 
+import java.security.Principal;
 import java.util.Map;
 
 import org.slf4j.Logger;
@@ -15,9 +16,11 @@ import org.springframework.web.socket.messaging.SessionDisconnectEvent;
  * <p>Sin esto una sesion caida sigue figurando como abierta: el siguiente
  * aviso queda marcado como entregado a una conexion que ya no existe y la
  * reconexion no recupera nada, que es exactamente el tercer escenario de la
- * historia. El identificador estable sale de los atributos que dejo el
- * handshake. Si el cliente no los mando no hay nada que cerrar y se deja
- * constancia en la bitacora, nunca en silencio.
+ * historia. El usuario es el de la conexion (lo dejo el CONNECT autenticado)
+ * y el identificador de sesion, el que el cliente dio de alta por
+ * {@code /app/notificaciones/sesion}. Si la conexion se cayo antes del alta
+ * no hay nada que cerrar y se deja constancia en la bitacora, nunca en
+ * silencio.
  */
 @Component
 class CicloDeVidaDeSesiones {
@@ -34,15 +37,16 @@ class CicloDeVidaDeSesiones {
     public void alDesconectar(SessionDisconnectEvent evento) {
         Map<String, Object> atributos = StompHeaderAccessor.wrap(evento.getMessage())
                 .getSessionAttributes();
-        if (atributos == null) {
-            return;
-        }
-        Object usuario = atributos.get(AsignadorDeIdentidadDelHandshake.ATRIBUTO_USUARIO);
-        Object sesion = atributos.get(AsignadorDeIdentidadDelHandshake.ATRIBUTO_SESION);
+        Principal usuario = evento.getUser();
+        Object sesion = atributos == null ? null : atributos.get(CanalDeSesionesController.ATRIBUTO_SESION);
         if (usuario == null || sesion == null) {
-            log.debug("Desconexion sin identidad del handshake, no hay sesion que cerrar");
+            log.debug("Desconexion sin usuario o sin sesion dada de alta, no hay sesion que cerrar");
             return;
         }
-        servicio.cerrarSesion(usuario.toString(), sesion.toString());
+        try {
+            servicio.cerrarSesion(CanalDeSesionesController.usuarioDe(usuario), sesion.toString());
+        } catch (IllegalArgumentException sinIdentidad) {
+            log.debug("Desconexion de una conexion sin identidad de usuario: {}", sinIdentidad.getMessage());
+        }
     }
 }

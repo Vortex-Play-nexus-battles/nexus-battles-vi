@@ -12,6 +12,11 @@
  */
 
 import { crearSala, ErrorDeApi } from './cliente-salas.js';
+import {
+  esSeccionDegradada,
+  pintarSeccionDegradada,
+  limpiarSeccionDegradada,
+} from '../../comun/degradacion/aviso-degradacion.js';
 
 /** Codigo HTTP -> variante del componente Aviso (tabla 4 del mapeo). */
 export function tonoPara(estado) {
@@ -25,27 +30,128 @@ export function tonoPara(estado) {
 }
 
 /**
+ * Limites por modalidad — RF-JUE-004, HU-SAL-004 (SCRUM-1080).
+ *
+ * Copia de la tabla de `Modalidad` en `contracts/openapi/salas-partidas.yaml`
+ * (1.2.0). El servicio es quien manda: aqui solo sirven para que el
+ * formulario no ofrezca lo que el servicio va a rechazar (un 1 contra 1 con
+ * cuatro cupos, una maquina en un duelo, equipos fuera de hasta seis).
+ *
+ * @param {string} modalidad
+ * @returns {{participantes: {min: number, max: number}, heroesIA: {min: number, max: number} | null, equipos: boolean}}
+ */
+export function limitesDe(modalidad) {
+  switch (modalidad) {
+    case 'UNO_CONTRA_UNO':
+      return { participantes: { min: 2, max: 2 }, heroesIA: null, equipos: false };
+    case 'CONTRA_IA':
+      return { participantes: { min: 2, max: 2 }, heroesIA: { min: 1, max: 1 }, equipos: false };
+    default:
+      return { participantes: { min: 2, max: 6 }, heroesIA: { min: 0, max: 5 }, equipos: true };
+  }
+}
+
+/** Cuantas maquinas caben con ese aforo: el anfitrion siempre juega. */
+export function maximoDeMaquinas(modalidad, maximoParticipantes) {
+  const limites = limitesDe(modalidad).heroesIA;
+  if (!limites) {
+    return 0;
+  }
+  return Math.max(limites.min, Math.min(limites.max, maximoParticipantes - 1));
+}
+
+/**
  * Lee el formulario y arma el cuerpo del contrato.
  *
- * Las tres entradas de RF-JUE-001 mas las dos opciones de sus flujos
- * alternativos. Las salas no tienen nombre: ningun requisito lo pide.
+ * Las tres entradas de RF-JUE-001 mas las opciones de sus flujos alternativos
+ * y de RF-JUE-004. Las salas no tienen nombre: ningun requisito lo pide.
  *
- * `tamanoEquipo` solo viaja en la modalidad que admite equipos: mandarlo en un
- * duelo seria un parametro que el servicio va a rechazar (RF-JUE-004).
+ * `tamanoEquipo` y `heroesIA` solo viajan en la modalidad que los admite:
+ * mandarlos en un duelo seria un parametro que el servicio va a rechazar.
+ * Contra la IA la maquina va siempre (`heroesIA: 1`); `incluirHeroeIA` se
+ * sigue mandando por el contrato anterior y vale «al menos una».
  */
 export function leerFormulario(formulario) {
   const datos = new FormData(formulario);
   const modalidad = datos.get('modalidad');
   const tamano = datos.get('tamanoEquipo');
+  const limites = limitesDe(modalidad);
+
+  let heroesIA = 0;
+  if (modalidad === 'CONTRA_IA') {
+    heroesIA = 1;
+  } else if (limites.heroesIA) {
+    // Numero nuevo, o la casilla de RF-JUE-001 si la vista todavia la usa.
+    const pedidas = datos.get('heroesIA');
+    if (pedidas !== null) {
+      heroesIA = Number(pedidas || 0);
+    } else if (datos.get('incluirHeroeIA') === 'on') {
+      heroesIA = 1;
+    }
+  }
 
   return {
     maximoParticipantes: Number(datos.get('maximoParticipantes')),
     modalidad,
     recompensaCreditos: Number(datos.get('recompensaCreditos') || 0),
-    incluirHeroeIA: datos.get('incluirHeroeIA') === 'on',
+    incluirHeroeIA: heroesIA > 0,
+    heroesIA,
     privada: datos.get('privada') === 'on',
-    tamanoEquipo: modalidad === 'HASTA_SEIS' && tamano ? Number(tamano) : null,
+    tamanoEquipo: limites.equipos && tamano ? Number(tamano) : null,
   };
+}
+
+/**
+ * Acomoda el formulario a la modalidad elegida — SCRUM-1080.
+ *
+ * Cambia los limites (y recorta el valor) del numero de participantes, muestra
+ * u oculta las opciones que solo tienen sentido en hasta seis (maquinas y
+ * equipos) y la nota de contra la IA. No decide nada que el servicio no
+ * decida ya: solo evita ofrecer combinaciones que van a volver con un 400.
+ *
+ * @param {HTMLFormElement} formulario
+ * @returns {{modalidad: string, participantes: {min: number, max: number}}}
+ */
+export function ajustarPorModalidad(formulario) {
+  const modalidad = new FormData(formulario).get('modalidad') ?? 'UNO_CONTRA_UNO';
+  const limites = limitesDe(modalidad);
+  const participantes = formulario.querySelector('[name="maximoParticipantes"]');
+  const maquinas = formulario.querySelector('[name="heroesIA"]');
+  const zonaSeis = formulario.querySelector('[data-zona="opciones-hasta-seis"]');
+  const notaIa = formulario.querySelector('[data-zona="nota-contra-ia"]');
+  const pista = formulario.querySelector('[data-zona="pista-participantes"]');
+
+  if (participantes) {
+    participantes.min = String(limites.participantes.min);
+    participantes.max = String(limites.participantes.max);
+    const actual = Number(participantes.value) || limites.participantes.min;
+    participantes.value = String(
+      Math.max(limites.participantes.min, Math.min(limites.participantes.max, actual)),
+    );
+    // Con un unico valor posible no hay nada que elegir.
+    participantes.readOnly = limites.participantes.min === limites.participantes.max;
+  }
+  if (pista) {
+    pista.textContent =
+      limites.participantes.min === limites.participantes.max
+        ? `Exactamente ${limites.participantes.min} jugadores.`
+        : `Entre ${limites.participantes.min} y ${limites.participantes.max} jugadores.`;
+  }
+  if (maquinas && participantes) {
+    const tope = maximoDeMaquinas(modalidad, Number(participantes.value));
+    maquinas.max = String(tope);
+    if (Number(maquinas.value) > tope) {
+      maquinas.value = String(tope);
+    }
+  }
+  if (zonaSeis) {
+    zonaSeis.hidden = !limites.equipos;
+  }
+  if (notaIa) {
+    notaIa.hidden = modalidad !== 'CONTRA_IA';
+  }
+
+  return { modalidad, participantes: limites.participantes };
 }
 
 function limpiarErroresDeCampo(formulario) {
@@ -139,14 +245,28 @@ function cargando(boton, activo) {
  */
 export function montarCrearSala(formulario, { crearSalaImpl = crearSala, alCrear } = {}) {
   const zonaAviso = formulario.querySelector('[data-zona="aviso"]');
+  // HU-DIS-003: el hueco donde se pinta `Seccion degradada` cuando el
+  // inventario (o el libro de creditos) no responde. Distinto del aviso:
+  // MAPEO-ERRORES §5.5 dice que no es un fallo de la accion sino una
+  // seccion limitada, con reintentar y sin tapar el resto del formulario.
+  const zonaDegradacion = formulario.querySelector('[data-zona="degradacion"]');
   const boton = formulario.querySelector('[type="submit"]');
 
-  formulario.addEventListener('submit', async (evento) => {
-    evento.preventDefault();
+  // RF-JUE-004: la modalidad manda sobre el resto del formulario, desde el
+  // primer pintado y cada vez que cambia ella o el aforo.
+  ajustarPorModalidad(formulario);
+  formulario.addEventListener('change', (evento) => {
+    const nombre = evento.target?.name;
+    if (nombre === 'modalidad' || nombre === 'maximoParticipantes') {
+      ajustarPorModalidad(formulario);
+    }
+  });
 
+  async function enviar() {
     limpiarErroresDeCampo(formulario);
     zonaAviso.hidden = true;
     zonaAviso.innerHTML = '';
+    limpiarSeccionDegradada(zonaDegradacion);
     cargando(boton, true);
 
     try {
@@ -171,6 +291,15 @@ export function montarCrearSala(formulario, { crearSalaImpl = crearSala, alCrear
         if (primero) {
           primero.focus();
         }
+      } else if (
+        error instanceof ErrorDeApi &&
+        zonaDegradacion &&
+        esSeccionDegradada(error.problema)
+      ) {
+        // Un servicio del que depende crear la sala no responde. Se dice
+        // cual, que el resto sigue, y se deja reintentar sin volver a
+        // rellenar nada: el formulario queda tal cual.
+        pintarSeccionDegradada(zonaDegradacion, error.problema, { alReintentar: enviar });
       } else if (error instanceof ErrorDeApi) {
         pintarAviso(zonaAviso, {
           tono: tonoPara(error.estado),
@@ -187,5 +316,10 @@ export function montarCrearSala(formulario, { crearSalaImpl = crearSala, alCrear
     } finally {
       cargando(boton, false);
     }
+  }
+
+  formulario.addEventListener('submit', (evento) => {
+    evento.preventDefault();
+    enviar();
   });
 }

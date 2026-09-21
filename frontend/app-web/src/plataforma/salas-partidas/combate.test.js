@@ -9,6 +9,8 @@
 import { jest } from '@jest/globals';
 
 import {
+  creditosDe,
+  recompensaDe,
   destinoDeAccion,
   enviarAccion,
   registroDeAvisos,
@@ -135,6 +137,118 @@ describe('textoDelResultado', () => {
   test('sin ganadores es empate, no un vencedor inventado', () => {
     expect(textoDelResultado({ ganadores: [] }, ANA)).toMatch(/empate/i);
   });
+
+  /* HU-JUE-014, CA-04: el reparto de la apuesta, desde el punto de vista de quien mira. */
+
+  test('con reparto, el ganador ve cuanto se lleva y el perdedor cuanto pierde', () => {
+    const fin = {
+      ganadores: [ANA],
+      reparto: [
+        { idJugador: ANA, creditos: 200 },
+        { idJugador: BRUNO, creditos: -100 },
+      ],
+    };
+
+    expect(textoDelResultado(fin, ANA)).toMatch(/ganado.*llevas 200 creditos/i);
+    expect(textoDelResultado(fin, BRUNO)).toMatch(/perdido.*pierdes los 100 creditos/i);
+  });
+
+  test('en empate con apuesta se dice que los creditos vuelven', () => {
+    const fin = { ganadores: [], reparto: [{ idJugador: ANA, creditos: 0 }] };
+
+    expect(textoDelResultado(fin, ANA)).toMatch(/empate.*devuelven/i);
+  });
+
+  test('sin reparto (sin apuesta o liquidacion pendiente) no se inventa ninguna cifra', () => {
+    expect(textoDelResultado({ ganadores: [ANA] }, ANA)).toBe('Has ganado el combate.');
+    expect(creditosDe({ ganadores: [ANA] }, ANA)).toBeNull();
+    expect(creditosDe({ reparto: [{ idJugador: BRUNO, creditos: 5 }] }, ANA)).toBeNull();
+  });
+
+  /* HU-SAL-004: modo cooperativo, el resultado es del equipo. */
+
+  test('con equipo ganador, quien esta entre los ganadores ve ganar a su equipo', () => {
+    const fin = { ganadores: [ANA], equipoGanador: 1 };
+
+    expect(textoDelResultado(fin, ANA)).toBe('Tu equipo (1) ha ganado el combate.');
+    expect(textoDelResultado(fin, BRUNO)).toBe('Gana el equipo 1. Tu equipo ha perdido.');
+  });
+
+  test('un companero que cayo tambien gana con su equipo, aunque no este en ganadores', () => {
+    const fin = { ganadores: [ANA], equipoGanador: 1 };
+
+    expect(textoDelResultado(fin, BRUNO, 1)).toBe('Tu equipo (1) ha ganado el combate.');
+    expect(textoDelResultado(fin, BRUNO, 2)).toMatch(/Tu equipo ha perdido/);
+  });
+});
+
+describe('montarControlesDeCombate · equipos (HU-SAL-004)', () => {
+  const CARLA = '44444444-4444-4444-4444-444444444444';
+
+  test('no hay boton para atacar a un companero de equipo', () => {
+    montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      turnoDe: ANA,
+      participantes: [
+        { jugador: { id: ANA }, heroe: { nombre: 'Arquero' }, equipo: 1 },
+        { jugador: { id: BRUNO }, heroe: { nombre: 'Centinela' }, equipo: 1 },
+        { jugador: { id: CARLA }, heroe: { nombre: 'Maga' }, equipo: 2 },
+      ],
+      alAtacar: () => {},
+    });
+
+    const botones = [...document.querySelectorAll('[data-atacar]')].map((b) => b.dataset.atacar);
+    expect(botones).toEqual([CARLA]);
+  });
+
+  test('sin equipos todos los demas son rivales, como siempre', () => {
+    montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: [
+        { jugador: { id: ANA }, heroe: { nombre: 'Arquero' }, equipo: null },
+        { jugador: { id: BRUNO }, heroe: { nombre: 'Centinela' }, equipo: null },
+        { jugador: { id: CARLA }, heroe: { nombre: 'Maga' } },
+      ],
+      alAtacar: () => {},
+    });
+
+    expect(document.querySelectorAll('[data-atacar]')).toHaveLength(2);
+  });
+});
+
+describe('registroDeAvisos con reparto (HU-JUE-014, CA-06)', () => {
+  test('el mismo fin, primero sin reparto y despues con el, NO es un duplicado', () => {
+    const registro = registroDeAvisos();
+    const sinReparto = { tipo: PARTIDA_FINALIZADA, idPartida: PARTIDA, ganadores: [ANA] };
+    const conReparto = { ...sinReparto, reparto: [{ idJugador: ANA, creditos: 100 }] };
+
+    expect(registro.yaVisto(sinReparto)).toBe(false);
+    expect(registro.yaVisto(conReparto)).toBe(false);
+    expect(registro.yaVisto(conReparto)).toBe(true);
+  });
+
+  test('el segundo aviso, ya con reparto, actualiza el texto del resultado', () => {
+    const controles = montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      alAtacar: () => {},
+    });
+    const resultado = document.querySelector('[data-zona="resultado"]');
+
+    controles.recibir({ tipo: PARTIDA_FINALIZADA, idPartida: PARTIDA, ganadores: [ANA] });
+    expect(resultado.textContent).toBe('Has ganado el combate.');
+
+    controles.recibir({
+      tipo: PARTIDA_FINALIZADA,
+      idPartida: PARTIDA,
+      ganadores: [ANA],
+      reparto: [{ idJugador: ANA, creditos: 100 }],
+    });
+    expect(resultado.textContent).toMatch(/llevas 100 creditos/i);
+  });
 });
 
 describe('montarControlesDeCombate', () => {
@@ -158,6 +272,59 @@ describe('montarControlesDeCombate', () => {
       yo: ANA,
       participantes: participantes(),
       alAtacar: () => {},
+    });
+
+    expect(document.querySelector('[data-atacar]').disabled).toBe(true);
+  });
+
+  // Los tres que siguen cierran el defecto que destapo el E2E del corte
+  // vertical: los botones solo se abrian al recibir `partida.turno.cambiado`,
+  // y ese mensaje SOLO lo emite `AvanzarTurno`, es decir, despues de que
+  // alguien haya jugado. En el turno 1 nadie ha jugado todavia, asi que nadie
+  // podia dar el primer golpe desde el navegador: el combate no arrancaba. Y
+  // quien recargaba a mitad de partida se quedaba sin poder jugar hasta que
+  // actuara el rival.
+  //
+  // El turno en curso ya viaja en `GET /partidas/{id}` (`turnoActual`), asi
+  // que la vista lo sabe al montar y no hace falta esperar ningun mensaje.
+  test('si al montar ya se sabe que el turno es mio, los botones nacen abiertos', () => {
+    montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      turnoDe: ANA,
+      alAtacar: () => {},
+    });
+
+    expect(document.querySelector('[data-atacar]').disabled).toBe(false);
+  });
+
+  test('si el turno es del rival, siguen cerrados', () => {
+    montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      turnoDe: BRUNO,
+      alAtacar: () => {},
+    });
+
+    expect(document.querySelector('[data-atacar]').disabled).toBe(true);
+  });
+
+  test('el turno del montaje no le gana al que llega despues por el canal', () => {
+    const controles = montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      turnoDe: ANA,
+      alAtacar: () => {},
+    });
+
+    controles.recibir({
+      tipo: TURNO_CAMBIADO,
+      idPartida: PARTIDA,
+      idJugador: BRUNO,
+      numeroTurno: 2,
     });
 
     expect(document.querySelector('[data-atacar]').disabled).toBe(true);
@@ -256,5 +423,153 @@ describe('montarControlesDeCombate', () => {
     controles.recibir(fin);
 
     expect(document.querySelector('[data-zona="acciones"]').hidden).toBe(true);
+  });
+});
+
+// HU-DIS-003 · el motor de combate no responde durante la partida. El rechazo
+// llega por la cola privada (errorDeCanal, contrato 1.3.0): los controles
+// dicen que el combate esta limitado, siguen ahi, y se puede reintentar.
+describe('montarControlesDeCombate · motor degradado (HU-DIS-003)', () => {
+  const motorCaido = () => ({
+    type: 'https://nexusbattles.local/errores/seccion-no-disponible',
+    title: 'Motor de combate no disponible temporalmente',
+    status: 503,
+    detail: 'La seccion de Motor de combate no esta disponible temporalmente.',
+    seccion: 'Motor de combate',
+    reintentarEnSegundos: 4,
+    dependencia: 'motor-combate',
+  });
+
+  function conHueco() {
+    document.body.innerHTML = `${VISTA}<div data-zona="degradacion" data-seccion="Combate" hidden></div>`;
+  }
+
+  test('pinta Seccion degradada sobre los controles y los deja vivos: el turno sigue siendo mio', () => {
+    conHueco();
+    const controles = montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      turnoDe: ANA,
+      alAtacar: () => {},
+    });
+
+    expect(controles.rechazar(motorCaido())).toBe(true);
+
+    const degradada = document.querySelector('[data-zona="degradacion"] .seccion-degradada');
+    expect(degradada).not.toBeNull();
+    expect(degradada.textContent).toContain('Motor de combate no disponible temporalmente');
+    expect(degradada.textContent).toContain('4 segundos');
+    expect(document.querySelector('[data-atacar]').disabled).toBe(false);
+    expect(document.querySelector('[data-zona="acciones"]').hidden).toBe(false);
+  });
+
+  test('Reintentar quita el aviso y vuelve a mandar la ultima accion', () => {
+    conHueco();
+    const alAtacar = jest.fn();
+    const controles = montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      turnoDe: ANA,
+      alAtacar,
+    });
+    document.querySelector('[data-atacar]').click();
+    controles.rechazar(motorCaido());
+
+    document.querySelector('.seccion-degradada__reintentar').click();
+
+    expect(alAtacar).toHaveBeenCalledTimes(2);
+    expect(alAtacar).toHaveBeenLastCalledWith({ idObjetivo: BRUNO, codigoAccion: 'ATAQUE_BASICO' });
+    expect(document.querySelector('.seccion-degradada')).toBeNull();
+  });
+
+  test('una accion resuelta despues limpia el aviso: el motor volvio', () => {
+    conHueco();
+    const controles = montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      alAtacar: () => {},
+    });
+    controles.rechazar(motorCaido());
+
+    controles.recibir(accionResuelta(80));
+
+    expect(document.querySelector('.seccion-degradada')).toBeNull();
+  });
+
+  test('otro rechazo (no es tu turno) se dice en la zona de rechazo, no como degradacion', () => {
+    document.body.innerHTML = `${VISTA}<div data-zona="degradacion" hidden></div><p data-zona="rechazo" role="alert" hidden></p>`;
+    const controles = montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      alAtacar: () => {},
+    });
+
+    const gestionado = controles.rechazar({
+      type: 'https://nexusbattles.local/errores/no-es-tu-turno',
+      title: 'No es tu turno',
+      status: 409,
+      detail: 'Espera a que juegue tu rival.',
+    });
+
+    expect(gestionado).toBe(true);
+    expect(document.querySelector('.seccion-degradada')).toBeNull();
+    const rechazo = document.querySelector('[data-zona="rechazo"]');
+    expect(rechazo.hidden).toBe(false);
+    expect(rechazo.textContent).toContain('Espera a que juegue tu rival.');
+  });
+
+  test('sin hueco de degradacion en la vista no revienta: devuelve false', () => {
+    const controles = montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      alAtacar: () => {},
+    });
+
+    expect(controles.rechazar(motorCaido())).toBe(false);
+  });
+});
+
+describe('recompensa por jugar (HU-JUE-012)', () => {
+  const fin = {
+    tipo: 'partida.finalizada',
+    idPartida: 'p1',
+    ganadores: [ANA],
+    recompensa: [
+      { idJugador: ANA, creditos: 2, ganador: true },
+      { idJugador: BRUNO, creditos: 1, ganador: false, cofre: 'cofre-1' },
+    ],
+  };
+
+  test('el texto dice cuantos creditos se ganan y por que, para quien mira', () => {
+    expect(textoDelResultado(fin, ANA)).toBe('Has ganado el combate. Ganas 2 creditos por ganar.');
+    expect(textoDelResultado(fin, BRUNO)).toBe(
+      'Has perdido el combate. Ganas 1 credito por participar. Ademas te llevas un cofre.',
+    );
+  });
+
+  test('con apuesta y recompensa, las dos coletillas van en orden: primero la apuesta', () => {
+    const conApuesta = { ...fin, reparto: [{ idJugador: ANA, creditos: 100 }] };
+    expect(textoDelResultado(conApuesta, ANA)).toBe(
+      'Has ganado el combate. Te llevas 100 creditos de la apuesta. Ganas 2 creditos por ganar.',
+    );
+  });
+
+  test('sin recompensa en el aviso (pendiente o sancionado) no se inventa nada', () => {
+    expect(recompensaDe({ ganadores: [ANA] }, ANA)).toBeNull();
+    expect(recompensaDe(fin, 'otro')).toBeNull();
+    expect(textoDelResultado({ ganadores: [ANA] }, ANA)).toBe('Has ganado el combate.');
+  });
+
+  test('el aviso que llega despues con la recompensa no es un duplicado del que llego sin ella', () => {
+    const registro = registroDeAvisos();
+    const sin = { tipo: PARTIDA_FINALIZADA, idPartida: 'p1', ganadores: [ANA] };
+    expect(registro.yaVisto(sin)).toBe(false);
+    expect(registro.yaVisto(fin)).toBe(false);
+    expect(registro.yaVisto(fin)).toBe(true);
   });
 });

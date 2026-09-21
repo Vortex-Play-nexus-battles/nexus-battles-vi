@@ -5,6 +5,25 @@ spring:
   application:
     name: metricas-plataforma
 
+  # HU-DIS-001: las interrupciones y las ventanas de mantenimiento viven en el
+  # esquema `metricas` de la PostgreSQL de plataforma (regla 7: esquema propio,
+  # misma instancia que el resto del bloque). Mismas variables que los demas
+  # servicios de plataforma (regla 10); lo de detras de los dos puntos es el
+  # entorno local del docker-compose de la raiz.
+  datasource:
+    url: ${DB_RELACIONAL_URL:jdbc:postgresql://localhost:5432/plataformadb}
+    username: ${DB_USER:usuario_nexus}
+    password: ${DB_PASS:password_secreta_123}
+    hikari:
+      # Una escritura por caida y una lectura al arrancar: con dos conexiones
+      # sobra, y la instancia compartida (256 MB) agradece cada una que no se abre.
+      maximum-pool-size: 2
+      minimum-idle: 0
+
+  flyway:
+    schemas: metricas
+    default-schema: metricas
+
 # HU-REN-001 — instrumentacion de latencia extremo a extremo (RNF-REN-001).
 #
 # El filtro que recoge las muestras NO se configura aqui: lo pone la
@@ -71,6 +90,16 @@ disponibilidad:
     notificaciones: ${SALUD_NOTIFICACIONES:http://localhost:8085/actuator/health}
     moderacion-sanciones: ${SALUD_MODERACION:http://localhost:8086/actuator/health}
     admin-parametros: ${SALUD_ADMIN_PARAMETROS:http://localhost:8088/actuator/health}
+
+# HU-MET-001 — metricas de usuarios y moderacion. La fuente es
+# moderacion-sanciones (GET /sanciones/metricas, agregados sin identificadores).
+# umbral-sanciones-por-dia SIN valor a proposito: la ficha pide «alertas de
+# alta frecuencia» pero ningun documento fija la cifra (D-25); mientras el PO
+# no la apruebe, el tablero publica los conteos y dice que no hay umbral.
+metricas:
+  moderacion:
+    url: ${SANCIONES_URL:http://localhost:8086/api/v1}
+    umbral-sanciones-por-dia: ${METRICAS_UMBRAL_SANCIONES_POR_DIA:}
 
 # Regla 3 de plataforma: este servicio tambien expone su propia salud.
 management:
