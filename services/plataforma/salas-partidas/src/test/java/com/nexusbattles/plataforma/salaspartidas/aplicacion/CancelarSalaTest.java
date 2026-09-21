@@ -45,7 +45,7 @@ class CancelarSalaTest {
         private boolean falla;
 
         @Override
-        public ReservaDeCreditos reservar(UUID idJugador, int cantidad, UUID idSala) {
+        public ReservaDeCreditos reservar(UUID idJugador, int cantidad, UUID idSala, long ingreso) {
             return new ReservaDeCreditos(UUID.randomUUID(), cantidad);
         }
 
@@ -55,6 +55,11 @@ class CancelarSalaTest {
                 throw new IllegalStateException("El modulo de creditos no responde.");
             }
             liberadas.add(idReserva);
+        }
+
+        @Override
+        public void consumir(UUID idReserva, UUID idBeneficiario) {
+            throw new UnsupportedOperationException("Cancelar una sala no cobra nada.");
         }
     }
 
@@ -164,6 +169,25 @@ class CancelarSalaTest {
     void salaInexistente() {
         assertThrows(SalaNoEncontrada.class,
                 () -> cancelar.ejecutar(UUID.randomUUID(), ANFITRION));
+    }
+
+    @Test
+    @DisplayName("HU-JUE-014 CA-03: al cancelar se devuelve la reserva de CADA participante, no solo la del anfitrion")
+    void devuelveLasReservasDeTodos() {
+        UUID delAnfitrion = UUID.randomUUID();
+        UUID delVisitante = UUID.randomUUID();
+        Sala sala = Sala.crear(
+                new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 400, false, false, null), ANFITRION);
+        sala = sala.conReserva(delAnfitrion);
+        sala.unirse(VISITANTE, new com.nexusbattles.plataforma.salaspartidas.dominio.FichaDeParticipante(
+                "Visitante", InventarioEnMemoria.SOMBRA, delVisitante), null);
+        almacen.guardar(sala);
+
+        cancelar.ejecutar(sala.id(), ANFITRION);
+
+        assertAll(
+                () -> assertEquals(List.of(delAnfitrion, delVisitante), creditos.liberadas),
+                () -> assertEquals(List.of(400), canal.creditosDevueltos()));
     }
 
     @Test

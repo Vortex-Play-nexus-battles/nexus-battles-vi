@@ -54,7 +54,7 @@ class CrearSalaTest {
         private final List<UUID> liberadas = new ArrayList<>();
 
         @Override
-        public ReservaDeCreditos reservar(UUID idJugador, int cantidad, UUID idSala) {
+        public ReservaDeCreditos reservar(UUID idJugador, int cantidad, UUID idSala, long ingreso) {
             if (saldo < cantidad) {
                 throw new CreditosInsuficientes(saldo, cantidad);
             }
@@ -71,6 +71,11 @@ class CrearSalaTest {
                     .filter(r -> r.id().equals(idReserva))
                     .findFirst()
                     .ifPresent(r -> saldo += r.creditos());
+        }
+
+        @Override
+        public void consumir(UUID idReserva, UUID idBeneficiario) {
+            throw new UnsupportedOperationException("Crear una sala no cobra nada.");
         }
     }
 

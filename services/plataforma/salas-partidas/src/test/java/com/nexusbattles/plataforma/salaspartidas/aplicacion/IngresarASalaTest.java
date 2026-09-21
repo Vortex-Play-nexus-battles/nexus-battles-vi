@@ -61,7 +61,7 @@ class IngresarASalaTest {
     void preparar() {
         repositorio = new RepositorioDeSalasEnMemoria();
         canal = new CanalDeSalaEspia();
-        ingresarASala = new IngresarASala(repositorio, canal, inventario);
+        ingresarASala = new IngresarASala(repositorio, canal, inventario, new CreditosEnMemoria());
     }
 
     private Sala salaAbierta() {
@@ -250,7 +250,7 @@ class IngresarASalaTest {
     @DisplayName("si otro ingreso se adelanto, vuelve a leer y entra si todavia cabe")
     void reintentaTrasUnaEscrituraAdelantada() {
         RepositorioQueSeAdelanta almacen = new RepositorioQueSeAdelanta(1);
-        ingresarASala = new IngresarASala(almacen, canal, inventario);
+        ingresarASala = new IngresarASala(almacen, canal, inventario, new CreditosEnMemoria());
         Sala sala = Sala.crear(
                 new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null), ANFITRION);
         // La semilla es una escritura «de fuera»: no debe consumir el fallo
@@ -270,7 +270,7 @@ class IngresarASalaTest {
     @DisplayName("si otro ocupo el ultimo cupo en medio, el segundo recibe el rechazo de sala llena y no se anuncia")
     void elPerdedorDeLaCarreraRecibeSalaLlena() {
         RepositorioQueSeAdelanta almacen = new RepositorioQueSeAdelanta(1);
-        ingresarASala = new IngresarASala(almacen, canal, inventario);
+        ingresarASala = new IngresarASala(almacen, canal, inventario, new CreditosEnMemoria());
         Sala sala = Sala.crear(
                 new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, false, null), ANFITRION);
         // La semilla es una escritura «de fuera»: no debe consumir el fallo
@@ -303,7 +303,7 @@ class IngresarASalaTest {
     @DisplayName("si la sala no deja de cambiar, tras los intentos previstos se rinde con un 409 y sin anunciar")
     void seRindeTrasLosIntentosPrevistos() {
         RepositorioQueSeAdelanta almacen = new RepositorioQueSeAdelanta(Integer.MAX_VALUE);
-        ingresarASala = new IngresarASala(almacen, canal, inventario);
+        ingresarASala = new IngresarASala(almacen, canal, inventario, new CreditosEnMemoria());
         Sala sala = Sala.crear(
                 new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null), ANFITRION);
         // La semilla es una escritura «de fuera»: no debe consumir el fallo
@@ -383,6 +383,189 @@ class IngresarASalaTest {
         public com.nexusbattles.plataforma.salaspartidas.dominio.PaginaDeSalas listar(
                 Modalidad modalidad, EstadoSala estado, int pagina, int tamano) {
             return real.listar(modalidad, estado, pagina, tamano);
+        }
+    }
+
+    /*
+     * Apuesta de creditos al entrar (HU-JUE-014, CA-01 a CA-03 y CA-06). Se
+     * afirma ESTADO del libro -a quien le queda cuanto- y no solo llamadas.
+     */
+    @org.junit.jupiter.api.Nested
+    @DisplayName("con recompensa en juego (HU-JUE-014)")
+    class ConApuesta {
+
+        private static final int APUESTA = 150;
+
+        private CreditosEnMemoria creditos;
+
+        @BeforeEach
+        void conLibro() {
+            creditos = new CreditosEnMemoria().conSaldo(VISITANTE, 500);
+            ingresarASala = new IngresarASala(repositorio, canal, inventario, creditos);
+        }
+
+        private Sala salaConApuesta() {
+            Sala sala = Sala.crear(
+                    new ParametrosDeSala(4, Modalidad.HASTA_SEIS, APUESTA, false, false, null), ANFITRION);
+            return repositorio.guardar(sala);
+        }
+
+        @Test
+        @DisplayName("CA-01: al entrar, la recompensa queda reservada (no descontada) y la sala recuerda la reserva")
+        void reservaAlEntrar() {
+            Sala sala = salaConApuesta();
+
+            Sala resultado = ingresarASala.ejecutar(sala.id(), como(VISITANTE));
+
+            UUID reserva = creditos.activasDe(VISITANTE).get(0).id();
+            assertAll(
+                    () -> assertEquals(500, creditos.saldoDe(VISITANTE), "reservar no descuenta"),
+                    () -> assertEquals(APUESTA, creditos.reservadoDe(VISITANTE)),
+                    () -> assertEquals(350, creditos.disponibleDe(VISITANTE), "pero ya no lo puede gastar"),
+                    () -> assertEquals(java.util.Optional.of(reserva), resultado.reservaDe(VISITANTE)),
+                    () -> assertEquals(java.util.Optional.of(reserva),
+                            repositorio.buscarPorId(sala.id()).orElseThrow().reservaDe(VISITANTE),
+                            "la reserva se guarda con la sala, no solo se devuelve"));
+        }
+
+        @Test
+        @DisplayName("CA-02: sin saldo suficiente se rechaza con 422, con las cifras, y la sala no cambia")
+        void saldoInsuficiente() {
+            creditos.conSaldo(VISITANTE, 100);
+            Sala sala = salaConApuesta();
+
+            com.nexusbattles.plataforma.salaspartidas.dominio.CreditosInsuficientes error = assertThrows(
+                    com.nexusbattles.plataforma.salaspartidas.dominio.CreditosInsuficientes.class,
+                    () -> ingresarASala.ejecutar(sala.id(), como(VISITANTE)));
+
+            assertAll(
+                    () -> assertEquals(422, error.estado()),
+                    () -> assertEquals(100, error.disponibles()),
+                    () -> assertEquals(APUESTA, error.requeridos()),
+                    () -> assertEquals(1, repositorio.buscarPorId(sala.id()).orElseThrow().ocupacion()),
+                    () -> assertTrue(canal.noAnuncioNada()),
+                    () -> assertTrue(creditos.reservas.isEmpty(), "no quedo nada reservado"));
+        }
+
+        @Test
+        @DisplayName("si la sala no lo admite despues de reservar, la reserva vuelve al jugador")
+        void devuelveLaReservaSiNoEntra() {
+            Sala sala = Sala.crear(
+                    new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, APUESTA, false, false, null), ANFITRION);
+            sala.unirse(UUID.randomUUID());
+            repositorio.guardar(sala);
+
+            assertThrows(IngresoNoPermitido.class, () -> ingresarASala.ejecutar(sala.id(), como(VISITANTE)));
+
+            assertAll(
+                    () -> assertEquals(1, creditos.liberadas.size(), "se libero lo que se habia reservado"),
+                    () -> assertEquals(0, creditos.reservadoDe(VISITANTE)),
+                    () -> assertEquals(500, creditos.disponibleDe(VISITANTE)));
+        }
+
+        @Test
+        @DisplayName("CA-06: con el libro caido responde 503 y nada queda reservado; la sala no cambia")
+        void libroCaido() {
+            creditos.caido = true;
+            Sala sala = salaConApuesta();
+
+            com.nexusbattles.plataforma.salaspartidas.dominio.CreditosNoDisponibles error = assertThrows(
+                    com.nexusbattles.plataforma.salaspartidas.dominio.CreditosNoDisponibles.class,
+                    () -> ingresarASala.ejecutar(sala.id(), como(VISITANTE)));
+
+            assertAll(
+                    () -> assertEquals(503, error.estado()),
+                    () -> assertEquals(com.nexusbattles.plataforma.salaspartidas.dominio.CreditosNoDisponibles.TIPO,
+                            error.tipo()),
+                    () -> assertTrue(creditos.reservas.isEmpty()),
+                    () -> assertEquals(1, repositorio.buscarPorId(sala.id()).orElseThrow().ocupacion()),
+                    () -> assertTrue(canal.noAnuncioNada()));
+        }
+
+        @Test
+        @DisplayName("CA-05: una sala sin recompensa no molesta al libro")
+        void sinRecompensaNoReserva() {
+            Sala sala = salaAbierta();
+
+            ingresarASala.ejecutar(sala.id(), como(VISITANTE));
+
+            assertAll(
+                    () -> assertTrue(creditos.llamadas.isEmpty()),
+                    () -> assertEquals(java.util.Optional.empty(),
+                            repositorio.buscarPorId(sala.id()).orElseThrow().reservaDe(VISITANTE)));
+        }
+
+        @Test
+        @DisplayName("quien sale y vuelve a entrar consigue una reserva nueva, no la que ya se le devolvio")
+        void reentrarReservaDeNuevo() {
+            Sala sala = salaConApuesta();
+            AbandonarSala abandonar = new AbandonarSala(repositorio, canal, creditos);
+
+            ingresarASala.ejecutar(sala.id(), como(VISITANTE));
+            UUID primera = creditos.activasDe(VISITANTE).get(0).id();
+            abandonar.ejecutar(sala.id(), VISITANTE);
+            // Como en PostgreSQL: la salida sube la version de la sala.
+            Sala tras = repositorio.buscarPorId(sala.id()).orElseThrow();
+            repositorio.guardar(Sala.rehidratar(tras.id(), tras.estado(), tras.modalidad(),
+                    tras.maximoParticipantes(), tras.recompensaCreditos(), tras.incluirHeroeIA(),
+                    tras.privada(), tras.tamanoEquipo(), tras.idAnfitrion(), tras.participantes(),
+                    tras.creadaEn(), tras.version() + 1, tras.codigoInvitacion(), tras.idReservaCreditos()));
+
+            Sala resultado = ingresarASala.ejecutar(sala.id(), como(VISITANTE));
+
+            UUID segunda = resultado.reservaDe(VISITANTE).orElseThrow();
+            assertAll(
+                    () -> assertTrue(!primera.equals(segunda)),
+                    () -> assertEquals(APUESTA, creditos.reservadoDe(VISITANTE), "una sola reserva activa"),
+                    () -> assertEquals(CreditosEnMemoria.Estado.LIBERADA, creditos.reservas.get(primera).estado()));
+        }
+
+        @Test
+        @DisplayName("repetir el mismo ingreso con la sala sin cambiar no reserva dos veces")
+        void elMismoIngresoNoReservaDosVeces() {
+            Sala sala = salaConApuesta();
+            RepositorioRotoAlGuardar roto = new RepositorioRotoAlGuardar(repositorio);
+            IngresarASala contraElRoto = new IngresarASala(roto, canal, inventario, creditos);
+            creditos.fallaAlLiberar = true; // la compensacion tampoco puede: la reserva queda viva
+
+            assertThrows(IllegalStateException.class, () -> contraElRoto.ejecutar(sala.id(), como(VISITANTE)));
+            creditos.fallaAlLiberar = false;
+            Sala resultado = ingresarASala.ejecutar(sala.id(), como(VISITANTE));
+
+            assertAll(
+                    () -> assertEquals(1, creditos.activasDe(VISITANTE).size(),
+                            "la misma clave devolvio la misma reserva"),
+                    () -> assertEquals(creditos.activasDe(VISITANTE).get(0).id(),
+                            resultado.reservaDe(VISITANTE).orElseThrow()));
+        }
+
+        /** Guardar falla siempre; leer y listar delegan. */
+        private final class RepositorioRotoAlGuardar implements RepositorioDeSalas {
+            private final RepositorioDeSalas real;
+
+            RepositorioRotoAlGuardar(RepositorioDeSalas real) {
+                this.real = real;
+            }
+
+            @Override
+            public Sala guardar(Sala sala) {
+                throw new IllegalStateException("La base de datos no responde.");
+            }
+
+            /** Copia, como PostgreSQL: lo que el caso de uso mute y no guarde, se pierde. */
+            @Override
+            public java.util.Optional<Sala> buscarPorId(UUID id) {
+                return real.buscarPorId(id).map(s -> Sala.rehidratar(s.id(), s.estado(), s.modalidad(),
+                        s.maximoParticipantes(), s.recompensaCreditos(), s.incluirHeroeIA(), s.privada(),
+                        s.tamanoEquipo(), s.idAnfitrion(), s.fichas(), s.creadaEn(), s.version(),
+                        s.codigoInvitacion(), s.idReservaCreditos()));
+            }
+
+            @Override
+            public com.nexusbattles.plataforma.salaspartidas.dominio.PaginaDeSalas listar(
+                    Modalidad modalidad, EstadoSala estado, int pagina, int tamano) {
+                return real.listar(modalidad, estado, pagina, tamano);
+            }
         }
     }
 }

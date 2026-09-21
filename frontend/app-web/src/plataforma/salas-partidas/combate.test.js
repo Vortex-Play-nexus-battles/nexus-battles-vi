@@ -9,6 +9,7 @@
 import { jest } from '@jest/globals';
 
 import {
+  creditosDe,
   destinoDeAccion,
   enviarAccion,
   registroDeAvisos,
@@ -134,6 +135,66 @@ describe('textoDelResultado', () => {
 
   test('sin ganadores es empate, no un vencedor inventado', () => {
     expect(textoDelResultado({ ganadores: [] }, ANA)).toMatch(/empate/i);
+  });
+
+  /* HU-JUE-014, CA-04: el reparto de la apuesta, desde el punto de vista de quien mira. */
+
+  test('con reparto, el ganador ve cuanto se lleva y el perdedor cuanto pierde', () => {
+    const fin = {
+      ganadores: [ANA],
+      reparto: [
+        { idJugador: ANA, creditos: 200 },
+        { idJugador: BRUNO, creditos: -100 },
+      ],
+    };
+
+    expect(textoDelResultado(fin, ANA)).toMatch(/ganado.*llevas 200 creditos/i);
+    expect(textoDelResultado(fin, BRUNO)).toMatch(/perdido.*pierdes los 100 creditos/i);
+  });
+
+  test('en empate con apuesta se dice que los creditos vuelven', () => {
+    const fin = { ganadores: [], reparto: [{ idJugador: ANA, creditos: 0 }] };
+
+    expect(textoDelResultado(fin, ANA)).toMatch(/empate.*devuelven/i);
+  });
+
+  test('sin reparto (sin apuesta o liquidacion pendiente) no se inventa ninguna cifra', () => {
+    expect(textoDelResultado({ ganadores: [ANA] }, ANA)).toBe('Has ganado el combate.');
+    expect(creditosDe({ ganadores: [ANA] }, ANA)).toBeNull();
+    expect(creditosDe({ reparto: [{ idJugador: BRUNO, creditos: 5 }] }, ANA)).toBeNull();
+  });
+});
+
+describe('registroDeAvisos con reparto (HU-JUE-014, CA-06)', () => {
+  test('el mismo fin, primero sin reparto y despues con el, NO es un duplicado', () => {
+    const registro = registroDeAvisos();
+    const sinReparto = { tipo: PARTIDA_FINALIZADA, idPartida: PARTIDA, ganadores: [ANA] };
+    const conReparto = { ...sinReparto, reparto: [{ idJugador: ANA, creditos: 100 }] };
+
+    expect(registro.yaVisto(sinReparto)).toBe(false);
+    expect(registro.yaVisto(conReparto)).toBe(false);
+    expect(registro.yaVisto(conReparto)).toBe(true);
+  });
+
+  test('el segundo aviso, ya con reparto, actualiza el texto del resultado', () => {
+    const controles = montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      alAtacar: () => {},
+    });
+    const resultado = document.querySelector('[data-zona="resultado"]');
+
+    controles.recibir({ tipo: PARTIDA_FINALIZADA, idPartida: PARTIDA, ganadores: [ANA] });
+    expect(resultado.textContent).toBe('Has ganado el combate.');
+
+    controles.recibir({
+      tipo: PARTIDA_FINALIZADA,
+      idPartida: PARTIDA,
+      ganadores: [ANA],
+      reparto: [{ idJugador: ANA, creditos: 100 }],
+    });
+    expect(resultado.textContent).toMatch(/llevas 100 creditos/i);
   });
 });
 

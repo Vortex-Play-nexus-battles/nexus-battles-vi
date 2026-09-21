@@ -50,6 +50,20 @@ services:
       timeout: 3s
       retries: 20
 
+  # Base propia del libro de creditos (regla 7): ms-finanzas crea su esquema
+  # `finanzas` con Flyway al arrancar.
+  e2e-finanzas-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: finanzas_db
+      POSTGRES_USER: finanzas_user
+      POSTGRES_PASSWORD: finanzas
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finanzas_user -d finanzas_db"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
   # Una sola Mongo para los tres servicios de contenido, con una base por
   # servicio: es como esta en docker-compose.contenido.yml.
   e2e-contenido-mongo:
@@ -172,6 +186,38 @@ services:
       timeout: 5s
       retries: 40
 
+  # ------------------------------------------------------------- cuentas
+  # El libro de creditos de HU-JUE-014 (Grupo 4). Es el que aparta, devuelve
+  # y cobra la apuesta; sin el, crear o entrar a una sala con recompensa
+  # responde 503 y el E2E de la apuesta no tendria nada real que probar.
+  srv-ms-finanzas:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/cuentas/ms-finanzas/build/libs/*.jar
+        PUERTO: "8093"
+    ports:
+      # Expuesto al host solo para que el spec y sembrar.sh puedan acreditar
+      # saldo y leerlo: el borde no enruta /creditos (ms-finanzas no esta en
+      # el host de dev) y esas dos operaciones no las hace ningun jugador.
+      - "8093:8093"
+    environment:
+      DB_HOST: e2e-finanzas-db
+      DB_PORT: "5432"
+      DB_NAME: finanzas_db
+      DB_USER: finanzas_user
+      DB_PASSWORD: finanzas
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+    depends_on:
+      e2e-finanzas-db: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8093/api/v1/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
   # ---------------------------------------------------------- plataforma
   srv-salas-partidas:
     build:
@@ -200,6 +246,11 @@ services:
       DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
       DIRECTORIO_ACTIVO_CLIENT_ID: salas-partidas
       DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-salas-partidas
+      # HU-JUE-014: el libro de creditos, con su context-path.
+      CREDITOS_URL: http://srv-ms-finanzas:8093/api/v1
+      # Reintento rapido de liquidaciones pendientes, para que el E2E pueda
+      # observarlo sin esperar el minuto por defecto.
+      APUESTAS_REINTENTO_MS: "5000"
       # El navegador llega por el borde, asi que el origen permitido del
       # canal STOMP es el del borde, no el del servicio.
       SALAS_WS_ORIGENES: http://localhost:8099,http://127.0.0.1:8099
@@ -211,6 +262,7 @@ services:
       srv-heroes: { condition: service_healthy }
       srv-motor-combate: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }
+      srv-ms-finanzas: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8084/actuator/health || exit 1"]
       interval: 5s

@@ -27,6 +27,9 @@ INVITADO="${E2E_INVITADO:-invitado_e2e}"
 # puerta de heroe (422) ANTES de mirar el codigo, y la prueba del codigo no
 # estaria probando el codigo.
 CURIOSO="${E2E_CURIOSO:-curioso_e2e}"
+# Cuarto: tiene heroe pero NI UN credito. Es el que prueba el 422 de
+# HU-JUE-014 CA-02 (creditos-insuficientes) en apuesta-de-creditos.e2e.spec.js.
+POBRE="${E2E_POBRE:-pobre_e2e}"
 # La misma clave que usa sala-de-batalla.e2e.spec.js: el spec vuelve a
 # registrar (tolera 400/409) e inicia sesion con ella.
 CLAVE="${E2E_CLAVE:-Contrasena-E2E-2026}"
@@ -163,12 +166,13 @@ sembrar_jugador() {
 sembrar_jugador "$ANFITRION"
 sembrar_jugador "$INVITADO"
 sembrar_jugador "$CURIOSO"
+sembrar_jugador "$POBRE"
 
 echo "== 3) Comprobando el camino completo de la verificacion =="
 # Las mismas tres llamadas que hace ClienteInventarioHeroes, en el mismo
 # orden. Si alguna de las tres falla, la puerta de heroe responde 503 y no se
 # puede crear ninguna sala: mejor enterarse aqui que a mitad de la prueba.
-for apodo in "$ANFITRION" "$INVITADO" "$CURIOSO"; do
+for apodo in "$ANFITRION" "$INVITADO" "$CURIOSO" "$POBRE"; do
   elementos=$(curl -sS "$BORDE/api/v1/inventario/elementos?pagina=0" -H "Authorization: Bearer $(token_de "$apodo")")
   heroe=$(echo "$elementos" | jq -r '[.elementos[]? | select(.tipo == "HEROE")][0].id // empty')
   [ -n "$heroe" ] || { echo "::error::$apodo no tiene heroe en la vitrina"; echo "$elementos" | jq .; exit 1; }
@@ -188,6 +192,41 @@ for apodo in "$ANFITRION" "$INVITADO" "$CURIOSO"; do
   [ -n "$vida" ] || { echo "::error::$apodo sin estadisticas: $stats"; exit 1; }
 
   echo "  $apodo: heroe=$heroe armas=$armas vida=$vida"
+done
+
+echo "== 4) Creditos (HU-JUE-014): saldo inicial en ms-finanzas ==="
+# El libro de creditos no esta detras del borde (ms-finanzas no corre en el
+# host de dev), asi que se le habla por el puerto que el compose expone.
+# Acreditar es idempotente por refId: repetir la semilla no duplica saldo.
+FINANZAS="${FINANZAS:-http://localhost:8093/api/v1}"
+SALDO_INICIAL="${E2E_SALDO_INICIAL:-500}"
+
+# El `uid` es el identificador estable del jugador (ADR-002): sale del
+# token, no del apodo. Se lee del cuerpo del JWT (base64url, sin firma).
+uid_de() {
+  local token cuerpo
+  token=$(token_de "$1")
+  cuerpo=$(printf '%s' "$token" | cut -d. -f2 | tr '_-' '/+')
+  # Relleno de base64 hasta multiplo de 4.
+  while [ $(( ${#cuerpo} % 4 )) -ne 0 ]; do cuerpo="$cuerpo="; done
+  printf '%s' "$cuerpo" | base64 -d 2>/dev/null | jq -r '.uid // empty'
+}
+
+# El curioso tambien: su intento con codigo equivocado reserva antes de que
+# la sala lo rechace, y sin saldo recibiria 422 en vez del 409 que se prueba.
+# El pobre, a proposito, se queda sin nada.
+for apodo in "$ANFITRION" "$INVITADO" "$CURIOSO"; do
+  uid=$(uid_de "$apodo")
+  [ -n "$uid" ] || { echo "::error::el token de $apodo no trae uid"; exit 1; }
+  codigo=$(curl -sS -o /tmp/acreditar-$apodo.json -w '%{http_code}' \
+    -X POST "$FINANZAS/creditos/acreditar" \
+    -H "Content-Type: application/json" \
+    -d "{\"uid\":\"$uid\",\"monto\":$SALDO_INICIAL,\"refId\":\"semilla-e2e-$apodo\",\"concepto\":\"semilla-e2e\"}")
+  if [ "$codigo" != "200" ]; then
+    echo "::error::ms-finanzas no acredito a $apodo ($codigo):"; cat "/tmp/acreditar-$apodo.json"; echo; exit 1
+  fi
+  disponible=$(curl -sS "$FINANZAS/creditos/$uid/saldo" | jq -r '.saldoDisponible // empty')
+  echo "  $apodo: uid=$uid disponible=$disponible"
 done
 
 echo "Semilla lista."

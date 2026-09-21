@@ -83,8 +83,25 @@ salas:
   heroes:
     url: ${HEROES_BASE_URL:http://localhost:8080}
 
-# Credencial de servicio con la que este servicio le habla a inventario
-# (ADR-001, emisor transitorio ADR-005). Las lee
+  # HU-JUE-014: el libro de creditos (ms-finanzas, equipo de Cuentas,
+  # contracts/openapi/creditos.yaml). Incluye el context-path /api/v1 del
+  # propio servicio. Si no responde, crear o entrar a una sala con recompensa
+  # sale 503 (creditos-no-disponibles) y nada queda reservado a medias; una
+  # partida ya en curso no se pierde: su liquidacion queda pendiente y se
+  # reintenta.
+  creditos:
+    url: ${CREDITOS_URL:http://localhost:8093/api/v1}
+
+  apuestas:
+    # Cada cuanto se reintentan las liquidaciones que el libro dejo pendientes.
+    reintento-ms: ${APUESTAS_REINTENTO_MS:60000}
+    # Decision funcional NO tomada por ninguna HU: que pasa con lo apostado por
+    # los humanos cuando gana la IA, que no tiene bolsa. LIBERAR (por defecto)
+    # lo devuelve; CONSUMIR lo cobra sin beneficiario. Ver LiquidarApuesta.
+    si-gana-la-maquina: ${APUESTAS_SI_GANA_LA_MAQUINA:LIBERAR}
+
+# Credencial de servicio con la que este servicio le habla a inventario y al
+# libro de creditos (ADR-001, emisor transitorio ADR-005). Las lee
 # CredencialesDeServicioAutoConfiguration (plataforma-seguridad): sin
 # client-id no se registra ningun interceptor y las llamadas salen sin
 # Authorization. En el host las genera desplegar.sh; en el E2E van en el

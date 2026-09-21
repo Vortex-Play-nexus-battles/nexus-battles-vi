@@ -90,7 +90,7 @@ class TurnoDeLaMaquinaTest {
     }
 
     private EjecutarAccion casoDeUso(MotorDeMentira motor) {
-        return new EjecutarAccion(partidas, canal, motor);
+        return new EjecutarAccion(partidas, canal, motor, LiquidacionSinApuesta.nueva());
     }
 
     // =====================================================================

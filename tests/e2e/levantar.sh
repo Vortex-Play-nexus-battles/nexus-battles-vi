@@ -25,6 +25,7 @@ if [ "${1:-}" != "--solo-levantar" ]; then
     :services:contenido:productos:bootJar \
     :services:contenido:inventario:bootJar \
     :services:contenido:motor-combate:bootJar \
+    :services:cuentas:ms-finanzas:bootJar \
     :services:plataforma:salas-partidas:bootJar
 
   (cd services/cuentas/ms-identidad && ./mvnw -B -DskipTests package)

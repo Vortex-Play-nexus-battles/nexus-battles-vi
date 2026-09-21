@@ -95,10 +95,27 @@ function huellaDe(aviso) {
     return `${aviso.tipo}#${aviso.idPartida}#${aviso.numeroTurno}`;
   }
   if (aviso.tipo === PARTIDA_FINALIZADA) {
-    // Una partida termina una sola vez.
-    return `${aviso.tipo}#${aviso.idPartida}`;
+    // Una partida termina una sola vez... pero el servidor puede anunciar el
+    // final dos veces a proposito: primero sin `reparto` (el libro de creditos
+    // no respondio, HU-JUE-014 CA-06) y despues con el, cuando la liquidacion
+    // se cierra. Ese segundo aviso no es un duplicado: trae lo que faltaba.
+    return `${aviso.tipo}#${aviso.idPartida}#${Array.isArray(aviso.reparto) && aviso.reparto.length > 0 ? 'con-reparto' : 'sin-reparto'}`;
   }
   return null;
+}
+
+/**
+ * Cuantos creditos netos gano o perdio quien mira, segun el `reparto` del
+ * aviso de fin (HU-JUE-014, CA-04). `null` si el aviso no trae reparto: sin
+ * apuesta, o con la liquidacion todavia pendiente.
+ *
+ * @param {{reparto?: Array<{idJugador: string, creditos: number}>}} aviso
+ * @param {string} yo
+ * @returns {number|null}
+ */
+export function creditosDe(aviso, yo) {
+  const entrada = (aviso?.reparto ?? []).find((r) => r?.idJugador === yo);
+  return entrada && Number.isFinite(entrada.creditos) ? entrada.creditos : null;
 }
 
 /**
@@ -113,10 +130,33 @@ function huellaDe(aviso) {
  */
 export function textoDelResultado(aviso, yo) {
   const ganadores = aviso?.ganadores ?? [];
-  if (ganadores.length === 0) {
-    return 'Combate terminado en empate.';
+  let base = 'Combate terminado en empate.';
+  if (ganadores.length > 0) {
+    base = ganadores.includes(yo) ? 'Has ganado el combate.' : 'Has perdido el combate.';
   }
-  return ganadores.includes(yo) ? 'Has ganado el combate.' : 'Has perdido el combate.';
+  return `${base}${textoDelReparto(aviso, yo)}`;
+}
+
+/**
+ * Coletilla economica del resultado (HU-JUE-014, CA-04): que paso con la
+ * apuesta de quien mira. Vacia si el aviso no trae reparto.
+ *
+ * @param {object} aviso
+ * @param {string} yo
+ * @returns {string}
+ */
+function textoDelReparto(aviso, yo) {
+  const creditos = creditosDe(aviso, yo);
+  if (creditos === null) {
+    return '';
+  }
+  if (creditos > 0) {
+    return ` Te llevas ${creditos} creditos de la apuesta.`;
+  }
+  if (creditos < 0) {
+    return ` Pierdes los ${-creditos} creditos que apostaste.`;
+  }
+  return ' Se te devuelven los creditos apostados.';
 }
 
 /**

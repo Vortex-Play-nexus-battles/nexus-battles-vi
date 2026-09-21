@@ -447,6 +447,45 @@ class RepositorioSalasJpaIT {
                 () -> assertEquals(DE_ANA, despues.fichaDe(ANFITRION).heroe()));
     }
 
+    // =========================================================================
+    // HU-JUE-014 — la reserva de cada participante (V9)
+    // =========================================================================
+
+    @Test
+    @DisplayName("la reserva de creditos de cada participante sobrevive al viaje, cada uno con la suya")
+    void cadaUnoConservaSuReserva() {
+        UUID delAnfitrion = UUID.randomUUID();
+        UUID deBruno = UUID.randomUUID();
+        Sala sala = Sala.crear(
+                new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 250, false, false, null), ANFITRION,
+                ficha("Ana", DE_ANA)).conReserva(delAnfitrion);
+        sala.unirse(BRUNO, ficha("Bruno", DE_BRUNO).conReserva(deBruno), null);
+
+        repositorio.guardar(sala);
+        Sala recuperada = repositorio.buscarPorId(sala.id()).orElseThrow();
+
+        assertAll(
+                () -> assertEquals(java.util.Optional.of(delAnfitrion), recuperada.reservaDe(ANFITRION)),
+                () -> assertEquals(java.util.Optional.of(deBruno), recuperada.reservaDe(BRUNO)),
+                () -> assertEquals(java.util.Map.of(ANFITRION, delAnfitrion, BRUNO, deBruno),
+                        recuperada.reservasDeCreditos()),
+                () -> assertEquals(DE_BRUNO, recuperada.fichaDe(BRUNO).heroe(), "la ficha sigue entera"));
+    }
+
+    @Test
+    @DisplayName("dos participantes no pueden apuntar a la misma reserva: lo impide la base (ux_participantes_sala_reserva)")
+    void unaReservaEsDeUnSoloParticipante() {
+        UUID compartida = UUID.randomUUID();
+        Sala sala = Sala.crear(
+                new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 250, false, false, null), ANFITRION,
+                ficha("Ana", DE_ANA));
+        sala.unirse(BRUNO, ficha("Bruno", DE_BRUNO).conReserva(compartida), null);
+        sala.unirse(ANA, ficha("Ana2", DE_ANA).conReserva(compartida), null);
+
+        assertThrows(org.springframework.dao.DataIntegrityViolationException.class,
+                () -> repositorio.guardar(sala));
+    }
+
     /**
      * Sala en el estado pedido, tal como la reconstruye la persistencia. Se
      * usa {@code rehidratar} porque {@code crear} solo produce ABIERTA o

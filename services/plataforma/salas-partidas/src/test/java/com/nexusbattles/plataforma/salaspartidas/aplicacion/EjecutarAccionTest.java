@@ -91,7 +91,7 @@ class EjecutarAccionTest {
     }
 
     private EjecutarAccion casoDeUso(MotorDeMentira motor) {
-        return new EjecutarAccion(partidas, canal, motor);
+        return new EjecutarAccion(partidas, canal, motor, LiquidacionSinApuesta.nueva());
     }
 
     @Test
@@ -272,5 +272,68 @@ class EjecutarAccionTest {
                 () -> assertTrue(canal.anuncios.stream().allMatch(a -> "turno".equals(a.tipo())),
                         "nadie golpea: solo se pasa turno"),
                 () -> assertEquals(EstadoPartida.EN_CURSO, despues.estado()));
+    }
+
+    /* HU-JUE-014, CA-04: el fin lleva el reparto de la apuesta. */
+    @org.junit.jupiter.api.Nested
+    @DisplayName("con apuesta en juego (HU-JUE-014)")
+    class ConApuesta {
+
+        private final RepositorioDeSalasEnMemoria salas = new RepositorioDeSalasEnMemoria();
+        private final CreditosEnMemoria libro = new CreditosEnMemoria().conSaldo(ANA, 1_000).conSaldo(BRUNO, 1_000);
+
+        private EjecutarAccion casoDeUsoConApuesta(MotorDeMentira motor) {
+            LiquidarApuesta liquidar = new LiquidarApuesta(salas, new RepositorioDeLiquidacionesEnMemoria(), libro,
+                    java.time.Clock.fixed(AHORA, java.time.ZoneOffset.UTC),
+                    LiquidarApuesta.SiGanaLaMaquina.LIBERAR);
+            return new EjecutarAccion(partidas, canal, motor, liquidar);
+        }
+
+        /** Ana y Bruno apuestan 100; Bruno tiene 10 de vida: cae al primer golpe. */
+        private Partida partidaApostada() {
+            Sala sala = Sala.crear(
+                    new ParametrosDeSala(6, Modalidad.HASTA_SEIS, 100, false, false, null), ANA,
+                    new FichaDeParticipante("Ana", heroe("Arquero", 100)));
+            sala = sala.conReserva(libro.reservar(ANA, 100, sala.id(), 0).id());
+            sala.unirse(BRUNO, new FichaDeParticipante("Bruno", heroe("Centinela", 10),
+                    libro.reservar(BRUNO, 100, sala.id(), 1).id()), null);
+            salas.guardar(sala);
+            return partidas.guardar(Partida.iniciar(sala, AHORA));
+        }
+
+        @Test
+        @DisplayName("al terminar, el aviso de fin lleva el reparto y el libro ya movio los creditos")
+        void elFinLlevaElReparto() {
+            Partida partida = partidaApostada();
+
+            casoDeUsoConApuesta(MotorDeMentira.queHace(50)).ejecutar(partida.id(), ANA, BRUNO, "ATAQUE_BASICO");
+
+            assertAll(
+                    () -> assertEquals("fin", canal.anuncios.get(canal.anuncios.size() - 1).tipo()),
+                    () -> assertEquals(List.of(
+                                    new com.nexusbattles.plataforma.salaspartidas.dominio.RepartoDeCreditos(ANA, 100),
+                                    new com.nexusbattles.plataforma.salaspartidas.dominio.RepartoDeCreditos(BRUNO, -100)),
+                            canal.repartos.get(0)),
+                    () -> assertEquals(1_100, libro.saldoDe(ANA)),
+                    () -> assertEquals(900, libro.saldoDe(BRUNO)));
+        }
+
+        @Test
+        @DisplayName("CA-06: si el libro no responde al terminar, la partida termina igual y el fin sale sin reparto")
+        void libroCaidoAlTerminar() {
+            Partida partida = partidaApostada();
+            libro.caido = true;
+
+            Partida despues = casoDeUsoConApuesta(MotorDeMentira.queHace(50))
+                    .ejecutar(partida.id(), ANA, BRUNO, "ATAQUE_BASICO");
+
+            assertAll(
+                    () -> assertEquals(EstadoPartida.FINALIZADA, despues.estado()),
+                    () -> assertEquals(EstadoPartida.FINALIZADA,
+                            partidas.buscarPorId(partida.id()).orElseThrow().estado(), "el ultimo golpe quedo guardado"),
+                    () -> assertEquals("fin", canal.anuncios.get(canal.anuncios.size() - 1).tipo()),
+                    () -> assertTrue(canal.repartos.get(0).isEmpty(), "sin reparto: queda pendiente, no se inventa"),
+                    () -> assertEquals(100, libro.reservadoDe(ANA), "nada se perdio: las reservas siguen vivas"));
+        }
     }
 }
