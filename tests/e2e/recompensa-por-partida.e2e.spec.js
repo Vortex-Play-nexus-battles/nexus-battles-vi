@@ -6,7 +6,7 @@
  * vista real: al terminar, salas-partidas informa el resultado a ms-finanzas
  * con su credencial de servicio y el libro acredita 2 si la anfitriona gano
  * (uno contra uno) o 1 si perdio (participacion). Se comprueba en el saldo
- * bruto, en el historial de transacciones (CA-01) y en el texto de la vista.
+ * bruto, en la operacion del libro (CA-01) y en el texto de la vista.
  *
  * CA-05 (idempotencia) se comprueba contra el libro real: volver a informar
  * la misma partida con un token de servicio responde 409
@@ -71,12 +71,13 @@ async function saldoBrutoDe(api, quien) {
   return Number((await r.json()).saldoBruto);
 }
 
-async function historialDe(api, quien) {
-  const r = await api.get(`${FINANZAS}/transacciones/mi-historial?size=50`, {
-    headers: conToken(quien.token),
+/** La operacion del libro por su referencia (solo servicios: /creditos/** es ROLE_SERVICIO). */
+async function operacionDe(api, servicio, refId) {
+  const r = await api.get(`${FINANZAS}/creditos/operaciones/${refId}`, {
+    headers: conToken(servicio),
   });
-  expect(r.status(), await r.text()).toBe(200);
-  return (await r.json()).content ?? [];
+  expect(r.status(), `operacion ${refId}: ${await r.text()}`).toBe(200);
+  return r.json();
 }
 
 async function partidaDe(api, quien, id) {
@@ -168,17 +169,14 @@ test.describe('Recompensa por jugar (HU-JUE-012)', () => {
       })
       .toBe(esperado);
 
-    // ...y el movimiento aparece en el historial con su referencia a la partida.
-    const movimientos = await historialDe(api, anfitriona);
-    const movimiento = movimientos.find(
-      (m) => m.refId === `partida-${partida.id}-jugador-${anfitriona.claims.uid}`,
-    );
-    expect(
-      movimiento,
-      `sin movimiento de la partida en el historial: ${JSON.stringify(movimientos.slice(0, 5))}`,
-    ).toBeTruthy();
-    expect(Number(movimiento.monto)).toBe(esperado);
-    expect(movimiento.concepto).toBe(gano ? 'recompensa-victoria' : 'recompensa-participacion');
+    // ...y el libro tiene la operacion con la referencia a la partida y el
+    // concepto de la ficha. (El «Historial de transacciones» del jugador solo
+    // lista pagos, no movimientos de creditos: defecto aparte para Cuentas.)
+    const servicio = await tokenDeServicio(api);
+    const refId = `partida-${partida.id}-jugador-${anfitriona.claims.uid}`;
+    const operacion = await operacionDe(api, servicio, refId);
+    expect(Number(operacion.monto)).toBe(esperado);
+    expect(operacion.concepto).toBe(gano ? 'recompensa-victoria' : 'recompensa-participacion');
 
     // La vista lo dice con la coletilla de HU-JUE-012 (contrato 1.4.0).
     await expect(page.locator('[data-zona="resultado"]')).toHaveText(
@@ -189,7 +187,6 @@ test.describe('Recompensa por jugar (HU-JUE-012)', () => {
     );
 
     // CA-05: informar otra vez la misma partida no acredita dos veces.
-    const servicio = await tokenDeServicio(api);
     const repetida = await api.post(`${FINANZAS}/partidas/resultado`, {
       headers: conToken(servicio),
       data: {
