@@ -70,6 +70,7 @@ jobs:
             :services:contenido:productos:bootJar \
             :services:contenido:inventario:bootJar \
             :services:contenido:motor-combate:bootJar \
+            :services:cuentas:ms-finanzas:bootJar \
             :services:plataforma:salas-partidas:bootJar
 
       - name: Construir el jar de ms-identidad (Maven)
@@ -116,7 +117,7 @@ jobs:
       - name: Logs de los servicios si algo fallo
         if: failure()
         run: |
-          for s in srv-ms-identidad srv-heroes srv-productos srv-inventario \
+          for s in srv-ms-identidad srv-ms-finanzas srv-heroes srv-productos srv-inventario \
                    srv-motor-combate srv-salas-partidas srv-borde; do
             echo "=============== $s ==============="
             # Primero la cabecera de las excepciones: con `--tail` a secas se

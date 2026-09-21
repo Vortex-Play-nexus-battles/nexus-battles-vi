@@ -91,6 +91,12 @@ services:
       # sale de la variable por servicio que genera desplegar.sh.
       DIRECTORIO_ACTIVO_CLIENT_ID: salas-partidas
       DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_SALAS_PARTIDAS:-}
+      # HU-JUE-014: el libro de creditos. ms-finanzas NO corre en el host de
+      # dev (no cabe en el t3.small sin sacrificar el MVP), asi que en dev
+      # toda sala con recompensa > 0 responde 503 creditos-no-disponibles y
+      # nada queda reservado; las salas sin recompensa no pasan por aqui. El
+      # dia que se despliegue, esta URL ya apunta a donde estara.
+      CREDITOS_URL: ${CREDITOS_URL:-http://srv-ms-finanzas:8093/api/v1}
 
   srv-notificaciones:
     <<: *servicio-plataforma

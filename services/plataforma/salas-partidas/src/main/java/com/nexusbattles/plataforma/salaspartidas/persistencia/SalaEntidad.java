@@ -150,6 +150,10 @@ class SalaEntidad {
         @Column(name = "heroe_vida_maxima")
         private Integer heroeVidaMaxima;
 
+        /** Reserva de creditos del participante (V9, HU-JUE-014). Nula sin apuesta. */
+        @Column(name = "id_reserva_creditos")
+        private UUID idReservaCreditos;
+
         protected FichaEmbebida() {
             // JPA.
         }
@@ -185,6 +189,7 @@ class SalaEntidad {
             fila.heroeNivel = heroe.nivel();
             fila.heroeVidaActual = heroe.vidaActual();
             fila.heroeVidaMaxima = heroe.vidaMaxima();
+            fila.idReservaCreditos = ficha.idReservaCreditos();
             return fila;
         }
 
@@ -216,14 +221,15 @@ class SalaEntidad {
                     && java.util.Objects.equals(heroeRetratoUrl, ficha.heroeRetratoUrl)
                     && java.util.Objects.equals(heroeNivel, ficha.heroeNivel)
                     && java.util.Objects.equals(heroeVidaActual, ficha.heroeVidaActual)
-                    && java.util.Objects.equals(heroeVidaMaxima, ficha.heroeVidaMaxima);
+                    && java.util.Objects.equals(heroeVidaMaxima, ficha.heroeVidaMaxima)
+                    && java.util.Objects.equals(idReservaCreditos, ficha.idReservaCreditos);
         }
 
         @Override
         public int hashCode() {
             return java.util.Objects.hash(conFicha, apodo, heroeId, heroeNombre, heroePrototipo, heroeDefensa,
                     heroeRetratoUrl,
-                    heroeNivel, heroeVidaActual, heroeVidaMaxima);
+                    heroeNivel, heroeVidaActual, heroeVidaMaxima, idReservaCreditos);
         }
 
         /** {@code null} cuando la fila no trae ficha: no se inventa una vacia. */
@@ -233,7 +239,7 @@ class SalaEntidad {
             }
             return new FichaDeParticipante(apodo, new HeroeDeCombate(
                     heroeId, heroeNombre, heroePrototipo, heroeRetratoUrl, heroeNivel,
-                    heroeVidaActual, heroeVidaMaxima, heroeDefensa));
+                    heroeVidaActual, heroeVidaMaxima, heroeDefensa), idReservaCreditos);
         }
     }
 

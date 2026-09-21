@@ -29,6 +29,13 @@
 import { test, expect, request as apiRequest } from '@playwright/test';
 
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
+// El libro de creditos (HU-JUE-014) no esta detras del borde: se le pregunta
+// el saldo por el puerto que expone el compose. Ningun jugador pasa por aqui;
+// la prueba lo usa solo para AFIRMAR lo que la apuesta hizo con el dinero.
+const FINANZAS = process.env.E2E_FINANZAS ?? 'http://localhost:8093/api/v1';
+// Lo que cada participante pone en juego en la sala de este flujo. Tiene que
+// caber en lo que `sembrar.sh` acredita (E2E_SALDO_INICIAL, 500 por defecto).
+const APUESTA = 100;
 const ANFITRION = process.env.E2E_ANFITRION ?? 'anfitriona_e2e';
 const INVITADO = process.env.E2E_INVITADO ?? 'invitado_e2e';
 /** Tercero con héroe, para poder probar el código de invitación de verdad. */
@@ -74,6 +81,18 @@ function conToken(token) {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 }
 
+/** Saldo del jugador en ms-finanzas: bruto, reservado y disponible. */
+async function saldoDe(api, uid) {
+  const r = await api.get(`${FINANZAS}/creditos/${uid}/saldo`);
+  expect(r.status(), `saldo de ${uid}: ${await r.text()}`).toBe(200);
+  const s = await r.json();
+  return {
+    bruto: Number(s.saldoBruto),
+    reservado: Number(s.saldoReservado),
+    disponible: Number(s.saldoDisponible),
+  };
+}
+
 test.describe('Sala de batalla de punta a punta', () => {
   test.describe.configure({ mode: 'serial' });
 
@@ -82,6 +101,8 @@ test.describe('Sala de batalla de punta a punta', () => {
   let invitado;
   let sala;
   let partida;
+  /** Saldo bruto por uid justo antes de iniciar la partida (HU-JUE-014). */
+  const brutoAlEmpezar = {};
 
   test.beforeAll(async () => {
     api = await apiRequest.newContext({ baseURL: BORDE });
@@ -119,6 +140,8 @@ test.describe('Sala de batalla de punta a punta', () => {
   // ===================================================================
 
   test('la verificación encuentra el héroe equipado que sembramos en inventario', async () => {
+    const antes = await saldoDe(api, anfitriona.claims.uid);
+
     const r = await api.post('/api/v1/salas', {
       headers: conToken(anfitriona.token),
       data: {
@@ -126,7 +149,9 @@ test.describe('Sala de batalla de punta a punta', () => {
         // El nombre exacto del enum `Modalidad`, no una abreviatura: Jackson
         // no deserializa `UNO_VS_UNO` y el servicio responde 400.
         modalidad: 'UNO_CONTRA_UNO',
-        recompensaCreditos: 0,
+        // HU-JUE-014: la sala pone creditos en juego. Hasta #442 esto era un
+        // 503 fijo; ahora reserva de verdad en ms-finanzas.
+        recompensaCreditos: APUESTA,
         privada: true,
       },
     });
@@ -142,6 +167,14 @@ test.describe('Sala de batalla de punta a punta', () => {
     expect(sala.participantes, JSON.stringify(sala)).toContain(anfitriona.claims.uid);
     expect(sala.idAnfitrion).toBe(anfitriona.claims.uid);
     expect(sala.ocupacion).toBe(1);
+    expect(sala.recompensaCreditos).toBe(APUESTA);
+
+    // HU-JUE-014 CA-01: la recompensa queda RESERVADA en el libro, no
+    // descontada: el bruto no baja, el disponible si.
+    const despues = await saldoDe(api, anfitriona.claims.uid);
+    expect(despues.bruto).toBe(antes.bruto);
+    expect(despues.reservado).toBe(antes.reservado + APUESTA);
+    expect(despues.disponible).toBe(antes.disponible - APUESTA);
   });
 
   test('la ruta de verificación cuenta qué héroe encontró en el inventario', async () => {
@@ -195,6 +228,8 @@ test.describe('Sala de batalla de punta a punta', () => {
   // ===================================================================
 
   test('el invitado entra con el código y el roster pasa a dos', async () => {
+    const antes = await saldoDe(api, invitado.claims.uid);
+
     const r = await api.post(`/api/v1/salas/${sala.id}/participantes`, {
       headers: conToken(invitado.token),
       data: { codigoInvitacion: sala.codigoInvitacion },
@@ -206,6 +241,11 @@ test.describe('Sala de batalla de punta a punta', () => {
     expect(actualizada.participantes, JSON.stringify(actualizada)).toHaveLength(2);
     expect(actualizada.participantes).toContain(invitado.claims.uid);
     expect(actualizada.ocupacion).toBe(2);
+
+    // HU-JUE-014 CA-01: entrar tambien compromete la apuesta, en el libro real.
+    const despues = await saldoDe(api, invitado.claims.uid);
+    expect(despues.reservado).toBe(antes.reservado + APUESTA);
+    expect(despues.disponible).toBe(antes.disponible - APUESTA);
     // A quien no es anfitrión no se le entrega el código. El campo ni siquiera
     // aparece —`@JsonInclude(NON_NULL)`—: que no exista deja claro que no hay
     // nada que ver, en vez de anunciar que existe algo así y le tocó un nulo.
@@ -232,6 +272,9 @@ test.describe('Sala de batalla de punta a punta', () => {
       headers: conToken(anfitriona.token),
     });
     expect((await despues.json()).ocupacion).toBe(2);
+    // HU-JUE-014: un ingreso rechazado no deja creditos comprometidos. La
+    // reserva se hizo antes de que la sala dijera que no, y se devolvio.
+    expect((await saldoDe(api, otro.claims.uid)).reservado).toBe(0);
   });
 
   // ===================================================================
@@ -239,6 +282,12 @@ test.describe('Sala de batalla de punta a punta', () => {
   // ===================================================================
 
   test('al iniciar, la partida reparte turnos y los dos entran a plena vida', async () => {
+    // Foto del saldo bruto de cada uno ANTES de jugar: la liquidacion de
+    // HU-JUE-014 se afirma contra esto al final.
+    for (const j of [anfitriona, invitado]) {
+      brutoAlEmpezar[j.claims.uid] = (await saldoDe(api, j.claims.uid)).bruto;
+    }
+
     const r = await api.post(`/api/v1/salas/${sala.id}/partida`, {
       headers: conToken(anfitriona.token),
     });
@@ -685,5 +734,33 @@ test.describe('Sala de batalla de punta a punta', () => {
       { timeout: 20000 },
     );
     await expect(page.locator('[data-zona="acciones"]')).toBeHidden();
+
+    // HU-JUE-014 CA-04: la apuesta se liquido en el libro REAL. El ganador
+    // se lleva lo del otro y recupera lo suyo; el perdedor pierde lo
+    // apostado; a nadie le queda nada reservado. Y la vista lo cuenta con
+    // la cifra, que viajo en `reparto` del mismo aviso.
+    const enPie = enCurso.participantes.filter((p) => p.heroe.vidaActual > 0);
+    expect(enPie, 'este flujo termina con un ganador, no en empate').toHaveLength(1);
+    const ganador = enPie[0].jugador === anfitriona.claims.uid ? anfitriona : invitado;
+    const perdedor = ganador === anfitriona ? invitado : anfitriona;
+
+    await expect
+      .poll(async () => (await saldoDe(api, ganador.claims.uid)).reservado, {
+        timeout: 20000,
+        message: 'la reserva del ganador no se libero',
+      })
+      .toBe(0);
+    const delGanador = await saldoDe(api, ganador.claims.uid);
+    const delPerdedor = await saldoDe(api, perdedor.claims.uid);
+    // Relativo a lo que tenian al empezar la partida, no a la semilla: asi la
+    // afirmacion vale tambien en un banco reutilizado de una corrida anterior.
+    expect(delGanador.bruto).toBe(brutoAlEmpezar[ganador.claims.uid] + APUESTA);
+    expect(delPerdedor.bruto).toBe(brutoAlEmpezar[perdedor.claims.uid] - APUESTA);
+    expect(delPerdedor.reservado).toBe(0);
+
+    await expect(page.locator('[data-zona="resultado"]')).toHaveText(
+      new RegExp(`(llevas|pierdes los) ${APUESTA} creditos`, 'i'),
+      { timeout: 20000 },
+    );
   });
 });

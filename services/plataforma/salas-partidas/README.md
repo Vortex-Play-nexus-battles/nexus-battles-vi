@@ -44,7 +44,7 @@ Los errores salen como problem details (RFC 7807) y la interfaz decide por
 
 | Puerto | Adaptador hoy | Qué falta y de quién |
 |---|---|---|
-| `CreditosDelJugador` (reservar/liberar recompensa) | `CreditosSinIntegrar` → `503 creditos-sin-integrar` para toda recompensa > 0 | `ms-finanzas` ya expone `POST /api/v1/creditos/reservar` y `/reservas/{id}/liberar`, pero sin OpenAPI publicado y con «saldo insuficiente» respondiendo `500` en vez de un problem detail con `type`. Cuentas (#29). |
+| `CreditosDelJugador` (reservar/liberar/consumir la apuesta, HU-JUE-014) | `ClienteCreditos` contra `ms-finanzas` por `contracts/openapi/creditos.yaml` (`CREDITOS_URL`), con la credencial de servicio de ADR-005. Sin el libro: `503 creditos-no-disponibles` y nada reservado; una partida ya terminada deja su liquidacion `PENDIENTE` (tabla `liquidaciones_de_apuesta`, V9) y `ReintentarLiquidaciones` la cierra despues. | Que Cuentas cierre `/creditos/**` a `ROLE_SERVICIO` (hoy `permitAll`) y desplegar `ms-finanzas` en el host de dev cuando quepa. |
 | Héroe activo del jugador (HU-SAL-003) | — | Ninguna ruta de `inventario.yaml`/`heroes.yaml` parte del jugador autenticado. Contenido (#27). |
 | Productor de `partida.accion.resuelta` | — | Resultado de la acción: motor de combate, fuera de este bloque. Grupo 2 (#31). |
 | `SancionesSinIntegrar` (chat) | Doble que no sanciona | Consulta de sanción activa de moderación-sanciones. |

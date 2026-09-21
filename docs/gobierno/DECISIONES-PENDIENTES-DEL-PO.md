@@ -1,0 +1,27 @@
+# Decisiones funcionales pendientes del Product Owner
+
+Registro único de lo que el código **no puede decidir por su cuenta** y quedó
+resuelto de forma provisional, configurable donde tuvo sentido, para no
+bloquear el MVP. Cada entrada dice qué se hizo mientras tanto, dónde se cambia
+en cuanto el PO decida, y qué NO se hizo a propósito.
+
+Regla de fondo (Project Charter, riesgo #6): nada de esto se inventó. Donde
+había hueco, se eligió la opción que no le quita nada a nadie y se dejó el
+interruptor a la vista.
+
+| # | Decisión pendiente | Qué hace hoy el sistema | Dónde se cambia | Origen |
+|---|---|---|---|---|
+| D-01 | **Desempate.** Qué pasa cuando la partida termina sin nadie en pie. | `partida.finalizada` sale con `ganadores: []` (empate). Con apuesta, se **devuelve** lo apostado a todos (`reparto` con 0). | `Partida.ganador()`; `LiquidarApuesta.moverCreditos` | HU-JUE-005, HU-JUE-014 CA-04 |
+| D-02 | **Gana la máquina con apuesta.** La IA no tiene bolsa (RF-JUE-014: no apuesta). ¿Qué pasa con lo apostado por los humanos si gana? | Configurable: `salas.apuestas.si-gana-la-maquina` = `LIBERAR` (por defecto: se devuelve) o `CONSUMIR` (la casa se queda con la apuesta). | `application.yml` de salas-partidas / variable `APUESTAS_SI_GANA_LA_MAQUINA` | HU-JUE-014 |
+| D-03 | **Héroe de la IA.** Con qué héroe combate la máquina. | Usa el del anfitrión a plena vida (único que la partida conoce). | `ParticipanteDePartida.inteligenciaArtificial` | HU-SAL-004 |
+| D-04 | **Estrategia de la IA.** A quién ataca cuando hay varios rivales. | Al primer rival en pie en orden de turno. | `EjecutarAccion.elegirObjetivo` | HU-SAL-004 |
+| D-05 | **Roster y equipos.** Cómo se forman los equipos en modalidad de hasta seis (`tamanoEquipo`). | Se valida el tamaño (1–3) pero nadie asigna equipos: `equipo` viaja nulo. | `Partida.iniciar` | HU-SAL-004 / RF-JUE-004 |
+| D-06 | **Notificaciones de partida.** Si el inicio/fin de partida (o la entrada de alguien a mi sala) debe generar una notificación push además del aviso STOMP. No está en el SRS (RF-NOT-001/003 son catálogo y subastas). | Solo el canal STOMP de la sala/partida. | `CanalDePartidaStomp` + integración con notificaciones | #441, HU-NOT-006 |
+| D-07 | **Segunda calificación del mismo jugador (HU-COM-001).** Si un jugador que ya calificó un producto vuelve a comentar con estrellas: ¿409 o se acepta el comentario «sin estrellas»? | Se acepta el comentario y se le quitan las estrellas (`CALIFICACION_DUPLICADA`), sin tratarlo como error. | `comentarios`: `HiloDeComentarios` | #34, #441 |
+| D-08 | **Entornos test/prod.** Si se despliegan y con qué host, dado el coste (un solo `t3.small` en el plan gratuito). | Solo `dev`; `test` y `prod` condicionados a secretos que no existen. | `cd.yml`, `scripts/cd/desplegar.sh` | HU-CICD-002 |
+| D-09 | **Segundo factor para la bitácora.** HU-AUD-001 menciona 2FA para consultar la auditoría, pero ms-identidad no implementa ninguno. | Exigencia **apagada** por configuración (`cumplimiento.auditoria.exigir-2fa=false`); al encenderla se lee `amr` (RFC 8176). | `application.properties` de ms-cumplimiento / `AUDITORIA_EXIGIR_2FA` | #453 |
+| D-10 | **Comisión sobre la apuesta.** El Charter fija que comisiones y límites son inalterables, pero ningún documento del bloque da un valor para la apuesta de batalla. | Sin comisión: el ganador recibe el total apostado por los demás, entero. | `LiquidarApuesta.moverCreditos` (una llamada `consumir` por perdedor) | HU-JUE-014 CA-04 |
+| D-11 | **Reservas huérfanas.** Si el servicio muere entre reservar y guardar la sala, la reserva queda viva hasta que ms-finanzas la expire (72 h). | Se acepta: la clave de idempotencia (sala, jugador, versión) hace que un reintento del mismo ingreso reutilice la reserva; el resto lo expira el libro. | `ClienteCreditos.claveDeIdempotencia`; expiración en ms-finanzas | HU-JUE-014 |
+
+Cuando el PO decida una, se aplica el cambio en el sitio indicado, se
+actualiza esta tabla y se cierra la entrada en la Sprint Review.

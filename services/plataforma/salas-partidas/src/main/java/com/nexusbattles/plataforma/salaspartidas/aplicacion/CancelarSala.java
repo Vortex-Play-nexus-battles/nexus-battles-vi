@@ -87,22 +87,35 @@ public class CancelarSala {
         }
     }
 
-    /** @return creditos efectivamente devueltos; 0 si no habia o si no se pudo */
+    /**
+     * Devuelve la reserva de <b>cada</b> participante — HU-JUE-014, CA-03.
+     *
+     * <p>Una a una y sin parar en la primera que falle: que el libro no
+     * responda para uno no es motivo para no devolverle al siguiente. Cada
+     * fallo se anota con lo necesario para devolverla a mano.
+     *
+     * @return creditos devueltos a cada participante (la recompensa de la
+     *         sala) si todas las reservas se liberaron; 0 si no habia o si
+     *         alguna no se pudo, para no prometer un numero que no se cumplio
+     */
     private int devolverCreditos(Sala sala) {
-        UUID reserva = sala.idReservaCreditos();
-        if (reserva == null) {
+        java.util.Map<UUID, UUID> reservas = sala.reservasDeCreditos();
+        if (reservas.isEmpty()) {
             return 0;
         }
-        try {
-            creditos.liberar(reserva);
-            return sala.recompensaCreditos();
-        } catch (RuntimeException noSePudoLiberar) {
-            BITACORA.error(
-                    "Sala {} cancelada pero la reserva {} de {} creditos no se pudo liberar; "
-                            + "hay que devolverla a mano al anfitrion {}.",
-                    sala.id(), reserva, sala.recompensaCreditos(), sala.idAnfitrion(),
-                    noSePudoLiberar);
-            return 0;
+        boolean todas = true;
+        for (java.util.Map.Entry<UUID, UUID> entrada : reservas.entrySet()) {
+            try {
+                creditos.liberar(entrada.getValue());
+            } catch (RuntimeException noSePudoLiberar) {
+                todas = false;
+                BITACORA.error(
+                        "Sala {} cancelada pero la reserva {} de {} creditos no se pudo liberar; "
+                                + "hay que devolverla a mano al jugador {}.",
+                        sala.id(), entrada.getValue(), sala.recompensaCreditos(), entrada.getKey(),
+                        noSePudoLiberar);
+            }
         }
+        return todas ? sala.recompensaCreditos() : 0;
     }
 }

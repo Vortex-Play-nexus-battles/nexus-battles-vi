@@ -16,6 +16,9 @@ class CanalDePartidaEspia implements CanalDePartida {
 
     final List<Anuncio> anuncios = new ArrayList<>();
 
+    /** Reparto que acompano a cada aviso de fin, en orden. */
+    final List<List<com.nexusbattles.plataforma.salaspartidas.dominio.RepartoDeCreditos>> repartos = new ArrayList<>();
+
     @Override
     public void anunciarAccionResuelta(AccionResuelta accion) {
         anuncios.add(new Anuncio("accion", null));
@@ -33,7 +36,9 @@ class CanalDePartidaEspia implements CanalDePartida {
     }
 
     @Override
-    public void anunciarFin(Partida partida) {
+    public void anunciarFin(Partida partida,
+                            java.util.List<com.nexusbattles.plataforma.salaspartidas.dominio.RepartoDeCreditos> reparto) {
         anuncios.add(new Anuncio("fin", partida));
+        repartos.add(reparto);
     }
 }

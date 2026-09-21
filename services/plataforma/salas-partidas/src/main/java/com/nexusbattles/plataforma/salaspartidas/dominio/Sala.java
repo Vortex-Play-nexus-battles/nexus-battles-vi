@@ -664,9 +664,53 @@ public final class Sala {
         return codigoInvitacion;
     }
 
-    /** Reserva de creditos ligada a la sala, o {@code null} si no compromete creditos. */
+    /**
+     * Reserva de creditos <b>del anfitrion</b>, o {@code null} si la sala no
+     * compromete creditos.
+     *
+     * <p>Desde HU-JUE-014 cada participante tiene la suya: la del anfitrion se
+     * anota aqui al crear la sala (columna de V5) y la de los demas viaja en su
+     * {@link FichaDeParticipante} al entrar (V9). Para verlas todas juntas,
+     * {@link #reservasDeCreditos()}.
+     */
     public UUID idReservaCreditos() {
         return idReservaCreditos;
+    }
+
+    /**
+     * Reserva de creditos de un participante concreto — HU-JUE-014.
+     *
+     * <p>Vacio si no esta dentro, si la sala no tiene recompensa, o si entro
+     * antes de que existiera la apuesta (fila anterior a V9). Se consulta
+     * <b>antes</b> de sacarlo de la sala: una vez fuera, la sala ya no sabe
+     * nada de el.
+     */
+    public java.util.Optional<UUID> reservaDe(UUID idJugador) {
+        if (idJugador == null || !participantes.containsKey(idJugador)) {
+            return java.util.Optional.empty();
+        }
+        if (idJugador.equals(idAnfitrion)) {
+            return java.util.Optional.ofNullable(idReservaCreditos);
+        }
+        FichaDeParticipante ficha = participantes.get(idJugador);
+        return ficha == null ? java.util.Optional.empty()
+                : java.util.Optional.ofNullable(ficha.idReservaCreditos());
+    }
+
+    /**
+     * Todas las reservas comprometidas en la sala, por participante, con el
+     * anfitrion primero — HU-JUE-014.
+     *
+     * <p>Es lo que hay que devolver al cancelar y lo que hay que liquidar al
+     * terminar. Solo aparecen quienes tienen reserva: en una sala sin
+     * recompensa el mapa esta vacio y nadie molesta al libro de creditos.
+     */
+    public Map<UUID, UUID> reservasDeCreditos() {
+        Map<UUID, UUID> reservas = new LinkedHashMap<>();
+        for (UUID jugador : participantes.keySet()) {
+            reservaDe(jugador).ifPresent(reserva -> reservas.put(jugador, reserva));
+        }
+        return Collections.unmodifiableMap(reservas);
     }
 
     /** Momento de creacion. Viaja en el contrato como {@code creadaEn}. */

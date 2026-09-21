@@ -281,4 +281,53 @@ class CanalDePartidaStompTest {
                 () -> assertEquals(BRUNO, aviso.idJugador()),
                 () -> assertEquals(2, aviso.numeroTurno()));
     }
+
+    /* HU-JUE-014, CA-04: el fin lleva el reparto de la apuesta, con la forma del AsyncAPI. */
+
+    @Test
+    @DisplayName("partida.finalizada lleva ganadores y el reparto de la apuesta por jugador")
+    void elFinLlevaElReparto() throws Exception {
+        Partida partida = partidaDe(salaDeEjemplo());
+        partida.aplicarDano(BRUNO, 1_000);
+        partida.terminarSiSoloQuedaUno();
+
+        canal.anunciarFin(partida, List.of(
+                new com.nexusbattles.plataforma.salaspartidas.dominio.RepartoDeCreditos(ANA, 100),
+                new com.nexusbattles.plataforma.salaspartidas.dominio.RepartoDeCreditos(BRUNO, -100)));
+
+        ArgumentCaptor<String> destino = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<Object> cuerpo = ArgumentCaptor.forClass(Object.class);
+        verify(mensajeria).convertAndSend(destino.capture(), cuerpo.capture());
+        AvisoDePartidaFinalizada aviso = (AvisoDePartidaFinalizada) cuerpo.getValue();
+        String json = tools.jackson.databind.json.JsonMapper.builder().build().writeValueAsString(aviso);
+
+        assertAll(
+                () -> assertEquals("/tema/partidas/" + partida.id(), destino.getValue()),
+                () -> assertEquals("partida.finalizada", aviso.tipo()),
+                () -> assertEquals(List.of(ANA), aviso.ganadores()),
+                () -> assertEquals(2, aviso.reparto().size()),
+                () -> assertEquals(ANA, aviso.reparto().get(0).idJugador()),
+                () -> assertEquals(100, aviso.reparto().get(0).creditos()),
+                () -> assertEquals(-100, aviso.reparto().get(1).creditos()),
+                () -> assertTrue(json.contains("\"reparto\":[{\"idJugador\":\"" + ANA + "\",\"creditos\":100}"),
+                        "los nombres de campo son los del contrato: " + json));
+    }
+
+    @Test
+    @DisplayName("sin apuesta (o con la liquidacion pendiente) el fin viaja sin la clave reparto")
+    void sinRepartoNoViajaLaClave() throws Exception {
+        Partida partida = partidaDe(salaDeEjemplo());
+        partida.aplicarDano(BRUNO, 1_000);
+        partida.terminarSiSoloQuedaUno();
+
+        canal.anunciarFin(partida, List.of());
+
+        ArgumentCaptor<Object> cuerpo = ArgumentCaptor.forClass(Object.class);
+        verify(mensajeria).convertAndSend(org.mockito.ArgumentMatchers.anyString(), cuerpo.capture());
+        String json = tools.jackson.databind.json.JsonMapper.builder().build().writeValueAsString(cuerpo.getValue());
+
+        assertAll(
+                () -> assertTrue(!json.contains("reparto"), "reparto es opcional en el contrato y aqui se omite: " + json),
+                () -> assertTrue(json.contains("\"ganadores\":[\"" + ANA + "\"]")));
+    }
 }

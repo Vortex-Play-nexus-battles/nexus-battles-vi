@@ -215,11 +215,11 @@ class SalasControllerTest {
     }
 
     @Test
-    @DisplayName("mientras no exista el modulo de creditos, una recompensa sale como 503 con su tipo, no como 500")
-    void creditosSinIntegrar() throws Exception {
+    @DisplayName("HU-JUE-014 CA-06: si el libro de creditos no responde, una recompensa sale como 503 con su tipo estable, no como 500")
+    void creditosNoDisponibles() throws Exception {
         when(crearSala.ejecutar(any(), any()))
-                .thenThrow(new com.nexusbattles.plataforma.salaspartidas.integracion
-                        .CreditosSinIntegrar.IntegracionDeCreditosPendiente());
+                .thenThrow(new com.nexusbattles.plataforma.salaspartidas.dominio
+                        .CreditosNoDisponibles("connection refused"));
 
         mockMvc.perform(post("/api/v1/salas")
                         .with(jugador())
@@ -227,9 +227,10 @@ class SalasControllerTest {
                         .content(CUERPO.replace("\"recompensaCreditos\": 0", "\"recompensaCreditos\": 320")))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
-                .andExpect(jsonPath("$.type").value("https://nexusbattles.local/errores/creditos-sin-integrar"))
-                .andExpect(jsonPath("$.title").value("Las apuestas todavia no estan disponibles"))
+                .andExpect(jsonPath("$.type").value("https://nexusbattles.local/errores/creditos-no-disponibles"))
+                .andExpect(jsonPath("$.title").value("El libro de creditos no esta disponible ahora mismo"))
                 .andExpect(jsonPath("$.status").value(503))
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("Nada quedo reservado")))
                 .andExpect(jsonPath("$.errores").doesNotExist());
     }
 

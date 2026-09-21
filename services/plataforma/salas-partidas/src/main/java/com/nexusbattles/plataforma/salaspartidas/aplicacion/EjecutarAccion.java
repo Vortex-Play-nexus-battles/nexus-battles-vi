@@ -49,12 +49,14 @@ public class EjecutarAccion {
     private final RepositorioDePartidas partidas;
     private final CanalDePartida canal;
     private final MotorDeCombate motor;
+    private final LiquidarApuesta apuesta;
 
     public EjecutarAccion(RepositorioDePartidas partidas, CanalDePartida canal,
-                          MotorDeCombate motor) {
+                          MotorDeCombate motor, LiquidarApuesta apuesta) {
         this.partidas = Objects.requireNonNull(partidas);
         this.canal = Objects.requireNonNull(canal);
         this.motor = Objects.requireNonNull(motor, "Sin motor no hay combate.");
+        this.apuesta = Objects.requireNonNull(apuesta, "Sin liquidacion la apuesta se perderia.");
     }
 
     /**
@@ -123,12 +125,26 @@ public class EjecutarAccion {
         // la barra bajar y luego el resultado. Al reves habria que animar hacia
         // atras.
         if (termino) {
-            canal.anunciarFin(guardada);
+            anunciarFin(guardada);
             return guardada;
         }
         canal.anunciarTurno(guardada);
 
         return jugarTurnosDeLaMaquina(guardada);
+    }
+
+    /**
+     * La partida termino: se liquida la apuesta y se anuncia el resultado con
+     * el reparto — HU-JUE-014, CA-04.
+     *
+     * <p>La liquidacion va ANTES del aviso para que el reparto viaje en el
+     * mismo mensaje. Si el libro de creditos no responde, {@code alTerminar}
+     * lo deja anotado como pendiente y devuelve vacio: el aviso sale igual, sin
+     * reparto, y el reintento lo completara despues. El ultimo golpe ya se dio
+     * y esta guardado; un fallo del libro no puede deshacerlo ni esconderlo.
+     */
+    private void anunciarFin(Partida terminada) {
+        canal.anunciarFin(terminada, apuesta.alTerminar(terminada));
     }
 
     /**
@@ -203,7 +219,7 @@ public class EjecutarAccion {
                         -resolucion.danoAplicado()))));
 
         if (termino) {
-            canal.anunciarFin(guardada);
+            anunciarFin(guardada);
         } else {
             canal.anunciarTurno(guardada);
         }
