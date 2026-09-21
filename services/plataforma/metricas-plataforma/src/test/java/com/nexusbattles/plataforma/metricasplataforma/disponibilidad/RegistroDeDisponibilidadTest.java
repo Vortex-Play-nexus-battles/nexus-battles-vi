@@ -185,4 +185,44 @@ class RegistroDeDisponibilidadTest {
         assertThatThrownBy(() -> new VentanaDeMantenimiento(enMinuto(20), enMinuto(10), "mal"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    // -- Persistencia (lo que #441 dejo: «registro en memoria, se pierde al redesplegar») --
+
+    @Test
+    void unaCaidaAbiertaAntesDeReiniciarSigueAbiertaTrasRecargarYLaCierraLaPrimeraComprobacionSana() {
+        AlmacenDeDisponibilidad almacen = new AlmacenEnMemoria();
+        RegistroDeDisponibilidad antes = new RegistroDeDisponibilidad(almacen);
+        antes.registrar(Comprobacion.caido("salas-partidas", enMinuto(10), "503"));
+
+        // «Reinicio»: un registro nuevo sobre el mismo almacen.
+        RegistroDeDisponibilidad despues = new RegistroDeDisponibilidad(almacen);
+        assertThat(despues.interrupcionesEn(T0, T_FIN)).singleElement()
+                .satisfies(interrupcion -> {
+                    assertThat(interrupcion.abierta()).isTrue();
+                    assertThat(interrupcion.id()).isNotNull();
+                });
+
+        // Sigue caido tras el reinicio: no se abre una segunda interrupcion.
+        despues.registrar(Comprobacion.caido("salas-partidas", enMinuto(15), "503"));
+        assertThat(despues.interrupcionesEn(T0, T_FIN)).hasSize(1);
+
+        despues.registrar(Comprobacion.disponible("salas-partidas", enMinuto(20)));
+        InformeDeDisponibilidad informe = despues.informe(BLOQUE, T0, T_FIN, UMBRAL);
+        assertThat(informe.servicios().get(0).indisponible()).isEqualTo(Duration.ofMinutes(10));
+        assertThat(informe.servicios().get(0).interrupciones().get(0).abierta()).isFalse();
+    }
+
+    @Test
+    void lasVentanasProgramadasTambienSeRecargan() {
+        AlmacenDeDisponibilidad almacen = new AlmacenEnMemoria();
+        RegistroDeDisponibilidad antes = new RegistroDeDisponibilidad(almacen);
+        antes.programarMantenimiento(new VentanaDeMantenimiento(enMinuto(10), enMinuto(30), "parche"));
+
+        RegistroDeDisponibilidad despues = new RegistroDeDisponibilidad(almacen);
+        despues.registrar(Comprobacion.caido("salas-partidas", enMinuto(10), "503"));
+        despues.registrar(Comprobacion.disponible("salas-partidas", enMinuto(30)));
+
+        // Toda la caida cae dentro de la ventana recargada: no descuenta.
+        assertThat(despues.indisponibilidadDe("salas-partidas", T0, T_FIN)).isZero();
+    }
 }
