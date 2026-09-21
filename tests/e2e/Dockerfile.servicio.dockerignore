@@ -35,5 +35,7 @@ docs/
 !services/cuentas/ms-subastas/build.nosync/libs/*.jar
 # R1 (guion de demo): lista negra y sanciones reales para el chat.
 !services/plataforma/moderacion-sanciones/build/libs/*.jar
+# HU-NOT-005: la bandeja real, para ver llegar el aviso de la sancion.
+!services/plataforma/notificaciones/build/libs/*.jar
 
 # ms-identidad es Maven: su jar vive en `target/`, que no esta excluido.
