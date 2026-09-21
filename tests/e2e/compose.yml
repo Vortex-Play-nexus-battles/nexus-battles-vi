@@ -109,7 +109,7 @@ services:
       # pruebas, no de ningun entorno real.
       # e2e-banco: credencial con la que sembrar.sh acredita el saldo inicial en
       # ms-finanzas, que desde #455 solo atiende a servicios (ROLE_SERVICIO).
-      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion
+      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion;torneos=e2e-secreto-de-torneos
     depends_on:
       e2e-identidad-db: { condition: service_healthy }
     healthcheck:
@@ -370,6 +370,38 @@ services:
       timeout: 5s
       retries: 40
 
+  # Torneos (M13, HU-TOR-001..005): equipos validados en la lista negra,
+  # sancion activa en moderacion-sanciones, inscripcion reservada en
+  # ms-finanzas con la credencial de servicio del propio compose.
+  srv-torneos:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/plataforma/torneos/build/libs/*.jar
+        PUERTO: "8083"
+    environment:
+      DB_RELACIONAL_URL: jdbc:postgresql://e2e-plataforma-db:5432/plataformadb
+      DB_USER: plataforma
+      DB_PASS: plataforma
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      LISTA_NEGRA_VERIFICAR_URL: http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar
+      SANCIONES_URL: http://srv-moderacion-sanciones:8086/api/v1
+      CREDITOS_URL: http://srv-ms-finanzas:8093/api/v1
+      DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
+      DIRECTORIO_ACTIVO_CLIENT_ID: torneos
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-torneos
+    depends_on:
+      e2e-plataforma-db: { condition: service_healthy }
+      srv-moderacion-sanciones: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
+      srv-ms-finanzas: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8083/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
   srv-salas-partidas:
     build:
       context: ../..
@@ -444,6 +476,7 @@ services:
       - ../../shared:/srv/nexus/shared:ro
     depends_on:
       srv-salas-partidas: { condition: service_healthy }
+      srv-torneos: { condition: service_healthy }
     healthcheck:
       # 127.0.0.1 y no `localhost` a proposito. El entrypoint de la imagen
       # intenta anadir un `listen [::]:80` y no puede, porque la

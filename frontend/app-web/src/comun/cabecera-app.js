@@ -48,7 +48,12 @@ export const SECCIONES = Object.freeze([
     privada: true,
   },
   { id: 'misiones', etiqueta: 'Misiones', pendiente: 'HU-MIS (grupo-2)' },
-  { id: 'torneo', etiqueta: 'Torneo', pendiente: 'HU-TOR-008 (#493, Sprint 3)' },
+  {
+    id: 'torneo',
+    etiqueta: 'Torneo',
+    destino: '../plataforma/torneos/torneos.html',
+    privada: false,
+  },
   {
     id: 'inventario',
     etiqueta: 'Mi inventario',
