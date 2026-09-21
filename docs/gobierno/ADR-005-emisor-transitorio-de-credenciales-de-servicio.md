@@ -56,6 +56,15 @@ protocolo que emitiría Keycloak, hasta que exista un realm.**
 7. En los clientes Gradle, `TokenDeServicioOAuth2.endpointDeToken` acepta una
    URL que ya termina en `/token` y la usa tal cual. Con Keycloak,
    `DIRECTORIO_ACTIVO_URL` vuelve a ser la URL del realm y no cambia nada más.
+8. En el host de dev, `scripts/cd/desplegar.sh` fija `DIRECTORIO_ACTIVO_URL`
+   al emisor de ms-identidad **sin mirar el secret de GitHub** del mismo
+   nombre (que es de ADR-001 y anterior a este ADR): con ese secret, cada
+   servicio pedía su token a un Keycloak que no existe en el host y toda
+   llamada entre servicios moría antes de salir. Para revertir a Keycloak se
+   cambia esa línea del script, además del secret.
+9. `CredencialDeServicioNoDisponible` es una `RestClientException`: sin
+   credencial no hay llamada, y cada adaptador lo traduce a su «servicio no
+   disponible» (503), nunca a un 500.
 
 ```
 salas-partidas                       ms-identidad                        inventario

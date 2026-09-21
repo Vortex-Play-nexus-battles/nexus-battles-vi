@@ -212,10 +212,19 @@ for cliente in $CLIENTES_DE_SERVICIO; do
   AUTH_CLIENTES_SERVICIO="${AUTH_CLIENTES_SERVICIO:+${AUTH_CLIENTES_SERVICIO};}${cliente}=${valor}"
 done
 echo "AUTH_CLIENTES_SERVICIO=${AUTH_CLIENTES_SERVICIO}" >> .env
-# Sin secret de GitHub, el emisor es ms-identidad dentro de la red de compose.
-if [ -z "${DIRECTORIO_ACTIVO_URL:-}" ]; then
-  sed -i 's#^DIRECTORIO_ACTIVO_URL=$#DIRECTORIO_ACTIVO_URL=http://srv-ms-identidad:8089/api/v1/auth/token#' .env
+# El emisor de esas credenciales es ms-identidad dentro de la red de compose
+# (ADR-005), SIEMPRE, mientras ese ADR este vigente: en este host no hay
+# Keycloak. El secret de GitHub DIRECTORIO_ACTIVO_URL viene de ADR-001 (la URL
+# del realm) y se creo antes de ADR-005; respetarlo aqui mandaba a cada
+# servicio a pedir su token a un Keycloak inexistente, la peticion moria
+# antes de llegar a inventario/finanzas y crear una sala respondia 500
+# (smoke de dev rojo desde c50452d). Cuando vuelva Keycloak, esta es la linea
+# que cambia (ADR-005, "Como se revierte"), no el secret.
+EMISOR_ADR_005="http://srv-ms-identidad:8089/api/v1/auth/token"
+if [ -n "${DIRECTORIO_ACTIVO_URL:-}" ] && [ "${DIRECTORIO_ACTIVO_URL}" != "$EMISOR_ADR_005" ]; then
+  echo "  DIRECTORIO_ACTIVO_URL del secret se ignora: bajo ADR-005 el emisor es ms-identidad (no se imprime el valor)"
 fi
+sed -i "s#^DIRECTORIO_ACTIVO_URL=.*#DIRECTORIO_ACTIVO_URL=${EMISOR_ADR_005}#" .env
 
 echo "== 2) Guardando el tag estable actual de cada servicio, antes de tocarlo =="
 # Si el servicio ya estaba corriendo con algun tag, lo guardamos en un
