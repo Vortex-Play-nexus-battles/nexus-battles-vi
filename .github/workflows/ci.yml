@@ -332,6 +332,30 @@ jobs:
         working-directory: frontend/app-web
         run: npm run format:check
 
+      # Pruebas de aceptacion en navegador (Playwright sobre http-server con
+      # rutas simuladas, sin backend): hoy son las 46 de inventario (Grupo 2)
+      # y 45 fallan porque abren la vista sin sesion (#581). Informativo,
+      # no bloqueante, por la misma razon que ESLint/Prettier de todo el
+      # arbol: la deuda es de otro equipo y bloquear aqui pararia a los tres.
+      # Cuando #581 se cierre en verde, se vuelve bloqueante quitando
+      # `continue-on-error`.
+      - name: Aceptacion en navegador (Playwright) — informativo (#581)
+        if: steps.detectar.outputs.hay == 'true'
+        continue-on-error: true
+        working-directory: frontend/app-web
+        run: |
+          npx playwright install --with-deps chromium
+          npx playwright test --config=playwright.config.js --reporter=list
+
+      - name: Guardar el informe de aceptacion
+        if: always() && steps.detectar.outputs.hay == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: informe-aceptacion
+          path: frontend/app-web/test-results/**
+          if-no-files-found: ignore
+          retention-days: 7
+
   # ---------------------------------------------------------------------
   # Job 2: por cada servicio detectado (uno por entrada de la matriz),
   # ejecuta en orden: compilar -> pruebas unitarias -> analisis estatico ->

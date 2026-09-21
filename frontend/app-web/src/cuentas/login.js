@@ -92,6 +92,30 @@ export function mensajeDeError(status, mensajeServidor) {
   }
 }
 
+/**
+ * Identificador estable del jugador (ADR-002): el claim `uid` del token.
+ * `LoginResponse.usuarioId` es la clave primaria de la tabla, que no es lo
+ * que comparan los demas servicios (#426); solo se usa si el token no trae
+ * `uid`.
+ *
+ * @param {string|undefined} token
+ * @param {unknown} respaldo
+ * @returns {string}
+ */
+export function identificadorDeSesion(token, respaldo) {
+  try {
+    const cuerpo = String(token ?? '').split('.')[1];
+    const base64 = cuerpo.replace(/-/g, '+').replace(/_/g, '/');
+    const claims = JSON.parse(atob(base64));
+    if (typeof claims.uid === 'string' && claims.uid) {
+      return claims.uid;
+    }
+  } catch {
+    // Sin token legible: queda el respaldo.
+  }
+  return String(respaldo ?? '');
+}
+
 form.addEventListener('submit', async (evento) => {
   evento.preventDefault();
 
@@ -144,8 +168,9 @@ form.addEventListener('submit', async (evento) => {
     // Mantener el rol en memoria para esta página.
     setCurrentRole(body.rol);
 
-    // Guardar los datos necesarios para las páginas siguientes.
-    sessionStorage.setItem(CLAVE_USUARIO_ID, String(body.usuarioId));
+    // Guardar los datos necesarios para las páginas siguientes. La identidad
+    // es el `uid` del token (ADR-002), no la clave primaria (#426).
+    sessionStorage.setItem(CLAVE_USUARIO_ID, identificadorDeSesion(body.token, body.usuarioId));
 
     sessionStorage.setItem(CLAVE_ROL, body.rol);
 
