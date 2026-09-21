@@ -281,16 +281,19 @@ test.describe('Sanciones y apelaciones (HU-USR-004/005/006/007, HU-NOT-005)', ()
   test('«Mis sanciones» muestra las dos y la apelacion revertida', async ({ page }) => {
     await conSesion(page, jugadora);
     await page.goto(`${BORDE}${VISTAS}/mis-sanciones.html`);
-    const tarjetas = page.locator('[data-zona="sanciones"] article');
-    await expect(tarjetas).toHaveCount(2, { timeout: 20000 });
-    await expect(page.locator(`[data-sancion-id="${suspension.id}"]`)).toContainText(/revertida/);
-    await expect(page.locator(`[data-sancion-id="${advertencia.id}"]`)).toContainText(
-      /no restringe tu acceso/,
-    );
+    // Se buscan por id y no por cuenta: si Playwright reintenta el grupo en
+    // serie vuelve a correr beforeAll y la jugadora acumula sanciones.
+    const laSuspension = page.locator(`[data-sancion-id="${suspension.id}"]`);
+    const laAdvertencia = page.locator(`[data-sancion-id="${advertencia.id}"]`);
+    await expect(laSuspension).toContainText(/revertida/, { timeout: 20000 });
+    await expect(laAdvertencia).toContainText(/no restringe tu acceso/);
     await expect(page.locator(`[data-apelacion-id="${apelacion.id}"]`)).toContainText(
       /revertida/,
     );
-    await expect(page.locator('[data-zona="sanciones"] [data-accion="apelar"]')).toHaveCount(0);
+    // La revertida ya no se apela; la advertencia sigue vigente y si (queda en
+    // el historial y el jugador puede pedir que se retire).
+    await expect(laSuspension.locator('[data-accion="apelar"]')).toHaveCount(0);
+    await expect(laAdvertencia.locator('[data-accion="apelar"]')).toHaveCount(1);
   });
 
   test('el panel de la moderadora carga el historial del usuario buscado', async ({ page }) => {
@@ -299,9 +302,12 @@ test.describe('Sanciones y apelaciones (HU-USR-004/005/006/007, HU-NOT-005)', ()
     await expect(page.locator('[name="tipo"] option[value="BANEO"]')).toBeDisabled();
     await page.fill('[data-zona="buscar"] [name="usuarioId"]', jugadora.claims.uid);
     await page.click('[data-zona="buscar"] button[type="submit"]');
-    await expect(page.locator('[data-zona="historial"] article')).toHaveCount(2, {
+    await expect(page.locator(`[data-zona="historial"] [data-sancion-id="${suspension.id}"]`)).toBeVisible({
       timeout: 20000,
     });
+    await expect(
+      page.locator(`[data-zona="historial"] [data-sancion-id="${advertencia.id}"]`),
+    ).toBeVisible();
     await expect(page.locator('[data-zona="emitir"] [name="usuarioId"]')).toHaveValue(
       jugadora.claims.uid,
     );
