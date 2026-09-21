@@ -31,8 +31,37 @@ MONGODB_URI=mongodb://localhost:27017/productos KEYCLOAK_JWK_SET_URI=https://<ke
 
 - Un **token Bearer con rol ADMINISTRADOR o SUPER_ADMINISTRADOR** (claim
   `realm_access.roles`), pegado en la variable `token` del entorno. Sin
-  Keycloak disponible se puede usar un JWKS local y un token firmado con esa
-  clave: el servicio solo valida firma y vigencia.
+  Keycloak disponible se usa el **JWKS de desarrollo** (abajo): el servicio
+  solo valida firma y vigencia.
+
+## JWKS de desarrollo (mientras cuentas no publique su Keycloak)
+
+En `docker-compose.contenido.yml` hay un servicio `jwks-dev` (nginx estático,
+sin puerto en el host) que sirve la clave **pública** RSA de desarrollo en
+`http://jwks-dev/certs.json`; productos apunta ahí por defecto con
+`KEYCLOAK_JWK_SET_URI`. La clave **privada** la guarda el PO fuera del
+repositorio (nunca se versiona). Herramientas en `jwks-dev/` (Node 20+, sin
+dependencias):
+
+| Script | Qué hace |
+|---|---|
+| `generar-claves.mjs <privada.pem>` | Genera el par RSA, deja la privada en esa ruta (permisos 600) y `jwks.json` al lado; imprime el JWKS público para pegarlo en el compose (`configs.jwks_dev.content`). Rotar la clave = volver a correrlo y abrir PR con el JWKS nuevo |
+| `emitir-token.mjs <privada.pem> [--rol ADMINISTRADOR] [--usuario nombre] [--horas 8]` | Firma un JWT RS256 con `realm_access.roles` y vencimiento |
+| `emitir-token.test.mjs` | Pruebas: `node --test postman/jwks-dev/emitir-token.test.mjs` |
+
+Quien tenga la clave privada es ADMINISTRADOR de productos en el entorno de
+desarrollo: es una herramienta de pruebas con datos de prueba, **no sustituye
+la integración con cuentas**. Cuando exista el Keycloak real, basta con
+cambiar `KEYCLOAK_JWK_SET_URI` en el entorno del servidor y pedir el token
+allá. La prueba `SeguridadConJwksRealTest` fija el formato del JWKS contra el
+decodificador real de Spring.
+
+Contra la instancia de contenido:
+
+```bash
+TOKEN=$(node postman/jwks-dev/emitir-token.mjs ~/.nexus/productos-jwks-dev.pem --usuario cesar)
+npx --yes newman run productos.postman_collection.json -e local.postman_environment.json --env-var baseUrl=http://34.193.90.11:8103 --env-var token=$TOKEN
+```
 
 ## Con la app de Postman
 
