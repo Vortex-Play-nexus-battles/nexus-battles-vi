@@ -8,8 +8,8 @@
   "event": [
     { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
       "if (!pm.collectionVariables.get('jugadorA')) {",
-      "  pm.collectionVariables.set('jugadorA', pm.variables.replace('{{$guid}}'));",
-      "  pm.collectionVariables.set('jugadorB', pm.variables.replace('{{$guid}}'));",
+      "  pm.collectionVariables.set('jugadorA', pm.variables.replaceIn('{{$guid}}'));",
+      "  pm.collectionVariables.set('jugadorB', pm.variables.replaceIn('{{$guid}}'));",
       "}"
     ] } }
   ],
