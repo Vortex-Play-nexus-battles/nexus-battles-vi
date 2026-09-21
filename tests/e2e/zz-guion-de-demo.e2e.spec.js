@@ -167,9 +167,10 @@ test.describe('Guion de demostración del Sprint 2', () => {
 
     await conSesion(page, anfitriona);
     await page.goto(`${BORDE}${VISTAS}/plataforma/salas-partidas/crear-sala.html`);
-    await page.fill('[name="maximoParticipantes"]', '2');
-    await page.fill('[name="recompensaCreditos"]', String(APUESTA));
+    // En «1 contra 1» el aforo queda fijo en 2 (la vista deshabilita el campo).
     await page.check('[name="modalidad"][value="UNO_CONTRA_UNO"]');
+    await expect(page.locator('[name="maximoParticipantes"]')).toHaveValue('2');
+    await page.fill('[name="recompensaCreditos"]', String(APUESTA));
     const formulario = await capturar(page, 4, 'crear-sala-formulario');
     // La sala la crea la vista de verdad; el id se lee de la respuesta que
     // recibio el navegador, no de un listado que podria traer salas ajenas.
