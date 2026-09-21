@@ -188,7 +188,7 @@
         abandonarSala,
         cancelarSala,
       } from './cliente-salas.js';
-      import { montarSalaDeEspera, dejarAvisoParaElListado } from './sala-de-espera.js';
+      import { montarSalaDeEspera, salidaAlListado } from './sala-de-espera.js';
       import { usuarioIdDeSesion } from '../../comun/identidad.js';
       // Transporte STOMP sobre WebSocket nativo del servicio, el mismo que usan
       // Batallas (HU-SAL-002) y el chat (HU-JUE-015): CONNECT con el JWT en la
@@ -278,11 +278,12 @@
       /** La ficha de la sala, si se pudo leer. */
       let sala = null;
 
-      /** Vuelve al listado dejando dicho por que. */
-      function volverAlListado(aviso) {
-        dejarAvisoParaElListado(sessionStorage, aviso);
-        globalThis.location.href = './batallas.html';
-      }
+      // Vuelve al listado dejando dicho por que — una sola vez por pagina: al
+      // anfitrion que cancela le llega el mismo hecho por su boton y por el
+      // canal, y navegar dos veces aborta la primera navegacion.
+      const volverAlListado = salidaAlListado(sessionStorage, (destino) => {
+        globalThis.location.href = destino;
+      });
 
       if (!partida && idSala) {
         if (zonaVacia) {

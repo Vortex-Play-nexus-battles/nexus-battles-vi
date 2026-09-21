@@ -88,6 +88,34 @@ export function recogerAvisoDelListado(storage) {
 }
 
 /**
+ * La salida al listado, que solo puede ocurrir una vez por pagina.
+ *
+ * Al anfitrion que cancela le llega el mismo hecho por dos caminos: la
+ * respuesta de su boton y su propio `sala.cancelada` por el canal, en el
+ * orden que toque. Dos asignaciones seguidas a `location.href` abortan la
+ * primera navegacion (`net::ERR_ABORTED`), asi que solo cuenta la primera
+ * llamada; las demas no hacen nada.
+ *
+ * @param {Storage} storage donde dejar el aviso para el listado
+ * @param {(destino: string) => void} navegar normalmente `href => location.href = href`
+ * @param {string} [destino]
+ * @returns {(aviso: {tono: string, titulo: string, detalle?: string}) => boolean}
+ *   `true` si esta llamada fue la que navego
+ */
+export function salidaAlListado(storage, navegar, destino = './batallas.html') {
+  let salio = false;
+  return (aviso) => {
+    if (salio) {
+      return false;
+    }
+    salio = true;
+    dejarAvisoParaElListado(storage, aviso);
+    navegar(destino);
+    return true;
+  };
+}
+
+/**
  * Monta la sala de espera sobre `[data-zona="espera"]`.
  *
  * @param {ParentNode} raiz

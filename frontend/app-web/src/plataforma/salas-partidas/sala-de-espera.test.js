@@ -16,6 +16,7 @@ import {
   textoDeOcupacion,
   dejarAvisoParaElListado,
   recogerAvisoDelListado,
+  salidaAlListado,
   CLAVE_AVISO_DEL_LISTADO,
 } from './sala-de-espera.js';
 
@@ -302,5 +303,38 @@ describe('aviso para el listado', () => {
 
     expect(() => dejarAvisoParaElListado(roto, { tono: 'info', titulo: 'x' })).not.toThrow();
     expect(recogerAvisoDelListado(roto)).toBeNull();
+  });
+});
+
+describe('salidaAlListado · una sola navegacion', () => {
+  test('al anfitrion que cancela le llega el hecho por dos caminos y solo navega una vez', () => {
+    const storage = almacen();
+    const navegar = jest.fn();
+    const volver = salidaAlListado(storage, navegar);
+
+    // Primero la respuesta del boton, despues su propio aviso por el canal.
+    expect(volver({ tono: 'info', titulo: 'Cancelaste la sala.' })).toBe(true);
+    expect(volver({ tono: 'info', titulo: 'Cancelaste la sala.' })).toBe(false);
+
+    expect(navegar).toHaveBeenCalledTimes(1);
+    expect(navegar).toHaveBeenCalledWith('./batallas.html');
+    // El aviso que queda es el de la primera llamada, no se pisa.
+    expect(recogerAvisoDelListado(storage)).toEqual({
+      tono: 'info',
+      titulo: 'Cancelaste la sala.',
+    });
+  });
+
+  test('el destino se puede cambiar y el aviso llega antes de navegar', () => {
+    const storage = almacen();
+    const orden = [];
+    const navegar = jest.fn((destino) =>
+      orden.push(['navegar', destino, storage.getItem(CLAVE_AVISO_DEL_LISTADO) !== null]),
+    );
+    const volver = salidaAlListado(storage, navegar, '../otro.html');
+
+    volver({ tono: 'advertencia', titulo: 'La sala se cerro' });
+
+    expect(orden).toEqual([['navegar', '../otro.html', true]]);
   });
 });
