@@ -28,6 +28,20 @@ SPRING_DATA_MONGODB_URI=mongodb://localhost:27017/inventario ./gradlew :services
   access token cuyo cliente sea `ms-subastas` y asignarlo a la variable de
   coleccion `s2sAccessToken`.
 
+  **Contrato 1.1.0 (#451): la identidad del jugador sale del Bearer.** Cada
+  peticion de jugador lleva `Authorization: Bearer {{tokenJugadorA}}` (o `B`);
+  `X-User-Name` se conserva solo para servicios con credencial. Los apodos
+  `jugadorA`/`jugadorB` deben coincidir con el `preferred_username` de cada
+  token. Con el JWKS de desarrollo:
+
+  ```bash
+  A=jugador-a-$RANDOM; B=jugador-b-$RANDOM
+  TA=$(node ../../productos/postman/jwks-dev/emitir-token.mjs ~/.nexus/productos-jwks-dev.pem --rol JUGADOR --usuario $A)
+  TB=$(node ../../productos/postman/jwks-dev/emitir-token.mjs ~/.nexus/productos-jwks-dev.pem --rol JUGADOR --usuario $B)
+  S2S=$(node ../../productos/postman/jwks-dev/emitir-token.mjs ~/.nexus/productos-jwks-dev.pem --azp ms-subastas)
+  npx --yes newman run inventario.postman_collection.json -e local.postman_environment.json --env-var baseUrl=http://34.193.90.11:8102 --env-var jugadorA=$A --env-var tokenJugadorA=$TA --env-var jugadorB=$B --env-var tokenJugadorB=$TB --env-var s2sAccessToken=$S2S
+  ```
+
   **Sin Keycloak (instancia de contenido y local con Compose):** inventario
   apunta al JWKS de desarrollo (`jwks-dev`, ver
   `services/contenido/productos/postman/LEEME.md`) y el token de servicio se
