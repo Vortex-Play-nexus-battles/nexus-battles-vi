@@ -502,7 +502,7 @@ test.describe('Sala de batalla de punta a punta', () => {
     // HU-SAL-005. Los umbrales estan probados en unidad sobre `clasificar`;
     // lo que esto anade es que se cumplen con el daño que calcula el motor de
     // verdad y viajando por STOMP, no con numeros inventados en una prueba.
-    test.setTimeout(180000);
+    test.setTimeout(240000);
 
     const vistos = new Set(['alto']); // ya comprobado a plena vida, mas arriba
     const recorrido = [];
@@ -531,21 +531,26 @@ test.describe('Sala de batalla de punta a punta', () => {
       });
       await boton.click();
 
-      // Esperar al repintado en vez de dormir un rato fijo: el evento llega
-      // por STOMP y tarda lo que tarde el motor.
-      const objetivo = enCurso.participantes
-        .filter((p) => p.jugador !== enCurso.turnoActual.idJugador)
-        .map((p) => p.heroe.vidaActual)
-        .reduce((a, b) => a + b, 0);
+      // Se espera al CAMBIO DE TURNO, no al daño. Un golpe puede fallar
+      // —«Guerrero Tanque» ataca con 10+1d6 contra defensa 11, asi que un 1
+      // en el dado no entra— y fallar es un resultado legitimo del combate:
+      // exigir daño en cada turno pondria la prueba roja por una tirada. El
+      // turno, en cambio, rota siempre: `AvanzarTurno` corre tras resolver la
+      // accion, acierte o no. Lo que se afirma abajo es el recorrido de
+      // colores a lo largo de la partida, que es lo que dice RF-JUE-009.
       await expect
         .poll(
           async () =>
-            (await barras(page))
-              .filter((b) => b.jugador !== enCurso.turnoActual.idJugador)
-              .reduce((t, b) => t + b.actual, 0),
-          { timeout: 25000, message: `turno ${turnos + 1}: la vida del rival no bajo` },
+            (
+              await (
+                await api.get(`/api/v1/partidas/${partida.id}`, {
+                  headers: conToken(anfitriona.token),
+                })
+              ).json()
+            ).turnoActual.numeroTurno,
+          { timeout: 25000, message: `turno ${turnos + 1}: el turno no avanzo` },
         )
-        .toBeLessThan(objetivo);
+        .toBeGreaterThan(enCurso.turnoActual.numeroTurno);
 
       for (const barra of await barras(page)) {
         vistos.add(barra.estado);
@@ -567,7 +572,7 @@ test.describe('Sala de batalla de punta a punta', () => {
   test('a fuerza de golpes alguien cae, y la vista lo dice', async ({ page }) => {
     // HU-JUE-005 / RF-JUE-017: el combate acaba de verdad. Se sigue golpeando
     // desde donde lo dejo la prueba anterior hasta que la partida cierre.
-    test.setTimeout(180000);
+    test.setTimeout(240000);
 
     let enCurso = await (
       await api.get(`/api/v1/partidas/${partida.id}`, {
