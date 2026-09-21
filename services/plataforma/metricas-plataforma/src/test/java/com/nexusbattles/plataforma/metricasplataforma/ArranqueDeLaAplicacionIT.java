@@ -1,17 +1,35 @@
 package com.nexusbattles.plataforma.metricasplataforma;
 
+import com.nexusbattles.plataforma.metricasplataforma.disponibilidad.AlmacenDeDisponibilidad;
+import com.nexusbattles.plataforma.metricasplataforma.disponibilidad.AlmacenEnPostgres;
+import com.nexusbattles.plataforma.metricasplataforma.disponibilidad.Comprobacion;
 import com.nexusbattles.plataforma.metricasplataforma.disponibilidad.ConfiguracionDeDisponibilidad;
+import com.nexusbattles.plataforma.metricasplataforma.disponibilidad.InformeDeDisponibilidad;
+import com.nexusbattles.plataforma.metricasplataforma.disponibilidad.Interrupcion;
 import com.nexusbattles.plataforma.metricasplataforma.disponibilidad.MonitorDeDisponibilidad;
+import com.nexusbattles.plataforma.metricasplataforma.disponibilidad.RegistroDeDisponibilidad;
+import com.nexusbattles.plataforma.metricasplataforma.disponibilidad.VentanaDeMantenimiento;
 import com.nexusbattles.plataforma.metricasplataforma.latencia.LatenciaController;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.ApplicationContext;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Levanta la aplicacion completa, igual que hace el contenedor en el
@@ -33,11 +51,68 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * el 2026-09-17 tenia cuatro entradas apuntando al puerto de OTRO servicio
  * (HU-DIS-001 medía servicios distintos de los que nombraba).
  */
+@Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class ArranqueDeLaAplicacionIT {
 
+    /**
+     * HU-DIS-001: desde que las interrupciones se guardan, el contexto
+     * necesita la PostgreSQL con la que Flyway crea el esquema {@code metricas}.
+     * Sin {@code disabledWithoutDocker}, como en salas-partidas: una prueba
+     * omitida no es una prueba que pasa.
+     */
+    @Container
+    @ServiceConnection
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:17-alpine");
+
     @Autowired
     private ApplicationContext contexto;
+
+    @Autowired
+    private JdbcClient jdbc;
+
+    @Test
+    @DisplayName("HU-DIS-001: una caida sobrevive al reinicio del servicio y la cierra la primera comprobacion sana")
+    void lasInterrupcionesSobrevivenAlReinicio() {
+        // El monitor real de este contexto ya esta sondeando (y anotando como
+        // caidos) los siete servicios del bloque en la misma base: por eso la
+        // prueba usa un servicio propio y un periodo del pasado, para que sus
+        // filas no se mezclen con las que el monitor va escribiendo en vivo.
+        AlmacenDeDisponibilidad almacen = new AlmacenEnPostgres(jdbc);
+        String servicio = "sonda-de-prueba";
+        Instant t0 = Instant.parse("2026-01-10T10:00:00Z");
+
+        // Antes del «reinicio»: un registro ve caer al servicio y programa
+        // una ventana de mantenimiento.
+        RegistroDeDisponibilidad antes = new RegistroDeDisponibilidad(almacen);
+        antes.registrar(Comprobacion.caido(servicio, t0, "connection refused"));
+        antes.programarMantenimiento(new VentanaDeMantenimiento(
+                t0.plus(Duration.ofHours(2)), t0.plus(Duration.ofHours(3)), "parche"));
+
+        // Despues: un registro nuevo (como tras redesplegar) recarga lo guardado.
+        RegistroDeDisponibilidad despues = new RegistroDeDisponibilidad(almacen);
+        List<Interrupcion> recargadas = despues.interrupcionesEn(t0, t0.plus(Duration.ofHours(1))).stream()
+                .filter(i -> i.servicio().equals(servicio))
+                .toList();
+        assertAll(
+                () -> assertEquals(1, recargadas.size()),
+                () -> assertTrue(recargadas.get(0).abierta(), "sigue abierta hasta que alguien la vea sana"),
+                () -> assertEquals("connection refused", recargadas.get(0).detalle()),
+                () -> assertNotNull(recargadas.get(0).id()));
+
+        // La primera comprobacion sana la cierra, y el cierre tambien se guarda.
+        despues.registrar(Comprobacion.disponible(servicio, t0.plus(Duration.ofMinutes(10))));
+        RegistroDeDisponibilidad tercero = new RegistroDeDisponibilidad(almacen);
+        InformeDeDisponibilidad informe = tercero.informe(
+                List.of(servicio), t0, t0.plus(Duration.ofHours(4)), 99.95);
+
+        assertAll(
+                () -> assertEquals(Duration.ofMinutes(10),
+                        informe.servicios().get(0).indisponible()),
+                () -> assertFalse(informe.servicios().get(0).interrupciones().get(0).abierta()),
+                () -> assertTrue(almacen.ventanas().stream().anyMatch(v -> "parche".equals(v.motivo())),
+                        "la ventana tambien sobrevive"));
+    }
 
     @Autowired
     private ConfiguracionDeDisponibilidad disponibilidad;
