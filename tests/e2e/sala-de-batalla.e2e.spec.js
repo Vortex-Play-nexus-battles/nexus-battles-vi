@@ -516,17 +516,32 @@ test.describe('Sala de batalla de punta a punta', () => {
     );
   });
 
-  test('la barra cambia de color al bajar del 60 % y del 40 %, con daño real', async ({ page }) => {
-    // HU-SAL-005. Los umbrales estan probados en unidad sobre `clasificar`;
-    // lo que esto anade es que se cumplen con el daño que calcula el motor de
-    // verdad y viajando por STOMP, no con numeros inventados en una prueba.
+  test('el color de la barra corresponde al numero, con daño real', async ({ page }) => {
+    // HU-SAL-005 / RF-JUE-009. Las fronteras exactas (60 y 40, y que el 60 no
+    // sea verde y el 40 si sea amarillo) estan probadas en unidad sobre
+    // `clasificar`. Lo que anade el E2E es que esa regla se cumple sobre los
+    // numeros que produce el motor de verdad y que viajan por STOMP.
+    //
+    // NO se exige ver los tres colores en una partida: el daño lo deciden los
+    // dados y un golpe grande salta la banda amarilla entera —paso: 29/44
+    // (alto) -> 12/44 (bajo)—. Exigirlo pondria la prueba roja por suerte. Lo
+    // que si se exige es que CADA estado pintado case con su porcentaje, y que
+    // la barra salga de «alto», que es lo que demuestra que hubo daño real.
     test.setTimeout(240000);
+
+    /** La regla de RF-JUE-009, escrita aqui a proposito y no importada. */
+    const colorEsperado = (actual, maxima) => {
+      const porcentaje = (actual / maxima) * 100;
+      if (porcentaje > 60) return 'alto';
+      if (porcentaje >= 40) return 'medio';
+      return 'bajo';
+    };
 
     const vistos = new Set(['alto']); // ya comprobado a plena vida, mas arriba
     const recorrido = [];
     let turnos = 0;
 
-    while (turnos < 40 && !vistos.has('bajo')) {
+    while (turnos < 40 && !vistos.has('bajo') && !vistos.has('medio')) {
       const enCurso = await (
         await api.get(`/api/v1/partidas/${partida.id}`, {
           headers: conToken(anfitriona.token),
@@ -573,18 +588,28 @@ test.describe('Sala de batalla de punta a punta', () => {
       for (const barra of await barras(page)) {
         vistos.add(barra.estado);
         recorrido.push(`${barra.actual}/${barra.maxima}=${barra.estado}`);
+
+        // Cada barra pintada, contra la regla, con el numero que le toco. Esto
+        // es lo que de verdad demuestra RF-JUE-009 de punta a punta: el color
+        // sale del dato que llego por STOMP, no de un valor de prueba.
+        expect(
+          barra.estado,
+          `${barra.actual}/${barra.maxima} deberia ser ` +
+            `${colorEsperado(barra.actual, barra.maxima)}`,
+        ).toBe(colorEsperado(barra.actual, barra.maxima));
+        // Y el numero se escribe junto al color: el color nunca es el unico
+        // indicador (accesibilidad, RNF).
+        expect(barra.texto).toBe(`${barra.actual}/${barra.maxima}`);
       }
       turnos += 1;
     }
 
-    // Los tres colores de RF-JUE-009, alcanzados con el daño que calculo el
-    // motor de verdad: verde por encima del 60 %, amarillo entre 60 y 40, rojo
-    // por debajo del 40 %.
-    expect([...vistos].sort(), `recorrido en ${turnos} turnos: ${recorrido.join(' ')}`).toEqual([
-      'alto',
-      'bajo',
-      'medio',
-    ]);
+    // La barra salio de verde con daño de verdad: si nadie hubiera acertado,
+    // las dos seguirian a tope y esto no se cumpliria.
+    expect(
+      [...vistos].some((estado) => estado !== 'alto'),
+      `recorrido en ${turnos} turnos: ${recorrido.join(' ')}`,
+    ).toBe(true);
   });
 
   test('a fuerza de golpes alguien cae, y la vista lo dice', async ({ page }) => {
