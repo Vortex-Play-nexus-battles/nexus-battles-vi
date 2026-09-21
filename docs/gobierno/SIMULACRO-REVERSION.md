@@ -57,6 +57,21 @@ Simulacro superado: fallo de salud detectado, reversion ejecutada y comprobada
 Después, el smoke del entorno dev corrió solo y quedó en verde
 ([smoke-dev #35623432485](https://github.com/Vortex-Play-nexus-battles/nexus-battles-vi/actions/runs/35623432485)).
 
+## Tiempos (marcas de los steps de la corrida, UTC)
+
+| Momento | Hora | Δ |
+|---|---|---|
+| Empieza el despliegue del servicio con el fallo inyectado | 16:04:40 | — |
+| `desplegar.sh` declara el fallo de salud (12 intentos × 5 s) y escribe `ultimo-fallo.txt` | 16:05:51 | +71 s |
+| `revertir.sh` termina (imagen local, sin pull) | 16:05:54 | +3 s |
+| `/actuator/health` del tag estable de nuevo `UP` (intento 5 de la comprobación) | 16:06:15 | +21 s |
+
+**Tiempo total de recuperación: 24 s** desde que se declara el fallo hasta que
+el servicio vuelve a estar sano con la versión anterior; 95 s desde el inicio
+del despliegue fallido (la ventana de salud del simulacro es de 60 s; en un
+despliegue normal es de 180 s, así que un fallo real tardaría hasta ~3 min en
+declararse antes de esos 24 s).
+
 ## Qué demuestra
 
 | Paso de CA-02 | Evidencia |
