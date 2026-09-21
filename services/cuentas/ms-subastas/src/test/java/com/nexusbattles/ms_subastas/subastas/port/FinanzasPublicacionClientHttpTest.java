@@ -1,6 +1,8 @@
 package com.nexusbattles.ms_subastas.subastas.port;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nexusbattles.comun.seguridad.servicio.CredencialDeServicioNoDisponible;
+import com.nexusbattles.ms_subastas.seguridad.PortadorDeServicio;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.URI;
@@ -23,19 +25,169 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class FinanzasPublicacionClientHttpTest {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void credencialNoDisponibleImpideMutacion(boolean reversa) {
+        var seguro = new FinanzasPublicacionClientHttp(
+                URI.create("http://finanzas:8093/api/v1"), http, mapper, Duration.ofSeconds(2),
+                PortadorDeServicio.de(() -> {
+                    throw new CredencialDeServicioNoDisponible("emisor caido", new IOException("down"));
+                }));
+        var error = assertThrows(FinanzasPublicacionClientException.class, () -> {
+            if (reversa) seguro.compensarDebito(subasta, "publicacion-fallida");
+            else seguro.debitarComision(uid, BigDecimal.ONE, subasta, "comision-publicacion-24h");
+        });
+        assertEquals(com.nexusbattles.ms_subastas.subastas.service.PublicacionSubastaException.Motivo.DEPENDENCIA_NO_DISPONIBLE,
+                error.getMotivo());
+        assertFalse(error.resultadoIncierto());
+        verifyNoInteractions(http);
+    }
+
+    @Test
+    void credencialCaidaTrasTimeoutImpideConsultaYConservaIncertidumbre() throws Exception {
+        var llamadas = new java.util.concurrent.atomic.AtomicInteger();
+        var seguro = new FinanzasPublicacionClientHttp(
+                URI.create("http://finanzas:8093/api/v1"), http, mapper, Duration.ofSeconds(2),
+                PortadorDeServicio.de(() -> {
+                    if (llamadas.incrementAndGet() == 1) return "token-servicio-prueba";
+                    throw new CredencialDeServicioNoDisponible("emisor caido", new IOException("down"));
+                }));
+        when(http.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenThrow(new java.net.http.HttpTimeoutException("resultado perdido"));
+        var error = assertThrows(FinanzasPublicacionClientException.class,
+                () -> seguro.debitarComision(uid, BigDecimal.ONE, subasta, "comision-publicacion-24h"));
+        assertTrue(error.resultadoIncierto());
+        assertEquals(2, llamadas.get());
+        solicitud("debitar");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"otro-error", "reserva-no-encontrada", "reserva-ya-liberada"})
+    void otro422EsTecnico(String tipo) throws Exception {
+        responder(422, "{\"type\":\"https://nexusbattles.upb.edu.co/errors/" + tipo + "\"}");
+        var error = assertThrows(FinanzasPublicacionClientException.class, () -> ejecutar(false));
+        assertEquals(com.nexusbattles.ms_subastas.subastas.service.PublicacionSubastaException.Motivo.DEPENDENCIA_NO_DISPONIBLE,
+                error.getMotivo());
+        solicitud("debitar");
+    }
+
+    @Test
+    void repetirDebitoConservaRefIdDelProveedor() throws Exception {
+        responder(200, "{\"refId\":\"" + refId + "\",\"estado\":\"EXITOSO\"}");
+        ejecutar(false);
+        ejecutar(false);
+        var captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(http, times(2)).send(captor.capture(), any(HttpResponse.BodyHandler.class));
+        for (var request : captor.getAllValues()) {
+            assertEquals(refId, mapper.readTree(body(request)).get("refId").asText());
+        }
+        assertEquals(body(captor.getAllValues().get(0)), body(captor.getAllValues().get(1)));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"REVERSADO", "YA_REVERSADO"})
+    void aceptaReversaIdempotente(String estado) throws Exception {
+        responder(200, "{\"refId\":\"" + refId + "\",\"estado\":\"" + estado + "\"}");
+        ejecutar(true);
+        solicitud("reversar");
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void timeoutResueltoPorConsultaNoRepiteMutacion(boolean reversa) throws Exception {
+        prepararConsulta(200, operacion(reversa ? "LIBERADA" : "CONSUMIDA"));
+        ejecutar(reversa);
+        verificarMutacionYConsulta(reversa);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {404, 409, 500})
+    void consultaFallidaNoPruebaAusenciaDeDebito(int status) throws Exception {
+        prepararConsulta(status, "{}");
+        assertTrue(assertThrows(FinanzasPublicacionClientException.class, () -> ejecutar(false)).resultadoIncierto());
+        verificarMutacionYConsulta(false);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ACTIVA", "LIBERADA", "UNKNOWN"})
+    void consultaSinDebitoAplicadoEsIncierta(String estado) throws Exception {
+        prepararConsulta(200, operacion(estado));
+        assertTrue(assertThrows(FinanzasPublicacionClientException.class, () -> ejecutar(false)).resultadoIncierto());
+        verificarMutacionYConsulta(false);
+    }
+
+    @Test
+    void consultaConDatosAjenosNoConfirmaDebito() throws Exception {
+        prepararConsulta(200, operacion("CONSUMIDA").replace(uid.toString(), UUID.randomUUID().toString()));
+        assertTrue(assertThrows(FinanzasPublicacionClientException.class, () -> ejecutar(false)).resultadoIncierto());
+    }
+
+    @Test
+    void debitoConsumidoNoConfirmaReversa() throws Exception {
+        prepararConsulta(200, operacion("CONSUMIDA"));
+        assertTrue(assertThrows(FinanzasPublicacionClientException.class, () -> ejecutar(true)).resultadoIncierto());
+        verificarMutacionYConsulta(true);
+    }
+
+    private String operacion(String estado) {
+        return "{\"refId\":\"" + refId + "\",\"uid\":\"" + uid
+                + "\",\"monto\":1,\"concepto\":\"comision-publicacion-24h\",\"estado\":\"" + estado + "\"}";
+    }
+
+    private void prepararConsulta(int status, String body) throws Exception {
+        when(response.statusCode()).thenReturn(status);
+        when(response.body()).thenReturn(body);
+        when(http.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenThrow(new java.net.http.HttpTimeoutException("resultado perdido")).thenReturn(response);
+    }
+
+    private void verificarMutacionYConsulta(boolean reversa) throws Exception {
+        var captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(http, times(2)).send(captor.capture(), any(HttpResponse.BodyHandler.class));
+        var requests = captor.getAllValues();
+        assertEquals("POST", requests.get(0).method());
+        assertTrue(requests.get(0).uri().getPath().endsWith(reversa ? "/reversar" : "/debitar"));
+        assertEquals("GET", requests.get(1).method());
+        assertEquals("/api/v1/creditos/operaciones/" + refId, requests.get(1).uri().getPath());
+        assertEquals(Duration.ofSeconds(2), requests.get(1).timeout().orElseThrow());
+        for (var request : requests) {
+            assertEquals("Bearer token-servicio-prueba", request.headers().firstValue("Authorization").orElseThrow());
+        }
+    }
+
+    @Test
+    void saldoInsuficiente422EsRechazoSinSegundoDebito() throws Exception {
+        responder(422, "{\"type\":\"https://nexusbattles.upb.edu.co/errors/saldo-insuficiente\","
+                + "\"title\":\"Saldo insuficiente\",\"status\":422}");
+        var error = assertThrows(com.nexusbattles.ms_subastas.subastas.service.PublicacionSubastaException.class,
+                () -> ejecutar(false));
+        assertEquals(com.nexusbattles.ms_subastas.subastas.service.PublicacionSubastaException.Motivo.REGLA_NEGOCIO,
+                error.getMotivo());
+        solicitud("debitar");
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void timeoutConsultaUnaVezYConservaResultadoIncierto(boolean reversa) throws Exception {
+        var causa = new java.net.http.HttpTimeoutException("sin respuesta");
+        when(http.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenThrow(causa);
+        assertSame(causa, assertThrows(FinanzasPublicacionClientException.class, () -> ejecutar(reversa)).getCause());
+        verify(http, times(2)).send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class));
+    }
     private final HttpClient http = mock(HttpClient.class);
     private final HttpResponse<String> response = mock(HttpResponse.class);
     private final ObjectMapper mapper = new ObjectMapper();
     private final UUID uid = UUID.randomUUID(), subasta = UUID.randomUUID();
     private final String refId = "sub-publicacion-" + subasta;
     private final FinanzasPublicacionClientHttp client = new FinanzasPublicacionClientHttp(
-            URI.create("http://finanzas:8093/api/v1"), http, mapper, Duration.ofSeconds(2));
+            URI.create("http://finanzas:8093/api/v1"), http, mapper, Duration.ofSeconds(2),
+            PortadorDeServicio.de(() -> "token-servicio-prueba"));
 
     @ParameterizedTest
     @ValueSource(ints = {24, 48})
     void debito200EnviaContratoReal(int horas) throws Exception {
         int monto = horas == 24 ? 1 : 3;
-        responder(200, "{\"refId\":\"" + refId + "\",\"transaccionId\":\"tx\",\"estado\":\"DEBITADO\","
+        responder(200, "{\"refId\":\"" + refId + "\",\"transaccionId\":\"tx\",\"estado\":\"EXITOSO\","
                 + "\"montoDebitado\":" + monto + ",\"nuevoSaldoDisponible\":99}");
         client.debitarComision(uid, BigDecimal.valueOf(monto), subasta, "comision-publicacion-" + horas + "h");
         var request = solicitud("debitar");
@@ -75,7 +227,7 @@ class FinanzasPublicacionClientHttpTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {201, 204, 400, 404, 409, 500})
+    @ValueSource(ints = {201, 204, 400, 401, 403, 404, 409, 422, 500, 503})
     void rechazaStatusDistintoDe200(int status) throws Exception {
         responder(status, "{\"refId\":\"" + refId + "\"}");
         assertThrows(FinanzasPublicacionClientException.class, () -> ejecutar(false));
@@ -118,7 +270,7 @@ class FinanzasPublicacionClientHttpTest {
 
     @Test
     void aceptaBaseConBarraFinal() throws Exception {
-        responder(200, "{\"refId\":\"" + refId + "\"}");
+        responder(200, "{\"refId\":\"" + refId + "\",\"estado\":\"YA_REVERSADO\"}");
         new FinanzasPublicacionClientHttp(URI.create("http://finanzas:8093/api/v1/"), http, mapper, Duration.ofSeconds(2))
                 .compensarDebito(subasta, "publicacion-fallida");
         solicitud("reversar");

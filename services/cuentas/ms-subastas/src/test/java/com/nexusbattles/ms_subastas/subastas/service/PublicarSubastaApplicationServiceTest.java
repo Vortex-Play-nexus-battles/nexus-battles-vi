@@ -18,6 +18,50 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class PublicarSubastaApplicationServiceTest {
+    @Test
+    void reversaSinConfirmarBloqueaNuevoCobro() {
+        when(subastas.saveAndFlush(any())).thenThrow(new RuntimeException("db"));
+        doThrow(new FinanzasPublicacionClientException("reversa incierta", null, true))
+                .when(finanzas).compensarDebito(any(), any());
+        assertThrows(RuntimeException.class, () -> servicio.publicar(solicitud(), "reversa-incierta"));
+        assertEquals(PublicacionSubastaException.Motivo.DEPENDENCIA_NO_DISPONIBLE,
+                assertThrows(PublicacionSubastaException.class,
+                        () -> servicio.publicar(solicitud(), "reversa-incierta")).getMotivo());
+        verify(finanzas).debitarComision(any(), any(), any(), any());
+        verify(finanzas).compensarDebito(any(), any());
+    }
+
+    @Test
+    void rollbackConDebitoInciertoConservaClaveParaConciliacion() {
+        org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+        try {
+            doThrow(new FinanzasPublicacionClientException("incierto", null, true))
+                    .when(finanzas).debitarComision(any(), any(), any(), any());
+            assertThrows(FinanzasPublicacionClientException.class, () -> servicio.publicar(solicitud(), "tx-incierta"));
+            for (var sync : org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations()) {
+                sync.afterCompletion(org.springframework.transaction.support.TransactionSynchronization.STATUS_ROLLED_BACK);
+            }
+            assertEquals(PublicacionSubastaException.Motivo.DEPENDENCIA_NO_DISPONIBLE,
+                    assertThrows(PublicacionSubastaException.class,
+                            () -> servicio.publicar(solicitud(), "tx-incierta")).getMotivo());
+            verify(finanzas).debitarComision(any(), any(), any(), any());
+        } finally { org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization(); }
+    }
+
+    @Test
+    void debitoInciertoBloqueaRepeticionSinOtraMutacion() {
+        doThrow(new FinanzasPublicacionClientException("incierto", null, true))
+                .when(finanzas).debitarComision(any(), any(), any(), any());
+        var error = assertThrows(FinanzasPublicacionClientException.class, () -> servicio.publicar(solicitud(), "incierta"));
+        assertEquals(PublicacionSubastaException.Motivo.DEPENDENCIA_NO_DISPONIBLE, error.getMotivo());
+        assertEquals(PublicacionSubastaException.Motivo.DEPENDENCIA_NO_DISPONIBLE,
+                assertThrows(PublicacionSubastaException.class, () -> servicio.publicar(solicitud(), "incierta")).getMotivo());
+        verify(finanzas).debitarComision(any(), any(), any(), any());
+        verify(finanzas, never()).compensarDebito(any(), any());
+        verify(inventario).liberarReserva(eq("elemento-1"), any(), eq("incierta"));
+        verify(subastas, never()).saveAndFlush(any());
+    }
+
     private final SubastaRepository subastas = mock(SubastaRepository.class);
     private final InventarioClient inventario = mock(InventarioClient.class);
     private final CatalogoProductosClient catalogo = mock(CatalogoProductosClient.class);

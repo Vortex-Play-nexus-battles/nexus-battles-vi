@@ -30,7 +30,7 @@ public class InventarioClientConfig {
 
     @Bean
     @ConditionalOnProperty(name = "app.inventario.modo", havingValue = "http")
-    public InventarioClient inventarioClientHttp(
+    public com.nexusbattles.ms_subastas.subastas.port.InventarioPublicacionClient inventarioClientHttp(
             @Value("${app.inventario.base-url:http://localhost:8080}") String baseUrl,
             @Value("${app.inventario.timeout-ms:5000}") long timeoutMs,
             ObjectMapper objectMapper,

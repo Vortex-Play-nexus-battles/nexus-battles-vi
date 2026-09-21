@@ -133,14 +133,16 @@ class PublicacionConcurrenteTest {
     }
 
     @Test
-    void compensacionesFallidasNoOcultanFalloYNoRetienenClave() {
+    void compensacionesFallidasNoOcultanFalloYRetienenClaveIncierta() {
         var original = new IllegalStateException("persistencia");
         when(repo.saveAndFlush(any())).thenThrow(original).thenAnswer(i -> i.getArgument(0));
         doThrow(new IllegalStateException("compensacion")).when(finanzas).compensarDebito(any(), any());
         doThrow(new IllegalStateException("liberacion")).when(inventario).liberarReserva(any(), any(), any());
         assertSame(original, assertThrows(IllegalStateException.class, () -> publicar(a, "a")));
         verify(inventario).liberarReserva(any(), any(), any());
-        assertNotNull(publicar(a, "a"));
+        assertEquals(PublicacionSubastaException.Motivo.DEPENDENCIA_NO_DISPONIBLE,
+                assertThrows(PublicacionSubastaException.class, () -> publicar(a, "a")).getMotivo());
+        verify(finanzas).debitarComision(any(), any(), any(), any());
     }
 
     private PublicarSubastaResponse publicar(UUID jugador, String unidad) {
