@@ -42,7 +42,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * casan con esas tablas, que es lo que pasa en el servidor. Con H2 la prueba
  * diria "arranca" sin haber probado lo que se despliega.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    properties = {
+        "spring.autoconfigure.exclude=org.springframework.cloud.client.discovery.simple.SimpleDiscoveryClientAutoConfiguration"
+    }
+)
 @Testcontainers
 @DisplayName("ms-ecommerce arranca y expone su salud donde el despliegue la busca")
 class ArranqueDeLaAplicacionIT {
@@ -74,22 +79,22 @@ class ArranqueDeLaAplicacionIT {
     @DisplayName("la salud vive bajo /ecommerce, no bajo /api/v1")
     void laSaludEstaDondeElDespliegueLaBusca() {
         ResponseEntity<String> bajoEcommerce = cliente()
-                .get().uri("/ecommerce/actuator/health")
-                .retrieve().toEntity(String.class);
+            .get().uri("/ecommerce/actuator/health")
+            .retrieve().toEntity(String.class);
 
         // Sin desactivar el manejo por defecto, un 404 se convertiria en
         // excepcion y la prueba no podria afirmar nada sobre el codigo.
         ResponseEntity<String> bajoApiV1 = cliente()
-                .get().uri("/api/v1/actuator/health")
-                .retrieve()
-                .onStatus(estado -> true, (peticion, respuesta) -> { })
-                .toEntity(String.class);
+            .get().uri("/api/v1/actuator/health")
+            .retrieve()
+            .onStatus(estado -> true, (peticion, respuesta) -> { })
+            .toEntity(String.class);
 
         assertAll(
-                () -> assertEquals(200, bajoEcommerce.getStatusCode().value()),
-                () -> assertTrue(bajoEcommerce.getBody().contains("\"status\":\"UP\""),
-                        "el despliegue busca literalmente \"status\":\"UP\""),
-                () -> assertEquals(404, bajoApiV1.getStatusCode().value(),
-                        "si esto deja de ser 404, revisar ruta_salud_de() en desplegar.sh"));
+            () -> assertEquals(200, bajoEcommerce.getStatusCode().value()),
+            () -> assertTrue(bajoEcommerce.getBody().contains("\"status\":\"UP\""),
+                "el despliegue busca literalmente \"status\":\"UP\""),
+            () -> assertEquals(404, bajoApiV1.getStatusCode().value(),
+                "si esto deja de ser 404, revisar ruta_salud_de() en desplegar.sh"));
     }
 }
