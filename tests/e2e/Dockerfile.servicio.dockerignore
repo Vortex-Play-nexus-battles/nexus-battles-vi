@@ -29,5 +29,7 @@ docs/
 !services/contenido/motor-combate/build/libs/*.jar
 !services/plataforma/salas-partidas/build/libs/*.jar
 !services/cuentas/ms-finanzas/build/libs/*.jar
+# R1 (guion de demo): lista negra y sanciones reales para el chat.
+!services/plataforma/moderacion-sanciones/build/libs/*.jar
 
 # ms-identidad es Maven: su jar vive en `target/`, que no esta excluido.

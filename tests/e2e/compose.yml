@@ -221,6 +221,40 @@ services:
       retries: 40
 
   # ---------------------------------------------------------- plataforma
+  # Lista negra (HU-ADM-002) y sanciones (RF-USR-004): el chat y los
+  # comentarios les preguntan antes de publicar. Cache en Redis, como en el
+  # compose de la raiz (plataforma-cache).
+  e2e-plataforma-cache:
+    image: redis:8-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  srv-moderacion-sanciones:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/plataforma/moderacion-sanciones/build/libs/*.jar
+        PUERTO: "8086"
+    environment:
+      DB_RELACIONAL_URL: jdbc:postgresql://e2e-plataforma-db:5432/plataformadb
+      DB_USER: plataforma
+      DB_PASS: plataforma
+      DB_MEMORIA_URL: redis://e2e-plataforma-cache:6379
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+    depends_on:
+      e2e-plataforma-db: { condition: service_healthy }
+      e2e-plataforma-cache: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8086/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
   srv-salas-partidas:
     build:
       context: ../..
@@ -261,6 +295,12 @@ services:
       # canal STOMP es el del borde, no el del servicio.
       SALAS_WS_ORIGENES: http://localhost:8099,http://127.0.0.1:8099
       CHAT_WS_ORIGENES: http://localhost:8099,http://127.0.0.1:8099
+      # HU-JUE-015 / D-14: el chat consulta la lista negra y la sancion activa
+      # en moderacion-sanciones, con fallo cerrado. Sin el servicio en el
+      # banco, ningun mensaje se publicaba (503 sanciones-no-disponibles) y el
+      # guion de la demo no podia mostrar el chat.
+      LISTA_NEGRA_VERIFICAR_URL: http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar
+      SANCIONES_URL: http://srv-moderacion-sanciones:8086/api/v1
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
       srv-inventario: { condition: service_healthy }
@@ -269,6 +309,7 @@ services:
       srv-motor-combate: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }
       srv-ms-finanzas: { condition: service_healthy }
+      srv-moderacion-sanciones: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8084/actuator/health || exit 1"]
       interval: 5s
