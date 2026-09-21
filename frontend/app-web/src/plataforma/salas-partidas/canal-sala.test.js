@@ -16,6 +16,9 @@ import {
   estadoDesdeFicha,
   TIPO_INGRESO,
   TIPO_PARTIDA_INICIADA,
+  TIPO_SALIDA,
+  TIPO_CANCELADA,
+  textoDeCancelacion,
 } from './canal-sala.js';
 
 const SALA = '11111111-1111-1111-1111-111111111111';
@@ -263,5 +266,107 @@ describe('arranque del combate (HU-SAL-004)', () => {
 
     expect(alCambiar).toHaveBeenCalledTimes(1);
     expect(canal.estado().participantes).toEqual([ANFITRION, VISITANTE]);
+  });
+});
+
+// ===========================================================================
+// HU-SAL-006 — salir y cancelar antes de empezar
+// ===========================================================================
+
+function avisoDeSalida(cambios = {}) {
+  return {
+    tipo: TIPO_SALIDA,
+    idSala: SALA,
+    idJugador: VISITANTE,
+    ocupacion: { actual: 1, maximo: 4 },
+    ...cambios,
+  };
+}
+
+function avisoDeCancelacion(cambios = {}) {
+  return {
+    tipo: TIPO_CANCELADA,
+    idSala: SALA,
+    motivo: 'CANCELADA_POR_ANFITRION',
+    creditosDevueltos: 0,
+    ...cambios,
+  };
+}
+
+describe('salida de un participante (HU-SAL-006, CA-01)', () => {
+  test('una salida baja la ocupacion y quita al jugador', () => {
+    const dentro = estado({
+      ocupacion: { actual: 2, maximo: 4 },
+      participantes: [ANFITRION, VISITANTE],
+    });
+
+    const resultado = aplicarAviso(dentro, avisoDeSalida());
+
+    expect(resultado.ocupacion).toEqual({ actual: 1, maximo: 4 });
+    expect(resultado.participantes).toEqual([ANFITRION]);
+  });
+
+  test('la salida de alguien que ya no estaba no cambia nada (reconexion)', () => {
+    const solo = estado();
+
+    expect(aplicarAviso(solo, avisoDeSalida())).toBe(solo);
+  });
+
+  test('la salida de otra sala se descarta', () => {
+    const dentro = estado({ participantes: [ANFITRION, VISITANTE] });
+
+    expect(aplicarAviso(dentro, avisoDeSalida({ idSala: 'otra' }))).toBe(dentro);
+  });
+
+  test('por seguirSala, la salida avisa al que monto con el estado nuevo', () => {
+    const alCambiar = jest.fn();
+    const canal = seguirSala(estado({ participantes: [ANFITRION, VISITANTE] }), { alCambiar });
+
+    canal.recibir(avisoDeSalida());
+
+    expect(alCambiar).toHaveBeenCalledTimes(1);
+    expect(alCambiar.mock.calls[0][0].participantes).toEqual([ANFITRION]);
+  });
+});
+
+describe('cancelacion de la sala (HU-SAL-006, CA-02)', () => {
+  test('avisa a la vista con el mensaje completo, una sola vez', () => {
+    const alCancelar = jest.fn();
+    const canal = seguirSala(estado(), { alCancelar });
+
+    canal.recibir(avisoDeCancelacion({ creditosDevueltos: 150 }));
+    canal.recibir(avisoDeCancelacion({ creditosDevueltos: 150 }));
+
+    expect(alCancelar).toHaveBeenCalledTimes(1);
+    expect(alCancelar.mock.calls[0][0].motivo).toBe('CANCELADA_POR_ANFITRION');
+    expect(alCancelar.mock.calls[0][0].creditosDevueltos).toBe(150);
+  });
+
+  test('la cancelacion de otra sala no mueve a nadie', () => {
+    const alCancelar = jest.fn();
+    const canal = seguirSala(estado(), { alCancelar });
+
+    canal.recibir(avisoDeCancelacion({ idSala: 'otra' }));
+
+    expect(alCancelar).not.toHaveBeenCalled();
+  });
+
+  test('no toca la ocupacion ni dispara alCambiar: cambia de pantalla, no de sala', () => {
+    const alCambiar = jest.fn();
+    const canal = seguirSala(estado(), { alCambiar, alCancelar: () => {} });
+
+    canal.recibir(avisoDeCancelacion());
+
+    expect(alCambiar).not.toHaveBeenCalled();
+    expect(canal.estado()).toEqual(estado());
+  });
+
+  test('el texto traduce el motivo y cuenta los creditos devueltos si los hubo', () => {
+    expect(textoDeCancelacion(avisoDeCancelacion())).toBe('El anfitrion cancelo la sala.');
+    expect(textoDeCancelacion(avisoDeCancelacion({ creditosDevueltos: 150 }))).toBe(
+      'El anfitrion cancelo la sala. Se te devolvieron 150 creditos.',
+    );
+    expect(textoDeCancelacion({ motivo: 'INACTIVIDAD' })).toMatch(/inactividad/i);
+    expect(textoDeCancelacion({ motivo: 'ALGO_NUEVO' })).toBe('La sala se cerro.');
   });
 });

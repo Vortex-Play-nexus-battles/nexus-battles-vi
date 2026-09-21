@@ -31,6 +31,41 @@ export const TIPO_INGRESO = 'sala.participante.ingreso';
  */
 export const TIPO_PARTIDA_INICIADA = 'sala.partida.iniciada';
 
+/** Un participante se fue antes de empezar — HU-SAL-006. Baja la ocupacion. */
+export const TIPO_SALIDA = 'sala.participante.salio';
+
+/**
+ * El anfitrion cancelo la sala — HU-SAL-006. No cambia la ocupacion: cambia a
+ * que pantalla pertenece la persona (vuelve al listado). Lo decide la vista
+ * con `alCancelar`, igual que el arranque con `alIniciarPartida`.
+ */
+export const TIPO_CANCELADA = 'sala.cancelada';
+
+/**
+ * Motivos de `sala.cancelada` del AsyncAPI, traducidos para quien mira. El
+ * mensaje viaja como enumerado a proposito: el idioma lo pone la interfaz.
+ */
+export const MOTIVOS_DE_CANCELACION = Object.freeze({
+  CANCELADA_POR_ANFITRION: 'El anfitrion cancelo la sala.',
+  INACTIVIDAD: 'La sala se cerro por inactividad.',
+  ERROR_DEL_SISTEMA: 'La sala se cerro por un error del sistema.',
+});
+
+/**
+ * Texto para quien es devuelto al listado por una cancelacion.
+ *
+ * @param {{motivo?: string, creditosDevueltos?: number|null}} aviso
+ * @returns {string}
+ */
+export function textoDeCancelacion(aviso) {
+  const motivo = MOTIVOS_DE_CANCELACION[aviso?.motivo] ?? 'La sala se cerro.';
+  const devueltos = Number(aviso?.creditosDevueltos);
+  if (Number.isFinite(devueltos) && devueltos > 0) {
+    return `${motivo} Se te devolvieron ${devueltos} creditos.`;
+  }
+  return motivo;
+}
+
 /**
  * URL del canal STOMP del servicio de salas, `/ws` en el mismo origen que la
  * API (`contracts/websocket/salas-partidas.yaml`).
@@ -99,21 +134,35 @@ export function destinoDeSala(idSala) {
  * @returns {object} el estado actualizado, o el mismo objeto si el aviso no aplica
  */
 export function aplicarAviso(estado, aviso) {
-  if (!aviso || aviso.tipo !== TIPO_INGRESO) {
-    return estado;
-  }
-  if (aviso.idSala !== estado.idSala) {
-    return estado;
-  }
-  if (estado.participantes.includes(aviso.idJugador)) {
+  if (!aviso || aviso.idSala !== estado.idSala) {
     return estado;
   }
 
-  return {
-    ...estado,
-    ocupacion: { ...aviso.ocupacion },
-    participantes: [...estado.participantes, aviso.idJugador],
-  };
+  if (aviso.tipo === TIPO_INGRESO) {
+    if (estado.participantes.includes(aviso.idJugador)) {
+      return estado;
+    }
+    return {
+      ...estado,
+      ocupacion: { ...aviso.ocupacion },
+      participantes: [...estado.participantes, aviso.idJugador],
+    };
+  }
+
+  if (aviso.tipo === TIPO_SALIDA) {
+    // Simetrico del ingreso (HU-SAL-006): quien ya no esta, no se quita dos
+    // veces al reconectar.
+    if (!estado.participantes.includes(aviso.idJugador)) {
+      return estado;
+    }
+    return {
+      ...estado,
+      ocupacion: { ...aviso.ocupacion },
+      participantes: estado.participantes.filter((id) => id !== aviso.idJugador),
+    };
+  }
+
+  return estado;
 }
 
 /**
@@ -125,14 +174,17 @@ export function aplicarAviso(estado, aviso) {
  * @param {(estado: object) => void} [opciones.alCambiar] se invoca solo cuando el estado cambia
  * @param {(aviso: object) => void} [opciones.alIniciarPartida] se invoca una sola vez,
  *        cuando el anfitrion arranca el combate de ESTA sala
+ * @param {(aviso: object) => void} [opciones.alCancelar] se invoca una sola vez,
+ *        cuando ESTA sala se cancela (HU-SAL-006)
  * @returns {{estado: () => object, recibir: (aviso: object) => void, conectado: boolean}}
  */
 export function seguirSala(
   estadoInicial,
-  { suscribir, alCambiar = () => {}, alIniciarPartida = () => {} } = {},
+  { suscribir, alCambiar = () => {}, alIniciarPartida = () => {}, alCancelar = () => {} } = {},
 ) {
   let estado = estadoInicial;
   let yaArranco = false;
+  let yaCancelada = false;
 
   const recibir = (aviso) => {
     if (aviso?.tipo === TIPO_PARTIDA_INICIADA && aviso.idSala === estado.idSala) {
@@ -142,6 +194,14 @@ export function seguirSala(
       if (!yaArranco) {
         yaArranco = true;
         alIniciarPartida(aviso);
+      }
+      return;
+    }
+    if (aviso?.tipo === TIPO_CANCELADA && aviso.idSala === estado.idSala) {
+      // Mismo criterio: devolver dos veces al listado no aporta nada.
+      if (!yaCancelada) {
+        yaCancelada = true;
+        alCancelar(aviso);
       }
       return;
     }

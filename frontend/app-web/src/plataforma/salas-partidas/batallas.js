@@ -46,6 +46,37 @@ const CLASE_DE_ESTADO = {
  *          recompensaCreditos: number, incluirHeroeIA: boolean}} sala
  * @returns {string}
  */
+/**
+ * Muestra, una sola vez, por que se volvio al listado — HU-SAL-006.
+ *
+ * Pinta sobre `[data-zona="aviso-sala"]` con el tono del sistema de diseno
+ * (`aviso--info`, `aviso--advertencia`...). Sin aviso, no toca nada.
+ *
+ * @param {ParentNode} raiz
+ * @param {{tono?: string, titulo: string, detalle?: string} | null} aviso
+ * @returns {boolean} true si se mostro algo
+ */
+export function mostrarAvisoDeSala(raiz, aviso) {
+  const zona = raiz.querySelector('[data-zona="aviso-sala"]');
+  if (!zona || !aviso?.titulo) {
+    return false;
+  }
+  const tonos = ['info', 'exito', 'advertencia', 'error'];
+  const tono = tonos.includes(aviso.tono) ? aviso.tono : 'info';
+  zona.className = `aviso aviso--${tono}`;
+  const titulo = zona.querySelector('[data-zona="aviso-sala-titulo"]');
+  const detalle = zona.querySelector('[data-zona="aviso-sala-detalle"]');
+  if (titulo) {
+    titulo.textContent = aviso.titulo;
+  }
+  if (detalle) {
+    detalle.textContent = aviso.detalle ?? '';
+    detalle.hidden = !aviso.detalle;
+  }
+  zona.hidden = false;
+  return true;
+}
+
 export function metaDeLaSala(sala) {
   const base =
     `${sala.ocupacion} de ${sala.maximoParticipantes} jugadores` +
