@@ -39,3 +39,12 @@ interruptor a la vista.
 
 Cuando el PO decida una, se aplica el cambio en el sitio indicado, se
 actualiza esta tabla y se cierra la entrada en la Sprint Review.
+
+**Desde HU-ADM-001 (#481, `admin-parametros`)** los valores configurables de
+D-02, D-16, D-20, D-23 y D-25 tienen su parámetro en el catálogo
+(`GET /api/v1/parametros`): cambiarlos ya no exige tocar variables de entorno
+ni desplegar, queda versionado y auditado. Consumidores conectados por API:
+`moderacion-sanciones` (rango de suspensión y plazo de apelación). Los demás
+(chat, salas, torneos, métricas) siguen leyendo su variable de entorno hasta
+que se conecten al mismo puerto de lectura. Los valores del Charter están en
+el catálogo como **inalterables**.
