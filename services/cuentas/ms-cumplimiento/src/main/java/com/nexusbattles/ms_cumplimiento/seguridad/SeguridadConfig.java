@@ -35,10 +35,17 @@ import org.springframework.security.web.SecurityFilterChain;
 @EnableWebSecurity
 public class SeguridadConfig {
 
+    /**
+     * S4502 (CSRF desactivado) revisado y aceptado: esta API no tiene sesion
+     * ni cookies de navegador — es sin estado y solo acepta un token portador
+     * en la cabecera, que un sitio ajeno no puede adjuntar — asi que no hay
+     * peticion entre sitios que falsificar. Es la misma decision, con la
+     * misma justificacion, que {@code CadenaDeSeguridad} en
+     * shared/libs/plataforma-seguridad para los 20 modulos.
+     */
     @Bean
+    @SuppressWarnings("java:S4502")
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        // Sin CSRF: API sin estado con token portador, sin sesion ni cookies de
-        // navegador que proteger (misma forma que CadenaDeSeguridad).
         http.csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(sesion -> sesion.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .cors(Customizer.withDefaults())
