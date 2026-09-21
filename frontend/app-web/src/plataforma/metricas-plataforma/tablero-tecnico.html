@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tablero tecnico y de moderacion · The Nexus Battles VI</title>
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
+    <link rel="stylesheet" href="./panel-metricas.css" />
+  </head>
+  <body>
+    <div data-cabecera-app></div>
+    <main class="contenedor pila" data-vista="tablero-tecnico">
+      <h1>Tablero tecnico y de moderacion</h1>
+      <p class="t-meta">
+        Metricas tecnicas de los servicios del bloque (HU-MET-004) y de usuarios y moderacion
+        (HU-MET-001). Los umbrales y las alertas los decide el servicio de metricas; esta pantalla
+        no recalcula nada. <a href="./panel-metricas.html">Panel de latencia y consultas</a>.
+      </p>
+
+      <section class="tarjeta pila pila--compacta">
+        <h2>Metricas tecnicas</h2>
+        <div class="fila">
+          <button type="button" class="boton boton--secundario" data-accion="recargar-tecnicas">
+            Recolectar de nuevo
+          </button>
+          <button type="button" class="boton boton--secundario" data-accion="exportar-tecnicas">
+            Exportar informe (texto)
+          </button>
+        </div>
+        <div class="pila pila--compacta" data-zona="tecnicas"></div>
+      </section>
+
+      <section class="tarjeta pila pila--compacta">
+        <h2>Usuarios y moderacion</h2>
+        <form class="fila" data-zona="periodo">
+          <label class="campo">
+            <span class="campo__etiqueta">Desde</span>
+            <input class="campo__control" type="datetime-local" name="desde" />
+          </label>
+          <label class="campo">
+            <span class="campo__etiqueta">Hasta</span>
+            <input class="campo__control" type="datetime-local" name="hasta" />
+          </label>
+          <button type="submit" class="boton boton--primario">Consultar periodo</button>
+          <button type="button" class="boton boton--secundario" data-accion="exportar-moderacion">
+            Exportar (JSON)
+          </button>
+        </form>
+        <div class="pila pila--compacta" data-zona="moderacion"></div>
+      </section>
+    </main>
+
+    <script type="module">
+      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+      import { montarTableroTecnico } from './tablero-tecnico.js';
+
+      if (!exigirSesion()) {
+        throw new Error('sin sesion: redirigiendo al login');
+      }
+      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'cuenta' });
+      montarTableroTecnico(document);
+    </script>
+  </body>
+</html>

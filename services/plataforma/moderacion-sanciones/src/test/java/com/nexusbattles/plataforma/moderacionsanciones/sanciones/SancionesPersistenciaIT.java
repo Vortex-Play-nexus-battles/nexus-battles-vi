@@ -75,5 +75,17 @@ class SancionesPersistenciaIT {
         assertThat(avisos.findByEntregadoEnIsNullOrderByCreadoEnAsc(org.springframework.data.domain.PageRequest.of(0, 10)))
                 .extracting(AvisoPendiente::tipo)
                 .contains("SANCION_ADVERTENCIA", "SANCION_SUSPENSION", "APELACION_REVERTIDA");
+
+        // HU-MET-001: los agregados del periodo salen de lo mismo que se guardo.
+        java.time.OffsetDateTime ahora = java.time.OffsetDateTime.now();
+        MetricasDeModeracion metricas = servicio.metricas(ahora.minusDays(1), ahora.plusDays(1));
+        assertThat(metricas.total()).isGreaterThanOrEqualTo(2);
+        assertThat(metricas.porTipo().get(Sancion.Tipo.ADVERTENCIA)).isGreaterThanOrEqualTo(1);
+        assertThat(metricas.porTipo().get(Sancion.Tipo.SUSPENSION)).isGreaterThanOrEqualTo(1);
+        assertThat(metricas.apelaciones().get(Apelacion.Estado.REVERTIDA)).isGreaterThanOrEqualTo(1);
+        assertThat(metricas.revertidas()).isGreaterThanOrEqualTo(1);
+        assertThat(metricas.moderadoresActivos()).isGreaterThanOrEqualTo(1);
+        assertThat(metricas.maximoEnUnDia()).isGreaterThanOrEqualTo(1);
+        assertThat(servicio.metricas(ahora.minusDays(40), ahora.minusDays(39)).total()).isZero();
     }
 }

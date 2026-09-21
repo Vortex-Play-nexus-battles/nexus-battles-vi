@@ -49,6 +49,11 @@ class SancionesControllerTest {
         CacheManager cacheManager() {
             return new ConcurrentMapCacheManager();
         }
+
+        @Bean
+        java.time.Clock relojDePrueba() {
+            return java.time.Clock.fixed(AHORA.toInstant(), ZoneOffset.UTC);
+        }
     }
 
     private static final UUID JUGADOR = UUID.fromString("11111111-1111-1111-1111-111111111111");
@@ -69,6 +74,24 @@ class SancionesControllerTest {
     private static Sancion advertencia() {
         return new Sancion(UUID.randomUUID(), JUGADOR, Sancion.Tipo.ADVERTENCIA, "Lenguaje ofensivo", null, null,
                 MODERADORA, "MODERADOR", AHORA, null);
+    }
+
+    @Test
+    @DisplayName("las metricas de moderacion son publicas, solo cuentas, y sin periodo cubren 30 dias (HU-MET-001)")
+    void metricas() throws Exception {
+        when(servicio.metricas(any(), any())).thenReturn(MetricasDeModeracion.de(AHORA.minusDays(30), AHORA,
+                List.of(advertencia()), List.of()));
+        mvc.perform(get("/api/v1/sanciones/metricas"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.porTipo.ADVERTENCIA").value(1))
+                .andExpect(jsonPath("$.porTipo.BANEO").value(0))
+                .andExpect(jsonPath("$.porDia[0].emitidas").value(1))
+                .andExpect(jsonPath("$.moderadoresActivos").value(1))
+                .andExpect(jsonPath("$.apelaciones.PENDIENTE").value(0));
+        ArgumentCaptor<OffsetDateTime> desde = ArgumentCaptor.forClass(OffsetDateTime.class);
+        org.mockito.Mockito.verify(servicio).metricas(desde.capture(), eq(AHORA));
+        assertThat(desde.getValue()).isEqualTo(AHORA.minusDays(30));
     }
 
     @Test

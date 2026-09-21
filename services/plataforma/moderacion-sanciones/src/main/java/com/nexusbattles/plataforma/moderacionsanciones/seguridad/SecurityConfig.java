@@ -40,6 +40,10 @@ public class SecurityConfig {
                 // dejar actuar a un jugador, igual que la verificacion de
                 // terminos. Regla traida de develop al integrar.
                 .requestMatchers("/api/v1/sanciones/usuarios/*/activa").permitAll()
+                // Agregados de moderacion (HU-MET-001): solo cuentas, sin
+                // identificadores; los lee metricas-plataforma, que no lleva
+                // credencial de servicio.
+                .requestMatchers("/api/v1/sanciones/metricas").permitAll()
                 .requestMatchers("/api/v1/lista-negra/terminos/**")
                 .hasAnyRole("ADMINISTRADOR", "MODERADOR")
                 // Sanciones y apelaciones (HU-USR-004..007): cualquier usuario

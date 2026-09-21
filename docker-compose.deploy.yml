@@ -170,6 +170,8 @@ services:
       SALUD_NOTIFICACIONES: http://srv-notificaciones:8085/actuator/health
       SALUD_MODERACION: http://srv-moderacion-sanciones:8086/actuator/health
       SALUD_ADMIN_PARAMETROS: http://srv-admin-parametros:8088/actuator/health
+      # HU-MET-001: agregados de moderacion desde moderacion-sanciones.
+      SANCIONES_URL: ${SANCIONES_URL:-http://srv-moderacion-sanciones:8086/api/v1}
 
   srv-admin-parametros:
     <<: *servicio-plataforma

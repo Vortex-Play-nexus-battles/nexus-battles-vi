@@ -26,3 +26,12 @@ spring:
         # En Jackson 3 esta opción dejó de estar en DeserializationFeature y
         # pasó a DateTimeFeature, de ahí la ruta 'datatype.datetime'.
         adjust-dates-to-context-time-zone: false
+
+# Regla 3 de plataforma: todo servicio expone salud Y metricas. Hasta el
+# 2026-09-21 este servicio solo exponia health (valor por omision de Actuator)
+# y el tablero tecnico de HU-MET-004 lo veia como brecha de observabilidad.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus

@@ -39,5 +39,7 @@ docs/
 !services/plataforma/notificaciones/build/libs/*.jar
 # M13: torneos.
 !services/plataforma/torneos/build/libs/*.jar
+# M16A: metricas de plataforma.
+!services/plataforma/metricas-plataforma/build/libs/*.jar
 
 # ms-identidad es Maven: su jar vive en `target/`, que no esta excluido.
