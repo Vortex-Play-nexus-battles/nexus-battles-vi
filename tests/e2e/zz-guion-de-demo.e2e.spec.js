@@ -332,11 +332,15 @@ test.describe('Guion de demostración del Sprint 2', () => {
     await expect
       .poll(async () => (await saldoDe(api, ganador)).reservado, { timeout: 60000 })
       .toBe(saldosAntes[ganador.apodo].reservado);
+    // HU-JUE-012: ademas de la apuesta, 2 creditos al ganador y 1 al perdedor por jugar.
+    await expect
+      .poll(async () => (await saldoDe(api, ganador)).bruto, { timeout: 60000 })
+      .toBe(saldosAntes[ganador.apodo].bruto + APUESTA + 2);
     const delGanador = await saldoDe(api, ganador);
     const delPerdedor = await saldoDe(api, perdedor);
-    expect(delGanador.bruto).toBe(saldosAntes[ganador.apodo].bruto + APUESTA);
-    expect(delPerdedor.bruto).toBe(saldosAntes[perdedor.apodo].bruto - APUESTA);
-    anotar(11, 'Apuesta liquidada (HU-JUE-014)', {
+    expect(delGanador.bruto).toBe(saldosAntes[ganador.apodo].bruto + APUESTA + 2);
+    expect(delPerdedor.bruto).toBe(saldosAntes[perdedor.apodo].bruto - APUESTA + 1);
+    anotar(11, 'Apuesta liquidada (HU-JUE-014) + recompensa por jugar (HU-JUE-012)', {
       ganador: ganador.apodo, perdedor: perdedor.apodo,
       antes: { [ganador.apodo]: saldosAntes[ganador.apodo], [perdedor.apodo]: saldosAntes[perdedor.apodo] },
       despues: { [ganador.apodo]: delGanador, [perdedor.apodo]: delPerdedor },

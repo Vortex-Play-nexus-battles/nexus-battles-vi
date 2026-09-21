@@ -96,9 +96,25 @@ public class ConfiguracionDelServicio {
     public com.nexusbattles.plataforma.salaspartidas.aplicacion.EjecutarAccion ejecutarAccion(
             RepositorioDePartidas partidas, CanalDePartida canal,
             com.nexusbattles.plataforma.salaspartidas.dominio.MotorDeCombate motor,
-            com.nexusbattles.plataforma.salaspartidas.aplicacion.LiquidarApuesta apuesta) {
+            com.nexusbattles.plataforma.salaspartidas.aplicacion.LiquidarApuesta apuesta,
+            com.nexusbattles.plataforma.salaspartidas.aplicacion.AcreditarRecompensa recompensa) {
         return new com.nexusbattles.plataforma.salaspartidas.aplicacion.EjecutarAccion(
-                partidas, canal, motor, apuesta);
+                partidas, canal, motor, apuesta, recompensa);
+    }
+
+    /**
+     * HU-JUE-012: al terminar, el resultado se informa al libro para que
+     * acredite la recompensa por jugar. La sancion activa de cada humano se
+     * consulta al mismo servicio que silencia el chat (D-14).
+     */
+    @Bean
+    public com.nexusbattles.plataforma.salaspartidas.aplicacion.AcreditarRecompensa acreditarRecompensa(
+            RepositorioDeSalas salas,
+            com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeRecompensas recompensas,
+            com.nexusbattles.plataforma.salaspartidas.aplicacion.AcreditadorDePartidas libro,
+            com.nexusbattles.plataforma.salaspartidas.chat.SancionesDelJugador sanciones) {
+        return new com.nexusbattles.plataforma.salaspartidas.aplicacion.AcreditarRecompensa(
+                salas, recompensas, libro, sanciones, Clock.systemUTC());
     }
 
     /**
@@ -123,11 +139,13 @@ public class ConfiguracionDelServicio {
     @Bean
     public com.nexusbattles.plataforma.salaspartidas.aplicacion.ReintentarLiquidaciones reintentarLiquidaciones(
             com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeLiquidaciones liquidaciones,
+            com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeRecompensas recompensas,
             RepositorioDePartidas partidas,
             com.nexusbattles.plataforma.salaspartidas.aplicacion.LiquidarApuesta liquidar,
+            com.nexusbattles.plataforma.salaspartidas.aplicacion.AcreditarRecompensa acreditar,
             CanalDePartida canal) {
         return new com.nexusbattles.plataforma.salaspartidas.aplicacion.ReintentarLiquidaciones(
-                liquidaciones, partidas, liquidar, canal);
+                liquidaciones, recompensas, partidas, liquidar, acreditar, canal);
     }
 
     /**
@@ -135,9 +153,9 @@ public class ConfiguracionDelServicio {
      * {@code contracts/openapi/creditos.yaml}) — HU-JUE-014.
      *
      * <p>Propio, como los demas. Lleva la credencial de servicio (ADR-005)
-     * cuando esta configurada, igual que el de inventario: ms-finanzas tiene
-     * hoy {@code /creditos/**} abierto, pero el dia que lo cierre a
-     * {@code ROLE_SERVICIO} no habra que tocar nada aqui.
+     * cuando esta configurada, igual que el de inventario: ms-finanzas cierra
+     * {@code /creditos/**} y {@code /partidas/**} a {@code ROLE_SERVICIO}
+     * (#455), asi que sin credencial el libro responde 401.
      */
     @Bean
     public CreditosDelJugador creditosDelJugador(
@@ -149,6 +167,25 @@ public class ConfiguracionDelServicio {
         RestClient.Builder constructor = RestClient.builder().requestFactory(fabricaConTiempos);
         credencial.ifAvailable(constructor::requestInterceptor);
         return new com.nexusbattles.plataforma.salaspartidas.integracion.ClienteCreditos(
+                constructor.build(), urlDelLibro, corta);
+    }
+
+    /**
+     * Cliente hacia el mismo libro para informar el resultado de la partida
+     * (HU-JUE-012). Comparte URL, credencial y corta circuitos con
+     * {@link #creditosDelJugador}: es el mismo servicio, y si esta caido lo
+     * esta para las dos cosas.
+     */
+    @Bean
+    public com.nexusbattles.plataforma.salaspartidas.aplicacion.AcreditadorDePartidas acreditadorDePartidas(
+            @org.springframework.beans.factory.annotation.Value("${salas.creditos.url}") String urlDelLibro,
+            org.springframework.beans.factory.ObjectProvider<
+                    com.nexusbattles.comun.seguridad.servicio.InterceptorDePortadorDeServicio> credencial,
+            @Qualifier("cortaCreditos") CortaCircuitos corta,
+            ClientHttpRequestFactory fabricaConTiempos) {
+        RestClient.Builder constructor = RestClient.builder().requestFactory(fabricaConTiempos);
+        credencial.ifAvailable(constructor::requestInterceptor);
+        return new com.nexusbattles.plataforma.salaspartidas.integracion.ClienteAcreditacionDePartidas(
                 constructor.build(), urlDelLibro, corta);
     }
 

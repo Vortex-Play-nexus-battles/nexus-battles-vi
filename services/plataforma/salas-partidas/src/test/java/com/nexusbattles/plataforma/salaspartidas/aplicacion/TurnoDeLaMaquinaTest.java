@@ -90,7 +90,7 @@ class TurnoDeLaMaquinaTest {
     }
 
     private EjecutarAccion casoDeUso(MotorDeMentira motor) {
-        return new EjecutarAccion(partidas, canal, motor, LiquidacionSinApuesta.nueva());
+        return new EjecutarAccion(partidas, canal, motor, LiquidacionSinApuesta.nueva(), RecompensaSinLibro.nueva());
     }
 
     // =====================================================================
@@ -225,7 +225,7 @@ class TurnoDeLaMaquinaTest {
             return new ResolucionDelMotor("CAUSAR_DANO", 15, 14);
         };
 
-        Partida despues = new EjecutarAccion(partidas, canal, motor, LiquidacionSinApuesta.nueva())
+        Partida despues = new EjecutarAccion(partidas, canal, motor, LiquidacionSinApuesta.nueva(), RecompensaSinLibro.nueva())
                 .ejecutar(partida.id(), ANA, null, null);
 
         assertAll(

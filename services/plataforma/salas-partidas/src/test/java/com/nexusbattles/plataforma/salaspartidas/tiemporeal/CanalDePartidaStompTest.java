@@ -330,4 +330,30 @@ class CanalDePartidaStompTest {
                 () -> assertTrue(!json.contains("reparto"), "reparto es opcional en el contrato y aqui se omite: " + json),
                 () -> assertTrue(json.contains("\"ganadores\":[\"" + ANA + "\"]")));
     }
+
+    /* HU-JUE-012: el fin lleva la recompensa por jugar, aparte del reparto, con la forma del AsyncAPI 1.4.0. */
+
+    @Test
+    @DisplayName("partida.finalizada lleva la recompensa por jugar con los nombres del contrato, y el cofre solo si lo hubo")
+    void elFinLlevaLaRecompensa() throws Exception {
+        Partida partida = partidaDe(salaDeEjemplo());
+        partida.aplicarDano(BRUNO, 1_000);
+        partida.terminarSiSoloQuedaUno();
+        UUID cofre = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
+
+        canal.anunciarFin(partida, List.of(), List.of(
+                new com.nexusbattles.plataforma.salaspartidas.dominio.CreditoPorPartida(ANA, 2, true, null),
+                new com.nexusbattles.plataforma.salaspartidas.dominio.CreditoPorPartida(BRUNO, 1, false, cofre)));
+
+        ArgumentCaptor<Object> cuerpo = ArgumentCaptor.forClass(Object.class);
+        verify(mensajeria).convertAndSend(org.mockito.ArgumentMatchers.anyString(), cuerpo.capture());
+        String json = tools.jackson.databind.json.JsonMapper.builder().build().writeValueAsString(cuerpo.getValue());
+
+        assertAll(
+                () -> assertTrue(!json.contains("reparto"), "sin apuesta no viaja reparto: " + json),
+                () -> assertTrue(json.contains("\"recompensa\":[{\"idJugador\":\"" + ANA + "\",\"creditos\":2,\"ganador\":true}"),
+                        "sin cofre no viaja la clave cofre: " + json),
+                () -> assertTrue(json.contains("{\"idJugador\":\"" + BRUNO + "\",\"creditos\":1,\"ganador\":false,\"cofre\":\"" + cofre + "\"}"),
+                        "el cofre viaja cuando lo hubo: " + json));
+    }
 }

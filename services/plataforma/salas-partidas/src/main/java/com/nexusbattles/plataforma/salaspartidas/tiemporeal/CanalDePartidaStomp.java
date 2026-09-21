@@ -59,8 +59,15 @@ class CanalDePartidaStomp implements CanalDePartida {
     @Override
     public void anunciarFin(Partida partida,
                             java.util.List<com.nexusbattles.plataforma.salaspartidas.dominio.RepartoDeCreditos> reparto) {
+        anunciarFin(partida, reparto, java.util.List.of());
+    }
+
+    @Override
+    public void anunciarFin(Partida partida,
+                            java.util.List<com.nexusbattles.plataforma.salaspartidas.dominio.RepartoDeCreditos> reparto,
+                            java.util.List<com.nexusbattles.plataforma.salaspartidas.dominio.CreditoPorPartida> recompensa) {
         mensajeria.convertAndSend(destinoDe(partida.id()),
-                AvisoDePartidaFinalizada.de(partida, reparto));
+                AvisoDePartidaFinalizada.de(partida, reparto, recompensa));
     }
 
     static String destinoDe(UUID idPartida) {

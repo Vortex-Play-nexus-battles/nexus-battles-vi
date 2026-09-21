@@ -34,7 +34,7 @@ asyncapi: 3.0.0
 
 info:
   title: Nexus Battles VI — Canal de salas y partidas
-  version: 1.3.0
+  version: 1.4.0
   description: |
     Canal WebSocket + STOMP del modulo `salas-partidas`.
 
@@ -476,6 +476,15 @@ components:
         # creditos no respondio al terminar (CA-06). En el segundo, el mismo
         # mensaje se vuelve a emitir CON reparto cuando la liquidacion se
         # cierra; la interfaz no debe tratarlo como duplicado.
+        #
+        # `recompensa` (1.4.0, HU-JUE-012) es OPCIONAL y es la otra cosa que el
+        # PDF pide en este mensaje: los creditos por JUGAR (2 al ganador de un
+        # uno contra uno, 4 a cada ganador de una grupal, 1 por participar) y
+        # el cofre si toco uno, tal cual los acredito ms-finanzas. Solo humanos
+        # no sancionados. Se OMITE si el libro no respondio (queda pendiente y
+        # el mensaje vuelve a salir con ella) y si ya se anuncio antes. Es
+        # independiente de `reparto`: puede venir una, la otra, las dos o
+        # ninguna, y la interfaz las suma por separado.
         required: [tipo, idPartida, ganadores]
         properties:
           tipo: { const: 'partida.finalizada' }
@@ -514,6 +523,25 @@ components:
                     id: { type: string }
                     nombre: { type: string }
                     rareza: { type: string }
+          recompensa:
+            type: array
+            description: Creditos por jugar acreditados por el libro (HU-JUE-012, 1.4.0).
+            items:
+              type: object
+              required: [idJugador, creditos, ganador]
+              properties:
+                idJugador: { type: string, format: uuid }
+                creditos:
+                  type: integer
+                  minimum: 0
+                  description: 2, 4 o 1. Nunca negativo.
+                ganador:
+                  type: boolean
+                  description: Si los recibio por ganar (true) o por participar (false).
+                cofre:
+                  type: string
+                  format: uuid
+                  description: Cofre entregado con estos creditos (RF-JUE-013), si toco uno.
 
     EjecutarAccion:
       name: ejecutarAccion

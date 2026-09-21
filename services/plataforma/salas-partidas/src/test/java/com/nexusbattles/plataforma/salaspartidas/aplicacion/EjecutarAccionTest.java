@@ -91,7 +91,7 @@ class EjecutarAccionTest {
     }
 
     private EjecutarAccion casoDeUso(MotorDeMentira motor) {
-        return new EjecutarAccion(partidas, canal, motor, LiquidacionSinApuesta.nueva());
+        return new EjecutarAccion(partidas, canal, motor, LiquidacionSinApuesta.nueva(), RecompensaSinLibro.nueva());
     }
 
     @Test
@@ -282,11 +282,16 @@ class EjecutarAccionTest {
         private final RepositorioDeSalasEnMemoria salas = new RepositorioDeSalasEnMemoria();
         private final CreditosEnMemoria libro = new CreditosEnMemoria().conSaldo(ANA, 1_000).conSaldo(BRUNO, 1_000);
 
+        private final AcreditadorEnMemoria libroDeRecompensas = new AcreditadorEnMemoria();
+
         private EjecutarAccion casoDeUsoConApuesta(MotorDeMentira motor) {
             LiquidarApuesta liquidar = new LiquidarApuesta(salas, new RepositorioDeLiquidacionesEnMemoria(), libro,
                     java.time.Clock.fixed(AHORA, java.time.ZoneOffset.UTC),
                     LiquidarApuesta.SiGanaLaMaquina.LIBERAR);
-            return new EjecutarAccion(partidas, canal, motor, liquidar);
+            AcreditarRecompensa recompensa = new AcreditarRecompensa(salas, new RepositorioDeRecompensasEnMemoria(),
+                    libroDeRecompensas, new SancionesEnMemoria(),
+                    java.time.Clock.fixed(AHORA, java.time.ZoneOffset.UTC));
+            return new EjecutarAccion(partidas, canal, motor, liquidar, recompensa);
         }
 
         /** Ana y Bruno apuestan 100; Bruno tiene 10 de vida: cae al primer golpe. */
@@ -316,6 +321,38 @@ class EjecutarAccionTest {
                             canal.repartos.get(0)),
                     () -> assertEquals(1_100, libro.saldoDe(ANA)),
                     () -> assertEquals(900, libro.saldoDe(BRUNO)));
+        }
+
+        @Test
+        @DisplayName("HU-JUE-012 CA-03: con apuesta, el mismo fin lleva ademas la recompensa por jugar, aparte del reparto")
+        void elFinLlevaLaRecompensa() {
+            Partida partida = partidaApostada();
+
+            casoDeUsoConApuesta(MotorDeMentira.queHace(50)).ejecutar(partida.id(), ANA, BRUNO, "ATAQUE_BASICO");
+
+            assertAll(
+                    () -> assertEquals(1, libroDeRecompensas.informes.size(), "se informo una vez"),
+                    () -> assertEquals(partida.id(), libroDeRecompensas.informes.get(0).idPartida()),
+                    () -> assertEquals(List.of(ANA), libroDeRecompensas.informes.get(0).ganadores()),
+                    () -> assertEquals(List.of(
+                                    new com.nexusbattles.plataforma.salaspartidas.dominio.CreditoPorPartida(ANA, 4, true, null),
+                                    new com.nexusbattles.plataforma.salaspartidas.dominio.CreditoPorPartida(BRUNO, 1, false, null)),
+                            canal.recompensas.get(0), "hasta seis es grupal: 4 al ganador"),
+                    () -> assertEquals(2, canal.repartos.get(0).size(), "y el reparto de la apuesta sigue ahi"));
+        }
+
+        @Test
+        @DisplayName("HU-JUE-012 CA-05: si solo falla la recompensa, la apuesta se liquida igual y el fin sale sin recompensa")
+        void soloLaRecompensaCaida() {
+            Partida partida = partidaApostada();
+            libroDeRecompensas.caido = true;
+
+            casoDeUsoConApuesta(MotorDeMentira.queHace(50)).ejecutar(partida.id(), ANA, BRUNO, "ATAQUE_BASICO");
+
+            assertAll(
+                    () -> assertEquals(1_100, libro.saldoDe(ANA), "la apuesta se liquido"),
+                    () -> assertEquals(2, canal.repartos.get(0).size()),
+                    () -> assertTrue(canal.recompensas.get(0).isEmpty(), "la recompensa queda pendiente"));
         }
 
         @Test
