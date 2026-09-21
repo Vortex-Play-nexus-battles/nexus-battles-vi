@@ -131,6 +131,16 @@
         </label>
       </div>
 
+      <!--
+        HU-SAL-006: por que se volvio al listado (saliste, cancelaste, o el
+        anfitrion cancelo y te devolvieron). Lo deja la sala de espera en
+        sessionStorage y se muestra una sola vez.
+      -->
+      <div class="aviso" data-zona="aviso-sala" role="status" hidden>
+        <p class="aviso__titulo" data-zona="aviso-sala-titulo"></p>
+        <p class="t-cuerpo" data-zona="aviso-sala-detalle"></p>
+      </div>
+
       <!-- RNF-USA-003: cargando, vacio y error comparten esta zona. -->
       <div class="estado-vista" data-zona="estado" role="status" aria-live="polite"></div>
 
@@ -150,9 +160,10 @@
     <button class="chatbot-flotante" type="button" aria-label="Abrir el asistente">IA</button>
 
     <script type="module">
-      import { montarBatallas } from './batallas.js';
+      import { montarBatallas, mostrarAvisoDeSala } from './batallas.js';
       import { urlDelCanal } from './canal-sala.js';
       import { baseDeApi } from './cliente-salas.js';
+      import { recogerAvisoDelListado } from './sala-de-espera.js';
       // Canal del servicio: `cliente-chat.js` pone el JWT en el CONNECT sobre el
       // transporte STOMP comun de `src/comun/transporte-stomp.js` (#351).
       import { conectarChat } from './cliente-chat.js';
@@ -164,6 +175,9 @@
       // Cabecera: solo lo que el login dejo de verdad en la sesion.
       document.querySelector('[data-zona="apodo"]').textContent =
         sessionStorage.getItem('nexus.apodoActual') ?? '';
+
+      // HU-SAL-006: si se viene de salir o de una cancelacion, se dice.
+      mostrarAvisoDeSala(document, recogerAvisoDelListado(sessionStorage));
 
       montarBatallas(document.getElementById('vista-batallas'), {
         conectarCanal: () =>

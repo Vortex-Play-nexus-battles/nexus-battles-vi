@@ -12,6 +12,7 @@ import { jest } from '@jest/globals';
 
 import {
   montarBatallas,
+  mostrarAvisoDeSala,
   fichaEnVivo,
   metaDeLaSala,
   subtituloDeSalas,
@@ -427,5 +428,51 @@ describe('canal en tiempo real en el listado', () => {
     await asentar();
 
     expect(raiz.querySelector('[data-zona="canal"]').dataset.estado).toBe('sin-sesion');
+  });
+});
+
+// ===========================================================================
+// HU-SAL-006 — por que se volvio al listado
+// ===========================================================================
+
+describe('mostrarAvisoDeSala', () => {
+  const ZONA = `
+    <div class="aviso" data-zona="aviso-sala" hidden>
+      <p class="aviso__titulo" data-zona="aviso-sala-titulo"></p>
+      <p class="t-cuerpo" data-zona="aviso-sala-detalle"></p>
+    </div>
+  `;
+
+  test('pinta titulo, detalle y tono, y destapa la zona', () => {
+    document.body.innerHTML = ZONA;
+
+    const mostrado = mostrarAvisoDeSala(document, {
+      tono: 'advertencia',
+      titulo: 'La sala se cerro',
+      detalle: 'El anfitrion cancelo la sala. Se te devolvieron 150 creditos.',
+    });
+
+    const zona = document.querySelector('[data-zona="aviso-sala"]');
+    expect(mostrado).toBe(true);
+    expect(zona.hidden).toBe(false);
+    expect(zona.className).toBe('aviso aviso--advertencia');
+    expect(zona.querySelector('[data-zona="aviso-sala-titulo"]').textContent).toBe(
+      'La sala se cerro',
+    );
+    expect(zona.querySelector('[data-zona="aviso-sala-detalle"]').textContent).toContain(
+      '150 creditos',
+    );
+  });
+
+  test('sin aviso no toca nada; sin detalle lo esconde; un tono desconocido cae a info', () => {
+    document.body.innerHTML = ZONA;
+
+    expect(mostrarAvisoDeSala(document, null)).toBe(false);
+    expect(document.querySelector('[data-zona="aviso-sala"]').hidden).toBe(true);
+
+    mostrarAvisoDeSala(document, { tono: 'raro', titulo: 'Saliste de la sala.' });
+    const zona = document.querySelector('[data-zona="aviso-sala"]');
+    expect(zona.className).toBe('aviso aviso--info');
+    expect(zona.querySelector('[data-zona="aviso-sala-detalle"]').hidden).toBe(true);
   });
 });

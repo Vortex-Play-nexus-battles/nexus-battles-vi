@@ -149,6 +149,74 @@ export async function ingresarASala(idSala, { fetchImpl = fetchWithHttpErrorInte
 }
 
 /**
+ * Trae una sala por su identificador — `GET /salas/{idSala}`.
+ *
+ * La vista de espera lo necesita para saber quien es el anfitrion (y por
+ * tanto si ofrece «Cancelar sala» o «Salir de la sala», HU-SAL-006) y cuanta
+ * gente hay dentro. Al anfitrion le llega ademas el codigo de invitacion.
+ *
+ * @param {string} idSala
+ * @param {{fetchImpl?: Function}} [opciones] inyeccion para las pruebas
+ * @returns {Promise<object>} segun el esquema Sala del contrato
+ * @throws {ErrorDeApi} 404 si no existe
+ */
+export async function obtenerSala(idSala, { fetchImpl = fetchWithHttpErrorInterceptor } = {}) {
+  const respuesta = await fetchImpl(ruta(`/${encodeURIComponent(idSala)}`));
+
+  if (respuesta.ok) {
+    return respuesta.json();
+  }
+
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+}
+
+/**
+ * Sale de una sala antes de que empiece — HU-SAL-006, operacion
+ * `abandonarSala` del contrato (`DELETE /salas/{idSala}/participantes`).
+ *
+ * Quien sale es quien firma el token: no viaja ningun identificador. Si la
+ * sala tenia recompensa, el servidor devuelve la reserva (HU-JUE-014).
+ *
+ * @param {string} idSala
+ * @param {{fetchImpl?: Function}} [opciones] inyeccion para las pruebas
+ * @returns {Promise<void>}
+ * @throws {ErrorDeApi} 404 no existe · 409 no estas dentro, eres el anfitrion o ya empezo
+ */
+export async function abandonarSala(idSala, { fetchImpl = fetchWithHttpErrorInterceptor } = {}) {
+  const respuesta = await fetchImpl(ruta(`/${encodeURIComponent(idSala)}/participantes`), {
+    method: 'DELETE',
+  });
+
+  if (respuesta.ok) {
+    return;
+  }
+
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+}
+
+/**
+ * Cancela una sala — HU-SAL-006, operacion `cancelarSala` del contrato
+ * (`DELETE /salas/{idSala}`). Solo el anfitrion, y solo antes de empezar; el
+ * servidor lo comprueba con el token.
+ *
+ * @param {string} idSala
+ * @param {{fetchImpl?: Function}} [opciones] inyeccion para las pruebas
+ * @returns {Promise<void>}
+ * @throws {ErrorDeApi} 403 no eres el anfitrion · 404 no existe · 409 ya empezo o ya no esta activa
+ */
+export async function cancelarSala(idSala, { fetchImpl = fetchWithHttpErrorInterceptor } = {}) {
+  const respuesta = await fetchImpl(ruta(`/${encodeURIComponent(idSala)}`), {
+    method: 'DELETE',
+  });
+
+  if (respuesta.ok) {
+    return;
+  }
+
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+}
+
+/**
  * Verifica el heroe antes de intentar entrar — HU-SAL-003, RF-JUE-003.
  *
  * Habla con `GET /salas/{idSala}/verificacion-heroe`, que ya esta publicado en
