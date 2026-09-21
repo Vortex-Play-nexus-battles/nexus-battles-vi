@@ -293,15 +293,27 @@ test.describe('Sala de batalla de punta a punta', () => {
   async function conSocketVigilado(page) {
     await page.addInitScript(() => {
       globalThis.__sockets = [];
+      globalThis.__frames = [];
       const Original = globalThis.WebSocket;
       globalThis.WebSocket = function (...args) {
         const socket = new Original(...args);
         globalThis.__sockets.push(socket);
+        // Todo lo que entra por el canal, tal cual. Si el servidor publica el
+        // aviso y la barra no se mueve, la pregunta es si el frame llego y no
+        // se aplico, o si no llego: sin esto no hay forma de distinguirlo.
+        socket.addEventListener('message', (e) =>
+          globalThis.__frames.push(String(e.data).slice(0, 400)),
+        );
         return socket;
       };
       Object.assign(globalThis.WebSocket, Original);
       globalThis.WebSocket.prototype = Original.prototype;
     });
+  }
+
+  /** @returns {Promise<string[]>} frames STOMP que recibio el navegador */
+  function framesRecibidos(page) {
+    return page.evaluate(() => globalThis.__frames ?? []);
   }
 
   /** @returns {Promise<number[]>} readyState de cada socket abierto (1 = OPEN) */
@@ -424,6 +436,8 @@ test.describe('Sala de batalla de punta a punta', () => {
         `${fallo.message}\n\n--- estado al fallar ---\n` +
         `sockets (1 = OPEN): ${JSON.stringify(await estadoDeSockets(page))}\n` +
         `barras: ${JSON.stringify(await barras(page))}\n` +
+        `frames STOMP recibidos por el navegador:\n` +
+        `${(await framesRecibidos(page)).join('\n---\n') || '(ninguno)'}\n` +
         `consola del navegador:\n${dicho.join('\n') || '(nada)'}`;
       throw fallo;
     }
