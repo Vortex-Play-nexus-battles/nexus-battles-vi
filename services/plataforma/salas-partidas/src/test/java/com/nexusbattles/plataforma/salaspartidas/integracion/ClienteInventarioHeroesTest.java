@@ -42,7 +42,13 @@ class ClienteInventarioHeroesTest {
     private static final String PRODUCTO_DEL_HEROE = PRODUCTOS + "/api/v1/productos/p-1";
     /** Y de aqui la defensa del prototipo, que es lo que el motor compara. */
     private static final String HEROES = "http://heroes:8080";
-    private static final String FICHA_DEL_PROTOTIPO = HEROES + "/api/v1/heroes/Guerrero Tanque";
+    /**
+     * Con {@code %20}, no con un espacio crudo: los nombres de prototipo llevan
+     * espacios y {@code RestClient} los codifica asi al expandir la plantilla.
+     * Es lo correcto —{@code URLEncoder} pondria un {@code +}, que el catalogo
+     * no reconoce— y es lo mismo que hace inventario.
+     */
+    private static final String FICHA_DEL_PROTOTIPO = HEROES + "/api/v1/heroes/Guerrero%20Tanque";
 
     private static final JugadorAutenticado JUGADOR =
             new JugadorAutenticado(UUID.fromString("11111111-1111-1111-1111-111111111111"), "vael");
