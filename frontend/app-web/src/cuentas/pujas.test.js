@@ -19,7 +19,7 @@ import {
   calcularEstadoTopesConcurrencia,
   ControladorSubastas,
   SUBASTAS_INICIALES,
-  HEROES_BASE
+  HEROES_BASE,
 } from './pujas.js';
 
 describe('HU-SUB-004 - Reglas de Negocio de Subastas y Pujas', () => {
@@ -40,7 +40,7 @@ describe('HU-SUB-004 - Reglas de Negocio de Subastas y Pujas', () => {
       const subastas = [
         { id: '1', retenido: 1000 },
         { id: '2', retenido: 500 },
-        { id: '3', retenido: 0 }
+        { id: '3', retenido: 0 },
       ];
       expect(calcularSaldoRetenido(subastas)).toBe(1500);
       expect(calcularSaldoLibre(6000, subastas)).toBe(4500);
@@ -57,7 +57,7 @@ describe('HU-SUB-004 - Reglas de Negocio de Subastas y Pujas', () => {
       id: 'sub-1',
       oferta: 1000,
       retenido: 1000,
-      segundosRestantes: 60
+      segundosRestantes: 60,
     };
 
     test('acepta una puja que cumple oferta + incremento y saldo suficiente', () => {
@@ -136,7 +136,7 @@ describe('HU-SUB-004 - Reglas de Negocio de Subastas y Pujas', () => {
       expect(comp.comparaciones).toEqual([
         { stat: 'Poder', actual: 100, nuevo: 110, delta: 10 },
         { stat: 'Vida', actual: 500, nuevo: 550, delta: 50 },
-        { stat: 'Defensa', actual: 30, nuevo: 35, delta: 5 }
+        { stat: 'Defensa', actual: 30, nuevo: 35, delta: 5 },
       ]);
     });
   });
@@ -152,7 +152,7 @@ describe('ControladorSubastas - Interacción y Flujo DOM', () => {
     controlador = new ControladorSubastas({
       contenedor,
       subastas: SUBASTAS_INICIALES,
-      heroes: HEROES_BASE
+      heroes: HEROES_BASE,
     });
     controlador.render();
   });
@@ -488,28 +488,18 @@ describe('ControladorSubastas - Interacción y Flujo DOM', () => {
 
 describe('HU-SUB-004 - Pruebas Unitarias de Cálculos Nuevos', () => {
   test('calcularSumaTopesAuto suma correctamente los topes de pujas automáticas', () => {
-    const subastas = [
-      { autoLimite: 2000 },
-      { autoLimite: 1500 },
-      { autoLimite: 0 }
-    ];
+    const subastas = [{ autoLimite: 2000 }, { autoLimite: 1500 }, { autoLimite: 0 }];
     expect(calcularSumaTopesAuto(subastas)).toBe(3500);
   });
 
   test('verificarSobreCompromiso detecta sobre-compromiso correctamente', () => {
-    const subastasExcedidas = [
-      { autoLimite: 4000 },
-      { autoLimite: 3000 }
-    ];
+    const subastasExcedidas = [{ autoLimite: 4000 }, { autoLimite: 3000 }];
     const res1 = verificarSobreCompromiso(6000, subastasExcedidas);
     expect(res1.sobreCompromiso).toBe(true);
     expect(res1.sumaTopes).toBe(7000);
     expect(res1.faltante).toBe(1000);
 
-    const subastasOk = [
-      { autoLimite: 2000 },
-      { autoLimite: 1500 }
-    ];
+    const subastasOk = [{ autoLimite: 2000 }, { autoLimite: 1500 }];
     const res2 = verificarSobreCompromiso(6000, subastasOk);
     expect(res2.sobreCompromiso).toBe(false);
     expect(res2.faltante).toBe(0);
@@ -519,7 +509,7 @@ describe('HU-SUB-004 - Pruebas Unitarias de Cálculos Nuevos', () => {
     const eventos = [
       { montoCobrado: 1350, montoDevuelto: 0 },
       { montoCobrado: 0, montoDevuelto: 880 },
-      { montoCobrado: 0, montoDevuelto: 2400 }
+      { montoCobrado: 0, montoDevuelto: 2400 },
     ];
     const balance = calcularBalanceNetoCierre(eventos, 6200, 720);
     expect(balance.cobrado).toBe(1350);
@@ -540,7 +530,7 @@ describe('HU-SUB-004 - Pruebas Unitarias de Cálculos Nuevos', () => {
     const evento = {
       nombre: 'Amuleto de Brasa Eterna',
       montoFinal: 2450,
-      topePropio: 2400
+      topePropio: 2400,
     };
     const consejo = generarConsejoTactico(evento, 4130);
     expect(consejo.diferencia).toBe(50);
@@ -552,14 +542,20 @@ describe('HU-SUB-004 - Pruebas Unitarias de Cálculos Nuevos', () => {
   test('calcularEstadoTopesConcurrencia genera alertas al superar el 80%', () => {
     // 8 de 10 subastas = 80%
     const subastas8 = Array.from({ length: 8 }, (_, i) => ({ id: `s-${i}`, ganando: false }));
-    const estado1 = calcularEstadoTopesConcurrencia(subastas8, { maxSubastasSimultaneas: 10, maxPujasActivas: 50 });
+    const estado1 = calcularEstadoTopesConcurrencia(subastas8, {
+      maxSubastasSimultaneas: 10,
+      maxPujasActivas: 50,
+    });
     expect(estado1.subastas.alerta).toBe(true);
     expect(estado1.subastas.topeAlcanzado).toBe(false);
     expect(estado1.subastas.pista).toContain('Aviso de tope (80%)');
 
     // 10 de 10 subastas = 100%
     const subastas10 = Array.from({ length: 10 }, (_, i) => ({ id: `s-${i}`, ganando: false }));
-    const estado2 = calcularEstadoTopesConcurrencia(subastas10, { maxSubastasSimultaneas: 10, maxPujasActivas: 50 });
+    const estado2 = calcularEstadoTopesConcurrencia(subastas10, {
+      maxSubastasSimultaneas: 10,
+      maxPujasActivas: 50,
+    });
     expect(estado2.subastas.topeAlcanzado).toBe(true);
     expect(estado2.subastas.pista).toContain('Has llegado al tope');
   });
@@ -574,7 +570,7 @@ describe('HU-SUB-004 - Pruebas Unitarias de Cálculos Nuevos', () => {
       controlador = new ControladorSubastas({
         contenedor,
         subastas: SUBASTAS_INICIALES,
-        heroes: HEROES_BASE
+        heroes: HEROES_BASE,
       });
       controlador.render();
     });
@@ -656,5 +652,79 @@ describe('HU-SUB-004 - Pruebas Unitarias de Cálculos Nuevos', () => {
       expect(alertaExplorar.textContent).toBe('');
       alertaSpy.mockRestore();
     });
+  });
+});
+
+describe('Accesibilidad del diálogo de compra (WCAG 2.1 AA)', () => {
+  let contenedorA11y;
+  let ctrlA11y;
+
+  beforeEach(() => {
+    contenedorA11y = document.createElement('div');
+    document.body.appendChild(contenedorA11y);
+    ctrlA11y = new ControladorSubastas({ contenedor: contenedorA11y });
+    ctrlA11y.iniciar();
+    ctrlA11y.abrirDetalle('hacha-obsidiana');
+  });
+
+  afterEach(() => {
+    ctrlA11y.destruir();
+    contenedorA11y.remove();
+  });
+
+  /**
+   * El marcado declaraba aria-modal="true" sin implementarlo. En una pantalla
+   * donde el siguiente botón gasta créditos, que el foco se quede detrás del
+   * overlay significa poder confirmar una compra sin haber llegado a oír de qué.
+   */
+  test('al abrirse, el foco entra en el diálogo', () => {
+    ctrlA11y.solicitarCompraInmediata();
+
+    const modal = contenedorA11y.querySelector('#modal-compra-inmediata');
+    expect(modal).not.toBeNull();
+    expect(modal.contains(document.activeElement)).toBe(true);
+  });
+
+  test('el foco NO arranca en el botón que gasta el dinero', () => {
+    ctrlA11y.solicitarCompraInmediata();
+
+    // Abrir un diálogo con el foco puesto en "Confirmar" invita a aceptarlo
+    // sin leer. Arranca en Cancelar.
+    expect(document.activeElement.id).toBe('btn-cancelar-compra');
+  });
+
+  test('Escape cierra el diálogo', () => {
+    ctrlA11y.solicitarCompraInmediata();
+    const modal = contenedorA11y.querySelector('#modal-compra-inmediata');
+
+    modal.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    expect(ctrlA11y.confirmandoCompra).toBe(false);
+    expect(contenedorA11y.querySelector('#modal-compra-inmediata')).toBeNull();
+  });
+
+  test('el tabulador no se escapa del diálogo', () => {
+    ctrlA11y.solicitarCompraInmediata();
+    const modal = contenedorA11y.querySelector('#modal-compra-inmediata');
+    const botones = modal.querySelectorAll('button');
+    const ultimo = botones[botones.length - 1];
+
+    ultimo.focus();
+    modal.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+
+    // Vuelve al primero en vez de irse al fondo, que no está inerte.
+    expect(document.activeElement).toBe(botones[0]);
+  });
+
+  test('el campo del tope automático tiene etiqueta, no solo placeholder', () => {
+    // El campo solo se pinta cuando NO hay un tope puesto; la subasta de
+    // ejemplo viene con uno, así que se desactiva primero.
+    ctrlA11y.desactivarAutoPuja();
+
+    const etiqueta = contenedorA11y.querySelector('label[for="input-limite-auto"]');
+
+    // Un placeholder desaparece al escribir y no sirve como nombre accesible.
+    expect(etiqueta).not.toBeNull();
+    expect(etiqueta.textContent).toContain('Tope de puja automática');
   });
 });

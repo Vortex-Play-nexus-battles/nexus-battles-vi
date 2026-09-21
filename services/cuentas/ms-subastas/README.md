@@ -104,45 +104,53 @@ Resuelto el dolor prioritario #1: la operacion `transferirProducto` quedo defini
 
 ## Pendiente
 
-Por orden de lo que mas duele:
+Por orden de lo que mas duele. Revisado contra el codigo el 20/09/2026.
 
-- **Ninguna puja mueve creditos de verdad todavia, pero ya no por falta de
-  cliente.** `pujas/creditos/CreditoClientHttp` existe y habla los cuatro
-  endpoints reales de ms-finanzas; se activa con `app.finanzas.modo=http`. El
-  valor por defecto sigue siendo el doble por **tres defectos de ms-finanzas,
-  verificados con el servicio levantado el 15/09/2026 y reportados a Juan Diego**:
+- **El producto no cambia de dueno al comprarlo. Es el unico bloqueo real que
+  queda.** La logica esta escrita y llamada desde los tres sitios (compra
+  inmediata, adjudicacion por vencimiento y compensacion al vendedor), pero
+  ms-inventario no expone la transferencia de propiedad:
+  `POST /elementos/{elementoId}/transferencias` no existe todavia. Por eso
+  `app.inventario.modo` sigue en `fake`: con el modo real, la compra inmediata
+  cobraria los creditos y no entregaria nada. Pedido a Nicolay; de los tres
+  endpoints que hacian falta ya publico dos —el bloqueo con `propietarioUid`
+  (#369) y la consulta por id (#368)—, ambos ya integrados aqui.
 
-  1. `GET /creditos/{uid}/saldo` devuelve **500 siempre, para cualquier uid**:
-     `obtenerSaldo` es `@Transactional(readOnly = true)` y llama a
-     `obtenerOCrearCuenta`, cuyo `findByJugadorUid` lleva
-     `@Lock(PESSIMISTIC_WRITE)` — PostgreSQL rechaza un `SELECT ... FOR NO KEY
-     UPDATE` dentro de una transaccion de solo lectura.
-  2. **Ninguna cuenta puede recibir creditos.** `CreditoController` es el unico
-     controlador y ninguna operacion acredita: `reservar` y `debitar` exigen
-     saldo, y el unico abono es `consumir` al vendedor, que exige una reserva
-     previa. Toda cuenta nace en 0,00, asi que hoy toda reserva falla.
-  3. **No hay manejador de errores**, asi que `SaldoInsuficienteException` sale
-     como 500, igual que una averia. Desde aqui no se puede separar "no tienes
-     creditos" —que el jugador debe ver y que no se debe reintentar— de
-     "finanzas se cayo". Activar el modo real hoy mostraria "error del
-     servidor" a quien no tiene saldo y ademas abriria el cortacircuitos para
-     todos los demas.
+- **`app.finanzas.modo` sigue en `fake` por defecto, pero ya NO por un defecto
+  ajeno.** Los tres problemas que lo impedian estan resueltos y verificados con
+  los servicios levantados: el saldo ya no devuelve 500, existe
+  `POST /creditos/acreditar`, y los rechazos llegan con su `type` URI
+  (422 saldo-insuficiente, 404 reserva-no-encontrada, 409 reserva-ya-liberada).
+  La integracion real se probo de punta a punta —ver el apartado de arriba—, asi
+  que cambiarlo a `http` es hoy **una decision de equipo, no un pendiente
+  tecnico**.
 
-  Con el punto 3 resuelto (409 para saldo insuficiente, 404 para reserva
-  inexistente) `app.finanzas.modo` pasa a `http` sin tocar el motor de pujas.
-- **El producto no cambia de dueno al comprarlo.** La logica esta, pero inventario no expone transferencia de propiedad. De los tres endpoints pedidos a Nicolay ya publico dos —el bloqueo y su liberacion (HU-INV-010), ambos ya implementados en `InventarioClientHttp`—; falta la transferencia y un `GET /elementos/{elementoId}` para resolver un elemento por id.
-- **El identificador de la frontera con inventario: acordado, pendiente de implementar.** Inventario autentica con `X-User-Name`, que es el apodo; este servicio solo conoce el `uid` del token. Se descarto la transicion de pasar ambos porque **en tres de las cinco llamadas a inventario no existe ningun apodo que propagar**: el cierre por vencimiento y la liberacion los dispara un `@Scheduled` sin peticion ni token, y la compensacion transfiere al vendedor, que no es quien hizo la peticion. El `uid`, en cambio, ya queda persistido al crear la subasta y se reutiliza despues. Acordado con Edwin el 14/09/2026: el contrato nuevo nace con `uid`. `InventarioClient` no se toca hasta cerrarlo con Nicolay.
-- **`esMaestroDeJuego` devuelve siempre `false`, y es una decision acordada, no un olvido.** Ese rol no existe formalmente en ms-identidad y no se inventa desde subastas. `false` es el valor seguro porque el Maestro de Juego esta exento de la comision de publicacion, asi que **hasta nuevo aviso todos pagan comision**. Lo define **HU-SUB-010 del Sprint 3**, y ms-identidad sera la fuente de verdad. Acordado con Edwin el 14/09/2026.
-- ~~El saldo del jugador no se muestra.~~ Hecho: `GET /mis-pujas/resumen` trae
-  `saldoDisponible` desde ms-finanzas. **Nulo significa "no se sabe", nunca
-  "cero"**, y con nulo la pantalla no bloquea: deja decidir al servidor, que es
-  quien conoce el dinero de verdad. Un cero inventado le diria al jugador que
-  esta arruinado y le negaria pujas que si puede pagar.
-- ~~Pruebas de contrato (Pact)~~ — hechas del lado consumidor: `CreditosPactoTest`
-  e `InventarioPactoTest` generan los pactos en `contracts/pactos/`. Falta que
-  los proveedores los verifiquen contra su implementacion (ver el README de esa
-  carpeta con los estados que hay que poder montar).
-- Los 4 limites de participacion son "configurables desde administracion" solo por variable de entorno.
+- **Los pactos estan escritos pero nadie los verifica del lado proveedor.**
+  `contracts/pactos/` tiene los dos, con los estados que cada proveedor debe
+  saber montar documentados en su README. Mientras no los verifiquen, fijan lo
+  que esperamos pero no avisan si el proveedor cambia.
+
+- **`esMaestroDeJuego` devuelve siempre `false`, y es una decision acordada, no
+  un olvido.** Ese rol no existe formalmente en ms-identidad y no se inventa
+  desde subastas. `false` es el valor seguro porque el Maestro de Juego esta
+  exento de la comision de publicacion, asi que **hasta nuevo aviso todos pagan
+  comision**. Lo define **HU-SUB-010 del Sprint 3**, y ms-identidad sera la
+  fuente de verdad. Acordado con Edwin el 14/09/2026.
+
+- **Los 4 limites de participacion son "configurables desde administracion"
+  solo por variable de entorno.** Cambiarlos hoy exige reiniciar el servicio.
+  Hacerlo de verdad pasa por `admin-parametros`, que es de otro equipo.
+
+- **Falta la parte de la Definition of Done que no es codigo**: desplegado por
+  el flujo automatizado, demostrado en la Sprint Review y aceptado por el
+  Product Owner.
+
+### Resuelto desde la ultima revision
+
+Lo que este apartado listaba como pendiente el 17/09 y ya no lo esta: el saldo
+del jugador en pantalla, las pruebas de contrato del lado consumidor, el
+identificador de la frontera con inventario (`propietarioUid`), la consulta de
+un elemento por id, y los tres defectos de ms-finanzas.
 
 ## Asunciones tomadas (a validar con el cliente)
 

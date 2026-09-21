@@ -19,7 +19,7 @@ export const PALETA_RAREZA = {
   comun: { fondo: '#E7EAF0', texto: '#57627A', borde: '#9FABC9', icono: '🛡️' },
   rara: { fondo: '#DFEEF8', texto: '#095E8C', borde: '#095E8C', icono: '⚔️' },
   epica: { fondo: '#EDE5FA', texto: '#5B27B4', borde: '#5B27B4', icono: '🪓' },
-  legendaria: { fondo: '#FBF0DE', texto: '#9A6800', borde: '#9A6800', icono: '🏹' }
+  legendaria: { fondo: '#FBF0DE', texto: '#9A6800', borde: '#9A6800', icono: '🏹' },
 };
 
 /**
@@ -36,7 +36,8 @@ export const SUBASTAS_INICIALES = [
     id: 'hacha-obsidiana',
     nombre: 'Hacha de Obsidiana Fracturada',
     tipo: 'Arma · Dos manos',
-    descripcion: 'Hoja de obsidiana templada en el Abismo. Su filo no se degrada, pero cada golpe cobra una fracción de la vitalidad de quien la empuña.',
+    descripcion:
+      'Hoja de obsidiana templada en el Abismo. Su filo no se degrada, pero cada golpe cobra una fracción de la vitalidad de quien la empuña.',
     rareza: 'epica',
     nivel: 24,
     vendedor: 'kaelthas_vx',
@@ -56,8 +57,8 @@ export const SUBASTAS_INICIALES = [
       { apodo: 'andres_nv', monto: 1350, tipo: 'Manual', cuando: 'hace 9 s', esTu: true },
       { apodo: 'draconis_91', monto: 1300, tipo: 'Automática', cuando: 'hace 25 s', esTu: false },
       { apodo: 'kael_vortex', monto: 1200, tipo: 'Automática', cuando: 'hace 1 min', esTu: false },
-      { apodo: 'andres_nv', monto: 1150, tipo: 'Manual', cuando: 'hace 2 min', esTu: true }
-    ]
+      { apodo: 'andres_nv', monto: 1150, tipo: 'Manual', cuando: 'hace 2 min', esTu: true },
+    ],
   },
   {
     id: 'grebas-centinela',
@@ -81,14 +82,15 @@ export const SUBASTAS_INICIALES = [
     aporte: { poder: 0, vida: 90, defensa: 18 },
     historial: [
       { apodo: 'thar_vex', monto: 880, tipo: 'Automática', cuando: 'hace 12 s', esTu: false },
-      { apodo: 'andres_nv', monto: 800, tipo: 'Manual', cuando: 'hace 45 s', esTu: true }
-    ]
+      { apodo: 'andres_nv', monto: 800, tipo: 'Manual', cuando: 'hace 45 s', esTu: true },
+    ],
   },
   {
     id: 'amuleto-brasa',
     nombre: 'Amuleto de Brasa Eterna',
     tipo: 'Accesorio · Cuello',
-    descripcion: 'Gema ígnea que late con el calor de las forjas primigenias. Otorga gran afinidad arcana y salud.',
+    descripcion:
+      'Gema ígnea que late con el calor de las forjas primigenias. Otorga gran afinidad arcana y salud.',
     rareza: 'legendaria',
     nivel: 25,
     vendedor: 'aerith_moon',
@@ -106,8 +108,8 @@ export const SUBASTAS_INICIALES = [
     aporte: { poder: 25, vida: 50, defensa: 5 },
     historial: [
       { apodo: 'andres_nv', monto: 2400, tipo: 'Automática', cuando: 'hace 1 min', esTu: true },
-      { apodo: 'valkyria_99', monto: 2350, tipo: 'Manual', cuando: 'hace 2 min', esTu: false }
-    ]
+      { apodo: 'valkyria_99', monto: 2350, tipo: 'Manual', cuando: 'hace 2 min', esTu: false },
+    ],
   },
   {
     id: 'daga-hueso',
@@ -130,14 +132,15 @@ export const SUBASTAS_INICIALES = [
     rivales: 1,
     aporte: { poder: 8, vida: 10, defensa: 0 },
     historial: [
-      { apodo: 'novato_12', monto: 310, tipo: 'Manual', cuando: 'hace 5 min', esTu: false }
-    ]
+      { apodo: 'novato_12', monto: 310, tipo: 'Manual', cuando: 'hace 5 min', esTu: false },
+    ],
   },
   {
     id: 'yelmo-vigia',
     nombre: 'Yelmo del Vigía',
     tipo: 'Armadura · Cabeza',
-    descripcion: 'Casco de acero templado con visor blindado. Mejora la resistencia y percepción táctica.',
+    descripcion:
+      'Casco de acero templado con visor blindado. Mejora la resistencia y percepción táctica.',
     rareza: 'rara',
     nivel: 18,
     vendedor: 'barkeep_tom',
@@ -154,9 +157,9 @@ export const SUBASTAS_INICIALES = [
     rivales: 2,
     aporte: { poder: 6, vida: 60, defensa: 14 },
     historial: [
-      { apodo: 'ignis_red', monto: 1100, tipo: 'Manual', cuando: 'hace 10 min', esTu: false }
-    ]
-  }
+      { apodo: 'ignis_red', monto: 1100, tipo: 'Manual', cuando: 'hace 10 min', esTu: false },
+    ],
+  },
 ];
 
 export const HEROES_BASE = [
@@ -165,15 +168,15 @@ export const HEROES_BASE = [
     nombre: 'Kaelen',
     nivel: 26,
     clase: 'Guerrero',
-    stats: { poder: 142, vida: 890, defensa: 64, ataque: '10 + 1d6', dano: '8 + 2d4' }
+    stats: { poder: 142, vida: 890, defensa: 64, ataque: '10 + 1d6', dano: '8 + 2d4' },
   },
   {
     id: 'lyra',
     nombre: 'Lyra',
     nivel: 21,
     clase: 'Exploradora',
-    stats: { poder: 118, vida: 640, defensa: 48, ataque: '7 + 1d8', dano: '6 + 1d6' }
-  }
+    stats: { poder: 118, vida: 640, defensa: 48, ataque: '7 + 1d8', dano: '6 + 1d6' },
+  },
 ];
 
 export const CONFIG_REGLAS = {
@@ -184,7 +187,7 @@ export const CONFIG_REGLAS = {
   incrementoMinimo: 50,
   intervaloSegundos: 5,
   maxSubastasSimultaneas: 10,
-  maxPujasActivas: 50
+  maxPujasActivas: 50,
 };
 
 export const EVENTOS_CIERRE_DEFAULT = [
@@ -198,7 +201,7 @@ export const EVENTOS_CIERRE_DEFAULT = [
     montoDevuelto: 0,
     ganador: 'andres_nv',
     esGanador: true,
-    motivo: '¡Adjudicada a tu inventario! La mejor oferta se mantuvo hasta el cierre.'
+    motivo: '¡Adjudicada a tu inventario! La mejor oferta se mantuvo hasta el cierre.',
   },
   {
     id: 'grebas-centinela',
@@ -210,7 +213,7 @@ export const EVENTOS_CIERRE_DEFAULT = [
     montoDevuelto: 880,
     ganador: 'thar_vex',
     esGanador: false,
-    motivo: 'Ganó thar_vex con 1.240 cr · su automática respondió'
+    motivo: 'Ganó thar_vex con 1.240 cr · su automática respondió',
   },
   {
     id: 'amuleto-brasa',
@@ -223,8 +226,8 @@ export const EVENTOS_CIERRE_DEFAULT = [
     montoDevuelto: 2400,
     ganador: 'valkyria_99',
     esGanador: false,
-    motivo: 'Tu automática paró en su tope de 2.400 cr · cerró en 2.450 cr'
-  }
+    motivo: 'Tu automática paró en su tope de 2.400 cr · cerró en 2.450 cr',
+  },
 ];
 
 // =========================================================================
@@ -236,7 +239,9 @@ export function formatearCreditos(n) {
 }
 
 export function formatearTiempo(seg) {
-  if (seg <= 0) {return 'Cerrada';}
+  if (seg <= 0) {
+    return 'Cerrada';
+  }
   if (seg >= 3600) {
     const h = Math.floor(seg / 3600);
     const m = Math.floor((seg % 3600) / 60);
@@ -259,7 +264,13 @@ export function calcularMinimoPuja(ofertaActual, incremento = CONFIG_REGLAS.incr
   return (Number(ofertaActual) || 0) + (Number(incremento) || 50);
 }
 
-export function validarPuja(monto, subasta, saldoLibre, incremento = CONFIG_REGLAS.incrementoMinimo, esperaRestante = 0) {
+export function validarPuja(
+  monto,
+  subasta,
+  saldoLibre,
+  incremento = CONFIG_REGLAS.incrementoMinimo,
+  esperaRestante = 0,
+) {
   if (!subasta) {
     return { valida: false, motivo: 'Subasta no encontrada.' };
   }
@@ -267,11 +278,17 @@ export function validarPuja(monto, subasta, saldoLibre, incremento = CONFIG_REGL
     return { valida: false, motivo: 'La subasta está cerrada.' };
   }
   if (esperaRestante > 0) {
-    return { valida: false, motivo: `Debes esperar ${esperaRestante} s antes de volver a pujar en esta subasta.` };
+    return {
+      valida: false,
+      motivo: `Debes esperar ${esperaRestante} s antes de volver a pujar en esta subasta.`,
+    };
   }
   const min = calcularMinimoPuja(subasta.oferta, incremento);
   if (monto < min) {
-    return { valida: false, motivo: `La oferta debe ser de al menos ${formatearCreditos(min)} cr (+${incremento} cr).` };
+    return {
+      valida: false,
+      motivo: `La oferta debe ser de al menos ${formatearCreditos(min)} cr (+${incremento} cr).`,
+    };
   }
   // Saldo desconocido: no se bloquea. El servidor es la autoridad sobre el
   // dinero y responde SALDO_INSUFICIENTE si no alcanza. Frenar aqui por no
@@ -282,16 +299,29 @@ export function validarPuja(monto, subasta, saldoLibre, incremento = CONFIG_REGL
   }
   const disponibleParaEsta = saldoLibre + (subasta.retenido || 0);
   if (monto > disponibleParaEsta) {
-    return { valida: false, motivo: `Saldo insuficiente. Tienes ${formatearCreditos(disponibleParaEsta)} cr disponibles para esta subasta.` };
+    return {
+      valida: false,
+      motivo: `Saldo insuficiente. Tienes ${formatearCreditos(disponibleParaEsta)} cr disponibles para esta subasta.`,
+    };
   }
   return { valida: true };
 }
 
-export function validarLimiteAuto(limite, subasta, saldoLibre, incremento = CONFIG_REGLAS.incrementoMinimo) {
-  if (!subasta) {return { valida: false, motivo: 'Subasta no encontrada.' };}
+export function validarLimiteAuto(
+  limite,
+  subasta,
+  saldoLibre,
+  incremento = CONFIG_REGLAS.incrementoMinimo,
+) {
+  if (!subasta) {
+    return { valida: false, motivo: 'Subasta no encontrada.' };
+  }
   const min = calcularMinimoPuja(subasta.oferta, incremento);
   if (limite < min) {
-    return { valida: false, motivo: `El tope de puja automática debe ser al menos ${formatearCreditos(min)} cr.` };
+    return {
+      valida: false,
+      motivo: `El tope de puja automática debe ser al menos ${formatearCreditos(min)} cr.`,
+    };
   }
   // Saldo desconocido: no se bloquea. El servidor es la autoridad sobre el
   // dinero y responde SALDO_INSUFICIENTE si no alcanza. Frenar aqui por no
@@ -302,13 +332,18 @@ export function validarLimiteAuto(limite, subasta, saldoLibre, incremento = CONF
   }
   const disponibleParaEsta = saldoLibre + (subasta.retenido || 0);
   if (limite > disponibleParaEsta) {
-    return { valida: false, motivo: `Saldo insuficiente para ese tope. Máximo disponible: ${formatearCreditos(disponibleParaEsta)} cr.` };
+    return {
+      valida: false,
+      motivo: `Saldo insuficiente para ese tope. Máximo disponible: ${formatearCreditos(disponibleParaEsta)} cr.`,
+    };
   }
   return { valida: true };
 }
 
 export function calcularComparacionHeroe(heroe, item) {
-  if (!heroe || !item) {return { comparaciones: [], nivelInsuficiente: false, deltaNivel: 0 };}
+  if (!heroe || !item) {
+    return { comparaciones: [], nivelInsuficiente: false, deltaNivel: 0 };
+  }
   const nivelInsuficiente = heroe.nivel < item.nivel;
   const deltaNivel = item.nivel - heroe.nivel;
   const st = heroe.stats;
@@ -317,7 +352,7 @@ export function calcularComparacionHeroe(heroe, item) {
   const comparaciones = [
     { stat: 'Poder', actual: st.poder, nuevo: st.poder + ap.poder, delta: ap.poder },
     { stat: 'Vida', actual: st.vida, nuevo: st.vida + ap.vida, delta: ap.vida },
-    { stat: 'Defensa', actual: st.defensa, nuevo: st.defensa + ap.defensa, delta: ap.defensa }
+    { stat: 'Defensa', actual: st.defensa, nuevo: st.defensa + ap.defensa, delta: ap.defensa },
   ];
 
   return { comparaciones, nivelInsuficiente, deltaNivel };
@@ -334,39 +369,49 @@ export function verificarSobreCompromiso(total, subastas = []) {
   return { sobreCompromiso, sumaTopes, total, faltante };
 }
 
-export function calcularBalanceNetoCierre(eventosCierre = [], saldoTotal = null, retenidoEnOtras = 0) {
+export function calcularBalanceNetoCierre(
+  eventosCierre = [],
+  saldoTotal = null,
+  retenidoEnOtras = 0,
+) {
   const cobrado = eventosCierre.reduce((acc, ev) => acc + (Number(ev.montoCobrado) || 0), 0);
   const devuelto = eventosCierre.reduce((acc, ev) => acc + (Number(ev.montoDevuelto) || 0), 0);
   // saldoTotal null = no se sabe. Se propaga como null en vez de convertirse
   // en cero, para que la pantalla lo muestre como desconocido.
-  const saldoLibre = saldoTotal === null || saldoTotal === undefined
-    ? null
-    : Math.max(0, saldoTotal - retenidoEnOtras - cobrado);
+  const saldoLibre =
+    saldoTotal === null || saldoTotal === undefined
+      ? null
+      : Math.max(0, saldoTotal - retenidoEnOtras - cobrado);
   return {
     cobrado,
     devuelto,
     neto: devuelto - cobrado,
-    saldoLibre
+    saldoLibre,
   };
 }
 
 export function generarConsejoTactico(eventoCierre, saldoLibre = null) {
-  if (!eventoCierre) {return null;}
+  if (!eventoCierre) {
+    return null;
+  }
   const nombre = eventoCierre.nombre || 'el objeto';
   const tope = eventoCierre.topePropio || 0;
   const montoFinal = eventoCierre.montoFinal || 0;
   const diferencia = Math.max(0, montoFinal - tope);
   const margenRecomendado = diferencia > 0 ? diferencia * 2 : 100;
-  const nombreCorto = nombre.includes('Amuleto') ? 'Amuleto' : nombre.split(' ')[0].replace(/^(el|la|los|las)\s+/i, '');
+  const nombreCorto = nombre.includes('Amuleto')
+    ? 'Amuleto'
+    : nombre.split(' ')[0].replace(/^(el|la|los|las)\s+/i, '');
 
   return {
     titulo: `El ${nombreCorto} se te escapó por ${formatearCreditos(diferencia)} cr.`,
     cuerpo: `Tu tope estaba en ${formatearCreditos(tope)} y cerró en ${formatearCreditos(montoFinal)}. Con ${formatearCreditos(margenRecomendado)} cr más de margen era tuyo${
       saldoLibre === null || saldoLibre === undefined
         ? '.'
-        : ` — y tenías ${formatearCreditos(saldoLibre)} libres.`}`,
+        : ` — y tenías ${formatearCreditos(saldoLibre)} libres.`
+    }`,
     diferencia,
-    margenRecomendado
+    margenRecomendado,
   };
 }
 
@@ -378,8 +423,12 @@ export function generarConsejoTactico(eventoCierre, saldoLibre = null) {
  * @param {{topeAlcanzado: boolean, alerta: boolean}} estado
  */
 export function segunTope(estado, critico, aviso, normal) {
-  if (estado.topeAlcanzado) {return critico;}
-  if (estado.alerta) {return aviso;}
+  if (estado.topeAlcanzado) {
+    return critico;
+  }
+  if (estado.alerta) {
+    return aviso;
+  }
   return normal;
 }
 
@@ -402,7 +451,7 @@ export function destinoDeVuelta(origenVista) {
   }
   return {
     vista: origenVista === 'explorar' ? 'explorar' : 'lista',
-    texto: '\u2190 Volver al listado de subastas'
+    texto: '\u2190 Volver al listado de subastas',
   };
 }
 
@@ -410,8 +459,12 @@ export function destinoDeVuelta(origenVista) {
  * Elige entre tres valores segun el signo de un delta (sube, baja, igual).
  */
 export function segunDelta(delta, positivo, negativo, cero) {
-  if (delta > 0) {return positivo;}
-  if (delta < 0) {return negativo;}
+  if (delta > 0) {
+    return positivo;
+  }
+  if (delta < 0) {
+    return negativo;
+  }
   return cero;
 }
 
@@ -439,8 +492,8 @@ export function calcularEstadoTopesConcurrencia(subastas = [], config = CONFIG_R
         { topeAlcanzado: nSubastas >= maxSubastas, alerta: alertaSubastas },
         'Has llegado al tope: no puedes entrar en más.',
         `Aviso de tope (80%): te quedan ${maxSubastas - nSubastas} subastas.`,
-        'Margen de sobra.'
-      )
+        'Margen de sobra.',
+      ),
     },
     pujas: {
       actual: nPujasGanando,
@@ -452,9 +505,9 @@ export function calcularEstadoTopesConcurrencia(subastas = [], config = CONFIG_R
         { topeAlcanzado: nPujasGanando >= maxPujas, alerta: alertaPujas },
         'Has llegado al tope de 50 pujas activas.',
         `Aviso de tope (80%): te quedan ${maxPujas - nPujasGanando} pujas.`,
-        'Margen de sobra.'
-      )
-    }
+        'Margen de sobra.',
+      ),
+    },
   };
 }
 
@@ -472,7 +525,7 @@ export class ControladorSubastas {
     api = null,
     subastaInicialId = null,
     urlCanal = null,
-    conectarCanal = conectarStomp
+    conectarCanal = conectarStomp,
   } = {}) {
     // Subasta que hay que abrir en detalle nada mas cargar. Viene de ?id= en la
     // URL: es la forma de que el listado de HU-SUB-011 entregue una subasta
@@ -504,6 +557,9 @@ export class ControladorSubastas {
     this.mensajeError = null;
     this.intervalId = null;
     this.avisoCruzado = null; // { id, nombre, oferta, rival, segundosRestantes }
+    // Si ya se movio el foco al dialogo abierto. Evita robarselo al usuario en
+    // cada repintado mientras el modal sigue en pantalla.
+    this.modalEnfocado = false;
 
     // Canal en vivo (HU-SUB-011 lo publica en /topic/subastas/listado). Es un
     // ANADIDO al sondeo, no un sustituto: el riesgo #7 del acta exige
@@ -535,12 +591,14 @@ export class ControladorSubastas {
    * exactamente como se pintan pantallas que mienten.
    */
   async recargar() {
-    if (!this.api) {return;}
+    if (!this.api) {
+      return;
+    }
     try {
       const [subastas, resumen] = await Promise.all([
         this.api.listar(),
         // Si falla, se sigue sin resumen en vez de tumbar el listado entero.
-        this.intentar(() => this.api.miResumen())
+        this.intentar(() => this.api.miResumen()),
       ]);
       this.subastas = subastas;
       this.resumen = resumen;
@@ -598,9 +656,13 @@ export class ControladorSubastas {
    * romper la pantalla: poder pujar es mas importante que ver el historial.
    */
   async cargarDetalle(id) {
-    if (!this.api) {return;}
+    if (!this.api) {
+      return;
+    }
     const sub = this.subastas.find((s) => s.id === id);
-    if (!sub) {return;}
+    if (!sub) {
+      return;
+    }
 
     // Cada consulta por su cuenta y sin dejar escapar el fallo: el historial es
     // publico y la participacion necesita sesion, asi que una puede fallar sin
@@ -608,7 +670,7 @@ export class ControladorSubastas {
     // poder pujar importa mas que ver el historial.
     const [historial, participacion] = await Promise.all([
       this.intentar(() => this.api.historial(id)),
-      this.intentar(() => this.api.miParticipacion(id))
+      this.intentar(() => this.api.miParticipacion(id)),
     ]);
 
     if (historial) {
@@ -617,7 +679,7 @@ export class ControladorSubastas {
         monto: Number(p.monto),
         tipo: p.tipo === 'AUTOMATICA' ? 'Automática' : 'Manual',
         cuando: p.creadaEn,
-        esTu: p.esTuya
+        esTu: p.esTuya,
       }));
       sub.historialCargado = true;
     }
@@ -626,7 +688,9 @@ export class ControladorSubastas {
       sub.ganando = participacion.vasGanando;
       sub.superado = participacion.teSuperaron;
       sub.retenido = Number(participacion.retenidoAqui || 0);
-      sub.autoLimite = participacion.automaticaActiva ? Number(participacion.limiteAutomatico || 0) : 0;
+      sub.autoLimite = participacion.automaticaActiva
+        ? Number(participacion.limiteAutomatico || 0)
+        : 0;
       sub.esperaSegundos = Number(participacion.segundosParaVolverAPujar || 0);
       sub.participacionCargada = true;
     }
@@ -648,7 +712,9 @@ export class ControladorSubastas {
   }
 
   async ejecutarContraElServidor(operacion) {
-    if (this.enviando) {return false;}
+    if (this.enviando) {
+      return false;
+    }
     this.limpiarError();
     this.enviando = true;
     this.render();
@@ -696,7 +762,6 @@ export class ControladorSubastas {
     return `<div id="alerta-pujas" class="alerta alerta-error alerta-pujas" role="alert" ${hayError ? '' : 'hidden style="display: none;"'}>${hayError ? this.mensajeError : ''}</div>`;
   }
 
-
   /**
    * Abre el canal en vivo y se suscribe al listado. Nunca rechaza: si el
    * servidor no tiene WebSocket, el navegador lo bloquea o el frame llega
@@ -704,7 +769,9 @@ export class ControladorSubastas {
    * Un canal opcional no puede tumbar la pantalla.
    */
   async abrirCanalEnVivo() {
-    if (!this.urlCanal || !this.conectarCanal || this.canal) {return null;}
+    if (!this.urlCanal || !this.conectarCanal || this.canal) {
+      return null;
+    }
     try {
       const canal = await this.conectarCanal({ url: this.urlCanal });
       canal.suscribir(CANAL_SUBASTAS, (cuerpo) => this.alLlegarActualizacion(cuerpo));
@@ -729,18 +796,24 @@ export class ControladorSubastas {
     } catch {
       return false;
     }
-    if (!actualizada || !actualizada.id) {return false;}
+    if (!actualizada || !actualizada.id) {
+      return false;
+    }
 
     const esLaQueMiro = this.vista === 'detalle' && actualizada.id === this.subastaActivaId;
     const laTengoEnLista = this.subastas.some((sub) => sub.id === actualizada.id);
-    if (!esLaQueMiro && !laTengoEnLista) {return false;}
+    if (!esLaQueMiro && !laTengoEnLista) {
+      return false;
+    }
 
     this.recargar();
     return true;
   }
 
   cerrarCanalEnVivo() {
-    if (!this.canal) {return;}
+    if (!this.canal) {
+      return;
+    }
     try {
       this.canal.cerrar();
     } catch {
@@ -794,8 +867,11 @@ export class ControladorSubastas {
    * que distinguirlos.
    */
   getSaldoLibre() {
-    if (!this.resumen || this.resumen.saldoDisponible === null
-        || this.resumen.saldoDisponible === undefined) {
+    if (
+      !this.resumen ||
+      this.resumen.saldoDisponible === null ||
+      this.resumen.saldoDisponible === undefined
+    ) {
       return null;
     }
     return Number(this.resumen.saldoDisponible);
@@ -894,16 +970,17 @@ export class ControladorSubastas {
   }
 
   lanzarAvisoCruzado(subastaOId) {
-    const sub = typeof subastaOId === 'string'
-      ? this.subastas.find((s) => s.id === subastaOId)
-      : subastaOId;
-    if (!sub) {return;}
+    const sub =
+      typeof subastaOId === 'string' ? this.subastas.find((s) => s.id === subastaOId) : subastaOId;
+    if (!sub) {
+      return;
+    }
     this.avisoCruzado = {
       id: sub.id,
       nombre: sub.nombre,
       oferta: sub.oferta,
       rival: sub.rival || 'rival',
-      segundosRestantes: sub.segundosRestantes
+      segundosRestantes: sub.segundosRestantes,
     };
     this.render();
   }
@@ -914,7 +991,9 @@ export class ControladorSubastas {
   }
 
   irDesdeAvisoCruzado() {
-    if (!this.avisoCruzado) {return;}
+    if (!this.avisoCruzado) {
+      return;
+    }
     const id = this.avisoCruzado.id;
     this.avisoCruzado = null;
     this.abrirDetalle(id);
@@ -938,7 +1017,13 @@ export class ControladorSubastas {
     }
 
     const saldoLibre = this.getSaldoLibre();
-    const validacion = validarPuja(monto, sub, saldoLibre, this.config.incrementoMinimo, sub.esperaSegundos);
+    const validacion = validarPuja(
+      monto,
+      sub,
+      saldoLibre,
+      this.config.incrementoMinimo,
+      sub.esperaSegundos,
+    );
 
     if (!validacion.valida) {
       this.mostrarError(validacion.motivo);
@@ -955,7 +1040,7 @@ export class ControladorSubastas {
       monto,
       tipo: 'Manual',
       cuando: 'ahora',
-      esTu: true
+      esTu: true,
     });
 
     // Simulación de respuesta automática de rival tras 4 s
@@ -972,7 +1057,7 @@ export class ControladorSubastas {
             monto: contraoferta,
             tipo: 'Automática',
             cuando: 'ahora',
-            esTu: false
+            esTu: false,
           });
           // Si el usuario no está viendo esta subasta en detalle, se dispara el aviso cruzado tipo toast
           if (this.vista !== 'detalle' || this.subastaActivaId !== sub.id) {
@@ -981,10 +1066,12 @@ export class ControladorSubastas {
               nombre: sub.nombre,
               oferta: contraoferta,
               rival: sub.rival,
-              segundosRestantes: sub.segundosRestantes
+              segundosRestantes: sub.segundosRestantes,
             };
           }
-          if (this.contenedor) {this.render();}
+          if (this.contenedor) {
+            this.render();
+          }
         }
       }, 4000);
     }
@@ -1021,7 +1108,9 @@ export class ControladorSubastas {
   desactivarAutoPuja() {
     this.limpiarError();
     const sub = this.getSubastaActiva();
-    if (!sub) {return undefined;}
+    if (!sub) {
+      return undefined;
+    }
 
     if (this.api) {
       return this.ejecutarContraElServidor(() => this.api.desactivarAutomatica(sub.id));
@@ -1049,23 +1138,21 @@ export class ControladorSubastas {
 
     if (this.api) {
       this.confirmandoCompra = false;
-      return this.ejecutarContraElServidor(() => this.api.comprarAhora(sub.id))
-        .then((exito) => {
-          if (exito) {
-            this.resultadoCierre = 'comprada';
-            this.render();
-          }
-          return exito;
-        });
+      return this.ejecutarContraElServidor(() => this.api.comprarAhora(sub.id)).then((exito) => {
+        if (exito) {
+          this.resultadoCierre = 'comprada';
+          this.render();
+        }
+        return exito;
+      });
     }
 
     // El null se comprueba ANTES de sumar: en JavaScript `null + 0` es 0, asi
     // que sumar primero convertiria "no se sabe" en "no tiene nada" y
     // bloquearia la compra.
     const libre = this.getSaldoLibre();
-    const disponibleParaEsta = libre === null || libre === undefined
-      ? null
-      : libre + (sub.retenido || 0);
+    const disponibleParaEsta =
+      libre === null || libre === undefined ? null : libre + (sub.retenido || 0);
 
     // Mismo criterio que en validarPuja: si no se sabe el saldo, decide el
     // servidor. Bloquear aqui por no haber podido preguntar le negaria una
@@ -1089,11 +1176,15 @@ export class ControladorSubastas {
   }
 
   actualizarTiemposEnDOM() {
-    if (!this.contenedor) {return;}
+    if (!this.contenedor) {
+      return;
+    }
     const elementosTiempo = this.contenedor.querySelectorAll('[data-tiempo-subasta]');
     elementosTiempo.forEach((el) => {
       const id = el.getAttribute('data-tiempo-subasta');
-      const sub = this.subastas.find((s) => s.id === id) || (this.avisoCruzado && this.avisoCruzado.id === id ? this.avisoCruzado : null);
+      const sub =
+        this.subastas.find((s) => s.id === id) ||
+        (this.avisoCruzado && this.avisoCruzado.id === id ? this.avisoCruzado : null);
       if (sub) {
         el.textContent = formatearTiempo(sub.segundosRestantes);
         if (sub.segundosRestantes <= 10 && sub.segundosRestantes > 0) {
@@ -1106,7 +1197,9 @@ export class ControladorSubastas {
   }
 
   render() {
-    if (!this.contenedor) {return;}
+    if (!this.contenedor) {
+      return;
+    }
 
     if (this.estadoDatos === 'carga') {
       this.contenedor.innerHTML = `
@@ -1154,7 +1247,13 @@ export class ControladorSubastas {
     let contenidoHtml = '';
 
     if (this.vista === 'mis-subastas') {
-      contenidoHtml = this.generarHtmlMisSubastas({ total, retenido, libre, subastasGanando, superadas });
+      contenidoHtml = this.generarHtmlMisSubastas({
+        total,
+        retenido,
+        libre,
+        subastasGanando,
+        superadas,
+      });
     } else if (this.vista === 'cierre-multiple') {
       contenidoHtml = this.generarHtmlCierreMultiple({ total, libre });
     } else if (this.vista === 'detalle') {
@@ -1170,6 +1269,63 @@ export class ControladorSubastas {
 
     this.contenedor.innerHTML = contenidoHtml;
     this.conectarEventos();
+    this.prepararModal();
+  }
+
+  /**
+   * Lleva el foco al dialogo de compra y lo mantiene dentro mientras este
+   * abierto.
+   *
+   * El marcado ya declaraba aria-modal="true", o sea que PROMETIA modalidad,
+   * pero no la implementaba: el foco se quedaba detras del overlay, no habia
+   * forma de cerrarlo con Escape y tabulando se salia al fondo. En una pantalla
+   * donde el siguiente boton gasta creditos, eso significa poder confirmar una
+   * compra sin haber llegado a oir de que.
+   *
+   * Se llama despues de cada render porque el modal se crea y se destruye con
+   * el innerHTML; el foco se mueve una sola vez, al aparecer.
+   */
+  prepararModal() {
+    const modal = this.contenedor.querySelector('#modal-compra-inmediata');
+    if (!modal) {
+      this.modalEnfocado = false;
+      return;
+    }
+
+    const focalizables = modal.querySelectorAll(
+      'button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    if (!focalizables.length) {
+      return;
+    }
+
+    if (!this.modalEnfocado) {
+      // Al primer control y no al de confirmar: abrir un dialogo con el foco
+      // puesto en el boton que gasta el dinero invita a confirmarlo sin leer.
+      focalizables[0].focus();
+      this.modalEnfocado = true;
+    }
+
+    modal.addEventListener('keydown', (evento) => {
+      if (evento.key === 'Escape') {
+        evento.preventDefault();
+        this.cancelarCompraInmediata();
+        return;
+      }
+      if (evento.key !== 'Tab') {
+        return;
+      }
+
+      const primero = focalizables[0];
+      const ultimo = focalizables[focalizables.length - 1];
+      if (evento.shiftKey && document.activeElement === primero) {
+        evento.preventDefault();
+        ultimo.focus();
+      } else if (!evento.shiftKey && document.activeElement === ultimo) {
+        evento.preventDefault();
+        primero.focus();
+      }
+    });
   }
 
   generarHtmlPestanas({ superadas = 0 } = {}) {
@@ -1223,9 +1379,11 @@ export class ControladorSubastas {
               <span class="punto-color punto-retenido"></span>
               <span>Retenido en pujas: <strong>${formatearCreditos(this.getRetenidoReal())} cr</strong></span>
             </div>
-            ${this.getSubastasGanando() === null
-              ? ''
-              : `<div class="chip-info"><span>Vas ganando en: <strong>${this.getSubastasGanando()}</strong></span></div>`}
+            ${
+              this.getSubastasGanando() === null
+                ? ''
+                : `<div class="chip-info"><span>Vas ganando en: <strong>${this.getSubastasGanando()}</strong></span></div>`
+            }
             <div class="chip-info">
               <span>Límite activo: <strong>${this.subastas.length} de ${this.config.maxSubastasSimultaneas} subastas</strong></span>
             </div>
@@ -1317,7 +1475,9 @@ export class ControladorSubastas {
   generarHtmlMisSubastas({ total, retenido, libre, superadas }) {
     const sobreCompromiso = verificarSobreCompromiso(total, this.subastas);
     const estadoTopes = calcularEstadoTopesConcurrencia(this.subastas, this.config);
-    const porUrgencia = [...this.subastas].sort((a, b) => a.segundosRestantes - b.segundosRestantes);
+    const porUrgencia = [...this.subastas].sort(
+      (a, b) => a.segundosRestantes - b.segundosRestantes,
+    );
 
     // Segmentos para la barra interactiva
     const conRetencion = this.subastas.filter((s) => (s.retenido || 0) > 0);
@@ -1330,7 +1490,7 @@ export class ControladorSubastas {
         nombre: sub.nombre,
         ancho: `${ancho}%`,
         color,
-        titulo: `${sub.nombre}: ${formatearCreditos(sub.retenido)} cr`
+        titulo: `${sub.nombre}: ${formatearCreditos(sub.retenido)} cr`,
       };
     });
     const libreAncho = total > 0 ? ((libre / total) * 100).toFixed(1) : '100';
@@ -1339,16 +1499,20 @@ export class ControladorSubastas {
       nombre: 'Libre para pujar',
       ancho: `${libreAncho}%`,
       color: '#0B6B31',
-      titulo: `Libre: ${formatearCreditos(libre)} cr`
+      titulo: `Libre: ${formatearCreditos(libre)} cr`,
     });
 
-    const leyenda = conRetencion.map((sub, i) => ({
-      color: PALETA_TRAMOS[i % PALETA_TRAMOS.length],
-      texto: `${sub.nombre.split(' ')[0]} · ${formatearCreditos(sub.retenido)} cr`
-    })).concat([{
-      color: '#0B6B31',
-      texto: `Libre · ${formatearCreditos(libre)} cr`
-    }]);
+    const leyenda = conRetencion
+      .map((sub, i) => ({
+        color: PALETA_TRAMOS[i % PALETA_TRAMOS.length],
+        texto: `${sub.nombre.split(' ')[0]} · ${formatearCreditos(sub.retenido)} cr`,
+      }))
+      .concat([
+        {
+          color: '#0B6B31',
+          texto: `Libre · ${formatearCreditos(libre)} cr`,
+        },
+      ]);
 
     return `
       <div class="subastas-app vista-mis-subastas">
@@ -1380,24 +1544,38 @@ export class ControladorSubastas {
           </div>
 
           <!-- Barra segmentada interactiva -->
-          <div class="barra-segmentada-tramos" role="progressbar" aria-label="Distribución de créditos en subastas">
-            ${tramos.map((t) => `
+          <div class="barra-segmentada-tramos" role="progressbar"
+               aria-label="Créditos retenidos en subastas"
+               aria-valuemin="0" aria-valuemax="${Math.round(total || 0)}"
+               aria-valuenow="${Math.round(retenido || 0)}"
+               aria-valuetext="${formatearCreditos(retenido)} cr retenidos${total ? ` de ${formatearCreditos(total)} cr` : ''}">
+            ${tramos
+              .map(
+                (t) => `
               <div class="tramo-subasta" style="width: ${t.ancho}; background: ${t.color};" title="${t.titulo}"></div>
-            `).join('')}
+            `,
+              )
+              .join('')}
           </div>
 
           <!-- Leyenda de tramos -->
           <div class="leyenda-tramos">
-            ${leyenda.map((l) => `
+            ${leyenda
+              .map(
+                (l) => `
               <span class="item-leyenda">
                 <span class="leyenda-punto" style="background: ${l.color};"></span>
                 <span>${l.texto}</span>
               </span>
-            `).join('')}
+            `,
+              )
+              .join('')}
           </div>
 
           <!-- Alerta de Sobre-compromiso -->
-          ${sobreCompromiso.sobreCompromiso ? `
+          ${
+            sobreCompromiso.sobreCompromiso
+              ? `
             <div class="alerta-sobrecompromiso" role="alert">
               <div class="sobrecompromiso-icono">⚠️</div>
               <div>
@@ -1408,7 +1586,9 @@ export class ControladorSubastas {
                 </div>
               </div>
             </div>
-          ` : ''}
+          `
+              : ''
+          }
         </section>
 
         <!-- Medidores Visuales de Topes de Concurrencia -->
@@ -1502,11 +1682,15 @@ export class ControladorSubastas {
           <div class="fila-badges">
             <span class="badge badge-${sub.rareza}">${sub.rareza.toUpperCase()}</span>
             ${badgeEstado}
-            ${sub.autoLimite > 0 ? `
+            ${
+              sub.autoLimite > 0
+                ? `
               <span class="chip-automatica-tope" title="Puja automática configurada">
                 ⚡ hasta ${formatearCreditos(sub.autoLimite)} cr
               </span>
-            ` : ''}
+            `
+                : ''
+            }
           </div>
         </div>
 
@@ -1543,7 +1727,8 @@ export class ControladorSubastas {
     const ganadas = eventos.filter((e) => e.esGanador).length;
     const superadas = eventos.filter((e) => !e.esGanador).length;
 
-    const eventoConTope = eventos.find((e) => e.tipoDesenlace === 'superada_tope') || eventos.find((e) => !e.esGanador);
+    const eventoConTope =
+      eventos.find((e) => e.tipoDesenlace === 'superada_tope') || eventos.find((e) => !e.esGanador);
     const consejo = generarConsejoTactico(eventoConTope, balance.saldoLibre);
 
     return `
@@ -1575,21 +1760,22 @@ export class ControladorSubastas {
 
           <!-- Filas de desenlaces -->
           <div class="lista-eventos-cierre">
-            ${eventos.map((ev) => {
-              const rarezaInfo = PALETA_RAREZA[ev.rareza] || PALETA_RAREZA.comun;
-              let claseEvento = 'evento--superada-rival';
-              let montoHtml = `<div class="evento-cifra cifra" style="color: var(--exito);">+${formatearCreditos(ev.montoDevuelto)}</div><div class="etiqueta-sm">devuelto</div>`;
-              let btnAccion = `<button type="button" class="btn btn-contorno btn-sm btn-buscar-parecidas" data-id="${ev.id}">Parecidas</button>`;
+            ${eventos
+              .map((ev) => {
+                const rarezaInfo = PALETA_RAREZA[ev.rareza] || PALETA_RAREZA.comun;
+                let claseEvento = 'evento--superada-rival';
+                let montoHtml = `<div class="evento-cifra cifra" style="color: var(--exito);">+${formatearCreditos(ev.montoDevuelto)}</div><div class="etiqueta-sm">devuelto</div>`;
+                let btnAccion = `<button type="button" class="btn btn-contorno btn-sm btn-buscar-parecidas" data-id="${ev.id}">Parecidas</button>`;
 
-              if (ev.tipoDesenlace === 'adjudicada') {
-                claseEvento = 'evento--adjudicada';
-                montoHtml = `<div class="evento-cifra cifra" style="color: var(--advertencia);">−${formatearCreditos(ev.montoCobrado)}</div><div class="etiqueta-sm">cobrado</div>`;
-                btnAccion = `<button type="button" class="btn btn-acento btn-sm btn-ver-adjudicada" data-id="${ev.id}">Ver</button>`;
-              } else if (ev.tipoDesenlace === 'superada_tope') {
-                claseEvento = 'evento--superada-tope';
-              }
+                if (ev.tipoDesenlace === 'adjudicada') {
+                  claseEvento = 'evento--adjudicada';
+                  montoHtml = `<div class="evento-cifra cifra" style="color: var(--advertencia);">−${formatearCreditos(ev.montoCobrado)}</div><div class="etiqueta-sm">cobrado</div>`;
+                  btnAccion = `<button type="button" class="btn btn-acento btn-sm btn-ver-adjudicada" data-id="${ev.id}">Ver</button>`;
+                } else if (ev.tipoDesenlace === 'superada_tope') {
+                  claseEvento = 'evento--superada-tope';
+                }
 
-              return `
+                return `
                 <div class="fila-evento-cierre ${claseEvento}">
                   <div class="evento-icono" style="background: ${rarezaInfo.fondo}; border: 1px solid ${rarezaInfo.borde};">
                     ${rarezaInfo.icono}
@@ -1606,11 +1792,14 @@ export class ControladorSubastas {
                   </div>
                 </div>
               `;
-            }).join('')}
+              })
+              .join('')}
           </div>
 
           <!-- Caja de Consejo Táctico Personalizado -->
-          ${consejo ? `
+          ${
+            consejo
+              ? `
             <div class="caja-consejo-tactico" role="region" aria-label="Consejo táctico">
               <div class="consejo-icono">⚡</div>
               <div class="consejo-contenido">
@@ -1618,7 +1807,9 @@ export class ControladorSubastas {
                 <div>${consejo.cuerpo}</div>
               </div>
             </div>
-          ` : ''}
+          `
+              : ''
+          }
 
           <!-- Botones de Navegación del Cierre -->
           <div class="cierre-acciones-pie">
@@ -1660,7 +1851,9 @@ export class ControladorSubastas {
         </div>
 
         <!-- Alerta de resultado final si cerró o se adjudicó -->
-        ${(this.resultadoCierre === 'comprada' || this.resultadoCierre === 'adjudicada') ? `
+        ${
+          this.resultadoCierre === 'comprada' || this.resultadoCierre === 'adjudicada'
+            ? `
           <div class="alerta alerta-exito-cierre" role="alert" style="margin-bottom: 20px; background: #DFF1E6; border: 1px solid #0B6B31; border-radius: 8px; padding: 20px; text-align: center;">
             <h2 class="titulo-grande" style="color: #0B6B31; margin-bottom: 6px;">¡ES TUYA!</h2>
             <p style="font-size: 16px; color: var(--texto-1); margin-bottom: 12px;">
@@ -1681,7 +1874,9 @@ export class ControladorSubastas {
               <button type="button" class="btn btn-contorno" id="btn-resultado-explorar">Al listado</button>
             </div>
           </div>
-        ` : ''}
+        `
+            : ''
+        }
 
         <div class="detalle-grid">
           <!-- Columna Izquierda: Información del Objeto y Comparativa con Héroe -->
@@ -1703,24 +1898,32 @@ export class ControladorSubastas {
               <div class="selector-heroes-seccion">
                 <span class="etiqueta-sm">Comparar compatibilidad con héroe activo:</span>
                 <div class="selector-heroes-botones" role="radiogroup" aria-label="Elegir héroe">
-                  ${this.heroes.map((h) => `
+                  ${this.heroes
+                    .map(
+                      (h) => `
                     <button type="button" class="btn-heroe-chip ${h.id === this.heroeId ? 'heroe-elegido' : ''}" data-heroe="${h.id}">
                       <strong>${h.nombre}</strong> (Niv. ${h.nivel} · ${h.clase})
                     </button>
-                  `).join('')}
+                  `,
+                    )
+                    .join('')}
                 </div>
               </div>
 
               <!-- Alerta de nivel si aplica -->
-              ${comp.nivelInsuficiente ? `
+              ${
+                comp.nivelInsuficiente
+                  ? `
                 <div class="alerta alerta-advertencia" role="alert">
                   <strong>⚠️ Nivel insuficiente:</strong> ${hero.nombre} es nivel ${hero.nivel}. Le faltan ${comp.deltaNivel} niveles para poder equipar este objeto (RN-INV-004).
                 </div>
-              ` : `
+              `
+                  : `
                 <div class="alerta alerta-exito-suave">
                   <strong>✓ Compatible:</strong> ${hero.nombre} cumple el nivel requerido para equipar este objeto.
                 </div>
-              `}
+              `
+              }
 
               <!-- Tabla de Comparación de Atributos -->
               <div class="tabla-comparacion-contenedor">
@@ -1734,7 +1937,9 @@ export class ControladorSubastas {
                     </tr>
                   </thead>
                   <tbody>
-                    ${comp.comparaciones.map((c) => `
+                    ${comp.comparaciones
+                      .map(
+                        (c) => `
                       <tr>
                         <td><strong>${c.stat}</strong></td>
                         <td class="cifra">${c.actual}</td>
@@ -1745,7 +1950,9 @@ export class ControladorSubastas {
                           </span>
                         </td>
                       </tr>
-                    `).join('')}
+                    `,
+                      )
+                      .join('')}
                   </tbody>
                 </table>
               </div>
@@ -1755,14 +1962,18 @@ export class ControladorSubastas {
             <div class="panel-historial">
               <h3 class="titulo-mediano">Historial de pujas (${sub.historial.length})</h3>
               <ul class="lista-historial">
-                ${sub.historial.map((p) => `
+                ${sub.historial
+                  .map(
+                    (p) => `
                   <li class="item-historial ${p.esTu ? 'historial-propio' : ''}">
-                    <span class="historial-postor ${p.esTu ? 'postor-tu' : ''}">${p.esTu ? `Tú (${  p.apodo  })` : p.apodo}</span>
+                    <span class="historial-postor ${p.esTu ? 'postor-tu' : ''}">${p.esTu ? `Tú (${p.apodo})` : p.apodo}</span>
                     <span class="historial-tipo">${p.tipo}</span>
                     <span class="historial-cuando">${p.cuando}</span>
                     <span class="historial-monto cifra"><strong>${formatearCreditos(p.monto)} cr</strong></span>
                   </li>
-                `).join('')}
+                `,
+                  )
+                  .join('')}
               </ul>
             </div>
           </section>
@@ -1831,19 +2042,24 @@ export class ControladorSubastas {
               <div class="seccion-bloque bloque-automatica">
                 <h4 class="titulo-pequeno">Puja automática con tope máximo</h4>
                 <p class="texto-pista">El sistema pujará automáticamente el incremento mínimo cuando otro jugador te supere, hasta tu límite.</p>
-                ${sub.autoLimite > 0 ? `
+                ${
+                  sub.autoLimite > 0
+                    ? `
                   <div class="auto-activa-aviso">
                     <span>Tope activo: <strong>${formatearCreditos(sub.autoLimite)} cr</strong></span>
                     <button type="button" id="btn-desactivar-auto" class="btn btn-peligro-sm">Desactivar</button>
                   </div>
-                ` : `
+                `
+                    : `
                   <div class="campo-con-boton">
-                    <input type="number" id="input-limite-auto" class="input-estandar" placeholder="Tope máx (ej. ${formatearCreditos(minPuja + 400)})" min="${minPuja}" step="50" ${cerrada ? 'disabled' : ''}>
+                    <label for="input-limite-auto" class="etiqueta-sm">Tope de puja automática (mínimo ${formatearCreditos(minPuja)} cr):</label>
+                    <input type="number" id="input-limite-auto" class="input-estandar" placeholder="Ej. ${formatearCreditos(minPuja + 400)}" min="${minPuja}" step="50" ${cerrada ? 'disabled' : ''}>
                     <button type="button" id="btn-activar-auto" class="btn btn-contorno" ${cerrada ? 'disabled' : ''}>
                       Activar
                     </button>
                   </div>
-                `}
+                `
+                }
               </div>
             </div>
 
@@ -1870,7 +2086,9 @@ export class ControladorSubastas {
         </div>
 
         <!-- Modal de Confirmación de Compra Inmediata -->
-        ${this.confirmandoCompra ? `
+        ${
+          this.confirmandoCompra
+            ? `
           <div class="modal-overlay" id="modal-compra-inmediata" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
             <div class="modal-tarjeta">
               <h2 id="modal-titulo" class="titulo-mediano">Confirmar compra inmediata</h2>
@@ -1882,13 +2100,17 @@ export class ControladorSubastas {
               </div>
             </div>
           </div>
-        ` : ''}
+        `
+            : ''
+        }
       </div>
     `;
   }
 
   generarHtmlToastCruzado() {
-    if (!this.avisoCruzado) {return '';}
+    if (!this.avisoCruzado) {
+      return '';
+    }
     return `
       <aside class="toast-cruzado-flotante" role="alert" aria-live="polite">
         <div class="toast-cruzado-cabecera">
@@ -1915,10 +2137,15 @@ export class ControladorSubastas {
     this.contenedor.querySelectorAll('.tab-btn[data-tab]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const tab = btn.getAttribute('data-tab');
-        if (tab === 'explorar') {this.abrirExplorar();}
-        else if (tab === 'mis-subastas') {this.abrirMisSubastas();}
-        else if (tab === 'detalle') {this.abrirDetalle(this.subastaActivaId || this.subastas[0]?.id);}
-        else if (tab === 'cierre-multiple') {this.abrirCierreMultiple();}
+        if (tab === 'explorar') {
+          this.abrirExplorar();
+        } else if (tab === 'mis-subastas') {
+          this.abrirMisSubastas();
+        } else if (tab === 'detalle') {
+          this.abrirDetalle(this.subastaActivaId || this.subastas[0]?.id);
+        } else if (tab === 'cierre-multiple') {
+          this.abrirCierreMultiple();
+        }
       });
     });
 
@@ -1936,18 +2163,25 @@ export class ControladorSubastas {
     });
 
     // Abrir detalle desde tarjeta en Explorar o Mis subastas
-    this.contenedor.querySelectorAll('.btn-abrir, .btn-ver-subasta, .btn-recuperar, .btn-ir-ahora').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const id = btn.getAttribute('data-abrir') || btn.closest('[data-id]')?.getAttribute('data-id');
-        if (id) {this.abrirDetalle(id);}
+    this.contenedor
+      .querySelectorAll('.btn-abrir, .btn-ver-subasta, .btn-recuperar, .btn-ir-ahora')
+      .forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const id =
+            btn.getAttribute('data-abrir') || btn.closest('[data-id]')?.getAttribute('data-id');
+          if (id) {
+            this.abrirDetalle(id);
+          }
+        });
       });
-    });
 
     this.contenedor.querySelectorAll('.tarjeta-subasta, .fila-mi-subasta').forEach((tarj) => {
       tarj.addEventListener('click', () => {
         const id = tarj.getAttribute('data-id');
-        if (id) {this.abrirDetalle(id);}
+        if (id) {
+          this.abrirDetalle(id);
+        }
       });
     });
 
@@ -1963,7 +2197,9 @@ export class ControladorSubastas {
     this.contenedor.querySelectorAll('.btn-ver-adjudicada').forEach((btn) => {
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-id');
-        if (id) {this.abrirDetalle(id, { resultadoCierre: 'adjudicada' });}
+        if (id) {
+          this.abrirDetalle(id, { resultadoCierre: 'adjudicada' });
+        }
       });
     });
 
