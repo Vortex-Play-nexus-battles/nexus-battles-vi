@@ -44,6 +44,26 @@ Los estados que hay que poder montar hoy:
 - el elemento existe
 - el elemento no existe
 - el elemento está bloqueado por esa subasta
+- el elemento está bloqueado por esa subasta y va a adjudicarse ⚠️
+- ese elemento ya se transfirió con esa misma clave de idempotencia ⚠️
+
+⚠️ Los dos últimos describen `POST /elementos/{elementoId}/transferencias`, que
+**todavía no existe**. Están en el pacto a propósito: son la especificación
+ejecutable de lo que ms-subastas necesita, para que quien lo implemente pueda
+verificar contra ella en vez de adivinar. Hoy fallan del lado proveedor, y esa
+es justamente la información útil.
+
+Lo que el pacto fija de ese endpoint, y por qué:
+
+- **El nuevo dueño viaja como `nuevoPropietarioUid` (UUID) en el cuerpo**, igual
+  que `propietarioUid` en el bloqueo. No puede salir de una cabecera de
+  identidad: de las tres llamadas que hace ms-subastas, dos las dispara un
+  `@Scheduled` sin petición ni token —el cierre por vencimiento—, y la tercera
+  transfiere **al vendedor** como compensación, que no es quien pidió nada.
+- **Tiene que ser idempotente por `Idempotency-Key`.** El cierre corre dentro de
+  una transacción y el job reintenta la misma subasta a los 30 s; sin
+  idempotencia, la segunda pasada vuelve a mover el producto.
+- Un reintento ya aplicado responde **200**, no un error.
 
 ## Por qué esto y no un documento
 
