@@ -54,3 +54,22 @@ describe('Login - aislamiento de credenciales por ambiente', () => {
     expect(mensaje).toBe('Cuenta bloqueada temporalmente.');
   });
 });
+
+describe('Login - identidad de la sesion (#426, ADR-002)', () => {
+  const token = (claims) =>
+    `x.${btoa(JSON.stringify(claims)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}.y`;
+
+  test('guarda el uid del token y no la clave primaria', async () => {
+    const { identificadorDeSesion } = await import('./login.js');
+    expect(
+      identificadorDeSesion(token({ uid: '11111111-1111-1111-1111-111111111111', sub: 'lyra' }), 7),
+    ).toBe('11111111-1111-1111-1111-111111111111');
+  });
+
+  test('sin uid legible cae a la clave primaria, sin romper', async () => {
+    const { identificadorDeSesion } = await import('./login.js');
+    expect(identificadorDeSesion(token({ sub: 'lyra' }), 7)).toBe('7');
+    expect(identificadorDeSesion('no-es-un-jwt', 7)).toBe('7');
+    expect(identificadorDeSesion(undefined, undefined)).toBe('');
+  });
+});
