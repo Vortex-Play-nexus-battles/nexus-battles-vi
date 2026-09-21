@@ -107,6 +107,14 @@
         <span class="conexion conexion--sin-conexion" data-zona="conexion" role="status">
           Canal en tiempo real no conectado
         </span>
+        <!--
+          HU-JUE-015: el chat de ESTA sala. Solo aparece cuando se llego con
+          `?sala=`: el script pone el enlace con el identificador. Antes la
+          vista del chat existia sin que ninguna pantalla llevara a ella.
+        -->
+        <a class="boton boton--secundario" data-zona="enlace-chat-sala" href="./chat.html" hidden
+          >Chat de la sala</a
+        >
       </div>
 
       <!--
@@ -204,6 +212,13 @@
       // Cabecera: solo lo que el login dejo de verdad en la sesion.
       document.querySelector('[data-zona="apodo"]').textContent =
         sessionStorage.getItem('nexus.apodoActual') ?? '';
+
+      // HU-JUE-015: el chat de esta sala, con su identificador en la URL.
+      const enlaceChat = document.querySelector('[data-zona="enlace-chat-sala"]');
+      if (enlaceChat && idSala) {
+        enlaceChat.href = `./chat.html?sala=${encodeURIComponent(idSala)}`;
+        enlaceChat.hidden = false;
+      }
 
       const zonaVacia = document.querySelector('[data-zona="sin-partida"] .t-meta');
       const zonaArranque = document.querySelector('[data-zona="arranque"]');

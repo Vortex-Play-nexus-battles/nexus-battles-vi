@@ -449,6 +449,12 @@ test.describe('Sala de batalla de punta a punta', () => {
     // `display: flex` de `.fila` y `.pila`. Se veian los dos a la vez.
     await expect(page.locator('[data-zona="arranque"]')).toBeHidden();
     await expect(page.locator('[data-zona="sin-partida"]')).toBeHidden();
+
+    // HU-JUE-015: desde la sala se llega a SU chat (#441 lo tenia como hueco:
+    // la vista del chat existia sin que ninguna pantalla enlazara a ella).
+    const enlaceChat = page.locator('[data-zona="enlace-chat-sala"]');
+    await expect(enlaceChat).toBeVisible();
+    await expect(enlaceChat).toHaveAttribute('href', `./chat.html?sala=${sala.id}`);
   });
 
   test('atacar desde la vista baja la vida del rival, y el aviso llega por STOMP', async ({

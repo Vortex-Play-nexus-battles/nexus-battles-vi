@@ -70,6 +70,37 @@ class ArranqueDeLaAplicacionIT {
     @DynamicPropertySource
     static void jwks(DynamicPropertyRegistry registro) {
         EmisorDeTokensDePrueba.registrarJwks(registro);
+        registro.add("comentarios.sanciones.url", () -> "http://127.0.0.1:" + sanciones.getAddress().getPort() + "/api/v1");
+    }
+
+    /**
+     * Doble HTTP de la consulta de sancion (RF-USR-004). Desde HU-COM-001 CA-03
+     * publicar consulta al modulo de sanciones de verdad y, sin respuesta, NO
+     * publica (503). Esta IT prueba el arranque y el camino feliz, asi que el
+     * doble responde «sin sancion» con la forma exacta del contrato.
+     */
+    static com.sun.net.httpserver.HttpServer sanciones;
+
+    @org.junit.jupiter.api.BeforeAll
+    static void levantarSancionesDePrueba() throws Exception {
+        sanciones = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        sanciones.createContext("/api/v1/sanciones/usuarios/", intercambio -> {
+            byte[] cuerpo = "{\"sancionActiva\":false,\"motivo\":null,\"vigenteHasta\":null}"
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            intercambio.getResponseHeaders().add("Content-Type", "application/json");
+            intercambio.sendResponseHeaders(200, cuerpo.length);
+            try (var salida = intercambio.getResponseBody()) {
+                salida.write(cuerpo);
+            }
+        });
+        sanciones.start();
+    }
+
+    @org.junit.jupiter.api.AfterAll
+    static void apagarSancionesDePrueba() {
+        if (sanciones != null) {
+            sanciones.stop(0);
+        }
     }
 
     @Autowired
