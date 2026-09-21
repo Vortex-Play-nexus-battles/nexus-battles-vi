@@ -307,11 +307,16 @@ services:
       DIRECTORIO_ACTIVO_CLIENT_ID: moderacion-sanciones
       DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-moderacion
       SANCIONES_AVISOS_REINTENTO_MS: "2000"
+      # HU-ADM-001 (CA-04): los limites de la suspension salen de admin-parametros;
+      # cache de 1 s para que el spec vea el cambio sin esperar.
+      PARAMETROS_URL: http://srv-admin-parametros:8088/api/v1
+      SANCIONES_PARAMETROS_CACHE_SEGUNDOS: "1"
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
       e2e-plataforma-cache: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }
       srv-notificaciones: { condition: service_healthy }
+      srv-admin-parametros: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8086/actuator/health || exit 1"]
       interval: 5s
@@ -402,10 +407,33 @@ services:
       timeout: 5s
       retries: 40
 
+  # Parametros del sistema (HU-ADM-001): catalogo real; moderacion-sanciones
+  # le lee el rango de la suspension (CA-04) y el spec lo cambia en caliente.
+  srv-admin-parametros:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/plataforma/admin-parametros/build/libs/*.jar
+        PUERTO: "8088"
+    environment:
+      DB_RELACIONAL_URL: jdbc:postgresql://e2e-plataforma-db:5432/plataformadb
+      DB_USER: plataforma
+      DB_PASS: plataforma
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+    depends_on:
+      e2e-plataforma-db: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8088/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
   # Metricas de plataforma (HU-MET-004 / HU-MET-001): recolecta Actuator de
   # los servicios del bloque que corren en este compose y los agregados de
-  # moderacion. correo y admin-parametros NO estan aqui a proposito: son la
-  # brecha de observabilidad que el spec espera ver senalada (CA-03).
+  # moderacion. correo NO esta aqui a proposito: es la brecha de
+  # observabilidad que el spec espera ver senalada (CA-03).
   srv-metricas-plataforma:
     build:
       context: ../..

@@ -78,6 +78,7 @@ export const RUTAS = Object.freeze({
   auditoria: '../cuentas/auditoria.html',
   listaNegra: '../plataforma/moderacion-sanciones/lista-negra-admin.html',
   sanciones: '../plataforma/moderacion-sanciones/sanciones-admin.html',
+  parametros: '../plataforma/admin-parametros/parametros-admin.html',
   misSanciones: '../plataforma/moderacion-sanciones/mis-sanciones.html',
   metricas: '../plataforma/metricas-plataforma/panel-metricas.html',
 });
@@ -412,7 +413,11 @@ export function montarCabecera(
         ['Sanciones', RUTAS.sanciones],
       );
       if (sesion.rol !== 'MODERADOR') {
-        opciones.push(['Auditoria', RUTAS.auditoria], ['Panel de observabilidad', RUTAS.metricas]);
+        opciones.push(
+          ['Parametros', RUTAS.parametros],
+          ['Auditoria', RUTAS.auditoria],
+          ['Panel de observabilidad', RUTAS.metricas],
+        );
       }
     }
     for (const [texto, ruta] of opciones) {

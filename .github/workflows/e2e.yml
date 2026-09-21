@@ -76,6 +76,7 @@ jobs:
             :services:plataforma:notificaciones:bootJar \
             :services:plataforma:torneos:bootJar \
             :services:plataforma:metricas-plataforma:bootJar \
+            :services:plataforma:admin-parametros:bootJar \
             :services:plataforma:comentarios:bootJar \
             :services:plataforma:salas-partidas:bootJar
 
@@ -124,7 +125,7 @@ jobs:
         if: failure()
         run: |
           for s in srv-ms-identidad srv-ms-finanzas srv-ms-subastas srv-comentarios srv-heroes srv-productos srv-inventario \
-                   srv-motor-combate srv-moderacion-sanciones srv-notificaciones srv-torneos srv-metricas-plataforma srv-salas-partidas srv-borde; do
+                   srv-motor-combate srv-moderacion-sanciones srv-notificaciones srv-torneos srv-metricas-plataforma srv-admin-parametros srv-salas-partidas srv-borde; do
             echo "=============== $s ==============="
             # Primero la cabecera de las excepciones: con `--tail` a secas se
             # ve el final de una pila de cien lineas y no la causa.
