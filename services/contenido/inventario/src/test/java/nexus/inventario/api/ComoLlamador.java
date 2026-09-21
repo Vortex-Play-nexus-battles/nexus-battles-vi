@@ -44,6 +44,11 @@ public final class ComoLlamador {
         return "Bearer " + EMISOR.tokenDeJugador(apodo, UUID.randomUUID());
     }
 
+    /** Con uid fijo: el propietario del inventario es ese identificador, no el apodo. */
+    public static String portadorDeJugador(String apodo, UUID uid) {
+        return "Bearer " + EMISOR.tokenDeJugador(apodo, uid);
+    }
+
     /** El valor Bearer de un servicio, para las pruebas con cadena real. */
     public static String portadorDeServicio(String clientId) {
         return "Bearer " + EMISOR.tokenDeServicio(clientId);

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Servicio de inventario
-  version: 1.1.0
+  version: 1.1.1
   description: >
     Consulta paginada de la vitrina para HU-INV-001, y creacion y modificacion
     de elementos propios del jugador para HU-INV-003, y equipamiento de
@@ -9,12 +9,13 @@ info:
     propios para HU-INV-002. HU-INV-010 registra el bloqueo de los productos
     publicados en una subasta vigente y evita operarlos mientras siga activo.
 
-    Identidad (1.1.0, ADR-001/ADR-002/ADR-005). Las rutas del jugador exigen
-    un token de acceso: si es de un jugador, el propietario es el sujeto del
-    token (su apodo, que es como el inventario guarda propietarioId) y la
-    cabecera X-User-Name se ignora; si es una credencial de servicio
-    (rol SERVICIO, por ejemplo salas-partidas al verificar el heroe de cada
-    participante), X-User-Name es obligatoria y dice a que jugador afecta
+    Identidad (1.1.1, ADR-001/ADR-002/ADR-005). Las rutas del jugador exigen
+    un token de acceso: si es de un jugador, el propietario es su identificador
+    estable (claim uid, o sub en UUID; es el propietarioUid de HU-INV-010 y
+    como el inventario guarda propietarioId) y la cabecera X-User-Name se
+    ignora; si es una credencial de servicio (rol SERVICIO, por ejemplo
+    salas-partidas al verificar el heroe de cada participante), X-User-Name es
+    obligatoria y lleva ese identificador estable del jugador afectado
     (400 sin ella). Sin token 401. Las operaciones internas acordadas con
     Subastas siguen exigiendo su credencial (azp = ms-subastas). Hasta la
     1.0.0 X-User-Name a secas era la identidad, sin verificar.
@@ -368,9 +369,10 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: >
-        Token de ms-identidad (RS256, JWKS). De jugador: el propietario es el
-        sujeto (apodo). De servicio (rol SERVICIO): el propietario va en
-        X-User-Name, obligatoria. Sustituye al esquema IdentidadTemporal
+        Token de ms-identidad (RS256, JWKS). De jugador: el propietario es su
+        identificador estable (uid, o sub en UUID); un token de usuario sin el
+        recibe 403. De servicio (rol SERVICIO): el identificador estable del
+        jugador afectado va en X-User-Name, obligatoria. Sustituye al esquema IdentidadTemporal
         (X-User-Name sin verificar) de la 1.0.0.
     BearerInterno:
       type: http
