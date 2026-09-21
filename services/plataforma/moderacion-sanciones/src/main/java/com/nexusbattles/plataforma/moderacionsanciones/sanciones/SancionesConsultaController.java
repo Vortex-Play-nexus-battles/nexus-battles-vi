@@ -8,13 +8,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
-/**
- * Contrato: contracts/openapi/moderacion-sanciones-consulta.yaml
- *
- * <p>Abierta entre microservicios (mismo patron que
- * ListaNegraVerificacionController): quien la llama no es un usuario final,
- * es otro backend, y el dato no es sensible.
- */
+/** {@code GET /sanciones/usuarios/{uid}/activa} — moderacion-sanciones-consulta.yaml 1.1.0. */
 @RestController
 @RequestMapping("/api/v1/sanciones")
 public class SancionesConsultaController {
@@ -28,9 +22,11 @@ public class SancionesConsultaController {
     @GetMapping("/usuarios/{usuarioId}/activa")
     public SancionActivaResponse consultarActiva(@PathVariable UUID usuarioId) {
         var resultado = service.consultar(usuarioId);
-        return new SancionActivaResponse(resultado.sancionActiva(), resultado.motivo(), resultado.vigenteHasta());
+        return new SancionActivaResponse(resultado.sancionActiva(), resultado.motivo(), resultado.vigenteHasta(),
+                resultado.tipo());
     }
 
-    public record SancionActivaResponse(boolean sancionActiva, String motivo, OffsetDateTime vigenteHasta) {
+    public record SancionActivaResponse(boolean sancionActiva, String motivo, OffsetDateTime vigenteHasta,
+                                        String tipo) {
     }
 }

@@ -152,6 +152,7 @@ describe('sesion', () => {
       'Historial de transacciones',
       'Mis cofres',
       'Tienda',
+      'Mis sanciones',
       'Cerrar sesion',
     ]);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
@@ -163,7 +164,7 @@ describe('sesion', () => {
     const { elemento } = montar();
     const opciones = [...elemento.querySelectorAll('[role="menuitem"]')].map((o) => o.textContent);
     expect(opciones).toEqual(
-      expect.arrayContaining(['Gestion de usuarios', 'Lista negra', 'Auditoria']),
+      expect.arrayContaining(['Gestion de usuarios', 'Lista negra', 'Sanciones', 'Auditoria']),
     );
     expect(elemento.querySelector('[data-zona="rol"]').textContent).toBe('administrador');
   });
