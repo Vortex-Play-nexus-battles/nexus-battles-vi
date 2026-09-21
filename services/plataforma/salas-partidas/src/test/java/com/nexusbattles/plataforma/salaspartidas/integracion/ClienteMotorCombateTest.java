@@ -102,7 +102,7 @@ class ClienteMotorCombateTest {
         // la cola privada del jugador, que la vista no escucha, asi que el
         // combate se quedaba quieto sin decir nada.
         HeroeDeCombate aquiles = new HeroeDeCombate(
-                "h-9", "Aquiles", "Guerrero Tanque", null, 5, 100, 100);
+                "h-9", "Aquiles", "Guerrero Tanque", null, 5, 100, 100, 11);
 
         motor.expect(requestTo(BASE + "/api/v1/combate/ataques"))
                 .andExpect(jsonPath("$.heroeAtacante").value("Guerrero Tanque"))
