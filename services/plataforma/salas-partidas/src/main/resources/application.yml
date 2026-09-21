@@ -100,6 +100,25 @@ salas:
     # lo devuelve; CONSUMIR lo cobra sin beneficiario. Ver LiquidarApuesta.
     si-gana-la-maquina: ${APUESTAS_SI_GANA_LA_MAQUINA:LIBERAR}
 
+# HU-DIS-003: degradacion controlada. Cada dependencia externa (inventario,
+# motor de combate, libro de creditos) va detras de su propio corta circuitos
+# (shared/libs/plataforma-resiliencia). Cuando una no responde, la seccion que
+# depende de ella sale 503 con type `seccion-no-disponible`, la propiedad
+# `seccion` y la cabecera Retry-After; el resto del servicio sigue sirviendo.
+resiliencia:
+  # Fallos seguidos que abren el circuito. Un fallo aislado no abre nada.
+  fallos-para-abrir: ${RESILIENCIA_FALLOS_PARA_ABRIR:3}
+  # Lo que dura abierto antes de dejar pasar UNA llamada de prueba, y lo mismo
+  # que se le dice al cliente en Retry-After / reintentarEnSegundos: una sola
+  # cifra, porque son la misma promesa.
+  reintentar-en-segundos: ${RESILIENCIA_REINTENTAR_EN_SEGUNDOS:30}
+  # Tiempos de espera de TODA llamada saliente. Sin ellos, una direccion sin
+  # nadie detras (contenedor apagado) colgaba el connect dos minutos y el
+  # borde respondia 504 antes que este servicio: lo destapo el E2E de
+  # inyeccion de fallos. Muy por debajo de los 60 s del borde.
+  tiempo-conexion-ms: ${RESILIENCIA_TIEMPO_CONEXION_MS:2000}
+  tiempo-respuesta-ms: ${RESILIENCIA_TIEMPO_RESPUESTA_MS:10000}
+
 # Credencial de servicio con la que este servicio le habla a inventario y al
 # libro de creditos (ADR-001, emisor transitorio ADR-005). Las lee
 # CredencialesDeServicioAutoConfiguration (plataforma-seguridad): sin

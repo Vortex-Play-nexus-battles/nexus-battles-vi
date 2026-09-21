@@ -24,10 +24,15 @@ public interface MotorDeCombate {
      * @param atacante heroe que ataca, tal como lo conoce el catalogo
      * @param objetivo heroe que recibe
      * @return cuanto dano aplicar y por que
-     * @throws MotorNoDisponible si el motor no responde o contesta algo que no
-     *                           se puede interpretar. No se inventa un
-     *                           resultado: un combate decidido con numeros
-     *                           falsos es peor que un combate que no avanza.
+     * @throws MotorNoDisponible si el motor contesta algo que no se puede
+     *                           interpretar. No se inventa un resultado: un
+     *                           combate decidido con numeros falsos es peor
+     *                           que un combate que no avanza.
+     * @throws com.nexusbattles.plataforma.resiliencia.DependenciaDegradada
+     *                           si el motor no responde: la seccion de
+     *                           combate queda degradada (HU-DIS-003) y quien
+     *                           llama decide si pasa el turno o se lo dice
+     *                           al jugador.
      */
     ResolucionDelMotor resolver(HeroeDeCombate atacante, HeroeDeCombate objetivo);
 }

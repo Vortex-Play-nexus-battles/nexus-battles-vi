@@ -168,6 +168,14 @@
           servidor va a rechazar.
         -->
         <div class="fila" data-zona="acciones"></div>
+        <!--
+          HU-DIS-003: si el motor de combate no responde al jugar, aqui se pinta
+          «Seccion degradada» (los botones se quedan: la accion no se aplico y
+          el turno sigue siendo tuyo). Cualquier otro rechazo del servidor a
+          la accion va en la zona de rechazo, con su texto.
+        -->
+        <div data-zona="degradacion" data-seccion="Motor de combate" hidden></div>
+        <p class="t-cuerpo" data-zona="rechazo" role="alert" hidden></p>
         <p class="t-cuerpo" data-zona="resultado" role="status" hidden></p>
       </section>
     </main>
@@ -229,6 +237,9 @@
       let partida = null;
       /** Cliente STOMP, si hay sesion. Se abre una sola vez y se comparte. */
       let canal = null;
+      /** Los controles de combate montados ahora mismo, para los rechazos. */
+      let controlesActuales = null;
+      let colaPrivadaSuscrita = false;
 
       // Quien mira. Sale del claim `uid` del token, igual que en el servidor:
       // `nexus.usuarioId` no lo escribe nadie y siempre es null.
@@ -271,6 +282,20 @@
             controles.recibir(aviso);
           }
         });
+
+        // Los rechazos a MI accion vuelven por mi cola privada (errorDeCanal
+        // del contrato), no por el tema de la partida. Sin escucharla, un
+        // motor caido (HU-DIS-003) o un «no es tu turno» se perdian en
+        // silencio, que es justo lo que el Charter (riesgo #7) prohibe. Una
+        // sola suscripcion aunque se repinte: el rechazo va a los controles
+        // que esten montados en ese momento.
+        controlesActuales = controles;
+        if (!colaPrivadaSuscrita) {
+          colaPrivadaSuscrita = true;
+          canal.suscribir('/usuario/cola/salas', (problema) => {
+            controlesActuales?.rechazar(problema);
+          });
+        }
       }
 
       // ?partida=<id> gana: se llego directamente al combate o se recargo

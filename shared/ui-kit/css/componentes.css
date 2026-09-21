@@ -293,6 +293,52 @@
 
 
 /* =======================================================================
+   Seccion degradada — HU-DIS-003 · RNF-DIS-003 · MAPEO-ERRORES §5.5
+   Se pinta EN EL HUECO de la seccion que depende de un servicio caido;
+   el resto de la vista queda como esta. No es un Aviso (§5.2) ni un
+   Estado de vista (§5.1): el tono es de advertencia, no de error, porque
+   la degradacion es temporal y lo demas sigue funcionando.
+   Lo rellena frontend/app-web/src/comun/degradacion/aviso-degradacion.js.
+   ======================================================================= */
+
+.seccion-degradada {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--advertencia);
+  border-left-width: 4px;
+  border-radius: var(--radio);
+  background: var(--advertencia-insignia);
+  font-size: var(--t-cuerpo-tam);
+  color: var(--texto);
+}
+
+.seccion-degradada__titulo {
+  font-family: var(--t-etiqueta-familia);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.seccion-degradada__espera { color: var(--texto-2); }
+
+/* El reintento es el boton secundario del kit: la degradacion no es la
+   accion principal de la vista, es la salida de un estado temporal. */
+.seccion-degradada__reintentar {
+  align-self: flex-start;
+  padding: var(--e-2) var(--e-4);
+  border: 1px solid var(--primaria-relleno);
+  border-radius: var(--radio);
+  background: transparent;
+  color: var(--primaria-relleno);
+  font-family: var(--t-etiqueta-familia);
+  font-weight: var(--t-etiqueta-peso);
+  cursor: pointer;
+}
+
+.seccion-degradada__reintentar:hover { background: var(--fondo); }
+
+
+/* =======================================================================
    Barra de vida
    HU-SAL-005 · RF-JUE-009 y RN-COM-005
    -----------------------------------------------------------------------

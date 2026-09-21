@@ -1,6 +1,7 @@
 package com.nexusbattles.plataforma.salaspartidas.configuracion;
 
 import com.nexusbattles.comun.observabilidad.FiltroDeTraza;
+import com.nexusbattles.plataforma.resiliencia.CortaCircuitos;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.AbandonarSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CancelarSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CreditosDelJugador;
@@ -16,10 +17,12 @@ import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDePartida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDeSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDePartidas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
+import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 import java.time.Clock;
@@ -140,11 +143,13 @@ public class ConfiguracionDelServicio {
     public CreditosDelJugador creditosDelJugador(
             @org.springframework.beans.factory.annotation.Value("${salas.creditos.url}") String urlDelLibro,
             org.springframework.beans.factory.ObjectProvider<
-                    com.nexusbattles.comun.seguridad.servicio.InterceptorDePortadorDeServicio> credencial) {
-        RestClient.Builder constructor = RestClient.builder();
+                    com.nexusbattles.comun.seguridad.servicio.InterceptorDePortadorDeServicio> credencial,
+            @Qualifier("cortaCreditos") CortaCircuitos corta,
+            ClientHttpRequestFactory fabricaConTiempos) {
+        RestClient.Builder constructor = RestClient.builder().requestFactory(fabricaConTiempos);
         credencial.ifAvailable(constructor::requestInterceptor);
         return new com.nexusbattles.plataforma.salaspartidas.integracion.ClienteCreditos(
-                constructor.build(), urlDelLibro);
+                constructor.build(), urlDelLibro, corta);
     }
 
     /**
@@ -152,14 +157,17 @@ public class ConfiguracionDelServicio {
      *
      * <p>Propio y no compartido con el de inventario: son dos integraciones
      * distintas y el dia que una necesite su propio tiempo de espera no debe
-     * arrastrar a la otra.
+     * arrastrar a la otra. Por eso mismo cada uno lleva su corta circuitos
+     * (HU-DIS-003, ver {@link ConfiguracionDeResiliencia}).
      */
     @Bean
     public com.nexusbattles.plataforma.salaspartidas.dominio.MotorDeCombate motorDeCombate(
             @org.springframework.beans.factory.annotation.Value("${motor.combate.url:http://localhost:8104}")
-            String urlDelMotor) {
+            String urlDelMotor,
+            @Qualifier("cortaMotorCombate") CortaCircuitos corta,
+            ClientHttpRequestFactory fabricaConTiempos) {
         return new com.nexusbattles.plataforma.salaspartidas.integracion.ClienteMotorCombate(
-                RestClient.builder().build(), urlDelMotor);
+                RestClient.builder().requestFactory(fabricaConTiempos).build(), urlDelMotor, corta);
     }
 
     /** RF-JUE-017: estado de la partida, para pintar y para reconectar. */
@@ -186,8 +194,11 @@ public class ConfiguracionDelServicio {
     @Bean
     public RestClient restClientInventario(
             org.springframework.beans.factory.ObjectProvider<
-                    com.nexusbattles.comun.seguridad.servicio.InterceptorDePortadorDeServicio> credencial) {
-        RestClient.Builder constructor = RestClient.builder();
+                    com.nexusbattles.comun.seguridad.servicio.InterceptorDePortadorDeServicio> credencial,
+            ClientHttpRequestFactory fabricaConTiempos) {
+        // Con tiempos de espera acotados (HU-DIS-003): ver
+        // ConfiguracionDeResiliencia.fabricaDePeticionesConTiempos.
+        RestClient.Builder constructor = RestClient.builder().requestFactory(fabricaConTiempos);
         credencial.ifAvailable(constructor::requestInterceptor);
         return constructor.build();
     }

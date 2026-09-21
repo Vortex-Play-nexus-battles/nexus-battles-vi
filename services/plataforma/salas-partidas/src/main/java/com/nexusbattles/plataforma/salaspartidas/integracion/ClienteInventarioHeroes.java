@@ -1,11 +1,14 @@
 package com.nexusbattles.plataforma.salaspartidas.integracion;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.nexusbattles.plataforma.resiliencia.CortaCircuitos;
+import com.nexusbattles.plataforma.resiliencia.DependenciaDegradada;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.HeroeDelJugador;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.JugadorAutenticado;
 import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoDelHeroe;
 import com.nexusbattles.plataforma.salaspartidas.dominio.HeroeDeCombate;
 import com.nexusbattles.plataforma.salaspartidas.dominio.InventarioNoDisponible;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -44,6 +47,16 @@ import java.util.Map;
  * primero que este disponible y equipado, recorriendo la vitrina en el orden en
  * que la devuelve su dueno. Si ninguno lo esta, el resultado explica cual de las
  * dos cosas falla, que es lo que el dialogo necesita para decir que hacer.
+ *
+ * <p><b>Si inventario no responde</b> (conexion, tiempo, 5xx, o la credencial
+ * de servicio que no se pudo obtener), las tres llamadas a inventario salen por
+ * el corta circuitos de HU-DIS-003 como {@link DependenciaDegradada}: 503 con
+ * la seccion «Inventario» —el ejemplo literal de la HU— y {@code Retry-After},
+ * y tras varios fallos seguidos se deja de llamar hasta que toque reintentar.
+ * Un 4xx (inventario contesto, pero rechazo la consulta) es
+ * {@link InventarioNoDisponible} y no abre nada. Las llamadas a productos y al
+ * catalogo de heroes no van por aqui: ya degradan solas y son de otras
+ * dependencias.
  */
 @Component
 class ClienteInventarioHeroes implements HeroeDelJugador {
@@ -57,15 +70,18 @@ class ClienteInventarioHeroes implements HeroeDelJugador {
     private final String urlBase;
     private final String urlProductos;
     private final String urlHeroes;
+    private final CortaCircuitos corta;
 
     ClienteInventarioHeroes(RestClient restClientInventario,
                             @Value("${salas.inventario.url}") String urlBase,
                             @Value("${salas.productos.url}") String urlProductos,
-                            @Value("${salas.heroes.url}") String urlHeroes) {
+                            @Value("${salas.heroes.url}") String urlHeroes,
+                            @Qualifier("cortaInventario") CortaCircuitos corta) {
         this.restClient = restClientInventario;
         this.urlBase = urlBase.replaceAll("/+$", "");
         this.urlProductos = urlProductos.replaceAll("/+$", "");
         this.urlHeroes = urlHeroes.replaceAll("/+$", "");
+        this.corta = corta;
     }
 
     @Override
@@ -231,17 +247,25 @@ class ClienteInventarioHeroes implements HeroeDelJugador {
         return heroe.subastaId() == null ? null : "una subasta en curso";
     }
 
+    /**
+     * Una consulta a inventario, detras del corta circuitos.
+     *
+     * @throws DependenciaDegradada  si inventario no responde o el circuito
+     *                               esta abierto (HU-DIS-003)
+     * @throws InventarioNoDisponible si inventario contesto con un 4xx: no es
+     *                               una caida, pero tampoco hay veredicto
+     */
     private <T> T pedir(String url, JugadorAutenticado jugador, Class<T> tipo) {
-        try {
-            return restClient.get()
-                    .uri(url)
-                    .header("X-User-Name", jugador.apodo())
-                    .header("Accept", "application/json")
-                    .retrieve()
-                    .body(tipo);
-        } catch (RestClientException ex) {
-            throw new InventarioNoDisponible(ex);
+        Contestacion<T> contestacion = Contestacion.protegida(corta, () -> restClient.get()
+                .uri(url)
+                .header("X-User-Name", jugador.apodo())
+                .header("Accept", "application/json")
+                .retrieve()
+                .body(tipo));
+        if (contestacion.rechazada()) {
+            throw new InventarioNoDisponible("inventario rechazo la consulta con " + contestacion.estado());
         }
+        return contestacion.cuerpo();
     }
 
     // -- Formas exactas de las respuestas de inventario -----------------------

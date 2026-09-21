@@ -153,6 +153,10 @@
       <!-- RNF-USA-003: cargando, vacio y error comparten esta zona. -->
       <div class="estado-vista" data-zona="estado" role="status" aria-live="polite"></div>
 
+      <!-- HU-DIS-003: «Seccion degradada» cuando entrar a una sala no se puede
+           comprobar porque el inventario no responde. El listado se queda. -->
+      <div data-zona="degradacion" data-seccion="Inventario" hidden></div>
+
       <!--
         Estado del canal en tiempo real (HU-SAL-002, criterio 3). Se dice con
         todas las letras si esta conectado o no, en vez de dejar que la persona

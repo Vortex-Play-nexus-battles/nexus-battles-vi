@@ -1,5 +1,10 @@
 package com.nexusbattles.plataforma.salaspartidas.integracion;
 
+import com.nexusbattles.plataforma.resiliencia.CortaCircuitos;
+import com.nexusbattles.plataforma.resiliencia.DependenciaDegradada;
+import com.nexusbattles.plataforma.resiliencia.EstadoDelCorta;
+import com.nexusbattles.plataforma.resiliencia.RegistroDeDegradacion;
+import com.nexusbattles.plataforma.salaspartidas.configuracion.ConfiguracionDeResiliencia;
 import com.nexusbattles.plataforma.salaspartidas.dominio.HeroeDeCombate;
 import com.nexusbattles.plataforma.salaspartidas.dominio.MotorNoDisponible;
 import com.nexusbattles.plataforma.salaspartidas.dominio.ResolucionDelMotor;
@@ -15,12 +20,15 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Duration;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
@@ -52,6 +60,7 @@ class ClienteMotorCombateTest {
 
     private MockRestServiceServer motor;
     private ClienteMotorCombate cliente;
+    private CortaCircuitos corta;
 
     private static HeroeDeCombate arquero() {
         return new HeroeDeCombate("h-1", "Arquero del Norte", null, 5, 100, 100);
@@ -65,7 +74,10 @@ class ClienteMotorCombateTest {
     void prepararElMotor() {
         RestClient.Builder constructor = RestClient.builder();
         motor = MockRestServiceServer.bindTo(constructor).build();
-        cliente = new ClienteMotorCombate(constructor.build(), BASE);
+        corta = new CortaCircuitos(ConfiguracionDeResiliencia.MOTOR_COMBATE,
+                ConfiguracionDeResiliencia.SECCION_COMBATE, 2, Duration.ofSeconds(30),
+                Clock.systemUTC(), new RegistroDeDegradacion());
+        cliente = new ClienteMotorCombate(constructor.build(), BASE, corta);
     }
 
     // =====================================================================
@@ -249,27 +261,53 @@ class ClienteMotorCombateTest {
     // =====================================================================
 
     @Test
-    @DisplayName("un 5xx es motor no disponible, NO un dano de cero")
+    @DisplayName("un 5xx es la seccion de combate degradada, NO un dano de cero (HU-DIS-003)")
     void elErrorDelServidorNoSeConfundeConUnFallo() {
         // La diferencia importa: un cero se confunde con un ataque fallido y
         // decidiria el combate con un numero que nadie calculo.
         motor.expect(requestTo(BASE + "/api/v1/combate/ataques")).andRespond(withServerError());
 
-        MotorNoDisponible error =
-                assertThrows(MotorNoDisponible.class, () -> cliente.resolver(arquero(), mago(90)));
+        DependenciaDegradada error =
+                assertThrows(DependenciaDegradada.class, () -> cliente.resolver(arquero(), mago(90)));
 
-        assertEquals(503, error.estado());
+        assertAll(
+                () -> assertEquals(ConfiguracionDeResiliencia.MOTOR_COMBATE, error.dependencia()),
+                () -> assertEquals(ConfiguracionDeResiliencia.SECCION_COMBATE, error.seccion()));
     }
 
     @Test
-    @DisplayName("un 400 del motor tambien es motor no disponible")
+    @DisplayName("un 400 del motor es motor no disponible: contesto, asi que el circuito no se abre")
     void elErrorDePeticionTambienSePropaga() {
         motor.expect(requestTo(BASE + "/api/v1/combate/ataques"))
                 .andRespond(withStatus(HttpStatus.BAD_REQUEST)
                         .contentType(MediaType.APPLICATION_PROBLEM_JSON)
                         .body("{\"title\":\"Prototipo desconocido\"}"));
 
-        assertThrows(MotorNoDisponible.class, () -> cliente.resolver(arquero(), mago(90)));
+        MotorNoDisponible error =
+                assertThrows(MotorNoDisponible.class, () -> cliente.resolver(arquero(), mago(90)));
+
+        assertAll(
+                () -> assertEquals(503, error.estado()),
+                () -> assertTrue(error.detalle().contains("400"), error.detalle()),
+                () -> assertEquals(EstadoDelCorta.CERRADO, corta.estado()));
+    }
+
+    @Test
+    @DisplayName("dos caidas seguidas abren el circuito: el tercer ataque no llega al motor")
+    void conElCircuitoAbiertoNoSeLlama() {
+        motor.expect(requestTo(BASE + "/api/v1/combate/ataques")).andRespond(withServerError());
+        motor.expect(requestTo(BASE + "/api/v1/combate/ataques")).andRespond(withServerError());
+
+        assertThrows(DependenciaDegradada.class, () -> cliente.resolver(arquero(), mago(90)));
+        assertThrows(DependenciaDegradada.class, () -> cliente.resolver(arquero(), mago(90)));
+
+        DependenciaDegradada sinLlamar =
+                assertThrows(DependenciaDegradada.class, () -> cliente.resolver(arquero(), mago(90)));
+
+        motor.verify();
+        assertAll(
+                () -> assertEquals(EstadoDelCorta.ABIERTO, corta.estado()),
+                () -> assertNull(sinLlamar.getCause()));
     }
 
     @Test

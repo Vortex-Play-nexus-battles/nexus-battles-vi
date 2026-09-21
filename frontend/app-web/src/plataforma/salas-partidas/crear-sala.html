@@ -106,6 +106,10 @@
       <form id="formulario-crear-sala" class="tarjeta pila" novalidate>
         <!-- Zona del aviso. Vacia y oculta hasta que hay algo que decir. -->
         <div data-zona="aviso" hidden></div>
+        <!-- HU-DIS-003: hueco de «Seccion degradada» cuando el inventario o el
+             libro de creditos no responden. data-seccion es solo el respaldo:
+             el nombre real viene en el problem detail. -->
+        <div data-zona="degradacion" data-seccion="Inventario" hidden></div>
 
         <!-- Dos campos a lo ancho, como en el diseno. -->
         <div class="fila">
