@@ -1,11 +1,54 @@
+# Parametros del sistema — HU-ADM-001. Contrato: contracts/openapi/admin-parametros.yaml.
+#
+# Regla 10: ningun valor real vive aqui; todo baja de variable de entorno y lo
+# que hay detras de los dos puntos es el valor de desarrollo local.
 server:
   port: 8088
 
-# Regla 3 de plataforma: todo servicio expone salud Y metricas. Hasta el
-# 2026-09-21 este servicio solo exponia health (valor por omision de Actuator)
-# y el tablero tecnico de HU-MET-004 lo veia como brecha de observabilidad.
+spring:
+  application:
+    name: admin-parametros
+  mvc:
+    problemdetails:
+      enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${IDENTIDAD_JWKS_URL:http://localhost:8089/api/v1/auth/jwks}
+  datasource:
+    url: ${DB_RELACIONAL_URL:jdbc:postgresql://localhost:5432/plataformadb}
+    username: ${DB_USER:usuario_nexus}
+    password: ${DB_PASS:password_secreta_123}
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        default_schema: admin_parametros
+  flyway:
+    schemas: admin_parametros
+    default-schema: admin_parametros
+
+# HU-AUD-001: cada cambio se envia a la auditoria de ms-cumplimiento con la
+# credencial de servicio (ADR-005). Vacio = no se audita fuera (solo el
+# historial local), y se dice en la bitacora.
+parametros:
+  auditoria:
+    url: ${AUDITORIA_URL:}
+
+seguridad:
+  servicio:
+    url: ${DIRECTORIO_ACTIVO_URL:}
+    client-id: ${DIRECTORIO_ACTIVO_CLIENT_ID:}
+    client-secret: ${DIRECTORIO_ACTIVO_CLIENT_SECRET:}
+
+# Regla 3 de plataforma: todo servicio expone salud Y metricas.
 management:
   endpoints:
     web:
       exposure:
         include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true

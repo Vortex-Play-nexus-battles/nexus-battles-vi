@@ -5,7 +5,7 @@
  *
  *   1. /tecnicas recolecta cpu, memoria y peticiones de los servicios que SI
  *      corren aqui (torneos, salas, moderacion, comentarios, notificaciones)
- *      y senala como BRECHA a los que no (correo, admin-parametros): CA-03
+ *      y senala como BRECHA a los que no (correo): CA-03
  *   2. /tecnicas/informe/texto exporta el mismo tablero (CA-02)
  *   3. /moderacion agrega lo que moderacion-sanciones publica: se emite una
  *      advertencia y el total del dia sube; sin umbral del PO no hay alertas
@@ -20,8 +20,15 @@ const MODERADORA = process.env.E2E_MODERADORA ?? 'moderadora_e2e';
 const OBJETIVO = process.env.E2E_SANCIONABLE ?? 'medida_e2e';
 const CLAVE = 'Contrasena-E2E-2026';
 const VISTA = '/frontend/app-web/src/plataforma/metricas-plataforma/tablero-tecnico.html';
-const EN_EL_BANCO = ['comentarios', 'torneos', 'salas-partidas', 'notificaciones', 'moderacion-sanciones'];
-const FUERA_DEL_BANCO = ['correo', 'admin-parametros'];
+const EN_EL_BANCO = [
+  'comentarios',
+  'torneos',
+  'salas-partidas',
+  'notificaciones',
+  'moderacion-sanciones',
+  'admin-parametros',
+];
+const FUERA_DEL_BANCO = ['correo'];
 
 function cuerpoDelToken(jwt) {
   const base64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');

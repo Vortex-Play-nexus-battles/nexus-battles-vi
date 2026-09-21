@@ -41,5 +41,7 @@ docs/
 !services/plataforma/torneos/build/libs/*.jar
 # M16A: metricas de plataforma.
 !services/plataforma/metricas-plataforma/build/libs/*.jar
+# HU-ADM-001: parametros del sistema.
+!services/plataforma/admin-parametros/build/libs/*.jar
 
 # ms-identidad es Maven: su jar vive en `target/`, que no esta excluido.

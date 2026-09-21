@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Parametros del sistema · Nexus Battles VI</title>
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
+  </head>
+  <body>
+    <div data-cabecera-app></div>
+
+    <main class="contenedor pila" data-vista="parametros-admin">
+      <h1>Parametros del sistema</h1>
+      <p class="t-meta">
+        Configuracion operativa con validacion, versionado y auditoria (RF-ADM-001). Cada cambio
+        lleva motivo y puede programarse con fecha de vigencia. Los valores fijados por el Project
+        Charter aparecen bloqueados. Un parametro «sin definir» es una decision que el Product Owner
+        no ha tomado: el servicio que lo consume aplica su comportamiento por omision.
+      </p>
+
+      <div class="aviso" data-zona="aviso" role="status" hidden></div>
+
+      <section class="pila pila--compacta" data-zona="catalogo"></section>
+    </main>
+
+    <script type="module">
+      import { montarCabecera, exigirSesion, leerSesion } from '../../comun/cabecera-app.js';
+      import { montarParametros } from './parametros.js';
+
+      if (!exigirSesion()) {
+        throw new Error('sin sesion: redirigiendo al login');
+      }
+      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'cuenta' });
+      montarParametros(document, { rol: leerSesion().rol });
+    </script>
+  </body>
+</html>

@@ -40,6 +40,15 @@ sanciones:
     # semanas y no fija el tope: 30 dias por defecto, decision D-20.
     minima-horas: ${SANCIONES_SUSPENSION_MINIMA_HORAS:1}
     maxima-dias: ${SANCIONES_SUSPENSION_MAXIMA_DIAS:30}
+  apelacion:
+    # Plazo para apelar una sancion desde su emision (HU-USR-007). Respaldo:
+    # el valor vigente lo da admin-parametros (sanciones.apelacion.plazo-dias).
+    plazo-dias: ${SANCIONES_APELACION_PLAZO_DIAS:30}
+  parametros:
+    # HU-ADM-001 (CA-04): rango de la suspension y plazo de apelacion por API
+    # de admin-parametros. Vacio = solo las variables de entorno de arriba.
+    url: ${PARAMETROS_URL:}
+    cache-segundos: ${SANCIONES_PARAMETROS_CACHE_SEGUNDOS:30}
   notificaciones:
     # Bandeja del jugador (contracts/openapi/notificaciones.yaml, /internal
     # exige la credencial de servicio de ADR-005: DIRECTORIO_ACTIVO_*).
