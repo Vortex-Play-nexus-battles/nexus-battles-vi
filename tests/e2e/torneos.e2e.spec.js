@@ -378,17 +378,37 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     let partida = await inicio.json();
 
     await page.goto(`${BORDE}${SALA_BATALLA}?sala=${sala.id}&partida=${partida.id}`);
+    const leerPartida = async () => {
+      const r = await api.get(`/api/v1/partidas/${partida.id}`, { headers: conToken(anfitriona.token) });
+      partida = await r.json();
+      return partida;
+    };
     let golpes = 0;
     while (partida.estado === 'EN_CURSO' && golpes < 30) {
-      const boton = page.locator('[data-zona="acciones"] [data-atacar]').first();
-      await expect(boton).toBeEnabled({ timeout: 20000 });
-      const turnoPrevio = partida.turnoActual.numeroTurno;
-      await boton.click();
+      // Se espera el turno propio segun el SERVICIO, no segun el boton: entre
+      // que el boton se ve habilitado y el clic, la maquina puede jugar y hasta
+      // terminar la partida (el clic se quedaria esperando para siempre).
       await expect
         .poll(
           async () => {
-            const r = await api.get(`/api/v1/partidas/${partida.id}`, { headers: conToken(anfitriona.token) });
-            partida = await r.json();
+            await leerPartida();
+            return partida.estado !== 'EN_CURSO' || partida.turnoActual.idJugador === anfitriona.claims.uid;
+          },
+          { timeout: 25000, message: `golpe ${golpes + 1}: la maquina no devuelve el turno` },
+        )
+        .toBe(true);
+      if (partida.estado !== 'EN_CURSO') {
+        break;
+      }
+      const turnoPrevio = partida.turnoActual.numeroTurno;
+      const boton = page.locator('[data-zona="acciones"] [data-atacar]').first();
+      await expect(boton).toBeEnabled({ timeout: 20000 });
+      // Si justo en este instante la partida cambia, el clic no entra y lo ve el sondeo de abajo.
+      await boton.click({ timeout: 5000 }).catch(() => {});
+      await expect
+        .poll(
+          async () => {
+            await leerPartida();
             return partida.estado !== 'EN_CURSO' || partida.turnoActual.numeroTurno > turnoPrevio;
           },
           { timeout: 25000, message: `golpe ${golpes + 1}: ni rota el turno ni acaba` },
