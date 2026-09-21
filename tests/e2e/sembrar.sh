@@ -256,4 +256,25 @@ for apodo in "$ANFITRION" "$INVITADO" "$CURIOSO"; do
   echo "  $apodo: uid=$uid disponible=$disponible"
 done
 
+echo "== 5) Moderacion (HU-USR-004..007): una moderadora y un administrador ==="
+# ms-identidad registra a todo el mundo como JUGADOR y el unico camino para
+# crear MODERADOR/ADMINISTRADOR es el endpoint de admin, que exige... un
+# administrador. En el banco E2E se rompe el huevo-gallina en la base de
+# identidad, que es de este compose y de nadie mas: se registran por el
+# camino normal y se les cambia el rol por SQL. El token con el rol nuevo lo
+# obtienen al iniciar sesion DESPUES de este paso (el rol viaja en el JWT).
+MODERADORA="${E2E_MODERADORA:-moderadora_e2e}"
+ADMIN="${E2E_ADMIN:-admin_e2e}"
+token_de "$MODERADORA" >/dev/null
+token_de "$ADMIN" >/dev/null
+$COMPOSE exec -T e2e-identidad-db psql -v ON_ERROR_STOP=1 -U identidad -d identidaddb -q <<SQL
+UPDATE usuarios SET rol_id = (SELECT id FROM roles WHERE nombre = 'MODERADOR')     WHERE apodo = '$MODERADORA';
+UPDATE usuarios SET rol_id = (SELECT id FROM roles WHERE nombre = 'ADMINISTRADOR') WHERE apodo = '$ADMIN';
+SQL
+roles=$($COMPOSE exec -T e2e-identidad-db psql -At -U identidad -d identidaddb \
+  -c "SELECT u.apodo || '=' || r.nombre FROM usuarios u JOIN roles r ON r.id = u.rol_id WHERE u.apodo IN ('$MODERADORA','$ADMIN') ORDER BY 1")
+echo "  $roles" | tr '\n' ' '; echo
+echo "$roles" | grep -q "^$ADMIN=ADMINISTRADOR$" || { echo "::error::$ADMIN no quedo como ADMINISTRADOR"; exit 1; }
+echo "$roles" | grep -q "^$MODERADORA=MODERADOR$" || { echo "::error::$MODERADORA no quedo como MODERADOR"; exit 1; }
+
 echo "Semilla lista."

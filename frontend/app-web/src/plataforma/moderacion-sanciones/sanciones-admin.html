@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Moderacion — Sanciones · Nexus Battles VI</title>
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
+  </head>
+  <body>
+    <div data-cabecera-app></div>
+
+    <main class="contenedor pila" data-vista="sanciones-admin">
+      <h1>Moderacion · Sanciones</h1>
+      <p class="t-meta">
+        Advertencias (RF-USR-004), suspensiones temporales (RF-USR-005), baneos definitivos
+        (RF-USR-006) y apelaciones (RF-USR-007). Quien emite queda registrado; nada se borra.
+      </p>
+
+      <div class="aviso" data-zona="aviso" role="status" hidden></div>
+
+      <section class="tarjeta pila pila--compacta">
+        <h2>Historial de un usuario</h2>
+        <form class="fila" data-zona="buscar">
+          <label class="campo" style="flex: 1">
+            <span class="campo__etiqueta">Identificador (uid) del usuario</span>
+            <input
+              class="campo__control"
+              name="usuarioId"
+              required
+              placeholder="uuid del jugador"
+            />
+          </label>
+          <button class="boton boton--secundario" type="submit">Ver historial</button>
+        </form>
+        <div class="pila pila--compacta" data-zona="historial"></div>
+      </section>
+
+      <section class="tarjeta pila pila--compacta">
+        <h2>Emitir sancion</h2>
+        <form class="pila pila--compacta" data-zona="emitir">
+          <label class="campo">
+            <span class="campo__etiqueta">Usuario (uid)</span>
+            <input class="campo__control" name="usuarioId" required />
+          </label>
+          <label class="campo">
+            <span class="campo__etiqueta">Tipo</span>
+            <select class="campo__control" name="tipo">
+              <option value="ADVERTENCIA">Advertencia (no restringe el acceso)</option>
+              <option value="SUSPENSION">Suspension temporal</option>
+              <option value="BANEO">Baneo definitivo</option>
+            </select>
+          </label>
+          <label class="campo" data-solo="SUSPENSION">
+            <span class="campo__etiqueta">Duracion en horas (1 hora a 30 dias)</span>
+            <input
+              class="campo__control"
+              type="number"
+              name="duracionHoras"
+              min="1"
+              max="720"
+              value="24"
+            />
+          </label>
+          <label class="campo">
+            <span class="campo__etiqueta">Motivo (obligatorio)</span>
+            <textarea class="campo__control" name="motivo" rows="3" required></textarea>
+          </label>
+          <label class="campo">
+            <span class="campo__etiqueta">Politica violada (opcional)</span>
+            <input class="campo__control" name="politica" />
+          </label>
+          <label class="campo">
+            <span class="campo__etiqueta">Comentario de origen (opcional)</span>
+            <input class="campo__control" name="comentarioId" />
+          </label>
+          <label class="campo campo--linea" data-solo="BANEO">
+            <input type="checkbox" name="confirmacion" />
+            <span
+              >Confirmo que el baneo es definitivo y solo lo revierte una apelacion favorable</span
+            >
+          </label>
+          <button class="boton boton--primario" type="submit">Emitir</button>
+        </form>
+      </section>
+
+      <section class="tarjeta pila pila--compacta">
+        <h2>Apelaciones pendientes</h2>
+        <div class="pila pila--compacta" data-zona="apelaciones"></div>
+      </section>
+    </main>
+
+    <script type="module">
+      import { montarCabecera, exigirSesion, leerSesion } from '../../comun/cabecera-app.js';
+      import { montarPanelDeModeracion } from './sanciones.js';
+
+      if (!exigirSesion()) {
+        throw new Error('sin sesion: redirigiendo al login');
+      }
+      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'cuenta' });
+      montarPanelDeModeracion(document, { rol: leerSesion().rol });
+      // Un 403 de RBAC lleva al menu, no al login (mismo criterio que la lista negra).
+      window.addEventListener('nexus:rbac-forbidden', () => {
+        window.location.href = new URL('../../cuentas/index.html', import.meta.url).href;
+      });
+    </script>
+  </body>
+</html>

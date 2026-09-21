@@ -109,7 +109,7 @@ services:
       # pruebas, no de ningun entorno real.
       # e2e-banco: credencial con la que sembrar.sh acredita el saldo inicial en
       # ms-finanzas, que desde #455 solo atiende a servicios (ROLE_SERVICIO).
-      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas
+      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion
     depends_on:
       e2e-identidad-db: { condition: service_healthy }
     healthcheck:
@@ -299,12 +299,46 @@ services:
       DB_PASS: plataforma
       DB_MEMORIA_URL: redis://e2e-plataforma-cache:6379
       IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      # HU-NOT-005: los avisos de sancion y de apelacion van a la bandeja del
+      # jugador con la credencial de servicio de este mismo compose (ADR-005).
+      # Reintento corto para que el E2E no espere 15 s si el primero no entro.
+      NOTIFICACIONES_URL: http://srv-notificaciones:8085/api/v1
+      DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
+      DIRECTORIO_ACTIVO_CLIENT_ID: moderacion-sanciones
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-moderacion
+      SANCIONES_AVISOS_REINTENTO_MS: "2000"
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
       e2e-plataforma-cache: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }
+      srv-notificaciones: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8086/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  # Bandeja de notificaciones (HU-NOT-006): la sancion y la decision de la
+  # apelacion tienen que aparecer en la bandeja del jugador (HU-NOT-005), y
+  # eso solo se demuestra con el servicio real detras del borde.
+  srv-notificaciones:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/plataforma/notificaciones/build/libs/*.jar
+        PUERTO: "8085"
+    environment:
+      DB_RELACIONAL_URL: jdbc:postgresql://e2e-plataforma-db:5432/plataformadb
+      DB_USER: plataforma
+      DB_PASS: plataforma
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      NOTIFICACIONES_WS_ORIGENES: http://localhost:8099
+    depends_on:
+      e2e-plataforma-db: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8085/actuator/health || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 40

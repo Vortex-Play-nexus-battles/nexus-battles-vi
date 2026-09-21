@@ -6,12 +6,13 @@ info:
     tiene una sancion activa que le impida participar en una operacion (por
     ejemplo, HU-SUB-001: no publicar subastas con sanciones activas).
 
-    Sprint 2: backing provisional. Todavia no existe el modelo ni el mecanismo
-    para imponer sanciones, asi que este endpoint siempre responde
-    "sancionActiva: false". En Sprint 3 se reemplaza la logica interna
-    manteniendo exactamente esta forma -- ningun consumidor necesita cambiar
-    codigo cuando eso pase.
-  version: 1.0.0
+    1.1.0 (Sprint 3, HU-USR-004..006 #477 #478 #479): la respuesta sale del
+    historial real de sanciones (moderacion-sanciones-admin.yaml). Restringe
+    una SUSPENSION no vencida o un BANEO no revertidos; una ADVERTENCIA nunca
+    (CA-02 de HU-USR-004). Se anade `tipo` para que el consumidor distinga
+    (D-14 actualizada: silencia la suspension o el baneo, no la advertencia).
+    Compatible con 1.0.0: la forma anterior no cambia.
+  version: 1.1.0
 servers:
   - url: http://localhost:8086/api/v1
     description: Entorno local de desarrollo
@@ -62,14 +63,21 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: Solo presente si sancionActiva es true.
+          description: Solo presente si sancionActiva es true y es una SUSPENSION (un BANEO no vence).
+        tipo:
+          type: string
+          nullable: true
+          enum: [SUSPENSION, BANEO, null]
+          description: (1.1.0) Que sancion restringe. Solo presente si sancionActiva es true.
       examples:
         - sancionActiva: false
           motivo: null
           vigenteHasta: null
+          tipo: null
         - sancionActiva: true
           motivo: "Lenguaje ofensivo reiterado"
           vigenteHasta: "2026-09-20T00:00:00Z"
+          tipo: SUSPENSION
 
     ProblemDetail:
       type: object

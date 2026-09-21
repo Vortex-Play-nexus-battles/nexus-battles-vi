@@ -72,6 +72,8 @@ export const RUTAS = Object.freeze({
   gestionUsuarios: '../cuentas/gestion-usuarios.html',
   auditoria: '../cuentas/auditoria.html',
   listaNegra: '../plataforma/moderacion-sanciones/lista-negra-admin.html',
+  sanciones: '../plataforma/moderacion-sanciones/sanciones-admin.html',
+  misSanciones: '../plataforma/moderacion-sanciones/mis-sanciones.html',
   metricas: '../plataforma/metricas-plataforma/panel-metricas.html',
 });
 
@@ -396,11 +398,13 @@ export function montarCabecera(
       ['Historial de transacciones', RUTAS.historial],
       ['Mis cofres', RUTAS.cofres],
       ['Tienda', RUTAS.tienda],
+      ['Mis sanciones', RUTAS.misSanciones],
     ];
     if (ROLES_ADMINISTRATIVOS.includes(sesion.rol)) {
       opciones.push(
         ['Gestion de usuarios', RUTAS.gestionUsuarios],
         ['Lista negra', RUTAS.listaNegra],
+        ['Sanciones', RUTAS.sanciones],
       );
       if (sesion.rol !== 'MODERADOR') {
         opciones.push(['Auditoria', RUTAS.auditoria], ['Panel de observabilidad', RUTAS.metricas]);
