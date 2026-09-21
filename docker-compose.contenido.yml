@@ -97,12 +97,18 @@ services:
       SPRING_DATA_MONGODB_URI: mongodb://contenido-mongo:27017/inventario
       HEROES_BASE_URL: http://srv-heroes:8080
       PRODUCTOS_BASE_URL: http://srv-productos:8080
+      # HU-INV-010: las operaciones internas de subastas llegan con un token de
+      # servicio (azp = ms-subastas) validado contra este JWKS. Mientras cuentas
+      # no publique su Keycloak, el de desarrollo (jwks-dev); se cambia por entorno.
+      KEYCLOAK_JWK_SET_URI: ${KEYCLOAK_JWK_SET_URI:-http://jwks-dev/certs.json}
     depends_on:
       contenido-mongo:
         condition: service_healthy
       srv-heroes:
         condition: service_started
       srv-productos:
+        condition: service_started
+      jwks-dev:
         condition: service_started
 
   srv-productos:

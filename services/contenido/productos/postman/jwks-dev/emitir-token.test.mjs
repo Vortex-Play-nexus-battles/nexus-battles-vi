@@ -59,6 +59,20 @@ test('emitir-token.mjs acepta otro rol y vence en 8 horas por defecto', () => {
   assert.ok(cuerpo.exp > ahora + 8 * 3600 - 10 && cuerpo.exp <= ahora + 8 * 3600 + 5);
 });
 
+test('emitir-token.mjs --azp emite un token de servicio (client_credentials) con el claim azp que revisa inventario', () => {
+  const token = correr('emitir-token.mjs', pem, '--azp', 'ms-subastas');
+  const cuerpo = JSON.parse(b64url(token.split('.')[1]));
+  assert.equal(cuerpo.azp, 'ms-subastas');
+  assert.equal(cuerpo.sub, 'ms-subastas');
+  assert.deepEqual(cuerpo.realm_access.roles, [], 'un token de servicio no lleva roles de usuario');
+});
+
+test('sin --azp el token no lleva el claim azp', () => {
+  const token = correr('emitir-token.mjs', pem);
+  const cuerpo = JSON.parse(b64url(token.split('.')[1]));
+  assert.ok(!('azp' in cuerpo));
+});
+
 test('generar-claves.mjs tambien deja jwks.json junto a la clave privada', () => {
   assert.ok(statSync(join(carpeta, 'jwks.json')).isFile());
 });
