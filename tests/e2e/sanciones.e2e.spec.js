@@ -299,7 +299,11 @@ test.describe('Sanciones y apelaciones (HU-USR-004/005/006/007, HU-NOT-005)', ()
   test('el panel de la moderadora carga el historial del usuario buscado', async ({ page }) => {
     await conSesion(page, moderadora);
     await page.goto(`${BORDE}${VISTAS}/sanciones-admin.html`);
-    await expect(page.locator('[name="tipo"] option[value="BANEO"]')).toBeDisabled();
+    // `toBeDisabled` no aplica a <option>: se mira el atributo.
+    await expect(page.locator('[name="tipo"] option[value="BANEO"]')).toHaveAttribute(
+      'disabled',
+      '',
+    );
     await page.fill('[data-zona="buscar"] [name="usuarioId"]', jugadora.claims.uid);
     await page.click('[data-zona="buscar"] button[type="submit"]');
     await expect(page.locator(`[data-zona="historial"] [data-sancion-id="${suspension.id}"]`)).toBeVisible({
