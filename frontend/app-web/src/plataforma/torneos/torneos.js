@@ -230,7 +230,31 @@ export function tarjetaDeEquipo(torneo, equipo, uid) {
   return tarjeta;
 }
 
-export function filaDeEncuentro(torneo, encuentro) {
+/**
+ * HU-TOR-004 CA-04: un encuentro LISTO en el que juega mi equipo se juega en
+ * una sala de batalla vinculada; al terminar, salas-partidas informa el
+ * ganador a torneos. Aqui solo se decide si mostrar el acceso.
+ *
+ * @returns {boolean}
+ */
+export function puedoJugar(torneo, encuentro, uid) {
+  if (encuentro.estado !== 'LISTO' || torneo.estado !== 'EN_CURSO') {
+    return false;
+  }
+  const equipo = miEquipo(torneo, uid);
+  return Boolean(equipo) && (equipo.id === encuentro.equipoA || equipo.id === encuentro.equipoB);
+}
+
+/** Ruta relativa de crear sala con el encuentro prefijado (misma carpeta `plataforma/`). */
+export function rutaDeSalaDelEncuentro(torneo, encuentro) {
+  const parametros = new URLSearchParams({
+    torneo: torneo.id,
+    encuentro: String(encuentro.numero),
+  });
+  return `../salas-partidas/crear-sala.html?${parametros}`;
+}
+
+export function filaDeEncuentro(torneo, encuentro, uid = null) {
   const fila = nodo('li', 'encuentro');
   fila.dataset.numero = String(encuentro.numero);
   fila.dataset.estado = encuentro.estado;
@@ -244,6 +268,12 @@ export function filaDeEncuentro(torneo, encuentro) {
     resultado = ' · listo para jugarse';
   }
   fila.textContent = `${etiqueta}: ${a} vs ${b}${resultado}`;
+  if (puedoJugar(torneo, encuentro, uid)) {
+    const enlace = nodo('a', 'boton boton--secundario', 'Crear sala del encuentro');
+    enlace.href = rutaDeSalaDelEncuentro(torneo, encuentro);
+    enlace.dataset.accion = 'jugar-encuentro';
+    fila.append(' ', enlace);
+  }
   return fila;
 }
 
@@ -426,7 +456,7 @@ export function montarTorneos(
       arbol.appendChild(nodo('h4', 't-etiqueta', titulo));
       const ul = nodo('ul', 'pila pila--ajustada');
       ul.dataset.llave = llave;
-      lista.forEach((e) => ul.appendChild(filaDeEncuentro(torneo, e)));
+      lista.forEach((e) => ul.appendChild(filaDeEncuentro(torneo, e, uid)));
       arbol.appendChild(ul);
     });
     zonaDetalle.appendChild(arbol);

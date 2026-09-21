@@ -20,6 +20,9 @@ import com.nexusbattles.plataforma.salaspartidas.dominio.ParametrosDeSala;
  * <p>{@code heroesIA} (contrato 1.2.0, HU-SAL-004) manda sobre
  * {@code incluirHeroeIA} cuando viene: el booleano de RF-JUE-001 se sigue
  * aceptando y vale por una maquina.
+ *
+ * <p>{@code torneo} (contrato 1.5.0, HU-TOR-004 CA-04) vincula la sala a un
+ * encuentro: al terminar la partida el ganador se informa a torneos.
  */
 public record CrearSalaRequest(
         Integer maximoParticipantes,
@@ -28,7 +31,18 @@ public record CrearSalaRequest(
         Boolean incluirHeroeIA,
         Boolean privada,
         Integer tamanoEquipo,
-        Integer heroesIA) {
+        Integer heroesIA,
+        EncuentroDeTorneoRequest torneo) {
+
+    /** Compatibilidad con el cuerpo 1.4.0 (sin torneo). */
+    public CrearSalaRequest(Integer maximoParticipantes, Modalidad modalidad, Integer recompensaCreditos,
+                            Boolean incluirHeroeIA, Boolean privada, Integer tamanoEquipo, Integer heroesIA) {
+        this(maximoParticipantes, modalidad, recompensaCreditos, incluirHeroeIA, privada, tamanoEquipo, heroesIA, null);
+    }
+
+    /** El encuentro del torneo que esta sala juega: {@code torneoId} y {@code numeroEncuentro} (1..14). */
+    public record EncuentroDeTorneoRequest(java.util.UUID torneoId, Integer numeroEncuentro) {
+    }
 
     ParametrosDeSala aParametros() {
         int maquinas = heroesIA != null ? heroesIA : (Boolean.TRUE.equals(incluirHeroeIA) ? 1 : 0);

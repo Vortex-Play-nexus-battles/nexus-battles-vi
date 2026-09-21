@@ -25,7 +25,7 @@ info:
     el pago en dinero real (RF-PAG-001, pasarela de otro equipo). El valor de
     la inscripcion lo fija quien crea el torneo, en creditos (D-23); con 0 no
     se cobra nada. Todo cambio incompatible abre version nueva (regla 2).
-  version: 1.0.0
+  version: 1.1.0
 servers:
   - url: http://localhost:8083/api/v1
     description: Entorno local de desarrollo
@@ -256,7 +256,7 @@ paths:
         '200':
           content: { application/json: { schema: { $ref: '#/components/schemas/Torneo' } } }
         '400':
-          description: Sin motivo cuando lo registra un administrador (SOLICITUD_INVALIDA)
+          description: Sin ganador (ni equipo ni uid), o sin motivo cuando lo registra un administrador (SOLICITUD_INVALIDA)
           content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
         '401': { $ref: '#/components/responses/SinToken' }
         '403': { $ref: '#/components/responses/SinPermiso' }
@@ -331,11 +331,17 @@ components:
 
     ResultadoRequest:
       type: object
-      required: [ganadorEquipoId]
+      description: >
+        Uno de los dos: `ganadorEquipoId` (el administrador, que ve los equipos)
+        o `ganadorUid` (1.1.0: la partida jugada, que solo conoce al jugador en
+        pie; torneos resuelve a que equipo del encuentro pertenece). Si vienen
+        los dos manda `ganadorEquipoId`. Sin ninguno, 400 (SOLICITUD_INVALIDA);
+        un uid que no juega ese encuentro, 422 (GANADOR_NO_PARTICIPA).
       properties:
-        ganadorEquipoId: { type: string, format: uuid }
-        partidaId: { type: string, format: uuid, description: Partida de salas-partidas que decidio el encuentro }
-        motivo: { type: string, maxLength: 500, description: Obligatorio cuando lo registra un administrador }
+        ganadorEquipoId: { type: [string, 'null'], format: uuid }
+        ganadorUid: { type: [string, 'null'], format: uuid, description: Jugador ganador (1.1.0, lo manda salas-partidas) }
+        partidaId: { type: [string, 'null'], format: uuid, description: Partida de salas-partidas que decidio el encuentro }
+        motivo: { type: [string, 'null'], maxLength: 500, description: Obligatorio cuando lo registra un administrador }
 
     TorneoResumen:
       type: object

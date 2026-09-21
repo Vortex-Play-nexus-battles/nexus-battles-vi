@@ -54,14 +54,27 @@ public class EjecutarAccion {
     private final MotorDeCombate motor;
     private final LiquidarApuesta apuesta;
     private final AcreditarRecompensa recompensa;
+    private static final org.slf4j.Logger BITACORA_TORNEO = org.slf4j.LoggerFactory.getLogger(EjecutarAccion.class);
+    private final InformarEncuentroDeTorneo torneo;
 
     public EjecutarAccion(RepositorioDePartidas partidas, CanalDePartida canal,
                           MotorDeCombate motor, LiquidarApuesta apuesta, AcreditarRecompensa recompensa) {
+        this(partidas, canal, motor, apuesta, recompensa, null);
+    }
+
+    /**
+     * @param torneo informa el ganador a torneos cuando la sala es un encuentro
+     *               (HU-TOR-004, CA-04); nulo en los dobles que no lo miran
+     */
+    public EjecutarAccion(RepositorioDePartidas partidas, CanalDePartida canal,
+                          MotorDeCombate motor, LiquidarApuesta apuesta, AcreditarRecompensa recompensa,
+                          InformarEncuentroDeTorneo torneo) {
         this.partidas = Objects.requireNonNull(partidas);
         this.canal = Objects.requireNonNull(canal);
         this.motor = Objects.requireNonNull(motor, "Sin motor no hay combate.");
         this.apuesta = Objects.requireNonNull(apuesta, "Sin liquidacion la apuesta se perderia.");
         this.recompensa = Objects.requireNonNull(recompensa, "Sin recompensa jugar no daria creditos.");
+        this.torneo = torneo;
     }
 
     /**
@@ -154,6 +167,16 @@ public class EjecutarAccion {
         List<RepartoDeCreditos> reparto = apuesta.alTerminar(terminada);
         List<CreditoPorPartida> premio = recompensa.alTerminar(terminada);
         canal.anunciarFin(terminada, reparto, premio);
+        // Despues del aviso: el resultado del encuentro es cosa de torneos y un
+        // fallo ahi no puede retrasar lo que ven los jugadores. Nunca lanza.
+        if (torneo != null) {
+            try {
+                torneo.alTerminar(terminada);
+            } catch (RuntimeException fallo) {
+                BITACORA_TORNEO.warn("La partida {} termino pero no se pudo anotar el encuentro de torneo: {}",
+                        terminada.id(), fallo.getMessage());
+            }
+        }
     }
 
     /**

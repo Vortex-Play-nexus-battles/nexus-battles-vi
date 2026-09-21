@@ -326,13 +326,21 @@ class TorneosServiceIT {
                     new TorneosService.SolicitudDeResultado(arbol.get(1).equipoA(), null, null)))
                     .isInstanceOfSatisfying(TorneoRechazado.class, ex -> assertThat(ex.motivo()).isEqualTo(Motivo.GANADOR_NO_PARTICIPA));
 
+            // 1.1.0: salas-partidas manda el uid del jugador en pie, no el equipo (que no conoce).
+            assertThatThrownBy(() -> servicio.registrarResultado(SALAS, id, 1,
+                    new TorneosService.SolicitudDeResultado(null, null, null, null)))
+                    .isInstanceOfSatisfying(TorneoRechazado.class, ex -> assertThat(ex.motivo()).isEqualTo(Motivo.SOLICITUD_INVALIDA));
+            assertThatThrownBy(() -> servicio.registrarResultado(SALAS, id, 1,
+                    new TorneosService.SolicitudDeResultado(null, UUID.randomUUID(), null, null)))
+                    .isInstanceOfSatisfying(TorneoRechazado.class, ex -> assertThat(ex.motivo()).isEqualTo(Motivo.GANADOR_NO_PARTICIPA));
             UUID partida = UUID.randomUUID();
             TorneosService.TorneoCompleto tras1 = servicio.registrarResultado(SALAS, id, 1,
-                    new TorneosService.SolicitudDeResultado(equipo.id(), partida, null));
+                    new TorneosService.SolicitudDeResultado(null, JUGADOR2.id(), partida, null));
             Encuentro e1 = tras1.encuentros().get(0);
             assertThat(e1.estado()).isEqualTo(Encuentro.Estado.JUGADO);
             assertThat(e1.registradoPor()).isEqualTo("salas-partidas");
             assertThat(e1.partidaId()).isEqualTo(partida);
+            assertThat(e1.ganador()).as("el uid del companero resuelve al equipo").isEqualTo(equipo.id());
             assertThat(tras1.encuentros().get(4).equipoA()).isEqualTo(equipo.id());
 
             // El administrador resuelve a mano el resto con motivo (incomparecencia): siempre gana el equipo A.
