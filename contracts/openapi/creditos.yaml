@@ -31,18 +31,25 @@ openapi: 3.1.0
 # medias sin mover creditos dos veces.
 #
 # ---------------------------------------------------------------------------
-# SEGURIDAD (estado real)
+# SEGURIDAD (1.1.0, #455 — ADR-001 / ADR-005)
 #
-# `/creditos/**` esta hoy abierto en ms-finanzas (`permitAll`, ver su
-# SecurityConfig) a la espera de que ms-subastas adopte credenciales de
-# servicio. salas-partidas manda igualmente su token de servicio (ADR-005,
-# `rol=SERVICIO`) para que el dia que ms-finanzas cierre esas rutas a
-# `ROLE_SERVICIO` no cambie nada de este lado.
+# El libro solo lo mueven los servicios: reservar, liberar y consumir exigen
+# un token de servicio (`rol=SERVICIO`, emitido por ms-identidad con
+# client_credentials; el `azp` dice que servicio habla). El jugador afectado
+# viaja SIEMPRE en la peticion (`jugadorUid`, `vendedorUid`), nunca se deduce
+# del token. Un jugador con su propio token recibe 403 aunque el uid sea el
+# suyo. Excepcion unica: `GET /creditos/{uid}/saldo` lo puede consultar el
+# propio usuario (uid de la ruta = claim `uid` de su token).
+#
+# Hasta 1.0.0 estas rutas estaban abiertas (`permitAll`) y el contrato lo
+# decia; cerrarlas cambia quien puede llamar, no la forma de la llamada, y
+# los consumidores conocidos (salas-partidas, ms-subastas) ya mandaban o
+# mandan la credencial: por eso es 1.1.0 y no 2.0.0.
 # =============================================================================
 
 info:
   title: Nexus Battles VI — Libro de creditos
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Saldo, reservas y movimientos de creditos de los jugadores.
 
@@ -71,6 +78,11 @@ tags:
   - name: creditos
     description: Saldo y reservas del libro de creditos (HU-PAG-001)
 
+# Por defecto, todo el libro exige credencial de servicio. Las operaciones
+# que admiten ademas al propio usuario lo declaran explicitamente.
+security:
+  - credencialDeServicio: []
+
 paths:
   /creditos/{uid}/saldo:
     get:
@@ -80,9 +92,20 @@ paths:
       description: |
         Un jugador sin cuenta todavia responde 200 con todo a cero: la cuenta
         se crea con su primera operacion.
+
+        Lo consulta un servicio (cualquier `uid`) o el propio usuario (el
+        `uid` de la ruta tiene que ser el claim `uid` de su token; otro uid
+        responde 403).
+      security:
+        - credencialDeServicio: []
+        - tokenDeUsuario: []
       parameters:
         - $ref: '#/components/parameters/Uid'
       responses:
+        '401':
+          $ref: '#/components/responses/SinCredencial'
+        '403':
+          $ref: '#/components/responses/NoAutorizado'
         '200':
           description: Saldo actual
           content:
@@ -125,6 +148,10 @@ paths:
               concepto: apuesta-sala
               referenciaId: sala-1b4e28ba-2fa1-11d2-883f-0016d3cca427
       responses:
+        '401':
+          $ref: '#/components/responses/SinCredencial'
+        '403':
+          $ref: '#/components/responses/NoAutorizado'
         '201':
           description: Reserva creada (o ya existente con esa clave)
           content:
@@ -165,6 +192,10 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ReservaId'
       responses:
+        '401':
+          $ref: '#/components/responses/SinCredencial'
+        '403':
+          $ref: '#/components/responses/NoAutorizado'
         '200':
           description: Estado de la reserva tras la operacion
           content:
@@ -204,6 +235,10 @@ paths:
             example:
               vendedorUid: 9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d
       responses:
+        '401':
+          $ref: '#/components/responses/SinCredencial'
+        '403':
+          $ref: '#/components/responses/NoAutorizado'
         '200':
           description: Reserva cobrada
           content:
@@ -226,6 +261,30 @@ paths:
                 $ref: '#/components/schemas/ProblemaDeCreditos'
 
 components:
+  securitySchemes:
+    credencialDeServicio:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Token de servicio (ADR-005): `rol=SERVICIO`, `azp=<client_id>`,
+        obtenido por `client_credentials` en `POST /api/v1/auth/token` de
+        ms-identidad y verificado contra su JWKS. Es la credencial de un
+        servicio (salas-partidas, ms-subastas...), nunca la de un jugador.
+    tokenDeUsuario:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token de sesion de un usuario (ADR-002), con claim `uid`.
+
+  responses:
+    SinCredencial:
+      description: Sin token, token caducado o firmado por otra clave.
+    NoAutorizado:
+      description: |
+        El token es valido pero no puede hacer esto: un usuario intentando
+        mover saldo, o consultando el saldo de otro.
+
   parameters:
     Uid:
       name: uid

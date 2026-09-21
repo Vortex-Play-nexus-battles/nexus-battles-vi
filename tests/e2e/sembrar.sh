@@ -201,6 +201,30 @@ echo "== 4) Creditos (HU-JUE-014): saldo inicial en ms-finanzas ==="
 FINANZAS="${FINANZAS:-http://localhost:8093/api/v1}"
 SALDO_INICIAL="${E2E_SALDO_INICIAL:-500}"
 
+# Desde #455 el libro de creditos solo atiende a servicios (ROLE_SERVICIO,
+# ADR-005): la semilla se identifica como el cliente `e2e-banco` registrado en
+# AUTH_CLIENTES_SERVICIO del compose y pide su credencial por client_credentials
+# al mismo emisor que usan los servicios. Un jugador con su propio token NO
+# puede acreditarse (403): eso es justamente lo que R0 cerro.
+BANCO_CLIENTE="${E2E_BANCO_CLIENTE:-e2e-banco}"
+BANCO_SECRETO="${E2E_BANCO_SECRETO:-e2e-secreto-del-banco-de-pruebas}"
+TOKEN_BANCO=$(curl -sS -u "$BANCO_CLIENTE:$BANCO_SECRETO" -X POST "$BORDE/api/v1/auth/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=client_credentials" | jq -r '.access_token // empty')
+[ -n "$TOKEN_BANCO" ] || { echo "::error::ms-identidad no entrego la credencial de servicio de $BANCO_CLIENTE"; exit 1; }
+
+# Prueba negativa de la semilla: un jugador no se acredita a si mismo.
+uid_anfitrion_prueba=$(printf '%s' "$(token_de "$ANFITRION")" | cut -d. -f2 | tr '_-' '/+')
+while [ $(( ${#uid_anfitrion_prueba} % 4 )) -ne 0 ]; do uid_anfitrion_prueba="$uid_anfitrion_prueba="; done
+uid_anfitrion_prueba=$(printf '%s' "$uid_anfitrion_prueba" | base64 -d 2>/dev/null | jq -r '.uid // empty')
+codigo_suplantacion=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$FINANZAS/creditos/acreditar" \
+  -H "Authorization: Bearer $(token_de "$ANFITRION")" -H "Content-Type: application/json" \
+  -d "{\"uid\":\"$uid_anfitrion_prueba\",\"monto\":999999,\"refId\":\"autoregalo-$ANFITRION\",\"concepto\":\"suplantacion\"}")
+if [ "$codigo_suplantacion" != "403" ]; then
+  echo "::error::un jugador pudo llamar a /creditos/acreditar con su propio token ($codigo_suplantacion): el libro esta abierto"; exit 1
+fi
+echo "  suplantacion rechazada por ms-finanzas: 403"
+
 # El `uid` es el identificador estable del jugador (ADR-002): sale del
 # token, no del apodo. Se lee del cuerpo del JWT (base64url, sin firma).
 uid_de() {
@@ -220,12 +244,15 @@ for apodo in "$ANFITRION" "$INVITADO" "$CURIOSO"; do
   [ -n "$uid" ] || { echo "::error::el token de $apodo no trae uid"; exit 1; }
   codigo=$(curl -sS -o /tmp/acreditar-$apodo.json -w '%{http_code}' \
     -X POST "$FINANZAS/creditos/acreditar" \
+    -H "Authorization: Bearer $TOKEN_BANCO" \
     -H "Content-Type: application/json" \
     -d "{\"uid\":\"$uid\",\"monto\":$SALDO_INICIAL,\"refId\":\"semilla-e2e-$apodo\",\"concepto\":\"semilla-e2e\"}")
   if [ "$codigo" != "200" ]; then
     echo "::error::ms-finanzas no acredito a $apodo ($codigo):"; cat "/tmp/acreditar-$apodo.json"; echo; exit 1
   fi
-  disponible=$(curl -sS "$FINANZAS/creditos/$uid/saldo" | jq -r '.saldoDisponible // empty')
+  # El saldo lo consulta el propio jugador: es el unico caso en que un
+  # usuario (no un servicio) puede leer /creditos/{uid}/saldo, y solo el suyo.
+  disponible=$(curl -sS -H "Authorization: Bearer $(token_de "$apodo")" "$FINANZAS/creditos/$uid/saldo" | jq -r '.saldoDisponible // empty')
   echo "  $apodo: uid=$uid disponible=$disponible"
 done
 

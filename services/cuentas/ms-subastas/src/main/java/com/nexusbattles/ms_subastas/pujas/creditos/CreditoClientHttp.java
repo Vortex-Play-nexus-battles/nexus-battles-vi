@@ -10,7 +10,11 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.Objects;
 import java.util.UUID;
+
+import com.nexusbattles.comun.seguridad.servicio.CredencialDeServicioNoDisponible;
+import com.nexusbattles.ms_subastas.seguridad.PortadorDeServicio;
 
 /**
  * Adaptador HTTP hacia ms-finanzas, contra la API que publica hoy
@@ -44,18 +48,35 @@ public class CreditoClientHttp implements CreditoClient {
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final Duration timeout;
+    private final PortadorDeServicio credencial;
 
     public CreditoClientHttp(String baseUrl, long timeoutMs, ObjectMapper objectMapper) {
+        this(baseUrl, timeoutMs, objectMapper, PortadorDeServicio.ninguno());
+    }
+
+    /**
+     * @param credencial la de ms-subastas ante ms-finanzas (ADR-005). Desde que
+     *        {@code /creditos/**} exige {@code ROLE_SERVICIO} (#455), sin ella
+     *        toda llamada vuelve con 401.
+     */
+    public CreditoClientHttp(String baseUrl, long timeoutMs, ObjectMapper objectMapper,
+                             PortadorDeServicio credencial) {
         this(URI.create(baseUrl),
                 HttpClient.newBuilder().connectTimeout(Duration.ofMillis(timeoutMs)).build(),
-                objectMapper, Duration.ofMillis(timeoutMs));
+                objectMapper, Duration.ofMillis(timeoutMs), credencial);
     }
 
     public CreditoClientHttp(URI baseUri, HttpClient httpClient, ObjectMapper objectMapper, Duration timeout) {
+        this(baseUri, httpClient, objectMapper, timeout, PortadorDeServicio.ninguno());
+    }
+
+    public CreditoClientHttp(URI baseUri, HttpClient httpClient, ObjectMapper objectMapper, Duration timeout,
+                             PortadorDeServicio credencial) {
         this.baseUri = baseUri;
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
         this.timeout = timeout;
+        this.credencial = Objects.requireNonNull(credencial, "credencial");
     }
 
     @Override
@@ -67,7 +88,7 @@ public class CreditoClientHttp implements CreditoClient {
         exigir(idempotencyKey != null && !idempotencyKey.isBlank(),
                 "La clave de idempotencia es obligatoria para reservar creditos");
 
-        HttpRequest peticion = HttpRequest.newBuilder(uri("/creditos/reservar"))
+        HttpRequest peticion = firmada(HttpRequest.newBuilder(uri("/creditos/reservar")))
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
                 .header("Idempotency-Key", idempotencyKey)
@@ -91,7 +112,7 @@ public class CreditoClientHttp implements CreditoClient {
     public void liberar(UUID reservaId) {
         exigir(reservaId != null, "La reserva es obligatoria para liberar");
 
-        HttpRequest peticion = HttpRequest.newBuilder(uri("/creditos/reservas/" + reservaId + "/liberar"))
+        HttpRequest peticion = firmada(HttpRequest.newBuilder(uri("/creditos/reservas/" + reservaId + "/liberar")))
                 .header("Accept", "application/json")
                 .timeout(timeout)
                 .POST(HttpRequest.BodyPublishers.noBody())
@@ -120,7 +141,7 @@ public class CreditoClientHttp implements CreditoClient {
         // quedarse los creditos por el camino.
         exigir(vendedorId != null, "El vendedor es obligatorio: sin el, el comprador paga y nadie cobra");
 
-        HttpRequest peticion = HttpRequest.newBuilder(uri("/creditos/reservas/" + reservaId + "/consumir"))
+        HttpRequest peticion = firmada(HttpRequest.newBuilder(uri("/creditos/reservas/" + reservaId + "/consumir")))
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
                 .timeout(timeout)
@@ -135,7 +156,7 @@ public class CreditoClientHttp implements CreditoClient {
     public BigDecimal saldoDisponible(UUID jugadorId) {
         exigir(jugadorId != null, "El jugador es obligatorio para consultar el saldo");
 
-        HttpRequest peticion = HttpRequest.newBuilder(uri("/creditos/" + jugadorId + "/saldo"))
+        HttpRequest peticion = firmada(HttpRequest.newBuilder(uri("/creditos/" + jugadorId + "/saldo")))
                 .header("Accept", "application/json")
                 .timeout(timeout)
                 .GET()
@@ -246,6 +267,20 @@ public class CreditoClientHttp implements CreditoClient {
     private URI uri(String ruta) {
         String base = baseUri.toString().replaceAll("/+$", "");
         return URI.create(base + ruta);
+    }
+
+    /**
+     * Pone la credencial de ms-subastas (ADR-005). Si el emisor no la entrega,
+     * la llamada no sale: para el motor de pujas es lo mismo que ms-finanzas
+     * caido, y asi se reintenta y empuja el cortacircuitos igual.
+     */
+    private HttpRequest.Builder firmada(HttpRequest.Builder peticion) {
+        try {
+            return credencial.firmar(peticion);
+        } catch (CredencialDeServicioNoDisponible sinCredencial) {
+            throw new CreditoNoDisponibleException(
+                    "Sin credencial de servicio no se puede llamar a ms-finanzas", sinCredencial);
+        }
     }
 
     // --- forma exacta de los DTO de ms-finanzas ---------------------------

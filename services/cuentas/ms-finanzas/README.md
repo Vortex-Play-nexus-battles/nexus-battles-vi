@@ -30,6 +30,17 @@ POST   /pagos/procesar            Pasarela simulada de pagos en moneda real.
 GET    /pagos/{refId}             Estado de una transacción.
 ```
 
+**Quién puede llamar (desde #455, 21-sep-2026):** todo `/creditos/**` y
+`/partidas/**` exige un **token de servicio** (`rol=SERVICIO`, ADR-005:
+`client_credentials` contra ms-identidad). Un jugador con su propio token
+recibe 403, aunque el `uid` del cuerpo sea el suyo. La única excepción es
+`GET /creditos/{uid}/saldo`, que además admite al propio usuario (y solo el
+suyo). `/transacciones/**` y `/cofres/**` son del usuario autenticado; un
+servicio no tiene historial. Las reglas y sus pruebas negativas de
+suplantación están en `seguridad/SecurityConfig` y `SecurityConfigTest`
+(tokens reales firmados y verificados contra un JWKS). Contrato:
+`contracts/openapi/creditos.yaml` 1.1.0.
+
 ms-subastas ya declara el cliente hacia este servicio en el instance
 `creditos` de Resilience4j (ver su `application.properties`). El SLA de
 latencia de los endpoints de `/creditos/*` se acuerda con Andrés (HU-SUB-004)

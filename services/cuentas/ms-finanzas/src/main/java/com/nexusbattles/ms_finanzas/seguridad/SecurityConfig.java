@@ -1,10 +1,19 @@
 package com.nexusbattles.ms_finanzas.seguridad;
 
+import java.util.function.Supplier;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.authorization.AuthorityAuthorizationManager;
+import org.springframework.security.authorization.AuthorizationDecision;
+import org.springframework.security.authorization.AuthorizationManager;
+import org.springframework.security.authorization.AuthorizationResult;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 
 import com.nexusbattles.comun.seguridad.CadenaDeSeguridad;
 import com.nexusbattles.comun.seguridad.ConversorRolesJwt;
@@ -17,29 +26,46 @@ import com.nexusbattles.comun.seguridad.ConversorRolesJwt;
  * (adoptado desde el PR #393, ADR-002). Aquí solo las reglas de rutas de este
  * dominio.
  *
- * <h2>Por qué /creditos/** queda abierto (por ahora)</h2>
+ * <h2>El libro de créditos solo lo mueven los servicios (ADR-001 / ADR-005)</h2>
  *
- * <p>Andrés (ms-subastas) tiene tres flujos que llaman a {@code /creditos/**}
- * sin JWT de jugador de por medio (dos {@code @Scheduled} y el flujo de
- * liberar la reserva del postor anterior al ser superado). No puede reenviar
- * el token del rival porque sería usar el token de un jugador para mover
- * créditos de otro. La solución acordada es que ms-subastas envíe un token de
- * servicio (client_credentials contra el realm de Keycloak) usando
- * {@code shared/libs/plataforma-seguridad/servicio/TokenDeServicio}
- * (ADR-001), pero **infra todavía no ha registrado el cliente en el realm**.
- * Hasta que exista ese registro, dejar {@code /creditos/**} exigiendo
- * autenticación cerraría a Andrés y bloquearía HU-SUB-001/004.
+ * <p>Hasta el 21-sep-2026 {@code /creditos/**} estaba {@code permitAll}
+ * «hasta que infra registre el cliente m2m en Keycloak». ADR-005 resolvió
+ * ese bloqueo sin Keycloak: {@code ms-identidad} emite credenciales de servicio
+ * ({@code grant_type=client_credentials}, {@code rol=SERVICIO}, {@code azp} con
+ * el {@code client_id}) firmadas con la misma clave que verifica este
+ * servicio por {@code IDENTIDAD_JWKS_URL}. Con eso ya no hay motivo para dejar
+ * abierta la puerta que crea, aparta y mueve saldo (#455, #413):
  *
- * <p>Cuando infra registre el client, se cambia
- * {@code .requestMatchers("/creditos/**").permitAll()} por
- * {@code .authenticated()} (o por un {@code hasRole} concreto de servicio),
- * y en paralelo se agrega el segundo issuer (Keycloak) al
- * {@code oauth2ResourceServer} para aceptar tanto tokens de ms-identidad
- * como de Keycloak.
+ * <ul>
+ *   <li>Reservar, liberar, consumir, debitar, reversar, acreditar y consultar
+ *       operaciones: <b>solo</b> {@code ROLE_SERVICIO}. El jugador afectado
+ *       viaja explícito en el cuerpo ({@code jugadorUid}, {@code uid},
+ *       {@code vendedorUid}); el token solo dice qué servicio habla. Un jugador
+ *       con su propio token recibe 403 aunque el {@code uid} sea el suyo: un
+ *       jugador nunca se acredita ni se reserva a sí mismo por HTTP, eso lo
+ *       hace el flujo de negocio (sala, subasta, tienda) con su credencial.</li>
+ *   <li>{@code GET /creditos/{uid}/saldo}: un servicio consulta el de
+ *       cualquiera; un usuario, <b>solo el suyo</b> (el {@code uid} de la ruta
+ *       tiene que ser el principal del token, que {@link ConversorRolesJwt} fija
+ *       en el claim {@code uid}). Consultar el saldo de otro es 403.</li>
+ *   <li>{@code POST /partidas/resultado} (HU-JUE-012) crea saldo: solo
+ *       {@code ROLE_SERVICIO}. Con {@code authenticated()} cualquier jugador
+ *       podía inventar un resultado con su {@code uid} como ganador.</li>
+ *   <li>{@code /transacciones/**} y {@code /cofres/**} son del propio usuario:
+ *       autenticado y <b>no</b> servicio (un token de servicio no tiene
+ *       {@code uid} y su principal sería el {@code client_id}).</li>
+ * </ul>
+ *
+ * <p>Las pruebas de estas reglas están en {@code SecurityConfigTest} con tokens
+ * reales firmados y verificados contra un JWKS (fixtures de
+ * {@code plataforma-seguridad}), incluidos los casos de suplantación.
  */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    /** Rol con el que ms-identidad (y, en su día, Keycloak) marca a un servicio — ADR-005. */
+    static final String ROL_SERVICIO = "SERVICIO";
 
     @Bean
     public ConversorRolesJwt conversorRolesJwt() {
@@ -53,32 +79,54 @@ public class SecurityConfig {
         http.authorizeHttpRequests(auth -> auth
                 // Regla 3: actuator queda abierto para la sonda de salud.
                 .requestMatchers("/actuator/**").permitAll()
-                // Temporal (ver javadoc): /creditos/** abierto hasta que infra
-                // registre el cliente m2m en Keycloak y ms-subastas adopte
-                // TokenDeServicio (ADR-001). Los tres flujos @Scheduled de
-                // ms-subastas no tienen JWT de jugador que reenviar.
-                .requestMatchers("/creditos/**").permitAll()
-                // POST /partidas/resultado CREA saldo (acredita créditos al
-                // ganador y participantes vía AcreditacionPartidaService que
-                // llama a CreditoService.acreditar como bean local — se salta
-                // el filter chain de /creditos/acreditar). Sin autenticación
-                // sería exactamente el mismo agujero por otra puerta:
-                // cualquiera POST-ea un resultado inventado con su uid como
-                // ganador y se autoacredita. Cerrado con authenticated tras
-                // el catch de Andrés (18/sep). Consecuencia: ms-salas-partidas
-                // necesita el token de servicio de Keycloak para llamar,
-                // igual que ms-subastas ahora sabe con /creditos/**. Sin
-                // eso, en dev/local se prueba con un JWT de jugador válido.
-                .requestMatchers("/partidas/**").authenticated()
-                // HU-PAG-002: el historial es del propio jugador; cualquier
-                // usuario autenticado puede consultar SU propio historial. La
-                // restricción por uid la aplica el controller leyendo el
-                // principal del Authentication (nunca del path/query).
-                .requestMatchers("/transacciones/**").authenticated()
-                // HU-JUE-012: "Mis cofres" — mismo criterio que el historial.
-                .requestMatchers("/cofres/**").authenticated()
+                // El saldo: un servicio ve el de cualquiera; un usuario, solo el suyo.
+                .requestMatchers(HttpMethod.GET, "/creditos/{uid}/saldo").access(servicioODuenoDelSaldo())
+                // Todo lo que aparta, mueve o crea saldo: solo servicios autorizados.
+                .requestMatchers("/creditos/**").hasRole(ROL_SERVICIO)
+                // HU-JUE-012: el resultado de una partida lo informa salas-partidas,
+                // nunca un jugador (crea saldo a favor del ganador).
+                .requestMatchers("/partidas/**").hasRole(ROL_SERVICIO)
+                // HU-PAG-002 / HU-JUE-013: historial y cofres del propio usuario. El
+                // controller lee el uid del principal, así que un servicio (sin uid)
+                // no tiene nada que consultar aquí.
+                .requestMatchers("/transacciones/**", "/cofres/**").access(usuarioAutenticadoNoServicio())
                 .anyRequest().authenticated());
 
         return http.build();
+    }
+
+    /**
+     * {@code GET /creditos/{uid}/saldo}: pasa un servicio, o un usuario cuyo
+     * principal (claim {@code uid}) coincide con el {@code uid} de la ruta.
+     */
+    static AuthorizationManager<RequestAuthorizationContext> servicioODuenoDelSaldo() {
+        AuthorizationManager<RequestAuthorizationContext> esServicio =
+                AuthorityAuthorizationManager.hasRole(ROL_SERVICIO);
+        return (Supplier<? extends Authentication> autenticacion, RequestAuthorizationContext contexto) -> {
+            AuthorizationResult servicio = esServicio.authorize(autenticacion, contexto);
+            if (servicio != null && servicio.isGranted()) {
+                return servicio;
+            }
+            Authentication actual = autenticacion.get();
+            boolean autenticado = actual != null && actual.isAuthenticated()
+                    && !(actual instanceof org.springframework.security.authentication.AnonymousAuthenticationToken);
+            String uidDeLaRuta = contexto.getVariables().get("uid");
+            boolean esElDueno = autenticado && uidDeLaRuta != null && uidDeLaRuta.equals(actual.getName());
+            return new AuthorizationDecision(esElDueno);
+        };
+    }
+
+    /** Autenticado y con un rol de usuario: un token de servicio no entra. */
+    static AuthorizationManager<RequestAuthorizationContext> usuarioAutenticadoNoServicio() {
+        AuthorizationManager<RequestAuthorizationContext> esServicio =
+                AuthorityAuthorizationManager.hasRole(ROL_SERVICIO);
+        return (Supplier<? extends Authentication> autenticacion, RequestAuthorizationContext contexto) -> {
+            Authentication actual = autenticacion.get();
+            boolean autenticado = actual != null && actual.isAuthenticated()
+                    && !(actual instanceof org.springframework.security.authentication.AnonymousAuthenticationToken);
+            AuthorizationResult servicio = esServicio.authorize(autenticacion, contexto);
+            boolean esServicioAutorizado = servicio != null && servicio.isGranted();
+            return new AuthorizationDecision(autenticado && !esServicioAutorizado);
+        };
     }
 }
