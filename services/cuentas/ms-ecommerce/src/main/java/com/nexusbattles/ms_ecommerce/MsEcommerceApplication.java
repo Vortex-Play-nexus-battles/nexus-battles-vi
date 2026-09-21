@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.openfeign.EnableFeignClients;
 
 @SpringBootApplication
-@EnableFeignClients
+@EnableFeignClients(basePackages = "com.nexusbattles.ms_ecommerce.client")
 public class MsEcommerceApplication {
 
 	public static void main(String[] args) {

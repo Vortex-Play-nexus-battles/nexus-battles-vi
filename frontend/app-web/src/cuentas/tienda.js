@@ -228,14 +228,14 @@ if (btnPagar) {
     btnPagar.addEventListener('click', () => {
         // Aquí puedes clonar el HTML de tu carrito actual hacia #checkout-summary para mostrar el resumen
         document.getElementById('checkout-summary').innerHTML = document.getElementById('cart-items').innerHTML;
-        if (checkoutModal) checkoutModal.classList.remove('hidden');
+        checkoutModal.classList.remove('hidden');
     });
 }
 
 // Cerrar modal
 if (closeModal) {
     closeModal.addEventListener('click', () => {
-        if (checkoutModal) checkoutModal.classList.add('hidden');
+        checkoutModal.classList.add('hidden');
     });
 }
 
@@ -245,10 +245,8 @@ if (paymentForm) {
         e.preventDefault();
 
         const btnConfirm = document.getElementById('btn-confirm-payment');
-        if (btnConfirm) {
-            btnConfirm.disabled = true;
-            btnConfirm.textContent = 'Procesando...';
-        }
+        btnConfirm.disabled = true;
+        btnConfirm.textContent = 'Procesando...';
 
         // Construir el payload. Los datos van a viajar en el body.
         const payload = {
@@ -262,34 +260,30 @@ if (paymentForm) {
         };
 
         try {
-            // Utilizamos fetchWithHttpErrorInterceptor y rutaDeApi para ser compatibles con el estándar del equipo
+            // Usamos fetchWithHttpErrorInterceptor y rutaDeApi para ser consistentes con el equipo
             const response = await fetchWithHttpErrorInterceptor(rutaDeApi('/checkout'), {
                 method: 'POST',
-                headers: cabeceras(),
+                headers: { 'Content-Type': 'application/json' }, // Eliminado el quemado de X-User-Id
                 body: JSON.stringify(payload)
             });
 
-            // fetchWithHttpErrorInterceptor devuelve la respuesta cruda si todo sale bien
             const result = await response.json();
 
-            if (paymentMessage) {
+            if (response.ok) {
                 paymentMessage.textContent = '¡Pago aprobado! Los productos han sido añadidos a tu inventario. Revisa tu correo.';
                 paymentMessage.className = 'success-msg';
-            }
-            paymentForm.reset();
-
-        } catch (error) {
-            if (paymentMessage) {
-                // Maneja los errores arrojados por el interceptor del equipo
-                paymentMessage.textContent = `Error: ${error.mensaje || 'Pago rechazado o error de conexión'}`;
+                paymentForm.reset();
+            } else {
+                paymentMessage.textContent = `Error: ${result.mensaje || 'Pago rechazado por la pasarela'}`;
                 paymentMessage.className = 'error-msg';
             }
+        } catch (error) {
+            paymentMessage.textContent = 'Error de conexión con el servidor.';
+            paymentMessage.className = 'error-msg';
         } finally {
-            if (paymentMessage) paymentMessage.classList.remove('hidden');
-            if (btnConfirm) {
-                btnConfirm.disabled = false;
-                btnConfirm.textContent = 'Confirmar Pago';
-            }
+            paymentMessage.classList.remove('hidden');
+            btnConfirm.disabled = false;
+            btnConfirm.textContent = 'Confirmar Pago';
         }
     });
 }
