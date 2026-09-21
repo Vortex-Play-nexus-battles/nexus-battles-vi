@@ -43,6 +43,7 @@ class CorreoControllerTest {
 
     private static final String BIENVENIDA = "/api/v1/correos/bienvenida";
     private static final String AVISO_ACCESO = "/api/v1/correos/aviso-acceso";
+    private static final String CAMBIO_CLAVE = "/api/v1/correos/cambio-clave";
     private static final String RECUPERACION = "/api/v1/correos/recuperacion-clave";
     private static final String CONFIRMACION = "/api/v1/correos/confirmacion-cuenta";
     private static final String MISION = "/api/v1/correos/mision";
@@ -138,6 +139,40 @@ class CorreoControllerTest {
                 .andExpect(status().isAccepted());
 
         verify(enviador).enviar(eq("jugador@ejemplo.com"), anyString(), eq("email/aviso-acceso"), any());
+    }
+
+    // HU-AUT-006 CA-01: aviso de cambio de contraseña, sobre la plantilla corporativa.
+
+    @Test
+    void aceptaUnAvisoDeCambioDeClaveYLoDespachaConLaFechaLegible() throws Exception {
+        mockMvc.perform(comoServicio(CAMBIO_CLAVE).contentType(MediaType.APPLICATION_JSON).content("""
+                {"email":"jugador@ejemplo.com","apodo":"ElGuerrero",
+                 "ip":"190.85.12.44","fechaHora":"2026-09-21T15:00:00-05:00"}
+                """))
+                .andExpect(status().isAccepted());
+
+        org.mockito.ArgumentCaptor<java.util.Map<String, Object>> modelo =
+                org.mockito.ArgumentCaptor.forClass(java.util.Map.class);
+        verify(enviador).enviar(eq("jugador@ejemplo.com"), eq("Tu contraseña de The Nexus Battles VI cambió"),
+                eq("email/cambio-clave"), modelo.capture());
+        org.assertj.core.api.Assertions.assertThat(modelo.getValue())
+                .containsEntry("apodo", "ElGuerrero")
+                .containsEntry("ip", "190.85.12.44")
+                .containsEntry("fechaHora", "21/09/2026 a las 15:00 (GMT-05:00)")
+                .doesNotContainKeys("password", "nuevaPassword");
+    }
+
+    @ParameterizedTest(name = "cambio de clave rechazado: {0}")
+    @ValueSource(strings = {
+            "{\"apodo\":\"ElGuerrero\",\"ip\":\"1.1.1.1\",\"fechaHora\":\"2026-09-21T15:00:00-05:00\"}",
+            "{\"email\":\"jugador@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"ip\":\"1.1.1.1\"}",
+            "{\"email\":\"jugador@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"fechaHora\":\"2026-09-21T15:00:00-05:00\"}",
+    })
+    void rechazaCambioDeClaveConDatosInvalidos(String cuerpo) throws Exception {
+        mockMvc.perform(comoServicio(CAMBIO_CLAVE).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                .andExpect(status().isBadRequest());
+
+        verify(enviador, never()).enviar(anyString(), anyString(), anyString(), any());
     }
 
     @ParameterizedTest(name = "bienvenida rechazada: {0}")

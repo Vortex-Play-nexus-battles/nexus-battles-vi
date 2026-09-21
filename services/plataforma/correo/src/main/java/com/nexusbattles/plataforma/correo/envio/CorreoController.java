@@ -54,6 +54,22 @@ public class CorreoController {
                         "fechaHora", solicitud.fechaHoraLegible()));
     }
 
+    @PostMapping("/cambio-clave")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void enviarCambioClave(@Valid @RequestBody CorreoCambioClaveRequest solicitud) {
+        // HU-AUT-006 CA-01. Mismo caracter que el aviso de acceso: informa
+        // de algo que YA paso para que quien no lo hizo reaccione. Nunca
+        // lleva la contraseña, ni entra en bitacora nada mas que el destino.
+        enviador.enviar(
+                solicitud.email(),
+                "Tu contraseña de The Nexus Battles VI cambió",
+                "email/cambio-clave",
+                Map.of(
+                        "apodo", solicitud.apodo(),
+                        "ip", solicitud.ip(),
+                        "fechaHora", solicitud.fechaHoraLegible()));
+    }
+
     @PostMapping("/confirmacion-cuenta")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public void enviarConfirmacionCuenta(@Valid @RequestBody CorreoConfirmacionCuentaRequest solicitud) {

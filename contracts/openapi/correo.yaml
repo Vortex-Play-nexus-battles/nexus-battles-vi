@@ -20,7 +20,7 @@ info:
     correo es un servicio entre servicios y nunca lo llama un navegador. Por
     eso el borde tampoco expone `/api/v1/correos`. Es version menor porque
     rutas y cuerpos no cambian.
-  version: 1.1.0
+  version: 1.2.0
 servers:
   - url: http://localhost:8082/api/v1
     description: Entorno local de desarrollo
@@ -61,6 +61,31 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/CorreoAvisoAccesoRequest'
+      responses:
+        '202':
+          description: Correo aceptado y entregado al servidor SMTP.
+        '400':
+          $ref: '#/components/responses/SolicitudInvalida'
+
+  /correos/cambio-clave:
+    post:
+      summary: Avisar de que la contrasena de la cuenta cambio
+      description: |
+        Soporta HU-AUT-006 (RF-AUT-006, CA-01): tras un cambio de contrasena
+        desde «Mi Cuenta», el usuario recibe un aviso sobre la plantilla
+        corporativa. No lleva la contrasena, ni la vieja ni la nueva: solo
+        que cambio, desde donde y cuando, para que quien NO lo hizo reaccione
+        (recuperar la cuenta por el flujo de «olvide mi contrasena»).
+        Lo dispara ms-identidad desde CambioDePasswordService.
+      operationId: enviarCorreoCambioClave
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CorreoCambioClaveRequest'
       responses:
         '202':
           description: Correo aceptado y entregado al servidor SMTP.
@@ -243,6 +268,31 @@ components:
           format: date-time
           description: Momento del acceso en ISO-8601 con zona horaria
           examples: ['2026-08-30T14:23:11-05:00']
+
+    CorreoCambioClaveRequest:
+      type: object
+      description: Misma forma que el aviso de acceso; nunca lleva contrasenas.
+      required:
+        - email
+        - apodo
+        - ip
+        - fechaHora
+      properties:
+        email:
+          type: string
+          format: email
+        apodo:
+          type: string
+          minLength: 1
+        ip:
+          type: string
+          description: IP desde la que se hizo el cambio, tal como la observo ms-identidad
+          examples: ['190.85.12.44']
+        fechaHora:
+          type: string
+          format: date-time
+          description: Momento del cambio en ISO-8601 con zona horaria
+          examples: ['2026-09-21T15:00:00-05:00']
 
     CorreoConfirmacionCuentaRequest:
       type: object

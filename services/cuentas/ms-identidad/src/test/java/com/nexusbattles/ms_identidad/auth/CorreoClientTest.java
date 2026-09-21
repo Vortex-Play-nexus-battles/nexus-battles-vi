@@ -110,4 +110,42 @@ class CorreoClientTest {
             )
         );
     }
+
+    // HU-AUT-006: aviso de cambio de contraseña, a su propia ruta del contrato.
+
+    @Test
+    void debeEnviarAvisoDeCambioDeClaveASuRuta() {
+        String urlCambioClave = "http://localhost:8082/api/v1/correos/cambio-clave";
+        ReflectionTestUtils.setField(correoClient, "urlCambioClave", urlCambioClave);
+        com.nexusbattles.ms_identidad.auth.correo.dto.CorreoCambioClaveRequest datos =
+            new com.nexusbattles.ms_identidad.auth.correo.dto.CorreoCambioClaveRequest(
+                "ana@test.com", "ana", "10.0.0.1", "2026-09-21T15:00:00Z");
+        ArgumentCaptor<com.nexusbattles.ms_identidad.auth.correo.dto.CorreoCambioClaveRequest> captor =
+            ArgumentCaptor.forClass(com.nexusbattles.ms_identidad.auth.correo.dto.CorreoCambioClaveRequest.class);
+
+        when(restClient.post()).thenReturn(requestBodyUriSpec);
+        when(requestBodyUriSpec.uri(urlCambioClave)).thenReturn(requestBodySpec);
+        when(requestBodySpec.body(captor.capture())).thenReturn(requestBodySpec);
+        when(requestBodySpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.toBodilessEntity()).thenReturn(ResponseEntity.accepted().build());
+
+        correoClient.enviarCambioClave(datos);
+
+        assertEquals("ana@test.com", captor.getValue().getEmail());
+        assertEquals("10.0.0.1", captor.getValue().getIp());
+        assertEquals("2026-09-21T15:00:00Z", captor.getValue().getFechaHora());
+    }
+
+    @Test
+    void elRespaldoDeCambioDeClaveNoDebeLanzarExcepcion() {
+        com.nexusbattles.ms_identidad.auth.correo.dto.CorreoCambioClaveRequest datos =
+            new com.nexusbattles.ms_identidad.auth.correo.dto.CorreoCambioClaveRequest(
+                "ana@test.com", "ana", "10.0.0.1", "2026-09-21T15:00:00Z");
+
+        assertDoesNotThrow(() ->
+            ReflectionTestUtils.invokeMethod(
+                correoClient, "enviarCambioClaveConFallback", datos, new RuntimeException("Servicio caído")
+            )
+        );
+    }
 }

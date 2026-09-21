@@ -90,6 +90,7 @@ services:
       CORREO_AVISO_ACCESO_URL: ${CORREO_AVISO_ACCESO_URL:-http://srv-correo:8082/api/v1/correos/aviso-acceso}
       CORREO_RECUPERACION_CLAVE_URL: ${CORREO_RECUPERACION_CLAVE_URL:-http://srv-correo:8082/api/v1/correos/recuperacion-clave}
       CORREO_CONFIRMACION_CUENTA_URL: ${CORREO_CONFIRMACION_CUENTA_URL:-http://srv-correo:8082/api/v1/correos/confirmacion-cuenta}
+      CORREO_CAMBIO_CLAVE_URL: ${CORREO_CAMBIO_CLAVE_URL:-http://srv-correo:8082/api/v1/correos/cambio-clave}
       NOTIFICACIONES_URL: ${NOTIFICACIONES_URL:-http://srv-notificaciones:8085/api/v1/internal/notifications}
       AUDITORIA_URL: ${AUDITORIA_URL:-http://srv-ms-cumplimiento:8091/api/v1/admin/auditoria/eventos}
       SPRING_PROFILES_ACTIVE: ${MS_IDENTIDAD_SPRING_PROFILES_ACTIVE}
