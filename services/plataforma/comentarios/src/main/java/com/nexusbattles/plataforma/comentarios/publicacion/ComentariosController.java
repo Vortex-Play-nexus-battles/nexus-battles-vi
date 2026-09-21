@@ -5,6 +5,7 @@ import java.util.List;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -36,6 +37,18 @@ public class ComentariosController {
 
     public ComentariosController(ServicioDePublicacionDeComentarios servicio) {
         this.servicio = servicio;
+    }
+
+    /**
+     * El hilo publico del producto (#438; proveedor de HU-INV-014).
+     *
+     * <p>Siempre 200: un producto sin comentarios es un hilo vacio, no un
+     * recurso inexistente. El promedio va nulo cuando nadie califico, para que
+     * la ficha diga «sin valoraciones» en vez de pintar un cero.
+     */
+    @GetMapping
+    public HiloDeComentariosResponse consultar(@PathVariable String productId) {
+        return HiloDeComentariosResponse.desde(servicio.consultarHilo(productId));
     }
 
     @PostMapping
@@ -87,6 +100,30 @@ public class ComentariosController {
                     comentario.calificacion().orElse(null),
                     comentario.fechaPublicacion(),
                     comentario.estado().name());
+        }
+    }
+
+    /** Esquema {@code HiloDeComentariosResponse} del contrato. */
+    public record HiloDeComentariosResponse(
+            String productoId,
+            List<ComentarioResponse> comentarios,
+            int total,
+            Double calificacionPromedio,
+            int totalCalificaciones) {
+
+        static HiloDeComentariosResponse desde(
+                ServicioDePublicacionDeComentarios.HiloConsultado hilo) {
+            List<ComentarioResponse> comentarios = hilo.comentarios().stream()
+                    .map(ComentarioResponse::desde)
+                    .toList();
+            // Dos decimales, como declara el contrato: 4.333... seria ruido en
+            // una ficha de cinco estrellas.
+            Double promedio = hilo.calificacionPromedio().isPresent()
+                    ? Math.round(hilo.calificacionPromedio().getAsDouble() * 100.0) / 100.0
+                    : null;
+            return new HiloDeComentariosResponse(
+                    hilo.productoId(), comentarios, comentarios.size(),
+                    promedio, hilo.totalCalificaciones());
         }
     }
 }
