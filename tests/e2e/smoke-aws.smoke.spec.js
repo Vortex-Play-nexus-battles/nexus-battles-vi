@@ -150,12 +150,26 @@ test.describe('Smoke del entorno desplegado', () => {
 
     const pagina = await conToken.json();
     // Forma de página, no un array pelado: es lo que el contrato declara y lo
-    // que el frontend pagina.
-    expect(pagina).toHaveProperty('salas');
-    expect(Array.isArray(pagina.salas)).toBe(true);
-    expect(typeof pagina.total === 'number' || typeof pagina.totalElementos === 'number').toBe(
-      true,
-    );
+    // que el frontend pagina. Los nombres son los de
+    // `PaginaDeSalasResponse` —`contenido`, no `salas`—, comprobados contra
+    // el DTO y no supuestos.
+    expect(Array.isArray(pagina.contenido), JSON.stringify(pagina)).toBe(true);
+    expect(typeof pagina.pagina).toBe('number');
+    expect(typeof pagina.tamano).toBe('number');
+    expect(typeof pagina.totalElementos).toBe('number');
+    expect(typeof pagina.totalPaginas).toBe('number');
+
+    // Y si hay salas, cada una trae su forma: el listado de RF-JUE-002 se
+    // pinta con estos campos.
+    for (const sala of pagina.contenido) {
+      expect(sala.id, JSON.stringify(sala)).toBeTruthy();
+      expect(sala.estado).toBeTruthy();
+      expect(sala.modalidad).toBeTruthy();
+      expect(typeof sala.ocupacion).toBe('number');
+      expect(sala.ocupacion).toBeLessThanOrEqual(sala.maximoParticipantes);
+      // El codigo de invitacion NO viaja en el listado: es de su anfitrion.
+      expect(sala.codigoInvitacion).toBeUndefined();
+    }
   });
 
   test('LIMITACION DE DEV: crear sala falla porque inventario no esta desplegado', async () => {
