@@ -506,8 +506,44 @@ jobs:
           path: ${{ matrix.ruta }}/target/site/jacoco/
           if-no-files-found: warn
 
-# Nota sobre CA-02 (notificacion inmediata ante falla): no se configura ningun
-# webhook aqui a proposito (Discord/Slack quedan pendientes de decision de
-# equipo). GitHub ya envia por defecto un correo a los autores de los commits
-# y observadores del repo cuando un workflow run falla; eso cubre el criterio
-# de aceptacion sin trabajo adicional en este archivo.
+  # ---------------------------------------------------------------------
+  # CA-02: notificacion inmediata ante falla, en la misma ejecucion, al
+  # canal del equipo. La eleccion del canal (Discord, Slack, Teams...) sigue
+  # siendo del equipo: este job solo actua si existe el secret
+  # WEBHOOK_NOTIFICACIONES con la URL de un webhook entrante, y solo cuando
+  # algo fallo (en verde no hace ruido). Sin el secret, GitHub sigue enviando
+  # su correo al autor del push y a los observadores del repositorio, que es
+  # lo que cubria el criterio hasta hoy. Mismo cuerpo que en cd.yml:
+  # "content" para Discord y "text" para Slack/Teams.
+  # ---------------------------------------------------------------------
+  notificar-fallo:
+    name: Avisar al canal del equipo si algo fallo
+    needs: [detectar-servicios, ci-transversal, ci-frontend, ci]
+    if: always() && contains(needs.*.result, 'failure')
+    runs-on: ubuntu-latest
+    env:
+      WEBHOOK: ${{ secrets.WEBHOOK_NOTIFICACIONES }}
+    steps:
+      - name: Enviar el aviso de fallo
+        if: env.WEBHOOK != ''
+        env:
+          RESULTADOS: >-
+            transversal=${{ needs.ci-transversal.result }}
+            frontend=${{ needs.ci-frontend.result }}
+            servicios=${{ needs.ci.result }}
+          CORRIDA: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REFERENCIA: ${{ github.head_ref || github.ref_name }}
+          COMMIT: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TEXTO=":x: CI FALLO en $REFERENCIA (${COMMIT:0:7}, por $ACTOR) - $RESULTADOS - $CORRIDA"
+          CUERPO=$(jq -cn --arg t "$TEXTO" '{content: $t, text: $t}')
+          CODIGO=$(curl -sS -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d "$CUERPO" "$WEBHOOK" || echo "000")
+          echo "Aviso enviado al canal del equipo: HTTP $CODIGO"
+          case "$CODIGO" in 2*) exit 0 ;; *) echo "::warning::El canal del equipo respondio $CODIGO; el resultado de CI no depende de esto." ;; esac
+      - name: Sin canal configurado
+        if: env.WEBHOOK == ''
+        run: |
+          echo "Sin secret WEBHOOK_NOTIFICACIONES: no se avisa a ningun canal (GitHub sigue avisando por correo al autor)."
