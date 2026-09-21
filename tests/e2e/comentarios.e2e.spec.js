@@ -101,7 +101,7 @@ test.describe('Comentarios: calificacion unica, promedio y eliminar (HU-COM-002/
     const segunda = await comentar(anfitriona, 'Segunda opinion, sigue igual de buena', 3);
     expect(segunda.status(), 'ya no es 409: entra sin estrellas').toBe(201);
     const cuerpo = await segunda.json();
-    expect(cuerpo.estrellas).toBeUndefined();
+    expect(cuerpo.estrellas ?? null, 'sin estrellas').toBeNull();
     expect(cuerpo.calificacionDescartada).toBe(true);
 
     h = await hilo();
