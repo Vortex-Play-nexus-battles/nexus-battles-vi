@@ -123,10 +123,15 @@ services:
       # es el Keycloak local; en despliegue la aporta el entorno del servidor.
       # El JWKS se consulta solo al validar el primer token, asi que el
       # contenedor arranca y responde salud aunque la URL no exista aun.
-      KEYCLOAK_JWK_SET_URI: ${KEYCLOAK_JWK_SET_URI:-http://host.docker.internal:9090/realms/nexus/protocol/openid-connect/certs}
+      # Por defecto apunta al JWKS de desarrollo de esta red (servicio jwks-dev,
+      # mas abajo). Cuando cuentas publique su Keycloak, se cambia con esta
+      # misma variable en el entorno del servidor, sin tocar el archivo.
+      KEYCLOAK_JWK_SET_URI: ${KEYCLOAK_JWK_SET_URI:-http://jwks-dev/certs.json}
     depends_on:
       contenido-mongo:
         condition: service_healthy
+      jwks-dev:
+        condition: service_started
 
   srv-motor-combate:
     build:
@@ -146,5 +151,43 @@ services:
       srv-heroes:
         condition: service_started
 
+  # --- JWKS de desarrollo para productos ---
+  # Productos valida los tokens Bearer contra un JWKS (firma y vigencia; no
+  # valida emisor). Mientras cuentas no publique su Keycloak, este servidor
+  # estatico sirve la clave PUBLICA de desarrollo para que se puedan probar los
+  # endpoints protegidos (Newman de productos, folder de tiraje). La clave
+  # privada la guarda el PO fuera del repositorio; los tokens se emiten con
+  # services/contenido/productos/postman/jwks-dev/emitir-token.mjs. Quien
+  # tenga esa clave es ADMINISTRADOR de productos en dev: herramienta de
+  # pruebas, no sustituye la integracion con cuentas. Sin puerto en el host.
+  jwks-dev:
+    image: nginx:1.27-alpine
+    container_name: jwks-dev
+    deploy:
+      resources:
+        limits:
+          memory: 32M
+    configs:
+      - source: jwks_dev
+        target: /usr/share/nginx/html/certs.json
+
 volumes:
   contenido-mongo-data:
+
+# Clave publica RSA del JWKS de desarrollo (kid ZWrXEjzebPN-783Y). Para
+# rotarla: node generar-claves.mjs <ruta-privada.pem> y pegar aqui su salida.
+configs:
+  jwks_dev:
+    content: |
+      {
+        "keys": [
+          {
+            "kty": "RSA",
+            "use": "sig",
+            "alg": "RS256",
+            "kid": "ZWrXEjzebPN-783Y",
+            "n": "pMVuOkaJc-xAMJT42ismRyqMdMOApEBBBbm56f8TCylwM-Cq7qKsm_Z6ZDLQJ6qXK0y3e_9SQXqvrqizW8JoQ6mKo7CxJdp1Css3Fy9QmFGCKdFbM8NbOh97u9dj9fAKuD9hk9SX3gfA7QXup2bWhYi7-AXcVDLcgLN6skzOVo1NYOjC825WB0OuxesnEnOwYRXBcECv4fJY5akNtGQ_0-3IL48pK7xnMNhahO4D2zgnPZPZMJmSB2Xuj79icVNJmcIjxqbm-rcCt9YYyEXpFWTg8Y6fi4cqb4a5fVZXn1xlQ0A9s-cYpko232y_Ukd-O9hOlWo0ZKh_dwitEVffgw",
+            "e": "AQAB"
+          }
+        ]
+      }
