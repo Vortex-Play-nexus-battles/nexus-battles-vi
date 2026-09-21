@@ -197,6 +197,8 @@ test.describe('Modalidades de partida (HU-SAL-004)', () => {
   // ===================================================================
 
   test('el formulario se acomoda a la modalidad y crea la sala contra la IA', async ({ page }) => {
+    // El combate del final tarda lo que tarde la maquina en caer.
+    test.setTimeout(180000);
     await conSesion(page, anfitriona, ANFITRION);
     await page.goto(`${BORDE}${CREAR}`);
 
@@ -206,13 +208,14 @@ test.describe('Modalidades de partida (HU-SAL-004)', () => {
     await expect(participantes).toHaveAttribute('readonly', '');
     await expect(page.locator('[data-zona="opciones-hasta-seis"]')).toBeHidden();
 
-    // Los radios van ocultos bajo su tarjeta (`.modalidad__cara`): se pulsa la
-    // tarjeta, que es lo que hace una persona.
-    await page.click('label[for="modalidad-seis"]');
+    // El radio va transparente ENCIMA de su tarjeta (`.modalidad__entrada`:
+    // opacity 0 al 100 %): es el que recibe el clic de una persona, y por eso
+    // Playwright no deja pulsar la tarjeta «tapada». Se marca el radio.
+    await page.locator('#modalidad-seis').check();
     await expect(participantes).toHaveAttribute('max', '6');
     await expect(page.locator('[data-zona="opciones-hasta-seis"]')).toBeVisible();
 
-    await page.click('label[for="modalidad-ia"]');
+    await page.locator('#modalidad-ia').check();
     await expect(page.locator('[data-zona="nota-contra-ia"]')).toBeVisible();
     await expect(participantes).toHaveValue('2');
 
@@ -238,7 +241,6 @@ test.describe('Modalidades de partida (HU-SAL-004)', () => {
 
     // Y se juega hasta el final: la anfitriona golpea desde la vista y la
     // maquina responde sola, turno tras turno, hasta que alguien cae.
-    test.setTimeout(180000);
     const inicio = await api.post(`/api/v1/salas/${sala.id}/partida`, {
       headers: conToken(anfitriona.token),
     });
