@@ -5,6 +5,15 @@ spring:
   mvc:
     problemdetails:
       enabled: true
+  # Clave publica con la que se verifican los tokens de usuario (ADR-002).
+  # Hoy la publica ms-identidad; con Keycloak solo cambia la URL, por
+  # variable de entorno. Los roles y el uid los traduce ConversorRolesJwt
+  # (shared/libs/plataforma-seguridad).
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${IDENTIDAD_JWKS_URL:http://localhost:8089/api/v1/auth/jwks}
   datasource:
     url: ${DB_RELACIONAL_URL:jdbc:postgresql://localhost:5432/plataformadb}
     username: ${DB_USER:usuario_nexus}
