@@ -2,19 +2,19 @@ package com.nexusbattles.ms_subastas.subastas.api;
 
 import com.nexusbattles.ms_subastas.seguridad.*;
 import com.nexusbattles.ms_subastas.subastas.service.*;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
-import java.nio.charset.StandardCharsets;
-import java.time.Clock;
 import java.time.Instant;
-import java.util.Date;
+import java.util.List;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import static org.mockito.Mockito.*;
@@ -24,10 +24,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 
 class PublicacionSubastaControllerTest {
-    private static final String SECRET = "clave-secreta-de-prueba-con-mas-de-32-caracteres";
     private final PublicarSubastaApplicationService servicio = mock(PublicarSubastaApplicationService.class);
     private final ObjectProvider<PublicarSubastaApplicationService> provider = mock(ObjectProvider.class);
-    private final MockHttpServletRequest request = new MockHttpServletRequest();
     /**
      * Sin /api/v1 en las rutas: standaloneSetup no aplica
      * server.servlet.context-path, asi que aqui se pide la ruta tal y como la
@@ -41,9 +39,16 @@ class PublicacionSubastaControllerTest {
     @BeforeEach
     void preparar() {
         when(provider.getIfAvailable()).thenReturn(servicio);
-        var identidad = new IdentidadDesdeToken(new ValidadorDeToken(SECRET, Clock.systemUTC()), request);
-        mvc = MockMvcBuilders.standaloneSetup(new PublicacionSubastaController(provider, identidad))
+        // La cadena de seguridad (firma, caducidad, emisor) se prueba en
+        // SeguridadWebConfigTest; aqui el token ya viene validado en el contexto
+        // y lo que se prueba es lo que el controlador hace con el.
+        mvc = MockMvcBuilders.standaloneSetup(new PublicacionSubastaController(provider, new IdentidadDesdeToken()))
                 .setControllerAdvice(new ManejadorDeErroresPublicacion()).build();
+    }
+
+    @AfterEach
+    void limpiarContexto() {
+        SecurityContextHolder.clearContext();
     }
 
     @ParameterizedTest
@@ -60,7 +65,7 @@ class PublicacionSubastaControllerTest {
                 new java.math.BigDecimal("20"), "ACTIVA", inicio, fin, comision,
                 "Espada", "ARMA", "RARA", "https://catalogo/espada.png", "Espada de hielo", "Congelar");
         when(servicio.publicar(any(), eq("k"))).thenReturn(respuesta);
-        request.addHeader("Authorization", token(vendedor.toString(), false));
+        autenticadoCon(vendedor.toString());
         String esperado = """
                 {"id":"%s","productoId":"%s","elementoInventarioId":"unidad","vendedorId":"%s",
                  "precioInicial":10,"ofertaVigente":10,"precioCompraInmediata":20,"comisionCobrado":%s,
@@ -80,26 +85,21 @@ class PublicacionSubastaControllerTest {
 
     @Test
     void integridadNoFuncionalEs500() throws Exception {
-        request.addHeader("Authorization", token(UUID.randomUUID().toString(), false));
+        autenticadoCon(UUID.randomUUID().toString());
         when(servicio.publicar(any(), any())).thenThrow(new org.springframework.dao.DataIntegrityViolationException("otra causa"));
         mvc.perform(post("/subastas").header("Idempotency-Key", "k").contentType("application/json")
                 .content(body("24H"))).andExpect(status().isInternalServerError());
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"ausente", "invalido", "sin-uid", "uid-invalido", "uid-numerico", "expirado"})
+    @ValueSource(strings = {"ausente", "sin-uid", "uid-invalido", "uid-numerico"})
     void jwtFailClosed(String caso) throws Exception {
-        String token = switch (caso) {
-            case "ausente" -> null;
-            case "invalido" -> "Bearer invalido";
-            case "sin-uid" -> token(null, false);
-            case "uid-invalido" -> token("no-es-uuid", false);
-            case "uid-numerico" -> "Bearer " + Jwts.builder().subject("apodo").claim("rol", "JUGADOR")
-                    .claim("ver", 1).claim("uid", 123).expiration(Date.from(Instant.now().plusSeconds(300)))
-                    .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8))).compact();
-            default -> token(UUID.randomUUID().toString(), true);
-        };
-        if (token != null) request.addHeader("Authorization", token);
+        switch (caso) {
+            case "ausente" -> SecurityContextHolder.clearContext();
+            case "sin-uid" -> autenticadoCon(null);
+            case "uid-invalido" -> autenticadoCon("no-es-uuid");
+            default -> autenticadoCon(123);
+        }
         mvc.perform(post("/subastas").header("Idempotency-Key", "k").contentType("application/json")
                 .content(body("24H"))).andExpect(status().isUnauthorized());
         verifyNoInteractions(servicio);
@@ -107,7 +107,7 @@ class PublicacionSubastaControllerTest {
 
     @Test
     void sinIntegracionesDevuelve503() throws Exception {
-        request.addHeader("Authorization", token(UUID.randomUUID().toString(), false));
+        autenticadoCon(UUID.randomUUID().toString());
         when(provider.getIfAvailable()).thenReturn(null);
         mvc.perform(post("/subastas").header("Idempotency-Key", "k").contentType("application/json")
                 .content(body("24H"))).andExpect(status().isServiceUnavailable());
@@ -130,7 +130,7 @@ class PublicacionSubastaControllerTest {
     @ParameterizedTest
     @ValueSource(strings = {" ", "1234567890"})
     void validaLongitudDeClave(String clave) throws Exception {
-        request.addHeader("Authorization", token(UUID.randomUUID().toString(), false));
+        autenticadoCon(UUID.randomUUID().toString());
         if (!clave.isBlank()) clave = clave.repeat(11);
         mvc.perform(post("/subastas").header("Idempotency-Key", clave).contentType("application/json")
                 .content(body("24H"))).andExpect(status().isBadRequest());
@@ -139,7 +139,7 @@ class PublicacionSubastaControllerTest {
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.EnumSource(PublicacionSubastaException.Motivo.class)
     void traduceErroresDeNegocio(PublicacionSubastaException.Motivo motivo) throws Exception {
-        request.addHeader("Authorization", token(UUID.randomUUID().toString(), false));
+        autenticadoCon(UUID.randomUUID().toString());
         when(servicio.publicar(any(), any())).thenThrow(new PublicacionSubastaException(motivo, "rechazo"));
         int esperado = switch (motivo) {
             case SOLICITUD_INVALIDA -> 400;
@@ -166,10 +166,13 @@ class PublicacionSubastaControllerTest {
                 + "\",\"duracion\":\"" + duracion + "\",\"precioInicial\":10}";
     }
 
-    private String token(String uid, boolean expirado) {
-        var jwt = Jwts.builder().subject("apodo").claim("rol", "JUGADOR").claim("ver", 1)
-                .expiration(Date.from(Instant.now().plusSeconds(expirado ? -60 : 300)));
+    /** Deja en el contexto un token de jugador ya validado, con el uid indicado (o sin el). */
+    private static void autenticadoCon(Object uid) {
+        var jwt = Jwt.withTokenValue("validado-por-la-cadena").header("alg", "RS256")
+                .subject("apodo").claim("rol", "JUGADOR").claim("ver", 1)
+                .issuedAt(Instant.now()).expiresAt(Instant.now().plusSeconds(300));
         if (uid != null) jwt.claim("uid", uid);
-        return "Bearer " + jwt.signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8))).compact();
+        SecurityContextHolder.getContext().setAuthentication(
+                new JwtAuthenticationToken(jwt.build(), List.of(new SimpleGrantedAuthority("ROLE_JUGADOR"))));
     }
 }

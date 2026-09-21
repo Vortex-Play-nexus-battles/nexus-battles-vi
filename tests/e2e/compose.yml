@@ -64,6 +64,18 @@ services:
       timeout: 3s
       retries: 20
 
+  e2e-subastas-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: subastas_db
+      POSTGRES_USER: subastas_user
+      POSTGRES_PASSWORD: subastas
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U subastas_user -d subastas_db"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
   # Una sola Mongo para los tres servicios de contenido, con una base por
   # servicio: es como esta en docker-compose.contenido.yml.
   e2e-contenido-mongo:
@@ -97,7 +109,7 @@ services:
       # pruebas, no de ningun entorno real.
       # e2e-banco: credencial con la que sembrar.sh acredita el saldo inicial en
       # ms-finanzas, que desde #455 solo atiende a servicios (ROLE_SERVICIO).
-      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas
+      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas
     depends_on:
       e2e-identidad-db: { condition: service_healthy }
     healthcheck:
@@ -216,6 +228,48 @@ services:
       srv-ms-identidad: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8093/api/v1/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  # Subastas (HU-SUB-001/004/011, Grupo 4). En el host de dev no cabe (#435)
+  # y hasta el 21-sep tampoco lo detectaba el CD ni aceptaba el token real de
+  # ms-identidad: por eso el 502 de la vista. Aqui corre con el mismo token
+  # que el resto (JWKS), su propia base y la credencial de servicio con la que
+  # habla a ms-finanzas e inventario. Los adaptadores de catalogo e inventario
+  # van en modo fake mientras no haya semilla de inventario para subastar;
+  # el libro de creditos SI es el real.
+  srv-ms-subastas:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/cuentas/ms-subastas/build.nosync/libs/*.jar
+        PUERTO: "8092"
+    environment:
+      DB_HOST: e2e-subastas-db
+      DB_PORT: "5432"
+      DB_NAME: subastas_db
+      DB_USER: subastas_user
+      DB_PASSWORD: subastas
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
+      DIRECTORIO_ACTIVO_CLIENT_ID: ms-subastas
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-subastas
+      FINANZAS_BASE_URL: http://srv-ms-finanzas:8093/api/v1
+      FINANZAS_MODO: http
+      INVENTARIO_BASE_URL: http://srv-inventario:8080
+      CATALOGO_BASE_URL: http://srv-productos:8080
+      NOTIFICACIONES_BASE_URL: http://srv-notificaciones:8085/api/v1
+      SANCIONES_BASE_URL: http://srv-moderacion-sanciones:8086
+      CORS_ORIGENES: http://localhost:8099
+      SPRING_JPA_SHOW_SQL: "false"
+    depends_on:
+      e2e-subastas-db: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
+      srv-ms-finanzas: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8092/api/v1/actuator/health || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 40
