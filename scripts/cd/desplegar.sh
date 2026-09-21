@@ -192,7 +192,7 @@ chmod 600 .env
 # servicio correspondiente). Rotar uno = borrar su linea de ese archivo y
 # volver a desplegar. Nunca se imprimen.
 SECRETOS_SERVICIOS="$DIRECTORIO/secretos-servicios.env"
-CLIENTES_DE_SERVICIO="salas-partidas comentarios notificaciones ms-subastas ms-finanzas moderacion-sanciones"
+CLIENTES_DE_SERVICIO="salas-partidas comentarios notificaciones ms-subastas ms-finanzas moderacion-sanciones torneos"
 touch "$SECRETOS_SERVICIOS"
 chmod 600 "$SECRETOS_SERVICIOS"
 AUTH_CLIENTES_SERVICIO=""
