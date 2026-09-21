@@ -11,7 +11,7 @@ public class AuditoriaEventClientTest {
     @Test
     @DisplayName("AuditoriaEventClient maneja caídas de ms-cumplimiento sin lanzar excepciones (Fail-Safe)")
     void testAuditoriaClientFailsafeWhenServerDown() {
-        AuditoriaEventClient client = new AuditoriaEventClient("http://localhost:9999/api/v1/admin/auditoria/eventos");
+        AuditoriaEventClient client = new AuditoriaEventClient("http://localhost:9999/api/v1/admin/auditoria/eventos", null);
 
         assertDoesNotThrow(() -> {
             client.registrarBypassAsync("test_user", "JUGADOR", "BANEAR_DEFINITIVAMENTE", "FORBIDDEN_ROLE", "127.0.0.1");

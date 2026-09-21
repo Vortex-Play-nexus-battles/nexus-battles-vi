@@ -2,7 +2,7 @@ package com.nexusbattles.plataforma.salaspartidas.tiemporeal;
 
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Sala;
-import com.nexusbattles.plataforma.salaspartidas.seguridad.IdentidadDelToken;
+import com.nexusbattles.comun.seguridad.IdentidadDelToken;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.stomp.StompCommand;

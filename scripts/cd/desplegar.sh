@@ -182,6 +182,41 @@ for variable in SMTP_PORT LISTA_NEGRA_VERIFICAR_URL SALAS_WS_ORIGENES CHAT_WS_OR
 done
 chmod 600 .env
 
+# Credenciales de servicio (ADR-001 via el emisor transitorio de ADR-005).
+#
+# No son secrets de GitHub: se generan UNA vez en el host y se persisten en
+# secretos-servicios.env (fuera del .env efimero), de modo que cada
+# despliegue reparta los mismos valores al emisor (ms-identidad lee
+# AUTH_CLIENTES_SERVICIO) y a cada cliente (SECRETO_SERVICIO_<CLIENTE>, que
+# docker-compose.deploy.yml inyecta como DIRECTORIO_ACTIVO_CLIENT_SECRET del
+# servicio correspondiente). Rotar uno = borrar su linea de ese archivo y
+# volver a desplegar. Nunca se imprimen.
+SECRETOS_SERVICIOS="$DIRECTORIO/secretos-servicios.env"
+CLIENTES_DE_SERVICIO="salas-partidas comentarios notificaciones ms-subastas ms-finanzas"
+touch "$SECRETOS_SERVICIOS"
+chmod 600 "$SECRETOS_SERVICIOS"
+AUTH_CLIENTES_SERVICIO=""
+for cliente in $CLIENTES_DE_SERVICIO; do
+  clave="SECRETO_SERVICIO_$(echo "$cliente" | tr 'a-z-' 'A-Z_')"
+  valor=$(grep "^${clave}=" "$SECRETOS_SERVICIOS" | head -n1 | cut -d= -f2- || true)
+  if [ -z "$valor" ]; then
+    if command -v openssl >/dev/null 2>&1; then
+      valor=$(openssl rand -hex 24)
+    else
+      valor=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
+    fi
+    echo "${clave}=${valor}" >> "$SECRETOS_SERVICIOS"
+    echo "  credencial de servicio generada para $cliente"
+  fi
+  echo "${clave}=${valor}" >> .env
+  AUTH_CLIENTES_SERVICIO="${AUTH_CLIENTES_SERVICIO:+${AUTH_CLIENTES_SERVICIO};}${cliente}=${valor}"
+done
+echo "AUTH_CLIENTES_SERVICIO=${AUTH_CLIENTES_SERVICIO}" >> .env
+# Sin secret de GitHub, el emisor es ms-identidad dentro de la red de compose.
+if [ -z "${DIRECTORIO_ACTIVO_URL:-}" ]; then
+  sed -i 's#^DIRECTORIO_ACTIVO_URL=$#DIRECTORIO_ACTIVO_URL=http://srv-ms-identidad:8089/api/v1/auth/token#' .env
+fi
+
 echo "== 2) Guardando el tag estable actual de cada servicio, antes de tocarlo =="
 # Si el servicio ya estaba corriendo con algun tag, lo guardamos en un
 # archivo simple ANTES de sobreescribirlo. Si el servicio nunca se ha
