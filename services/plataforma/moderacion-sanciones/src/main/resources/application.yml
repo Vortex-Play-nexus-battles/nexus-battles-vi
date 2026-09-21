@@ -56,3 +56,12 @@ seguridad:
     url: ${DIRECTORIO_ACTIVO_URL:}
     client-id: ${DIRECTORIO_ACTIVO_CLIENT_ID:}
     client-secret: ${DIRECTORIO_ACTIVO_CLIENT_SECRET:}
+
+# Regla 3 de plataforma: todo servicio expone salud Y metricas. Hasta el
+# 2026-09-21 este servicio solo exponia health (valor por omision de Actuator)
+# y el tablero tecnico de HU-MET-004 lo veia como brecha de observabilidad.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
