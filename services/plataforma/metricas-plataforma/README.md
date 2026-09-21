@@ -53,9 +53,20 @@ entorno y lo que hay en `application.yml` son los valores de desarrollo local.
 | `DISPONIBILIDAD_UMBRAL` | `99.95` | Umbral mensual de DEC-01 |
 | `DISPONIBILIDAD_INTERVALO_MS` | `30000` | Cada cuánto se comprueba la salud |
 | `SALUD_<SERVICIO>` | `http://localhost:<puerto>/actuator/health` | Endpoint de salud de cada servicio del bloque |
+| `DB_RELACIONAL_URL`, `DB_USER`, `DB_PASS` | la PostgreSQL de plataforma local | Esquema `metricas`, donde sobreviven las interrupciones y las ventanas de mantenimiento |
 
 Añadir un servicio al monitoreo es añadir una entrada en `disponibilidad.servicios`;
 no hay que recompilar nada.
+
+### Persistencia
+
+Las interrupciones (una fila por caída, no por sondeo) y las ventanas de
+mantenimiento se guardan en el esquema `metricas` de la PostgreSQL de plataforma
+(`AlmacenEnPostgres`, JDBC sin JPA, migración `V1` por Flyway). Al arrancar, el
+registro recarga lo guardado: una caída que quedó abierta antes de un redespliegue
+sigue abierta y la cierra la primera comprobación sana. Lo que **no** se guarda es
+la última comprobación de cada servicio («estado actual»): es una cada 30 s y solo
+interesa la más reciente. El registro de latencia (HU-REN-001) sigue en memoria.
 
 ## Alertas
 
@@ -225,8 +236,7 @@ red ni esperas.
   el equipo aún no ha acordado cuál. Lo que hay aquí es la medición propia, que es
   lo que los criterios de aceptación piden y lo que permite tener evidencia
   acumulada desde el Sprint 1.
-- **Persistencia del registro** (SCRUM-1144/1145: recolección centralizada y
-  política de retención). Hoy el registro vive en memoria: al reiniciar el
-  servicio se pierde el histórico. Antes de la demostración final hay que
-  decidir dónde se guarda y con qué retención, porque el informe mensual necesita
-  sobrevivir a un reinicio.
+- **Política de retención** (SCRUM-1145). Las interrupciones ya sobreviven a un
+  reinicio (ver «Persistencia»), pero nadie las borra: con una fila por caída el
+  crecimiento es mínimo, y cuánto tiempo conservarlas es una decisión del PO que
+  no se ha tomado. El registro de latencia (HU-REN-001) sí sigue en memoria.
