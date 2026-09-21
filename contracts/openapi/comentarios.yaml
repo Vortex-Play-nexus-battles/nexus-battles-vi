@@ -7,10 +7,15 @@ info:
     RF-COM-001, RF-COM-002 y RF-COM-007; el contenido del comentario sigue
     RN-CMT-001). El filtro se apoya en la lista negra de
     HU-ADM-002, consumida por REST segun contracts/openapi/moderacion-lista-negra.yaml.
-    El autor y su apodo viajan en el cuerpo mientras se acuerda con el modulo de
-    identidad que claim del token los aporta; al integrar el resource server este
-    contrato abrira una version nueva en lugar de modificar esta.
-  version: 1.0.0
+
+    Desde la 1.1.0 el autor y su apodo salen del token de acceso (ADR-002:
+    identificador estable `uid` y apodo), no del cuerpo. Los campos `autorId`
+    y `apodoAutor` de `PublicacionComentarioRequest` se conservan como
+    obsoletos y se ignoran, asi un cliente de la 1.0.0 sigue recibiendo 201 y
+    no 400: por eso es una version menor y no una mayor. Publicar exige un
+    usuario autenticado (401 sin token; 403 con un token que no es de usuario,
+    como uno de servicio); leer el hilo sigue siendo publico.
+  version: 1.1.0
 servers:
   - url: http://localhost:8081/api/v1
     description: Entorno local de desarrollo
@@ -50,7 +55,14 @@ paths:
     post:
       summary: Publicar un comentario sobre un producto
       operationId: publicarComentario
+      security:
+        - bearerAuth: []
       description: >
+        Exige un usuario autenticado: el autor es el `uid` del token y el
+        apodo, su sujeto. Sin token responde 401; con un token de servicio,
+        403.
+
+
         La retencion y el rechazo no son lo mismo. Si el filtro senala el texto,
         el comentario si se guarda pero queda esperando a un moderador y la
         respuesta es 202, no 201. Si el autor esta silenciado (403) o alguna
@@ -97,8 +109,13 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/ProblemDetail"
+        "401":
+          description: Sin token de acceso, o con un token caducado o no verificable
         "403":
-          description: El autor tiene una sancion activa de silencio y no puede publicar
+          description: >
+            El autor tiene una sancion activa de silencio y no puede publicar
+            (problem detail con motivo AUTOR_SILENCIADO), o el token no es de
+            un usuario (por ejemplo, un token de servicio; sin cuerpo)
           content:
             application/problem+json:
               schema:
@@ -119,20 +136,34 @@ paths:
                 $ref: "#/components/schemas/ProblemDetail"
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Token de acceso emitido por ms-identidad (RS256, verificado contra su
+        JWKS, ADR-002). El autor del comentario es el claim `uid`; el apodo,
+        el sujeto (o `preferred_username` con Keycloak). Cualquiera de los
+        roles de usuario (JUGADOR, MODERADOR, ADMINISTRADOR,
+        SUPER_ADMINISTRADOR) puede publicar; un token de servicio no.
   schemas:
     PublicacionComentarioRequest:
       type: object
       required:
-        - autorId
-        - apodoAutor
         - texto
       properties:
         autorId:
           type: string
-          description: Identificador del jugador que publica
+          deprecated: true
+          description: >
+            Obsoleto desde la 1.1.0: se ignora. El autor es el `uid` del token.
+            Se conserva para que un cliente de la 1.0.0 no reciba 400.
         apodoAutor:
           type: string
-          description: Apodo del jugador en el momento de publicar
+          deprecated: true
+          description: >
+            Obsoleto desde la 1.1.0: se ignora. El apodo sale del token.
         texto:
           type: string
           description: >
