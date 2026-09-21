@@ -283,7 +283,6 @@ test('nombres del inventario se muestran como texto, sin insertar HTML', async (
 test('auditoría HU-SUB-001: los módulos protegidos coinciden byte a byte con HEAD', () => {
   const raizRepo = new URL('../../../../', import.meta.url);
   const protegidos = [
-    'cuentas/subastas.js',
     'cuentas/subastas.html',
     'cuentas/cliente-subastas.js',
     'cuentas/subastas-vitrina.js',
@@ -327,4 +326,37 @@ test('compra inmediata incompleta no se confunde con campo opcional vacío', asy
   expect($('[type="submit"]').disabled).toBe(true);
   expect(publicar).not.toHaveBeenCalled();
   expect($('#error-inmediata').textContent).not.toBe('');
+});
+
+test('Subastas activas ofrece Publicar subasta sin sesion y conserva la carga del listado', async () => {
+  sessionStorage.clear();
+  document.body.innerHTML = '<div data-cabecera-app></div><main id="raiz-subastas"></main>';
+  globalThis.fetch = jest.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ contenido: [], pagina: 0, totalPaginas: 0 }),
+  });
+  const escuchar = jest.spyOn(document, 'addEventListener');
+  await import('./subastas.js');
+  const inicializar = escuchar.mock.calls.find(([evento]) => evento === 'DOMContentLoaded')[1];
+  try {
+    document.dispatchEvent(new Event('DOMContentLoaded'));
+    await vaciar();
+
+    const enlace = $('#raiz-subastas a');
+    expect(enlace).not.toBeNull();
+    expect(enlace.textContent).toBe('Publicar subasta');
+    expect(enlace.getAttribute('href')).toBe('./publicar-subasta.html');
+    expect(enlace.hidden).toBe(false);
+    expect(enlace.previousElementSibling.textContent).toBe('Subastas activas');
+    expect(enlace.nextElementSibling.className).toBe('subastas-busqueda');
+    expect($('.cabecera [data-seccion="subasta"]').getAttribute('aria-current')).toBe('page');
+    expect($('.subastas-filtros')).not.toBeNull();
+    expect($('.subastas-orden__control')).not.toBeNull();
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/v1/subastas?page=0&size=16&ordenarPor=FECHA_PUBLICACION',
+    );
+    expect($('#subastas-resultados .estado-vacio')).not.toBeNull();
+  } finally {
+    document.removeEventListener('DOMContentLoaded', inicializar);
+  }
 });

@@ -52,6 +52,12 @@ function inicializar() {
   titulo.textContent = 'Subastas activas';
   raiz.appendChild(titulo);
 
+  const enlacePublicar = document.createElement('a');
+  enlacePublicar.className = 'boton boton--primario';
+  enlacePublicar.textContent = 'Publicar subasta';
+  enlacePublicar.href = './publicar-subasta.html';
+  raiz.appendChild(enlacePublicar);
+
   raiz.appendChild(construirBarraBusqueda());
   raiz.appendChild(construirBarraOrden());
 
