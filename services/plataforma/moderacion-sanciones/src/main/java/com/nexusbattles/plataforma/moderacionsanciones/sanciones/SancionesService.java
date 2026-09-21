@@ -293,6 +293,22 @@ public class SancionesService {
         return valor == null || valor.isBlank() ? null : valor.strip();
     }
 
+    /**
+     * Metricas de moderacion de un periodo (HU-MET-001): solo agregados.
+     * Un periodo vacio no es error: devuelve ceros (la ausencia de actividad
+     * tambien es evidencia).
+     */
+    @Transactional(readOnly = true)
+    public MetricasDeModeracion metricas(OffsetDateTime desde, OffsetDateTime hasta) {
+        if (desde == null || hasta == null || !hasta.isAfter(desde)) {
+            throw new SancionRechazada(SancionRechazada.Motivo.SOLICITUD_INVALIDA,
+                    "el periodo necesita desde y hasta, con hasta posterior a desde");
+        }
+        return MetricasDeModeracion.de(desde, hasta,
+                sanciones.findByEmitidaEnBetweenOrderByEmitidaEnAsc(desde, hasta),
+                apelaciones.findByCreadaEnBetween(desde, hasta));
+    }
+
     private OffsetDateTime ahora() {
         return OffsetDateTime.now(reloj).withOffsetSameInstant(ZoneOffset.UTC);
     }

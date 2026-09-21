@@ -91,6 +91,16 @@ disponibilidad:
     moderacion-sanciones: ${SALUD_MODERACION:http://localhost:8086/actuator/health}
     admin-parametros: ${SALUD_ADMIN_PARAMETROS:http://localhost:8088/actuator/health}
 
+# HU-MET-001 — metricas de usuarios y moderacion. La fuente es
+# moderacion-sanciones (GET /sanciones/metricas, agregados sin identificadores).
+# umbral-sanciones-por-dia SIN valor a proposito: la ficha pide «alertas de
+# alta frecuencia» pero ningun documento fija la cifra (D-25); mientras el PO
+# no la apruebe, el tablero publica los conteos y dice que no hay umbral.
+metricas:
+  moderacion:
+    url: ${SANCIONES_URL:http://localhost:8086/api/v1}
+    umbral-sanciones-por-dia: ${METRICAS_UMBRAL_SANCIONES_POR_DIA:}
+
 # Regla 3 de plataforma: este servicio tambien expone su propia salud.
 management:
   endpoints:

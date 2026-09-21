@@ -33,6 +33,11 @@ class SeguridadSancionesTest {
         CacheManager cacheManager() {
             return new ConcurrentMapCacheManager();
         }
+
+        @Bean
+        java.time.Clock relojDePrueba() {
+            return java.time.Clock.systemUTC();
+        }
     }
 
     @Autowired
@@ -40,6 +45,10 @@ class SeguridadSancionesTest {
 
     @MockitoBean
     private ConsultaSancionActivaService service;
+
+    /** El controlador de consulta tambien publica /sanciones/metricas (HU-MET-001). */
+    @MockitoBean
+    private SancionesService sanciones;
 
     @Test
     void laConsultaQuedaAbiertaParaLlamadasEntreMicroservicios() throws Exception {

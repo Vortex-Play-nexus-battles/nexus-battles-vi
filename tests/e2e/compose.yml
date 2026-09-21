@@ -402,6 +402,39 @@ services:
       timeout: 5s
       retries: 40
 
+  # Metricas de plataforma (HU-MET-004 / HU-MET-001): recolecta Actuator de
+  # los servicios del bloque que corren en este compose y los agregados de
+  # moderacion. correo y admin-parametros NO estan aqui a proposito: son la
+  # brecha de observabilidad que el spec espera ver senalada (CA-03).
+  srv-metricas-plataforma:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/plataforma/metricas-plataforma/build/libs/*.jar
+        PUERTO: "8087"
+    environment:
+      DB_RELACIONAL_URL: jdbc:postgresql://e2e-plataforma-db:5432/plataformadb
+      DB_USER: plataforma
+      DB_PASS: plataforma
+      DISPONIBILIDAD_INTERVALO_MS: "5000"
+      SALUD_COMENTARIOS: http://srv-comentarios:8081/actuator/health
+      SALUD_CORREO: http://srv-correo:8082/actuator/health
+      SALUD_TORNEOS: http://srv-torneos:8083/actuator/health
+      SALUD_SALAS_PARTIDAS: http://srv-salas-partidas:8084/actuator/health
+      SALUD_NOTIFICACIONES: http://srv-notificaciones:8085/actuator/health
+      SALUD_MODERACION: http://srv-moderacion-sanciones:8086/actuator/health
+      SALUD_ADMIN_PARAMETROS: http://srv-admin-parametros:8088/actuator/health
+      SANCIONES_URL: http://srv-moderacion-sanciones:8086/api/v1
+    depends_on:
+      e2e-plataforma-db: { condition: service_healthy }
+      srv-moderacion-sanciones: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8087/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
   srv-salas-partidas:
     build:
       context: ../..
@@ -477,6 +510,7 @@ services:
     depends_on:
       srv-salas-partidas: { condition: service_healthy }
       srv-torneos: { condition: service_healthy }
+      srv-metricas-plataforma: { condition: service_healthy }
     healthcheck:
       # 127.0.0.1 y no `localhost` a proposito. El entrypoint de la imagen
       # intenta anadir un `listen [::]:80` y no puede, porque la
