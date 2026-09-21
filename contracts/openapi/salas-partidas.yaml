@@ -62,7 +62,18 @@ info:
     (`creditos-no-disponibles`, `inventario-no-disponible`,
     `motor-de-combate-no-disponible`) se conservan para cuando la dependencia
     contesta pero lo que contesta no sirve. Ver `DependenciaNoDisponible`.
-  version: 1.3.0
+
+    Cambios 1.4.0 (HU-TOR-004 CA-04, aditivo): `torneo` opcional en
+    `CrearSalaRequest` vincula la sala a un encuentro de torneo
+    (`torneoId` + `numeroEncuentro` 1..14). Al terminar la partida, este
+    servicio informa al jugador ganador a torneos
+    (`POST /torneos/{id}/encuentros/{n}/resultado` con `ganadorUid`,
+    `contracts/openapi/torneos.yaml` 1.1.0) con su credencial de servicio. Si
+    torneos no responde, el fallo queda anotado en el vinculo y lo resuelve un
+    administrador con motivo; la partida termina igual. Un encuentro fuera de
+    rango o sin torneo es `400` `parametros-invalidos` con el campo
+    (`torneo.numeroEncuentro` / `torneo.torneoId`) y la sala no se crea.
+  version: 1.4.0
   contact:
     name: Grupo 6 — Tiempo real, comunidad y plataforma
   license:
@@ -725,6 +736,25 @@ components:
             IA van al final); cada `Participante` trae su `equipo`. La partida
             termina cuando solo queda un equipo en pie y no se puede atacar a
             un companero.
+        torneo:
+          $ref: '#/components/schemas/EncuentroDeTorneo'
+
+    EncuentroDeTorneo:
+      type: object
+      description: |
+        (1.4.0, HU-TOR-004) La sala es la partida del encuentro `numeroEncuentro`
+        del torneo `torneoId`. Al terminar, el ganador se informa a torneos por
+        API; nunca se registra a mano desde aqui.
+      required: [torneoId, numeroEncuentro]
+      properties:
+        torneoId:
+          type: string
+          format: uuid
+        numeroEncuentro:
+          type: integer
+          minimum: 1
+          maximum: 14
+          description: Numero del encuentro en el arbol doble (1..14, `torneos.yaml`).
 
     IngresoRequest:
       type: object

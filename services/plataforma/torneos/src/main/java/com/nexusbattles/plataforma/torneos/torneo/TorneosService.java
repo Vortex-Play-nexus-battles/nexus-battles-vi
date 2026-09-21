@@ -14,6 +14,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.nexusbattles.plataforma.torneos.torneo.TorneoRechazado.Motivo;
 
@@ -57,7 +58,16 @@ public class TorneosService {
 
     public record SolicitudDeEquipo(String nombre, String avatar, UUID companeroUid) { }
 
-    public record SolicitudDeResultado(UUID ganadorEquipoId, UUID partidaId, String motivo) { }
+    /**
+     * {@code ganadorEquipoId} lo manda el administrador; {@code ganadorUid}
+     * (contrato 1.1.0) lo manda salas-partidas, que solo conoce al jugador en
+     * pie. Si vienen los dos manda el equipo.
+     */
+    public record SolicitudDeResultado(UUID ganadorEquipoId, UUID ganadorUid, UUID partidaId, String motivo) {
+        public SolicitudDeResultado(UUID ganadorEquipoId, UUID partidaId, String motivo) {
+            this(ganadorEquipoId, null, partidaId, motivo);
+        }
+    }
 
     // ---------------------------------------------------------------- consultas
 
@@ -264,8 +274,8 @@ public class TorneosService {
             throw new TorneoRechazado(Motivo.PERMISO_INSUFICIENTE,
                     "el resultado lo aporta la partida jugada o un administrador con motivo");
         }
-        if (solicitud.ganadorEquipoId() == null) {
-            throw new TorneoRechazado(Motivo.SOLICITUD_INVALIDA, "hace falta el equipo ganador");
+        if (solicitud.ganadorEquipoId() == null && solicitud.ganadorUid() == null) {
+            throw new TorneoRechazado(Motivo.SOLICITUD_INVALIDA, "hace falta el equipo ganador o el uid del jugador ganador");
         }
         if (!actor.esServicio() && (solicitud.motivo() == null || solicitud.motivo().isBlank())) {
             throw new TorneoRechazado(Motivo.SOLICITUD_INVALIDA,
@@ -278,9 +288,12 @@ public class TorneosService {
         List<Encuentro> arbol = encuentros.findByTorneoIdOrderByNumeroAsc(torneoId);
         Map<UUID, Equipo> porId = equipos.findByTorneoIdOrderByCreadoEnAsc(torneoId).stream()
                 .collect(Collectors.toMap(Equipo::id, Function.identity()));
+        UUID ganador = solicitud.ganadorEquipoId() != null
+                ? solicitud.ganadorEquipoId()
+                : equipoDelJugadorEn(arbol, porId, numero, solicitud.ganadorUid());
         Arbol.Movimiento movimiento;
         try {
-            movimiento = Arbol.aplicar(arbol, porId, numero, solicitud.ganadorEquipoId(), solicitud.partidaId(),
+            movimiento = Arbol.aplicar(arbol, porId, numero, ganador, solicitud.partidaId(),
                     actor.nombre(), actor.esServicio() ? null : solicitud.motivo().strip(), ahora());
         } catch (IllegalStateException noListo) {
             throw new TorneoRechazado(Motivo.ENCUENTRO_NO_LISTO, noListo.getMessage());
@@ -295,7 +308,7 @@ public class TorneosService {
             BITACORA.info("Torneo finalizado: id={} campeon={}", torneoId, campeon);
         });
         BITACORA.info("Resultado registrado: torneo={} encuentro={} ganador={} por={} motivo={}", torneoId, numero,
-                solicitud.ganadorEquipoId(), actor.nombre(), solicitud.motivo());
+                ganador, actor.nombre(), solicitud.motivo());
         return completar(torneo);
     }
 
@@ -304,6 +317,26 @@ public class TorneosService {
     private TorneoCompleto completar(Torneo torneo) {
         return new TorneoCompleto(torneo, equipos.findByTorneoIdOrderByCreadoEnAsc(torneo.id()),
                 encuentros.findByTorneoIdOrderByNumeroAsc(torneo.id()));
+    }
+
+    /**
+     * El equipo del encuentro {@code numero} en el que juega {@code uid}
+     * (contrato 1.1.0). Si no juega ahi, GANADOR_NO_PARTICIPA: la partida no
+     * puede decidir un encuentro que no era suyo.
+     */
+    private static UUID equipoDelJugadorEn(List<Encuentro> arbol, Map<UUID, Equipo> porId, int numero, UUID uid) {
+        if (numero < 1 || numero > arbol.size()) {
+            throw new TorneoRechazado(Motivo.NO_ENCONTRADO, "no hay encuentro " + numero);
+        }
+        Encuentro encuentro = arbol.get(numero - 1);
+        return Stream.of(encuentro.equipoA(), encuentro.equipoB())
+                .filter(Objects::nonNull)
+                .map(porId::get)
+                .filter(e -> e != null && e.tieneIntegrante(uid))
+                .map(Equipo::id)
+                .findFirst()
+                .orElseThrow(() -> new TorneoRechazado(Motivo.GANADOR_NO_PARTICIPA,
+                        "el jugador " + uid + " no juega el encuentro " + numero));
     }
 
     private Torneo torneoDe(UUID id) {

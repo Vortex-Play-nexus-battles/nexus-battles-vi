@@ -97,9 +97,38 @@ public class ConfiguracionDelServicio {
             RepositorioDePartidas partidas, CanalDePartida canal,
             com.nexusbattles.plataforma.salaspartidas.dominio.MotorDeCombate motor,
             com.nexusbattles.plataforma.salaspartidas.aplicacion.LiquidarApuesta apuesta,
-            com.nexusbattles.plataforma.salaspartidas.aplicacion.AcreditarRecompensa recompensa) {
+            com.nexusbattles.plataforma.salaspartidas.aplicacion.AcreditarRecompensa recompensa,
+            com.nexusbattles.plataforma.salaspartidas.aplicacion.InformarEncuentroDeTorneo torneo) {
         return new com.nexusbattles.plataforma.salaspartidas.aplicacion.EjecutarAccion(
-                partidas, canal, motor, apuesta, recompensa);
+                partidas, canal, motor, apuesta, recompensa, torneo);
+    }
+
+    /**
+     * HU-TOR-004 (CA-04): la sala que es un encuentro de torneo informa el
+     * ganador a torneos al terminar, con la credencial de servicio de este
+     * modulo. Sin URL, el arbitro anota el fallo y lo resuelve el administrador.
+     */
+    @Bean
+    public com.nexusbattles.plataforma.salaspartidas.aplicacion.InformarEncuentroDeTorneo informarEncuentroDeTorneo(
+            com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeVinculosDeTorneo vinculos,
+            @org.springframework.beans.factory.annotation.Value("${salas.torneos.url:}") String urlDeTorneos,
+            org.springframework.beans.factory.ObjectProvider<
+                    com.nexusbattles.comun.seguridad.servicio.InterceptorDePortadorDeServicio> credencial,
+            ClientHttpRequestFactory fabricaConTiempos) {
+        com.nexusbattles.plataforma.salaspartidas.aplicacion.ArbitroDeTorneo arbitro;
+        if (urlDeTorneos == null || urlDeTorneos.isBlank()) {
+            arbitro = (idTorneo, numero, ganador, idPartida) -> {
+                throw new com.nexusbattles.plataforma.salaspartidas.aplicacion.ArbitroDeTorneo.TorneoNoDisponible(
+                        "SALAS_TORNEOS_URL no esta configurada en este entorno");
+            };
+        } else {
+            RestClient.Builder constructor = RestClient.builder().requestFactory(fabricaConTiempos);
+            credencial.ifAvailable(constructor::requestInterceptor);
+            arbitro = new com.nexusbattles.plataforma.salaspartidas.integracion.ClienteTorneos(
+                    constructor.build(), urlDeTorneos);
+        }
+        return new com.nexusbattles.plataforma.salaspartidas.aplicacion.InformarEncuentroDeTorneo(
+                vinculos, arbitro, Clock.systemUTC());
     }
 
     /**

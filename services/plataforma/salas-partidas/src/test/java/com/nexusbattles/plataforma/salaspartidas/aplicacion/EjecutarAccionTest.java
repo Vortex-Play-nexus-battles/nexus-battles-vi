@@ -161,6 +161,53 @@ class EjecutarAccionTest {
     }
 
     @Test
+    @DisplayName("HU-TOR-004 CA-04: al terminar, la partida se pasa al informe de torneo, despues del aviso de fin")
+    void alTerminarInformaAlTorneo() {
+        Partida partida = partidaDe(ANA, BRUNO);
+        List<Partida> informadas = new ArrayList<>();
+        InformarEncuentroDeTorneoTest.VinculosEnMemoria vinculos = new InformarEncuentroDeTorneoTest.VinculosEnMemoria();
+        InformarEncuentroDeTorneo torneo = new InformarEncuentroDeTorneo(vinculos,
+                (idTorneo, numero, ganador, idPartida) -> { }, java.time.Clock.systemUTC()) {
+            @Override
+            public java.util.Optional<com.nexusbattles.plataforma.salaspartidas.dominio.VinculoDeTorneo> alTerminar(
+                    Partida terminada) {
+                informadas.add(terminada);
+                assertEquals("fin", canal.anuncios.get(canal.anuncios.size() - 1).tipo(), "primero el aviso");
+                return java.util.Optional.empty();
+            }
+        };
+
+        new EjecutarAccion(partidas, canal, MotorDeMentira.queHace(100), LiquidacionSinApuesta.nueva(),
+                RecompensaSinLibro.nueva(), torneo).ejecutar(partida.id(), ANA, BRUNO, null);
+
+        assertAll(
+                () -> assertEquals(1, informadas.size()),
+                () -> assertEquals(EstadoPartida.FINALIZADA, informadas.get(0).estado()));
+    }
+
+    @Test
+    @DisplayName("HU-TOR-004: si el informe de torneo revienta, la partida termina igual y el fin ya salio")
+    void unFalloDelTorneoNoRompeLaPartida() {
+        Partida partida = partidaDe(ANA, BRUNO);
+        InformarEncuentroDeTorneo torneo = new InformarEncuentroDeTorneo(
+                new InformarEncuentroDeTorneoTest.VinculosEnMemoria(),
+                (idTorneo, numero, ganador, idPartida) -> { }, java.time.Clock.systemUTC()) {
+            @Override
+            public java.util.Optional<com.nexusbattles.plataforma.salaspartidas.dominio.VinculoDeTorneo> alTerminar(
+                    Partida terminada) {
+                throw new IllegalStateException("la base de vinculos no responde");
+            }
+        };
+
+        Partida despues = new EjecutarAccion(partidas, canal, MotorDeMentira.queHace(100), LiquidacionSinApuesta.nueva(),
+                RecompensaSinLibro.nueva(), torneo).ejecutar(partida.id(), ANA, BRUNO, null);
+
+        assertAll(
+                () -> assertEquals(EstadoPartida.FINALIZADA, despues.estado()),
+                () -> assertEquals("fin", canal.anuncios.get(1).tipo()));
+    }
+
+    @Test
     @DisplayName("la vida no baja de cero por mucho dano que haga el motor")
     void laVidaNoSeVaANegativo() {
         Partida partida = partidaDe(ANA, BRUNO);

@@ -17,9 +17,15 @@
  *   5. inicio por el administrador -> EN_CURSO, 8 equipos (7 maquinas), 14
  *      encuentros, 1-4 listos; la reserva se cobro (saldo bruto -10)
  *   6. resultados: el servicio (e2e-banco) registra el 1; un jugador 403; el
- *      administrador sin motivo 400 y con motivo el resto -> FINALIZADO con
- *      campeon
- *   7. la vista muestra el torneo, el campeon y el arbol
+ *      administrador sin motivo 400 y con motivo el 2 -> el 5 queda LISTO
+ *   7. HU-TOR-004 CA-04: el encuentro 5 se juega de verdad en una sala de
+ *      batalla vinculada desde la vista «Torneo» (crear-sala prefijada); al
+ *      terminar, salas-partidas informa el ganador a torneos con su
+ *      credencial y el encuentro queda JUGADO por `salas-partidas` con la
+ *      partida. Si gana la maquina (que no tiene cuenta) el vinculo lo anota y
+ *      el administrador lo resuelve con motivo.
+ *   8. el administrador resuelve el resto con motivo -> FINALIZADO con campeon
+ *   9. la vista muestra el torneo, el campeon y el arbol
  */
 
 import { test, expect, request as apiRequest } from '@playwright/test';
@@ -35,6 +41,8 @@ const BANCO_CLIENTE = process.env.E2E_BANCO_CLIENTE ?? 'e2e-banco';
 const BANCO_SECRETO = process.env.E2E_BANCO_SECRETO ?? 'e2e-secreto-del-banco-de-pruebas';
 const CLAVE = 'Contrasena-E2E-2026';
 const VISTA = '/frontend/app-web/src/plataforma/torneos/torneos.html';
+const CREAR_SALA = '/frontend/app-web/src/plataforma/salas-partidas/crear-sala.html';
+const SALA_BATALLA = '/frontend/app-web/src/plataforma/salas-partidas/sala-batalla.html';
 const COSTO = 10;
 
 function cuerpoDelToken(jwt) {
@@ -255,7 +263,7 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     expect((await tarde.json()).motivo).toBe('ESTADO_NO_PERMITE');
   });
 
-  test('resultados: los aporta un servicio o un administrador con motivo; el arbol avanza hasta el campeon', async () => {
+  test('resultados: los aporta un servicio o un administrador con motivo; con el 1 y el 2 jugados el 5 queda listo', async () => {
     let actual = await detalle();
     const porJugadora = await api.post(`/api/v1/torneos/${torneo.id}/encuentros/1/resultado`, {
       headers: conToken(anfitriona.token),
@@ -277,6 +285,14 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     expect(noListo.status()).toBe(409);
     expect((await noListo.json()).motivo).toBe('ENCUENTRO_NO_LISTO');
 
+    // 1.1.0: un servicio puede mandar el uid del jugador; uno que no juega ahi es 422.
+    const ajeno = await api.post(`/api/v1/torneos/${torneo.id}/encuentros/1/resultado`, {
+      headers: conToken(tokenBanco),
+      data: { ganadorUid: curioso.claims.uid },
+    });
+    expect(ajeno.status(), await ajeno.text()).toBe(422);
+    expect((await ajeno.json()).motivo).toBe('GANADOR_NO_PARTICIPA');
+
     const partidaId = '00000000-0000-4000-8000-000000000001';
     const primero = await api.post(`/api/v1/torneos/${torneo.id}/encuentros/1/resultado`, {
       headers: conToken(tokenBanco),
@@ -289,12 +305,142 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     expect(actual.encuentros[0].partidaId).toBe(partidaId);
     expect(actual.encuentros[4].equipoA).toBe(equipo.id);
 
-    for (let numero = 2; numero <= 14; numero++) {
+    const segundo = await api.post(`/api/v1/torneos/${torneo.id}/encuentros/2/resultado`, {
+      headers: conToken(admin.token),
+      data: { ganadorEquipoId: actual.encuentros[1].equipoA, motivo: 'Incomparecencia del rival (E2E)' },
+    });
+    expect(segundo.status(), await segundo.text()).toBe(200);
+    actual = await segundo.json();
+    expect(actual.encuentros[4].estado, 'el 5 espera a los ganadores del 1 y el 2').toBe('LISTO');
+    expect(actual.encuentros[4].equipoB).toBeTruthy();
+  });
+
+  test('HU-TOR-004 CA-04: el encuentro 5 se juega en una sala vinculada desde la vista y el resultado llega solo', async ({
+    page,
+  }) => {
+    test.setTimeout(240000);
+
+    // Un encuentro fuera de rango no crea la sala: 400 con el campo.
+    const fuera = await api.post('/api/v1/salas', {
+      headers: conToken(anfitriona.token),
+      data: {
+        modalidad: 'CONTRA_IA',
+        maximoParticipantes: 2,
+        recompensaCreditos: 0,
+        heroesIA: 1,
+        torneo: { torneoId: torneo.id, numeroEncuentro: 15 },
+      },
+    });
+    expect(fuera.status(), await fuera.text()).toBe(400);
+    expect((await fuera.json()).errores[0].campo).toBe('torneo.numeroEncuentro');
+
+    // Desde la vista «Torneo»: el encuentro 5 (mi equipo vs la maquina) ofrece
+    // «Crear sala del encuentro» y lleva a crear-sala con el vinculo prefijado.
+    await page.addInitScript(
+      ([token, nombre, uid]) => {
+        sessionStorage.setItem('nexus.token', token);
+        sessionStorage.setItem('nexus.apodoActual', nombre);
+        sessionStorage.setItem('nexus.usuarioId', uid);
+      },
+      [anfitriona.token, ANFITRION, anfitriona.claims.uid],
+    );
+    await page.goto(`${BORDE}${VISTA}?torneo=${torneo.id}`);
+    const fila5 = page.locator('[data-zona="detalle"] [data-llave="GANADORES"] li[data-numero="5"]');
+    await expect(fila5).toContainText('listo para jugarse', { timeout: 20000 });
+    const enlace = fila5.locator('[data-accion="jugar-encuentro"]');
+    await expect(enlace).toHaveAttribute('href', new RegExp(`torneo=${torneo.id}&encuentro=5$`));
+    // El encuentro 3 (dos maquinas) no me ofrece nada.
+    await expect(
+      page.locator('[data-zona="detalle"] li[data-numero="3"] [data-accion="jugar-encuentro"]'),
+    ).toHaveCount(0);
+    await enlace.click();
+    await expect(page).toHaveURL(new RegExp(`${CREAR_SALA}\\?torneo=${torneo.id}&encuentro=5`));
+    await expect(page.locator('[data-zona="nota-torneo"]')).toBeVisible();
+    await expect(page.locator('[data-zona="nota-torneo"]')).toContainText('encuentro 5');
+    await expect(page.locator('input[name="torneoId"]')).toHaveValue(torneo.id);
+
+    // Contra la maquina para que el combate termine solo, turno tras turno.
+    await page.locator('#modalidad-ia').check();
+    const respuesta = page.waitForResponse(
+      (r) => r.url().includes('/api/v1/salas') && r.request().method() === 'POST',
+    );
+    await page.click('[type="submit"]');
+    const creada = await respuesta;
+    expect(creada.status(), await creada.text()).toBe(201);
+    expect(creada.request().postDataJSON().torneo).toEqual({ torneoId: torneo.id, numeroEncuentro: 5 });
+    const sala = await creada.json();
+    expect(sala.modalidad).toBe('CONTRA_IA');
+
+    const inicio = await api.post(`/api/v1/salas/${sala.id}/partida`, {
+      headers: conToken(anfitriona.token),
+    });
+    expect(inicio.status(), await inicio.text()).toBe(201);
+    let partida = await inicio.json();
+
+    await page.goto(`${BORDE}${SALA_BATALLA}?sala=${sala.id}&partida=${partida.id}`);
+    let golpes = 0;
+    while (partida.estado === 'EN_CURSO' && golpes < 30) {
+      const boton = page.locator('[data-zona="acciones"] [data-atacar]').first();
+      await expect(boton).toBeEnabled({ timeout: 20000 });
+      const turnoPrevio = partida.turnoActual.numeroTurno;
+      await boton.click();
+      await expect
+        .poll(
+          async () => {
+            const r = await api.get(`/api/v1/partidas/${partida.id}`, { headers: conToken(anfitriona.token) });
+            partida = await r.json();
+            return partida.estado !== 'EN_CURSO' || partida.turnoActual.numeroTurno > turnoPrevio;
+          },
+          { timeout: 25000, message: `golpe ${golpes + 1}: ni rota el turno ni acaba` },
+        )
+        .toBe(true);
+      golpes += 1;
+    }
+    expect(partida.estado, `no termino en ${golpes} golpes`).toBe('FINALIZADA');
+    const humana = partida.participantes.find((p) => !p.esIA);
+    const ganoLaHumana = humana.heroe.vidaActual > 0;
+
+    if (ganoLaHumana) {
+      // CA-04: el resultado lo puso la partida, no una persona.
+      await expect
+        .poll(async () => (await detalle()).encuentros[4].estado, {
+          timeout: 20000,
+          message: 'torneos no recibio el resultado desde salas-partidas',
+        })
+        .toBe('JUGADO');
+      const e5 = (await detalle()).encuentros[4];
+      expect(e5.registradoPor).toBe('salas-partidas');
+      expect(e5.partidaId).toBe(partida.id);
+      expect(e5.ganador).toBe(equipo.id);
+      expect(e5.motivo ?? null).toBeNull();
+    } else {
+      // La maquina no tiene cuenta: no hay uid que informar. El encuentro
+      // sigue LISTO y lo resuelve el administrador con motivo (RF-ADM-005).
+      const e5 = (await detalle()).encuentros[4];
+      expect(e5.estado).toBe('LISTO');
+      const aMano = await api.post(`/api/v1/torneos/${torneo.id}/encuentros/5/resultado`, {
+        headers: conToken(admin.token),
+        data: { ganadorEquipoId: e5.equipoB, partidaId: partida.id, motivo: 'Gano la maquina en la partida (E2E)' },
+      });
+      expect(aMano.status(), await aMano.text()).toBe(200);
+    }
+  });
+
+  test('el administrador resuelve el resto con motivo y el arbol avanza hasta el campeon', async () => {
+    let actual = await detalle();
+    expect(actual.encuentros[4].estado).toBe('JUGADO');
+    const gano5 = actual.encuentros[4].ganador;
+    for (let numero = 3; numero <= 14; numero++) {
       const encuentro = actual.encuentros[numero - 1];
+      if (encuentro.estado === 'JUGADO') {
+        continue;
+      }
       expect(encuentro.estado, `encuentro ${numero} listo`).toBe('LISTO');
+      // Gana siempre el equipo de la anfitriona si juega; si no, el A.
+      const ganador = [encuentro.equipoA, encuentro.equipoB].includes(equipo.id) ? equipo.id : encuentro.equipoA;
       const r = await api.post(`/api/v1/torneos/${torneo.id}/encuentros/${numero}/resultado`, {
         headers: conToken(admin.token),
-        data: { ganadorEquipoId: encuentro.equipoA, motivo: 'Incomparecencia del rival (E2E)' },
+        data: { ganadorEquipoId: ganador, motivo: 'Incomparecencia del rival (E2E)' },
       });
       expect(r.status(), `encuentro ${numero}: ${await r.text()}`).toBe(200);
       actual = await r.json();
@@ -303,7 +449,12 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     expect(actual.campeonEquipoId).toBe(equipo.id);
     expect(actual.encuentros.every((e) => e.estado === 'JUGADO')).toBe(true);
     expect(actual.encuentros[13].motivo).toMatch(/Incomparecencia/);
-    expect(actual.equipos.filter((e) => e.eliminado)).toHaveLength(7);
+    // 14 derrotas repartidas: si el campeon no perdio ninguna, los otros 7
+    // cargan con dos cada uno; si perdio el 5 contra la maquina, uno de los
+    // siete se queda con una sola.
+    const derrotasDelCampeon = actual.equipos.find((e) => e.id === equipo.id).derrotas;
+    expect(actual.equipos.filter((e) => e.eliminado)).toHaveLength(derrotasDelCampeon === 0 ? 7 : 6);
+    expect(actual.encuentros[4].ganador, 'lo jugado no se toca').toBe(gano5);
   });
 
   test('la vista «Torneo» muestra el torneo, el campeon y el arbol (HU-TOR-008)', async ({ page }) => {

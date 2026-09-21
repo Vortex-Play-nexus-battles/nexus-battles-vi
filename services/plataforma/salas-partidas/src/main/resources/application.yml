@@ -92,6 +92,14 @@ salas:
   creditos:
     url: ${CREDITOS_URL:http://localhost:8093/api/v1}
 
+  # HU-TOR-004 (CA-04): cuando la sala es un encuentro de torneo, al terminar
+  # la partida el ganador se informa a torneos (contracts/openapi/torneos.yaml
+  # 1.1.0) con la credencial de servicio de este modulo. Incluye el
+  # context-path /api/v1 de torneos. Sin URL, el resultado queda anotado como
+  # fallo en el vinculo y lo registra un administrador con motivo.
+  torneos:
+    url: ${TORNEOS_URL:}
+
   apuestas:
     # Cada cuanto se reintentan las liquidaciones que el libro dejo pendientes.
     reintento-ms: ${APUESTAS_REINTENTO_MS:60000}

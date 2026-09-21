@@ -44,6 +44,8 @@
              libro de creditos no responden. data-seccion es solo el respaldo:
              el nombre real viene en el problem detail. -->
         <div data-zona="degradacion" data-seccion="Inventario" hidden></div>
+        <!-- HU-TOR-004: solo cuando se llega desde un encuentro de torneo. -->
+        <p class="aviso aviso--info" data-zona="nota-torneo" hidden></p>
 
         <!-- Dos campos a lo ancho, como en el diseno. -->
         <div class="fila">
@@ -191,7 +193,7 @@
     <button class="chatbot-flotante" type="button" aria-label="Abrir el asistente">IA</button>
 
     <script type="module">
-      import { montarCrearSala } from './crear-sala.js';
+      import { montarCrearSala, encuentroDesde } from './crear-sala.js';
       import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
 
       // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
@@ -201,7 +203,9 @@
       // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
       montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'jugar' });
 
-      montarCrearSala(document.getElementById('formulario-crear-sala'));
+      montarCrearSala(document.getElementById('formulario-crear-sala'), {
+        encuentro: encuentroDesde(window.location.search),
+      });
     </script>
   </body>
 </html>

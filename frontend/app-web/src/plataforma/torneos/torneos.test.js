@@ -9,10 +9,13 @@ import {
   ErrorDeTorneos,
   accionesDe,
   encuentrosDe,
+  filaDeEncuentro,
   miEquipo,
   montarTorneos,
   nombreDe,
+  puedoJugar,
   resumenDe,
+  rutaDeSalaDelEncuentro,
 } from './torneos.js';
 
 const UID = '11111111-1111-1111-1111-111111111111';
@@ -108,6 +111,68 @@ describe('presentacion', () => {
     });
     expect(encuentrosDe(t, 'GANADORES').map((e) => e.numero)).toEqual([1, 11]);
     expect(encuentrosDe(t, 'FINAL')).toEqual([]);
+  });
+
+  test('puedoJugar: solo un encuentro LISTO de un torneo en curso en el que juega mi equipo (HU-TOR-004)', () => {
+    const mio = equipo({ id: 'eq-1', inscrito: true, posicion: 1 });
+    const rival = equipo({
+      id: 'eq-2',
+      nombre: 'Rivales',
+      integrantes: ['x', 'y'],
+      inscrito: true,
+    });
+    const listo = {
+      numero: 1,
+      llave: 'GANADORES',
+      estado: 'LISTO',
+      equipoA: 'eq-1',
+      equipoB: 'eq-2',
+    };
+    const enCurso = torneo({ estado: 'EN_CURSO', equipos: [mio, rival], encuentros: [listo] });
+
+    expect(puedoJugar(enCurso, listo, UID)).toBe(true);
+    expect(puedoJugar(enCurso, listo, 'x')).toBe(true);
+    expect(puedoJugar(enCurso, listo, 'nadie')).toBe(false);
+    expect(puedoJugar(enCurso, listo, null)).toBe(false);
+    expect(puedoJugar(enCurso, { ...listo, estado: 'JUGADO' }, UID)).toBe(false);
+    expect(puedoJugar(enCurso, { ...listo, equipoA: 'eq-3' }, UID)).toBe(false);
+    expect(puedoJugar({ ...enCurso, estado: 'FINALIZADO' }, listo, UID)).toBe(false);
+  });
+
+  test('filaDeEncuentro pone «Crear sala del encuentro» hacia crear-sala con torneo y encuentro', () => {
+    const mio = equipo({ id: 'eq-1', inscrito: true, posicion: 1 });
+    const rival = equipo({
+      id: 'eq-2',
+      nombre: 'Rivales',
+      integrantes: ['x', 'y'],
+      inscrito: true,
+    });
+    const listo = {
+      numero: 5,
+      llave: 'GANADORES',
+      estado: 'LISTO',
+      equipoA: 'eq-1',
+      equipoB: 'eq-2',
+    };
+    const enCurso = torneo({
+      id: 't-9',
+      estado: 'EN_CURSO',
+      equipos: [mio, rival],
+      encuentros: [listo],
+    });
+
+    expect(rutaDeSalaDelEncuentro(enCurso, listo)).toBe(
+      '../salas-partidas/crear-sala.html?torneo=t-9&encuentro=5',
+    );
+    const conAcceso = filaDeEncuentro(enCurso, listo, UID);
+    const enlace = conAcceso.querySelector('[data-accion="jugar-encuentro"]');
+    expect(enlace.getAttribute('href')).toBe(
+      '../salas-partidas/crear-sala.html?torneo=t-9&encuentro=5',
+    );
+    expect(conAcceso.textContent).toContain('Los Valientes vs Rivales');
+
+    expect(filaDeEncuentro(enCurso, listo, 'nadie').querySelector('a')).toBeNull();
+    expect(filaDeEncuentro(enCurso, listo).querySelector('a')).toBeNull();
   });
 
   test('ErrorDeTorneos conserva motivo y proxima fecha', () => {

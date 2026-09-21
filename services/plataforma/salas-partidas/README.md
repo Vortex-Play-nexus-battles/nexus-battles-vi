@@ -50,6 +50,7 @@ Los errores salen como problem details (RFC 7807) y la interfaz decide por
 | `HeroeDelJugador` (puerta de héroe, HU-SAL-003) | `ClienteInventarioHeroes` contra `inventario.yaml` (`INVENTARIO_BASE_URL`) con la credencial de servicio; prototipo y defensa de `productos`/`heroes` (degradan solos). | Que inventario publique «el héroe activo»: hoy se toma el primero disponible y equipado. Contenido (#27). |
 | `MotorDeCombate` (resultado de la acción) | `ClienteMotorCombate` contra `motor-combate.yaml` (`MOTOR_COMBATE_URL`). | Mapeo héroe → prototipo de distribución (hoy `GUERRERO_ARMAS` para todos). Grupo 2 (#31). |
 | Sanción activa (chat, HU-JUE-015) | `ClienteSanciones` contra `moderacion-sanciones-consulta.yaml` (`SANCIONES_URL`); sin respuesta, `503 sanciones-no-disponibles` y nada sale al canal (D-14). | Tipo de sanción en el contrato, si el PO distingue silencio de otras. |
+| `ArbitroDeTorneo` (informar el ganador del encuentro, HU-TOR-004 CA-04) | `ClienteTorneos` contra `POST /torneos/{id}/encuentros/{n}/resultado` de `torneos.yaml` 1.1.0 (`TORNEOS_URL`) con `ganadorUid` y la credencial de servicio. El vínculo sala↔encuentro va en `encuentros_de_torneo` (V12) y se crea con `torneo` en `CrearSalaRequest` (1.4.0). Si torneos no responde o gana la máquina (D-26), queda `ultimo_fallo` y lo resuelve el administrador con motivo; la partida termina igual. | Reintento automático del informe pendiente (hoy solo administrador). |
 
 ## Degradación controlada (HU-DIS-003)
 
@@ -76,7 +77,7 @@ resto de la vista sigue. Probado apagando contenedores de verdad en
 `DB_RELACIONAL_URL`, `DB_USER`, `DB_PASS`, `DIRECTORIO_ACTIVO_URL`,
 `DIRECTORIO_ACTIVO_CLIENT_ID`, `DIRECTORIO_ACTIVO_CLIENT_SECRET`,
 `INVENTARIO_BASE_URL`, `PRODUCTOS_BASE_URL`, `HEROES_BASE_URL`,
-`MOTOR_COMBATE_URL`, `CREDITOS_URL`, `SANCIONES_URL`,
+`MOTOR_COMBATE_URL`, `CREDITOS_URL`, `SANCIONES_URL`, `TORNEOS_URL`,
 `RESILIENCIA_FALLOS_PARA_ABRIR`, `RESILIENCIA_REINTENTAR_EN_SEGUNDOS`,
 `RESILIENCIA_TIEMPO_CONEXION_MS`, `RESILIENCIA_TIEMPO_RESPUESTA_MS`,
 `SALAS_WS_ENDPOINT`, `SALAS_WS_ORIGENES`, `LISTA_NEGRA_VERIFICAR_URL`,

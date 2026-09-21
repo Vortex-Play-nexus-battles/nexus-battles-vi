@@ -102,6 +102,9 @@ class SalasControllerTest {
     @MockitoBean
     private com.nexusbattles.plataforma.salaspartidas.aplicacion.IniciarPartida iniciarPartida;
 
+    @MockitoBean
+    private com.nexusbattles.plataforma.salaspartidas.aplicacion.InformarEncuentroDeTorneo encuentroDeTorneo;
+
     private static Sala salaDeEjemplo() {
         return Sala.crear(new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null), JUGADOR);
     }
@@ -136,6 +139,52 @@ class SalasControllerTest {
                 // pantalla de HU-SAL-002 lo muestra.
                 .andExpect(jsonPath("$.anfitrion").doesNotExist())
                 .andExpect(jsonPath("$.idPartida").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("con torneo (1.5.0) la sala queda vinculada al encuentro con el anfitrion como quien la vinculo (HU-TOR-004)")
+    void vinculaLaSalaAlEncuentro() throws Exception {
+        Sala sala = salaDeEjemplo();
+        when(crearSala.ejecutar(any(), any())).thenReturn(sala);
+        UUID torneo = UUID.fromString("77777777-7777-7777-7777-777777777777");
+
+        mockMvc.perform(post("/api/v1/salas")
+                        .with(jugador())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"maximoParticipantes": 2, "modalidad": "UNO_CONTRA_UNO", "recompensaCreditos": 0,
+                                 "torneo": {"torneoId": "77777777-7777-7777-7777-777777777777", "numeroEncuentro": 3}}
+                                """))
+                .andExpect(status().isCreated());
+
+        verify(encuentroDeTorneo).vincular(sala.id(), torneo, 3, JUGADOR);
+    }
+
+    @Test
+    @DisplayName("un encuentro fuera de 1..14 o sin torneo es 400 con el campo, y la sala NO se crea")
+    void encuentroInvalidoNoCreaSala() throws Exception {
+        mockMvc.perform(post("/api/v1/salas")
+                        .with(jugador())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"maximoParticipantes": 2, "modalidad": "UNO_CONTRA_UNO", "recompensaCreditos": 0,
+                                 "torneo": {"torneoId": "77777777-7777-7777-7777-777777777777", "numeroEncuentro": 15}}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.errores[0].campo").value("torneo.numeroEncuentro"));
+
+        mockMvc.perform(post("/api/v1/salas")
+                        .with(jugador())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"maximoParticipantes": 2, "modalidad": "UNO_CONTRA_UNO", "recompensaCreditos": 0,
+                                 "torneo": {"numeroEncuentro": 1}}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errores[0].campo").value("torneo.torneoId"));
+
+        org.mockito.Mockito.verifyNoInteractions(crearSala, encuentroDeTorneo);
     }
 
     @Test
