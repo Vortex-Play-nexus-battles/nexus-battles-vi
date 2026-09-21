@@ -263,11 +263,21 @@ public class EjecutarAccion {
      * <p>Con un solo rival en pie se resuelve solo: en un 1v1 no hay ambiguedad
      * y pedir el identificador seria burocracia. Con dos o mas, elegir por el
      * jugador seria decidir su jugada, asi que se exige.
+     *
+     * <p>En el modo cooperativo (HU-SAL-004) los companeros de equipo no son
+     * rivales: no se les puede apuntar, ni la maquina los elige. «Cooperativo»
+     * no admite otra lectura.
      */
     private static ParticipanteDePartida elegirObjetivo(Partida partida, UUID atacante,
                                                         UUID idObjetivo) {
+        if (idObjetivo != null && !idObjetivo.equals(atacante)
+                && partida.sonDelMismoEquipo(atacante, idObjetivo)) {
+            throw new SinObjetivoPosible("Es de tu equipo: en el modo cooperativo no se ataca a un companero.");
+        }
+
         List<ParticipanteDePartida> rivales = partida.enPie().stream()
                 .filter(p -> !p.idJugador().equals(atacante))
+                .filter(p -> !partida.sonDelMismoEquipo(atacante, p.idJugador()))
                 .toList();
 
         if (rivales.isEmpty()) {

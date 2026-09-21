@@ -163,6 +163,58 @@ describe('textoDelResultado', () => {
     expect(creditosDe({ ganadores: [ANA] }, ANA)).toBeNull();
     expect(creditosDe({ reparto: [{ idJugador: BRUNO, creditos: 5 }] }, ANA)).toBeNull();
   });
+
+  /* HU-SAL-004: modo cooperativo, el resultado es del equipo. */
+
+  test('con equipo ganador, quien esta entre los ganadores ve ganar a su equipo', () => {
+    const fin = { ganadores: [ANA], equipoGanador: 1 };
+
+    expect(textoDelResultado(fin, ANA)).toBe('Tu equipo (1) ha ganado el combate.');
+    expect(textoDelResultado(fin, BRUNO)).toBe('Gana el equipo 1. Tu equipo ha perdido.');
+  });
+
+  test('un companero que cayo tambien gana con su equipo, aunque no este en ganadores', () => {
+    const fin = { ganadores: [ANA], equipoGanador: 1 };
+
+    expect(textoDelResultado(fin, BRUNO, 1)).toBe('Tu equipo (1) ha ganado el combate.');
+    expect(textoDelResultado(fin, BRUNO, 2)).toMatch(/Tu equipo ha perdido/);
+  });
+});
+
+describe('montarControlesDeCombate · equipos (HU-SAL-004)', () => {
+  const CARLA = '44444444-4444-4444-4444-444444444444';
+
+  test('no hay boton para atacar a un companero de equipo', () => {
+    montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      turnoDe: ANA,
+      participantes: [
+        { jugador: { id: ANA }, heroe: { nombre: 'Arquero' }, equipo: 1 },
+        { jugador: { id: BRUNO }, heroe: { nombre: 'Centinela' }, equipo: 1 },
+        { jugador: { id: CARLA }, heroe: { nombre: 'Maga' }, equipo: 2 },
+      ],
+      alAtacar: () => {},
+    });
+
+    const botones = [...document.querySelectorAll('[data-atacar]')].map((b) => b.dataset.atacar);
+    expect(botones).toEqual([CARLA]);
+  });
+
+  test('sin equipos todos los demas son rivales, como siempre', () => {
+    montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: [
+        { jugador: { id: ANA }, heroe: { nombre: 'Arquero' }, equipo: null },
+        { jugador: { id: BRUNO }, heroe: { nombre: 'Centinela' }, equipo: null },
+        { jugador: { id: CARLA }, heroe: { nombre: 'Maga' } },
+      ],
+      alAtacar: () => {},
+    });
+
+    expect(document.querySelectorAll('[data-atacar]')).toHaveLength(2);
+  });
 });
 
 describe('registroDeAvisos con reparto (HU-JUE-014, CA-06)', () => {

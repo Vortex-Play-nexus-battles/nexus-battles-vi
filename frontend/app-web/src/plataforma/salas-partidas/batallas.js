@@ -81,7 +81,15 @@ export function metaDeLaSala(sala) {
   const base =
     `${sala.ocupacion} de ${sala.maximoParticipantes} jugadores` +
     ` · ${sala.recompensaCreditos} creditos`;
-  return sala.incluirHeroeIA ? `${base} · Con heroe de la IA` : base;
+  if (!sala.incluirHeroeIA) {
+    return base;
+  }
+  // Con varios cupos de la IA (HU-SAL-004) se dice cuantos; con uno, la
+  // linea exacta del diseno.
+  const maquinas = Number(sala.heroesIA) || 1;
+  return maquinas > 1
+    ? `${base} · Con ${maquinas} heroes de la IA`
+    : `${base} · Con heroe de la IA`;
 }
 
 /**

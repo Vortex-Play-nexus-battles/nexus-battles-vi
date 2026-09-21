@@ -35,7 +35,7 @@ const ACCION_RESUELTA = 'partida.accion.resuelta';
  * @returns {HTMLElement}
  */
 function crearBarra(participante) {
-  const { jugador, heroe, esIA } = participante;
+  const { jugador, heroe, esIA, equipo } = participante;
 
   const barra = document.createElement('div');
   barra.className = 'barra-vida';
@@ -47,6 +47,11 @@ function crearBarra(participante) {
   // pantalla necesita distinguirlo de una persona.
   if (esIA) {
     barra.dataset.ia = 'true';
+  }
+  // Y el equipo, en el modo cooperativo (HU-SAL-004): sin el, no se sabe a
+  // quien se puede atacar ni con quien se gana.
+  if (Number.isInteger(equipo) && equipo > 0) {
+    barra.dataset.equipo = String(equipo);
   }
 
   const nombre = document.createElement('span');
@@ -62,7 +67,23 @@ function crearBarra(participante) {
   const valor = document.createElement('span');
   valor.className = 'barra-vida__valor';
 
-  barra.append(nombre, pista, valor);
+  barra.append(nombre);
+  // Quien es la maquina y de que equipo: al lado del nombre, sin ensuciarlo.
+  const etiquetas = [];
+  if (esIA) {
+    etiquetas.push('IA');
+  }
+  if (Number.isInteger(equipo) && equipo > 0) {
+    etiquetas.push(`Equipo ${equipo}`);
+  }
+  if (etiquetas.length > 0) {
+    const etiqueta = document.createElement('span');
+    etiqueta.className = 'barra-vida__etiqueta t-meta';
+    etiqueta.dataset.etiqueta = '';
+    etiqueta.textContent = etiquetas.join(' · ');
+    barra.append(etiqueta);
+  }
+  barra.append(pista, valor);
   return barra;
 }
 

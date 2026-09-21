@@ -90,6 +90,29 @@ describe('pintarParticipantes', () => {
     expect(valorDe(BRUNO)).toBe('80/100');
   });
 
+  test('cada barra dice de que equipo es y si la lleva la maquina (HU-SAL-004)', () => {
+    pintarParticipantes(panel, participantes());
+
+    expect(barraDe(ANA).dataset.equipo).toBe('1');
+    expect(barraDe(ANA).querySelector('[data-etiqueta]').textContent).toBe('Equipo 1');
+    expect(barraDe(MAQUINA).dataset.ia).toBe('true');
+    expect(barraDe(MAQUINA).querySelector('[data-etiqueta]').textContent).toBe('IA · Equipo 2');
+  });
+
+  test('sin equipo ni maquina no hay etiqueta que estorbe', () => {
+    pintarParticipantes(panel, [
+      {
+        jugador: { id: ANA },
+        heroe: { id: 'h1', nombre: 'Arquero', vidaActual: 10, vidaMaxima: 10 },
+        esIA: false,
+        equipo: null,
+      },
+    ]);
+
+    expect(barraDe(ANA).querySelector('[data-etiqueta]')).toBeNull();
+    expect(barraDe(ANA).dataset.equipo).toBeUndefined();
+  });
+
   test('aplica el umbral de color a cada barra desde el primer pintado', () => {
     pintarParticipantes(panel, participantes());
 

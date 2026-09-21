@@ -73,7 +73,8 @@ class RepositorioSalasJpaIT {
                 () -> assertTrue(recuperada.incluirHeroeIA()),
                 () -> assertEquals(2, recuperada.tamanoEquipo()),
                 () -> assertEquals(ANFITRION, recuperada.idAnfitrion()),
-                () -> assertEquals(1, recuperada.ocupacion()));
+                // Anfitrion + la maquina: desde HU-SAL-004 la IA ocupa cupo.
+                () -> assertEquals(2, recuperada.ocupacion()));
     }
 
     @Test
@@ -97,6 +98,35 @@ class RepositorioSalasJpaIT {
         repositorio.guardar(sala);
 
         assertNull(repositorio.buscarPorId(sala.id()).orElseThrow().tamanoEquipo());
+    }
+
+    @Test
+    @DisplayName("los cupos de la maquina (V10) van y vuelven, y la ocupacion los cuenta (HU-SAL-004)")
+    void conservaLosCuposDeLaMaquina() {
+        Sala sala = Sala.crear(new ParametrosDeSala(6, Modalidad.HASTA_SEIS, 0, 3, false, null), ANFITRION);
+
+        repositorio.guardar(sala);
+        Sala recuperada = repositorio.buscarPorId(sala.id()).orElseThrow();
+
+        assertAll(
+                () -> assertEquals(3, recuperada.heroesIA()),
+                () -> assertTrue(recuperada.incluirHeroeIA()),
+                () -> assertEquals(4, recuperada.ocupacion(), "anfitrion + 3 maquinas"),
+                () -> assertEquals(EstadoSala.ABIERTA, recuperada.estado()));
+    }
+
+    @Test
+    @DisplayName("contra la IA se guarda llena, con la maquina en el segundo cupo")
+    void contraLaIaSeGuardaLlena() {
+        Sala sala = Sala.crear(new ParametrosDeSala(2, Modalidad.CONTRA_IA, 0, false, false, null), ANFITRION);
+
+        repositorio.guardar(sala);
+        Sala recuperada = repositorio.buscarPorId(sala.id()).orElseThrow();
+
+        assertAll(
+                () -> assertEquals(1, recuperada.heroesIA()),
+                () -> assertEquals(EstadoSala.LLENA, recuperada.estado()),
+                () -> assertEquals(2, recuperada.ocupacion()));
     }
 
     @Test

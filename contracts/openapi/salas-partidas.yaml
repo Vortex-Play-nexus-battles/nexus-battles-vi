@@ -43,7 +43,14 @@ info:
     `shared/ui-kit/MAPEO-ERRORES.md`.
 
     Trazas: toda peticion propaga `traceparent` (regla 5 de plataforma).
-  version: 1.1.0
+
+    Cambios 1.2.0 (HU-SAL-004, aditivos): `heroesIA` en `CrearSalaRequest` y en
+    `Sala` — cuantos cupos son de la inteligencia artificial; cuentan en
+    `ocupacion`. `CONTRA_IA` lleva siempre uno; `UNO_CONTRA_UNO` ninguno;
+    `HASTA_SEIS` de cero a `maximoParticipantes - 1`. `incluirHeroeIA` se
+    conserva y vale por uno. En el modo cooperativo (`tamanoEquipo`) los
+    participantes de la partida traen `equipo` asignado por orden de entrada.
+  version: 1.2.0
   contact:
     name: Grupo 6 — Tiempo real, comunidad y plataforma
   license:
@@ -574,6 +581,15 @@ components:
       description: |
         Modalidades admitidas (RF-JUE-004): uno contra uno, uno contra la
         inteligencia artificial, y partidas de hasta seis jugadores.
+
+        Limites por modalidad (los aplica el servicio; fuera de ellos, `400`
+        con el campo y el limite superado):
+
+        | Modalidad      | maximoParticipantes | heroesIA                 | tamanoEquipo |
+        |----------------|---------------------|--------------------------|--------------|
+        | UNO_CONTRA_UNO | exactamente 2       | 0                        | no admite    |
+        | CONTRA_IA      | exactamente 2       | exactamente 1 (implicito)| no admite    |
+        | HASTA_SEIS     | 2 a 6               | 0 a maximoParticipantes-1| 1 a 3        |
       enum: [UNO_CONTRA_UNO, CONTRA_IA, HASTA_SEIS]
 
     EstadoSala:
@@ -625,7 +641,19 @@ components:
         incluirHeroeIA:
           type: boolean
           default: false
-          description: Incluir un heroe aleatorio controlado por la IA (RF-JUE-001).
+          description: |
+            Incluir un heroe aleatorio controlado por la IA (RF-JUE-001).
+            Equivale a `heroesIA: 1`; si viene `heroesIA`, manda `heroesIA`.
+        heroesIA:
+          type: integer
+          minimum: 0
+          maximum: 5
+          description: |
+            Cuantos cupos ocupa la inteligencia artificial (RF-JUE-004,
+            HU-SAL-004): «cualquiera puede ser controlado por la IA». Cada uno
+            cuenta en el aforo; el anfitrion siempre juega, asi que como maximo
+            `maximoParticipantes - 1`. Ver los limites por modalidad en
+            `Modalidad`. Ausente: vale lo que diga `incluirHeroeIA`.
         privada:
           type: boolean
           default: false
@@ -639,7 +667,12 @@ components:
           maximum: 3
           description: |
             Integrantes por equipo en modo cooperativo. RF-JUE-004 fija el
-            maximo en tres. Solo aplica con modalidad HASTA_SEIS.
+            maximo en tres. Solo aplica con modalidad HASTA_SEIS. Al iniciar la
+            partida los participantes se reparten en equipos de ese tamano por
+            orden de entrada (el anfitrion abre el equipo 1; los heroes de la
+            IA van al final); cada `Participante` trae su `equipo`. La partida
+            termina cuando solo queda un equipo en pie y no se puede atacar a
+            un companero.
 
     IngresoRequest:
       type: object
@@ -668,7 +701,7 @@ components:
         muestra y ningun requisito los pide. Un participante se identifica por
         su UUID, que es lo unico que este servicio conoce — el apodo pertenece
         al modulo de cuentas y no se replica aqui (regla 7 de plataforma).
-      required: [id, estado, modalidad, maximoParticipantes, ocupacion, recompensaCreditos, incluirHeroeIA]
+      required: [id, estado, modalidad, maximoParticipantes, ocupacion, recompensaCreditos, incluirHeroeIA, heroesIA]
       properties:
         id: { type: string, format: uuid }
         estado: { $ref: '#/components/schemas/EstadoSala' }
@@ -678,15 +711,21 @@ components:
           type: integer
           minimum: 0
           description: |
-            Cuantos hay dentro. Es el primer numero de «N de M jugadores» en la
-            tarjeta. Se deriva de `participantes`, nunca se almacena aparte.
+            Cupos ocupados: las personas de `participantes` mas `heroesIA`. Es
+            el primer numero de «N de M jugadores» en la tarjeta. Se deriva,
+            nunca se almacena aparte. Una sala contra la IA nace con 2 de 2.
         recompensaCreditos: { type: integer, minimum: 0 }
         incluirHeroeIA:
           type: boolean
           description: |
-            Si la sala incluye un heroe controlado por la IA (RF-JUE-001). La
-            tarjeta lo pinta como el sufijo «· Con heroe de la IA», presente
-            solo cuando es verdadero.
+            Si la sala incluye al menos un heroe controlado por la IA
+            (RF-JUE-001). La tarjeta lo pinta como el sufijo «· Con heroe de
+            la IA», presente solo cuando es verdadero.
+        heroesIA:
+          type: integer
+          minimum: 0
+          maximum: 5
+          description: Cuantos cupos son de la inteligencia artificial (HU-SAL-004).
         privada: { type: boolean }
         tamanoEquipo: { type: integer, minimum: 1, maximum: 3 }
         idAnfitrion:

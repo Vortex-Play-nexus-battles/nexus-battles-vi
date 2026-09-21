@@ -137,3 +137,20 @@ jobs:
             echo
             echo "===================== BORDE ================================"
             curl -s --max-time 5 http://localhost/salud-borde || echo "  el borde no responde"
+
+            echo
+            echo "===================== ULTIMOS ERRORES POR SERVICIO ========="
+            # Lo que el smoke no cuenta: POR QUE falla. Solo lineas de error de
+            # la ultima hora, recortadas, sin cuerpos de peticion. Un servicio
+            # sano imprime "(sin errores)". Se mira tambien la URL del emisor
+            # de credenciales de cada uno (ADR-005): es configuracion, no
+            # secreto, y una URL equivocada aqui explica un 500 en cadena.
+            for c in $(sudo docker ps --format '{{.Names}}' | grep '^srv-' | sort); do
+              echo "  -- $c"
+              emisor=$(sudo docker exec "$c" sh -c 'echo "${DIRECTORIO_ACTIVO_URL:-}"' 2>/dev/null || true)
+              [ -n "$emisor" ] && echo "     emisor de credenciales: $emisor"
+              errores=$(sudo docker logs --since 1h "$c" 2>&1 \
+                | grep -iE '"level":"(ERROR|WARN)"|ERROR|Exception' \
+                | grep -viE 'DEBUG|TRACE' | tail -8 | cut -c1-220 || true)
+              if [ -n "$errores" ]; then echo "$errores" | sed 's/^/     /'; else echo "     (sin errores en la ultima hora)"; fi
+            done

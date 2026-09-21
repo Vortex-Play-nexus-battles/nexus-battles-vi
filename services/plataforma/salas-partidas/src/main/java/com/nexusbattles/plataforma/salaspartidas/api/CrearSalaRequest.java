@@ -16,6 +16,10 @@ import com.nexusbattles.plataforma.salaspartidas.dominio.ParametrosDeSala;
  * <p>Los valores por defecto de los booleanos y del entero los pone
  * {@link #aParametros()}, no Jackson, para que un campo ausente y uno en
  * {@code false} signifiquen lo mismo.
+ *
+ * <p>{@code heroesIA} (contrato 1.2.0, HU-SAL-004) manda sobre
+ * {@code incluirHeroeIA} cuando viene: el booleano de RF-JUE-001 se sigue
+ * aceptando y vale por una maquina.
  */
 public record CrearSalaRequest(
         Integer maximoParticipantes,
@@ -23,14 +27,16 @@ public record CrearSalaRequest(
         Integer recompensaCreditos,
         Boolean incluirHeroeIA,
         Boolean privada,
-        Integer tamanoEquipo) {
+        Integer tamanoEquipo,
+        Integer heroesIA) {
 
     ParametrosDeSala aParametros() {
+        int maquinas = heroesIA != null ? heroesIA : (Boolean.TRUE.equals(incluirHeroeIA) ? 1 : 0);
         return new ParametrosDeSala(
                 maximoParticipantes == null ? 0 : maximoParticipantes,
                 modalidad,
                 recompensaCreditos == null ? 0 : recompensaCreditos,
-                Boolean.TRUE.equals(incluirHeroeIA),
+                maquinas,
                 Boolean.TRUE.equals(privada),
                 tamanoEquipo);
     }
