@@ -233,20 +233,23 @@ test.describe('Smoke del entorno desplegado', () => {
     expect(resultado, `respuesta del canal en ${url}`).toBe('CONNECTED');
   });
 
-  test('los comentarios de un producto responden con su forma', async () => {
-    // HU-COM-001. El producto no tiene por que existir: lo que se comprueba
-    // es que el servicio esta enrutado y contesta su propia forma, no el
-    // 404 generico del borde.
-    const r = await api.get('/api/v1/products/smoke-inexistente/comments');
+  test('comentarios esta enrutado y protege la publicacion', async () => {
+    // HU-COM-001. Publicar existe; LEER no: `ComentariosController` solo tiene
+    // `@PostMapping`, asi que un GET da 405. Ese 405 ya demuestra lo que el
+    // smoke quiere saber —que el prefijo llega al servicio y no al 404
+    // generico del borde—, y de paso deja escrita la ausencia del endpoint de
+    // lectura, que hace falta para la vitrina de HU-INV-014.
+    const lectura = await api.get('/api/v1/products/smoke-inexistente/comments');
+    expect(
+      lectura.status(),
+      'si esto deja de ser 405, ya hay endpoint de lectura: actualiza la prueba',
+    ).toBe(405);
 
-    expect([200, 404]).toContain(r.status());
-    const cuerpo = await r.json();
-    if (r.status() === 200) {
-      expect(Array.isArray(cuerpo.comentarios ?? cuerpo.contenido ?? cuerpo)).toBe(true);
-    } else {
-      // Problem details del servicio, no el «Ruta sin servicio en el borde».
-      expect(JSON.stringify(cuerpo)).not.toContain('Ruta sin servicio en el borde');
-    }
+    // Y publicar sin token no pasa: el comentario lleva autor.
+    const sinToken = await api.post('/api/v1/products/smoke-inexistente/comments', {
+      data: { texto: 'smoke' },
+    });
+    expect([401, 403]).toContain(sinToken.status());
   });
 
   test('la bandeja de notificaciones responde con su forma y cuenta las no leidas', async () => {
