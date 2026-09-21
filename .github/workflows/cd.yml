@@ -995,3 +995,55 @@ jobs:
         run: |
           echo "El despliegue a produccion fallo su verificacion de salud y se revirtio automaticamente. Revisar el step 'Reversion automatica por fallo de salud' para el detalle."
           exit 1
+
+  # ---------------------------------------------------------------------
+  # Notificacion del resultado al canal del equipo (HU-CICD-001 CA-02,
+  # HU-CICD-002 SCRUM-1115). Opcional a proposito: la eleccion del canal
+  # (Discord, Slack, Teams...) sigue siendo del equipo; el dia que exista,
+  # basta crear el secret WEBHOOK_NOTIFICACIONES con la URL del webhook
+  # entrante y este job empieza a avisar. Sin el secret no hace nada, y
+  # GitHub sigue mandando su correo a quien hizo el push cuando falla.
+  # El cuerpo lleva "content" (Discord) y "text" (Slack y Teams) a la vez:
+  # cada servicio lee el suyo e ignora el otro.
+  # ---------------------------------------------------------------------
+  notificar-resultado:
+    name: Avisar al canal del equipo
+    needs: [detectar-servicios, construir-y-publicar, desplegar-dev, desplegar-contenido-dev, desplegar-test, desplegar-produccion]
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      WEBHOOK: ${{ secrets.WEBHOOK_NOTIFICACIONES }}
+    steps:
+      - name: Enviar el resultado del despliegue
+        if: env.WEBHOOK != ''
+        env:
+          RESULTADOS: >-
+            construir=${{ needs.construir-y-publicar.result }}
+            dev=${{ needs.desplegar-dev.result }}
+            contenido=${{ needs.desplegar-contenido-dev.result }}
+            test=${{ needs.desplegar-test.result }}
+            prod=${{ needs.desplegar-produccion.result }}
+          SERVICIOS: ${{ needs.detectar-servicios.outputs.servicios }}
+          CORRIDA: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if echo "$RESULTADOS" | grep -q 'failure'; then
+            ESTADO="FALLO"; ICONO=":x:"
+          elif echo "$RESULTADOS" | grep -q 'cancelled'; then
+            ESTADO="CANCELADO"; ICONO=":warning:"
+          else
+            ESTADO="OK"; ICONO=":white_check_mark:"
+          fi
+          TEXTO="$ICONO CD $ESTADO en develop (${COMMIT:0:7}, por $ACTOR) - servicios: ${SERVICIOS:-solo frontend y borde} - $RESULTADOS - $CORRIDA"
+          CUERPO=$(jq -cn --arg t "$TEXTO" '{content: $t, text: $t}')
+          # El webhook nunca se imprime: solo el codigo HTTP de la respuesta.
+          CODIGO=$(curl -sS -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d "$CUERPO" "$WEBHOOK" || echo "000")
+          echo "Aviso enviado al canal del equipo: HTTP $CODIGO ($ESTADO)"
+          case "$CODIGO" in 2*) exit 0 ;; *) echo "::warning::El canal del equipo respondio $CODIGO; el despliegue no depende de esto." ;; esac
+      - name: Sin canal configurado
+        if: env.WEBHOOK == ''
+        run: |
+          echo "Sin secret WEBHOOK_NOTIFICACIONES: no se avisa a ningun canal (GitHub sigue avisando por correo al autor si falla)."
