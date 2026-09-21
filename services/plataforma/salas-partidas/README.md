@@ -60,7 +60,10 @@ servicio que no se pudo obtener) la operación sale `503` con `type`
 `seccion-no-disponible`, `seccion`, `reintentarEnSegundos` y `Retry-After`; tras
 `RESILIENCIA_FALLOS_PARA_ABRIR` fallos seguidos se deja de llamar durante
 `RESILIENCIA_REINTENTAR_EN_SEGUNDOS` y luego pasa **una** llamada de prueba. Un
-4xx es una respuesta, no una caída: no abre nada (`Contestacion`). Por STOMP,
+4xx es una respuesta, no una caída: no abre nada (`Contestacion`). Toda llamada
+saliente tiene tiempos acotados (`RESILIENCIA_TIEMPO_CONEXION_MS` 2 s,
+`RESILIENCIA_TIEMPO_RESPUESTA_MS` 10 s): sin ellos un contenedor apagado colgaba
+el `connect` dos minutos y el borde respondía 504 antes que este servicio. Por STOMP,
 el mismo problem detail vuelve por `/usuario/cola/salas`. El frontend lo pinta
 con `Seccion degradada` (`comun/degradacion/aviso-degradacion.js`) en
 `crear-sala`, `batallas`, `validacion-heroe` y los controles de combate, y el
@@ -74,6 +77,7 @@ resto de la vista sigue. Probado apagando contenedores de verdad en
 `INVENTARIO_BASE_URL`, `PRODUCTOS_BASE_URL`, `HEROES_BASE_URL`,
 `MOTOR_COMBATE_URL`, `CREDITOS_URL`, `SANCIONES_URL`,
 `RESILIENCIA_FALLOS_PARA_ABRIR`, `RESILIENCIA_REINTENTAR_EN_SEGUNDOS`,
+`RESILIENCIA_TIEMPO_CONEXION_MS`, `RESILIENCIA_TIEMPO_RESPUESTA_MS`,
 `SALAS_WS_ENDPOINT`, `SALAS_WS_ORIGENES`, `LISTA_NEGRA_VERIFICAR_URL`,
 `CHAT_WS_ORIGENES`, `CHAT_HISTORIAL_TAMANO`. Ningún valor real en el repo
 (regla 10); los valores tras `:` en `application.yml` son los del entorno local.

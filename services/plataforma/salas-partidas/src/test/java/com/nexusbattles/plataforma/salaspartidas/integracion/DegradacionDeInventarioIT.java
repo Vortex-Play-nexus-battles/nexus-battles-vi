@@ -59,7 +59,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
                 "resiliencia.fallos-para-abrir=2",
-                "resiliencia.reintentar-en-segundos=1"
+                "resiliencia.reintentar-en-segundos=1",
+                "resiliencia.tiempo-respuesta-ms=1000"
         })
 @DisplayName("Degradacion controlada ante la caida del inventario (HU-DIS-003)")
 class DegradacionDeInventarioIT {
@@ -95,9 +96,42 @@ class DegradacionDeInventarioIT {
     }
 
     @Test
+    @DisplayName("inventario colgado: la espera se corta en un segundo y sale como degradacion, no como un 504 del borde")
+    void unInventarioQueNoContestaNoCuelgaAlServicio() throws Exception {
+        // Lo que destapo el E2E: sin tiempo de espera, un connect a una
+        // direccion sin nadie detras se quedaba dos minutos y el borde
+        // respondia 504 antes que este servicio. Aqui el doble ACEPTA la
+        // conexion y no contesta nunca: con tiempo-respuesta-ms=1000, la
+        // respuesta tiene que llegar en un par de segundos y ser la nuestra.
+        String token = EmisorDeTokensDePrueba.emisor().tokenDeJugador("Bea", UUID.randomUUID());
+        inventario = HttpServer.create(new InetSocketAddress(PUERTO_INVENTARIO), 0);
+        inventario.createContext("/", intercambio -> {
+            try {
+                Thread.sleep(4_000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            intercambio.close();
+        });
+        inventario.start();
+
+        long inicio = System.nanoTime();
+        HttpResponse<String> respuesta = crearSala(token);
+        long milis = (System.nanoTime() - inicio) / 1_000_000;
+
+        JsonNode problema = json.readTree(respuesta.body());
+        assertAll(
+                () -> assertEquals(503, respuesta.statusCode(), respuesta.body()),
+                () -> assertEquals(ErroresDeDegradacion.TIPO.toString(), problema.path("type").asString()),
+                () -> assertTrue(milis < 3_500, "tardo " + milis + " ms: la espera no esta acotada"));
+    }
+
+    @Test
     @DisplayName("inventario caido: 503 con la seccion, el listado sigue, y al volver se recupera solo")
     void laCaidaDelInventarioDegradaSoloSuSeccion() throws Exception {
         String token = EmisorDeTokensDePrueba.emisor().tokenDeJugador("Ana", UUID.randomUUID());
+        // Por si la prueba del inventario colgado dejo el circuito abierto.
+        Thread.sleep(1_100);
 
         // ---- CP-02: el jugador recibe el aviso explicito de funcion limitada.
         HttpResponse<String> primera = crearSala(token);

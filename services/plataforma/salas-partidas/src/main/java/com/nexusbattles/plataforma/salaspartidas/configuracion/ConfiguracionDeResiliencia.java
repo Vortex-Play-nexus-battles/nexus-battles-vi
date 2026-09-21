@@ -5,7 +5,10 @@ import com.nexusbattles.plataforma.resiliencia.RegistroDeDegradacion;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.ClientHttpRequestFactory;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 
+import java.net.http.HttpClient;
 import java.time.Clock;
 import java.time.Duration;
 
@@ -82,5 +85,35 @@ public class ConfiguracionDeResiliencia {
             return new CortaCircuitos(dependencia, seccion, fallosParaAbrir,
                     esperaAntesDeReintentar, Clock.systemUTC(), registro);
         }
+    }
+
+    /**
+     * Tiempos de espera acotados para TODA llamada saliente.
+     *
+     * <p>Sin esto el corta circuitos no protege de nada: lo destapo el E2E de
+     * inyeccion de fallos. Con el contenedor de inventario apagado, la
+     * direccion que este servicio tenia resuelta se quedo sin nadie detras y
+     * el {@code connect} se quedo colgado los dos minutos que tarda el nucleo
+     * en rendirse; el borde corto a los 60 s con un 504 y el jugador vio una
+     * pagina de nginx, no el aviso de seccion degradada. Un fallo que tarda
+     * dos minutos en contarse no abre ningun circuito a tiempo y, con
+     * suficiente trafico, se lleva todos los hilos por delante — que es
+     * exactamente la caida en cascada que HU-DIS-003 existe para evitar.
+     *
+     * <p>Conexion corta (2 s: en la red del compose se conecta en milisegundos)
+     * y respuesta con margen (10 s: inventario encadena productos y heroes por
+     * dentro), las dos muy por debajo de los 60 s del borde para que quien
+     * responda sea siempre este servicio, con su problem detail.
+     */
+    @Bean
+    public ClientHttpRequestFactory fabricaDePeticionesConTiempos(
+            @Value("${resiliencia.tiempo-conexion-ms:2000}") long conexionMs,
+            @Value("${resiliencia.tiempo-respuesta-ms:10000}") long respuestaMs) {
+        HttpClient cliente = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofMillis(conexionMs))
+                .build();
+        JdkClientHttpRequestFactory fabrica = new JdkClientHttpRequestFactory(cliente);
+        fabrica.setReadTimeout(Duration.ofMillis(respuestaMs));
+        return fabrica;
     }
 }
