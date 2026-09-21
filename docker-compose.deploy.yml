@@ -72,6 +72,12 @@ services:
   srv-comentarios:
     <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-comentarios:${TAG}
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      # HU-COM-001 / RF-USR-004: la sancion activa del autor se consulta en
+      # moderacion-sanciones, que corre en este host (misma nota que en
+      # srv-salas-partidas: sin esto localhost seria el propio contenedor).
+      SANCIONES_URL: ${SANCIONES_URL:-http://srv-moderacion-sanciones:8086/api/v1}
 
   srv-correo:
     <<: *servicio-plataforma
