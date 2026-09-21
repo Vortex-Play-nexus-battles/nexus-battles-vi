@@ -48,6 +48,7 @@ public class SecurityConfig {
                 .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/products/*/comments").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/products/*/comments").hasAnyRole(ROLES_DE_USUARIO)
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/products/*/comments/*").hasAnyRole(ROLES_DE_USUARIO)
                 .anyRequest().authenticated());
 
         return http.build();

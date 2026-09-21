@@ -27,6 +27,24 @@ public class ManejadorErroresComentarios {
         return problema;
     }
 
+    /** HU-COM-004, CA-03: el comentario no esta en el hilo de ese producto. */
+    @ExceptionHandler(HiloDeComentarios.ComentarioNoEncontrado.class)
+    public ProblemDetail manejarComentarioNoEncontrado(HiloDeComentarios.ComentarioNoEncontrado ex) {
+        ProblemDetail problema = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        problema.setType(java.net.URI.create("https://nexusbattles.local/errores/comentario-no-encontrado"));
+        problema.setTitle("Comentario no encontrado");
+        return problema;
+    }
+
+    /** HU-COM-004, CA-02: solo el autor retira su comentario. */
+    @ExceptionHandler(HiloDeComentarios.ComentarioAjeno.class)
+    public ProblemDetail manejarComentarioAjeno(HiloDeComentarios.ComentarioAjeno ex) {
+        ProblemDetail problema = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+        problema.setType(java.net.URI.create("https://nexusbattles.local/errores/comentario-ajeno"));
+        problema.setTitle("Ese comentario no es tuyo");
+        return problema;
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ProblemDetail manejarCarreraDeCalificacion(DataIntegrityViolationException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,

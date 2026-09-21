@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -79,6 +80,11 @@ class ComentariosControllerTest {
                 Instant.parse("2026-08-30T03:00:00Z"), estado);
     }
 
+    private static ServicioDePublicacionDeComentarios.Publicado publicado(
+            Comentario.Estado estado, Integer estrellas) {
+        return new ServicioDePublicacionDeComentarios.Publicado(comentario(estado, estrellas), false);
+    }
+
     private MockHttpServletRequestBuilder publicarComoLyra() {
         return post(RUTA)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeJugador("LyraRoja", UID_LYRA))
@@ -95,7 +101,7 @@ class ComentariosControllerTest {
         void elAutorSaleDelToken() throws Exception {
             when(servicio.publicar(eq("espada-del-alba"), eq(UID_LYRA.toString()), eq("LyraRoja"),
                     eq("Muy buena espada"), eq(List.of("captura.jpg")), eq(4)))
-                    .thenReturn(comentario(Comentario.Estado.PUBLICADO, 4));
+                    .thenReturn(publicado(Comentario.Estado.PUBLICADO, 4));
 
             mvc.perform(publicarComoLyra())
                     .andExpect(status().isCreated())
@@ -149,7 +155,7 @@ class ComentariosControllerTest {
             UUID uid = UUID.randomUUID();
             when(servicio.publicar(eq("espada-del-alba"), eq(uid.toString()), eq("Mod_Ana"),
                     anyString(), any(), any()))
-                    .thenReturn(comentario(Comentario.Estado.PUBLICADO, 4));
+                    .thenReturn(publicado(Comentario.Estado.PUBLICADO, 4));
 
             mvc.perform(post(RUTA)
                             .header(HttpHeaders.AUTHORIZATION,
@@ -164,7 +170,7 @@ class ComentariosControllerTest {
             UUID sujeto = UUID.randomUUID();
             when(servicio.publicar(eq("espada-del-alba"), eq(sujeto.toString()), eq("ana"),
                     anyString(), any(), any()))
-                    .thenReturn(comentario(Comentario.Estado.PUBLICADO, 4));
+                    .thenReturn(publicado(Comentario.Estado.PUBLICADO, 4));
 
             mvc.perform(post(RUTA)
                             .header(HttpHeaders.AUTHORIZATION,
@@ -178,7 +184,7 @@ class ComentariosControllerTest {
         void cuerpoSinIdentidad() throws Exception {
             when(servicio.publicar(eq("espada-del-alba"), eq(UID_LYRA.toString()), eq("LyraRoja"),
                     eq("Solo texto"), any(), any()))
-                    .thenReturn(comentario(Comentario.Estado.PUBLICADO, null));
+                    .thenReturn(publicado(Comentario.Estado.PUBLICADO, null));
 
             mvc.perform(post(RUTA)
                             .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeJugador("LyraRoja", UID_LYRA))
@@ -193,7 +199,7 @@ class ComentariosControllerTest {
     void publicadoResponde201() throws Exception {
         when(servicio.publicar(eq("espada-del-alba"), anyString(), anyString(),
                 anyString(), any(), any()))
-                .thenReturn(comentario(Comentario.Estado.PUBLICADO, 4));
+                .thenReturn(publicado(Comentario.Estado.PUBLICADO, 4));
 
         mvc.perform(publicarComoLyra())
                 .andExpect(status().isCreated())
@@ -207,7 +213,7 @@ class ComentariosControllerTest {
     void retenidoResponde202() throws Exception {
         when(servicio.publicar(eq("espada-del-alba"), anyString(), anyString(),
                 anyString(), any(), any()))
-                .thenReturn(comentario(Comentario.Estado.EN_REVISION, 4));
+                .thenReturn(publicado(Comentario.Estado.EN_REVISION, 4));
 
         mvc.perform(publicarComoLyra())
                 .andExpect(status().isAccepted())
@@ -243,17 +249,65 @@ class ComentariosControllerTest {
     }
 
     @Test
-    @DisplayName("calificación duplicada rechazada por dominio responde 409 con el motivo")
-    void calificacionDuplicadaResponde409() throws Exception {
+    @DisplayName("la segunda calificación entra sin estrellas y la respuesta lo dice: 201 con calificacionDescartada (D-07)")
+    void calificacionDuplicadaEntraSinEstrellas() throws Exception {
         when(servicio.publicar(eq("espada-del-alba"), anyString(), anyString(),
                 anyString(), any(), any()))
-                .thenThrow(new HiloDeComentarios.PublicacionRechazada(
-                        MotivoDeRechazo.CALIFICACION_DUPLICADA,
-                        "Ya calificaste este producto"));
+                .thenReturn(new ServicioDePublicacionDeComentarios.Publicado(
+                        comentario(Comentario.Estado.PUBLICADO, null), true));
 
         mvc.perform(publicarComoLyra())
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.motivo").value("CALIFICACION_DUPLICADA"));
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.estrellas").doesNotExist())
+                .andExpect(jsonPath("$.calificacionDescartada").value(true));
+    }
+
+    /* HU-COM-004: retirar un comentario propio. */
+
+    private static final String RUTA_COMENTARIO = RUTA + "/com-1";
+
+    @Test
+    @DisplayName("DELETE propio responde 204 y el autor es el uid del token, nunca el cuerpo")
+    void eliminarPropioResponde204() throws Exception {
+        when(servicio.eliminar("espada-del-alba", "com-1", UID_LYRA.toString()))
+                .thenReturn(comentario(Comentario.Estado.ELIMINADO, null));
+
+        mvc.perform(delete(RUTA_COMENTARIO)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeJugador("LyraRoja", UID_LYRA)))
+                .andExpect(status().isNoContent());
+
+        verify(servicio).eliminar("espada-del-alba", "com-1", UID_LYRA.toString());
+    }
+
+    @Test
+    @DisplayName("DELETE sin token es 401 y no llega al servicio")
+    void eliminarSinToken() throws Exception {
+        mvc.perform(delete(RUTA_COMENTARIO)).andExpect(status().isUnauthorized());
+        verifyNoInteractions(servicio);
+    }
+
+    @Test
+    @DisplayName("DELETE de un comentario ajeno es 403 con su tipo de problema")
+    void eliminarAjenoResponde403() throws Exception {
+        when(servicio.eliminar(eq("espada-del-alba"), eq("com-1"), anyString()))
+                .thenThrow(new HiloDeComentarios.ComentarioAjeno("com-1"));
+
+        mvc.perform(delete(RUTA_COMENTARIO)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeJugador("LyraRoja", UID_LYRA)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.type").value("https://nexusbattles.local/errores/comentario-ajeno"));
+    }
+
+    @Test
+    @DisplayName("DELETE de un comentario que no esta en el hilo es 404 con su tipo de problema")
+    void eliminarInexistenteResponde404() throws Exception {
+        when(servicio.eliminar(eq("espada-del-alba"), eq("com-1"), anyString()))
+                .thenThrow(new HiloDeComentarios.ComentarioNoEncontrado("com-1"));
+
+        mvc.perform(delete(RUTA_COMENTARIO)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeJugador("LyraRoja", UID_LYRA)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.type").value("https://nexusbattles.local/errores/comentario-no-encontrado"));
     }
 
     @Test
