@@ -78,6 +78,10 @@ services:
       # servicio de correo la cuenta se crea igual. Por eso correo y mailpit
       # no estan en este compose.
       SERVER_PORT: "8089"
+      # Emisor transitorio de credenciales de servicio (ADR-005): la que usa
+      # salas-partidas para hablarle a inventario. Secreto de banco de
+      # pruebas, no de ningun entorno real.
+      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas
     depends_on:
       e2e-identidad-db: { condition: service_healthy }
     healthcheck:
@@ -190,6 +194,12 @@ services:
       # Y de aqui la defensa del prototipo, sin la cual nadie acierta.
       HEROES_BASE_URL: http://srv-heroes:8080
       IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      # Credencial de servicio (ADR-005): inventario solo cree en X-User-Name
+      # cuando lo manda un servicio autenticado. Misma pareja que declara
+      # AUTH_CLIENTES_SERVICIO en srv-ms-identidad.
+      DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
+      DIRECTORIO_ACTIVO_CLIENT_ID: salas-partidas
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-salas-partidas
       # El navegador llega por el borde, asi que el origen permitido del
       # canal STOMP es el del borde, no el del servicio.
       SALAS_WS_ORIGENES: http://localhost:8099,http://127.0.0.1:8099

@@ -123,10 +123,22 @@ public class ConfiguracionDelServicio {
      * <p>Propio y no compartido con el del chat: son dos integraciones
      * distintas, con proveedores distintos, y el dia que una necesite un tiempo
      * de espera o un interceptor suyo no debe arrastrar a la otra.
+     *
+     * <p>Lleva la credencial de servicio de salas-partidas (ADR-001 via el
+     * emisor transitorio de ADR-005) cuando esta configurada
+     * ({@code DIRECTORIO_ACTIVO_*}): inventario ya no cree en
+     * {@code X-User-Name} a secas, solo cuando se la manda un servicio
+     * autenticado. Sin credencial configurada el cliente sale sin
+     * {@code Authorization} y la puerta de heroe respondera 503, que es lo que
+     * corresponde: mejor un fallo visible que verificar el heroe de nadie.
      */
     @Bean
-    public RestClient restClientInventario() {
-        return RestClient.builder().build();
+    public RestClient restClientInventario(
+            org.springframework.beans.factory.ObjectProvider<
+                    com.nexusbattles.comun.seguridad.servicio.InterceptorDePortadorDeServicio> credencial) {
+        RestClient.Builder constructor = RestClient.builder();
+        credencial.ifAvailable(constructor::requestInterceptor);
+        return constructor.build();
     }
 
     /**
