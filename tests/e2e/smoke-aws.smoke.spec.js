@@ -178,6 +178,63 @@ test.describe('Smoke del entorno desplegado', () => {
   // Notificaciones, correo y metricas
   // ===================================================================
 
+  test('el canal en tiempo real acepta el CONNECT con el JWT desplegado', async ({ page }) => {
+    // HU-JUE-015 y HU-SAL-005 viajan los dos por aqui. Un 200 de
+    // `/actuator/health` no dice nada del canal: el handshake de WebSocket
+    // pasa por el borde con cabeceras de upgrade y el CONNECT de STOMP lleva
+    // el token. Se prueba lo que de verdad puede romperse.
+    // Se abre desde una pagina del propio host: el canal comprueba el Origin
+    // (`setAllowedOriginPatterns`), y desde `about:blank` viajaria como
+    // `null` y lo rechazaria por un motivo que no es el que se quiere probar.
+    await page.goto(`${AWS}/frontend/app-web/src/cuentas/login.html`);
+
+    const url = `${AWS.replace(/^http/, 'ws')}/ws`;
+    const resultado = await page.evaluate(
+      ([destino, token]) =>
+        new Promise((resolver) => {
+          const NUL = ' ';
+          const socket = new WebSocket(destino);
+          const cortar = setTimeout(() => resolver('sin respuesta en 15 s'), 15000);
+          socket.onopen = () =>
+            socket.send(
+              `CONNECT\naccept-version:1.2\nheart-beat:0,0\n` +
+                `Authorization:Bearer ${token}\n\n${NUL}`,
+            );
+          socket.onmessage = (evento) => {
+            clearTimeout(cortar);
+            resolver(String(evento.data).split('\n')[0]);
+          };
+          socket.onerror = () => {
+            clearTimeout(cortar);
+            resolver('error de transporte');
+          };
+          socket.onclose = () => {
+            clearTimeout(cortar);
+            resolver('cerrado sin CONNECTED');
+          };
+        }),
+      [url, jugador.token],
+    );
+
+    expect(resultado, `respuesta del canal en ${url}`).toBe('CONNECTED');
+  });
+
+  test('los comentarios de un producto responden con su forma', async () => {
+    // HU-COM-001. El producto no tiene por que existir: lo que se comprueba
+    // es que el servicio esta enrutado y contesta su propia forma, no el
+    // 404 generico del borde.
+    const r = await api.get('/api/v1/products/smoke-inexistente/comments');
+
+    expect([200, 404]).toContain(r.status());
+    const cuerpo = await r.json();
+    if (r.status() === 200) {
+      expect(Array.isArray(cuerpo.comentarios ?? cuerpo.contenido ?? cuerpo)).toBe(true);
+    } else {
+      // Problem details del servicio, no el «Ruta sin servicio en el borde».
+      expect(JSON.stringify(cuerpo)).not.toContain('Ruta sin servicio en el borde');
+    }
+  });
+
   test('la bandeja de notificaciones responde con su forma y cuenta las no leidas', async () => {
     const r = await api.get(`/api/v1/users/${cuerpoDelToken(jugador.token).uid}/notifications`);
     expect(r.status()).toBe(200);
