@@ -43,6 +43,11 @@ public record ParticipanteDePartida(
         return new ParticipanteDePartida(idJugador, heroe, esIA, equipo, creditosApostados);
     }
 
+    /** El mismo participante, asignado a un equipo del modo cooperativo (HU-SAL-004). */
+    public ParticipanteDePartida conEquipo(Integer equipo) {
+        return new ParticipanteDePartida(idJugador, heroe, esIA, equipo, creditosApostados);
+    }
+
     /**
      * True cuando sigue en pie.
      *

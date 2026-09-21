@@ -76,6 +76,15 @@ describe('metaDeLaSala', () => {
     );
   });
 
+  test('con varios cupos de la IA dice cuantos (HU-SAL-004)', () => {
+    expect(metaDeLaSala(sala({ incluirHeroeIA: true, heroesIA: 3 }))).toBe(
+      '4 de 6 jugadores · 320 creditos · Con 3 heroes de la IA',
+    );
+    expect(metaDeLaSala(sala({ incluirHeroeIA: true, heroesIA: 1 }))).toMatch(
+      /Con heroe de la IA$/,
+    );
+  });
+
   test('una apuesta de cero se escribe igual: el diseno la pinta como 0 creditos', () => {
     expect(
       metaDeLaSala(sala({ ocupacion: 1, maximoParticipantes: 2, recompensaCreditos: 0 })),

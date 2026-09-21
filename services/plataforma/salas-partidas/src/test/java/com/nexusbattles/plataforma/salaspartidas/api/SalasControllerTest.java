@@ -131,10 +131,54 @@ class SalasControllerTest {
                 .andExpect(jsonPath("$.maximoParticipantes").value(4))
                 .andExpect(jsonPath("$.recompensaCreditos").value(0))
                 .andExpect(jsonPath("$.incluirHeroeIA").value(false))
+                .andExpect(jsonPath("$.heroesIA").value(0))
                 // El apodo no viaja: pertenece al modulo de cuentas y ninguna
                 // pantalla de HU-SAL-002 lo muestra.
                 .andExpect(jsonPath("$.anfitrion").doesNotExist())
                 .andExpect(jsonPath("$.idPartida").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("heroesIA del contrato 1.2.0 llega al caso de uso, y manda sobre el booleano (HU-SAL-004)")
+    void heroesIaLlegaAlCasoDeUso() throws Exception {
+        Sala sala = Sala.crear(new ParametrosDeSala(6, Modalidad.HASTA_SEIS, 0, 3, false, null), JUGADOR);
+        when(crearSala.ejecutar(any(), any())).thenReturn(sala);
+        org.mockito.ArgumentCaptor<ParametrosDeSala> parametros =
+                org.mockito.ArgumentCaptor.forClass(ParametrosDeSala.class);
+
+        mockMvc.perform(post("/api/v1/salas")
+                        .with(jugador())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"maximoParticipantes": 6, "modalidad": "HASTA_SEIS",
+                                 "recompensaCreditos": 0, "incluirHeroeIA": false, "heroesIA": 3}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.heroesIA").value(3))
+                .andExpect(jsonPath("$.incluirHeroeIA").value(true))
+                .andExpect(jsonPath("$.ocupacion").value(4));
+
+        org.mockito.Mockito.verify(crearSala).ejecutar(parametros.capture(), any());
+        org.junit.jupiter.api.Assertions.assertEquals(3, parametros.getValue().heroesIA());
+    }
+
+    @Test
+    @DisplayName("mas maquinas de las que caben: 400 con el campo y el limite (CA-04)")
+    void demasiadasMaquinas() throws Exception {
+        when(crearSala.ejecutar(any(), any())).thenAnswer(invocacion ->
+                Sala.crear(invocacion.getArgument(0), JUGADOR));
+
+        mockMvc.perform(post("/api/v1/salas")
+                        .with(jugador())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"maximoParticipantes": 4, "modalidad": "HASTA_SEIS",
+                                 "recompensaCreditos": 0, "heroesIA": 4}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errores[0].campo").value("heroesIA"))
+                .andExpect(jsonPath("$.errores[0].mensaje").value(
+                        org.hamcrest.Matchers.containsString("como maximo 3")));
     }
 
     @Test

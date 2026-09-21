@@ -23,8 +23,9 @@ Los errores salen como problem details (RFC 7807) y la interfaz decide por
 | `POST /api/v1/salas/{id}/participantes` — ingreso con cupo y bloqueo optimista | Implementado | HU-SAL-002 |
 | `/tema/salas/{idSala}` — `sala.participante.ingreso` a los suscritos | Implementado y probado extremo a extremo (`CanalDeSalaIT`) | HU-SAL-002 |
 | `/tema/salas/{idSala}/chat`, `/tema/chat/general` — chat con filtro de lista negra | Implementado | HU-JUE-015 |
-| `/tema/partidas/{idPartida}` — `partida.accion.resuelta` (vida de cada afectado) | **Publicación lista** (`CanalDePartida` → `CanalDePartidaStomp`, `CanalDePartidaIT`); **nadie la dispara todavía** | HU-SAL-005 |
-| `GET /salas/{id}/verificacion-heroe` | No implementado | HU-SAL-003 |
+| `/tema/partidas/{idPartida}` — `partida.accion.resuelta`, `partida.turno.cambiado`, `partida.finalizada` (con `reparto` y `equipoGanador`) | Implementado; lo dispara `EjecutarAccion` | HU-SAL-005, HU-JUE-014 |
+| `GET /salas/{id}/verificacion-heroe` | Implementado (`PuertaDeHeroe` contra inventario) | HU-SAL-003 |
+| Modalidades: `CONTRA_IA` con la máquina en el segundo cupo; `HASTA_SEIS` con `heroesIA` (0..n−1) que ocupan cupo y `tamanoEquipo` (1–3) con equipos por orden de entrada, victoria por equipo y sin fuego amigo; el turno salta a los caídos | Implementado (V10, contrato 1.2.0); decisiones D-05/D-12/D-13 en `docs/gobierno` | HU-SAL-004 |
 
 ## Canal en tiempo real
 
