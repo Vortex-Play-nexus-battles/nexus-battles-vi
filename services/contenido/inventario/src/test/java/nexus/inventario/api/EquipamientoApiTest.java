@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import nexus.inventario.configuracion.IdentidadDelLlamador;
 import nexus.inventario.aplicacion.GestionarEquipamiento;
 import nexus.inventario.aplicacion.RepositorioInventariosEnMemoria;
 import nexus.inventario.dominio.ElementoInventario;
@@ -27,7 +28,7 @@ class EquipamientoApiTest {
     void preparar() {
         repositorio = new RepositorioInventariosEnMemoria();
         mvc = MockMvcBuilders.standaloneSetup(
-                        new EquipamientoController(new GestionarEquipamiento(repositorio)))
+                        new EquipamientoController(new GestionarEquipamiento(repositorio), new IdentidadDelLlamador()))
                 .setControllerAdvice(new ManejadorDeErrores())
                 .build();
     }
@@ -37,12 +38,12 @@ class EquipamientoApiTest {
     void equiparYDesequipar() throws Exception {
         guardarInventario("jugador-A", "heroe-A", "arma-A", "arma-B", "arma-C");
 
-        mvc.perform(put(ruta("heroe-A", "arma-A")).header("X-User-Name", "jugador-A"))
+        mvc.perform(put(ruta("heroe-A", "arma-A")).with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.heroeId").value("heroe-A"))
                 .andExpect(jsonPath("$.armas[0]").value("arma-A"));
 
-        mvc.perform(delete(ruta("heroe-A", "arma-A")).header("X-User-Name", "jugador-A"))
+        mvc.perform(delete(ruta("heroe-A", "arma-A")).with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.armas.length()").value(0));
     }
@@ -53,7 +54,7 @@ class EquipamientoApiTest {
         guardarInventario("jugador-A", "heroe-A", "arma-A");
 
         mvc.perform(get("/api/v1/inventario/heroes/heroe-A/equipamiento")
-                        .header("X-User-Name", "jugador-A"))
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.heroeId").value("heroe-A"))
                 .andExpect(jsonPath("$.armaduras").isMap())
@@ -64,10 +65,10 @@ class EquipamientoApiTest {
     @DisplayName("exceder dos armas responde conflicto y no guarda la tercera")
     void rechazarTerceraArma() throws Exception {
         guardarInventario("jugador-A", "heroe-A", "arma-A", "arma-B", "arma-C");
-        mvc.perform(put(ruta("heroe-A", "arma-A")).header("X-User-Name", "jugador-A"));
-        mvc.perform(put(ruta("heroe-A", "arma-B")).header("X-User-Name", "jugador-A"));
+        mvc.perform(put(ruta("heroe-A", "arma-A")).with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A"));
+        mvc.perform(put(ruta("heroe-A", "arma-B")).with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A"));
 
-        mvc.perform(put(ruta("heroe-A", "arma-C")).header("X-User-Name", "jugador-A"))
+        mvc.perform(put(ruta("heroe-A", "arma-C")).with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.title").value("Limite de equipamiento"));
 
@@ -80,7 +81,7 @@ class EquipamientoApiTest {
     void rechazarHeroeAjeno() throws Exception {
         guardarInventario("jugador-B", "heroe-B", "arma-B");
 
-        mvc.perform(put(ruta("heroe-B", "arma-B")).header("X-User-Name", "jugador-A"))
+        mvc.perform(put(ruta("heroe-B", "arma-B")).with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.title").value("Inventario ajeno"));
     }

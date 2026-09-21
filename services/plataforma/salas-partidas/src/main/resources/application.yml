@@ -83,6 +83,18 @@ salas:
   heroes:
     url: ${HEROES_BASE_URL:http://localhost:8080}
 
+# Credencial de servicio con la que este servicio le habla a inventario
+# (ADR-001, emisor transitorio ADR-005). Las lee
+# CredencialesDeServicioAutoConfiguration (plataforma-seguridad): sin
+# client-id no se registra ningun interceptor y las llamadas salen sin
+# Authorization. En el host las genera desplegar.sh; en el E2E van en el
+# compose de tests/e2e.
+seguridad:
+  servicio:
+    url: ${DIRECTORIO_ACTIVO_URL:http://localhost:8089/api/v1/auth/token}
+    client-id: ${DIRECTORIO_ACTIVO_CLIENT_ID:}
+    client-secret: ${DIRECTORIO_ACTIVO_CLIENT_SECRET:}
+
 # Chat de HU-JUE-015. La lista negra es la de HU-ADM-002 (moderacion-sanciones).
 chat:
   lista-negra:

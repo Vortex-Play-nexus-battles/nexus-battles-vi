@@ -12,6 +12,7 @@ import nexus.inventario.aplicacion.ConsultarElementoInventario;
 import nexus.inventario.aplicacion.ConsultarInventarioPaginado;
 import nexus.inventario.aplicacion.DetalleElementoInventario;
 import nexus.inventario.aplicacion.GestionarInventario;
+import nexus.inventario.configuracion.IdentidadDelLlamador;
 import nexus.inventario.configuracion.SeguridadConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,7 +23,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = InventarioController.class)
-@Import(SeguridadConfig.class)
+@Import({SeguridadConfig.class, IdentidadDelLlamador.class})
 class SeguridadConsultaElementoTest {
 
     @Autowired

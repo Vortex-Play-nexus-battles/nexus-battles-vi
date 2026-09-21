@@ -84,6 +84,13 @@ services:
   srv-salas-partidas:
     <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-salas-partidas:${TAG}
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      # Credencial de servicio propia (ADR-005) para hablar con inventario.
+      # El .env es compartido, asi que el client_id va aqui y el secreto
+      # sale de la variable por servicio que genera desplegar.sh.
+      DIRECTORIO_ACTIVO_CLIENT_ID: salas-partidas
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_SALAS_PARTIDAS:-}
 
   srv-notificaciones:
     <<: *servicio-plataforma
