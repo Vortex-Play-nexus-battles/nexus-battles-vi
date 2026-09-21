@@ -30,14 +30,20 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 
 import { test, expect, request as apiRequest } from '@playwright/test';
 
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const ANFITRION = process.env.E2E_ANFITRION ?? 'anfitriona_e2e';
 const CLAVE = 'Contrasena-E2E-2026';
-const COMPOSE = fileURLToPath(new URL('./compose.yml', import.meta.url));
+// Playwright transpila estos specs a CommonJS (no hay package.json con
+// "type": "module" en tests/), asi que `import.meta` no existe aqui:
+// `__dirname` si. Si algun dia se ejecutan como ESM, se cae al directorio
+// desde el que se lanza Playwright (`frontend/app-web`).
+const AQUI =
+  typeof __dirname === 'undefined' ? path.resolve(process.cwd(), '../../tests/e2e') : __dirname;
+const COMPOSE = path.join(AQUI, 'compose.yml');
 
 const CREAR = '/frontend/app-web/src/plataforma/salas-partidas/crear-sala.html';
 const BATALLAS = '/frontend/app-web/src/plataforma/salas-partidas/batallas.html';
