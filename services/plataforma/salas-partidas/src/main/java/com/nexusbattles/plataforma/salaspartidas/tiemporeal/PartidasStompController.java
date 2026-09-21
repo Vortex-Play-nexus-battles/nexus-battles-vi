@@ -2,7 +2,7 @@ package com.nexusbattles.plataforma.salaspartidas.tiemporeal;
 
 import com.nexusbattles.comun.error.ErrorDeNegocio;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.EjecutarAccion;
-import com.nexusbattles.plataforma.salaspartidas.seguridad.IdentidadDelToken;
+import com.nexusbattles.comun.seguridad.IdentidadDelToken;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.messaging.handler.annotation.DestinationVariable;

@@ -243,8 +243,8 @@ public class SalasController {
      */
     private static JugadorAutenticado jugadorDe(Jwt token) {
         return new JugadorAutenticado(
-                com.nexusbattles.plataforma.salaspartidas.seguridad.IdentidadDelToken.idDe(token),
-                com.nexusbattles.plataforma.salaspartidas.seguridad.IdentidadDelToken.apodoDe(token));
+                com.nexusbattles.comun.seguridad.IdentidadDelToken.idDe(token),
+                com.nexusbattles.comun.seguridad.IdentidadDelToken.apodoDe(token));
     }
 
     private static String primerTextoNoVacio(String... candidatos) {

@@ -16,7 +16,7 @@ import java.time.Clock;
  *
  * <p>El canal STOMP (endpoint {@code /ws}, broker, prefijos {@code /tema},
  * {@code /app} y {@code /usuario/cola}, y la autenticacion por JWT en el
- * {@code CONNECT} con {@link AutenticacionStomp}) es uno solo para todo el
+ * {@code CONNECT} con {@code AutenticacionStomp} de plataforma-seguridad) es uno solo para todo el
  * servicio y vive en {@code tiemporeal.ConfiguracionWebSocket}: la sala de
  * batalla (HU-SAL-002) y el chat comparten conexion, tal como fija
  * {@code contracts/websocket/salas-partidas.yaml}. Esta clase registro ese

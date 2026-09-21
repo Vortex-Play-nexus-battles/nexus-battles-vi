@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_identidad.rbac.security;
 
+import com.nexusbattles.ms_identidad.auth.servicio.CredencialPropia;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,15 +23,24 @@ public class AuditoriaEventClient {
     private final RestClient restClient;
     private final String urlAuditoria;
 
+    /**
+     * @param urlAuditoria misma propiedad y mismo valor por defecto que
+     *                     {@code AuditoriaClient} (puerto real 8091)
+     * @param credencial   credencial de servicio de ms-identidad (ADR-005);
+     *                     nula solo en pruebas que no arrancan el contexto
+     */
     public AuditoriaEventClient(
-            @Value("${app.auditoria.url:http://localhost:8083/api/v1/admin/auditoria/eventos}") String urlAuditoria) {
+            @Value("${app.auditoria.url:http://localhost:8091/api/v1/admin/auditoria/eventos}") String urlAuditoria,
+            CredencialPropia credencial) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(1000); // 1 segundo
         requestFactory.setReadTimeout(1000);    // 1 segundo
 
-        this.restClient = RestClient.builder()
-                .requestFactory(requestFactory)
-                .build();
+        RestClient.Builder constructor = RestClient.builder().requestFactory(requestFactory);
+        if (credencial != null) {
+            constructor.requestInterceptor(credencial);
+        }
+        this.restClient = constructor.build();
         this.urlAuditoria = urlAuditoria;
     }
 

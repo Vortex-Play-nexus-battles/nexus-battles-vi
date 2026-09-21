@@ -1,8 +1,10 @@
-package com.nexusbattles.plataforma.salaspartidas.seguridad;
+package com.nexusbattles.comun.seguridad;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
 import java.time.Instant;
 import java.util.Map;
@@ -12,13 +14,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * Las dos caras de la identidad — ADR-002.
- *
- * <p>Esta lectura estaba escrita dos veces y una de las dos tenia un fallo que
- * devolvia 500: {@code UUID.fromString(sub)} sobre un token de
- * {@code ms-identidad}, cuyo sujeto es el <b>apodo</b>. Se corrigio en
- * {@code SalasController} (PR #404) y se quedo mal en {@code ChatController}.
- * Estas pruebas fijan la regla para que no vuelva a divergir.
+ * La lectura de la identidad tiene una sola regla y vive en un solo sitio.
+ * Estaba escrita dos veces en salas-partidas y una copia conservo el fallo que
+ * la otra ya habia corregido; estas pruebas fijan la regla para que no vuelva
+ * a divergir cuando la usen comentarios, notificaciones y los demas.
  */
 @DisplayName("IdentidadDelToken · el id sale de uid y el apodo del nombre visible")
 class IdentidadDelTokenTest {
@@ -46,7 +45,7 @@ class IdentidadDelTokenTest {
     }
 
     @Test
-    @DisplayName("sin uid se cae al sujeto: los tokens anteriores a ADR-002 siguen valiendo")
+    @DisplayName("sin uid se cae al sujeto: los tokens de Keycloak y los anteriores a ADR-002 siguen valiendo")
     void sinUidValeElSujeto() {
         assertEquals(UID, IdentidadDelToken.idDe(token(UID.toString(), Map.of())));
     }
@@ -82,5 +81,24 @@ class IdentidadDelTokenTest {
                 token("da-igual", Map.of("uid", UID.toString(), "apodo", "Ana"))));
         assertEquals("demo_grupo6", IdentidadDelToken.apodoDe(
                 token("demo_grupo6", Map.of("uid", UID.toString()))));
+    }
+
+    @Test
+    @DisplayName("desde la autenticacion de la cadena se lee lo mismo que desde el token")
+    void desdeLaAutenticacion() {
+        Jwt jwt = token("demo_grupo6", Map.of("uid", UID.toString()));
+        JwtAuthenticationToken autenticacion = new JwtAuthenticationToken(jwt);
+
+        assertEquals(UID, IdentidadDelToken.idDe(autenticacion));
+        assertEquals("demo_grupo6", IdentidadDelToken.apodoDe(autenticacion));
+    }
+
+    @Test
+    @DisplayName("una autenticacion que no es un JWT no identifica a nadie")
+    void autenticacionQueNoEsJwt() {
+        var otra = new UsernamePasswordAuthenticationToken("alguien", "clave");
+
+        assertThrows(IllegalArgumentException.class, () -> IdentidadDelToken.idDe(otra));
+        assertThrows(IllegalArgumentException.class, () -> IdentidadDelToken.apodoDe(otra));
     }
 }

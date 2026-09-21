@@ -81,6 +81,11 @@ services:
       DB_PASSWORD: ${MS_IDENTIDAD_DB_PASSWORD}
       LISTA_NEGRA_URL: ${LISTA_NEGRA_URL}
       SPRING_PROFILES_ACTIVE: ${MS_IDENTIDAD_SPRING_PROFILES_ACTIVE}
+      # Emisor transitorio de credenciales de servicio (ADR-005): los
+      # clientes y sus secretos los genera desplegar.sh en el host.
+      AUTH_CLIENTES_SERVICIO: ${AUTH_CLIENTES_SERVICIO:-}
+      # Clave de firma estable (ADR-002); sin valor se genera una efimera.
+      JWT_CLAVE_PRIVADA: ${JWT_CLAVE_PRIVADA:-}
 
 volumes:
   identidad-db-datos:

@@ -88,11 +88,26 @@ public final class TokenDeServicioOAuth2 implements TokenDeServicio {
         this.gestor.setAuthorizedClientProvider(proveedor);
     }
 
-    /** Endpoint de token OIDC del realm. Publico para que las pruebas lo comprueben. */
+    /**
+     * Endpoint de token del emisor. Publico para que las pruebas lo comprueben.
+     *
+     * <p>Dos formas de configurarlo (ADR-005):
+     * <ul>
+     *   <li>la URL de un realm de Keycloak ({@code https://kc/realms/nexus}):
+     *       se le anade la ruta OIDC estandar;</li>
+     *   <li>la URL completa de un endpoint de token, reconocible porque termina
+     *       en {@code /token} ({@code http://srv-ms-identidad:8089/api/v1/auth/token}):
+     *       se usa tal cual. Es el caso de ms-identidad, que emite credenciales
+     *       de servicio mientras no haya Keycloak.</li>
+     * </ul>
+     */
     public static String endpointDeToken(String urlDelEmisor) {
         String base = urlDelEmisor.endsWith("/")
                 ? urlDelEmisor.substring(0, urlDelEmisor.length() - 1)
                 : urlDelEmisor;
+        if (base.endsWith("/token")) {
+            return base;
+        }
         return base + "/protocol/openid-connect/token";
     }
 

@@ -40,7 +40,7 @@ public class SecurityBypassTest {
 
         RbacMatrixRepository repository = new RbacMatrixRepository();
         RbacAuthorizationService service = new RbacAuthorizationService(repository);
-        AuditoriaEventClient auditoriaClient = new AuditoriaEventClient("http://localhost:8083/api/v1/admin/auditoria/eventos");
+        AuditoriaEventClient auditoriaClient = new AuditoriaEventClient("http://localhost:8083/api/v1/admin/auditoria/eventos", null);
         SecurityInterceptor interceptor = new SecurityInterceptor(service, auditoriaClient, jwtService);
         AdminActionDemoController controller = new AdminActionDemoController();
 
@@ -141,7 +141,7 @@ public class SecurityBypassTest {
         // Construir MockMvc con el interceptor que SÍ tiene UsuarioRepository
         RbacMatrixRepository repository = new RbacMatrixRepository();
         RbacAuthorizationService service = new RbacAuthorizationService(repository);
-        AuditoriaEventClient auditoriaClient = new AuditoriaEventClient("http://localhost:8083/api/v1/admin/auditoria/eventos");
+        AuditoriaEventClient auditoriaClient = new AuditoriaEventClient("http://localhost:8083/api/v1/admin/auditoria/eventos", null);
         SecurityInterceptor interceptor = new SecurityInterceptor(service, auditoriaClient, jwtService, mockRepo);
         AdminActionDemoController controller = new AdminActionDemoController();
 
@@ -165,7 +165,7 @@ public class SecurityBypassTest {
         RbacMatrixRepository repository = new RbacMatrixRepository();
         RbacAuthorizationService service = new RbacAuthorizationService(repository);
         AuditoriaEventClient auditoriaClient =
-            new AuditoriaEventClient("http://localhost:8083/api/v1/admin/auditoria/eventos");
+            new AuditoriaEventClient("http://localhost:8083/api/v1/admin/auditoria/eventos", null);
 
         // permitirHeaderRol = false -> configuracion de produccion
         SecurityInterceptor interceptorProd =
@@ -192,7 +192,7 @@ public class SecurityBypassTest {
         RbacMatrixRepository repository = new RbacMatrixRepository();
         RbacAuthorizationService service = new RbacAuthorizationService(repository);
         AuditoriaEventClient auditoriaClient =
-            new AuditoriaEventClient("http://localhost:8083/api/v1/admin/auditoria/eventos");
+            new AuditoriaEventClient("http://localhost:8083/api/v1/admin/auditoria/eventos", null);
 
         SecurityInterceptor interceptorDev =
             new SecurityInterceptor(service, auditoriaClient, jwtService, null, true);
