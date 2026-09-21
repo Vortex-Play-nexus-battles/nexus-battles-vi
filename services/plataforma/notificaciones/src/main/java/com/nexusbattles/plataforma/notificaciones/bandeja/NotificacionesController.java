@@ -22,10 +22,13 @@ import com.nexusbattles.plataforma.notificaciones.Notificacion;
  * <p>Aqui vive lo que se consulta y lo que se marca. La entrega en tiempo real
  * viaja por STOMP y no pasa por este controlador.
  *
- * <p>El identificador del jugador llega en la ruta mientras se acuerda con el
- * modulo de identidad que claim del token lo aporta. Cuando eso se confirme, el
- * resource server entra igual que en moderacion-sanciones y el contrato abre
- * version nueva.
+ * <p><b>Quien puede que.</b> El {@code usuarioId} de la ruta sigue siendo la
+ * forma del contrato, pero desde la 1.1.0 la cadena de seguridad
+ * ({@code seguridad.SecurityConfig}) solo deja pasar la peticion si el
+ * {@code uid} del token es ese mismo usuario: aqui llega unicamente el
+ * dueno de la bandeja. {@code /internal/notifications} lo llaman otros
+ * servicios con su credencial de servicio (ADR-005); el {@code usuarioId}
+ * del cuerpo es el destinatario, un dato de negocio, no quien llama.
  */
 @RestController
 @RequestMapping("/api/v1")

@@ -10,13 +10,20 @@ info:
     El estado de lectura pertenece al jugador y no a la sesion, por eso marcar
     leido en un dispositivo se ve en todos.
 
-    El identificador del jugador viaja en la ruta mientras se acuerda con el
-    modulo de identidad que claim del token lo aporta. Al integrar el resource
-    server este contrato abrira una version nueva en lugar de modificar esta.
-  version: 1.0.0
+    Desde la 1.1.0 las rutas exigen token de acceso (ADR-002/ADR-005):
+    - `/users/{usuarioId}/**` solo la atiende el usuario cuyo `uid` del token
+      es ese `usuarioId`; con otro token responde 403 y sin token 401. La
+      forma de la ruta no cambia, por eso es version menor.
+    - `/internal/notifications` la llaman otros servicios con su credencial
+      de servicio (`ROLE_SERVICIO`); un token de usuario responde 403. El
+      `usuarioId` del cuerpo es el destinatario, un dato de negocio, no
+      quien llama.
+  version: 1.1.0
 servers:
   - url: http://localhost:8085/api/v1
     description: Entorno local de desarrollo
+security:
+  - bearerAuth: []
 paths:
   /users/{usuarioId}/notifications:
     get:
@@ -151,6 +158,16 @@ paths:
                 $ref: '#/components/schemas/ProblemDetail'
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Token de acceso emitido por ms-identidad (RS256, verificado contra su
+        JWKS). En `/users/{usuarioId}/**` es el token del propio usuario
+        (`uid` = `usuarioId`); en `/internal/**` es una credencial de
+        servicio (`rol=SERVICIO`, `azp`=servicio que llama, ADR-005).
   schemas:
 
     EmitirNotificacionRequest:

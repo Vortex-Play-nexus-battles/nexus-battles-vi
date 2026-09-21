@@ -19,7 +19,8 @@ de entrada público del host de plataforma en AWS: `http://<ip-del-host>/`.
 | `/api/v1/carrito…` | `srv-ms-ecommerce:8090`, reescrito a `/ecommerce/api/v1/carrito…` |
 | `GET /api/v1/productos` (exacto) | `srv-ms-ecommerce:8090` → `/ecommerce/api/v1/productos` (vitrina) |
 | `/api/v1/productos…` (resto) | `srv-productos:8080` (catálogo de contenido) |
-| `/ws` | `srv-salas-partidas:8084`; con `?usuario=…` → `srv-notificaciones:8085` |
+| `/ws/notificaciones` | `srv-notificaciones:8085` |
+| `/ws` | `srv-salas-partidas:8084` |
 | `/mailpit/` | bandeja del SMTP de pruebas |
 | `/salud-borde` | `UP` (lo comprueba `desplegar.sh`) |
 | otro `/api/…` | 404 problem details "ruta sin servicio en el borde" |

@@ -6,14 +6,12 @@
  * `contracts/websocket/notificaciones.yaml` (handshake, cola privada, alta de
  * sesion). No decide nada que los contratos no digan.
  *
- * Identidad de la conexion. El contrato AsyncAPI declara que, mientras OAuth2
- * este diferido, el cliente se identifica en la URL del handshake
- * (`/ws?usuario={usuarioId}&sesion={sesionId}`): de ahi sale el Principal que
- * resuelve la cola privada. Es una decision de diseno del contrato de
- * Alexander, no de este cliente; aqui se cumple tal cual y queda aislada en
- * `urlDelCanal` para que, cuando el servicio pida el JWT en el CONNECT (como
- * ya lo exige salas-partidas en #222), cambie una sola funcion. Por esa URL
- * NO viaja el token de sesion.
+ * Identidad de la conexion. Desde la 1.1.0 del contrato AsyncAPI el canal se
+ * identifica igual que la API HTTP: el JWT de la sesion viaja en la cabecera
+ * `Authorization` del frame CONNECT (como ya exige salas-partidas, #222) y el
+ * servidor deja como Principal el `uid` del token. Por la URL del handshake
+ * NO viaja nada que identifique a nadie: ni el token ni el usuario. La
+ * identidad que antes iba en `?usuario=` la ponia el cliente sin verificar.
  *
  * Todo error HTTP sale como `ErrorDeApi` (problem details, RFC 7807), para que
  * la vista decida por `tipo` y `estado` y nunca por el texto
@@ -24,6 +22,7 @@ import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-err
 import { usuarioIdDeSesion } from '../../comun/identidad.js';
 
 const CLAVE_APODO = 'nexus.apodoActual';
+const CLAVE_TOKEN = 'nexus.token';
 
 /**
  * Identificador estable de ESTA sesion del navegador. Sobrevive a la
@@ -32,12 +31,26 @@ const CLAVE_APODO = 'nexus.apodoActual';
  */
 export const CLAVE_SESION_CANAL = 'nexus.notificaciones.sesionId';
 
-/** Destinos y rutas del contrato AsyncAPI. */
+/**
+ * Destinos y rutas del contrato AsyncAPI. El handshake es `/ws/notificaciones`
+ * y no `/ws`: el borde enruta por la ruta, ya no por `?usuario=`.
+ */
 export const CANAL = Object.freeze({
-  RUTA_HANDSHAKE: '/ws',
+  RUTA_HANDSHAKE: '/ws/notificaciones',
   COLA_PRIVADA: '/usuario/cola/notificaciones',
   ALTA_DE_SESION: '/app/notificaciones/sesion',
 });
+
+/**
+ * Token de acceso de la sesion, el mismo que lleva la API HTTP. Va en la
+ * cabecera `Authorization` del CONNECT; sin el, el servidor no abre sesion.
+ *
+ * @param {Storage} [almacen=sessionStorage]
+ * @returns {string|null}
+ */
+export function tokenDeSesion(almacen = globalThis.sessionStorage) {
+  return almacen?.getItem?.(CLAVE_TOKEN) ?? null;
+}
 
 /**
  * Base de la API. Vacia por omision (mismo origen). Para revisar la vista
@@ -96,24 +109,17 @@ export function identificadorDeSesion(
 }
 
 /**
- * URL del handshake WebSocket, con la identidad que el contrato exige hoy.
+ * URL del handshake WebSocket. Sin identidad: esa va en el CONNECT.
  *
- * @param {{base?: string, usuarioId: string, sesionId: string, location?: Location}} opciones
+ * @param {{base?: string, location?: Location}} [opciones]
  *   `base` es la de la API HTTP (`http(s)://...` o vacia = mismo origen);
  *   se traduce a `ws(s)://`. `location` es inyeccion para las pruebas.
  * @returns {string}
  */
-export function urlDelCanal({
-  base = baseDeApi(),
-  usuarioId,
-  sesionId,
-  location = globalThis.location,
-}) {
+export function urlDelCanal({ base = baseDeApi(), location = globalThis.location } = {}) {
   const origen = base || `${location.protocol}//${location.host}`;
   const url = new URL(CANAL.RUTA_HANDSHAKE, origen);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-  url.searchParams.set('usuario', usuarioId);
-  url.searchParams.set('sesion', sesionId);
   return url.toString();
 }
 
