@@ -130,6 +130,14 @@ class SalaEntidad {
         @Column(name = "heroe_nombre", length = 120)
         private String heroeNombre;
 
+        /** Prototipo del catalogo (V8). Sin el, el motor no resuelve el ataque. */
+        @Column(name = "heroe_prototipo", length = 120)
+        private String heroePrototipo;
+
+        /** Defensa del prototipo (V8). Con la vida en su lugar, nadie acertaba. */
+        @Column(name = "heroe_defensa")
+        private Integer heroeDefensa;
+
         @Column(name = "heroe_retrato_url", length = 500)
         private String heroeRetratoUrl;
 
@@ -171,6 +179,8 @@ class SalaEntidad {
             HeroeDeCombate heroe = ficha.heroe();
             fila.heroeId = heroe.id();
             fila.heroeNombre = heroe.nombre();
+            fila.heroePrototipo = heroe.prototipo();
+            fila.heroeDefensa = heroe.defensa();
             fila.heroeRetratoUrl = heroe.retratoUrl();
             fila.heroeNivel = heroe.nivel();
             fila.heroeVidaActual = heroe.vidaActual();
@@ -201,6 +211,8 @@ class SalaEntidad {
                     && java.util.Objects.equals(apodo, ficha.apodo)
                     && java.util.Objects.equals(heroeId, ficha.heroeId)
                     && java.util.Objects.equals(heroeNombre, ficha.heroeNombre)
+                    && java.util.Objects.equals(heroePrototipo, ficha.heroePrototipo)
+                    && java.util.Objects.equals(heroeDefensa, ficha.heroeDefensa)
                     && java.util.Objects.equals(heroeRetratoUrl, ficha.heroeRetratoUrl)
                     && java.util.Objects.equals(heroeNivel, ficha.heroeNivel)
                     && java.util.Objects.equals(heroeVidaActual, ficha.heroeVidaActual)
@@ -209,7 +221,8 @@ class SalaEntidad {
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(conFicha, apodo, heroeId, heroeNombre, heroeRetratoUrl,
+            return java.util.Objects.hash(conFicha, apodo, heroeId, heroeNombre, heroePrototipo, heroeDefensa,
+                    heroeRetratoUrl,
                     heroeNivel, heroeVidaActual, heroeVidaMaxima);
         }
 
@@ -219,8 +232,8 @@ class SalaEntidad {
                 return null;
             }
             return new FichaDeParticipante(apodo, new HeroeDeCombate(
-                    heroeId, heroeNombre, heroeRetratoUrl, heroeNivel,
-                    heroeVidaActual, heroeVidaMaxima));
+                    heroeId, heroeNombre, heroePrototipo, heroeRetratoUrl, heroeNivel,
+                    heroeVidaActual, heroeVidaMaxima, heroeDefensa));
         }
     }
 

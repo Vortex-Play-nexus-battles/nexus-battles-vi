@@ -68,6 +68,21 @@ salas:
   inventario:
     url: ${INVENTARIO_BASE_URL:http://localhost:8080}
 
+  # El prototipo del heroe, que es lo unico que motor-combate sabe buscar en el
+  # catalogo. Inventario lo resuelve por dentro pero no lo publica; productos si
+  # lo expone en GET /api/v1/productos/{id}, y es lectura publica. Sin esta URL
+  # el combate degrada al comportamiento anterior a V8 -mandar el nombre propio
+  # al motor, que responde 404-, pero entrar a la sala sigue funcionando.
+  productos:
+    url: ${PRODUCTOS_BASE_URL:http://localhost:8080}
+
+  # La DEFENSA del prototipo. El motor acierta si la tirada supera la defensa
+  # del objetivo; mandandole la vida en su lugar -44 en "Guerrero Tanque",
+  # contra un ataque maximo de 16- ningun golpe acertaba NUNCA. Misma ruta que
+  # ya consume inventario para las estadisticas: GET /api/v1/heroes/{prototipo}.
+  heroes:
+    url: ${HEROES_BASE_URL:http://localhost:8080}
+
 # Chat de HU-JUE-015. La lista negra es la de HU-ADM-002 (moderacion-sanciones).
 chat:
   lista-negra:

@@ -51,7 +51,7 @@ public class ClienteMotorCombate implements MotorDeCombate {
         try {
             Respuesta respuesta = http.post()
                     .uri(base + "/api/v1/combate/ataques")
-                    .body(new Peticion(atacante.nombre(), defensaDe(objetivo),
+                    .body(new Peticion(nombreParaElMotor(atacante), defensaDe(objetivo),
                             new Peticion.Distribucion(PROTOTIPO_POR_DEFECTO)))
                     .retrieve()
                     .body(Respuesta.class);
@@ -70,21 +70,47 @@ public class ClienteMotorCombate implements MotorDeCombate {
     /**
      * Defensa del objetivo.
      *
-     * <p><b>Aqui hay una simplificacion consciente.</b> La defensa real de un
-     * heroe la publica el catalogo (`GET /api/v1/heroes/{nombre}`), y este
-     * servicio no la guarda: la ficha que conserva de cada participante lleva
-     * vida, no defensa. Mandar su vida actual como defensa es lo mas cercano
-     * que se puede hacer sin inventar un numero ni anadir aqui una integracion
-     * con el catalogo que pertenece al motor.
+     * <p><b>La simplificacion que habia aqui hacia el combate imposible.</b> Se
+     * mandaba la vida actual del objetivo como defensa, anotado como
+     * aproximacion consciente. Pero el motor acierta si
+     * {@code ataqueResuelto > defensa}, y los dos numeros no estan en la misma
+     * escala ni de lejos: «Guerrero Tanque» ataca con {@code 10+1d6} —de 11 a
+     * 16— y tiene 44 de vida. Ningun golpe podia acertar <b>nunca</b>, con
+     * ningun prototipo, porque la vida de todos esta muy por encima de
+     * cualquier tirada. No era una aproximacion: era un tope insuperable, y el
+     * combate entero no funcionaba. Lo destapo el E2E del corte vertical, que
+     * recibia {@code SIN_EFECTO} en cada golpe.
      *
-     * <p>Consecuencia observable: un heroe herido se defiende peor. No es una
-     * regla acordada en ninguna HU —queda anotada como pendiente—, pero es
-     * determinable y coherente, y no falsea ninguna estadistica. Cuando el
-     * motor acepte el nombre del objetivo y consulte su defensa al catalogo
-     * -como ya hace con el atacante-, esta linea desaparece.
+     * <p>Ahora se manda la defensa de verdad, la del prototipo, que
+     * {@code ClienteInventarioHeroes} resuelve contra el catalogo de heroes al
+     * construir la ficha. Cuando no se conoce —fichas anteriores a V8, o el
+     * catalogo sin contestar— se cae a la vida, que es lo que habia: se degrada
+     * al comportamiento anterior en vez de mandar un numero inventado.
      */
     private static int defensaDe(HeroeDeCombate objetivo) {
-        return objetivo.vidaActual();
+        Integer defensa = objetivo.defensa();
+        return defensa == null ? objetivo.vidaActual() : defensa;
+    }
+
+    /**
+     * Lo que el motor busca en el catalogo: el <b>prototipo</b>, no el nombre.
+     *
+     * <p>El motor resuelve al atacante con {@code GET /api/v1/heroes/{nombre}},
+     * y ese catalogo indexa por prototipo —«Guerrero Tanque»—. Aqui se mandaba
+     * {@code atacante.nombre()}, que es el nombre propio que le puso su dueno
+     * —«Aquiles»—: el catalogo devolvia 404 y <b>ningun ataque se resolvia</b>.
+     * El fallo era invisible porque el error viajaba a la cola privada del
+     * jugador, que la vista no escuchaba. Lo destapo el E2E del corte vertical.
+     *
+     * <p>El prototipo lo resuelve {@code ClienteInventarioHeroes} contra
+     * productos al construir la ficha. Cuando no se conoce —fichas anteriores a
+     * V8, o productos sin contestar— se manda el nombre, que es lo que habia:
+     * funciona si el heroe se llama como su prototipo y falla igual que antes si
+     * no. Es peor callar el caso que degradar al comportamiento anterior.
+     */
+    private static String nombreParaElMotor(HeroeDeCombate atacante) {
+        String prototipo = atacante.prototipo();
+        return prototipo == null || prototipo.isBlank() ? atacante.nombre() : prototipo;
     }
 
     /** Espejo de {@code PeticionDeAtaque} del contrato del motor. */
