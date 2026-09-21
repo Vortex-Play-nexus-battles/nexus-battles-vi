@@ -16,6 +16,37 @@ servers:
     description: Entorno local de desarrollo
 paths:
   /products/{productId}/comments:
+    get:
+      summary: Leer el hilo de comentarios de un producto
+      operationId: consultarHilo
+      description: >
+        Devuelve los comentarios PUBLICADOS de un producto, del mas antiguo al
+        mas reciente, junto con el promedio de calificacion en cinco estrellas.
+        Es el lado proveedor de HU-INV-014 (la ficha de producto pinta este
+        hilo) y cierra el criterio CA-01 de HU-COM-001: un comentario "se suma
+        al hilo", y el hilo tiene que poder leerse.
+
+        Los comentarios EN_REVISION no salen: estan a la espera de un
+        moderador y no son publicos. No mueven el promedio.
+
+        Un producto sin comentarios responde 200 con la lista vacia y sin
+        promedio, nunca 404: no tener comentarios es un estado normal de un
+        producto, no un error, y la ficha lo pinta como estado vacio. La
+        existencia del producto no se verifica contra el catalogo, igual que
+        en la publicacion.
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: El hilo del producto, aunque este vacio
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HiloDeComentariosResponse"
     post:
       summary: Publicar un comentario sobre un producto
       operationId: publicarComentario
@@ -158,6 +189,38 @@ components:
           enum:
             - PUBLICADO
             - EN_REVISION
+
+    HiloDeComentariosResponse:
+      type: object
+      required:
+        - productoId
+        - comentarios
+        - total
+        - totalCalificaciones
+      properties:
+        productoId:
+          type: string
+        comentarios:
+          type: array
+          description: Solo los PUBLICADOS, del mas antiguo al mas reciente.
+          items:
+            $ref: "#/components/schemas/ComentarioResponse"
+        total:
+          type: integer
+          description: Cuantos comentarios trae la lista.
+        calificacionPromedio:
+          type:
+            - number
+            - "null"
+          minimum: 1
+          maximum: 5
+          description: >
+            Promedio de las estrellas de los comentarios publicados que
+            calificaron, con dos decimales. Nulo si nadie ha calificado: la
+            ficha debe mostrar "sin valoraciones", no un cero.
+        totalCalificaciones:
+          type: integer
+          description: Cuantos de los comentarios publicados traen estrellas.
 
     ProblemDetail:
       type: object

@@ -4,12 +4,14 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.OptionalDouble;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -148,5 +150,44 @@ class ComentariosControllerTest {
         mvc.perform(post(RUTA).contentType(MediaType.APPLICATION_JSON).content(CUERPO))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value(409));
+    }
+
+    // ---- Lectura del hilo (#438, lado proveedor de HU-INV-014) ----
+
+    @Test
+    @DisplayName("el hilo de un producto responde 200 con sus comentarios y el promedio")
+    void hiloResponde200ConPromedio() throws Exception {
+        when(servicio.consultarHilo("espada-del-alba"))
+                .thenReturn(new ServicioDePublicacionDeComentarios.HiloConsultado(
+                        "espada-del-alba",
+                        List.of(comentario(Comentario.Estado.PUBLICADO, 4)),
+                        OptionalDouble.of(4.0),
+                        1));
+
+        mvc.perform(get(RUTA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.productoId").value("espada-del-alba"))
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.comentarios[0].id").value("com-1"))
+                .andExpect(jsonPath("$.comentarios[0].apodoAutor").value("LyraRoja"))
+                .andExpect(jsonPath("$.calificacionPromedio").value(4.0))
+                .andExpect(jsonPath("$.totalCalificaciones").value(1));
+    }
+
+    @Test
+    @DisplayName("un producto sin comentarios responde 200 vacio y promedio nulo, nunca 404")
+    void hiloVacioNoEs404() throws Exception {
+        // Criterio CA-03 de HU-INV-014: "sin valoraciones -> estado vacio,
+        // nunca error". No tener comentarios es normal, no un fallo.
+        when(servicio.consultarHilo("espada-del-alba"))
+                .thenReturn(new ServicioDePublicacionDeComentarios.HiloConsultado(
+                        "espada-del-alba", List.of(), OptionalDouble.empty(), 0));
+
+        mvc.perform(get(RUTA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.comentarios").isEmpty())
+                .andExpect(jsonPath("$.total").value(0))
+                .andExpect(jsonPath("$.calificacionPromedio").value((Object) null))
+                .andExpect(jsonPath("$.totalCalificaciones").value(0));
     }
 }

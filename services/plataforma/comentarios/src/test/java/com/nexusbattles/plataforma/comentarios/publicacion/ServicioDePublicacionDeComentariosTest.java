@@ -133,4 +133,55 @@ class ServicioDePublicacionDeComentariosTest {
 
         verify(repositorio, never()).save(any(RegistroDeComentario.class));
     }
+
+    // ------------------------------------------------------------------
+    // Lectura del hilo (#438): el lado proveedor de HU-INV-014 y el CA-01 de
+    // HU-COM-001 -"se suma al hilo"-, que solo se puede afirmar si el hilo
+    // se puede leer. El dominio ya sabia hacerlo (visibles, promedio); esto
+    // solo lo expone.
+    // ------------------------------------------------------------------
+
+    private static RegistroDeComentario guardadoCon(
+            String id, String autorId, Integer estrellas, Comentario.Estado estado) {
+        return RegistroDeComentario.desde(new Comentario(
+                id, "espada-del-alba", autorId, "Apodo-" + autorId,
+                "texto", List.of(), estrellas, AYER, estado));
+    }
+
+    @Test
+    @DisplayName("un producto sin comentarios responde un hilo vacio, no un error")
+    void hiloVacio() {
+        when(repositorio.findByProductoIdOrderByFechaPublicacionAsc("espada-del-alba"))
+                .thenReturn(List.of());
+
+        ServicioDePublicacionDeComentarios.HiloConsultado hilo =
+                servicio.consultarHilo("espada-del-alba");
+
+        assertEquals("espada-del-alba", hilo.productoId());
+        assertTrue(hilo.comentarios().isEmpty());
+        assertTrue(hilo.calificacionPromedio().isEmpty());
+        assertEquals(0, hilo.totalCalificaciones());
+    }
+
+    @Test
+    @DisplayName("el hilo trae solo lo publicado, en orden, y promedia solo esas estrellas")
+    void hiloConPublicadosYRetenidos() {
+        when(repositorio.findByProductoIdOrderByFechaPublicacionAsc("espada-del-alba"))
+                .thenReturn(List.of(
+                        guardadoCon("c1", "jugador-1", 4, Comentario.Estado.PUBLICADO),
+                        // Retenido: reserva la calificacion de su autor pero NO
+                        // es publico ni mueve el promedio.
+                        guardadoCon("c2", "jugador-2", 1, Comentario.Estado.EN_REVISION),
+                        guardadoCon("c3", "jugador-3", 5, Comentario.Estado.PUBLICADO),
+                        // Segundo comentario de jugador-1: sin estrellas.
+                        guardadoCon("c4", "jugador-1", null, Comentario.Estado.PUBLICADO)));
+
+        ServicioDePublicacionDeComentarios.HiloConsultado hilo =
+                servicio.consultarHilo("espada-del-alba");
+
+        assertEquals(List.of("c1", "c3", "c4"),
+                hilo.comentarios().stream().map(Comentario::id).toList());
+        assertEquals(4.5, hilo.calificacionPromedio().orElseThrow(), 0.0001);
+        assertEquals(2, hilo.totalCalificaciones());
+    }
 }

@@ -2,6 +2,7 @@ package com.nexusbattles.plataforma.comentarios.publicacion;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.OptionalDouble;
 import java.util.Set;
 import java.util.UUID;
 
@@ -87,5 +88,57 @@ public class ServicioDePublicacionDeComentarios {
 
         repositorio.save(RegistroDeComentario.desde(comentario));
         return comentario;
+    }
+
+    /**
+     * El hilo de un producto tal como lo ven los jugadores.
+     *
+     * <p>Lado proveedor de HU-INV-014 (la ficha pinta esto) y lo que hace
+     * afirmable el CA-01 de HU-COM-001: un comentario «se suma al hilo» solo
+     * se puede comprobar si el hilo se puede leer. Hasta #438 solo existia el
+     * POST, asi que lo publicado no lo veia nadie, ni su autor tras recargar.
+     *
+     * <p>No repite reglas: {@link HiloDeComentarios#visibles()} decide que es
+     * publico y {@link HiloDeComentarios#promedio()} que califica. Un
+     * comentario retenido por el filtro no sale ni mueve el promedio.
+     *
+     * <p>Un producto sin comentarios devuelve un hilo vacio, no un error: no
+     * tener comentarios es un estado normal de un producto.
+     */
+    @Transactional(readOnly = true)
+    public HiloConsultado consultarHilo(String productoId) {
+        List<Comentario> existentes = repositorio
+                .findByProductoIdOrderByFechaPublicacionAsc(productoId)
+                .stream()
+                .map(RegistroDeComentario::aDominio)
+                .toList();
+
+        HiloDeComentarios hilo =
+                HiloDeComentarios.reconstituir(productoId, formatosAdmitidos, existentes);
+
+        List<Comentario> visibles = hilo.visibles();
+        long calificaciones = visibles.stream()
+                .filter(comentario -> comentario.calificacion().isPresent())
+                .count();
+
+        return new HiloConsultado(productoId, visibles, hilo.promedio(), (int) calificaciones);
+    }
+
+    /**
+     * Resultado de la consulta del hilo.
+     *
+     * @param productoId           producto consultado
+     * @param comentarios          solo los publicados, del mas antiguo al mas reciente
+     * @param calificacionPromedio promedio de estrellas de los publicados que
+     *                             calificaron; vacio si nadie lo ha hecho, que la
+     *                             ficha debe pintar como «sin valoraciones» y no
+     *                             como cero
+     * @param totalCalificaciones  cuantos de los publicados traen estrellas
+     */
+    public record HiloConsultado(
+            String productoId,
+            List<Comentario> comentarios,
+            OptionalDouble calificacionPromedio,
+            int totalCalificaciones) {
     }
 }
