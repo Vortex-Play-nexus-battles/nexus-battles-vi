@@ -39,6 +39,12 @@ public class RecolectorDeActuator implements RecolectorDeMetricas {
             Optional<Metrica> errores = leer(base + "/metrics/http.server.requests?tag=outcome:SERVER_ERROR");
             Optional<Metrica> cpu = leer(base + "/metrics/process.cpu.usage");
             Optional<Metrica> memoria = leer(base + "/metrics/jvm.memory.used");
+            if (cpu.isEmpty() && memoria.isEmpty() && peticiones.isEmpty()) {
+                // La JVM siempre tiene cpu y memoria: si no hay NINGUNA, el
+                // servicio no expone /actuator/metrics. Eso es una brecha
+                // (regla 3 de plataforma), no un servicio sin trafico.
+                return MetricasDeServicio.brecha(servicio, "no expone /actuator/metrics (regla 3 de plataforma)");
+            }
             long total = peticiones.map(m -> (long) m.valor("COUNT")).orElse(0L);
             double tiempoTotalS = peticiones.map(m -> m.valor("TOTAL_TIME")).orElse(0d);
             Double maximoMs = peticiones.map(m -> m.valor("MAX") * 1000d).orElse(null);

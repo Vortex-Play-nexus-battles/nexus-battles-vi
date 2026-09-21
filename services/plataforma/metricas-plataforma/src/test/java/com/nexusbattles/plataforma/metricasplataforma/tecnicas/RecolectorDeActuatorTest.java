@@ -7,6 +7,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
@@ -42,6 +44,19 @@ class RecolectorDeActuatorTest {
         assertThat(m.errores5xx()).isEqualTo(4);
         assertThat(m.cpu()).isEqualTo(0.42);
         assertThat(m.memoriaMb()).isEqualTo(200d);
+        servidor.verify();
+    }
+
+    @Test
+    @DisplayName("sin ninguna metrica de la JVM el servicio no expone /actuator/metrics: brecha por la regla 3")
+    void sinMetricsExpuesto() {
+        for (String ruta : List.of("http.server.requests", "http.server.requests?tag=outcome:SERVER_ERROR",
+                "process.cpu.usage", "jvm.memory.used")) {
+            servidor.expect(requestTo("http://srv-w:8081/actuator/metrics/" + ruta)).andRespond(withStatus(HttpStatus.NOT_FOUND));
+        }
+        MetricasDeServicio m = recolector.recolectar("comentarios", "http://srv-w:8081/actuator/health");
+        assertThat(m.recolectado()).isFalse();
+        assertThat(m.brecha()).contains("regla 3");
         servidor.verify();
     }
 
