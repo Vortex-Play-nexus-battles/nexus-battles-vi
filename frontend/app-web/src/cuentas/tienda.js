@@ -32,13 +32,15 @@ import { usuarioIdDeSesion } from '../comun/identidad.js';
 /**
  * Cabeceras de cada petición.
  *
- * La identidad ya no viaja en `X-User-Id`: `ms-ecommerce` toma el usuario del
- * `uid` del JWT, que `fetchWithHttpErrorInterceptor` pone en `Authorization`
- * (ADR-002). Una cabecera que el navegador escribía no identificaba a nadie.
- * Sin sesión el backend responde 401, y el carrito de nadie se mezcla.
+ * `X-User-Id` lo exige `CarritoController` de `ms-ecommerce`, así que se manda;
+ * lo que cambia es que ahora lleva **al usuario de verdad**. Sin sesión se
+ * omite: mejor que el backend responda 400 a que el carrito de alguien se
+ * mezcle con el de otro.
  */
 function cabeceras() {
-  return { 'Content-Type': 'application/json' };
+  const usuario = usuarioIdDeSesion();
+  const base = { 'Content-Type': 'application/json' };
+  return usuario ? { ...base, 'X-User-Id': usuario } : base;
 }
 
 /** @returns {boolean} true si hay una sesión utilizable */
