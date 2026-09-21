@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
@@ -95,8 +96,12 @@ class ClienteCreditosTest {
         @Test
         @DisplayName("CA-02: un 422 se traduce a CreditosInsuficientes con el saldo consultado aparte")
         void saldoInsuficiente() {
+            // HttpStatusCode.valueOf(422), no la constante: asi llega desde una
+            // respuesta HTTP real, y en Spring 7 resuelve a UNPROCESSABLE_CONTENT,
+            // no a UNPROCESSABLE_ENTITY. Con la constante esta prueba pasaba y el
+            // E2E fallaba.
             libro.expect(requestTo(BASE + "/creditos/reservar"))
-                    .andRespond(withStatus(HttpStatus.UNPROCESSABLE_ENTITY)
+                    .andRespond(withStatus(HttpStatusCode.valueOf(422))
                             .contentType(MediaType.APPLICATION_PROBLEM_JSON)
                             .body("""
                                     {"type":"https://nexusbattles.upb.edu.co/errors/saldo-insuficiente",
@@ -123,7 +128,7 @@ class ClienteCreditosTest {
         @DisplayName("si tras el 422 tampoco se puede leer el saldo, sigue siendo 422 (con 0 disponibles)")
         void saldoInsuficienteSinPoderLeerElSaldo() {
             libro.expect(requestTo(BASE + "/creditos/reservar"))
-                    .andRespond(withStatus(HttpStatus.UNPROCESSABLE_ENTITY));
+                    .andRespond(withStatus(HttpStatusCode.valueOf(422)));
             libro.expect(requestTo(BASE + "/creditos/" + JUGADOR + "/saldo"))
                     .andRespond(withServerError());
 

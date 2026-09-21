@@ -72,6 +72,21 @@ async function salaActual(api, quien, id) {
   return r.json();
 }
 
+/**
+ * Crea la sala, corre el cuerpo y la cancela PASE LO QUE PASE. Si una
+ * afirmacion falla a medias, la reserva de la anfitriona vuelve igual: una
+ * sala huerfana aqui dejaria creditos comprometidos que las demas pruebas
+ * verian como saldo reservado ajeno.
+ */
+async function conSala(api, quien, recompensaCreditos, cuerpo) {
+  const sala = await crearSala(api, quien, recompensaCreditos);
+  try {
+    await cuerpo(sala);
+  } finally {
+    await api.delete(`/api/v1/salas/${sala.id}`, { headers: conToken(quien.token) });
+  }
+}
+
 test.describe('Apuesta de creditos (HU-JUE-014)', () => {
   test.describe.configure({ mode: 'serial' });
 
@@ -92,53 +107,50 @@ test.describe('Apuesta de creditos (HU-JUE-014)', () => {
   });
 
   test('CA-02: sin saldo no se entra; el 422 dice cuanto hay y cuanto falta, y la sala no cambia', async () => {
-    const sala = await crearSala(api, anfitriona, APUESTA);
-    // `pobre_e2e` tiene heroe (lo siembra sembrar.sh) y CERO creditos: si
-    // no tuviera heroe, la puerta de heroe lo pararia antes con otro 422.
-    expect((await saldoDe(api, pobre.claims.uid)).disponible).toBe(0);
+    await conSala(api, anfitriona, APUESTA, async (sala) => {
+      // `pobre_e2e` tiene heroe (lo siembra sembrar.sh) y CERO creditos: si
+      // no tuviera heroe, la puerta de heroe lo pararia antes con otro 422.
+      expect((await saldoDe(api, pobre.claims.uid)).disponible).toBe(0);
 
-    const r = await api.post(`/api/v1/salas/${sala.id}/participantes`, {
-      headers: conToken(pobre.token),
+      const r = await api.post(`/api/v1/salas/${sala.id}/participantes`, {
+        headers: conToken(pobre.token),
+      });
+
+      expect(r.status(), `ingreso sin saldo: ${await r.text()}`).toBe(422);
+      const problema = await r.json();
+      expect(problema.type).toBe('https://nexusbattles.local/errores/creditos-insuficientes');
+      expect(problema.detail).toMatch(new RegExp(`Tienes 0 creditos y necesitas ${APUESTA}`));
+      expect((await salaActual(api, anfitriona, sala.id)).ocupacion).toBe(1);
+      expect((await saldoDe(api, pobre.claims.uid)).reservado).toBe(0);
     });
-
-    expect(r.status(), `ingreso sin saldo: ${await r.text()}`).toBe(422);
-    const problema = await r.json();
-    expect(problema.type).toBe('https://nexusbattles.local/errores/creditos-insuficientes');
-    expect(problema.detail).toMatch(new RegExp(`Tienes 0 creditos y necesitas ${APUESTA}`));
-    expect((await salaActual(api, anfitriona, sala.id)).ocupacion).toBe(1);
-    expect((await saldoDe(api, pobre.claims.uid)).reservado).toBe(0);
-
-    // Limpieza: se cancela para que la reserva de la anfitriona vuelva.
-    await api.delete(`/api/v1/salas/${sala.id}`, { headers: conToken(anfitriona.token) });
   });
 
   test('CA-03: quien abandona antes de empezar recupera su reserva, y al volver a entrar reserva de nuevo', async () => {
-    const sala = await crearSala(api, anfitriona, APUESTA);
-    const antes = await saldoDe(api, invitado.claims.uid);
+    await conSala(api, anfitriona, APUESTA, async (sala) => {
+      const antes = await saldoDe(api, invitado.claims.uid);
 
-    const entrada = await api.post(`/api/v1/salas/${sala.id}/participantes`, {
-      headers: conToken(invitado.token),
+      const entrada = await api.post(`/api/v1/salas/${sala.id}/participantes`, {
+        headers: conToken(invitado.token),
+      });
+      expect(entrada.status(), await entrada.text()).toBe(200);
+      expect((await saldoDe(api, invitado.claims.uid)).reservado).toBe(antes.reservado + APUESTA);
+
+      const salida = await api.delete(`/api/v1/salas/${sala.id}/participantes`, {
+        headers: conToken(invitado.token),
+      });
+      expect(salida.status(), await salida.text()).toBe(204);
+      const tras = await saldoDe(api, invitado.claims.uid);
+      expect(tras.reservado).toBe(antes.reservado);
+      expect(tras.disponible).toBe(antes.disponible);
+      expect((await salaActual(api, anfitriona, sala.id)).ocupacion).toBe(1);
+
+      // Vuelve a entrar: reserva NUEVA, no la que ya se le devolvio.
+      const otraVez = await api.post(`/api/v1/salas/${sala.id}/participantes`, {
+        headers: conToken(invitado.token),
+      });
+      expect(otraVez.status(), await otraVez.text()).toBe(200);
+      expect((await saldoDe(api, invitado.claims.uid)).reservado).toBe(antes.reservado + APUESTA);
     });
-    expect(entrada.status(), await entrada.text()).toBe(200);
-    expect((await saldoDe(api, invitado.claims.uid)).reservado).toBe(antes.reservado + APUESTA);
-
-    const salida = await api.delete(`/api/v1/salas/${sala.id}/participantes`, {
-      headers: conToken(invitado.token),
-    });
-    expect(salida.status(), await salida.text()).toBe(204);
-    const tras = await saldoDe(api, invitado.claims.uid);
-    expect(tras.reservado).toBe(antes.reservado);
-    expect(tras.disponible).toBe(antes.disponible);
-    expect((await salaActual(api, anfitriona, sala.id)).ocupacion).toBe(1);
-
-    // Vuelve a entrar: reserva NUEVA, no la que ya se le devolvio.
-    const otraVez = await api.post(`/api/v1/salas/${sala.id}/participantes`, {
-      headers: conToken(invitado.token),
-    });
-    expect(otraVez.status(), await otraVez.text()).toBe(200);
-    expect((await saldoDe(api, invitado.claims.uid)).reservado).toBe(antes.reservado + APUESTA);
-
-    await api.delete(`/api/v1/salas/${sala.id}`, { headers: conToken(anfitriona.token) });
   });
 
   test('CA-03: cancelar la sala devuelve la reserva de TODOS los participantes', async () => {
@@ -168,19 +180,18 @@ test.describe('Apuesta de creditos (HU-JUE-014)', () => {
 
   test('CA-05: una sala sin recompensa no toca el libro de creditos', async () => {
     const antes = await saldoDe(api, anfitriona.claims.uid);
-    const sala = await crearSala(api, anfitriona, 0);
-    const entrada = await api.post(`/api/v1/salas/${sala.id}/participantes`, {
-      headers: conToken(invitado.token),
-    });
-    expect(entrada.status(), await entrada.text()).toBe(200);
+    await conSala(api, anfitriona, 0, async (sala) => {
+      const entrada = await api.post(`/api/v1/salas/${sala.id}/participantes`, {
+        headers: conToken(invitado.token),
+      });
+      expect(entrada.status(), await entrada.text()).toBe(200);
 
-    expect(await saldoDe(api, anfitriona.claims.uid)).toEqual(antes);
-    // Y el pobre, sin un credito, entra igual: no hay nada que reservar.
-    const elPobre = await api.post(`/api/v1/salas/${sala.id}/participantes`, {
-      headers: conToken(pobre.token),
+      expect(await saldoDe(api, anfitriona.claims.uid)).toEqual(antes);
+      // Y el pobre, sin un credito, entra igual: no hay nada que reservar.
+      const elPobre = await api.post(`/api/v1/salas/${sala.id}/participantes`, {
+        headers: conToken(pobre.token),
+      });
+      expect(elPobre.status(), await elPobre.text()).toBe(200);
     });
-    expect(elPobre.status(), await elPobre.text()).toBe(200);
-
-    await api.delete(`/api/v1/salas/${sala.id}`, { headers: conToken(anfitriona.token) });
   });
 });

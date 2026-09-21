@@ -5,7 +5,6 @@ import com.nexusbattles.plataforma.salaspartidas.aplicacion.CreditosDelJugador;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ReservaDeCreditos;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CreditosInsuficientes;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CreditosNoDisponibles;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -52,6 +51,9 @@ public class ClienteCreditos implements CreditosDelJugador {
 
     static final String CONCEPTO = "apuesta-sala";
 
+    /** Codigo con el que creditos.yaml responde «saldo insuficiente». */
+    static final int SALDO_INSUFICIENTE = 422;
+
     private final RestClient http;
     private final String base;
 
@@ -85,7 +87,11 @@ public class ClienteCreditos implements CreditosDelJugador {
             return new ReservaDeCreditos(respuesta.reservaId(), enteros(respuesta.monto()));
 
         } catch (HttpClientErrorException error) {
-            if (error.getStatusCode() == HttpStatus.UNPROCESSABLE_ENTITY) {
+            // Por valor, no por constante: Spring 7 tiene dos constantes para
+            // 422 (UNPROCESSABLE_CONTENT y la vieja UNPROCESSABLE_ENTITY) y una
+            // respuesta real resuelve a la primera. Con `==` el 422 del libro
+            // se convertia en 503 — lo destapo el E2E.
+            if (error.getStatusCode().value() == SALDO_INSUFICIENTE) {
                 throw new CreditosInsuficientes(saldoDisponibleDe(idJugador), creditos);
             }
             throw new CreditosNoDisponibles("el libro rechazo la reserva con " + error.getStatusCode().value());

@@ -101,8 +101,9 @@ test.describe('Sala de batalla de punta a punta', () => {
   let invitado;
   let sala;
   let partida;
-  /** Saldo bruto por uid justo antes de iniciar la partida (HU-JUE-014). */
+  /** Saldo bruto y reservado por uid justo antes de iniciar la partida (HU-JUE-014). */
   const brutoAlEmpezar = {};
+  const reservadoAlEmpezar = {};
 
   test.beforeAll(async () => {
     api = await apiRequest.newContext({ baseURL: BORDE });
@@ -257,6 +258,7 @@ test.describe('Sala de batalla de punta a punta', () => {
     // de héroe lo rechazaría con un 422 antes de mirar el código, y esta
     // prueba no estaría probando el código.
     const otro = await sesionDe(api, CURIOSO);
+    const reservadoAntes = (await saldoDe(api, otro.claims.uid)).reservado;
     const r = await api.post(`/api/v1/salas/${sala.id}/participantes`, {
       headers: conToken(otro.token),
       data: { codigoInvitacion: 'NO-ES-ESTE' },
@@ -274,7 +276,7 @@ test.describe('Sala de batalla de punta a punta', () => {
     expect((await despues.json()).ocupacion).toBe(2);
     // HU-JUE-014: un ingreso rechazado no deja creditos comprometidos. La
     // reserva se hizo antes de que la sala dijera que no, y se devolvio.
-    expect((await saldoDe(api, otro.claims.uid)).reservado).toBe(0);
+    expect((await saldoDe(api, otro.claims.uid)).reservado).toBe(reservadoAntes);
   });
 
   // ===================================================================
@@ -282,10 +284,16 @@ test.describe('Sala de batalla de punta a punta', () => {
   // ===================================================================
 
   test('al iniciar, la partida reparte turnos y los dos entran a plena vida', async () => {
-    // Foto del saldo bruto de cada uno ANTES de jugar: la liquidacion de
-    // HU-JUE-014 se afirma contra esto al final.
+    // Foto del saldo de cada uno ANTES de jugar: la liquidacion de HU-JUE-014
+    // se afirma contra esto al final. Tambien lo reservado: en este momento
+    // los dos tienen comprometida la apuesta de ESTA sala, y al final debe
+    // haber bajado exactamente eso — no «ser cero», porque otra prueba que
+    // fallara a medias dejaria reservas de otras salas y este flujo no tiene
+    // por que pagarlo.
     for (const j of [anfitriona, invitado]) {
-      brutoAlEmpezar[j.claims.uid] = (await saldoDe(api, j.claims.uid)).bruto;
+      const saldo = await saldoDe(api, j.claims.uid);
+      brutoAlEmpezar[j.claims.uid] = saldo.bruto;
+      reservadoAlEmpezar[j.claims.uid] = saldo.reservado;
     }
 
     const r = await api.post(`/api/v1/salas/${sala.id}/partida`, {
@@ -749,14 +757,16 @@ test.describe('Sala de batalla de punta a punta', () => {
         timeout: 20000,
         message: 'la reserva del ganador no se libero',
       })
-      .toBe(0);
+      .toBe(reservadoAlEmpezar[ganador.claims.uid] - APUESTA);
     const delGanador = await saldoDe(api, ganador.claims.uid);
     const delPerdedor = await saldoDe(api, perdedor.claims.uid);
     // Relativo a lo que tenian al empezar la partida, no a la semilla: asi la
     // afirmacion vale tambien en un banco reutilizado de una corrida anterior.
     expect(delGanador.bruto).toBe(brutoAlEmpezar[ganador.claims.uid] + APUESTA);
     expect(delPerdedor.bruto).toBe(brutoAlEmpezar[perdedor.claims.uid] - APUESTA);
-    expect(delPerdedor.reservado).toBe(0);
+    // Al perdedor se le cobro la reserva (consumida), no se le devolvio: en
+    // cualquiera de los dos casos deja de estar reservada.
+    expect(delPerdedor.reservado).toBe(reservadoAlEmpezar[perdedor.claims.uid] - APUESTA);
 
     await expect(page.locator('[data-zona="resultado"]')).toHaveText(
       new RegExp(`(llevas|pierdes los) ${APUESTA} creditos`, 'i'),
