@@ -140,8 +140,11 @@
         background: var(--color-error);
       }
     </style>
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
   </head>
   <body>
+    <div data-cabecera-app></div>
     <header>Panel de administración — Lista negra de términos</header>
 
     <main>
@@ -169,5 +172,14 @@
     </main>
 
     <script type="module" src="./lista-negra-admin.js"></script>
+    <script type="module">
+      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+
+      if (!exigirSesion()) {
+        throw new Error('sin sesion: redirigiendo al login');
+      }
+      // Cabecera unica de la aplicacion (HU-UX-001).
+      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'cuenta' });
+    </script>
   </body>
 </html>

@@ -27,73 +27,7 @@
       Esta marca se repite en cada vista mientras no exista una forma acordada
       de compartir fragmentos de HTML sin framework. Decision de equipo.
     -->
-    <header class="cabecera">
-      <div class="cabecera__grupo-marca">
-        <span class="cabecera__marca">NEXUS BATTLES VI</span>
-        <nav class="cabecera__nav" aria-label="Navegacion principal">
-          <a class="cabecera__destino" href="./batallas.html">Jugar online</a>
-          <a
-            class="cabecera__destino cabecera__destino--pendiente"
-            aria-disabled="true"
-            data-pendiente="grupo-alpha"
-            title="Todavia no publicada: grupo-alpha"
-            >Misiones</a
-          >
-          <a
-            class="cabecera__destino cabecera__destino--pendiente"
-            aria-disabled="true"
-            data-pendiente="HU-TOR, sprint 3"
-            title="Todavia no publicada: HU-TOR, sprint 3"
-            >Torneo</a
-          >
-          <a class="cabecera__destino" href="../../contenido/inventario/inventario.html"
-            >Mi inventario</a
-          >
-          <a class="cabecera__destino" href="../../cuentas/subastas.html">Subasta</a>
-        </nav>
-      </div>
-
-      <label class="cabecera__buscador">
-        <svg class="icono icono--menudo" aria-hidden="true">
-          <use href="../../../../../shared/ui-kit/iconos/sprite.svg#buscar" />
-        </svg>
-        <span class="solo-lectores">Buscar productos</span>
-        <input class="cabecera__buscador-texto" type="search" placeholder="Buscar productos" />
-      </label>
-
-      <div class="cabecera__acciones">
-        <!--
-          Sin datos de ejemplo en la cabecera. El saldo se pinta cuando exista
-          el contrato de creditos (#29); hasta entonces el dato queda oculto en
-          vez de mostrar un numero inventado.
-        -->
-        <span class="cabecera__dato" data-zona="creditos" hidden>
-          <svg class="icono icono--menudo" aria-hidden="true">
-            <use href="../../../../../shared/ui-kit/iconos/sprite.svg#moneda" />
-          </svg>
-          <span data-zona="saldo"></span>
-        </span>
-
-        <a
-          class="cabecera__campana"
-          href="../notificaciones/notificaciones.html"
-          aria-label="Notificaciones"
-        >
-          <svg class="icono" aria-hidden="true">
-            <use href="../../../../../shared/ui-kit/iconos/sprite.svg#campana" />
-          </svg>
-          <span class="cabecera__contador" data-zona="contador" aria-hidden="true" hidden>0</span>
-        </a>
-
-        <span class="cabecera__cuenta">
-          <span class="cabecera__avatar" aria-hidden="true"></span>
-          <span class="cabecera__identidad">
-            <!-- El apodo lo escribe el login en sessionStorage (nexus.apodoActual). -->
-            <span class="cabecera__apodo" data-zona="apodo"></span>
-          </span>
-        </span>
-      </div>
-    </header>
+    <div data-cabecera-app></div>
 
     <main class="pagina pila">
       <div class="pila pila--compacta">
@@ -258,10 +192,14 @@
 
     <script type="module">
       import { montarCrearSala } from './crear-sala.js';
+      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
 
-      // Cabecera: solo lo que el login dejo de verdad en la sesion.
-      document.querySelector('[data-zona="apodo"]').textContent =
-        sessionStorage.getItem('nexus.apodoActual') ?? '';
+      // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
+      if (!exigirSesion()) {
+        throw new Error('sin sesion: redirigiendo al login');
+      }
+      // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
+      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'jugar' });
 
       montarCrearSala(document.getElementById('formulario-crear-sala'));
     </script>

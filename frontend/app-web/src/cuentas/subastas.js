@@ -13,7 +13,7 @@
  * tiempo real queda como el siguiente incremento, no silenciada.
  */
 
-import { construirBarra } from '../comun/barra-navegacion.js';
+import { montarCabecera } from '../comun/cabecera-app.js';
 import { listarSubastas, sugerirSubastas } from './cliente-subastas.js';
 import { construirVitrinaSubastas } from './subastas-vitrina.js';
 import { construirFiltros } from './subastas-filtros.js';
@@ -35,7 +35,17 @@ function inicializar() {
     throw new Error('subastas.html debe traer un elemento con id="raiz-subastas"');
   }
 
-  raiz.appendChild(construirBarra({ seccionActiva: 'subasta' }));
+  // Cabecera unica de la aplicacion (HU-UX-001). Subasta es publica: un
+  // visitante ve el listado; pujar exige sesion.
+  // Va fuera de la raiz (a todo el ancho, como en las demas vistas); si la
+  // pagina no trae el contenedor, se crea dentro para no quedarse sin barra.
+  let cabecera = document.querySelector('[data-cabecera-app]');
+  if (!cabecera) {
+    cabecera = document.createElement('div');
+    cabecera.dataset.cabeceraApp = '';
+    raiz.appendChild(cabecera);
+  }
+  montarCabecera(cabecera, { seccionActiva: 'subasta' });
 
   const titulo = document.createElement('h1');
   titulo.className = 'subastas-titulo';

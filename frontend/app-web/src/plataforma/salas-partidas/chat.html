@@ -17,43 +17,7 @@
       fragmentos compartidos: los destinos que existen enlazan de verdad y los
       que no, quedan marcados como pendientes en vez de apuntar a "#".
     -->
-    <header class="cabecera">
-      <div class="cabecera__grupo-marca">
-        <span class="cabecera__marca">NEXUS BATTLES VI</span>
-        <nav class="cabecera__nav" aria-label="Navegacion principal">
-          <a class="cabecera__destino activo" href="./batallas.html" aria-current="page"
-            >Jugar online</a
-          >
-          <a
-            class="cabecera__destino cabecera__destino--pendiente"
-            aria-disabled="true"
-            data-pendiente="grupo-alpha"
-            title="Todavia no publicada: grupo-alpha"
-            >Misiones</a
-          >
-          <a
-            class="cabecera__destino cabecera__destino--pendiente"
-            aria-disabled="true"
-            data-pendiente="HU-TOR, sprint 3"
-            title="Todavia no publicada: HU-TOR, sprint 3"
-            >Torneo</a
-          >
-          <a class="cabecera__destino" href="../../contenido/inventario/inventario.html"
-            >Mi inventario</a
-          >
-          <a class="cabecera__destino" href="../../cuentas/subastas.html">Subasta</a>
-        </nav>
-      </div>
-
-      <label class="cabecera__buscador">
-        <span class="solo-lectores">Buscar productos</span>
-        <input class="cabecera__buscador-texto" type="search" placeholder="Buscar productos" />
-      </label>
-
-      <div class="cabecera__acciones">
-        <span class="t-etiqueta" data-zona="apodo"></span>
-      </div>
-    </header>
+    <div data-cabecera-app></div>
 
     <main id="chat" class="pagina pila">
       <div class="pila pila--compacta">
@@ -109,13 +73,19 @@
 
     <script type="module">
       import { montarChat, canalDesdeUrl, CLAVE_TOKEN } from './chat.js';
+      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+
+      // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
+      if (!exigirSesion()) {
+        throw new Error('sin sesion: redirigiendo al login');
+      }
+      // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
+      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'jugar' });
 
       const canal = canalDesdeUrl(window.location.search);
       document.querySelector('[data-zona="titulo"]').textContent = canal.idSala
         ? 'Chat de la sala'
         : 'Chat general';
-      document.querySelector('[data-zona="apodo"]').textContent =
-        sessionStorage.getItem('nexus.apodoActual') ?? '';
 
       montarChat(document.getElementById('chat'), {
         canal,

@@ -4,7 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Nexus Battles VI - Pujar en una subasta</title>
-    <link rel="stylesheet" href="../comun/barra-navegacion.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
     <link rel="stylesheet" href="./tema-cuentas.css" />
     <link rel="stylesheet" href="./pujas.css" />
   </head>
@@ -18,65 +19,12 @@
     </main>
 
     <script type="module">
-      import { construirBarra } from '../comun/barra-navegacion.js';
+      import { montarCabecera } from '../comun/cabecera-app.js';
       import { montarSubastas } from './pujas.js';
       import { crearApiSubastas, urlDelCanal } from './pujas-api.js';
 
-      // Montar la barra compartida con rutas funcionales y sesión real
-      const navbarContainer = document.getElementById('navbar-container');
-      if (navbarContainer) {
-        const tieneSesion = Boolean(
-          sessionStorage.getItem('nexus.token') ||
-          sessionStorage.getItem('nexus.rolActual') ||
-          sessionStorage.getItem('token') ||
-          sessionStorage.getItem('usuarioId')
-        );
-
-        const RUTAS = {
-          '/jugar': '../plataforma/salas-partidas/batallas.html',
-          '/misiones': './index.html',
-          '/torneo': '../plataforma/salas-partidas/batallas.html',
-          '/inventario': '../contenido/inventario/inventario.html',
-          '/subasta': './subastas.html',
-          '/cuenta': './perfil.html',
-        };
-
-        const barra = construirBarra({
-          seccionActiva: 'subasta',
-          sesion: { autenticado: tieneSesion },
-          navegar: (ruta) => {
-            const destino = RUTAS[ruta] || ruta;
-            window.location.href = destino;
-          },
-        });
-
-        // Enlazar opciones del panel de cuenta
-        barra.querySelectorAll('.barra__opcion-cuenta').forEach((btn) => {
-          if (btn.textContent.includes('Mi perfil')) {
-            btn.addEventListener('click', () => { window.location.href = './perfil.html'; });
-          } else if (btn.textContent.includes('Cerrar sesion')) {
-            btn.addEventListener('click', () => {
-              sessionStorage.clear();
-              window.location.href = './login.html';
-            });
-          } else if (btn.textContent.includes('Registrarse')) {
-            btn.addEventListener('click', () => { window.location.href = './registro.html'; });
-          }
-        });
-
-        // Búsqueda funcional
-        const campoBusqueda = barra.querySelector('.barra__busqueda input');
-        if (campoBusqueda) {
-          campoBusqueda.placeholder = 'Buscar subastas o productos...';
-          campoBusqueda.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && campoBusqueda.value.trim()) {
-              window.location.href = `./subastas.html?criterio=${encodeURIComponent(campoBusqueda.value.trim())}`;
-            }
-          });
-        }
-
-        navbarContainer.appendChild(barra);
-      }
+      // Cabecera unica de la aplicacion (HU-UX-001): sesion real, navegacion y cuenta.
+      montarCabecera(document.getElementById('navbar-container'), { seccionActiva: 'subasta' });
 
       const contenedor = document.getElementById('subastas-app');
       const parametros = new URLSearchParams(location.search);
@@ -98,7 +46,7 @@
       montarSubastas(contenedor, {
         api: crearApiSubastas(),
         urlCanal: urlDelCanal(),
-        ...(subastaId ? { subastaInicialId: subastaId } : {})
+        ...(subastaId ? { subastaInicialId: subastaId } : {}),
       });
     </script>
   </body>

@@ -13,7 +13,7 @@
 // rol admin (solo trae opciones fijas de jugador), así que el filtrado de los
 // accesos administrativos por rol se resuelve aquí, no dentro de la barra.
 
-import { construirBarra } from '../comun/barra-navegacion.js';
+import { montarCabecera, cerrarSesion } from '../comun/cabecera-app.js';
 
 const RUTA_LOGIN = './login.html';
 
@@ -37,15 +37,11 @@ function iniciar() {
 }
 
 function montarBarraNavegacion() {
-  const barra = construirBarra({
-    seccionActiva: 'cuenta',
-    sesion: { autenticado: true },
-    navegar: (ruta) => {
-      window.location.href = ruta;
-    },
-  });
-
-  document.body.prepend(barra);
+  // Cabecera unica de la aplicacion (HU-UX-001): la sesion la lee ella del login.
+  const contenedor = document.createElement('div');
+  contenedor.dataset.cabeceraApp = '';
+  document.body.prepend(contenedor);
+  montarCabecera(contenedor, { seccionActiva: 'cuenta' });
 }
 
 function mostrarBienvenida() {
@@ -95,8 +91,5 @@ function configurarCerrarSesion() {
     return;
   }
 
-  boton.addEventListener('click', () => {
-    sessionStorage.clear();
-    window.location.href = RUTA_LOGIN;
-  });
+  boton.addEventListener('click', () => cerrarSesion());
 }
