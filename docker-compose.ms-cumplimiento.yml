@@ -43,3 +43,5 @@ services:
       DB_NAME: ${MS_CUMPLIMIENTO_DB_NAME}
       DB_USER: ${MS_CUMPLIMIENTO_DB_USER}
       DB_PASSWORD: ${MS_CUMPLIMIENTO_DB_PASSWORD}
+      # Clave publica de los tokens (ADR-002/ADR-005), dentro de la red.
+      IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://srv-ms-identidad:8089/api/v1/auth/jwks}

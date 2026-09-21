@@ -46,6 +46,35 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security</artifactId>
 		</dependency>
+		<!--
+			Servidor de recursos (ADR-002/ADR-005): la consulta de auditoria es
+			del SUPER_ADMINISTRADOR del token y el alta de eventos, de los
+			servicios con credencial. Hasta ahora el starter de security estaba
+			solo, sin SecurityFilterChain: Boot montaba su cadena por defecto
+			(HTTP Basic con clave generada) y todo lo que llegaba, incluido
+			ms-identidad, recibia 401. Este modulo sigue en Maven y no enlaza
+			plataforma-seguridad; SeguridadConfig reproduce el conversor minimo.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+		</dependency>
+		<!-- Regla 3: salud y metricas de Actuator; desplegar.sh sondea /actuator/health. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<!-- @WebMvcTest en Boot 4 vive en este starter de prueba. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-webmvc-test</artifactId>
+			<scope>test</scope>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-aspectj</artifactId>
