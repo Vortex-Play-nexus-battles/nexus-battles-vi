@@ -126,13 +126,6 @@ jobs:
             echo "  --- ultimas lineas ---"
             docker compose -f tests/e2e/compose.yml logs --tail 40 "$s" || true
           done
-          # El trafico STOMP, aparte: es donde se ve si la accion del jugador
-          # llego al servidor o se perdio por el camino. Con el resto del log
-          # mezclado se pierde entre el arranque de Spring.
-          echo "=============== frames STOMP ==============="
-          docker compose -f tests/e2e/compose.yml logs srv-salas-partidas 2>&1 \
-            | grep -Ei "SEND|SUBSCRIBE|CONNECT|MESSAGE|acciones|accion.resuelta|turno" \
-            | tail -60 || true
           echo "=============== estado ==============="
           docker compose -f tests/e2e/compose.yml ps
 

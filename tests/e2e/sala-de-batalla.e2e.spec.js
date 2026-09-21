@@ -288,7 +288,11 @@ test.describe('Sala de batalla de punta a punta', () => {
    * `conectarChat` devuelve un objeto que sigue existiendo aunque el socket se
    * haya cerrado despues, asi que «hay canal» no implica «hay conexion». Esto
    * mira el `readyState` de verdad, interceptando el constructor antes de que
-   * la pagina cargue.
+   * la pagina cargue. No es instrumentacion de paso: es lo que distingue «el
+   * envio se perdio» de «el servidor lo ignoro», que desde fuera se ven igual.
+   *
+   * Los frames que llegan se guardan por lo mismo. Solo se vuelcan cuando una
+   * afirmacion falla, y ahorran una vuelta entera de CI a quien lo investigue.
    */
   async function conSocketVigilado(page) {
     await page.addInitScript(() => {
@@ -298,9 +302,6 @@ test.describe('Sala de batalla de punta a punta', () => {
       globalThis.WebSocket = function (...args) {
         const socket = new Original(...args);
         globalThis.__sockets.push(socket);
-        // Todo lo que entra por el canal, tal cual. Si el servidor publica el
-        // aviso y la barra no se mueve, la pregunta es si el frame llego y no
-        // se aplico, o si no llego: sin esto no hay forma de distinguirlo.
         socket.addEventListener('message', (e) =>
           globalThis.__frames.push(String(e.data).slice(0, 400)),
         );
