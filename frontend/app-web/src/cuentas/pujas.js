@@ -557,6 +557,9 @@ export class ControladorSubastas {
     this.mensajeError = null;
     this.intervalId = null;
     this.avisoCruzado = null; // { id, nombre, oferta, rival, segundosRestantes }
+    // Si ya se movio el foco al dialogo abierto. Evita robarselo al usuario en
+    // cada repintado mientras el modal sigue en pantalla.
+    this.modalEnfocado = false;
 
     // Canal en vivo (HU-SUB-011 lo publica en /topic/subastas/listado). Es un
     // ANADIDO al sondeo, no un sustituto: el riesgo #7 del acta exige
@@ -1266,6 +1269,63 @@ export class ControladorSubastas {
 
     this.contenedor.innerHTML = contenidoHtml;
     this.conectarEventos();
+    this.prepararModal();
+  }
+
+  /**
+   * Lleva el foco al dialogo de compra y lo mantiene dentro mientras este
+   * abierto.
+   *
+   * El marcado ya declaraba aria-modal="true", o sea que PROMETIA modalidad,
+   * pero no la implementaba: el foco se quedaba detras del overlay, no habia
+   * forma de cerrarlo con Escape y tabulando se salia al fondo. En una pantalla
+   * donde el siguiente boton gasta creditos, eso significa poder confirmar una
+   * compra sin haber llegado a oir de que.
+   *
+   * Se llama despues de cada render porque el modal se crea y se destruye con
+   * el innerHTML; el foco se mueve una sola vez, al aparecer.
+   */
+  prepararModal() {
+    const modal = this.contenedor.querySelector('#modal-compra-inmediata');
+    if (!modal) {
+      this.modalEnfocado = false;
+      return;
+    }
+
+    const focalizables = modal.querySelectorAll(
+      'button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    if (!focalizables.length) {
+      return;
+    }
+
+    if (!this.modalEnfocado) {
+      // Al primer control y no al de confirmar: abrir un dialogo con el foco
+      // puesto en el boton que gasta el dinero invita a confirmarlo sin leer.
+      focalizables[0].focus();
+      this.modalEnfocado = true;
+    }
+
+    modal.addEventListener('keydown', (evento) => {
+      if (evento.key === 'Escape') {
+        evento.preventDefault();
+        this.cancelarCompraInmediata();
+        return;
+      }
+      if (evento.key !== 'Tab') {
+        return;
+      }
+
+      const primero = focalizables[0];
+      const ultimo = focalizables[focalizables.length - 1];
+      if (evento.shiftKey && document.activeElement === primero) {
+        evento.preventDefault();
+        ultimo.focus();
+      } else if (!evento.shiftKey && document.activeElement === ultimo) {
+        evento.preventDefault();
+        primero.focus();
+      }
+    });
   }
 
   generarHtmlPestanas({ superadas = 0 } = {}) {
@@ -1484,7 +1544,11 @@ export class ControladorSubastas {
           </div>
 
           <!-- Barra segmentada interactiva -->
-          <div class="barra-segmentada-tramos" role="progressbar" aria-label="Distribución de créditos en subastas">
+          <div class="barra-segmentada-tramos" role="progressbar"
+               aria-label="Créditos retenidos en subastas"
+               aria-valuemin="0" aria-valuemax="${Math.round(total || 0)}"
+               aria-valuenow="${Math.round(retenido || 0)}"
+               aria-valuetext="${formatearCreditos(retenido)} cr retenidos${total ? ` de ${formatearCreditos(total)} cr` : ''}">
             ${tramos
               .map(
                 (t) => `
@@ -1988,7 +2052,8 @@ export class ControladorSubastas {
                 `
                     : `
                   <div class="campo-con-boton">
-                    <input type="number" id="input-limite-auto" class="input-estandar" placeholder="Tope máx (ej. ${formatearCreditos(minPuja + 400)})" min="${minPuja}" step="50" ${cerrada ? 'disabled' : ''}>
+                    <label for="input-limite-auto" class="etiqueta-sm">Tope de puja automática (mínimo ${formatearCreditos(minPuja)} cr):</label>
+                    <input type="number" id="input-limite-auto" class="input-estandar" placeholder="Ej. ${formatearCreditos(minPuja + 400)}" min="${minPuja}" step="50" ${cerrada ? 'disabled' : ''}>
                     <button type="button" id="btn-activar-auto" class="btn btn-contorno" ${cerrada ? 'disabled' : ''}>
                       Activar
                     </button>
