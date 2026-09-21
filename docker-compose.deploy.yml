@@ -97,6 +97,11 @@ services:
       # nada queda reservado; las salas sin recompensa no pasan por aqui. El
       # dia que se despliegue, esta URL ya apunta a donde estara.
       CREDITOS_URL: ${CREDITOS_URL:-http://srv-ms-finanzas:8093/api/v1}
+      # HU-JUE-015 / RF-USR-004: el chat consulta la sancion activa del autor
+      # en moderacion-sanciones, que SI corre en este host. Sin esta URL el
+      # valor por defecto es localhost, que dentro del contenedor es el propio
+      # servicio, y todo mensaje se bloquearia con «sanciones no disponibles».
+      SANCIONES_URL: ${SANCIONES_URL:-http://srv-moderacion-sanciones:8086/api/v1}
 
   srv-notificaciones:
     <<: *servicio-plataforma

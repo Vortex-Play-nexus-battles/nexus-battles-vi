@@ -112,10 +112,13 @@ seguridad:
     client-id: ${DIRECTORIO_ACTIVO_CLIENT_ID:}
     client-secret: ${DIRECTORIO_ACTIVO_CLIENT_SECRET:}
 
-# Chat de HU-JUE-015. La lista negra es la de HU-ADM-002 (moderacion-sanciones).
+# Chat de HU-JUE-015. La lista negra es la de HU-ADM-002 y las sanciones las
+# de RF-USR-004: las dos viven en moderacion-sanciones.
 chat:
   lista-negra:
     url: ${LISTA_NEGRA_VERIFICAR_URL:http://localhost:8086/api/v1/lista-negra/verificar}
+  sanciones:
+    url: ${SANCIONES_URL:http://localhost:8086/api/v1}
   ws:
     origenes: ${CHAT_WS_ORIGENES:http://localhost:5173}
   historial:
