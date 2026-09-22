@@ -1,18 +1,17 @@
 # Auditoría visual automática — UX-R2.1
 
-Generado: 2026-09-22T13:48:11.393Z · modo **sin-servicios**
+Generado: 2026-09-22T14:11:19.809Z · modo **sin-servicios**
 
-155 combinaciones vista × resolución · 57 con hallazgos
+155 combinaciones vista × resolución · 53 con hallazgos
 
 ## Por motivo
 
 | Motivo | Veces |
 |---|---|
-| `objetivo-tactil-pequeno` | 326 |
+| `objetivo-tactil-pequeno` | 327 |
 | `cabecera-en-mas-de-dos-filas` | 48 |
 | `elemento-fuera-del-viewport` | 9 |
 | `desbordamiento-horizontal` | 6 |
-| `error-tecnico-visible` | 5 |
 
 ## Detalle
 
@@ -194,12 +193,7 @@ Generado: 2026-09-22T13:48:11.393Z · modo **sin-servicios**
 | productos | movil | `objetivo-tactil-pequeno` | a«Iniciar sesión» mide 115×32 |
 | productos | movil | `objetivo-tactil-pequeno` | a«Registrarse» mide 103×32 |
 | productos | movil | `objetivo-tactil-pequeno` | input«» mide 20×20 |
-| subastas | desktop | `error-tecnico-visible` | el texto de la pantalla contiene /\b(?:Error|HTTP|[Ss]tatus|[Cc]ódigo|[Cc]odigo)\s*:?\s*\d{3}\b/ |
-| subastas | laptop | `error-tecnico-visible` | el texto de la pantalla contiene /\b(?:Error|HTTP|[Ss]tatus|[Cc]ódigo|[Cc]odigo)\s*:?\s*\d{3}\b/ |
-| subastas | laptop-min | `error-tecnico-visible` | el texto de la pantalla contiene /\b(?:Error|HTTP|[Ss]tatus|[Cc]ódigo|[Cc]odigo)\s*:?\s*\d{3}\b/ |
-| subastas | tablet | `error-tecnico-visible` | el texto de la pantalla contiene /\b(?:Error|HTTP|[Ss]tatus|[Cc]ódigo|[Cc]odigo)\s*:?\s*\d{3}\b/ |
 | subastas | movil | `cabecera-en-mas-de-dos-filas` | la cabecera mide 180px (una fila son 64px) |
-| subastas | movil | `error-tecnico-visible` | el texto de la pantalla contiene /\b(?:Error|HTTP|[Ss]tatus|[Cc]ódigo|[Cc]odigo)\s*:?\s*\d{3}\b/ |
 | subastas | movil | `objetivo-tactil-pequeno` | a«NEXUS BATTLES VI» mide 154×30 |
 | subastas | movil | `objetivo-tactil-pequeno` | a«Jugar online» mide 84×31 |
 | subastas | movil | `objetivo-tactil-pequeno` | a«Torneo» mide 48×31 |
@@ -235,6 +229,7 @@ Generado: 2026-09-22T13:48:11.393Z · modo **sin-servicios**
 | subastas | movil | `objetivo-tactil-pequeno` | input«» mide 13×13 |
 | subastas | movil | `objetivo-tactil-pequeno` | input«» mide 13×13 |
 | subastas | movil | `objetivo-tactil-pequeno` | button«Limpiar filtros» mide 317×40 |
+| subastas | movil | `objetivo-tactil-pequeno` | button«Reintentar» mide 104×40 |
 | pujas | movil | `cabecera-en-mas-de-dos-filas` | la cabecera mide 180px (una fila son 64px) |
 | pujas | movil | `objetivo-tactil-pequeno` | a«NEXUS BATTLES VI» mide 154×30 |
 | pujas | movil | `objetivo-tactil-pequeno` | a«Jugar online» mide 84×31 |

@@ -728,3 +728,152 @@ describe('Accesibilidad del diálogo de compra (WCAG 2.1 AA)', () => {
     expect(etiqueta.textContent).toContain('Tope de puja automática');
   });
 });
+
+/**
+ * UX-R2.8c — el marcado que llegaba del servidor.
+ *
+ * Esta vista se pinta con plantillas de cadena y `innerHTML`, y no escapaba
+ * NADA. El nombre del objeto, su descripcion, el apodo del vendedor y el del
+ * pujador salen del servidor y los escribe otra persona, asi que bastaba con
+ * publicar una subasta con marcado en el nombre para ejecutar codigo en la
+ * pantalla de quien la mirara. En la pantalla que mueve creditos.
+ */
+describe('UX-R2.8c - datos del servidor no pueden inyectar marcado', () => {
+  const CARGA = '<img src=x onerror="globalThis.__colado = true">';
+
+  /** Una subasta con la forma que espera la vista. */
+  function subastaCon(campos) {
+    return {
+      ...SUBASTAS_INICIALES[0],
+      id: 'envenenada',
+      ...campos,
+    };
+  }
+
+  function pintar(subasta, extra = {}) {
+    const contenedor = document.createElement('div');
+    document.body.appendChild(contenedor);
+    const controlador = new ControladorSubastas({
+      contenedor,
+      subastas: [subasta],
+      heroes: HEROES_BASE,
+      ...extra,
+    });
+    controlador.render();
+    return { contenedor, controlador };
+  }
+
+  afterEach(() => {
+    delete globalThis.__colado;
+    document.body.innerHTML = '';
+  });
+
+  test('el nombre de la subasta se lee como texto, no se ejecuta', () => {
+    const { contenedor, controlador } = pintar(subastaCon({ nombre: CARGA }));
+
+    expect(contenedor.querySelector('img')).toBeNull();
+    expect(globalThis.__colado).toBeUndefined();
+    expect(contenedor.textContent).toContain(CARGA);
+
+    controlador.destruir();
+  });
+
+  test('la descripcion tampoco', () => {
+    const { contenedor, controlador } = pintar(subastaCon({ descripcion: CARGA }));
+
+    expect(contenedor.querySelector('img')).toBeNull();
+    expect(globalThis.__colado).toBeUndefined();
+
+    controlador.destruir();
+  });
+
+  test('una comilla en el nombre no abre un atributo en la barra de saldo', () => {
+    // El vector concreto: `title="${t.titulo}"`, donde `t.titulo` lleva el
+    // nombre de la subasta.
+    const { contenedor, controlador } = pintar(
+      subastaCon({ nombre: '" onmouseover="globalThis.__colado = true', retenido: 500 }),
+    );
+    controlador.vista = 'mis-subastas';
+    controlador.render();
+
+    const conManejador = [...contenedor.querySelectorAll('*')].filter((el) =>
+      el.getAttribute('onmouseover'),
+    );
+    expect(conManejador).toEqual([]);
+
+    controlador.destruir();
+  });
+
+  test('el apodo de quien puja, en el historial del detalle, tampoco', () => {
+    const { contenedor, controlador } = pintar(
+      subastaCon({
+        historial: [{ apodo: CARGA, monto: 100, hace: '1 m', esTu: false }],
+      }),
+    );
+    controlador.abrirDetalle('envenenada');
+    controlador.render();
+
+    expect(contenedor.querySelector('img')).toBeNull();
+    expect(globalThis.__colado).toBeUndefined();
+
+    controlador.destruir();
+  });
+
+  test('el mensaje de error del servidor tampoco', () => {
+    const { contenedor, controlador } = pintar(subastaCon({}));
+    controlador.estadoDatos = 'error';
+    controlador.mensajeError = CARGA;
+    controlador.render();
+
+    expect(contenedor.querySelector('img')).toBeNull();
+    expect(globalThis.__colado).toBeUndefined();
+
+    controlador.destruir();
+  });
+});
+
+/**
+ * UX-R2.8c — «Reintentar» no reintentaba.
+ */
+describe('UX-R2.8c - un servicio caido no se presenta como mercado vacio', () => {
+  test('Reintentar vuelve a pedir los datos, no solo repinta', async () => {
+    const contenedor = document.createElement('div');
+    document.body.appendChild(contenedor);
+
+    const listar = jest.fn().mockResolvedValue([]);
+    const controlador = new ControladorSubastas({
+      contenedor,
+      subastas: [],
+      heroes: HEROES_BASE,
+      api: { listar, miResumen: jest.fn().mockResolvedValue(null) },
+    });
+    controlador.estadoDatos = 'error';
+    controlador.mensajeError = 'No se pudo contactar al servidor de subastas.';
+    controlador.render();
+
+    contenedor.querySelector('#btn-reintentar').click();
+
+    // Antes esto era 0: el boton ponia el estado en «exito» y repintaba, y
+    // como `this.subastas` estaba vacio salia «No hay subastas en curso».
+    expect(listar).toHaveBeenCalledTimes(1);
+
+    await Promise.resolve();
+    controlador.destruir();
+    contenedor.remove();
+  });
+
+  test('el titulo del error habla del servicio, no del catalogo', () => {
+    const contenedor = document.createElement('div');
+    document.body.appendChild(contenedor);
+    const controlador = new ControladorSubastas({ contenedor, subastas: [], heroes: HEROES_BASE });
+    controlador.estadoDatos = 'error';
+    controlador.mensajeError = 'No se pudo contactar al servidor de subastas.';
+    controlador.render();
+
+    expect(contenedor.textContent).toContain('El mercado no responde');
+    expect(contenedor.textContent).not.toContain('No hay subastas en curso');
+
+    controlador.destruir();
+    contenedor.remove();
+  });
+});

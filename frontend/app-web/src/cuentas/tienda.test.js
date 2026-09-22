@@ -203,3 +203,63 @@ describe('montarTienda', () => {
     expect(JSON.parse(globalThis.fetch.mock.calls[0][1].body).productoId).toBe('p1');
   });
 });
+
+/**
+ * UX-R2.8d — los estados que le faltaban a la Tienda.
+ */
+describe('UX-R2.8d - estados de la vitrina', () => {
+  test('mientras carga se ve la forma de lo que viene, no una rejilla en blanco', async () => {
+    // El HTML traia `<!-- Cargando productos... -->`: un comentario, o sea
+    // nada en la pantalla hasta que respondiera el servicio.
+    let resolver;
+    globalThis.fetch.mockReturnValue(new Promise((r) => (resolver = r)));
+
+    const pintando = cargarVitrina(document);
+    expect(document.querySelector('#productos-grid [data-estado="cargando"]')).not.toBeNull();
+
+    resolver({ ok: true, status: 200, json: async () => ({ content: [] }) });
+    await pintando;
+  });
+
+  test('un catalogo vacio no se confunde con un fallo', async () => {
+    globalThis.fetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ content: [] }),
+    });
+
+    await cargarVitrina(document);
+
+    const rejilla = document.getElementById('productos-grid');
+    expect(rejilla.querySelector('[data-estado="vacio"]')).not.toBeNull();
+    expect(rejilla.querySelector('[data-estado="error"]')).toBeNull();
+    expect(rejilla.textContent).not.toMatch(/no se pudo/i);
+  });
+
+  test('un fallo ofrece reintentar, y reintenta de verdad', async () => {
+    globalThis.fetch.mockRejectedValueOnce(new Error('sin red'));
+    await cargarVitrina(document);
+
+    const reintentar = document.querySelector('#productos-grid [data-accion="reintentar"]');
+    expect(reintentar).not.toBeNull();
+
+    globalThis.fetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ content: [{ id: 'p1', nombre: 'Espada', precio: 10, tipo: 'ARMA' }] }),
+    });
+    reintentar.click();
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(document.querySelectorAll('.product-card')).toHaveLength(1);
+  });
+
+  test('el carrito caido tambien ofrece reintentar', async () => {
+    globalThis.fetch.mockRejectedValue(Object.assign(new Error('roto'), { estado: 500 }));
+
+    await cargarCarrito(document);
+
+    expect(document.querySelector('#cart-items [data-accion="reintentar"]')).not.toBeNull();
+    expect(document.getElementById('btn-pagar').disabled).toBe(true);
+  });
+});

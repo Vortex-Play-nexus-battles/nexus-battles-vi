@@ -1210,9 +1210,20 @@
   background: var(--texto-sobre-color);
 }
 
+/* UX-R2.8d — estas siete reglas decian
+     `outline: var(--foco-grosor) solid var(--anillo-foco)`
+   y `--anillo-foco` NO es un color: vale `0 0 0 3px rgba(34,68,191,.35)`,
+   pensado para `box-shadow`. Un `outline: 3px solid 0 0 0 3px rgba(…)` es
+   invalido, asi que el navegador tiraba la declaracion entera y **el foco no
+   se dibujaba** en casillas, radios, desplegables, estrellas, ranuras,
+   acciones de combate, zona de carga y el selector de objeto.
+
+   RNF-ACC-002 dice que el foco es siempre visible, asi que esto era un
+   incumplimiento medible, no una preferencia. El color correcto ya existia:
+   `--interaccion-foco-anillo`. `clases-del-kit.test.js` lo vigila. */
 .casilla__entrada:focus-visible,
 .radio__entrada:focus-visible {
-  outline: var(--foco-grosor) solid var(--anillo-foco);
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
   outline-offset: 2px;
 }
 
@@ -1251,7 +1262,7 @@
 }
 
 .desplegable__control:focus-visible {
-  outline: var(--foco-grosor) solid var(--anillo-foco);
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
   outline-offset: 1px;
 }
 
@@ -1370,7 +1381,7 @@
   cursor: pointer;
 }
 .estrellas--editable .estrellas__entrada:focus-visible + .estrellas__estrella {
-  outline: var(--foco-grosor) solid var(--anillo-foco);
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
   outline-offset: 2px;
 }
 
@@ -1889,7 +1900,7 @@
 }
 
 .ranura__caja:focus-visible {
-  outline: var(--foco-grosor) solid var(--anillo-foco);
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
   outline-offset: 2px;
 }
 
@@ -2479,7 +2490,7 @@
 }
 
 .accion-combate:focus-visible {
-  outline: var(--foco-grosor) solid var(--anillo-foco);
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
   outline-offset: 2px;
 }
 
@@ -2537,7 +2548,7 @@
 
 .zona-carga:focus-visible,
 .zona-carga--arrastrando {
-  outline: var(--foco-grosor) solid var(--anillo-foco);
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
   outline-offset: 2px;
   border-color: var(--primaria);
 }
@@ -3982,7 +3993,7 @@ button.tarjeta-heroe[aria-pressed='true'] {
 }
 
 .elegir-objeto__opcion:focus-visible {
-  outline: var(--foco-grosor) solid var(--anillo-foco);
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
   outline-offset: 2px;
 }
 
@@ -4037,4 +4048,56 @@ button.tarjeta-heroe[aria-pressed='true'] {
     justify-items: center;
     text-align: center;
   }
+}
+
+/* =====================================================================
+   Cuenta atras — UX-R2.8b
+   =====================================================================
+
+   El tiempo que le queda a una subasta es el dato con el que alguien
+   decide si puja ahora o espera. Se lee como una cifra, no como una
+   frase: `--cifras-tabulares` para que «04:31» no baile al pasar a
+   «04:30», que es exactamente lo que hace un contador con la fuente
+   proporcional.
+
+   `--urgente` es color y peso. NO es un parpadeo: la urgencia nunca se
+   codifica solo en movimiento, porque entonces `prefers-reduced-motion`
+   la borra (regla de UX-R2.10). */
+.cuenta-atras {
+  font-variant-numeric: var(--cifras-tabulares);
+  font-weight: 600;
+  color: var(--texto-2);
+}
+
+.cuenta-atras--urgente {
+  color: var(--error);
+}
+
+.cuenta-atras--finalizada {
+  color: var(--texto-3);
+  font-weight: 400;
+}
+
+/* =====================================================================
+   Mercado — encabezado y rejilla de subastas (UX-R2.8b)
+   ===================================================================== */
+
+/* La barra de busqueda, el orden y el filtro son UN control compuesto, no
+   tres bloques sueltos apilados con el titulo en medio. */
+.mercado__controles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-3);
+  align-items: center;
+  margin-bottom: var(--e-5);
+}
+
+.mercado__controles > :first-child {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.mercado__resumen {
+  color: var(--texto-3);
+  font-size: var(--t-meta-tam);
 }

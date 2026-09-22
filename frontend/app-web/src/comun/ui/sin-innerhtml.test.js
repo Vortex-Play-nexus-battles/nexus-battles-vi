@@ -60,16 +60,18 @@ const REVISADOS = new Map([
   ['contenido/productos/productos.js:159', 'plantilla() devuelve marcado fijo, sin datos'],
   ['cuentas/publicar-subasta.js:68', 'plantilla fija del formulario, sin interpolación'],
   ['cuentas/registro.js:235', 'cadena literal fija, sin interpolación'],
-  ['cuentas/tienda.js:95', 'plantilla fija; el color pasó a data-tipo en UX-R2.8'],
-  ['cuentas/tienda.js:155', 'cadena literal fija del fallo del carrito'],
-  ['cuentas/tienda.js:173', 'cadena literal fija del carrito vacío'],
-  ['cuentas/tienda.js:183', 'plantilla fija; los datos entran luego por textContent'],
-  ['cuentas/pujas.js:1205', 'plantilla fija del estado de carga'],
-  ['cuentas/pujas.js:1215', 'plantilla fija del estado de error'],
-  ['cuentas/pujas.js:1230', 'plantilla fija del estado vacío'],
+  ['cuentas/tienda.js:141', 'plantilla fija; el color pasó a data-tipo en UX-R2.8'],
+
+  ['cuentas/tienda.js:226', 'cadena literal fija del carrito vacío'],
+  ['cuentas/tienda.js:236', 'plantilla fija; los datos entran luego por textContent'],
+  ['cuentas/pujas.js:1216', 'plantilla fija del estado de carga'],
+  ['cuentas/pujas.js:1234', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
+  ['cuentas/pujas.js:1250', 'plantilla fija del estado vacío'],
   [
-    'cuentas/pujas.js:1270',
-    'DEUDA CONOCIDA (UX-R2.8c): los generadores interpolan datos de la subasta',
+    'cuentas/pujas.js:1290',
+    'DELIBERADO y SANEADO (UX-R2.8c): las 20 interpolaciones con datos del ' +
+      'servidor pasan por esc(); pujas.test.js lo comprueba con cargas reales. ' +
+      'La estructura (2.297 líneas de plantilla) se mueve en UX-R2.10.',
   ],
   [
     'cuentas/registro.js:222',
