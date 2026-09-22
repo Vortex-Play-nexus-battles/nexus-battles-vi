@@ -91,7 +91,7 @@ describe('navegacion (HU-INV-004)', () => {
     const misiones = elemento.querySelector('[data-seccion="misiones"]');
     expect(misiones.hasAttribute('href')).toBe(false);
     expect(misiones.getAttribute('aria-disabled')).toBe('true');
-    expect(misiones.title).toMatch(/Todavia no publicada/);
+    expect(misiones.title).toMatch(/Todavía no publicada/);
   });
 
   test('funciona igual servido desde src/, no solo desde el borde', () => {
@@ -122,7 +122,7 @@ describe('sesion', () => {
     const botones = [...elemento.querySelectorAll('[data-zona="sesion"] a')].map(
       (a) => a.textContent,
     );
-    expect(botones).toEqual(['Iniciar sesion', 'Registrarse']);
+    expect(botones).toEqual(['Iniciar sesión', 'Registrarse']);
     expect(elemento.querySelector('[data-zona="cuenta"]')).toBeNull();
     expect(elemento.querySelector('.cabecera__campana')).toBeNull();
   });
@@ -153,7 +153,7 @@ describe('sesion', () => {
       'Mis cofres',
       'Tienda',
       'Mis sanciones',
-      'Cerrar sesion',
+      'Cerrar sesión',
     ]);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(menu.hidden).toBe(true);
@@ -165,11 +165,11 @@ describe('sesion', () => {
     const opciones = [...elemento.querySelectorAll('[role="menuitem"]')].map((o) => o.textContent);
     expect(opciones).toEqual(
       expect.arrayContaining([
-        'Gestion de usuarios',
+        'Gestión de usuarios',
         'Lista negra',
         'Sanciones',
-        'Parametros',
-        'Auditoria',
+        'Parámetros',
+        'Auditoría',
       ]),
     );
     expect(elemento.querySelector('[data-zona="rol"]').textContent).toBe('administrador');
@@ -194,7 +194,7 @@ describe('sesion', () => {
     const { elemento, sesion } = montar();
     expect(sesion.autenticado).toBe(false);
     expect(sesion.caducada).toBe(true);
-    expect(elemento.querySelector('.cabecera__aviso-sesion').textContent).toMatch(/caduco/);
+    expect(elemento.querySelector('.cabecera__aviso-sesion').textContent).toMatch(/caducó/);
     expect(elemento.querySelector('[data-zona="cuenta"]')).toBeNull();
   });
 

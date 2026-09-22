@@ -3048,3 +3048,19 @@
     max-width: none;
   }
 }
+
+
+/* Destino de la barra que exige sesión — HU-INV-004 CA-01 · UX-R2.0
+   -----------------------------------------------------------------------
+   El requisito manda los seis accesos siempre, tambien a quien no ha
+   entrado. Lo que faltaba era que se notara cual va a pedir sesion: se veian
+   identicos y cuatro devolvian al login. La opacidad acompana al `title`,
+   que es lo que lee un lector de pantalla; el color no es la unica senal. */
+.cabecera__destino--con-sesion {
+  opacity: 0.72;
+}
+
+.cabecera__destino--con-sesion:hover,
+.cabecera__destino--con-sesion:focus-visible {
+  opacity: 1;
+}
