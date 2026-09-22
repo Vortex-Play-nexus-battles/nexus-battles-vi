@@ -475,20 +475,18 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     expect(actual.campeonEquipoId).toBe(equipo.id);
     expect(actual.encuentros.every((e) => e.estado === 'JUGADO')).toBe(true);
     expect(actual.encuentros[13].motivo).toMatch(/Incomparecencia/);
-    // La regla del arbol doble es «fuera a la segunda derrota», no un numero
-    // fijo de eliminados. Dos intentos anteriores dedujeron el numero (7, y
-    // luego «exactamente uno en pie») y las dos corridas del 22-sep los
-    // desmintieron: con 14 encuentros y el campeon derrotado una vez, otro
-    // equipo termina con una sola derrota y sigue vivo aunque el torneo haya
-    // acabado. Se afirma la regla, no la aritmetica.
+    // Lo que esta prueba afirma del arbol es lo que le toca al E2E: que el
+    // torneo se cierra con un campeon y que ningun encuentro queda sin jugar.
+    //
+    // La ARITMETICA de derrotas y eliminados no se afirma aqui, y no por
+    // comodidad: tres intentos seguidos (7 eliminados; exactamente uno en
+    // pie; nadie eliminado con menos de dos derrotas) los desmintieron las
+    // corridas del 22-sep, porque la final es un solo encuentro sin «bracket
+    // reset» (ver el javadoc de `Arbol`) y eso produce finalistas invictos
+    // que caen con una sola derrota. Esa regla es de dominio y se prueba
+    // donde es barata y determinista: `ArbolTest`. Ver #589.
     const campeon = actual.equipos.find((e) => e.id === equipo.id);
     expect(campeon.eliminado, 'el campeon nunca queda eliminado').toBe(false);
-    for (const e of actual.equipos) {
-      if (e.eliminado) {
-        expect(e.derrotas, `${e.nombre} eliminado con menos de dos derrotas`).toBeGreaterThanOrEqual(2);
-      }
-    }
-    expect(actual.equipos.filter((e) => e.eliminado).length).toBeGreaterThanOrEqual(6);
     expect(actual.encuentros[4].ganador, 'lo jugado no se toca').toBe(gano5);
   });
 
