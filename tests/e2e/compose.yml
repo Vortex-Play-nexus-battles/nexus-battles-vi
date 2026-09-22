@@ -132,6 +132,10 @@ services:
       SPRING_PROFILES_ACTIVE: mongo
       SPRING_MONGODB_URI: mongodb://e2e-contenido-mongo:27017/heroes
       SPRING_DATA_MONGODB_URI: mongodb://e2e-contenido-mongo:27017/heroes
+      # R8.1: heroes ya es servidor de recursos. El catalogo sigue siendo
+      # publico (el seed y los tres consumidores lo leen sin token), pero las
+      # cuatro rutas POST exigen token del emisor real de este banco.
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
     depends_on:
       e2e-contenido-mongo: { condition: service_healthy }
     healthcheck:
@@ -192,6 +196,10 @@ services:
         JAR: services/contenido/motor-combate/build/libs/*.jar
     environment:
       MOTOR_HEROES_URL: http://srv-heroes:8080
+      # R8.1: POST /api/v1/combate/ataques exige ROLE_SERVICIO. Quien lo llama
+      # es salas-partidas con su credencial (DIRECTORIO_ACTIVO_CLIENT_ID:
+      # salas-partidas, mas abajo), firmada por este mismo ms-identidad.
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
     depends_on:
       srv-heroes: { condition: service_healthy }
     healthcheck:
