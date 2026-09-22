@@ -475,11 +475,18 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     expect(actual.campeonEquipoId).toBe(equipo.id);
     expect(actual.encuentros.every((e) => e.estado === 'JUGADO')).toBe(true);
     expect(actual.encuentros[13].motivo).toMatch(/Incomparecencia/);
-    // 14 derrotas repartidas: si el campeon no perdio ninguna, los otros 7
-    // cargan con dos cada uno; si perdio el 5 contra la maquina, uno de los
-    // siete se queda con una sola.
-    const derrotasDelCampeon = actual.equipos.find((e) => e.id === equipo.id).derrotas;
-    expect(actual.equipos.filter((e) => e.eliminado)).toHaveLength(derrotasDelCampeon === 0 ? 7 : 6);
+    // Lo que esta prueba afirma del arbol es lo que le toca al E2E: que el
+    // torneo se cierra con un campeon y que ningun encuentro queda sin jugar.
+    //
+    // La ARITMETICA de derrotas y eliminados no se afirma aqui, y no por
+    // comodidad: tres intentos seguidos (7 eliminados; exactamente uno en
+    // pie; nadie eliminado con menos de dos derrotas) los desmintieron las
+    // corridas del 22-sep, porque la final es un solo encuentro sin «bracket
+    // reset» (ver el javadoc de `Arbol`) y eso produce finalistas invictos
+    // que caen con una sola derrota. Esa regla es de dominio y se prueba
+    // donde es barata y determinista: `ArbolTest`. Ver #589.
+    const campeon = actual.equipos.find((e) => e.id === equipo.id);
+    expect(campeon.eliminado, 'el campeon nunca queda eliminado').toBe(false);
     expect(actual.encuentros[4].ganador, 'lo jugado no se toca').toBe(gano5);
   });
 
