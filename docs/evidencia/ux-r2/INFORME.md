@@ -1,6 +1,6 @@
 # Auditoría visual automática — UX-R2.1
 
-Generado: 2026-09-22T13:41:22.207Z · modo **sin-servicios**
+Generado: 2026-09-22T13:48:11.393Z · modo **sin-servicios**
 
 155 combinaciones vista × resolución · 57 con hallazgos
 
@@ -8,7 +8,7 @@ Generado: 2026-09-22T13:41:22.207Z · modo **sin-servicios**
 
 | Motivo | Veces |
 |---|---|
-| `objetivo-tactil-pequeno` | 325 |
+| `objetivo-tactil-pequeno` | 326 |
 | `cabecera-en-mas-de-dos-filas` | 48 |
 | `elemento-fuera-del-viewport` | 9 |
 | `desbordamiento-horizontal` | 6 |
@@ -279,6 +279,7 @@ Generado: 2026-09-22T13:41:22.207Z · modo **sin-servicios**
 | torneos | movil | `objetivo-tactil-pequeno` | a«Mi Cuenta» mide 69×31 |
 | torneos | movil | `objetivo-tactil-pequeno` | a«Iniciar sesión» mide 115×32 |
 | torneos | movil | `objetivo-tactil-pequeno` | a«Registrarse» mide 103×32 |
+| torneos | movil | `objetivo-tactil-pequeno` | button«Reintentar» mide 104×40 |
 | publicar-comentario | tablet | `cabecera-en-mas-de-dos-filas` | la cabecera mide 141px (una fila son 64px) |
 | publicar-comentario | movil | `cabecera-en-mas-de-dos-filas` | la cabecera mide 188px (una fila son 64px) |
 | publicar-comentario | movil | `objetivo-tactil-pequeno` | a«NEXUS BATTLES VI» mide 154×30 |

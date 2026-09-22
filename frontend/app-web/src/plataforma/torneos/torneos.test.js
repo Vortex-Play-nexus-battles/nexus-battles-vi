@@ -216,7 +216,14 @@ describe('vista', () => {
       fetchImpl: servicio({ 'GET /api/v1/torneos': { cuerpo: [] } }),
     });
     await asentar();
-    expect(document.querySelector('[data-zona="listado"]').textContent).toMatch(/no hay torneos/);
+    // UX-R2.7 — el vacio pasa de un parrafo gris a un estado util: dice que
+    // NO hay torneo, explica el formato por temporadas y ofrece lo unico que
+    // el jugador puede hacer ahora. Sin inventar una fecha del proximo.
+    const listado = document.querySelector('[data-zona="listado"]');
+    expect(listado.textContent).toMatch(/no hay ningún torneo abierto/i);
+    expect(listado.textContent).toMatch(/temporadas/i);
+    expect(listado.querySelector('a[href*="batallas"]')).not.toBeNull();
+    expect(listado.textContent).not.toMatch(/\d+\s*d[ií]as/);
     expect(document.querySelector('[data-zona="crear-torneo"]').hidden).toBe(true);
 
     document.body.innerHTML = VISTA;
