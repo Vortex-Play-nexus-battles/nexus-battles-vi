@@ -106,7 +106,10 @@ export function tarjeta({
 /**
  * Cifra destacada con su etiqueta (saldo, sanciones del mes, latencia media).
  *
- * @param {{etiqueta: string, valor: string, detalle?: string|null, tono?: string|null}} opciones
+ * `valor` acepta también un nodo, para cifras que se presentan con su propio
+ * componente —créditos con su moneda, por ejemplo— en vez de como texto suelto.
+ *
+ * @param {{etiqueta: string, valor: string|Node, detalle?: string|null, tono?: string|null}} opciones
  * @returns {HTMLElement}
  */
 export function tarjetaDeCifra({ etiqueta, valor, detalle = null, tono = null }) {
@@ -114,10 +117,11 @@ export function tarjetaDeCifra({ etiqueta, valor, detalle = null, tono = null })
     clase: 'metrica metrica--cifra',
     datos: tono ? { tono } : {},
   });
-  caja.append(
-    h('p', { clase: 't-meta', texto: etiqueta }),
-    h('p', { clase: 'metrica__valor', texto: valor }),
-  );
+  const cifra =
+    valor instanceof Node
+      ? h('p', { clase: 'metrica__valor', hijos: [valor] })
+      : h('p', { clase: 'metrica__valor', texto: valor });
+  caja.append(h('p', { clase: 't-meta', texto: etiqueta }), cifra);
   if (detalle) {
     caja.append(h('p', { clase: 't-meta', texto: detalle }));
   }

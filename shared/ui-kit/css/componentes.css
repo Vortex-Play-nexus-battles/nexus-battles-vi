@@ -3463,3 +3463,262 @@
 .cabecera__destino--con-sesion:focus-visible {
   opacity: 1;
 }
+
+/* =======================================================================
+   Componentes de juego — UX-R2.2
+   -----------------------------------------------------------------------
+   Lo que el kit ya traia de Figma (`marco-heroe`, `ranura`, `accion-combate`,
+   `barra-vida`, `turno-actual`) no se toca: esto es solo lo que le faltaba
+   para que esas piezas se puedan usar de verdad en una pantalla.
+
+   Ni un color nuevo. Todo sale de fichas existentes.
+   ======================================================================= */
+
+/* --- Heroe sin retrato ------------------------------------------------- */
+
+/* Antes de que llegue la imagen, o cuando el heroe no tiene ninguna, la
+   inicial dice de quien es el hueco. Un circulo vacio no distingue seis
+   participantes; una «A» y una «M», si. */
+.marco-heroe__inicial {
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-titulo-tam);
+  font-weight: var(--t-titulo-peso);
+  color: var(--texto-2);
+}
+
+/* --- Carta de heroe ---------------------------------------------------- */
+
+.tarjeta-heroe {
+  display: grid;
+  gap: var(--e-3);
+  justify-items: center;
+  text-align: center;
+}
+
+/* Cuando es pulsable es un `<button>`, y un boton trae estilos de agente de
+   usuario que hay que apagar para que siga pareciendo una carta. */
+button.tarjeta-heroe {
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.tarjeta-heroe__identidad {
+  display: grid;
+  gap: var(--e-1);
+  justify-items: center;
+}
+
+/* Elegida: no basta con el borde de foco, que se va al pulsar en otro sitio.
+   `aria-pressed` es lo que lee el lector; esto es su equivalente visual. */
+.tarjeta-heroe--seleccionada,
+button.tarjeta-heroe[aria-pressed='true'] {
+  border-color: var(--primaria);
+  box-shadow: var(--anillo-foco);
+}
+
+.tarjeta-heroe__estadisticas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  gap: var(--e-2) var(--e-3);
+  margin: 0;
+  width: 100%;
+}
+
+.tarjeta-heroe__estadisticas dt {
+  color: var(--texto-2);
+}
+
+.tarjeta-heroe__cifra {
+  margin: 0;
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  font-weight: var(--t-titulo-peso);
+}
+
+/* --- Ranuras de equipamiento ------------------------------------------- */
+
+.ranura__icono {
+  width: var(--icono);
+  height: var(--icono);
+}
+
+.grupo-ranuras {
+  display: grid;
+  gap: var(--e-3);
+}
+
+.grupo-ranuras__rejilla {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-4);
+}
+
+/* --- Accion de combate: el coste --------------------------------------- */
+
+.accion-combate__coste {
+  color: var(--texto-2);
+}
+
+/* --- Indicador de turno: ronda y texto --------------------------------- */
+
+.turno-actual__ronda {
+  font-weight: var(--t-titulo-peso);
+}
+
+/* Separador entre la ronda y de quien es el turno, sin meter un nodo mas. */
+.turno-actual__ronda + .turno-actual__texto::before {
+  content: '·';
+  margin: 0 var(--e-2);
+  color: currentcolor;
+}
+
+/* --- Creditos ---------------------------------------------------------- */
+
+.distintivo-credito {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+  padding: var(--e-1) var(--e-3);
+  border: 1px solid var(--credito-oro);
+  border-radius: var(--radio-pildora);
+  background: var(--rareza-legendaria-insignia);
+  font-family: var(--t-titulo-familia);
+  font-weight: var(--t-titulo-peso);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.distintivo-credito__icono {
+  width: var(--icono-menudo);
+  height: var(--icono-menudo);
+  color: var(--credito-oro);
+}
+
+.distintivo-credito--grande {
+  padding: var(--e-2) var(--e-4);
+  font-size: var(--t-subtitulo-tam);
+}
+
+.distintivo-credito--grande .distintivo-credito__icono {
+  width: var(--icono);
+  height: var(--icono);
+}
+
+.distintivo-credito__contexto {
+  color: var(--texto-2);
+  font-family: var(--t-meta-familia);
+  font-weight: var(--t-cuerpo-peso);
+}
+
+/* --- Desenlace de partida ---------------------------------------------- */
+
+/* `--t-display-tam` llevaba en tokens.css desde el principio, reservada para
+   esto, y nadie la usaba: el tamano mas grande de toda la aplicacion era el de
+   un titulo de seccion. Una partida que termina igual de discreta que un
+   formulario no se siente como el final de nada. */
+.panel-resultado {
+  display: grid;
+  justify-items: center;
+  gap: var(--e-3);
+  padding: var(--e-8) var(--e-6);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  box-shadow: var(--sombra-3);
+  text-align: center;
+}
+
+.panel-resultado__icono {
+  width: 48px;
+  height: 48px;
+}
+
+.panel-resultado__palabra {
+  margin: 0;
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-display-tam);
+  line-height: var(--t-display-alto);
+  font-weight: var(--t-titulo-peso);
+  letter-spacing: 0.04em;
+}
+
+/* Ganar y perder no son el mismo panel con otro color: cambian la palabra, el
+   icono y el borde. Quien no distinga verde de rojo lee «VICTORIA» igual. */
+.panel-resultado--victoria {
+  border-top: 4px solid var(--exito);
+}
+
+.panel-resultado--victoria .panel-resultado__palabra,
+.panel-resultado--victoria .panel-resultado__icono {
+  color: var(--exito);
+}
+
+.panel-resultado--derrota {
+  border-top: 4px solid var(--texto-3);
+}
+
+.panel-resultado--derrota .panel-resultado__palabra,
+.panel-resultado--derrota .panel-resultado__icono {
+  color: var(--texto-2);
+}
+
+.panel-resultado__detalle {
+  margin: 0;
+  color: var(--texto-2);
+}
+
+.panel-resultado__creditos {
+  margin: 0;
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  font-weight: var(--t-titulo-peso);
+}
+
+.panel-resultado__creditos[data-signo='positivo'] {
+  color: var(--exito);
+}
+
+.panel-resultado__creditos[data-signo='negativo'] {
+  color: var(--texto-2);
+}
+
+.panel-resultado__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-3);
+  justify-content: center;
+  margin-top: var(--e-2);
+}
+
+/* En movil el display de 56px ocupa media pantalla. Se reduce, pero sigue
+   siendo con diferencia lo mas grande de la vista, que es su trabajo. */
+@media (max-width: 480px) {
+  .panel-resultado {
+    padding: var(--e-6) var(--e-4);
+  }
+
+  .panel-resultado__palabra {
+    font-size: var(--t-titulo-xl-tam);
+  }
+}
+
+/* La entrada del panel solo para quien no ha pedido lo contrario. El panel se
+   ve igual de bien sin ella; la animacion es adorno, no informacion. */
+@media (prefers-reduced-motion: no-preference) {
+  .panel-resultado {
+    animation: aparecer-resultado var(--duracion-pausado) var(--curva-estandar);
+  }
+}
+
+@keyframes aparecer-resultado {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

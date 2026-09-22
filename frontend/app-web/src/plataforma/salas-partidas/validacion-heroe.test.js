@@ -240,11 +240,27 @@ describe('accesibilidad', () => {
     expect(titulo.textContent).toBe('Verificacion de heroe');
   });
 
-  test('el retrato es decorativo: lo que comunica es el texto', () => {
+  test('sin heroe, el circulo del dialogo es decorativo', () => {
+    const d = raiz();
+    pintarValidacion(d, sinHeroe());
+
+    expect(d.querySelector('.dialogo__icono').getAttribute('aria-hidden')).toBe('true');
+  });
+
+  // UX-R2.2 — antes este retrato era un <span> vacio con `aria-hidden` para
+  // CUALQUIER resultado, aunque el contrato trajera el heroe. El circulo era
+  // el mismo para todos los heroes del juego.
+  test('con heroe, el retrato es el marco del kit y se nombra', () => {
     const d = raiz();
     pintarValidacion(d, disponible());
 
-    expect(d.querySelector('.dialogo__icono').getAttribute('aria-hidden')).toBe('true');
+    const marco = d.querySelector('.marco-heroe');
+    expect(marco).not.toBeNull();
+    expect(marco.getAttribute('aria-label')).toContain('Arquero del Norte');
+    // `nivel` viaja en `HeroeEnPartida` desde que se escribio el contrato.
+    expect(marco.querySelector('.marco-heroe__nivel').textContent).toBe('12');
+    // Y ya no queda el circulo gris de antes.
+    expect(d.querySelector('.dialogo__icono')).toBeNull();
   });
 
   test('el aviso de error se anuncia como alerta y el resto como estado', () => {
