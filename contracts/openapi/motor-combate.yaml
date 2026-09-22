@@ -41,7 +41,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Motor de combate
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Resuelve el resultado de un ataque segun las reglas del juego: tirada de
     dados, comparacion con la defensa, sorteo del efecto sobre la tabla de
@@ -75,6 +75,7 @@ paths:
     post:
       tags: [Combate]
       operationId: resolverAtaque
+      security: [{ tokenDeServicio: [] }]
       summary: Resuelve un ataque de principio a fin
       description: |
         Hace las tres cosas que el dominio ya sabe hacer, en orden:
@@ -145,6 +146,7 @@ paths:
     get:
       tags: [Combate]
       operationId: listarDistribuciones
+      security: [{ tokenDePortador: [] }]
       summary: Prototipos de distribucion de efectos disponibles
       description: |
         Los seis prototipos que el dominio define, con su reparto porcentual.
@@ -163,6 +165,25 @@ paths:
                 items: { $ref: '#/components/schemas/PrototipoDeDistribucion' }
 
 components:
+  # R8.1 — antes de esta version el motor no tenia seguridad ninguna: cualquiera
+  # que alcanzara el puerto podia resolver un ataque, y con ello sondear la tabla
+  # de efectos. Resolver un ataque decide quien gana una partida, asi que es
+  # exclusivo de servicio: su unico consumidor legitimo es salas-partidas, que
+  # es quien conoce el estado del combate.
+  securitySchemes:
+    tokenDeServicio:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Credencial de servicio por `client_credentials` (ADR-005), con
+        `rol=SERVICIO`. Un token de jugador —incluso de super administrador—
+        recibe 403.
+    tokenDePortador:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token de cualquier usuario autenticado (ADR-002).
 
   schemas:
 

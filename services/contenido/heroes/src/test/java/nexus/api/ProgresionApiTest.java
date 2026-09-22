@@ -5,6 +5,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.UUID;
+
+import com.nexusbattles.comun.seguridad.pruebas.EmisorDeTokensDePrueba;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +26,18 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest
 @AutoConfigureMockMvc
 class ProgresionApiTest {
+    // R8.1 — esta ruta dejo de ser anonima. Resolver la subida de nivel es logica de servidor.
+    // El token es real (RSA, verificado contra el JWKS del emisor de prueba),
+    // no un principal inventado: lo que estas pruebas atraviesan es la misma
+    // cadena de seguridad que atravesara el servicio desplegado.
+    private static final String AUTORIZACION =
+            "Bearer " + EmisorDeTokensDePrueba.emisor().tokenDeServicio("salas-partidas");
+
+    @DynamicPropertySource
+    static void jwks(DynamicPropertyRegistry registro) {
+        EmisorDeTokensDePrueba.registrarJwks(registro);
+    }
+
 
     @Autowired
     private MockMvc mvc;
@@ -110,7 +127,7 @@ class ProgresionApiTest {
     @Test
     @DisplayName("progresar aplica puntos con sobrante y encadena niveles")
     void progresarEncadenaNiveles() throws Exception {
-        mvc.perform(post("/api/v1/progresion/experiencia")
+        mvc.perform(post("/api/v1/progresion/experiencia").header("Authorization", AUTORIZACION)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"nivel\":1,\"experiencia\":0,\"puntos\":250}"))
                 .andExpect(status().isOk())
@@ -121,7 +138,7 @@ class ProgresionApiTest {
     @Test
     @DisplayName("progresar rechaza puntos negativos con 400")
     void progresarRechazaNegativos() throws Exception {
-        mvc.perform(post("/api/v1/progresion/experiencia")
+        mvc.perform(post("/api/v1/progresion/experiencia").header("Authorization", AUTORIZACION)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"nivel\":1,\"experiencia\":0,\"puntos\":-5}"))
                 .andExpect(status().isBadRequest())

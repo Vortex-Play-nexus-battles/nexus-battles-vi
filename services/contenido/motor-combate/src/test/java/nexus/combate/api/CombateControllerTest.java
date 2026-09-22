@@ -29,9 +29,34 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 // este, no padre: `@WebMvcTest` busca la configuracion hacia arriba y no la
 // encuentra sola. Se le dice cual es. Es el precio -barato- de tener el
 // dominio fuera del escaneo de Spring, y merece la pena.
+// R8.1 — `addFilters = false` desconecta la cadena de seguridad SOLO aqui, a
+// proposito. Esta clase comprueba la FORMA del contrato: que un ataque resuelto
+// sale con sus cinco campos y que cada fallo lleva su `type`. Meterle un token a
+// cada peticion no anadiria una sola afirmacion sobre eso y taparia el sujeto de
+// la prueba. Quien comprueba que la ruta esta cerrada es
+// `nexus.combate.arranque.SeguridadDelMotorTest`, con tokens RSA reales y los
+// casos negativos (sin token, jugador, administrador, firma ajena). Las dos
+// clases juntas cubren forma y acceso sin mezclarlos.
+// `@Import(SeguridadConfig.class)` no es opcional: sin el, el contexto de la
+// rodaja ni siquiera arranca. Con spring-security en el classpath, Boot activa
+// `OAuth2ResourceServerWebSecurityAutoConfiguration`, que solo entra cuando
+// NADIE ha definido un `SecurityFilterChain` — y en un `@WebMvcTest` una
+// `@Configuration` corriente como la nuestra queda fuera del escaneo. Su cadena
+// de respaldo pide un bean `HttpSecurity` que en la rodaja no existe, y el
+// contexto muere con `UnsatisfiedDependencyException`. Importando la nuestra,
+// que lleva `@EnableWebSecurity`, el bean existe y la cadena es la de verdad.
+// `addFilters = false` la deja despues sin ejecutar, que es lo que aqui toca.
 @WebMvcTest(controllers = CombateController.class)
 @ContextConfiguration(classes = nexus.combate.arranque.MotorCombateApplication.class)
-@TestPropertySource(properties = "motor.heroes.url=http://localhost:65535")
+@org.springframework.context.annotation.Import(nexus.combate.arranque.SeguridadConfig.class)
+@TestPropertySource(properties = {
+        "motor.heroes.url=http://localhost:65535",
+        // La rodaja no llama a ningun JWKS —los filtros estan apagados— pero la
+        // propiedad tiene que resolver para que el servidor de recursos se
+        // configure sin quejarse.
+        "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=http://localhost:65535/jwks"
+})
+@org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc(addFilters = false)
 class CombateControllerTest {
 
     private static final String CUERPO = """

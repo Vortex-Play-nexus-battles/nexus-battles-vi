@@ -345,13 +345,24 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
       [anfitriona.token, ANFITRION, anfitriona.claims.uid],
     );
     await page.goto(`${BORDE}${VISTA}?torneo=${torneo.id}`);
-    const fila5 = page.locator('[data-zona="detalle"] [data-llave="GANADORES"] li[data-numero="5"]');
-    await expect(fila5).toContainText('listo para jugarse', { timeout: 20000 });
+    // R8.2 — PR-UX-3/4 (#592) sustituyo `filaDeEncuentro` por
+    // `tarjetaDeEncuentro`: el nodo dejo de ser un <li> dentro de una lista y
+    // paso a ser un <article> dentro de `.arbol-torneo__ronda`, y el estado
+    // dejo de ir en una frase corrida (' · listo para jugarse') para vivir en
+    // la cabecera del componente, capitalizado.
+    //
+    // La prueba se actualiza, no se afloja: HU-TOR-004 CA-04 pide que el
+    // resultado lo aporte la partida jugada, no un texto concreto — el enum del
+    // contrato es LISTO (torneos.yaml). Lo que se sigue afirmando es lo mismo.
+    const fila5 = page.locator('[data-zona="detalle"] [data-llave="GANADORES"] article[data-numero="5"]');
+    await expect(fila5).toContainText('Listo para jugarse', { timeout: 20000 });
     const enlace = fila5.locator('[data-accion="jugar-encuentro"]');
     await expect(enlace).toHaveAttribute('href', new RegExp(`torneo=${torneo.id}&encuentro=5$`));
     // El encuentro 3 (dos maquinas) no me ofrece nada.
     await expect(
-      page.locator('[data-zona="detalle"] li[data-numero="3"] [data-accion="jugar-encuentro"]'),
+      // Tambien <article>: con `li` esta asercion daba 0 por no encontrar el
+      // nodo, no por no haber enlace. Pasaba por la razon equivocada.
+      page.locator('[data-zona="detalle"] article[data-numero="3"] [data-accion="jugar-encuentro"]'),
     ).toHaveCount(0);
     await enlace.click();
     await expect(page).toHaveURL(new RegExp(`${CREAR_SALA}\\?torneo=${torneo.id}&encuentro=5`));
@@ -507,10 +518,27 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     const detalleVista = page.locator('[data-zona="detalle"]');
     await expect(detalleVista).toHaveAttribute('data-estado', 'FINALIZADO');
     await expect(detalleVista.locator('[data-zona="campeon"]')).toHaveText('Campeon: Los Valientes');
-    await expect(detalleVista.locator('[data-llave="GANADORES"] li')).toHaveCount(7);
-    await expect(detalleVista.locator('[data-llave="SECUNDARIOS"] li')).toHaveCount(6);
-    await expect(detalleVista.locator('[data-llave="FINAL"] li')).toHaveCount(1);
-    await expect(detalleVista.locator('[data-llave="FINAL"] li')).toContainText('gana Los Valientes');
+    // R8.2 — mismos <article> del kit (#592). Este test estaba SALTADO porque
+    // el describe es `serial` y el anterior fallaba; al arreglarlo despierta, y
+    // con `li` habria dado un tercer rojo.
+    await expect(detalleVista.locator('[data-llave="GANADORES"] article.encuentro')).toHaveCount(7);
+    await expect(detalleVista.locator('[data-llave="SECUNDARIOS"] article.encuentro')).toHaveCount(6);
+    await expect(detalleVista.locator('[data-llave="FINAL"] article.encuentro')).toHaveCount(1);
+    // R8.2 — se afirma sobre el MARCADOR de ganador, no sobre una frase.
+    //
+    // `tarjetaDeEncuentro` (#592) sustituyo a proposito la frase corrida
+    // «Encuentro 5: Los Dragones vs Los Lobos → gana Los Valientes» por una
+    // fila por equipo con el ganador distinguido **por peso de letra y no solo
+    // por color** (`.encuentro__equipo--ganador`) mas un texto para lectores de
+    // pantalla. Era una mejora de accesibilidad; la prueba se quedo con la
+    // redaccion vieja.
+    //
+    // Afirmar sobre la clase del ganador es mas fuerte que la subcadena
+    // anterior: aquella pasaba con que el nombre apareciera en cualquier parte
+    // de la tarjeta; esta exige que sea **ese** equipo el marcado como ganador.
+    await expect(
+      detalleVista.locator('[data-llave="FINAL"] article.encuentro .encuentro__equipo--ganador'),
+    ).toContainText('Los Valientes');
     await expect(detalleVista.locator('[data-zona="equipos"] article[data-ia="true"]')).toHaveCount(7);
     await expect(detalleVista.locator(`[data-equipo-id="${equipo.id}"]`)).toContainText('(tu equipo)');
   });
