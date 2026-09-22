@@ -3006,3 +3006,45 @@
   .arbol-torneo { flex-direction: column; overflow-x: visible; }
   .encuentro { width: 100%; }
 }
+
+
+/* =======================================================================
+   Aviso flotante — HU-RBAC-004
+   -----------------------------------------------------------------------
+   El rechazo de permiso que levanta el interceptor compartido. Se construia
+   a mano con veinte lineas de `elemento.style.*` en linea; ahora es un
+   `.aviso` normal que flota. El color y el borde salen del modificador
+   (`.aviso--error`), asi que acompanan al modo de alto contraste.
+   ======================================================================= */
+
+.aviso-flotante {
+  position: fixed;
+  top: var(--e-5);
+  right: var(--e-5);
+  z-index: 9999;
+  max-width: min(420px, calc(100vw - var(--e-8, 2rem)));
+  box-shadow: var(--sombra-3);
+  opacity: 0;
+  transform: translateY(-10px);
+  transition:
+    opacity var(--duracion-normal) var(--curva-salida),
+    transform var(--duracion-normal) var(--curva-salida);
+  /* Mientras esta invisible no debe atrapar clics de lo que hay debajo. */
+  pointer-events: none;
+}
+
+.aviso-flotante[data-visible='si'] {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* En pantalla estrecha ocupa el ancho: un aviso de 420 px anclado a la
+   derecha en un movil se sale o tapa el contenido. */
+@media (max-width: 599px) {
+  .aviso-flotante {
+    left: var(--e-3);
+    right: var(--e-3);
+    max-width: none;
+  }
+}

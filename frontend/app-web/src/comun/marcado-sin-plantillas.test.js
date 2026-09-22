@@ -28,7 +28,7 @@
  * migraron aquí. La prueba falla si aparece uno nuevo o si uno de la lista se
  * arregla y nadie borra su línea: en los dos sentidos obliga a mirar.
  *
- * Nueve de los catorce originales son de los otros dos equipos —incluido
+ * Los ocho que quedan son de los otros dos equipos —incluido
  * `publicar-subasta.js`, que está en la lista de módulos protegidos de la
  * auditoría HU-SUB-001— y migrarlos desde fuera de su historia sería
  * exactamente lo que el Charter prohíbe.
@@ -46,9 +46,6 @@ const raizRepo = new URL('../../../../', import.meta.url);
  * @type {Record<string, string>}
  */
 const PENDIENTES = Object.freeze({
-  // Grupo 6 — quedan para el bloque de limpieza (PR-UX-8).
-  'comun/interceptors/http-error.interceptor.js': 'grupo-6, interceptor compartido',
-
   // Grupo 2 — Contenido. No se tocan sin su dueño.
   'contenido/productos/productos.js': 'grupo-2',
 
