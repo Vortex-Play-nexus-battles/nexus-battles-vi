@@ -5090,3 +5090,47 @@ button.tarjeta-heroe[aria-pressed='true'] {
 .formulario-en-linea > .boton {
   flex: 0 0 auto;
 }
+
+/* El campo de combate solo existe cuando hay combate — UX-R3.4.
+
+   `.combate__campo` se lleva la franja `1fr` de la reja, que es la mayor
+   parte de la ventana: CA-01 de HU-JUE-017 pide más del 80 % del alto útil
+   para el área de juego, y eso está bien mientras haya área de juego. Sin
+   partida cargada dejaba media pantalla de degradado vacío con la tarjeta del
+   estado vacío huérfana debajo, casi en el borde inferior. La pantalla más
+   importante del producto parecía rota justo en el estado en el que más gente
+   la abre por error.
+
+   Sin partida: el campo desaparece y el estado vacío ocupa su sitio, centrado.
+   Con partida, nada de esto aplica y la reja vuelve a ser la de CA-01. */
+.combate[data-sin-partida='si'] .combate__campo {
+  display: none;
+}
+
+/* Y el hueco que dejaba pasa al estado vacío. Sin esto, la reja sigue
+   reservando su franja `1fr` —las filas las fija la plantilla, no el
+   contenido— y la tarjeta se quedaba pegada al borde inferior de la ventana,
+   que es justo lo que se venía a arreglar. */
+.combate[data-sin-partida='si'] {
+  grid-template-rows: auto 1fr;
+}
+
+/* `.combate__sala` es una CAPA: `position: absolute; inset: auto 0 0 0`, es
+   decir, pegada al borde inferior del campo, que es donde tiene que estar
+   mientras se espera a que la sala se llene y el campo ya se ve detrás.
+
+   Sin campo detrás no es una capa, es el contenido: vuelve al flujo de la
+   reja, ocupa la franja `1fr` que dejó el campo y se centra en ella. Esto era
+   lo que faltaba: ocultar el campo no bastaba, porque la tarjeta seguía
+   anclada abajo y quedaba flotando sobre medio lienzo vacío. */
+.combate[data-sin-partida='si'] .combate__sala {
+  position: static;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  min-height: 0;
+}
+
+.combate[data-sin-partida='si'] .combate__sala > .estado-vista {
+  width: min(560px, 100%);
+}
