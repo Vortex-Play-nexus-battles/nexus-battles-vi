@@ -8,6 +8,17 @@ spring:
   application:
     name: motor-combate
 
+  # R8.1 — servidor de recursos. El emisor real es ms-identidad (ADR-002 /
+  # ADR-005), que publica su JWKS en GET /api/v1/auth/jwks. Se acepta tambien
+  # KEYCLOAK_JWK_SET_URI por compatibilidad con los compose del host de
+  # contenido, que hoy inyectan ese nombre; el renombrado de los tres servicios
+  # es trabajo de R9.7.
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${IDENTIDAD_JWKS_URL:${KEYCLOAK_JWK_SET_URI:http://localhost:8089/api/v1/auth/jwks}}
+
 server:
   port: ${SERVER_PORT:8080}
 

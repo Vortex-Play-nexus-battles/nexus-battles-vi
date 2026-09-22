@@ -4,6 +4,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.UUID;
+
+import com.nexusbattles.comun.seguridad.pruebas.EmisorDeTokensDePrueba;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +26,18 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest
 @AutoConfigureMockMvc
 class EstrategiasApiTest {
+    // R8.1 — esta ruta dejo de ser anonima. Validar una estrategia es un calculo a peticion del jugador.
+    // El token es real (RSA, verificado contra el JWKS del emisor de prueba),
+    // no un principal inventado: lo que estas pruebas atraviesan es la misma
+    // cadena de seguridad que atravesara el servicio desplegado.
+    private static final String AUTORIZACION =
+            "Bearer " + EmisorDeTokensDePrueba.emisor().tokenDeJugador("lyra", UUID.randomUUID());
+
+    @DynamicPropertySource
+    static void jwks(DynamicPropertyRegistry registro) {
+        EmisorDeTokensDePrueba.registrarJwks(registro);
+    }
+
 
     private static final String RUTA = "/api/v1/estrategias/validacion";
 
@@ -30,7 +47,7 @@ class EstrategiasApiTest {
     @Test
     @DisplayName("el ejemplo del documento (seccion 7.8.5) se acepta con prioridades alta, media y baja")
     void ejemploDelDocumento() throws Exception {
-        mvc.perform(post(RUTA).contentType(MediaType.APPLICATION_JSON).content("""
+        mvc.perform(post(RUTA).header("Authorization", AUTORIZACION).contentType(MediaType.APPLICATION_JSON).content("""
                 {"heroe":"Guerrero Armas","nivel":8,"rotaciones":[
                   {"pasos":["Golpe de tormenta","Embate sangriento","Ataque básico"]},
                   {"pasos":["Lanza de los dioses","Ataque básico","Ataque básico"]},
@@ -52,7 +69,7 @@ class EstrategiasApiTest {
     @Test
     @DisplayName("una habilidad que el heroe no posee en su nivel se rechaza indicando las validas (ERS CU-61 E1)")
     void habilidadNoPoseida() throws Exception {
-        mvc.perform(post(RUTA).contentType(MediaType.APPLICATION_JSON).content("""
+        mvc.perform(post(RUTA).header("Authorization", AUTORIZACION).contentType(MediaType.APPLICATION_JSON).content("""
                 {"heroe":"guerrero armas","nivel":4,"rotaciones":[{"pasos":["Golpe de tormenta"]}]}
                 """))
                 .andExpect(status().isOk())
@@ -68,7 +85,7 @@ class EstrategiasApiTest {
     @Test
     @DisplayName("sin rotaciones la estrategia es la por defecto: ataque basico (RF-MIS-15)")
     void sinRotaciones() throws Exception {
-        mvc.perform(post(RUTA).contentType(MediaType.APPLICATION_JSON).content("""
+        mvc.perform(post(RUTA).header("Authorization", AUTORIZACION).contentType(MediaType.APPLICATION_JSON).content("""
                 {"heroe":"Pícaro Veneno","nivel":3}
                 """))
                 .andExpect(status().isOk())
@@ -81,7 +98,7 @@ class EstrategiasApiTest {
     @Test
     @DisplayName("sin nivel se asume el 1: solo la primera accion y el ataque basico")
     void nivelPorDefecto() throws Exception {
-        mvc.perform(post(RUTA).contentType(MediaType.APPLICATION_JSON).content("""
+        mvc.perform(post(RUTA).header("Authorization", AUTORIZACION).contentType(MediaType.APPLICATION_JSON).content("""
                 {"heroe":"Guerrero Tanque","rotaciones":[{"pasos":["Golpe con escudo","Ataque básico"]}]}
                 """))
                 .andExpect(status().isOk())
@@ -93,7 +110,7 @@ class EstrategiasApiTest {
     @Test
     @DisplayName("un heroe inexistente responde 404 en formato de detalles de problema")
     void heroeInexistente() throws Exception {
-        mvc.perform(post(RUTA).contentType(MediaType.APPLICATION_JSON).content("""
+        mvc.perform(post(RUTA).header("Authorization", AUTORIZACION).contentType(MediaType.APPLICATION_JSON).content("""
                 {"heroe":"Paladín","nivel":1,"rotaciones":[]}
                 """))
                 .andExpect(status().isNotFound())
@@ -103,7 +120,7 @@ class EstrategiasApiTest {
     @Test
     @DisplayName("un nivel fuera de 1..8 responde 400 con mensaje apto para el usuario")
     void nivelFueraDeRango() throws Exception {
-        mvc.perform(post(RUTA).contentType(MediaType.APPLICATION_JSON).content("""
+        mvc.perform(post(RUTA).header("Authorization", AUTORIZACION).contentType(MediaType.APPLICATION_JSON).content("""
                 {"heroe":"Chamán","nivel":9,"rotaciones":[]}
                 """))
                 .andExpect(status().isBadRequest())

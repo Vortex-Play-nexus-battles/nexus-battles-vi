@@ -20,6 +20,11 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import java.util.UUID;
+
+import com.nexusbattles.comun.seguridad.pruebas.EmisorDeTokensDePrueba;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
@@ -34,6 +39,22 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest
 @AutoConfigureMockMvc
 class ContratoDeHeroesTest {
+    // R8.1 — el contrato se comprueba ahora atravesando la seguridad real.
+    // Cada POST lleva el token de la clase que SeguridadConfig le exige: el
+    // calculo del jugador va con token de jugador, la logica de servidor con
+    // credencial de servicio. Los GET del catalogo siguen sin token, porque
+    // siguen siendo publicos — y que lo sigan siendo es parte del contrato.
+    private static final EmisorDeTokensDePrueba EMISOR = EmisorDeTokensDePrueba.emisor();
+    private static final String COMO_JUGADOR =
+            "Bearer " + EMISOR.tokenDeJugador("lyra", UUID.randomUUID());
+    private static final String COMO_SERVICIO =
+            "Bearer " + EMISOR.tokenDeServicio("salas-partidas");
+
+    @DynamicPropertySource
+    static void jwks(DynamicPropertyRegistry registro) {
+        EmisorDeTokensDePrueba.registrarJwks(registro);
+    }
+
 
     private static final String CONTRATO =
             Path.of("contracts/openapi/heroes.yaml").toUri().toString();
@@ -111,7 +132,7 @@ class ContratoDeHeroesTest {
         mvc.perform(get("/api/v1/progresion/niveles"))
                 .andExpect(status().isOk())
                 .andExpect(openApi().isValid(CONTRATO));
-        mvc.perform(post("/api/v1/progresion/experiencia")
+        mvc.perform(post("/api/v1/progresion/experiencia").header("Authorization", COMO_SERVICIO)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"nivel\":2,\"experiencia\":10,\"puntos\":500}"))
                 .andExpect(status().isOk())
@@ -124,17 +145,17 @@ class ContratoDeHeroesTest {
     @Test
     @DisplayName("la validacion de composicion de equipo cumple el contrato (HU-JUE-009)")
     void composicionDeEquipoCumpleElContrato() throws Exception {
-        mvc.perform(post("/api/v1/equipos/validacion")
+        mvc.perform(post("/api/v1/equipos/validacion").header("Authorization", COMO_JUGADOR)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"heroes\":[\"Chamán\",\"Guerrero Tanque\"]}"))
                 .andExpect(status().isOk())
                 .andExpect(openApi().isValid(CONTRATO));
-        mvc.perform(post("/api/v1/equipos/validacion")
+        mvc.perform(post("/api/v1/equipos/validacion").header("Authorization", COMO_JUGADOR)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"heroes\":[\"Chamán\",\"Médico\"]}"))
                 .andExpect(status().isOk())
                 .andExpect(openApi().isValid(CONTRATO));
-        mvc.perform(post("/api/v1/equipos/validacion")
+        mvc.perform(post("/api/v1/equipos/validacion").header("Authorization", COMO_JUGADOR)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"heroes\":[\"Nigromante\"]}"))
                 .andExpect(status().isNotFound())
@@ -144,22 +165,22 @@ class ContratoDeHeroesTest {
     @Test
     @DisplayName("la validacion de la estrategia de combate cumple el contrato (HU-SIM-001)")
     void estrategiaDeCombateCumpleElContrato() throws Exception {
-        mvc.perform(post("/api/v1/estrategias/validacion")
+        mvc.perform(post("/api/v1/estrategias/validacion").header("Authorization", COMO_JUGADOR)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"heroe\":\"Guerrero Armas\",\"nivel\":8,\"rotaciones\":[{\"pasos\":[\"Golpe de tormenta\",\"Ataque básico\"]}]}"))
                 .andExpect(status().isOk())
                 .andExpect(openApi().isValid(CONTRATO));
-        mvc.perform(post("/api/v1/estrategias/validacion")
+        mvc.perform(post("/api/v1/estrategias/validacion").header("Authorization", COMO_JUGADOR)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"heroe\":\"Guerrero Armas\",\"nivel\":1,\"rotaciones\":[{\"pasos\":[\"Golpe de tormenta\"]}]}"))
                 .andExpect(status().isOk())
                 .andExpect(openApi().isValid(CONTRATO));
-        mvc.perform(post("/api/v1/estrategias/validacion")
+        mvc.perform(post("/api/v1/estrategias/validacion").header("Authorization", COMO_JUGADOR)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"heroe\":\"Chamán\"}"))
                 .andExpect(status().isOk())
                 .andExpect(openApi().isValid(CONTRATO));
-        mvc.perform(post("/api/v1/estrategias/validacion")
+        mvc.perform(post("/api/v1/estrategias/validacion").header("Authorization", COMO_JUGADOR)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"heroe\":\"Nigromante\"}"))
                 .andExpect(status().isNotFound())
@@ -170,17 +191,17 @@ class ContratoDeHeroesTest {
     @DisplayName("la decision de la IA por turno cumple el contrato (HU-SIM-002)")
     void decisionPorTurnoCumpleElContrato() throws Exception {
         String estrategia = "\"heroe\":\"Guerrero Armas\",\"nivel\":8,\"rotaciones\":[{\"pasos\":[\"Golpe de tormenta\",\"Ataque básico\"]},{\"pasos\":[\"Lanza de los dioses\"]}]";
-        mvc.perform(post("/api/v1/estrategias/decision")
+        mvc.perform(post("/api/v1/estrategias/decision").header("Authorization", COMO_SERVICIO)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{" + estrategia + ",\"estado\":{\"turno\":1,\"poder\":64,\"vida\":44}}"))
                 .andExpect(status().isOk())
                 .andExpect(openApi().isValid(CONTRATO));
-        mvc.perform(post("/api/v1/estrategias/decision")
+        mvc.perform(post("/api/v1/estrategias/decision").header("Authorization", COMO_SERVICIO)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{" + estrategia + ",\"estado\":{\"turno\":4,\"poder\":0,\"vida\":44,\"turnoDeUltimoUso\":{\"Golpe de tormenta\":3},\"cursores\":[1,0]}}"))
                 .andExpect(status().isOk())
                 .andExpect(openApi().isValid(CONTRATO));
-        mvc.perform(post("/api/v1/estrategias/decision")
+        mvc.perform(post("/api/v1/estrategias/decision").header("Authorization", COMO_SERVICIO)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{" + estrategia + ",\"estado\":{\"turno\":1,\"poder\":64,\"vida\":0}}"))
                 .andExpect(status().isBadRequest())
