@@ -17,6 +17,7 @@
  */
 
 import { conectarChat, ErrorDeCanal } from './cliente-chat.js';
+import { pintarAviso } from '../../comun/ui/aviso.js';
 
 export const CLAVE_TOKEN = 'nexus.token';
 export const COLA_DE_ERRORES = '/usuario/cola/salas';
@@ -85,24 +86,6 @@ export function pintarMensaje(mensaje) {
   });
   item.appendChild(hora);
   return item;
-}
-
-function pintarAviso(zona, { tono, titulo, detalle }) {
-  zona.innerHTML = '';
-  const aviso = document.createElement('div');
-  aviso.className = `aviso aviso--${tono}`;
-  aviso.setAttribute('role', tono === 'error' || tono === 'advertencia' ? 'alert' : 'status');
-  const encabezado = document.createElement('p');
-  encabezado.className = 'aviso__titulo';
-  encabezado.textContent = titulo;
-  aviso.appendChild(encabezado);
-  if (detalle) {
-    const cuerpo = document.createElement('p');
-    cuerpo.textContent = detalle;
-    aviso.appendChild(cuerpo);
-  }
-  zona.appendChild(aviso);
-  zona.hidden = false;
 }
 
 const TEXTO_CONEXION = {

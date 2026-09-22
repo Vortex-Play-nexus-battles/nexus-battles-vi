@@ -286,6 +286,11 @@
   margin-bottom: var(--e-1);
 }
 
+/* El aviso puede llevar una acción a la derecha («Reintentar», «Ir»); el
+   cuerpo ocupa lo que quede para que el botón no se aplaste. */
+.aviso__cuerpo { flex: 1; min-width: 0; }
+.aviso__detalle { color: var(--texto-2); }
+
 .aviso--error       { border-color: var(--error);       background: var(--error-insignia); }
 .aviso--advertencia { border-color: var(--advertencia); background: var(--advertencia-insignia); }
 .aviso--exito       { border-color: var(--exito);       background: var(--exito-insignia); }
@@ -536,6 +541,14 @@
 }
 
 .estado-vista--error .estado-vista__icono { background: var(--error-insignia); }
+.estado-vista--vacio .estado-vista__icono { background: var(--info-insignia); }
+
+/* Un estado vacío o de error se lee, no se decora: el detalle en segundo
+   nivel y con ancho de lectura cómodo. */
+.estado-vista__detalle {
+  color: var(--texto-2);
+  max-width: 46ch;
+}
 
 .estado-vista__titulo {
   font-family: var(--t-subtitulo-familia);
@@ -574,6 +587,8 @@
 .velo--bajo-cabecera { top: var(--cabecera-alto); }
 
 .dialogo {
+  /* `relative`: el botón de cerrar se ancla a la esquina del diálogo. */
+  position: relative;
   width: min(480px, calc(100vw - var(--e-8)));
   display: flex;
   flex-direction: column;
@@ -2454,4 +2469,171 @@
   .cabecera__identidad {
     display: none;
   }
+}
+
+
+/* =======================================================================
+   Encabezados de página y de sección
+   -----------------------------------------------------------------------
+   Antes cada vista colocaba el título, la descripción y el botón principal
+   donde le parecía. Dos pantallas se sienten la misma aplicación cuando lo
+   primero que ve el ojo está siempre en el mismo sitio.
+   ======================================================================= */
+
+.encabezado-pagina {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--e-4);
+  margin-bottom: var(--e-5);
+}
+
+.encabezado-pagina h1 {
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-titulo-xl-tam);
+  line-height: var(--t-titulo-xl-alto);
+}
+
+.encabezado-pagina__acciones,
+.encabezado-seccion__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+}
+
+.encabezado-seccion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--e-3);
+  margin-bottom: var(--e-3);
+  padding-bottom: var(--e-2);
+  border-bottom: 1px solid var(--borde);
+}
+
+
+/* =======================================================================
+   Tarjeta — partes internas
+   -----------------------------------------------------------------------
+   `.tarjeta` ya existía; lo que faltaba era la estructura de dentro, que
+   cada listado resolvía a mano y por eso la tarjeta de subasta y la de sala
+   no se parecían.
+   ======================================================================= */
+
+.tarjeta__cabecera {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--e-3);
+}
+
+.tarjeta__titulo {
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  line-height: var(--t-subtitulo-alto);
+  font-weight: var(--t-subtitulo-peso);
+}
+
+.tarjeta__distintivos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-1);
+}
+
+.tarjeta__medios {
+  margin: calc(var(--e-4) * -1) calc(var(--e-4) * -1) 0;
+  border-radius: var(--radio) var(--radio) 0 0;
+  overflow: hidden;
+  background: var(--fondo);
+}
+
+.tarjeta__medios img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+}
+
+/* Pares etiqueta/valor: la etiqueta pequeña encima y el valor con cifras
+   tabulares, para que una columna de créditos quede alineada. */
+.tarjeta__datos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: var(--e-2) var(--e-3);
+  margin: 0;
+}
+
+.tarjeta__datos dt {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.tarjeta__datos dd {
+  margin: 0;
+  font-variant-numeric: var(--cifras-tabulares);
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+.tarjeta__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+  margin-top: auto;
+  padding-top: var(--e-2);
+}
+
+/* Distintivo de rareza: el color lo pone quien lo crea, con la variable de
+   rareza del catálogo de tokens. */
+.distintivo--rareza {
+  border-color: var(--rareza, var(--borde));
+  color: var(--rareza, var(--texto));
+}
+
+.metrica__valor {
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-titulo-tam);
+  line-height: var(--t-titulo-alto);
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+.dialogo__titulo {
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  font-weight: var(--t-subtitulo-peso);
+  padding-right: var(--e-6);
+}
+
+.dialogo__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--e-2);
+  margin-top: var(--e-4);
+}
+
+.dialogo__cerrar {
+  position: absolute;
+  top: var(--e-2);
+  right: var(--e-2);
+  width: var(--icono);
+  height: var(--icono);
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radio-chico);
+  background: transparent;
+  color: var(--texto-2);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dialogo__cerrar:hover { background: var(--interaccion-velo-hover); color: var(--texto); }
+
+/* Menos movimiento para quien lo pidió en su sistema operativo. */
+@media (prefers-reduced-motion: reduce) {
+  .esqueleto { animation: none; }
 }

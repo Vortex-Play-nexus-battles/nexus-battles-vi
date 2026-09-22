@@ -10,6 +10,7 @@
 
 import { baseDeApi, ErrorDeMetricas } from './cliente-metricas.js';
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
+import { nodo } from '../../comun/ui/dom.js';
 
 async function pedir(
   ruta,
@@ -93,17 +94,6 @@ export function resumenDeModeracion(tablero) {
 }
 
 /* ---- DOM ---- */
-
-function nodo(etiqueta, clase, texto) {
-  const el = document.createElement(etiqueta);
-  if (clase) {
-    el.className = clase;
-  }
-  if (texto !== undefined) {
-    el.textContent = texto;
-  }
-  return el;
-}
 
 function celda(texto, enAlerta = false) {
   const td = nodo('td', enAlerta ? 'celda--alerta' : undefined, texto);

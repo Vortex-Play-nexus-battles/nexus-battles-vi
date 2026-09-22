@@ -12,6 +12,7 @@
  */
 
 import { crearSala, ErrorDeApi } from './cliente-salas.js';
+import { pintarAviso } from '../../comun/ui/aviso.js';
 import {
   esSeccionDegradada,
   pintarSeccionDegradada,
@@ -268,27 +269,6 @@ function marcarCampos(formulario, errores) {
   });
 
   return primero;
-}
-
-function pintarAviso(zona, { tono, titulo, detalle }) {
-  zona.innerHTML = '';
-  const aviso = document.createElement('div');
-  aviso.className = `aviso aviso--${tono}`;
-  aviso.setAttribute('role', tono === 'error' || tono === 'advertencia' ? 'alert' : 'status');
-
-  const encabezado = document.createElement('p');
-  encabezado.className = 'aviso__titulo';
-  encabezado.textContent = titulo;
-  aviso.appendChild(encabezado);
-
-  if (detalle) {
-    const cuerpo = document.createElement('p');
-    cuerpo.textContent = detalle;
-    aviso.appendChild(cuerpo);
-  }
-
-  zona.appendChild(aviso);
-  zona.hidden = false;
 }
 
 /**

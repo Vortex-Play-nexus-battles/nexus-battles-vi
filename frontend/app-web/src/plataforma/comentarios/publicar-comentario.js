@@ -34,6 +34,7 @@ import {
   ESTADO,
 } from './cliente-comentarios.js';
 import { usuarioIdDeSesion } from '../../comun/identidad.js';
+import { pintarAviso } from '../../comun/ui/aviso.js';
 
 const CLAVE_APODO = 'nexus.apodoActual';
 
@@ -178,36 +179,6 @@ function marcarZonaDeCarga(formulario, motivo) {
     }
     ayuda.textContent = motivo;
   }
-}
-
-function pintarAviso(zona, { tono, titulo, detalle, accion }) {
-  zona.innerHTML = '';
-  const aviso = document.createElement('div');
-  aviso.className = `aviso aviso--${tono}`;
-  aviso.setAttribute('role', tono === 'error' || tono === 'advertencia' ? 'alert' : 'status');
-
-  const cuerpo = document.createElement('div');
-  const encabezado = document.createElement('p');
-  encabezado.className = 'aviso__titulo';
-  encabezado.textContent = titulo;
-  cuerpo.appendChild(encabezado);
-  if (detalle) {
-    const texto = document.createElement('p');
-    texto.textContent = detalle;
-    cuerpo.appendChild(texto);
-  }
-  if (accion) {
-    const boton = document.createElement('button');
-    boton.type = 'button';
-    boton.className = 'boton boton--secundario boton--pequeno';
-    boton.dataset.accion = accion.nombre;
-    boton.textContent = accion.texto;
-    boton.addEventListener('click', accion.alPulsar);
-    cuerpo.appendChild(boton);
-  }
-  aviso.appendChild(cuerpo);
-  zona.appendChild(aviso);
-  zona.hidden = false;
 }
 
 function ocultarAviso(zona) {
