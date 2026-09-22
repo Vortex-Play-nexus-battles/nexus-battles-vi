@@ -12,6 +12,7 @@
  */
 
 import { crearSala, ErrorDeApi } from './cliente-salas.js';
+import { vaciar } from '../../comun/ui/dom.js';
 import { pintarAviso } from '../../comun/ui/aviso.js';
 import {
   esSeccionDegradada,
@@ -320,7 +321,7 @@ export function montarCrearSala(
   async function enviar() {
     limpiarErroresDeCampo(formulario);
     zonaAviso.hidden = true;
-    zonaAviso.innerHTML = '';
+    vaciar(zonaAviso);
     limpiarSeccionDegradada(zonaDegradacion);
     cargando(boton, true);
 

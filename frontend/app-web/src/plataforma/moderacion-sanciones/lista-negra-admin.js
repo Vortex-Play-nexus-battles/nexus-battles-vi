@@ -4,6 +4,7 @@
  */
 
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
+import { vaciar } from '../../comun/ui/dom.js';
 
 const BASE_URL = '/api/v1/lista-negra/terminos';
 
@@ -64,7 +65,7 @@ function mostrarTerminos(terminos) {
     return;
   }
 
-  listaTerminos.innerHTML = '';
+  vaciar(listaTerminos);
   for (const termino of terminos) {
     listaTerminos.appendChild(crearFilaTermino(termino));
   }
