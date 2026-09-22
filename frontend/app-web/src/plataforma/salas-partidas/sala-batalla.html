@@ -25,9 +25,13 @@
     <main class="pagina pila">
       <div class="pila pila--compacta">
         <h1>Sala en batalla</h1>
-        <p class="t-cuerpo">
-          La vida de cada participante con su valor numerico. El color cambia al 60 % y al 40 %.
-        </p>
+        <!--
+          Antes este parrafo le explicaba al jugador que «el color cambia al
+          60 % y al 40 %»: una nota de la especificacion (RF-JUE-009) colada en
+          la pantalla. El umbral es una decision de diseno, no algo que quien
+          juega tenga que leer; la barra ya lo comunica con el color.
+        -->
+        <p class="t-cuerpo">Vida de cada participante y turno en curso.</p>
       </div>
 
       <!--
@@ -90,7 +94,16 @@
       </div>
 
       <section class="tarjeta pila" data-zona="panel" hidden>
-        <h2 class="tarjeta__titulo">Participantes</h2>
+        <div class="encabezado-seccion">
+          <h2 class="tarjeta__titulo">Participantes</h2>
+          <!--
+            De quien es el turno. Hasta ahora esto SOLO se notaba en que los
+            botones de atacar estaban grises: invisible para un lector de
+            pantalla, e inutil para saber a quien se esta esperando o si la
+            maquina esta jugando. Region viva, asi que se anuncia solo.
+          -->
+          <p class="turno-actual" data-zona="turno" role="status" aria-live="polite" hidden></p>
+        </div>
         <div class="pila pila--compacta" data-zona="vidas"></div>
 
         <!--
@@ -112,10 +125,14 @@
       </section>
     </main>
 
-    <!-- RNF-DIS-002: el chatbot esta en todas las vistas, sin excepcion. -->
-    <button class="chatbot-flotante" type="button" aria-label="Abrir el asistente">IA</button>
+    <!--
+      RF-CHA-001: el icono flotante del asistente va en todas las vistas.
+      Lo monta `comun/ui/asistente.js`, que ademas le da comportamiento:
+      hasta ahora el boton estaba copiado aqui y no hacia nada al pulsarlo.
+    -->
 
     <script type="module">
+      import { montarAsistente } from '../../comun/ui/asistente.js';
       import {
         montarSalaBatalla,
         leerEstadoInicial,
@@ -415,6 +432,9 @@
             canal && estado?.idPartida ? suscripcionDePartida(canal, estado.idPartida) : undefined,
         });
       }
+
+      // RF-CHA-001 / HU-CHA-001 CA-03: el icono responde y dice la verdad.
+      montarAsistente(document);
     </script>
   </body>
 </html>

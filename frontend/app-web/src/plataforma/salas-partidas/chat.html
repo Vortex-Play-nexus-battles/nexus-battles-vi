@@ -68,10 +68,14 @@
       </form>
     </main>
 
-    <!-- RNF-DIS-002: el chatbot esta en todas las vistas, sin excepcion. -->
-    <button class="chatbot-flotante" type="button" aria-label="Abrir el asistente">IA</button>
+    <!--
+      RF-CHA-001: el icono flotante del asistente va en todas las vistas.
+      Lo monta `comun/ui/asistente.js`, que ademas le da comportamiento:
+      hasta ahora el boton estaba copiado aqui y no hacia nada al pulsarlo.
+    -->
 
     <script type="module">
+      import { montarAsistente } from '../../comun/ui/asistente.js';
       import { montarChat, canalDesdeUrl, CLAVE_TOKEN } from './chat.js';
       import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
 
@@ -91,6 +95,9 @@
         canal,
         token: sessionStorage.getItem(CLAVE_TOKEN),
       });
+
+      // RF-CHA-001 / HU-CHA-001 CA-03: el icono responde y dice la verdad.
+      montarAsistente(document);
     </script>
   </body>
 </html>

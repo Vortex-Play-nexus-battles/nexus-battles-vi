@@ -9,7 +9,8 @@ import {
   ErrorDeTorneos,
   accionesDe,
   encuentrosDe,
-  filaDeEncuentro,
+  tarjetaDeEncuentro,
+  porRonda,
   miEquipo,
   montarTorneos,
   nombreDe,
@@ -139,7 +140,7 @@ describe('presentacion', () => {
     expect(puedoJugar({ ...enCurso, estado: 'FINALIZADO' }, listo, UID)).toBe(false);
   });
 
-  test('filaDeEncuentro pone «Crear sala del encuentro» hacia crear-sala con torneo y encuentro', () => {
+  test('tarjetaDeEncuentro pone «Crear sala del encuentro» hacia crear-sala con torneo y encuentro', () => {
     const mio = equipo({ id: 'eq-1', inscrito: true, posicion: 1 });
     const rival = equipo({
       id: 'eq-2',
@@ -164,15 +165,19 @@ describe('presentacion', () => {
     expect(rutaDeSalaDelEncuentro(enCurso, listo)).toBe(
       '../salas-partidas/crear-sala.html?torneo=t-9&encuentro=5',
     );
-    const conAcceso = filaDeEncuentro(enCurso, listo, UID);
+    const conAcceso = tarjetaDeEncuentro(enCurso, listo, UID);
     const enlace = conAcceso.querySelector('[data-accion="jugar-encuentro"]');
     expect(enlace.getAttribute('href')).toBe(
       '../salas-partidas/crear-sala.html?torneo=t-9&encuentro=5',
     );
-    expect(conAcceso.textContent).toContain('Los Valientes vs Rivales');
+    // Los dos equipos, cada uno en su fila del componente `Encuentro`, en vez
+    // de la frase corrida «A vs B» que habia antes.
+    const filas = [...conAcceso.querySelectorAll('.encuentro__equipo')];
+    expect(filas[0].textContent).toContain('Los Valientes');
+    expect(filas[1].textContent).toContain('Rivales');
 
-    expect(filaDeEncuentro(enCurso, listo, 'nadie').querySelector('a')).toBeNull();
-    expect(filaDeEncuentro(enCurso, listo).querySelector('a')).toBeNull();
+    expect(tarjetaDeEncuentro(enCurso, listo, 'nadie').querySelector('a')).toBeNull();
+    expect(tarjetaDeEncuentro(enCurso, listo).querySelector('a')).toBeNull();
   });
 
   test('ErrorDeTorneos conserva motivo y proxima fecha', () => {
@@ -339,11 +344,19 @@ describe('vista', () => {
     await asentar();
     const detalle = document.querySelector('[data-zona="detalle"]');
     expect(detalle.querySelector('[data-zona="campeon"]').textContent).toBe('Campeon: A');
-    expect(detalle.querySelector('[data-llave="GANADORES"] [data-numero="1"]').textContent).toBe(
-      'Encuentro 1: A vs B → gana A',
-    );
-    expect(detalle.querySelector('[data-llave="FINAL"] [data-numero="14"]').textContent).toBe(
-      'Final: A vs por definir',
+    // El encuentro es el componente `Encuentro` del kit: cabecera con estado y
+    // una fila por equipo, no la frase corrida que habia antes.
+    const primero = detalle.querySelector('[data-llave="GANADORES"] [data-numero="1"]');
+    expect(primero.querySelector('.encuentro__cabecera').textContent).toBe('Encuentro 1Jugado');
+    const ganadores = [...primero.querySelectorAll('.encuentro__equipo')];
+    expect(ganadores[0].classList.contains('encuentro__equipo--ganador')).toBe(true);
+    expect(ganadores[0].textContent).toContain('A');
+    expect(ganadores[1].textContent).toContain('B');
+
+    const final = detalle.querySelector('[data-llave="FINAL"] [data-numero="14"]');
+    expect(final.querySelector('.encuentro__cabecera').textContent).toBe('FinalPendiente');
+    expect([...final.querySelectorAll('.encuentro__equipo')][1].textContent).toContain(
+      'por definir',
     );
     expect(detalle.querySelector('[data-equipo-id="b"][data-ia="true"]').textContent).toMatch(
       /maquina/,
@@ -416,5 +429,96 @@ describe('vista', () => {
     expect(document.querySelector('.aviso--exito').textContent).toMatch(/Torneo iniciado/);
     expect(document.querySelector('[data-zona="detalle"]').dataset.estado).toBe('EN_CURSO');
     expect(document.querySelector('[data-zona="administracion"]')).toBeNull();
+  });
+});
+
+describe('el arbol usa el componente Encuentro del sistema de diseno', () => {
+  const equipos = [
+    { id: 'eq-1', nombre: 'Los Valientes', integrantes: [UID, 'x'], inscrito: true, posicion: 1 },
+    { id: 'eq-2', nombre: 'Rivales', integrantes: ['y', 'z'], inscrito: true, posicion: 2 },
+  ];
+  const enCurso = { id: 't-1', estado: 'EN_CURSO', equipos, encuentros: [] };
+
+  function encuentro(extra) {
+    return { numero: 1, llave: 'GANADORES', ronda: 1, equipoA: 'eq-1', equipoB: 'eq-2', ...extra };
+  }
+
+  test('pinta cabecera con el estado y una fila por equipo', () => {
+    const tarjeta = tarjetaDeEncuentro(enCurso, encuentro({ estado: 'PENDIENTE' }));
+
+    expect(tarjeta.classList.contains('encuentro')).toBe(true);
+    expect(tarjeta.querySelector('.encuentro__cabecera').textContent).toContain('Encuentro 1');
+    expect(tarjeta.querySelector('.encuentro__cabecera').textContent).toContain('Pendiente');
+    expect(tarjeta.querySelectorAll('.encuentro__equipo')).toHaveLength(2);
+  });
+
+  test('un encuentro listo se marca como en curso', () => {
+    const tarjeta = tarjetaDeEncuentro(enCurso, encuentro({ estado: 'LISTO' }));
+
+    expect(tarjeta.classList.contains('encuentro--en-curso')).toBe(true);
+  });
+
+  test('el ganador se distingue por la clase del kit, no solo por color', () => {
+    const tarjeta = tarjetaDeEncuentro(enCurso, encuentro({ estado: 'JUGADO', ganador: 'eq-2' }));
+
+    const filas = [...tarjeta.querySelectorAll('.encuentro__equipo')];
+    expect(filas[0].classList.contains('encuentro__equipo--ganador')).toBe(false);
+    expect(filas[1].classList.contains('encuentro__equipo--ganador')).toBe(true);
+    expect(tarjeta.classList.contains('encuentro--finalizado')).toBe(true);
+  });
+
+  test('el ganador tambien se dice para quien no ve la negrita', () => {
+    const tarjeta = tarjetaDeEncuentro(enCurso, encuentro({ estado: 'JUGADO', ganador: 'eq-1' }));
+
+    const oculto = tarjeta.querySelector('.solo-lectores');
+    expect(oculto).not.toBeNull();
+    expect(oculto.textContent).toContain('gana');
+  });
+
+  test('un lado sin equipo dice «por definir» en vez de quedarse en blanco', () => {
+    const tarjeta = tarjetaDeEncuentro(
+      enCurso,
+      encuentro({ numero: 14, estado: 'PENDIENTE', equipoA: 'eq-1', equipoB: null }),
+    );
+
+    const filas = [...tarjeta.querySelectorAll('.encuentro__equipo')];
+    expect(filas[1].textContent).toContain('por definir');
+    expect(tarjeta.querySelector('.encuentro__cabecera').textContent).toContain('Final');
+  });
+
+  test('sin ganador ninguna fila se marca', () => {
+    const tarjeta = tarjetaDeEncuentro(enCurso, encuentro({ estado: 'PENDIENTE', ganador: null }));
+
+    expect(tarjeta.querySelectorAll('.encuentro__equipo--ganador')).toHaveLength(0);
+  });
+
+  test('no se inventa marcador: el contrato no trae puntuacion', () => {
+    const tarjeta = tarjetaDeEncuentro(enCurso, encuentro({ estado: 'JUGADO', ganador: 'eq-1' }));
+
+    expect(tarjeta.querySelector('.encuentro__marcador')).toBeNull();
+  });
+});
+
+describe('porRonda()', () => {
+  test('agrupa por ronda y las devuelve en orden', () => {
+    const grupos = porRonda([
+      { numero: 3, ronda: 2 },
+      { numero: 1, ronda: 1 },
+      { numero: 2, ronda: 1 },
+    ]);
+
+    expect(grupos.map((g) => g.ronda)).toEqual([1, 2]);
+    expect(grupos[0].encuentros.map((e) => e.numero)).toEqual([1, 2]);
+  });
+
+  test('un encuentro sin ronda no se pierde', () => {
+    const grupos = porRonda([{ numero: 1 }, { numero: 2, ronda: 1 }]);
+
+    expect(grupos).toHaveLength(2);
+    expect(grupos[0].ronda).toBe(0);
+  });
+
+  test('sin encuentros devuelve una lista vacia', () => {
+    expect(porRonda([])).toEqual([]);
   });
 });

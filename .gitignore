@@ -87,3 +87,4 @@ test-results/
 /.jest.ps1
 /.front.ps1
 /.msg.txt
+/.issue.md

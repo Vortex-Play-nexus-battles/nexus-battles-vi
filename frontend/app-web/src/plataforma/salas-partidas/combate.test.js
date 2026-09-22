@@ -15,6 +15,7 @@ import {
   enviarAccion,
   registroDeAvisos,
   textoDelResultado,
+  textoDelTurno,
   montarControlesDeCombate,
   ACCION_RESUELTA,
   TURNO_CAMBIADO,
@@ -26,6 +27,11 @@ const ANA = '22222222-2222-2222-2222-222222222222';
 const BRUNO = '33333333-3333-3333-3333-333333333333';
 
 const VISTA = `
+  <p class="turno-actual" data-zona="turno" role="status" hidden></p>
+  <div class="pila" data-zona="vidas">
+    <div class="barra-vida" data-jugador="22222222-2222-2222-2222-222222222222"></div>
+    <div class="barra-vida" data-jugador="33333333-3333-3333-3333-333333333333"></div>
+  </div>
   <div class="fila" data-zona="acciones"></div>
   <p class="t-cuerpo" data-zona="resultado" hidden></p>
 `;
@@ -571,5 +577,116 @@ describe('recompensa por jugar (HU-JUE-012)', () => {
     expect(registro.yaVisto(sin)).toBe(false);
     expect(registro.yaVisto(fin)).toBe(false);
     expect(registro.yaVisto(fin)).toBe(true);
+  });
+});
+
+// --------------------------------------------------------------- el turno
+
+describe('textoDelTurno()', () => {
+  test('sin turno conocido no dice nada, en vez de inventarse uno', () => {
+    expect(textoDelTurno(null, participantes(), ANA)).toEqual({ texto: '', mio: false });
+  });
+
+  test('mi turno se dice en segunda persona y se marca como mio', () => {
+    expect(textoDelTurno(ANA, participantes(), ANA)).toEqual({ texto: 'Es tu turno', mio: true });
+  });
+
+  test('el turno de otra persona nombra a su heroe', () => {
+    expect(textoDelTurno(BRUNO, participantes(), ANA)).toEqual({
+      texto: 'Turno de Centinela',
+      mio: false,
+    });
+  });
+
+  test('el turno de la maquina se distingue del de una persona', () => {
+    const conIA = [
+      participantes()[0],
+      { jugador: { id: BRUNO }, heroe: { nombre: 'Golem' }, esIA: true },
+    ];
+
+    expect(textoDelTurno(BRUNO, conIA, ANA).texto).toBe('Juega la maquina (Golem)');
+  });
+
+  test('un identificador que no esta en pantalla no deja el indicador en blanco', () => {
+    expect(textoDelTurno('44444444-4444-4444-4444-444444444444', participantes(), ANA)).toEqual({
+      texto: 'Turno de otro participante',
+      mio: false,
+    });
+  });
+});
+
+describe('indicador de turno en la vista', () => {
+  /**
+   * El turno era invisible: lo unico que cambiaba era que los botones de
+   * atacar estuvieran grises. Estas pruebas afirman que ahora se dice.
+   */
+  function montar(turnoDe) {
+    return montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      turnoDe,
+      alAtacar: () => {},
+    });
+  }
+
+  test('al montar con el turno propio lo dice y marca la barra', () => {
+    montar(ANA);
+
+    const indicador = document.querySelector('[data-zona="turno"]');
+    expect(indicador.hidden).toBe(false);
+    expect(indicador.textContent).toBe('Es tu turno');
+    expect(indicador.dataset.mio).toBe('true');
+    expect(document.querySelector(`[data-jugador="${ANA}"]`).dataset.turno).toBe('si');
+    expect(document.querySelector(`[data-jugador="${BRUNO}"]`).dataset.turno).toBeUndefined();
+  });
+
+  test('es una region viva: se anuncia sin que nadie mire la pantalla', () => {
+    montar(ANA);
+
+    expect(document.querySelector('[data-zona="turno"]').getAttribute('role')).toBe('status');
+  });
+
+  test('sin turno conocido el indicador no aparece', () => {
+    montar(undefined);
+
+    expect(document.querySelector('[data-zona="turno"]').hidden).toBe(true);
+  });
+
+  test('un cambio de turno mueve el texto y la marca a quien juega', () => {
+    const controles = montar(ANA);
+
+    controles.recibir({ tipo: TURNO_CAMBIADO, idPartida: PARTIDA, idJugador: BRUNO });
+
+    const indicador = document.querySelector('[data-zona="turno"]');
+    expect(indicador.textContent).toBe('Turno de Centinela');
+    expect(indicador.dataset.mio).toBe('false');
+    expect(document.querySelector(`[data-jugador="${BRUNO}"]`).dataset.turno).toBe('si');
+    expect(document.querySelector(`[data-jugador="${ANA}"]`).dataset.turno).toBeUndefined();
+  });
+
+  test('al acabar la partida ya no es el turno de nadie', () => {
+    const controles = montar(ANA);
+
+    controles.recibir({ tipo: PARTIDA_FINALIZADA, idPartida: PARTIDA, ganadores: [ANA] });
+
+    expect(document.querySelector('[data-zona="turno"]').hidden).toBe(true);
+    expect(document.querySelector(`[data-jugador="${ANA}"]`).dataset.turno).toBeUndefined();
+  });
+
+  test('un turno de OTRA partida no toca el indicador', () => {
+    const controles = montar(ANA);
+
+    controles.recibir({ tipo: TURNO_CAMBIADO, idPartida: 'otra', idJugador: BRUNO });
+
+    expect(document.querySelector('[data-zona="turno"]').textContent).toBe('Es tu turno');
+  });
+
+  test('sin las zonas en el HTML los controles siguen funcionando', () => {
+    document.body.innerHTML = `
+      <div class="fila" data-zona="acciones"></div>
+      <p data-zona="resultado" hidden></p>`;
+
+    expect(() => montar(ANA)).not.toThrow();
   });
 });
