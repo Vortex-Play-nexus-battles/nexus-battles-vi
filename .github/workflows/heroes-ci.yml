@@ -38,9 +38,46 @@ jobs:
           ./gradlew :services:contenido:heroes:bootJar --no-daemon
       - name: Construir la imagen (contexto = raiz del monorepo con -f, igual que cd.yml)
         run: docker build -f services/contenido/heroes/Dockerfile -t servicio-heroes:ci .
+      # R8.1 — heroes ya es servidor de recursos, asi que para arrancarlo hace
+      # falta un emisor. Se fabrica uno EFIMERO, valido solo dentro de esta
+      # corrida:
+      #
+      #   * la clave se genera aqui y vive en /tmp, NUNCA en el repositorio
+      #     (es la misma regla que ya escribio generar-claves.mjs);
+      #   * el JWKS lo sirve un nginx en una red propia, igual que el servicio
+      #     jwks-dev de docker-compose.contenido.yml;
+      #   * la SEGUNDA clave existe solo para firmar un token invalido y poder
+      #     comprobar que la firma se verifica de verdad.
+      #
+      # Ningun token se versiona y ninguno sobrevive a la corrida.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Emisor efimero de tokens para la corrida
+        run: |
+          set -euo pipefail
+          GEN=services/contenido/productos/postman/jwks-dev/generar-claves.mjs
+          mkdir -p /tmp/jwks-ci /tmp/jwks-ajeno /tmp/jwks-publico
+          node "$GEN" /tmp/jwks-ci/clave.pem     > /dev/null
+          node "$GEN" /tmp/jwks-ajeno/clave.pem  > /dev/null
+          # Se publica SOLO la parte publica. generar-claves.mjs deja la clave
+          # privada junto al jwks.json, y montar esa carpeta entera dejaria la
+          # privada servible en http://jwks-ci/clave.pem. Dentro de una red
+          # efimera de dos contenedores no le haria dano a nadie, pero servir
+          # una clave privada por HTTP no es algo que se deje escrito.
+          cp /tmp/jwks-ci/jwks.json /tmp/jwks-publico/jwks.json
+          docker network create heroes-ci-red
+          docker run -d --name jwks-ci --network heroes-ci-red \
+            -v /tmp/jwks-publico:/usr/share/nginx/html:ro nginx:1.27-alpine
+          echo "JWKS efimero listo (kid $(node -e "
+            const j=require('/tmp/jwks-ci/jwks.json'); process.stdout.write(j.keys[0].kid)"))"
+
       - name: La imagen arranca y responde su salud (host 8101 -> contenedor 8080, como en despliegue)
         run: |
-          docker run -d --name heroes-ci -p 8101:8080 servicio-heroes:ci
+          docker run -d --name heroes-ci --network heroes-ci-red -p 8101:8080 \
+            -e IDENTIDAD_JWKS_URL=http://jwks-ci/jwks.json \
+            servicio-heroes:ci
           for i in $(seq 1 20); do
             if curl -fsS http://localhost:8101/actuator/health | grep -q '"status":"UP"'; then
               echo "saludable en el intento $i"; exit 0
@@ -51,13 +88,29 @@ jobs:
       # SCRUM-1408: la misma coleccion de Postman que se corre a mano antes de un
       # push (postman/LEEME.md), contra el contenedor recien levantado. Cada
       # asercion cita la regla del cliente que verifica; si una falla, el CI falla.
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
       - name: Coleccion de Postman contra el contenedor (Newman)
         working-directory: services/contenido/heroes
         run: |
-          npx --yes newman run postman/heroes.postman_collection.json             -e postman/local.postman_environment.json             --env-var baseUrl=http://localhost:8101             --reporters cli
+          set -euo pipefail
+          EMITIR=../../../services/contenido/productos/postman/jwks-dev/emitir-token.mjs
+          CLAVE=/tmp/jwks-ci/clave.pem
+          # Un token por clase de acceso, emitidos al vuelo. El rol viaja en
+          # realm_access.roles, que es lo que lee ConversorRolesJwt (ADR-002).
+          JUGADOR=$(node "$EMITIR" "$CLAVE" --rol JUGADOR  --usuario lyra --horas 1)
+          SERVICIO=$(node "$EMITIR" "$CLAVE" --rol SERVICIO --usuario salas-partidas --horas 1)
+          # Firmado con la OTRA clave: el servicio debe rechazarlo con 401.
+          AJENO=$(node "$EMITIR" /tmp/jwks-ajeno/clave.pem --rol JUGADOR --usuario lyra --horas 1)
+          npx --yes newman run postman/heroes.postman_collection.json \
+            -e postman/local.postman_environment.json \
+            --env-var baseUrl=http://localhost:8101 \
+            --env-var tokenJugador="$JUGADOR" \
+            --env-var tokenServicio="$SERVICIO" \
+            --env-var tokenFalsificado="$AJENO" \
+            --reporters cli
       - name: Registro del contenedor si algo fallo
         if: failure()
-        run: docker logs heroes-ci || true
+        run: |
+          docker logs heroes-ci || true
+          echo "--- jwks efimero ---"
+          docker logs jwks-ci || true
+          curl -fsS http://localhost:8101/actuator/health || true
