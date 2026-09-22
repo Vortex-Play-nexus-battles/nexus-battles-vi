@@ -8,17 +8,31 @@
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
   </head>
-  <body>
+  <body class="portal">
     <div data-cabecera-app></div>
 
     <main class="entrada">
       <section class="entrada__identidad">
-        <p class="t-etiqueta">Recuperar el acceso</p>
+        <p class="entrada__sobretitulo">Recuperar el acceso</p>
         <h1 class="entrada__marca">NEXUS <em>BATTLES</em> VI</h1>
         <p class="entrada__lema">
-          Te mandamos un codigo de un solo uso al correo de tu cuenta. Con el eliges una contrasena
-          nueva; el codigo caduca y no sirve dos veces.
+          Recuperar el acceso al Nexo son tres pasos: pides el código, lo recibes en el correo de tu
+          cuenta y eliges una contraseña nueva.
         </p>
+        <ul class="entrada__puntos">
+          <li class="entrada__punto">
+            <svg class="icono" aria-hidden="true">
+              <use href="../../../../shared/ui-kit/iconos/sprite.svg#reloj" />
+            </svg>
+            <span>El código caduca y no sirve dos veces</span>
+          </li>
+          <li class="entrada__punto">
+            <svg class="icono" aria-hidden="true">
+              <use href="../../../../shared/ui-kit/iconos/sprite.svg#candado" />
+            </svg>
+            <span>La contraseña nueva se elige desde el propio código</span>
+          </li>
+        </ul>
       </section>
 
       <section class="entrada__tarjeta">
