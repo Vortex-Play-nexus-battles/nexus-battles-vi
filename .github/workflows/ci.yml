@@ -133,6 +133,77 @@ jobs:
   # No sustituye al job por servicio: aquel corre siempre que cambia un
   # servicio y ademas publica cobertura y analisis estatico por modulo.
   # ---------------------------------------------------------------------
+  # ---------------------------------------------------------------------
+  # Job: reparto de rutas del borde (R8.4).
+  #
+  # El banco de `infrastructure/red-balanceo/pruebas/` existia desde P3.1 y
+  # NADIE lo ejecutaba. En las dos semanas siguientes se colaron dos defectos
+  # que habria atrapado en el acto:
+  #
+  #   * `/api/v1/admin/auditoria` iba a ms-identidad en vez de a
+  #     ms-cumplimiento —un prefijo simple tapado por la regex de `/admin`—,
+  #     y el comentario del fichero daba el arreglo por hecho describiendo mal
+  #     la precedencia de nginx. La vista de auditoria llevaba rota desde el
+  #     17 de septiembre.
+  #   * `/api/v1/cofres` no tenia `location` ninguna y caia en el 404
+  #     generico, con la vista Mis cofres rota y sin issue abierto.
+  #
+  # Un guardian que no corre no es un guardian. Este job cuesta ~20 s: trece
+  # contenedores de nginx:1.27-alpine y 33 peticiones.
+  # ---------------------------------------------------------------------
+  ci-enrutado-borde:
+    name: CI - reparto de rutas del borde
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el repositorio con historial completo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detectar si cambio el borde
+        id: detectar
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE=$(git merge-base "origin/${{ github.base_ref }}" "${{ github.sha }}")
+          else
+            BASE="${{ github.event.before }}"
+            ZERO="0000000000000000000000000000000000000000"
+            if [ "$BASE" = "$ZERO" ] || [ -z "$BASE" ]; then
+              BASE=$(git rev-parse "${{ github.sha }}^" 2>/dev/null || echo "4b825dc642cb6eb9a060e54bf8d69288fbee4904")
+            fi
+          fi
+          CAMBIOS=$(git diff --name-only "$BASE" "${{ github.sha }}" \
+            | grep -E '^infrastructure/red-balanceo/' || true)
+          if [ -n "$CAMBIOS" ]; then
+            echo "Cambios en el borde:"; echo "$CAMBIOS"
+            echo "hay=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "El borde no cambio."
+            echo "hay=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Levantar el banco con el borde-dev.conf REAL
+        if: steps.detectar.outputs.hay == 'true'
+        working-directory: infrastructure/red-balanceo/pruebas
+        run: docker compose up -d --wait
+
+      - name: Comprobar el reparto de las 33 rutas
+        if: steps.detectar.outputs.hay == 'true'
+        working-directory: infrastructure/red-balanceo/pruebas
+        run: ./comprobar-rutas.sh
+
+      - name: Recoger la bitacora del borde si algo fallo
+        if: failure() && steps.detectar.outputs.hay == 'true'
+        working-directory: infrastructure/red-balanceo/pruebas
+        run: docker compose logs borde --tail 80
+
+      - name: Desmontar el banco
+        if: always() && steps.detectar.outputs.hay == 'true'
+        working-directory: infrastructure/red-balanceo/pruebas
+        run: docker compose down -v
+
   ci-transversal:
     name: CI - cambios transversales
     runs-on: ubuntu-latest
