@@ -4,6 +4,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.UUID;
+
+import com.nexusbattles.comun.seguridad.pruebas.EmisorDeTokensDePrueba;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +27,18 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest
 @AutoConfigureMockMvc
 class DecisionesApiTest {
+    // R8.1 — esta ruta dejo de ser anonima. Decidir la jugada de la maquina es logica de servidor.
+    // El token es real (RSA, verificado contra el JWKS del emisor de prueba),
+    // no un principal inventado: lo que estas pruebas atraviesan es la misma
+    // cadena de seguridad que atravesara el servicio desplegado.
+    private static final String AUTORIZACION =
+            "Bearer " + EmisorDeTokensDePrueba.emisor().tokenDeServicio("salas-partidas");
+
+    @DynamicPropertySource
+    static void jwks(DynamicPropertyRegistry registro) {
+        EmisorDeTokensDePrueba.registrarJwks(registro);
+    }
+
 
     private static final String RUTA = "/api/v1/estrategias/decision";
 
@@ -38,7 +55,7 @@ class DecisionesApiTest {
     @Test
     @DisplayName("con poder y sin recargas se ejecuta la Rotacion 1 y se devuelven los cursores del turno siguiente")
     void rotacionUno() throws Exception {
-        mvc.perform(post(RUTA).contentType(MediaType.APPLICATION_JSON).content(
+        mvc.perform(post(RUTA).header("Authorization", AUTORIZACION).contentType(MediaType.APPLICATION_JSON).content(
                         "{" + EJEMPLO + ",\"estado\":{\"turno\":1,\"poder\":64,\"vida\":44}}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accion").value("Golpe de tormenta"))
@@ -53,7 +70,7 @@ class DecisionesApiTest {
     @Test
     @DisplayName("sin poder para la Rotacion 1 se ejecuta la 2 y se explica por que se descarto la 1 (RF-MIS-14)")
     void pasaALaSegunda() throws Exception {
-        mvc.perform(post(RUTA).contentType(MediaType.APPLICATION_JSON).content(
+        mvc.perform(post(RUTA).header("Authorization", AUTORIZACION).contentType(MediaType.APPLICATION_JSON).content(
                         "{" + EJEMPLO + ",\"estado\":{\"turno\":1,\"poder\":5,\"vida\":44}}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accion").value("Lanza de los dioses"))
@@ -66,7 +83,7 @@ class DecisionesApiTest {
     @Test
     @DisplayName("en recarga la habilidad no es viable: se informa el turno en que vuelve (HU-HER-007)")
     void enRecarga() throws Exception {
-        mvc.perform(post(RUTA).contentType(MediaType.APPLICATION_JSON).content(
+        mvc.perform(post(RUTA).header("Authorization", AUTORIZACION).contentType(MediaType.APPLICATION_JSON).content(
                         "{" + EJEMPLO + ",\"estado\":{\"turno\":4,\"poder\":64,\"vida\":44,"
                                 + "\"turnoDeUltimoUso\":{\"Golpe de tormenta\":3}}}"))
                 .andExpect(status().isOk())
@@ -78,7 +95,7 @@ class DecisionesApiTest {
     @Test
     @DisplayName("si ninguna rotacion es viable, ataque basico sin consumir poder (RF-MIS-15)")
     void ataqueBasico() throws Exception {
-        mvc.perform(post(RUTA).contentType(MediaType.APPLICATION_JSON).content("""
+        mvc.perform(post(RUTA).header("Authorization", AUTORIZACION).contentType(MediaType.APPLICATION_JSON).content("""
                 {"heroe":"Guerrero Armas","nivel":8,"rotaciones":[{"pasos":["Golpe de tormenta"]},{"pasos":["Lanza de los dioses"]}],
                  "estado":{"turno":1,"poder":0,"vida":44}}
                 """))
@@ -92,7 +109,7 @@ class DecisionesApiTest {
     @Test
     @DisplayName("un heroe sin vida no actua: 400 con mensaje apto para el usuario")
     void sinVida() throws Exception {
-        mvc.perform(post(RUTA).contentType(MediaType.APPLICATION_JSON).content(
+        mvc.perform(post(RUTA).header("Authorization", AUTORIZACION).contentType(MediaType.APPLICATION_JSON).content(
                         "{" + EJEMPLO + ",\"estado\":{\"turno\":1,\"poder\":64,\"vida\":0}}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.title").value("Solicitud no válida"))
@@ -102,7 +119,7 @@ class DecisionesApiTest {
     @Test
     @DisplayName("una rotacion con una habilidad que el heroe no posee responde 400 con el motivo")
     void rotacionInvalida() throws Exception {
-        mvc.perform(post(RUTA).contentType(MediaType.APPLICATION_JSON).content("""
+        mvc.perform(post(RUTA).header("Authorization", AUTORIZACION).contentType(MediaType.APPLICATION_JSON).content("""
                 {"heroe":"Guerrero Armas","nivel":1,"rotaciones":[{"pasos":["Golpe de tormenta"]}],
                  "estado":{"turno":1,"poder":8,"vida":44}}
                 """))
@@ -114,7 +131,7 @@ class DecisionesApiTest {
     @Test
     @DisplayName("un heroe inexistente responde 404 en formato de detalles de problema")
     void heroeInexistente() throws Exception {
-        mvc.perform(post(RUTA).contentType(MediaType.APPLICATION_JSON).content("""
+        mvc.perform(post(RUTA).header("Authorization", AUTORIZACION).contentType(MediaType.APPLICATION_JSON).content("""
                 {"heroe":"Paladín","nivel":1,"estado":{"turno":1,"poder":1,"vida":1}}
                 """))
                 .andExpect(status().isNotFound())
@@ -124,7 +141,7 @@ class DecisionesApiTest {
     @Test
     @DisplayName("una solicitud sin estado del heroe responde 400 con mensaje apto para el usuario")
     void sinEstado() throws Exception {
-        mvc.perform(post(RUTA).contentType(MediaType.APPLICATION_JSON).content(
+        mvc.perform(post(RUTA).header("Authorization", AUTORIZACION).contentType(MediaType.APPLICATION_JSON).content(
                         "{" + EJEMPLO + "}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.title").value("Solicitud no válida"))
