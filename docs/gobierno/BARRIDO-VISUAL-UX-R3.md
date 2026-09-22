@@ -735,7 +735,7 @@ DEMASIADO GENÉRICA a propósito.
 | 2 | `auditoria`, `historial-transacciones` (375 px) | Región desplazable sin acceso por teclado. **Serio** |
 | 3 | `crear-cuenta-admin` | La vista no funcionaba para ningún rol: firma mal y matriz RBAC sin cargar |
 | 4 | todas las de consola (1280–1512 px) | Cabecera partida en dos filas |
-| 5 | 27 ficheros | 101 palabras sin tilde en texto visible |
+| 5 | 36 ficheros | 125 palabras sin tilde en texto visible |
 | 6 | 4 zonas de aviso | `.aviso` dentro de `.aviso`, con dos `role` |
 | 7 | `mis-cofres` | Tercera paleta paralela; fallo sin salida; emoji |
 | 8 | `historial-transacciones` | Cabecera de columnas sobre el hueco; paginación viva sobre una lista fallida |

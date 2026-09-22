@@ -3,8 +3,15 @@
  *
  * ## El defecto que esta prueba impide que vuelva
  *
- * El barrido de las 32 vistas encontró **101 palabras sin tilde en texto
- * visible, repartidas por 27 ficheros**. No eran un descuido aislado: estaban
+ * El barrido de las 32 vistas encontró **125 palabras sin tilde en texto
+ * visible, repartidas por 36 ficheros de producto**.
+ *
+ * (La primera medida fue de 101 en 27, con un diccionario más corto. 125/36 es
+ * lo que da ESTE fichero, con la lista de abajo, corriendo contra el árbol de
+ * antes del arreglo: `git archive <commit anterior> frontend/app-web/src`. Se
+ * deja el número que se puede reproducir, no el que salió primero.)
+ *
+ * No eran un descuido aislado: estaban
  * en el portal —«El codigo llega por correo […] pide otro desde «Recuperar
  * contrasena»», que es de las primeras frases que lee alguien sin cuenta—, en
  * el diálogo de verificación de héroe («Verificacion de heroe», «Tu heroe esta
