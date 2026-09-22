@@ -10,12 +10,6 @@ body {
   font-family: var(--tipografia-cuerpo, Inter, system-ui, sans-serif);
 }
 
-.contenedor {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 16px;
-}
-
 .encabezado-contenido {
   display: flex;
   align-items: flex-start;

@@ -5,50 +5,96 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Crear cuenta — NEXUS BATTLES VI</title>
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
+    <!-- Solo el recortador de avatar: lo demas sale del kit. -->
     <link rel="stylesheet" href="./registro.css" />
   </head>
   <body>
     <div data-cabecera-app></div>
-    <main class="pagina-auth">
-      <section class="tarjeta">
-        <h1 class="titulo-grande">NEXUS BATTLES VI</h1>
-        <p class="titulo-mediano">Crea tu cuenta de jugador</p>
+    <main class="entrada">
+      <section class="entrada__identidad">
+        <p class="t-etiqueta">Proyecto Integrador II · UPB Bucaramanga</p>
+        <h1 class="entrada__marca">NEXUS <em>BATTLES</em> VI</h1>
+        <p class="entrada__lema">
+          Crea tu cuenta y empieza con creditos para tu primera apuesta. El apodo es el nombre con
+          el que te veran en las salas, el chat y los torneos.
+        </p>
+        <ul class="entrada__puntos">
+          <li class="entrada__punto">Tu heroe equipado decide con que entras al combate</li>
+          <li class="entrada__punto">Ganar una partida da 2 creditos; jugarla, 1</li>
+          <li class="entrada__punto">Puedes cambiar tu apodo despues, con confirmacion</li>
+        </ul>
+      </section>
+
+      <section class="entrada__tarjeta">
+        <div class="pila pila--ajustada">
+          <h2 class="entrada__titulo">Crea tu cuenta</h2>
+          <p class="t-meta">Solo hace falta un correo y un apodo libre.</p>
+        </div>
 
         <p class="estado" id="estadoRegistro" hidden role="status"></p>
 
-        <form id="formRegistro" novalidate>
-          <label>
-            Nombres
-            <input type="text" id="nombres" name="nombres" required autocomplete="given-name" />
-          </label>
+        <form id="formRegistro" class="pila" novalidate>
+          <div class="fila">
+            <div class="campo">
+              <label class="campo__etiqueta" for="nombres">Nombres</label>
+              <input
+                class="campo__control"
+                type="text"
+                id="nombres"
+                name="nombres"
+                required
+                autocomplete="given-name"
+              />
+            </div>
 
-          <label>
-            Apellidos
+            <div class="campo">
+              <label class="campo__etiqueta" for="apellidos">Apellidos</label>
+              <input
+                class="campo__control"
+                type="text"
+                id="apellidos"
+                name="apellidos"
+                required
+                autocomplete="family-name"
+              />
+            </div>
+          </div>
+
+          <div class="campo">
+            <label class="campo__etiqueta" for="apodo">Apodo</label>
             <input
+              class="campo__control"
               type="text"
-              id="apellidos"
-              name="apellidos"
+              id="apodo"
+              name="apodo"
               required
-              autocomplete="family-name"
+              autocomplete="nickname"
             />
-          </label>
+            <p class="campo__pista">
+              Es tu nombre visible en las salas, el chat y los comentarios.
+            </p>
+          </div>
 
-          <label>
-            Apodo
-            <input type="text" id="apodo" name="apodo" required autocomplete="nickname" />
-          </label>
-          <p class="ayuda">Será tu nombre visible en las salas y comentarios.</p>
-
-          <label>
-            Correo electrónico
-            <input type="email" id="email" name="email" required autocomplete="email" />
-          </label>
-          <p class="ayuda">Te enviaremos novedades importantes de tu cuenta.</p>
-
-          <label>
-            Contraseña
+          <div class="campo">
+            <label class="campo__etiqueta" for="email">Correo electrónico</label>
             <input
+              class="campo__control"
+              type="email"
+              id="email"
+              name="email"
+              required
+              autocomplete="email"
+              placeholder="tu@correo.com"
+            />
+            <p class="campo__pista">Ahí llegan la confirmación y la recuperación de contraseña.</p>
+          </div>
+
+          <div class="campo">
+            <label class="campo__etiqueta" for="password">Contraseña</label>
+            <input
+              class="campo__control"
               type="password"
               id="password"
               name="password"
@@ -56,20 +102,23 @@
               autocomplete="new-password"
               minlength="9"
             />
-          </label>
-          <p class="ayuda">Mínimo 9 caracteres, con mayúscula, minúscula, número y símbolo.</p>
+            <p class="campo__pista">
+              Mínimo 9 caracteres, con mayúscula, minúscula, número y símbolo.
+            </p>
+          </div>
 
-          <label>
-            Repetir contraseña
+          <div class="campo">
+            <label class="campo__etiqueta" for="confirmarPassword">Repetir contraseña</label>
             <input
+              class="campo__control"
               type="password"
               id="confirmarPassword"
               name="confirmarPassword"
               required
               autocomplete="new-password"
             />
-          </label>
-          <p class="ayuda error-campo" id="ayudaConfirmar" hidden>Las contraseñas no coinciden.</p>
+            <p class="campo__error" id="ayudaConfirmar" hidden>Las contraseñas no coinciden.</p>
+          </div>
 
           <fieldset class="selector-avatar">
             <legend>Selecciona tu avatar</legend>
@@ -78,7 +127,9 @@
                 <span class="avatar-placeholder">Sin foto</span>
               </div>
               <div class="avatar-carga-acciones">
-                <label for="avatar" class="btn-contorno avatar-boton-subir"> Subir foto </label>
+                <label for="avatar" class="boton boton--secundario avatar-boton-subir">
+                  Subir foto
+                </label>
                 <input
                   type="file"
                   id="avatar"
@@ -91,13 +142,18 @@
                 </button>
               </div>
             </div>
-            <p class="ayuda">Opcional. Formatos JPG, PNG o WEBP.</p>
+            <p class="campo__pista">Opcional. Formatos JPG, PNG o WEBP.</p>
           </fieldset>
 
-          <button type="submit" class="btn-primario" id="botonEnviar">Crear cuenta</button>
+          <button type="submit" class="boton boton--primario boton--grande" id="botonEnviar">
+            Crear cuenta
+          </button>
         </form>
 
-        <a class="enlace-secundario" href="./login.html">¿Ya tienes cuenta? Inicia sesión</a>
+        <div class="entrada__pie">
+          <a href="./login.html">¿Ya tienes cuenta? Entra</a>
+          <a href="./restablecer-solicitar.html">¿Olvidaste tu contraseña?</a>
+        </div>
       </section>
     </main>
 
@@ -126,8 +182,10 @@
       </label>
 
       <div class="recorte-acciones">
-        <button type="button" class="btn-contorno" id="botonCancelarRecorte2">Cancelar</button>
-        <button type="button" class="btn-primario" id="botonConfirmarRecorte">
+        <button type="button" class="boton boton--secundario" id="botonCancelarRecorte2">
+          Cancelar
+        </button>
+        <button type="button" class="boton boton--primario" id="botonConfirmarRecorte">
           Usar esta foto
         </button>
       </div>
@@ -136,9 +194,12 @@
     <script type="module" src="./registro.js"></script>
     <script type="module">
       import { montarCabecera } from '../comun/cabecera-app.js';
+      import { mejorarContrasena } from '../comun/ui/campo.js';
 
       // Cabecera unica de la aplicacion (HU-UX-001).
       montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: null });
+      mejorarContrasena(document.getElementById('password'));
+      mejorarContrasena(document.getElementById('confirmarPassword'));
     </script>
   </body>
 </html>

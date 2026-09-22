@@ -81,6 +81,10 @@ public class SecurityConfig {
                 .requestMatchers("/actuator/**").permitAll()
                 // El saldo: un servicio ve el de cualquiera; un usuario, solo el suyo.
                 .requestMatchers(HttpMethod.GET, "/creditos/{uid}/saldo").access(servicioODuenoDelSaldo())
+                // El historial de movimientos (#569): misma regla que el saldo.
+                // Es lectura, pero dice cuanto aposto y cuanto gano alguien, asi
+                // que no puede verlo un tercero.
+                .requestMatchers(HttpMethod.GET, "/creditos/{uid}/movimientos").access(servicioODuenoDelSaldo())
                 // Todo lo que aparta, mueve o crea saldo: solo servicios autorizados.
                 .requestMatchers("/creditos/**").hasRole(ROL_SERVICIO)
                 // HU-JUE-012: el resultado de una partida lo informa salas-partidas,

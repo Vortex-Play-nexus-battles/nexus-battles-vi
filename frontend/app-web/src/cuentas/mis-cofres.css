@@ -10,12 +10,6 @@ body {
   font-family: var(--tipografia-cuerpo, Inter, system-ui, sans-serif);
 }
 
-.contenedor {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 16px;
-}
-
 .encabezado-contenido {
   display: flex;
   align-items: flex-start;
@@ -98,6 +92,15 @@ body {
   font-size: 14px;
 }
 
-.estado.carga { background: #ddeef7; color: #095e8c; }
-.estado.error { background: #fbe4e4; color: #b81a1a; }
-.estado.vacio { background: #f2f4f8; color: var(--texto-2, #48536a); }
+.estado.carga {
+  background: #ddeef7;
+  color: #095e8c;
+}
+.estado.error {
+  background: #fbe4e4;
+  color: #b81a1a;
+}
+.estado.vacio {
+  background: #f2f4f8;
+  color: var(--texto-2, #48536a);
+}

@@ -3,12 +3,6 @@
    .estado, botones, inputs). Aquí SOLO va lo que esa hoja no cubre:
    layout de página, tabla, badges por tipo de acción, y paginación. */
 
-.contenedor {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 32px 16px 64px;
-}
-
 .auditoria-titulo {
   font-family: Inter, 'Segoe UI', system-ui, sans-serif;
   font-weight: 700;

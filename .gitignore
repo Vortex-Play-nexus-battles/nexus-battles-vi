@@ -80,3 +80,10 @@ test-results/
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
+
+# Guiones locales para lanzar Gradle/Jest/ESLint desde Windows sin bloquear la
+# sesion. No son parte del proyecto: CI usa los comandos de package.json y Gradle.
+/.correr.ps1
+/.jest.ps1
+/.front.ps1
+/.msg.txt

@@ -1,5 +1,5 @@
-@import url('./tema-cuentas.css');
-
+/* Solo el recortador de avatar del registro. El avatar, los botones y los
+   campos salen de `shared/ui-kit/css/componentes.css`. */
 .selector-avatar {
   border: none;
   padding: 0;
@@ -8,7 +8,7 @@
 .selector-avatar legend {
   font-size: 13px;
   font-weight: 600;
-  color: var(--texto-secundario);
+  color: var(--texto-2);
   padding: 0;
   margin-bottom: 10px;
 }
@@ -17,30 +17,6 @@
   display: flex;
   align-items: center;
   gap: 16px;
-}
-
-.avatar-vista-previa {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  background: var(--fondo);
-  border: 2px dashed var(--borde-decorativo);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-.avatar-vista-previa img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.avatar-placeholder {
-  font-size: 11px;
-  color: var(--texto-terciario);
-  text-align: center;
-  padding: 0 6px;
 }
 
 .avatar-carga-acciones {
@@ -90,7 +66,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 18px 20px;
-  border-bottom: 1px solid var(--borde-decorativo);
+  border-bottom: 1px solid var(--borde);
 }
 .dialogo-recorte-cabecera h2 {
   margin: 0;
@@ -138,7 +114,7 @@
   padding: 16px 20px 0;
   font-size: 13px;
   font-weight: 600;
-  color: var(--texto-secundario);
+  color: var(--texto-2);
 }
 .recorte-zoom-label input[type='range'] {
   width: 100%;

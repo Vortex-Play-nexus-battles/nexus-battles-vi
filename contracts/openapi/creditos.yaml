@@ -64,7 +64,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Libro de creditos
-  version: 1.2.0
+  version: 1.3.0
   description: |
     Saldo, reservas y movimientos de creditos de los jugadores.
 
@@ -132,6 +132,90 @@ paths:
                 saldoBruto: 500
                 saldoReservado: 120
                 saldoDisponible: 380
+
+  /creditos/{uid}/movimientos:
+    get:
+      tags: [creditos]
+      operationId: listarMovimientos
+      summary: Historial de movimientos de credito del jugador
+      description: |
+        Todo lo que movio el saldo del jugador, de lo mas reciente a lo mas
+        antiguo: la apuesta reservada al entrar a una sala, su cobro o su
+        devolucion al terminar, la recompensa por jugar (HU-JUE-012), la
+        inscripcion a un torneo y cualquier debito o credito directo.
+
+        **Por que existe (1.3.0, #569):** el jugador solo podia ver sus pagos
+        en moneda real (`/transacciones/mi-historial`), asi que una partida con
+        apuesta no aparecia en ninguna parte de la interfaz aunque el saldo
+        hubiera cambiado. La fuente es la misma tabla que da idempotencia a
+        `acreditar` y `debitar`, no un registro nuevo.
+
+        `signo` resume la regla para la interfaz: `SUMA` (el saldo subio),
+        `RESTA` (bajo), `APARTA` (reserva todavia activa) y `NEUTRO` (reserva
+        liberada, no movio nada). Asi la vista no la reimplementa.
+
+        Mismo acceso que el saldo: un servicio consulta el de cualquiera; una
+        persona, solo el suyo (403 con otro `uid`). Es lectura, pero dice
+        cuanto aposto y cuanto gano alguien.
+      security:
+        - credencialDeServicio: []
+        - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/Uid'
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: size
+          in: query
+          required: false
+          description: Se acota a 100 en el servidor.
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '401':
+          $ref: '#/components/responses/SinCredencial'
+        '403':
+          $ref: '#/components/responses/NoAutorizado'
+        '200':
+          description: Pagina de movimientos, del mas reciente al mas antiguo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content:
+                    type: array
+                    items: { $ref: '#/components/schemas/MovimientoDeCredito' }
+                  totalElements: { type: integer }
+                  totalPages: { type: integer }
+                  number: { type: integer }
+                  size: { type: integer }
+                  first: { type: boolean }
+                  last: { type: boolean }
+              example:
+                content:
+                  - id: 3f1c2a7e-3d6b-4b9a-8f0e-1c2d3e4f5a6b
+                    monto: 2
+                    concepto: recompensa-victoria
+                    referenciaId: partida-9c1e-jugador-6f1c
+                    tipo: CREDITO
+                    estado: CONSUMIDA
+                    signo: SUMA
+                    creado: '2026-09-22T02:31:00Z'
+                  - id: 8a2d3e4f-5a6b-4c7d-9e0f-1a2b3c4d5e6f
+                    monto: 60
+                    concepto: apuesta-sala
+                    referenciaId: sala-4b7a-jugador-6f1c
+                    tipo: RESERVA
+                    estado: LIBERADA
+                    signo: NEUTRO
+                    creado: '2026-09-22T02:28:00Z'
+                totalElements: 2
+                totalPages: 1
+                number: 0
+                size: 20
+                first: true
+                last: true
 
   /creditos/reservar:
     post:
@@ -395,6 +479,27 @@ components:
         maxLength: 128
 
   schemas:
+    MovimientoDeCredito:
+      type: object
+      description: Una linea del historial de creditos del jugador (#569).
+      required: [id, monto, tipo, estado, signo, creado]
+      properties:
+        id: { type: string, format: uuid }
+        monto: { type: number }
+        concepto:
+          type: [string, 'null']
+          description: Por ejemplo `apuesta-sala`, `recompensa-victoria`, `inscripcion-torneo`.
+        referenciaId:
+          type: [string, 'null']
+          description: A que se refiere el movimiento (partida, sala, torneo).
+        tipo: { type: string, enum: [RESERVA, DEBITO, CREDITO] }
+        estado: { type: string, enum: [ACTIVA, LIBERADA, CONSUMIDA] }
+        signo:
+          type: string
+          enum: [SUMA, RESTA, APARTA, NEUTRO]
+          description: Como afecto al saldo; lo decide el servicio, no la vista.
+        creado: { type: string, format: date-time }
+
     Saldo:
       type: object
       required: [jugadorUid, saldoBruto, saldoReservado, saldoDisponible]
