@@ -22,97 +22,147 @@
     -->
     <div data-cabecera-app></div>
 
-    <main class="pagina pila">
-      <div class="pila pila--compacta">
-        <h1>Sala en batalla</h1>
-        <!--
-          Antes este parrafo le explicaba al jugador que «el color cambia al
-          60 % y al 40 %»: una nota de la especificacion (RF-JUE-009) colada en
-          la pantalla. El umbral es una decision de diseno, no algo que quien
-          juega tenga que leer; la barra ya lo comunica con el color.
-        -->
-        <p class="t-cuerpo">Vida de cada participante y turno en curso.</p>
-      </div>
+    <!--
+      HU-JUE-017 (RF-JUE-017) · CA-01 — el area de juego ocupa mas del 80 % del
+      alto y del ancho utiles, y los menus van ABAJO, nunca sobre el campo.
 
+      Hasta UX-R2.3 esto era una pila vertical de tarjetas dentro de `.pagina`:
+      titulo, parrafo, fila de estado, tarjeta «Participantes» con las barras y
+      una fila de botones azules. Funcionaba, pero era un formulario. La ficha
+      del requisito describe otra cosa.
+
+      La reja tiene tres franjas: HUD arriba (CA-02: vida de todos y turno),
+      campo en medio (CA-03), controles abajo. Las tres son `data-zona` de
+      siempre, asi que todo el guion que ya existia sigue encontrandolas.
+    -->
+    <main class="combate" data-zona="combate">
       <!--
-        Dice lo que hay de verdad. Mientras no exista el transporte del canal,
-        esta vista NO aparenta estar conectada: lo pinta el script segun reciba
-        o no una funcion de suscripcion.
+        CA-02 · Barra superior: vida de todos los participantes con sus colores
+        (HU-SAL-005 #31) y el turno actual, siempre visibles.
       -->
-      <div class="fila">
-        <span class="conexion conexion--sin-conexion" data-zona="conexion" role="status">
-          Canal en tiempo real no conectado
-        </span>
-        <!--
+      <header class="combate__hud">
+        <div class="combate__hud-titulo">
+          <h1 class="t-subtitulo">Sala en batalla</h1>
+          <!--
+            Dice lo que hay de verdad. Mientras no exista el transporte del
+            canal, esta vista NO aparenta estar conectada: lo pinta el script
+            segun reciba o no una funcion de suscripcion.
+          -->
+          <span class="conexion conexion--sin-conexion" data-zona="conexion" role="status">
+            Canal en tiempo real no conectado
+          </span>
+          <!--
           HU-JUE-015: el chat de ESTA sala. Solo aparece cuando se llego con
           `?sala=`: el script pone el enlace con el identificador. Antes la
           vista del chat existia sin que ninguna pantalla llevara a ella.
         -->
-        <a class="boton boton--secundario" data-zona="enlace-chat-sala" href="./chat.html" hidden
-          >Chat de la sala</a
-        >
-      </div>
+          <a class="boton boton--secundario" data-zona="enlace-chat-sala" href="./chat.html" hidden
+            >Chat de la sala</a
+          >
+        </div>
+
+        <!--
+          Las barras de vida, en la franja superior. `panel-vidas.js` las pinta
+          aqui igual que antes: solo cambia donde vive la zona.
+        -->
+        <div class="combate__vidas" data-zona="vidas"></div>
+
+        <!--
+          De quien es el turno. Hasta PR-UX-3 esto SOLO se notaba en que los
+          botones de atacar estaban grises: invisible para un lector de
+          pantalla, e inutil para saber a quien se esta esperando o si la
+          maquina esta jugando. Region viva, asi que se anuncia solo.
+        -->
+        <p class="turno-actual" data-zona="turno" role="status" aria-live="polite" hidden></p>
+      </header>
 
       <!--
+        CA-03 · El campo. Los heroes se colocan al empezar en una posicion
+        derivada de su identificador: aleatoria a la vista y estable de verdad
+        (ver `campo.js`). Es decorativo para el lector de pantalla — la vida, el
+        turno y a quien se ataca se leen arriba y abajo, donde se pueden usar.
+      -->
+      <div class="combate__campo" data-zona="campo" aria-hidden="true"></div>
+
+      <!--
+        CA-05 · Por debajo del minimo (1360×768 de la ficha) la vista degrada
+        con un aviso en vez de romperse. El campo absoluto necesita alto; en un
+        movil apaisado de 360 px no lo hay. Se ensena por CSS, sin JS.
+      -->
+      <p class="combate__aviso-tamano" role="status">
+        Esta pantalla es demasiado estrecha para el campo de combate. Gira el dispositivo o usa una
+        pantalla mayor; la vida y los controles siguen funcionando.
+      </p>
+
+      <!--
+        Todo lo de ANTES del combate: el estado vacio, el arranque y los
+        controles de sala. Van en su propia capa sobre el campo porque mientras
+        la partida no empieza el campo esta vacio; cuando empieza, el guion
+        esconde estas tres zonas y el campo queda limpio. Ninguna de ellas se
+        superpone a los controles de abajo, que es lo que CA-01 prohibe.
+      -->
+      <div class="combate__sala">
+        <!--
         Estado vacio de RNF-USA-003. Es lo que se ve mientras no haya partida
         cargada: no se inventan participantes de ejemplo.
       -->
-      <div class="estado-vista" data-zona="sin-partida">
-        <p class="estado-vista__titulo">No hay ninguna partida cargada</p>
-        <p class="t-meta">Esta vista se pinta con los participantes de una partida en curso.</p>
-      </div>
+        <div class="estado-vista" data-zona="sin-partida">
+          <p class="estado-vista__titulo">No hay ninguna partida cargada</p>
+          <p class="t-meta">Esta vista se pinta con los participantes de una partida en curso.</p>
+        </div>
 
-      <!--
+        <!--
         HU-SAL-004: arranque del combate. Solo aparece cuando se llego desde una
         sala; quien no sea el anfitrion recibe un 403 del servidor y lo ve aqui
         mismo. No se oculta el boton adivinando quien es el anfitrion: esta vista
         no lo sabe, y esconderlo por si acaso dejaria al anfitrion sin forma de
         empezar cuando la suposicion falle.
       -->
-      <div class="fila" data-zona="arranque" hidden>
-        <button class="boton boton--primario" type="button" data-accion="iniciar-partida">
-          Iniciar combate
-        </button>
-        <span class="t-meta" data-zona="aviso-arranque" role="status"></span>
-      </div>
+        <div class="fila" data-zona="arranque" hidden>
+          <button class="boton boton--primario" type="button" data-accion="iniciar-partida">
+            Iniciar combate
+          </button>
+          <span class="t-meta" data-zona="aviso-arranque" role="status"></span>
+        </div>
 
-      <!--
+        <!--
         HU-SAL-006: salir o cancelar ANTES de que empiece. Se ofrece el boton
         que corresponde a quien mira (la vista lo sabe por `idAnfitrion` de
         GET /salas/{id}) y ninguno de los dos cuando la partida ya arranco.
         Cancelar pide confirmacion porque expulsa a los demas; salir no.
       -->
-      <div class="fila" data-zona="espera" hidden>
-        <span class="t-meta" data-zona="ocupacion" role="status" aria-live="polite"></span>
-        <button class="boton boton--secundario" type="button" data-accion="salir-de-sala" hidden>
-          Salir de la sala
-        </button>
-        <button class="boton boton--peligro" type="button" data-accion="cancelar-sala" hidden>
-          Cancelar sala
-        </button>
-        <span class="t-meta" data-zona="aviso-espera" role="alert"></span>
+        <div class="fila" data-zona="espera" hidden>
+          <span class="t-meta" data-zona="ocupacion" role="status" aria-live="polite"></span>
+          <button class="boton boton--secundario" type="button" data-accion="salir-de-sala" hidden>
+            Salir de la sala
+          </button>
+          <button class="boton boton--peligro" type="button" data-accion="cancelar-sala" hidden>
+            Cancelar sala
+          </button>
+          <span class="t-meta" data-zona="aviso-espera" role="alert"></span>
+        </div>
       </div>
 
-      <section class="tarjeta pila" data-zona="panel" hidden>
-        <div class="encabezado-seccion">
-          <h2 class="tarjeta__titulo">Participantes</h2>
-          <!--
-            De quien es el turno. Hasta ahora esto SOLO se notaba en que los
-            botones de atacar estaban grises: invisible para un lector de
-            pantalla, e inutil para saber a quien se esta esperando o si la
-            maquina esta jugando. Region viva, asi que se anuncia solo.
-          -->
-          <p class="turno-actual" data-zona="turno" role="status" aria-live="polite" hidden></p>
-        </div>
-        <div class="pila pila--compacta" data-zona="vidas"></div>
-
+      <!--
+        CA-01 · Los controles, ABAJO. `data-zona="panel"` sigue siendo el
+        contenedor que el guion esconde y ensena segun haya partida; lo que
+        cambia es que ahora es la franja inferior de la reja y no una tarjeta
+        en medio de una pila.
+      -->
+      <footer class="combate__controles" data-zona="panel" hidden>
         <!--
-          HU-SAL-005 / RF-JUE-017: jugar el turno. Los botones nacen
-          deshabilitados y solo se abren cuando el canal dice que el turno es
-          tuyo: habilitarlos por defecto invitaria a mandar acciones que el
-          servidor va a rechazar.
+          HU-SAL-005 / RF-JUE-017 CA-03: jugar el turno, con iconos. Los
+          botones nacen deshabilitados y solo se abren cuando el canal dice que
+          el turno es tuyo: habilitarlos por defecto invitaria a mandar
+          acciones que el servidor va a rechazar. Cuando estan cerrados dicen
+          por que, que es lo que faltaba.
         -->
-        <div class="fila" data-zona="acciones"></div>
+        <div
+          class="combate__acciones"
+          data-zona="acciones"
+          role="group"
+          aria-label="Acciones de combate"
+        ></div>
         <!--
           HU-DIS-003: si el motor de combate no responde al jugar, aqui se pinta
           «Seccion degradada» (los botones se quedan: la accion no se aplico y
@@ -121,8 +171,14 @@
         -->
         <div data-zona="degradacion" data-seccion="Motor de combate" hidden></div>
         <p class="t-cuerpo" data-zona="rechazo" role="alert" hidden></p>
-        <p class="t-cuerpo" data-zona="resultado" role="status" hidden></p>
-      </section>
+      </footer>
+
+      <!--
+        CA-04 · Vista de alto impacto al terminar. Va fuera de la franja de
+        controles, superpuesta al campo, porque cuando aparece la partida ya
+        acabo y no hay nada que pulsar debajo.
+      -->
+      <div class="combate__desenlace" data-zona="resultado" role="status" hidden></div>
     </main>
 
     <!--
@@ -208,7 +264,8 @@
        * otro.
        */
       function repintar(suscribir) {
-        montarSalaBatalla(document, { partida, suscribir });
+        // `yo` deja al campo saber que lado es el propio (HU-JUE-017 CA-03).
+        montarSalaBatalla(document, { partida, suscribir, yo });
 
         if (!partida || !canal) {
           return;
@@ -428,6 +485,7 @@
         montarSalaBatalla(document, {
           idPartida: estado?.idPartida,
           participantes: estado?.participantes,
+          yo,
           suscribir:
             canal && estado?.idPartida ? suscripcionDePartida(canal, estado.idPartida) : undefined,
         });

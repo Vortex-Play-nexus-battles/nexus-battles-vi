@@ -17,6 +17,7 @@
  */
 
 import { montarPanelVidas } from './panel-vidas.js';
+import { pintarCampo } from './campo.js';
 
 /**
  * Destino del canal `partidaEstado` del AsyncAPI
@@ -138,11 +139,12 @@ function explicarVacio(zona, texto) {
  *   Transporte del canal de la partida. Se inyecta desde fuera para que el dia
  *   que exista STOMP no haya que rehacer nada de aqui.
  */
-export function montarSalaBatalla(raiz, { partida, idPartida, participantes, suscribir } = {}) {
+export function montarSalaBatalla(raiz, { partida, idPartida, participantes, suscribir, yo } = {}) {
   const zonaConexion = raiz.querySelector('[data-zona="conexion"]');
   const zonaSinPartida = raiz.querySelector('[data-zona="sin-partida"]');
   const panel = raiz.querySelector('[data-zona="panel"]');
   const vidas = raiz.querySelector('[data-zona="vidas"]');
+  const campo = raiz.querySelector('[data-zona="campo"]');
 
   pintarConexion(zonaConexion, typeof suscribir === 'function');
 
@@ -168,7 +170,19 @@ export function montarSalaBatalla(raiz, { partida, idPartida, participantes, sus
     panel.hidden = !hayPartida;
   }
 
-  if (!hayPartida || !vidas) {
+  if (!hayPartida) {
+    return;
+  }
+
+  // HU-JUE-017 CA-01 y CA-03: el campo con los heroes colocados. Es lo que
+  // ocupa mas del 80 % de la pantalla; la barra de vida y los controles van
+  // alrededor, nunca encima. Si la vista no trae campo (o una prueba monta
+  // solo el panel), no pasa nada: el resto sigue funcionando igual.
+  if (campo) {
+    pintarCampo(campo, enPantalla, yo ?? null);
+  }
+
+  if (!vidas) {
     return;
   }
 

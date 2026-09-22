@@ -17,6 +17,7 @@ import {
   textoDelResultado,
   textoDelTurno,
   montarControlesDeCombate,
+  gano,
   ACCION_RESUELTA,
   TURNO_CAMBIADO,
   PARTIDA_FINALIZADA,
@@ -245,7 +246,10 @@ describe('registroDeAvisos con reparto (HU-JUE-014, CA-06)', () => {
     const resultado = document.querySelector('[data-zona="resultado"]');
 
     controles.recibir({ tipo: PARTIDA_FINALIZADA, idPartida: PARTIDA, ganadores: [ANA] });
-    expect(resultado.textContent).toBe('Has ganado el combate.');
+    // Desde UX-R2.3 el desenlace es un panel con la palabra grande delante
+    // (HU-JUE-017 CA-04), asi que se comprueba el detalle, no la cadena exacta.
+    expect(resultado.textContent).toContain('Has ganado el combate.');
+    expect(resultado.textContent).toContain('VICTORIA');
 
     controles.recibir({
       tipo: PARTIDA_FINALIZADA,
@@ -688,5 +692,119 @@ describe('indicador de turno en la vista', () => {
       <p data-zona="resultado" hidden></p>`;
 
     expect(() => montar(ANA)).not.toThrow();
+  });
+});
+
+/**
+ * HU-JUE-017 (RF-JUE-017) — la interfaz de combate, criterio por criterio.
+ *
+ * Estas pruebas no comprueban que el combate funcione (eso ya lo hacen las de
+ * arriba): comprueban que se PRESENTE como pide la ficha. Son las que se caen
+ * si alguien vuelve a poner un boton azul de formulario en la barra de
+ * acciones o si el final de partida vuelve a ser un parrafo.
+ */
+describe('HU-JUE-017 · presentacion del combate (UX-R2.3)', () => {
+  beforeEach(() => {
+    document.body.innerHTML = VISTA;
+  });
+
+  const montar = (turnoDe) =>
+    montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      turnoDe,
+      alAtacar: () => {},
+    });
+
+  test('CA-03 · cada accion lleva icono, no solo texto', () => {
+    montar(ANA);
+    const accion = document.querySelector('[data-atacar]');
+
+    expect(accion.className).toContain('accion-combate');
+    expect(accion.querySelector('.accion-combate__icono')).not.toBeNull();
+    expect(accion.querySelector('use').getAttribute('href')).toContain('#espada');
+  });
+
+  test('CA-03 · el icono no sustituye al nombre del rival', () => {
+    montar(ANA);
+    expect(document.querySelector('[data-atacar]').textContent).toContain('Centinela');
+  });
+
+  test('fuera de turno se dice POR QUE, no solo se apaga', () => {
+    montar(BRUNO);
+    const accion = document.querySelector('[data-atacar]');
+
+    expect(accion.disabled).toBe(true);
+    expect(accion.className).toContain('accion-combate--fuera-de-turno');
+    expect(accion.getAttribute('title')).toBe('No es tu turno');
+    expect(accion.getAttribute('aria-label')).toContain('No es tu turno');
+  });
+
+  test('cuando toca, el motivo desaparece y el boton invita a atacar', () => {
+    const controles = montar(BRUNO);
+    controles.recibir({ tipo: TURNO_CAMBIADO, idPartida: PARTIDA, idJugador: ANA });
+
+    const accion = document.querySelector('[data-atacar]');
+    expect(accion.disabled).toBe(false);
+    expect(accion.className).not.toContain('accion-combate--fuera-de-turno');
+    expect(accion.getAttribute('title')).toMatch(/^Atacar a /);
+  });
+
+  test('CA-04 · el final de la partida es una vista de alto impacto', () => {
+    const controles = montar(ANA);
+    controles.recibir({ tipo: PARTIDA_FINALIZADA, idPartida: PARTIDA, ganadores: [ANA] });
+
+    const panel = document.querySelector('[data-zona="resultado"] .panel-resultado');
+    expect(panel).not.toBeNull();
+    expect(panel.dataset.resultado).toBe('victoria');
+    // La palabra, no solo el color: quien no distinga verde de rojo la lee.
+    expect(panel.querySelector('.panel-resultado__palabra').textContent).toBe('VICTORIA');
+  });
+
+  test('CA-04 · perder tambien se ve, y no es el mismo panel en rojo', () => {
+    const controles = montar(ANA);
+    controles.recibir({ tipo: PARTIDA_FINALIZADA, idPartida: PARTIDA, ganadores: [BRUNO] });
+
+    const panel = document.querySelector('[data-zona="resultado"] .panel-resultado');
+    expect(panel.dataset.resultado).toBe('derrota');
+    expect(panel.querySelector('.panel-resultado__palabra').textContent).toBe('DERROTA');
+  });
+
+  test('CA-04 · el reparto de creditos sale en el panel', () => {
+    const controles = montar(ANA);
+    controles.recibir({
+      tipo: PARTIDA_FINALIZADA,
+      idPartida: PARTIDA,
+      ganadores: [ANA],
+      recompensa: [{ idJugador: ANA, creditos: 40, ganador: true }],
+    });
+
+    expect(
+      document.querySelector('[data-zona="resultado"] .panel-resultado__creditos').textContent,
+    ).toBe('+40');
+  });
+});
+
+describe('gano · la regla del desenlace, en un solo sitio', () => {
+  test('gana quien esta en la lista de ganadores', () => {
+    expect(gano({ ganadores: [ANA] }, ANA)).toBe(true);
+    expect(gano({ ganadores: [BRUNO] }, ANA)).toBe(false);
+  });
+
+  test('por equipos se gana con los companeros aunque uno haya caido', () => {
+    expect(gano({ ganadores: [BRUNO], equipoGanador: 2 }, ANA, 2)).toBe(true);
+    expect(gano({ ganadores: [BRUNO], equipoGanador: 2 }, ANA, 1)).toBe(false);
+  });
+
+  test('sin ganadores nadie gano: es empate', () => {
+    expect(gano({ ganadores: [] }, ANA)).toBe(false);
+    expect(gano({}, ANA)).toBe(false);
+  });
+
+  test('coincide con lo que dice el texto, que es de donde se extrajo', () => {
+    const aviso = { ganadores: [ANA] };
+    expect(textoDelResultado(aviso, ANA)).toContain('Has ganado');
+    expect(gano(aviso, ANA)).toBe(true);
   });
 });
