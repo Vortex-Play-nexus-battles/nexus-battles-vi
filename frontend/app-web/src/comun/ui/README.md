@@ -4,28 +4,28 @@ Construye en JavaScript los componentes que `shared/ui-kit/css` define
 visualmente. Nació en el bloque UX porque la auditoría del frontend encontró
 esto:
 
-| Síntoma | Medida |
-|---|---|
-| `function nodo()` reescrita en cada vista | 4 copias |
-| `function pintarAviso()` reescrita en cada vista | 6 copias, en **dos familias** que no se parecían |
-| `document.createElement` a pelo | 34 archivos |
+| Síntoma                                            | Medida                                                                                                                                      |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `function nodo()` reescrita en cada vista          | 4 copias                                                                                                                                    |
+| `function pintarAviso()` reescrita en cada vista   | 6 copias, en **dos familias** que no se parecían                                                                                            |
+| `document.createElement` a pelo                    | 34 archivos                                                                                                                                 |
 | Componentes del kit que existían y **nadie usaba** | `tarjeta--subasta`, `marco-heroe`, `esqueleto`, `distintivo`, `ranura`, `metrica`, `pestanas`, `encuentro`, `logro`, `lote`, `linea-tiempo` |
-| CSS local por vista | 5.562 líneas, 4 archivos sin una sola `var(--token)` |
+| CSS local por vista                                | 5.562 líneas, 4 archivos sin una sola `var(--token)`                                                                                        |
 
 ## Qué hay
 
-| Módulo | Para qué |
-|---|---|
-| `dom.js` | `h()`, `nodo()`, `vaciar()`, `clases()`. Siempre `textContent`, nunca `innerHTML` |
-| `formato.js` | `creditos()`, `fecha()`, `fechaHora()`, `cuantoFalta()`, `numero()`, `porcentaje()` — una sola localización (`es-CO`) |
-| `aviso.js` | `aviso()`, `pintarAviso()`, `limpiarAviso()`, `tonoPorEstado()` (MAPEO-ERRORES, tabla 4) |
-| `estado-vista.js` | `estadoVacio()`, `estadoDeError()`, `estadoDeCarga()`, `pintarEstado()` |
-| `esqueleto.js` | `esqueletoDeLista()`, `esqueletoDeTarjetas()`, `esqueletoDeFilas()` |
-| `boton.js` | `boton()`, `conCarga()` — bloquea, lo anuncia y devuelve el texto exacto |
-| `distintivo.js` | `distintivo()`, `distintivoDeRareza()`, `claseDeMarco()` |
-| `tarjeta.js` | `tarjeta()`, `tarjetaDeCifra()` |
-| `dialogo.js` | `abrirDialogo()`, `confirmar()` — foco atrapado, Escape, foco devuelto |
-| `pagina.js` | `encabezadoDePagina()`, `encabezadoDeSeccion()` |
+| Módulo            | Para qué                                                                                                              |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `dom.js`          | `h()`, `nodo()`, `vaciar()`, `clases()`. Siempre `textContent`, nunca `innerHTML`                                     |
+| `formato.js`      | `creditos()`, `fecha()`, `fechaHora()`, `cuantoFalta()`, `numero()`, `porcentaje()` — una sola localización (`es-CO`) |
+| `aviso.js`        | `aviso()`, `pintarAviso()`, `limpiarAviso()`, `tonoPorEstado()` (MAPEO-ERRORES, tabla 4)                              |
+| `estado-vista.js` | `estadoVacio()`, `estadoDeError()`, `estadoDeCarga()`, `pintarEstado()`                                               |
+| `esqueleto.js`    | `esqueletoDeLista()`, `esqueletoDeTarjetas()`, `esqueletoDeFilas()`                                                   |
+| `boton.js`        | `boton()`, `conCarga()` — bloquea, lo anuncia y devuelve el texto exacto                                              |
+| `distintivo.js`   | `distintivo()`, `distintivoDeRareza()`, `claseDeMarco()`                                                              |
+| `tarjeta.js`      | `tarjeta()`, `tarjetaDeCifra()`                                                                                       |
+| `dialogo.js`      | `abrirDialogo()`, `confirmar()` — foco atrapado, Escape, foco devuelto                                                |
+| `pagina.js`       | `encabezadoDePagina()`, `encabezadoDeSeccion()`                                                                       |
 
 ## Reglas
 
