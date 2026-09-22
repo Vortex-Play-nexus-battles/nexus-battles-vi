@@ -1,3 +1,14 @@
+/* Los componentes compartidos ya no se redefinen aqui.
+ *
+ * `.tarjeta`, `.aviso`, `.fila`, `.ayuda` y `.paginacion` son del sistema
+ * de diseno (`shared/ui-kit/css/`). Redefinirlos con el mismo nombre en una
+ * hoja de vista hacia que el MISMO componente se viera distinto segun la
+ * pantalla: la tarjeta tenia radio 8 px en unas vistas y 10 px en otras, y
+ * el aviso salia siempre azul aunque el modificador dijera error o exito.
+ * La vista carga ahora `base.css` ademas de `componentes.css`, asi que las
+ * reglas del kit llegan enteras.
+ */
+
 /* Los tokens del sistema de diseno ya no se copian aqui: los que compartian
  * nombre con `tokens.css` tapaban el modo de alto contraste del kit. Quedan
  * los alias propios de este tema. */
@@ -48,33 +59,6 @@ body {
   font-family: Inter, 'Segoe UI', system-ui, sans-serif;
   font-size: 16px;
   line-height: 1.45;
-}
-
-.aviso {
-  background: var(--info-fondo);
-  color: var(--info);
-  border: 1px solid var(--borde-decorativo);
-  border-radius: 8px;
-  padding: 12px 16px;
-  margin-bottom: 20px;
-}
-.aviso[hidden] {
-  display: none;
-}
-
-.tarjeta {
-  background: var(--superficie);
-  border: 1px solid var(--borde-decorativo);
-  border-radius: 10px;
-  padding: 20px;
-  margin-bottom: 20px;
-}
-
-.fila {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  align-items: flex-end;
 }
 
 label {
@@ -160,15 +144,6 @@ button {
   background: var(--superficie);
   color: var(--accion);
   border: 1px solid var(--borde-interactivo);
-}
-
-.ayuda {
-  margin: 8px 0 16px;
-  color: var(--texto-terciario);
-  font-size: 13px;
-}
-.ayuda.error-campo {
-  color: var(--error);
 }
 
 /* ---- Adiciones propias de registro/login ----
