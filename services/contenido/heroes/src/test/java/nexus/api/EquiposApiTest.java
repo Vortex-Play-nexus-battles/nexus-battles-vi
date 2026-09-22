@@ -4,6 +4,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.UUID;
+
+import com.nexusbattles.comun.seguridad.pruebas.EmisorDeTokensDePrueba;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +25,18 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest
 @AutoConfigureMockMvc
 class EquiposApiTest {
+    // R8.1 — esta ruta dejo de ser anonima. Validar una composicion es un calculo a peticion del jugador.
+    // El token es real (RSA, verificado contra el JWKS del emisor de prueba),
+    // no un principal inventado: lo que estas pruebas atraviesan es la misma
+    // cadena de seguridad que atravesara el servicio desplegado.
+    private static final String AUTORIZACION =
+            "Bearer " + EmisorDeTokensDePrueba.emisor().tokenDeJugador("lyra", UUID.randomUUID());
+
+    @DynamicPropertySource
+    static void jwks(DynamicPropertyRegistry registro) {
+        EmisorDeTokensDePrueba.registrarJwks(registro);
+    }
+
 
     @Autowired
     private MockMvc mvc;
@@ -27,7 +44,7 @@ class EquiposApiTest {
     @Test
     @DisplayName("un equipo con un solo sanador es valido (RC-08)")
     void unSanadorValido() throws Exception {
-        mvc.perform(post("/api/v1/equipos/validacion")
+        mvc.perform(post("/api/v1/equipos/validacion").header("Authorization", AUTORIZACION)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"heroes\":[\"Chamán\",\"Guerrero Tanque\",\"Mago Fuego\"]}"))
                 .andExpect(status().isOk())
@@ -40,7 +57,7 @@ class EquiposApiTest {
     @Test
     @DisplayName("dos sanadores en un equipo se rechazan con el motivo apto para el jugador (ERS CU-44 E4)")
     void dosSanadoresRechazados() throws Exception {
-        mvc.perform(post("/api/v1/equipos/validacion")
+        mvc.perform(post("/api/v1/equipos/validacion").header("Authorization", AUTORIZACION)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"heroes\":[\"chaman\",\"MÉDICO\"]}"))
                 .andExpect(status().isOk())
@@ -52,7 +69,7 @@ class EquiposApiTest {
     @Test
     @DisplayName("el individual con sanador sigue el parametro propio; por defecto rige RC-09 (solo en equipo)")
     void individualConSanadorSegunParametro() throws Exception {
-        mvc.perform(post("/api/v1/equipos/validacion")
+        mvc.perform(post("/api/v1/equipos/validacion").header("Authorization", AUTORIZACION)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"heroes\":[\"Médico\"]}"))
                 .andExpect(status().isOk())
@@ -64,7 +81,7 @@ class EquiposApiTest {
     @Test
     @DisplayName("un heroe inexistente en la composicion responde 404 en formato de detalles de problema")
     void heroeInexistente() throws Exception {
-        mvc.perform(post("/api/v1/equipos/validacion")
+        mvc.perform(post("/api/v1/equipos/validacion").header("Authorization", AUTORIZACION)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"heroes\":[\"Paladín\"]}"))
                 .andExpect(status().isNotFound())
@@ -74,7 +91,7 @@ class EquiposApiTest {
     @Test
     @DisplayName("un equipo vacio responde 400 con mensaje apto para el usuario")
     void equipoVacio() throws Exception {
-        mvc.perform(post("/api/v1/equipos/validacion")
+        mvc.perform(post("/api/v1/equipos/validacion").header("Authorization", AUTORIZACION)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"heroes\":[]}"))
                 .andExpect(status().isBadRequest())
@@ -85,7 +102,7 @@ class EquiposApiTest {
     @Test
     @DisplayName("una solicitud sin el campo heroes responde 400 con mensaje apto para el usuario")
     void sinCampoHeroes() throws Exception {
-        mvc.perform(post("/api/v1/equipos/validacion")
+        mvc.perform(post("/api/v1/equipos/validacion").header("Authorization", AUTORIZACION)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isBadRequest())

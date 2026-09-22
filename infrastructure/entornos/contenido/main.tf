@@ -106,17 +106,50 @@ resource "aws_instance" "contenido_dev" {
   vpc_security_group_ids = [aws_security_group.contenido_sg.id]
   # Lo que desplegar.sh da por hecho en el servidor: Docker, Compose v2, el
   # usuario ubuntu en el grupo docker y /opt/nexus escribible por el.
+  #
+  # R8.3 — mas un swap de 2 GB, como el de plataforma
+  # (infrastructure/entornos/plataforma/main.tf). Este host nacio sin el: con
+  # 1,9 GiB de RAM contra 1.760 MB de `mem_limit`, el margen declarado es de
+  # -114 MB, y aqui viven los cuatro servicios de los que depende el combate.
+  # Sin swap un pico de arranque no degrada: el OOM killer mata un contenedor.
+  # Es disco gp3 ya pagado; no cuesta un centavo mas.
+  #
+  # OJO — esto NO arregla el host que ya esta corriendo: `user_data` solo se
+  # ejecuta en el primer arranque. Al host vivo lo arregla
+  # `scripts/cd/asegurar-swap.sh`, que corre desde `desplegar.sh` en cada
+  # despliegue y es idempotente. Este bloque es para cualquier reconstruccion
+  # futura, para que no vuelva a nacer sin swap.
   user_data = <<-EOT
     #!/bin/bash
     apt-get update -y
     apt-get install -y docker.io docker-compose-v2
     usermod -aG docker ubuntu
     mkdir -p /opt/nexus && chown ubuntu:ubuntu /opt/nexus
+    if [ ! -f /swapfile ]; then
+      fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile
+      echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    fi
+    swapon -a
   EOT
+
+  # **Esta linea es la que impide un desastre.** Por omision, cambiar
+  # `user_data` marca la instancia para REEMPLAZO: Terraform la destruiria y
+  # crearia otra, perdiendo /opt/nexus y obligando a reasociar la IP elastica.
+  # Con `false`, el cambio se registra en el estado y no toca el host.
+  # Plataforma la lleva desde su PR original por la misma razon.
+  user_data_replace_on_change = false
+
   root_block_device {
     volume_size = 16
   }
   tags = { Name = "nexus-contenido-dev" }
+
+  lifecycle {
+    # La AMI "mas reciente" cambia cada pocas semanas. Sin esto, un `apply`
+    # rutinario recrearia el host. Mismo motivo y misma linea que en
+    # plataforma.
+    ignore_changes = [ami]
+  }
 }
 
 # IP fija: la instancia se puede apagar y prender sin que cambie el secreto.

@@ -74,6 +74,17 @@ services:
       PUERTO_HEROES: 8080
       SPRING_PROFILES_ACTIVE: mongo
       MONGODB_URI: mongodb://contenido-mongo:27017/heroes
+      # R8.1 — emisor real (ADR-002/ADR-005). Es ms-identidad, que corre en el
+      # host de plataforma; su 8089 esta abierto en el Security Group y su IP
+      # es elastica, asi que el valor por omision es estable. El CD ya reparte
+      # esta misma variable (cd.yml:813, vars.IDENTIDAD_JWKS_URL) al job de
+      # contenido, de modo que en un despliegue real manda la variable.
+      #
+      # OJO: srv-inventario y srv-productos, mas abajo, siguen leyendo
+      # KEYCLOAK_JWK_SET_URI, que el CD NO reparte — por eso caen al jwks-dev
+      # de esta red y no al emisor real. Ese renombrado es R9.7 y toca a los
+      # dos a la vez; aqui no se cambia para no mezclar bloques.
+      IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://35.168.124.119:8089/api/v1/auth/jwks}
     depends_on:
       contenido-mongo:
         condition: service_healthy
@@ -153,6 +164,11 @@ services:
       - "8104:8080"
     environment:
       HEROES_URL: http://srv-heroes:8080
+      # R8.1 — POST /api/v1/combate/ataques exige ROLE_SERVICIO. El token lo
+      # firma ms-identidad en el host de plataforma y lo presenta
+      # salas-partidas; el motor solo necesita la clave publica para
+      # verificarlo. Misma variable que reparte el CD.
+      IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://35.168.124.119:8089/api/v1/auth/jwks}
     depends_on:
       srv-heroes:
         condition: service_started
