@@ -89,6 +89,7 @@ test-results/
 /.msg.txt
 /.issue.md
 /.visual.ps1
+/.pr.md
 
 # Capturas del laboratorio visual (UX-R2.1). El informe SI se versiona
 # (`INFORME.md` e `informe.json`: son numeros, se comparan entre corridas y

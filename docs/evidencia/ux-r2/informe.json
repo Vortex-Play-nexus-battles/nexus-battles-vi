@@ -1,12 +1,11 @@
 {
-  "generado": "2026-09-22T06:32:49.383Z",
+  "generado": "2026-09-22T06:45:32.632Z",
   "modo": "sin-servicios",
   "combinaciones": 155,
-  "conHallazgos": 68,
+  "conHallazgos": 57,
   "porMotivo": {
     "cabecera-en-mas-de-dos-filas": 48,
     "objetivo-tactil-pequeno": 326,
-    "contraste-insuficiente": 35,
     "desbordamiento-horizontal": 6,
     "elemento-fuera-del-viewport": 9,
     "error-tecnico-visible": 5
@@ -243,84 +242,12 @@
     {
       "vista": "home",
       "grupo": "cuenta",
-      "pantalla": "desktop",
-      "ancho": 1440,
-      "hallazgos": [
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«Tu Nexo» 1.46:1 (mínimo 4.5:1, 14px)"
-        },
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«Hola, qa_visual» 1.46:1 (mínimo 3:1, 40px)"
-        },
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«Equipa tu héroe, entra a una» 1.46:1 (mínimo 4.5:1, 16px)"
-        }
-      ]
-    },
-    {
-      "vista": "home",
-      "grupo": "cuenta",
-      "pantalla": "laptop",
-      "ancho": 1280,
-      "hallazgos": [
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«Tu Nexo» 1.46:1 (mínimo 4.5:1, 14px)"
-        },
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«Hola, qa_visual» 1.46:1 (mínimo 3:1, 40px)"
-        },
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«Equipa tu héroe, entra a una» 1.46:1 (mínimo 4.5:1, 16px)"
-        }
-      ]
-    },
-    {
-      "vista": "home",
-      "grupo": "cuenta",
-      "pantalla": "laptop-min",
-      "ancho": 1024,
-      "hallazgos": [
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«Tu Nexo» 1.46:1 (mínimo 4.5:1, 14px)"
-        },
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«Hola, qa_visual» 1.46:1 (mínimo 3:1, 40px)"
-        },
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«Equipa tu héroe, entra a una» 1.46:1 (mínimo 4.5:1, 16px)"
-        }
-      ]
-    },
-    {
-      "vista": "home",
-      "grupo": "cuenta",
       "pantalla": "tablet",
       "ancho": 768,
       "hallazgos": [
         {
           "motivo": "cabecera-en-mas-de-dos-filas",
           "detalle": "la cabecera mide 141px (una fila son 64px)"
-        },
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«Tu Nexo» 1.46:1 (mínimo 4.5:1, 14px)"
-        },
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«Hola, qa_visual» 1.46:1 (mínimo 3:1, 40px)"
-        },
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«Equipa tu héroe, entra a una» 1.46:1 (mínimo 4.5:1, 16px)"
         }
       ]
     },
@@ -333,18 +260,6 @@
         {
           "motivo": "cabecera-en-mas-de-dos-filas",
           "detalle": "la cabecera mide 188px (una fila son 64px)"
-        },
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«Tu Nexo» 1.46:1 (mínimo 4.5:1, 14px)"
-        },
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«Hola, qa_visual» 1.46:1 (mínimo 3:1, 40px)"
-        },
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«Equipa tu héroe, entra a una» 1.46:1 (mínimo 4.5:1, 16px)"
         },
         {
           "motivo": "objetivo-tactil-pequeno",
@@ -943,104 +858,12 @@
     {
       "vista": "productos",
       "grupo": "coleccion",
-      "pantalla": "desktop",
-      "ancho": 1440,
-      "hallazgos": [
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«NEXUS BATTLES VI» 1.08:1 (mínimo 4.5:1, 13px)"
-        },
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«Registra un producto con los» 1.35:1 (mínimo 4.5:1, 16px)"
-        },
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«Administración» 1.35:1 (mínimo 4.5:1, 13px)"
-        }
-      ]
-    },
-    {
-      "vista": "productos",
-      "grupo": "coleccion",
-      "pantalla": "laptop",
-      "ancho": 1280,
-      "hallazgos": [
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«NEXUS BATTLES VI» 1.08:1 (mínimo 4.5:1, 13px)"
-        },
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«Registra un producto con los» 1.35:1 (mínimo 4.5:1, 16px)"
-        },
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«Administración» 1.35:1 (mínimo 4.5:1, 13px)"
-        }
-      ]
-    },
-    {
-      "vista": "productos",
-      "grupo": "coleccion",
-      "pantalla": "laptop-min",
-      "ancho": 1024,
-      "hallazgos": [
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«NEXUS BATTLES VI» 1.08:1 (mínimo 4.5:1, 13px)"
-        },
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«Registra un producto con los» 1.35:1 (mínimo 4.5:1, 16px)"
-        },
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«Administración» 1.35:1 (mínimo 4.5:1, 13px)"
-        }
-      ]
-    },
-    {
-      "vista": "productos",
-      "grupo": "coleccion",
-      "pantalla": "tablet",
-      "ancho": 768,
-      "hallazgos": [
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«NEXUS BATTLES VI» 1.08:1 (mínimo 4.5:1, 13px)"
-        },
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«Registra un producto con los» 1.35:1 (mínimo 4.5:1, 16px)"
-        },
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«Administración» 1.35:1 (mínimo 4.5:1, 13px)"
-        }
-      ]
-    },
-    {
-      "vista": "productos",
-      "grupo": "coleccion",
       "pantalla": "movil",
       "ancho": 375,
       "hallazgos": [
         {
           "motivo": "cabecera-en-mas-de-dos-filas",
           "detalle": "la cabecera mide 180px (una fila son 64px)"
-        },
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«NEXUS BATTLES VI» 1.08:1 (mínimo 4.5:1, 13px)"
-        },
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«Registra un producto con los» 1.35:1 (mínimo 4.5:1, 16px)"
-        },
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«Administración» 1.35:1 (mínimo 4.5:1, 13px)"
         },
         {
           "motivo": "objetivo-tactil-pequeno",
@@ -1407,54 +1230,6 @@
     {
       "vista": "tienda",
       "grupo": "mercado",
-      "pantalla": "desktop",
-      "ancho": 1440,
-      "hallazgos": [
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«PAGAR» 2.48:1 (mínimo 4.5:1, 18px)"
-        }
-      ]
-    },
-    {
-      "vista": "tienda",
-      "grupo": "mercado",
-      "pantalla": "laptop",
-      "ancho": 1280,
-      "hallazgos": [
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«PAGAR» 2.48:1 (mínimo 4.5:1, 18px)"
-        }
-      ]
-    },
-    {
-      "vista": "tienda",
-      "grupo": "mercado",
-      "pantalla": "laptop-min",
-      "ancho": 1024,
-      "hallazgos": [
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«PAGAR» 2.48:1 (mínimo 4.5:1, 18px)"
-        }
-      ]
-    },
-    {
-      "vista": "tienda",
-      "grupo": "mercado",
-      "pantalla": "tablet",
-      "ancho": 768,
-      "hallazgos": [
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«PAGAR» 2.48:1 (mínimo 4.5:1, 18px)"
-        }
-      ]
-    },
-    {
-      "vista": "tienda",
-      "grupo": "mercado",
       "pantalla": "movil",
       "ancho": 375,
       "hallazgos": [
@@ -1469,10 +1244,6 @@
         {
           "motivo": "cabecera-en-mas-de-dos-filas",
           "detalle": "la cabecera mide 186px (una fila son 64px)"
-        },
-        {
-          "motivo": "contraste-insuficiente",
-          "detalle": "«PAGAR» 2.48:1 (mínimo 4.5:1, 18px)"
         },
         {
           "motivo": "objetivo-tactil-pequeno",

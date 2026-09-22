@@ -1,8 +1,8 @@
 # Auditoría visual automática — UX-R2.1
 
-Generado: 2026-09-22T06:32:49.383Z · modo **sin-servicios**
+Generado: 2026-09-22T06:45:32.632Z · modo **sin-servicios**
 
-155 combinaciones vista × resolución · 68 con hallazgos
+155 combinaciones vista × resolución · 57 con hallazgos
 
 ## Por motivo
 
@@ -10,7 +10,6 @@ Generado: 2026-09-22T06:32:49.383Z · modo **sin-servicios**
 |---|---|
 | `objetivo-tactil-pequeno` | 326 |
 | `cabecera-en-mas-de-dos-filas` | 48 |
-| `contraste-insuficiente` | 35 |
 | `elemento-fuera-del-viewport` | 9 |
 | `desbordamiento-horizontal` | 6 |
 | `error-tecnico-visible` | 5 |
@@ -68,23 +67,8 @@ Generado: 2026-09-22T06:32:49.383Z · modo **sin-servicios**
 | restablecer-confirmar | movil | `objetivo-tactil-pequeno` | button«Ver» mide 38×24 |
 | restablecer-confirmar | movil | `objetivo-tactil-pequeno` | a«Pedir otro código» mide 106×20 |
 | restablecer-confirmar | movil | `objetivo-tactil-pequeno` | a«Volver a entrar» mide 90×20 |
-| home | desktop | `contraste-insuficiente` | «Tu Nexo» 1.46:1 (mínimo 4.5:1, 14px) |
-| home | desktop | `contraste-insuficiente` | «Hola, qa_visual» 1.46:1 (mínimo 3:1, 40px) |
-| home | desktop | `contraste-insuficiente` | «Equipa tu héroe, entra a una» 1.46:1 (mínimo 4.5:1, 16px) |
-| home | laptop | `contraste-insuficiente` | «Tu Nexo» 1.46:1 (mínimo 4.5:1, 14px) |
-| home | laptop | `contraste-insuficiente` | «Hola, qa_visual» 1.46:1 (mínimo 3:1, 40px) |
-| home | laptop | `contraste-insuficiente` | «Equipa tu héroe, entra a una» 1.46:1 (mínimo 4.5:1, 16px) |
-| home | laptop-min | `contraste-insuficiente` | «Tu Nexo» 1.46:1 (mínimo 4.5:1, 14px) |
-| home | laptop-min | `contraste-insuficiente` | «Hola, qa_visual» 1.46:1 (mínimo 3:1, 40px) |
-| home | laptop-min | `contraste-insuficiente` | «Equipa tu héroe, entra a una» 1.46:1 (mínimo 4.5:1, 16px) |
 | home | tablet | `cabecera-en-mas-de-dos-filas` | la cabecera mide 141px (una fila son 64px) |
-| home | tablet | `contraste-insuficiente` | «Tu Nexo» 1.46:1 (mínimo 4.5:1, 14px) |
-| home | tablet | `contraste-insuficiente` | «Hola, qa_visual» 1.46:1 (mínimo 3:1, 40px) |
-| home | tablet | `contraste-insuficiente` | «Equipa tu héroe, entra a una» 1.46:1 (mínimo 4.5:1, 16px) |
 | home | movil | `cabecera-en-mas-de-dos-filas` | la cabecera mide 188px (una fila son 64px) |
-| home | movil | `contraste-insuficiente` | «Tu Nexo» 1.46:1 (mínimo 4.5:1, 14px) |
-| home | movil | `contraste-insuficiente` | «Hola, qa_visual» 1.46:1 (mínimo 3:1, 40px) |
-| home | movil | `contraste-insuficiente` | «Equipa tu héroe, entra a una» 1.46:1 (mínimo 4.5:1, 16px) |
 | home | movil | `objetivo-tactil-pequeno` | a«NEXUS BATTLES VI» mide 154×30 |
 | home | movil | `objetivo-tactil-pequeno` | a«Jugar online» mide 84×31 |
 | home | movil | `objetivo-tactil-pequeno` | a«Torneo» mide 48×31 |
@@ -201,22 +185,7 @@ Generado: 2026-09-22T06:32:49.383Z · modo **sin-servicios**
 | inventario | movil | `objetivo-tactil-pequeno` | button«Qqa_visual» mide 72×40 |
 | inventario | movil | `objetivo-tactil-pequeno` | button«Buscar» mide 351×40 |
 | inventario | movil | `objetivo-tactil-pequeno` | button«Agregar elemento» mide 164×40 |
-| productos | desktop | `contraste-insuficiente` | «NEXUS BATTLES VI» 1.08:1 (mínimo 4.5:1, 13px) |
-| productos | desktop | `contraste-insuficiente` | «Registra un producto con los» 1.35:1 (mínimo 4.5:1, 16px) |
-| productos | desktop | `contraste-insuficiente` | «Administración» 1.35:1 (mínimo 4.5:1, 13px) |
-| productos | laptop | `contraste-insuficiente` | «NEXUS BATTLES VI» 1.08:1 (mínimo 4.5:1, 13px) |
-| productos | laptop | `contraste-insuficiente` | «Registra un producto con los» 1.35:1 (mínimo 4.5:1, 16px) |
-| productos | laptop | `contraste-insuficiente` | «Administración» 1.35:1 (mínimo 4.5:1, 13px) |
-| productos | laptop-min | `contraste-insuficiente` | «NEXUS BATTLES VI» 1.08:1 (mínimo 4.5:1, 13px) |
-| productos | laptop-min | `contraste-insuficiente` | «Registra un producto con los» 1.35:1 (mínimo 4.5:1, 16px) |
-| productos | laptop-min | `contraste-insuficiente` | «Administración» 1.35:1 (mínimo 4.5:1, 13px) |
-| productos | tablet | `contraste-insuficiente` | «NEXUS BATTLES VI» 1.08:1 (mínimo 4.5:1, 13px) |
-| productos | tablet | `contraste-insuficiente` | «Registra un producto con los» 1.35:1 (mínimo 4.5:1, 16px) |
-| productos | tablet | `contraste-insuficiente` | «Administración» 1.35:1 (mínimo 4.5:1, 13px) |
 | productos | movil | `cabecera-en-mas-de-dos-filas` | la cabecera mide 180px (una fila son 64px) |
-| productos | movil | `contraste-insuficiente` | «NEXUS BATTLES VI» 1.08:1 (mínimo 4.5:1, 13px) |
-| productos | movil | `contraste-insuficiente` | «Registra un producto con los» 1.35:1 (mínimo 4.5:1, 16px) |
-| productos | movil | `contraste-insuficiente` | «Administración» 1.35:1 (mínimo 4.5:1, 13px) |
 | productos | movil | `objetivo-tactil-pequeno` | a«NEXUS BATTLES VI» mide 154×30 |
 | productos | movil | `objetivo-tactil-pequeno` | a«Jugar online» mide 84×31 |
 | productos | movil | `objetivo-tactil-pequeno` | a«Torneo» mide 48×31 |
@@ -291,14 +260,9 @@ Generado: 2026-09-22T06:32:49.383Z · modo **sin-servicios**
 | publicar-subasta | movil | `objetivo-tactil-pequeno` | input«» mide 20×20 |
 | publicar-subasta | movil | `objetivo-tactil-pequeno` | input«» mide 20×20 |
 | publicar-subasta | movil | `objetivo-tactil-pequeno` | input«» mide 20×20 |
-| tienda | desktop | `contraste-insuficiente` | «PAGAR» 2.48:1 (mínimo 4.5:1, 18px) |
-| tienda | laptop | `contraste-insuficiente` | «PAGAR» 2.48:1 (mínimo 4.5:1, 18px) |
-| tienda | laptop-min | `contraste-insuficiente` | «PAGAR» 2.48:1 (mínimo 4.5:1, 18px) |
-| tienda | tablet | `contraste-insuficiente` | «PAGAR» 2.48:1 (mínimo 4.5:1, 18px) |
 | tienda | movil | `desbordamiento-horizontal` | el documento mide 670px en un viewport de 375px |
 | tienda | movil | `elemento-fuera-del-viewport` | aside.cart-section acaba en 670px |
 | tienda | movil | `cabecera-en-mas-de-dos-filas` | la cabecera mide 186px (una fila son 64px) |
-| tienda | movil | `contraste-insuficiente` | «PAGAR» 2.48:1 (mínimo 4.5:1, 18px) |
 | tienda | movil | `objetivo-tactil-pequeno` | a«NEXUS BATTLES VI» mide 154×29 |
 | tienda | movil | `objetivo-tactil-pequeno` | a«Jugar online» mide 84×30 |
 | tienda | movil | `objetivo-tactil-pequeno` | a«Torneo» mide 48×30 |
