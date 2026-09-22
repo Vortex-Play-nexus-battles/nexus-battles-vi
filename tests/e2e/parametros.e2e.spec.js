@@ -187,7 +187,14 @@ test.describe('Parametros del sistema (HU-ADM-001)', () => {
     );
     await page.goto(`${BORDE}${VISTA}`);
     await expect(page.locator(`[data-clave="${PARAMETRO}"]`)).toBeVisible({ timeout: 20000 });
-    await expect(page.locator(`[data-clave="${PARAMETRO}"] [data-campo="valor"]`)).toContainText('Vigente: 2 dias');
+    // R8.2 — `p[...]` y no `[...]` a secas: desde PR-UX-7 (#596) el formulario
+    // se construye con `campo()` del kit, que estampa `data-campo="valor"` en su
+    // caja. Dentro de la misma fila hay ahora DOS nodos con ese marcador —el
+    // parrafo del valor vigente y el campo del formulario— y Playwright, en modo
+    // estricto, se niega a elegir. El texto esperado NO cambio: el fallo era del
+    // localizador. (La ambiguedad de fondo queda anotada: `data-campo` significa
+    // dos cosas distintas desde #596.)
+    await expect(page.locator(`[data-clave="${PARAMETRO}"] p[data-campo="valor"]`)).toContainText('Vigente: 2 dias');
     await expect(page.locator(`[data-clave="${PARAMETRO}"] [data-zona="cambio"]`)).toBeVisible();
     await expect(page.locator('[data-clave="torneos.cupos"] [data-campo="bloqueado"]')).toContainText('Charter');
     await expect(page.locator('[data-clave="torneos.cupos"] [data-zona="cambio"]')).toHaveCount(0);
