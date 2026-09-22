@@ -9,50 +9,61 @@
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
   </head>
   <body>
-    <!-- Cabecera única de la aplicación (HU-UX-001). Antes esta vista tenía su
-         propio encabezado con su propio botón de cerrar sesión. -->
     <div data-cabecera-app></div>
 
     <main class="pagina home">
-      <!-- Lo primero: quién eres y la acción principal. -->
-      <section class="home__destacado">
-        <div class="pila pila--ajustada">
-          <p class="t-etiqueta">Tu Nexo</p>
+      <!--
+        UX-R3.2 — la portada del jugador.
+
+        Antes eran dos bloques separados: un panel oscuro con el saludo y el
+        botón de jugar, y debajo una sección «Tu héroe» con su tarjeta. El
+        orden de la pantalla decía «hola, juega» y solo después «ah, y este es
+        tu héroe», cuando es AL REVÉS: el héroe equipado es lo que decide si
+        se puede entrar a una sala (HU-SAL-003), y en un juego es lo primero
+        que uno mira al volver.
+
+        Ahora es una sola pieza: a la izquierda quién eres y qué vas a hacer, a
+        la derecha con qué. Las dos cosas a la vez, que es como se leen.
+      -->
+      <section class="home__portada">
+        <div class="home__presentacion">
+          <p class="home__sobretitulo">Tu Nexo</p>
           <h1 class="home__saludo" data-zona="saludo">Hola</h1>
-          <p class="t-cuerpo">
+          <p class="home__lema">
             Equipa tu héroe, entra a una sala y decide el combate turno a turno.
           </p>
+          <div class="home__acciones">
+            <!--
+              El CTA domina. Era un botón primario del mismo tamaño que los
+              «Reintentar» de las tarjetas de abajo: la acción por la que uno
+              entra al juego pesaba lo mismo que reintentar una consulta.
+            -->
+            <a
+              class="boton boton--acento boton--grande home__jugar"
+              href="../plataforma/salas-partidas/crear-sala.html"
+            >
+              Jugar ahora
+            </a>
+            <a
+              class="boton boton--contorno boton--grande"
+              href="../plataforma/salas-partidas/batallas.html"
+            >
+              Ver salas abiertas
+            </a>
+          </div>
         </div>
-        <!--
-          UX-R2.6 — el CTA domina. Era un botón primario del mismo tamaño que
-          los «Reintentar» de las tarjetas de abajo: la acción por la que uno
-          entra al juego pesaba visualmente lo mismo que reintentar una
-          consulta de saldo. `.home__jugar` le da el tamaño y el acento.
-        -->
-        <a
-          class="boton boton--acento boton--grande home__jugar"
-          href="../plataforma/salas-partidas/crear-sala.html"
-        >
-          Jugar ahora
-        </a>
+
+        <!-- El héroe equipado, dentro de la portada. Su contenido lo pinta
+             `home.js` desde el inventario: retrato con anillo de rareza si lo
+             hay, y si no, por qué no y a dónde ir. -->
+        <div class="home__heroe" data-zona="bloque-heroe"></div>
       </section>
 
       <!--
-        UX-R2.6 — orden del hub. Antes venia primero «Tus créditos» y después
-        «Tu héroe». La jerarquía de una pantalla de inicio de juego es otra:
-        primero JUGAR (arriba, en el destacado), después con QUÉ se juega —el
-        héroe equipado, que es lo que decide si se puede entrar a una sala
-        (HU-SAL-003)— y solo entonces cuánto se tiene para apostar. El saldo
-        importa, pero no es lo primero que uno mira al volver a un juego.
-
-        Cada bloque se carga por su cuenta y dice por su nombre si su servicio
-        no está en este entorno.
+        El estado: cuánto tienes, qué se está jugando, qué te llegó. Cada
+        bloque se carga por su cuenta y dice por su nombre si su servicio no
+        está en este entorno.
       -->
-      <section class="pila pila--compacta home__heroe">
-        <h2 class="t-subtitulo">Tu héroe</h2>
-        <div data-zona="bloque-heroe"></div>
-      </section>
-
       <div class="home__rejilla">
         <section class="pila pila--compacta">
           <h2 class="t-subtitulo">Tus créditos</h2>
@@ -75,56 +86,15 @@
         <div class="home__accesos" data-zona="accesos"></div>
       </section>
 
-      <!-- Administración: solo para quien tiene rol. La cabecera ya lleva su
-           propio menú; esto es el atajo desde la home. -->
-      <section class="pila pila--compacta" data-zona="administracion" hidden>
-        <h2 class="t-subtitulo">Administración</h2>
-        <div class="home__accesos">
-          <a
-            class="tarjeta tarjeta--pulsable pila pila--ajustada"
-            href="./gestion-usuarios.html"
-            data-roles="ADMINISTRADOR,SUPER_ADMINISTRADOR"
-            hidden
-          >
-            <h3 class="tarjeta__titulo">Gestión de usuarios</h3>
-            <p class="t-meta">Perfiles, roles y estado de las cuentas.</p>
-          </a>
-          <a
-            class="tarjeta tarjeta--pulsable pila pila--ajustada"
-            href="./crear-cuenta-admin.html"
-            data-roles="SUPER_ADMINISTRADOR"
-            hidden
-          >
-            <h3 class="tarjeta__titulo">Crear cuenta administrativa</h3>
-            <p class="t-meta">Registra una cuenta con rol administrativo.</p>
-          </a>
-          <a
-            class="tarjeta tarjeta--pulsable pila pila--ajustada"
-            href="./auditoria.html"
-            data-roles="SUPER_ADMINISTRADOR"
-            hidden
-          >
-            <h3 class="tarjeta__titulo">Auditoría</h3>
-            <p class="t-meta">Registro de acciones administrativas.</p>
-          </a>
-          <a
-            class="tarjeta tarjeta--pulsable pila pila--ajustada"
-            href="../plataforma/moderacion-sanciones/sanciones-admin.html"
-            data-roles="MODERADOR,ADMINISTRADOR,SUPER_ADMINISTRADOR"
-            hidden
-          >
-            <h3 class="tarjeta__titulo">Moderación</h3>
-            <p class="t-meta">Sanciones, apelaciones y lista negra.</p>
-          </a>
-        </div>
-      </section>
+      <!--
+        UX-R3.2 — aquí había una sección «Administración» con cuatro tarjetas
+        y `data-roles` en cada una. Ya no: quien opera el Nexo tiene su propia
+        consola (`plataforma/consola/`), con su armazón, su navegación y sus
+        permisos. Repetir cuatro atajos administrativos en la home del jugador
+        era exactamente la mezcla que UX-R3 vino a deshacer — y además era la
+        cuarta lista de roles del producto, escrita a mano en el marcado.
+      -->
     </main>
-
-    <!--
-      RF-CHA-001: el icono flotante del asistente va en todas las vistas.
-      Lo monta `comun/ui/asistente.js`, que ademas le da comportamiento:
-      hasta ahora el boton estaba copiado aqui y no hacia nada al pulsarlo.
-    -->
 
     <script type="module" src="./index.js"></script>
     <script type="module">

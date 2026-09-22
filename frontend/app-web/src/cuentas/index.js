@@ -1,8 +1,14 @@
 /**
  * Arranque de la home del jugador.
  *
- * Solo tres cosas: exigir sesión, montar la cabecera y montar la home. La
+ * Solo tres cosas: exigir acceso, montar el armazón y montar la home. La
  * lógica de qué se pinta y qué se pide vive en `home.js`, que sí se prueba.
+ *
+ * Hasta UX-R3.2 había una cuarta: `mostrarAdministracion()`, que recorría el
+ * marcado buscando `data-roles` y enseñaba u ocultaba cuatro atajos
+ * administrativos. Era la cuarta lista de roles del producto —escrita a mano,
+ * en el HTML— y mezclaba en la home del jugador lo que ahora tiene consola
+ * propia.
  */
 
 import { montarCabecera } from '../comun/cabecera-app.js';
@@ -10,35 +16,14 @@ import { exigirAcceso } from '../comun/acceso.js';
 import { montarHome } from './home.js';
 
 // Vista privada: sin sesión (o caducada) se va al login con vuelta aquí;
-// con sesión pero sin permiso, se explica en vez de rebotar (§17).
+// con sesión pero sin permiso, se explica en vez de rebotar.
 // `exigirAcceso` comprueba sesión y rol contra la matriz, y devuelve la
 // sesión ya leída, así que no se lee dos veces.
 const sesion = exigirAcceso('home');
 if (sesion) {
-  montarCabecera(document.querySelector('[data-cabecera-app]'), {
+  const { elemento: cabecera } = montarCabecera(document.querySelector('[data-cabecera-app]'), {
     vista: 'home',
     seccionActiva: 'cuenta',
   });
-  montarHome(document, { sesion });
-  mostrarAdministracion(sesion.rol);
-}
-
-/**
- * Los atajos administrativos de la home. Quien no tiene el rol no ve ni la
- * sección: un encabezado huérfano sobre una rejilla vacía es ruido.
- *
- * @param {string|null} rol
- */
-function mostrarAdministracion(rol) {
-  const seccion = document.querySelector('[data-zona="administracion"]');
-  if (!seccion) {
-    return;
-  }
-  let alguna = false;
-  for (const acceso of seccion.querySelectorAll('[data-roles]')) {
-    const permitidos = acceso.dataset.roles.split(',').map((uno) => uno.trim());
-    acceso.hidden = !permitidos.includes(rol);
-    alguna = alguna || !acceso.hidden;
-  }
-  seccion.hidden = !alguna;
+  montarHome(document, { sesion, cabecera });
 }
