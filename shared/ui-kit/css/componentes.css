@@ -4412,3 +4412,119 @@ button.tarjeta-heroe[aria-pressed='true'] {
 .ranura {
   position: relative;
 }
+
+/* =====================================================================
+   Presentacion de los heroes — HU-JUE-017 CA-04 (UX-R2.10)
+   =====================================================================
+
+   La otra mitad de «vistas de alto impacto al inicio y al final». El final
+   es `.panel-resultado`; esto es el inicio.
+
+   Es la SEGUNDA pantalla que usa `--t-display-tam`, y la unica junto al
+   desenlace: el tamano display esta reservado para los dos momentos de mayor
+   intensidad de la partida. Si aparece en una tercera, deja de significar
+   nada.
+
+   Cubre el campo, pero `aria-modal="false"` a proposito: el combate ya esta
+   montado debajo y sigue vivo; esto no es un dialogo que bloquee, es una
+   presentacion que se puede cerrar y a la que no se vuelve. */
+.presentacion {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e-6);
+  padding: var(--e-6);
+  background: var(--cromo);
+  color: var(--texto-sobre-color);
+  text-align: center;
+  animation: presentacion-entrar var(--duracion-pausado) var(--curva-salida);
+}
+
+@keyframes presentacion-entrar {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.presentacion__rotulo {
+  margin: 0;
+  font-family: var(--fuente-titulo);
+  font-size: var(--t-display-tam);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+.presentacion__bandos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e-6);
+}
+
+.presentacion__bando {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-5);
+  justify-content: center;
+}
+
+.presentacion__versus {
+  font-family: var(--fuente-titulo);
+  font-size: var(--t-titulo-tam);
+  font-weight: 700;
+  color: var(--acento-relleno);
+}
+
+.presentacion__heroe {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--e-2);
+  min-width: 120px;
+}
+
+/* Quien abre el combate se marca con un anillo, no solo con el texto de
+   abajo: es lo primero que alguien quiere saber al entrar. */
+.presentacion__heroe--abre .marco-heroe {
+  box-shadow: 0 0 0 3px var(--acento-relleno);
+}
+
+.presentacion__nombre {
+  margin: 0;
+  font-family: var(--fuente-titulo);
+  font-size: var(--t-subtitulo-tam);
+  font-weight: 700;
+}
+
+.presentacion__jugador {
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--pista);
+}
+
+.presentacion__turno {
+  margin: 0;
+  font-size: var(--t-cuerpo-tam);
+  color: var(--pista);
+}
+
+/* En pantallas cortas el rotulo display no cabe junto a los heroes: baja al
+   tamano de titulo antes que empujar a los heroes fuera. */
+@media (max-height: 600px), (max-width: 599px) {
+  .presentacion__rotulo {
+    font-size: var(--t-titulo-tam);
+  }
+
+  .presentacion {
+    gap: var(--e-4);
+  }
+}

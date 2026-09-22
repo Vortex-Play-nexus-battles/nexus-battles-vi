@@ -85,6 +85,14 @@
       <div class="combate__campo" data-zona="campo" aria-hidden="true"></div>
 
       <!--
+        CA-04 · La presentacion de los heroes. Se pinta encima del campo al
+        llegar `sala.partida.iniciada` —la senal real, no un temporizador— y
+        se quita al pulsar, con Escape, o cuando llega el primer aviso que
+        dice que el combate ya esta corriendo.
+      -->
+      <div data-zona="presentacion" hidden></div>
+
+      <!--
         CA-05 · Por debajo del minimo (1360×768 de la ficha) la vista degrada
         con un aviso en vez de romperse. El campo absoluto necesita alto; en un
         movil apaisado de 360 px no lo hay. Se ensena por CSS, sin JS.
@@ -263,9 +271,14 @@
        * combate desde este navegador, y al llegar el aviso de que lo arranco
        * otro.
        */
-      function repintar(suscribir) {
+      function repintar(suscribir, { presentar = false, turnoActual = null } = {}) {
         // `yo` deja al campo saber que lado es el propio (HU-JUE-017 CA-03).
-        montarSalaBatalla(document, { partida, suscribir, yo });
+        //
+        // CA-04 · `presentar` SOLO viene true desde `alIniciarPartida`, es
+        // decir desde el aviso `sala.partida.iniciada`. Al recargar una
+        // partida que ya estaba en curso no se presenta nada: presentar a
+        // los heroes a mitad de combate mentiria sobre el momento.
+        montarSalaBatalla(document, { partida, suscribir, yo, presentar, turnoActual });
 
         if (!partida || !canal) {
           return;
@@ -433,7 +446,13 @@
                 }
                 // CA-03: en curso ya no se sale ni se cancela desde aqui.
                 espera?.ocultar();
-                repintar(suscripcionActual());
+                // CA-04 · este es el momento: el aviso trae el orden de
+                // turnos y quien abre, asi que la presentacion sale con
+                // datos reales y sin ningun temporizador.
+                repintar(suscripcionActual(), {
+                  presentar: true,
+                  turnoActual: aviso.turnoActual ?? null,
+                });
               } catch (error) {
                 console.warn('No se pudo cargar la partida recien iniciada:', error?.message);
               }
