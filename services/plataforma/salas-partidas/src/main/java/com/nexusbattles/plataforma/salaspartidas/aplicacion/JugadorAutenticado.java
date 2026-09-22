@@ -11,18 +11,19 @@ import java.util.UUID;
  * convertiria a otra persona en anfitrion el dia que alguien se cambie el
  * nombre.
  *
- * <p>Pero el inventario, hoy, identifica al jugador por la cabecera
- * {@code X-User-Name} (asi lo declara {@code contracts/openapi/inventario.yaml}:
- * «las rutas del jugador conservan temporalmente X-User-Name»). Mientras siga
- * siendo asi, cualquier consulta a su vitrina necesita el apodo, no el UUID.
+ * <p>El inventario tambien identifica ya por el identificador estable
+ * (contrato 1.1.1, #575): la cabecera {@code X-User-Name} que manda
+ * {@code ClienteInventarioHeroes} lleva el {@code id}, no el apodo. Con eso
+ * desaparecio la ultima razon tecnica para arrastrar el apodo hasta el
+ * adaptador.
  *
- * <p>Este record lleva las dos y evita que el apodo se cuele en el dominio: las
- * salas siguen tratando con {@code id}, y solo el adaptador de inventario mira
- * {@code apodo}. El dia que el inventario acepte el token (ADR-001), se borra el
- * segundo campo y no se toca nada mas.
+ * <p>El apodo se conserva porque el canal de la partida y el chat muestran un
+ * nombre de persona, no un UUID: quien mira la sala lee «vael», no
+ * «11111111-…». Es un dato de presentacion, y por eso el dominio de salas
+ * sigue tratando solo con {@code id}.
  *
- * @param id    identificador estable, el que persisten las salas
- * @param apodo nombre visible, el que reconoce el inventario
+ * @param id    identificador estable (ADR-002); con el se persiste y se pregunta
+ * @param apodo nombre visible, para lo que se pinta en pantalla
  */
 public record JugadorAutenticado(UUID id, String apodo) {
 
