@@ -198,6 +198,30 @@ export function pintarSinPermiso(documento, { rolesAdmitidos = null, base = BASE
   // —venga del módulo que venga, y llegue en el orden que llegue— ve que la
   // página está interrumpida y no toca nada.
   documento.documentElement.dataset.acceso = 'denegado';
+  // Una barra mínima con la marca. Sin esto, la pantalla de «sin acceso»
+  // salía distinta según la vista: las que montan su cabecera desde otro
+  // módulo la conservaban (y encima enseñaban la navegación de consola a
+  // quien acababa de ser rechazado), y las que la montan en el mismo módulo
+  // se quedaban sin ninguna. Ahora es la misma siempre, y no lleva
+  // navegación: no se ofrece ir a sitios que tampoco se pueden abrir.
+  const barra = h('header', { clase: 'cabecera cabecera--portal' });
+  const grupo = h('div', { clase: 'cabecera__grupo-marca' });
+  const marcaEnlace = h('a', {
+    clase: 'cabecera__marca',
+    atributos: { 'aria-label': 'Nexus Battles VI — inicio' },
+  });
+  marcaEnlace.href = resolver(RUTAS.inicio, base);
+  marcaEnlace.append(
+    h('span', { clase: 'cabecera__marca-larga', texto: 'NEXUS BATTLES VI' }),
+    h('span', {
+      clase: 'cabecera__marca-corta',
+      texto: 'NB VI',
+      atributos: { 'aria-hidden': 'true' },
+    }),
+  );
+  grupo.append(marcaEnlace);
+  barra.append(grupo);
+
   const marco = h('main', { clase: 'pagina interrupcion' });
   const tarjeta = h('section', {
     clase: 'interrupcion__tarjeta',
@@ -205,7 +229,6 @@ export function pintarSinPermiso(documento, { rolesAdmitidos = null, base = BASE
     datos: { zona: 'sin-permiso' },
   });
   tarjeta.append(
-    h('p', { clase: 'interrupcion__marca', texto: 'NEXUS BATTLES VI' }),
     h('h1', { clase: 'interrupcion__titulo', texto: 'No tienes acceso a esta sección.' }),
     h('p', {
       clase: 'interrupcion__detalle',
@@ -223,5 +246,5 @@ export function pintarSinPermiso(documento, { rolesAdmitidos = null, base = BASE
   salidas.append(volver);
   tarjeta.append(salidas);
   marco.append(tarjeta);
-  documento.body.replaceChildren(marco);
+  documento.body.replaceChildren(barra, marco);
 }
