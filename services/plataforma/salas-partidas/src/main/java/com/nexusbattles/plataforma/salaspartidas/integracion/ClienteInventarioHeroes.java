@@ -36,11 +36,21 @@ import java.util.Map;
  *       atacante por prototipo y no por el nombre que le puso su dueno.</li>
  * </ol>
  *
- * <p><b>La identidad va en {@code X-User-Name}</b> porque es lo que inventario
- * exige hoy: «las rutas del jugador conservan temporalmente X-User-Name». No es
- * una decision de este servicio ni una que apruebe — ADR-001 fija OAuth2
- * {@code client_credentials} como destino — pero mientras el proveedor no
- * acepte el token, mandar otra cosa seria mandar algo que no mira.
+ * <p><b>La identidad va en {@code X-User-Name} y es el identificador estable
+ * del jugador</b> (el {@code uid} de ADR-002), no su apodo. Inventario 1.1.1
+ * (#575) cambio la clave de propiedad del apodo al identificador estable,
+ * precisamente porque el apodo es mutable y reasignable; desde entonces un
+ * servicio con credencial «pone en X-User-Name el identificador estable del
+ * jugador afectado».
+ *
+ * <p>Hasta el 22-sep-2026 aqui viajaba el apodo, que era lo que inventario
+ * 1.1.0 pedia. Con el contrato nuevo desplegado, inventario buscaba la vitrina
+ * de un propietario llamado «anfitriona_e2e» y no encontraba nada: la puerta
+ * de heroe respondia «no tienes un heroe equipado» a jugadores que si lo
+ * tenian, y con eso caia el camino completo de crear sala y jugar. Es el
+ * Riesgo #3 del Charter —un contrato que cambia despues de ser consumido— y se
+ * cierra actualizando al consumidor, no revirtiendo al proveedor: la decision
+ * de #575 es la correcta.
  *
  * <p><b>Que elige cuando hay varios heroes.</b> El contrato de inventario no
  * marca ninguno como «el activo»: no existe tal campo. Asi que se toma el
@@ -258,7 +268,8 @@ class ClienteInventarioHeroes implements HeroeDelJugador {
     private <T> T pedir(String url, JugadorAutenticado jugador, Class<T> tipo) {
         Contestacion<T> contestacion = Contestacion.protegida(corta, () -> restClient.get()
                 .uri(url)
-                .header("X-User-Name", jugador.apodo())
+                // Identificador estable, no apodo: inventario 1.1.1 (#575).
+                .header("X-User-Name", jugador.id().toString())
                 .header("Accept", "application/json")
                 .retrieve()
                 .body(tipo));
