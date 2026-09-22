@@ -255,7 +255,8 @@ export function montarCabecera(
 
   const nav = document.createElement('nav');
   nav.className = 'cabecera__nav';
-  nav.setAttribute('aria-label', 'Navegacion principal');
+  nav.setAttribute('aria-label', 'Navegación principal');
+
   for (const seccion of SECCIONES) {
     const destino = document.createElement('a');
     destino.className = 'cabecera__destino';
@@ -265,7 +266,7 @@ export function montarCabecera(
       destino.classList.add('cabecera__destino--pendiente');
       destino.setAttribute('aria-disabled', 'true');
       destino.dataset.pendiente = seccion.pendiente;
-      destino.title = `Todavia no publicada: ${seccion.pendiente}`;
+      destino.title = `Todavía no publicada: ${seccion.pendiente}`;
     } else {
       destino.href = resolver(seccion.destino, base);
       if (seccion.privada && !sesion.autenticado) {
@@ -274,6 +275,15 @@ export function montarCabecera(
         login.searchParams.set('volver', new URL(destino.href).pathname);
         destino.href = login.href;
         destino.dataset.exigeSesion = '';
+
+        // UX-R2.0 — antes solo se sabia al pulsar: el visitante veia seis
+        // destinos identicos y cuatro le devolvian al login. HU-INV-004 CA-01
+        // exige los seis accesos siempre, asi que no se esconden; lo que
+        // faltaba era decir cual pide sesion ANTES de pulsarlo. El titulo lo
+        // dice, y `.cabecera__destino--con-sesion` lo marca en pantalla sin
+        // que el color sea la unica senal.
+        destino.classList.add('cabecera__destino--con-sesion');
+        destino.title = `${seccion.etiqueta}: hay que iniciar sesión`;
       }
     }
     if (seccion.id === seccionActiva) {
@@ -325,7 +335,7 @@ export function montarCabecera(
       );
     }
     zona.appendChild(
-      enlace('Iniciar sesion', login.href, 'boton boton--secundario boton--pequeno'),
+      enlace('Iniciar sesión', login.href, 'boton boton--secundario boton--pequeno'),
     );
     zona.appendChild(
       enlace('Registrarse', resolver(RUTAS.registro, base), 'boton boton--primario boton--pequeno'),
@@ -334,7 +344,7 @@ export function montarCabecera(
       const aviso = document.createElement('span');
       aviso.className = 'cabecera__aviso-sesion';
       aviso.setAttribute('role', 'status');
-      aviso.textContent = 'Tu sesion caduco';
+      aviso.textContent = 'Tu sesión caducó';
       zona.prepend(aviso);
     }
     acciones.appendChild(zona);
@@ -408,14 +418,14 @@ export function montarCabecera(
     ];
     if (ROLES_ADMINISTRATIVOS.includes(sesion.rol)) {
       opciones.push(
-        ['Gestion de usuarios', RUTAS.gestionUsuarios],
+        ['Gestión de usuarios', RUTAS.gestionUsuarios],
         ['Lista negra', RUTAS.listaNegra],
         ['Sanciones', RUTAS.sanciones],
       );
       if (sesion.rol !== 'MODERADOR') {
         opciones.push(
-          ['Parametros', RUTAS.parametros],
-          ['Auditoria', RUTAS.auditoria],
+          ['Parámetros', RUTAS.parametros],
+          ['Auditoría', RUTAS.auditoria],
           ['Panel de observabilidad', RUTAS.metricas],
         );
       }
@@ -430,7 +440,7 @@ export function montarCabecera(
     salir.className = 'menu__opcion menu__opcion--peligro';
     salir.setAttribute('role', 'menuitem');
     salir.dataset.zona = 'cerrar-sesion';
-    salir.textContent = 'Cerrar sesion';
+    salir.textContent = 'Cerrar sesión';
     salir.addEventListener('click', () => cerrarSesion({ almacen, navegar, base }));
     grupo.appendChild(salir);
     menu.appendChild(grupo);

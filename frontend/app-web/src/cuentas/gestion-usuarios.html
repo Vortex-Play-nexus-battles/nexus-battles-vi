@@ -293,6 +293,17 @@
       </div>
     </main>
 
+    <script type="module">
+      import { exigirSesion } from '../comun/cabecera-app.js';
+
+      // UX-R2.0 — esta vista se abria SIN sesion: cargaba entera y solo
+      // despues comprobaba permisos en cliente. El servidor protegia la API,
+      // pero la pantalla se veia. El guard va lo primero.
+      if (!exigirSesion()) {
+        throw new Error('sin sesion: redirigiendo al login');
+      }
+    </script>
+
     <script type="module" src="./gestion-usuarios.js"></script>
   </body>
 </html>
