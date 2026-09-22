@@ -1,19 +1,15 @@
+/* Los tokens del sistema de diseno ya no se copian aqui: los que compartian
+ * nombre con `tokens.css` tapaban el modo de alto contraste del kit. Quedan
+ * los alias propios de esta vista. */
+
 :root {
-  --fondo: #d7deed;
-  --superficie: #ffffff;
-  --cromo: #1c2340;
-  --borde: #6f7994;
   --borde-suave: #9fabc9;
   --primario: #1e3f88;
   --primario-enlace: #2244bf;
   --acento: #582784;
-  --texto: #111726;
   --texto-secundario: #48536a;
-  --exito: #086b31;
   --exito-fondo: #e4f5e9;
-  --error: #b81a1a;
   --error-fondo: #fbe4e4;
-  --info: #095e8c;
   --info-fondo: #ddeef7;
   --sombra: 0 14px 40px rgb(28 35 64 / 12%);
   font-family:

@@ -1,3 +1,7 @@
+/* Los tokens del sistema de diseno ya no se copian aqui: los que compartian
+ * nombre con `tokens.css` tapaban el modo de alto contraste del kit. Quedan
+ * los alias propios de este tema. */
+
 /* ============================================================
    tema-cuentas.css
    Copia exacta de los tokens y clases base de demo-rbac.css
@@ -19,23 +23,15 @@
 /* ---- Copiado tal cual de demo-rbac.css ---- */
 
 :root {
-  --fondo: #d7deed;
-  --superficie: #ffffff;
-  --cromo: #1c2340;
   --borde-decorativo: #9fabc9;
   --borde-interactivo: #6f7994;
   --accion: #2244bf;
   --accion-relleno: #1e3f88;
   --acento: #582784;
-  --exito: #086b31;
   --exito-fondo: #e4f5e9;
-  --advertencia: #8a4a00;
   --advertencia-fondo: #fbeedd;
-  --error: #b81a1a;
   --error-fondo: #fbe4e4;
-  --info: #095e8c;
   --info-fondo: #ddeef7;
-  --texto: #111726;
   --texto-secundario: #48536a;
   --texto-terciario: #57627a;
 }
