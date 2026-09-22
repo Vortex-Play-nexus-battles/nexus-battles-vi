@@ -144,3 +144,34 @@ test('una tarjeta-enlace no se subraya como un enlace de texto', () => {
   expect(bloque).toContain('text-decoration: none');
   expect(bloque).toContain('color: inherit');
 });
+
+test('ninguna ficha de sombra se usa como color de contorno (UX-R2.8d)', () => {
+  // Defecto real: siete reglas del kit decian
+  //   `outline: var(--foco-grosor) solid var(--anillo-foco)`
+  // y `--anillo-foco` vale `0 0 0 3px rgba(34,68,191,.35)` — una sombra, no un
+  // color. El `outline` resultante es invalido y el navegador lo descarta, asi
+  // que el foco NO se dibujaba en casillas, radios, desplegables, estrellas,
+  // ranuras, acciones de combate, zona de carga ni selector de objeto.
+  // RNF-ACC-002 exige que el foco sea siempre visible.
+  const hojas = ['base.css', 'componentes.css'].map((f) => readFileSync(join(KIT, f), 'utf8'));
+  const tokens = readFileSync(join(KIT, 'tokens.css'), 'utf8');
+
+  // Que sigue siendo una sombra: si algun dia pasa a ser un color, esta prueba
+  // avisa de que la regla de abajo ya no hace falta.
+  expect(tokens).toMatch(/--anillo-foco:\s*0 0 0/);
+
+  const culpables = [];
+  for (const hoja of hojas) {
+    // Sin los comentarios: la nota que explica este defecto cita la regla
+    // mala textualmente, y si no se quitan el guardian se denuncia a si mismo.
+    const sinComentarios = hoja.replace(/\/\*[\s\S]*?\*\//g, (bloque) =>
+      bloque.replace(/[^\n]/g, ' '),
+    );
+    sinComentarios.split('\n').forEach((linea, i) => {
+      if (/\boutline\s*:[^;]*var\(--anillo-foco\)/.test(linea)) {
+        culpables.push(`${i + 1}: ${linea.trim()}`);
+      }
+    });
+  }
+  expect(culpables).toEqual([]);
+});

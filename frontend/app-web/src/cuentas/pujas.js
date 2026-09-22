@@ -11,6 +11,17 @@
  */
 
 import { conectarStomp } from '../comun/transporte-stomp.js';
+// UX-R2.8c — esta vista se pinta con plantillas de cadena y `innerHTML`, y
+// no escapaba NADA: el nombre del objeto, su descripcion, el apodo del
+// vendedor y el del pujador salen del servidor y los escribe otra persona.
+// Una subasta llamada `<img src=x onerror=…>` se ejecutaba al abrir «Mis
+// pujas», con la sesion puesta, en la pantalla que mueve creditos.
+//
+// El `innerHTML` que queda es deliberado —reescribir 2.300 lineas de golpe
+// en una vista de dinero es peor idea que cerrar el agujero hoy— y por eso
+// va con saneamiento EXPLICITO en cada interpolacion que lleve datos.
+// `sin-innerhtml.test.js` lo tiene anotado; la estructura se mueve en R2.10.
+import { esc } from '../comun/ui/escapar.js';
 
 /** Canal que publica ms-subastas en cada cambio (SubastaRealtimePublisher). */
 export const CANAL_SUBASTAS = '/topic/subastas/listado';
@@ -1212,16 +1223,25 @@ export class ControladorSubastas {
     }
 
     if (this.estadoDatos === 'error') {
+      // UX-R2.8c — «Reintentar» no reintentaba. Ponia `estadoDatos = 'exito'`
+      // y volvia a pintar con `this.subastas`, que tras un fallo esta vacio:
+      // la rama de abajo se encargaba del resto y el jugador acababa viendo
+      // **«No hay subastas en curso»**. Un servicio caido presentado como un
+      // mercado vacio, que es justo lo que no puede pasar.
+      //
+      // Ahora vuelve a pedir los datos de verdad, y mientras tanto ensena el
+      // estado de carga.
       this.contenedor.innerHTML = `
         <div class="estado-contenedor estado-error" role="alert">
-          <h3 class="titulo-mediano">Error al cargar las subastas</h3>
-          <p>${this.mensajeError || 'No fue posible conectar con el servicio de subastas.'}</p>
+          <h3 class="titulo-mediano">El mercado no responde</h3>
+          <p>${esc(this.mensajeError) || 'No fue posible conectar con el servicio de subastas.'}</p>
           <button class="btn btn-primario" id="btn-reintentar">Reintentar</button>
         </div>
       `;
       this.contenedor.querySelector('#btn-reintentar')?.addEventListener('click', () => {
-        this.estadoDatos = 'exito';
+        this.estadoDatos = 'carga';
         this.render();
+        this.recargar();
       });
       return;
     }
@@ -1441,9 +1461,9 @@ export class ControladorSubastas {
         </div>
 
         <div class="tarjeta-cuerpo">
-          <h3 class="tarjeta-titulo">${sub.nombre}</h3>
+          <h3 class="tarjeta-titulo">${esc(sub.nombre)}</h3>
           <p class="tarjeta-subtitulo">${sub.tipo} · Nivel req. ${sub.nivel}</p>
-          <p class="tarjeta-desc">${sub.descripcion}</p>
+          <p class="tarjeta-desc">${esc(sub.descripcion)}</p>
         </div>
 
         <div class="tarjeta-finanzas">
@@ -1552,7 +1572,7 @@ export class ControladorSubastas {
             ${tramos
               .map(
                 (t) => `
-              <div class="tramo-subasta" style="width: ${t.ancho}; background: ${t.color};" title="${t.titulo}"></div>
+              <div class="tramo-subasta" style="width: ${t.ancho}; background: ${t.color};" title="${esc(t.titulo)}"></div>
             `,
               )
               .join('')}
@@ -1565,7 +1585,7 @@ export class ControladorSubastas {
                 (l) => `
               <span class="item-leyenda">
                 <span class="leyenda-punto" style="background: ${l.color};"></span>
-                <span>${l.texto}</span>
+                <span>${esc(l.texto)}</span>
               </span>
             `,
               )
@@ -1678,7 +1698,7 @@ export class ControladorSubastas {
         </div>
 
         <div class="fila-info-principal">
-          <h3 class="fila-nombre">${sub.nombre}</h3>
+          <h3 class="fila-nombre">${esc(sub.nombre)}</h3>
           <div class="fila-badges">
             <span class="badge badge-${sub.rareza}">${sub.rareza.toUpperCase()}</span>
             ${badgeEstado}
@@ -1781,8 +1801,8 @@ export class ControladorSubastas {
                     ${rarezaInfo.icono}
                   </div>
                   <div class="evento-info">
-                    <h3 class="evento-titulo">${ev.nombre}</h3>
-                    <div class="evento-motivo">${ev.motivo}</div>
+                    <h3 class="evento-titulo">${esc(ev.nombre)}</h3>
+                    <div class="evento-motivo">${esc(ev.motivo)}</div>
                   </div>
                   <div class="evento-monto">
                     ${montoHtml}
@@ -1803,7 +1823,7 @@ export class ControladorSubastas {
             <div class="caja-consejo-tactico" role="region" aria-label="Consejo táctico">
               <div class="consejo-icono">⚡</div>
               <div class="consejo-contenido">
-                <div class="consejo-titulo">${consejo.titulo}</div>
+                <div class="consejo-titulo">${esc(consejo.titulo)}</div>
                 <div>${consejo.cuerpo}</div>
               </div>
             </div>
@@ -1884,15 +1904,15 @@ export class ControladorSubastas {
             <div class="panel-objeto">
               <div class="objeto-badges">
                 <span class="badge badge-${sub.rareza}">${sub.rareza.toUpperCase()}</span>
-                <span class="badge badge-neutral">Vendedor: ${sub.vendedor}</span>
+                <span class="badge badge-neutral">Vendedor: ${esc(sub.vendedor)}</span>
                 <span class="badge ${comp.nivelInsuficiente ? 'badge-error' : 'badge-exito'}">
                   Req. Nivel ${sub.nivel}
                 </span>
               </div>
 
-              <h1 class="titulo-grande titulo-objeto">${sub.nombre}</h1>
+              <h1 class="titulo-grande titulo-objeto">${esc(sub.nombre)}</h1>
               <p class="objeto-tipo">${sub.tipo}</p>
-              <p class="objeto-descripcion">${sub.descripcion}</p>
+              <p class="objeto-descripcion">${esc(sub.descripcion)}</p>
 
               <!-- Selector de Héroe para Comparación de Estadísticas -->
               <div class="selector-heroes-seccion">
@@ -1902,7 +1922,7 @@ export class ControladorSubastas {
                     .map(
                       (h) => `
                     <button type="button" class="btn-heroe-chip ${h.id === this.heroeId ? 'heroe-elegido' : ''}" data-heroe="${h.id}">
-                      <strong>${h.nombre}</strong> (Niv. ${h.nivel} · ${h.clase})
+                      <strong>${esc(h.nombre)}</strong> (Niv. ${esc(h.nivel)} · ${esc(h.clase)})
                     </button>
                   `,
                     )
@@ -1915,12 +1935,12 @@ export class ControladorSubastas {
                 comp.nivelInsuficiente
                   ? `
                 <div class="alerta alerta-advertencia" role="alert">
-                  <strong>⚠️ Nivel insuficiente:</strong> ${hero.nombre} es nivel ${hero.nivel}. Le faltan ${comp.deltaNivel} niveles para poder equipar este objeto (RN-INV-004).
+                  <strong>⚠️ Nivel insuficiente:</strong> ${esc(hero.nombre)} es nivel ${esc(hero.nivel)}. Le faltan ${comp.deltaNivel} niveles para poder equipar este objeto (RN-INV-004).
                 </div>
               `
                   : `
                 <div class="alerta alerta-exito-suave">
-                  <strong>✓ Compatible:</strong> ${hero.nombre} cumple el nivel requerido para equipar este objeto.
+                  <strong>✓ Compatible:</strong> ${esc(hero.nombre)} cumple el nivel requerido para equipar este objeto.
                 </div>
               `
               }
@@ -1931,8 +1951,8 @@ export class ControladorSubastas {
                   <thead>
                     <tr>
                       <th>Atributo</th>
-                      <th>Actual (${hero.nombre})</th>
-                      <th>Con ${sub.nombre.split(' ')[0]}</th>
+                      <th>Actual (${esc(hero.nombre)})</th>
+                      <th>Con ${esc(sub.nombre.split(' ')[0])}</th>
                       <th>Diferencia</th>
                     </tr>
                   </thead>
@@ -1966,7 +1986,7 @@ export class ControladorSubastas {
                   .map(
                     (p) => `
                   <li class="item-historial ${p.esTu ? 'historial-propio' : ''}">
-                    <span class="historial-postor ${p.esTu ? 'postor-tu' : ''}">${p.esTu ? `Tú (${p.apodo})` : p.apodo}</span>
+                    <span class="historial-postor ${p.esTu ? 'postor-tu' : ''}">${p.esTu ? `Tú (${esc(p.apodo)})` : esc(p.apodo)}</span>
                     <span class="historial-tipo">${p.tipo}</span>
                     <span class="historial-cuando">${p.cuando}</span>
                     <span class="historial-monto cifra"><strong>${formatearCreditos(p.monto)} cr</strong></span>
@@ -2092,7 +2112,7 @@ export class ControladorSubastas {
           <div class="modal-overlay" id="modal-compra-inmediata" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
             <div class="modal-tarjeta">
               <h2 id="modal-titulo" class="titulo-mediano">Confirmar compra inmediata</h2>
-              <p>Estás a punto de comprar <strong>${sub.nombre}</strong> de forma directa por <strong>${formatearCreditos(sub.compraInmediata)} cr</strong>.</p>
+              <p>Estás a punto de comprar <strong>${esc(sub.nombre)}</strong> de forma directa por <strong>${formatearCreditos(sub.compraInmediata)} cr</strong>.</p>
               <p class="texto-pista">Esta acción cerrará la subasta inmediatamente y transferirá el objeto a tu cuenta.</p>
               <div class="modal-acciones">
                 <button type="button" class="btn btn-contorno" id="btn-cancelar-compra">Cancelar</button>
@@ -2121,7 +2141,7 @@ export class ControladorSubastas {
           <button type="button" class="btn-cerrar-toast" aria-label="Cerrar aviso cruzado">×</button>
         </div>
         <p class="toast-mensaje">
-          <strong>${this.avisoCruzado.nombre}</strong> · ahora <strong class="cifra">${formatearCreditos(this.avisoCruzado.oferta)} cr</strong> ·
+          <strong>${esc(this.avisoCruzado.nombre)}</strong> · ahora <strong class="cifra">${formatearCreditos(this.avisoCruzado.oferta)} cr</strong> ·
           quedan <span class="cifra" data-tiempo-subasta="${this.avisoCruzado.id}">${formatearTiempo(this.avisoCruzado.segundosRestantes)}</span>
         </p>
         <div class="toast-acciones">

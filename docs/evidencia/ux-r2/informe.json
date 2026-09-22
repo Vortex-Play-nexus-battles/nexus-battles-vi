@@ -1,14 +1,13 @@
 {
-  "generado": "2026-09-22T13:48:11.393Z",
+  "generado": "2026-09-22T14:11:19.809Z",
   "modo": "sin-servicios",
   "combinaciones": 155,
-  "conHallazgos": 57,
+  "conHallazgos": 53,
   "porMotivo": {
     "cabecera-en-mas-de-dos-filas": 48,
-    "objetivo-tactil-pequeno": 326,
+    "objetivo-tactil-pequeno": 327,
     "desbordamiento-horizontal": 6,
-    "elemento-fuera-del-viewport": 9,
-    "error-tecnico-visible": 5
+    "elemento-fuera-del-viewport": 9
   },
   "detalle": [
     {
@@ -902,64 +901,12 @@
     {
       "vista": "subastas",
       "grupo": "mercado",
-      "pantalla": "desktop",
-      "ancho": 1440,
-      "hallazgos": [
-        {
-          "motivo": "error-tecnico-visible",
-          "detalle": "el texto de la pantalla contiene /\\b(?:Error|HTTP|[Ss]tatus|[Cc]ódigo|[Cc]odigo)\\s*:?\\s*\\d{3}\\b/"
-        }
-      ]
-    },
-    {
-      "vista": "subastas",
-      "grupo": "mercado",
-      "pantalla": "laptop",
-      "ancho": 1280,
-      "hallazgos": [
-        {
-          "motivo": "error-tecnico-visible",
-          "detalle": "el texto de la pantalla contiene /\\b(?:Error|HTTP|[Ss]tatus|[Cc]ódigo|[Cc]odigo)\\s*:?\\s*\\d{3}\\b/"
-        }
-      ]
-    },
-    {
-      "vista": "subastas",
-      "grupo": "mercado",
-      "pantalla": "laptop-min",
-      "ancho": 1024,
-      "hallazgos": [
-        {
-          "motivo": "error-tecnico-visible",
-          "detalle": "el texto de la pantalla contiene /\\b(?:Error|HTTP|[Ss]tatus|[Cc]ódigo|[Cc]odigo)\\s*:?\\s*\\d{3}\\b/"
-        }
-      ]
-    },
-    {
-      "vista": "subastas",
-      "grupo": "mercado",
-      "pantalla": "tablet",
-      "ancho": 768,
-      "hallazgos": [
-        {
-          "motivo": "error-tecnico-visible",
-          "detalle": "el texto de la pantalla contiene /\\b(?:Error|HTTP|[Ss]tatus|[Cc]ódigo|[Cc]odigo)\\s*:?\\s*\\d{3}\\b/"
-        }
-      ]
-    },
-    {
-      "vista": "subastas",
-      "grupo": "mercado",
       "pantalla": "movil",
       "ancho": 375,
       "hallazgos": [
         {
           "motivo": "cabecera-en-mas-de-dos-filas",
           "detalle": "la cabecera mide 180px (una fila son 64px)"
-        },
-        {
-          "motivo": "error-tecnico-visible",
-          "detalle": "el texto de la pantalla contiene /\\b(?:Error|HTTP|[Ss]tatus|[Cc]ódigo|[Cc]odigo)\\s*:?\\s*\\d{3}\\b/"
         },
         {
           "motivo": "objetivo-tactil-pequeno",
@@ -1100,6 +1047,10 @@
         {
           "motivo": "objetivo-tactil-pequeno",
           "detalle": "button«Limpiar filtros» mide 317×40"
+        },
+        {
+          "motivo": "objetivo-tactil-pequeno",
+          "detalle": "button«Reintentar» mide 104×40"
         }
       ]
     },
