@@ -2884,3 +2884,65 @@
    `.fila` estira cada hijo a partes iguales, que es lo contrario de lo que
    necesita una lista de permisos o de estados. */
 .fila--envuelta > * { flex: 0 0 auto; }
+
+
+/* =======================================================================
+   Turno en curso — HU-SAL-005 · RF-JUE-017
+   -----------------------------------------------------------------------
+   En un juego por turnos, de quien es el turno es el dato mas importante de
+   la pantalla, y hasta ahora solo se deducia de que los botones de atacar
+   estuvieran grises. Se dice con texto (que es lo que lee un lector de
+   pantalla) y se marca sobre la barra de quien juega; el color acompana al
+   texto, nunca lo sustituye.
+   ======================================================================= */
+
+.turno-actual {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+  padding: var(--e-1) var(--e-3);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-pildora);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  color: var(--texto-2);
+  white-space: nowrap;
+}
+
+/* Cuando toca jugar, el indicador deja de ser informativo y pasa a ser una
+   llamada a la accion. Relleno solido con texto claro: el mismo par que usa
+   `.boton--acento`, para no inventar una combinacion sin contraste medido. */
+.turno-actual[data-mio='true'] {
+  border-color: var(--acento-relleno);
+  background: var(--acento-relleno);
+  color: var(--texto-sobre-color);
+}
+
+.turno-actual::before {
+  content: '';
+  width: var(--icono-menudo);
+  height: var(--icono-menudo);
+  border-radius: 50%;
+  background: var(--texto-3);
+  flex-shrink: 0;
+}
+
+.turno-actual[data-mio='true']::before { background: var(--texto-sobre-color); }
+
+/* La barra de quien juega, destacada. El borde y el desplazamiento no tapan
+   el color de vida, que sigue diciendo lo suyo. */
+.barra-vida[data-turno='si'] {
+  border-left: 3px solid var(--acento-relleno);
+  padding-left: var(--e-2);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .turno-actual[data-mio='true']::before {
+    animation: latido-turno var(--duracion-turno, 1.2s) ease-in-out infinite;
+  }
+}
+
+@keyframes latido-turno {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}

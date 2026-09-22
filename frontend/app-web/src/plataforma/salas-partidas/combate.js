@@ -221,6 +221,39 @@ function textoDelReparto(aviso, yo) {
 }
 
 /**
+ * De quién es el turno, dicho para quien mira.
+ *
+ * Hasta ahora el turno **solo** se notaba en que los botones de atacar
+ * estaban grises o no. Eso deja fuera a tres personas: a quien usa lector de
+ * pantalla (que solo se entera tabulando hasta un botón deshabilitado), a
+ * quien espera su turno (que no sabe a quién está esperando) y a quien juega
+ * contra la máquina (que no ve nada mientras la IA piensa). El dato ya venía
+ * en `turnoActual.idJugador` y en cada `partida.turno.cambiado`: solo no se
+ * enseñaba.
+ *
+ * @param {string|null} idJugador de quién es el turno
+ * @param {Array<object>} participantes esquema del panel
+ * @param {string} yo quién mira
+ * @returns {{texto: string, mio: boolean}} vacío si aún no se sabe
+ */
+export function textoDelTurno(idJugador, participantes, yo) {
+  if (!idJugador) {
+    return { texto: '', mio: false };
+  }
+  if (idJugador === yo) {
+    return { texto: 'Es tu turno', mio: true };
+  }
+  const quien = (participantes ?? []).find((p) => p.jugador?.id === idJugador);
+  if (!quien) {
+    // Un identificador que no está en pantalla: se dice que no es el turno
+    // propio, que es lo único que se sabe con certeza, en vez de callar.
+    return { texto: 'Turno de otro participante', mio: false };
+  }
+  const nombre = quien.heroe?.nombre ?? 'tu rival';
+  return { texto: quien.esIA ? `Juega la maquina (${nombre})` : `Turno de ${nombre}`, mio: false };
+}
+
+/**
  * Monta los controles de combate sobre el marcado de la vista.
  *
  * @param {ParentNode} raiz
@@ -245,6 +278,10 @@ export function montarControlesDeCombate(
 ) {
   const zona = raiz.querySelector('[data-zona="acciones"]');
   const aviso = raiz.querySelector('[data-zona="resultado"]');
+  // Indicador de turno y panel de vidas: el turno se dice con palabras y se
+  // marca sobre la barra de quien juega.
+  const zonaTurno = raiz.querySelector('[data-zona="turno"]');
+  const zonaVidas = raiz.querySelector('[data-zona="vidas"]');
   // HU-DIS-003: hueco de «Seccion degradada» cuando el motor de combate no
   // responde; y la zona para los demas rechazos de la cola privada.
   const zonaDegradacion = raiz.querySelector('[data-zona="degradacion"]');
@@ -297,9 +334,33 @@ export function montarControlesDeCombate(
     }
   }
 
+  /**
+   * Deja dicho de quién es el turno: en el indicador (región viva, así que un
+   * lector de pantalla lo anuncia solo) y sobre la barra de quien juega.
+   *
+   * @param {string|null} idJugador
+   */
+  function marcarTurno(idJugador) {
+    const turno = textoDelTurno(idJugador, participantes, yo);
+    if (zonaTurno) {
+      zonaTurno.textContent = turno.texto;
+      zonaTurno.hidden = turno.texto === '';
+      zonaTurno.dataset.mio = String(turno.mio);
+    }
+    for (const barra of zonaVidas?.querySelectorAll('[data-jugador]') ?? []) {
+      // `delete` y no `= 'no'`: el selector del kit mira si el atributo está.
+      if (idJugador && barra.dataset.jugador === idJugador) {
+        barra.dataset.turno = 'si';
+      } else {
+        delete barra.dataset.turno;
+      }
+    }
+  }
+
   // Con `turnoDe` conocido se decide ya; sin él, cerrados, que es lo prudente:
   // abrir un botón que el servidor va a rechazar es peor que hacer esperar.
   habilitar(Boolean(turnoDe) && turnoDe === yo);
+  marcarTurno(turnoDe ?? null);
 
   return {
     /**
@@ -349,10 +410,14 @@ export function montarControlesDeCombate(
       }
       if (mensaje?.tipo === TURNO_CAMBIADO && mensaje.idPartida === idPartida) {
         habilitar(mensaje.idJugador === yo);
+        marcarTurno(mensaje.idJugador);
         return;
       }
       if (mensaje?.tipo === PARTIDA_FINALIZADA && mensaje.idPartida === idPartida) {
         habilitar(false);
+        // Se acabo: ya no es el turno de nadie. Dejar la marca puesta haria
+        // creer que la partida sigue.
+        marcarTurno(null);
         if (zona) {
           zona.hidden = true;
         }
