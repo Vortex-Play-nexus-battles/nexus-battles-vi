@@ -197,6 +197,10 @@ export async function erroresTecnicosVisibles(pagina) {
     // error técnico es el código ACOMPAÑADO de su etiqueta.
     const sospechas = [
       /\b(?:Error|HTTP|[Ss]tatus|[Cc]ódigo|[Cc]odigo)\s*:?\s*\d{3}\b/,
+      // «El servicio respondio 404.»: el arnes no lo veia porque la etiqueta
+      // no era ninguna de las de arriba, y estaba en la pantalla de Batallas
+      // —la entrada al juego— desde siempre (UX-R2.4).
+      /\brespondi[oó]\s+\d{3}\b/,
       /\[object Object\]/,
       /\bundefined\b/,
       /\bNaN\b/,

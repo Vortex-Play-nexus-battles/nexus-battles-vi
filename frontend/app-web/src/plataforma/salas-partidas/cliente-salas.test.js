@@ -271,7 +271,12 @@ describe('crearSala', () => {
     const error = await crearSala(PARAMETROS, { fetchImpl }).catch((e) => e);
 
     expect(error.estado).toBe(500);
-    expect(error.detalle).toContain('500');
+    // UX-R2.4 — antes se exigia que el detalle CONTUVIERA «500». El codigo
+    // sigue disponible en `estado`, que es por donde lo lee quien programa; lo
+    // que ve el jugador es una frase que le dice que hacer. «500» no le dice
+    // a nadie si esperar, reintentar o irse.
+    expect(error.detalle).toMatch(/no responde ahora mismo/i);
+    expect(error.detalle).not.toMatch(/\b500\b/);
   });
 });
 
@@ -350,7 +355,9 @@ describe('sin backend detras', () => {
     const error = await listarSalas({}, { fetchImpl }).catch((e) => e);
 
     expect(error.titulo).not.toMatch(/no hay ninguna api/i);
-    expect(error.detalle).toContain('503');
+    // El codigo sigue ahi para quien programa; el detalle es para quien juega.
+    expect(error.estado).toBe(503);
+    expect(error.detalle).toMatch(/no responde ahora mismo/i);
   });
 });
 

@@ -2856,6 +2856,17 @@
   line-height: var(--t-titulo-xl-alto);
 }
 
+/* El bloque del titulo y su descripcion, cuando la cabecera lleva tambien
+   acciones a la derecha. `historial-transacciones` y `mis-cofres` lo
+   escribian como `.encabezado-contenido`, una clase que no existia en ningun
+   sitio: el bloque no tenia ancho maximo y la descripcion cruzaba la pantalla
+   entera (UX-R2.4). */
+.encabezado-pagina__contenido {
+  display: grid;
+  gap: var(--e-2);
+  max-width: var(--ancho-estrecho);
+}
+
 .encabezado-pagina__acciones,
 .encabezado-seccion__acciones {
   display: flex;
@@ -3927,3 +3938,4 @@ button.tarjeta-heroe[aria-pressed='true'] {
     padding: 0;
   }
 }
+
