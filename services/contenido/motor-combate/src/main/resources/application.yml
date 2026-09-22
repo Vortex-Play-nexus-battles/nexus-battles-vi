@@ -34,3 +34,7 @@ logging:
 motor:
   heroes:
     url: ${HEROES_URL:http://localhost:8081}
+  productos:
+    url: ${PRODUCTOS_URL:http://localhost:8092}
+  inventario:
+    url: ${INVENTARIO_URL:http://localhost:8091}
