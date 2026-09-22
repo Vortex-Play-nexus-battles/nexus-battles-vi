@@ -99,10 +99,42 @@ function construirParametros(filtros, pagina, tamano) {
  * el formato problem+json.
  */
 async function errorDesdeRespuesta(respuesta) {
+  // UX-R2.8 — el respaldo era `Error ${status} al consultar subastas`, y ese
+  // texto acababa en la pantalla: el laboratorio visual (#600) lo detectaba
+  // en la vista `subastas` en las cinco anchuras. «Error 502» no le dice a
+  // nadie si esperar, reintentar o irse. El codigo sigue viajando en
+  // `error.estado`, para quien programa y para la traza.
+  const fallo = (mensaje) => {
+    const error = new Error(mensaje);
+    error.estado = respuesta.status;
+    return error;
+  };
   try {
     const problema = await respuesta.json();
-    return new Error(problema.detail ?? `Error ${respuesta.status} al consultar subastas`);
+    return fallo(problema.detail ?? mensajeDelFallo(respuesta.status));
   } catch {
-    return new Error(`Error ${respuesta.status} al consultar subastas`);
+    return fallo(mensajeDelFallo(respuesta.status));
   }
+}
+
+/**
+ * Que leer cuando el mercado no responde. Nunca el codigo.
+ *
+ * @param {number} estado
+ * @returns {string}
+ */
+function mensajeDelFallo(estado) {
+  if (estado === 401 || estado === 403) {
+    return 'Tu sesion no alcanza para ver las subastas.';
+  }
+  if (estado === 404) {
+    return 'Esa subasta ya no existe.';
+  }
+  if (estado === 409) {
+    return 'La subasta cambio mientras la mirabas. Vuelve a cargarla.';
+  }
+  if (estado >= 500 || estado === 0) {
+    return 'El mercado no esta disponible ahora mismo. Puedes reintentar en unos momentos.';
+  }
+  return 'No pudimos consultar las subastas.';
 }

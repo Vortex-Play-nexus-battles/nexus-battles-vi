@@ -199,3 +199,23 @@ body {
 .btn-pagar:not([disabled]):hover {
   background-color: #2b4cbf;
 }
+
+/* UX-R2.8 — el color de la caja del producto se interpolaba dentro de un
+   `innerHTML` (`background-color: ${colorCaja}`). Ahora viaja en `data-tipo`
+   y el color lo elige el CSS, con las fichas del kit en vez de dos hex
+   sueltos. Mismo resultado en pantalla, sin interpolar marcado. */
+.product-image {
+  background-color: var(--info);
+}
+
+.product-card[data-tipo='ARMA'] .product-image {
+  background-color: var(--info);
+}
+
+.product-card[data-tipo='ARMADURA'] .product-image,
+.product-card[data-tipo='ITEM'] .product-image,
+.product-card[data-tipo='HABILIDAD'] .product-image,
+.product-card[data-tipo='EPICA'] .product-image,
+.product-card[data-tipo='HEROE'] .product-image {
+  background-color: var(--acento-relleno);
+}
