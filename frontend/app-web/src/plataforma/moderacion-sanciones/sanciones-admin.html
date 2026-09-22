@@ -92,13 +92,17 @@
     </main>
 
     <script type="module">
-      import { montarCabecera, exigirSesion, leerSesion } from '../../comun/cabecera-app.js';
+      import { montarCabecera, leerSesion } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
       import { montarPanelDeModeracion } from './sanciones.js';
 
-      if (!exigirSesion()) {
+      if (!exigirAcceso('sanciones-admin')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'cuenta' });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'sanciones-admin',
+        seccionActiva: 'sanciones',
+      });
       montarPanelDeModeracion(document, { rol: leerSesion().rol });
       // Un 403 de RBAC lleva al menu, no al login (mismo criterio que la lista negra).
       window.addEventListener('nexus:rbac-forbidden', () => {

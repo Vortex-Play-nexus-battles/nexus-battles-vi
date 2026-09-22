@@ -37,7 +37,7 @@ function montarBarraNavegacion() {
     contenedor.dataset.cabeceraApp = '';
     document.body.prepend(contenedor);
   }
-  montarCabecera(contenedor, { seccionActiva: 'cuenta' });
+  montarCabecera(contenedor, { vista: 'crear-cuenta-admin', seccionActiva: 'usuarios' });
 }
 
 function iniciar() {

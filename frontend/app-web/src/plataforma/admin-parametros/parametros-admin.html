@@ -26,13 +26,17 @@
     </main>
 
     <script type="module">
-      import { montarCabecera, exigirSesion, leerSesion } from '../../comun/cabecera-app.js';
+      import { montarCabecera, leerSesion } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
       import { montarParametros } from './parametros.js';
 
-      if (!exigirSesion()) {
+      if (!exigirAcceso('parametros-admin')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'cuenta' });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'parametros-admin',
+        seccionActiva: 'parametros',
+      });
       montarParametros(document, { rol: leerSesion().rol });
     </script>
   </body>

@@ -96,7 +96,10 @@
       import { mejorarContrasena } from '../comun/ui/campo.js';
 
       // Cabecera unica de la aplicacion (HU-UX-001).
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: null });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'restablecer-confirmar',
+        seccionActiva: null,
+      });
       mejorarContrasena(document.getElementById('nuevaPassword'));
       mejorarContrasena(document.getElementById('confirmarPassword'));
     </script>

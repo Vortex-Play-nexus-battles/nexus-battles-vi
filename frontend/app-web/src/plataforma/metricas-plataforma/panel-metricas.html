@@ -47,29 +47,42 @@
     </main>
 
     <script type="module">
+      import { exigirAcceso } from '../../comun/acceso.js';
+      import { montarCabecera } from '../../comun/cabecera-app.js';
       import { iniciarPanel } from './panel-metricas.js';
 
-      const contenedor = document.querySelector('[data-panel-metricas]');
-      iniciarPanel(contenedor);
+      // UX-R3.0 — la guarda va PRIMERO y en el mismo bloque.
+      //
+      // Estaban en dos `<script type="module">` separados, y el que arrancaba
+      // el panel iba antes: `iniciarPanel()` lanzaba sus consultas a
+      // `ms-metricas` y solo despues se comprobaba la sesion. Quien no tenia
+      // permiso veia la pantalla montarse, dispararse las peticiones y
+      // devolver 403 una por una antes de que el navegador lo sacara de ahi.
+      //
+      // Ahora nada arranca hasta que la guarda dice que si — y la guarda
+      // comprueba rol, no solo sesion: el panel es de administracion.
+      const sesion = exigirAcceso('panel-metricas');
+      if (sesion) {
 
-      // La exportacion usa el texto que el panel ya dejo preparado con los
-      // mismos datos que se estan viendo: no se vuelve a consultar el
-      // servidor, asi que lo copiado y lo mostrado no pueden discrepar.
-      document.querySelector('[data-accion="copiar-informe"]').addEventListener('click', () => {
-        const texto = contenedor.dataset.ultimoInforme;
-        if (texto) {
-          navigator.clipboard?.writeText(texto);
-        }
-      });
-    </script>
-    <script type="module">
-      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+        // Cabecera unica de la aplicacion (HU-UX-001).
+        montarCabecera(document.querySelector('[data-cabecera-app]'), {
+          vista: 'panel-metricas',
+          seccionActiva: 'metricas',
+        });
 
-      if (!exigirSesion()) {
-        throw new Error('sin sesion: redirigiendo al login');
+        const contenedor = document.querySelector('[data-panel-metricas]');
+        iniciarPanel(contenedor);
+
+        // La exportacion usa el texto que el panel ya dejo preparado con los
+        // mismos datos que se estan viendo: no se vuelve a consultar el
+        // servidor, asi que lo copiado y lo mostrado no pueden discrepar.
+        document.querySelector('[data-accion="copiar-informe"]').addEventListener('click', () => {
+          const texto = contenedor.dataset.ultimoInforme;
+          if (texto) {
+            navigator.clipboard?.writeText(texto);
+          }
+        });
       }
-      // Cabecera unica de la aplicacion (HU-UX-001).
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'cuenta' });
     </script>
   </body>
 </html>

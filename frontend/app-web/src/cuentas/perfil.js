@@ -6,16 +6,20 @@
  * líneas y buscaba trece elementos por id que la vista no tenía (#567).
  */
 
-import { montarCabecera, exigirSesion, cerrarSesion } from '../comun/cabecera-app.js';
+import { montarCabecera, cerrarSesion } from '../comun/cabecera-app.js';
+import { exigirAcceso } from '../comun/acceso.js';
 import { montarPestanas } from '../comun/ui/pestanas.js';
 import { montarCuenta, montarAccionesDeSesion } from './cuenta.js';
 import { montarCambioDePassword } from './cambiar-password.js';
 import { mejorarContrasena } from '../comun/ui/campo.js';
 
-const sesion = exigirSesion();
+const sesion = exigirAcceso('perfil');
 
 if (sesion) {
-  montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'cuenta' });
+  montarCabecera(document.querySelector('[data-cabecera-app]'), {
+    vista: 'perfil',
+    seccionActiva: 'cuenta',
+  });
 
   montarPestanas(
     document.querySelector('[data-zona="pestanas"]'),

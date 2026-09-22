@@ -212,14 +212,18 @@
     <script type="module">
       import { montarAsistente } from '../../comun/ui/asistente.js';
       import { montarPublicarComentario, leerSesion } from './publicar-comentario.js';
-      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+      import { montarCabecera } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
 
       // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
-      if (!exigirSesion()) {
+      if (!exigirAcceso('publicar-comentario')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
       // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'subasta' });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'publicar-comentario',
+        seccionActiva: null,
+      });
 
       const productoId = new URLSearchParams(location.search).get('producto');
       const formulario = document.getElementById('formulario-comentario');

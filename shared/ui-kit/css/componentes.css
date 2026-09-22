@@ -4528,3 +4528,240 @@ button.tarjeta-heroe[aria-pressed='true'] {
     gap: var(--e-4);
   }
 }
+
+/* =======================================================================
+   Los tres armazones — UX-R3.0 (src/comun/shell.js)
+   -----------------------------------------------------------------------
+   RF-INV-008 («adapta las opciones visibles al estado de autenticación y al
+   rol del usuario») · RF-RBAC-001 · RF-RBAC-002.
+
+   Un solo sistema de diseño, tres densidades. Lo que cambia entre ellos no
+   es la paleta ni la tipografía —son las mismas— sino cuánta información
+   cabe por fila y qué se pone en primer plano:
+
+     portal   marca y una salida. Nada más: quien mira todavía no tiene
+              aplicación que navegar.
+     jugador  seis destinos (RF-INV-008), buscador y HUD.
+     consola  ocho herramientas, sin HUD de juego y con el rol a la vista.
+
+   Ninguna regla de aquí introduce un color nuevo: todo sale de tokens.css.
+   ======================================================================= */
+
+/* --- 1. Portal de entrada ---------------------------------------------- */
+
+/* Sin navegación, la marca deja de competir por el espacio: se le da el peso
+   que tiene en la pantalla de un juego, no el de un logotipo de barra. */
+.cabecera--portal .cabecera__grupo-marca {
+  gap: var(--e-4);
+}
+
+.cabecera--portal .cabecera__marca {
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  font-weight: var(--t-titulo-peso);
+  letter-spacing: 0.04em;
+}
+
+/* «¿Primera vez en el Nexo?» acompaña al botón y explica para qué es. En
+   móvil desaparece: el botón se basta y la fila no tiene sitio. */
+.cabecera__invitacion {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--pista);
+}
+
+@media (max-width: 640px) {
+  .cabecera__invitacion {
+    display: none;
+  }
+}
+
+/* --- 2. Distintivo de rol ---------------------------------------------- */
+
+/* Quién eres cuando no eres solo jugador. Sigue la regla de las insignias de
+   tokens.css: color saturado como TEXTO sobre el fondo tenue del mismo
+   color, nunca relleno sólido con texto blanco. */
+.distintivo-rol {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--e-2);
+  border-radius: var(--radio-pildora);
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-cuerpo-peso-enfasis);
+  line-height: 1.6;
+  white-space: nowrap;
+  background: var(--info-insignia);
+  color: var(--info);
+}
+
+.distintivo-rol--moderador {
+  background: var(--info-insignia);
+  color: var(--info);
+}
+
+.distintivo-rol--administrador {
+  background: var(--rareza-epica-insignia);
+  color: var(--rareza-epica);
+}
+
+/* El super administrador se distingue del administrador a propósito: es el
+   único rol que puede crear otros administradores (RF-RBAC-003) y el único
+   cuya sesión exige doble factor. Verlo de un vistazo importa. */
+.distintivo-rol--super-administrador {
+  background: var(--advertencia-insignia);
+  color: var(--advertencia);
+}
+
+/* Dentro del cromo el fondo tenue de la insignia no contrasta: ahí el
+   distintivo se dibuja en negativo, con el borde marcando la forma. */
+.cabecera .distintivo-rol {
+  background: transparent;
+  border: 1px solid currentcolor;
+  color: var(--pista);
+}
+
+/* --- 3. Consola de operación ------------------------------------------- */
+
+/* «Control» junto a la marca. No es un adorno: es la única señal permanente
+   de que lo que se pulsa aquí afecta a otras personas. */
+.cabecera__marca-sufijo {
+  margin-left: var(--e-2);
+  padding: 0 var(--e-2);
+  border-radius: var(--radio-chico);
+  background: var(--acento-relleno);
+  color: var(--texto-sobre-color);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Ocho destinos no caben con la separación de seis. La consola comprime la
+   navegación —es su diferencia de densidad respecto al jugador— sin tocar el
+   objetivo táctil, que sigue en 44 px de alto. */
+.cabecera--consola .cabecera__grupo-marca {
+  gap: var(--e-5);
+}
+
+.cabecera--consola .cabecera__nav--consola {
+  gap: var(--e-4);
+}
+
+.cabecera--consola .cabecera__destino {
+  font-size: var(--t-meta-tam);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* El filo de acento recorre toda la barra. Es la versión a lo ancho del filo
+   superior de la tarjeta de entrada: mismo gesto, mismo gradiente, distinto
+   sitio. Marca el modo sin gastar un color nuevo. */
+.cabecera--consola {
+  border-bottom: 2px solid var(--acento-relleno);
+}
+
+/* La salida al juego es secundaria, pero tiene que existir: un administrador
+   también juega, y sin esto volvía escribiendo la URL a mano. */
+.cabecera__salida {
+  white-space: nowrap;
+}
+
+@media (max-width: 860px) {
+  /* En móvil la salida entra en el panel plegable, no en la fila. */
+  .cabecera__salida {
+    display: none;
+  }
+}
+
+/* --- 4. Aterrizaje de la consola --------------------------------------- */
+
+/* §19: la consola es más compacta que la aplicación del jugador. La densidad
+   no se consigue apretando la tipografía —que sería la misma peor leída— sino
+   ensanchando el área útil y acortando el ritmo vertical: quien opera compara
+   tablas y filtros, no contempla una portada. `.pagina` sigue poniendo el
+   centrado y el relleno; esto solo ajusta las dos medidas que cambian. */
+.consola {
+  max-width: 1600px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-6);
+}
+
+.consola__rejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--e-4);
+}
+
+.consola__herramienta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  text-decoration: none;
+  color: inherit;
+}
+
+/* El alcance del rol, al pie. Texto de lectura, no de interfaz: ancho medido
+   en caracteres para que no se convierta en una línea de 140. */
+.consola__alcance {
+  max-width: 78ch;
+  color: var(--texto-2);
+  line-height: var(--t-cuerpo-alto);
+}
+
+/* --- 5. Interrupción: sin permiso, sin sesión, servicio caído ----------- */
+
+/* §17: un 403 no es contenido. Esta pantalla sustituye a la vista entera
+   —y no se superpone— para que debajo no siga cargando datos que el
+   servidor va a negar de todas formas. */
+.interrupcion {
+  min-height: calc(100vh - var(--cabecera-alto));
+  display: grid;
+  place-items: center;
+  padding: var(--e-8) var(--e-4);
+}
+
+.interrupcion__tarjeta {
+  width: min(520px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+  padding: var(--e-8) var(--e-6);
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra-2);
+  text-align: center;
+}
+
+.interrupcion__marca {
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-titulo-peso);
+  letter-spacing: 0.12em;
+  color: var(--texto-3);
+}
+
+.interrupcion__titulo {
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-titulo-tam);
+  line-height: var(--t-titulo-alto);
+  color: var(--texto);
+}
+
+.interrupcion__detalle {
+  max-width: 46ch;
+  margin: 0 auto;
+  color: var(--texto-2);
+  line-height: var(--t-cuerpo-alto);
+}
+
+.interrupcion__salidas {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--e-3);
+  padding-top: var(--e-3);
+}

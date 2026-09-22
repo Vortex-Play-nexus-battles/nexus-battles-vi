@@ -85,7 +85,10 @@
       import { mejorarContrasena } from '../comun/ui/campo.js';
 
       // Cabecera unica de la aplicacion (HU-UX-001).
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: null });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'login',
+        seccionActiva: null,
+      });
       // Ver/ocultar la contraseña: el mismo interruptor en las cuatro vistas
       // de entrada, desde `comun/ui`.
       mejorarContrasena(document.getElementById('password'));

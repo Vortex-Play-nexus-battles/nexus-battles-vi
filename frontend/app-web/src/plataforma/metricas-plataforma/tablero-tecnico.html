@@ -53,13 +53,17 @@
     </main>
 
     <script type="module">
-      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+      import { montarCabecera } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
       import { montarTableroTecnico } from './tablero-tecnico.js';
 
-      if (!exigirSesion()) {
+      if (!exigirAcceso('tablero-tecnico')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'cuenta' });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'tablero-tecnico',
+        seccionActiva: 'tecnico',
+      });
       montarTableroTecnico(document);
     </script>
   </body>

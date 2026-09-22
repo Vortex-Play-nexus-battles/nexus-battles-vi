@@ -41,14 +41,18 @@
       import { montarAsistente } from '../../comun/ui/asistente.js';
       import { montarValidacionDeHeroe } from './validacion-heroe.js';
       import { verificarHeroe } from './cliente-salas.js';
-      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+      import { montarCabecera } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
 
       // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
-      if (!exigirSesion()) {
+      if (!exigirAcceso('validacion-heroe')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
       // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'jugar' });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'validacion-heroe',
+        seccionActiva: 'jugar',
+      });
 
       // Sin `?sala=` el modulo pinta su estado de error con la instruccion de
       // como llegar; no se llama al servicio con una sala inexistente.

@@ -62,7 +62,10 @@
     <script type="module">
       import { montarCabecera } from '../comun/cabecera-app.js';
 
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: null });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'restablecer-solicitar',
+        seccionActiva: null,
+      });
     </script>
   </body>
 </html>

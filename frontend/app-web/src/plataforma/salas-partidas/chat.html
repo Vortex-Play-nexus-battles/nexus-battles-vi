@@ -77,14 +77,18 @@
     <script type="module">
       import { montarAsistente } from '../../comun/ui/asistente.js';
       import { montarChat, canalDesdeUrl, CLAVE_TOKEN } from './chat.js';
-      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+      import { montarCabecera } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
 
       // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
-      if (!exigirSesion()) {
+      if (!exigirAcceso('chat')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
       // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'jugar' });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'chat',
+        seccionActiva: 'jugar',
+      });
 
       const canal = canalDesdeUrl(window.location.search);
       document.querySelector('[data-zona="titulo"]').textContent = canal.idSala
