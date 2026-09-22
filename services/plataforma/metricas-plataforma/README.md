@@ -240,3 +240,9 @@ red ni esperas.
   reinicio (ver «Persistencia»), pero nadie las borra: con una fila por caída el
   crecimiento es mínimo, y cuánto tiempo conservarlas es una decisión del PO que
   no se ha tomado. El registro de latencia (HU-REN-001) sí sigue en memoria.
+
+## Seguridad
+
+Desde #527 la API exige rol administrativo (`ADMINISTRADOR`, `SUPER_ADMINISTRADOR`)
+o credencial de servicio; `/actuator/**` queda abierto (regla 3). Emisor:
+`IDENTIDAD_JWKS_URL`.

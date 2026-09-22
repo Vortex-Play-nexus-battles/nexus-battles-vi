@@ -454,8 +454,11 @@ services:
       SALUD_MODERACION: http://srv-moderacion-sanciones:8086/actuator/health
       SALUD_ADMIN_PARAMETROS: http://srv-admin-parametros:8088/actuator/health
       SANCIONES_URL: http://srv-moderacion-sanciones:8086/api/v1
+      # HU-MET-001 (#527): la observabilidad es de administracion.
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
       srv-moderacion-sanciones: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8087/actuator/health || exit 1"]

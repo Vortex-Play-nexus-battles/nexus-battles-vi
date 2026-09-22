@@ -116,6 +116,30 @@ describe('falta la decision del Product Owner', () => {
   });
 });
 
+describe('la observabilidad es de administracion (#527)', () => {
+  test('un 403 no se pinta como fallo del servicio ni ofrece reintentar', () => {
+    const caja = contenedor();
+
+    pintarError(caja, new ErrorDeMetricas(null, 403), () => {});
+
+    const estado = caja.querySelector('.estado-vista');
+    expect(estado.dataset.estado).toBe('sin-permiso');
+    expect(estado.textContent).toMatch(/administracion/i);
+    expect(estado.querySelector('[data-accion="reintentar"]')).toBeNull();
+  });
+
+  test('un 401 invita a volver a entrar, no a reintentar', () => {
+    const caja = contenedor();
+
+    pintarError(caja, new ErrorDeMetricas(null, 401), () => {});
+
+    const estado = caja.querySelector('.estado-vista');
+    expect(estado.dataset.estado).toBe('sin-permiso');
+    expect(estado.textContent).toMatch(/sesion/i);
+    expect(estado.querySelector('[data-accion="reintentar"]')).toBeNull();
+  });
+});
+
 describe('lecturas y escrituras separadas', () => {
   it('pinta una fila por tipo con su percentil y su maximo', () => {
     const caja = contenedor();

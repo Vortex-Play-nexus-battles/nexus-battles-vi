@@ -175,6 +175,9 @@ services:
       SALUD_ADMIN_PARAMETROS: http://srv-admin-parametros:8088/actuator/health
       # HU-MET-001: agregados de moderacion desde moderacion-sanciones.
       SANCIONES_URL: ${SANCIONES_URL:-http://srv-moderacion-sanciones:8086/api/v1}
+      # HU-MET-001 (#527): la observabilidad exige rol administrativo; el
+      # emisor de los tokens es ms-identidad, igual que en el resto del bloque.
+      IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://srv-ms-identidad:8089/api/v1/auth/jwks}
 
   srv-admin-parametros:
     <<: *servicio-plataforma

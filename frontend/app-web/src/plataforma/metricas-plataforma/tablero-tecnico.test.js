@@ -132,6 +132,31 @@ const VISTA = `
   <form data-zona="periodo"><input name="desde" /><input name="hasta" /><button type="submit"></button><button type="button" data-accion="exportar-moderacion"></button></form>
   <div data-zona="moderacion"></div>`;
 
+describe('la observabilidad es de administracion (#527)', () => {
+  beforeEach(() => {
+    document.body.innerHTML = VISTA;
+  });
+
+  test('sin rol administrativo la vista lo explica y no habla de codigos ni de reintentar', async () => {
+    const fetchImpl = servicio({
+      '/api/v1/tecnicas': { estado: 403, cuerpo: { status: 403, title: 'Forbidden' } },
+      '/api/v1/moderacion': { estado: 403, cuerpo: { status: 403, title: 'Forbidden' } },
+    });
+
+    montarTableroTecnico(document, { fetchImpl });
+    await asentar();
+    await asentar();
+
+    const aviso = document.querySelector(
+      '[data-zona="tecnicas"] .aviso[data-motivo="sin-permiso"]',
+    );
+    expect(aviso).not.toBeNull();
+    expect(aviso.className).toContain('aviso--info');
+    expect(aviso.textContent).toMatch(/administracion/i);
+    expect(aviso.textContent).not.toMatch(/403|error/i);
+  });
+});
+
 describe('vista', () => {
   beforeEach(() => {
     document.body.innerHTML = VISTA;
