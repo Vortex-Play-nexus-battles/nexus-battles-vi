@@ -329,6 +329,31 @@ function sinApiDetras(respuesta) {
 }
 
 /**
+ * Que decirle a quien mira, segun por que fallo. Nunca el codigo.
+ *
+ * @param {number} estado
+ * @returns {string}
+ */
+function detalleDelFallo(estado) {
+  if (estado === 401) {
+    return 'Vuelve a iniciar sesion para continuar.';
+  }
+  if (estado === 403) {
+    return 'Tu cuenta no tiene permiso para ver esto.';
+  }
+  if (estado === 404) {
+    return 'Esa sala ya no existe. Vuelve al listado para ver las que siguen abiertas.';
+  }
+  if (estado === 409) {
+    return 'Alguien se te adelanto: el estado de la sala cambio mientras mirabas.';
+  }
+  if (estado >= 500 || estado === 0) {
+    return 'El servicio de batallas no responde ahora mismo. Vuelve a intentarlo en un momento.';
+  }
+  return 'No pudimos completar la operacion. Vuelve a intentarlo.';
+}
+
+/**
  * Lee el problem details de una respuesta fallida.
  *
  * Un 401 de Spring Security llega sin cuerpo, y un servidor estatico devuelve
@@ -361,12 +386,15 @@ async function cuerpoDelProblema(respuesta) {
     };
   }
 
+  // UX-R2.4 — el detalle era `El servicio respondio ${status}.`, o sea el
+  // codigo HTTP como el mensaje que lee el jugador. La norma del producto es
+  // que el codigo puede ir en la traza, nunca en la pantalla: «404» no le dice
+  // a nadie si esperar, reintentar o irse. El estado sigue en `status` para
+  // quien programa.
   return {
     status: respuesta.status,
-    title: respuesta.status === 401 ? 'Tu sesion no es valida' : 'El servicio no respondio bien',
-    detail:
-      respuesta.status === 401
-        ? 'Vuelve a iniciar sesion para continuar.'
-        : `El servicio respondio ${respuesta.status}.`,
+    title:
+      respuesta.status === 401 ? 'Tu sesion no es valida' : 'Las batallas no estan disponibles',
+    detail: detalleDelFallo(respuesta.status),
   };
 }

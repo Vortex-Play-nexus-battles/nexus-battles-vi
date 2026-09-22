@@ -1,6 +1,6 @@
 # Auditoría visual automática — UX-R2.1
 
-Generado: 2026-09-22T07:13:56.672Z · modo **sin-servicios**
+Generado: 2026-09-22T13:05:00.924Z · modo **sin-servicios**
 
 155 combinaciones vista × resolución · 57 con hallazgos
 
@@ -8,7 +8,7 @@ Generado: 2026-09-22T07:13:56.672Z · modo **sin-servicios**
 
 | Motivo | Veces |
 |---|---|
-| `objetivo-tactil-pequeno` | 326 |
+| `objetivo-tactil-pequeno` | 325 |
 | `cabecera-en-mas-de-dos-filas` | 48 |
 | `elemento-fuera-del-viewport` | 9 |
 | `desbordamiento-horizontal` | 6 |
@@ -108,7 +108,7 @@ Generado: 2026-09-22T07:13:56.672Z · modo **sin-servicios**
 | historial-transacciones | movil | `objetivo-tactil-pequeno` | a«Mi Cuenta» mide 69×30 |
 | historial-transacciones | movil | `objetivo-tactil-pequeno` | a«0» mide 20×20 |
 | historial-transacciones | movil | `objetivo-tactil-pequeno` | button«Qqa_visual» mide 72×40 |
-| historial-transacciones | movil | `objetivo-tactil-pequeno` | button«Volver» mide 77×40 |
+| historial-transacciones | movil | `objetivo-tactil-pequeno` | button«Volver» mide 335×40 |
 | mis-cofres | movil | `cabecera-en-mas-de-dos-filas` | la cabecera mide 186px (una fila son 64px) |
 | mis-cofres | movil | `objetivo-tactil-pequeno` | a«NEXUS BATTLES VI» mide 154×29 |
 | mis-cofres | movil | `objetivo-tactil-pequeno` | a«Jugar online» mide 84×30 |
@@ -118,7 +118,7 @@ Generado: 2026-09-22T07:13:56.672Z · modo **sin-servicios**
 | mis-cofres | movil | `objetivo-tactil-pequeno` | a«Mi Cuenta» mide 69×30 |
 | mis-cofres | movil | `objetivo-tactil-pequeno` | a«0» mide 20×20 |
 | mis-cofres | movil | `objetivo-tactil-pequeno` | button«Qqa_visual» mide 72×40 |
-| mis-cofres | movil | `objetivo-tactil-pequeno` | button«Volver» mide 77×40 |
+| mis-cofres | movil | `objetivo-tactil-pequeno` | button«Volver» mide 260×40 |
 | batallas | tablet | `cabecera-en-mas-de-dos-filas` | la cabecera mide 141px (una fila son 64px) |
 | batallas | movil | `cabecera-en-mas-de-dos-filas` | la cabecera mide 188px (una fila son 64px) |
 | batallas | movil | `objetivo-tactil-pequeno` | a«NEXUS BATTLES VI» mide 154×30 |
@@ -129,7 +129,6 @@ Generado: 2026-09-22T07:13:56.672Z · modo **sin-servicios**
 | batallas | movil | `objetivo-tactil-pequeno` | a«Mi Cuenta» mide 69×31 |
 | batallas | movil | `objetivo-tactil-pequeno` | a«0» mide 20×20 |
 | batallas | movil | `objetivo-tactil-pequeno` | button«Qqa_visual» mide 72×40 |
-| batallas | movil | `objetivo-tactil-pequeno` | a«Chat general» mide 215×40 |
 | crear-sala | tablet | `cabecera-en-mas-de-dos-filas` | la cabecera mide 141px (una fila son 64px) |
 | crear-sala | movil | `cabecera-en-mas-de-dos-filas` | la cabecera mide 188px (una fila son 64px) |
 | crear-sala | movil | `objetivo-tactil-pequeno` | a«NEXUS BATTLES VI» mide 154×30 |

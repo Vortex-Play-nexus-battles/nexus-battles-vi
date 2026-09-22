@@ -1,11 +1,11 @@
 {
-  "generado": "2026-09-22T07:13:56.672Z",
+  "generado": "2026-09-22T13:05:00.924Z",
   "modo": "sin-servicios",
   "combinaciones": 155,
   "conHallazgos": 57,
   "porMotivo": {
     "cabecera-en-mas-de-dos-filas": 48,
-    "objetivo-tactil-pequeno": 326,
+    "objetivo-tactil-pequeno": 325,
     "desbordamiento-horizontal": 6,
     "elemento-fuera-del-viewport": 9,
     "error-tecnico-visible": 5
@@ -443,7 +443,7 @@
         },
         {
           "motivo": "objetivo-tactil-pequeno",
-          "detalle": "button«Volver» mide 77×40"
+          "detalle": "button«Volver» mide 335×40"
         }
       ]
     },
@@ -491,7 +491,7 @@
         },
         {
           "motivo": "objetivo-tactil-pequeno",
-          "detalle": "button«Volver» mide 77×40"
+          "detalle": "button«Volver» mide 260×40"
         }
       ]
     },
@@ -548,10 +548,6 @@
         {
           "motivo": "objetivo-tactil-pequeno",
           "detalle": "button«Qqa_visual» mide 72×40"
-        },
-        {
-          "motivo": "objetivo-tactil-pequeno",
-          "detalle": "a«Chat general» mide 215×40"
         }
       ]
     },
