@@ -475,11 +475,14 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     expect(actual.campeonEquipoId).toBe(equipo.id);
     expect(actual.encuentros.every((e) => e.estado === 'JUGADO')).toBe(true);
     expect(actual.encuentros[13].motivo).toMatch(/Incomparecencia/);
-    // 14 derrotas repartidas: si el campeon no perdio ninguna, los otros 7
-    // cargan con dos cada uno; si perdio el 5 contra la maquina, uno de los
-    // siete se queda con una sola.
-    const derrotasDelCampeon = actual.equipos.find((e) => e.id === equipo.id).derrotas;
-    expect(actual.equipos.filter((e) => e.eliminado)).toHaveLength(derrotasDelCampeon === 0 ? 7 : 6);
+    // La invariante del arbol doble no es cuantas derrotas lleva cada equipo:
+    // es que al final queda EXACTAMENTE uno en pie. El intento anterior
+    // dedujo «7 eliminados salvo que el campeon perdiera una» y la corrida
+    // del 22-sep lo desmintio (7 eliminados con el campeon derrotado en el
+    // encuentro 5). Se afirma lo que el torneo garantiza.
+    const enPie = actual.equipos.filter((e) => !e.eliminado);
+    expect(enPie.map((e) => e.id)).toEqual([equipo.id]);
+    expect(actual.equipos.filter((e) => e.eliminado)).toHaveLength(actual.equipos.length - 1);
     expect(actual.encuentros[4].ganador, 'lo jugado no se toca').toBe(gano5);
   });
 
