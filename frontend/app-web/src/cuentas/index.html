@@ -23,25 +23,40 @@
             Equipa tu héroe, entra a una sala y decide el combate turno a turno.
           </p>
         </div>
+        <!--
+          UX-R2.6 — el CTA domina. Era un botón primario del mismo tamaño que
+          los «Reintentar» de las tarjetas de abajo: la acción por la que uno
+          entra al juego pesaba visualmente lo mismo que reintentar una
+          consulta de saldo. `.home__jugar` le da el tamaño y el acento.
+        -->
         <a
-          class="boton boton--primario boton--grande"
+          class="boton boton--acento boton--grande home__jugar"
           href="../plataforma/salas-partidas/crear-sala.html"
         >
           Jugar ahora
         </a>
       </section>
 
-      <!-- Cada bloque se carga por su cuenta y dice por su nombre si su
-           servicio no está en este entorno. -->
-      <section class="pila pila--compacta">
-        <h2 class="t-subtitulo">Tus créditos</h2>
-        <div data-zona="bloque-saldo"></div>
+      <!--
+        UX-R2.6 — orden del hub. Antes venia primero «Tus créditos» y después
+        «Tu héroe». La jerarquía de una pantalla de inicio de juego es otra:
+        primero JUGAR (arriba, en el destacado), después con QUÉ se juega —el
+        héroe equipado, que es lo que decide si se puede entrar a una sala
+        (HU-SAL-003)— y solo entonces cuánto se tiene para apostar. El saldo
+        importa, pero no es lo primero que uno mira al volver a un juego.
+
+        Cada bloque se carga por su cuenta y dice por su nombre si su servicio
+        no está en este entorno.
+      -->
+      <section class="pila pila--compacta home__heroe">
+        <h2 class="t-subtitulo">Tu héroe</h2>
+        <div data-zona="bloque-heroe"></div>
       </section>
 
       <div class="home__rejilla">
         <section class="pila pila--compacta">
-          <h2 class="t-subtitulo">Tu héroe</h2>
-          <div data-zona="bloque-heroe"></div>
+          <h2 class="t-subtitulo">Tus créditos</h2>
+          <div data-zona="bloque-saldo"></div>
         </section>
 
         <section class="pila pila--compacta">

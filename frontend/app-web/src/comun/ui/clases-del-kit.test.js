@@ -129,3 +129,18 @@ test('el kit define las clases de maquetación que las vistas dan por hechas', (
     expect(definidas.has(clase) ? clase : `FALTA .${clase} en el kit`).toBe(clase);
   }
 });
+
+test('una tarjeta-enlace no se subraya como un enlace de texto', () => {
+  // `base.css` subraya todo `<a>`. Una tarjeta que además es enlace tiene que
+  // apagarlo, o el título y la descripción salen subrayados dentro de la caja
+  // —que es como se veía la home hasta UX-R2.6—. `color: inherit` ya estaba;
+  // el subrayado, no.
+  const componentes = readFileSync(join(KIT, 'componentes.css'), 'utf8');
+  const bloque = componentes.slice(
+    componentes.indexOf('.tarjeta--pulsable {'),
+    componentes.indexOf('.tarjeta--pulsable:hover'),
+  );
+
+  expect(bloque).toContain('text-decoration: none');
+  expect(bloque).toContain('color: inherit');
+});

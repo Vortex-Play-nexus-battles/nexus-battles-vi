@@ -33,6 +33,12 @@
   width: 100%;
   font: inherit;
   color: inherit;
+  /* UX-R2.6 — faltaba, y se notaba: `base.css` subraya todo `<a>`, así que
+     cada tarjeta-enlace salía con su título y su descripción subrayados, como
+     un enlace de texto de los noventa. `color: inherit` ya estaba; lo que no
+     estaba era apagar el subrayado. Afecta a las seis tarjetas de la home, al
+     listado de salas y a cualquier tarjeta con `href`. */
+  text-decoration: none;
   transition:
     border-color var(--transicion),
     box-shadow var(--transicion);
@@ -3991,4 +3997,44 @@ button.tarjeta-heroe[aria-pressed='true'] {
 .equipamiento__resumen {
   margin: 0;
   grid-column: 1 / -1;
+}
+
+/* --- Home como hub del jugador (UX-R2.6) -------------------------------- */
+
+/* El CTA por el que uno entra al juego. `--boton-grande` son 48px, que es la
+   altura de una acción principal cualquiera; esta no es cualquiera. */
+.home__jugar {
+  min-height: 56px;
+  padding-inline: var(--e-8);
+  font-size: var(--t-subtitulo-tam);
+  box-shadow: var(--sombra-2);
+}
+
+/* El héroe equipado es lo segundo que se mira: sube de la rejilla de tres a
+   su propia fila, con el retrato a la izquierda. */
+.home__heroe .tarjeta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--e-4);
+  align-items: center;
+}
+
+/* Salvo cuando el bloque no trae héroe y lo que hay es un estado vacío o de
+   error, que ocupa la tarjeta entera. */
+.home__heroe .estado-vista,
+.home__heroe .tarjeta:not(:has(.marco-heroe)) {
+  display: block;
+}
+
+@media (max-width: 767px) {
+  .home__jugar {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .home__heroe .tarjeta {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
 }
