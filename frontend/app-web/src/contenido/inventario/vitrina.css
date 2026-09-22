@@ -535,3 +535,49 @@
 .inventario__paginacion {
   margin-top: 8px;
 }
+
+/* =======================================================================
+   Retrato de la tarjeta — UX-R2.5 (HU-INV-001)
+   -----------------------------------------------------------------------
+   El marco lo dibuja `.marco-heroe` del kit; aqui solo va lo que es propio
+   de esta rejilla: que el retrato sea mas pequeno que en el campo de
+   combate, porque caben dieciseis en 1360x768.
+   ======================================================================= */
+
+.vitrina__marco {
+  width: auto;
+}
+
+.vitrina__marco .marco-heroe__retrato {
+  width: 72px;
+  height: 72px;
+}
+
+.vitrina__marco .marco-heroe__imagen {
+  width: 60px;
+  height: 60px;
+}
+
+.vitrina__icono {
+  width: 32px;
+  height: 32px;
+  color: var(--texto-2);
+}
+
+/* Lo que no esta disponible (bloqueado por una subasta, HU-INV-010) se
+   atenua tambien en el retrato: ya lo dice el texto, esto lo acompana. */
+.vitrina__producto--no-disponible .vitrina__marco {
+  opacity: 0.55;
+  filter: grayscale(1);
+}
+
+/* El panel de equipamiento pasa a ser los tres grupos de ranuras, que se
+   reparten segun quepan en vez de en tres columnas fijas. */
+.inventario-equipo__lista {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

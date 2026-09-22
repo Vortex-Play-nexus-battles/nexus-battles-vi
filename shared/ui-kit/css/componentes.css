@@ -3939,3 +3939,56 @@ button.tarjeta-heroe[aria-pressed='true'] {
   }
 }
 
+
+/* =======================================================================
+   Elegir que va en una ranura — HU-INV-005 (UX-R2.5)
+   -----------------------------------------------------------------------
+   El contenido del dialogo que se abre al pulsar una ranura vacia. Vive en
+   el kit y no en la vista porque cualquier pantalla con ranuras —el
+   equipamiento de hoy, la configuracion de un equipo de torneo manana—
+   necesita exactamente esta lista.
+   ======================================================================= */
+
+.elegir-objeto {
+  display: grid;
+  gap: var(--e-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.elegir-objeto__opcion {
+  width: 100%;
+  padding: var(--e-3);
+  text-align: left;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  color: var(--texto);
+  font: inherit;
+  cursor: pointer;
+}
+
+.elegir-objeto__opcion:hover {
+  background: var(--interaccion-velo-hover);
+}
+
+.elegir-objeto__opcion:focus-visible {
+  outline: var(--foco-grosor) solid var(--anillo-foco);
+  outline-offset: 2px;
+}
+
+/* Publicado en una subasta (HU-INV-010): se ofrece igual, apagado y con su
+   motivo en el texto. Esconderlo dejaria al jugador buscando una pieza que
+   tiene y no entiende por que no aparece. */
+.elegir-objeto__opcion--bloqueada {
+  color: var(--texto-3);
+  cursor: not-allowed;
+}
+
+.equipamiento__resumen {
+  margin: 0;
+  grid-column: 1 / -1;
+}
