@@ -13,16 +13,25 @@
  * mismo requisito de 16 items por pagina sin desplazamiento horizontal.
  */
 
+/* UX-R3.6 — el relleno estaba en el `<body>`, y la cabecera de la aplicación
+   se monta dentro del `<body>`: la barra quedaba con aire a cada lado y
+   flotando sobre el fondo, mientras en las otras treinta vistas va de borde a
+   borde. Mismo fallo que tenía el inventario, misma corrección: el relleno
+   baja al contenido, que es de quien era. */
 .subastas-pagina {
   --subastas-columnas: 4;
 
   box-sizing: border-box;
   min-height: 100vh;
   margin: 0;
-  padding: var(--e-5);
+  padding: 0;
   background: var(--fondo);
   color: var(--texto);
   font-family: var(--fuente-texto);
+}
+
+.subastas-pagina > #raiz-subastas {
+  padding: var(--e-5);
 }
 
 .subastas-pagina *,
