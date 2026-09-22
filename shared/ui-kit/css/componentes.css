@@ -3722,3 +3722,208 @@ button.tarjeta-heroe[aria-pressed='true'] {
     transform: none;
   }
 }
+
+/* =======================================================================
+   Pantalla de combate — HU-JUE-017 · RF-JUE-017 (UX-R2.3)
+   -----------------------------------------------------------------------
+   CA-01 pide que el area de juego ocupe mas del 80 % del alto y del ancho
+   utiles, con los menus abajo o al lado y NUNCA sobre el campo. Eso no se
+   consigue con `.pagina`, que es una columna centrada con margenes: se
+   consigue con una reja de tres franjas que ocupa la ventana entera menos la
+   cabecera de la aplicacion.
+
+   Las medidas: la cabecera son 64 px (`--cabecera-alto`). El HUD y los
+   controles se dimensionan por su contenido, con un maximo; lo que sobra es
+   campo. En 1360×768 —el minimo de la ficha— eso deja el campo por encima del
+   80 % del alto util y el 100 % del ancho.
+   ======================================================================= */
+
+.combate {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: var(--e-3);
+  /* La ventana menos la cabecera. `dvh` y no `vh`: en un movil la barra del
+     navegador se esconde al desplazar y con `vh` el campo quedaba cortado. */
+  min-height: calc(100dvh - var(--cabecera-alto));
+  padding: var(--e-3) var(--e-4);
+  box-sizing: border-box;
+}
+
+/* --- HUD superior (CA-02) ---------------------------------------------- */
+
+.combate__hud {
+  display: grid;
+  gap: var(--e-2);
+  padding: var(--e-3) var(--e-4);
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra-1);
+  /* Tope duro: el HUD no puede comerse el campo por muchos participantes que
+     haya. A partir de ahi, las barras se desplazan dentro. */
+  max-height: 22vh;
+  overflow-y: auto;
+}
+
+.combate__hud-titulo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-3);
+}
+
+/* Las seis barras de una partida de seis, en dos columnas cuando caben: en
+   una sola fila cada una quedaria de 20 px y el color no se distinguiria. */
+.combate__vidas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--e-2) var(--e-5);
+}
+
+/* --- El campo (CA-01, CA-03) ------------------------------------------- */
+
+.combate__campo {
+  position: relative;
+  /* `min-height: 0` en una reja permite que la fila `1fr` encoja de verdad;
+     sin ella el contenido impone su alto y el campo desborda la ventana. */
+  min-height: 0;
+  border-radius: var(--radio);
+  border: 1px solid var(--borde);
+  /* Dos tonos del fondo ya existente: da profundidad sin inventar un color.
+     El campo es el unico sitio de la aplicacion donde hay superficie grande
+     vacia, y plana se veria como un error de carga. */
+  background:
+    radial-gradient(circle at 50% 40%, var(--superficie) 0%, var(--fondo) 70%),
+    var(--fondo);
+  overflow: hidden;
+}
+
+.campo__puesto {
+  position: absolute;
+  display: grid;
+  justify-items: center;
+  gap: var(--e-1);
+  /* La posicion que calcula `campo.js` es la del centro del heroe. */
+  transform: translate(-50%, -50%);
+  transition: transform var(--duracion-normal) var(--curva-estandar);
+}
+
+.campo__nombre {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+  text-align: center;
+  max-width: 120px;
+  overflow-wrap: break-word;
+}
+
+/* Los rivales miran hacia el jugador. Es el truco de siempre en un juego 2D y
+   cuesta una linea. */
+.campo__puesto--rival .marco-heroe__retrato {
+  transform: scaleX(-1);
+}
+
+/* A quien le toca, destacado. Igual que en la barra de vida: el anillo
+   acompana al texto del indicador de turno, no lo sustituye. */
+.campo__puesto[data-turno='si'] .marco-heroe__retrato {
+  box-shadow: 0 0 0 4px var(--acento-relleno);
+}
+
+.campo__puesto--caido {
+  opacity: 0.45;
+  filter: grayscale(1);
+}
+
+/* --- Capa de sala: lo de antes del combate ----------------------------- */
+
+.combate__sala {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: grid;
+  gap: var(--e-3);
+  justify-items: center;
+  padding: var(--e-4);
+  pointer-events: none;
+}
+
+.combate__sala > * {
+  pointer-events: auto;
+}
+
+/* --- Controles, abajo (CA-01) ------------------------------------------ */
+
+.combate__controles {
+  display: grid;
+  gap: var(--e-2);
+  padding: var(--e-3) var(--e-4);
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra-2);
+}
+
+.combate__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-3);
+  justify-content: center;
+}
+
+/* --- Desenlace (CA-04) -------------------------------------------------- */
+
+/* Encima de todo, centrado. Cuando aparece, la partida acabo: no hay nada
+   debajo que pulsar, asi que taparlo no incumple CA-01. */
+.combate__desenlace {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--e-4);
+  background: rgb(17 23 38 / 55%);
+  z-index: 40;
+}
+
+.combate__desenlace[hidden] {
+  display: none;
+}
+
+/* --- Degradacion por tamano (CA-05) ------------------------------------- */
+
+/* Por encima del minimo, el aviso no existe. */
+.combate__aviso-tamano {
+  display: none;
+  margin: 0;
+  padding: var(--e-3);
+  border-radius: var(--radio);
+  background: var(--advertencia-insignia);
+  border: 1px solid var(--advertencia);
+  color: var(--texto);
+  text-align: center;
+}
+
+/* Por debajo, el campo absoluto no cabe: en vez de dejar a los heroes
+   amontonados en una franja de 90 px, se retira el campo y se dice por que.
+   La vida y los controles siguen enteros — degradar no es apagar. */
+@media (max-width: 767px), (max-height: 520px) {
+  .combate {
+    min-height: auto;
+    grid-template-rows: auto auto auto;
+  }
+
+  .combate__campo {
+    display: none;
+  }
+
+  .combate__aviso-tamano {
+    display: block;
+  }
+
+  .combate__hud {
+    max-height: none;
+  }
+
+  .combate__sala {
+    position: static;
+    padding: 0;
+  }
+}
