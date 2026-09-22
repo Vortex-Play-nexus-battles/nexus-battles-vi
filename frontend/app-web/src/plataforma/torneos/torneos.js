@@ -14,6 +14,7 @@ import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-err
 import { nodo } from '../../comun/ui/dom.js';
 import { pintarAviso } from '../../comun/ui/aviso.js';
 import { campo } from '../../comun/ui/campo.js';
+import { estadoDeCarga, estadoDeError, estadoVacio } from '../../comun/ui/estado-vista.js';
 
 export const ROLES_DE_ADMINISTRACION = Object.freeze(['ADMINISTRADOR', 'SUPER_ADMINISTRADOR']);
 
@@ -351,17 +352,52 @@ export function montarTorneos(
 
   async function cargarListado() {
     try {
+      zonaListado.replaceChildren(estadoDeCarga({ filas: 2, etiqueta: 'Buscando torneos…' }));
       const torneos = await api.listar(fetchImpl);
       zonaListado.replaceChildren();
+
+      // UX-R2.7 — el vacio era un parrafo gris de una linea: «Todavia no hay
+      // torneos publicados». Cierto y completamente inutil — el jugador se
+      // queda mirando una pantalla con un titulo y nada mas, sin saber que
+      // hacer ni cuando volver. Ahora se dice que NO hay torneo, que el
+      // formato es por temporadas, y se ofrece lo unico que si puede hacer
+      // ahora mismo: jugar una sala.
+      //
+      // No se inventa una fecha: `torneos.yaml` no publica cuando empieza el
+      // siguiente, y poner «vuelve en X dias» seria adivinarlo.
       if (torneos.length === 0) {
         zonaListado.appendChild(
-          nodo('p', 't-meta', 'Todavia no hay torneos publicados. El proximo aparecera aqui.'),
+          estadoVacio({
+            titulo: 'No hay ningún torneo abierto',
+            detalle:
+              'Los torneos se abren por temporadas. Cuando haya uno, aparecerá aquí con sus ' +
+              'equipos, sus cupos y el árbol de encuentros.',
+            accion: {
+              texto: 'Jugar una batalla',
+              href: '../salas-partidas/batallas.html',
+            },
+          }),
         );
+        return;
       }
       torneos.forEach((t) =>
         zonaListado.appendChild(tarjetaDeTorneo(t, { alAbrir: (x) => abrir(x.id) })),
       );
     } catch (error) {
+      // El fallo se pinta DONDE iban los torneos, no solo en el aviso de
+      // arriba: hasta ahora quedaba un encabezado «Torneos» huerfano con
+      // setecientos pixeles de vacio debajo, y el unico rastro del problema
+      // era una caja amarilla que decia «No se pudo completar» sin mas.
+      zonaListado.replaceChildren(
+        estadoDeError({
+          titulo: 'Los torneos no están disponibles',
+          detalle:
+            error instanceof ErrorDeTorneos && error.estado < 500
+              ? error.detalle
+              : 'El servicio de torneos no responde ahora mismo.',
+          alReintentar: () => cargarListado(),
+        }),
+      );
       avisarError(zonaAviso, error);
     }
   }
