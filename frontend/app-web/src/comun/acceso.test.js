@@ -55,6 +55,7 @@ function sesionDe(rol, { caducada = false } = {}) {
 beforeEach(() => {
   sessionStorage.clear();
   document.body.innerHTML = '';
+  delete document.documentElement.dataset.acceso;
 });
 
 describe('catálogo de roles (RF-RBAC-001)', () => {
@@ -72,9 +73,7 @@ describe('catálogo de roles (RF-RBAC-001)', () => {
     // sueltos: el mismo nombre significaba dos conjuntos distintos.
     expect(ROLES_DE_MODERACION).toContain('MODERADOR');
     expect(ROLES_DE_ADMINISTRACION).not.toContain('MODERADOR');
-    expect(ROLES_DE_MODERACION).toEqual(
-      expect.arrayContaining([...ROLES_DE_ADMINISTRACION]),
-    );
+    expect(ROLES_DE_MODERACION).toEqual(expect.arrayContaining([...ROLES_DE_ADMINISTRACION]));
   });
 
   test('solo los roles de trastienda operan el sistema', () => {
@@ -296,5 +295,31 @@ describe('guardas de ruta (§16)', () => {
   test('la pantalla sin permiso se anuncia a los lectores de pantalla', () => {
     pintarSinPermiso(document, { base: BASE, rolesAdmitidos: ROLES_DE_ADMINISTRACION });
     expect(document.querySelector('[data-zona="sin-permiso"]').getAttribute('role')).toBe('alert');
+  });
+});
+
+describe('la interrupción es definitiva', () => {
+  test('marca el documento para que ningún módulo monte encima', () => {
+    // `gestion-usuarios.html` tiene su guarda en un `<script type="module">` y
+    // monta la cabecera desde `gestion-usuarios.js`, otro módulo. Lanzar una
+    // excepción detiene el primero y no el segundo: la cabecera de consola se
+    // pintaba encima de la pantalla de «sin acceso».
+    sesionDe('JUGADOR');
+    exigirAcceso('gestion-usuarios', {
+      navegar: jest.fn(),
+      base: BASE,
+      ubicacion: { pathname: '/cuentas/gestion-usuarios.html', search: '' },
+    });
+    expect(document.documentElement.dataset.acceso).toBe('denegado');
+  });
+
+  test('una vista permitida no deja marca', () => {
+    sesionDe('ADMINISTRADOR');
+    exigirAcceso('gestion-usuarios', {
+      navegar: jest.fn(),
+      base: BASE,
+      ubicacion: { pathname: '/cuentas/gestion-usuarios.html', search: '' },
+    });
+    expect(document.documentElement.dataset.acceso).toBeUndefined();
   });
 });

@@ -193,9 +193,9 @@ describe('armazón de jugador', () => {
 
   test('sin sesión ofrece entrar y registrarse; con sesión, nunca «Registrarse»', () => {
     const anonimo = montar({ vista: 'subastas' }).elemento;
-    expect([...anonimo.querySelectorAll('[data-zona="sesion"] a')].map((a) => a.textContent)).toEqual(
-      ['Iniciar sesión', 'Registrarse'],
-    );
+    expect(
+      [...anonimo.querySelectorAll('[data-zona="sesion"] a')].map((a) => a.textContent),
+    ).toEqual(['Iniciar sesión', 'Registrarse']);
 
     document.body.innerHTML = '';
     conSesion({ apodo: 'valkiria' });
@@ -253,9 +253,9 @@ describe('armazón de jugador', () => {
     document.body.innerHTML = '';
     conSesion({ rol: 'ADMINISTRADOR' });
     const admin = montar({ vista: 'home' }).elemento;
-    expect(
-      [...admin.querySelectorAll('[role="menuitem"]')].map((o) => o.textContent),
-    ).toContain('Consola de operación');
+    expect([...admin.querySelectorAll('[role="menuitem"]')].map((o) => o.textContent)).toContain(
+      'Consola de operación',
+    );
     expect(admin.querySelector('[data-zona="rol"]').textContent).toBe('Administrador');
   });
 
@@ -344,21 +344,15 @@ describe('armazón de consola', () => {
     expect(etiquetas(consolaDe('ADMINISTRADOR'))).not.toContain('Auditoría');
 
     document.body.innerHTML = '';
-    expect(etiquetas(consolaDe('MODERADOR'))).toEqual([
-      'Resumen',
-      'Sanciones',
-      'Lista negra',
-    ]);
+    expect(etiquetas(consolaDe('MODERADOR'))).toEqual(['Resumen', 'Sanciones', 'Lista negra']);
   });
 
   test('enseña el rol, para que «esa opción no me aparece» tenga respuesta', () => {
-    expect(consolaDe('MODERADOR').querySelector('[data-zona="rol"]').textContent).toBe(
-      'Moderador',
-    );
+    expect(consolaDe('MODERADOR').querySelector('[data-zona="rol"]').textContent).toBe('Moderador');
     document.body.innerHTML = '';
-    expect(
-      consolaDe('SUPER_ADMINISTRADOR').querySelector('[data-zona="rol"]').textContent,
-    ).toBe('Super administrador');
+    expect(consolaDe('SUPER_ADMINISTRADOR').querySelector('[data-zona="rol"]').textContent).toBe(
+      'Super administrador',
+    );
   });
 
   test('tiene salida al juego: quien administra también juega', () => {
@@ -427,6 +421,26 @@ describe('plegado en pantallas estrechas (UX-R2.9)', () => {
   });
 
   test('el portal no necesita plegar nada: no tiene navegación', () => {
-    expect(montar({ vista: 'login' }).elemento.querySelector('[data-zona="alternar-nav"]')).toBeNull();
+    expect(
+      montar({ vista: 'login' }).elemento.querySelector('[data-zona="alternar-nav"]'),
+    ).toBeNull();
+  });
+});
+
+describe('una página interrumpida no se vuelve a montar', () => {
+  test('con el documento marcado, montarArmazon no pinta nada', () => {
+    conSesion({ rol: 'JUGADOR' });
+    document.documentElement.dataset.acceso = 'denegado';
+    const raiz = document.createElement('div');
+    document.body.appendChild(raiz);
+    const { elemento } = montarArmazon(raiz, { vista: 'home', base: BASE, navegar: jest.fn() });
+    expect(elemento).toBeNull();
+    expect(raiz.childElementCount).toBe(0);
+    delete document.documentElement.dataset.acceso;
+  });
+
+  test('sin contenedor, tampoco revienta', () => {
+    conSesion();
+    expect(() => montarArmazon(null, { vista: 'home', base: BASE })).not.toThrow();
   });
 });

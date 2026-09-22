@@ -63,7 +63,6 @@
       // comprueba rol, no solo sesion: el panel es de administracion.
       const sesion = exigirAcceso('panel-metricas');
       if (sesion) {
-
         // Cabecera unica de la aplicacion (HU-UX-001).
         montarCabecera(document.querySelector('[data-cabecera-app]'), {
           vista: 'panel-metricas',

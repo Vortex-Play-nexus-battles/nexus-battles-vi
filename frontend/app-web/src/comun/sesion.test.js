@@ -104,7 +104,9 @@ describe('cerrar y olvidar', () => {
 describe('rutaDeVuelta', () => {
   test('solo admite rutas del propio origen', () => {
     expect(
-      rutaDeVuelta('?volver=%2Ffrontend%2Fapp-web%2Fsrc%2Fplataforma%2Fsalas-partidas%2Fbatallas.html'),
+      rutaDeVuelta(
+        '?volver=%2Ffrontend%2Fapp-web%2Fsrc%2Fplataforma%2Fsalas-partidas%2Fbatallas.html',
+      ),
     ).toBe('/frontend/app-web/src/plataforma/salas-partidas/batallas.html');
     // Ni una URL absoluta a otro sitio, ni el truco del doble slash.
     expect(rutaDeVuelta('?volver=https%3A%2F%2Fmalo.example%2F')).toBeNull();

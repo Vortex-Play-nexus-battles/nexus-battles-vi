@@ -644,8 +644,21 @@ export function montarArmazon(
     navegar = (url) => {
       globalThis.location.href = url;
     },
+    documento = globalThis.document,
   } = {},
 ) {
+  // Página interrumpida por una guarda (§17): no se monta nada encima.
+  //
+  // Una vista puede tener su guarda en un `<script type="module">` y montar su
+  // cabecera desde OTRO módulo (`gestion-usuarios.js` lo hace). Lanzar una
+  // excepción detiene el módulo de la guarda, no el de al lado: el segundo
+  // seguía ejecutándose y pintaba la cabecera de consola encima de la
+  // pantalla de «sin acceso». Sin contenedor tampoco se monta: eso es lo que
+  // queda cuando esa pantalla ya sustituyó al `<body>`.
+  if (documento?.documentElement?.dataset?.acceso === 'denegado' || !raiz) {
+    return { elemento: null, sesion: null };
+  }
+
   const sesion = leerSesion(almacen, ahora);
   const elegido = armazon ?? armazonDeVista(vista) ?? (sesion.autenticado ? 'jugador' : 'publico');
 
