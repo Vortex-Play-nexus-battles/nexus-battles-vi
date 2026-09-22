@@ -169,7 +169,8 @@ textarea:focus-visible {
   display: flex !important;
   align-items: center;
   align-self: center;
-  min-height: 42px;
+  /* UX-R2.9 — 42 px se quedaban a dos del minimo tactil de 44. */
+  min-height: var(--objetivo-tactil);
 }
 
 .producto-premium input {

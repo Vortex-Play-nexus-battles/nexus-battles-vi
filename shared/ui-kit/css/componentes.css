@@ -887,6 +887,23 @@
   display: flex;
   gap: var(--e-5);
   border-bottom: 1px solid var(--borde);
+  /* UX-R2.9 — cuatro pestanas no caben en 375 px: en `perfil` el documento
+     medía 401 px y la ultima se salia por la derecha. Se desplazan a lo
+     ancho en vez de empujar la pagina entera; el resto de la vista deja de
+     tener scroll horizontal, que es lo que de verdad molesta.
+
+     `overscroll-behavior-x: contain` para que llegar al final de la tira no
+     dispare el gesto de «atras» del navegador. */
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.pestanas > .pestana {
+  /* Sin esto, `flex` las encoge hasta que el texto se parte en dos lineas en
+     vez de desplazarse. */
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .pestana {
@@ -1225,6 +1242,16 @@
 .radio__entrada:focus-visible {
   outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
   outline-offset: 2px;
+}
+
+/* UX-R2.9 — misma razon que en el panel de filtros: el objetivo tactil de
+   una casilla es su etiqueta, porque `<label>` reenvia el clic. La casilla
+   se queda en 20 px, que es su tamano de diseno y cumple los 24x24 de WCAG
+   2.5.8 contando el relleno de la etiqueta a su alrededor. */
+.casilla,
+.radio {
+  min-height: var(--objetivo-tactil);
+  align-items: center;
 }
 
 .casilla__etiqueta,
@@ -2824,28 +2851,171 @@
   border-top: 0;
 }
 
-/* Pantallas estrechas: la navegación baja a una segunda fila, nunca se
-   pierde un destino (RF-INV-004 exige los seis). RNF-USA-001. */
+/* =======================================================================
+   La cabecera en pantallas estrechas — UX-R2.9
+   -----------------------------------------------------------------------
+   Antes esto decia «la navegación baja a una segunda fila». En la practica
+   bajaba a TRES: el laboratorio visual (#600) media **180 px de cabecera a
+   375 px de ancho**, casi el triple de los 64 px que fija el diseno, y lo
+   encontraba en 30 de las 31 vistas en movil y en 18 en tablet — 48 de las
+   155 combinaciones medidas. La pagina empezaba media pantalla mas abajo.
+
+   Ahora la cabecera es UNA fila a cualquier anchura:
+
+     [marca corta] [campana] [avatar] [☰]
+
+   y los seis destinos se pliegan detras del boton. **No se pierde ninguno**:
+   HU-INV-004 CA-01 exige los seis accesos siempre, y siguen estando todos,
+   a un toque. Plegar no es esconder — lo que se esconde es lo que no se
+   puede alcanzar.
+
+   El panel se abre con `data-nav-abierto` en la cabecera, no con `hidden` en
+   el `<nav>`: quien decide si hay que plegar es el ancho, y eso solo lo sabe
+   el CSS. Asi el escritorio ignora el atributo y ensena los seis siempre.
+
+   Los objetivos tactiles suben a 44x44 (WCAG 2.5.8 AA). Eran 84x31, 48x31,
+   55x31…: 327 hallazgos del laboratorio, casi todos en esta barra.
+   ======================================================================= */
+
+/* El disparador no existe en escritorio: ahi caben los seis. */
+.cabecera__alternar {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--objetivo-tactil);
+  min-height: var(--objetivo-tactil);
+  border: 0;
+  border-radius: var(--radio);
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.cabecera__alternar:hover,
+.cabecera__alternar[aria-expanded='true'] {
+  background: var(--cromo-elevado);
+}
+
+.cabecera__alternar:focus-visible {
+  outline: 2px solid var(--acento-relleno);
+  outline-offset: 2px;
+}
+
+/* La marca corta solo aparece cuando la larga no cabe. */
+.cabecera__marca-corta {
+  display: none;
+}
+
+/* Objetivos tactiles del tamano minimo, en las tres anchuras. Un enlace de
+   texto de 31 px de alto se falla igual en escritorio con un raton impreciso
+   que en un movil con el pulgar. */
+.cabecera__marca,
+.cabecera__destino,
+.cabecera__campana,
+.cabecera__cuenta-boton {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--objetivo-tactil);
+}
+
+/* La campana es un enlace de solo icono: alto ya tenia, ancho no. Medía 24 px
+   y salia en 23 de las 31 vistas. */
+.cabecera__campana {
+  justify-content: center;
+  min-width: var(--objetivo-tactil);
+}
+
+/* Las pestanas son botones sin relleno vertical (`padding: 0`), asi que su
+   alto lo daba el texto: 31 px. */
+.pestana {
+  min-height: var(--objetivo-tactil);
+  justify-content: center;
+}
+
 @media (max-width: 860px) {
   .cabecera {
-    flex-wrap: wrap;
-    row-gap: var(--e-2);
-    padding: var(--e-2) var(--e-4);
+    /* Sin `wrap`: es justo lo que producia las tres filas. */
+    flex-wrap: nowrap;
+    gap: var(--e-2);
+    padding: 0 var(--e-3);
+    /* El panel de navegacion cuelga de aqui. */
+    position: relative;
   }
+
   .cabecera__grupo-marca {
-    flex-wrap: wrap;
-    gap: var(--e-4);
+    display: flex;
+    align-items: center;
+    gap: var(--e-2);
+    min-width: 0;
+    flex: 1 1 auto;
   }
-  .cabecera__nav {
-    order: 3;
-    flex-basis: 100%;
-    flex-wrap: wrap;
-    gap: var(--e-4);
+
+  .cabecera__marca-larga {
+    display: none;
   }
-  .cabecera__acciones {
+
+  .cabecera__marca-corta {
+    display: inline;
+  }
+
+  .cabecera__alternar {
+    display: inline-flex;
+    /* Ultimo de la fila, pegado a las acciones. */
+    order: 5;
     margin-left: auto;
   }
+
+  /* El panel: cae debajo de la barra, ocupa el ancho y se cierra solo al
+     navegar porque la pagina cambia. */
+  .cabecera__nav {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 30;
+    flex-direction: column;
+    gap: 0;
+    padding: var(--e-2);
+    background: var(--cromo);
+    box-shadow: var(--sombra-3);
+  }
+
+  .cabecera[data-nav-abierto='si'] .cabecera__nav {
+    display: flex;
+  }
+
+  .cabecera__destino {
+    /* A lo ancho: un destino por fila, sin tener que apuntar a 55 px. */
+    width: 100%;
+    padding: var(--e-2) var(--e-3);
+    border-bottom: 0;
+    border-radius: var(--radio-chico);
+  }
+
+  .cabecera__destino.activo {
+    background: var(--cromo-elevado);
+  }
+
+  .cabecera__buscador {
+    display: none;
+  }
+
+  .cabecera__acciones {
+    display: flex;
+    align-items: center;
+    gap: var(--e-1);
+  }
+
+  /* El apodo y el rango no caben; el avatar y el menu de cuenta si, y de ahi
+     se llega al perfil. El nombre accesible del boton no cambia. */
   .cabecera__identidad {
+    display: none;
+  }
+
+  /* El saldo en cifras tampoco cabe junto a todo lo demas. Esta en la home,
+     que es donde el jugador lo mira (jerarquia de UX-R2.6). */
+  .cabecera__dato {
     display: none;
   }
 }
@@ -3052,6 +3222,15 @@
   top: 50%;
   right: var(--e-1);
   transform: translateY(-50%);
+  /* UX-R2.9 — «Ver» medía 38x24. Es el control que decide si alguien puede
+     comprobar la contrasena que acaba de escribir, y en un movil se falla.
+     El relleno vertical sube al minimo tactil; el texto sigue igual de
+     pequeno, asi que no se come el campo. */
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--objetivo-tactil);
+  min-width: var(--objetivo-tactil);
+  justify-content: center;
   padding: var(--e-1) var(--e-2);
   border: 0;
   border-radius: var(--radio-chico);
@@ -3182,6 +3361,18 @@
   padding-top: var(--e-3);
   border-top: 1px solid var(--borde);
   font-size: var(--t-meta-tam);
+}
+
+/* UX-R2.9 — «¿Olvidaste tu contraseña?» y «Crear una cuenta» no son texto
+   dentro de una frase: son las dos salidas de la pantalla de entrada, y son
+   justo las que pulsa quien NO consigue entrar. Medían 20 px de alto.
+
+   La excepcion «inline» de WCAG 2.5.8 no aplica aqui porque no estan dentro
+   de un parrafo: estan solos, como acciones. Asi que les toca el minimo. */
+.entrada__pie a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--objetivo-tactil);
 }
 
 /* =======================================================================

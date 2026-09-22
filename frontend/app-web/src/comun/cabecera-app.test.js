@@ -287,3 +287,78 @@ describe('buscador solo donde aplica', () => {
     expect(alBuscar).toHaveBeenCalledWith('espada');
   });
 });
+
+/**
+ * UX-R2.9 — la cabecera en pantallas estrechas.
+ *
+ * El laboratorio visual (#600) medía **180 px de cabecera a 375 px de ancho**
+ * —casi el triple de los 64 px del diseño— en 30 de las 31 vistas en móvil y
+ * en 18 en tablet: 48 de las 155 combinaciones. La página empezaba media
+ * pantalla más abajo.
+ *
+ * Lo que se comprueba aquí es que plegar **no es esconder**: HU-INV-004 CA-01
+ * exige los seis accesos siempre, y siguen estando los seis.
+ */
+describe('cabecera plegable (UX-R2.9, HU-INV-004 CA-01)', () => {
+  test('los seis destinos siguen en el documento, plegados o no', () => {
+    const { elemento } = montar();
+
+    expect(elemento.dataset.navAbierto).toBe('no');
+    // Plegado NO es `hidden` ni `display:none` en el marcado: el nav está,
+    // con sus seis enlaces, y quien lo oculta es una media query.
+    expect(elemento.querySelectorAll('.cabecera__destino')).toHaveLength(6);
+    expect(elemento.querySelector('.cabecera__nav').hidden).toBe(false);
+  });
+
+  test('el disparador dice si está abierto, y lo cambia al pulsarlo', () => {
+    const { elemento } = montar();
+    const alternar = elemento.querySelector('[data-zona="alternar-nav"]');
+
+    expect(alternar.getAttribute('aria-expanded')).toBe('false');
+    expect(alternar.getAttribute('aria-controls')).toBe('cabecera-nav');
+    expect(elemento.querySelector('.cabecera__nav').id).toBe('cabecera-nav');
+
+    alternar.click();
+    expect(alternar.getAttribute('aria-expanded')).toBe('true');
+    expect(elemento.dataset.navAbierto).toBe('si');
+
+    alternar.click();
+    expect(alternar.getAttribute('aria-expanded')).toBe('false');
+    expect(elemento.dataset.navAbierto).toBe('no');
+  });
+
+  test('la etiqueta del disparador dice lo que va a pasar, no dónde está', () => {
+    const { elemento } = montar();
+    const alternar = elemento.querySelector('[data-zona="alternar-nav"]');
+
+    expect(alternar.getAttribute('aria-label')).toBe('Abrir el menú de navegación');
+    alternar.click();
+    expect(alternar.getAttribute('aria-label')).toBe('Cerrar el menú de navegación');
+  });
+
+  test('Escape cierra el menú y devuelve el foco al disparador', () => {
+    // Sin esto el teclado se queda con el menú abierto y sin forma de
+    // cerrarlo (WCAG 2.1.2, «sin trampas de teclado»).
+    const { elemento } = montar();
+    const alternar = elemento.querySelector('[data-zona="alternar-nav"]');
+    alternar.click();
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+    expect(elemento.dataset.navAbierto).toBe('no');
+    expect(alternar.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(alternar);
+  });
+
+  test('la marca corta no cambia el nombre accesible', () => {
+    // «NEXUS BATTLES VI» mide 154 px y a 375 px se comía media fila. La
+    // versión corta es decoración: quien usa lector de pantalla sigue oyendo
+    // el nombre entero, que lo fija el aria-label.
+    const { elemento } = montar();
+    const marca = elemento.querySelector('.cabecera__marca');
+
+    expect(marca.getAttribute('aria-label')).toBe('Nexus Battles VI — inicio');
+    expect(marca.querySelector('.cabecera__marca-larga').textContent).toBe('NEXUS BATTLES VI');
+    expect(marca.querySelector('.cabecera__marca-corta').getAttribute('aria-hidden')).toBe('true');
+  });
+});

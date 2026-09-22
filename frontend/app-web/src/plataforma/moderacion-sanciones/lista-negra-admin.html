@@ -26,7 +26,19 @@
         background: var(--color-fondo);
         color: var(--color-texto-principal);
         font-family: 'Inter', Arial, Helvetica, sans-serif;
-        min-width: 1360px;
+        /* UX-R2.9 — aqui decia `min-width: 1360px`, en el `body`. El
+           documento medía 1360 px SIEMPRE, asi que la pagina se salia por la
+           derecha en las cuatro anchuras por debajo de eso (1280, 1024, 768
+           y 375): cuatro de las seis apariciones de
+           `desbordamiento-horizontal` de todo el laboratorio venian de esta
+           linea. El ancho de trabajo comodo se pide donde corresponde —en el
+           contenedor, y como maximo— no obligando a la ventana entera. */
+        min-width: 0;
+      }
+
+      main {
+        max-width: 1360px;
+        margin: 0 auto;
       }
 
       header {
@@ -70,6 +82,9 @@
         color: #ffffff;
         border: none;
         border-radius: 6px;
+        /* UX-R2.9 — el alto lo daba el texto: 40 px, cuatro por debajo del
+           minimo tactil (WCAG 2.5.5). */
+        min-height: 44px;
         padding: 0 20px;
         font-size: 14px;
         font-weight: 600;
