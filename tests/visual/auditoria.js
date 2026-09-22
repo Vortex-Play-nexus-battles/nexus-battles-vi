@@ -29,6 +29,35 @@ import { OBJETIVO_TACTIL } from './vistas.js';
  */
 export async function desbordamientos(pagina) {
   return pagina.evaluate(() => {
+    /**
+     * ¿Este elemento vive dentro de algo que se desplaza a lo ancho?
+     *
+     * UX-R2.9 — una tabla ancha metida en un contenedor con
+     * `overflow-x: auto` **no es un defecto**: es la forma correcta de
+     * enseñar ocho columnas en un móvil. El documento no desborda (y por eso
+     * `desbordamiento-horizontal` no salta), pero la tabla sí sobresale del
+     * viewport, y esta comprobación la marcaba igual.
+     *
+     * Lo marcaba en `auditoria` a 768 y a 375, donde `.tabla-envoltorio` ya
+     * hacía exactamente lo que había que hacer. Un hallazgo que señala una
+     * solución correcta enseña a ignorar el informe, así que se corrige aquí
+     * y no en la vista.
+     *
+     * @param {Element} el
+     * @returns {boolean}
+     */
+    const dentroDeUnCarrusel = (el) => {
+      for (let padre = el.parentElement; padre; padre = padre.parentElement) {
+        const desplaza = getComputedStyle(padre).overflowX;
+        if (desplaza === 'auto' || desplaza === 'scroll') {
+          // Y de verdad cabe dentro de él: si el propio contenedor se sale
+          // del viewport, el problema sigue siendo real.
+          return padre.getBoundingClientRect().right <= document.documentElement.clientWidth + 1;
+        }
+      }
+      return false;
+    };
+
     const hallazgos = [];
     const doc = document.documentElement;
     // 1 px de margen: los redondeos de subpíxel no son un defecto.
@@ -45,7 +74,7 @@ export async function desbordamientos(pagina) {
         continue;
       }
       const fijo = getComputedStyle(el).position === 'fixed';
-      if (!fijo && caja.right > ancho + 1) {
+      if (!fijo && caja.right > ancho + 1 && !dentroDeUnCarrusel(el)) {
         hallazgos.push({
           motivo: 'elemento-fuera-del-viewport',
           detalle: `${el.tagName.toLowerCase()}.${el.className || '(sin clase)'} acaba en ${Math.round(caja.right)}px`,
@@ -128,10 +157,38 @@ export async function objetivosTactiles(pagina, minimo = OBJETIVO_TACTIL) {
         continue;
       }
       // Un enlace dentro de un párrafo es texto, no un control: se mide solo
-      // lo que se presenta como control.
+      // lo que se presenta como control. Es la excepción «inline» que WCAG
+      // 2.5.8 recoge explícitamente.
       const estilo = getComputedStyle(el);
       if (el.tagName === 'A' && estilo.display === 'inline') {
         continue;
+      }
+
+      // UX-R2.9 — una casilla o un radio nativos miden 13 px y no hay forma
+      // razonable de inflarlos a 44 sin que parezcan otra cosa. Lo que se
+      // pulsa de verdad es su ETIQUETA, porque `<label>` reenvía el clic al
+      // control. Así que el objetivo es la etiqueta, y es ella la que tiene
+      // que medir 44.
+      //
+      // Los 25 hallazgos de `subastas` eran exactamente esto: el panel de
+      // filtros, donde cada opción es `<label><input type="checkbox">…`, con
+      // la etiqueta bien dimensionada y el `input` diminuto dentro.
+      if (el.tagName === 'INPUT') {
+        const etiqueta =
+          el.closest('label') ??
+          (el.id ? document.querySelector(`label[for="${CSS.escape(el.id)}"]`) : null);
+        if (etiqueta) {
+          const cajaEtiqueta = etiqueta.getBoundingClientRect();
+          if (cajaEtiqueta.height >= min && cajaEtiqueta.width >= min) {
+            continue;
+          }
+          // Si la etiqueta tampoco llega, el defecto es de la etiqueta.
+          hallazgos.push({
+            motivo: 'objetivo-tactil-pequeno',
+            detalle: `label«${(etiqueta.textContent ?? '').trim().slice(0, 24)}» mide ${Math.round(cajaEtiqueta.width)}×${Math.round(cajaEtiqueta.height)}`,
+          });
+          continue;
+        }
       }
       if (caja.height < min || caja.width < min) {
         hallazgos.push({

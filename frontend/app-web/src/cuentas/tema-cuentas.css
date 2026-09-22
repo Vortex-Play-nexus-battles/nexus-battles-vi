@@ -76,7 +76,8 @@ input[type='url'],
 input[type='email'],
 input[type='password'] {
   min-width: 240px;
-  height: 40px;
+  /* UX-R2.9 — ver la nota del boton, mas abajo. */
+  min-height: var(--objetivo-tactil);
   padding: 0 12px;
   border: 1px solid var(--borde-interactivo);
   border-radius: 6px;
@@ -121,8 +122,12 @@ button:focus {
   color: var(--advertencia);
 }
 
+/* UX-R2.9 — 40 px era lo que traia la maqueta; el minimo tactil son 44
+   (WCAG 2.5.5). Se cambia la ALTURA MINIMA, nada mas: el relleno lateral y
+   el tamano de letra siguen igual, asi que el control se ve como se veia y
+   ademas se puede pulsar. */
 button {
-  min-height: 40px;
+  min-height: var(--objetivo-tactil);
   padding: 8px 16px;
   border: 0;
   border-radius: 6px;
