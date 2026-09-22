@@ -10,6 +10,11 @@
 
 plugins {
     id 'nexus.spring-conventions'
+    // R8.1: resolver un ataque decide quien gana una partida. Hasta aqui este
+    // modulo no tenia Spring Security en el classpath y el endpoint respondia
+    // a cualquiera que alcanzara el puerto. Las reglas de ruta estan en
+    // nexus/combate/arranque/SeguridadConfig.java.
+    id 'nexus.seguridad-conventions'
 }
 
 group = 'nexus'
