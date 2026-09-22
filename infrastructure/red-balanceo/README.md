@@ -9,16 +9,24 @@ de entrada público del host de plataforma en AWS: `http://<ip-del-host>/`.
 |---|---|
 | `/` | redirige a `/frontend/app-web/src/cuentas/login.html` |
 | `/frontend/app-web/src/…`, `/shared/ui-kit/…` | archivos estáticos del repo, misma jerarquía (las vistas usan `../../../../../shared/ui-kit`) |
-| `/api/v1/salas` | `srv-salas-partidas:8084` |
+| `/api/v1/salas`, `/api/v1/partidas` | `srv-salas-partidas:8084` |
 | `/api/v1/users` | `srv-notificaciones:8085` |
 | `/api/v1/products` | `srv-comentarios:8081` |
 | `/api/v1/correos` | **no se expone**: correo es entre servicios (ADR-005); desde fuera, 404 |
-| `/api/v1/lista-negra`, `/api/v1/sanciones` | `srv-moderacion-sanciones:8086` |
-| `/api/v1/{latencia,disponibilidad,consultas,degradacion}` | `srv-metricas-plataforma:8087` |
+| `/api/v1/lista-negra`, `/api/v1/sanciones`, `/api/v1/apelaciones` | `srv-moderacion-sanciones:8086` |
+| `/api/v1/torneos` | `srv-torneos:8083` |
+| `/api/v1/parametros` | `srv-admin-parametros:8088` |
+| `/api/v1/{latencia,disponibilidad,consultas,degradacion,tecnicas,moderacion}` | `srv-metricas-plataforma:8087` |
+| **`/api/v1/admin/auditoria…`** | **`srv-ms-cumplimiento:8091`** — con `^~`, ver abajo |
 | `/api/v1/{auth,perfiles,rbac,admin}` | `srv-ms-identidad:8089` |
+| `/api/v1/{creditos,transacciones}` | `srv-ms-finanzas:8093` |
+| **`/api/v1/cofres`** | **`srv-ms-finanzas:8093`** — añadido en R8.4, no existía |
+| `/api/v1/{subastas,mis-pujas}` | `srv-ms-subastas:8092` |
 | `/api/v1/carrito…` | `srv-ms-ecommerce:8090`, reescrito a `/ecommerce/api/v1/carrito…` |
 | `GET /api/v1/productos` (exacto) | `srv-ms-ecommerce:8090` → `/ecommerce/api/v1/productos` (vitrina) |
-| `/api/v1/productos…` (resto) | `srv-productos:8080` (catálogo de contenido) |
+| `/api/v1/productos…` (resto) | **`34.193.90.11:8103`** (host de contenido, desde el PR #611) |
+| `/api/v1/{heroes,equipos,estrategias,progresion}` | **`34.193.90.11:8101`** (host de contenido) |
+| `/api/v1/inventario` | **`34.193.90.11:8102`** (host de contenido) |
 | `/ws/notificaciones` | `srv-notificaciones:8085` |
 | `/ws` | `srv-salas-partidas:8084` |
 | `/mailpit/` | bandeja del SMTP de pruebas |
@@ -52,6 +60,27 @@ docker compose down -v
 ```
 
 No cuesta nada, no toca AWS y no necesita ningún servicio real.
+
+### Precedencia de `location`: por qué `/admin/auditoria` lleva `^~`
+
+nginx **no** elige la `location` por orden de aparición. El orden real es:
+
+1. `=` — coincidencia exacta, gana sobre todo;
+2. `^~` — prefijo más largo; si gana, **no se evalúan las expresiones regulares**;
+3. `~` / `~*` — expresiones regulares, en orden de aparición, la primera que case;
+4. prefijo simple — el más largo memorizado, **solo si ninguna regex casó**.
+
+Un prefijo simple se resuelve en el paso 4, o sea **después** de todas las
+regex. Por eso `location /api/v1/admin/auditoria` perdía siempre contra
+`location ~ ^/api/v1/(auth|perfiles|rbac|admin)`, estuviera declarado donde
+estuviera: la petición terminaba en ms-identidad, que no publica esa ruta, y la
+vista de auditoría recibía su 404 de Spring. Estuvo así del 17 al 22 de
+septiembre, dándose por arreglada.
+
+`^~` la resuelve en el paso 2 y nginx ni mira las regex.
+
+Esto lo fija `pruebas/comprobar-rutas.sh`, que desde R8.4 corre en integración
+continua en cada cambio de esta carpeta.
 
 ### Colisión conocida: `/api/v1/productos`
 
