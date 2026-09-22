@@ -749,6 +749,43 @@ DEMASIADO GENÉRICA a propósito.
 | 16 | `crear-sala` | Tildes |
 | 17 | kit | `.dialogo__titulo` declarado dos veces con dos escalas distintas |
 
+### Deuda medida que este bloque NO cierra
+
+**94 literales de color en 9 hojas de vista.** Medido con los comentarios
+descontados, sobre las hojas que sigue git:
+
+| Hoja | Literales |
+|---|---|
+| `cuentas/pujas.css` | **59** (21 colores distintos) |
+| `cuentas/historial-transacciones.css` | 15 |
+| `cuentas/tema-cuentas.css` | 9 |
+| `cuentas/registro.css` | 4 |
+| `contenido/inventario/ficha-producto.css` | 3 |
+| otras cuatro | 1 cada una |
+
+Hay que separar dos cosas que no son lo mismo:
+
+- **Las tres paletas paralelas** —las que redefinían un componente compartido
+  con sus propios colores y por tanto **tapaban el modo de alto contraste del
+  kit**— están las tres eliminadas: el `<style>` de lista negra (R3.3),
+  `productos.css` (R3.3) y `mis-cofres.css` (R3.11). Eso es lo que rompía
+  accesibilidad, y eso está cerrado; `tokens-sin-sombra` lo vigila.
+- **Lo que queda son literales dentro de componentes propios de una vista** que
+  no tapan nada del kit: `.tarjeta-subasta`, `.badge-legendaria`,
+  `.caja-consejo-tactico`. No rompen el alto contraste, pero tampoco salen del
+  sistema de diseño, así que «paleta oficial respetada» **no se cumple del
+  todo** y decirlo es más útil que decir que sí.
+
+El grueso es `pujas.css`, que está en la lista protegida de HU-SUB-001 y cuyo
+dueño es grupo-4. Sus 21 colores incluyen los distintivos de rareza
+—`.badge-comun`, `.badge-epica`, `.badge-legendaria`—, que son el caso más claro
+de algo que **debería** salir de las fichas de rareza del kit, porque la rareza
+es un concepto de primera clase del producto y no un adorno de una pantalla.
+
+Hacerlo aquí, al cierre y contra un fichero protegido, sería meter un cambio
+visual grande sin su dueño y sin evidencia propia. Queda como trabajo con
+nombre y con número, no como «pendiente de pulir».
+
 ### Lo que queda anotado y no se toca
 
 - **El sprite no tiene icono de cofre.** Treinta símbolos, ninguno sirve. `mis-cofres` queda sin icono antes que con uno que signifique otra cosa. Pedirlo al archivo de Figma es trabajo de diseño, no de este bloque.
