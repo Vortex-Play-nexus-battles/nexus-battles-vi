@@ -37,7 +37,7 @@ export function textoDeConfirmacion(sala) {
     return '¿Cancelar la sala? Todavía no ha entrado nadie mas.';
   }
   const gente = otros === 1 ? '1 participante' : `${otros} participantes`;
-  return `¿Cancelar la sala? Se expulsara a ${gente}.`;
+  return `¿Cancelar la sala? Se expulsará a ${gente}.`;
 }
 
 /**

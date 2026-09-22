@@ -89,7 +89,11 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     });
     expect(r.status(), await r.text()).toBe(200);
     const s = await r.json();
-    return { bruto: Number(s.saldoBruto), reservado: Number(s.saldoReservado), disponible: Number(s.saldoDisponible) };
+    return {
+      bruto: Number(s.saldoBruto),
+      reservado: Number(s.saldoReservado),
+      disponible: Number(s.saldoDisponible),
+    };
   }
 
   async function detalle() {
@@ -130,7 +134,9 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     expect(negado.status()).toBe(403);
     expect((await negado.json()).motivo).toBe('PERMISO_INSUFICIENTE');
 
-    const sinToken = await api.post('/api/v1/torneos', { data: { nombre: 'x', inscripcionesCierranEn: cierre } });
+    const sinToken = await api.post('/api/v1/torneos', {
+      data: { nombre: 'x', inscripcionesCierranEn: cierre },
+    });
     expect(sinToken.status()).toBe(401);
 
     const creado = await api.post('/api/v1/torneos', {
@@ -157,7 +163,9 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     expect(r.status()).toBe(409);
     const problema = await r.json();
     expect(problema.motivo).toBe('VENTANA_DE_91_DIAS');
-    expect(Date.parse(problema.proximaFechaPosible)).toBeGreaterThan(Date.now() + 90 * 24 * 3600 * 1000);
+    expect(Date.parse(problema.proximaFechaPosible)).toBeGreaterThan(
+      Date.now() + 90 * 24 * 3600 * 1000,
+    );
   });
 
   test('equipos: nombre prohibido 422; un jugador en un solo equipo 409; el equipo queda registrado sin inscribir', async () => {
@@ -201,9 +209,12 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     });
     expect(delPobre.status(), await delPobre.text()).toBe(201);
     const equipoPobre = await delPobre.json();
-    const sinCreditos = await api.post(`/api/v1/torneos/${torneo.id}/equipos/${equipoPobre.id}/inscripcion`, {
-      headers: conToken(pobre.token),
-    });
+    const sinCreditos = await api.post(
+      `/api/v1/torneos/${torneo.id}/equipos/${equipoPobre.id}/inscripcion`,
+      {
+        headers: conToken(pobre.token),
+      },
+    );
     expect(sinCreditos.status(), await sinCreditos.text()).toBe(422);
     expect((await sinCreditos.json()).motivo).toBe('CREDITOS_INSUFICIENTES');
 
@@ -213,9 +224,12 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     expect(ajeno.status()).toBe(403);
 
     saldoAntes = await saldoDe(anfitriona);
-    const inscrito = await api.post(`/api/v1/torneos/${torneo.id}/equipos/${equipo.id}/inscripcion`, {
-      headers: conToken(anfitriona.token),
-    });
+    const inscrito = await api.post(
+      `/api/v1/torneos/${torneo.id}/equipos/${equipo.id}/inscripcion`,
+      {
+        headers: conToken(anfitriona.token),
+      },
+    );
     expect(inscrito.status(), await inscrito.text()).toBe(201);
     const cuerpo = await inscrito.json();
     expect(cuerpo.inscrito).toBe(true);
@@ -227,9 +241,12 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     expect(saldo.reservado).toBe(saldoAntes.reservado + COSTO);
     expect(saldo.bruto, 'reservado, todavia no cobrado').toBe(saldoAntes.bruto);
 
-    const otraVez = await api.post(`/api/v1/torneos/${torneo.id}/equipos/${equipo.id}/inscripcion`, {
-      headers: conToken(invitado.token),
-    });
+    const otraVez = await api.post(
+      `/api/v1/torneos/${torneo.id}/equipos/${equipo.id}/inscripcion`,
+      {
+        headers: conToken(invitado.token),
+      },
+    );
     expect(otraVez.status()).toBe(409);
     expect((await otraVez.json()).motivo).toBe('YA_INSCRITO');
     expect((await detalle()).equiposInscritos).toBe(1);
@@ -241,14 +258,18 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     });
     expect(porJugadora.status()).toBe(403);
 
-    const r = await api.post(`/api/v1/torneos/${torneo.id}/inicio`, { headers: conToken(admin.token) });
+    const r = await api.post(`/api/v1/torneos/${torneo.id}/inicio`, {
+      headers: conToken(admin.token),
+    });
     expect(r.status(), await r.text()).toBe(200);
     const enCurso = await r.json();
     expect(enCurso.estado).toBe('EN_CURSO');
     expect(enCurso.equipos.filter((e) => e.inscrito)).toHaveLength(8);
     expect(enCurso.equipos.filter((e) => e.ia)).toHaveLength(7);
     expect(enCurso.encuentros).toHaveLength(14);
-    expect(enCurso.encuentros.filter((e) => e.estado === 'LISTO').map((e) => e.numero)).toEqual([1, 2, 3, 4]);
+    expect(enCurso.encuentros.filter((e) => e.estado === 'LISTO').map((e) => e.numero)).toEqual([
+      1, 2, 3, 4,
+    ]);
     expect(enCurso.encuentros[0].equipoA).toBe(equipo.id);
 
     const saldo = await saldoDe(anfitriona);
@@ -307,7 +328,10 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
 
     const segundo = await api.post(`/api/v1/torneos/${torneo.id}/encuentros/2/resultado`, {
       headers: conToken(admin.token),
-      data: { ganadorEquipoId: actual.encuentros[1].equipoA, motivo: 'Incomparecencia del rival (E2E)' },
+      data: {
+        ganadorEquipoId: actual.encuentros[1].equipoA,
+        motivo: 'Incomparecencia del rival (E2E)',
+      },
     });
     expect(segundo.status(), await segundo.text()).toBe(200);
     actual = await segundo.json();
@@ -354,7 +378,9 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     // La prueba se actualiza, no se afloja: HU-TOR-004 CA-04 pide que el
     // resultado lo aporte la partida jugada, no un texto concreto — el enum del
     // contrato es LISTO (torneos.yaml). Lo que se sigue afirmando es lo mismo.
-    const fila5 = page.locator('[data-zona="detalle"] [data-llave="GANADORES"] article[data-numero="5"]');
+    const fila5 = page.locator(
+      '[data-zona="detalle"] [data-llave="GANADORES"] article[data-numero="5"]',
+    );
     await expect(fila5).toContainText('Listo para jugarse', { timeout: 20000 });
     const enlace = fila5.locator('[data-accion="jugar-encuentro"]');
     await expect(enlace).toHaveAttribute('href', new RegExp(`torneo=${torneo.id}&encuentro=5$`));
@@ -362,7 +388,9 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     await expect(
       // Tambien <article>: con `li` esta asercion daba 0 por no encontrar el
       // nodo, no por no haber enlace. Pasaba por la razon equivocada.
-      page.locator('[data-zona="detalle"] article[data-numero="3"] [data-accion="jugar-encuentro"]'),
+      page.locator(
+        '[data-zona="detalle"] article[data-numero="3"] [data-accion="jugar-encuentro"]',
+      ),
     ).toHaveCount(0);
     await enlace.click();
     await expect(page).toHaveURL(new RegExp(`${CREAR_SALA}\\?torneo=${torneo.id}&encuentro=5`));
@@ -378,7 +406,10 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     await page.click('[type="submit"]');
     const creada = await respuesta;
     expect(creada.status(), await creada.text()).toBe(201);
-    expect(creada.request().postDataJSON().torneo).toEqual({ torneoId: torneo.id, numeroEncuentro: 5 });
+    expect(creada.request().postDataJSON().torneo).toEqual({
+      torneoId: torneo.id,
+      numeroEncuentro: 5,
+    });
     const sala = await creada.json();
     expect(sala.modalidad).toBe('CONTRA_IA');
 
@@ -390,7 +421,9 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
 
     await page.goto(`${BORDE}${SALA_BATALLA}?sala=${sala.id}&partida=${partida.id}`);
     const leerPartida = async () => {
-      const r = await api.get(`/api/v1/partidas/${partida.id}`, { headers: conToken(anfitriona.token) });
+      const r = await api.get(`/api/v1/partidas/${partida.id}`, {
+        headers: conToken(anfitriona.token),
+      });
       partida = await r.json();
       return partida;
     };
@@ -403,7 +436,10 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
         .poll(
           async () => {
             await leerPartida();
-            return partida.estado !== 'EN_CURSO' || partida.turnoActual.idJugador === anfitriona.claims.uid;
+            return (
+              partida.estado !== 'EN_CURSO' ||
+              partida.turnoActual.idJugador === anfitriona.claims.uid
+            );
           },
           { timeout: 25000, message: `golpe ${golpes + 1}: la maquina no devuelve el turno` },
         )
@@ -434,7 +470,9 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     // combate es real y no se fuerza el resultado).
     console.log(
       `[HU-TOR-004] partida ${partida.id} terminada en ${golpes} golpes: ` +
-        (ganoLaHumana ? 'gano la anfitriona -> lo informa salas-partidas' : 'gano la maquina -> D-26, lo registra el administrador'),
+        (ganoLaHumana
+          ? 'gano la anfitriona -> lo informa salas-partidas'
+          : 'gano la maquina -> D-26, lo registra el administrador'),
     );
 
     if (ganoLaHumana) {
@@ -457,7 +495,11 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
       expect(e5.estado).toBe('LISTO');
       const aMano = await api.post(`/api/v1/torneos/${torneo.id}/encuentros/5/resultado`, {
         headers: conToken(admin.token),
-        data: { ganadorEquipoId: e5.equipoB, partidaId: partida.id, motivo: 'Gano la maquina en la partida (E2E)' },
+        data: {
+          ganadorEquipoId: e5.equipoB,
+          partidaId: partida.id,
+          motivo: 'Gano la maquina en la partida (E2E)',
+        },
       });
       expect(aMano.status(), await aMano.text()).toBe(200);
     }
@@ -474,7 +516,9 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
       }
       expect(encuentro.estado, `encuentro ${numero} listo`).toBe('LISTO');
       // Gana siempre el equipo de la anfitriona si juega; si no, el A.
-      const ganador = [encuentro.equipoA, encuentro.equipoB].includes(equipo.id) ? equipo.id : encuentro.equipoA;
+      const ganador = [encuentro.equipoA, encuentro.equipoB].includes(equipo.id)
+        ? equipo.id
+        : encuentro.equipoA;
       const r = await api.post(`/api/v1/torneos/${torneo.id}/encuentros/${numero}/resultado`, {
         headers: conToken(admin.token),
         data: { ganadorEquipoId: ganador, motivo: 'Incomparecencia del rival (E2E)' },
@@ -501,7 +545,9 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     expect(actual.encuentros[4].ganador, 'lo jugado no se toca').toBe(gano5);
   });
 
-  test('la vista «Torneo» muestra el torneo, el campeon y el arbol (HU-TOR-008)', async ({ page }) => {
+  test('la vista «Torneo» muestra el torneo, el campeon y el arbol (HU-TOR-008)', async ({
+    page,
+  }) => {
     await page.addInitScript(
       ([token, nombre, uid]) => {
         sessionStorage.setItem('nexus.token', token);
@@ -511,18 +557,27 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
       [anfitriona.token, ANFITRION, anfitriona.claims.uid],
     );
     await page.goto(`${BORDE}${VISTA}?torneo=${torneo.id}`);
-    await expect(page.locator('.cabecera [data-seccion="torneo"]')).toHaveAttribute('aria-current', 'page');
-    await expect(page.locator(`[data-zona="listado"] [data-torneo-id="${torneo.id}"]`)).toBeVisible({
-      timeout: 20000,
-    });
+    await expect(page.locator('.cabecera [data-seccion="torneo"]')).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    await expect(page.locator(`[data-zona="listado"] [data-torneo-id="${torneo.id}"]`)).toBeVisible(
+      {
+        timeout: 20000,
+      },
+    );
     const detalleVista = page.locator('[data-zona="detalle"]');
     await expect(detalleVista).toHaveAttribute('data-estado', 'FINALIZADO');
-    await expect(detalleVista.locator('[data-zona="campeon"]')).toHaveText('Campeon: Los Valientes');
+    await expect(detalleVista.locator('[data-zona="campeon"]')).toHaveText(
+      'Campeon: Los Valientes',
+    );
     // R8.2 — mismos <article> del kit (#592). Este test estaba SALTADO porque
     // el describe es `serial` y el anterior fallaba; al arreglarlo despierta, y
     // con `li` habria dado un tercer rojo.
     await expect(detalleVista.locator('[data-llave="GANADORES"] article.encuentro')).toHaveCount(7);
-    await expect(detalleVista.locator('[data-llave="SECUNDARIOS"] article.encuentro')).toHaveCount(6);
+    await expect(detalleVista.locator('[data-llave="SECUNDARIOS"] article.encuentro')).toHaveCount(
+      6,
+    );
     await expect(detalleVista.locator('[data-llave="FINAL"] article.encuentro')).toHaveCount(1);
     // R8.2 — se afirma sobre el MARCADOR de ganador, no sobre una frase.
     //
@@ -539,7 +594,11 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     await expect(
       detalleVista.locator('[data-llave="FINAL"] article.encuentro .encuentro__equipo--ganador'),
     ).toContainText('Los Valientes');
-    await expect(detalleVista.locator('[data-zona="equipos"] article[data-ia="true"]')).toHaveCount(7);
-    await expect(detalleVista.locator(`[data-equipo-id="${equipo.id}"]`)).toContainText('(tu equipo)');
+    await expect(detalleVista.locator('[data-zona="equipos"] article[data-ia="true"]')).toHaveCount(
+      7,
+    );
+    await expect(detalleVista.locator(`[data-equipo-id="${equipo.id}"]`)).toContainText(
+      '(tu equipo)',
+    );
   });
 });

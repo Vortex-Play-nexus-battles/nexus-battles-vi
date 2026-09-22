@@ -242,11 +242,15 @@ test.describe('Sanciones y apelaciones (HU-USR-004/005/006/007, HU-NOT-005)', ()
     });
     expect(ajena.status(), 'solo el sancionado apela').toBe(422);
 
-    const pendientes = await api.get('/api/v1/apelaciones', { headers: conToken(moderadora.token) });
+    const pendientes = await api.get('/api/v1/apelaciones', {
+      headers: conToken(moderadora.token),
+    });
     expect(pendientes.status()).toBe(200);
     expect((await pendientes.json()).map((a) => a.id)).toContain(apelacion.id);
 
-    const mias = await api.get('/api/v1/apelaciones?mias=true', { headers: conToken(jugadora.token) });
+    const mias = await api.get('/api/v1/apelaciones?mias=true', {
+      headers: conToken(jugadora.token),
+    });
     expect(mias.status()).toBe(200);
     expect((await mias.json()).map((a) => a.id)).toContain(apelacion.id);
 
@@ -287,9 +291,7 @@ test.describe('Sanciones y apelaciones (HU-USR-004/005/006/007, HU-NOT-005)', ()
     const laAdvertencia = page.locator(`[data-sancion-id="${advertencia.id}"]`);
     await expect(laSuspension).toContainText(/revertida/, { timeout: 20000 });
     await expect(laAdvertencia).toContainText(/no restringe tu acceso/);
-    await expect(page.locator(`[data-apelacion-id="${apelacion.id}"]`)).toContainText(
-      /revertida/,
-    );
+    await expect(page.locator(`[data-apelacion-id="${apelacion.id}"]`)).toContainText(/revertida/);
     // La revertida ya no se apela; la advertencia sigue vigente y si (queda en
     // el historial y el jugador puede pedir que se retire).
     await expect(laSuspension.locator('[data-accion="apelar"]')).toHaveCount(0);
@@ -306,7 +308,9 @@ test.describe('Sanciones y apelaciones (HU-USR-004/005/006/007, HU-NOT-005)', ()
     );
     await page.fill('[data-zona="buscar"] [name="usuarioId"]', jugadora.claims.uid);
     await page.click('[data-zona="buscar"] button[type="submit"]');
-    await expect(page.locator(`[data-zona="historial"] [data-sancion-id="${suspension.id}"]`)).toBeVisible({
+    await expect(
+      page.locator(`[data-zona="historial"] [data-sancion-id="${suspension.id}"]`),
+    ).toBeVisible({
       timeout: 20000,
     });
     await expect(

@@ -517,7 +517,7 @@ describe('mostrarAvisoDeSala', () => {
 
     const mostrado = mostrarAvisoDeSala(document, {
       tono: 'advertencia',
-      titulo: 'La sala se cerro',
+      titulo: 'La sala se cerró',
       detalle: 'El anfitrion cancelo la sala. Se te devolvieron 150 créditos.',
     });
 
@@ -526,7 +526,7 @@ describe('mostrarAvisoDeSala', () => {
     expect(zona.hidden).toBe(false);
     expect(zona.className).toBe('aviso aviso--advertencia');
     expect(zona.querySelector('[data-zona="aviso-sala-titulo"]').textContent).toBe(
-      'La sala se cerro',
+      'La sala se cerró',
     );
     expect(zona.querySelector('[data-zona="aviso-sala-detalle"]').textContent).toContain(
       '150 créditos',

@@ -30,11 +30,21 @@
  *   - los nodos de texto del marcado (lo que hay entre `>` y `<`);
  *   - los atributos que una persona lee: `placeholder`, `title`, `aria-label`,
  *     `alt`, `value`;
- *   - las cadenas de los módulos que parecen una frase (tres palabras o más).
+ *   - las cadenas de los módulos que parecen una frase (tres palabras o más);
+ *   - y las cadenas de los `<script>` **del propio marcado**. Esto último se
+ *     añadió después: la primera versión los descartaba enteros y por eso se le
+ *     escapó `titulo: 'La sala se cerro'` en `sala-batalla.html`, que sí se
+ *     pinta. Lo encontró una prueba de extremo a extremo que esperaba ese texto,
+ *     no el guardián.
  *
  * Deja fuera, a propósito:
  *
  *   - los comentarios de código, que van sin tilde en este repositorio;
+ *   - `throw new Error('sin sesion: redirigiendo al login')` y sus veinte
+ *     copias: eso detiene el módulo mientras el navegador redirige, y nadie lo
+ *     lee nunca;
+ *   - los `console.*`, que salen por la consola del navegador y no por la
+ *     pantalla. Misma exención que en `copy-de-producto.test.js`;
  *   - los identificadores, los selectores y las claves de objeto, que son
  *     ASCII siempre (`creditosDe`, `[data-zona="creditos"]`, `/api/v1/creditos`);
  *   - las listas de clases del kit (`boton boton--primario boton--pequeno`),
@@ -47,12 +57,19 @@
  * 101 estaban en cadenas COPIADAS entre módulos («Revisa tu conexion e
  * intentalo de nuevo.» aparecía seis veces, idéntica).
  *
- * ## Dos palabras que NO están en la lista
+ * ## Lo que esta lista NO puede decidir
  *
  * `rechazo`/`rechazó` y `valida`/`válida`: las dos formas son correctas según
  * sean sustantivo o verbo, y una regla automática no sabe cuál toca. Se probó:
  * dejó «el motivo del rechazó» en `crear-sala.html` y «válida defensa» en once
  * nombres de prueba. Fuera de la lista.
+ *
+ * Por lo mismo quedan fuera las terceras personas del pasado que coinciden con
+ * otra palabra: `cerro`/`cerró` (un cerro es un cerro), `cancelo`/`canceló`
+ * («yo cancelo»), `expulsara`/`expulsará` (subjuntivo). Las tres estaban mal
+ * escritas en `canal-sala.js` y `sala-de-espera.js` y **este guardián no las
+ * habría encontrado**: las encontró una prueba de extremo a extremo que
+ * esperaba el texto viejo. Conviene saber qué no cubre una prueba.
  */
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -67,6 +84,7 @@ const PARES = Object.freeze({
   administracion: 'administración',
   algun: 'algún',
   analisis: 'análisis',
+  anfitrion: 'anfitrión',
   apelacion: 'apelación',
   aplicacion: 'aplicación',
   aqui: 'aquí',
@@ -198,26 +216,46 @@ function ficheros(extension) {
   return encontrados;
 }
 
-/** Nodos de texto y atributos que una persona lee. */
+/**
+ * `throw new Error(...)` dentro de la guarda de una vista: detiene el módulo
+ * mientras el navegador redirige. No se lee. Veinte vistas lo tienen idéntico.
+ */
+const DIAGNOSTICO = [
+  /throw new Error\([\s\S]*?\);/g,
+  // Un `console.*` sale por la consola del navegador, no por la pantalla.
+  // Misma exención que en `copy-de-producto.test.js`, por la misma razón.
+  /console\.(?:log|warn|error|info|debug)\([\s\S]*?\);/g,
+];
+
+/** Nodos de texto, atributos que una persona lee, y las cadenas de sus scripts. */
 function visibleDeVista(ruta) {
-  const html = readFileSync(ruta, 'utf8')
-    .replace(/<!--[\s\S]*?-->/g, ' ')
+  const crudo = readFileSync(ruta, 'utf8').replace(/<!--[\s\S]*?-->/g, ' ');
+  const guiones = [...crudo.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+  const html = crudo
     .replace(/<script[\s\S]*?<\/script>/g, ' ')
     .replace(/<style[\s\S]*?<\/style>/g, ' ');
   return [
     ...[...html.matchAll(/>([^<>]+)</g)].map((m) => m[1]),
     ...[...html.matchAll(/(?:placeholder|title|aria-label|alt|value)="([^"]+)"/g)].map((m) => m[1]),
+    ...guiones.flatMap((guion) => cadenasDe(sinDiagnostico(guion))),
   ];
+}
+
+function sinDiagnostico(js) {
+  return DIAGNOSTICO.reduce((texto, patron) => texto.replace(patron, ' '), js);
+}
+
+/** Las cadenas de un trozo de JavaScript, sin sus comentarios. */
+function cadenasDe(js) {
+  const limpio = js.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
+  return [...limpio.matchAll(/'([^'\n]{6,})'|"([^"\n]{6,})"|`([^`\n]{6,})`/g)].flatMap((m) =>
+    m.slice(1).filter(Boolean),
+  );
 }
 
 /** Cadenas del módulo, sin comentarios. */
 function visibleDeModulo(ruta) {
-  const js = readFileSync(ruta, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/^\s*\/\/.*$/gm, ' ');
-  return [...js.matchAll(/'([^'\n]{6,})'|"([^"\n]{6,})"|`([^`\n]{6,})`/g)].flatMap((m) =>
-    m.slice(1).filter(Boolean),
-  );
+  return cadenasDe(sinDiagnostico(readFileSync(ruta, 'utf8')));
 }
 
 function hallazgos(nombre, trozos) {

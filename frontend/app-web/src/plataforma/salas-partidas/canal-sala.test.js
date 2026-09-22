@@ -362,11 +362,11 @@ describe('cancelacion de la sala (HU-SAL-006, CA-02)', () => {
   });
 
   test('el texto traduce el motivo y cuenta los créditos devueltos si los hubo', () => {
-    expect(textoDeCancelacion(avisoDeCancelacion())).toBe('El anfitrion cancelo la sala.');
+    expect(textoDeCancelacion(avisoDeCancelacion())).toBe('El anfitrión canceló la sala.');
     expect(textoDeCancelacion(avisoDeCancelacion({ creditosDevueltos: 150 }))).toBe(
-      'El anfitrion cancelo la sala. Se te devolvieron 150 créditos.',
+      'El anfitrión canceló la sala. Se te devolvieron 150 créditos.',
     );
     expect(textoDeCancelacion({ motivo: 'INACTIVIDAD' })).toMatch(/inactividad/i);
-    expect(textoDeCancelacion({ motivo: 'ALGO_NUEVO' })).toBe('La sala se cerro.');
+    expect(textoDeCancelacion({ motivo: 'ALGO_NUEVO' })).toBe('La sala se cerró.');
   });
 });
