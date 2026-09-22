@@ -524,7 +524,21 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     await expect(detalleVista.locator('[data-llave="GANADORES"] article.encuentro')).toHaveCount(7);
     await expect(detalleVista.locator('[data-llave="SECUNDARIOS"] article.encuentro')).toHaveCount(6);
     await expect(detalleVista.locator('[data-llave="FINAL"] article.encuentro')).toHaveCount(1);
-    await expect(detalleVista.locator('[data-llave="FINAL"] article.encuentro')).toContainText('gana Los Valientes');
+    // R8.2 — se afirma sobre el MARCADOR de ganador, no sobre una frase.
+    //
+    // `tarjetaDeEncuentro` (#592) sustituyo a proposito la frase corrida
+    // «Encuentro 5: Los Dragones vs Los Lobos → gana Los Valientes» por una
+    // fila por equipo con el ganador distinguido **por peso de letra y no solo
+    // por color** (`.encuentro__equipo--ganador`) mas un texto para lectores de
+    // pantalla. Era una mejora de accesibilidad; la prueba se quedo con la
+    // redaccion vieja.
+    //
+    // Afirmar sobre la clase del ganador es mas fuerte que la subcadena
+    // anterior: aquella pasaba con que el nombre apareciera en cualquier parte
+    // de la tarjeta; esta exige que sea **ese** equipo el marcado como ganador.
+    await expect(
+      detalleVista.locator('[data-llave="FINAL"] article.encuentro .encuentro__equipo--ganador'),
+    ).toContainText('Los Valientes');
     await expect(detalleVista.locator('[data-zona="equipos"] article[data-ia="true"]')).toHaveCount(7);
     await expect(detalleVista.locator(`[data-equipo-id="${equipo.id}"]`)).toContainText('(tu equipo)');
   });
