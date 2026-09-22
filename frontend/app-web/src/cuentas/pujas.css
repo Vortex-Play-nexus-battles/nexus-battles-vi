@@ -603,6 +603,8 @@ body {
 }
 
 .precio-actual {
+  /* UX-R2.10 — el acuse de una puja aceptada se posiciona dentro. */
+  position: relative;
   font-size: 32px;
   font-weight: 700;
   color: var(--cromo);

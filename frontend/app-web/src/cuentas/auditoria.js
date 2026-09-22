@@ -176,7 +176,7 @@
 
       if (respuesta.status === 401) {
         mostrarEstado(
-          'Inicia sesion como Super Administrador para consultar este registro.',
+          'Inicia sesión como Super Administrador para consultar este registro.',
           'error',
         );
         el.btnAnterior.disabled = true;

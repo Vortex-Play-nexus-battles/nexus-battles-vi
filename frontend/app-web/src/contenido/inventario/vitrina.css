@@ -35,8 +35,6 @@
   /* HU-INV-013: sombra de capa elevada del sistema de diseno (--sombra-2 de
      shared/ui-kit/css/tokens.css). Se replica aqui por la misma razon que
      el resto de la paleta: estas vistas todavia no enlazan el ui-kit. */
-  --tipografia-titulo: 'Rajdhani', system-ui, 'Segoe UI', sans-serif;
-  --tipografia-texto: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
 
   box-sizing: border-box;
   min-height: 100vh;
@@ -44,7 +42,7 @@
   padding: var(--vitrina-margen);
   background: var(--fondo);
   color: var(--texto);
-  font-family: var(--tipografia-texto);
+  font-family: var(--fuente-texto);
 }
 
 .vitrina-pagina *,
@@ -55,7 +53,7 @@
 
 .vitrina-titulo {
   margin: 0;
-  font-family: var(--tipografia-titulo);
+  font-family: var(--fuente-titulo);
   font-size: 1.25rem;
   font-weight: 600;
   letter-spacing: 0.01em;
@@ -151,7 +149,7 @@
   width: 100%;
   min-height: var(--objetivo-tactil);
   padding: 8px 12px;
-  border: 1px solid var(--borde-interactivo);
+  border: 1px solid var(--borde-int);
   border-radius: 6px;
   color: var(--texto);
   background: var(--superficie);
@@ -192,7 +190,7 @@
 
 .inventario-editor__titulo {
   margin: 0 0 12px;
-  font-family: var(--tipografia-titulo);
+  font-family: var(--fuente-titulo);
   font-size: 1rem;
 }
 
@@ -258,7 +256,7 @@
 }
 
 .inventario-equipo__titulo {
-  font-family: var(--tipografia-titulo);
+  font-family: var(--fuente-titulo);
   font-size: 1rem;
 }
 
@@ -343,7 +341,7 @@
  */
 .vitrina__producto:hover,
 .vitrina__producto:focus-within {
-  border-color: var(--borde-interactivo);
+  border-color: var(--borde-int);
   box-shadow: var(--sombra-2);
 }
 
@@ -392,7 +390,7 @@
 
 .vitrina__tipo {
   margin: 0;
-  font-family: var(--tipografia-titulo);
+  font-family: var(--fuente-titulo);
   font-size: 0.75rem;
   font-weight: 500;
   letter-spacing: 0.06em;
@@ -509,7 +507,7 @@
 
 .estado__mensaje {
   margin: 0;
-  font-family: var(--tipografia-titulo);
+  font-family: var(--fuente-titulo);
   font-size: 1.05rem;
   font-weight: 600;
 }

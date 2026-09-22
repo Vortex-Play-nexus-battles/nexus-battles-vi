@@ -402,7 +402,7 @@ describe('montarCrearSala', () => {
       new ErrorDeApi(
         {
           type: 'https://nexusbattles.local/errores/creditos-sin-integrar',
-          title: 'Las apuestas todavia no estan disponibles',
+          title: 'Las apuestas todavía no están disponibles',
           status: 503,
           detail: 'Por ahora solo se pueden crear salas sin recompensa.',
         },
@@ -416,7 +416,7 @@ describe('montarCrearSala', () => {
 
     const aviso = document.querySelector('.aviso');
     expect(aviso.className).toContain('aviso--error');
-    expect(aviso.textContent).toContain('apuestas todavia no estan disponibles');
+    expect(aviso.textContent).toContain('apuestas todavía no están disponibles');
     expect(aviso.textContent).toContain('sin recompensa');
     expect(aviso.getAttribute('role')).toBe('alert');
   });

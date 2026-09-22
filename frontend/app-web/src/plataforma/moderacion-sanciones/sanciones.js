@@ -448,7 +448,7 @@ export function montarPanelDeModeracion(
       pintarAviso(zonaAviso, {
         tono: 'advertencia',
         titulo: 'El baneo es definitivo',
-        detalle: 'Marca la confirmacion para continuar.',
+        detalle: 'Marca la confirmación para continuar.',
       });
       return;
     }
@@ -458,7 +458,7 @@ export function montarPanelDeModeracion(
       const sancion = await api.emitir(cuerpo, fetchImpl);
       pintarAviso(zonaAviso, {
         tono: 'exito',
-        titulo: 'Sancion emitida',
+        titulo: 'Sanción emitida',
         detalle: `${descripcionDe(sancion, ahora())}. El jugador recibira el aviso.`,
       });
       formEmitir.querySelector('[name="motivo"]').value = '';

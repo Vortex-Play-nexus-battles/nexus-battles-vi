@@ -23,6 +23,7 @@
  */
 
 import { actualizar } from '../../../../../shared/ui-kit/js/barra-vida.js';
+import { acusarCambioDeVida } from '../../comun/ui/acuse.js';
 import { barraDeVida } from '../../comun/ui/juego/combate.js';
 
 /** Tipo del mensaje del contrato AsyncAPI que mueve las barras. */
@@ -108,7 +109,24 @@ export function aplicarAccionResuelta(contenedor, evento) {
       continue;
     } // espectador, o participante ya retirado de la vista
 
+    // UX-R2.10 — la vida ANTES, para poder decir cuánto cambió.
+    //
+    // La barra ya se movía y ya se anunciaba el valor nuevo, pero el jugador
+    // no veía **el golpe**: en una sala de seis, una barra que baja un poco
+    // entre otras cinco pasa desapercibida. `acusarCambioDeVida` marca cuál
+    // fue y con cuánto, y lo deja escrito — la cifra es texto con
+    // `aria-live`, así que con `prefers-reduced-motion` puesto se pierde el
+    // movimiento pero no el dato.
+    //
+    // Se lee de `aria-valuenow`, que es lo que `actualizar()` deja puesto:
+    // no hace falta llevar un estado paralelo que pueda desincronizarse.
+    const antes = Number(barra.getAttribute('aria-valuenow'));
+
     actualizar(barra, afectado.vidaActual, afectado.vidaMaxima);
+
+    if (Number.isFinite(antes)) {
+      acusarCambioDeVida(barra, antes, afectado.vidaActual);
+    }
   }
 }
 

@@ -285,7 +285,7 @@ export function pintarInforme(contenedor, informe) {
 
   if (Array.isArray(informe.operacionesMasLentas) && informe.operacionesMasLentas.length > 0) {
     const subtitulo = document.createElement('h3');
-    subtitulo.textContent = 'Operaciones mas lentas';
+    subtitulo.textContent = 'Operaciones más lentas';
     tarjeta.append(subtitulo, tablaOperaciones(informe.operacionesMasLentas, informe.percentil));
   }
 

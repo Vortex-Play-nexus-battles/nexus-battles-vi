@@ -4292,3 +4292,123 @@ button.tarjeta-heroe[aria-pressed='true'] {
   color: var(--texto-3);
   font-size: var(--t-meta-tam);
 }
+
+/* =====================================================================
+   Acuse de un cambio de estado — UX-R2.10
+   =====================================================================
+
+   Movimiento con proposito: turno, dano, curacion, equipar, puja,
+   notificacion, dialogo y desenlace. Nada mas. Sin fondos animados, sin
+   entradas escalonadas de listas, sin transiciones de pagina.
+
+   Las duraciones salen de las fichas del kit, que valen `0ms` bajo
+   `prefers-reduced-motion`. Por eso aqui NO hay un bloque
+   `@media (prefers-reduced-motion)` que apague nada: con la preferencia
+   puesta, la animacion dura cero y el cambio se ve igual, de golpe. Lo que
+   no puede desaparecer es la informacion, y la informacion vive en
+   `.acuse__cifra`, que es texto con `aria-live`. */
+
+.acuse--dano {
+  animation: acuse-sacudida var(--duracion-pausado) var(--curva-estandar);
+}
+
+.acuse--curacion {
+  animation: acuse-brillo var(--duracion-pausado) var(--curva-salida);
+}
+
+.acuse--equipar {
+  animation: acuse-encaje var(--duracion-normal) var(--curva-impulso);
+}
+
+.acuse--puja {
+  animation: acuse-brillo var(--duracion-normal) var(--curva-salida);
+}
+
+/* Dos pixeles, no una convulsion: comunica el golpe sin marear a nadie ni
+   empujar el resto de la maqueta (`translate`, no `margin`). */
+@keyframes acuse-sacudida {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-2px);
+  }
+  75% {
+    transform: translateX(2px);
+  }
+}
+
+@keyframes acuse-brillo {
+  0% {
+    filter: brightness(1);
+  }
+  40% {
+    filter: brightness(1.35);
+  }
+  100% {
+    filter: brightness(1);
+  }
+}
+
+/* La ranura «encaja» lo que se acaba de poner: un rebote corto con la curva
+   de impulso, que es justo para lo que esta esa ficha. */
+@keyframes acuse-encaje {
+  0% {
+    transform: scale(0.94);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* La cifra: el dato, que es lo que sobrevive a `prefers-reduced-motion`.
+   `pointer-events: none` para que no se coma un clic al aparecer encima de
+   un boton. */
+.acuse__cifra {
+  position: absolute;
+  top: 0;
+  right: var(--e-2);
+  z-index: 5;
+  font-family: var(--t-etiqueta-familia);
+  font-weight: 700;
+  font-size: var(--t-cuerpo-tam);
+  font-variant-numeric: var(--cifras-tabulares);
+  pointer-events: none;
+  animation: acuse-subir calc(var(--duracion-pausado) * 2) var(--curva-salida) forwards;
+}
+
+.acuse__cifra--dano {
+  color: var(--error);
+}
+
+.acuse__cifra--curacion {
+  color: var(--exito);
+}
+
+.acuse__cifra--puja {
+  color: var(--acento-relleno);
+}
+
+@keyframes acuse-subir {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-14px);
+  }
+}
+
+/* El acuse se posiciona dentro de lo acusado. Solo las clases del kit: una
+   vista que quiera acusar sobre un bloque propio declara su `position` en su
+   propia hoja — que es lo que hace `subastas-vitrina.css`. */
+.barra-vida,
+.ranura {
+  position: relative;
+}

@@ -63,6 +63,8 @@
 }
 
 .subastas__producto {
+  /* UX-R2.10 — el acuse de una puja se coloca dentro de la tarjeta. */
+  position: relative;
   position: relative;
   display: flex;
   flex-direction: column;

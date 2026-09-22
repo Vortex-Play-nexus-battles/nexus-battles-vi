@@ -135,7 +135,7 @@ describe('la observabilidad es de administracion (#527)', () => {
 
     const estado = caja.querySelector('.estado-vista');
     expect(estado.dataset.estado).toBe('sin-permiso');
-    expect(estado.textContent).toMatch(/sesion/i);
+    expect(estado.textContent).toMatch(/sesi[oó]n/i);
     expect(estado.querySelector('[data-accion="reintentar"]')).toBeNull();
   });
 });

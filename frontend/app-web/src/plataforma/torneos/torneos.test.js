@@ -368,7 +368,7 @@ describe('vista', () => {
     expect(detalle.querySelector('[data-equipo-id="b"][data-ia="true"]').textContent).toMatch(
       /maquina/,
     );
-    expect(detalle.querySelector('[data-zona="acciones"]').textContent).toMatch(/Inicia sesion/);
+    expect(detalle.querySelector('[data-zona="acciones"]').textContent).toMatch(/Inicia sesión/);
 
     document.body.innerHTML = VISTA;
     montarTorneos(document, {

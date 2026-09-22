@@ -22,6 +22,7 @@ import { conectarStomp } from '../comun/transporte-stomp.js';
 // va con saneamiento EXPLICITO en cada interpolacion que lleve datos.
 // `sin-innerhtml.test.js` lo tiene anotado; la estructura se mueve en R2.10.
 import { esc } from '../comun/ui/escapar.js';
+import { acusar } from '../comun/ui/acuse.js';
 
 /** Canal que publica ms-subastas en cada cambio (SubastaRealtimePublisher). */
 export const CANAL_SUBASTAS = '/topic/subastas/listado';
@@ -722,7 +723,7 @@ export class ControladorSubastas {
     }
   }
 
-  async ejecutarContraElServidor(operacion) {
+  async ejecutarContraElServidor(operacion, { acuse: acuseTras = null } = {}) {
     if (this.enviando) {
       return false;
     }
@@ -735,6 +736,15 @@ export class ControladorSubastas {
       // no refleja si TU vas ganando ni tu limite, y sin eso la pantalla se
       // quedaria diciendo lo de antes de pujar.
       await this.recargar();
+      // El acuse va DESPUES de recargar, sobre el nodo ya repintado: si fuera
+      // antes, el repintado se lo llevaria por delante. Y solo si la
+      // operacion salio bien — un acuse tras un rechazo seria una mentira.
+      if (acuseTras) {
+        const destino = this.contenedor?.querySelector(acuseTras.selector);
+        if (destino) {
+          acusar(destino, { tipo: acuseTras.tipo, texto: acuseTras.texto });
+        }
+      }
       return true;
     } catch (fallo) {
       const mensaje = fallo?.message || 'No se pudo completar la operacion.';
@@ -1024,7 +1034,15 @@ export class ControladorSubastas {
         this.mostrarError('Escribe un monto valido.');
         return Promise.resolve(false);
       }
-      return this.ejecutarContraElServidor(() => this.api.pujar(sub.id, monto));
+      return this.ejecutarContraElServidor(() => this.api.pujar(sub.id, monto), {
+        // UX-R2.10 — una puja aceptada repintaba la pantalla entera con el
+        // importe nuevo y sin decir nada mas. Entre un numero que cambia y
+        // otro que no, en una tarjeta llena de cifras, no se nota. El acuse
+        // marca el importe y escribe cuanto se ofrecio; la cifra es texto
+        // con `aria-live`, asi que con `prefers-reduced-motion` puesto se
+        // pierde el brillo pero no el dato.
+        acuse: { selector: '.precio-actual', tipo: 'puja', texto: `+${formatearCreditos(monto)}` },
+      });
     }
 
     const saldoLibre = this.getSaldoLibre();

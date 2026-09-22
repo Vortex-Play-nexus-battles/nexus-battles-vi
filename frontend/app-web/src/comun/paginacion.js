@@ -91,7 +91,7 @@ export function construirPaginacion({ paginaActual, totalPaginas }, alCambiarPag
 
   const info = document.createElement('p');
   info.className = 'paginacion__info';
-  info.textContent = `Pagina ${paginaActual + 1} de ${totalPaginas}`;
+  info.textContent = `Página ${paginaActual + 1} de ${totalPaginas}`;
 
   const paginas = document.createElement('div');
   paginas.className = 'paginacion__paginas';

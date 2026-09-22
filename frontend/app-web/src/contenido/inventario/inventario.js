@@ -20,6 +20,7 @@ import { motivoDelRechazo, pintarEquipamiento } from './equipamiento.js';
 import { construirCarga, construirVacio, construirError } from './estados-vista.js';
 import { abrirFicha } from './ficha-producto.js';
 import { construirPaginacion } from '../../comun/paginacion.js';
+import { acusar } from '../../comun/ui/acuse.js';
 
 const TIPOS = [
   ['HEROE', 'Héroe'],
@@ -366,6 +367,29 @@ export async function montarInventario(
    * @param {boolean} equipando
    * @param {object} elemento
    */
+  /**
+   * Marca la ranura que acaba de recibir un objeto (UX-R2.10).
+   *
+   * Se busca por el NOMBRE del objeto, que es lo que `ranura()` escribe en
+   * `.ranura__etiqueta` cuando esta ocupada. Es indirecto, si — la
+   * alternativa era que `pintarEquipamiento` devolviera un indice de
+   * ranuras, y eso acopla el panel a una animacion. Si no se encuentra, no
+   * pasa nada: el mensaje de texto ya dijo lo que ocurrio.
+   */
+  function acusarRanuraDe(elemento) {
+    const nombre = elemento?.nombrePropio;
+    if (!nombre) {
+      return;
+    }
+    const etiqueta = [...vista.equipoLista.querySelectorAll('.ranura__etiqueta')].find(
+      (n) => n.textContent === nombre,
+    );
+    const caja = etiqueta?.closest('.ranura');
+    if (caja) {
+      acusar(caja, { tipo: 'equipar' });
+    }
+  }
+
   async function cambiarEquipo(equipando, elemento) {
     if (!elemento || !heroeSeleccionado) {
       return;
@@ -377,6 +401,17 @@ export async function montarInventario(
         : await desequipar(identidad, heroeSeleccionado.id, elemento.id);
       pintarEquipo();
       mostrarMensaje(equipando ? 'Elemento equipado.' : 'Elemento desequipado.');
+
+      // UX-R2.10 — la ranura acusa lo que acaba de recibir.
+      //
+      // Hasta aquí, equipar repintaba el panel entero y el único rastro era
+      // una línea de texto debajo. Entre diez ranuras idénticas, **cuál**
+      // cambió no se veía. El acuse marca la que acaba de moverse; el
+      // mensaje de texto sigue donde estaba, así que con
+      // `prefers-reduced-motion` no se pierde nada.
+      if (equipando) {
+        acusarRanuraDe(elemento);
+      }
     } catch (fallo) {
       console.error('No se pudo cambiar el equipamiento', fallo);
       mostrarMensaje(motivoDelRechazo(fallo), true);

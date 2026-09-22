@@ -112,7 +112,7 @@ export function miEquipo(torneo, uid) {
  */
 export function accionesDe(torneo, uid) {
   if (!uid) {
-    return { crearEquipo: false, inscribir: false, motivo: 'Inicia sesion para inscribirte.' };
+    return { crearEquipo: false, inscribir: false, motivo: 'Inicia sesión para inscribirte.' };
   }
   if (torneo.estado !== 'INSCRIPCIONES_ABIERTAS') {
     return { crearEquipo: false, inscribir: false, motivo: 'Las inscripciones estan cerradas.' };

@@ -31,7 +31,7 @@ body {
 
 .titulo {
   margin: 0 0 4px;
-  font-family: var(--tipografia-titulo);
+  font-family: var(--fuente-titulo);
   font-size: 24px;
 }
 
@@ -63,7 +63,7 @@ body {
 
 .cofre-titulo {
   margin: 0 0 4px;
-  font-family: var(--tipografia-titulo);
+  font-family: var(--fuente-titulo);
   font-size: 16px;
   text-transform: capitalize;
 }

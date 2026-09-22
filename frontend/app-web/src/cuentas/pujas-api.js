@@ -75,7 +75,7 @@ const MENSAJES = {
   // No deberia verlo un jugador: significa que el cliente reutilizo una clave
   // de idempotencia. Se traduce igual, porque un mensaje en blanco seria peor
   // que uno generico si alguna vez pasa.
-  CLAVE_REUTILIZADA: 'Hubo un problema al enviar la operacion. Vuelve a intentarlo.'
+  CLAVE_REUTILIZADA: 'Hubo un problema al enviar la operacion. Vuelve a intentarlo.',
 };
 
 /**
@@ -140,7 +140,7 @@ export function aVistaDeSubasta(resumen, apodoPropio = null) {
     aporte: { poder: 0, vida: 0, defensa: 0 },
     historial: [],
     esMaestroDeJuego: Boolean(resumen.esMaestroDeJuego),
-    apodoPropio
+    apodoPropio,
   };
 }
 
@@ -161,8 +161,11 @@ async function lanzarDesde(respuesta) {
   }
 
   if (respuesta.status === 401) {
-    throw new ErrorDeSubastas('Tu sesion no es valida. Vuelve a iniciar sesion.',
-      { estado: 401, motivo, detalle });
+    throw new ErrorDeSubastas('Tu sesion no es valida. Vuelve a iniciar sesion.', {
+      estado: 401,
+      motivo,
+      detalle,
+    });
   }
   if (respuesta.status === 404) {
     throw new ErrorDeSubastas('Esa subasta ya no existe.', { estado: 404, motivo, detalle });
@@ -180,31 +183,36 @@ export function crearApiSubastas({
   urlBase = URL_BASE_POR_DEFECTO,
   fetch: hacerPeticion = globalThis.fetch?.bind(globalThis),
   leerToken = () => globalThis.sessionStorage?.getItem(CLAVE_TOKEN) || null,
-  leerApodo = () => globalThis.sessionStorage?.getItem(CLAVE_APODO) || null
+  leerApodo = () => globalThis.sessionStorage?.getItem(CLAVE_APODO) || null,
 } = {}) {
-
   async function pedir(
     ruta,
-    { metodo = 'GET', cuerpo = null, conIdempotencia = false, exigeSesion = true } = {}
+    { metodo = 'GET', cuerpo = null, conIdempotencia = false, exigeSesion = true } = {},
   ) {
     const token = leerToken();
     if (!token && exigeSesion) {
-      throw new ErrorDeSubastas('Inicia sesion para participar en las subastas.', { estado: 401 });
+      throw new ErrorDeSubastas('Inicia sesión para participar en las subastas.', { estado: 401 });
     }
 
     const cabeceras = { Accept: 'application/json' };
     // Sin sesion se manda igual la peticion cuando el endpoint es publico: el
     // token solo enriquece la respuesta (marcar las pujas propias).
-    if (token) {cabeceras.Authorization = `Bearer ${token}`;}
-    if (cuerpo !== null) {cabeceras['Content-Type'] = 'application/json';}
+    if (token) {
+      cabeceras.Authorization = `Bearer ${token}`;
+    }
+    if (cuerpo !== null) {
+      cabeceras['Content-Type'] = 'application/json';
+    }
     // La clave se genera UNA vez, fuera del bucle de reintento: reintentar con
     // una clave nueva seria pujar otra vez, que es justo lo contrario.
-    if (conIdempotencia) {cabeceras['Idempotency-Key'] = claveDeIdempotencia();}
+    if (conIdempotencia) {
+      cabeceras['Idempotency-Key'] = claveDeIdempotencia();
+    }
 
     const opciones = {
       method: metodo,
       headers: cabeceras,
-      body: cuerpo === null ? undefined : JSON.stringify(cuerpo)
+      body: cuerpo === null ? undefined : JSON.stringify(cuerpo),
     };
 
     let respuesta;
@@ -217,19 +225,27 @@ export function crearApiSubastas({
       // con ella, el servidor devuelve la puja original si la primera si entro.
       // Un error HTTP no se reintenta: el servidor ya respondio.
       if (!conIdempotencia) {
-        throw new ErrorDeSubastas('No se pudo contactar al servidor de subastas.',
-          { estado: 0, detalle: fallo?.message || null });
+        throw new ErrorDeSubastas('No se pudo contactar al servidor de subastas.', {
+          estado: 0,
+          detalle: fallo?.message || null,
+        });
       }
       try {
         respuesta = await hacerPeticion(`${urlBase}${ruta}`, opciones);
       } catch (segundoFallo) {
-        throw new ErrorDeSubastas('No se pudo contactar al servidor de subastas.',
-          { estado: 0, detalle: segundoFallo?.message || null });
+        throw new ErrorDeSubastas('No se pudo contactar al servidor de subastas.', {
+          estado: 0,
+          detalle: segundoFallo?.message || null,
+        });
       }
     }
 
-    if (!respuesta.ok) {await lanzarDesde(respuesta);}
-    if (respuesta.status === 204) {return null;}
+    if (!respuesta.ok) {
+      await lanzarDesde(respuesta);
+    }
+    if (respuesta.status === 204) {
+      return null;
+    }
     return respuesta.json();
   }
 
@@ -242,17 +258,25 @@ export function crearApiSubastas({
     async listar({ page = 0, size = 16 } = {}) {
       const token = leerToken();
       const cabeceras = { Accept: 'application/json' };
-      if (token) {cabeceras.Authorization = `Bearer ${token}`;}
+      if (token) {
+        cabeceras.Authorization = `Bearer ${token}`;
+      }
 
       let respuesta;
       try {
-        respuesta = await hacerPeticion(`${urlBase}/subastas?page=${page}&size=${size}`,
-          { method: 'GET', headers: cabeceras });
+        respuesta = await hacerPeticion(`${urlBase}/subastas?page=${page}&size=${size}`, {
+          method: 'GET',
+          headers: cabeceras,
+        });
       } catch (fallo) {
-        throw new ErrorDeSubastas('No se pudo cargar el listado de subastas.',
-          { estado: 0, detalle: fallo?.message || null });
+        throw new ErrorDeSubastas('No se pudo cargar el listado de subastas.', {
+          estado: 0,
+          detalle: fallo?.message || null,
+        });
       }
-      if (!respuesta.ok) {await lanzarDesde(respuesta);}
+      if (!respuesta.ok) {
+        await lanzarDesde(respuesta);
+      }
 
       const pagina = await respuesta.json();
       const apodo = leerApodo();
@@ -294,7 +318,7 @@ export function crearApiSubastas({
       return pedir(`/subastas/${subastaId}/pujas`, {
         metodo: 'POST',
         cuerpo: { monto: String(monto) },
-        conIdempotencia: true
+        conIdempotencia: true,
       });
     },
 
@@ -303,7 +327,7 @@ export function crearApiSubastas({
       return pedir(`/subastas/${subastaId}/compra-inmediata`, {
         metodo: 'POST',
         cuerpo: { confirmado: true },
-        conIdempotencia: true
+        conIdempotencia: true,
       });
     },
 
@@ -311,13 +335,13 @@ export function crearApiSubastas({
     configurarAutomatica(subastaId, limite) {
       return pedir(`/subastas/${subastaId}/puja-automatica`, {
         metodo: 'PUT',
-        cuerpo: { limite: String(limite) }
+        cuerpo: { limite: String(limite) },
       });
     },
 
     /** DELETE /subastas/{id}/puja-automatica */
     desactivarAutomatica(subastaId) {
       return pedir(`/subastas/${subastaId}/puja-automatica`, { metodo: 'DELETE' });
-    }
+    },
   };
 }

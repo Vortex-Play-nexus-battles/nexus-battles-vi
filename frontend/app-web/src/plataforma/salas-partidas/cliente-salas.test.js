@@ -243,7 +243,7 @@ describe('crearSala', () => {
     const fetchImpl = jest.fn().mockResolvedValue(
       respuesta(503, {
         type: 'https://nexusbattles.local/errores/creditos-sin-integrar',
-        title: 'Las apuestas todavia no estan disponibles',
+        title: 'Las apuestas todavía no están disponibles',
         status: 503,
         detail: 'Por ahora solo se pueden crear salas sin recompensa.',
       }),

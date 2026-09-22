@@ -135,8 +135,8 @@ export async function montarChat(
     boton.disabled = true;
     pintarAviso(zonaAviso, {
       tono: 'advertencia',
-      titulo: 'Inicia sesion para chatear',
-      detalle: 'El chat necesita tu sesion iniciada para saber quien escribe.',
+      titulo: 'Inicia sesión para chatear',
+      detalle: 'El chat necesita tu sesión iniciada para saber quién escribe.',
     });
     return null;
   }
