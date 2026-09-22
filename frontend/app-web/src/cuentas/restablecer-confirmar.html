@@ -5,28 +5,38 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Restablecer contraseña — NEXUS BATTLES VI</title>
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
-    <link rel="stylesheet" href="./login.css" />
   </head>
   <body>
     <div data-cabecera-app></div>
-    <main class="pagina-auth">
-      <section class="tarjeta">
-        <h1 class="titulo-grande">NEXUS BATTLES VI</h1>
-        <p class="titulo-mediano">Restablecer contraseña</p>
+    <main class="entrada">
+      <section class="entrada__identidad">
+        <p class="t-etiqueta">Recuperar el acceso</p>
+        <h1 class="entrada__marca">NEXUS <em>BATTLES</em> VI</h1>
+        <p class="entrada__lema">
+          El codigo llega por correo, dura poco y solo sirve una vez. Si caduco, pide otro desde
+          «Recuperar contrasena».
+        </p>
+      </section>
 
-        <p class="ayuda">Ingresa el código que recibiste por correo y tu nueva contraseña.</p>
+      <section class="entrada__tarjeta">
+        <div class="pila pila--ajustada">
+          <h2 class="entrada__titulo">Restablecer contraseña</h2>
+          <p class="t-meta">Codigo del correo y la contrasena nueva.</p>
+        </div>
 
         <p class="estado" id="estadoConfirmacion" hidden role="status"></p>
 
-        <form id="formConfirmacion" novalidate>
-          <label>
-            Código
+        <form id="formConfirmacion" class="pila" novalidate>
+          <div class="campo">
+            <label class="campo__etiqueta" for="codigo">Código</label>
             <!-- El backend genera codigos de 10 caracteres, mayusculas y
              digitos, sin 0/O ni 1/I (TokenCredencialService). No se
              fuerza mayusculas por CSS/JS: el usuario podria copiar y
              pegar el codigo tal cual viene en el correo. -->
             <input
+              class="campo__control"
               type="text"
               id="codigo"
               name="codigo"
@@ -36,45 +46,59 @@
               autocomplete="one-time-code"
               placeholder="Ej: 82AEN4P56Z"
             />
-          </label>
+            <p class="campo__pista">Diez caracteres, tal como vienen en el correo.</p>
+          </div>
 
-          <label>
-            Nueva contraseña
+          <div class="campo">
+            <label class="campo__etiqueta" for="nuevaPassword">Nueva contraseña</label>
             <input
+              class="campo__control"
               type="password"
               id="nuevaPassword"
               name="nuevaPassword"
               required
               autocomplete="new-password"
             />
-          </label>
+            <p class="campo__pista">
+              Mínimo 9 caracteres, con mayúscula, minúscula, número y símbolo.
+            </p>
+          </div>
 
-          <label>
-            Confirmar nueva contraseña
+          <div class="campo">
+            <label class="campo__etiqueta" for="confirmarPassword"
+              >Confirmar nueva contraseña</label
+            >
             <input
+              class="campo__control"
               type="password"
               id="confirmarPassword"
               name="confirmarPassword"
               required
               autocomplete="new-password"
             />
-          </label>
+          </div>
 
-          <button type="submit" class="btn-primario" id="botonEnviar">
+          <button type="submit" class="boton boton--primario boton--grande" id="botonEnviar">
             Restablecer contraseña
           </button>
         </form>
 
-        <a class="enlace-secundario" href="./login.html">Volver a iniciar sesión</a>
+        <div class="entrada__pie">
+          <a href="./restablecer-solicitar.html">Pedir otro código</a>
+          <a href="./login.html">Volver a entrar</a>
+        </div>
       </section>
     </main>
 
     <script type="module" src="./restablecer-confirmar.js"></script>
     <script type="module">
       import { montarCabecera } from '../comun/cabecera-app.js';
+      import { mejorarContrasena } from '../comun/ui/campo.js';
 
       // Cabecera unica de la aplicacion (HU-UX-001).
       montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: null });
+      mejorarContrasena(document.getElementById('nuevaPassword'));
+      mejorarContrasena(document.getElementById('confirmarPassword'));
     </script>
   </body>
 </html>

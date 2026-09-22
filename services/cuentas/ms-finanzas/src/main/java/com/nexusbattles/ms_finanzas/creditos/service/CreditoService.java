@@ -218,6 +218,51 @@ public class CreditoService {
     // FIX: acreditar() es idempotente por refId, igual que debitar().
     // Sin esto, un reintento de red desde el llamador (Sanabria, HU-JUE-012)
     // duplicaría los créditos otorgados por el mismo resultado de partida.
+    /**
+     * Historial de movimientos de credito del jugador (#569, HU-PAG-002).
+     *
+     * <p>Solo lectura: no toca saldo. La fuente es `reservas_credito`, donde
+     * cada operacion —apuesta reservada, cobrada o devuelta, recompensa por
+     * jugar, inscripcion a un torneo— deja su fila. Hasta ahora el jugador
+     * solo podia ver sus pagos en moneda real (`/transacciones/mi-historial`)
+     * y por eso una partida con apuesta no aparecia en ninguna parte.
+     *
+     * @param jugadorUid identificador estable del jugador (ADR-002)
+     * @param pagina     pagina y tamano; el controlador acota el tamano
+     */
+    @Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<MovimientoResponse> movimientos(
+            String jugadorUid, org.springframework.data.domain.Pageable pagina) {
+        return reservaRepository.findByJugadorUidOrderByCreadoDesc(jugadorUid, pagina)
+                .map(CreditoService::comoMovimiento);
+    }
+
+    /**
+     * El signo que la interfaz necesita para pintar la linea, decidido aqui
+     * una sola vez: un credito suma, un debito y una reserva consumida restan,
+     * una reserva activa aparta y una liberada no movio nada.
+     */
+    static MovimientoResponse comoMovimiento(ReservaCredito operacion) {
+        String signo = switch (operacion.getTipoOperacion()) {
+            case CREDITO -> "SUMA";
+            case DEBITO -> "RESTA";
+            case RESERVA -> switch (operacion.getEstado()) {
+                case CONSUMIDA -> "RESTA";
+                case ACTIVA -> "APARTA";
+                case LIBERADA -> "NEUTRO";
+            };
+        };
+        return new MovimientoResponse(
+                operacion.getId(),
+                operacion.getMonto(),
+                operacion.getConcepto(),
+                operacion.getReferenciaId(),
+                operacion.getTipoOperacion().name(),
+                operacion.getEstado().name(),
+                signo,
+                operacion.getCreado());
+    }
+
     @Transactional
     public AcreditarResponse acreditar(AcreditarRequest req) {
         Optional<ReservaCredito> operacionExistente = reservaRepository.findByIdempotencyKey(req.refId());

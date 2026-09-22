@@ -7,6 +7,9 @@ import {
 
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
 import { montarCabecera } from '../comun/cabecera-app.js';
+import { h, vaciar } from '../comun/ui/dom.js';
+import { distintivo } from '../comun/ui/distintivo.js';
+import { confirmar } from '../comun/ui/dialogo.js';
 
 const BASE_API = '/api/v1/admin/cuentas';
 
@@ -25,10 +28,15 @@ const PERMISOS_POR_ROL = {
 document.addEventListener('DOMContentLoaded', iniciar);
 
 function montarBarraNavegacion() {
-  // Cabecera unica de la aplicacion (HU-UX-001): la sesion la lee ella del login.
-  const contenedor = document.createElement('div');
-  contenedor.dataset.cabeceraApp = '';
-  document.body.prepend(contenedor);
+  // Cabecera unica de la aplicacion (HU-UX-001): la sesion la lee ella del
+  // login. El hueco ya viene en el HTML; si falta (una prueba que monta solo
+  // el formulario), se crea para no quedarse sin navegacion.
+  let contenedor = document.querySelector('[data-cabecera-app]');
+  if (!contenedor) {
+    contenedor = document.createElement('div');
+    contenedor.dataset.cabeceraApp = '';
+    document.body.prepend(contenedor);
+  }
   montarCabecera(contenedor, { seccionActiva: 'cuenta' });
 }
 
@@ -135,27 +143,19 @@ function actualizarPermisosVisuales() {
 
   const rolSeleccionado = selectorRol.value;
 
+  vaciar(contenedorPermisos);
+
   if (!rolSeleccionado || !PERMISOS_POR_ROL[rolSeleccionado]) {
-    contenedorPermisos.innerHTML = `
-        <div class="sin-permisos">
-            Selecciona un rol para consultar sus permisos.
-        </div>
-    `;
+    contenedorPermisos.append(
+      h('p', { clase: 't-meta', texto: 'Selecciona un rol para consultar sus permisos.' }),
+    );
 
     return;
   }
 
-  const permisos = PERMISOS_POR_ROL[rolSeleccionado];
-
-  contenedorPermisos.innerHTML = permisos
-    .map(
-      (permiso) => `
-        <div class="permiso">
-            <span>${formatearPermiso(permiso)}</span>
-        </div>
-    `,
-    )
-    .join('');
+  for (const permiso of PERMISOS_POR_ROL[rolSeleccionado]) {
+    contenedorPermisos.append(distintivo(formatearPermiso(permiso)));
+  }
 }
 
 function formatearPermiso(permiso) {
@@ -200,9 +200,12 @@ async function manejarCreacionCuenta(evento) {
     return;
   }
 
-  const confirmado = window.confirm(
-    `¿Deseas crear la cuenta administrativa para "${apodo}" con rol ${rol}?`,
-  );
+  const confirmado = await confirmar({
+    titulo: 'Crear cuenta administrativa',
+    mensaje: `Se creara la cuenta "${apodo}" con rol ${rol}. Podras cambiarle el rol despues, pero la cuenta no se puede borrar desde esta vista.`,
+    textoConfirmar: 'Crear cuenta',
+    peligro: false,
+  });
 
   if (!confirmado) {
     return;
