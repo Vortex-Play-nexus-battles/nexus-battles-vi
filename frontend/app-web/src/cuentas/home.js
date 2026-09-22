@@ -26,6 +26,8 @@ import { creditos as formatoCreditos, cuantoFalta } from '../comun/ui/formato.js
 import { boton } from '../comun/ui/boton.js';
 import { distintivo } from '../comun/ui/distintivo.js';
 import { tarjeta, tarjetaDeCifra } from '../comun/ui/tarjeta.js';
+import { retratoDeHeroe } from '../comun/ui/juego/heroe.js';
+import { distintivoDeCreditos } from '../comun/ui/juego/credito.js';
 import {
   estadoDeCarga,
   estadoDeError,
@@ -125,12 +127,14 @@ async function bloqueDeSaldo(uid, fetchImpl, alReintentar) {
   caja.append(
     tarjetaDeCifra({
       etiqueta: 'Créditos disponibles',
-      valor: formatoCreditos(saldo.saldoDisponible),
+      // UX-R2.2 — la cifra era un número suelto, indistinguible de cualquier
+      // otro dato. Los créditos son la moneda del juego: se ven como moneda.
+      valor: distintivoDeCreditos(saldo.saldoDisponible, { tam: 'grande' }),
       detalle: 'Lo que puedes apostar ahora',
     }),
     tarjetaDeCifra({
       etiqueta: 'Apartado en apuestas',
-      valor: formatoCreditos(saldo.saldoReservado),
+      valor: distintivoDeCreditos(saldo.saldoReservado, { tam: 'grande' }),
       detalle: 'Vuelve si la sala se cancela',
     }),
   );
@@ -138,11 +142,48 @@ async function bloqueDeSaldo(uid, fetchImpl, alReintentar) {
 }
 
 /**
+ * Comprueba si un héroe lleva algo puesto.
+ *
+ * Es la misma regla que aplica la puerta de héroe del servidor
+ * (`ClienteInventarioHeroes`): equipado es llevar un arma, una armadura o un
+ * ítem. No hay ningún campo `equipado` en `inventario.yaml` — lo único que
+ * publica el inventario al respecto es este endpoint.
+ *
+ * @returns {Promise<boolean|null>} `null` si el inventario no contesta
+ */
+async function llevaEquipo(idHeroe, fetchImpl) {
+  const r = await pedir(
+    `/api/v1/inventario/heroes/${encodeURIComponent(idHeroe)}/equipamiento`,
+    fetchImpl,
+  );
+  if (!r.ok) {
+    return null;
+  }
+  const e = r.datos ?? {};
+  return (
+    (e.armas?.length ?? 0) > 0 ||
+    Object.keys(e.armaduras ?? {}).length > 0 ||
+    (e.items?.length ?? 0) > 0
+  );
+}
+
+/**
  * Héroe equipado (HU-SAL-003, `inventario.yaml`): es lo que decide con qué
  * entras al combate, así que es lo primero que hay que poder mirar.
+ *
+ * ## Por qué esto no era lo que parecía
+ *
+ * Hasta UX-R2.2 este bloque buscaba `elemento.equipado` y leía
+ * `heroe.nombre`. Ninguno de los dos campos existe: `ElementoInventario`
+ * declara `nombrePropio` y `disponible`, y «equipado» no es un campo sino el
+ * resultado de preguntar por el equipamiento del héroe. Contra la API real el
+ * bloque acababa SIEMPRE en «No tienes un héroe equipado», tuviera uno o no.
+ * La prueba no lo veía porque su doble devolvía los campos inventados.
+ *
+ * Se aplica la misma regla que el servidor, sin adivinar otra.
  */
 async function bloqueDeHeroe(fetchImpl, alReintentar) {
-  const respuesta = await pedir('/api/v1/inventario/elementos?page=0&size=16', fetchImpl);
+  const respuesta = await pedir('/api/v1/inventario/elementos?pagina=0', fetchImpl);
   if (!respuesta.ok) {
     return estadoDeError({
       titulo: 'Tu inventario no está disponible',
@@ -152,7 +193,20 @@ async function bloqueDeHeroe(fetchImpl, alReintentar) {
   }
   const crudos = respuesta.datos?.elementos;
   const elementos = Array.isArray(crudos) ? crudos : [];
-  const heroe = elementos.find((e) => e.tipo === 'HEROE' && e.equipado);
+  // Solo los primeros: la home no es el inventario, y cada candidato cuesta
+  // una llamada más. Quien tenga muchos héroes los gestiona en su vista.
+  const candidatos = elementos
+    .filter((e) => e.tipo === 'HEROE' && e.disponible !== false)
+    .slice(0, 3);
+
+  let heroe = null;
+  for (const candidato of candidatos) {
+    if (await llevaEquipo(candidato.id, fetchImpl)) {
+      heroe = candidato;
+      break;
+    }
+  }
+
   if (!heroe) {
     return estadoVacio({
       titulo: 'No tienes un héroe equipado',
@@ -160,11 +214,14 @@ async function bloqueDeHeroe(fetchImpl, alReintentar) {
       accion: { texto: 'Ir al inventario', href: '../contenido/inventario/inventario.html' },
     });
   }
+
+  // UX-R2.2 — era una tarjeta de texto con la palabra «Héroe» dentro. Ahora es
+  // el retrato con marco que el kit tenía dibujado desde el principio.
   return tarjeta({
-    titulo: heroe.nombre,
+    titulo: heroe.nombrePropio,
     subtitulo: 'Tu héroe equipado',
     distintivos: [distintivo('Equipado', 'activo')],
-    datos: [{ etiqueta: 'Tipo', valor: 'Héroe' }],
+    medios: retratoDeHeroe({ nombre: heroe.nombrePropio }, { conNombre: false }),
     acciones: [
       boton({
         texto: 'Ver inventario',

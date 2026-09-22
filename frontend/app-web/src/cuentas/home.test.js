@@ -41,8 +41,28 @@ function servicio(rutas) {
 
 const TODO_BIEN = {
   '/api/v1/creditos': { cuerpo: { saldoDisponible: 380, saldoReservado: 120, saldoBruto: 500 } },
+  // Los campos son los de `ElementoInventario` en `contracts/openapi/inventario.yaml`:
+  // `nombrePropio` y `disponible`. Antes este doble devolvia `nombre` y
+  // `equipado`, que NO existen en el contrato, y por eso la prueba pasaba
+  // mientras el bloque estaba roto contra la API real (UX-R2.2).
   '/api/v1/inventario/elementos': {
-    cuerpo: { elementos: [{ id: 'h-1', nombre: 'Sombra de Vael', tipo: 'HEROE', equipado: true }] },
+    cuerpo: {
+      elementos: [
+        {
+          id: 'h-1',
+          productoId: 'p-1',
+          tipo: 'HEROE',
+          nombrePropio: 'Sombra de Vael',
+          disponible: true,
+        },
+      ],
+      ultima: true,
+    },
+  },
+  // «Equipado» no es un campo: es tener algo puesto. Misma regla que aplica la
+  // puerta de heroe del servidor (`ClienteInventarioHeroes`).
+  '/api/v1/inventario/heroes': {
+    cuerpo: { heroeId: 'h-1', armas: ['a-1'], armaduras: {}, items: [] },
   },
   '/api/v1/torneos': {
     cuerpo: [
@@ -68,6 +88,8 @@ describe('con todos los servicios disponibles', () => {
   test('saluda por el apodo y pinta saldo, héroe, torneo y avisos', async () => {
     montarHome(document, { sesion: SESION, fetchImpl: servicio(TODO_BIEN) });
     await asentar();
+    await asentar();
+    // Una vuelta más: el héroe encadena una segunda llamada (el equipamiento).
     await asentar();
 
     expect(document.querySelector('[data-zona="saludo"]').textContent).toBe('Hola, vael');
@@ -152,6 +174,44 @@ describe('cuando un servicio no está en este entorno', () => {
 
     expect(document.querySelector('[data-zona="bloque-saldo"]').textContent).toMatch(
       /no está disponible/i,
+    );
+  });
+});
+
+// UX-R2.2 — este bloque es el guardián del defecto que nadie vio: la home
+// filtraba por `elemento.equipado` y leía `heroe.nombre`, dos campos que
+// `contracts/openapi/inventario.yaml` no declara. Contra la API real el
+// resultado era SIEMPRE «no tienes un héroe equipado». Si alguien vuelve a
+// leer campos inventados, estas dos pruebas se caen.
+describe('el héroe se busca como lo hace el servidor', () => {
+  test('lo encuentra por `nombrePropio` y por tener equipo puesto', async () => {
+    montarHome(document, { sesion: SESION, fetchImpl: servicio(TODO_BIEN) });
+    await asentar();
+    await asentar();
+    await asentar();
+
+    const zona = document.querySelector('[data-zona="bloque-heroe"]');
+    expect(zona.textContent).toContain('Sombra de Vael');
+    // Y se pinta con el marco del kit, no como una línea de texto.
+    expect(zona.querySelector('.marco-heroe')).not.toBeNull();
+  });
+
+  test('un héroe SIN nada puesto no cuenta como equipado', async () => {
+    montarHome(document, {
+      sesion: SESION,
+      fetchImpl: servicio({
+        ...TODO_BIEN,
+        '/api/v1/inventario/heroes': {
+          cuerpo: { heroeId: 'h-1', armas: [], armaduras: {}, items: [] },
+        },
+      }),
+    });
+    await asentar();
+    await asentar();
+    await asentar();
+
+    expect(document.querySelector('[data-zona="bloque-heroe"]').textContent).toMatch(
+      /no tienes un héroe equipado/i,
     );
   });
 });
