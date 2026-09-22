@@ -15,6 +15,8 @@ import {
   desequiparElemento,
 } from './cliente-inventario.js';
 import { construirVitrina, PRODUCTOS_POR_PAGINA } from './vitrina.js';
+import { pintarRetratos } from './retratos.js';
+import { motivoDelRechazo, pintarEquipamiento } from './equipamiento.js';
 import { construirCarga, construirVacio, construirError } from './estados-vista.js';
 import { abrirFicha } from './ficha-producto.js';
 import { construirPaginacion } from '../../comun/paginacion.js';
@@ -97,6 +99,15 @@ export async function montarVitrina(
       alAbrirDetalle: (elemento) =>
         abrirFicha(elemento.productoId, { origen: document.activeElement }),
     }),
+  );
+
+  // UX-R2.5 — los retratos llegan DESPUES, uno por producto, porque el
+  // inventario no guarda la imagen y `productos.yaml` no tiene consulta por
+  // lotes. La vitrina ya esta en pantalla con el icono de cada tipo; esto
+  // solo la mejora cuando el catalogo contesta. No se espera: si tardara o
+  // fallara, la vista ya esta usable.
+  pintarRetratos(contenedor).catch((fallo) =>
+    console.warn('No se pudieron traer los retratos del catalogo', fallo),
   );
   return pagina;
 }
@@ -195,7 +206,9 @@ function construirGestion() {
   equipoCerrar.type = 'button';
   equipoCabecera.append(equipoTitulo, equipoCerrar);
   const equipoResumen = elementoHtml('p', 'inventario-equipo__resumen');
-  const equipoLista = elementoHtml('ul', 'inventario-equipo__lista');
+  // UX-R2.5 — era un <ul> de filas; ahora contiene los tres grupos de
+  // ranuras (`<section>`), y una lista no puede tener secciones dentro.
+  const equipoLista = elementoHtml('div', 'inventario-equipo__lista');
   equipo.append(equipoCabecera, equipoResumen, equipoLista);
 
   const mensaje = elementoHtml('p', 'inventario__mensaje');
@@ -317,67 +330,56 @@ export async function montarInventario(
     vista.nombre.control.focus();
   }
 
-  function idsEquipados(equipo) {
-    return new Set([...equipo.armas, ...Object.values(equipo.armaduras), ...equipo.items]);
+  /**
+   * UX-R2.5 — el panel deja de ser una lista de botones y pasa a ser las diez
+   * ranuras del contrato: 2 armas, 6 armaduras (una por `ParteArmadura`) y
+   * 2 items. La forma de la pantalla dice los limites que antes habia que
+   * leer en un contador.
+   *
+   * La logica de equipar/desequipar no cambia: sigue siendo el mismo PUT y el
+   * mismo DELETE de `inventario.yaml`, y sigue siendo el servidor quien
+   * decide. Lo que cambia es que ahora se ve donde va cada cosa, y que los
+   * rechazos se traducen uno a uno en vez de caer todos en la misma frase.
+   */
+  function pintarEquipo() {
+    pintarEquipamiento(vista.equipoLista, {
+      equipo: equipoActual,
+      elementos: paginaMostrada?.elementos ?? [],
+      alEquipar: (ranura, elemento) => cambiarEquipo(true, elemento),
+      alDesequipar: (ranura) => cambiarEquipo(false, ranura.elemento),
+      alPintarRetratos: (panel) =>
+        pintarRetratos(panel).catch((fallo) =>
+          console.warn('No se pudieron traer los retratos del equipo', fallo),
+        ),
+    });
+    // El resumen vive ahora dentro del panel, junto a las ranuras.
+    vista.equipoResumen.hidden = true;
   }
 
-  function pintarEquipo() {
-    const equipados = idsEquipados(equipoActual);
-    vista.equipoResumen.textContent =
-      `Armas ${equipoActual.armas.length}/2 · ` +
-      `Armadura ${Object.keys(equipoActual.armaduras).length}/6 · ` +
-      `Ítems ${equipoActual.items.length}/2`;
-    vista.equipoLista.replaceChildren();
-
-    const disponibles = (paginaMostrada?.elementos ?? []).filter((elemento) =>
-      ['ARMA', 'ARMADURA', 'ITEM'].includes(elemento.tipo),
-    );
-    for (const elemento of disponibles) {
-      const fila = elementoHtml('li', 'inventario-equipo__elemento');
-      const detalle = elementoHtml(
-        'span',
-        'inventario-equipo__nombre',
-        elemento.parteArmadura
-          ? `${elemento.nombrePropio} · ${elemento.parteArmadura}`
-          : elemento.nombrePropio,
-      );
-      const estaEquipado = equipados.has(elemento.id);
-      const estaDisponible = elemento.disponible !== false;
-      let textoAccion = 'Equipar';
-      if (estaEquipado) {
-        textoAccion = 'Desequipar';
-      } else if (!estaDisponible) {
-        textoAccion = 'No disponible';
-      }
-      const boton = elementoHtml(
-        'button',
-        estaEquipado ? 'inventario-equipo__desequipar' : 'inventario-equipo__equipar',
-        textoAccion,
-      );
-      boton.type = 'button';
-      boton.disabled = !estaEquipado && !estaDisponible;
-      boton.addEventListener('click', async () => {
-        cambiarDisponibilidad(boton, false);
-        try {
-          equipoActual = estaEquipado
-            ? await desequipar(identidad, heroeSeleccionado.id, elemento.id)
-            : await equipar(identidad, heroeSeleccionado.id, elemento.id);
-          pintarEquipo();
-          mostrarMensaje(estaEquipado ? 'Elemento desequipado.' : 'Elemento equipado.');
-        } catch (fallo) {
-          console.error('No se pudo cambiar el equipamiento', fallo);
-          let texto = 'No pudimos cambiar el equipamiento. Inténtalo de nuevo.';
-          if (fallo?.status === 409) {
-            texto = 'Ese cambio supera los límites de equipamiento.';
-          } else if (fallo?.status === 403) {
-            texto = 'No tienes permiso para modificar ese inventario.';
-          }
-          mostrarMensaje(texto, true);
-          cambiarDisponibilidad(boton, true);
-        }
-      });
-      fila.append(detalle, boton);
-      vista.equipoLista.appendChild(fila);
+  /**
+   * Equipa o desequipa, y repinta con lo que devuelva el servicio.
+   *
+   * La respuesta de los dos endpoints es el `EquipamientoHeroe` completo, asi
+   * que no hace falta adivinar el estado nuevo: se usa el que manda el
+   * servidor, que es el unico que sabe la verdad.
+   *
+   * @param {boolean} equipando
+   * @param {object} elemento
+   */
+  async function cambiarEquipo(equipando, elemento) {
+    if (!elemento || !heroeSeleccionado) {
+      return;
+    }
+    mostrarMensaje(equipando ? 'Equipando…' : 'Desequipando…');
+    try {
+      equipoActual = equipando
+        ? await equipar(identidad, heroeSeleccionado.id, elemento.id)
+        : await desequipar(identidad, heroeSeleccionado.id, elemento.id);
+      pintarEquipo();
+      mostrarMensaje(equipando ? 'Elemento equipado.' : 'Elemento desequipado.');
+    } catch (fallo) {
+      console.error('No se pudo cambiar el equipamiento', fallo);
+      mostrarMensaje(motivoDelRechazo(fallo), true);
     }
   }
 

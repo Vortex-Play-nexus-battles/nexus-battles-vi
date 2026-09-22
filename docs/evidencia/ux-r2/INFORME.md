@@ -1,6 +1,6 @@
 # Auditoría visual automática — UX-R2.1
 
-Generado: 2026-09-22T13:05:00.924Z · modo **sin-servicios**
+Generado: 2026-09-22T13:35:39.862Z · modo **sin-servicios**
 
 155 combinaciones vista × resolución · 57 con hallazgos
 
