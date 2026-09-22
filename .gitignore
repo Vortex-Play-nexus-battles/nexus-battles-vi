@@ -88,3 +88,12 @@ test-results/
 /.front.ps1
 /.msg.txt
 /.issue.md
+/.visual.ps1
+
+# Capturas del laboratorio visual (UX-R2.1). El informe SI se versiona
+# (`INFORME.md` e `informe.json`: son numeros, se comparan entre corridas y
+# pesan kilobytes). Las 155 capturas pesan casi 9 MB por corrida y cambian
+# enteras con cada ajuste de CSS: versionarlas engordaria el repositorio sin
+# darle historia util. Viven como artefacto de `visual.yml`, descargable
+# durante 14 dias, que es lo que se adjunta al acta del sprint.
+docs/evidencia/ux-r2/**/*.png
