@@ -97,4 +97,4 @@ test-results/
 # enteras con cada ajuste de CSS: versionarlas engordaria el repositorio sin
 # darle historia util. Viven como artefacto de `visual.yml`, descargable
 # durante 14 dias, que es lo que se adjunta al acta del sprint.
-docs/evidencia/ux-r2/**/*.png
+docs/evidencia/laboratorio-visual/**/*.png

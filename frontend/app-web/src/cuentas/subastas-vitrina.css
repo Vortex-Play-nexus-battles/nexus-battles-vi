@@ -255,9 +255,17 @@
   }
 }
 
+/* El relleno va al contenido, no al `<body>`: la cabecera de la aplicación se
+   monta dentro del `<body>` y heredaba el margen (UX-R3.6). Estas dos reglas
+   lo volvían a poner en las anchuras estrechas, que es donde el laboratorio
+   lo encontró: 16 px de aire a cada lado de la barra en tablet, 12 px en
+   móvil. */
 @media (max-width: 899px) {
   .subastas-pagina {
     --subastas-columnas: 2;
+  }
+
+  .subastas-pagina > #raiz-subastas {
     padding: var(--e-4);
   }
 }
@@ -265,6 +273,9 @@
 @media (max-width: 599px) {
   .subastas-pagina {
     --subastas-columnas: 1;
+  }
+
+  .subastas-pagina > #raiz-subastas {
     padding: var(--e-3);
   }
 
