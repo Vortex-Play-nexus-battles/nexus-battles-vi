@@ -130,6 +130,27 @@ fi
 mkdir -p "$DIRECTORIO"
 cd "$DIRECTORIO"
 
+# R8.3 — area de intercambio antes de levantar nada.
+#
+# Va aqui, y no solo en el `user_data` de Terraform, porque `user_data` corre
+# UNICAMENTE en el primer arranque: cambiarlo no hace nada en un host que ya
+# existe, y forzar su re-ejecucion significaria recrear la instancia. (El
+# Terraform se corrige igualmente, para cualquier reconstruccion futura.)
+#
+# `nexus-contenido-dev` nacio sin swap: 1,9 GiB de RAM contra 1.760 MB de
+# `mem_limit`, margen declarado de -114 MB, y ahi viven los cuatro servicios
+# de los que depende el combate. Sin swap un pico no degrada: mata un
+# contenedor. En `nexus-plataforma-dev`, que ya la trae de su user_data, el
+# script ve la swap activa y no toca nada.
+#
+# Es idempotente y NO es load-bearing: si no puede crearla, avisa y devuelve
+# 0. Un despliegue no se cae por no poder crear swap.
+if [ -f "$DIRECTORIO/scripts/cd/asegurar-swap.sh" ]; then
+  echo "== 0) Comprobando el area de intercambio del host =="
+  chmod +x "$DIRECTORIO/scripts/cd/asegurar-swap.sh" 2>/dev/null || true
+  "$DIRECTORIO/scripts/cd/asegurar-swap.sh" || true
+fi
+
 echo "== 1) Generando .env efimero en el servidor (nunca se versiona) =="
 # Mismo nombre de variable que en .env.example, valor real desde los
 # secrets de GitHub Actions (llegan aqui ya como variables de entorno, ver
