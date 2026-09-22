@@ -16,6 +16,8 @@
  */
 
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
+import { nodo } from '../../comun/ui/dom.js';
+import { pintarAviso } from '../../comun/ui/aviso.js';
 
 export const TIPO = Object.freeze({
   ADVERTENCIA: 'ADVERTENCIA',
@@ -208,26 +210,6 @@ export function solicitudDesde(datos) {
 }
 
 /* ---- DOM ---- */
-
-function nodo(etiqueta, clase, texto) {
-  const el = document.createElement(etiqueta);
-  if (clase) {
-    el.className = clase;
-  }
-  if (texto !== undefined) {
-    el.textContent = texto;
-  }
-  return el;
-}
-
-export function pintarAviso(zona, { tono, titulo, detalle }) {
-  zona.className = `aviso aviso--${tono}`;
-  zona.replaceChildren(
-    nodo('strong', 'aviso__titulo', titulo),
-    nodo('p', 'aviso__detalle', detalle ?? ''),
-  );
-  zona.hidden = false;
-}
 
 function tonoDe(error) {
   if (!(error instanceof ErrorDeSanciones)) {
