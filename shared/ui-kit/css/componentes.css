@@ -2946,3 +2946,36 @@
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.35; }
 }
+
+
+/* =======================================================================
+   Arbol del torneo — HU-TOR-004 · RF-TOR-004
+   -----------------------------------------------------------------------
+   El componente `Encuentro` (mas arriba, linea ~1667) ya venia del Figma con
+   su cabecera, sus dos filas de equipo y el ganador en negrita. Lo que
+   faltaba era el contenedor: la vista pintaba catorce encuentros en una
+   lista plana, que no se parece a un cuadro de doble eliminacion. `ronda`
+   viene en el contrato; aqui se convierte en columnas.
+   ======================================================================= */
+
+.arbol-torneo {
+  display: flex;
+  gap: var(--e-5);
+  align-items: flex-start;
+  overflow-x: auto;
+  padding-bottom: var(--e-2);
+}
+
+.arbol-torneo__ronda {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+  flex: 0 0 auto;
+}
+
+/* En pantalla estrecha el cuadro se lee hacia abajo: un scroll horizontal
+   de catorce encuentros en un movil no lo usa nadie. */
+@media (max-width: 720px) {
+  .arbol-torneo { flex-direction: column; overflow-x: visible; }
+  .encuentro { width: 100%; }
+}
