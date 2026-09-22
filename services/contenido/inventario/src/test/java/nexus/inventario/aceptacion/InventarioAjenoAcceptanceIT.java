@@ -8,6 +8,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.jayway.jsonpath.JsonPath;
 import java.nio.charset.StandardCharsets;
+import java.util.UUID;
+import java.util.Map;
+import java.util.HashMap;
+import com.nexusbattles.comun.seguridad.pruebas.EmisorDeTokensDePrueba;
+import nexus.inventario.api.ComoLlamador;
 import nexus.inventario.dominio.Inventario;
 import nexus.inventario.dominio.RepositorioDeInventarios;
 import org.junit.jupiter.api.DisplayName;
@@ -17,6 +22,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.testcontainers.containers.MongoDBContainer;
@@ -31,6 +38,12 @@ class InventarioAjenoAcceptanceIT {
     @Container
     @ServiceConnection
     static MongoDBContainer mongo = new MongoDBContainer("mongo:8");
+
+    /** Los tokens de jugador se verifican contra un JWKS real (ADR-002). */
+    @DynamicPropertySource
+    static void jwks(DynamicPropertyRegistry registro) {
+        EmisorDeTokensDePrueba.registrarJwks(registro);
+    }
 
     @Autowired
     private MockMvc mvc;
@@ -59,7 +72,7 @@ class InventarioAjenoAcceptanceIT {
         Inventario inventarioBAntes = inventarioDe("jugador-modificacion-B");
 
         mvc.perform(patch("/api/v1/inventario/elementos/{elementoId}", elementoDeB)
-                        .header("X-User-Name", "jugador-modificacion-A")
+                        .header("Authorization", ComoLlamador.portadorDeJugador("jugador-modificacion-A", uidDe("jugador-modificacion-A")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"nombrePropio\":\"Elemento alterado por A\"}"))
                 .andExpect(status().isForbidden())
@@ -71,7 +84,7 @@ class InventarioAjenoAcceptanceIT {
 
     private String crear(String jugador, String producto, String nombre) throws Exception {
         MvcResult resultado = mvc.perform(post("/api/v1/inventario/elementos")
-                        .header("X-User-Name", jugador)
+                        .header("Authorization", ComoLlamador.portadorDeJugador(jugador, uidDe(jugador)))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"productoId":"%s","tipo":"ITEM","nombrePropio":"%s"}
@@ -82,7 +95,14 @@ class InventarioAjenoAcceptanceIT {
                 resultado.getResponse().getContentAsString(StandardCharsets.UTF_8), "$.id");
     }
 
+    /** El propietario es el identificador estable del token; el apodo es solo el nombre del caso. */
+    private static final Map<String, UUID> UIDS = new HashMap<>();
+
+    private static UUID uidDe(String jugador) {
+        return UIDS.computeIfAbsent(jugador, apodo -> UUID.randomUUID());
+    }
+
     private Inventario inventarioDe(String jugador) {
-        return repositorio.buscarPorPropietario(jugador).orElseThrow();
+        return repositorio.buscarPorPropietario(uidDe(jugador).toString()).orElseThrow();
     }
 }

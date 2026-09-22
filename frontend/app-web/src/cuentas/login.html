@@ -1,40 +1,94 @@
 <!doctype html>
 <html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Iniciar sesión — NEXUS BATTLES VI</title>
-  <link rel="stylesheet" href="./login.css">
-</head>
-<body>
-<main class="pagina-auth">
-  <section class="tarjeta">
-    <h1 class="titulo-grande">NEXUS BATTLES VI</h1>
-    <p class="titulo-mediano">Entra al Nexo</p>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Entrar — NEXUS BATTLES VI</title>
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
+  </head>
+  <body>
+    <div data-cabecera-app></div>
 
-    <p class="estado" id="estadoLogin" hidden role="status"></p>
-    <p class="aviso" id="avisoDispositivo" hidden></p>
+    <main class="entrada">
+      <!-- Columna de identidad: qué es esto y por qué entrar. En móvil queda
+           debajo del formulario (order), porque nadie se registra para leer. -->
+      <section class="entrada__identidad">
+        <p class="t-etiqueta">Proyecto Integrador II · UPB Bucaramanga</p>
+        <h1 class="entrada__marca">NEXUS <em>BATTLES</em> VI</h1>
+        <p class="entrada__lema">
+          Equipa a tu héroe, entra a una sala y decide el combate turno a turno. Lo que apuestas es
+          real dentro del Nexo.
+        </p>
+        <ul class="entrada__puntos">
+          <li class="entrada__punto">Duelos 1v1, contra la máquina o hasta seis en equipos</li>
+          <li class="entrada__punto">Créditos en juego en cada batalla</li>
+          <li class="entrada__punto">Torneos de ocho equipos con árbol de doble eliminación</li>
+        </ul>
+      </section>
 
-    <form id="formLogin" novalidate>
-      <label>
-        Correo electrónico
-        <!-- El mockup mostraba "Correo o apodo"; el contrato real de
-             POST /api/v1/auth/login solo acepta "email". -->
-        <input type="email" id="email" name="email" required autocomplete="email">
-      </label>
+      <!-- Columna del formulario -->
+      <section class="entrada__tarjeta">
+        <div class="pila pila--ajustada">
+          <h2 class="entrada__titulo">Entra al Nexo</h2>
+          <p class="t-meta">Usa el correo con el que creaste tu cuenta.</p>
+        </div>
 
-      <label>
-        Contraseña
-        <input type="password" id="password" name="password" required autocomplete="current-password">
-      </label>
+        <!-- Estado global de la operación: cargando, rechazo del servicio. -->
+        <p class="estado" id="estadoLogin" hidden role="status"></p>
+        <div id="avisoDispositivo" hidden></div>
 
-      <button type="submit" class="btn-primario" id="botonEnviar">Iniciar sesión</button>
-    </form>
+        <form id="formLogin" class="pila" novalidate>
+          <div class="campo">
+            <!-- El mockup decía «Correo o apodo»; el contrato real de
+                 POST /api/v1/auth/login solo acepta `email`. -->
+            <label class="campo__etiqueta" for="email">Correo electrónico</label>
+            <input
+              class="campo__control"
+              type="email"
+              id="email"
+              name="email"
+              required
+              autocomplete="email"
+              placeholder="tu@correo.com"
+            />
+          </div>
 
-    <a class="enlace-secundario" href="./registro.html">¿No tienes cuenta? Regístrate</a>
-  </section>
-</main>
+          <div class="campo">
+            <label class="campo__etiqueta" for="password">Contraseña</label>
+            <input
+              class="campo__control"
+              type="password"
+              id="password"
+              name="password"
+              required
+              autocomplete="current-password"
+            />
+          </div>
 
-<script type="module" src="./login.js"></script>
-</body>
+          <button type="submit" class="boton boton--primario boton--grande" id="botonEnviar">
+            Entrar al Nexo
+          </button>
+        </form>
+
+        <div class="entrada__pie">
+          <a href="./restablecer-solicitar.html">¿Olvidaste tu contraseña?</a>
+          <a href="./registro.html">Crear una cuenta</a>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./login.js"></script>
+    <script type="module">
+      import { montarCabecera } from '../comun/cabecera-app.js';
+      import { mejorarContrasena } from '../comun/ui/campo.js';
+
+      // Cabecera unica de la aplicacion (HU-UX-001).
+      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: null });
+      // Ver/ocultar la contraseña: el mismo interruptor en las cuatro vistas
+      // de entrada, desde `comun/ui`.
+      mejorarContrasena(document.getElementById('password'));
+    </script>
+  </body>
 </html>

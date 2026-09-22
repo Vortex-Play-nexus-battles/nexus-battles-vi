@@ -18,6 +18,13 @@
  */
 
 import { listarSalas, ingresarASala } from './cliente-salas.js';
+import { vaciar } from '../../comun/ui/dom.js';
+import { seguirSala, estadoDesdeFicha } from './canal-sala.js';
+import {
+  esSeccionDegradada,
+  pintarSeccionDegradada,
+  limpiarSeccionDegradada,
+} from '../../comun/degradacion/aviso-degradacion.js';
 
 /** Etiqueta de la insignia por estado. Son las del componente `Insignia`. */
 const ETIQUETA_DE_ESTADO = {
@@ -45,11 +52,50 @@ const CLASE_DE_ESTADO = {
  *          recompensaCreditos: number, incluirHeroeIA: boolean}} sala
  * @returns {string}
  */
+/**
+ * Muestra, una sola vez, por que se volvio al listado — HU-SAL-006.
+ *
+ * Pinta sobre `[data-zona="aviso-sala"]` con el tono del sistema de diseno
+ * (`aviso--info`, `aviso--advertencia`...). Sin aviso, no toca nada.
+ *
+ * @param {ParentNode} raiz
+ * @param {{tono?: string, titulo: string, detalle?: string} | null} aviso
+ * @returns {boolean} true si se mostro algo
+ */
+export function mostrarAvisoDeSala(raiz, aviso) {
+  const zona = raiz.querySelector('[data-zona="aviso-sala"]');
+  if (!zona || !aviso?.titulo) {
+    return false;
+  }
+  const tonos = ['info', 'exito', 'advertencia', 'error'];
+  const tono = tonos.includes(aviso.tono) ? aviso.tono : 'info';
+  zona.className = `aviso aviso--${tono}`;
+  const titulo = zona.querySelector('[data-zona="aviso-sala-titulo"]');
+  const detalle = zona.querySelector('[data-zona="aviso-sala-detalle"]');
+  if (titulo) {
+    titulo.textContent = aviso.titulo;
+  }
+  if (detalle) {
+    detalle.textContent = aviso.detalle ?? '';
+    detalle.hidden = !aviso.detalle;
+  }
+  zona.hidden = false;
+  return true;
+}
+
 export function metaDeLaSala(sala) {
   const base =
     `${sala.ocupacion} de ${sala.maximoParticipantes} jugadores` +
     ` · ${sala.recompensaCreditos} creditos`;
-  return sala.incluirHeroeIA ? `${base} · Con heroe de la IA` : base;
+  if (!sala.incluirHeroeIA) {
+    return base;
+  }
+  // Con varios cupos de la IA (HU-SAL-004) se dice cuantos; con uno, la
+  // linea exacta del diseno.
+  const maquinas = Number(sala.heroesIA) || 1;
+  return maquinas > 1
+    ? `${base} · Con ${maquinas} heroes de la IA`
+    : `${base} · Con heroe de la IA`;
 }
 
 /**
@@ -112,25 +158,137 @@ function tarjetaDeSala(sala, doc) {
 }
 
 /**
+ * Ficha de la sala tal como se pinta, a partir de su ficha de la API y del
+ * estado que va llegando por el canal. Una sala que se llena en vivo pasa a
+ * LLENA y deja de ser pulsable, igual que si hubiera llegado asi del listado.
+ *
+ * @param {object} sala ficha original de `GET /salas`
+ * @param {{ocupacion: {actual: number, maximo: number}}} estado estado del canal
+ * @returns {object}
+ */
+export function fichaEnVivo(sala, estado) {
+  const llena = estado.ocupacion.actual >= estado.ocupacion.maximo;
+  return {
+    ...sala,
+    ocupacion: estado.ocupacion.actual,
+    estado: llena && sala.estado === 'ABIERTA' ? 'LLENA' : sala.estado,
+  };
+}
+
+/**
  * Monta la vista del listado de batallas.
  *
+ * El canal en tiempo real es opcional y se inyecta ya resuelto: `conectarCanal`
+ * devuelve una promesa con un cliente `{suscribir(destino, alRecibir)}` o con
+ * `null` cuando no hay sesion. Sin canal la vista funciona igual, solo que no
+ * se actualiza sola; con el, cada tarjeta publica del listado sigue su sala y
+ * la propia sala a la que se acaba de entrar tambien, sea publica o privada.
+ * Las privadas ajenas no se siguen desde el listado: el servidor las rechaza
+ * (solo sus participantes pueden), y pedirlo seria provocar un ERROR seguro.
+ *
  * @param {HTMLElement} raiz elemento que contiene la vista
- * @param {{listar?: Function, ingresar?: Function, alEntrar?: Function}} [puertos]
- *        dependencias inyectables; por defecto las del cliente HTTP real
+ * @param {{listar?: Function, ingresar?: Function, alEntrar?: Function,
+ *          conectarCanal?: () => Promise<{suscribir: Function}|null>}} [puertos]
+ *        dependencias inyectables; por defecto las del cliente HTTP real y sin canal
  * @returns {{refrescar: Function}}
  */
 export function montarBatallas(raiz, puertos = {}) {
-  const { listar = listarSalas, ingresar = ingresarASala, alEntrar = () => {} } = puertos;
+  const {
+    listar = listarSalas,
+    ingresar = ingresarASala,
+    alEntrar = () => {},
+    conectarCanal = () => Promise.resolve(null),
+  } = puertos;
 
   const doc = raiz.ownerDocument;
   const zonaSalas = raiz.querySelector('[data-zona="salas"]');
   const zonaEstado = raiz.querySelector('[data-zona="estado"]');
   const zonaPaginacion = raiz.querySelector('[data-zona="paginacion"]');
   const subtitulo = raiz.querySelector('[data-zona="subtitulo"]');
+  const zonaCanal = raiz.querySelector('[data-zona="canal"]');
+  // HU-DIS-003: hueco de «Seccion degradada» cuando entrar a una sala falla
+  // porque el inventario (o el libro de creditos) no responde. Aparte del
+  // estado de vista a proposito: el listado sigue siendo util y no se oculta.
+  const zonaDegradacion = raiz.querySelector('[data-zona="degradacion"]');
   const filtroModalidad = raiz.querySelector('[name="modalidad"]');
   const filtroEstado = raiz.querySelector('[name="estado"]');
 
   let paginaActual = 0;
+
+  /* -- Canal en tiempo real ------------------------------------------- */
+
+  let canal = null;
+  /** Fichas de la pagina actual por id, para repintar la tarjeta que cambie. */
+  const fichas = new Map();
+  /** Salas ya suscritas en esta sesion: el cliente no expone UNSUBSCRIBE. */
+  const seguidas = new Set();
+
+  function marcarCanal(texto, estadoCanal) {
+    if (!zonaCanal) {
+      return;
+    }
+    zonaCanal.textContent = texto;
+    zonaCanal.dataset.estado = estadoCanal;
+    zonaCanal.hidden = false;
+  }
+
+  function repintarTarjeta(sala, estado) {
+    const actual = zonaSalas.querySelector(`[data-sala="${sala.id}"]`);
+    if (!actual) {
+      return;
+    }
+    const nueva = fichaEnVivo(sala, estado);
+    fichas.set(sala.id, nueva);
+    actual.replaceWith(tarjetaDeSala(nueva, doc));
+  }
+
+  function seguir(sala) {
+    if (!canal || seguidas.has(sala.id)) {
+      return;
+    }
+    seguidas.add(sala.id);
+    seguirSala(estadoDesdeFicha(sala), {
+      suscribir: (destino, alRecibir) => canal.suscribir(destino, alRecibir),
+      alCambiar: (estado) => repintarTarjeta(fichas.get(sala.id) ?? sala, estado),
+    });
+  }
+
+  function seguirVisibles() {
+    for (const sala of fichas.values()) {
+      if (!sala.privada) {
+        seguir(sala);
+      }
+    }
+  }
+
+  conectarCanal()
+    .then((cliente) => {
+      if (!cliente) {
+        marcarCanal(
+          'Sin canal en tiempo real: inicia sesion para ver los cambios al instante.',
+          'sin-sesion',
+        );
+        return;
+      }
+      canal = cliente;
+      if (typeof cliente === 'object' && 'alCerrar' in cliente) {
+        cliente.alCerrar = () => {
+          canal = null;
+          marcarCanal(
+            'Canal en tiempo real desconectado. Recarga para volver a seguir las salas.',
+            'cerrado',
+          );
+        };
+      }
+      marcarCanal('Canal en tiempo real conectado: las salas se actualizan solas.', 'conectado');
+      seguirVisibles();
+    })
+    .catch((error) => {
+      marcarCanal(
+        `Canal en tiempo real no disponible: ${error?.message ?? 'no se pudo conectar'}.`,
+        'error',
+      );
+    });
 
   /** Muestra uno de los cuatro estados de RNF-USA-003 y oculta la rejilla. */
   function mostrarEstado(claseExtra, titulo, detalle) {
@@ -138,7 +296,7 @@ export function montarBatallas(raiz, puertos = {}) {
     zonaPaginacion.hidden = true;
     zonaEstado.hidden = false;
     zonaEstado.className = `estado-vista ${claseExtra}`;
-    zonaEstado.innerHTML = '';
+    vaciar(zonaEstado);
 
     const encabezado = doc.createElement('p');
     encabezado.className = 'estado-vista__titulo';
@@ -154,7 +312,7 @@ export function montarBatallas(raiz, puertos = {}) {
   function pintar(pagina) {
     zonaEstado.hidden = true;
     zonaSalas.hidden = false;
-    zonaSalas.innerHTML = '';
+    vaciar(zonaSalas);
 
     subtitulo.textContent = subtituloDeSalas(pagina.totalElementos);
 
@@ -168,16 +326,19 @@ export function montarBatallas(raiz, puertos = {}) {
       return;
     }
 
+    fichas.clear();
     for (const sala of pagina.contenido) {
+      fichas.set(sala.id, sala);
       zonaSalas.append(tarjetaDeSala(sala, doc));
     }
+    seguirVisibles();
 
     pintarPaginacion(pagina);
   }
 
   function pintarPaginacion(pagina) {
     zonaPaginacion.hidden = false;
-    zonaPaginacion.innerHTML = '';
+    vaciar(zonaPaginacion);
 
     const info = doc.createElement('span');
     info.className = 'paginacion__info';
@@ -232,10 +393,35 @@ export function montarBatallas(raiz, puertos = {}) {
     if (!tarjeta || tarjeta.disabled) {
       return;
     }
+    await entrarA(tarjeta.dataset.sala);
+  });
 
+  /** Entra a una sala; reutilizable por el reintento de la seccion degradada. */
+  async function entrarA(idSala) {
+    limpiarSeccionDegradada(zonaDegradacion);
     try {
-      alEntrar(await ingresar(tarjeta.dataset.sala));
+      const dentro = await ingresar(idSala);
+      // Ya se es participante: ahora si se puede seguir la sala aunque sea
+      // privada, y la tarjeta refleja la entrada sin esperar al canal.
+      if (dentro && dentro.id) {
+        fichas.set(dentro.id, dentro);
+        const actual = zonaSalas.querySelector(`[data-sala="${dentro.id}"]`);
+        if (actual) {
+          actual.replaceWith(tarjetaDeSala(dentro, doc));
+        }
+        seguir(dentro);
+      }
+      alEntrar(dentro);
     } catch (error) {
+      if (zonaDegradacion && esSeccionDegradada(error?.problema)) {
+        // HU-DIS-003: no es que no se pueda entrar, es que quien lo comprueba
+        // no responde. El listado se queda; se dice que seccion esta limitada
+        // y se ofrece reintentar la misma sala.
+        pintarSeccionDegradada(zonaDegradacion, error.problema, {
+          alReintentar: () => entrarA(idSala),
+        });
+        return;
+      }
       // Los tres rechazos del contrato -403 privada, 404 no existe, 409 llena-
       // llegan aqui ya interpretados por el cliente. La vista los muestra tal
       // cual: el texto lo redacta el servicio, que es quien sabe el motivo.
@@ -245,7 +431,7 @@ export function montarBatallas(raiz, puertos = {}) {
         error.detalle ?? error.message,
       );
     }
-  });
+  }
 
   for (const filtro of [filtroModalidad, filtroEstado]) {
     filtro?.addEventListener('change', () => {

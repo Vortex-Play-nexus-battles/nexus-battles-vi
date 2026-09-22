@@ -61,6 +61,14 @@ export class ErrorDeApi extends Error {
     this.estado = problema?.status ?? estado;
     /** @type {Array<{campo: string, mensaje: string}>} */
     this.errores = Array.isArray(problema?.errores) ? problema.errores : [];
+    /**
+     * El problem detail entero, tal como llego. Hace falta para las
+     * propiedades que no son de la regla 4 base -`seccion`,
+     * `reintentarEnSegundos` de HU-DIS-003- y que decide otro componente
+     * (`comun/degradacion/aviso-degradacion.js`), no este.
+     * @type {object}
+     */
+    this.problema = problema && typeof problema === 'object' ? problema : {};
   }
 
   /** True cuando el rechazo se puede corregir campo a campo en el formulario. */
@@ -149,6 +157,74 @@ export async function ingresarASala(idSala, { fetchImpl = fetchWithHttpErrorInte
 }
 
 /**
+ * Trae una sala por su identificador — `GET /salas/{idSala}`.
+ *
+ * La vista de espera lo necesita para saber quien es el anfitrion (y por
+ * tanto si ofrece «Cancelar sala» o «Salir de la sala», HU-SAL-006) y cuanta
+ * gente hay dentro. Al anfitrion le llega ademas el codigo de invitacion.
+ *
+ * @param {string} idSala
+ * @param {{fetchImpl?: Function}} [opciones] inyeccion para las pruebas
+ * @returns {Promise<object>} segun el esquema Sala del contrato
+ * @throws {ErrorDeApi} 404 si no existe
+ */
+export async function obtenerSala(idSala, { fetchImpl = fetchWithHttpErrorInterceptor } = {}) {
+  const respuesta = await fetchImpl(ruta(`/${encodeURIComponent(idSala)}`));
+
+  if (respuesta.ok) {
+    return respuesta.json();
+  }
+
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+}
+
+/**
+ * Sale de una sala antes de que empiece — HU-SAL-006, operacion
+ * `abandonarSala` del contrato (`DELETE /salas/{idSala}/participantes`).
+ *
+ * Quien sale es quien firma el token: no viaja ningun identificador. Si la
+ * sala tenia recompensa, el servidor devuelve la reserva (HU-JUE-014).
+ *
+ * @param {string} idSala
+ * @param {{fetchImpl?: Function}} [opciones] inyeccion para las pruebas
+ * @returns {Promise<void>}
+ * @throws {ErrorDeApi} 404 no existe · 409 no estas dentro, eres el anfitrion o ya empezo
+ */
+export async function abandonarSala(idSala, { fetchImpl = fetchWithHttpErrorInterceptor } = {}) {
+  const respuesta = await fetchImpl(ruta(`/${encodeURIComponent(idSala)}/participantes`), {
+    method: 'DELETE',
+  });
+
+  if (respuesta.ok) {
+    return;
+  }
+
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+}
+
+/**
+ * Cancela una sala — HU-SAL-006, operacion `cancelarSala` del contrato
+ * (`DELETE /salas/{idSala}`). Solo el anfitrion, y solo antes de empezar; el
+ * servidor lo comprueba con el token.
+ *
+ * @param {string} idSala
+ * @param {{fetchImpl?: Function}} [opciones] inyeccion para las pruebas
+ * @returns {Promise<void>}
+ * @throws {ErrorDeApi} 403 no eres el anfitrion · 404 no existe · 409 ya empezo o ya no esta activa
+ */
+export async function cancelarSala(idSala, { fetchImpl = fetchWithHttpErrorInterceptor } = {}) {
+  const respuesta = await fetchImpl(ruta(`/${encodeURIComponent(idSala)}`), {
+    method: 'DELETE',
+  });
+
+  if (respuesta.ok) {
+    return;
+  }
+
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+}
+
+/**
  * Verifica el heroe antes de intentar entrar — HU-SAL-003, RF-JUE-003.
  *
  * Habla con `GET /salas/{idSala}/verificacion-heroe`, que ya esta publicado en
@@ -176,18 +252,105 @@ export async function verificarHeroe(idSala, { fetchImpl = fetchWithHttpErrorInt
 }
 
 /**
+ * Arranca el combate de una sala — HU-SAL-004, RF-JUE-017.
+ *
+ * Solo el anfitrion puede, y el servidor lo comprueba con el token: por eso
+ * aqui no viaja ningun identificador de jugador, igual que al crear y al
+ * entrar.
+ *
+ * Pulsar dos veces no es un error ni crea dos partidas: la segunda llamada
+ * devuelve la misma. La vista puede reintentar sin comprobar nada antes.
+ *
+ * @param {string} idSala
+ * @param {{fetchImpl?: Function}} [opciones] inyeccion para las pruebas
+ * @returns {Promise<object>} la partida iniciada, segun el esquema Partida
+ * @throws {ErrorDeApi} 403 no eres el anfitrion · 404 no existe · 409 la sala no puede empezar
+ */
+export async function iniciarPartida(idSala, { fetchImpl = fetchWithHttpErrorInterceptor } = {}) {
+  const respuesta = await fetchImpl(ruta(`/${encodeURIComponent(idSala)}/partida`), {
+    method: 'POST',
+  });
+
+  if (respuesta.ok) {
+    return respuesta.json();
+  }
+
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+}
+
+/**
+ * Trae el estado de una partida — RF-JUE-017.
+ *
+ * Es para pintar la vista de combate la primera vez y para ponerse al dia tras
+ * una caida del canal. El avance turno a turno llega por WebSocket: si la vista
+ * llamara a esto en bucle, el canal sobraria.
+ *
+ * Cuelga de `/api/v1/partidas`, no de `/api/v1/salas`, asi que no usa `ruta()`.
+ *
+ * @param {string} idPartida
+ * @param {{fetchImpl?: Function}} [opciones] inyeccion para las pruebas
+ * @returns {Promise<object>} segun el esquema Partida del contrato
+ * @throws {ErrorDeApi} 404 si la partida no existe
+ */
+export async function obtenerPartida(
+  idPartida,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const respuesta = await fetchImpl(
+    `${baseDeApi()}/api/v1/partidas/${encodeURIComponent(idPartida)}`,
+  );
+
+  if (respuesta.ok) {
+    return respuesta.json();
+  }
+
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+}
+
+/**
  * True cuando detras de la ruta no hay ninguna API, sino un servidor de
  * ficheros. Un servidor estatico responde 405 a un POST sobre una ruta que
- * para el es un fichero, y devuelve HTML —nunca problem details— cuando la
- * ruta no existe. Distinguirlo importa: es la diferencia entre «el servicio
- * fallo» y «no has levantado el servicio».
+ * para el es un fichero (`http-server` lo hace con `text/plain`), y devuelve
+ * HTML cuando la ruta no existe. Distinguirlo importa: es la diferencia entre
+ * «el servicio fallo» y «no has levantado el servicio».
+ *
+ * Solo se consulta cuando el cuerpo NO era JSON. Un servicio de la Empresa A
+ * responde siempre con problem details (regla 4 de plataforma), tambien en
+ * un 405 real, asi que ese 405 nunca llega aqui: lo atrapa `cuerpoDelProblema`
+ * antes. Por eso no se reduce la comprobacion a `text/html`: dejaria de
+ * reconocerse el caso real del servidor estatico.
  *
  * @param {Response} respuesta
  * @returns {boolean}
  */
 function sinApiDetras(respuesta) {
-  const tipo = respuesta.headers?.get?.('content-type') ?? '';
-  return respuesta.status === 405 || String(tipo).includes('text/html');
+  const tipo = String(respuesta.headers?.get?.('content-type') ?? '');
+  return respuesta.status === 405 || tipo.includes('text/html');
+}
+
+/**
+ * Que decirle a quien mira, segun por que fallo. Nunca el codigo.
+ *
+ * @param {number} estado
+ * @returns {string}
+ */
+function detalleDelFallo(estado) {
+  if (estado === 401) {
+    return 'Vuelve a iniciar sesion para continuar.';
+  }
+  if (estado === 403) {
+    return 'Tu cuenta no tiene permiso para ver esto.';
+  }
+  if (estado === 404) {
+    return 'Esa sala ya no existe. Vuelve al listado para ver las que siguen abiertas.';
+  }
+  if (estado === 409) {
+    return 'Alguien se te adelanto: el estado de la sala cambio mientras mirabas.';
+  }
+  if (estado >= 500 || estado === 0) {
+    return 'El servicio de batallas no responde ahora mismo. Vuelve a intentarlo en un momento.';
+  }
+  return 'No pudimos completar la operacion. Vuelve a intentarlo.';
 }
 
 /**
@@ -211,22 +374,27 @@ async function cuerpoDelProblema(respuesta) {
   }
 
   if (sinApiDetras(respuesta)) {
+    // La URL real de la peticion cuando `fetch` la trae; la base como respaldo.
+    const direccion = respuesta.url || ruta();
     return {
       status: respuesta.status,
       title: 'No hay ninguna API detras de esta ruta',
       detail:
-        `Estas viendo la vista servida como HTML estatico: nadie atiende ${ruta()}. ` +
+        `Estas viendo la vista servida como HTML estatico: nadie atiende ${direccion}. ` +
         'Levanta el servicio de salas, o declara en la pagina ' +
         '<meta name="nexus-api-base"> apuntando a donde este corriendo.',
     };
   }
 
+  // UX-R2.4 — el detalle era `El servicio respondio ${status}.`, o sea el
+  // codigo HTTP como el mensaje que lee el jugador. La norma del producto es
+  // que el codigo puede ir en la traza, nunca en la pantalla: «404» no le dice
+  // a nadie si esperar, reintentar o irse. El estado sigue en `status` para
+  // quien programa.
   return {
     status: respuesta.status,
-    title: respuesta.status === 401 ? 'Tu sesion no es valida' : 'El servicio no respondio bien',
-    detail:
-      respuesta.status === 401
-        ? 'Vuelve a iniciar sesion para continuar.'
-        : `El servicio respondio ${respuesta.status}.`,
+    title:
+      respuesta.status === 401 ? 'Tu sesion no es valida' : 'Las batallas no estan disponibles',
+    detail: detalleDelFallo(respuesta.status),
   };
 }

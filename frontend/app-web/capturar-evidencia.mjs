@@ -77,5 +77,81 @@ await capturar('editor-375x812', { ancho: 375, alto: 812, total: 3, mostrarEdito
   await ctx.close();
 }
 
+// HU-INV-011: el control de paginacion en un inventario grande, colocado en
+// una pagina intermedia para que se vean las dos flechas y la ventana ya
+// desplazada. `pagina()` siempre devuelve la primera, asi que aqui se
+// responde segun la pagina pedida.
+{
+  const TOTAL = 640;
+  const ctx = await navegador.newContext({ viewport: { width: 1360, height: 768 } });
+  const page = await ctx.newPage();
+  await page.route('**/api/v1/inventario/elementos*', (r) => {
+    const numero = Number(new URL(r.request().url()).searchParams.get('pagina') ?? 0);
+    const desde = numero * 16;
+    r.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        elementos: Array.from({ length: 16 }, (_, i) => ({
+          id: `e${desde + i}`,
+          productoId: `p${desde + i}`,
+          tipo: tipos[(desde + i) % tipos.length],
+          nombrePropio: nombres[(desde + i) % nombres.length],
+        })),
+        numero, tamanio: 16, totalElementos: TOTAL,
+        totalPaginas: Math.ceil(TOTAL / 16), ultima: false,
+      }),
+    });
+  });
+  await page.goto(BASE);
+  await page.waitForFunction(() => !document.querySelector('.estado-carga'));
+  await page.waitForSelector('.paginacion');
+
+  await page.screenshot({ path: `${SALIDA}/paginacion-primera-1360x768.png` });
+  console.log('  paginacion-primera-1360x768.png  (1360x768)');
+
+  // Se avanza hasta una pagina intermedia esperando a que el control asiente:
+  // cada cambio lo repinta entero.
+  const info = page.locator('.paginacion__info');
+  for (let i = 0; i < 9; i += 1) {
+    const antes = await info.textContent();
+    await page.locator('.paginacion__pagina[data-direccion="siguiente"]').click();
+    await page.waitForFunction(
+      (previo) => document.querySelector('.paginacion__info')?.textContent !== previo,
+      antes,
+    );
+  }
+  await page.screenshot({ path: `${SALIDA}/paginacion-intermedia-1360x768.png` });
+  console.log('  paginacion-intermedia-1360x768.png  (1360x768)');
+  await ctx.close();
+}
+
+// HU-INV-013: el realce de la tarjeta senalada. Se capturan las dos vias
+// del criterio — puntero y foco por teclado — sobre tarjetas distintas para
+// que en una sola imagen se vea el realce junto a las tarjetas en reposo.
+{
+  const ctx = await navegador.newContext({ viewport: { width: 1360, height: 768 } });
+  const page = await ctx.newPage();
+  await page.route('**/api/v1/inventario/elementos*', (r) => r.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify(pagina(16)),
+  }));
+  await page.goto(BASE);
+  await page.waitForFunction(() => !document.querySelector('.estado-carga'));
+
+  const tarjetas = page.locator('.vitrina__producto');
+  await tarjetas.first().hover();
+  // La transicion dura 150 ms: se espera a que el borde asiente.
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `${SALIDA}/resaltado-puntero-1360x768.png` });
+  console.log('  resaltado-puntero-1360x768.png  (1360x768)');
+
+  await page.mouse.move(2, 2);
+  await tarjetas.nth(5).locator('button').first().focus();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `${SALIDA}/resaltado-foco-1360x768.png` });
+  console.log('  resaltado-foco-1360x768.png  (1360x768)');
+  await ctx.close();
+}
+
 await navegador.close();
 process.exit(0);

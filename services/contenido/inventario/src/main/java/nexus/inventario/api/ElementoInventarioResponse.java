@@ -9,11 +9,14 @@ public record ElementoInventarioResponse(
         String productoId,
         TipoElementoInventario tipo,
         String nombrePropio,
-        ParteArmadura parteArmadura) {
+        ParteArmadura parteArmadura,
+        boolean disponible,
+        String subastaId) {
 
     static ElementoInventarioResponse de(ElementoInventario elemento) {
         return new ElementoInventarioResponse(
                 elemento.id(), elemento.productoId(), elemento.tipo(),
-                elemento.nombrePropio(), elemento.parteArmadura());
+                elemento.nombrePropio(), elemento.parteArmadura(),
+                elemento.disponible(), elemento.subastaId());
     }
 }

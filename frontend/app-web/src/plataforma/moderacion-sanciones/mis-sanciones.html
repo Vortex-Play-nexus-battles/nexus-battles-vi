@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mis sanciones · Nexus Battles VI</title>
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
+  </head>
+  <body>
+    <div data-cabecera-app></div>
+
+    <main class="pagina pila" data-vista="mis-sanciones">
+      <h1>Mis sanciones</h1>
+      <p class="t-meta">
+        Tu historial disciplinario. Una sancion vigente se puede apelar dentro de los 30 dias
+        siguientes; el panel de revision responde con una decision motivada.
+      </p>
+
+      <div class="aviso" data-zona="aviso" role="status" hidden></div>
+
+      <section class="tarjeta pila pila--compacta">
+        <h2>Sanciones</h2>
+        <div class="pila pila--compacta" data-zona="sanciones"></div>
+      </section>
+
+      <form class="tarjeta pila pila--compacta" data-zona="apelar" hidden>
+        <h2>Apelar</h2>
+        <input type="hidden" name="sancionId" />
+        <label class="campo">
+          <span class="campo__etiqueta">Tu argumento</span>
+          <textarea class="campo__control" name="argumento" rows="4" required></textarea>
+        </label>
+        <button class="boton boton--primario" type="submit">Enviar apelacion</button>
+      </form>
+
+      <section class="tarjeta pila pila--compacta">
+        <h2>Mis apelaciones</h2>
+        <div class="pila pila--compacta" data-zona="apelaciones"></div>
+      </section>
+    </main>
+
+    <script type="module">
+      import { montarCabecera, exigirSesion, leerSesion } from '../../comun/cabecera-app.js';
+      import { montarMisSanciones } from './sanciones.js';
+
+      if (!exigirSesion()) {
+        throw new Error('sin sesion: redirigiendo al login');
+      }
+      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'cuenta' });
+      montarMisSanciones(document, { uid: leerSesion().uid });
+    </script>
+  </body>
+</html>

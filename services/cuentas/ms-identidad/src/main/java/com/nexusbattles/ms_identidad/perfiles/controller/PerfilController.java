@@ -32,17 +32,20 @@ public class PerfilController {
         return ResponseEntity.ok(PerfilUsuarioResponse.from(perfil));
     }
 
-    @PutMapping("/{usuarioId}")
+    // Cambió de @RequestBody (JSON) a @ModelAttribute + multipart/form-data,
+    // porque ahora el avatar es un archivo real (mismo patrón que usa
+    // Cristian en /api/v1/auth/registro), no un nombre de avatar predefinido.
+    @PutMapping(value = "/{usuarioId}", consumes = "multipart/form-data")
     @RequirePermission(Action.MODIFICAR_PERFIL_PROPIO)
     public ResponseEntity<?> actualizarMiPerfil(@PathVariable Long usuarioId,
-                                                @Valid @RequestBody ActualizarPerfilRequest datos,
+                                                @Valid @ModelAttribute ActualizarPerfilRequest datos,
                                                 HttpServletRequest request) {
         PerfilUsuario perfilActual = buscarOFallar(usuarioId);
         verificarDueno(perfilActual, request);
         try {
             PerfilUsuario actualizado = perfilUsuarioService.actualizarPerfilPropio(
                 usuarioId, datos.getNombres(), datos.getApellidos(), datos.getAvatar(),
-                datos.getBiografia(), datos.getPreferencias(), datos.getApodo());
+                datos.getPreferencias(), datos.getApodo());
             return ResponseEntity.ok(PerfilUsuarioResponse.from(actualizado));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());

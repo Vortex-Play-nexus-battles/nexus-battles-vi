@@ -1,0 +1,483 @@
+openapi: 3.1.0
+info:
+  title: Nexus Battles VI - Pujas y compra inmediata (ms-subastas)
+  description: >-
+    API de participación en subastas: pujar, comprar de forma inmediata y
+    configurar una puja automática. Cubre HU-SUB-004 (M12 — Subasta).
+
+    Contrato publicado ANTES de implementar los controladores, conforme a la
+    regla 1 de plataforma ("contrato primero"). Los endpoints de publicación
+    (HU-SUB-001) y de listado (HU-SUB-011) son de otras historias y no se
+    describen aquí.
+
+    DECISIÓN TOMADA (v0.2.0): cada servicio valida el token por su cuenta.
+    ms-subastas trae su propio ValidadorDeToken, escrito sin dependencias de
+    Spring ni del dominio para poder mudarse a shared/libs/ cuando los tres
+    equipos acuerden esa estructura; importar el interceptor de ms-identidad
+    habría cruzado dominios, cosa que prohíbe backend-spring.md y verifica
+    ArchUnit. La identidad del jugador se toma SIEMPRE del token, nunca de un
+    encabezado ni del cuerpo, porque estos endpoints mueven créditos.
+  version: 0.3.0
+servers:
+  - url: http://localhost:8092/api/v1
+    description: Spring Boot local (perfil dev)
+
+security:
+  - bearerJwt: []
+
+paths:
+  /subastas/{subastaId}/pujas:
+    get:
+      summary: Historial de pujas de la subasta
+      description: >-
+        De la mas reciente a la mas antigua. Publico: se consulta sin sesion,
+        igual que el listado. Con sesion, cada linea viene marcada con `esTuya`
+        para que la interfaz resalte las propias sin conocer el identificador de
+        nadie.
+
+        No devuelve apodos. El de cada postor vive en ms-identidad, y traerlo
+        obligaria a este servicio a consultar otro dominio solo para pintar una
+        lista.
+      operationId: historialDePujas
+      tags: [pujas]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/SubastaId'
+      responses:
+        '200':
+          description: Historial de la subasta
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PujaDelHistorial'
+        '404':
+          $ref: '#/components/responses/SubastaNoEncontrada'
+    post:
+      summary: Pujar en una subasta
+      description: >-
+        Registra una puja que debe superar la oferta vigente más el incremento
+        mínimo. Reserva los créditos del ofertante en ms-finanzas y libera los
+        del postor superado, de forma atómica con la actualización de la
+        subasta.
+      operationId: pujar
+      tags: [pujas]
+      parameters:
+        - $ref: '#/components/parameters/SubastaId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PujarRequest'
+      responses:
+        '201':
+          description: Puja aceptada; queda como oferta vigente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PujaResponse'
+        '400':
+          $ref: '#/components/responses/SolicitudMalFormada'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '404':
+          $ref: '#/components/responses/SubastaNoEncontrada'
+        '409':
+          $ref: '#/components/responses/PujaRechazada'
+        '422':
+          $ref: '#/components/responses/PujaRechazada'
+
+  /subastas/{subastaId}/mi-participacion:
+    get:
+      summary: Situacion del jugador autenticado en esta subasta
+      description: >-
+        Si va ganando, cuanto lleva retenido, que limite automatico tiene puesto
+        y cuantos segundos faltan para poder volver a pujar.
+
+        Existe porque el listado de HU-SUB-011 es el mismo para todos y no puede
+        responder nada de esto. Sin el, la interfaz tiene que suponerlo, y lo
+        que hacia era mostrar siempre "no vas ganando" y "sin puja automatica"
+        aunque fuera falso.
+      operationId: miParticipacion
+      tags: [pujas]
+      parameters:
+        - $ref: '#/components/parameters/SubastaId'
+      responses:
+        '200':
+          description: Situacion del jugador
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MiParticipacion'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '404':
+          $ref: '#/components/responses/SubastaNoEncontrada'
+
+  /mis-pujas/resumen:
+    get:
+      summary: Lo que el jugador tiene en juego sumando todas las subastas
+      description: >-
+        Cuelga de su propia ruta y no de /subastas/{subastaId} porque no habla
+        de ninguna subasta concreta: colgarlo de ahi obligaria a inventar un
+        identificador para pedirlo.
+      operationId: miResumen
+      tags: [pujas]
+      responses:
+        '200':
+          description: Resumen del jugador
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MiResumen'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+
+  /subastas/{subastaId}/compra-inmediata:
+    post:
+      summary: Comprar de forma inmediata
+      description: >-
+        Adquiere el producto al precio de compra inmediata, cierra la subasta y
+        libera los créditos del postor que quedaba vigente. Exige confirmación
+        explícita del jugador: una petición con `confirmado` en false se
+        rechaza, para que la interfaz no pueda cerrar una compra por accidente.
+      operationId: comprarAhora
+      tags: [pujas]
+      parameters:
+        - $ref: '#/components/parameters/SubastaId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompraInmediataRequest'
+      responses:
+        '201':
+          description: Compra realizada; la subasta queda adjudicada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PujaResponse'
+        '400':
+          $ref: '#/components/responses/SolicitudMalFormada'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '404':
+          $ref: '#/components/responses/SubastaNoEncontrada'
+        '409':
+          $ref: '#/components/responses/PujaRechazada'
+        '422':
+          $ref: '#/components/responses/PujaRechazada'
+
+  /subastas/{subastaId}/puja-automatica:
+    put:
+      summary: Configurar o actualizar la puja automática del jugador
+      description: >-
+        Deja configurada una puja automática que ofertará hasta el límite
+        indicado, respetando el incremento mínimo y el intervalo mínimo entre
+        pujas. Es idempotente por jugador y subasta: hay como máximo una.
+      operationId: configurarPujaAutomatica
+      tags: [puja-automatica]
+      parameters:
+        - $ref: '#/components/parameters/SubastaId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PujaAutomaticaRequest'
+      responses:
+        '200':
+          description: Puja automática configurada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PujaAutomaticaResponse'
+        '400':
+          $ref: '#/components/responses/SolicitudMalFormada'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '404':
+          $ref: '#/components/responses/SubastaNoEncontrada'
+        '409':
+          $ref: '#/components/responses/PujaRechazada'
+        '422':
+          $ref: '#/components/responses/PujaRechazada'
+    delete:
+      summary: Desactivar la puja automática del jugador
+      operationId: desactivarPujaAutomatica
+      tags: [puja-automatica]
+      parameters:
+        - $ref: '#/components/parameters/SubastaId'
+      responses:
+        '204':
+          description: >-
+            Puja automática desactivada. Idempotente: si el jugador no tenía
+            ninguna configurada, la respuesta es igualmente 204, porque el
+            estado que pedía el cliente ya se cumple. La fila no se borra, se
+            marca inactiva: es la única evidencia de por qué se emitieron sus
+            pujas.
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '404':
+          $ref: '#/components/responses/SubastaNoEncontrada'
+
+components:
+  securitySchemes:
+    bearerJwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        Token emitido por ms-identidad. El jugador se identifica por el claim
+        `uid` (UUID estable), NO por `sub`: el subject es el apodo, que el
+        usuario puede cambiar desde su perfil y un administrador desde la
+        edición, así que no sirve como clave de nada que mueva créditos.
+
+        Un token sin `uid` es válido para leer pero se rechaza con 401 en estos
+        endpoints: acredita que alguien inició sesión, pero no a quién cobrarle.
+        Ese caso solo aparece con tokens emitidos antes de que ms-identidad
+        incluyera el claim, y se resuelve volviendo a iniciar sesión.
+
+  parameters:
+    SubastaId:
+      name: subastaId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >-
+        Clave generada por el cliente. Reintentar con la misma clave no
+        reserva los créditos dos veces ni registra una puja nueva: devuelve la
+        puja que creó la primera petición, con el mismo cuerpo. Es obligatoria
+        a propósito: si el servidor la derivara del reloj, un reintento por
+        expiración produciría una clave distinta y cobraría doble.
+
+        Reutilizarla en otra subasta o para otro jugador se rechaza con
+        `motivo: CLAVE_REUTILIZADA`, porque entonces la clave ya no identifica
+        una sola operación.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+
+  schemas:
+    PujarRequest:
+      type: object
+      required: [monto]
+      properties:
+        monto:
+          type: string
+          format: decimal
+          description: >-
+            Créditos ofrecidos. Debe ser al menos la oferta vigente más el
+            incremento mínimo de la subasta. Se transporta como cadena para no
+            perder precisión decimal.
+          example: "110.00"
+
+    CompraInmediataRequest:
+      type: object
+      required: [confirmado]
+      properties:
+        confirmado:
+          type: boolean
+          description: Debe ser true. Materializa la confirmación que exige la historia.
+          example: true
+
+    PujaAutomaticaRequest:
+      type: object
+      required: [limite]
+      properties:
+        limite:
+          type: string
+          format: decimal
+          description: >-
+            Tope hasta el que el motor ofertará por el jugador. Se valida que
+            sea alcanzable (al menos la siguiente oferta válida) y que el saldo
+            disponible del jugador lo cubra.
+          example: "500.00"
+
+    PujaDelHistorial:
+      type: object
+      required: [id, monto, tipo, estado, creadaEn, esTuya]
+      properties:
+        id: { type: string, format: uuid }
+        monto: { type: string, format: decimal, example: "110.00" }
+        tipo: { type: string, enum: [MANUAL, AUTOMATICA] }
+        estado: { type: string, enum: [ACTIVA, SUPERADA, GANADORA, RECHAZADA] }
+        creadaEn: { type: string, format: date-time }
+        esTuya:
+          type: boolean
+          description: Falso siempre si se consulta sin sesion.
+
+    MiResumen:
+      type: object
+      required: [creditosRetenidos, subastasGanando]
+      properties:
+        creditosRetenidos:
+          type: string
+          format: decimal
+          description: Suma de tus pujas que siguen siendo oferta vigente.
+        saldoDisponible:
+          type: [string, "null"]
+          format: decimal
+          description: >-
+            Lo que te queda libre segun ms-finanzas, ya neto de reservas.
+
+            **Nulo significa "no se sabe", nunca "cero"**: si ms-finanzas no
+            responde, este servicio prefiere no decir nada antes que inventar
+            una cifra. La interfaz debe mostrarlo como desconocido y dejar que
+            el servidor decida si una puja cabe o no; un cero le diria al
+            jugador que esta arruinado y le bloquearia pujas que si puede pagar.
+        subastasGanando:
+          type: integer
+          description: En cuantas subastas tu puja es la oferta vigente.
+
+    MiParticipacion:
+      type: object
+      required: [vasGanando, teSuperaron, creditosRetenidos, automaticaActiva, segundosParaVolverAPujar]
+      properties:
+        vasGanando: { type: boolean }
+        teSuperaron:
+          type: boolean
+          description: >-
+            No es lo contrario de vasGanando: exige haber pujado antes. Quien
+            nunca pujo no va perdiendo, es que no participa, y la interfaz no
+            debe decirle lo mismo.
+        tuOfertaVigente:
+          type: [string, "null"]
+          format: decimal
+          description: Nula si no tienes ninguna puja que sea la oferta vigente.
+        creditosRetenidos:
+          type: string
+          format: decimal
+          description: >-
+            Suma de tus pujas que siguen siendo oferta vigente. Es lo unico que
+            este servicio sabe de creditos: el saldo total y el disponible los
+            tiene ms-finanzas.
+        limiteAutomatico:
+          type: [string, "null"]
+          format: decimal
+        automaticaActiva: { type: boolean }
+        segundosParaVolverAPujar:
+          type: integer
+          description: Cero si ya puedes pujar. El intervalo es por subasta, no por cuenta.
+
+    PujaResponse:
+      type: object
+      required: [id, subastaId, jugadorId, monto, estado, creadaEn]
+      properties:
+        id:
+          type: string
+          format: uuid
+        subastaId:
+          type: string
+          format: uuid
+        jugadorId:
+          type: string
+          format: uuid
+        monto:
+          type: string
+          format: decimal
+          example: "110.00"
+        estado:
+          type: string
+          enum: [ACTIVA, SUPERADA, GANADORA, RECHAZADA]
+        creadaEn:
+          type: string
+          format: date-time
+
+    PujaAutomaticaResponse:
+      type: object
+      required: [id, subastaId, jugadorId, limite, activa]
+      properties:
+        id:
+          type: string
+          format: uuid
+        subastaId:
+          type: string
+          format: uuid
+        jugadorId:
+          type: string
+          format: uuid
+        limite:
+          type: string
+          format: decimal
+          example: "500.00"
+        activa:
+          type: boolean
+
+    ProblemDetail:
+      type: object
+      description: Formato de error estándar de los 20 módulos (regla 4 de plataforma).
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        motivo:
+          type: string
+          description: Código estable para que la interfaz elija el mensaje.
+          enum:
+            - SUBASTA_NO_ACTIVA
+            - PUJA_PROPIA
+            - OFERTA_INSUFICIENTE
+            - INTERVALO_MINIMO_NO_CUMPLIDO
+            - LIMITE_SUBASTAS_ACTIVAS
+            - LIMITE_PUJAS_ACTIVAS
+            - LIMITE_AUTOMATICO_INALCANZABLE
+            - SALDO_INSUFICIENTE_PARA_LIMITE
+            - CONFIRMACION_REQUERIDA
+            - SIN_COMPRA_INMEDIATA
+            - SALDO_INSUFICIENTE
+            - CLAVE_REUTILIZADA
+
+  responses:
+    SolicitudMalFormada:
+      description: >-
+        La petición no cumple el propio contrato: falta la cabecera
+        Idempotency-Key o no tiene entre 8 y 128 caracteres, falta un campo
+        obligatorio del cuerpo, o un valor no tiene el tipo declarado. No lleva
+        `motivo`: no es un rechazo de negocio, es una petición que el servidor
+        no puede ni evaluar.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    NoAutenticado:
+      description: Falta el token o no es válido
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    SubastaNoEncontrada:
+      description: No existe la subasta
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    PujaRechazada:
+      description: >-
+        La operación viola una regla de participación. El campo `motivo`
+        distingue el caso; 409 para conflictos de carrera (la oferta vigente ya
+        subió), 422 para violaciones de regla del propio jugador.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'

@@ -1,3 +1,17 @@
 plugins {
     id 'nexus.spring-conventions'
+    // Catalogo y versiones en un esquema propio del PostgreSQL de la
+    // plataforma (regla 7), cambios por Flyway (regla 8).
+    id 'nexus.persistencia-conventions'
+    // Servidor de recursos (ADR-002): quien cambia un parametro sale del
+    // token; la lectura es publica dentro de la red.
+    id 'nexus.seguridad-conventions'
+}
+
+dependencies {
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation platform('org.testcontainers:testcontainers-bom:1.21.4')
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:postgresql'
 }

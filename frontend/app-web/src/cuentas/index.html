@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Inicio — NEXUS BATTLES VI</title>
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
+  </head>
+  <body>
+    <!-- Cabecera única de la aplicación (HU-UX-001). Antes esta vista tenía su
+         propio encabezado con su propio botón de cerrar sesión. -->
+    <div data-cabecera-app></div>
+
+    <main class="pagina home">
+      <!-- Lo primero: quién eres y la acción principal. -->
+      <section class="home__destacado">
+        <div class="pila pila--ajustada">
+          <p class="t-etiqueta">Tu Nexo</p>
+          <h1 class="home__saludo" data-zona="saludo">Hola</h1>
+          <p class="t-cuerpo">
+            Equipa tu héroe, entra a una sala y decide el combate turno a turno.
+          </p>
+        </div>
+        <!--
+          UX-R2.6 — el CTA domina. Era un botón primario del mismo tamaño que
+          los «Reintentar» de las tarjetas de abajo: la acción por la que uno
+          entra al juego pesaba visualmente lo mismo que reintentar una
+          consulta de saldo. `.home__jugar` le da el tamaño y el acento.
+        -->
+        <a
+          class="boton boton--acento boton--grande home__jugar"
+          href="../plataforma/salas-partidas/crear-sala.html"
+        >
+          Jugar ahora
+        </a>
+      </section>
+
+      <!--
+        UX-R2.6 — orden del hub. Antes venia primero «Tus créditos» y después
+        «Tu héroe». La jerarquía de una pantalla de inicio de juego es otra:
+        primero JUGAR (arriba, en el destacado), después con QUÉ se juega —el
+        héroe equipado, que es lo que decide si se puede entrar a una sala
+        (HU-SAL-003)— y solo entonces cuánto se tiene para apostar. El saldo
+        importa, pero no es lo primero que uno mira al volver a un juego.
+
+        Cada bloque se carga por su cuenta y dice por su nombre si su servicio
+        no está en este entorno.
+      -->
+      <section class="pila pila--compacta home__heroe">
+        <h2 class="t-subtitulo">Tu héroe</h2>
+        <div data-zona="bloque-heroe"></div>
+      </section>
+
+      <div class="home__rejilla">
+        <section class="pila pila--compacta">
+          <h2 class="t-subtitulo">Tus créditos</h2>
+          <div data-zona="bloque-saldo"></div>
+        </section>
+
+        <section class="pila pila--compacta">
+          <h2 class="t-subtitulo">Torneo</h2>
+          <div data-zona="bloque-torneo"></div>
+        </section>
+
+        <section class="pila pila--compacta">
+          <h2 class="t-subtitulo">Tus avisos</h2>
+          <div data-zona="bloque-avisos"></div>
+        </section>
+      </div>
+
+      <section class="pila pila--compacta">
+        <h2 class="t-subtitulo">A dónde ir</h2>
+        <div class="home__accesos" data-zona="accesos"></div>
+      </section>
+
+      <!-- Administración: solo para quien tiene rol. La cabecera ya lleva su
+           propio menú; esto es el atajo desde la home. -->
+      <section class="pila pila--compacta" data-zona="administracion" hidden>
+        <h2 class="t-subtitulo">Administración</h2>
+        <div class="home__accesos">
+          <a
+            class="tarjeta tarjeta--pulsable pila pila--ajustada"
+            href="./gestion-usuarios.html"
+            data-roles="ADMINISTRADOR,SUPER_ADMINISTRADOR"
+            hidden
+          >
+            <h3 class="tarjeta__titulo">Gestión de usuarios</h3>
+            <p class="t-meta">Perfiles, roles y estado de las cuentas.</p>
+          </a>
+          <a
+            class="tarjeta tarjeta--pulsable pila pila--ajustada"
+            href="./crear-cuenta-admin.html"
+            data-roles="SUPER_ADMINISTRADOR"
+            hidden
+          >
+            <h3 class="tarjeta__titulo">Crear cuenta administrativa</h3>
+            <p class="t-meta">Registra una cuenta con rol administrativo.</p>
+          </a>
+          <a
+            class="tarjeta tarjeta--pulsable pila pila--ajustada"
+            href="./auditoria.html"
+            data-roles="SUPER_ADMINISTRADOR"
+            hidden
+          >
+            <h3 class="tarjeta__titulo">Auditoría</h3>
+            <p class="t-meta">Registro de acciones administrativas.</p>
+          </a>
+          <a
+            class="tarjeta tarjeta--pulsable pila pila--ajustada"
+            href="../plataforma/moderacion-sanciones/sanciones-admin.html"
+            data-roles="MODERADOR,ADMINISTRADOR,SUPER_ADMINISTRADOR"
+            hidden
+          >
+            <h3 class="tarjeta__titulo">Moderación</h3>
+            <p class="t-meta">Sanciones, apelaciones y lista negra.</p>
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <!--
+      RF-CHA-001: el icono flotante del asistente va en todas las vistas.
+      Lo monta `comun/ui/asistente.js`, que ademas le da comportamiento:
+      hasta ahora el boton estaba copiado aqui y no hacia nada al pulsarlo.
+    -->
+
+    <script type="module" src="./index.js"></script>
+    <script type="module">
+      import { montarAsistente } from '../comun/ui/asistente.js';
+
+      // RF-CHA-001 / HU-CHA-001 CA-03: el icono responde y dice la verdad.
+      montarAsistente(document);
+    </script>
+  </body>
+</html>

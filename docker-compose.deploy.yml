@@ -18,27 +18,179 @@
 # ${TAG} lo exporta desplegar.sh antes de invocar "docker compose" (sha corto
 # del commit que paso CI para ese servicio).
 
+#
+# Host unico de dev en AWS (t3.small, 2 GiB + 2 GB de swap; ver
+# infrastructure/entornos/plataforma/README.md). Cada JVM queda acotada a
+# 384 MB (MaxRAMPercentage=70 sobre el limite del contenedor) para que un
+# arranque no se coma la memoria de los demas, y todo se reinicia solo
+# cuando la instancia vuelve del apagado nocturno (restart: unless-stopped;
+# sin esto, tras un stop/start del host los contenedores quedan parados y
+# la demo aparece caida).
+
+x-servicio-plataforma: &servicio-plataforma
+  restart: unless-stopped
+  mem_limit: 384m
+  environment:
+    JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+
 services:
+  plataforma-db:
+    restart: unless-stopped
+    mem_limit: 256m
+    # Volumen con nombre: los datos de dev sobreviven a redespliegues y al
+    # apagado nocturno (el base no declara volumen: usa uno anonimo).
+    volumes:
+      - plataforma-db-datos:/var/lib/postgresql/data
+
+  plataforma-cache:
+    restart: unless-stopped
+    mem_limit: 64m
+
+  mailpit:
+    restart: unless-stopped
+    mem_limit: 64m
+    environment:
+      # La bandeja se sirve detras del borde en /mailpit/ (borde-dev.conf).
+      MP_WEBROOT: /mailpit
+
+  # Borde del host (infrastructure/red-balanceo/borde-dev.conf): unico
+  # puerto publico del host, sirve el frontend y enruta /api/v1/* y /ws a
+  # cada servicio por nombre. No existe en docker-compose.yml (desarrollo
+  # local abre cada servicio por su puerto); solo en despliegue. cd.yml deja
+  # el frontend, el ui-kit y esta configuracion en /opt/nexus/web/.
+  srv-borde:
+    image: nginx:1.27-alpine
+    container_name: srv-borde
+    restart: unless-stopped
+    mem_limit: 48m
+    ports:
+      - "80:80"
+    volumes:
+      - /opt/nexus/web:/srv/nexus:ro
+      - /opt/nexus/web/infrastructure/red-balanceo/borde-dev.conf:/etc/nginx/conf.d/default.conf:ro
+
   srv-comentarios:
+    <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-comentarios:${TAG}
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      # HU-COM-001 / RF-USR-004: la sancion activa del autor se consulta en
+      # moderacion-sanciones, que corre en este host (misma nota que en
+      # srv-salas-partidas: sin esto localhost seria el propio contenedor).
+      SANCIONES_URL: ${SANCIONES_URL:-http://srv-moderacion-sanciones:8086/api/v1}
 
   srv-correo:
+    <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-correo:${TAG}
 
   srv-torneos:
+    <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-torneos:${TAG}
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      # M13: lista negra y sanciones en moderacion-sanciones (este host); el
+      # libro de creditos NO corre en dev (ver srv-salas-partidas): una
+      # inscripcion con costo > 0 responde 503 libro-no-disponible y un torneo
+      # gratuito (costo 0) funciona completo. Credencial propia (ADR-005).
+      LISTA_NEGRA_VERIFICAR_URL: ${LISTA_NEGRA_VERIFICAR_URL:-http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar}
+      SANCIONES_URL: ${SANCIONES_URL:-http://srv-moderacion-sanciones:8086/api/v1}
+      CREDITOS_URL: ${CREDITOS_URL:-http://srv-ms-finanzas:8093/api/v1}
+      DIRECTORIO_ACTIVO_URL: ${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}
+      DIRECTORIO_ACTIVO_CLIENT_ID: torneos
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_TORNEOS:-}
 
   srv-salas-partidas:
+    <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-salas-partidas:${TAG}
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      # Credencial de servicio propia (ADR-005) para hablar con inventario.
+      # El .env es compartido, asi que el client_id va aqui y el secreto
+      # sale de la variable por servicio que genera desplegar.sh.
+      DIRECTORIO_ACTIVO_CLIENT_ID: salas-partidas
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_SALAS_PARTIDAS:-}
+      # HU-JUE-014: el libro de creditos. ms-finanzas NO corre en el host de
+      # dev (no cabe en el t3.small sin sacrificar el MVP), asi que en dev
+      # toda sala con recompensa > 0 responde 503 creditos-no-disponibles y
+      # nada queda reservado; las salas sin recompensa no pasan por aqui. El
+      # dia que se despliegue, esta URL ya apunta a donde estara.
+      CREDITOS_URL: ${CREDITOS_URL:-http://srv-ms-finanzas:8093/api/v1}
+      # HU-TOR-004 CA-04: la sala que es un encuentro de torneo informa el
+      # ganador a torneos al terminar, con la credencial de arriba.
+      TORNEOS_URL: ${TORNEOS_URL:-http://srv-torneos:8083/api/v1}
+      # HU-JUE-015 / RF-USR-004: el chat consulta la sancion activa del autor
+      # en moderacion-sanciones, que SI corre en este host. Sin esta URL el
+      # valor por defecto es localhost, que dentro del contenedor es el propio
+      # servicio, y todo mensaje se bloquearia con «sanciones no disponibles».
+      SANCIONES_URL: ${SANCIONES_URL:-http://srv-moderacion-sanciones:8086/api/v1}
 
   srv-notificaciones:
+    <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-notificaciones:${TAG}
 
   srv-moderacion-sanciones:
+    <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-moderacion-sanciones:${TAG}
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      # HU-NOT-005: el aviso de sancion/apelacion va a la bandeja del jugador
+      # por /internal/notifications de notificaciones, que corre en este host,
+      # con la credencial de servicio propia (ADR-005; secreto de desplegar.sh).
+      NOTIFICACIONES_URL: ${NOTIFICACIONES_URL:-http://srv-notificaciones:8085/api/v1}
+      # HU-ADM-001 (CA-04): rango de la suspension y plazo de apelacion desde
+      # admin-parametros, con las variables de entorno como respaldo.
+      PARAMETROS_URL: ${PARAMETROS_URL:-http://srv-admin-parametros:8088/api/v1}
+      DIRECTORIO_ACTIVO_URL: ${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}
+      DIRECTORIO_ACTIVO_CLIENT_ID: moderacion-sanciones
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_MODERACION_SANCIONES:-}
 
+  # HU-DIS-001: el monitor de disponibilidad necesita saber DONDE preguntar.
+  #
+  # Su application.yml trae, como valores de desarrollo, http://localhost:808x
+  # -- y lo advierte por escrito: «dentro de un contenedor, localhost es el
+  # propio servicio». En el host eso significaba que se sondeaba a si mismo
+  # ocho veces y reportaba INDISPONIBLE para los siete servicios del bloque,
+  # justo mientras el healthcheck del despliegue los daba saludables a todos.
+  # El informe de HU-DIS-001 media, literalmente, nada.
+  #
+  # Aqui se corrige donde corresponde: la topologia de despliegue. Los nombres
+  # son los del compose y la red interna los resuelve; no son secretos, asi que
+  # se versionan (regla 10 habla de valores reales, no de nombres de servicio).
+  # metricas-plataforma no se sondea a si mismo: si estuviera caido no habria
+  # nadie que lo reportara, y su salud la vigila el healthcheck del CD.
   srv-metricas-plataforma:
+    <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-metricas-plataforma:${TAG}
+    environment:
+      # Se repite porque el merge de YAML (<<) reemplaza el mapa entero, no lo
+      # fusiona: sin esta linea el servicio perderia el limite de memoria de la
+      # JVM que comparte con los demas.
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      SALUD_COMENTARIOS: http://srv-comentarios:8081/actuator/health
+      SALUD_CORREO: http://srv-correo:8082/actuator/health
+      SALUD_TORNEOS: http://srv-torneos:8083/actuator/health
+      SALUD_SALAS_PARTIDAS: http://srv-salas-partidas:8084/actuator/health
+      SALUD_NOTIFICACIONES: http://srv-notificaciones:8085/actuator/health
+      SALUD_MODERACION: http://srv-moderacion-sanciones:8086/actuator/health
+      SALUD_ADMIN_PARAMETROS: http://srv-admin-parametros:8088/actuator/health
+      # HU-MET-001: agregados de moderacion desde moderacion-sanciones.
+      SANCIONES_URL: ${SANCIONES_URL:-http://srv-moderacion-sanciones:8086/api/v1}
+      # HU-MET-001 (#527): la observabilidad exige rol administrativo; el
+      # emisor de los tokens es ms-identidad, igual que en el resto del bloque.
+      IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://srv-ms-identidad:8089/api/v1/auth/jwks}
 
   srv-admin-parametros:
+    <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-admin-parametros:${TAG}
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      # HU-AUD-001: ms-cumplimiento NO corre en el host de dev (capacidad);
+      # sin AUDITORIA_URL cada cambio queda en el historial local y en la
+      # bitacora. Cuando corra, apuntar aqui a su /admin/auditoria/eventos.
+      AUDITORIA_URL: ${AUDITORIA_URL:-}
+      DIRECTORIO_ACTIVO_URL: ${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}
+      DIRECTORIO_ACTIVO_CLIENT_ID: admin-parametros
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_ADMIN_PARAMETROS:-}
+
+volumes:
+  plataforma-db-datos:

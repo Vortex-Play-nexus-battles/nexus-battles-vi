@@ -2,12 +2,7 @@ import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.
 
 const CLAVE_TOKEN = 'nexus.token';
 
-export const ROLES_DISPONIBLES = [
-  'JUGADOR',
-  'MODERADOR',
-  'ADMINISTRADOR',
-  'SUPER_ADMINISTRADOR',
-];
+export const ROLES_DISPONIBLES = ['JUGADOR', 'MODERADOR', 'ADMINISTRADOR', 'SUPER_ADMINISTRADOR'];
 
 function obtenerToken() {
   return sessionStorage.getItem(CLAVE_TOKEN);
@@ -32,19 +27,16 @@ export async function cambiarRol(
     throw new Error('El rol seleccionado no es válido.');
   }
 
-  const response = await fetchImpl(
-    `/api/v1/rbac/usuarios/${encodeURIComponent(usuarioId)}/rol`,
-    {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        nuevoRol,
-      }),
+  const response = await fetchImpl(`/api/v1/rbac/usuarios/${encodeURIComponent(usuarioId)}/rol`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
     },
-  );
+    body: JSON.stringify({
+      nuevoRol,
+    }),
+  });
 
   const texto = await response.text();
 

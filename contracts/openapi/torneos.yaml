@@ -1,0 +1,447 @@
+openapi: 3.1.0
+info:
+  title: Nexus Battles VI - Torneos (creacion, equipos, inscripcion y arbol)
+  description: >
+    Modulo M13 «Torneo y transmision», Grupo 6, servicio `torneos`. Cubre
+    RF-TOR-001 (creacion, un torneo cada 91 dias), RF-TOR-003 (equipos de dos
+    jugadores con nombre y avatar validados contra la lista negra),
+    RF-TOR-002 (inscripcion pagando en creditos por el libro de ms-finanzas),
+    RF-TOR-005 (las posiciones vacias del arbol se completan con equipos de la
+    maquina), RF-TOR-004 (arbol de ocho equipos: ganadores 1-6, 11 y final;
+    secundarios 7-10, 12 y 13) y la intervencion de RF-ADM-005 sobre un
+    encuentro (resultado registrado por un administrador con motivo).
+
+    Quien actua sale SIEMPRE del token (claims `uid` y `rol`, ADR-002). Crear,
+    iniciar y cancelar un torneo es de ADMINISTRADOR o SUPER_ADMINISTRADOR
+    (D-21: el «administrador de torneo» de la ficha no esta en la Tabla 24,
+    INC-13). Un encuentro es equipo contra equipo (2 contra 2, D-22 / INC-12):
+    es el unico formato compatible con un arbol de pares como el que fija
+    RF-TOR-004. El resultado de un encuentro lo aporta un servicio (la
+    partida jugada, ROLE_SERVICIO) o un administrador con `motivo`
+    (incomparecencia o incidencia, RF-ADM-005); nunca un jugador.
+
+    Lo que este contrato NO cubre todavia: la premiacion (RF-TOR-007: monto y
+    «epica unica» sin definir por el PO), la transmision (RF-TOR-006, INC-18) y
+    el pago en dinero real (RF-PAG-001, pasarela de otro equipo). El valor de
+    la inscripcion lo fija quien crea el torneo, en creditos (D-23); con 0 no
+    se cobra nada. Todo cambio incompatible abre version nueva (regla 2).
+  version: 1.1.0
+servers:
+  - url: http://localhost:8083/api/v1
+    description: Entorno local de desarrollo
+
+security:
+  - tokenDeUsuario: []
+
+paths:
+  /torneos:
+    get:
+      summary: Torneos publicados, del mas reciente al mas antiguo
+      operationId: listarTorneos
+      security: []
+      responses:
+        '200':
+          description: Lista (puede ser vacia)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TorneoResumen' }
+    post:
+      summary: Crear un torneo y abrir las inscripciones (RF-TOR-001)
+      operationId: crearTorneo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CrearTorneoRequest' }
+      responses:
+        '201':
+          description: Torneo creado en INSCRIPCIONES_ABIERTAS con sus 8 cupos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Torneo' }
+        '400':
+          description: Cuerpo invalido (SOLICITUD_INVALIDA)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+        '401': { $ref: '#/components/responses/SinToken' }
+        '403':
+          description: El rol no crea torneos (PERMISO_INSUFICIENTE)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+        '409':
+          description: >
+            Ya hay un torneo dentro de la ventana de 91 dias (VENTANA_DE_91_DIAS).
+            `proximaFechaPosible` dice cuando se podra crear el siguiente.
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+
+  /torneos/{torneoId}:
+    get:
+      summary: Detalle del torneo con sus equipos y su arbol
+      operationId: obtenerTorneo
+      security: []
+      parameters: [ { $ref: '#/components/parameters/TorneoId' } ]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Torneo' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+
+  /torneos/{torneoId}/cancelacion:
+    post:
+      summary: Cancelar antes del inicio; se devuelven las inscripciones (CA-04 RF-TOR-001)
+      operationId: cancelarTorneo
+      parameters: [ { $ref: '#/components/parameters/TorneoId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motivo]
+              properties:
+                motivo: { type: string, minLength: 1, maxLength: 500 }
+      responses:
+        '200':
+          description: Torneo CANCELADO; toda reserva de creditos liberada
+          content: { application/json: { schema: { $ref: '#/components/schemas/Torneo' } } }
+        '401': { $ref: '#/components/responses/SinToken' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409':
+          description: Ya empezo o ya termino (ESTADO_NO_PERMITE)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+        '503': { $ref: '#/components/responses/LibroNoDisponible' }
+
+  /torneos/{torneoId}/equipos:
+    post:
+      summary: Registrar un equipo de dos jugadores (RF-TOR-003)
+      description: >
+        Quien llama es el primer integrante y capitan; `companeroUid` es el
+        segundo. Nombre y avatar pasan por la lista negra (HU-ADM-002). Un
+        jugador no puede estar en dos equipos del mismo torneo.
+      operationId: crearEquipo
+      parameters: [ { $ref: '#/components/parameters/TorneoId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CrearEquipoRequest' }
+      responses:
+        '201':
+          description: Equipo registrado, todavia sin inscripcion pagada
+          content: { application/json: { schema: { $ref: '#/components/schemas/Equipo' } } }
+        '400':
+          description: Cuerpo invalido (SOLICITUD_INVALIDA)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+        '401': { $ref: '#/components/responses/SinToken' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409':
+          description: Inscripciones cerradas (ESTADO_NO_PERMITE) o jugador ya en otro equipo (JUGADOR_YA_EN_EQUIPO)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+        '422':
+          description: Nombre o avatar rechazados por la politica (NOMBRE_RECHAZADO)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+        '503':
+          description: La lista negra no responde: no se registra sin verificar (LISTA_NEGRA_NO_DISPONIBLE)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+
+  /torneos/{torneoId}/equipos/{equipoId}/integrantes:
+    put:
+      summary: Sustituir al companero antes del cierre (CA-02 RF-TOR-003)
+      operationId: sustituirIntegrante
+      parameters:
+        - { $ref: '#/components/parameters/TorneoId' }
+        - { $ref: '#/components/parameters/EquipoId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [companeroUid]
+              properties:
+                companeroUid: { type: string, format: uuid }
+      responses:
+        '200':
+          content: { application/json: { schema: { $ref: '#/components/schemas/Equipo' } } }
+        '401': { $ref: '#/components/responses/SinToken' }
+        '403':
+          description: Solo el capitan sustituye (PERMISO_INSUFICIENTE)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409':
+          description: Inscripciones cerradas o el nuevo ya esta en otro equipo
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+
+  /torneos/{torneoId}/equipos/{equipoId}/inscripcion:
+    post:
+      summary: Inscribir al equipo pagando en creditos (RF-TOR-002)
+      description: >
+        Quien llama debe ser integrante y es quien paga (D-23): se reservan
+        `costoInscripcion` creditos en el libro con clave idempotente
+        `torneo-<torneoId>-equipo-<equipoId>`; se cobran al iniciar el torneo y
+        se devuelven si se cancela. Con costo 0 no se toca el libro. Si algun
+        integrante tiene una sancion activa, no se inscribe (CA-02).
+      operationId: inscribirEquipo
+      parameters:
+        - { $ref: '#/components/parameters/TorneoId' }
+        - { $ref: '#/components/parameters/EquipoId' }
+      responses:
+        '201':
+          description: Inscripcion confirmada con la posicion en el arbol (1..8)
+          content: { application/json: { schema: { $ref: '#/components/schemas/Equipo' } } }
+        '401': { $ref: '#/components/responses/SinToken' }
+        '403':
+          description: No eres integrante del equipo (PERMISO_INSUFICIENTE)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409':
+          description: Cupo agotado (CUPO_AGOTADO), ya inscrito (YA_INSCRITO) o inscripciones cerradas (ESTADO_NO_PERMITE)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+        '422':
+          description: Creditos insuficientes (CREDITOS_INSUFICIENTES) o integrante sancionado (INTEGRANTE_SANCIONADO)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+        '503':
+          description: El libro o las sanciones no responden (LIBRO_NO_DISPONIBLE, SANCIONES_NO_DISPONIBLES)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+
+  /torneos/{torneoId}/inicio:
+    post:
+      summary: Cerrar inscripciones, completar con la maquina y generar el arbol (RF-TOR-004/005)
+      description: >
+        Cobra las reservas de los equipos inscritos, rellena las posiciones
+        vacias con equipos de la maquina (`ia: true`) y deja los encuentros 1-4
+        listos para jugar. Sin ningun equipo humano inscrito no arranca.
+      operationId: iniciarTorneo
+      parameters: [ { $ref: '#/components/parameters/TorneoId' } ]
+      responses:
+        '200':
+          description: Torneo EN_CURSO con los 14 encuentros
+          content: { application/json: { schema: { $ref: '#/components/schemas/Torneo' } } }
+        '401': { $ref: '#/components/responses/SinToken' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409':
+          description: No esta en INSCRIPCIONES_ABIERTAS (ESTADO_NO_PERMITE)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+        '422':
+          description: Ningun equipo inscrito (SIN_EQUIPOS)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+        '503': { $ref: '#/components/responses/LibroNoDisponible' }
+
+  /torneos/{torneoId}/encuentros/{numero}/resultado:
+    post:
+      summary: Registrar el ganador de un encuentro y mover a los equipos en el arbol
+      description: >
+        Lo llama un servicio (la partida jugada; ROLE_SERVICIO, con `partidaId`)
+        o un administrador con `motivo` (RF-ADM-005: incomparecencia o incidencia;
+        queda registrado). El ganador avanza; el perdedor baja al arbol de
+        secundarios y, a la segunda derrota, queda eliminado. Con la final
+        jugada el torneo pasa a FINALIZADO con `campeonEquipoId`.
+      operationId: registrarResultado
+      parameters:
+        - { $ref: '#/components/parameters/TorneoId' }
+        - name: numero
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1, maximum: 14 }
+          description: 1-6 y 11 ganadores, 7-10, 12 y 13 secundarios, 14 la final
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResultadoRequest' }
+      responses:
+        '200':
+          content: { application/json: { schema: { $ref: '#/components/schemas/Torneo' } } }
+        '400':
+          description: Sin ganador (ni equipo ni uid), o sin motivo cuando lo registra un administrador (SOLICITUD_INVALIDA)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+        '401': { $ref: '#/components/responses/SinToken' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409':
+          description: El encuentro no esta listo o ya se jugo (ENCUENTRO_NO_LISTO)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+        '422':
+          description: El ganador no juega ese encuentro (GANADOR_NO_PARTICIPA)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+
+components:
+  securitySchemes:
+    tokenDeUsuario:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token de ms-identidad (claims uid, rol) o credencial de servicio (rol SERVICIO, ADR-005).
+
+  parameters:
+    TorneoId:
+      name: torneoId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    EquipoId:
+      name: equipoId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    SinToken:
+      description: Sin token o token invalido
+    SinPermiso:
+      description: El rol no puede hacer esto (PERMISO_INSUFICIENTE)
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+    NoEncontrado:
+      description: No existe (NO_ENCONTRADO)
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+    LibroNoDisponible:
+      description: El libro de creditos no responde; nada cambio (LIBRO_NO_DISPONIBLE)
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+
+  schemas:
+    CrearTorneoRequest:
+      type: object
+      required: [nombre, inscripcionesCierranEn]
+      properties:
+        nombre: { type: string, minLength: 3, maxLength: 80 }
+        inscripcionesCierranEn:
+          type: string
+          format: date-time
+          description: Fecha limite anunciada; el cierre real lo hace el administrador con /inicio
+        costoInscripcion:
+          type: integer
+          minimum: 0
+          default: 0
+          description: Creditos que paga el equipo al inscribirse (D-23). 0 = gratuito.
+
+    CrearEquipoRequest:
+      type: object
+      required: [nombre, avatar, companeroUid]
+      properties:
+        nombre: { type: string, minLength: 3, maxLength: 40 }
+        avatar:
+          type: string
+          minLength: 1
+          maxLength: 300
+          description: Identificador o URL del avatar; se valida contra la lista negra como texto
+        companeroUid: { type: string, format: uuid }
+
+    ResultadoRequest:
+      type: object
+      description: >
+        Uno de los dos: `ganadorEquipoId` (el administrador, que ve los equipos)
+        o `ganadorUid` (1.1.0: la partida jugada, que solo conoce al jugador en
+        pie; torneos resuelve a que equipo del encuentro pertenece). Si vienen
+        los dos manda `ganadorEquipoId`. Sin ninguno, 400 (SOLICITUD_INVALIDA);
+        un uid que no juega ese encuentro, 422 (GANADOR_NO_PARTICIPA).
+      properties:
+        ganadorEquipoId: { type: [string, 'null'], format: uuid }
+        ganadorUid: { type: [string, 'null'], format: uuid, description: Jugador ganador (1.1.0, lo manda salas-partidas) }
+        partidaId: { type: [string, 'null'], format: uuid, description: Partida de salas-partidas que decidio el encuentro }
+        motivo: { type: [string, 'null'], maxLength: 500, description: Obligatorio cuando lo registra un administrador }
+
+    TorneoResumen:
+      type: object
+      required: [id, nombre, estado, creadoEn, inscripcionesCierranEn, costoInscripcion, equiposInscritos, cupos]
+      properties:
+        id: { type: string, format: uuid }
+        nombre: { type: string }
+        estado: { $ref: '#/components/schemas/EstadoTorneo' }
+        creadoEn: { type: string, format: date-time }
+        inscripcionesCierranEn: { type: string, format: date-time }
+        costoInscripcion: { type: integer }
+        equiposInscritos: { type: integer }
+        cupos: { type: integer, const: 8 }
+        campeonEquipoId: { type: [string, 'null'], format: uuid }
+
+    Torneo:
+      allOf:
+        - $ref: '#/components/schemas/TorneoResumen'
+        - type: object
+          required: [equipos, encuentros]
+          properties:
+            creadoPor: { type: string, format: uuid }
+            iniciadoEn: { type: [string, 'null'], format: date-time }
+            finalizadoEn: { type: [string, 'null'], format: date-time }
+            motivoCancelacion: { type: [string, 'null'] }
+            equipos:
+              type: array
+              items: { $ref: '#/components/schemas/Equipo' }
+            encuentros:
+              type: array
+              description: Vacio hasta el inicio; 14 despues
+              items: { $ref: '#/components/schemas/Encuentro' }
+
+    EstadoTorneo:
+      type: string
+      enum: [INSCRIPCIONES_ABIERTAS, EN_CURSO, FINALIZADO, CANCELADO]
+
+    Equipo:
+      type: object
+      required: [id, torneoId, nombre, avatar, ia, integrantes, inscrito, posicion, derrotas, eliminado]
+      properties:
+        id: { type: string, format: uuid }
+        torneoId: { type: string, format: uuid }
+        nombre: { type: string }
+        avatar: { type: string }
+        ia: { type: boolean, description: Equipo de la maquina que rellena una posicion vacia (RF-TOR-005) }
+        capitanUid: { type: [string, 'null'], format: uuid }
+        integrantes:
+          type: array
+          maxItems: 2
+          items: { type: string, format: uuid }
+        inscrito: { type: boolean }
+        pagadoPor: { type: [string, 'null'], format: uuid }
+        reservaId: { type: [string, 'null'], format: uuid }
+        posicion: { type: [integer, 'null'], minimum: 1, maximum: 8 }
+        derrotas: { type: integer }
+        eliminado: { type: boolean }
+
+    Encuentro:
+      type: object
+      required: [numero, llave, ronda, estado]
+      properties:
+        numero: { type: integer, minimum: 1, maximum: 14 }
+        llave: { type: string, enum: [GANADORES, SECUNDARIOS, FINAL] }
+        ronda: { type: integer }
+        equipoA: { type: [string, 'null'], format: uuid }
+        equipoB: { type: [string, 'null'], format: uuid }
+        ganador: { type: [string, 'null'], format: uuid }
+        partidaId: { type: [string, 'null'], format: uuid }
+        estado: { type: string, enum: [PENDIENTE, LISTO, JUGADO] }
+        registradoPor: { type: [string, 'null'], description: uid o client id de quien registro el resultado }
+        motivo: { type: [string, 'null'], description: Motivo cuando lo registro un administrador }
+
+    ProblemDetail:
+      type: object
+      description: RFC 9457. `type` = https://nexusbattles.local/errores/<motivo-en-kebab>; `motivo` repite el motivo en mayusculas.
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        motivo:
+          type: string
+          enum:
+            - PERMISO_INSUFICIENTE
+            - SOLICITUD_INVALIDA
+            - NO_ENCONTRADO
+            - VENTANA_DE_91_DIAS
+            - ESTADO_NO_PERMITE
+            - JUGADOR_YA_EN_EQUIPO
+            - NOMBRE_RECHAZADO
+            - LISTA_NEGRA_NO_DISPONIBLE
+            - CUPO_AGOTADO
+            - YA_INSCRITO
+            - CREDITOS_INSUFICIENTES
+            - INTEGRANTE_SANCIONADO
+            - LIBRO_NO_DISPONIBLE
+            - SANCIONES_NO_DISPONIBLES
+            - SIN_EQUIPOS
+            - ENCUENTRO_NO_LISTO
+            - GANADOR_NO_PARTICIPA
+        proximaFechaPosible: { type: string, format: date-time, description: Solo con VENTANA_DE_91_DIAS }

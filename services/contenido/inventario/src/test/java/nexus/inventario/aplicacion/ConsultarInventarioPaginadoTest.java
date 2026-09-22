@@ -90,6 +90,26 @@ class ConsultarInventarioPaginadoTest {
     }
 
     @Test
+    @DisplayName("sin aviso de subastas conserva el bloqueo persistido por defecto")
+    void conservaBloqueoSiSubastasNoResponde() {
+        Inventario bloqueado = Inventario.vacio("jugador-A")
+                .agregar(new ElementoInventario(
+                        "elemento-1", "producto-1",
+                        TipoElementoInventario.ITEM, "Reliquia"))
+                .bloquearEnSubasta("elemento-1", "subasta-1");
+        repositorio.guardar(bloqueado);
+
+        ElementoInventario primeraEvaluacion = consulta.consultar("jugador-A", 0)
+                .elementos().get(0);
+        ElementoInventario segundaEvaluacion = consulta.consultar("jugador-A", 0)
+                .elementos().get(0);
+
+        assertFalse(primeraEvaluacion.disponible());
+        assertFalse(segundaEvaluacion.disponible());
+        assertEquals("subasta-1", segundaEvaluacion.subastaId());
+    }
+
+    @Test
     @DisplayName("sin identidad no se consulta ningun inventario")
     void exigeIdentidad() {
         assertThrows(IdentidadRequeridaException.class, () -> consulta.consultar(null, 0));

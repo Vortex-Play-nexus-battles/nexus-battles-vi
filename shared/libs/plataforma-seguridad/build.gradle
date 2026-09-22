@@ -1,0 +1,54 @@
+// Biblioteca de seguridad compartida por los servicios de la plataforma.
+//
+// Aqui vive lo que todos los servicios necesitan igual: como se traducen los
+// roles que emite el emisor de identidad, como se arma la parte no negociable
+// de la cadena de filtros, como se leen las dos caras de la identidad de un
+// usuario (IdentidadDelToken, ADR-002), como se autentica un canal STOMP con el
+// mismo token (AutenticacionStomp) y, desde ADR-001, como se identifica un
+// servicio ante otro (credenciales de servicio, grant client_credentials).
+// Las reglas de rutas NO estan aqui: son de cada dominio.
+
+plugins {
+    id 'nexus.libreria-spring-conventions'
+    // Fixtures de prueba: un emisor de tokens RS256 de verdad, con su JWKS
+    // servido por HTTP, para que las pruebas de los servicios verifiquen
+    // firma, caducidad y claims con el mismo decodificador que usan en
+    // produccion, en vez de un JwtDecoder falso que acepta cualquier cosa.
+    id 'java-test-fixtures'
+}
+
+dependencies {
+    // 'api' y no 'implementation': quien consuma esta biblioteca necesita ver
+    // estos tipos para escribir su propio SecurityConfig.
+    api 'org.springframework.boot:spring-boot-starter-security'
+    api 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
+
+    // Lado cliente del patron servicio-a-servicio (ADR-001). Es 'api' por el
+    // mismo motivo: el consumidor declara la dependencia una sola vez. Sin
+    // registros configurados, la autoconfiguracion de Boot para este starter
+    // no hace nada, asi que no altera a los servicios que solo son servidor
+    // de recursos.
+    api 'org.springframework.boot:spring-boot-starter-oauth2-client'
+
+    compileOnly 'org.springframework.boot:spring-boot-autoconfigure'
+    compileOnly 'org.springframework:spring-web'
+    // Solo para AutenticacionStomp: la trae el servicio que tenga canal
+    // (spring-boot-starter-websocket); un servicio sin canal no la carga.
+    compileOnly 'org.springframework:spring-messaging'
+
+    // Los fixtures firman con Nimbus (ya viene con el resource server) y
+    // ofrecen una @TestConfiguration con el decodificador apuntando al JWKS.
+    testFixturesApi 'org.springframework.security:spring-security-oauth2-jose'
+    testFixturesApi 'org.springframework:spring-test'
+    testFixturesImplementation 'org.springframework.boot:spring-boot-test'
+    testFixturesImplementation 'org.springframework:spring-context'
+
+    // Pruebas del patron completo: un emisor real (Keycloak en Testcontainers),
+    // un servicio que pide su credencial y un servidor de recursos que la valida.
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework:spring-messaging'
+    testImplementation platform('org.testcontainers:testcontainers-bom:1.21.4')
+    testImplementation 'org.testcontainers:testcontainers'
+    testImplementation 'org.testcontainers:junit-jupiter'
+}

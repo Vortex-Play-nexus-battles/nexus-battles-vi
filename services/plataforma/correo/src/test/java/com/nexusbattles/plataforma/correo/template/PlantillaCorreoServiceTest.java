@@ -94,4 +94,95 @@ class PlantillaCorreoServiceTest {
                 .contains("contraseña")
                 .doesNotContain("�");
     }
+
+    // ----- HU-COR-002: plantilla de confirmacion de cuenta -----
+
+    @Test
+    void laConfirmacionDeCuentaVaSobreLaPlantillaCorporativa() {
+        // CP-01 de #24: "el correo llega con el codigo legible y aplicando el
+        // diseno de la plantilla corporativa oficial".
+        String html = service.renderizar("email/confirmacion-cuenta",
+                Map.of("apodo", "ElGuerrero", "codigo", "734201", "minutosVigencia", 15));
+
+        assertThat(html)
+                .contains("THE NEXUS BATTLES VI")
+                .contains("src=\"cid:logo-nexus\"")
+                .contains("instagram.com/thenexusbattles");
+    }
+
+    @Test
+    void laConfirmacionDeCuentaMuestraElCodigoLaVigenciaYElApodo() {
+        String html = service.renderizar("email/confirmacion-cuenta",
+                Map.of("apodo", "ElGuerrero", "codigo", "734201", "minutosVigencia", 15));
+
+        assertThat(html)
+                .contains("Confirma tu cuenta")
+                .contains("ElGuerrero")
+                .contains("734201")
+                .contains("15</strong> minutos")
+                .as("debe decir que se puede pedir uno nuevo y que el anterior deja de servir (CA-03)")
+                .contains("pide uno nuevo")
+                // El valor de muestra de la celda del codigo (">000000</td>") debe
+                // quedar sustituido. No se busca "000000" a secas: el layout
+                // corporativo lleva "background:#000000" en su CSS.
+                .doesNotContain(">000000</td>")
+                .doesNotContain("�");
+    }
+
+    @Test
+    void laConfirmacionDeCuentaNoDejaValoresDeEjemploSiFaltaUnaVariable() {
+        // Si ms-identidad mandara el codigo vacio, la plantilla no debe rellenar
+        // con el "000000" de muestra: quedaria un correo que parece valido.
+        // (El "#000000" del CSS del layout corporativo no cuenta: es un color.)
+        String html = service.renderizar("email/confirmacion-cuenta",
+                Map.of("apodo", "ElGuerrero", "codigo", "", "minutosVigencia", 15));
+
+        assertThat(html)
+                .doesNotContain(">000000</td>")
+                .as("la celda del codigo queda vacia, no con el valor de muestra")
+                .contains("padding:20px 16px;\"></td>");
+    }
+
+    // ----- HU-COR-005: plantillas de mision y subasta -----
+
+    @Test
+    void laPlantillaDeMisionVaSobreLaPlantillaCorporativaYMuestraElContenido() {
+        String html = service.renderizar("email/mision",
+                Map.of("apodo", "ElGuerrero", "asunto", "Nueva misión disponible", "mensaje", "Derrota al dragón"));
+
+        assertThat(html)
+                .contains("THE NEXUS BATTLES VI")
+                .contains("ElGuerrero")
+                .contains("Nueva misión disponible")
+                .contains("Derrota al dragón");
+    }
+
+    // ----- HU-AUT-006: aviso de cambio de contraseña -----
+
+    @Test
+    void laPlantillaDeCambioDeClaveVaSobreLaCorporativaYNuncaMuestraContrasenas() {
+        String html = service.renderizar("email/cambio-clave",
+                Map.of("apodo", "ElGuerrero", "ip", "190.85.12.44", "fechaHora", "21/09/2026 a las 15:00 (GMT-05:00)"));
+
+        assertThat(html)
+                .contains("THE NEXUS BATTLES VI")
+                .contains("Tu contraseña cambió")
+                .contains("ElGuerrero")
+                .contains("190.85.12.44")
+                .contains("21/09/2026 a las 15:00")
+                .contains("Olvidé mi contraseña")
+                .doesNotContain("${");
+    }
+
+    @Test
+    void laPlantillaDeSubastaVaSobreLaPlantillaCorporativaYMuestraElContenido() {
+        String html = service.renderizar("email/subasta",
+                Map.of("apodo", "ElGuerrero", "asunto", "Ganaste la subasta", "mensaje", "Espada Legendaria"));
+
+        assertThat(html)
+                .contains("THE NEXUS BATTLES VI")
+                .contains("ElGuerrero")
+                .contains("Ganaste la subasta")
+                .contains("Espada Legendaria");
+    }
 }

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nexus Battles VI - Pujar en una subasta</title>
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
+    <link rel="stylesheet" href="./tema-cuentas.css" />
+    <link rel="stylesheet" href="./pujas.css" />
+  </head>
+  <body>
+    <!-- Barra de navegación compartida. Mismo patrón vivo que tienda.html -->
+    <div id="navbar-container"></div>
+
+    <!-- Contenedor Principal de la Aplicación -->
+    <main id="subastas-app" class="contenedor-subastas">
+      <!-- Inyectado por pujas.js -->
+    </main>
+
+    <script type="module">
+      import { montarCabecera } from '../comun/cabecera-app.js';
+      import { montarSubastas } from './pujas.js';
+      import { crearApiSubastas, urlDelCanal } from './pujas-api.js';
+
+      // Cabecera unica de la aplicacion (HU-UX-001): sesion real, navegacion y cuenta.
+      montarCabecera(document.getElementById('navbar-container'), { seccionActiva: 'subasta' });
+
+      const contenedor = document.getElementById('subastas-app');
+      const parametros = new URLSearchParams(location.search);
+
+      // ?id=<uuid> abre directamente el detalle de esa subasta. Es el enganche
+      // que espera el listado de HU-SUB-011: su vitrina ya llama a
+      // alAbrirDetalle, que hoy apunta a /subasta/{id} — una ruta que no
+      // existe. Cambiar ese destino por ./pujas.html?id={id} conecta las dos
+      // pantallas, pero es una linea en el archivo de Cristian y la decide el.
+      const subastaId = parametros.get('id');
+
+      // Siempre contra el servicio real. No hay modo de demostracion: una
+      // pantalla que se pinta con datos inventados cuando el backend no
+      // responde engana justo cuando mas importa saberlo, y en una
+      // sustentacion haria creer que funciona algo que no esta funcionando.
+      // Si el servicio no esta, la pantalla lo dice y ofrece reintentar.
+      // urlCanal es opcional: si el WebSocket no levanta, la pantalla sigue
+      // con el sondeo de 5 s. Anade inmediatez, no la sustituye.
+      montarSubastas(contenedor, {
+        api: crearApiSubastas(),
+        urlCanal: urlDelCanal(),
+        ...(subastaId ? { subastaInicialId: subastaId } : {}),
+      });
+    </script>
+  </body>
+</html>

@@ -7,6 +7,7 @@
 
 import {
   consultarPagina,
+  buscarElementos,
   crearElemento,
   modificarElemento,
   consultarEquipamiento,
@@ -14,8 +15,12 @@ import {
   desequiparElemento,
 } from './cliente-inventario.js';
 import { construirVitrina, PRODUCTOS_POR_PAGINA } from './vitrina.js';
+import { pintarRetratos } from './retratos.js';
+import { motivoDelRechazo, pintarEquipamiento } from './equipamiento.js';
 import { construirCarga, construirVacio, construirError } from './estados-vista.js';
 import { abrirFicha } from './ficha-producto.js';
+import { construirPaginacion } from '../../comun/paginacion.js';
+import { acusar } from '../../comun/ui/acuse.js';
 
 const TIPOS = [
   ['HEROE', 'Héroe'],
@@ -41,16 +46,27 @@ const PARTES_ARMADURA = [
  * @param {HTMLElement} contenedor donde se monta la vista.
  * @param {string} identidad jugador autenticado, que viaja en la cabecera.
  * @param {number} numeroPagina pagina pedida, desde cero.
- * @param {{consultar?: Function, alEditar?: Function}} opciones inyeccion para las pruebas.
+ * @param {{consultar?: Function, alEditar?: Function, sigueVigente?: () => boolean}} opciones
+ *   inyeccion para las pruebas. `sigueVigente` permite descartar una respuesta
+ *   que llego tarde: sin el, dos cambios de pagina seguidos pueden pintar el
+ *   resultado del primero encima del segundo (HU-INV-011).
  * @returns {Promise<object|null>} pagina mostrada o null cuando falla la consulta.
  */
 export async function montarVitrina(
   contenedor,
   identidad,
   numeroPagina = 0,
-  { consultar = consultarPagina, alEditar, alEquipar } = {},
+  {
+    consultar = consultarPagina,
+    alEditar,
+    alEquipar,
+    mensajeCarga,
+    mensajeVacio,
+    detalleVacio,
+    sigueVigente = () => true,
+  } = {},
 ) {
-  contenedor.replaceChildren(construirCarga());
+  contenedor.replaceChildren(construirCarga(mensajeCarga));
 
   let pagina;
   try {
@@ -58,12 +74,20 @@ export async function montarVitrina(
   } catch (fallo) {
     // El detalle tecnico es para el equipo; al jugador se le habla en su idioma.
     console.error('No se pudo cargar la vitrina del inventario', fallo);
-    contenedor.replaceChildren(construirError());
+    if (sigueVigente()) {
+      contenedor.replaceChildren(construirError());
+    }
     return null;
   }
 
+  // Mientras se esperaba, el jugador pudo pedir otra pagina. Pintar esta
+  // ahora dejaria la vitrina mostrando una pagina que ya nadie pidio.
+  if (!sigueVigente()) {
+    return pagina;
+  }
+
   if (!pagina || pagina.elementos.length === 0) {
-    contenedor.replaceChildren(construirVacio());
+    contenedor.replaceChildren(construirVacio(mensajeVacio, detalleVacio));
     return pagina;
   }
 
@@ -76,6 +100,15 @@ export async function montarVitrina(
       alAbrirDetalle: (elemento) =>
         abrirFicha(elemento.productoId, { origen: document.activeElement }),
     }),
+  );
+
+  // UX-R2.5 — los retratos llegan DESPUES, uno por producto, porque el
+  // inventario no guarda la imagen y `productos.yaml` no tiene consulta por
+  // lotes. La vitrina ya esta en pantalla con el icono de cada tipo; esto
+  // solo la mejora cuando el catalogo contesta. No se espera: si tardara o
+  // fallara, la vista ya esta usable.
+  pintarRetratos(contenedor).catch((fallo) =>
+    console.warn('No se pudieron traer los retratos del catalogo', fallo),
   );
   return pagina;
 }
@@ -111,6 +144,30 @@ function construirGestion() {
   const botonNuevo = elementoHtml('button', 'inventario__nuevo', 'Agregar elemento');
   botonNuevo.type = 'button';
   cabecera.append(titulo, botonNuevo);
+
+  const busqueda = elementoHtml('form', 'inventario-busqueda');
+  busqueda.setAttribute('role', 'search');
+  const busquedaCampo = elementoHtml('label', 'inventario-busqueda__campo');
+  const busquedaEtiqueta = elementoHtml(
+    'span',
+    'inventario-busqueda__etiqueta',
+    'Buscar productos',
+  );
+  const busquedaControl = document.createElement('input');
+  busquedaControl.className = 'inventario-busqueda__control';
+  busquedaControl.type = 'search';
+  busquedaControl.name = 'criterio';
+  busquedaControl.minLength = 4;
+  busquedaControl.autocomplete = 'off';
+  busquedaControl.placeholder = 'Buscar por nombre, tipo o producto';
+  busquedaCampo.append(busquedaEtiqueta, busquedaControl);
+  const botonBuscar = elementoHtml('button', 'inventario-busqueda__buscar', 'Buscar');
+  botonBuscar.type = 'submit';
+  const botonLimpiar = elementoHtml('button', 'inventario-busqueda__limpiar', 'Limpiar');
+  botonLimpiar.type = 'button';
+  botonLimpiar.hidden = true;
+  busqueda.append(busquedaCampo, botonBuscar, botonLimpiar);
+  cabecera.append(busqueda, botonNuevo);
 
   const editor = elementoHtml('section', 'inventario-editor');
   editor.hidden = true;
@@ -150,7 +207,9 @@ function construirGestion() {
   equipoCerrar.type = 'button';
   equipoCabecera.append(equipoTitulo, equipoCerrar);
   const equipoResumen = elementoHtml('p', 'inventario-equipo__resumen');
-  const equipoLista = elementoHtml('ul', 'inventario-equipo__lista');
+  // UX-R2.5 — era un <ul> de filas; ahora contiene los tres grupos de
+  // ranuras (`<section>`), y una lista no puede tener secciones dentro.
+  const equipoLista = elementoHtml('div', 'inventario-equipo__lista');
   equipo.append(equipoCabecera, equipoResumen, equipoLista);
 
   const mensaje = elementoHtml('p', 'inventario__mensaje');
@@ -160,10 +219,18 @@ function construirGestion() {
   mensaje.setAttribute('aria-live', 'polite');
   const contenido = elementoHtml('div', 'inventario__contenido');
 
+  // HU-INV-011: el control se inserta una vez y se repinta con cada pagina.
+  // Se monta despues de la cuadricula porque es su pie de navegacion.
+  const paginacion = elementoHtml('div', 'inventario__paginacion');
+
   return {
-    elementos: [cabecera, editor, equipo, mensaje, contenido],
+    elementos: [cabecera, editor, equipo, mensaje, contenido, paginacion],
     cabecera,
     botonNuevo,
+    busqueda,
+    busquedaControl,
+    botonBuscar,
+    botonLimpiar,
     editor,
     tituloEditor,
     formulario,
@@ -180,6 +247,7 @@ function construirGestion() {
     equipoLista,
     mensaje,
     contenido,
+    paginacion,
   };
 }
 
@@ -193,6 +261,7 @@ export async function montarInventario(
   numeroPagina = 0,
   {
     consultar = consultarPagina,
+    buscar = buscarElementos,
     crear = crearElemento,
     modificar = modificarElemento,
     consultarEquipo = consultarEquipamiento,
@@ -203,8 +272,21 @@ export async function montarInventario(
   const vista = construirGestion();
   raiz.replaceChildren(...vista.elementos);
 
-  let paginaActual = numeroPagina;
+  /**
+   * HU-INV-002: criterio de la busqueda activa, o cadena vacia si no hay.
+   * Vive en la vista y no en el control de paginacion, asi que cambiar de
+   * pagina no lo toca: eso es lo que cumple el criterio 3 de HU-INV-011.
+   */
+  let criterioBusqueda = '';
+  /**
+   * Unica fuente de la pagina en curso: la que el servicio devolvio y el
+   * jugador esta viendo. No se lleva un contador aparte, porque dos
+   * variables que dicen lo mismo acaban discrepando en cuanto una consulta
+   * llega tarde o falla.
+   */
   let paginaMostrada = null;
+  /** Turno de la ultima consulta pedida, para descartar respuestas tardias. */
+  let ultimoTurno = 0;
   let elementoSeleccionado = null;
   let heroeSeleccionado = null;
   let equipoActual = null;
@@ -249,59 +331,90 @@ export async function montarInventario(
     vista.nombre.control.focus();
   }
 
-  function idsEquipados(equipo) {
-    return new Set([...equipo.armas, ...Object.values(equipo.armaduras), ...equipo.items]);
+  /**
+   * UX-R2.5 — el panel deja de ser una lista de botones y pasa a ser las diez
+   * ranuras del contrato: 2 armas, 6 armaduras (una por `ParteArmadura`) y
+   * 2 items. La forma de la pantalla dice los limites que antes habia que
+   * leer en un contador.
+   *
+   * La logica de equipar/desequipar no cambia: sigue siendo el mismo PUT y el
+   * mismo DELETE de `inventario.yaml`, y sigue siendo el servidor quien
+   * decide. Lo que cambia es que ahora se ve donde va cada cosa, y que los
+   * rechazos se traducen uno a uno en vez de caer todos en la misma frase.
+   */
+  function pintarEquipo() {
+    pintarEquipamiento(vista.equipoLista, {
+      equipo: equipoActual,
+      elementos: paginaMostrada?.elementos ?? [],
+      alEquipar: (ranura, elemento) => cambiarEquipo(true, elemento),
+      alDesequipar: (ranura) => cambiarEquipo(false, ranura.elemento),
+      alPintarRetratos: (panel) =>
+        pintarRetratos(panel).catch((fallo) =>
+          console.warn('No se pudieron traer los retratos del equipo', fallo),
+        ),
+    });
+    // El resumen vive ahora dentro del panel, junto a las ranuras.
+    vista.equipoResumen.hidden = true;
   }
 
-  function pintarEquipo() {
-    const equipados = idsEquipados(equipoActual);
-    vista.equipoResumen.textContent =
-      `Armas ${equipoActual.armas.length}/2 · ` +
-      `Armadura ${Object.keys(equipoActual.armaduras).length}/6 · ` +
-      `Ítems ${equipoActual.items.length}/2`;
-    vista.equipoLista.replaceChildren();
-
-    const disponibles = (paginaMostrada?.elementos ?? []).filter((elemento) =>
-      ['ARMA', 'ARMADURA', 'ITEM'].includes(elemento.tipo),
+  /**
+   * Equipa o desequipa, y repinta con lo que devuelva el servicio.
+   *
+   * La respuesta de los dos endpoints es el `EquipamientoHeroe` completo, asi
+   * que no hace falta adivinar el estado nuevo: se usa el que manda el
+   * servidor, que es el unico que sabe la verdad.
+   *
+   * @param {boolean} equipando
+   * @param {object} elemento
+   */
+  /**
+   * Marca la ranura que acaba de recibir un objeto (UX-R2.10).
+   *
+   * Se busca por el NOMBRE del objeto, que es lo que `ranura()` escribe en
+   * `.ranura__etiqueta` cuando esta ocupada. Es indirecto, si — la
+   * alternativa era que `pintarEquipamiento` devolviera un indice de
+   * ranuras, y eso acopla el panel a una animacion. Si no se encuentra, no
+   * pasa nada: el mensaje de texto ya dijo lo que ocurrio.
+   */
+  function acusarRanuraDe(elemento) {
+    const nombre = elemento?.nombrePropio;
+    if (!nombre) {
+      return;
+    }
+    const etiqueta = [...vista.equipoLista.querySelectorAll('.ranura__etiqueta')].find(
+      (n) => n.textContent === nombre,
     );
-    for (const elemento of disponibles) {
-      const fila = elementoHtml('li', 'inventario-equipo__elemento');
-      const detalle = elementoHtml(
-        'span',
-        'inventario-equipo__nombre',
-        elemento.parteArmadura
-          ? `${elemento.nombrePropio} · ${elemento.parteArmadura}`
-          : elemento.nombrePropio,
-      );
-      const estaEquipado = equipados.has(elemento.id);
-      const boton = elementoHtml(
-        'button',
-        estaEquipado ? 'inventario-equipo__desequipar' : 'inventario-equipo__equipar',
-        estaEquipado ? 'Desequipar' : 'Equipar',
-      );
-      boton.type = 'button';
-      boton.addEventListener('click', async () => {
-        cambiarDisponibilidad(boton, false);
-        try {
-          equipoActual = estaEquipado
-            ? await desequipar(identidad, heroeSeleccionado.id, elemento.id)
-            : await equipar(identidad, heroeSeleccionado.id, elemento.id);
-          pintarEquipo();
-          mostrarMensaje(estaEquipado ? 'Elemento desequipado.' : 'Elemento equipado.');
-        } catch (fallo) {
-          console.error('No se pudo cambiar el equipamiento', fallo);
-          let texto = 'No pudimos cambiar el equipamiento. Inténtalo de nuevo.';
-          if (fallo?.status === 409) {
-            texto = 'Ese cambio supera los límites de equipamiento.';
-          } else if (fallo?.status === 403) {
-            texto = 'No tienes permiso para modificar ese inventario.';
-          }
-          mostrarMensaje(texto, true);
-          cambiarDisponibilidad(boton, true);
-        }
-      });
-      fila.append(detalle, boton);
-      vista.equipoLista.appendChild(fila);
+    const caja = etiqueta?.closest('.ranura');
+    if (caja) {
+      acusar(caja, { tipo: 'equipar' });
+    }
+  }
+
+  async function cambiarEquipo(equipando, elemento) {
+    if (!elemento || !heroeSeleccionado) {
+      return;
+    }
+    mostrarMensaje(equipando ? 'Equipando…' : 'Desequipando…');
+    try {
+      equipoActual = equipando
+        ? await equipar(identidad, heroeSeleccionado.id, elemento.id)
+        : await desequipar(identidad, heroeSeleccionado.id, elemento.id);
+      pintarEquipo();
+      mostrarMensaje(equipando ? 'Elemento equipado.' : 'Elemento desequipado.');
+
+      // UX-R2.10 — la ranura acusa lo que acaba de recibir.
+      //
+      // Hasta aquí, equipar repintaba el panel entero y el único rastro era
+      // una línea de texto debajo. Entre diez ranuras idénticas, **cuál**
+      // cambió no se veía. El acuse marca la que acaba de moverse; el
+      // mensaje de texto sigue donde estaba, así que con
+      // `prefers-reduced-motion` no se pierde nada.
+      if (equipando) {
+        acusarRanuraDe(elemento);
+      }
+    } catch (fallo) {
+      console.error('No se pudo cambiar el equipamiento', fallo);
+      mostrarMensaje(motivoDelRechazo(fallo), true);
     }
   }
 
@@ -320,20 +433,121 @@ export async function montarInventario(
     }
   }
 
-  async function actualizar(numero = paginaActual) {
-    paginaActual = numero;
-    const consultada = await montarVitrina(vista.contenido, identidad, paginaActual, {
-      consultar,
+  /**
+   * HU-INV-011: repinta el control a partir de la pagina que de verdad se
+   * esta mostrando, no de la que se pidio. Si la consulta fallo, el jugador
+   * sigue viendo la anterior y el control debe decir esa misma.
+   */
+  function pintarPaginacion() {
+    const totalPaginas = paginaMostrada?.totalPaginas ?? 0;
+    const numero = paginaMostrada?.numero ?? 0;
+
+    // RNF-ACC-002: repintar el control lo destruye entero, y con el se iria
+    // el foco al body. Quien cambio de pagina con el teclado se quedaria sin
+    // sitio y tendria que tabular otra vez desde arriba. Si el foco estaba
+    // dentro, se devuelve a la casilla de la pagina que ahora se muestra.
+    const veniaEnfocado = vista.paginacion.contains(document.activeElement);
+
+    try {
+      vista.paginacion.replaceChildren(
+        construirPaginacion({ paginaActual: numero, totalPaginas }, (pedida) => {
+          actualizar(pedida);
+        }),
+      );
+      if (veniaEnfocado) {
+        vista.paginacion.querySelector('[aria-current="page"]')?.focus();
+      }
+    } catch (fallo) {
+      // El servicio devolvio una pagina incoherente con su propio total. No
+      // se adivina un control: se deja sin paginar y queda constancia.
+      console.error('Paginacion incoherente en la respuesta del inventario', fallo);
+      vista.paginacion.replaceChildren();
+    }
+  }
+
+  /** La pagina que el jugador esta viendo ahora mismo. */
+  function paginaEnCurso() {
+    return paginaMostrada?.numero ?? numeroPagina;
+  }
+
+  async function actualizar(numero) {
+    // Cada consulta lleva su turno. Si el jugador pide otra pagina antes de
+    // que llegue esta, la respuesta tardia se descarta entera: ni pinta la
+    // vitrina ni mueve el control. Gana siempre lo ultimo que se pidio.
+    const miTurno = ++ultimoTurno;
+    const sigueVigente = () => miTurno === ultimoTurno;
+
+    // HU-INV-002: con una busqueda activa la vitrina pagina sobre sus
+    // resultados. El criterio se lee aqui en cada consulta, asi que el control
+    // de paginacion lo conserva sin necesidad de conocerlo.
+    const busquedaActiva = criterioBusqueda !== '';
+
+    const consultada = await montarVitrina(vista.contenido, identidad, numero, {
+      consultar: busquedaActiva
+        ? (jugador, pagina) => buscar(jugador, criterioBusqueda, pagina)
+        : consultar,
       alEditar: abrirEdicion,
       alEquipar: abrirEquipamiento,
+      mensajeCarga: busquedaActiva ? 'Buscando en tu inventario...' : undefined,
+      mensajeVacio: busquedaActiva ? 'No encontramos productos con ese criterio.' : undefined,
+      detalleVacio: busquedaActiva
+        ? 'Prueba con otro nombre, tipo o identificador de producto.'
+        : undefined,
+      sigueVigente,
     });
+
+    if (!sigueVigente()) {
+      return consultada;
+    }
+
+    // La pagina mostrada solo avanza si la consulta trajo algo: asi el
+    // control nunca marca una pagina que el jugador no esta viendo.
     if (consultada) {
       paginaMostrada = consultada;
     }
+    pintarPaginacion();
     return consultada;
   }
 
   vista.botonNuevo.addEventListener('click', abrirCreacion);
+  vista.busqueda.addEventListener('submit', async (evento) => {
+    evento.preventDefault();
+    const criterio = vista.busquedaControl.value.trim();
+    if (criterio.length < 4) {
+      mostrarMensaje('Ingresa al menos cuatro caracteres para buscar.', true);
+      vista.busquedaControl.focus();
+      return;
+    }
+
+    criterioBusqueda = criterio;
+    vista.busquedaControl.value = criterio;
+    vista.busqueda.classList.add('inventario-busqueda--activa');
+    vista.botonLimpiar.hidden = false;
+    cambiarDisponibilidad(vista.botonBuscar, false);
+    mostrarMensaje(`Buscando "${criterio}"...`);
+    try {
+      const resultado = await actualizar(0);
+      if (resultado) {
+        const cantidad = resultado.totalElementos ?? resultado.elementos.length;
+        mostrarMensaje(
+          `${cantidad} ${cantidad === 1 ? 'resultado' : 'resultados'} para "${criterio}".`,
+        );
+      } else {
+        mostrarMensaje('No pudimos realizar la búsqueda. Inténtalo de nuevo.', true);
+      }
+    } finally {
+      cambiarDisponibilidad(vista.botonBuscar, true);
+    }
+  });
+  vista.botonLimpiar.addEventListener('click', async () => {
+    criterioBusqueda = '';
+    vista.busquedaControl.value = '';
+    vista.busqueda.classList.remove('inventario-busqueda--activa');
+    vista.botonLimpiar.hidden = true;
+    mostrarMensaje('');
+    await actualizar(0);
+    vista.busquedaControl.focus();
+  });
   vista.botonCancelar.addEventListener('click', cerrarEditor);
   vista.equipoCerrar.addEventListener('click', () => {
     vista.equipo.hidden = true;
@@ -355,7 +569,7 @@ export async function montarInventario(
           nombrePropio: vista.nombre.control.value,
         });
         cerrarEditor();
-        await actualizar();
+        await actualizar(paginaEnCurso());
         mostrarMensaje('Elemento actualizado.');
       } else {
         const totalAntes = paginaMostrada?.totalElementos ?? 0;
@@ -367,7 +581,9 @@ export async function montarInventario(
             vista.tipo.control.value === 'ARMADURA' ? vista.parte.control.value : undefined,
         });
         cerrarEditor();
-        await actualizar(Math.floor(totalAntes / PRODUCTOS_POR_PAGINA));
+        await actualizar(
+          criterioBusqueda === '' ? Math.floor(totalAntes / PRODUCTOS_POR_PAGINA) : 0,
+        );
         mostrarMensaje('Elemento creado.');
       }
     } catch (fallo) {
@@ -382,7 +598,7 @@ export async function montarInventario(
     }
   });
 
-  await actualizar();
+  await actualizar(paginaEnCurso());
 }
 
 function cambiarDisponibilidad(boton, disponible) {

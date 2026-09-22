@@ -28,7 +28,25 @@
 	</scm>
 	<properties>
 		<java.version>21</java.version>
+		<!--
+			Misma version del BOM de Testcontainers que ya usan heroes,
+			inventario y salas-partidas en Gradle. Se fija aqui para que el
+			servicio no dependa de que el parent de Spring Boot la gestione.
+		-->
+		<testcontainers.version>1.21.4</testcontainers.version>
 	</properties>
+
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.testcontainers</groupId>
+				<artifactId>testcontainers-bom</artifactId>
+				<version>${testcontainers.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
 	<dependencies>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -42,7 +60,49 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+    <!--
+      Servidor de recursos (ADR-002): el carrito es del uid del token, no de
+      una cabecera X-User-Id que cualquiera podia escribir. Este modulo sigue
+      en Maven (settings.gradle lo lista como pendiente de migrar), asi que no
+      puede enlazar shared/libs/plataforma-seguridad y trae los starters
+      directamente; SeguridadConfig reproduce el conversor de roles minimo.
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.security</groupId>
+      <artifactId>spring-security-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springdoc</groupId>
+      <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+      <version>2.8.5</version> <!-- Use the latest 2.x version for Spring Boot 3 / Java 21 -->
+    </dependency>
 
+		<!-- Regla 8 de plataforma: todo cambio de esquema por Flyway, versionado. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-flyway</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-core</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-database-postgresql</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.postgresql</groupId>
 			<artifactId>postgresql</artifactId>
@@ -68,6 +128,28 @@
 			<artifactId>spring-boot-starter-webmvc-test</artifactId>
 			<scope>test</scope>
 		</dependency>
+
+		<!--
+			Testcontainers: la prueba de arranque necesita el PostgreSQL de
+			verdad. Con H2 el contexto levantaria con otro dialecto y otro
+			esquema, y la prueba diria "arranca" sin haber probado lo que se
+			despliega. Mismo criterio que los IT de arranque de plataforma.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-testcontainers</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 
 	<build>
@@ -75,6 +157,57 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+			<!--
+				Surefire solo recoge *Test, Test*, *Tests y *TestCase. El
+				sufijo *IT es de Failsafe, que aqui no esta configurado y que
+				ademas se ata a la fase "verify" — y el CI ejecuta "mvn test".
+				Sin esta inclusion, ArranqueDeLaAplicacionIT se queda sin
+				ejecutar y el build sale verde sin haberla corrido: lo
+				comprobamos en la corrida 35414172038, donde el job dijo
+				"Tests run: 3" con la prueba de arranque ya en el repo.
+
+				Se mantiene el sufijo *IT porque es el que usan los IT de
+				Testcontainers de los otros dieciseis servicios; lo que se
+				ajusta es quien los recoge.
+			-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<includes>
+						<include>**/*Test.java</include>
+						<include>**/*Tests.java</include>
+						<include>**/*IT.java</include>
+					</includes>
+				</configuration>
+			</plugin>
+			<!--
+				JaCoCo: el informe que lee SonarQube Cloud
+				(sonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+				en ci.yml). Sin el, Sonar veia 0 % de cobertura en todo lo nuevo y
+				la compuerta (80 %) fallaba aunque las pruebas existieran. Misma
+				configuracion que ms-cumplimiento; la compuerta la aplica Sonar.
+			-->
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>0.8.12</version>
+				<executions>
+					<execution>
+						<id>prepare-agent</id>
+						<goals>
+							<goal>prepare-agent</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>report</id>
+						<phase>test</phase>
+						<goals>
+							<goal>report</goal>
+						</goals>
+					</execution>
+				</executions>
 			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>

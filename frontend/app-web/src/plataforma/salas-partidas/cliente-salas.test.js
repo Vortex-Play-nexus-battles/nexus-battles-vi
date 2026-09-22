@@ -15,6 +15,11 @@ import {
   listarSalas,
   ingresarASala,
   verificarHeroe,
+  iniciarPartida,
+  obtenerPartida,
+  obtenerSala,
+  abandonarSala,
+  cancelarSala,
   baseDeApi,
   ErrorDeApi,
 } from './cliente-salas.js';
@@ -238,7 +243,7 @@ describe('crearSala', () => {
     const fetchImpl = jest.fn().mockResolvedValue(
       respuesta(503, {
         type: 'https://nexusbattles.local/errores/creditos-sin-integrar',
-        title: 'Las apuestas todavia no estan disponibles',
+        title: 'Las apuestas todavía no están disponibles',
         status: 503,
         detail: 'Por ahora solo se pueden crear salas sin recompensa.',
       }),
@@ -266,7 +271,12 @@ describe('crearSala', () => {
     const error = await crearSala(PARAMETROS, { fetchImpl }).catch((e) => e);
 
     expect(error.estado).toBe(500);
-    expect(error.detalle).toContain('500');
+    // UX-R2.4 — antes se exigia que el detalle CONTUVIERA «500». El codigo
+    // sigue disponible en `estado`, que es por donde lo lee quien programa; lo
+    // que ve el jugador es una frase que le dice que hacer. «500» no le dice
+    // a nadie si esperar, reintentar o irse.
+    expect(error.detalle).toMatch(/no responde ahora mismo/i);
+    expect(error.detalle).not.toMatch(/\b500\b/);
   });
 });
 
@@ -288,6 +298,45 @@ describe('sin backend detras', () => {
     expect(error.detalle).not.toMatch(/respondio 405/i);
   });
 
+  test('el 405 real de http-server llega como text/plain y tambien se reconoce', async () => {
+    // `http-server` responde 405 con `content-type: text/plain` a un POST.
+    // Reducir la deteccion a HTML, como sugirio Copilot en #271, perderia
+    // justo este caso, que es el que motivo la distincion.
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(405, undefined, 'text/plain'));
+
+    const error = await crearSala(PARAMETROS, { fetchImpl }).catch((e) => e);
+
+    expect(error.titulo).toMatch(/no hay ninguna api/i);
+  });
+
+  test('un 405 con problem details es un fallo del servicio, no un servidor estatico', async () => {
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValue(
+        respuesta(
+          405,
+          { status: 405, title: 'Metodo no permitido', detail: 'Solo GET.' },
+          'application/problem+json',
+        ),
+      );
+
+    const error = await crearSala(PARAMETROS, { fetchImpl }).catch((e) => e);
+
+    expect(error.titulo).toBe('Metodo no permitido');
+  });
+
+  test('el mensaje nombra la URL real de la peticion cuando fetch la trae', async () => {
+    const conUrl = {
+      ...respuesta(404, undefined, 'text/html'),
+      url: 'http://127.0.0.1:4399/api/v1/salas/s1/verificacion-heroe',
+    };
+    const fetchImpl = jest.fn().mockResolvedValue(conUrl);
+
+    const error = await verificarHeroe('s1', { fetchImpl }).catch((e) => e);
+
+    expect(error.detalle).toContain('/api/v1/salas/s1/verificacion-heroe');
+  });
+
   test('un GET que devuelve la pagina HTML del servidor estatico tambien se detecta', async () => {
     const fetchImpl = jest
       .fn()
@@ -306,7 +355,9 @@ describe('sin backend detras', () => {
     const error = await listarSalas({}, { fetchImpl }).catch((e) => e);
 
     expect(error.titulo).not.toMatch(/no hay ninguna api/i);
-    expect(error.detalle).toContain('503');
+    // El codigo sigue ahi para quien programa; el detalle es para quien juega.
+    expect(error.estado).toBe(503);
+    expect(error.detalle).toMatch(/no responde ahora mismo/i);
   });
 });
 
@@ -332,5 +383,183 @@ describe('baseDeApi', () => {
     await listarSalas({}, { fetchImpl });
 
     expect(fetchImpl).toHaveBeenCalledWith('http://127.0.0.1:8083/api/v1/salas');
+  });
+});
+
+// ===========================================================================
+// HU-SAL-004 · RF-JUE-017 — arranque del combate y estado de la partida
+// ===========================================================================
+
+describe('iniciarPartida', () => {
+  test('llama a la subruta de partida sin cuerpo: el anfitrion sale del token', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(201, { id: 'p1' }));
+
+    await iniciarPartida('abc', { fetchImpl });
+
+    const [url, opciones] = fetchImpl.mock.calls[0];
+    expect(url).toBe('/api/v1/salas/abc/partida');
+    expect(opciones.method).toBe('POST');
+    expect(opciones.body).toBeUndefined();
+  });
+
+  test('devuelve la partida iniciada tal como la manda el servicio', async () => {
+    const partida = { id: 'p1', estado: 'EN_CURSO', participantes: [] };
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(201, partida));
+
+    await expect(iniciarPartida('abc', { fetchImpl })).resolves.toEqual(partida);
+  });
+
+  test('un 403 de quien no es el anfitrion llega con su tipo', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(
+      respuesta(403, {
+        type: 'https://nexusbattles.local/errores/no-es-el-anfitrion',
+        title: 'No eres el anfitrion de esta sala',
+        detail: 'Solo quien creo la sala puede iniciarla.',
+        status: 403,
+      }),
+    );
+
+    const error = await iniciarPartida('abc', { fetchImpl }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ErrorDeApi);
+    expect(error.tipo).toBe('https://nexusbattles.local/errores/no-es-el-anfitrion');
+    expect(error.estado).toBe(403);
+  });
+
+  test('un 409 de sala que todavia no puede empezar llega interpretado', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(
+      respuesta(409, {
+        type: 'https://nexusbattles.local/errores/ingreso-no-permitido',
+        title: 'No puedes entrar a esta sala',
+        detail: 'La sala necesita al menos un rival o el heroe de la IA.',
+        status: 409,
+      }),
+    );
+
+    const error = await iniciarPartida('abc', { fetchImpl }).catch((e) => e);
+
+    expect(error.estado).toBe(409);
+    expect(error.detalle).toMatch(/rival/i);
+  });
+
+  test('el identificador de la sala se codifica: no se pega crudo en la URL', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(201, {}));
+
+    await iniciarPartida('a b/c', { fetchImpl });
+
+    expect(fetchImpl.mock.calls[0][0]).toBe('/api/v1/salas/a%20b%2Fc/partida');
+  });
+});
+
+describe('obtenerPartida', () => {
+  test('cuelga de /api/v1/partidas, no de /api/v1/salas', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, { id: 'p1' }));
+
+    await obtenerPartida('p1', { fetchImpl });
+
+    expect(fetchImpl.mock.calls[0][0]).toBe('/api/v1/partidas/p1');
+  });
+
+  test('es una lectura: va sin opciones de peticion', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, { id: 'p1' }));
+
+    await obtenerPartida('p1', { fetchImpl });
+
+    expect(fetchImpl.mock.calls[0][1]).toBeUndefined();
+  });
+
+  test('una partida que no existe llega como 404 con su tipo', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(
+      respuesta(404, {
+        type: 'https://nexusbattles.local/errores/partida-no-encontrada',
+        title: 'La partida no existe',
+        detail: 'No hay ninguna partida con ese identificador.',
+        status: 404,
+      }),
+    );
+
+    const error = await obtenerPartida('p1', { fetchImpl }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ErrorDeApi);
+    expect(error.tipo).toBe('https://nexusbattles.local/errores/partida-no-encontrada');
+    expect(error.estado).toBe(404);
+  });
+});
+
+// ===========================================================================
+// HU-SAL-006 — salir y cancelar antes de empezar
+// ===========================================================================
+
+describe('obtenerSala', () => {
+  test('pide la sala por su identificador y la devuelve tal cual', async () => {
+    const sala = { id: 's1', idAnfitrion: 'a', ocupacion: 2, maximoParticipantes: 4 };
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, sala));
+
+    expect(await obtenerSala('s1', { fetchImpl })).toEqual(sala);
+    expect(fetchImpl.mock.calls[0][0]).toBe('/api/v1/salas/s1');
+  });
+
+  test('un 404 llega interpretado', async () => {
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValue(respuesta(404, { type: 'x', title: 'No existe', status: 404 }));
+
+    const error = await obtenerSala('s1', { fetchImpl }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ErrorDeApi);
+    expect(error.estado).toBe(404);
+  });
+});
+
+describe('abandonarSala', () => {
+  test('hace DELETE a /participantes sin cuerpo: quien sale es quien firma el token', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(204, undefined));
+
+    await abandonarSala('s1', { fetchImpl });
+
+    expect(fetchImpl.mock.calls[0][0]).toBe('/api/v1/salas/s1/participantes');
+    expect(fetchImpl.mock.calls[0][1]).toEqual({ method: 'DELETE' });
+  });
+
+  test('el 409 del anfitrion (su camino es cancelar) llega interpretado', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(
+      respuesta(409, {
+        type: 'https://nexusbattles.local/errores/salida-no-permitida',
+        title: 'No puedes salir de esta sala',
+        detail: 'El anfitrion no abandona su sala: la cancela.',
+        status: 409,
+      }),
+    );
+
+    const error = await abandonarSala('s1', { fetchImpl }).catch((e) => e);
+
+    expect(error.estado).toBe(409);
+    expect(error.detalle).toContain('la cancela');
+  });
+});
+
+describe('cancelarSala', () => {
+  test('hace DELETE a la sala', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(204, undefined));
+
+    await cancelarSala('s1', { fetchImpl });
+
+    expect(fetchImpl.mock.calls[0][0]).toBe('/api/v1/salas/s1');
+    expect(fetchImpl.mock.calls[0][1]).toEqual({ method: 'DELETE' });
+  });
+
+  test('quien no es el anfitrion recibe el 403 interpretado', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(
+      respuesta(403, {
+        type: 'https://nexusbattles.local/errores/no-es-el-anfitrion',
+        title: 'Solo el anfitrion puede hacer esto',
+        status: 403,
+      }),
+    );
+
+    const error = await cancelarSala('s1', { fetchImpl }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ErrorDeApi);
+    expect(error.estado).toBe(403);
   });
 });

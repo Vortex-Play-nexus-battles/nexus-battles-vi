@@ -2,6 +2,7 @@
 // Vista de inicio de sesión — HU-AUT-004.
 
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
+import { rutaDeVuelta } from '../comun/cabecera-app.js';
 import { setCurrentRole } from './directives/has-permission.directive.js';
 
 const URL_LOGIN = '/api/v1/auth/login';
@@ -36,19 +37,19 @@ async function cuerpoDe(response) {
   if (!texto) {
     return {
       status: response.status,
-      body: null
+      body: null,
     };
   }
 
   try {
     return {
       status: response.status,
-      body: JSON.parse(texto)
+      body: JSON.parse(texto),
     };
   } catch {
     return {
       status: response.status,
-      body: texto
+      body: texto,
     };
   }
 }
@@ -91,6 +92,30 @@ export function mensajeDeError(status, mensajeServidor) {
   }
 }
 
+/**
+ * Identificador estable del jugador (ADR-002): el claim `uid` del token.
+ * `LoginResponse.usuarioId` es la clave primaria de la tabla, que no es lo
+ * que comparan los demas servicios (#426); solo se usa si el token no trae
+ * `uid`.
+ *
+ * @param {string|undefined} token
+ * @param {unknown} respaldo
+ * @returns {string}
+ */
+export function identificadorDeSesion(token, respaldo) {
+  try {
+    const cuerpo = String(token ?? '').split('.')[1];
+    const base64 = cuerpo.replace(/-/g, '+').replace(/_/g, '/');
+    const claims = JSON.parse(atob(base64));
+    if (typeof claims.uid === 'string' && claims.uid) {
+      return claims.uid;
+    }
+  } catch {
+    // Sin token legible: queda el respaldo.
+  }
+  return String(respaldo ?? '');
+}
+
 form.addEventListener('submit', async (evento) => {
   evento.preventDefault();
 
@@ -104,7 +129,7 @@ form.addEventListener('submit', async (evento) => {
 
   const payload = {
     email: form.email.value.trim(),
-    password: form.password.value
+    password: form.password.value,
   };
 
   botonEnviar.disabled = true;
@@ -114,26 +139,17 @@ form.addEventListener('submit', async (evento) => {
     const respuesta = await fetchWithHttpErrorInterceptor(URL_LOGIN, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     });
 
     const { body } = await cuerpoDe(respuesta);
 
     if (!respuesta.ok) {
-      const mensajeServidor =
-        typeof body === 'string'
-          ? body
-          : body?.mensaje;
+      const mensajeServidor = typeof body === 'string' ? body : body?.mensaje;
 
-      setEstado(
-        mensajeDeError(
-          respuesta.status,
-          mensajeServidor
-        ),
-        'error'
-      );
+      setEstado(mensajeDeError(respuesta.status, mensajeServidor), 'error');
 
       return;
     }
@@ -152,39 +168,27 @@ form.addEventListener('submit', async (evento) => {
     // Mantener el rol en memoria para esta página.
     setCurrentRole(body.rol);
 
-    // Guardar los datos necesarios para las páginas siguientes.
-    sessionStorage.setItem(
-      CLAVE_USUARIO_ID,
-      String(body.usuarioId)
-    );
+    // Guardar los datos necesarios para las páginas siguientes. La identidad
+    // es el `uid` del token (ADR-002), no la clave primaria (#426).
+    sessionStorage.setItem(CLAVE_USUARIO_ID, identificadorDeSesion(body.token, body.usuarioId));
 
-    sessionStorage.setItem(
-      CLAVE_ROL,
-      body.rol
-    );
+    sessionStorage.setItem(CLAVE_ROL, body.rol);
 
-    sessionStorage.setItem(
-      CLAVE_APODO,
-      body.apodo
-    );
+    sessionStorage.setItem(CLAVE_APODO, body.apodo);
 
     // JWT utilizado por las peticiones autenticadas.
-    sessionStorage.setItem(
-      CLAVE_TOKEN,
-      body.token
-    );
+    sessionStorage.setItem(CLAVE_TOKEN, body.token);
 
     if (body.dispositivoNuevo) {
       avisoDispositivo.hidden = false;
 
-      avisoDispositivo.textContent =
-        'Detectamos un inicio de sesión desde un dispositivo nuevo.';
+      avisoDispositivo.textContent = 'Detectamos un inicio de sesión desde un dispositivo nuevo.';
     }
 
     ocultarEstado();
 
-    // TODO equipo: apuntar a la pantalla real post-login cuando exista.
-    window.location.href = './';
+    // HU-UX-001: si se llego al login desde una vista privada, se vuelve a ella.
+    window.location.href = rutaDeVuelta(window.location.search) ?? './index.html';
   } finally {
     botonEnviar.disabled = false;
   }

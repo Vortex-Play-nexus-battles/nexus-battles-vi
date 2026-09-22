@@ -8,6 +8,11 @@ La integración de `HU-INV-003` añade la creación por `POST` y la edición del
 nombre por `PATCH`. Después de cada escritura, la vista vuelve a consultar el
 inventario persistido y muestra el resultado en la cuadrícula.
 
+`HU-INV-002` incorpora un campo de búsqueda que consulta
+`GET /api/v1/inventario/elementos/busqueda?criterio=texto&pagina=N`. La vista
+exige cuatro caracteres, conserva los estados de carga, éxito, vacío y error,
+y permite limpiar el criterio para volver al inventario completo.
+
 ## Alcance actual
 
 **Cuadricula de referencia**:
@@ -17,6 +22,7 @@ inventario persistido y muestra el resultado en la cuadrícula.
 - nombre propio del jugador escrito como texto, nunca como marcado;
 - rechazo ruidoso de una pagina que exceda los 16 elementos acordados;
 - cliente HTTP de la consulta paginada, con `fetch` inyectable.
+- campo de búsqueda por nombre, tipo o identificador de producto;
 - formulario para crear elementos y editar el nombre de elementos propios;
 - actualización de la vitrina después de guardar, incluida la página donde
   queda el elemento nuevo cuando el inventario supera los 16 elementos.
@@ -28,11 +34,14 @@ inventario persistido y muestra el resultado en la cuadrícula.
   `estados-vista.js`, con `pagina-inventario.js` decidiendo cual mostrar;
 - estado vacio explicativo que no parece un error;
 - ningun codigo del protocolo a la vista del jugador: el detalle tecnico va a
-  la consola. Regla del cliente del 2026-08-13, *"uno como usuario jamas
-  deberia ver un status de HTML"*.
+  la consola. Regla del cliente del 2026-08-13, _"uno como usuario jamas
+  deberia ver un status de HTML"_.
 
 **Pruebas de aceptacion**:
 
+- los escenarios de `HU-INV-002-busqueda-inventario.feature` ejecutados en
+  Chromium para localizar productos por nombre, identificador, tipo y parte
+  de armadura, validar el mínimo y restaurar la vitrina al limpiar;
 - los cuatro escenarios de `HU-INV-001-vitrina-del-inventario.feature`
   traducidos uno a uno a Playwright sobre Chromium, con el esquema del
   criterio 2 expandido a sus tres resoluciones;
@@ -48,20 +57,20 @@ El `.feature` vive junto a la prueba a proposito: los criterios de aceptacion
 
 ## Medidas verificadas a 1360 x 768
 
-| Escenario | Tarjetas | Filas | Alto | Scroll horizontal |
-|---|---|---|---|---|
-| 16 productos | 16 | 4 | 768 px | no |
-| 7 productos | 7 | 2 | 768 px | no |
-| nombre de 300 caracteres | 16 | 4 | 877 px | no |
+| Escenario                | Tarjetas | Filas | Alto   | Scroll horizontal |
+| ------------------------ | -------- | ----- | ------ | ----------------- |
+| 16 productos             | 16       | 4     | 768 px | no                |
+| 7 productos              | 7        | 2     | 768 px | no                |
+| nombre de 300 caracteres | 16       | 4     | 877 px | no                |
 
 ## Medidas verificadas en resoluciones inferiores
 
-| Ventana | Columnas | Ancho de tarjeta | Tamano del texto | Scroll horizontal |
-|---|---|---|---|---|
-| 1360 x 768 | 4 | 313 px | 15,2 px | no |
-| 1024 x 768 | 3 | 307 px | 15,2 px | no |
-| 768 x 1024 | 2 | 353 px | 15,2 px | no |
-| 375 x 812 | 1 | ancho completo | 15,2 px | no |
+| Ventana    | Columnas | Ancho de tarjeta | Tamano del texto | Scroll horizontal |
+| ---------- | -------- | ---------------- | ---------------- | ----------------- |
+| 1360 x 768 | 4        | 313 px           | 15,2 px          | no                |
+| 1024 x 768 | 3        | 307 px           | 15,2 px          | no                |
+| 768 x 1024 | 2        | 353 px           | 15,2 px          | no                |
+| 375 x 812  | 1        | ancho completo   | 15,2 px          | no                |
 
 **El tamano del texto no cambia en ningun corte.** Encoger la letra para que
 quepa seria exactamente lo que el criterio 2 prohibe: lo que baja es el numero
@@ -75,9 +84,9 @@ horizontal.
 
 - La tarjeta y la paginacion de dieciseis son **componentes de `shared/ui-kit`**
   segun la pila; ese directorio esta vacio, asi que viven aqui provisionalmente.
-- El tema de `vitrina.css` es provisional: la paleta y las tipografias
-  autoalojadas (Rajdhani e Inter) salen de la propuesta de diseno, que aun no
-  esta en el repositorio.
+- `vitrina.css` usa la paleta oficial del sistema de diseno de Figma
+  (`iMcw1JhmSAD6XjzDZuYlIz`) y los mismos nombres de token publicados en
+  `shared/ui-kit/css/tokens.css`.
 - Los cuatro estados de `RNF-USA-003` ya existen en `estados-vista.js`, pero la
   pila los quiere **centralizados para los veinte modulos**. Su hogar es
   `shared/ui-kit`; se mudan sin cambiar la interfaz.

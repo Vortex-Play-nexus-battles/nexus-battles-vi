@@ -33,6 +33,7 @@ desktop.ini
 # --- Artefactos de compilacion y dependencias ---
 .gradle/
 build/
+build.nosync/
 dist/
 out/
 target/
@@ -79,3 +80,21 @@ test-results/
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
+
+# Guiones locales para lanzar Gradle/Jest/ESLint desde Windows sin bloquear la
+# sesion. No son parte del proyecto: CI usa los comandos de package.json y Gradle.
+/.correr.ps1
+/.jest.ps1
+/.front.ps1
+/.msg.txt
+/.issue.md
+/.visual.ps1
+/.pr.md
+
+# Capturas del laboratorio visual (UX-R2.1). El informe SI se versiona
+# (`INFORME.md` e `informe.json`: son numeros, se comparan entre corridas y
+# pesan kilobytes). Las 155 capturas pesan casi 9 MB por corrida y cambian
+# enteras con cada ajuste de CSS: versionarlas engordaria el repositorio sin
+# darle historia util. Viven como artefacto de `visual.yml`, descargable
+# durante 14 dias, que es lo que se adjunta al acta del sprint.
+docs/evidencia/ux-r2/**/*.png

@@ -1,0 +1,289 @@
+# Infraestructura del host de plataforma en AWS (infrastructure/entornos/plataforma).
+#
+# Sin claves de AWS en GitHub: el job asume el rol IAM github-actions-nexus-dev
+# por OIDC (permissions.id-token). El rol solo confia en workflows de ESTE
+# repositorio (condicion `sub` = repo:Vortex-Play-nexus-battles/nexus-battles-vi:*).
+#
+# Variables del repositorio (Settings > Secrets and variables > Actions > Variables):
+#   AWS_ROLE_ARN        arn:aws:iam::<cuenta>:role/github-actions-nexus-dev
+#   AWS_REGION          us-east-1
+#   TFSTATE_BUCKET      bucket S3 del estado (versionado, sin acceso publico)
+#   AWS_CORREO_ALERTAS  buzon del equipo para presupuestos y recordatorios
+#
+# Acciones:
+#   plan     -> siempre segura; corre sola en cada PR que toque la carpeta y
+#               deja el plan como comentario: eso es lo que aprueba el revisor.
+#   apply    -> crea/actualiza el host. Corre SOLA al fusionar en develop un
+#               cambio de la carpeta (el plan aprobado en el PR es la
+#               confirmacion humana). A mano exige escribir "apply" en `confirmar`.
+#   start    -> enciende la instancia (tambien por cron lun-vie 07:00 Colombia).
+#   stop     -> apaga la instancia (tambien por cron todos los dias 23:00 Colombia).
+#               Apagada solo factura la IP elastica (3,60 USD/mes) y el disco.
+#   destroy  -> borra TODO lo de esta carpeta, incluida la IP. Exige "destroy".
+#               Nunca corre sola.
+#
+# Limite de GitHub: el boton "Run workflow" y los `cron` solo existen cuando el
+# archivo esta en la rama por defecto (`main`). Hasta que develop se promueva a
+# main, el apagado nocturno no corre solo y start/stop se piden a un
+# administrador. El apply por fusion en develop NO tiene esa limitacion.
+#
+# Politica de la cuenta (Free Plan, USD 0 de bolsillo): ver
+# infrastructure/entornos/plataforma/README.md.
+
+name: Infra dev (AWS Free Plan)
+
+on:
+  workflow_dispatch:
+    inputs:
+      accion:
+        description: "Que hacer con el host de plataforma"
+        type: choice
+        required: true
+        default: plan
+        options: [plan, apply, start, stop, destroy]
+      confirmar:
+        description: "Para apply/destroy: escribe la misma accion aqui"
+        type: string
+        required: false
+        default: ""
+  pull_request:
+    branches: [develop]
+    paths:
+      - "infrastructure/entornos/plataforma/**"
+      - ".github/workflows/infra-dev.yml"
+  # Fusion en develop de un cambio de la carpeta -> apply (GitOps).
+  push:
+    branches: [develop]
+    paths:
+      - "infrastructure/entornos/plataforma/**"
+      - ".github/workflows/infra-dev.yml"
+  # OJO con la hora exacta. Estas tareas estaban a las 04:00 y 12:00 en punto,
+  # y GitHub retrasa las programadas cuando hay carga —el arranque de cada
+  # hora es justo el peor momento— y, si el retraso es grande, las DESCARTA.
+  # Medido en este repositorio: el apagado de las 04:00 corrio a las 08:38 y a
+  # las 09:08; el encendido de las 12:00 del 19 de septiembre no llego a
+  # correr nunca, y el despliegue de esa tarde murio contra un host apagado.
+  #
+  # Dos cambios: minutos fuera de punto, y cada accion se intenta DOS veces
+  # con una hora de diferencia. Repetir no molesta porque la accion es
+  # idempotente: si ya esta en el estado pedido, el paso dice "Nada que hacer".
+  schedule:
+    # Apagar: 04:23 y 05:23 UTC = 23:23 y 00:23 Colombia, todos los dias.
+    # El segundo intento importa mas que el primero: una noche sin apagar se
+    # come credito del Free Plan.
+    - cron: "23 4 * * *"
+    - cron: "23 5 * * *"
+    # Encender: 12:17 y 13:17 UTC = 07:17 y 08:17 Colombia, de lunes a viernes.
+    # Los fines de semana el host queda apagado a proposito, por coste; quien
+    # necesite desplegar un sabado no tiene que hacer nada: el propio CD lo
+    # enciende (ver "Asegurar que el host esta encendido" en cd.yml).
+    - cron: "17 12 * * 1-5"
+    - cron: "17 13 * * 1-5"
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+# Nunca dos ejecuciones a la vez sobre el mismo estado.
+concurrency:
+  group: infra-dev-plataforma
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_VAR_correo_alertas: ${{ vars.AWS_CORREO_ALERTAS }}
+  NOMBRE_INSTANCIA: nexus-plataforma-dev
+
+defaults:
+  run:
+    working-directory: infrastructure/entornos/plataforma
+
+jobs:
+  infra:
+    name: Host de plataforma
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Resolver la accion
+        id: accion
+        working-directory: .
+        run: |
+          case "${{ github.event_name }}" in
+            workflow_dispatch) accion="${{ inputs.accion }}" ;;
+            schedule)
+              # Explicito en los dos sentidos: un cron que no este en esta
+              # lista es un error de configuracion, no un "start" por defecto.
+              # Dejarlo caer en start dejaria el host encendido gastando
+              # credito sin que nadie se entere.
+              case "${{ github.event.schedule }}" in
+                "23 4 * * *"|"23 5 * * *")       accion=stop ;;
+                "17 12 * * 1-5"|"17 13 * * 1-5") accion=start ;;
+                *) echo "::error::Cron no reconocido: '${{ github.event.schedule }}'. Revisa el bloque schedule de este workflow."; exit 1 ;;
+              esac ;;
+            push) accion=apply ;;
+            *) accion=plan ;;
+          esac
+          echo "accion=$accion" >> "$GITHUB_OUTPUT"
+          echo "Accion: $accion"
+
+      - name: Exigir confirmacion para apply/destroy manuales
+        if: github.event_name == 'workflow_dispatch' && (steps.accion.outputs.accion == 'apply' || steps.accion.outputs.accion == 'destroy')
+        working-directory: .
+        run: |
+          if [ "${{ inputs.confirmar }}" != "${{ steps.accion.outputs.accion }}" ]; then
+            echo "::error::Escribe '${{ steps.accion.outputs.accion }}' en el campo 'confirmar' para ejecutar esta accion."
+            exit 1
+          fi
+
+      - name: Verificar variables del repositorio
+        working-directory: .
+        run: |
+          faltan=""
+          for v in AWS_ROLE_ARN AWS_REGION TFSTATE_BUCKET AWS_CORREO_ALERTAS; do
+            eval "valor=\${$v:-}"
+            [ -n "$valor" ] || faltan="$faltan $v"
+          done
+          if [ -n "$faltan" ]; then
+            echo "::error::Faltan variables del repositorio:$faltan"
+            exit 1
+          fi
+        env:
+          AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+          TFSTATE_BUCKET: ${{ vars.TFSTATE_BUCKET }}
+          AWS_CORREO_ALERTAS: ${{ vars.AWS_CORREO_ALERTAS }}
+
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      # Solo se imprimen los claims del token (sub, aud, repositorio, rama),
+      # nunca el token: sirve para comparar con la condicion de confianza del
+      # rol cuando AWS responde "Not authorized".
+      - name: Mostrar la identidad OIDC que ve AWS
+        working-directory: .
+        run: |
+          token=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value)
+          cuerpo=$(echo "$token" | cut -d. -f2 | tr '_-' '/+')
+          case $(( ${#cuerpo} % 4 )) in 2) cuerpo="$cuerpo==";; 3) cuerpo="$cuerpo=";; esac
+          echo "$cuerpo" | base64 -d | jq '{iss, sub, aud, repository, repository_owner, ref, event_name}'
+
+      - name: Asumir el rol de AWS por OIDC (sin claves)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-session-name: infra-dev-${{ steps.accion.outputs.accion }}-${{ github.run_id }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Comprobar que la cuenta sigue en Free Plan
+        working-directory: .
+        run: |
+          # Si algun dia esta llamada devolviera PAID, el flujo se detiene: nadie
+          # despliega sobre una cuenta que ya factura a la tarjeta.
+          plan=$(aws freetier get-account-plan-state --query 'accountPlanType' --output text 2>/dev/null || echo DESCONOCIDO)
+          echo "Plan de la cuenta: $plan"
+          if [ "$plan" = "PAID" ]; then
+            echo "::error::La cuenta esta en Paid Plan. Politica del proyecto: USD 0 de bolsillo. Detenido."
+            exit 1
+          fi
+
+      # --------------------------------------------------------------- start/stop
+      - name: Encender o apagar la instancia
+        if: steps.accion.outputs.accion == 'start' || steps.accion.outputs.accion == 'stop'
+        working-directory: .
+        run: |
+          accion="${{ steps.accion.outputs.accion }}"
+          id=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=$NOMBRE_INSTANCIA" "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+            --query 'Reservations[].Instances[].InstanceId' --output text)
+          if [ -z "$id" ] || [ "$id" = "None" ]; then
+            echo "No hay instancia $NOMBRE_INSTANCIA: nada que $accion (todavia no se ha hecho apply, o ya se destruyo)."
+            exit 0
+          fi
+          estado=$(aws ec2 describe-instances --instance-ids "$id" --query 'Reservations[0].Instances[0].State.Name' --output text)
+          echo "Instancia $id en estado $estado"
+          case "$accion:$estado" in
+            start:stopped)  aws ec2 start-instances --instance-ids "$id" >/dev/null; aws ec2 wait instance-running --instance-ids "$id"; echo "Encendida." ;;
+            stop:running)   aws ec2 stop-instances  --instance-ids "$id" >/dev/null; aws ec2 wait instance-stopped --instance-ids "$id"; echo "Apagada." ;;
+            *)              echo "Nada que hacer." ;;
+          esac
+
+      # ------------------------------------------------------ plan/apply/destroy
+      # La organizacion solo permite acciones de GitHub, verificadas en el
+      # Marketplace o appleboy/*; opentofu/setup-opentofu no lo es. Se instala
+      # con el script oficial, version fijada (misma que el .terraform.lock.hcl
+      # de entornos/ usa "tofu").
+      - name: Instalar OpenTofu
+        if: steps.accion.outputs.accion == 'plan' || steps.accion.outputs.accion == 'apply' || steps.accion.outputs.accion == 'destroy'
+        working-directory: .
+        run: |
+          curl -fsSL https://get.opentofu.org/install-opentofu.sh -o install-opentofu.sh
+          chmod +x install-opentofu.sh
+          sudo ./install-opentofu.sh --install-method standalone --opentofu-version 1.10.6
+          rm -f install-opentofu.sh
+          tofu version
+
+      - name: tofu init (estado en S3)
+        if: steps.accion.outputs.accion == 'plan' || steps.accion.outputs.accion == 'apply' || steps.accion.outputs.accion == 'destroy'
+        run: |
+          tofu init \
+            -backend-config="bucket=${{ vars.TFSTATE_BUCKET }}" \
+            -backend-config="region=${{ vars.AWS_REGION }}"
+
+      - name: tofu fmt + validate
+        if: steps.accion.outputs.accion == 'plan' || steps.accion.outputs.accion == 'apply'
+        run: |
+          tofu fmt -check -diff
+          tofu validate
+
+      - name: tofu plan
+        if: steps.accion.outputs.accion == 'plan' || steps.accion.outputs.accion == 'apply'
+        id: plan
+        run: |
+          set -o pipefail
+          tofu plan -no-color -out=plan.tfplan | tee plan.txt
+
+      - name: Publicar el plan en el PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('infrastructure/entornos/plataforma/plan.txt', 'utf8');
+            const resumen = (plan.match(/^(Plan:.*|No changes.*)$/m) || ['Sin resumen (ver el log).'])[0];
+            const recortado = plan.length > 60000 ? plan.slice(0, 60000) + '\n... (recortado)' : plan;
+            const cuerpo = [
+              '### Infra dev — `tofu plan` (host de plataforma, AWS Free Plan)',
+              '',
+              '`' + resumen.trim() + '`',
+              '',
+              '<details><summary>Plan completo</summary>',
+              '',
+              '```', recortado, '```',
+              '',
+              '</details>',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number, body: cuerpo,
+            });
+
+      - name: tofu apply
+        if: steps.accion.outputs.accion == 'apply'
+        run: tofu apply -no-color -auto-approve plan.tfplan
+
+      - name: tofu destroy
+        if: steps.accion.outputs.accion == 'destroy'
+        run: tofu destroy -no-color -auto-approve
+
+      - name: Salidas
+        if: steps.accion.outputs.accion == 'apply'
+        run: |
+          echo "## Host de plataforma (dev)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tofu output -no-color >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "Secretos del entorno dev a actualizar por un administrador: DEPLOY_HOST_DEV = ip_publica, SSH_USER_DEV = ubuntu, SSH_KEY_DEV = valor del parametro indicado en parametro_llave_privada (Systems Manager > Parameter Store)." >> "$GITHUB_STEP_SUMMARY"

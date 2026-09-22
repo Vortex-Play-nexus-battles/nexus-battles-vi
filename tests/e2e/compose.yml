@@ -1,0 +1,559 @@
+# Banco de pruebas E2E — el corte vertical de la sala de batalla.
+#
+# ## Por que existe
+#
+# El flujo de sala NO se puede demostrar en el host de dev (#435): la puerta
+# de heroe de HU-SAL-003 consulta a `inventario`, que no esta desplegado en
+# AWS, y `ClienteInventarioHeroes` falla cerrado a proposito. Meterlo en el
+# `t3.small` tampoco cabe: quedan 171 MiB y ya hay 907 MB en swap (#430).
+#
+# Aqui estan los seis servicios de verdad, con sus bases de datos de verdad,
+# y el MISMO `borde-dev.conf` que corre en AWS. Ningun mock: si el contrato
+# entre dos servicios se rompe, esto se pone rojo.
+#
+# ## Como se usa
+#
+#   ./gradlew :services:plataforma:salas-partidas:bootJar ...   (ver levantar.sh)
+#   docker compose -f tests/e2e/compose.yml up -d --build
+#   ./tests/e2e/sembrar.sh
+#   npx playwright test --config=playwright.e2e.config.js
+#   docker compose -f tests/e2e/compose.yml down -v
+#
+# El contexto de build es la raiz del repositorio, para que cada imagen pueda
+# copiar el jar de su servicio.
+
+name: nexus-e2e
+
+services:
+  # --------------------------------------------------------------- datos
+  e2e-identidad-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: identidaddb
+      POSTGRES_USER: identidad
+      POSTGRES_PASSWORD: identidad
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U identidad -d identidaddb"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  e2e-plataforma-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: plataformadb
+      POSTGRES_USER: plataforma
+      POSTGRES_PASSWORD: plataforma
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U plataforma -d plataformadb"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # Base propia del libro de creditos (regla 7): ms-finanzas crea su esquema
+  # `finanzas` con Flyway al arrancar.
+  e2e-finanzas-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: finanzas_db
+      POSTGRES_USER: finanzas_user
+      POSTGRES_PASSWORD: finanzas
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finanzas_user -d finanzas_db"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  e2e-subastas-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: subastas_db
+      POSTGRES_USER: subastas_user
+      POSTGRES_PASSWORD: subastas
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U subastas_user -d subastas_db"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # Una sola Mongo para los tres servicios de contenido, con una base por
+  # servicio: es como esta en docker-compose.contenido.yml.
+  e2e-contenido-mongo:
+    image: mongo:8
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+  # ----------------------------------------------------------- identidad
+  srv-ms-identidad:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/cuentas/ms-identidad/target/*.jar
+        PUERTO: "8089"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: jdbc:postgresql://e2e-identidad-db:5432/identidaddb
+      SPRING_DATASOURCE_USERNAME: identidad
+      SPRING_DATASOURCE_PASSWORD: identidad
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      # El registro avisa por correo, pero es fail-open (Resilience4j): sin
+      # servicio de correo la cuenta se crea igual. Por eso correo y mailpit
+      # no estan en este compose.
+      SERVER_PORT: "8089"
+      # Emisor transitorio de credenciales de servicio (ADR-005): la que usa
+      # salas-partidas para hablarle a inventario. Secreto de banco de
+      # pruebas, no de ningun entorno real.
+      # e2e-banco: credencial con la que sembrar.sh acredita el saldo inicial en
+      # ms-finanzas, que desde #455 solo atiende a servicios (ROLE_SERVICIO).
+      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion;torneos=e2e-secreto-de-torneos
+    depends_on:
+      e2e-identidad-db: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8089/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  # ----------------------------------------------------------- contenido
+  srv-heroes:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/contenido/heroes/build/libs/*.jar
+    environment:
+      # El perfil `mongo` es el que siembra los ocho prototipos
+      # (CatalogoEnMongo). Sin el, /api/v1/heroes/{prototipo} da 404 y la
+      # verificacion de heroe muere con un 503.
+      SPRING_PROFILES_ACTIVE: mongo
+      SPRING_MONGODB_URI: mongodb://e2e-contenido-mongo:27017/heroes
+      SPRING_DATA_MONGODB_URI: mongodb://e2e-contenido-mongo:27017/heroes
+    depends_on:
+      e2e-contenido-mongo: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  srv-productos:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/contenido/productos/build/libs/*.jar
+    environment:
+      SPRING_MONGODB_URI: mongodb://e2e-contenido-mongo:27017/productos
+      SPRING_DATA_MONGODB_URI: mongodb://e2e-contenido-mongo:27017/productos
+      # Productos exige JWT en sus rutas de escritura y valida contra este
+      # JWKS. Las de lectura, que son las que usa inventario, van abiertas.
+      KEYCLOAK_JWK_SET_URI: http://srv-ms-identidad:8089/api/v1/auth/jwks
+    depends_on:
+      e2e-contenido-mongo: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  srv-inventario:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/contenido/inventario/build/libs/*.jar
+    environment:
+      SPRING_MONGODB_URI: mongodb://e2e-contenido-mongo:27017/inventario
+      SPRING_DATA_MONGODB_URI: mongodb://e2e-contenido-mongo:27017/inventario
+      # /estadisticas resuelve el producto y el prototipo por HTTP: si estos
+      # dos no responden, la verificacion de heroe sale 503.
+      HEROES_BASE_URL: http://srv-heroes:8080
+      PRODUCTOS_BASE_URL: http://srv-productos:8080
+      KEYCLOAK_JWK_SET_URI: http://srv-ms-identidad:8089/api/v1/auth/jwks
+    depends_on:
+      e2e-contenido-mongo: { condition: service_healthy }
+      srv-heroes: { condition: service_healthy }
+      srv-productos: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  srv-motor-combate:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/contenido/motor-combate/build/libs/*.jar
+    environment:
+      MOTOR_HEROES_URL: http://srv-heroes:8080
+    depends_on:
+      srv-heroes: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  # ------------------------------------------------------------- cuentas
+  # El libro de creditos de HU-JUE-014 (Grupo 4). Es el que aparta, devuelve
+  # y cobra la apuesta; sin el, crear o entrar a una sala con recompensa
+  # responde 503 y el E2E de la apuesta no tendria nada real que probar.
+  srv-ms-finanzas:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/cuentas/ms-finanzas/build/libs/*.jar
+        PUERTO: "8093"
+    ports:
+      # Expuesto al host solo para que el spec y sembrar.sh puedan acreditar
+      # saldo y leerlo: el borde no enruta /creditos (ms-finanzas no esta en
+      # el host de dev) y esas dos operaciones no las hace ningun jugador.
+      - "8093:8093"
+    environment:
+      DB_HOST: e2e-finanzas-db
+      DB_PORT: "5432"
+      DB_NAME: finanzas_db
+      DB_USER: finanzas_user
+      DB_PASSWORD: finanzas
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+    depends_on:
+      e2e-finanzas-db: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8093/api/v1/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  # Subastas (HU-SUB-001/004/011, Grupo 4). En el host de dev no cabe (#435)
+  # y hasta el 21-sep tampoco lo detectaba el CD ni aceptaba el token real de
+  # ms-identidad: por eso el 502 de la vista. Aqui corre con el mismo token
+  # que el resto (JWKS), su propia base y la credencial de servicio con la que
+  # habla a ms-finanzas e inventario. Los adaptadores de catalogo e inventario
+  # van en modo fake mientras no haya semilla de inventario para subastar;
+  # el libro de creditos SI es el real.
+  srv-ms-subastas:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/cuentas/ms-subastas/build.nosync/libs/*.jar
+        PUERTO: "8092"
+    environment:
+      DB_HOST: e2e-subastas-db
+      DB_PORT: "5432"
+      DB_NAME: subastas_db
+      DB_USER: subastas_user
+      DB_PASSWORD: subastas
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
+      DIRECTORIO_ACTIVO_CLIENT_ID: ms-subastas
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-subastas
+      FINANZAS_BASE_URL: http://srv-ms-finanzas:8093/api/v1
+      FINANZAS_MODO: http
+      INVENTARIO_BASE_URL: http://srv-inventario:8080
+      CATALOGO_BASE_URL: http://srv-productos:8080
+      NOTIFICACIONES_BASE_URL: http://srv-notificaciones:8085/api/v1
+      SANCIONES_BASE_URL: http://srv-moderacion-sanciones:8086
+      CORS_ORIGENES: http://localhost:8099
+      SPRING_JPA_SHOW_SQL: "false"
+    depends_on:
+      e2e-subastas-db: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
+      srv-ms-finanzas: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8092/api/v1/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  # ---------------------------------------------------------- plataforma
+  # Lista negra (HU-ADM-002) y sanciones (RF-USR-004): el chat y los
+  # comentarios les preguntan antes de publicar. Cache en Redis, como en el
+  # compose de la raiz (plataforma-cache).
+  e2e-plataforma-cache:
+    image: redis:8-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  srv-moderacion-sanciones:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/plataforma/moderacion-sanciones/build/libs/*.jar
+        PUERTO: "8086"
+    environment:
+      DB_RELACIONAL_URL: jdbc:postgresql://e2e-plataforma-db:5432/plataformadb
+      DB_USER: plataforma
+      DB_PASS: plataforma
+      DB_MEMORIA_URL: redis://e2e-plataforma-cache:6379
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      # HU-NOT-005: los avisos de sancion y de apelacion van a la bandeja del
+      # jugador con la credencial de servicio de este mismo compose (ADR-005).
+      # Reintento corto para que el E2E no espere 15 s si el primero no entro.
+      NOTIFICACIONES_URL: http://srv-notificaciones:8085/api/v1
+      DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
+      DIRECTORIO_ACTIVO_CLIENT_ID: moderacion-sanciones
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-moderacion
+      SANCIONES_AVISOS_REINTENTO_MS: "2000"
+      # HU-ADM-001 (CA-04): los limites de la suspension salen de admin-parametros;
+      # cache de 1 s para que el spec vea el cambio sin esperar.
+      PARAMETROS_URL: http://srv-admin-parametros:8088/api/v1
+      SANCIONES_PARAMETROS_CACHE_SEGUNDOS: "1"
+    depends_on:
+      e2e-plataforma-db: { condition: service_healthy }
+      e2e-plataforma-cache: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
+      srv-notificaciones: { condition: service_healthy }
+      srv-admin-parametros: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8086/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  # Bandeja de notificaciones (HU-NOT-006): la sancion y la decision de la
+  # apelacion tienen que aparecer en la bandeja del jugador (HU-NOT-005), y
+  # eso solo se demuestra con el servicio real detras del borde.
+  srv-notificaciones:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/plataforma/notificaciones/build/libs/*.jar
+        PUERTO: "8085"
+    environment:
+      DB_RELACIONAL_URL: jdbc:postgresql://e2e-plataforma-db:5432/plataformadb
+      DB_USER: plataforma
+      DB_PASS: plataforma
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      NOTIFICACIONES_WS_ORIGENES: http://localhost:8099
+    depends_on:
+      e2e-plataforma-db: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8085/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  # Comentarios sobre productos (HU-COM-001..004). Mismo esquema de plataforma,
+  # lista negra y sanciones en moderacion-sanciones (fail-closed, D-14), token
+  # de ms-identidad. Sin el, el E2E de comentarios no tendria nada real.
+  srv-comentarios:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/plataforma/comentarios/build/libs/*.jar
+        PUERTO: "8081"
+    environment:
+      DB_RELACIONAL_URL: jdbc:postgresql://e2e-plataforma-db:5432/plataformadb
+      DB_USER: plataforma
+      DB_PASS: plataforma
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      LISTA_NEGRA_VERIFICAR_URL: http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar
+      SANCIONES_URL: http://srv-moderacion-sanciones:8086/api/v1
+    depends_on:
+      e2e-plataforma-db: { condition: service_healthy }
+      srv-moderacion-sanciones: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8081/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  # Torneos (M13, HU-TOR-001..005): equipos validados en la lista negra,
+  # sancion activa en moderacion-sanciones, inscripcion reservada en
+  # ms-finanzas con la credencial de servicio del propio compose.
+  srv-torneos:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/plataforma/torneos/build/libs/*.jar
+        PUERTO: "8083"
+    environment:
+      DB_RELACIONAL_URL: jdbc:postgresql://e2e-plataforma-db:5432/plataformadb
+      DB_USER: plataforma
+      DB_PASS: plataforma
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      LISTA_NEGRA_VERIFICAR_URL: http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar
+      SANCIONES_URL: http://srv-moderacion-sanciones:8086/api/v1
+      CREDITOS_URL: http://srv-ms-finanzas:8093/api/v1
+      DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
+      DIRECTORIO_ACTIVO_CLIENT_ID: torneos
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-torneos
+    depends_on:
+      e2e-plataforma-db: { condition: service_healthy }
+      srv-moderacion-sanciones: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
+      srv-ms-finanzas: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8083/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  # Parametros del sistema (HU-ADM-001): catalogo real; moderacion-sanciones
+  # le lee el rango de la suspension (CA-04) y el spec lo cambia en caliente.
+  srv-admin-parametros:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/plataforma/admin-parametros/build/libs/*.jar
+        PUERTO: "8088"
+    environment:
+      DB_RELACIONAL_URL: jdbc:postgresql://e2e-plataforma-db:5432/plataformadb
+      DB_USER: plataforma
+      DB_PASS: plataforma
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+    depends_on:
+      e2e-plataforma-db: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8088/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  # Metricas de plataforma (HU-MET-004 / HU-MET-001): recolecta Actuator de
+  # los servicios del bloque que corren en este compose y los agregados de
+  # moderacion. correo NO esta aqui a proposito: es la brecha de
+  # observabilidad que el spec espera ver senalada (CA-03).
+  srv-metricas-plataforma:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/plataforma/metricas-plataforma/build/libs/*.jar
+        PUERTO: "8087"
+    environment:
+      DB_RELACIONAL_URL: jdbc:postgresql://e2e-plataforma-db:5432/plataformadb
+      DB_USER: plataforma
+      DB_PASS: plataforma
+      DISPONIBILIDAD_INTERVALO_MS: "5000"
+      SALUD_COMENTARIOS: http://srv-comentarios:8081/actuator/health
+      SALUD_CORREO: http://srv-correo:8082/actuator/health
+      SALUD_TORNEOS: http://srv-torneos:8083/actuator/health
+      SALUD_SALAS_PARTIDAS: http://srv-salas-partidas:8084/actuator/health
+      SALUD_NOTIFICACIONES: http://srv-notificaciones:8085/actuator/health
+      SALUD_MODERACION: http://srv-moderacion-sanciones:8086/actuator/health
+      SALUD_ADMIN_PARAMETROS: http://srv-admin-parametros:8088/actuator/health
+      SANCIONES_URL: http://srv-moderacion-sanciones:8086/api/v1
+      # HU-MET-001 (#527): la observabilidad es de administracion.
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+    depends_on:
+      e2e-plataforma-db: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
+      srv-moderacion-sanciones: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8087/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  srv-salas-partidas:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/plataforma/salas-partidas/build/libs/*.jar
+        PUERTO: "8084"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://e2e-plataforma-db:5432/plataformadb
+      SPRING_DATASOURCE_USERNAME: plataforma
+      SPRING_DATASOURCE_PASSWORD: plataforma
+      # Estas dos son las que NO estan puestas en el despliegue de dev, y por
+      # eso alli la sala no se puede crear (#435). Aqui si.
+      INVENTARIO_BASE_URL: http://srv-inventario:8080
+      MOTOR_COMBATE_URL: http://srv-motor-combate:8080
+      # De aqui sale el prototipo del heroe. Sin el, al motor le llega el
+      # nombre propio y responde 404: ningun ataque se resuelve.
+      PRODUCTOS_BASE_URL: http://srv-productos:8080
+      # Y de aqui la defensa del prototipo, sin la cual nadie acierta.
+      HEROES_BASE_URL: http://srv-heroes:8080
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      # Credencial de servicio (ADR-005): inventario solo cree en X-User-Name
+      # cuando lo manda un servicio autenticado. Misma pareja que declara
+      # AUTH_CLIENTES_SERVICIO en srv-ms-identidad.
+      DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
+      DIRECTORIO_ACTIVO_CLIENT_ID: salas-partidas
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-salas-partidas
+      # HU-JUE-014: el libro de creditos, con su context-path.
+      CREDITOS_URL: http://srv-ms-finanzas:8093/api/v1
+      # Reintento rapido de liquidaciones pendientes, para que el E2E pueda
+      # observarlo sin esperar el minuto por defecto.
+      APUESTAS_REINTENTO_MS: "5000"
+      # HU-DIS-003: corta circuitos cortos, para que degradacion.e2e.spec.js
+      # vea abrirse el circuito con dos fallos y recuperarse en dos segundos.
+      RESILIENCIA_FALLOS_PARA_ABRIR: "2"
+      RESILIENCIA_REINTENTAR_EN_SEGUNDOS: "2"
+      # El navegador llega por el borde, asi que el origen permitido del
+      # canal STOMP es el del borde, no el del servicio.
+      SALAS_WS_ORIGENES: http://localhost:8099,http://127.0.0.1:8099
+      CHAT_WS_ORIGENES: http://localhost:8099,http://127.0.0.1:8099
+      # HU-JUE-015 / D-14: el chat consulta la lista negra y la sancion activa
+      # en moderacion-sanciones, con fallo cerrado. Sin el servicio en el
+      # banco, ningun mensaje se publicaba (503 sanciones-no-disponibles) y el
+      # guion de la demo no podia mostrar el chat.
+      LISTA_NEGRA_VERIFICAR_URL: http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar
+      SANCIONES_URL: http://srv-moderacion-sanciones:8086/api/v1
+      # HU-TOR-004 CA-04: el resultado del encuentro sale de la partida jugada.
+      TORNEOS_URL: http://srv-torneos:8083/api/v1
+    depends_on:
+      e2e-plataforma-db: { condition: service_healthy }
+      srv-inventario: { condition: service_healthy }
+      srv-productos: { condition: service_healthy }
+      srv-heroes: { condition: service_healthy }
+      srv-motor-combate: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
+      srv-ms-finanzas: { condition: service_healthy }
+      srv-moderacion-sanciones: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8084/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  # ---------------------------------------------------------------- borde
+  # El MISMO archivo que corre en AWS, sin una linea distinta. Si el reparto
+  # de rutas se rompe, se rompe aqui antes que en la demo.
+  srv-borde:
+    image: nginx:1.27-alpine
+    ports:
+      - "8099:80"
+    volumes:
+      - ../../infrastructure/red-balanceo/borde-dev.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../../frontend:/srv/nexus/frontend:ro
+      - ../../shared:/srv/nexus/shared:ro
+    depends_on:
+      srv-salas-partidas: { condition: service_healthy }
+      srv-torneos: { condition: service_healthy }
+      srv-metricas-plataforma: { condition: service_healthy }
+    healthcheck:
+      # 127.0.0.1 y no `localhost` a proposito. El entrypoint de la imagen
+      # intenta anadir un `listen [::]:80` y no puede, porque la
+      # configuracion se monta en solo lectura:
+      #   10-listen-on-ipv6-by-default.sh: info: can not modify
+      #   /etc/nginx/conf.d/default.conf (read-only file system?)
+      # Asi que nginx escucha solo en IPv4 y `localhost` -que resuelve antes
+      # a ::1- da conexion rechazada. El contenedor estaba sano y el
+      # healthcheck decia que no.
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1/salud-borde | grep -q UP"]
+      interval: 3s
+      timeout: 3s
+      retries: 20

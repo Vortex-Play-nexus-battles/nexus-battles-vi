@@ -1,0 +1,39 @@
+// Seguridad: servidor de recursos OAuth2 (hoy ms-identidad emite; Keycloak 26
+// es el destino, ADR-002).
+//
+// Plugin OPT-IN, por la misma razon que el de persistencia: si se metiera en
+// 'nexus.spring-conventions', los servicios que hoy exponen endpoints abiertos
+// empezarian a devolver 401 sin que nadie lo hubiera pedido.
+//
+// Uso:
+//     plugins {
+//         id 'nexus.spring-conventions'
+//         id 'nexus.seguridad-conventions'
+//     }
+//
+// Trae ya enlazada la biblioteca compartida con el manejo de roles, para que
+// ningun servicio vuelva a escribir su propio conversor de claims.
+//
+// Cada servicio sigue declarando SUS reglas de rutas en su propio SecurityConfig:
+// que camino es publico y que rol hace falta es una decision de dominio, no de
+// plataforma. Lo compartido es el andamiaje, no la politica.
+//
+// Para las pruebas trae, ademas de spring-security-test, los fixtures de
+// plataforma-seguridad: un emisor de tokens RS256 real con su JWKS
+// (EmisorDeTokensDePrueba) y un JwtDecoder de prueba apuntando a el
+// (DecodificadorDePrueba). Con eso una prueba de seguridad afirma lo que
+// afirmaria produccion —firma, caducidad, uid, rol— en vez de aceptar
+// cualquier cadena como token.
+
+plugins {
+    id 'java'
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
+    implementation project(':shared:libs:plataforma-seguridad')
+
+    testImplementation 'org.springframework.security:spring-security-test'
+    testImplementation testFixtures(project(':shared:libs:plataforma-seguridad'))
+}

@@ -2,3 +2,7 @@
 **/.gradle/
 **/build/
 **/node_modules/
+# Excepcion: la imagen de heroes NO compila dentro del contenedor, copia el
+# jar que ya compilo el flujo (cd.yml, heroes-ci.yml) desde la raiz. Sin esta
+# linea el COPY del Dockerfile no encuentra build/libs.
+!services/contenido/heroes/build/libs/*.jar

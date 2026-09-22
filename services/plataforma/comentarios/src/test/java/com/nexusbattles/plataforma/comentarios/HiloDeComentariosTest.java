@@ -21,8 +21,10 @@ import org.junit.jupiter.api.Test;
  * Pruebas de HU-COM-001 - Publicacion de comentarios con texto e imagenes.
  *
  * Fuente: Proyecto Integrador II, seccion 7.1, p. 34 y seccion 7.7.9, p. 55.
- * Regla RN-CMT-001: el comentario lleva texto e imagenes, mas el apodo del jugador,
- * la calificacion en estrellas y la fecha de publicacion. Un jugador comenta cuantas
+ * Regla RN-CMT-001: el comentario lleva texto e imagenes, mas el apodo del
+ * jugador,
+ * la calificacion en estrellas y la fecha de publicacion. Un jugador comenta
+ * cuantas
  * veces quiera pero califica una sola vez.
  */
 class HiloDeComentariosTest {
@@ -61,23 +63,66 @@ class HiloDeComentariosTest {
     }
 
     @Test
-    @DisplayName("del segundo comentario en adelante va sin estrellas y el promedio no se mueve")
-    void aceptaComentariosSinLimitePeroUnaSolaCalificacion() {
+    @DisplayName("la segunda calificación entra sin estrellas y se dice (RF-COM-002, D-07); los comentarios no tienen tope")
+    void laSegundaCalificacionEntraSinEstrellas() {
         hilo.publicar(solicitud("com-1", "jugador-1", List.of(), 4), HABILITADO, LIMPIO);
         assertTrue(hilo.yaCalifico("jugador-1"));
+        assertFalse(hilo.ultimaCalificacionDescartada());
 
-        Comentario segundo = hilo.publicar(
-                solicitud("com-2", "jugador-1", List.of(), 5), HABILITADO, LIMPIO);
+        Comentario segundo = hilo.publicar(solicitud("com-2", "jugador-1", List.of(), 5), HABILITADO, LIMPIO);
 
-        assertTrue(segundo.calificacion().isEmpty());
-        assertTrue(segundo.estaPublicado());
-        assertEquals(4.0, hilo.promedio().orElseThrow());
+        assertTrue(segundo.calificacion().isEmpty(), "entra sin estrellas");
+        assertTrue(hilo.ultimaCalificacionDescartada(), "y se dice");
+        assertEquals(Comentario.Estado.PUBLICADO, segundo.estado());
 
         for (int i = 3; i <= 7; i++) {
             hilo.publicar(solicitud("com-" + i, "jugador-1", List.of(), null), HABILITADO, LIMPIO);
         }
+        assertFalse(hilo.ultimaCalificacionDescartada(), "sin estrellas no hay nada que descartar");
         assertEquals(7, hilo.visibles().size());
-        assertEquals(4.0, hilo.promedio().orElseThrow());
+        assertEquals(4.0, hilo.promedio().orElseThrow(), "solo cuenta la primera");
+    }
+
+    @Test
+    @DisplayName("retirar el propio comentario lo saca del hilo, del promedio y libera la calificación (HU-COM-004, D-19)")
+    void retirarElPropio() {
+        hilo.publicar(solicitud("com-1", "jugador-1", List.of(), 4), HABILITADO, LIMPIO);
+        hilo.publicar(solicitud("com-2", "jugador-2", List.of(), 2), HABILITADO, LIMPIO);
+        assertEquals(3.0, hilo.promedio().orElseThrow());
+
+        Comentario retirado = hilo.eliminar("com-1", "jugador-1");
+
+        assertEquals(Comentario.Estado.ELIMINADO, retirado.estado());
+        assertTrue(retirado.calificacion().isEmpty());
+        assertEquals(List.of("com-2"), hilo.visibles().stream().map(Comentario::id).toList());
+        assertEquals(2.0, hilo.promedio().orElseThrow(), "la calificación retirada no cuenta");
+        assertFalse(hilo.yaCalifico("jugador-1"), "puede volver a calificar");
+
+        // Idempotente: retirar de nuevo devuelve el mismo, sin error.
+        assertEquals(retirado, hilo.eliminar("com-1", "jugador-1"));
+    }
+
+    @Test
+    @DisplayName("solo el autor retira: ajeno es ComentarioAjeno, inexistente es ComentarioNoEncontrado")
+    void soloElAutorRetira() {
+        hilo.publicar(solicitud("com-1", "jugador-1", List.of(), 4), HABILITADO, LIMPIO);
+
+        assertThrows(HiloDeComentarios.ComentarioAjeno.class, () -> hilo.eliminar("com-1", "jugador-2"));
+        assertThrows(HiloDeComentarios.ComentarioNoEncontrado.class, () -> hilo.eliminar("no-existe", "jugador-1"));
+        assertEquals(1, hilo.visibles().size(), "nada cambio");
+    }
+
+    @Test
+    @DisplayName("un comentario retirado cargado de la base no reserva la calificación de su autor")
+    void elRetiradoNoReservaCalificacion() {
+        Comentario retirado = new Comentario("com-0", "espada-del-alba", "jugador-1", "Lyra", "viejo",
+                List.of(), null, Instant.parse("2026-08-30T00:00:00Z"), Comentario.Estado.ELIMINADO);
+        HiloDeComentarios cargado = HiloDeComentarios.reconstituir("espada-del-alba", Set.of("jpg"),
+                List.of(retirado));
+
+        assertFalse(cargado.yaCalifico("jugador-1"));
+        assertTrue(cargado.visibles().isEmpty());
+        assertTrue(cargado.promedio().isEmpty());
     }
 
     @Test

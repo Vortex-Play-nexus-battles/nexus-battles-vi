@@ -7,6 +7,16 @@ rootProject.name = 'nexus-battles-vi'
 // El workflow guardia-monorepo.yml falla el pull request si se olvida.
 // -----------------------------------------------------------------------
 
+// --- Bibliotecas compartidas por los tres equipos ---
+//
+// No son servicios: no se despliegan ni tienen main. Los servicios las
+// declaran como dependencia. Cambiarlas afecta a los veinte modulos, asi que
+// requieren revision de los tres Scrum Masters (CLAUDE.md).
+include 'shared:libs:plataforma-comun'
+include 'shared:libs:plataforma-seguridad'
+include 'shared:libs:plataforma-observabilidad'
+include 'shared:libs:plataforma-resiliencia'
+
 // --- Plataforma: tiempo real, comunidad y plataforma (Equipo 6) ---
 include 'services:plataforma:admin-parametros'
 include 'services:plataforma:comentarios'
@@ -23,6 +33,9 @@ include 'services:contenido:inventario'
 include 'services:contenido:motor-combate'
 include 'services:contenido:productos'
 
+// --- Cuentas y economia ---
+include 'services:cuentas:ms-subastas'
+
 // --- Pendientes de incorporar ---
 //
 // Sin build.gradle todavia: la carpeta existe pero no hay nada que compilar.
@@ -31,8 +44,7 @@ include 'services:contenido:productos'
 // include 'services:contenido:misiones'
 // include 'services:contenido:progresion-jugador'
 // include 'services:cuentas:ms-chatbot'
-// include 'services:cuentas:ms-finanzas'
-// include 'services:cuentas:ms-subastas'
+include 'services:cuentas:ms-finanzas'
 //
 // Todavia en Maven (pom.xml). Migrarlos a Gradle y descomentar aqui:
 //

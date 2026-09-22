@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Recuperar contraseña — NEXUS BATTLES VI</title>
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
+  </head>
+  <body>
+    <div data-cabecera-app></div>
+
+    <main class="entrada">
+      <section class="entrada__identidad">
+        <p class="t-etiqueta">Recuperar el acceso</p>
+        <h1 class="entrada__marca">NEXUS <em>BATTLES</em> VI</h1>
+        <p class="entrada__lema">
+          Te mandamos un codigo de un solo uso al correo de tu cuenta. Con el eliges una contrasena
+          nueva; el codigo caduca y no sirve dos veces.
+        </p>
+      </section>
+
+      <section class="entrada__tarjeta">
+        <div class="pila pila--ajustada">
+          <h2 class="entrada__titulo">Recuperar contraseña</h2>
+          <p class="t-meta">Escribe el correo con el que creaste la cuenta.</p>
+        </div>
+
+        <p class="estado" id="estadoSolicitud" hidden role="status"></p>
+
+        <form id="formSolicitud" class="pila" novalidate>
+          <div class="campo">
+            <label class="campo__etiqueta" for="email">Correo electrónico</label>
+            <input
+              class="campo__control"
+              type="email"
+              id="email"
+              name="email"
+              required
+              autocomplete="email"
+              placeholder="tu@correo.com"
+            />
+            <p class="campo__pista">
+              Por seguridad, la respuesta es la misma exista o no la cuenta.
+            </p>
+          </div>
+
+          <button type="submit" class="boton boton--primario boton--grande" id="botonEnviar">
+            Enviar código
+          </button>
+        </form>
+
+        <div class="entrada__pie">
+          <a href="./restablecer-confirmar.html">Ya tengo un código</a>
+          <a href="./login.html">Volver a entrar</a>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./restablecer-solicitar.js"></script>
+    <script type="module">
+      import { montarCabecera } from '../comun/cabecera-app.js';
+
+      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: null });
+    </script>
+  </body>
+</html>

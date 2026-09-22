@@ -1,2 +1,65 @@
+# Notificaciones en tiempo real — HU-NOT-006.
+#
+# Mismas convenciones que moderacion-sanciones y salas-partidas: un solo
+# PostgreSQL para la plataforma y un esquema por servicio, para cumplir la
+# regla 7 sin pagar una instancia por microservicio.
+#
+# Regla 10: ningun valor real vive aqui. Todo baja de variable de entorno; lo
+# que aparece detras de los dos puntos son los valores de desarrollo local que
+# levanta el docker-compose de la raiz.
+
 server:
   port: 8085
+
+spring:
+  application:
+    name: notificaciones
+
+  # Regla 4: los errores salen en formato problem details (RFC 7807).
+  mvc:
+    problemdetails:
+      enabled: true
+
+  # Clave publica con la que se verifican los tokens de usuario y de servicio
+  # (ADR-002, ADR-005). Hoy la publica ms-identidad; con Keycloak solo cambia
+  # la URL. Los roles y el uid los traduce ConversorRolesJwt
+  # (shared/libs/plataforma-seguridad).
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${IDENTIDAD_JWKS_URL:http://localhost:8089/api/v1/auth/jwks}
+
+  datasource:
+    url: ${DB_RELACIONAL_URL:jdbc:postgresql://localhost:5432/plataformadb}
+    username: ${DB_USER:usuario_nexus}
+    password: ${DB_PASS:password_secreta_123}
+
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        default_schema: notificaciones
+
+  flyway:
+    schemas: notificaciones
+    default-schema: notificaciones
+
+# Canal en tiempo real declarado en contracts/websocket/notificaciones.yaml.
+# El endpoint es /ws/notificaciones y no /ws: el borde enruta por la ruta,
+# ya no por el parametro ?usuario= (que era la identidad sin verificar).
+notificaciones:
+  websocket:
+    endpoint: ${NOTIFICACIONES_WS_ENDPOINT:/ws/notificaciones}
+    origenes-permitidos: ${NOTIFICACIONES_WS_ORIGENES:http://localhost:5173,http://localhost:3000}
+
+# Regla 3: todo servicio expone salud y metricas.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true

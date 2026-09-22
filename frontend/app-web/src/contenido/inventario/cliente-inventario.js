@@ -1,9 +1,11 @@
 /**
  * HU-INV-001 - Acceso HTTP a la consulta paginada del inventario.
  *
- * El servicio identifica al jugador por la cabecera `X-User-Name`, la misma
- * que usan las operaciones de creacion y modificacion. Cuando llegue el
- * contrato de identidad (HU-INF-009) esa cabecera la pondra la sesion.
+ * El servicio identifica al jugador por el JWT de la sesion (`Authorization:
+ * Bearer`, que pone `fetchWithHttpErrorInterceptor`): el propietario es el
+ * sujeto del token, contrato de inventario 1.1.0 / ADR-002. La cabecera
+ * `X-User-Name` que aun se manda es informativa para un jugador —el servicio
+ * la ignora— y solo cuenta cuando la manda otro servicio con credencial.
  *
  * Las peticiones salen por el envoltorio comun de `src/comun/`, no por `fetch`
  * pelado: asi el manejo de Problem Details es el mismo en los veinte modulos.
@@ -13,6 +15,7 @@
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
 
 const RUTA = '/api/v1/inventario/elementos';
+const RUTA_BUSQUEDA = `${RUTA}/busqueda`;
 const RUTA_HEROES = '/api/v1/inventario/heroes';
 
 function identidadNormalizada(identidad) {
@@ -72,6 +75,44 @@ export async function consultarPagina(
     throw new Error(
       `El servicio de inventario respondio ${respuesta.status} al pedir la pagina ${pagina}`,
     );
+  }
+  return respuesta.json();
+}
+
+/**
+ * Busca una pagina del inventario propio usando el indice del servicio.
+ *
+ * @param {string} identidad jugador autenticado, que viaja en la cabecera.
+ * @param {string} criterio texto de al menos cuatro caracteres.
+ * @param {number} numeroPagina pagina pedida, desde cero.
+ * @param {{fetchImpl?: Function}} opciones inyeccion para las pruebas.
+ * @returns {Promise<object>} pagina con los elementos coincidentes.
+ */
+export async function buscarElementos(
+  identidad,
+  criterio,
+  numeroPagina = 0,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const propietario = identidadNormalizada(identidad);
+  const texto = typeof criterio === 'string' ? criterio.trim() : '';
+  const pagina = numeroPagina ?? 0;
+
+  if (texto.length < 4) {
+    throw new RangeError('El criterio de busqueda debe tener al menos cuatro caracteres');
+  }
+  if (!Number.isInteger(pagina) || pagina < 0) {
+    throw new RangeError('El numero de pagina no puede ser negativo');
+  }
+
+  const parametros = new URLSearchParams({ criterio: texto, pagina: String(pagina) });
+  const respuesta = await fetchImpl(`${RUTA_BUSQUEDA}?${parametros}`, {
+    headers: { 'X-User-Name': propietario },
+  });
+  if (!respuesta.ok) {
+    const fallo = new Error(`No se pudo buscar en el inventario (${respuesta.status})`);
+    fallo.status = respuesta.status;
+    throw fallo;
   }
   return respuesta.json();
 }

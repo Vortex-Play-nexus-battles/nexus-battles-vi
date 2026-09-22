@@ -59,6 +59,72 @@ public final class BandejaDeNotificaciones {
     }
 
     /**
+     * Reconstruye la bandeja de un jugador con lo que ya esta guardado.
+     *
+     * <p>Existe para la capa de persistencia. La bandeja aplica sus reglas
+     * recordando tres cosas: que avisos tiene, cuales estan leidos y que ha
+     * recibido ya cada sesion. Esa memoria hay que recuperarla de la base antes
+     * de atender cada evento nuevo, porque de lo contrario la reconexion le
+     * entregaria a la sesion todo lo que tiene sin leer en vez de solo lo que
+     * se perdio.
+     *
+     * @param usuarioId jugador dueno de la bandeja
+     * @param avisos avisos guardados, del mas antiguo al mas reciente
+     * @param leidas identificadores de los avisos ya leidos
+     * @param sesionesAbiertas sesiones que seguian abiertas
+     * @param entregadas por cada sesion, los avisos que ya recibio
+     * @return la bandeja con su historia cargada
+     */
+    public static BandejaDeNotificaciones reconstituir(
+            String usuarioId,
+            List<Notificacion> avisos,
+            Set<String> leidas,
+            Set<String> sesionesAbiertas,
+            Map<String, Set<String>> entregadas) {
+
+        Objects.requireNonNull(avisos, "los avisos guardados son obligatorios");
+        Objects.requireNonNull(leidas, "los avisos leidos son obligatorios");
+        Objects.requireNonNull(sesionesAbiertas, "las sesiones abiertas son obligatorias");
+        Objects.requireNonNull(entregadas, "las entregas por sesion son obligatorias");
+
+        BandejaDeNotificaciones bandeja = de(usuarioId);
+        for (Notificacion aviso : avisos) {
+            Objects.requireNonNull(aviso, "ningun aviso guardado puede ser nulo");
+            bandeja.avisos.put(aviso.id(), aviso);
+        }
+        for (String id : leidas) {
+            if (bandeja.avisos.containsKey(id)) {
+                bandeja.leidas.add(id);
+            }
+        }
+        for (String sesionId : sesionesAbiertas) {
+            bandeja.sesionesActivas.add(sesionId);
+            bandeja.entregadasPorSesion.putIfAbsent(sesionId, new HashSet<>());
+        }
+        for (Map.Entry<String, Set<String>> entrada : entregadas.entrySet()) {
+            bandeja.entregadasPorSesion
+                    .computeIfAbsent(entrada.getKey(), id -> new HashSet<>())
+                    .addAll(entrada.getValue());
+        }
+        return bandeja;
+    }
+
+    /** Avisos que esa sesion ya recibio. Lo necesita la capa de persistencia. */
+    public Set<String> entregadasA(String sesionId) {
+        return Set.copyOf(entregadasPorSesion.getOrDefault(sesionId, Set.of()));
+    }
+
+    /** Identificadores de los avisos leidos. Lo necesita la capa de persistencia. */
+    public Set<String> leidas() {
+        return Set.copyOf(leidas);
+    }
+
+    /** Sesiones de las que se lleva registro de entregas, abiertas o ya cerradas. */
+    public Set<String> sesionesConRegistro() {
+        return Set.copyOf(entregadasPorSesion.keySet());
+    }
+
+    /**
      * Registra una sesion que acaba de conectarse.
      *
      * <p>Una sesion que se abre por primera vez no arrastra historial: se

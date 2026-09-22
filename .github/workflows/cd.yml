@@ -16,11 +16,39 @@ name: CD - Distribucion continua
 on:
   push:
     branches: [develop]
+  # Despliegue a demanda de servicios concretos con la version actual de
+  # develop (promocion manual, HU-CICD-002): util para levantar un servicio
+  # que no cambio en el ultimo push (p. ej. ms-identidad en un host nuevo)
+  # o para volver a desplegar tras cambiar secrets/variables del entorno.
+  # Se ejecuta desde la rama que tenga este archivo; el tag es el sha corto
+  # de ese commit y las imagenes se construyen desde el, igual que en push.
+  workflow_dispatch:
+    inputs:
+      servicios:
+        description: "Servicios a desplegar, separados por coma (ej: salas-partidas,notificaciones,ms-identidad). Vacio = solo frontend y borde."
+        type: string
+        required: false
+        default: ""
+      # HU-CICD-002 CA-02: simulacro de reversion en dev. El servicio indicado
+      # (uno de `servicios`) se despliega con la imagen buena pero con
+      # SERVER_PORT movido a un puerto que nadie publica (ver desplegar.sh):
+      # falla la salud, se escribe ultimo-fallo.txt, corre revertir.sh y se
+      # comprueba que volvio el tag estable anterior. Es la unica manera de
+      # ejercitar la reversion sin publicar una imagen rota a proposito.
+      # Vacio (lo normal) = ningun simulacro; los push nunca lo activan.
+      simulacro_reversion:
+        description: "SOLO simulacro (HU-CICD-002): nombre de UN servicio de 'servicios' al que se le inyecta un fallo de salud para ejercitar la reversion automatica en dev. Vacio = sin simulacro."
+        type: string
+        required: false
+        default: ""
 
 # Minimo necesario: leer el repo y escribir paquetes (para publicar en ghcr.io).
 permissions:
   contents: read
   packages: write
+  # Para encender el host si esta apagado, por OIDC y sin claves guardadas.
+  # Ver el paso "Asegurar que el host esta encendido" del job de dev.
+  id-token: write
 
 # A diferencia de ci.yml, NUNCA cancelamos una corrida de CD a mitad de
 # camino: podria dejar un ambiente a medio desplegar.
@@ -37,7 +65,7 @@ jobs:
   # ---------------------------------------------------------------------
   # Job 1: que servicios de plataforma cambiaron en este push a develop.
   #
-  # DECISION DE DISEÑO: esta logica ya existe en ci.yml (job
+  # DECISION DE DISEÃ‘O: esta logica ya existe en ci.yml (job
   # "detectar-servicios"), pero aqui la DUPLICAMOS en vez de extraerla a un
   # job/workflow compartido. Razones:
   #   1) ci.yml compara contra dos casos (push Y pull_request); cd.yml SOLO
@@ -61,6 +89,11 @@ jobs:
     outputs:
       servicios: ${{ steps.detectar.outputs.servicios }}
       hay_servicios: ${{ steps.detectar.outputs.hay_servicios }}
+      # Desplegar por perfil de dominio (reglas de trabajo de plataforma):
+      # plataforma y cuentas van al host de plataforma; contenido a su propio
+      # host. Cada lista dispara solo el job de despliegue que le toca.
+      hay_plataforma: ${{ steps.detectar.outputs.hay_plataforma }}
+      hay_contenido: ${{ steps.detectar.outputs.hay_contenido }}
       tag: ${{ steps.detectar.outputs.tag }}
     steps:
       - name: Descargar el repositorio con historial completo
@@ -91,12 +124,30 @@ jobs:
 
           echo "Comparando $BASE..$HEAD"
 
-          # 2) Solo nos importan los 8 servicios de services/plataforma/* que
-          #    ya tienen imagen en docker-compose.yml (los unicos que este
-          #    equipo despliega). Un servicio de otro equipo que cambie en el
-          #    mismo push se ignora aqui a proposito.
-          ARCHIVOS=$(git diff --name-only "$BASE" "$HEAD")
-          CARPETAS=$(echo "$ARCHIVOS" | grep -E '^services/plataforma/[^/]+/' | awk -F'/' '{print $1"/"$2"/"$3}' | sort -u || true)
+          # 2) Nos importan los servicios de services/plataforma/* (8, con
+          #    imagen en docker-compose.yml) y los de services/contenido/*
+          #    que ya esten registrados en puerto_de() y en
+          #    docker-compose.contenido.yml. Un servicio sin puerto
+          #    registrado se omite mas abajo con un mensaje, no rompe nada.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Despliegue a demanda: se fabrica la misma lista de rutas que
+            # produciria un push, una por servicio pedido, para reutilizar
+            # sin cambios la deteccion de abajo. Los nombres de cuentas y
+            # contenido se reconocen por su lista fija; el resto es plataforma.
+            ARCHIVOS=""
+            for s in $(echo "${{ inputs.servicios }}" | tr ',' ' '); do
+              case "$s" in
+                ms-identidad|ms-cumplimiento|ms-ecommerce) ARCHIVOS="$ARCHIVOS services/cuentas/$s/a-demanda" ;;
+                heroes|inventario|productos|motor-combate) ARCHIVOS="$ARCHIVOS services/contenido/$s/a-demanda" ;;
+                *) ARCHIVOS="$ARCHIVOS services/plataforma/$s/a-demanda" ;;
+              esac
+            done
+            ARCHIVOS=$(echo "$ARCHIVOS" | tr ' ' '\n' | sed '/^$/d')
+            echo "Despliegue a demanda de: ${{ inputs.servicios }}"
+          else
+            ARCHIVOS=$(git diff --name-only "$BASE" "$HEAD")
+          fi
+          CARPETAS=$(echo "$ARCHIVOS" | grep -E '^services/(plataforma|contenido)/[^/]+/' | awk -F'/' '{print $1"/"$2"/"$3}' | sort -u || true)
 
           # 3) Puerto fijo por servicio, mismo orden que docker-compose.yml
           #    (8081 a 8088). Si se agrega un noveno servicio de plataforma
@@ -112,6 +163,17 @@ jobs:
               moderacion-sanciones) echo 8086 ;;
               metricas-plataforma) echo 8087 ;;
               admin-parametros) echo 8088 ;;
+              # services/contenido/* (equipo Contenido): bloque 8101-8104.
+              # Es el puerto del HOST (el que consulta el healthcheck de
+              # desplegar.sh); dentro del contenedor todos escuchan en 8080
+              # y docker-compose.contenido.yml los publica como 810x:8080.
+              # No se usa 8090-8094: cuentas ya fija ms-ecommerce en 8090 y
+              # ms-cumplimiento en 8091. Cada servicio de aqui se construye
+              # desde la raiz del monorepo con -f (ver "Construir la imagen").
+              heroes) echo 8101 ;;
+              inventario) echo 8102 ;;
+              productos) echo 8103 ;;
+              motor-combate) echo 8104 ;;
               *) echo "" ;;
             esac
           }
@@ -183,6 +245,46 @@ jobs:
             fi
           fi
 
+          # 6) services/cuentas/ms-ecommerce (Maven), mismo patron exacto que
+          #    ms-identidad y ms-cumplimiento arriba -- bloque especifico, NO
+          #    generalizado a un grep de cuentas/*. Puerto 8090, mismo del
+          #    lado del host que del contenedor (confirmado en su Dockerfile:
+          #    EXPOSE 8090). A diferencia de los otros dos, este servicio
+          #    tiene server.servlet.context-path=/api/v1 -- el healthcheck
+          #    generico de desplegar.sh no sirve tal cual para el, ver el
+          #    comentario de "ruta_salud_de" en ese script.
+          if echo "$ARCHIVOS" | grep -q '^services/cuentas/ms-ecommerce/'; then
+            if [ -f "services/cuentas/ms-ecommerce/pom.xml" ]; then
+              MATRIZ=$(echo "$MATRIZ" | jq -c \
+                --arg ruta "services/cuentas/ms-ecommerce" \
+                --arg servicio "ms-ecommerce" \
+                '. + [{ruta:$ruta, rutaGradle:"", servicio:$servicio, puerto:"8090", herramienta:"maven"}]')
+            else
+              echo "Se omite services/cuentas/ms-ecommerce: no tiene pom.xml"
+            fi
+          fi
+
+          # 7) Lo que NO cabe en el host de dev. El t3.small (1,9 GB) corre 9
+          #    servicios + borde con ~330 MB libres y 1,1 GB ya en swap
+          #    (diagnostico-dev del 21/sep). Meter otra JVM no "desplegaria un
+          #    servicio mas": tumbaria los que sostienen el MVP. Hasta que haya
+          #    un segundo host (fuera del plan gratuito, decision del cliente),
+          #    estos se quedan fuera del flujo automatico -- ni imagen ni
+          #    despliegue -- en vez de fallar por secrets que nadie va a crear
+          #    (corrida 35571690523). Sus pruebas y su compuerta de calidad
+          #    siguen corriendo en ci.yml. A demanda (workflow_dispatch) SI se
+          #    intentan: quien los pide sabe lo que hace y ve el fallo con sus
+          #    secrets faltantes.
+          FUERA_DEL_HOST_DEV="ms-cumplimiento ms-ecommerce"
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            for fuera in $FUERA_DEL_HOST_DEV; do
+              if echo "$MATRIZ" | jq -e --arg s "$fuera" 'any(.[]; .servicio == $s)' > /dev/null; then
+                echo "::warning::$fuera cambio, pero no se despliega en el host de dev por capacidad (ver #430); solo se publica su imagen. Para intentarlo igual: despliegue a demanda."
+                MATRIZ=$(echo "$MATRIZ" | jq -c --arg s "$fuera" '[.[] | select(.servicio != $s)]')
+              fi
+            done
+          fi
+
           echo "Servicios a desplegar: $MATRIZ"
           echo "servicios=$MATRIZ" >> "$GITHUB_OUTPUT"
 
@@ -192,6 +294,20 @@ jobs:
           else
             echo "hay_servicios=false" >> "$GITHUB_OUTPUT"
           fi
+
+          # Por dominio: contenido despliega en su propio host (job
+          # "desplegar-contenido-dev"); todo lo demas en el de plataforma.
+          CONTENIDO=$(echo "$MATRIZ" | jq '[.[] | select(.ruta | startswith("services/contenido/"))] | length')
+          PLATAFORMA=$(echo "$MATRIZ" | jq '[.[] | select(.ruta | startswith("services/contenido/") | not)] | length')
+          # El host de plataforma tambien sirve el frontend (borde nginx, ver
+          # infrastructure/red-balanceo/borde-dev.conf): un cambio en las
+          # vistas, el ui-kit o el propio borde se despliega aunque ningun
+          # servicio haya cambiado. Un despliegue a demanda sin servicios
+          # hace lo mismo (refresca frontend y borde).
+          FRONTEND=$(echo "$ARCHIVOS" | grep -cE '^(frontend/app-web/src/|shared/ui-kit/|infrastructure/red-balanceo/)' || true)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "$PLATAFORMA" -eq 0 ] && [ "$CONTENIDO" -eq 0 ]; then FRONTEND=1; fi
+          if [ "$CONTENIDO" -gt 0 ]; then echo "hay_contenido=true" >> "$GITHUB_OUTPUT"; else echo "hay_contenido=false" >> "$GITHUB_OUTPUT"; fi
+          if [ "$PLATAFORMA" -gt 0 ] || [ "$FRONTEND" -gt 0 ]; then echo "hay_plataforma=true" >> "$GITHUB_OUTPUT"; else echo "hay_plataforma=false" >> "$GITHUB_OUTPUT"; fi
 
           # TAG unico para toda esta corrida: se usa para nombrar las
           # imagenes en ghcr.io y para saber que version desplegar despues.
@@ -264,14 +380,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # El contexto del build es la carpeta del servicio (matrix.ruta): ahi
-      # es donde acaba de quedar el jar (build/libs/*.jar en Gradle,
-      # target/*.jar en Maven) y donde vive su Dockerfile.
+      # Contexto del build:
+      #  - services/plataforma/*: la carpeta del servicio (matrix.ruta), donde
+      #    acaba de quedar el jar (build/libs/*.jar en Gradle, target/*.jar
+      #    en Maven) y donde vive su Dockerfile.
+      #  - services/contenido/*: la RAIZ del monorepo, con -f al Dockerfile
+      #    del servicio. Sus Dockerfiles necesitan ver el wrapper de Gradle y
+      #    buildSrc (inventario, productos y motor-combate compilan dentro de
+      #    la imagen; heroes copia el jar que este job ya compilo).
       - name: Construir la imagen Docker
         run: |
-          docker build \
-            -t ${{ env.REGISTRO_IMAGENES }}/nexus-battles-vi-${{ matrix.servicio }}:${{ needs.detectar-servicios.outputs.tag }} \
-            ${{ matrix.ruta }}
+          IMAGEN=${{ env.REGISTRO_IMAGENES }}/nexus-battles-vi-${{ matrix.servicio }}:${{ needs.detectar-servicios.outputs.tag }}
+          case "${{ matrix.ruta }}" in
+            services/contenido/*)
+              docker build -f "${{ matrix.ruta }}/Dockerfile" -t "$IMAGEN" . ;;
+            *)
+              docker build -t "$IMAGEN" "${{ matrix.ruta }}" ;;
+          esac
 
       - name: Publicar la imagen en ghcr.io
         run: docker push ${{ env.REGISTRO_IMAGENES }}/nexus-battles-vi-${{ matrix.servicio }}:${{ needs.detectar-servicios.outputs.tag }}
@@ -284,18 +409,89 @@ jobs:
   desplegar-dev:
     name: Desplegar en Dev
     needs: [detectar-servicios, construir-y-publicar]
-    if: needs.detectar-servicios.outputs.hay_servicios == 'true'
+    # Solo plataforma y cuentas: los servicios de contenido van al host de
+    # contenido (job "desplegar-contenido-dev"), nunca a este. Corre tambien
+    # cuando solo cambio el frontend/borde (construir-y-publicar queda
+    # omitido, no fallido): de ahi el !cancelled() y la comprobacion del
+    # resultado en vez del "needs" implicito.
+    if: ${{ !cancelled() && needs.detectar-servicios.outputs.hay_plataforma == 'true' && needs.construir-y-publicar.result != 'failure' }}
     runs-on: ubuntu-latest
     environment: dev
     steps:
       - name: Descargar el repositorio
         uses: actions/checkout@v4
 
-      - name: Preparar lista "servicio:puerto" para este ambiente
+      - name: Preparar lista "servicio:puerto" para este ambiente (sin contenido)
         id: lista
         run: |
-          LISTA=$(echo '${{ needs.detectar-servicios.outputs.servicios }}' | jq -r '[.[] | "\(.servicio):\(.puerto)"] | join(" ")')
+          LISTA=$(echo '${{ needs.detectar-servicios.outputs.servicios }}' | jq -r '[.[] | select(.ruta | startswith("services/contenido/") | not) | "\(.servicio):\(.puerto)"] | join(" ")')
           echo "lista=$LISTA" >> "$GITHUB_OUTPUT"
+
+      # ------------------------------------------------------------------
+      # El host de dev se apaga todas las noches para no gastar credito, y
+      # solo se enciende de lunes a viernes. Ademas, las tareas programadas de
+      # GitHub se retrasan horas cuando hay carga y a veces se descartan: el
+      # 19 de septiembre el "start" de las 12:00 UTC no llego a ejecutarse, y
+      # el despliegue de las 20:15 murio con "dial tcp :22: i/o timeout" tras
+      # un minuto de espera, sin decir por que.
+      #
+      # Un despliegue no deberia depender de que un cron se haya cumplido. Si
+      # el host esta apagado se enciende aqui, que es justo lo que hace falta
+      # para desplegar y no cuesta nada de mas: la instancia iba a encenderse
+      # igual. Si ya esta encendido, este paso no hace nada.
+      # ------------------------------------------------------------------
+      - name: Asumir el rol de AWS por OIDC (sin claves)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-session-name: cd-dev-${{ github.run_id }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Asegurar que el host esta encendido
+        run: |
+          set -euo pipefail
+          id=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=nexus-plataforma-dev" \
+                      "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+            --query 'Reservations[].Instances[].InstanceId' --output text)
+          if [ -z "$id" ] || [ "$id" = "None" ]; then
+            echo "::error::No existe la instancia nexus-plataforma-dev. Lanza 'Infra dev' con accion=apply."
+            exit 1
+          fi
+
+          estado=$(aws ec2 describe-instances --instance-ids "$id" \
+            --query 'Reservations[0].Instances[0].State.Name' --output text)
+          echo "Instancia $id en estado $estado"
+
+          if [ "$estado" = "stopping" ]; then
+            echo "Esperando a que termine de apagarse para poder encenderla."
+            aws ec2 wait instance-stopped --instance-ids "$id"
+            estado=stopped
+          fi
+
+          if [ "$estado" = "stopped" ]; then
+            echo "Estaba apagada: se enciende para poder desplegar."
+            aws ec2 start-instances --instance-ids "$id" >/dev/null
+            aws ec2 wait instance-running --instance-ids "$id"
+            # "running" solo dice que el hipervisor la arranco; SSH tarda mas.
+            aws ec2 wait instance-status-ok --instance-ids "$id"
+            echo "Encendida y con los chequeos de EC2 en verde."
+          fi
+
+          # Ultimo filtro antes de gastar el minuto del scp: que el 22 conteste
+          # de verdad. Asi un fallo aqui dice "SSH no responde" y no
+          # "i/o timeout" a secas desde dentro de una accion de terceros.
+          ip=$(aws ec2 describe-instances --instance-ids "$id" \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
+          for intento in $(seq 1 30); do
+            if nc -z -w 3 "$ip" 22 2>/dev/null; then
+              echo "SSH responde en el intento $intento."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::El host esta encendido pero el puerto 22 no responde tras 150 s."
+          exit 1
 
       - name: Copiar docker-compose.yml, docker-compose.deploy.yml y el script de despliegue
         uses: appleboy/scp-action@v0.1.7
@@ -303,9 +499,25 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,scripts/cd/desplegar.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
+
+      # El borde (nginx) sirve las vistas y el ui-kit tal cual estan en el
+      # repo, con la misma jerarquia de carpetas (las vistas referencian
+      # ../../../../../shared/ui-kit): por eso se copia el arbol completo a
+      # /opt/nexus/web/ sin recortar componentes. La configuracion del borde
+      # viaja en el mismo arbol y desplegar.sh la recarga.
+      - name: Copiar frontend, ui-kit y configuracion del borde
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          source: "frontend/app-web/src,shared/ui-kit,infrastructure/red-balanceo/borde-dev.conf"
+          target: "/opt/nexus/web"
+          strip_components: 0
+          overwrite: true
 
       # Los 16 nombres vienen de .env.example. Los valores reales viven SOLO
       # como secrets de GitHub (nunca en este yml). "envs:" es lo que hace
@@ -314,10 +526,20 @@ jobs:
       # generar el .env efimero del servidor.
       - name: Desplegar en Dev
         id: desplegar
+        # Solo durante un simulacro de reversion el fallo de este step no
+        # detiene el job: hacen falta los steps de reversion y comprobacion
+        # de abajo. En un push normal sigue como siempre: rojo y se para.
+        continue-on-error: ${{ github.event_name == 'workflow_dispatch' && inputs.simulacro_reversion != '' }}
         uses: appleboy/ssh-action@v1.0.3
         env:
           TAG: ${{ needs.detectar-servicios.outputs.tag }}
+          # Para que el servidor pueda hacer pull de las imagenes privadas de
+          # ghcr.io: token de esta corrida (packages:read), no un secreto guardado.
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SERVICIOS_PUERTOS: ${{ steps.lista.outputs.lista }}
+          # HU-CICD-002 CA-02: vacio salvo en el simulacro a demanda.
+          SIMULACRO_REVERSION: ${{ inputs.simulacro_reversion }}
           APP_ENV: ${{ secrets.APP_ENV }}
           LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
           DB_RELACIONAL_URL: ${{ secrets.DB_RELACIONAL_URL }}
@@ -325,6 +547,11 @@ jobs:
           DB_MEMORIA_URL: ${{ secrets.DB_MEMORIA_URL }}
           COLA_MENSAJES_URL: ${{ secrets.COLA_MENSAJES_URL }}
           DIRECTORIO_ACTIVO_URL: ${{ secrets.DIRECTORIO_ACTIVO_URL }}
+          # ADR-002: de donde baja la plataforma la clave publica con la que
+          # verifica los tokens de usuario. Hoy la publica ms-identidad; el dia
+          # que sea Keycloak, cambia esta variable y nada mas.
+          IDENTIDAD_JWKS_URL: ${{ vars.IDENTIDAD_JWKS_URL }}
+          JWT_CLAVE_PRIVADA: ${{ secrets.JWT_CLAVE_PRIVADA }}
           DIRECTORIO_ACTIVO_CLIENT_ID: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_ID }}
           DIRECTORIO_ACTIVO_CLIENT_SECRET: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_SECRET }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
@@ -334,6 +561,18 @@ jobs:
           WEBSOCKET_URL: ${{ secrets.WEBSOCKET_URL }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASS: ${{ secrets.DB_PASS }}
+          # Configuracion NO secreta de los servicios de plataforma (nombres
+          # de .env.example). Son "variables" del entorno dev, no secrets:
+          # URLs internas del compose y origenes CORS. desplegar.sh solo las
+          # escribe en el .env si llegan con valor, para que un servicio sin
+          # variable conserve el valor por defecto de su application.yml.
+          SMTP_PORT: ${{ vars.SMTP_PORT }}
+          LISTA_NEGRA_VERIFICAR_URL: ${{ vars.LISTA_NEGRA_VERIFICAR_URL }}
+          SALAS_WS_ORIGENES: ${{ vars.SALAS_WS_ORIGENES }}
+          CHAT_WS_ORIGENES: ${{ vars.CHAT_WS_ORIGENES }}
+          CHAT_HISTORIAL_TAMANO: ${{ vars.CHAT_HISTORIAL_TAMANO }}
+          NOTIFICACIONES_WS_ORIGENES: ${{ vars.NOTIFICACIONES_WS_ORIGENES }}
+          COMENTARIOS_FORMATOS_IMAGEN: ${{ vars.COMENTARIOS_FORMATOS_IMAGEN }}
           # PENDIENTE (TODO_*): secrets propios de ms-identidad (equipo
           # Cuentas), todavia no creados en GitHub -- ver la validacion de
           # "fallo visible" en desplegar.sh si faltan y ms-identidad esta
@@ -356,11 +595,20 @@ jobs:
           MS_CUMPLIMIENTO_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_CUMPLIMIENTO }}
           MS_CUMPLIMIENTO_DB_USER: ${{ secrets.TODO_DB_USER_MS_CUMPLIMIENTO }}
           MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_CUMPLIMIENTO }}
+          # PENDIENTE (TODO_*): mismo patron de placeholder que los otros dos
+          # servicios de Cuentas -- 5 secrets propios de ms-ecommerce,
+          # todavia no creados en GitHub. Prefijo "MS_ECOMMERCE_" para no
+          # chocar con ningun otro esquema (ver docker-compose.ms-ecommerce.yml).
+          MS_ECOMMERCE_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_USER: ${{ secrets.TODO_DB_USER_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_ECOMMERCE }}
         with:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,SIMULACRO_REVERSION,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,SMTP_PORT,LISTA_NEGRA_VERIFICAR_URL,SALAS_WS_ORIGENES,CHAT_WS_ORIGENES,CHAT_HISTORIAL_TAMANO,NOTIFICACIONES_WS_ORIGENES,COMENTARIOS_FORMATOS_IMAGEN,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -368,17 +616,158 @@ jobs:
       # CA-02 en dev/test: si /actuator/health no pasa, el step de arriba ya
       # termino en error (desplegar.sh hace "exit 1") y este job queda en
       # rojo -- eso automaticamente bloquea "desplegar-test" (depende de
-      # este job via needs). No hay reversion automatica en dev/test: el
-      # diseño acordado con Santiago Gonzalez la reserva para produccion
-      # (ver el job "desplegar-produccion" mas abajo).
+      # este job via needs). No hay reversion automatica en dev/test en un
+      # push normal: el diseno acordado con Santiago Gonzalez la reserva
+      # para produccion (ver el job "desplegar-produccion" mas abajo).
+      #
+      # Lo que SI hay es el SIMULACRO a demanda (entrada simulacro_reversion):
+      # como produccion no existe todavia (D-08), es la unica forma de
+      # ejercitar revertir.sh de verdad -- mismo script, mismo step con el
+      # mismo nombre, mismo host donde corre el MVP. Los tres steps de abajo
+      # solo existen cuando el simulacro esta activo.
+      - name: Reversion automatica por fallo de salud
+        if: github.event_name == 'workflow_dispatch' && inputs.simulacro_reversion != '' && steps.desplegar.outcome == 'failure'
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          # Por si la imagen del tag estable ya no esta en el host y hay que
+          # bajarla de ghcr.io: mismo token de la corrida que usa desplegar.sh.
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          envs: GHCR_USER,GHCR_TOKEN
+          script: |
+            chmod +x /opt/nexus/scripts/cd/revertir.sh
+            /opt/nexus/scripts/cd/revertir.sh
+
+      # La reversion no vale nada si no se comprueba: el contenedor tiene que
+      # estar corriendo el tag estable ANTERIOR (no el de esta corrida) y su
+      # /actuator/health tiene que volver a estar UP en su puerto de siempre.
+      - name: Comprobar que el servicio volvio al tag estable y esta sano
+        if: github.event_name == 'workflow_dispatch' && inputs.simulacro_reversion != '' && steps.desplegar.outcome == 'failure'
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          SIMULACRO_REVERSION: ${{ inputs.simulacro_reversion }}
+          TAG: ${{ needs.detectar-servicios.outputs.tag }}
+          SERVICIOS_PUERTOS: ${{ steps.lista.outputs.lista }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          envs: SIMULACRO_REVERSION,TAG,SERVICIOS_PUERTOS
+          script: |
+            set -euo pipefail
+            cd /opt/nexus
+            servicio="$SIMULACRO_REVERSION"
+            esperado=$(cat "ultimo-tag-estable-${servicio}.txt")
+            actual=$(docker inspect --format '{{.Config.Image}}' "srv-${servicio}" | sed 's/^.*://')
+            echo "tag de la corrida (fallido): $TAG | tag estable esperado: $esperado | tag que corre ahora: $actual"
+            if [ "$actual" != "$esperado" ] || [ "$actual" = "$TAG" ]; then
+              echo "La reversion NO dejo el tag estable anterior."; exit 1
+            fi
+            puerto=""
+            for par in $SERVICIOS_PUERTOS; do
+              if [ "${par%%:*}" = "$servicio" ]; then puerto="${par##*:}"; fi
+            done
+            for intento in $(seq 1 36); do
+              if curl -fsS "http://localhost:${puerto}/actuator/health" | grep -q '"status":"UP"'; then
+                echo "srv-${servicio} (puerto $puerto) volvio a estar UP en el intento $intento con el tag $actual"
+                echo "ultimo-fallo.txt registro el fallo: $(grep "^${servicio}:" ultimo-fallo.txt || echo '(sin linea)')"
+                exit 0
+              fi
+              sleep 5
+            done
+            echo "srv-${servicio} no volvio a estar sano tras la reversion"; exit 1
+
+      # Veredicto: un simulacro solo se supera si el fallo inyectado se
+      # detecto. Si el despliegue paso la salud con SERVER_PORT movido, el
+      # healthcheck no esta mirando donde cree, y eso es un defecto del CD.
+      - name: Veredicto del simulacro de reversion
+        if: github.event_name == 'workflow_dispatch' && inputs.simulacro_reversion != ''
+        run: |
+          if [ "${{ steps.desplegar.outcome }}" != "failure" ]; then
+            echo "::error::El simulacro no provoco ningun fallo de salud: el healthcheck de desplegar.sh no detecto SERVER_PORT movido. Revisar el paso 4 del script."
+            exit 1
+          fi
+          echo "Simulacro superado: fallo de salud detectado, reversion ejecutada y comprobada (ver los dos steps anteriores)."
+
+  # ---------------------------------------------------------------------
+  # Job 3b: dev de CONTENIDO, en el host propio del dominio. Mismo script
+  # (desplegar.sh), mismos compose, mismo TAG; solo cambian el host y la
+  # llave (secrets *_CONTENIDO_DEV del entorno "dev"). Lo pide el propio
+  # documento de plataforma ("desplegar por perfil de dominio, no los 20
+  # servicios a la vez") y lo motiva el tamano del host de plataforma
+  # (t3.micro, 1 GB): ahi no caben 20 JVM. Los servicios de contenido solo
+  # leen variables propias (URIs de Mongo internas, URLs entre servicios
+  # del mismo compose), asi que no necesitan los secrets de aplicacion de
+  # plataforma: desplegar.sh los deja vacios en el .env sin fallar.
+  # Test y produccion de contenido quedan para cuando exista ese entorno.
+  # ---------------------------------------------------------------------
+  desplegar-contenido-dev:
+    name: Desplegar contenido en Dev
+    needs: [detectar-servicios, construir-y-publicar]
+    if: needs.detectar-servicios.outputs.hay_contenido == 'true'
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar lista "servicio:puerto" (solo contenido)
+        id: lista
+        run: |
+          LISTA=$(echo '${{ needs.detectar-servicios.outputs.servicios }}' | jq -r '[.[] | select(.ruta | startswith("services/contenido/")) | "\(.servicio):\(.puerto)"] | join(" ")')
+          echo "lista=$LISTA" >> "$GITHUB_OUTPUT"
+
+      - name: Copiar los compose y el script de despliegue al host de contenido
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST_CONTENIDO_DEV }}
+          username: ${{ secrets.SSH_USER_CONTENIDO_DEV }}
+          key: ${{ secrets.SSH_KEY_CONTENIDO_DEV }}
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh"
+          target: "/opt/nexus"
+          strip_components: 0
+
+      - name: Desplegar contenido en Dev
+        id: desplegar
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          TAG: ${{ needs.detectar-servicios.outputs.tag }}
+          # Para que el servidor pueda hacer pull de las imagenes privadas de
+          # ghcr.io: token de esta corrida (packages:read), no un secreto guardado.
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SERVICIOS_PUERTOS: ${{ steps.lista.outputs.lista }}
+          APP_ENV: dev
+          LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST_CONTENIDO_DEV }}
+          username: ${{ secrets.SSH_USER_CONTENIDO_DEV }}
+          key: ${{ secrets.SSH_KEY_CONTENIDO_DEV }}
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL
+          script: |
+            chmod +x /opt/nexus/scripts/cd/desplegar.sh
+            /opt/nexus/scripts/cd/desplegar.sh
 
   # ---------------------------------------------------------------------
   # Job 4: test. Espera a que dev termine y haya pasado salud (needs).
+  #
+  # Solo corre si la variable de repositorio HAY_ENTORNO_TEST vale "true".
+  # La cuenta AWS de la empresa (Free Plan, USD 0 de bolsillo; ver
+  # infrastructure/entornos/plataforma/README.md) tiene UN host de dev y
+  # ningun host de test: sin esta condicion, cada corrida terminaba en rojo
+  # despues de un dev correcto, y ese rojo tapa los fallos reales. Cuando
+  # exista un host de test, se crea la variable y sus secrets *_TEST, sin
+  # tocar este archivo. Produccion depende de test (needs), asi que queda
+  # omitida en cadena.
   # ---------------------------------------------------------------------
   desplegar-test:
     name: Desplegar en Test
     needs: [detectar-servicios, construir-y-publicar, desplegar-dev]
-    if: needs.detectar-servicios.outputs.hay_servicios == 'true'
+    if: needs.detectar-servicios.outputs.hay_servicios == 'true' && vars.HAY_ENTORNO_TEST == 'true'
     runs-on: ubuntu-latest
     environment: test
     steps:
@@ -397,7 +786,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,scripts/cd/desplegar.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -406,6 +795,10 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           TAG: ${{ needs.detectar-servicios.outputs.tag }}
+          # Para que el servidor pueda hacer pull de las imagenes privadas de
+          # ghcr.io: token de esta corrida (packages:read), no un secreto guardado.
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SERVICIOS_PUERTOS: ${{ steps.lista.outputs.lista }}
           APP_ENV: ${{ secrets.APP_ENV }}
           LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
@@ -414,6 +807,11 @@ jobs:
           DB_MEMORIA_URL: ${{ secrets.DB_MEMORIA_URL }}
           COLA_MENSAJES_URL: ${{ secrets.COLA_MENSAJES_URL }}
           DIRECTORIO_ACTIVO_URL: ${{ secrets.DIRECTORIO_ACTIVO_URL }}
+          # ADR-002: de donde baja la plataforma la clave publica con la que
+          # verifica los tokens de usuario. Hoy la publica ms-identidad; el dia
+          # que sea Keycloak, cambia esta variable y nada mas.
+          IDENTIDAD_JWKS_URL: ${{ vars.IDENTIDAD_JWKS_URL }}
+          JWT_CLAVE_PRIVADA: ${{ secrets.JWT_CLAVE_PRIVADA }}
           DIRECTORIO_ACTIVO_CLIENT_ID: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_ID }}
           DIRECTORIO_ACTIVO_CLIENT_SECRET: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_SECRET }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
@@ -438,11 +836,18 @@ jobs:
           MS_CUMPLIMIENTO_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_CUMPLIMIENTO }}
           MS_CUMPLIMIENTO_DB_USER: ${{ secrets.TODO_DB_USER_MS_CUMPLIMIENTO }}
           MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_CUMPLIMIENTO }}
+          # PENDIENTE (TODO_*): ver el mismo comentario en el job "Desplegar
+          # en Dev" -- misma logica para los 5 secrets de ms-ecommerce.
+          MS_ECOMMERCE_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_USER: ${{ secrets.TODO_DB_USER_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_ECOMMERCE }}
         with:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -464,7 +869,8 @@ jobs:
   desplegar-produccion:
     name: Desplegar en Produccion
     needs: [detectar-servicios, construir-y-publicar, desplegar-test]
-    if: needs.detectar-servicios.outputs.hay_servicios == 'true'
+    # Misma logica que test: solo con host propio (variable HAY_ENTORNO_PRODUCCION).
+    if: needs.detectar-servicios.outputs.hay_servicios == 'true' && vars.HAY_ENTORNO_PRODUCCION == 'true'
     runs-on: ubuntu-latest
     environment: produccion
     steps:
@@ -483,7 +889,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,scripts/cd/desplegar.sh,scripts/cd/revertir.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -495,6 +901,10 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           TAG: ${{ needs.detectar-servicios.outputs.tag }}
+          # Para que el servidor pueda hacer pull de las imagenes privadas de
+          # ghcr.io: token de esta corrida (packages:read), no un secreto guardado.
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SERVICIOS_PUERTOS: ${{ steps.lista.outputs.lista }}
           APP_ENV: ${{ secrets.APP_ENV }}
           LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
@@ -503,6 +913,11 @@ jobs:
           DB_MEMORIA_URL: ${{ secrets.DB_MEMORIA_URL }}
           COLA_MENSAJES_URL: ${{ secrets.COLA_MENSAJES_URL }}
           DIRECTORIO_ACTIVO_URL: ${{ secrets.DIRECTORIO_ACTIVO_URL }}
+          # ADR-002: de donde baja la plataforma la clave publica con la que
+          # verifica los tokens de usuario. Hoy la publica ms-identidad; el dia
+          # que sea Keycloak, cambia esta variable y nada mas.
+          IDENTIDAD_JWKS_URL: ${{ vars.IDENTIDAD_JWKS_URL }}
+          JWT_CLAVE_PRIVADA: ${{ secrets.JWT_CLAVE_PRIVADA }}
           DIRECTORIO_ACTIVO_CLIENT_ID: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_ID }}
           DIRECTORIO_ACTIVO_CLIENT_SECRET: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_SECRET }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
@@ -533,11 +948,19 @@ jobs:
           MS_CUMPLIMIENTO_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_CUMPLIMIENTO }}
           MS_CUMPLIMIENTO_DB_USER: ${{ secrets.TODO_DB_USER_MS_CUMPLIMIENTO }}
           MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_CUMPLIMIENTO }}
+          # PENDIENTE (TODO_*): mismos 5 secrets de ms-ecommerce que en
+          # dev/test -- tampoco tiene perfiles Spring, no hace falta forzar
+          # ninguno.
+          MS_ECOMMERCE_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_USER: ${{ secrets.TODO_DB_USER_MS_ECOMMERCE }}
+          MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_ECOMMERCE }}
         with:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          envs: TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -550,10 +973,16 @@ jobs:
       - name: Reversion automatica por fallo de salud
         if: steps.desplegar.outcome == 'failure'
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          # Lo destapo el simulacro en dev: sin sesion en ghcr.io, un pull de la
+          # imagen estable fallaba justo cuando mas falta hacia.
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
+          envs: GHCR_USER,GHCR_TOKEN
           script: |
             chmod +x /opt/nexus/scripts/cd/revertir.sh
             /opt/nexus/scripts/cd/revertir.sh
@@ -566,14 +995,55 @@ jobs:
         run: |
           echo "El despliegue a produccion fallo su verificacion de salud y se revirtio automaticamente. Revisar el step 'Reversion automatica por fallo de salud' para el detalle."
           exit 1
+
   # ---------------------------------------------------------------------
-  # Job 6: Revelar IP para auditoria
+  # Notificacion del resultado al canal del equipo (HU-CICD-001 CA-02,
+  # HU-CICD-002 SCRUM-1115). Opcional a proposito: la eleccion del canal
+  # (Discord, Slack, Teams...) sigue siendo del equipo; el dia que exista,
+  # basta crear el secret WEBHOOK_NOTIFICACIONES con la URL del webhook
+  # entrante y este job empieza a avisar. Sin el secret no hace nada, y
+  # GitHub sigue mandando su correo a quien hizo el push cuando falla.
+  # El cuerpo lleva "content" (Discord) y "text" (Slack y Teams) a la vez:
+  # cada servicio lee el suyo e ignora el otro.
   # ---------------------------------------------------------------------
-  revelar-ip:
-    name: Revelar IP de AWS
+  notificar-resultado:
+    name: Avisar al canal del equipo
+    needs: [detectar-servicios, construir-y-publicar, desplegar-dev, desplegar-contenido-dev, desplegar-test, desplegar-produccion]
+    if: always()
     runs-on: ubuntu-latest
+    env:
+      WEBHOOK: ${{ secrets.WEBHOOK_NOTIFICACIONES }}
     steps:
-      - name: Extraer IP desde secreto
+      - name: Enviar el resultado del despliegue
+        if: env.WEBHOOK != ''
+        env:
+          RESULTADOS: >-
+            construir=${{ needs.construir-y-publicar.result }}
+            dev=${{ needs.desplegar-dev.result }}
+            contenido=${{ needs.desplegar-contenido-dev.result }}
+            test=${{ needs.desplegar-test.result }}
+            prod=${{ needs.desplegar-produccion.result }}
+          SERVICIOS: ${{ needs.detectar-servicios.outputs.servicios }}
+          CORRIDA: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+        shell: bash
         run: |
-          echo "La IP es:"
-          echo "${{ secrets.DEPLOY_HOST_DEV }}" | sed 's/./& /g'
+          set -euo pipefail
+          if echo "$RESULTADOS" | grep -q 'failure'; then
+            ESTADO="FALLO"; ICONO=":x:"
+          elif echo "$RESULTADOS" | grep -q 'cancelled'; then
+            ESTADO="CANCELADO"; ICONO=":warning:"
+          else
+            ESTADO="OK"; ICONO=":white_check_mark:"
+          fi
+          TEXTO="$ICONO CD $ESTADO en develop (${COMMIT:0:7}, por $ACTOR) - servicios: ${SERVICIOS:-solo frontend y borde} - $RESULTADOS - $CORRIDA"
+          CUERPO=$(jq -cn --arg t "$TEXTO" '{content: $t, text: $t}')
+          # El webhook nunca se imprime: solo el codigo HTTP de la respuesta.
+          CODIGO=$(curl -sS -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d "$CUERPO" "$WEBHOOK" || echo "000")
+          echo "Aviso enviado al canal del equipo: HTTP $CODIGO ($ESTADO)"
+          case "$CODIGO" in 2*) exit 0 ;; *) echo "::warning::El canal del equipo respondio $CODIGO; el despliegue no depende de esto." ;; esac
+      - name: Sin canal configurado
+        if: env.WEBHOOK == ''
+        run: |
+          echo "Sin secret WEBHOOK_NOTIFICACIONES: no se avisa a ningun canal (GitHub sigue avisando por correo al autor si falla)."

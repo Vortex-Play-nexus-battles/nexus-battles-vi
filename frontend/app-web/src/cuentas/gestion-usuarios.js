@@ -1,18 +1,15 @@
 import {
-setCurrentRole,
-getCurrentRole,
-checkPermission,
-setPermissionMatrix
+  setCurrentRole,
+  getCurrentRole,
+  checkPermission,
+  setPermissionMatrix,
 } from './directives/has-permission.directive.js';
 
-import {
-fetchWithHttpErrorInterceptor
-} from '../comun/interceptors/http-error.interceptor.js';
-import { construirBarra } from '../comun/barra-navegacion.js';
+import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
+import { montarCabecera } from '../comun/cabecera-app.js';
 import { cambiarRol, ROLES_DISPONIBLES } from './cambio-rol.js';
 
-
-const BASE_API = '/api/admin/usuarios';
+const BASE_API = '/api/v1/admin/usuarios';
 const MATRIZ_RBAC_API = '/api/v1/rbac/matrix';
 
 const CLAVE_ROL = 'nexus.rolActual';
@@ -28,1095 +25,621 @@ let usuarioSeleccionado = null;
 
 document.addEventListener('DOMContentLoaded', iniciar);
 
-
 function montarBarraNavegacion() {
-    const rolActual = sessionStorage.getItem(CLAVE_ROL);
-    const barra = construirBarra({
-        seccionActiva: 'cuenta',
-        sesion: { autenticado: !!rolActual },
-        navegar: (ruta) => { location.href = ruta; }
-    });
-    document.body.prepend(barra);
-}
-
-function montarMenuAdmin() {
-    const rolActual = sessionStorage.getItem(CLAVE_ROL);
-    const rolesConAcceso = ['ADMINISTRADOR', 'SUPER_ADMINISTRADOR'];
-
-    if (!rolesConAcceso.includes(rolActual)) {
-        return;
-    }
-
-    const menu = document.createElement('div');
-    menu.className = 'menu-admin';
-
-    const enlaceCrear = document.createElement('a');
-    enlaceCrear.href = './crear-cuenta-admin.html';
-    enlaceCrear.textContent = 'Crear cuenta admin';
-    if (rolActual !== 'SUPER_ADMINISTRADOR') {
-        enlaceCrear.style.display = 'none';
-    }
-
-    const enlaceGestion = document.createElement('a');
-    enlaceGestion.href = './gestion-usuarios.html';
-    enlaceGestion.textContent = 'Gestion de usuarios';
-
-    menu.append(enlaceCrear, enlaceGestion);
-    document.body.insertBefore(menu, document.body.children[1]);
+  // Cabecera unica de la aplicacion (HU-UX-001): la sesion la lee ella del login.
+  const contenedor = document.createElement('div');
+  contenedor.dataset.cabeceraApp = '';
+  document.body.prepend(contenedor);
+  montarCabecera(contenedor, { seccionActiva: 'cuenta' });
 }
 
 async function iniciar() {
+  montarBarraNavegacion();
 
-montarBarraNavegacion();
+  const rolActual = sessionStorage.getItem(CLAVE_ROL) || 'JUGADOR';
 
-montarMenuAdmin();
+  setCurrentRole(rolActual);
 
-const rolActual =
-    sessionStorage.getItem(CLAVE_ROL) || 'JUGADOR';
+  configurarSelectorRoles();
 
-setCurrentRole(rolActual);
+  configurarEventos();
 
-configurarSelectorRoles();
-
-configurarEventos();
-
-await cargarMatrizYVerificarAcceso();
-
+  await cargarMatrizYVerificarAcceso();
 }
 
 export async function cargarMatrizYVerificarAcceso({
-fetchImpl = fetchWithHttpErrorInterceptor
+  fetchImpl = fetchWithHttpErrorInterceptor,
 } = {}) {
+  const token = sessionStorage.getItem(CLAVE_TOKEN);
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
-const token = sessionStorage.getItem(CLAVE_TOKEN);
-const headers = token
-    ? { Authorization: `Bearer ${token}` }
-    : {};
-
-try {
-
-    const respuesta = await fetchImpl(
-        MATRIZ_RBAC_API,
-        { headers }
-    );
+  try {
+    const respuesta = await fetchImpl(MATRIZ_RBAC_API, { headers });
 
     if (!respuesta.ok) {
-        throw new Error(`Error HTTP ${respuesta.status}`);
+      throw new Error(`Error HTTP ${respuesta.status}`);
     }
 
     const payload = await respuesta.json();
     const matriz = payload?.matrix;
 
-    if (
-        !matriz ||
-        typeof matriz !== 'object' ||
-        Object.keys(matriz).length === 0
-    ) {
-        throw new Error('La matriz RBAC recibida no es válida.');
+    if (!matriz || typeof matriz !== 'object' || Object.keys(matriz).length === 0) {
+      throw new Error('La matriz RBAC recibida no es válida.');
     }
 
     setPermissionMatrix(matriz);
-
-} catch (error) {
-
+  } catch (error) {
     console.error('No fue posible cargar la matriz RBAC:', error);
     setPermissionMatrix({});
+  }
 
-}
-
-verificarAcceso();
-
+  verificarAcceso();
 }
 
 function configurarEventos() {
+  const formularioBusqueda = document.getElementById('form-buscar-usuario');
 
-const formularioBusqueda =
-    document.getElementById('form-buscar-usuario');
+  const formularioPerfil = document.getElementById('formulario-perfil-admin');
 
-const formularioPerfil =
-    document.getElementById('formulario-perfil-admin');
+  const btnVolver = document.getElementById('btn-volver');
 
-const btnVolver =
-    document.getElementById('btn-volver');
+  const btnVolverAcceso = document.getElementById('btn-volver-acceso');
 
-const btnVolverAcceso =
-    document.getElementById('btn-volver-acceso');
+  const btnSuspender = document.getElementById('btn-suspender');
 
-const btnSuspender =
-    document.getElementById('btn-suspender');
+  const btnReactivar = document.getElementById('btn-reactivar');
 
-const btnReactivar =
-    document.getElementById('btn-reactivar');
+  const btnBanear = document.getElementById('btn-banear');
 
-const btnBanear =
-    document.getElementById('btn-banear');
+  const btnRestablecerPassword = document.getElementById('btn-restablecer-password');
 
-const btnRestablecerPassword =
-    document.getElementById('btn-restablecer-password');
+  const btnCambiarRol = document.getElementById('btn-cambiar-rol');
 
-const btnCambiarRol =
-    document.getElementById('btn-cambiar-rol');
+  if (formularioBusqueda) {
+    formularioBusqueda.addEventListener('submit', buscarUsuario);
+  }
 
+  if (formularioPerfil) {
+    formularioPerfil.addEventListener('submit', guardarPerfil);
+  }
 
-if (formularioBusqueda) {
+  if (btnVolver) {
+    btnVolver.addEventListener('click', volverInicio);
+  }
 
-    formularioBusqueda.addEventListener(
-        'submit',
-        buscarUsuario
-    );
+  if (btnVolverAcceso) {
+    btnVolverAcceso.addEventListener('click', volverInicio);
+  }
 
-}
+  if (btnSuspender) {
+    btnSuspender.addEventListener('click', suspenderUsuario);
+  }
 
+  if (btnReactivar) {
+    btnReactivar.addEventListener('click', reactivarUsuario);
+  }
 
-if (formularioPerfil) {
+  if (btnBanear) {
+    btnBanear.addEventListener('click', banearUsuario);
+  }
 
-    formularioPerfil.addEventListener(
-        'submit',
-        guardarPerfil
-    );
+  if (btnRestablecerPassword) {
+    btnRestablecerPassword.addEventListener('click', restablecerPassword);
+  }
 
-}
-
-
-if (btnVolver) {
-
-    btnVolver.addEventListener(
-        'click',
-        volverInicio
-    );
-
-}
-
-
-if (btnVolverAcceso) {
-
-    btnVolverAcceso.addEventListener(
-        'click',
-        volverInicio
-    );
-
-}
-
-
-if (btnSuspender) {
-
-    btnSuspender.addEventListener(
-        'click',
-        suspenderUsuario
-    );
-
-}
-
-
-if (btnReactivar) {
-
-    btnReactivar.addEventListener(
-        'click',
-        reactivarUsuario
-    );
-
-}
-
-
-if (btnBanear) {
-
-    btnBanear.addEventListener(
-        'click',
-        banearUsuario
-    );
-
-}
-
-
-if (btnRestablecerPassword) {
-
-    btnRestablecerPassword.addEventListener(
-        'click',
-        restablecerPassword
-    );
-
-}
-
-
-if (btnCambiarRol) {
-
-    btnCambiarRol.addEventListener(
-        'click',
-        cambiarRolUsuarioSeleccionado
-    );
-
-}
-
+  if (btnCambiarRol) {
+    btnCambiarRol.addEventListener('click', cambiarRolUsuarioSeleccionado);
+  }
 }
 
 function configurarSelectorRoles() {
+  const selector = document.getElementById('nuevo-rol');
 
-const selector =
-    document.getElementById('nuevo-rol');
-
-if (!selector) {
+  if (!selector) {
     return;
-}
+  }
 
+  selector.replaceChildren();
 
-selector.replaceChildren();
-
-for (const rol of ROLES_DISPONIBLES) {
-
+  for (const rol of ROLES_DISPONIBLES) {
     const opcion = document.createElement('option');
     opcion.value = rol;
     opcion.textContent = rol;
     selector.append(opcion);
-
-}
-
+  }
 }
 
 function verificarAcceso() {
+  const contenedor = document.getElementById('gestion-contenedor');
 
-const contenedor =
-    document.getElementById('gestion-contenedor');
+  const accesoDenegado = document.getElementById('acceso-denegado');
 
-const accesoDenegado =
-    document.getElementById('acceso-denegado');
-
-
-if (!contenedor || !accesoDenegado) {
+  if (!contenedor || !accesoDenegado) {
     return;
-}
+  }
 
+  const tienePermiso = checkPermission(getCurrentRole(), PERMISO_GESTIONAR);
 
-const tienePermiso =
-    checkPermission(getCurrentRole(), PERMISO_GESTIONAR);
-
-
-if (!tienePermiso) {
-
+  if (!tienePermiso) {
     contenedor.hidden = true;
 
     accesoDenegado.hidden = false;
 
     return;
-}
+  }
 
+  contenedor.hidden = false;
 
-contenedor.hidden = false;
-
-accesoDenegado.hidden = true;
-
+  accesoDenegado.hidden = true;
 }
 
 async function buscarUsuario(evento) {
+  evento.preventDefault();
 
-evento.preventDefault();
+  limpiarMensajeBusqueda();
 
+  const input = document.getElementById('usuario-id');
 
-limpiarMensajeBusqueda();
-
-
-const input =
-    document.getElementById('usuario-id');
-
-if (!input) {
+  if (!input) {
     return;
-}
+  }
 
+  const usuarioId = input.value.trim();
 
-const usuarioId =
-    input.value.trim();
-
-
-if (!usuarioId || Number(usuarioId) <= 0) {
-
-    mostrarMensajeBusqueda(
-        'Debes ingresar un ID de usuario válido.'
-    );
+  if (!usuarioId || Number(usuarioId) <= 0) {
+    mostrarMensajeBusqueda('Debes ingresar un ID de usuario válido.');
 
     return;
-}
+  }
 
+  /*
+   * Actualmente el backend conocido no expone todavía
+   * un GET administrativo confirmado para consultar
+   * la información completa del usuario.
+   *
+   * Por eso esta función deja seleccionado el ID
+   * y prepara la interfaz para el futuro endpoint.
+   */
 
-/*
- * Actualmente el backend conocido no expone todavía
- * un GET administrativo confirmado para consultar
- * la información completa del usuario.
- *
- * Por eso esta función deja seleccionado el ID
- * y prepara la interfaz para el futuro endpoint.
- */
+  usuarioSeleccionado = {
+    id: Number(usuarioId),
+  };
 
-usuarioSeleccionado = {
-    id: Number(usuarioId)
-};
+  sessionStorage.setItem(CLAVE_USUARIO_ID, String(usuarioId));
 
+  mostrarPanelUsuario();
 
-sessionStorage.setItem(
-    CLAVE_USUARIO_ID,
-    String(usuarioId)
-);
+  limpiarDatosUsuario();
 
-
-mostrarPanelUsuario();
-
-
-limpiarDatosUsuario();
-
-
-mostrarMensajeBusqueda(
-    'Usuario seleccionado. La consulta de sus datos quedará conectada cuando el backend exponga el endpoint administrativo de consulta.'
-);
-
+  mostrarMensajeBusqueda(
+    'Usuario seleccionado. La consulta de sus datos quedará conectada cuando el backend exponga el endpoint administrativo de consulta.',
+  );
 }
 
 function mostrarPanelUsuario() {
+  const panel = document.getElementById('panel-usuario');
 
-const panel =
-    document.getElementById('panel-usuario');
-
-if (!panel) {
+  if (!panel) {
     return;
-}
+  }
 
-
-panel.hidden = false;
-
+  panel.hidden = false;
 }
 
 function limpiarDatosUsuario() {
+  establecerTexto('usuario-id-mostrado', usuarioSeleccionado?.id ?? '-');
 
-establecerTexto(
-    'usuario-id-mostrado',
-    usuarioSeleccionado?.id ?? '-'
-);
+  establecerTexto('usuario-apodo-mostrado', '-');
 
-establecerTexto(
-    'usuario-apodo-mostrado',
-    '-'
-);
+  establecerTexto('usuario-email-mostrado', '-');
 
-establecerTexto(
-    'usuario-email-mostrado',
-    '-'
-);
+  establecerTexto('usuario-rol-mostrado', '-');
 
-establecerTexto(
-    'usuario-rol-mostrado',
-    '-'
-);
+  establecerTexto('usuario-estado-mostrado', '-');
 
-establecerTexto(
-    'usuario-estado-mostrado',
-    '-'
-);
-
-
-establecerValor('nombres', '');
-establecerValor('apellidos', '');
-establecerValor('apodo', '');
-establecerValor('avatar', '');
-establecerValor('biografia', '');
-establecerValor('preferencias', '');
-establecerValor('estado', 'ACTIVO');
-establecerValor('suspendido-hasta', '');
-establecerValor('nuevo-rol', ROLES_DISPONIBLES[0]);
-limpiarMensajeCambioRol();
-
+  establecerValor('nombres', '');
+  establecerValor('apellidos', '');
+  establecerValor('apodo', '');
+  establecerValor('avatar', '');
+  establecerValor('preferencias', '');
+  establecerValor('estado', 'ACTIVO');
+  establecerValor('suspendido-hasta', '');
+  establecerValor('nuevo-rol', ROLES_DISPONIBLES[0]);
+  limpiarMensajeCambioRol();
 }
 
 async function cambiarRolUsuarioSeleccionado() {
+  limpiarMensajeCambioRol();
 
-limpiarMensajeCambioRol();
-
-
-if (!validarUsuarioSeleccionado()) {
-
-    mostrarMensajeCambioRol(
-        'Primero debes seleccionar un usuario.'
-    );
+  if (!validarUsuarioSeleccionado()) {
+    mostrarMensajeCambioRol('Primero debes seleccionar un usuario.');
 
     return;
-}
+  }
 
-
-if (!checkPermission(getCurrentRole(), PERMISO_ASIGNAR_ROL)) {
-
-    mostrarMensajeCambioRol(
-        'No tienes permiso para cambiar roles.'
-    );
+  if (!checkPermission(getCurrentRole(), PERMISO_ASIGNAR_ROL)) {
+    mostrarMensajeCambioRol('No tienes permiso para cambiar roles.');
 
     return;
-}
+  }
 
+  const nuevoRol = obtenerValor('nuevo-rol');
+  const boton = document.getElementById('btn-cambiar-rol');
 
-const nuevoRol = obtenerValor('nuevo-rol');
-const boton = document.getElementById('btn-cambiar-rol');
+  cambiarEstadoBoton(boton, true, 'Cambiando rol...');
 
-cambiarEstadoBoton(
-    boton,
-    true,
-    'Cambiando rol...'
-);
+  try {
+    await cambiarRol(usuarioSeleccionado.id, nuevoRol);
 
+    establecerTexto('usuario-rol-mostrado', nuevoRol);
 
-try {
+    mostrarMensajeCambioRol(`Rol actualizado correctamente a ${nuevoRol}.`);
+  } catch (error) {
+    console.error('Error cambiando rol:', error);
 
-    await cambiarRol(
-        usuarioSeleccionado.id,
-        nuevoRol
-    );
-
-    establecerTexto(
-        'usuario-rol-mostrado',
-        nuevoRol
-    );
-
-    mostrarMensajeCambioRol(
-        `Rol actualizado correctamente a ${nuevoRol}.`
-    );
-
-} catch (error) {
-
-    console.error(
-        'Error cambiando rol:',
-        error
-    );
-
-    mostrarMensajeCambioRol(
-        error.message ||
-        'No fue posible cambiar el rol del usuario.'
-    );
-
-} finally {
-
-    cambiarEstadoBoton(
-        boton,
-        false,
-        'Cambiar rol'
-    );
-
-}
-
+    mostrarMensajeCambioRol(error.message || 'No fue posible cambiar el rol del usuario.');
+  } finally {
+    cambiarEstadoBoton(boton, false, 'Cambiar rol');
+  }
 }
 
 async function guardarPerfil(evento) {
+  evento.preventDefault();
 
-evento.preventDefault();
-
-
-if (!validarUsuarioSeleccionado()) {
+  if (!validarUsuarioSeleccionado()) {
     return;
-}
+  }
 
-
-if (!checkPermission(getCurrentRole(), PERMISO_GESTIONAR)) {
-
-    mostrarMensajePerfil(
-        'No tienes permisos para modificar cuentas.'
-    );
+  if (!checkPermission(getCurrentRole(), PERMISO_GESTIONAR)) {
+    mostrarMensajePerfil('No tienes permisos para modificar cuentas.');
 
     return;
-}
+  }
 
+  const nombres = obtenerValor('nombres');
 
-const nombres =
-    obtenerValor('nombres');
+  const apellidos = obtenerValor('apellidos');
 
-const apellidos =
-    obtenerValor('apellidos');
+  const apodo = obtenerValor('apodo');
 
-const apodo =
-    obtenerValor('apodo');
+  const archivoAvatar = document.getElementById('avatar')?.files?.[0];
 
-const avatar =
-    obtenerValor('avatar');
+  const preferencias = obtenerValor('preferencias');
 
-const biografia =
-    obtenerValor('biografia');
-
-const preferencias =
-    obtenerValor('preferencias');
-
-
-if (!nombres) {
-
-    mostrarMensajePerfil(
-        'Los nombres son obligatorios.'
-    );
+  if (!nombres) {
+    mostrarMensajePerfil('Los nombres son obligatorios.');
 
     return;
-}
+  }
 
-
-if (!apellidos) {
-
-    mostrarMensajePerfil(
-        'Los apellidos son obligatorios.'
-    );
+  if (!apellidos) {
+    mostrarMensajePerfil('Los apellidos son obligatorios.');
 
     return;
-}
+  }
 
-
-if (!apodo) {
-
-    mostrarMensajePerfil(
-        'El apodo es obligatorio.'
-    );
+  if (!apodo) {
+    mostrarMensajePerfil('El apodo es obligatorio.');
 
     return;
-}
+  }
 
+  const confirmado = window.confirm(
+    `¿Deseas guardar los cambios del usuario ${usuarioSeleccionado.id}?`,
+  );
 
-const confirmado =
-    window.confirm(
-        `¿Deseas guardar los cambios del usuario ${usuarioSeleccionado.id}?`
-    );
-
-
-if (!confirmado) {
+  if (!confirmado) {
     return;
-}
+  }
 
+  const boton = document.getElementById('btn-guardar-perfil');
 
-const boton =
-    document.getElementById('btn-guardar-perfil');
+  cambiarEstadoBoton(boton, true, 'Guardando...');
 
-cambiarEstadoBoton(
-    boton,
-    true,
-    'Guardando...'
-);
-
-
-try {
-
-    const respuesta =
-        await fetchWithHttpErrorInterceptor(
-            `${BASE_API}/${usuarioSeleccionado.id}/perfil`,
-            {
-                method: 'PUT',
-
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-
-                body: JSON.stringify({
-                    nombres,
-                    apellidos,
-                    apodo,
-                    avatar,
-                    biografia,
-                    preferencias
-                })
-            }
-        );
-
-
-    if (!respuesta.ok) {
-
-        throw new Error(
-            await obtenerMensajeError(respuesta)
-        );
-
+  try {
+    const cuerpoFormData = new FormData();
+    cuerpoFormData.append('nombres', nombres);
+    cuerpoFormData.append('apellidos', apellidos);
+    cuerpoFormData.append('apodo', apodo);
+    cuerpoFormData.append('preferencias', preferencias);
+    if (archivoAvatar) {
+      cuerpoFormData.append('avatar', archivoAvatar);
     }
 
-
-    mostrarMensajePerfil(
-        'Perfil actualizado correctamente.'
+    // No se pone Content-Type a mano: el navegador arma el multipart/form-data solo.
+    const respuesta = await fetchWithHttpErrorInterceptor(
+      `${BASE_API}/${usuarioSeleccionado.id}/perfil`,
+      {
+        method: 'PUT',
+        body: cuerpoFormData,
+      },
     );
 
+    if (!respuesta.ok) {
+      throw new Error(await obtenerMensajeError(respuesta));
+    }
+
+    mostrarMensajePerfil('Perfil actualizado correctamente.');
 
     actualizarResumenUsuario({
-        apodo,
-        avatar
+      apodo,
     });
+  } catch (error) {
+    console.error('Error actualizando perfil:', error);
 
-
-} catch (error) {
-
-    console.error(
-        'Error actualizando perfil:',
-        error
-    );
-
-    mostrarMensajePerfil(
-        error.message ||
-        'No fue posible actualizar el perfil.'
-    );
-
-} finally {
-
-    cambiarEstadoBoton(
-        boton,
-        false,
-        'Guardar cambios'
-    );
-
-}
-
+    mostrarMensajePerfil(error.message || 'No fue posible actualizar el perfil.');
+  } finally {
+    cambiarEstadoBoton(boton, false, 'Guardar cambios');
+  }
 }
 
 async function suspenderUsuario() {
-
-if (!validarUsuarioSeleccionado()) {
+  if (!validarUsuarioSeleccionado()) {
     return;
-}
+  }
 
-
-if (!checkPermission(getCurrentRole(), PERMISO_SUSPENDER)) {
-
-    mostrarMensajePerfil(
-        'No tienes permisos para suspender usuarios.'
-    );
+  if (!checkPermission(getCurrentRole(), PERMISO_SUSPENDER)) {
+    mostrarMensajePerfil('No tienes permisos para suspender usuarios.');
 
     return;
-}
+  }
 
+  const suspendidoHasta = obtenerValor('suspendido-hasta');
 
-const suspendidoHasta =
-    obtenerValor('suspendido-hasta');
-
-
-if (!suspendidoHasta) {
-
-    mostrarMensajePerfil(
-        'Debes indicar hasta cuándo estará suspendida la cuenta.'
-    );
+  if (!suspendidoHasta) {
+    mostrarMensajePerfil('Debes indicar hasta cuándo estará suspendida la cuenta.');
 
     return;
-}
+  }
 
+  const confirmado = window.confirm(`¿Deseas suspender al usuario ${usuarioSeleccionado.id}?`);
 
-const confirmado =
-    window.confirm(
-        `¿Deseas suspender al usuario ${usuarioSeleccionado.id}?`
-    );
-
-
-if (!confirmado) {
+  if (!confirmado) {
     return;
-}
+  }
 
-
-await ejecutarAccionEstado(
-    `/suspender`,
-    'SUSPENDIDO',
-    'Cuenta suspendida correctamente.'
-);
-
+  await ejecutarAccionEstado(`/suspender`, 'SUSPENDIDO', 'Cuenta suspendida correctamente.');
 }
 
 async function reactivarUsuario() {
-
-if (!validarUsuarioSeleccionado()) {
+  if (!validarUsuarioSeleccionado()) {
     return;
-}
+  }
 
-
-if (!checkPermission(getCurrentRole(), PERMISO_SUSPENDER)) {
-
-    mostrarMensajePerfil(
-        'No tienes permisos para reactivar usuarios.'
-    );
+  if (!checkPermission(getCurrentRole(), PERMISO_SUSPENDER)) {
+    mostrarMensajePerfil('No tienes permisos para reactivar usuarios.');
 
     return;
-}
+  }
 
+  const confirmado = window.confirm(`¿Deseas reactivar al usuario ${usuarioSeleccionado.id}?`);
 
-const confirmado =
-    window.confirm(
-        `¿Deseas reactivar al usuario ${usuarioSeleccionado.id}?`
-    );
-
-
-if (!confirmado) {
+  if (!confirmado) {
     return;
-}
+  }
 
-
-await ejecutarAccionEstado(
-    `/reactivar`,
-    'ACTIVO',
-    'Cuenta reactivada correctamente.'
-);
-
+  await ejecutarAccionEstado(`/reactivar`, 'ACTIVO', 'Cuenta reactivada correctamente.');
 }
 
 async function banearUsuario() {
-
-if (!validarUsuarioSeleccionado()) {
+  if (!validarUsuarioSeleccionado()) {
     return;
+  }
+
+  if (!checkPermission(getCurrentRole(), PERMISO_BANEAR)) {
+    mostrarMensajePerfil('No tienes permisos para banear definitivamente a este usuario.');
+
+    return;
+  }
+
+  const confirmado = window.confirm(
+    `Esta acción es permanente. ¿Deseas banear definitivamente al usuario ${usuarioSeleccionado.id}?`,
+  );
+
+  if (!confirmado) {
+    return;
+  }
+
+  await ejecutarAccionEstado(`/banear`, 'BANEADO', 'Cuenta baneada definitivamente.');
 }
 
-
-if (!checkPermission(getCurrentRole(), PERMISO_BANEAR)) {
-
-    mostrarMensajePerfil(
-        'No tienes permisos para banear definitivamente a este usuario.'
+async function ejecutarAccionEstado(ruta, estado, mensajeExito) {
+  try {
+    const respuesta = await fetchWithHttpErrorInterceptor(
+      `${BASE_API}/${usuarioSeleccionado.id}${ruta}`,
+      {
+        method: 'PUT',
+      },
     );
-
-    return;
-}
-
-
-const confirmado =
-    window.confirm(
-        `Esta acción es permanente. ¿Deseas banear definitivamente al usuario ${usuarioSeleccionado.id}?`
-    );
-
-
-if (!confirmado) {
-    return;
-}
-
-
-await ejecutarAccionEstado(
-    `/banear`,
-    'BANEADO',
-    'Cuenta baneada definitivamente.'
-);
-
-}
-
-async function ejecutarAccionEstado(
-ruta,
-estado,
-mensajeExito
-) {
-
-try {
-
-    const respuesta =
-        await fetchWithHttpErrorInterceptor(
-            `${BASE_API}/${usuarioSeleccionado.id}${ruta}`,
-            {
-                method: 'PUT'
-            }
-        );
-
 
     if (!respuesta.ok) {
-
-        throw new Error(
-            await obtenerMensajeError(respuesta)
-        );
-
+      throw new Error(await obtenerMensajeError(respuesta));
     }
 
+    establecerValor('estado', estado);
 
-    establecerValor(
-        'estado',
-        estado
-    );
+    establecerTexto('usuario-estado-mostrado', estado);
 
+    mostrarMensajePerfil(mensajeExito);
+  } catch (error) {
+    console.error('Error modificando estado:', error);
 
-    establecerTexto(
-        'usuario-estado-mostrado',
-        estado
-    );
-
-
-    mostrarMensajePerfil(
-        mensajeExito
-    );
-
-
-} catch (error) {
-
-    console.error(
-        'Error modificando estado:',
-        error
-    );
-
-    mostrarMensajePerfil(
-        error.message ||
-        'No fue posible modificar el estado de la cuenta.'
-    );
-
-}
-
+    mostrarMensajePerfil(error.message || 'No fue posible modificar el estado de la cuenta.');
+  }
 }
 
 async function restablecerPassword() {
-
-if (!validarUsuarioSeleccionado()) {
+  if (!validarUsuarioSeleccionado()) {
     return;
-}
+  }
 
+  if (!checkPermission(getCurrentRole(), PERMISO_GESTIONAR)) {
+    mostrarMensajePerfil('No tienes permisos para restablecer contraseñas.');
 
-if (!checkPermission(getCurrentRole(), PERMISO_GESTIONAR)) {
+    return;
+  }
 
-    mostrarMensajePerfil(
-        'No tienes permisos para restablecer contraseñas.'
+  const confirmado = window.confirm(
+    `¿Deseas restablecer la contraseña del usuario ${usuarioSeleccionado.id}? El usuario deberá completar el mecanismo seguro de restablecimiento.`,
+  );
+
+  if (!confirmado) {
+    return;
+  }
+
+  try {
+    const respuesta = await fetchWithHttpErrorInterceptor(
+      `${BASE_API}/${usuarioSeleccionado.id}/restablecer-password`,
+      {
+        method: 'POST',
+      },
     );
-
-    return;
-}
-
-
-const confirmado =
-    window.confirm(
-        `¿Deseas restablecer la contraseña del usuario ${usuarioSeleccionado.id}? El usuario deberá completar el mecanismo seguro de restablecimiento.`
-    );
-
-
-if (!confirmado) {
-    return;
-}
-
-
-try {
-
-    const respuesta =
-        await fetchWithHttpErrorInterceptor(
-            `${BASE_API}/${usuarioSeleccionado.id}/restablecer-password`,
-            {
-                method: 'POST'
-            }
-        );
-
 
     if (!respuesta.ok) {
-
-        throw new Error(
-            await obtenerMensajeError(respuesta)
-        );
-
+      throw new Error(await obtenerMensajeError(respuesta));
     }
 
+    mostrarMensajePerfil('El restablecimiento de contraseña fue solicitado correctamente.');
+  } catch (error) {
+    console.error('Error restableciendo contraseña:', error);
 
-    mostrarMensajePerfil(
-        'El restablecimiento de contraseña fue solicitado correctamente.'
-    );
-
-
-} catch (error) {
-
-    console.error(
-        'Error restableciendo contraseña:',
-        error
-    );
-
-    mostrarMensajePerfil(
-        error.message ||
-        'No fue posible restablecer la contraseña.'
-    );
-
-}
-
+    mostrarMensajePerfil(error.message || 'No fue posible restablecer la contraseña.');
+  }
 }
 
 function validarUsuarioSeleccionado() {
-
-if (!usuarioSeleccionado?.id) {
-
-    mostrarMensajePerfil(
-        'Primero debes seleccionar un usuario.'
-    );
+  if (!usuarioSeleccionado?.id) {
+    mostrarMensajePerfil('Primero debes seleccionar un usuario.');
 
     return false;
-}
+  }
 
-
-return true;
-
+  return true;
 }
 
 function actualizarResumenUsuario(datos) {
-
-if (datos.apodo !== undefined) {
-
-    establecerTexto(
-        'usuario-apodo-mostrado',
-        datos.apodo
-    );
-
-}
-
-
-if (datos.avatar !== undefined) {
-
-    establecerTexto(
-        'usuario-email-mostrado',
-        establecerTexto
-    );
-
-}
-
+  if (datos.apodo !== undefined) {
+    establecerTexto('usuario-apodo-mostrado', datos.apodo);
+  }
 }
 
 function obtenerValor(id) {
+  const elemento = document.getElementById(id);
 
-const elemento =
-    document.getElementById(id);
-
-return elemento
-    ? elemento.value.trim()
-    : '';
-
+  return elemento ? elemento.value.trim() : '';
 }
 
 function establecerValor(id, valor) {
+  const elemento = document.getElementById(id);
 
-const elemento =
-    document.getElementById(id);
-
-if (elemento) {
+  if (elemento) {
     elemento.value = valor ?? '';
-}
-
+  }
 }
 
 function establecerTexto(id, texto) {
+  const elemento = document.getElementById(id);
 
-const elemento =
-    document.getElementById(id);
-
-if (elemento) {
+  if (elemento) {
     elemento.textContent = String(texto ?? '-');
+  }
 }
 
-}
-
-function cambiarEstadoBoton(
-boton,
-deshabilitado,
-texto
-) {
-
-if (!boton) {
+function cambiarEstadoBoton(boton, deshabilitado, texto) {
+  if (!boton) {
     return;
-}
+  }
 
+  boton.disabled = deshabilitado;
 
-boton.disabled = deshabilitado;
-
-boton.textContent = texto;
-
+  boton.textContent = texto;
 }
 
 function mostrarMensajeBusqueda(mensaje) {
+  const elemento = document.getElementById('mensaje-busqueda');
 
-const elemento =
-    document.getElementById('mensaje-busqueda');
-
-if (!elemento) {
+  if (!elemento) {
     return;
-}
+  }
 
+  elemento.textContent = mensaje;
 
-elemento.textContent = mensaje;
-
-elemento.hidden = false;
-
+  elemento.hidden = false;
 }
 
 function limpiarMensajeBusqueda() {
+  const elemento = document.getElementById('mensaje-busqueda');
 
-const elemento =
-    document.getElementById('mensaje-busqueda');
-
-if (!elemento) {
+  if (!elemento) {
     return;
-}
+  }
 
+  elemento.textContent = '';
 
-elemento.textContent = '';
-
-elemento.hidden = true;
-
+  elemento.hidden = true;
 }
 
 function mostrarMensajePerfil(mensaje) {
+  const elemento = document.getElementById('mensaje-perfil');
 
-const elemento =
-    document.getElementById('mensaje-perfil');
-
-if (!elemento) {
+  if (!elemento) {
     return;
-}
+  }
 
+  elemento.textContent = mensaje;
 
-elemento.textContent = mensaje;
-
-elemento.hidden = false;
-
+  elemento.hidden = false;
 }
 
 function mostrarMensajeCambioRol(mensaje) {
+  const elemento = document.getElementById('mensaje-cambio-rol');
 
-const elemento =
-    document.getElementById('mensaje-cambio-rol');
-
-if (!elemento) {
+  if (!elemento) {
     return;
-}
+  }
 
-
-elemento.textContent = mensaje;
-elemento.hidden = false;
-
+  elemento.textContent = mensaje;
+  elemento.hidden = false;
 }
 
 function limpiarMensajeCambioRol() {
+  const elemento = document.getElementById('mensaje-cambio-rol');
 
-const elemento =
-    document.getElementById('mensaje-cambio-rol');
-
-if (!elemento) {
+  if (!elemento) {
     return;
-}
+  }
 
-
-elemento.textContent = '';
-elemento.hidden = true;
-
+  elemento.textContent = '';
+  elemento.hidden = true;
 }
 
 async function obtenerMensajeError(respuesta) {
-
-try {
-
-    const datos =
-        await respuesta.clone().json();
-
+  try {
+    const datos = await respuesta.clone().json();
 
     if (typeof datos === 'string') {
-        return datos;
+      return datos;
     }
 
-
-    return (
-        datos.detail ||
-        datos.message ||
-        datos.title ||
-        `Error HTTP ${respuesta.status}`
-    );
-
-} catch {
-
+    return datos.detail || datos.message || datos.title || `Error HTTP ${respuesta.status}`;
+  } catch {
     try {
+      const texto = await respuesta.clone().text();
 
-        const texto =
-            await respuesta.clone().text();
-
-        if (texto) {
-            return texto;
-        }
-
+      if (texto) {
+        return texto;
+      }
     } catch {
-        // Se utiliza el mensaje genérico.
+      // Se utiliza el mensaje genérico.
     }
-
 
     return `Error HTTP ${respuesta.status}`;
-
-}
-
+  }
 }
 
 function volverInicio() {
-
-window.location.href = '../index.html';
-
+  // El menú principal (index.html) vive en la MISMA carpeta que esta página
+  // (frontend/app-web/src/cuentas/), no un nivel arriba: '../index.html' no
+  // existe y devolvía 404 al usuario que hacía clic en Volver.
+  window.location.href = './index.html';
 }

@@ -19,6 +19,13 @@
  * simplemente no se pinta, en vez de rellenarse con un valor de ejemplo.
  */
 
+import {
+  esSeccionDegradada,
+  pintarSeccionDegradada,
+} from '../../comun/degradacion/aviso-degradacion.js';
+import { vaciar } from '../../comun/ui/dom.js';
+import { retratoDeHeroe } from '../../comun/ui/juego/heroe.js';
+
 /** Resultados del esquema `VerificacionHeroe` del contrato OpenAPI. */
 export const RESULTADOS = {
   DISPONIBLE: 'DISPONIBLE',
@@ -114,42 +121,49 @@ export function estadisticasDe(heroe) {
 export function pintarValidacion(raiz, verificacion, acciones = {}) {
   const doc = raiz.ownerDocument;
   const variante = VARIANTES[verificacion?.resultado];
-
-  raiz.innerHTML = '';
-  // `--ancho`: el conjunto «Dialogo de validacion de heroe» mide 520 px con
-  // 20 px entre bloques, frente a los 480/16 del `Dialogo` base. Es un
-  // modificador porque el dialogo base lo consumen otras vistas.
-  raiz.className = 'dialogo dialogo--ancho pila';
-  raiz.setAttribute('role', 'dialog');
-  raiz.setAttribute('aria-modal', 'true');
-  raiz.setAttribute('aria-labelledby', 'titulo-validacion-heroe');
+  activarTeclado(raiz);
 
   if (!variante) {
     // Un resultado que el diseno no contempla —CREDITOS_INSUFICIENTES lo esta
     // en el contrato pero no tiene variante— no se inventa: se dice.
-    raiz.dataset.resultado = 'DESCONOCIDO';
+    prepararDialogo(raiz, 'DESCONOCIDO');
     raiz.append(
-      texto(doc, 'h2', 'dialogo__titulo', 'Verificacion de heroe', 'titulo-validacion-heroe'),
+      tituloDelDialogo(doc),
       texto(doc, 'p', 't-cuerpo', 'No se pudo interpretar la respuesta de la verificacion.'),
     );
+    enfocarTitulo(raiz);
     return;
   }
 
-  raiz.dataset.resultado = verificacion.resultado;
+  prepararDialogo(raiz, verificacion.resultado);
 
   // 1 · Titulo del dialogo. Fijo en las tres variantes.
-  raiz.append(
-    texto(doc, 'h2', 'dialogo__titulo', 'Verificacion de heroe', 'titulo-validacion-heroe'),
-  );
+  raiz.append(tituloDelDialogo(doc));
 
-  // 2 · Retrato mas mensaje, en fila. El retrato es decorativo: lo que
-  //     comunica es el texto, no el circulo.
+  // 2 · Retrato mas mensaje, en fila. Lo que comunica sigue siendo el texto;
+  //     el retrato acompana.
   const fila = doc.createElement('div');
   fila.className = 'dialogo__encabezado';
 
-  const retrato = doc.createElement('span');
-  retrato.className = 'dialogo__icono dialogo__icono--grande';
-  retrato.setAttribute('aria-hidden', 'true');
+  // UX-R2.2 — este retrato era un <span> vacio con `aria-hidden`: un circulo
+  // gris. El contrato trae `retratoUrl` y `nivel` en `HeroeEnPartida` desde que
+  // se escribio y nadie los pintaba, asi que el jugador veia el mismo circulo
+  // para cualquier heroe. Cuando hay heroe se usa el marco del kit; cuando no
+  // lo hay (SIN_HEROE_EQUIPADO) se queda el circulo decorativo de antes.
+  const retrato = verificacion.heroe
+    ? retratoDeHeroe(
+        {
+          nombre: verificacion.heroe.nombre,
+          nivel: verificacion.heroe.nivel ?? undefined,
+          imagen: verificacion.heroe.retratoUrl ?? undefined,
+        },
+        { conNombre: false },
+      )
+    : doc.createElement('span');
+  if (!verificacion.heroe) {
+    retrato.className = 'dialogo__icono dialogo__icono--grande';
+    retrato.setAttribute('aria-hidden', 'true');
+  }
 
   const mensaje = doc.createElement('div');
   mensaje.className = 'pila pila--ajustada';
@@ -199,10 +213,15 @@ export function pintarValidacion(raiz, verificacion, acciones = {}) {
 
   zonaAcciones.append(cancelar, confirmar);
   raiz.append(zonaAcciones);
+  enfocarTitulo(raiz);
 }
 
 /**
  * Monta el dialogo: pide la verificacion y la pinta.
+ *
+ * Sin `idSala` no hay nada que verificar: se muestra el estado de error con
+ * la instruccion de como llegar, en vez de pedir `/salas/null/...` al
+ * servicio.
  *
  * @param {HTMLElement} raiz
  * @param {object} opciones
@@ -217,20 +236,59 @@ export async function montarValidacionDeHeroe(
   { idSala, verificar, alCancelar, alConfirmar },
 ) {
   const doc = raiz.ownerDocument;
+  activarTeclado(raiz);
 
-  raiz.className = 'dialogo dialogo--ancho pila';
-  raiz.dataset.resultado = 'CARGANDO';
-  raiz.innerHTML = '';
-  raiz.append(
-    texto(doc, 'h2', 'dialogo__titulo', 'Verificacion de heroe'),
-    texto(doc, 'p', 't-cuerpo', 'Comprobando tu heroe.'),
-  );
+  if (!idSala) {
+    pintarFalloDeVerificacion(
+      raiz,
+      {
+        titulo: 'Falta saber a que sala quieres entrar',
+        detalle:
+          'Abre esta verificacion desde el listado de Batallas, o anade ?sala=<id> ' +
+          'a la direccion.',
+      },
+      alCancelar,
+      'SIN_SALA',
+    );
+    return;
+  }
+
+  prepararDialogo(raiz, 'CARGANDO');
+  raiz.append(tituloDelDialogo(doc), texto(doc, 'p', 't-cuerpo', 'Comprobando tu heroe.'));
+  enfocarTitulo(raiz);
 
   try {
     pintarValidacion(raiz, await verificar(idSala), { alCancelar, alConfirmar });
   } catch (error) {
+    if (esSeccionDegradada(error?.problema)) {
+      // HU-DIS-003: el inventario no responde. No hay veredicto que pintar
+      // -ni se inventa-, asi que el dialogo dice que Inventario esta
+      // limitado y deja reintentar la misma verificacion.
+      pintarInventarioDegradado(raiz, error.problema, alCancelar, () =>
+        montarValidacionDeHeroe(raiz, { idSala, verificar, alCancelar, alConfirmar }),
+      );
+      return;
+    }
     pintarFalloDeVerificacion(raiz, error, alCancelar);
   }
+}
+
+/**
+ * Seccion degradada dentro del dialogo — HU-DIS-003, MAPEO-ERRORES §5.5.
+ *
+ * No es el estado de error de RNF-USA-003: aqui el dialogo esta bien y es
+ * una parte -la respuesta del inventario- la que no esta. Se pinta el
+ * componente comun en el hueco del veredicto, con Cancelar como salida.
+ */
+function pintarInventarioDegradado(raiz, problema, alCancelar, alReintentar) {
+  const doc = raiz.ownerDocument;
+  prepararDialogo(raiz, 'DEGRADADO');
+  const hueco = doc.createElement('div');
+  hueco.dataset.zona = 'degradacion';
+  hueco.dataset.seccion = 'Inventario';
+  pintarSeccionDegradada(hueco, problema, { alReintentar });
+  raiz.append(tituloDelDialogo(doc), hueco, accionesSoloCancelar(doc, alCancelar));
+  enfocarTitulo(raiz);
 }
 
 /**
@@ -240,15 +298,97 @@ export async function montarValidacionDeHeroe(
  * la vista real: un 404 explicado, no un dialogo en blanco ni un veredicto
  * inventado.
  */
-function pintarFalloDeVerificacion(raiz, error, alCancelar) {
+function pintarFalloDeVerificacion(raiz, error, alCancelar, resultado = 'ERROR') {
   const doc = raiz.ownerDocument;
-  raiz.dataset.resultado = 'ERROR';
-  raiz.innerHTML = '';
+  prepararDialogo(raiz, resultado);
   raiz.append(
-    texto(doc, 'h2', 'dialogo__titulo', 'Verificacion de heroe'),
+    tituloDelDialogo(doc),
     avisoDeError(doc, error),
     accionesSoloCancelar(doc, alCancelar),
   );
+  enfocarTitulo(raiz);
+}
+
+/* -- Dialogo modal: identidad, foco y teclado (RNF-ACC-002). -------------- */
+
+const ID_TITULO = 'titulo-validacion-heroe';
+
+const FOCALIZABLES =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), ' +
+  'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Deja la raiz identificada como dialogo modal en TODOS los estados, tambien
+ * mientras carga y cuando falla: un lector de pantalla no debe encontrarse
+ * una seccion anonima en ningun momento.
+ */
+function prepararDialogo(raiz, resultado) {
+  // `--ancho`: el conjunto «Dialogo de validacion de heroe» mide 520 px con
+  // 20 px entre bloques, frente a los 480/16 del `Dialogo` base. Es un
+  // modificador porque el dialogo base lo consumen otras vistas.
+  raiz.className = 'dialogo dialogo--ancho pila';
+  raiz.setAttribute('role', 'dialog');
+  raiz.setAttribute('aria-modal', 'true');
+  raiz.setAttribute('aria-labelledby', ID_TITULO);
+  raiz.dataset.resultado = resultado;
+  vaciar(raiz);
+}
+
+/**
+ * El titulo recibe el foco al abrir y en cada cambio de estado: asi se
+ * anuncia el dialogo sin activar por accidente ninguna de sus acciones, y el
+ * primer Tab cae en «Cancelar». Patron de dialogo modal de WAI-ARIA.
+ */
+function tituloDelDialogo(doc) {
+  const titulo = texto(doc, 'h2', 'dialogo__titulo', 'Verificacion de heroe', ID_TITULO);
+  titulo.tabIndex = -1;
+  return titulo;
+}
+
+function enfocarTitulo(raiz) {
+  raiz.querySelector(`#${ID_TITULO}`)?.focus();
+}
+
+/**
+ * Escape equivale a «Cancelar» del estado que este pintado, y Tab no sale del
+ * dialogo mientras este abierto. Se instala una sola vez por raiz.
+ */
+function activarTeclado(raiz) {
+  if (raiz.dataset.teclado === 'activo') {
+    return;
+  }
+  raiz.dataset.teclado = 'activo';
+
+  raiz.addEventListener('keydown', (evento) => {
+    if (evento.key === 'Escape') {
+      evento.preventDefault();
+      raiz.querySelector('[data-accion="cancelar"]')?.click();
+      return;
+    }
+    if (evento.key === 'Tab') {
+      atraparTab(raiz, evento);
+    }
+  });
+}
+
+function atraparTab(raiz, evento) {
+  const focalizables = [...raiz.querySelectorAll(FOCALIZABLES)];
+  if (focalizables.length === 0) {
+    evento.preventDefault();
+    return;
+  }
+  const primero = focalizables[0];
+  const ultimo = focalizables[focalizables.length - 1];
+  const activo = raiz.ownerDocument.activeElement;
+  const enElPrimero = activo === primero || !focalizables.includes(activo);
+
+  if (evento.shiftKey && enElPrimero) {
+    evento.preventDefault();
+    ultimo.focus();
+  } else if (!evento.shiftKey && activo === ultimo) {
+    evento.preventDefault();
+    primero.focus();
+  }
 }
 
 /* -- Ayudas de construccion. Ninguna decide nada. ------------------------- */

@@ -4,6 +4,7 @@ import com.nexusbattles.ms_identidad.auth.dto.CanjearTokenRequest;
 import com.nexusbattles.ms_identidad.auth.dto.LoginRequest;
 import com.nexusbattles.ms_identidad.auth.dto.LoginResponse;
 import com.nexusbattles.ms_identidad.auth.dto.RegistroRequest;
+import com.nexusbattles.ms_identidad.auth.dto.SolicitarRestablecimientoRequest;
 import com.nexusbattles.ms_identidad.auth.exception.CredencialesInvalidasException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaBaneadaException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaBloqueadaException;
@@ -55,7 +56,6 @@ public class AuthController {
 
             LoginResponse respuesta = loginService.iniciarSesion(datos, ip, userAgent);
             return ResponseEntity.ok(respuesta);
-
         } catch (CredencialesInvalidasException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
         } catch (CuentaBaneadaException e) {
@@ -69,12 +69,26 @@ public class AuthController {
         }
     }
 
+    // HU-COR-003. Punto de entrada publico de auto-servicio ("olvide mi
+    // contraseña") que faltaba por completo -- solo existia la via
+    // administrativa (AdminGestionUsuarioController). Responde siempre el
+    // mismo mensaje generico, exista o no la cuenta con ese email: evita
+    // que este endpoint sirva para enumerar correos registrados (mismo
+    // principio que el mensaje generico del login).
+    @PostMapping("/restablecer/solicitar")
+    public ResponseEntity<?> solicitarRestablecimiento(@Valid @RequestBody SolicitarRestablecimientoRequest datos) {
+        tokenCredencialService.solicitarRestablecimiento(datos.getEmail());
+        return ResponseEntity.ok("Si el correo está registrado, recibirás un mensaje con instrucciones para restablecer tu contraseña.");
+    }
+
     @PostMapping("/restablecer/confirmar")
     public ResponseEntity<?> canjearToken(@Valid @RequestBody CanjearTokenRequest datos) {
         try {
             tokenCredencialService.canjearToken(datos.getToken(), datos.getNuevaPassword());
             return ResponseEntity.ok("Contraseña actualizada correctamente. Ya puedes iniciar sesión.");
-        } catch (TokenInvalidoException e) {
+        } catch (TokenInvalidoException | IllegalArgumentException e) {
+            // IllegalArgumentException: la nueva contraseña no cumple la
+            // politica (RF-AUT-002); el mensaje dice que regla falla.
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
         }
     }

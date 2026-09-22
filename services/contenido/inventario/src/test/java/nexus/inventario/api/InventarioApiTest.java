@@ -1,14 +1,22 @@
 package nexus.inventario.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.UUID;
+import nexus.inventario.configuracion.IdentidadDelLlamador;
+import nexus.inventario.aplicacion.BuscarElementosInventario;
+import nexus.inventario.aplicacion.ConsultarElementoInventario;
 import nexus.inventario.aplicacion.ConsultarInventarioPaginado;
 import nexus.inventario.aplicacion.GestionarInventario;
+import nexus.inventario.aplicacion.GestionarBloqueoSubasta;
 import nexus.inventario.aplicacion.RepositorioInventariosEnMemoria;
 import nexus.inventario.dominio.ElementoInventario;
 import nexus.inventario.dominio.TipoElementoInventario;
@@ -23,24 +31,48 @@ class InventarioApiTest {
 
     private RepositorioInventariosEnMemoria repositorio;
     private GestionarInventario gestion;
+    private GestionarBloqueoSubasta gestionBloqueo;
     private MockMvc mvc;
 
     @BeforeEach
     void preparar() {
         repositorio = new RepositorioInventariosEnMemoria();
         gestion = new GestionarInventario(repositorio);
+        gestionBloqueo = new GestionarBloqueoSubasta(repositorio);
         mvc = MockMvcBuilders.standaloneSetup(
                         new InventarioController(
-                                gestion, new ConsultarInventarioPaginado(repositorio)))
+                                gestion,
+                                new ConsultarInventarioPaginado(repositorio),
+                                new BuscarElementosInventario(repositorio),
+                                new ConsultarElementoInventario(repositorio),
+                                new IdentidadDelLlamador()),
+                        new BloqueoSubastaController(gestionBloqueo))
                 .setControllerAdvice(new ManejadorDeErrores())
                 .build();
+    }
+
+    @Test
+    @DisplayName("GET por id entrega los datos estables que necesita subastas")
+    void consultarElementoPorId() throws Exception {
+        String propietarioUid = "ae8df97e-9ab9-4af5-bd2a-25715919e5f1";
+        String productoId = "113609ca-3c15-42f5-b427-d452ce06f9a8";
+        ElementoInventario creado = gestion.crear(
+                propietarioUid, productoId, TipoElementoInventario.ITEM, "Amuleto");
+
+        mvc.perform(get("/api/v1/inventario/elementos/{elementoId}", creado.id()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.elementoId").value(creado.id()))
+                .andExpect(jsonPath("$.productoId").value(productoId))
+                .andExpect(jsonPath("$.propietarioUid").value(propietarioUid))
+                .andExpect(jsonPath("$.enUso").value(false))
+                .andExpect(jsonPath("$.disponible").value(true));
     }
 
     @Test
     @DisplayName("POST crea en el inventario indicado por la identidad autenticada")
     void crearElemento() throws Exception {
         mvc.perform(post("/api/v1/inventario/elementos")
-                        .header("X-User-Name", "jugador-A")
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"productoId":"producto-1","tipo":"ITEM","nombrePropio":"Amuleto de Niebla"}
@@ -50,7 +82,7 @@ class InventarioApiTest {
                 .andExpect(jsonPath("$.nombrePropio").value("Amuleto de Niebla"));
 
         mvc.perform(post("/api/v1/inventario/elementos")
-                        .header("X-User-Name", "jugador-B")
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-B")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"productoId":"producto-2","tipo":"HEROE","nombrePropio":"Mi guerrero"}
@@ -65,7 +97,7 @@ class InventarioApiTest {
     @DisplayName("POST conserva la parte de una armadura para su ranura")
     void crearArmaduraConParte() throws Exception {
         mvc.perform(post("/api/v1/inventario/elementos")
-                        .header("X-User-Name", "jugador-A")
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"productoId":"producto-casco","tipo":"ARMADURA",
@@ -79,7 +111,7 @@ class InventarioApiTest {
     @DisplayName("POST rechaza una armadura sin parte mientras productos no resuelve la ranura")
     void rechazarArmaduraSinParte() throws Exception {
         mvc.perform(post("/api/v1/inventario/elementos")
-                        .header("X-User-Name", "jugador-A")
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"productoId":"producto-armadura","tipo":"ARMADURA",
@@ -98,7 +130,7 @@ class InventarioApiTest {
                 "jugador-A", "producto-1", TipoElementoInventario.ITEM, "Amuleto de Niebla");
 
         mvc.perform(patch("/api/v1/inventario/elementos/{elementoId}", creado.id())
-                        .header("X-User-Name", "jugador-A")
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"nombrePropio\":\"Amuleto de Bruma\"}"))
                 .andExpect(status().isOk())
@@ -109,7 +141,7 @@ class InventarioApiTest {
     @DisplayName("crear y modificar se reflejan al consultar la vitrina")
     void escriturasSeReflejanEnLaVitrina() throws Exception {
         mvc.perform(post("/api/v1/inventario/elementos")
-                        .header("X-User-Name", "jugador-A")
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"productoId":"producto-1","tipo":"ITEM","nombrePropio":"Amuleto de Niebla"}
@@ -120,13 +152,13 @@ class InventarioApiTest {
                 .orElseThrow().elementos().getFirst();
 
         mvc.perform(patch("/api/v1/inventario/elementos/{elementoId}", creado.id())
-                        .header("X-User-Name", "jugador-A")
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"nombrePropio\":\"Amuleto de Bruma\"}"))
                 .andExpect(status().isOk());
 
         mvc.perform(get("/api/v1/inventario/elementos")
-                        .header("X-User-Name", "jugador-A")
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
                         .param("pagina", "0"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.elementos.length()").value(1))
@@ -141,7 +173,7 @@ class InventarioApiTest {
                 "jugador-B", "producto-1", TipoElementoInventario.ITEM, "Daga Corta");
 
         mvc.perform(patch("/api/v1/inventario/elementos/{elementoId}", elementoDeB.id())
-                        .header("X-User-Name", "jugador-A")
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"nombrePropio\":\"Daga Robada\"}"))
                 .andExpect(status().isForbidden())
@@ -168,7 +200,7 @@ class InventarioApiTest {
     @DisplayName("POST con datos invalidos responde 400 sin escribir")
     void solicitudInvalida() throws Exception {
         mvc.perform(post("/api/v1/inventario/elementos")
-                        .header("X-User-Name", "jugador-A")
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"productoId\":\"\",\"tipo\":\"ITEM\",\"nombrePropio\":\"\"}"))
                 .andExpect(status().isBadRequest())
@@ -181,7 +213,7 @@ class InventarioApiTest {
     @DisplayName("PATCH de un elemento inexistente responde 404")
     void elementoInexistente() throws Exception {
         mvc.perform(patch("/api/v1/inventario/elementos/{elementoId}", "elemento-inexistente")
-                        .header("X-User-Name", "jugador-A")
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"nombrePropio\":\"Otro nombre\"}"))
                 .andExpect(status().isNotFound())
@@ -196,7 +228,7 @@ class InventarioApiTest {
         repositorio.fallarSiguienteGuardado();
 
         mvc.perform(patch("/api/v1/inventario/elementos/{elementoId}", creado.id())
-                        .header("X-User-Name", "jugador-A")
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"nombrePropio\":\"Amuleto incompleto\"}"))
                 .andExpect(status().isServiceUnavailable())
@@ -209,6 +241,118 @@ class InventarioApiTest {
     }
 
     @Test
+    @DisplayName("un producto publicado figura no disponible y rechaza modificacion y eliminacion")
+    void productoBloqueadoEnSubasta() throws Exception {
+        UUID propietarioUid = UUID.fromString("ae8df97e-9ab9-4af5-bd2a-25715919e5f1");
+        ElementoInventario creado = gestion.crear(
+                propietarioUid.toString(), "producto-1", TipoElementoInventario.ITEM, "Amuleto");
+
+        mvc.perform(put("/api/v1/inventario/elementos/{elementoId}/bloqueo-subasta", creado.id())
+                        .header("Idempotency-Key", "publicar-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"propietarioUid":"%s",
+                                 "subastaId":"89d9040d-52e0-44ae-8d8c-8ec033978afb"}
+                                """.formatted(propietarioUid)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.disponible").value(false))
+                .andExpect(jsonPath("$.subastaId")
+                        .value("89d9040d-52e0-44ae-8d8c-8ec033978afb"));
+
+        mvc.perform(get("/api/v1/inventario/elementos")
+                        .with(ComoLlamador.servicio()).header("X-User-Name", propietarioUid))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.elementos[0].disponible").value(false));
+
+        mvc.perform(patch("/api/v1/inventario/elementos/{elementoId}", creado.id())
+                        .with(ComoLlamador.servicio()).header("X-User-Name", propietarioUid)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nombrePropio\":\"Amuleto cambiado\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Producto no disponible"));
+
+        mvc.perform(delete("/api/v1/inventario/elementos/{elementoId}", creado.id())
+                        .with(ComoLlamador.servicio()).header("X-User-Name", propietarioUid))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Producto no disponible"));
+    }
+
+    @Test
+    @DisplayName("el aviso de cierre libera el producto y permite volver a modificarlo")
+    void liberarProductoAlCerrarSubasta() throws Exception {
+        UUID propietarioUid = UUID.fromString("ae8df97e-9ab9-4af5-bd2a-25715919e5f1");
+        ElementoInventario creado = gestion.crear(
+                propietarioUid.toString(), "producto-1", TipoElementoInventario.ITEM, "Amuleto");
+        UUID subastaId = UUID.fromString("89d9040d-52e0-44ae-8d8c-8ec033978afb");
+        mvc.perform(put("/api/v1/inventario/elementos/{elementoId}/bloqueo-subasta", creado.id())
+                        .header("Idempotency-Key", "publicar-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"propietarioUid":"%s","subastaId":"%s"}
+                                """.formatted(propietarioUid, subastaId)))
+                .andExpect(status().isOk());
+
+        mvc.perform(delete("/api/v1/inventario/elementos/{elementoId}/bloqueo-subasta/{subastaId}",
+                        creado.id(), subastaId)
+                        .header("Idempotency-Key", "cerrar-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.disponible").value(true))
+                .andExpect(jsonPath("$.subastaId").doesNotExist());
+
+        mvc.perform(patch("/api/v1/inventario/elementos/{elementoId}", creado.id())
+                        .with(ComoLlamador.servicio()).header("X-User-Name", propietarioUid)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nombrePropio\":\"Amuleto liberado\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nombrePropio").value("Amuleto liberado"));
+    }
+
+    @Test
+    @DisplayName("un aviso ajeno no libera el producto y responde conflicto")
+    void noLiberarProductoConOtraSubasta() throws Exception {
+        UUID propietarioUid = UUID.fromString("ae8df97e-9ab9-4af5-bd2a-25715919e5f1");
+        ElementoInventario creado = gestion.crear(
+                propietarioUid.toString(), "producto-1", TipoElementoInventario.ITEM, "Amuleto");
+        UUID subastaVigente = UUID.fromString("89d9040d-52e0-44ae-8d8c-8ec033978afb");
+        gestionBloqueo.bloquear(
+                propietarioUid, creado.id(), subastaVigente, "publicar-1");
+
+        mvc.perform(delete("/api/v1/inventario/elementos/{elementoId}/bloqueo-subasta/{subastaId}",
+                        creado.id(), "51326b9d-1aa2-4d8a-bb7d-d3ad593f902d")
+                        .header("Idempotency-Key", "cerrar-anterior"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value(
+                        "El aviso no corresponde a la subasta que mantiene el bloqueo."));
+
+        assertFalse(repositorio.buscarPorElementoId(creado.id())
+                .orElseThrow().elemento(creado.id()).disponible());
+    }
+
+    @Test
+    @DisplayName("sin respuesta de subastas la disponibilidad conserva el bloqueo registrado")
+    void conservarBloqueoSiSubastasNoResponde() throws Exception {
+        UUID propietarioUid = UUID.fromString("ae8df97e-9ab9-4af5-bd2a-25715919e5f1");
+        ElementoInventario creado = gestion.crear(
+                propietarioUid.toString(), "producto-1", TipoElementoInventario.ITEM, "Reliquia");
+        UUID subastaId = UUID.fromString("89d9040d-52e0-44ae-8d8c-8ec033978afb");
+        gestionBloqueo.bloquear(propietarioUid, creado.id(), subastaId, "publicar-1");
+
+        mvc.perform(get("/api/v1/inventario/elementos")
+                        .with(ComoLlamador.servicio()).header("X-User-Name", propietarioUid))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.elementos[0].disponible").value(false))
+                .andExpect(jsonPath("$.elementos[0].subastaId").value(subastaId.toString()));
+
+        mvc.perform(delete("/api/v1/inventario/elementos/{elementoId}", creado.id())
+                        .with(ComoLlamador.servicio()).header("X-User-Name", propietarioUid))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Producto no disponible"));
+
+        assertEquals(subastaId.toString(), repositorio.buscarPorElementoId(creado.id())
+                .orElseThrow().elemento(creado.id()).subastaId());
+    }
+
+    @Test
     @DisplayName("GET entrega la vitrina en paginas de dieciseis del inventario propio")
     void consultarPaginaDeLaVitrina() throws Exception {
         for (int i = 0; i < 20; i++) {
@@ -217,7 +361,7 @@ class InventarioApiTest {
         }
 
         mvc.perform(get("/api/v1/inventario/elementos")
-                        .header("X-User-Name", "jugador-A")
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
                         .param("pagina", "0"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.elementos.length()").value(16))
@@ -230,7 +374,7 @@ class InventarioApiTest {
     @DisplayName("GET de un jugador sin inventario responde 200 con la pagina vacia")
     void consultarSinInventario() throws Exception {
         mvc.perform(get("/api/v1/inventario/elementos")
-                        .header("X-User-Name", "jugador-nuevo"))
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-nuevo"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.elementos.length()").value(0))
                 .andExpect(jsonPath("$.totalElementos").value(0));
@@ -247,8 +391,49 @@ class InventarioApiTest {
     @DisplayName("GET con una pagina negativa es una solicitud invalida")
     void consultarPaginaNegativa() throws Exception {
         mvc.perform(get("/api/v1/inventario/elementos")
-                        .header("X-User-Name", "jugador-A")
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
                         .param("pagina", "-1"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("GET busqueda localiza elementos propios por la informacion registrada")
+    void buscarElementosPropios() throws Exception {
+        gestion.crear("jugador-A", "producto-bruma", TipoElementoInventario.ITEM,
+                "Amuleto de Bruma");
+        gestion.crear("jugador-A", "producto-solar", TipoElementoInventario.ARMA,
+                "Espada Solar");
+        gestion.crear("jugador-B", "producto-ajeno", TipoElementoInventario.ITEM,
+                "Amuleto de Bruma ajeno");
+
+        mvc.perform(get("/api/v1/inventario/elementos/busqueda")
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
+                        .param("criterio", "bruma")
+                        .param("pagina", "0"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.elementos.length()").value(1))
+                .andExpect(jsonPath("$.elementos[0].productoId").value("producto-bruma"))
+                .andExpect(jsonPath("$.totalElementos").value(1))
+                .andExpect(jsonPath("$.tamanio").value(16));
+    }
+
+    @Test
+    @DisplayName("GET busqueda rechaza menos de cuatro caracteres")
+    void buscarConCriterioCorto() throws Exception {
+        mvc.perform(get("/api/v1/inventario/elementos/busqueda")
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
+                        .param("criterio", "abc"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Criterio de busqueda invalido"))
+                .andExpect(jsonPath("$.detail")
+                        .value("Ingresa al menos cuatro caracteres para buscar."));
+    }
+
+    @Test
+    @DisplayName("GET busqueda exige la identidad autenticada")
+    void buscarSinIdentidad() throws Exception {
+        mvc.perform(get("/api/v1/inventario/elementos/busqueda")
+                        .param("criterio", "bruma"))
+                .andExpect(status().isUnauthorized());
     }
 }

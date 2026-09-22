@@ -25,80 +25,25 @@
       productos de RF-INV-004. Se repite en cada vista mientras no exista una
       forma acordada de compartir fragmentos de HTML sin framework.
     -->
-    <header class="cabecera">
-      <div class="cabecera__grupo-marca">
-        <span class="cabecera__marca">NEXUS BATTLES VI</span>
-        <nav class="cabecera__nav" aria-label="Navegacion principal">
-          <a class="cabecera__destino activo" href="#" aria-current="page">Jugar online</a>
-          <a
-            class="cabecera__destino cabecera__destino--pendiente"
-            aria-disabled="true"
-            data-pendiente="grupo-alpha"
-            title="Todavia no publicada: grupo-alpha"
-            >Misiones</a
-          >
-          <a
-            class="cabecera__destino cabecera__destino--pendiente"
-            aria-disabled="true"
-            data-pendiente="HU-TOR, sprint 3"
-            title="Todavia no publicada: HU-TOR, sprint 3"
-            >Torneo</a
-          >
-          <a class="cabecera__destino" href="../../contenido/inventario/inventario.html"
-            >Mi inventario</a
-          >
-          <a
-            class="cabecera__destino cabecera__destino--pendiente"
-            aria-disabled="true"
-            data-pendiente="grupo-beta"
-            title="Todavia no publicada: grupo-beta"
-            >Subasta</a
-          >
-        </nav>
-      </div>
-
-      <label class="cabecera__buscador">
-        <svg class="icono icono--menudo" aria-hidden="true">
-          <use href="../../../../../shared/ui-kit/iconos/sprite.svg#buscar" />
-        </svg>
-        <span class="solo-lectores">Buscar productos</span>
-        <input class="cabecera__buscador-texto" type="search" placeholder="Buscar productos" />
-      </label>
-
-      <div class="cabecera__acciones">
-        <span class="cabecera__dato">
-          <svg class="icono icono--menudo" aria-hidden="true">
-            <use href="../../../../../shared/ui-kit/iconos/sprite.svg#moneda" />
-          </svg>
-          240
-        </span>
-
-        <span class="cabecera__campana">
-          <svg class="icono" aria-hidden="true">
-            <use href="../../../../../shared/ui-kit/iconos/sprite.svg#campana" />
-          </svg>
-          <span class="cabecera__contador" aria-hidden="true">3</span>
-          <span class="solo-lectores">3 notificaciones sin leer</span>
-        </span>
-
-        <span class="cabecera__cuenta">
-          <span class="cabecera__avatar" aria-hidden="true"></span>
-          <span class="cabecera__identidad">
-            <span class="cabecera__apodo">Simon_P</span>
-            <span class="cabecera__rango">Rango 12</span>
-          </span>
-        </span>
-      </div>
-    </header>
+    <div data-cabecera-app></div>
 
     <main id="vista-batallas" class="pagina pila">
-      <div class="acciones">
+      <header class="encabezado-pagina">
         <div class="pila pila--compacta">
           <h1>Batallas</h1>
           <p class="t-cuerpo" data-zona="subtitulo">Buscando batallas</p>
         </div>
-        <a class="boton boton--primario boton--grande" href="./crear-sala.html">CREAR SALA</a>
-      </div>
+        <div class="encabezado-pagina__acciones">
+          <!--
+            HU-JUE-015: el chat de la vista general, para cuadrar partidas. La
+            vista existia (chat.html) pero nadie enlazaba a ella (#441).
+          -->
+          <a class="boton boton--secundario" href="./chat.html" data-zona="enlace-chat-general"
+            >Chat general</a
+          >
+          <a class="boton boton--primario boton--grande" href="./crear-sala.html">CREAR SALA</a>
+        </div>
+      </header>
 
       <!--
         Dos filtros, los dos del contrato. El buscador que tenia la maqueta se
@@ -127,25 +72,81 @@
         </label>
       </div>
 
+      <!--
+        HU-SAL-006: por que se volvio al listado (saliste, cancelaste, o el
+        anfitrion cancelo y te devolvieron). Lo deja la sala de espera en
+        sessionStorage y se muestra una sola vez.
+      -->
+      <div class="aviso" data-zona="aviso-sala" role="status" hidden>
+        <p class="aviso__titulo" data-zona="aviso-sala-titulo"></p>
+        <p class="t-cuerpo" data-zona="aviso-sala-detalle"></p>
+      </div>
+
       <!-- RNF-USA-003: cargando, vacio y error comparten esta zona. -->
       <div class="estado-vista" data-zona="estado" role="status" aria-live="polite"></div>
+
+      <!-- HU-DIS-003: «Seccion degradada» cuando entrar a una sala no se puede
+           comprobar porque el inventario no responde. El listado se queda. -->
+      <div data-zona="degradacion" data-seccion="Inventario" hidden></div>
+
+      <!--
+        Estado del canal en tiempo real (HU-SAL-002, criterio 3). Se dice con
+        todas las letras si esta conectado o no, en vez de dejar que la persona
+        adivine por que una sala no cambia.
+      -->
+      <p class="t-meta" data-zona="canal" role="status" aria-live="polite" hidden></p>
 
       <div class="rejilla-salas" data-zona="salas" hidden></div>
 
       <nav class="paginacion" data-zona="paginacion" aria-label="Paginas del listado" hidden></nav>
     </main>
 
-    <!-- RNF-DIS-002: el chatbot esta en todas las vistas, sin excepcion. -->
-    <button class="chatbot-flotante" type="button" aria-label="Abrir el asistente">IA</button>
+    <!--
+      RF-CHA-001: el icono flotante del asistente va en todas las vistas.
+      Lo monta `comun/ui/asistente.js`, que ademas le da comportamiento:
+      hasta ahora el boton estaba copiado aqui y no hacia nada al pulsarlo.
+    -->
 
     <script type="module">
-      import { montarBatallas } from './batallas.js';
+      import { montarAsistente } from '../../comun/ui/asistente.js';
+      import { montarBatallas, mostrarAvisoDeSala } from './batallas.js';
+      import { urlDelCanal } from './canal-sala.js';
+      import { baseDeApi } from './cliente-salas.js';
+      import { recogerAvisoDelListado } from './sala-de-espera.js';
+      // Canal del servicio: `cliente-chat.js` pone el JWT en el CONNECT sobre el
+      // transporte STOMP comun de `src/comun/transporte-stomp.js` (#351).
+      import { conectarChat } from './cliente-chat.js';
+      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+
+      // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
+      if (!exigirSesion()) {
+        throw new Error('sin sesion: redirigiendo al login');
+      }
+      // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
+      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'jugar' });
+
+      // El mismo token que adjunta `src/comun/interceptors/http-error.interceptor.js`
+      // a cada peticion HTTP. Sin sesion no hay canal, y la vista lo dice.
+      const token = sessionStorage.getItem('nexus.token');
+
+      // HU-SAL-006: si se viene de salir o de una cancelacion, se dice.
+      mostrarAvisoDeSala(document, recogerAvisoDelListado(sessionStorage));
 
       montarBatallas(document.getElementById('vista-batallas'), {
-        // Entrar lleva a la sala de espera. Esa vista es HU-SAL-004: hasta que
-        // exista, se deja el destino sin resolver en vez de inventar una ruta.
-        alEntrar: (sala) => console.info('Ingreso aceptado en la sala', sala.id),
+        conectarCanal: () =>
+          token
+            ? conectarChat({ url: urlDelCanal({ base: baseDeApi() }), token })
+            : Promise.resolve(null),
+        // Entrar lleva a la sala. Antes esto solo escribia en la consola, asi
+        // que el ingreso se aceptaba en el servidor y la persona se quedaba
+        // mirando el listado sin saber que habia entrado.
+        alEntrar: (sala) => {
+          globalThis.location.href = `./sala-batalla.html?sala=${encodeURIComponent(sala.id)}`;
+        },
       });
+
+      // RF-CHA-001 / HU-CHA-001 CA-03: el icono responde y dice la verdad.
+      montarAsistente(document);
     </script>
   </body>
 </html>

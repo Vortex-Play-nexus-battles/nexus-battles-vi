@@ -1,18 +1,29 @@
 openapi: 3.1.0
 info:
   title: Servicio de inventario
-  version: 1.0.0
+  version: 1.1.1
   description: >
     Consulta paginada de la vitrina para HU-INV-001, y creacion y modificacion
     de elementos propios del jugador para HU-INV-003, y equipamiento de
-    heroes con limites para HU-INV-005.
-    La identidad temporal sigue la convencion X-User-Name de ms-identidad hasta
-    que HU-AUT-004 publique el subject del token.
+    heroes con limites para HU-INV-005, y busqueda indexada de productos
+    propios para HU-INV-002. HU-INV-010 registra el bloqueo de los productos
+    publicados en una subasta vigente y evita operarlos mientras siga activo.
+
+    Identidad (1.1.1, ADR-001/ADR-002/ADR-005). Las rutas del jugador exigen
+    un token de acceso: si es de un jugador, el propietario es su identificador
+    estable (claim uid, o sub en UUID; es el propietarioUid de HU-INV-010 y
+    como el inventario guarda propietarioId) y la cabecera X-User-Name se
+    ignora; si es una credencial de servicio (rol SERVICIO, por ejemplo
+    salas-partidas al verificar el heroe de cada participante), X-User-Name es
+    obligatoria y lleva ese identificador estable del jugador afectado
+    (400 sin ella). Sin token 401. Las operaciones internas acordadas con
+    Subastas siguen exigiendo su credencial (azp = ms-subastas). Hasta la
+    1.0.0 X-User-Name a secas era la identidad, sin verificar.
 servers:
   - url: http://localhost:8080
     description: Entorno local de desarrollo
 security:
-  - IdentidadTemporal: []
+  - TokenDeAcceso: []
 paths:
   /api/v1/inventario/elementos:
     get:
@@ -21,7 +32,9 @@ paths:
         HU-INV-001. El tamano de pagina es fijo en dieciseis porque el criterio
         de aceptacion exige ese numero de productos en la vista de referencia
         de 1360 x 768. La identidad viaja en la cabecera y nunca en la ruta:
-        un jugador no puede consultar el inventario de otro.
+        un jugador no puede consultar el inventario de otro. HU-INV-010 evalua
+        la disponibilidad desde el bloqueo persistido: si subastas no responde
+        o no envia un aviso de cierre, el producto permanece no disponible.
       operationId: consultarInventarioPaginado
       parameters:
         - name: pagina
@@ -67,7 +80,69 @@ paths:
           $ref: "#/components/responses/IdentidadRequerida"
         "503":
           $ref: "#/components/responses/PersistenciaNoDisponible"
+  /api/v1/inventario/elementos/busqueda:
+    get:
+      summary: Busca productos en el inventario del jugador autenticado
+      description: >
+        HU-INV-002. Usa el indice de texto de la informacion registrada en los
+        elementos y solo consulta el inventario derivado de X-User-Name. El
+        criterio debe contener al menos cuatro caracteres y los resultados
+        conservan la paginacion fija de dieciseis elementos.
+      operationId: buscarElementosInventario
+      parameters:
+        - name: criterio
+          in: query
+          required: true
+          description: Texto que se busca en productoId, tipo, nombre propio y parte de armadura.
+          schema:
+            type: string
+            minLength: 4
+        - name: pagina
+          in: query
+          required: false
+          description: Numero de pagina de coincidencias, desde cero.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Pagina de productos propios que coinciden con el criterio
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginaInventario"
+        "400":
+          $ref: "#/components/responses/SolicitudInvalida"
+        "401":
+          $ref: "#/components/responses/IdentidadRequerida"
   /api/v1/inventario/elementos/{elementoId}:
+    get:
+      summary: Consulta una unidad concreta para una integracion entre servicios
+      description: >
+        HU-INV-010. Operacion interna consumida por ms-subastas antes de publicar
+        una unidad. Requiere un token OAuth2 obtenido mediante client_credentials;
+        propietarioUid es un dato de negocio y no la identidad del token.
+      operationId: consultarElementoInventarioPorId
+      security:
+        - BearerInterno: []
+      parameters:
+        - $ref: "#/components/parameters/ElementoId"
+      responses:
+        "200":
+          description: Unidad encontrada con su propietario y estado de uso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DetalleElementoInventario"
+        "401":
+          $ref: "#/components/responses/AutenticacionInternaRequerida"
+        "403":
+          $ref: "#/components/responses/ServicioInternoNoAutorizado"
+        "404":
+          $ref: "#/components/responses/ElementoNoEncontrado"
+        "409":
+          description: El inventario historico aun no usa identificadores UUID
     patch:
       summary: Modifica el nombre propio de un elemento del jugador autenticado
       operationId: modificarElementoPropio
@@ -106,6 +181,97 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/DetalleDeProblema"
+        "503":
+          $ref: "#/components/responses/PersistenciaNoDisponible"
+    delete:
+      summary: Elimina un elemento disponible del inventario del jugador autenticado
+      operationId: eliminarElementoPropio
+      parameters:
+        - $ref: "#/components/parameters/ElementoId"
+      responses:
+        "204":
+          description: Elemento eliminado
+        "401":
+          $ref: "#/components/responses/IdentidadRequerida"
+        "403":
+          $ref: "#/components/responses/InventarioAjeno"
+        "404":
+          $ref: "#/components/responses/ElementoNoEncontrado"
+        "409":
+          $ref: "#/components/responses/ElementoNoDisponible"
+        "503":
+          $ref: "#/components/responses/PersistenciaNoDisponible"
+  /api/v1/inventario/elementos/{elementoId}/bloqueo-subasta:
+    put:
+      summary: Bloquea un producto mientras su publicacion en subasta siga vigente
+      description: >
+        HU-INV-010. Operacion idempotente para la misma subasta. El servicio de
+        subastas se autentica con OAuth2 client_credentials y envia el UUID
+        estable del propietario como dato de negocio. Un elemento equipado o
+        reservado por otra subasta se rechaza.
+      operationId: bloquearElementoEnSubasta
+      security:
+        - BearerInterno: []
+      parameters:
+        - $ref: "#/components/parameters/ElementoId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BloquearEnSubasta"
+      responses:
+        "200":
+          description: Producto bloqueado y marcado como no disponible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ElementoInventario"
+        "400":
+          $ref: "#/components/responses/SolicitudInvalida"
+        "401":
+          $ref: "#/components/responses/AutenticacionInternaRequerida"
+        "403":
+          $ref: "#/components/responses/BloqueoSubastaNoAutorizado"
+        "404":
+          $ref: "#/components/responses/ElementoNoEncontrado"
+        "409":
+          $ref: "#/components/responses/ElementoNoDisponible"
+        "503":
+          $ref: "#/components/responses/PersistenciaNoDisponible"
+  /api/v1/inventario/elementos/{elementoId}/bloqueo-subasta/{subastaId}:
+    delete:
+      summary: Libera el producto cuando la subasta se cierra o cancela
+      description: >
+        HU-INV-010. El servicio de subastas envia este aviso al cerrar o
+        cancelar la publicacion. La operacion es idempotente si el producto ya
+        esta disponible. Si subastaId no corresponde al bloqueo vigente,
+        responde 409 y conserva el producto bloqueado.
+      operationId: liberarElementoDeSubasta
+      security:
+        - BearerInterno: []
+      parameters:
+        - $ref: "#/components/parameters/ElementoId"
+        - $ref: "#/components/parameters/SubastaId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Producto liberado o aviso repetido procesado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ElementoInventario"
+        "400":
+          $ref: "#/components/responses/SolicitudInvalida"
+        "401":
+          $ref: "#/components/responses/AutenticacionInternaRequerida"
+        "403":
+          $ref: "#/components/responses/ServicioInternoNoAutorizado"
+        "404":
+          $ref: "#/components/responses/ElementoNoEncontrado"
+        "409":
+          $ref: "#/components/responses/ElementoNoDisponible"
         "503":
           $ref: "#/components/responses/PersistenciaNoDisponible"
   /api/v1/inventario/heroes/{heroeId}/equipamiento:
@@ -198,13 +364,21 @@ paths:
           $ref: "#/components/responses/ElementoNoEncontrado"
 components:
   securitySchemes:
-    IdentidadTemporal:
-      type: apiKey
-      in: header
-      name: X-User-Name
+    TokenDeAcceso:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
       description: >
-        Identidad suministrada por la capa de autenticacion. Es temporal y sera
-        reemplazada por el subject del JWT cuando HU-AUT-004 este disponible.
+        Token de ms-identidad (RS256, JWKS). De jugador: el propietario es su
+        identificador estable (uid, o sub en UUID); un token de usuario sin el
+        recibe 403. De servicio (rol SERVICIO): el identificador estable del
+        jugador afectado va en X-User-Name, obligatoria. Sustituye al esquema IdentidadTemporal
+        (X-User-Name sin verificar) de la 1.0.0.
+    BearerInterno:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token OAuth2 client_credentials emitido para ms-subastas.
   schemas:
     CrearElemento:
       type: object
@@ -235,9 +409,20 @@ components:
         nombrePropio:
           type: string
           minLength: 1
+    BloquearEnSubasta:
+      type: object
+      additionalProperties: false
+      required: [propietarioUid, subastaId]
+      properties:
+        propietarioUid:
+          type: string
+          format: uuid
+        subastaId:
+          type: string
+          format: uuid
     ElementoInventario:
       type: object
-      required: [id, productoId, tipo, nombrePropio]
+      required: [id, productoId, tipo, nombrePropio, disponible, subastaId]
       properties:
         id: { type: string }
         productoId: { type: string }
@@ -248,6 +433,36 @@ components:
         parteArmadura:
           oneOf:
             - $ref: "#/components/schemas/ParteArmadura"
+            - type: "null"
+        disponible:
+          type: boolean
+          description: Falso mientras exista un bloqueo por subasta vigente.
+        subastaId:
+          oneOf:
+            - type: string
+              format: uuid
+            - type: "null"
+    DetalleElementoInventario:
+      type: object
+      additionalProperties: false
+      required: [elementoId, productoId, propietarioUid, enUso, disponible, subastaId]
+      properties:
+        elementoId:
+          type: string
+        productoId:
+          type: string
+          format: uuid
+        propietarioUid:
+          type: string
+          format: uuid
+        enUso:
+          type: boolean
+        disponible:
+          type: boolean
+        subastaId:
+          oneOf:
+            - type: string
+              format: uuid
             - type: "null"
     ParteArmadura:
       type: string
@@ -366,6 +581,12 @@ components:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/DetalleDeProblema"
+    AutenticacionInternaRequerida:
+      description: Token Bearer ausente o invalido
+    ServicioInternoNoAutorizado:
+      description: El token no identifica al cliente OAuth2 autorizado de ms-subastas
+    BloqueoSubastaNoAutorizado:
+      description: El token no identifica a ms-subastas o propietarioUid no es el propietario
     PersistenciaNoDisponible:
       description: La escritura atomica no pudo completarse y no se aplicaron cambios parciales
       content:
@@ -396,6 +617,12 @@ components:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/DetalleDeProblema"
+    ElementoNoDisponible:
+      description: El producto esta equipado o bloqueado por una subasta vigente
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/DetalleDeProblema"
   parameters:
     HeroeId:
       name: heroeId
@@ -407,3 +634,18 @@ components:
       in: path
       required: true
       schema: { type: string }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 100
+    SubastaId:
+      name: subastaId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid

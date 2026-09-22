@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Notificaciones · The Nexus Battles VI</title>
+
+    <!--
+      Ejecucion INTEGRADA (Spring Boot sirve esta vista): la API y el canal
+      viven en el mismo origen y no hay que declarar nada.
+      Ejecucion ESTATICA para revision visual: para apuntar la vista al
+      servicio de notificaciones que corra en otro sitio, descomenta y ajusta
+      (la URL del canal ws:// se deriva de esta misma base):
+      <meta name="nexus-api-base" content="http://127.0.0.1:8085" />
+    -->
+
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
+  </head>
+
+  <body>
+    <!--
+      Cabecera de 64 px con los seis destinos de RF-INV-008 y el buscador de
+      productos de RF-INV-004. Se repite en cada vista mientras no exista una
+      forma acordada de compartir fragmentos de HTML sin framework.
+
+      La campana de esta cabecera es la de verdad: la monta `campana.js`.
+    -->
+    <div data-cabecera-app></div>
+
+    <main class="pagina pila">
+      <!--
+        Region viva para los avisos que llegan en tiempo real. No bloquea:
+        no hay velo ni dialogo, y cada aviso se cierra solo o con su boton.
+      -->
+      <div class="pila pila--compacta" data-zona="emergentes" aria-live="polite"></div>
+
+      <div class="pila pila--compacta">
+        <h1>Notificaciones</h1>
+        <p class="t-cuerpo">
+          Lo que te pasa en el juego, en todas tus sesiones abiertas a la vez. Si pierdes la
+          conexion, esta vista consulta periodicamente y se pone al dia al volver.
+        </p>
+      </div>
+
+      <div class="estado-vista" data-zona="sin-sesion" hidden>
+        <p class="estado-vista__titulo">Inicia sesión para ver tus notificaciones</p>
+        <p class="t-meta">Los avisos son tuyos: hace falta tu sesión para pedirlos.</p>
+      </div>
+
+      <section class="tarjeta pila" id="panel-notificaciones" data-zona="panel" hidden>
+        <div class="fila">
+          <h2 class="tarjeta__titulo">Bandeja</h2>
+          <!-- Estado del canal: componente `Estado de conexion`, no un Aviso (mapeo §5.4). -->
+          <span class="conexion conexion--sin-conexion" data-zona="conexion" role="status"
+            >Sin canal en tiempo real</span
+          >
+        </div>
+
+        <p class="t-meta" data-zona="lista-vacia">Todavía no tienes notificaciones.</p>
+        <ul class="pila pila--compacta" data-zona="lista" aria-label="Notificaciones"></ul>
+      </section>
+    </main>
+
+    <!--
+      RF-CHA-001: el icono flotante del asistente va en todas las vistas.
+      Lo monta `comun/ui/asistente.js`, que ademas le da comportamiento:
+      hasta ahora el boton estaba copiado aqui y no hacia nada al pulsarlo.
+    -->
+
+    <script type="module">
+      import { montarAsistente } from '../../comun/ui/asistente.js';
+      import { montarCampana } from './campana.js';
+      import { leerSesion, identificadorDeSesion } from './cliente-notificaciones.js';
+      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+
+      // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
+      if (!exigirSesion()) {
+        throw new Error('sin sesion: redirigiendo al login');
+      }
+      // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
+      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: null });
+      // En esta vista la campana de la cabecera abre el panel de aqui mismo.
+      const campana = document.querySelector('[data-cabecera-app] .cabecera__campana');
+      campana.dataset.zona = 'boton';
+      campana.addEventListener('click', (evento) => evento.preventDefault());
+
+      const sesion = leerSesion();
+
+      if (!sesion.usuarioId) {
+        document.querySelector('[data-zona="sin-sesion"]').hidden = false;
+      } else {
+        const { abrir } = montarCampana(document, {
+          usuarioId: sesion.usuarioId,
+          sesionId: identificadorDeSesion(),
+        });
+        // En la vista de notificaciones el panel arranca abierto.
+        abrir();
+      }
+
+      // RF-CHA-001 / HU-CHA-001 CA-03: el icono responde y dice la verdad.
+      montarAsistente(document);
+    </script>
+  </body>
+</html>

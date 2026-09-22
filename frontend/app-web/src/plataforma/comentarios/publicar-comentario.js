@@ -1,0 +1,800 @@
+/**
+ * HU-COM-001 — Vista de publicacion de comentarios sobre un producto.
+ *
+ * Formulario de publicacion con texto, imagenes (con previsualizacion,
+ * subtarea SCRUM-1100) y calificacion opcional en estrellas, mas el hilo del
+ * producto donde aparece lo que se publica con apodo, estrellas y fecha
+ * (RN-CMT-001).
+ *
+ * Usa solo clases del ui-kit compartido (`campo`, `zona-carga`, `estrellas`,
+ * `aviso`, `tarjeta`, `estado-vista`); no define estilos propios.
+ *
+ * El manejo de errores sigue `shared/ui-kit/MAPEO-ERRORES.md`:
+ *
+ *   - `errores[]`                       -> cada campo marcado, mensaje debajo
+ *   - 422 FORMATO_DE_IMAGEN_NO_ADMITIDO -> la zona de carga en error, con el motivo
+ *   - 403 AUTOR_SILENCIADO              -> aviso de advertencia (no es fallo del sistema)
+ *   - 409                               -> aviso con salida: reintentar sin calificar
+ *   - 202                               -> aviso de informacion: esta en revision, no en el hilo
+ *   - 201                               -> aviso de exito y el comentario entra al hilo
+ *
+ * Se decide por `estado` y `motivo`, nunca comparando textos.
+ *
+ * Lo que NO hace, porque el contrato no lo define: leer el hilo existente del
+ * producto. No hay `GET` en `comentarios.yaml`; el hilo muestra lo publicado
+ * en esta sesion y lo dice.
+ */
+
+import {
+  publicarComentario,
+  consultarHilo,
+  eliminarComentario,
+  ErrorDeApi,
+  MOTIVO,
+  ESTADO,
+} from './cliente-comentarios.js';
+import { usuarioIdDeSesion } from '../../comun/identidad.js';
+import { pintarAviso } from '../../comun/ui/aviso.js';
+import { vaciar } from '../../comun/ui/dom.js';
+
+const CLAVE_APODO = 'nexus.apodoActual';
+
+const MAXIMO_ESTRELLAS = 5;
+
+/**
+ * Lee la identidad del jugador de esta sesion.
+ *
+ * El identificador sale de `comun/identidad.js`, no de `nexus.usuarioId` a
+ * pelo: esa clave la escribe el login con la clave primaria de la tabla, y
+ * `gestion-usuarios.js` la pisa con el id del usuario que el administrador
+ * esta consultando. Un comentario firmado con la identidad de otra persona no
+ * es un detalle cosmetico.
+ *
+ * @param {Storage} [almacen=sessionStorage]
+ * @returns {{usuarioId: string|null, apodo: string|null}}
+ */
+export function leerSesion(almacen = globalThis.sessionStorage) {
+  return {
+    usuarioId: usuarioIdDeSesion(almacen),
+    apodo: almacen?.getItem?.(CLAVE_APODO) ?? null,
+  };
+}
+
+/** Codigo HTTP -> variante del componente Aviso (tabla 4 del mapeo). */
+export function tonoPara(estado) {
+  if (estado >= 500) {
+    return 'error';
+  }
+  if (estado === 404) {
+    return 'info';
+  }
+  return 'advertencia';
+}
+
+/**
+ * Nombres de los archivos elegidos, leidos de las miniaturas que pinta la
+ * zona de carga. Se leen del DOM y no de un `FileList` porque este es
+ * inmutable y la persona puede quitar archivos uno a uno.
+ *
+ * @param {HTMLFormElement} formulario
+ * @returns {string[]}
+ */
+export function nombresDeImagenes(formulario) {
+  return Array.from(formulario.querySelectorAll('[data-zona="miniaturas"] [data-nombre]')).map(
+    (nodo) => nodo.dataset.nombre,
+  );
+}
+
+/**
+ * Lee el formulario y arma `PublicacionComentarioRequest` del contrato.
+ *
+ * `estrellas` solo viaja si la persona califico: el contrato dice «omitir si
+ * no se quiere calificar», y mandar `null` no es omitir.
+ *
+ * @param {HTMLFormElement} formulario
+ * @param {{usuarioId: string, apodo: string}} sesion
+ */
+export function leerFormulario(formulario, sesion) {
+  const datos = new FormData(formulario);
+  const cuerpo = {
+    autorId: sesion.usuarioId,
+    apodoAutor: sesion.apodo,
+    texto: String(datos.get('texto') ?? '').trim(),
+    imagenes: nombresDeImagenes(formulario),
+  };
+
+  const estrellas = Number(datos.get('estrellas'));
+  if (estrellas >= 1 && estrellas <= MAXIMO_ESTRELLAS) {
+    cuerpo.estrellas = estrellas;
+  }
+
+  return cuerpo;
+}
+
+function limpiarErroresDeCampo(formulario) {
+  formulario.querySelectorAll('.campo--invalido').forEach((campo) => {
+    campo.classList.remove('campo--invalido');
+    const control = campo.querySelector('.campo__control');
+    if (control) {
+      control.removeAttribute('aria-invalid');
+      control.removeAttribute('aria-describedby');
+    }
+  });
+  formulario.querySelectorAll('.campo__error').forEach((mensaje) => mensaje.remove());
+
+  const zonaCarga = formulario.querySelector('[data-zona="carga"]');
+  if (zonaCarga) {
+    zonaCarga.classList.remove('zona-carga--error');
+    const ayuda = zonaCarga.querySelector('.zona-carga__ayuda');
+    if (ayuda && ayuda.dataset.textoReposo !== undefined) {
+      ayuda.textContent = ayuda.dataset.textoReposo;
+    }
+  }
+}
+
+/**
+ * Marca un campo como invalido y escribe el motivo debajo (mapeo §6).
+ *
+ * @returns {HTMLElement|null} el control marcado, para llevarle el foco
+ */
+function marcarCampo(formulario, campo, mensaje) {
+  const control = formulario.querySelector(`[name="${campo}"]`);
+  if (!control) {
+    return null;
+  }
+  const contenedor = control.closest('.campo') ?? control.parentElement;
+  contenedor.classList.add('campo--invalido');
+  const idMensaje = `error-${campo}`;
+  const aviso = document.createElement('p');
+  aviso.className = 'campo__error';
+  aviso.id = idMensaje;
+  aviso.textContent = mensaje;
+  contenedor.appendChild(aviso);
+  control.setAttribute('aria-invalid', 'true');
+  control.setAttribute('aria-describedby', idMensaje);
+  return control;
+}
+
+function marcarCampos(formulario, errores) {
+  let primero = null;
+  errores.forEach(({ campo, mensaje }) => {
+    const control = marcarCampo(formulario, campo, mensaje);
+    if (control && !primero) {
+      primero = control;
+    }
+  });
+  return primero;
+}
+
+/** La zona de carga dice el motivo escrito, no solo el borde en rojo. */
+function marcarZonaDeCarga(formulario, motivo) {
+  const zonaCarga = formulario.querySelector('[data-zona="carga"]');
+  if (!zonaCarga) {
+    return;
+  }
+  zonaCarga.classList.add('zona-carga--error');
+  const ayuda = zonaCarga.querySelector('.zona-carga__ayuda');
+  if (ayuda) {
+    if (ayuda.dataset.textoReposo === undefined) {
+      ayuda.dataset.textoReposo = ayuda.textContent;
+    }
+    ayuda.textContent = motivo;
+  }
+}
+
+function ocultarAviso(zona) {
+  zona.hidden = true;
+  vaciar(zona);
+}
+
+function cargando(boton, activo) {
+  if (boton.dataset.textoReposo === undefined) {
+    boton.dataset.textoReposo = boton.textContent;
+  }
+  boton.disabled = activo;
+  boton.setAttribute('aria-busy', String(activo));
+  boton.textContent = activo ? 'Publicando…' : boton.dataset.textoReposo;
+}
+
+/* ---------------------------------------------------------------------------
+   Calificacion en estrellas (componente `estrellas` del ui-kit, editable)
+   --------------------------------------------------------------------------- */
+
+/**
+ * Pinta las estrellas llenas hasta `valor` y el detalle textual que el ui-kit
+ * exige («las estrellas redondean; la precision la da el numero de al lado»).
+ *
+ * @param {HTMLElement} contenedor elemento `.estrellas`
+ * @param {number|null} valor 1..5, o null cuando no hay calificacion
+ */
+export function pintarEstrellas(contenedor, valor) {
+  const estrellas = contenedor.querySelectorAll('.estrellas__estrella');
+  estrellas.forEach((estrella, indice) => {
+    estrella.classList.toggle('estrellas__estrella--llena', valor !== null && indice < valor);
+  });
+  const detalle = contenedor.querySelector('.estrellas__detalle');
+  if (detalle) {
+    detalle.textContent = valor === null ? 'Sin calificar' : `${valor} de ${MAXIMO_ESTRELLAS}`;
+  }
+}
+
+function calificacionElegida(formulario) {
+  const marcada = formulario.querySelector('[name="estrellas"]:checked');
+  return marcada ? Number(marcada.value) : null;
+}
+
+function quitarCalificacion(formulario) {
+  formulario.querySelectorAll('[name="estrellas"]').forEach((entrada) => {
+    entrada.checked = false;
+  });
+  const contenedor = formulario.querySelector('[data-zona="calificacion"]');
+  if (contenedor) {
+    pintarEstrellas(contenedor, null);
+  }
+}
+
+function montarCalificacion(formulario) {
+  const contenedor = formulario.querySelector('[data-zona="calificacion"]');
+  if (!contenedor) {
+    return;
+  }
+  pintarEstrellas(contenedor, calificacionElegida(formulario));
+  contenedor.addEventListener('change', () => {
+    pintarEstrellas(contenedor, calificacionElegida(formulario));
+  });
+  const sinCalificar = formulario.querySelector('[data-accion="sin-calificar"]');
+  if (sinCalificar) {
+    sinCalificar.addEventListener('click', () => quitarCalificacion(formulario));
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Zona de carga de imagenes con previsualizacion (SCRUM-1100)
+   --------------------------------------------------------------------------- */
+
+function pintarMiniatura(lista, archivo, alQuitar) {
+  const item = document.createElement('li');
+  item.className = 'zona-carga__miniatura';
+  item.dataset.nombre = archivo.name;
+  item.title = archivo.name;
+
+  // La previsualizacion real solo existe en el navegador; en las pruebas
+  // (jsdom) no hay createObjectURL y la miniatura queda como caja con nombre.
+  if (typeof URL.createObjectURL === 'function') {
+    const imagen = document.createElement('img');
+    imagen.src = URL.createObjectURL(archivo);
+    imagen.alt = archivo.name;
+    imagen.width = 56;
+    imagen.height = 56;
+    imagen.addEventListener('load', () => URL.revokeObjectURL(imagen.src));
+    item.appendChild(imagen);
+  }
+
+  const quitar = document.createElement('button');
+  quitar.type = 'button';
+  quitar.className = 'zona-carga__quitar';
+  quitar.setAttribute('aria-label', `Quitar ${archivo.name}`);
+  quitar.textContent = '×';
+  quitar.addEventListener('click', (evento) => {
+    evento.stopPropagation();
+    item.remove();
+    alQuitar();
+  });
+  item.appendChild(quitar);
+  lista.appendChild(item);
+}
+
+function montarZonaDeCarga(formulario) {
+  const zonaCarga = formulario.querySelector('[data-zona="carga"]');
+  const entrada = formulario.querySelector('[name="imagenes"]');
+  const lista = formulario.querySelector('[data-zona="miniaturas"]');
+  if (!zonaCarga || !entrada || !lista) {
+    return;
+  }
+
+  const actualizarEstado = () => {
+    zonaCarga.classList.toggle('zona-carga--con-archivos', lista.children.length > 0);
+  };
+
+  // La zona es tambien un boton que abre el selector: arrastrar nunca es la unica via.
+  zonaCarga.addEventListener('click', (evento) => {
+    if (evento.target === entrada || evento.target.closest('.zona-carga__quitar')) {
+      return;
+    }
+    entrada.click();
+  });
+  zonaCarga.addEventListener('keydown', (evento) => {
+    if (evento.key === 'Enter' || evento.key === ' ') {
+      evento.preventDefault();
+      entrada.click();
+    }
+  });
+
+  const agregar = (archivos) => {
+    const existentes = new Set(nombresDeImagenes(formulario));
+    Array.from(archivos).forEach((archivo) => {
+      if (!existentes.has(archivo.name)) {
+        pintarMiniatura(lista, archivo, actualizarEstado);
+        existentes.add(archivo.name);
+      }
+    });
+    actualizarEstado();
+  };
+
+  entrada.addEventListener('change', () => {
+    agregar(entrada.files ?? []);
+    // El mismo archivo debe poder elegirse otra vez despues de quitarlo.
+    entrada.value = '';
+  });
+
+  zonaCarga.addEventListener('dragover', (evento) => {
+    evento.preventDefault();
+    zonaCarga.classList.add('zona-carga--arrastrando');
+  });
+  zonaCarga.addEventListener('dragleave', () => {
+    zonaCarga.classList.remove('zona-carga--arrastrando');
+  });
+  zonaCarga.addEventListener('drop', (evento) => {
+    evento.preventDefault();
+    zonaCarga.classList.remove('zona-carga--arrastrando');
+    agregar(evento.dataTransfer?.files ?? []);
+  });
+}
+
+function vaciarMiniaturas(formulario) {
+  const lista = formulario.querySelector('[data-zona="miniaturas"]');
+  if (lista) {
+    vaciar(lista);
+  }
+  const zonaCarga = formulario.querySelector('[data-zona="carga"]');
+  if (zonaCarga) {
+    zonaCarga.classList.remove('zona-carga--con-archivos');
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Hilo del producto
+   --------------------------------------------------------------------------- */
+
+const formatoDeFecha = new Intl.DateTimeFormat('es-CO', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
+
+/**
+ * @param {string} iso fecha ISO 8601 (`fechaPublicacion` del contrato)
+ * @returns {string} fecha legible, o el valor original si no se puede leer
+ */
+export function fechaLegible(iso) {
+  const fecha = new Date(iso);
+  return Number.isNaN(fecha.getTime()) ? String(iso) : formatoDeFecha.format(fecha);
+}
+
+function nodoDeEstrellas(valor) {
+  const contenedor = document.createElement('span');
+  contenedor.className = 'estrellas';
+  contenedor.setAttribute('aria-label', `Calificacion: ${valor} de ${MAXIMO_ESTRELLAS}`);
+
+  const lista = document.createElement('span');
+  lista.className = 'estrellas__lista';
+  lista.setAttribute('aria-hidden', 'true');
+  for (let indice = 0; indice < MAXIMO_ESTRELLAS; indice += 1) {
+    const estrella = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    estrella.setAttribute('class', 'estrellas__estrella');
+    const uso = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+    uso.setAttribute('href', '../../../../../shared/ui-kit/iconos/sprite.svg#estrella');
+    estrella.appendChild(uso);
+    lista.appendChild(estrella);
+  }
+  contenedor.appendChild(lista);
+
+  const detalle = document.createElement('span');
+  detalle.className = 'estrellas__detalle';
+  contenedor.appendChild(detalle);
+
+  pintarEstrellas(contenedor, valor);
+  return contenedor;
+}
+
+/**
+ * Texto de la calificacion promedio del producto — HU-COM-003.
+ *
+ * `null` (o ausente) es «sin calificaciones», nunca un 0: un producto que nadie
+ * ha calificado no es un producto malo (CA-03).
+ *
+ * @param {{calificacionPromedio?: number|null, totalCalificaciones?: number}} hilo
+ * @returns {string}
+ */
+export function textoDelPromedio(hilo) {
+  const promedio = hilo?.calificacionPromedio;
+  const total = Number.isInteger(hilo?.totalCalificaciones) ? hilo.totalCalificaciones : 0;
+  if (!Number.isFinite(promedio) || total === 0) {
+    return 'Sin calificaciones todavía.';
+  }
+  const plural = total === 1 ? 'calificacion' : 'calificaciones';
+  return `Calificacion promedio: ${promedio.toFixed(2)} de ${MAXIMO_ESTRELLAS} (${total} ${plural}).`;
+}
+
+/**
+ * Pinta el promedio y el total en la zona `[data-zona="promedio"]` del hilo.
+ *
+ * @param {HTMLElement} zonaHilo
+ * @param {object} hilo `HiloDeComentariosResponse`
+ */
+export function pintarPromedio(zonaHilo, hilo) {
+  const zona = zonaHilo.querySelector('[data-zona="promedio"]');
+  if (zona) {
+    zona.textContent = textoDelPromedio(hilo);
+  }
+}
+
+/**
+ * Anade un comentario publicado al hilo, con apodo, calificacion y fecha
+ * (RN-CMT-001). Un comentario sin `estrellas` es normal, no un error: es el
+ * segundo comentario del mismo jugador sobre el producto (CA-02).
+ *
+ * Si el comentario es de quien mira (`opciones.yo` = `autorId`), lleva el boton
+ * «Eliminar» (HU-COM-004, CA-04); pulsarlo llama a `opciones.alEliminar(id)`.
+ *
+ * @param {HTMLElement} zonaHilo elemento con `[data-zona="hilo"]`
+ * @param {object} comentario `ComentarioResponse` del contrato
+ * @param {{yo?: string|null, alEliminar?: (id: string) => void, alFinal?: boolean}} [opciones]
+ * @returns {HTMLElement} el articulo pintado
+ */
+export function agregarAlHilo(
+  zonaHilo,
+  comentario,
+  { yo = null, alEliminar, alFinal = false } = {},
+) {
+  const vacio = zonaHilo.querySelector('[data-zona="hilo-vacio"]');
+  if (vacio) {
+    vacio.hidden = true;
+  }
+
+  const articulo = document.createElement('article');
+  articulo.className = 'tarjeta pila pila--compacta';
+  articulo.dataset.comentarioId = comentario.id ?? '';
+
+  const cabecera = document.createElement('div');
+  cabecera.className = 'fila';
+
+  const apodo = document.createElement('span');
+  apodo.className = 'tarjeta__titulo';
+  apodo.dataset.campo = 'apodo';
+  apodo.textContent = comentario.apodoAutor ?? '';
+  cabecera.appendChild(apodo);
+
+  if (Number.isInteger(comentario.estrellas)) {
+    cabecera.appendChild(nodoDeEstrellas(comentario.estrellas));
+  }
+
+  const fecha = document.createElement('time');
+  fecha.className = 'tarjeta__meta';
+  fecha.dataset.campo = 'fecha';
+  fecha.dateTime = comentario.fechaPublicacion ?? '';
+  fecha.textContent = fechaLegible(comentario.fechaPublicacion);
+  cabecera.appendChild(fecha);
+
+  articulo.appendChild(cabecera);
+
+  const texto = document.createElement('p');
+  texto.className = 't-cuerpo';
+  texto.dataset.campo = 'texto';
+  texto.textContent = comentario.texto ?? '';
+  articulo.appendChild(texto);
+
+  if (Array.isArray(comentario.imagenes) && comentario.imagenes.length > 0) {
+    const imagenes = document.createElement('ul');
+    imagenes.className = 'zona-carga__miniaturas';
+    comentario.imagenes.forEach((nombre) => {
+      const item = document.createElement('li');
+      item.className = 'zona-carga__miniatura';
+      item.dataset.nombre = nombre;
+      item.title = nombre;
+      imagenes.appendChild(item);
+    });
+    articulo.appendChild(imagenes);
+  }
+
+  if (yo && comentario.autorId === yo && typeof alEliminar === 'function') {
+    const acciones = document.createElement('div');
+    acciones.className = 'fila';
+    const eliminar = document.createElement('button');
+    eliminar.type = 'button';
+    eliminar.className = 'boton boton--secundario boton--pequeno';
+    eliminar.dataset.accion = 'eliminar';
+    eliminar.textContent = 'Eliminar';
+    eliminar.addEventListener('click', () => alEliminar(comentario.id, articulo));
+    acciones.appendChild(eliminar);
+    articulo.appendChild(acciones);
+  }
+
+  const lista = zonaHilo.querySelector('[data-zona="hilo-lista"]') ?? zonaHilo;
+  if (alFinal) {
+    lista.appendChild(articulo);
+  } else {
+    lista.prepend(articulo);
+  }
+  return articulo;
+}
+
+/**
+ * Quita un articulo del hilo y, si no queda ninguno, vuelve a mostrar el vacio.
+ *
+ * @param {HTMLElement} zonaHilo
+ * @param {HTMLElement} articulo
+ */
+export function quitarDelHilo(zonaHilo, articulo) {
+  articulo.remove();
+  const lista = zonaHilo.querySelector('[data-zona="hilo-lista"]') ?? zonaHilo;
+  const vacio = zonaHilo.querySelector('[data-zona="hilo-vacio"]');
+  if (vacio && lista.children.length === 0) {
+    vacio.hidden = false;
+  }
+}
+
+/**
+ * Vuelve a leer el promedio del servicio, sin tocar la lista: el servicio es
+ * quien lo calcula (regla 7), la vista no lo estima.
+ *
+ * @param {HTMLElement} zonaHilo
+ * @param {{productoId: string, consultarImpl?: Function}} opciones
+ */
+export async function actualizarPromedio(zonaHilo, { productoId, consultarImpl = consultarHilo }) {
+  try {
+    pintarPromedio(zonaHilo, await consultarImpl(productoId));
+  } catch {
+    // El promedio anterior sigue en pantalla; no se inventa uno nuevo.
+  }
+}
+
+/**
+ * Carga el hilo del servicio y lo pinta: promedio arriba y los comentarios
+ * del mas reciente al mas antiguo, con «Eliminar» en los propios
+ * (HU-COM-003, HU-COM-004).
+ *
+ * @param {HTMLElement} zonaHilo
+ * @param {object} opciones
+ * @param {string} opciones.productoId
+ * @param {string|null} [opciones.yo] `autorId` de quien mira
+ * @param {Function} [opciones.consultarImpl]
+ * @param {(id: string, articulo: HTMLElement) => void} [opciones.alEliminar]
+ * @returns {Promise<object|null>} el hilo, o `null` si no se pudo cargar
+ */
+export async function cargarHilo(
+  zonaHilo,
+  { productoId, yo = null, consultarImpl = consultarHilo, alEliminar } = {},
+) {
+  const indicador = zonaHilo.querySelector('[data-zona="hilo-cargando"]');
+  const vacio = zonaHilo.querySelector('[data-zona="hilo-vacio"]');
+  const lista = zonaHilo.querySelector('[data-zona="hilo-lista"]') ?? zonaHilo;
+  if (indicador) {
+    indicador.hidden = false;
+  }
+  try {
+    const hilo = await consultarImpl(productoId);
+    lista.replaceChildren();
+    pintarPromedio(zonaHilo, hilo);
+    const comentarios = Array.isArray(hilo?.comentarios) ? hilo.comentarios : [];
+    // El servicio los da del mas antiguo al mas reciente; el hilo se lee al reves.
+    comentarios.forEach((comentario) => {
+      agregarAlHilo(zonaHilo, comentario, { yo, alEliminar });
+    });
+    if (vacio) {
+      vacio.hidden = comentarios.length > 0;
+    }
+    return hilo;
+  } catch {
+    // Sin hilo no se bloquea la publicacion: la vista sigue sirviendo para
+    // comentar y lo dice en la zona del promedio, sin inventar cifras.
+    const zona = zonaHilo.querySelector('[data-zona="promedio"]');
+    if (zona) {
+      zona.textContent = 'No pudimos cargar el hilo. Intentalo de nuevo en un momento.';
+    }
+    return null;
+  } finally {
+    if (indicador) {
+      indicador.hidden = true;
+    }
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Montaje
+   --------------------------------------------------------------------------- */
+
+/**
+ * Conecta el formulario con el servicio.
+ *
+ * @param {HTMLFormElement} formulario
+ * @param {object} [opciones]
+ * @param {string} [opciones.productoId] si falta, se lee de `data-producto-id`
+ * @param {{usuarioId: string|null, apodo: string|null}} [opciones.sesion]
+ * @param {Function} [opciones.publicarImpl] inyeccion para las pruebas
+ * @param {HTMLElement} [opciones.hilo] zona del hilo; si falta, se busca en el documento
+ * @param {Function} [opciones.alPublicar] callback con el `ComentarioResponse` publicado
+ */
+export function montarPublicarComentario(
+  formulario,
+  {
+    productoId,
+    sesion = leerSesion(),
+    publicarImpl = publicarComentario,
+    consultarImpl = consultarHilo,
+    eliminarImpl = eliminarComentario,
+    hilo,
+    alPublicar,
+  } = {},
+) {
+  const zonaAviso = formulario.querySelector('[data-zona="aviso"]');
+  const boton = formulario.querySelector('[type="submit"]');
+  const zonaHilo = hilo ?? formulario.ownerDocument.querySelector('[data-zona="hilo"]');
+  const idProducto = productoId ?? formulario.dataset.productoId;
+
+  montarCalificacion(formulario);
+  montarZonaDeCarga(formulario);
+
+  // HU-COM-004: retirar un comentario propio. El servicio decide si es mio
+  // (403 si no); la vista solo pinta el boton en los mios (CA-04) y, tras el
+  // 204, recarga el promedio, que ya no cuenta esa calificacion (CA-01).
+  const alEliminar = async (comentarioId, articulo) => {
+    const botonEliminar = articulo.querySelector('[data-accion="eliminar"]');
+    if (botonEliminar) {
+      botonEliminar.disabled = true;
+    }
+    try {
+      await eliminarImpl(idProducto, comentarioId);
+      quitarDelHilo(zonaHilo, articulo);
+      pintarAviso(zonaAviso, {
+        tono: 'exito',
+        titulo: 'Comentario eliminado',
+        detalle: 'Ya no aparece en el hilo y su calificacion dejo de contar.',
+      });
+      await actualizarPromedio(zonaHilo, { productoId: idProducto, consultarImpl });
+    } catch (error) {
+      if (botonEliminar) {
+        botonEliminar.disabled = false;
+      }
+      const deApi = error instanceof ErrorDeApi;
+      pintarAviso(zonaAviso, {
+        tono: deApi ? tonoPara(error.estado) : 'error',
+        titulo: deApi ? error.titulo : 'No pudimos contactar con el servicio',
+        detalle: deApi ? error.detalle : 'Revisa tu conexion e intentalo de nuevo.',
+      });
+    }
+  };
+
+  // HU-COM-003: el hilo real, con su promedio, desde el primer momento.
+  if (zonaHilo && idProducto) {
+    cargarHilo(zonaHilo, {
+      productoId: idProducto,
+      yo: sesion?.usuarioId,
+      consultarImpl,
+      alEliminar,
+    });
+  }
+
+  // Sin sesion no hay autor ni apodo que mandar: el contrato los exige.
+  if (!sesion?.usuarioId || !sesion?.apodo) {
+    formulario.querySelectorAll('input, textarea, button').forEach((control) => {
+      control.disabled = true;
+    });
+    pintarAviso(zonaAviso, {
+      tono: 'advertencia',
+      titulo: 'Inicia sesión para comentar',
+      detalle: 'Tu comentario se publica con tu apodo, y para eso hace falta tu sesión.',
+    });
+    return;
+  }
+
+  formulario.addEventListener('submit', async (evento) => {
+    evento.preventDefault();
+    limpiarErroresDeCampo(formulario);
+    ocultarAviso(zonaAviso);
+
+    const cuerpo = leerFormulario(formulario, sesion);
+    if (!cuerpo.texto) {
+      const control = marcarCampo(
+        formulario,
+        'texto',
+        'Escribe el comentario antes de publicarlo.',
+      );
+      control?.focus();
+      return;
+    }
+
+    cargando(boton, true);
+    try {
+      const { comentario, estado } = await publicarImpl(idProducto, cuerpo);
+
+      if (estado === ESTADO.EN_REVISION) {
+        // Retenido, no rechazado: se guardo y lo vera un moderador. No entra
+        // al hilo hasta que se apruebe (CA-03, caso adicional de #34).
+        pintarAviso(zonaAviso, {
+          tono: 'info',
+          titulo: 'Tu comentario esta en revision',
+          detalle:
+            'El filtro automatico lo senalo. Quedo guardado y un moderador lo revisara antes de publicarlo.',
+        });
+      } else {
+        // RF-COM-002 / D-07: la segunda calificacion no es un error. El
+        // servicio publica sin estrellas y lo dice (calificacionDescartada).
+        // Tambien si un servicio 1.1.0 quito las estrellas sin decirlo.
+        const descartada =
+          comentario.calificacionDescartada === true ||
+          (Number.isInteger(cuerpo.estrellas) && !Number.isInteger(comentario.estrellas));
+        let detalle = 'Ya aparece en el hilo del producto.';
+        if (descartada) {
+          detalle =
+            'Ya habias calificado este producto: el comentario va sin estrellas y tu calificacion anterior se mantiene.';
+        } else if (Number.isInteger(comentario.estrellas)) {
+          detalle = 'Ya aparece en el hilo del producto con tu calificacion.';
+        }
+        pintarAviso(zonaAviso, {
+          tono: 'exito',
+          titulo: 'Comentario publicado',
+          detalle,
+        });
+        if (zonaHilo) {
+          agregarAlHilo(zonaHilo, comentario, { yo: sesion?.usuarioId, alEliminar });
+          if (Number.isInteger(comentario.estrellas)) {
+            // Con estrellas nuevas el promedio cambio: se lee del servicio,
+            // que es quien lo calcula (regla 7), no se estima aqui.
+            actualizarPromedio(zonaHilo, { productoId: idProducto, consultarImpl });
+          }
+        }
+      }
+
+      formulario.reset();
+      vaciarMiniaturas(formulario);
+      quitarCalificacion(formulario);
+      if (alPublicar) {
+        alPublicar(comentario, estado);
+      }
+    } catch (error) {
+      if (error instanceof ErrorDeApi && error.esDeFormulario) {
+        const primero = marcarCampos(formulario, error.errores);
+        primero?.focus();
+      } else if (
+        error instanceof ErrorDeApi &&
+        error.motivo === MOTIVO.FORMATO_DE_IMAGEN_NO_ADMITIDO
+      ) {
+        // El motivo va escrito en la propia zona de carga (mapeo §5.3 y ui-kit).
+        marcarZonaDeCarga(formulario, error.detalle);
+        const control = marcarCampo(formulario, 'imagenes', error.detalle);
+        control?.focus();
+      } else if (error instanceof ErrorDeApi && error.estado === 409) {
+        // Conflicto de calificacion simultanea: el contrato dice que reintentar
+        // sin estrellas publica el comentario. El aviso lleva esa salida.
+        pintarAviso(zonaAviso, {
+          tono: tonoPara(error.estado),
+          titulo: error.titulo,
+          detalle: error.detalle,
+          accion: {
+            nombre: 'reintentar-sin-calificar',
+            texto: 'Publicar sin calificacion',
+            alPulsar: () => {
+              quitarCalificacion(formulario);
+              formulario.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            },
+          },
+        });
+      } else if (error instanceof ErrorDeApi) {
+        // Incluye 403 AUTOR_SILENCIADO: es una advertencia, no un fallo del sistema.
+        pintarAviso(zonaAviso, {
+          tono: tonoPara(error.estado),
+          titulo: error.titulo,
+          detalle: error.detalle,
+        });
+      } else {
+        pintarAviso(zonaAviso, {
+          tono: 'error',
+          titulo: 'No pudimos contactar con el servicio',
+          detalle: 'Revisa tu conexion e intentalo de nuevo.',
+        });
+      }
+    } finally {
+      cargando(boton, false);
+    }
+  });
+}

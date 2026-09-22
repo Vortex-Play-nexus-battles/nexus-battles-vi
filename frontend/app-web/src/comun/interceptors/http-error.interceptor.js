@@ -89,9 +89,11 @@ export async function fetchWithHttpErrorInterceptor(url, options = {}) {
  */
 function mostrarMensajeAccesoDenegado(mensaje) {
   // Disparar evento personalizado para que cualquier componente del frontend lo capture
-  window.dispatchEvent(new CustomEvent('nexus:rbac-forbidden', {
-    detail: { message: mensaje }
-  }));
+  window.dispatchEvent(
+    new CustomEvent('nexus:rbac-forbidden', {
+      detail: { message: mensaje },
+    }),
+  );
 
   const banner = document.getElementById('nexus-rbac-forbidden');
   if (banner) {
@@ -100,39 +102,33 @@ function mostrarMensajeAccesoDenegado(mensaje) {
     return;
   }
 
-  // Notificación flotante moderna (Toast) en lugar de alert()
+  // Aviso flotante. Antes se construía aquí a mano: veinte líneas de
+  // `toast.style.*` en línea y, lo importante,
+  //
+  //     toast.innerHTML = `<span…>⛔</span> <span>${mensaje}</span>`;
+  //
+  // `mensaje` es el texto de error que devuelve el servidor (el `detail` o el
+  // `title` del problem detail). Iba al parser de HTML **sin escapar**, en el
+  // interceptor que usan TODAS las vistas del producto. Ahora el texto va por
+  // `textContent`, que no interpreta marcado, y el aspecto lo pone `.aviso`
+  // del sistema de diseño en vez de estilos en línea.
   let toast = document.getElementById('nexus-rbac-toast');
   if (!toast) {
     toast = document.createElement('div');
     toast.id = 'nexus-rbac-toast';
+    toast.className = 'aviso aviso--error aviso-flotante';
+    // `role="alert"` y no `status`: es un rechazo de permiso, y quien usa
+    // lector de pantalla tiene que enterarse en el momento.
     toast.setAttribute('role', 'alert');
-    toast.style.position = 'fixed';
-    toast.style.top = '24px';
-    toast.style.right = '24px';
-    toast.style.zIndex = '9999';
-    toast.style.backgroundColor = '#fbe4e4';
-    toast.style.color = '#b81a1a';
-    toast.style.border = '1px solid #f5c6c6';
-    toast.style.borderRadius = '8px';
-    toast.style.padding = '14px 20px';
-    toast.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
-    toast.style.fontFamily = "Inter, 'Segoe UI', system-ui, sans-serif";
-    toast.style.fontSize = '14px';
-    toast.style.fontWeight = '600';
-    toast.style.display = 'flex';
-    toast.style.alignItems = 'center';
-    toast.style.gap = '10px';
-    toast.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
     document.body.appendChild(toast);
   }
 
-  toast.innerHTML = `<span style="font-size: 16px;">⛔</span> <span>${mensaje}</span>`;
-  toast.style.opacity = '1';
-  toast.style.transform = 'translateY(0)';
+  toast.textContent = mensaje;
+  toast.hidden = false;
+  toast.dataset.visible = 'si';
 
   clearTimeout(toast._timeout);
   toast._timeout = setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateY(-10px)';
+    delete toast.dataset.visible;
   }, 4500);
 }

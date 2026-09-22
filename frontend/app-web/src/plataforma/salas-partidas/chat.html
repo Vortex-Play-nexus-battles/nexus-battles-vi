@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chat · The Nexus Battles VI</title>
+
+    <!-- Sistema de diseno compartido, sin estilos propios. Mismas rutas que crear-sala.html. -->
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
+  </head>
+
+  <body>
+    <!--
+      Misma cabecera que las demas vistas de salas-partidas mientras no haya
+      fragmentos compartidos: los destinos que existen enlazan de verdad y los
+      que no, quedan marcados como pendientes en vez de apuntar a "#".
+    -->
+    <div data-cabecera-app></div>
+
+    <main id="chat" class="pagina pila">
+      <div class="pila pila--compacta">
+        <h1 data-zona="titulo">Chat</h1>
+        <p class="t-cuerpo">
+          Lo que escribes pasa por el filtro de contenido antes de salir. El historial queda para
+          quien entra despues.
+          <span class="conexion conexion--reconectando" data-zona="conexion">Conectando</span>
+        </p>
+      </div>
+
+      <section class="tarjeta pila" aria-label="Conversacion">
+        <ol class="pila pila--compacta" data-zona="mensajes" aria-live="polite"></ol>
+      </section>
+
+      <form id="formulario-chat" class="tarjeta pila" novalidate>
+        <div data-zona="aviso" hidden></div>
+
+        <div class="campo campo--area">
+          <label class="campo__etiqueta" for="texto">Mensaje</label>
+          <textarea
+            class="campo__control"
+            id="texto"
+            name="texto"
+            rows="2"
+            maxlength="500"
+            required
+          ></textarea>
+          <p class="campo__pista">Hasta 500 caracteres.</p>
+        </div>
+
+        <!-- CA-02: compartir un logro de mision. Opcional, plegado por defecto. -->
+        <details class="pila pila--compacta">
+          <summary class="t-etiqueta">Compartir un logro de mision</summary>
+          <div class="fila">
+            <div class="campo">
+              <label class="campo__etiqueta" for="logroMision">Mision</label>
+              <input class="campo__control" id="logroMision" name="logroMision" type="text" />
+            </div>
+            <div class="campo">
+              <label class="campo__etiqueta" for="logroTitulo">Logro</label>
+              <input class="campo__control" id="logroTitulo" name="logroTitulo" type="text" />
+            </div>
+          </div>
+        </details>
+
+        <button class="boton boton--primario" type="submit">Enviar</button>
+      </form>
+    </main>
+
+    <!--
+      RF-CHA-001: el icono flotante del asistente va en todas las vistas.
+      Lo monta `comun/ui/asistente.js`, que ademas le da comportamiento:
+      hasta ahora el boton estaba copiado aqui y no hacia nada al pulsarlo.
+    -->
+
+    <script type="module">
+      import { montarAsistente } from '../../comun/ui/asistente.js';
+      import { montarChat, canalDesdeUrl, CLAVE_TOKEN } from './chat.js';
+      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+
+      // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
+      if (!exigirSesion()) {
+        throw new Error('sin sesion: redirigiendo al login');
+      }
+      // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
+      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'jugar' });
+
+      const canal = canalDesdeUrl(window.location.search);
+      document.querySelector('[data-zona="titulo"]').textContent = canal.idSala
+        ? 'Chat de la sala'
+        : 'Chat general';
+
+      montarChat(document.getElementById('chat'), {
+        canal,
+        token: sessionStorage.getItem(CLAVE_TOKEN),
+      });
+
+      // RF-CHA-001 / HU-CHA-001 CA-03: el icono responde y dice la verdad.
+      montarAsistente(document);
+    </script>
+  </body>
+</html>

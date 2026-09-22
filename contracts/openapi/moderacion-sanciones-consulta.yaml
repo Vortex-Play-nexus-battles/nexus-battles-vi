@@ -1,0 +1,159 @@
+openapi: 3.1.0
+info:
+  title: Nexus Battles VI - Moderacion y Sanciones (consulta de sancion activa)
+  description: >
+    Consulta de solo lectura para que otros microservicios sepan si un jugador
+    tiene una sancion activa que le impida participar en una operacion (por
+    ejemplo, HU-SUB-001: no publicar subastas con sanciones activas).
+
+    1.1.0 (Sprint 3, HU-USR-004..006 #477 #478 #479): la respuesta sale del
+    historial real de sanciones (moderacion-sanciones-admin.yaml). Restringe
+    una SUSPENSION no vencida o un BANEO no revertidos; una ADVERTENCIA nunca
+    (CA-02 de HU-USR-004). Se anade `tipo` para que el consumidor distinga
+    (D-14 actualizada: silencia la suspension o el baneo, no la advertencia).
+    Compatible con 1.0.0: la forma anterior no cambia.
+  version: 1.2.0
+servers:
+  - url: http://localhost:8086/api/v1
+    description: Entorno local de desarrollo
+
+paths:
+  /sanciones/usuarios/{usuarioId}/activa:
+    get:
+      summary: Consultar si un usuario tiene una sancion activa
+      operationId: consultarSancionActiva
+      parameters:
+        - name: usuarioId
+          in: path
+          required: true
+          description: >
+            Identificador publico y estable del jugador (claim "uid" del JWT
+            de identidad), no el id interno secuencial.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Estado de sancion del usuario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SancionActivaResponse'
+        '400':
+          description: usuarioId no tiene formato de UUID valido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /sanciones/metricas:
+    get:
+      summary: Agregados de moderacion de un periodo (HU-MET-001 / RF-MET-001)
+      description: >
+        Solo cuentas, sin identificadores de jugador ni de moderador: sanciones
+        emitidas por tipo y por dia, apelaciones por estado (las abiertas en el
+        periodo), moderadores distintos que emitieron y sanciones revertidas.
+        Lo consume metricas-plataforma para el tablero de usuarios y
+        moderacion. Sin `desde`/`hasta`: los ultimos 30 dias. Un periodo sin
+        actividad devuelve ceros, no error. Version 1.2.0 (compatible).
+      operationId: metricasDeModeracion
+      parameters:
+        - name: desde
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: hasta
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Agregados del periodo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricasDeModeracion'
+        '400':
+          description: Periodo invalido (hasta no posterior a desde)
+
+components:
+  schemas:
+    SancionActivaResponse:
+      type: object
+      required:
+        - sancionActiva
+      properties:
+        sancionActiva:
+          type: boolean
+        motivo:
+          type: string
+          nullable: true
+          description: Solo presente si sancionActiva es true.
+        vigenteHasta:
+          type: string
+          format: date-time
+          nullable: true
+          description: Solo presente si sancionActiva es true y es una SUSPENSION (un BANEO no vence).
+        tipo:
+          type: string
+          nullable: true
+          enum: [SUSPENSION, BANEO, null]
+          description: (1.1.0) Que sancion restringe. Solo presente si sancionActiva es true.
+      examples:
+        - sancionActiva: false
+          motivo: null
+          vigenteHasta: null
+          tipo: null
+        - sancionActiva: true
+          motivo: "Lenguaje ofensivo reiterado"
+          vigenteHasta: "2026-09-20T00:00:00Z"
+          tipo: SUSPENSION
+
+    ProblemDetail:
+      type: object
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+
+    MetricasDeModeracion:
+      type: object
+      required: [desde, hasta, total, porTipo, porDia, apelaciones, moderadoresActivos, revertidas]
+      properties:
+        desde: { type: string, format: date-time }
+        hasta: { type: string, format: date-time }
+        total: { type: integer }
+        porTipo:
+          type: object
+          properties:
+            ADVERTENCIA: { type: integer }
+            SUSPENSION: { type: integer }
+            BANEO: { type: integer }
+        porDia:
+          type: array
+          items:
+            type: object
+            properties:
+              fecha: { type: string, format: date }
+              emitidas: { type: integer }
+        apelaciones:
+          type: object
+          properties:
+            PENDIENTE: { type: integer }
+            MANTENIDA: { type: integer }
+            REDUCIDA: { type: integer }
+            REVERTIDA: { type: integer }
+        moderadoresActivos: { type: integer }
+        revertidas: { type: integer }

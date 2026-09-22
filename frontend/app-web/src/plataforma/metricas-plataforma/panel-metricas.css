@@ -1,0 +1,81 @@
+/*
+ * Panel de observabilidad — HU-REN-002 (CA-03).
+ *
+ * Solo lo que el ui-kit no tiene todavia: una tabla de metricas y el
+ * distintivo por tipo de operacion. Todo lo demas —tarjeta, aviso,
+ * estado-vista, esqueleto, boton— sale de shared/ui-kit/css/componentes.css,
+ * y los colores de tokens.css. Nada de paleta nueva aqui.
+ *
+ * ---------------------------------------------------------------------------
+ * Corregido en PR-UX-6. La cabecera de arriba decia la verdad sobre la
+ * intencion y no sobre el codigo: esta hoja usaba DIEZ variables que no
+ * existen en ninguna parte del repositorio —`--color-info-suave`,
+ * `--color-acento`, `--espacio-3`, `--texto-pequeno`…— y por tanto siempre
+ * ganaba el valor de respaldo.
+ *
+ * Los respaldos eran de una paleta OSCURA (#17324a, #7fc4ff, #1c2029) dentro
+ * de una aplicacion clara: los distintivos de tipo de operacion salian como
+ * fichas azul marino con texto celeste en medio de un panel blanco, y siempre
+ * iban a salir asi, porque los tokens que debian leer nunca se definieron.
+ *
+ * Ahora usa los nombres reales del kit. El resultado sigue el mismo criterio
+ * que el resto de distintivos y acompana al modo de alto contraste.
+ * ---------------------------------------------------------------------------
+ */
+
+.tabla-metricas {
+  width: 100%;
+  border-collapse: collapse;
+  margin-block: var(--e-4);
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+.tabla-metricas th,
+.tabla-metricas td {
+  padding: var(--e-2) var(--e-4);
+  text-align: left;
+  border-bottom: 1px solid var(--borde);
+}
+
+/* Las cifras a la derecha: comparar columnas de numeros alineados a la
+   izquierda obliga a leer digito a digito. */
+.tabla-metricas td {
+  text-align: right;
+}
+
+.tabla-metricas thead th:not(:first-child) {
+  text-align: right;
+}
+
+.tabla-metricas tbody tr:last-child th,
+.tabla-metricas tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/*
+ * El color NO es el unico indicador del tipo: al lado va siempre el nombre
+ * escrito ("Lecturas · listados"). Un panel que distinga lectura de escritura
+ * solo por el color deja fuera a quien no distingue esos dos colores.
+ *
+ * Los pares son los mismos que usan las demas variantes de `.distintivo` en
+ * el kit, asi que heredan su contraste medido y su version de alto contraste.
+ */
+.distintivo[data-tipo-operacion='lectura'] {
+  background: var(--info-insignia);
+  color: var(--info);
+}
+
+.distintivo[data-tipo-operacion='escritura'] {
+  background: var(--rareza-epica-insignia);
+  color: var(--acento-relleno);
+}
+
+.distintivo[data-tipo-operacion='otra'] {
+  background: var(--pista);
+  color: var(--texto-3);
+}
+
+.estado-vista__criterio {
+  color: var(--texto-2);
+  font-size: var(--t-meta-tam);
+}

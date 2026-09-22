@@ -1,0 +1,511 @@
+package com.nexusbattles.plataforma.salaspartidas.tiemporeal;
+
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.messaging.simp.stomp.StompFrameHandler;
+import org.springframework.messaging.simp.stomp.StompHeaders;
+import org.springframework.messaging.simp.stomp.StompSession;
+import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.web.socket.WebSocketHttpHeaders;
+import org.springframework.web.socket.client.standard.StandardWebSocketClient;
+import org.springframework.web.socket.messaging.WebSocketStompClient;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+import java.lang.reflect.Type;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+
+import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * Canal de sala extremo a extremo — HU-SAL-002, tercer criterio del issue #30.
+ *
+ * <p>Prueba el viaje completo con el servicio levantado de verdad: un cliente
+ * se conecta por STOMP y se suscribe a {@code /tema/salas/{idSala}}, otro
+ * jugador entra por la API REST, y el primero recibe
+ * {@code sala.participante.ingreso}. Nada esta simulado: hay un servidor con
+ * puerto, un socket, una PostgreSQL 17 por Testcontainers y el broker real.
+ *
+ * <p><b>La seguridad no se debilita.</b> El handshake HTTP de {@code /ws} esta
+ * abierto porque un navegador no puede ponerle cabeceras; a cambio, el JWT se
+ * exige en el frame {@code CONNECT} de STOMP y sin el no hay sesion (un caso lo
+ * comprueba), y suscribirse al canal de una sala privada ajena se rechaza
+ * (otro caso lo comprueba). {@code /api/v1/salas/**} sigue exigiendo rol
+ * JUGADOR. Lo unico que se sustituye es el
+ * {@link JwtDecoder}, que en produccion valida contra Keycloak; sin eso la
+ * prueba necesitaria un Keycloak levantado para comprobar algo que no es de
+ * Keycloak. Los tokens de prueba llevan el rol en {@code realm_access.roles},
+ * exactamente donde lo busca {@code ConversorRolesJwt}.
+ *
+ * <p><b>Sin Jackson y sin conversor de mensajes.</b> Spring Boot 4 no trae
+ * {@code com.fasterxml.jackson.databind} en el classpath de este servicio, y
+ * {@code MappingJackson2MessageConverter} esta marcado para eliminacion. El
+ * cliente se queda con el conversor por defecto y lee el cuerpo como bytes: se
+ * comprueba el JSON literal que viaja por el cable, que para una prueba de
+ * contrato es mejor evidencia que un objeto ya deserializado. El identificador
+ * de la sala sale de la cabecera {@code Location}, no de parsear el cuerpo.
+ *
+ * <p>Sin {@code disabledWithoutDocker}, por el mismo motivo que
+ * {@code RepositorioSalasJpaIT}: una prueba de integracion omitida no es una
+ * prueba que pasa.
+ */
+@Testcontainers
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@Import(CanalDeSalaIT.SeguridadDePrueba.class)
+@DisplayName("Canal de sala extremo a extremo (HU-SAL-002)")
+class CanalDeSalaIT {
+
+    @Container
+    @ServiceConnection
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:17-alpine");
+
+    private static final String ANFITRION = "anfitrion";
+    private static final String VISITANTE = "visitante";
+
+    private static final UUID ID_ANFITRION = UUID.fromString("11111111-1111-1111-1111-111111111111");
+    private static final UUID ID_VISITANTE = UUID.fromString("22222222-2222-2222-2222-222222222222");
+
+    @Value("${local.server.port}")
+    private int puerto;
+
+    /** El mismo bean que usa el adaptador en produccion; aqui, para la sonda. */
+    @Autowired
+    private SimpMessagingTemplate mensajeria;
+
+    private final HttpClient http = HttpClient.newHttpClient();
+
+    /**
+     * Decodificador de prueba: traduce un token literal a la identidad que
+     * representa, con el rol donde lo espera la cadena de seguridad real.
+     */
+    /**
+     * Inventario de prueba: siempre deja pasar.
+     *
+     * <p>Desde SCRUM-1074, crear una sala y entrar a ella pasan por la puerta de
+     * heroe, que pregunta al inventario. Esta IT no prueba esa integracion —la
+     * cubre {@code ClienteInventarioHeroesTest} contra HTTP real— sino el canal
+     * STOMP, y sin este doble las diez pruebas de aqui reciben 503 al crear la
+     * sala y no llegan a mirar el canal.
+     *
+     * <p>Se sustituye el <b>puerto</b>, no el cliente HTTP: asi la puerta se
+     * ejecuta de verdad y solo se finge la respuesta del modulo ajeno.
+     */
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private com.nexusbattles.plataforma.salaspartidas.aplicacion.HeroeDelJugador heroes;
+
+    @org.junit.jupiter.api.BeforeEach
+    void elInventarioDejaPasar() {
+        org.mockito.Mockito.when(heroes.consultar(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(com.nexusbattles.plataforma.salaspartidas.dominio.EstadoDelHeroe
+                        .disponible(new com.nexusbattles.plataforma.salaspartidas.dominio
+                                .HeroeDeCombate("h-1", "Sombra de Vael", null, 7, 140, 140)));
+    }
+
+    @TestConfiguration
+    static class SeguridadDePrueba {
+
+        @Bean
+        JwtDecoder jwtDecoder() {
+            return token -> Jwt.withTokenValue(token)
+                    .header("alg", "none")
+                    .subject(ANFITRION.equals(token) ? ID_ANFITRION.toString() : ID_VISITANTE.toString())
+                    .claim("realm_access", Map.of("roles", List.of("JUGADOR")))
+                    .issuedAt(Instant.now())
+                    .expiresAt(Instant.now().plusSeconds(300))
+                    .build();
+        }
+    }
+
+    private HttpResponse<String> pedir(String ruta, String cuerpo, String token) throws Exception {
+        HttpRequest peticion = HttpRequest.newBuilder(URI.create("http://localhost:" + puerto + ruta))
+                .header("Authorization", "Bearer " + token)
+                .header("Content-Type", "application/json")
+                .POST(cuerpo == null
+                        ? HttpRequest.BodyPublishers.noBody()
+                        : HttpRequest.BodyPublishers.ofString(cuerpo))
+                .build();
+        return http.send(peticion, HttpResponse.BodyHandlers.ofString());
+    }
+
+    /**
+     * Crea una sala real por la API y devuelve su identificador.
+     *
+     * <p>El identificador se lee de la cabecera {@code Location}, que el propio
+     * contrato obliga a devolver en el 201. Asi la prueba no necesita ningun
+     * analizador de JSON.
+     */
+    private UUID crearSala() throws Exception {
+        HttpResponse<String> respuesta = pedir("/api/v1/salas", """
+                {"maximoParticipantes": 4, "modalidad": "HASTA_SEIS", "recompensaCreditos": 0}
+                """, ANFITRION);
+
+        assertEquals(201, respuesta.statusCode(), "la sala de partida tiene que crearse");
+
+        String ubicacion = respuesta.headers().firstValue("Location").orElseThrow();
+        return UUID.fromString(ubicacion.substring(ubicacion.lastIndexOf('/') + 1));
+    }
+
+    /** Cliente STOMP con el conversor por defecto: sin Jackson de por medio. */
+    private static WebSocketStompClient clienteStomp() {
+        return new WebSocketStompClient(new StandardWebSocketClient());
+    }
+
+    /**
+     * Conecta como lo hace el navegador: handshake sin cabeceras y el JWT en la
+     * cabecera {@code Authorization} del frame {@code CONNECT}.
+     */
+    private StompSession conectar(String token) throws Exception {
+        return conectar(token, new StompSessionHandlerAdapter() { });
+    }
+
+    private StompSession conectar(String token, StompSessionHandlerAdapter manejador)
+            throws Exception {
+        StompHeaders connect = new StompHeaders();
+        if (token != null) {
+            connect.add("Authorization", "Bearer " + token);
+        }
+        return clienteStomp()
+                .connectAsync("ws://localhost:" + puerto + "/ws", new WebSocketHttpHeaders(),
+                        connect, manejador)
+                .get(10, TimeUnit.SECONDS);
+    }
+
+    /** Recoge los frames ERROR y los fallos de transporte que reciba una sesion. */
+    private static final class RegistroDeErrores extends StompSessionHandlerAdapter {
+        final BlockingQueue<String> errores = new LinkedBlockingQueue<>();
+
+        @Override
+        public void handleFrame(StompHeaders cabeceras, Object cuerpo) {
+            errores.add("ERROR: " + cabeceras.getFirst("message"));
+        }
+
+        @Override
+        public void handleException(StompSession sesion, org.springframework.messaging.simp.stomp.StompCommand comando,
+                StompHeaders cabeceras, byte[] cuerpo, Throwable ex) {
+            errores.add("EXCEPCION: " + ex.getMessage());
+        }
+
+        @Override
+        public void handleTransportError(StompSession sesion, Throwable ex) {
+            errores.add("TRANSPORTE: " + ex.getMessage());
+        }
+    }
+
+    /** Marca de la sonda con la que se confirma que la suscripcion esta viva. */
+    private static final String SONDA = "sonda-de-suscripcion";
+
+    /**
+     * Se suscribe al canal de una sala y NO vuelve hasta que la suscripcion
+     * esta demostrablemente activa.
+     *
+     * <p>Nada de esperas a ojo. La suscripcion viaja de forma asincrona, asi
+     * que se publica una sonda por el mismo destino hasta que vuelve: el
+     * momento en que la sonda llega es la prueba de que el broker ya registro
+     * la suscripcion. Sin esto, el ingreso podria publicarse antes y el mensaje
+     * se perderia por una carrera, no por un fallo real.
+     *
+     * <p>Se usa una sonda y no el frame RECEIPT de STOMP porque el broker
+     * simple en memoria no garantiza emitirlo, y una prueba que depende de algo
+     * no garantizado es justo lo que se intenta evitar. Las sondas se separan
+     * de los avisos en el propio manejador, para que no contaminen la cola que
+     * de verdad se comprueba.
+     */
+    private BlockingQueue<String> suscribirseA(StompSession sesion, UUID idSala) throws Exception {
+        BlockingQueue<String> avisos = new LinkedBlockingQueue<>();
+        BlockingQueue<String> sondas = new LinkedBlockingQueue<>();
+        String destino = CanalDeSalaStomp.destinoDe(idSala);
+
+        sesion.subscribe(destino, new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders cabeceras) {
+                return byte[].class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders cabeceras, Object cuerpo) {
+                String texto = new String((byte[]) cuerpo, StandardCharsets.UTF_8);
+                (texto.contains(SONDA) ? sondas : avisos).add(texto);
+            }
+        });
+
+        boolean viva = false;
+        long limite = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
+        while (!viva && System.nanoTime() < limite) {
+            mensajeria.convertAndSend(destino, SONDA);
+            viva = sondas.poll(200, TimeUnit.MILLISECONDS) != null;
+        }
+        assertTrue(viva, "la suscripcion al canal de la sala nunca quedo activa");
+
+        // Descarta las sondas que quedaran en vuelo antes de medir nada.
+        while (sondas.poll(200, TimeUnit.MILLISECONDS) != null) {
+            // vaciando
+        }
+        return avisos;
+    }
+
+    @Test
+    @DisplayName("quien esta suscrito recibe el ingreso con el payload del contrato")
+    void elIngresoLlegaAQuienEstaDentro() throws Exception {
+        UUID idSala = crearSala();
+        BlockingQueue<String> recibidos = suscribirseA(conectar(ANFITRION), idSala);
+
+        HttpResponse<String> ingreso =
+                pedir("/api/v1/salas/" + idSala + "/participantes", null, VISITANTE);
+        assertEquals(200, ingreso.statusCode(), "el ingreso tiene que aceptarse");
+
+        String aviso = recibidos.poll(10, TimeUnit.SECONDS);
+
+        assertNotNull(aviso, "el mensaje no llego por el canal");
+        assertAll(
+                () -> assertTrue(aviso.contains("\"tipo\":\"sala.participante.ingreso\""), aviso),
+                () -> assertTrue(aviso.contains("\"idSala\":\"" + idSala + "\""), aviso),
+                () -> assertTrue(aviso.contains("\"idJugador\":\"" + ID_VISITANTE + "\""), aviso),
+                () -> assertTrue(aviso.contains("\"ocupacion\":{\"actual\":2,\"maximo\":4}"), aviso),
+                // El contrato se recorto en esta historia: ni heroe ni apodo.
+                () -> assertTrue(!aviso.contains("heroe") && !aviso.contains("apodo"), aviso));
+    }
+
+    @Test
+    @DisplayName("un ingreso rechazado no publica nada por el canal")
+    void unRechazoNoViajaPorElCanal() throws Exception {
+        UUID idSala = crearSala();
+        BlockingQueue<String> recibidos = suscribirseA(conectar(VISITANTE), idSala);
+
+        // El anfitrion ya esta dentro: entrar otra vez se rechaza con 409.
+        HttpResponse<String> repetido =
+                pedir("/api/v1/salas/" + idSala + "/participantes", null, ANFITRION);
+        assertEquals(409, repetido.statusCode());
+
+        assertNull(recibidos.poll(2, TimeUnit.SECONDS),
+                "un rechazo no debe anunciarse a los que estan dentro");
+    }
+
+    @Test
+    @DisplayName("el handshake esta abierto, pero un CONNECT sin token no obtiene sesion")
+    void elConnectExigeToken() {
+        assertThrows(Exception.class, () -> conectar(null),
+                "sin JWT en el CONNECT el servidor debe responder ERROR y no abrir sesion");
+    }
+
+    @Test
+    @DisplayName("un jugador ajeno no puede suscribirse al canal de una sala privada")
+    void unAjenoNoSigueUnaSalaPrivada() throws Exception {
+        UUID idPrivada = crearSalaPrivada();
+        RegistroDeErrores registro = new RegistroDeErrores();
+        StompSession intruso = conectar(VISITANTE, registro);
+
+        intruso.subscribe(CanalDeSalaStomp.destinoDe(idPrivada), new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders cabeceras) {
+                return byte[].class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders cabeceras, Object cuerpo) {
+                registro.errores.add("MENSAJE INESPERADO");
+            }
+        });
+
+        String rechazo = registro.errores.poll(10, TimeUnit.SECONDS);
+        assertNotNull(rechazo, "el servidor tiene que rechazar la suscripcion, no ignorarla");
+        assertTrue(rechazo.startsWith("ERROR") || rechazo.startsWith("TRANSPORTE")
+                || rechazo.startsWith("EXCEPCION"), rechazo);
+        assertTrue(!rechazo.contains("MENSAJE INESPERADO"), rechazo);
+    }
+
+    @Test
+    @DisplayName("el anfitrion si sigue el canal de su sala privada y recibe el ingreso de su invitado")
+    void elAnfitrionSigueSuSalaPrivada() throws Exception {
+        UUID idPrivada = crearSalaPrivada();
+        BlockingQueue<String> recibidos = suscribirseA(conectar(ANFITRION), idPrivada);
+
+        // Sin codigo, una sala privada sigue rechazando con 403. Lo que aqui se
+        // demuestra es la autorizacion del canal; el ingreso con codigo tiene su
+        // propio caso, mas abajo.
+        HttpResponse<String> intento =
+                pedir("/api/v1/salas/" + idPrivada + "/participantes", null, VISITANTE);
+        assertEquals(403, intento.statusCode());
+        assertNull(recibidos.poll(2, TimeUnit.SECONDS),
+                "un ingreso rechazado no se anuncia, tampoco en una sala privada");
+    }
+
+    // -----------------------------------------------------------------------
+    // Codigo de invitacion, salida y cancelacion (ADR-003)
+    // -----------------------------------------------------------------------
+
+    @Test
+    @DisplayName("con el codigo de invitacion se entra a una sala privada y el ingreso viaja por el canal")
+    void conCodigoSeEntraALaSalaPrivada() throws Exception {
+        SalaPrivada privada = crearSalaPrivadaConCodigo();
+        BlockingQueue<String> recibidos = suscribirseA(conectar(ANFITRION), privada.id());
+
+        HttpResponse<String> ingreso = pedir(
+                "/api/v1/salas/" + privada.id() + "/participantes",
+                "{\"codigoInvitacion\": \"" + privada.codigo() + "\"}",
+                VISITANTE);
+
+        assertEquals(200, ingreso.statusCode(),
+                "con el codigo correcto el ingreso se acepta: " + ingreso.body());
+
+        String aviso = recibidos.poll(10, TimeUnit.SECONDS);
+        assertNotNull(aviso, "el ingreso con invitacion tambien se anuncia");
+        assertAll(
+                () -> assertTrue(aviso.contains("\"tipo\":\"sala.participante.ingreso\""), aviso),
+                () -> assertTrue(aviso.contains("\"ocupacion\":{\"actual\":2,\"maximo\":4}"), aviso),
+                // El invitado NO recibe la llave: entro, no reparte invitaciones.
+                () -> assertTrue(!ingreso.body().contains("codigoInvitacion"), ingreso.body()));
+    }
+
+    @Test
+    @DisplayName("un codigo equivocado sigue siendo 403 y no anuncia nada")
+    void conCodigoEquivocadoNoEntra() throws Exception {
+        SalaPrivada privada = crearSalaPrivadaConCodigo();
+        BlockingQueue<String> recibidos = suscribirseA(conectar(ANFITRION), privada.id());
+
+        HttpResponse<String> intento = pedir(
+                "/api/v1/salas/" + privada.id() + "/participantes",
+                "{\"codigoInvitacion\": \"ZZZZ-9999\"}",
+                VISITANTE);
+
+        assertAll(
+                () -> assertEquals(403, intento.statusCode()),
+                () -> assertNull(recibidos.poll(2, TimeUnit.SECONDS)));
+    }
+
+    @Test
+    @DisplayName("abandonar la sala publica sala.participante.salio con la ocupacion ya rebajada")
+    void laSalidaViajaPorElCanal() throws Exception {
+        UUID idSala = crearSala();
+        assertEquals(200,
+                pedir("/api/v1/salas/" + idSala + "/participantes", null, VISITANTE).statusCode());
+
+        BlockingQueue<String> recibidos = suscribirseA(conectar(ANFITRION), idSala);
+
+        assertEquals(204, borrar("/api/v1/salas/" + idSala + "/participantes", VISITANTE).statusCode());
+
+        String aviso = recibidos.poll(10, TimeUnit.SECONDS);
+        assertNotNull(aviso, "la salida no llego por el canal");
+        assertAll(
+                () -> assertTrue(aviso.contains("\"tipo\":\"sala.participante.salio\""), aviso),
+                () -> assertTrue(aviso.contains("\"idJugador\":\"" + ID_VISITANTE + "\""), aviso),
+                () -> assertTrue(aviso.contains("\"ocupacion\":{\"actual\":1,\"maximo\":4}"), aviso));
+    }
+
+    @Test
+    @DisplayName("cancelar publica sala.cancelada con el motivo del contrato")
+    void laCancelacionViajaPorElCanal() throws Exception {
+        UUID idSala = crearSala();
+        BlockingQueue<String> recibidos = suscribirseA(conectar(ANFITRION), idSala);
+
+        assertEquals(204, borrar("/api/v1/salas/" + idSala, ANFITRION).statusCode());
+
+        String aviso = recibidos.poll(10, TimeUnit.SECONDS);
+        assertNotNull(aviso, "la cancelacion no llego por el canal");
+        assertAll(
+                () -> assertTrue(aviso.contains("\"tipo\":\"sala.cancelada\""), aviso),
+                () -> assertTrue(aviso.contains("\"idSala\":\"" + idSala + "\""), aviso),
+                () -> assertTrue(aviso.contains("\"motivo\":\"CANCELADA_POR_ANFITRION\""), aviso),
+                () -> assertTrue(aviso.contains("\"creditosDevueltos\":0"), aviso));
+    }
+
+    @Test
+    @DisplayName("quien no es el anfitrion no puede cancelar la sala")
+    void soloElAnfitrionCancela() throws Exception {
+        UUID idSala = crearSala();
+        assertEquals(200,
+                pedir("/api/v1/salas/" + idSala + "/participantes", null, VISITANTE).statusCode());
+
+        assertEquals(403, borrar("/api/v1/salas/" + idSala, VISITANTE).statusCode());
+
+        // Y la sala sigue en pie: se puede consultar y sigue abierta.
+        HttpResponse<String> consulta = leer("/api/v1/salas/" + idSala, VISITANTE);
+        assertAll(
+                () -> assertEquals(200, consulta.statusCode()),
+                () -> assertTrue(consulta.body().contains("\"estado\":\"ABIERTA\""), consulta.body()));
+    }
+
+    @Test
+    @DisplayName("GET de la sala: el anfitrion ve el codigo, el invitado no")
+    void elCodigoSoloLoVeElAnfitrion() throws Exception {
+        SalaPrivada privada = crearSalaPrivadaConCodigo();
+
+        HttpResponse<String> delAnfitrion = leer("/api/v1/salas/" + privada.id(), ANFITRION);
+        HttpResponse<String> delOtro = leer("/api/v1/salas/" + privada.id(), VISITANTE);
+
+        assertAll(
+                () -> assertTrue(delAnfitrion.body().contains(privada.codigo()), delAnfitrion.body()),
+                () -> assertTrue(!delOtro.body().contains("codigoInvitacion"), delOtro.body()));
+    }
+
+    /** Sala privada recien creada, con la llave que el 201 le devolvio a su anfitrion. */
+    private record SalaPrivada(UUID id, String codigo) {
+    }
+
+    private SalaPrivada crearSalaPrivadaConCodigo() throws Exception {
+        HttpResponse<String> respuesta = pedir("/api/v1/salas", """
+                {"maximoParticipantes": 4, "modalidad": "HASTA_SEIS", "recompensaCreditos": 0, "privada": true}
+                """, ANFITRION);
+        assertEquals(201, respuesta.statusCode(), "la sala privada tiene que crearse");
+
+        // Sin analizador de JSON, igual que el resto de la clase: se extrae del
+        // cuerpo literal, lo que ademas demuestra que el campo viaja por el cable.
+        java.util.regex.Matcher codigo = java.util.regex.Pattern
+                .compile("\"codigoInvitacion\":\"([A-Z0-9-]+)\"")
+                .matcher(respuesta.body());
+        assertTrue(codigo.find(),
+                "el 201 de una sala privada tiene que traerle su codigo al anfitrion: "
+                        + respuesta.body());
+
+        String ubicacion = respuesta.headers().firstValue("Location").orElseThrow();
+        return new SalaPrivada(
+                UUID.fromString(ubicacion.substring(ubicacion.lastIndexOf('/') + 1)),
+                codigo.group(1));
+    }
+
+    private UUID crearSalaPrivada() throws Exception {
+        return crearSalaPrivadaConCodigo().id();
+    }
+
+    private HttpResponse<String> borrar(String ruta, String token) throws Exception {
+        return enviar(HttpRequest.newBuilder(URI.create("http://localhost:" + puerto + ruta))
+                .header("Authorization", "Bearer " + token)
+                .DELETE());
+    }
+
+    private HttpResponse<String> leer(String ruta, String token) throws Exception {
+        return enviar(HttpRequest.newBuilder(URI.create("http://localhost:" + puerto + ruta))
+                .header("Authorization", "Bearer " + token)
+                .GET());
+    }
+
+    private HttpResponse<String> enviar(HttpRequest.Builder peticion) throws Exception {
+        return http.send(peticion.build(), HttpResponse.BodyHandlers.ofString());
+    }
+}
