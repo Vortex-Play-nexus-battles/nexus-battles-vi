@@ -194,7 +194,7 @@ describe('sesion', () => {
     const { elemento, sesion } = montar();
     expect(sesion.autenticado).toBe(false);
     expect(sesion.caducada).toBe(true);
-    expect(elemento.querySelector('.cabecera__aviso-sesion').textContent).toMatch(/caduco/);
+    expect(elemento.querySelector('.cabecera__aviso-sesion').textContent).toMatch(/caducó/);
     expect(elemento.querySelector('[data-zona="cuenta"]')).toBeNull();
   });
 
