@@ -182,7 +182,10 @@ function construirGrupoPrecio() {
 
   const fila = document.createElement('div');
   fila.className = 'subastas-filtros__precio';
-  fila.append(construirCampoPrecio('precioMin', 'Mínimo'), construirCampoPrecio('precioMax', 'Máximo'));
+  fila.append(
+    construirCampoPrecio('precioMin', 'Mínimo'),
+    construirCampoPrecio('precioMax', 'Máximo'),
+  );
 
   grupo.appendChild(fila);
   return grupo;

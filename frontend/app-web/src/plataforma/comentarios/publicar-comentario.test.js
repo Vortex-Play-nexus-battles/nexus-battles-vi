@@ -61,7 +61,7 @@ const HTML = `
   </form>
 
   <section data-zona="hilo">
-    <p data-zona="promedio">Sin calificaciones todavia.</p>
+    <p data-zona="promedio">Sin calificaciones todavía.</p>
     <p data-zona="hilo-cargando" hidden>Cargando…</p>
     <p data-zona="hilo-vacio">Aqui aparece lo que publiques.</p>
     <div data-zona="hilo-lista"></div>
@@ -280,7 +280,7 @@ describe('montarPublicarComentario', () => {
 
     expect(formulario.querySelector('[type="submit"]').disabled).toBe(true);
     expect(formulario.querySelector('.aviso--advertencia .aviso__titulo').textContent).toBe(
-      'Inicia sesion para comentar',
+      'Inicia sesión para comentar',
     );
     expect(publicarImpl).not.toHaveBeenCalled();
   });
@@ -622,9 +622,9 @@ describe('HU-COM-002 · calificacion unica (D-07)', () => {
 describe('HU-COM-003 · promedio', () => {
   test('sin calificaciones se dice, nunca 0; con ellas, dos decimales y el total', () => {
     expect(textoDelPromedio({ calificacionPromedio: null, totalCalificaciones: 0 })).toBe(
-      'Sin calificaciones todavia.',
+      'Sin calificaciones todavía.',
     );
-    expect(textoDelPromedio({})).toBe('Sin calificaciones todavia.');
+    expect(textoDelPromedio({})).toBe('Sin calificaciones todavía.');
     expect(textoDelPromedio({ calificacionPromedio: 4.5, totalCalificaciones: 1 })).toBe(
       'Calificacion promedio: 4.50 de 5 (1 calificacion).',
     );

@@ -11,49 +11,55 @@ import { ControladorSubastas, CANAL_SUBASTAS } from './pujas.js';
 import { ErrorDeSubastas } from './pujas-api.js';
 
 function subastaDelServidor(extra = {}) {
-  return Object.assign({
-    id: 'sub-1',
-    nombre: 'Hacha de Obsidiana',
-    tipo: 'Arma',
-    descripcion: '',
-    rareza: 'epica',
-    nivel: 0,
-    vendedor: 'kaelthas_vx',
-    oferta: 1350,
-    compraInmediata: 2800,
-    mediaMercado: 0,
-    segundosRestantes: 120,
-    ganando: false,
-    superado: false,
-    autoLimite: 0,
-    esperaSegundos: 0,
-    retenido: 0,
-    rival: null,
-    rivales: 3,
-    aporte: { poder: 0, vida: 0, defensa: 0 },
-    historial: []
-  }, extra);
+  return Object.assign(
+    {
+      id: 'sub-1',
+      nombre: 'Hacha de Obsidiana',
+      tipo: 'Arma',
+      descripcion: '',
+      rareza: 'epica',
+      nivel: 0,
+      vendedor: 'kaelthas_vx',
+      oferta: 1350,
+      compraInmediata: 2800,
+      mediaMercado: 0,
+      segundosRestantes: 120,
+      ganando: false,
+      superado: false,
+      autoLimite: 0,
+      esperaSegundos: 0,
+      retenido: 0,
+      rival: null,
+      rivales: 3,
+      aporte: { poder: 0, vida: 0, defensa: 0 },
+      historial: [],
+    },
+    extra,
+  );
 }
 
 function apiFalsa(sobrescribir = {}) {
-  return Object.assign({
-    listar: jest.fn(async () => [subastaDelServidor()]),
-    miResumen: jest.fn(async () => ({ creditosRetenidos: '0', subastasGanando: 0 })),
-    historial: jest.fn(async () => []),
-    miParticipacion: jest.fn(async () => ({
-      vasGanando: false,
-      teSuperaron: false,
-      tuOfertaVigente: null,
-      retenidoAqui: '0',
-      limiteAutomatico: null,
-      automaticaActiva: false,
-      segundosParaVolverAPujar: 0
-    })),
-    pujar: jest.fn(async () => ({ id: 'p1', estado: 'ACTIVA' })),
-    comprarAhora: jest.fn(async () => ({ id: 'p2', estado: 'GANADORA' })),
-    configurarAutomatica: jest.fn(async () => ({ id: 'a1', activa: true })),
-    desactivarAutomatica: jest.fn(async () => null)
-  }, sobrescribir);
+  return Object.assign(
+    {
+      listar: jest.fn(async () => [subastaDelServidor()]),
+      miResumen: jest.fn(async () => ({ creditosRetenidos: '0', subastasGanando: 0 })),
+      historial: jest.fn(async () => []),
+      miParticipacion: jest.fn(async () => ({
+        vasGanando: false,
+        teSuperaron: false,
+        tuOfertaVigente: null,
+        retenidoAqui: '0',
+        limiteAutomatico: null,
+        automaticaActiva: false,
+        segundosParaVolverAPujar: 0,
+      })),
+      pujar: jest.fn(async () => ({ id: 'p1', estado: 'ACTIVA' })),
+      comprarAhora: jest.fn(async () => ({ id: 'p2', estado: 'GANADORA' })),
+      configurarAutomatica: jest.fn(async () => ({ id: 'a1', activa: true })),
+      desactivarAutomatica: jest.fn(async () => null),
+    },
+    sobrescribir,
+  );
 }
 
 function contenedor() {
@@ -84,7 +90,7 @@ describe('carga inicial', () => {
   test('un listado vacio se distingue de un error', async () => {
     const ctrl = new ControladorSubastas({
       contenedor: contenedor(),
-      api: apiFalsa({ listar: jest.fn(async () => []) })
+      api: apiFalsa({ listar: jest.fn(async () => []) }),
     });
 
     await ctrl.iniciar();
@@ -99,8 +105,8 @@ describe('carga inicial', () => {
       api: apiFalsa({
         listar: jest.fn(async () => {
           throw new ErrorDeSubastas('No se pudo contactar al servidor de subastas.', { estado: 0 });
-        })
-      })
+        }),
+      }),
     });
 
     await ctrl.iniciar();
@@ -122,10 +128,14 @@ describe('llegada desde el listado (HU-SUB-011)', () => {
     const api = apiFalsa({
       listar: jest.fn(async () => [
         subastaDelServidor({ id: 'sub-1' }),
-        subastaDelServidor({ id: 'sub-2', nombre: 'Grebas del Centinela' })
-      ])
+        subastaDelServidor({ id: 'sub-2', nombre: 'Grebas del Centinela' }),
+      ]),
     });
-    const ctrl = new ControladorSubastas({ contenedor: contenedor(), api, subastaInicialId: 'sub-2' });
+    const ctrl = new ControladorSubastas({
+      contenedor: contenedor(),
+      api,
+      subastaInicialId: 'sub-2',
+    });
 
     await ctrl.iniciar();
 
@@ -142,7 +152,9 @@ describe('llegada desde el listado (HU-SUB-011)', () => {
   test('si la subasta del enlace ya no esta, lo dice en vez de abrir un detalle vacio', async () => {
     const api = apiFalsa();
     const ctrl = new ControladorSubastas({
-      contenedor: contenedor(), api, subastaInicialId: 'sub-que-ya-no-existe'
+      contenedor: contenedor(),
+      api,
+      subastaInicialId: 'sub-que-ya-no-existe',
     });
 
     await ctrl.iniciar();
@@ -169,7 +181,11 @@ describe('llegada desde el listado (HU-SUB-011)', () => {
    */
   test('el id del enlace no reabre el detalle en cada recarga', async () => {
     const api = apiFalsa();
-    const ctrl = new ControladorSubastas({ contenedor: contenedor(), api, subastaInicialId: 'sub-1' });
+    const ctrl = new ControladorSubastas({
+      contenedor: contenedor(),
+      api,
+      subastaInicialId: 'sub-1',
+    });
     await ctrl.iniciar();
 
     ctrl.volverALista();
@@ -195,8 +211,8 @@ describe('datos propios del detalle', () => {
         retenidoAqui: '1450',
         limiteAutomatico: '2000',
         automaticaActiva: true,
-        segundosParaVolverAPujar: 3
-      }))
+        segundosParaVolverAPujar: 3,
+      })),
     });
     const ctrl = new ControladorSubastas({ contenedor: contenedor(), api });
     await ctrl.iniciar();
@@ -215,9 +231,23 @@ describe('datos propios del detalle', () => {
   test('el historial viene del servidor y marca cuales son tuyas', async () => {
     const api = apiFalsa({
       historial: jest.fn(async () => [
-        { id: 'p1', monto: '1450', tipo: 'MANUAL', estado: 'ACTIVA', creadaEn: '2026-09-14T12:00:00Z', esTuya: true },
-        { id: 'p2', monto: '1400', tipo: 'AUTOMATICA', estado: 'SUPERADA', creadaEn: '2026-09-14T11:59:00Z', esTuya: false }
-      ])
+        {
+          id: 'p1',
+          monto: '1450',
+          tipo: 'MANUAL',
+          estado: 'ACTIVA',
+          creadaEn: '2026-09-14T12:00:00Z',
+          esTuya: true,
+        },
+        {
+          id: 'p2',
+          monto: '1400',
+          tipo: 'AUTOMATICA',
+          estado: 'SUPERADA',
+          creadaEn: '2026-09-14T11:59:00Z',
+          esTuya: false,
+        },
+      ]),
     });
     const ctrl = new ControladorSubastas({ contenedor: contenedor(), api });
     await ctrl.iniciar();
@@ -254,8 +284,12 @@ describe('datos propios del detalle', () => {
   /** Si el servidor no responde, el detalle se pinta igual: pujar importa mas. */
   test('un fallo al traer el detalle no rompe la pantalla', async () => {
     const api = apiFalsa({
-      historial: jest.fn(async () => { throw new Error('sin red'); }),
-      miParticipacion: jest.fn(async () => { throw new Error('sin red'); })
+      historial: jest.fn(async () => {
+        throw new Error('sin red');
+      }),
+      miParticipacion: jest.fn(async () => {
+        throw new Error('sin red');
+      }),
     });
     const ctrl = new ControladorSubastas({ contenedor: contenedor(), api });
     await ctrl.iniciar();
@@ -273,7 +307,7 @@ describe('nada inventado en pantalla', () => {
    */
   test('el retenido sale del servidor, no de un valor de ejemplo', async () => {
     const api = apiFalsa({
-      miResumen: jest.fn(async () => ({ creditosRetenidos: '2750', subastasGanando: 2 }))
+      miResumen: jest.fn(async () => ({ creditosRetenidos: '2750', subastasGanando: 2 })),
     });
     const ctrl = new ControladorSubastas({ contenedor: contenedor(), api });
 
@@ -289,7 +323,11 @@ describe('nada inventado en pantalla', () => {
    * ninguna", que es una afirmacion distinta de "no lo sabemos".
    */
   test('sin resumen del servidor no se afirma en cuantas vas ganando', async () => {
-    const api = apiFalsa({ miResumen: jest.fn(async () => { throw new Error('sin red'); }) });
+    const api = apiFalsa({
+      miResumen: jest.fn(async () => {
+        throw new Error('sin red');
+      }),
+    });
     const ctrl = new ControladorSubastas({ contenedor: contenedor(), api });
 
     await ctrl.iniciar();
@@ -319,9 +357,11 @@ describe('acciones', () => {
     const alertaSpy = jest.spyOn(globalThis, 'alert').mockImplementation(() => {});
     const api = apiFalsa({
       pujar: jest.fn(async () => {
-        throw new ErrorDeSubastas('Alguien se te adelanto: la oferta ya subio. Revisa el nuevo minimo.',
-          { estado: 409, motivo: 'OFERTA_INSUFICIENTE' });
-      })
+        throw new ErrorDeSubastas(
+          'Alguien se te adelanto: la oferta ya subio. Revisa el nuevo minimo.',
+          { estado: 409, motivo: 'OFERTA_INSUFICIENTE' },
+        );
+      }),
     });
     const ctrl = new ControladorSubastas({ contenedor: contenedor(), api });
     await ctrl.iniciar();
@@ -414,7 +454,12 @@ describe('acciones', () => {
   test('no se manda una segunda peticion mientras la primera esta en vuelo', async () => {
     let resolver;
     const api = apiFalsa({
-      pujar: jest.fn(() => new Promise((r) => { resolver = r; }))
+      pujar: jest.fn(
+        () =>
+          new Promise((r) => {
+            resolver = r;
+          }),
+      ),
     });
     const ctrl = new ControladorSubastas({ contenedor: contenedor(), api });
     await ctrl.iniciar();
@@ -454,11 +499,14 @@ describe('canal en vivo (HU-SUB-011 publica, esta pantalla escucha)', () => {
     const suscripciones = [];
     return {
       cliente: {
-        suscribir: (destino, alRecibir) => { suscripciones.push({ destino, alRecibir }); return 'sub-1'; },
+        suscribir: (destino, alRecibir) => {
+          suscripciones.push({ destino, alRecibir });
+          return 'sub-1';
+        },
         enviar: () => {},
-        cerrar: jest.fn()
+        cerrar: jest.fn(),
       },
-      suscripciones
+      suscripciones,
     };
   }
 
@@ -466,26 +514,52 @@ describe('canal en vivo (HU-SUB-011 publica, esta pantalla escucha)', () => {
     let llamadas = 0;
     return {
       api: {
-        listar: async () => { llamadas += 1; return JSON.parse(JSON.stringify(subastas)); },
-        miResumen: async () => ({ creditosRetenidos: '0', saldoDisponible: '1000', subastasGanando: 0 }),
+        listar: async () => {
+          llamadas += 1;
+          return JSON.parse(JSON.stringify(subastas));
+        },
+        miResumen: async () => ({
+          creditosRetenidos: '0',
+          saldoDisponible: '1000',
+          subastasGanando: 0,
+        }),
         historial: async () => [],
-        miParticipacion: async () => ({ vasGanando: false, teSuperaron: false, creditosRetenidos: '0',
-          automaticaActiva: false, segundosParaVolverAPujar: 0 })
+        miParticipacion: async () => ({
+          vasGanando: false,
+          teSuperaron: false,
+          creditosRetenidos: '0',
+          automaticaActiva: false,
+          segundosParaVolverAPujar: 0,
+        }),
       },
-      veces: () => llamadas
+      veces: () => llamadas,
     };
   }
 
-  const SUBASTA = { id: 's1', nombre: 'Hacha', oferta: 100, compraInmediata: 500, segundosRestantes: 600,
-    retenido: 0, ganando: false, superado: false, pujas: [], rareza: 'comun' };
+  const SUBASTA = {
+    id: 's1',
+    nombre: 'Hacha',
+    oferta: 100,
+    compraInmediata: 500,
+    segundosRestantes: 600,
+    retenido: 0,
+    ganando: false,
+    superado: false,
+    pujas: [],
+    rareza: 'comun',
+  };
 
   test('se suscribe al canal que publica el servidor', async () => {
     const caja = document.createElement('div');
     const falso = canalFalso();
     const { api } = apiQueCuenta([SUBASTA]);
 
-    const ctrl = new ControladorSubastas({ contenedor: caja, api, urlCanal: 'ws://servidor/api/v1/ws-subastas',
-      conectarCanal: async () => falso.cliente });
+    const ctrl = new ControladorSubastas({
+      contenedor: caja,
+      api,
+      urlCanal: 'ws://servidor/api/v1/ws-subastas',
+      conectarCanal: async () => falso.cliente,
+    });
     await ctrl.iniciar();
     await ctrl.abrirCanalEnVivo();
 
@@ -498,8 +572,12 @@ describe('canal en vivo (HU-SUB-011 publica, esta pantalla escucha)', () => {
     const falso = canalFalso();
     const { api, veces } = apiQueCuenta([SUBASTA]);
 
-    const ctrl = new ControladorSubastas({ contenedor: caja, api, urlCanal: 'ws://x/ws-subastas',
-      conectarCanal: async () => falso.cliente });
+    const ctrl = new ControladorSubastas({
+      contenedor: caja,
+      api,
+      urlCanal: 'ws://x/ws-subastas',
+      conectarCanal: async () => falso.cliente,
+    });
     await ctrl.iniciar();
     const antes = veces();
 
@@ -518,8 +596,12 @@ describe('canal en vivo (HU-SUB-011 publica, esta pantalla escucha)', () => {
     const falso = canalFalso();
     const { api, veces } = apiQueCuenta([SUBASTA]);
 
-    const ctrl = new ControladorSubastas({ contenedor: caja, api, urlCanal: 'ws://x/ws-subastas',
-      conectarCanal: async () => falso.cliente });
+    const ctrl = new ControladorSubastas({
+      contenedor: caja,
+      api,
+      urlCanal: 'ws://x/ws-subastas',
+      conectarCanal: async () => falso.cliente,
+    });
     await ctrl.iniciar();
     const antes = veces();
 
@@ -544,8 +626,14 @@ describe('canal en vivo (HU-SUB-011 publica, esta pantalla escucha)', () => {
     const caja = document.createElement('div');
     const { api } = apiQueCuenta([SUBASTA]);
 
-    const ctrl = new ControladorSubastas({ contenedor: caja, api, urlCanal: 'ws://servidor-caido/ws-subastas',
-      conectarCanal: async () => { throw new Error('ECONNREFUSED'); } });
+    const ctrl = new ControladorSubastas({
+      contenedor: caja,
+      api,
+      urlCanal: 'ws://servidor-caido/ws-subastas',
+      conectarCanal: async () => {
+        throw new Error('ECONNREFUSED');
+      },
+    });
     await ctrl.iniciar();
 
     expect(await ctrl.abrirCanalEnVivo()).toBeNull();
@@ -559,8 +647,12 @@ describe('canal en vivo (HU-SUB-011 publica, esta pantalla escucha)', () => {
     const falso = canalFalso();
     const { api } = apiQueCuenta([SUBASTA]);
 
-    const ctrl = new ControladorSubastas({ contenedor: caja, api, urlCanal: 'ws://x/ws-subastas',
-      conectarCanal: async () => falso.cliente });
+    const ctrl = new ControladorSubastas({
+      contenedor: caja,
+      api,
+      urlCanal: 'ws://x/ws-subastas',
+      conectarCanal: async () => falso.cliente,
+    });
     await ctrl.iniciar();
     await ctrl.abrirCanalEnVivo();
     ctrl.destruir();

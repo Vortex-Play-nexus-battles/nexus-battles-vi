@@ -31,7 +31,7 @@ body {
 
 .titulo {
   margin: 0 0 4px;
-  font-family: var(--tipografia-titulo);
+  font-family: var(--fuente-titulo);
   font-size: 24px;
 }
 
@@ -54,7 +54,7 @@ body {
 }
 
 .tabla-historial thead th {
-  font-family: var(--tipografia-titulo);
+  font-family: var(--fuente-titulo);
   font-weight: 600;
   color: var(--texto-2, #48536a);
   background: rgba(0, 0, 0, 0.02);

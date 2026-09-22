@@ -64,7 +64,7 @@ export class ErrorDeMetricas extends Error {
   get avisoDePermiso() {
     return this.estado === 401
       ? {
-          titulo: 'Tu sesion ya no es valida',
+          titulo: 'Tu sesión ya no es válida',
           detalle: 'Vuelve a entrar para consultar la observabilidad de la plataforma.',
         }
       : {

@@ -7,18 +7,13 @@
  */
 
 import { jest } from '@jest/globals';
-import {
-  crearApiSubastas,
-  aVistaDeSubasta,
-  mensajePara,
-  ErrorDeSubastas
-} from './pujas-api.js';
+import { crearApiSubastas, aVistaDeSubasta, mensajePara, ErrorDeSubastas } from './pujas-api.js';
 
 function respuesta({ ok = true, status = 200, cuerpo = {} } = {}) {
   return {
     ok,
     status,
-    json: async () => cuerpo
+    json: async () => cuerpo,
   };
 }
 
@@ -27,7 +22,7 @@ function apiCon(fetchFalso, { token = 'jwt-de-prueba' } = {}) {
     urlBase: 'http://servidor/api/v1',
     fetch: fetchFalso,
     leerToken: () => token,
-    leerApodo: () => 'andres_nv'
+    leerApodo: () => 'andres_nv',
   });
 }
 
@@ -101,7 +96,7 @@ describe('peticiones que mueven creditos', () => {
       status: 204,
       json: async () => {
         throw new Error('un 204 no trae cuerpo');
-      }
+      },
     }));
 
     await expect(apiCon(falso).desactivarAutomatica('sub-1')).resolves.toBeNull();
@@ -113,7 +108,9 @@ describe('reintento de una peticion que no llego a tener respuesta', () => {
     const claves = [];
     const falso = jest.fn(async (url, opciones) => {
       claves.push(opciones.headers['Idempotency-Key']);
-      if (claves.length === 1) {throw new TypeError('Failed to fetch');}
+      if (claves.length === 1) {
+        throw new TypeError('Failed to fetch');
+      }
       return respuesta({ status: 201, cuerpo: { id: 'p1', estado: 'ACTIVA' } });
     });
 
@@ -127,25 +124,31 @@ describe('reintento de una peticion que no llego a tener respuesta', () => {
   });
 
   test('si la red falla dos veces se avisa, no se reintenta sin fin', async () => {
-    const falso = jest.fn(async () => {throw new TypeError('Failed to fetch');});
+    const falso = jest.fn(async () => {
+      throw new TypeError('Failed to fetch');
+    });
 
     await expect(apiCon(falso).pujar('s1', '110')).rejects.toBeInstanceOf(ErrorDeSubastas);
     expect(falso).toHaveBeenCalledTimes(2);
   });
 
   test('un error del servidor NO se reintenta: ya respondio', async () => {
-    const falso = jest.fn(async () => respuesta({
-      ok: false,
-      status: 409,
-      cuerpo: { motivo: 'OFERTA_INSUFICIENTE' }
-    }));
+    const falso = jest.fn(async () =>
+      respuesta({
+        ok: false,
+        status: 409,
+        cuerpo: { motivo: 'OFERTA_INSUFICIENTE' },
+      }),
+    );
 
     await expect(apiCon(falso).pujar('s1', '110')).rejects.toBeInstanceOf(ErrorDeSubastas);
     expect(falso).toHaveBeenCalledTimes(1);
   });
 
   test('una peticion sin clave de idempotencia no se reintenta a ciegas', async () => {
-    const falso = jest.fn(async () => {throw new TypeError('Failed to fetch');});
+    const falso = jest.fn(async () => {
+      throw new TypeError('Failed to fetch');
+    });
 
     await expect(apiCon(falso).miResumen()).rejects.toBeInstanceOf(ErrorDeSubastas);
     expect(falso).toHaveBeenCalledTimes(1);
@@ -154,19 +157,21 @@ describe('reintento de una peticion que no llego a tener respuesta', () => {
 
 describe('traduccion de errores', () => {
   test('el mensaje sale del motivo, no del texto tecnico del servidor', async () => {
-    const falso = jest.fn(async () => respuesta({
-      ok: false,
-      status: 409,
-      cuerpo: {
-        motivo: 'OFERTA_INSUFICIENTE',
-        detail: 'La puja de 105 no supera la oferta vigente mas el incremento minimo (110)'
-      }
-    }));
+    const falso = jest.fn(async () =>
+      respuesta({
+        ok: false,
+        status: 409,
+        cuerpo: {
+          motivo: 'OFERTA_INSUFICIENTE',
+          detail: 'La puja de 105 no supera la oferta vigente mas el incremento minimo (110)',
+        },
+      }),
+    );
 
     await expect(apiCon(falso).pujar('sub-1', 105)).rejects.toMatchObject({
       estado: 409,
       motivo: 'OFERTA_INSUFICIENTE',
-      message: 'Alguien se te adelanto: la oferta ya subio. Revisa el nuevo minimo.'
+      message: 'Alguien se te adelanto: la oferta ya subio. Revisa el nuevo minimo.',
     });
   });
 
@@ -179,8 +184,9 @@ describe('traduccion de errores', () => {
   test('sin token ni siquiera sale la peticion', async () => {
     const falso = jest.fn();
 
-    await expect(apiCon(falso, { token: null }).pujar('sub-1', 110))
-      .rejects.toBeInstanceOf(ErrorDeSubastas);
+    await expect(apiCon(falso, { token: null }).pujar('sub-1', 110)).rejects.toBeInstanceOf(
+      ErrorDeSubastas,
+    );
     expect(falso).not.toHaveBeenCalled();
   });
 
@@ -199,20 +205,24 @@ describe('traduccion de errores', () => {
 
 describe('listado', () => {
   test('lee el campo contenido, que es el del contrato', async () => {
-    const falso = jest.fn(async () => respuesta({
-      cuerpo: {
-        contenido: [{
-          id: 'sub-1',
-          nombreProducto: 'Hacha de Obsidiana',
-          ofertaVigente: 1350,
-          precioCompraInmediata: 2800,
-          cantidadPujas: 3,
-          rareza: 'EPICA',
-          fechaFin: new Date(Date.now() + 60000).toISOString()
-        }],
-        pagina: 0
-      }
-    }));
+    const falso = jest.fn(async () =>
+      respuesta({
+        cuerpo: {
+          contenido: [
+            {
+              id: 'sub-1',
+              nombreProducto: 'Hacha de Obsidiana',
+              ofertaVigente: 1350,
+              precioCompraInmediata: 2800,
+              cantidadPujas: 3,
+              rareza: 'EPICA',
+              fechaFin: new Date(Date.now() + 60000).toISOString(),
+            },
+          ],
+          pagina: 0,
+        },
+      }),
+    );
 
     const subastas = await apiCon(falso).listar();
 
@@ -231,7 +241,7 @@ describe('listado', () => {
   test('el tiempo restante sale de fechaFin y nunca es negativo', () => {
     const vencida = aVistaDeSubasta({
       id: 'x',
-      fechaFin: new Date(Date.now() - 60000).toISOString()
+      fechaFin: new Date(Date.now() - 60000).toISOString(),
     });
 
     expect(vencida.segundosRestantes).toBe(0);

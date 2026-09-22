@@ -409,7 +409,7 @@ export function textoDelPromedio(hilo) {
   const promedio = hilo?.calificacionPromedio;
   const total = Number.isInteger(hilo?.totalCalificaciones) ? hilo.totalCalificaciones : 0;
   if (!Number.isFinite(promedio) || total === 0) {
-    return 'Sin calificaciones todavia.';
+    return 'Sin calificaciones todavía.';
   }
   const plural = total === 1 ? 'calificacion' : 'calificaciones';
   return `Calificacion promedio: ${promedio.toFixed(2)} de ${MAXIMO_ESTRELLAS} (${total} ${plural}).`;
@@ -681,8 +681,8 @@ export function montarPublicarComentario(
     });
     pintarAviso(zonaAviso, {
       tono: 'advertencia',
-      titulo: 'Inicia sesion para comentar',
-      detalle: 'Tu comentario se publica con tu apodo, y para eso hace falta tu sesion.',
+      titulo: 'Inicia sesión para comentar',
+      detalle: 'Tu comentario se publica con tu apodo, y para eso hace falta tu sesión.',
     });
     return;
   }

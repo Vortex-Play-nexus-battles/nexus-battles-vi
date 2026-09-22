@@ -195,7 +195,7 @@ describe('panel de moderacion', () => {
       tipo: 'ADVERTENCIA',
       motivo: 'Lenguaje ofensivo',
     });
-    expect(document.querySelector('.aviso--exito').textContent).toMatch(/Sancion emitida/);
+    expect(document.querySelector('.aviso--exito').textContent).toMatch(/Sanción emitida/);
     expect(document.querySelectorAll('[data-zona="historial"] article')).toHaveLength(1);
   });
 

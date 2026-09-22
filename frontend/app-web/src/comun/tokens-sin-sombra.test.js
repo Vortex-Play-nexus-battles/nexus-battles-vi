@@ -162,4 +162,48 @@ describe('ninguna hoja usa variables que no existen', () => {
 
     expect([...new Set(huerfanas)]).toEqual([]);
   });
+
+  /**
+   * UX-R2.10 — «declarada en alguna hoja» tenia un agujero.
+   *
+   * `auditoria.css` usaba `var(--texto-secundario)` y `var(--exito-fondo)`.
+   * La prueba de arriba pasaba porque esos nombres SI estaban declarados…
+   * en `tema-cuentas.css`, sobre un selector propio que `auditoria.html` no
+   * lleva. Una variable declarada en otro sitio no llega: `background:
+   * var(--exito-fondo)` sin respaldo es una declaracion invalida, el
+   * navegador la descarta y la insignia sale **sin fondo**.
+   *
+   * Eran 40 usos en seis hojas, y todos apuntaban a un alias con el hex
+   * escrito a mano — la misma familia de defecto que PR-UX-5: un hex no
+   * responde a `prefers-contrast: more`, la ficha del kit si.
+   *
+   * La regla, ahora: una variable sin respaldo tiene que estar en el KIT o
+   * en la MISMA hoja. Lo de «en alguna parte del repositorio» no basta.
+   */
+  test('una var(--x) sin respaldo resuelve en el kit o en su propia hoja', () => {
+    const delKit = new Set([...tokensDelKit(), ...variablesDelKitCompleto()]);
+    const fuera = [];
+
+    for (const ruta of hojasDeVista()) {
+      const css = readFileSync(new URL(ruta, raizRepo), 'utf8');
+      const propias = new Set([...css.matchAll(/^\s*(--[a-z0-9-]+)\s*:/gm)].map((m) => m[1]));
+      for (const [, nombre, coma] of css.matchAll(/var\(\s*(--[a-z0-9-]+)\s*(,?)/g)) {
+        // Con respaldo es una decision: `var(--x, 24px)` funciona sin `--x`.
+        if (coma === ',' || delKit.has(nombre) || propias.has(nombre)) {
+          continue;
+        }
+        fuera.push(`${ruta.split('/').pop()} → ${nombre}`);
+      }
+    }
+
+    expect([...new Set(fuera)]).toEqual([]);
+  });
 });
+
+/** Todo lo que declaran las tres hojas del kit, tokens y medidas. */
+function variablesDelKitCompleto() {
+  const kit = ['tokens.css', 'base.css', 'componentes.css']
+    .map((f) => readFileSync(new URL(`shared/ui-kit/css/${f}`, raizRepo), 'utf8'))
+    .join('\n');
+  return new Set([...kit.matchAll(/^\s*(--[a-z0-9-]+)\s*:/gm)].map((m) => m[1]));
+}

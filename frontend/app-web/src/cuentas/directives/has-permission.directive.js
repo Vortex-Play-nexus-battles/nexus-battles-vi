@@ -2,7 +2,7 @@
  * ==========================================================================
  * Directiva / Helper de Permisos RBAC en JavaScript Estándar (HU-RBAC-001 / 003 / 004)
  * Pila Tecnológica: Vanilla JS ES2022 (Sin Angular / Sin TypeScript)
- * 
+ *
  * Consume la matriz autorizada por el backend y oculta/muestra elementos del DOM
  * que contengan el atributo [data-has-permission="ACCION"].
  * ==========================================================================
@@ -61,7 +61,7 @@ export function checkPermission(role, action) {
  */
 export function applyHasPermissionDirective(root = document) {
   const elements = root.querySelectorAll('[data-has-permission]');
-  
+
   elements.forEach((el) => {
     const requiredAction = el.getAttribute('data-has-permission');
     const isPermitted = checkPermission(currentRole, requiredAction);
