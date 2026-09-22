@@ -35,6 +35,7 @@ import {
 } from './cliente-comentarios.js';
 import { usuarioIdDeSesion } from '../../comun/identidad.js';
 import { pintarAviso } from '../../comun/ui/aviso.js';
+import { vaciar } from '../../comun/ui/dom.js';
 
 const CLAVE_APODO = 'nexus.apodoActual';
 
@@ -183,7 +184,7 @@ function marcarZonaDeCarga(formulario, motivo) {
 
 function ocultarAviso(zona) {
   zona.hidden = true;
-  zona.innerHTML = '';
+  vaciar(zona);
 }
 
 function cargando(boton, activo) {
@@ -343,7 +344,7 @@ function montarZonaDeCarga(formulario) {
 function vaciarMiniaturas(formulario) {
   const lista = formulario.querySelector('[data-zona="miniaturas"]');
   if (lista) {
-    lista.innerHTML = '';
+    vaciar(lista);
   }
   const zonaCarga = formulario.querySelector('[data-zona="carga"]');
   if (zonaCarga) {

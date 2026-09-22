@@ -15,6 +15,7 @@ import {
   pintarSeccionDegradada,
   limpiarSeccionDegradada,
 } from '../../comun/degradacion/aviso-degradacion.js';
+import { vaciar } from '../../comun/ui/dom.js';
 
 /** Destino `accionDelJugador` del AsyncAPI. Prefijo de envío `/app`. */
 export function destinoDeAccion(idPartida) {
@@ -300,7 +301,7 @@ export function montarControlesDeCombate(
   );
 
   if (zona) {
-    zona.innerHTML = '';
+    vaciar(zona);
     for (const rival of rivales) {
       const boton = doc.createElement('button');
       boton.type = 'button';

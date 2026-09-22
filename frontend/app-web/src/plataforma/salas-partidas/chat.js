@@ -17,6 +17,7 @@
  */
 
 import { conectarChat, ErrorDeCanal } from './cliente-chat.js';
+import { vaciar } from '../../comun/ui/dom.js';
 import { pintarAviso } from '../../comun/ui/aviso.js';
 
 export const CLAVE_TOKEN = 'nexus.token';
@@ -162,7 +163,7 @@ export async function montarChat(
   };
 
   cliente.suscribir(destinos.historial, (mensajes) => {
-    lista.innerHTML = '';
+    vaciar(lista);
     (mensajes ?? []).forEach(agregar);
   });
   cliente.suscribir(destinos.vivo, agregar);
@@ -186,7 +187,7 @@ export async function montarChat(
       return;
     }
     zonaAviso.hidden = true;
-    zonaAviso.innerHTML = '';
+    vaciar(zonaAviso);
     cliente.enviar(destinos.envio, { texto, logro: leerLogro(formulario) });
     formulario.reset();
   });

@@ -21,6 +21,7 @@
  */
 
 import { crearBandeja, ESTADO_CANAL } from './bandeja.js';
+import { vaciar } from '../../comun/ui/dom.js';
 
 const TEXTO_CONEXION = Object.freeze({
   [ESTADO_CANAL.ESTABLE]: 'Notificaciones en tiempo real',
@@ -128,7 +129,7 @@ function pintarLista(raiz, avisos, alMarcar) {
   if (!lista) {
     return;
   }
-  lista.innerHTML = '';
+  vaciar(lista);
   avisos.forEach((aviso) => lista.appendChild(nodoDeAviso(aviso, alMarcar)));
   if (vacia) {
     vacia.hidden = avisos.length > 0;

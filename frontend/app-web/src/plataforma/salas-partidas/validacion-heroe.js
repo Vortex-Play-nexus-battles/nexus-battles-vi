@@ -23,6 +23,7 @@ import {
   esSeccionDegradada,
   pintarSeccionDegradada,
 } from '../../comun/degradacion/aviso-degradacion.js';
+import { vaciar } from '../../comun/ui/dom.js';
 
 /** Resultados del esquema `VerificacionHeroe` del contrato OpenAPI. */
 export const RESULTADOS = {
@@ -313,7 +314,7 @@ function prepararDialogo(raiz, resultado) {
   raiz.setAttribute('aria-modal', 'true');
   raiz.setAttribute('aria-labelledby', ID_TITULO);
   raiz.dataset.resultado = resultado;
-  raiz.innerHTML = '';
+  vaciar(raiz);
 }
 
 /**

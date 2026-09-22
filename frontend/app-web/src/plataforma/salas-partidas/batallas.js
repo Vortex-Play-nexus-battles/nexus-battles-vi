@@ -18,6 +18,7 @@
  */
 
 import { listarSalas, ingresarASala } from './cliente-salas.js';
+import { vaciar } from '../../comun/ui/dom.js';
 import { seguirSala, estadoDesdeFicha } from './canal-sala.js';
 import {
   esSeccionDegradada,
@@ -295,7 +296,7 @@ export function montarBatallas(raiz, puertos = {}) {
     zonaPaginacion.hidden = true;
     zonaEstado.hidden = false;
     zonaEstado.className = `estado-vista ${claseExtra}`;
-    zonaEstado.innerHTML = '';
+    vaciar(zonaEstado);
 
     const encabezado = doc.createElement('p');
     encabezado.className = 'estado-vista__titulo';
@@ -311,7 +312,7 @@ export function montarBatallas(raiz, puertos = {}) {
   function pintar(pagina) {
     zonaEstado.hidden = true;
     zonaSalas.hidden = false;
-    zonaSalas.innerHTML = '';
+    vaciar(zonaSalas);
 
     subtitulo.textContent = subtituloDeSalas(pagina.totalElementos);
 
@@ -337,7 +338,7 @@ export function montarBatallas(raiz, puertos = {}) {
 
   function pintarPaginacion(pagina) {
     zonaPaginacion.hidden = false;
-    zonaPaginacion.innerHTML = '';
+    vaciar(zonaPaginacion);
 
     const info = doc.createElement('span');
     info.className = 'paginacion__info';
