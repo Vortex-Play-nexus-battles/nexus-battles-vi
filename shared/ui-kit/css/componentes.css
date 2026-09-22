@@ -1098,9 +1098,14 @@
   background: var(--advertencia-insignia);
   color: var(--advertencia);
 }
+/* UX-R3.8 — esto iba en rojo, y no es un error: sin canal en tiempo real la
+   vista sigue funcionando, sigue trayendo notificaciones y se pone al día
+   sola; lo único que pasa es que los avisos tardan un poco más. El rojo es
+   para lo que está roto. El ámbar dice «ojo, algo va distinto», que es
+   exactamente lo que pasa. */
 .conexion--sin-conexion {
-  background: var(--error-insignia);
-  color: var(--error);
+  background: var(--advertencia-insignia);
+  color: var(--advertencia);
 }
 
 /* =======================================================================
@@ -5134,4 +5139,14 @@ button.tarjeta-heroe[aria-pressed='true'] {
 
 .combate[data-sin-partida='si'] .combate__sala > .estado-vista {
   width: min(560px, 100%);
+}
+
+/* Fila de acciones que NO reparte el ancho — UX-R3.8.
+
+   `.fila` existe y da `flex: 1 1 280px` a cada hijo, que es lo correcto para
+   campos del mismo peso. Para una fila de botones no lo es: un solo botón
+   crecía de lado a lado del contenedor. Esta variante los deja medir lo que
+   mide su texto, que es lo que hace un botón. */
+.fila--acciones > * {
+  flex: 0 0 auto;
 }

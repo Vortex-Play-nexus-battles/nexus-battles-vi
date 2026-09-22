@@ -327,7 +327,7 @@ describe('mis sanciones', () => {
       (c) => String(c[0]).includes('/apelaciones') && c[1]?.method === 'POST',
     );
     expect(JSON.parse(llamada[1].body)).toEqual({ argumento: 'No fui yo' });
-    expect(document.querySelector('.aviso--exito').textContent).toMatch(/Apelacion enviada/);
+    expect(document.querySelector('.aviso--exito').textContent).toMatch(/Apelación enviada/);
   });
 
   test('si no hay sanciones se dice; un error del servicio se avisa', async () => {
@@ -341,7 +341,7 @@ describe('mis sanciones', () => {
     await asentar();
     await asentar();
     expect(document.querySelector('[data-zona="sanciones"]').textContent).toMatch(
-      /No tienes sanciones/,
+      /No tienes ninguna sanción/,
     );
 
     document.body.innerHTML = MIAS;
@@ -357,7 +357,17 @@ describe('mis sanciones', () => {
     });
     await asentar();
     await asentar();
-    expect(document.querySelector('.aviso--error .aviso__titulo').textContent).toBe('Caido');
+
+    // UX-R3.8 — el fallo se dice DONDE iban las sanciones.
+    //
+    // Antes solo saltaba el aviso flotante con «Caido» y quedaban dos
+    // tarjetas vacias debajo: «Sanciones» y «Mis apelaciones», con nada
+    // dentro. La pantalla parecia decir que no tienes ninguna sancion, que es
+    // exactamente lo contrario de lo que se sabe — no se sabe nada.
+    const zona = document.querySelector('[data-zona="sanciones"]');
+    expect(zona.textContent).toMatch(/No pudimos consultar tu historial/);
+    expect(zona.textContent).toMatch(/no significa que no tengas sanciones/i);
+    expect(zona.querySelector('[data-accion="reintentar"]')).not.toBeNull();
   });
 
   test('ErrorDeSanciones conserva estado, titulo, detalle y motivo', () => {

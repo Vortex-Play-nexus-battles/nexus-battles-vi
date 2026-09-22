@@ -30,7 +30,7 @@
       <div class="pila pila--compacta">
         <h1>Comentar un producto</h1>
         <p class="t-cuerpo">
-          Tu comentario se publica con tu apodo, tu calificacion y la fecha. Puedes comentar cuantas
+          Tu comentario se publica con tu apodo, tu calificación y la fecha. Puedes comentar cuantas
           veces quieras; calificar, una sola vez por producto.
         </p>
       </div>
@@ -41,8 +41,14 @@
         es quien enlaza aqui.
       -->
       <div class="estado-vista" data-zona="sin-producto" hidden>
-        <p class="estado-vista__titulo">No hay ningun producto seleccionado</p>
-        <p class="t-meta">Abre esta vista desde la ficha de un producto del catalogo.</p>
+        <p class="estado-vista__titulo">No hay ningún producto seleccionado</p>
+        <p class="estado-vista__detalle">
+          Esta pantalla se abre desde la ficha de un producto. Entra a tu inventario, abre el que
+          quieras comentar y pulsa «Comentar».
+        </p>
+        <a class="boton boton--primario" href="../../contenido/inventario/inventario.html">
+          Ir a mi inventario
+        </a>
       </div>
 
       <form id="formulario-comentario" class="tarjeta pila" novalidate hidden>
@@ -96,7 +102,7 @@
           prohibe controles con clic sin input.
         -->
         <fieldset class="pila pila--compacta">
-          <legend class="campo__etiqueta">Tu calificacion</legend>
+          <legend class="campo__etiqueta">Tu calificación</legend>
           <div class="fila">
             <div class="estrellas estrellas--editable" data-zona="calificacion">
               <span class="estrellas__lista">
