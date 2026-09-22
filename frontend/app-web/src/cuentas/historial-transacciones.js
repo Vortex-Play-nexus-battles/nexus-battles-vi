@@ -70,21 +70,84 @@ function ocultarEstado() {
   el.estado.textContent = '';
 }
 
+/**
+ * Una celda con texto. `textContent` y nunca `innerHTML`: el concepto y la
+ * moneda vienen del servidor.
+ *
+ * @param {string} texto
+ * @param {string} [clase]
+ * @returns {HTMLTableCellElement}
+ */
+function celda(texto, clase) {
+  const td = document.createElement('td');
+  if (clase) {
+    td.className = clase;
+  }
+  td.textContent = texto;
+  return td;
+}
+
+/**
+ * El enlace al comprobante, si lo hay y si es seguro seguirlo.
+ *
+ * UX-R2.8 — esto era `` `<a href="${registro.comprobanteUrl}">` `` dentro de
+ * un `innerHTML`. Dos agujeros en una linea: la URL entraba sin escapar en un
+ * atributo, y **un `comprobanteUrl` con `javascript:` se ejecutaba al pulsar
+ * «Ver»**. El valor lo pone el proveedor de pagos, no el jugador, pero un
+ * comprobante es exactamente el sitio por el que un atacante intentaria
+ * colarse.
+ *
+ * Ahora se construye el nodo, se asigna por propiedad —que no interpreta
+ * marcado— y **solo se acepta http(s)**.
+ *
+ * @param {string|null|undefined} url
+ * @returns {HTMLAnchorElement|Text}
+ */
+function enlaceDeComprobante(url) {
+  if (!url) {
+    return document.createTextNode('—');
+  }
+  let destino;
+  try {
+    destino = new URL(url, globalThis.location?.href ?? 'https://localhost');
+  } catch {
+    return document.createTextNode('—');
+  }
+  if (destino.protocol !== 'http:' && destino.protocol !== 'https:') {
+    console.warn('Comprobante con un esquema que no se sigue:', destino.protocol);
+    return document.createTextNode('—');
+  }
+
+  const a = document.createElement('a');
+  a.href = destino.href;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  a.textContent = 'Ver';
+  return a;
+}
+
 function renderFilas(registros) {
-  el.tbody.innerHTML = '';
+  el.tbody.replaceChildren();
   for (const registro of registros) {
     const tr = document.createElement('tr');
-    const comprobante = registro.comprobanteUrl
-      ? `<a href="${registro.comprobanteUrl}" target="_blank" rel="noopener">Ver</a>`
-      : '—';
-    tr.innerHTML = `
-      <td class="celda-fecha">${formatearFecha(registro.creado)}</td>
-      <td>${registro.concepto ?? '—'}</td>
-      <td class="celda-monto">${formatearMonto(registro.monto)}</td>
-      <td>${registro.moneda ?? '—'}</td>
-      <td><span class="${claseResultado(registro.resultado)}">${registro.resultado ?? '—'}</span></td>
-      <td>${comprobante}</td>
-    `;
+
+    const resultado = document.createElement('span');
+    resultado.className = claseResultado(registro.resultado);
+    resultado.textContent = registro.resultado ?? '—';
+    const celdaResultado = document.createElement('td');
+    celdaResultado.append(resultado);
+
+    const celdaComprobante = document.createElement('td');
+    celdaComprobante.append(enlaceDeComprobante(registro.comprobanteUrl));
+
+    tr.append(
+      celda(formatearFecha(registro.creado), 'celda-fecha'),
+      celda(registro.concepto ?? '—'),
+      celda(formatearMonto(registro.monto), 'celda-monto'),
+      celda(registro.moneda ?? '—'),
+      celdaResultado,
+      celdaComprobante,
+    );
     el.tbody.appendChild(tr);
   }
 }

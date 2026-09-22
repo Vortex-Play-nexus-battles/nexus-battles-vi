@@ -64,8 +64,13 @@ export async function cargarVitrina(doc = document) {
     }
   } catch (error) {
     // Antes esto no existía: un fallo dejaba el cargador girando para siempre.
-    rejilla.innerHTML =
-      '<p class="empty-cart-msg">No se pudo cargar la vitrina. Vuelve a intentarlo.</p>';
+    // `.empty-cart-msg` no existe en ningun CSS (el guardian de clases solo
+    // mira el HTML, y esta estaba escrita en JavaScript): el mensaje salia con
+    // el estilo por defecto del navegador.
+    const fallo = doc.createElement('p');
+    fallo.className = 't-meta';
+    fallo.textContent = 'No se pudo cargar la vitrina. Vuelve a intentarlo.';
+    rejilla.replaceChildren(fallo);
     console.error('Error al cargar la vitrina:', error);
   }
 }
@@ -78,12 +83,17 @@ export async function cargarVitrina(doc = document) {
  * funciona cuando este archivo se carga como módulo.
  */
 function tarjetaDeProducto(producto, doc) {
-  const colorCaja = producto.tipo === 'ARMA' ? '#006b8f' : '#6a1b9a';
-
   const tarjeta = doc.createElement('div');
   tarjeta.className = 'product-card';
+  tarjeta.dataset.tipo = producto.tipo ?? '';
+  // UX-R2.8 — el color de la caja se interpolaba dentro de la plantilla
+  // (`background-color: ${colorCaja}`). Los dos valores eran constantes, asi
+  // que no habia agujero, pero era `innerHTML` con una interpolacion: la
+  // forma exacta que el guardian persigue, y la que alguien copia el dia que
+  // el color venga del catalogo. Ahora el marcado es fijo y el color se pone
+  // por `dataset`, con las fichas del kit.
   tarjeta.innerHTML = `
-    <div class="product-image" style="background-color: ${colorCaja};"></div>
+    <div class="product-image"></div>
     <h4></h4>
     <p></p>
     <div class="product-footer">
@@ -143,7 +153,7 @@ function mostrarFalloDelCarrito(doc) {
   const botonPagar = doc.getElementById('btn-pagar');
   if (contenedor) {
     contenedor.innerHTML =
-      '<p class="empty-cart-msg">No se pudo cargar tu carrito. Vuelve a intentarlo.</p>';
+      '<p class="t-meta">No se pudo cargar tu carrito. Vuelve a intentarlo.</p>';
   }
   if (botonPagar) {
     // No se paga lo que no se ha podido leer.
@@ -160,7 +170,7 @@ export function actualizarUI(carrito, doc = document) {
   contenedor.innerHTML = '';
 
   if (!carrito || !carrito.items || carrito.items.length === 0) {
-    contenedor.innerHTML = '<p class="empty-cart-msg">Tu carrito está vacío</p>';
+    contenedor.innerHTML = '<p class="t-meta">Tu carrito está vacío</p>';
     subtotal.textContent = '0 COP';
     total.textContent = '0 COP';
     botonPagar.disabled = true;
