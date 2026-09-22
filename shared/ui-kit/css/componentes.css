@@ -9,7 +9,6 @@
    Ningún color se escribe en hexadecimal aquí. Todos bajan de tokens.css.
    ======================================================================= */
 
-
 /* =======================================================================
    Tarjeta — base de casi todo
    ======================================================================= */
@@ -34,14 +33,15 @@
   width: 100%;
   font: inherit;
   color: inherit;
-  transition: border-color var(--transicion), box-shadow var(--transicion);
+  transition:
+    border-color var(--transicion),
+    box-shadow var(--transicion);
 }
 
 .tarjeta--pulsable:hover {
   border-color: var(--borde-int);
   box-shadow: var(--sombra-2);
 }
-
 
 /* =======================================================================
    Botones
@@ -67,12 +67,20 @@
      Crear sala) no debe heredar el subrayado ni el azul de `a` en base.css. */
   text-decoration: none;
   cursor: pointer;
-  transition: background var(--transicion), border-color var(--transicion);
+  transition:
+    background var(--transicion),
+    border-color var(--transicion);
 }
 
 /* Atacar, Confirmar, Pagar */
-.boton--grande  { min-height: var(--boton-grande); padding: 0 var(--e-5); }
-.boton--pequeno { min-height: var(--boton-pequeno); padding: 0 var(--e-3); }
+.boton--grande {
+  min-height: var(--boton-grande);
+  padding: 0 var(--e-5);
+}
+.boton--pequeno {
+  min-height: var(--boton-pequeno);
+  padding: 0 var(--e-3);
+}
 
 /* Cada variante repite su color en :hover a propósito: `a:hover` de base.css
    (0,1,1) le ganaría a la variante sola (0,1,0) y pintaría el texto de azul
@@ -81,33 +89,42 @@
   background: var(--primaria-relleno);
   color: var(--texto-sobre-color);
 }
-.boton--primario:hover { background: var(--primaria); color: var(--texto-sobre-color); }
+.boton--primario:hover {
+  background: var(--primaria);
+  color: var(--texto-sobre-color);
+}
 
 .boton--acento {
   background: var(--acento-relleno);
   color: var(--texto-sobre-color);
 }
-.boton--acento:hover { color: var(--texto-sobre-color); }
+.boton--acento:hover {
+  color: var(--texto-sobre-color);
+}
 
 .boton--secundario {
   background: var(--superficie);
   border-color: var(--borde-int);
   color: var(--texto);
 }
-.boton--secundario:hover { background: var(--fondo); color: var(--texto); }
+.boton--secundario:hover {
+  background: var(--fondo);
+  color: var(--texto);
+}
 
 .boton--peligro {
   background: var(--error);
   color: var(--texto-sobre-color);
 }
-.boton--peligro:hover { color: var(--texto-sobre-color); }
+.boton--peligro:hover {
+  color: var(--texto-sobre-color);
+}
 
 .boton[disabled],
 .boton[aria-disabled='true'] {
   opacity: 0.5;
   cursor: not-allowed;
 }
-
 
 /* =======================================================================
    Campos de formulario
@@ -146,7 +163,9 @@
 
 /* Estado inválido. El criterio de aceptación de HU-SAL-001 pide que se
    indique EL MOTIVO del rechazo, no solo que falló: de ahí campo__error. */
-.campo--invalido .campo__control { border-color: var(--error); }
+.campo--invalido .campo__control {
+  border-color: var(--error);
+}
 
 .campo__error {
   display: flex;
@@ -157,7 +176,6 @@
   font-weight: 600;
   color: var(--error);
 }
-
 
 /* =======================================================================
    Selector de modalidad
@@ -195,10 +213,14 @@
   border: 1px solid var(--borde-int);
   border-radius: var(--radio);
   text-align: center;
-  transition: border-color var(--transicion), background var(--transicion);
+  transition:
+    border-color var(--transicion),
+    background var(--transicion);
 }
 
-.modalidad__entrada:hover + .modalidad__cara { border-color: var(--primaria); }
+.modalidad__entrada:hover + .modalidad__cara {
+  border-color: var(--primaria);
+}
 
 .modalidad__entrada:checked + .modalidad__cara {
   background: var(--primaria-relleno);
@@ -226,7 +248,6 @@
   opacity: 0.85;
 }
 
-
 /* =======================================================================
    Distintivo (insignia)
    HU-SAL-002 · estado de la sala en el listado
@@ -248,9 +269,18 @@
   white-space: nowrap;
 }
 
-.distintivo--abierta  { background: var(--exito-insignia);       color: var(--exito); }
-.distintivo--llena    { background: var(--advertencia-insignia); color: var(--advertencia); }
-.distintivo--en-juego { background: var(--info-insignia);        color: var(--info); }
+.distintivo--abierta {
+  background: var(--exito-insignia);
+  color: var(--exito);
+}
+.distintivo--llena {
+  background: var(--advertencia-insignia);
+  color: var(--advertencia);
+}
+.distintivo--en-juego {
+  background: var(--info-insignia);
+  color: var(--info);
+}
 
 /* El documento no define un fondo tenue para el acento, asi que la sala
    privada se marca con borde y texto en acento, sin inventar un color.
@@ -260,7 +290,6 @@
   border-color: var(--acento-relleno);
   color: var(--acento-relleno);
 }
-
 
 /* =======================================================================
    Aviso
@@ -288,14 +317,30 @@
 
 /* El aviso puede llevar una acción a la derecha («Reintentar», «Ir»); el
    cuerpo ocupa lo que quede para que el botón no se aplaste. */
-.aviso__cuerpo { flex: 1; min-width: 0; }
-.aviso__detalle { color: var(--texto-2); }
+.aviso__cuerpo {
+  flex: 1;
+  min-width: 0;
+}
+.aviso__detalle {
+  color: var(--texto-2);
+}
 
-.aviso--error       { border-color: var(--error);       background: var(--error-insignia); }
-.aviso--advertencia { border-color: var(--advertencia); background: var(--advertencia-insignia); }
-.aviso--exito       { border-color: var(--exito);       background: var(--exito-insignia); }
-.aviso--info        { border-color: var(--info);        background: var(--info-insignia); }
-
+.aviso--error {
+  border-color: var(--error);
+  background: var(--error-insignia);
+}
+.aviso--advertencia {
+  border-color: var(--advertencia);
+  background: var(--advertencia-insignia);
+}
+.aviso--exito {
+  border-color: var(--exito);
+  background: var(--exito-insignia);
+}
+.aviso--info {
+  border-color: var(--info);
+  background: var(--info-insignia);
+}
 
 /* =======================================================================
    Seccion degradada — HU-DIS-003 · RNF-DIS-003 · MAPEO-ERRORES §5.5
@@ -324,7 +369,9 @@
   font-weight: var(--t-etiqueta-peso);
 }
 
-.seccion-degradada__espera { color: var(--texto-2); }
+.seccion-degradada__espera {
+  color: var(--texto-2);
+}
 
 /* El reintento es el boton secundario del kit: la degradacion no es la
    accion principal de la vista, es la salida de un estado temporal. */
@@ -340,8 +387,9 @@
   cursor: pointer;
 }
 
-.seccion-degradada__reintentar:hover { background: var(--fondo); }
-
+.seccion-degradada__reintentar:hover {
+  background: var(--fondo);
+}
 
 /* =======================================================================
    Barra de vida
@@ -378,12 +426,20 @@
   height: 100%;
   width: calc(var(--vida, 100) * 1%);
   border-radius: inherit;
-  transition: width var(--transicion), background var(--transicion);
+  transition:
+    width var(--transicion),
+    background var(--transicion);
 }
 
-.barra-vida[data-estado='alto']  .barra-vida__relleno { background: var(--exito); }
-.barra-vida[data-estado='medio'] .barra-vida__relleno { background: var(--advertencia); }
-.barra-vida[data-estado='bajo']  .barra-vida__relleno { background: var(--error); }
+.barra-vida[data-estado='alto'] .barra-vida__relleno {
+  background: var(--exito);
+}
+.barra-vida[data-estado='medio'] .barra-vida__relleno {
+  background: var(--advertencia);
+}
+.barra-vida[data-estado='bajo'] .barra-vida__relleno {
+  background: var(--error);
+}
 
 .barra-vida__valor {
   min-width: 5ch;
@@ -401,7 +457,6 @@
   font-weight: var(--t-subtitulo-peso);
   color: var(--texto);
 }
-
 
 /* =======================================================================
    Encabezado de aplicación
@@ -429,7 +484,6 @@
   letter-spacing: 0.02em;
 }
 
-
 /* =======================================================================
    Rejilla de salas
    HU-SAL-002 · listado de batallas, dieciséis por página
@@ -443,9 +497,10 @@
 
 /* A 1024 px la rejilla pasa de cuatro columnas a tres. RNF-USA-001. */
 @media (max-width: 1024px) {
-  .rejilla-salas { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+  .rejilla-salas {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  }
 }
-
 
 /* =======================================================================
    Marco de héroe
@@ -496,12 +551,27 @@
   text-align: center;
 }
 
-.marco-heroe--rara      .marco-heroe__retrato { border-color: var(--rareza-rara);       background: var(--rareza-rara-insignia); }
-.marco-heroe--rara      .marco-heroe__imagen  { background: var(--rareza-rara); }
-.marco-heroe--epica     .marco-heroe__retrato { border-color: var(--rareza-epica);      background: var(--rareza-epica-insignia); }
-.marco-heroe--epica     .marco-heroe__imagen  { background: var(--rareza-epica); }
-.marco-heroe--legendaria .marco-heroe__retrato{ border-color: var(--rareza-legendaria); background: var(--rareza-legendaria-insignia); }
-.marco-heroe--legendaria .marco-heroe__imagen { background: var(--rareza-legendaria); }
+.marco-heroe--rara .marco-heroe__retrato {
+  border-color: var(--rareza-rara);
+  background: var(--rareza-rara-insignia);
+}
+.marco-heroe--rara .marco-heroe__imagen {
+  background: var(--rareza-rara);
+}
+.marco-heroe--epica .marco-heroe__retrato {
+  border-color: var(--rareza-epica);
+  background: var(--rareza-epica-insignia);
+}
+.marco-heroe--epica .marco-heroe__imagen {
+  background: var(--rareza-epica);
+}
+.marco-heroe--legendaria .marco-heroe__retrato {
+  border-color: var(--rareza-legendaria);
+  background: var(--rareza-legendaria-insignia);
+}
+.marco-heroe--legendaria .marco-heroe__imagen {
+  background: var(--rareza-legendaria);
+}
 
 .marco-heroe__nombre {
   font-family: var(--t-subtitulo-familia);
@@ -509,7 +579,6 @@
   font-weight: var(--t-subtitulo-peso);
   text-align: center;
 }
-
 
 /* =======================================================================
    Estado de vista — RNF-USA-003
@@ -540,8 +609,12 @@
   background: var(--fondo);
 }
 
-.estado-vista--error .estado-vista__icono { background: var(--error-insignia); }
-.estado-vista--vacio .estado-vista__icono { background: var(--info-insignia); }
+.estado-vista--error .estado-vista__icono {
+  background: var(--error-insignia);
+}
+.estado-vista--vacio .estado-vista__icono {
+  background: var(--info-insignia);
+}
 
 /* Un estado vacío o de error se lee, no se decora: el detalle en segundo
    nivel y con ancho de lectura cómodo. */
@@ -558,16 +631,23 @@
 
 /* Estado de carga: esqueletos, no un girador. El usuario ve la forma
    de lo que viene, y eso hace la espera más corta. */
-.estado-vista--cargando { align-items: stretch; justify-content: flex-start; }
+.estado-vista--cargando {
+  align-items: stretch;
+  justify-content: flex-start;
+}
 
 .esqueleto {
   height: 14px;
   border-radius: 4px;
   background: var(--pista);
 }
-.esqueleto--corto { width: 40%; }
-.esqueleto--largo { width: 75%; height: 10px; }
-
+.esqueleto--corto {
+  width: 40%;
+}
+.esqueleto--largo {
+  width: 75%;
+  height: 10px;
+}
 
 /* =======================================================================
    Diálogo — bloquea la interacción, capa 3
@@ -584,7 +664,9 @@
 /* La Pantalla 4 atenúa el contenido pero deja la cabecera legible y usable:
    en Figma el velo empieza en y=64, no en y=0. Variante y no cambio del velo
    base porque un diálogo destructivo sí debe taparlo todo. */
-.velo--bajo-cabecera { top: var(--cabecera-alto); }
+.velo--bajo-cabecera {
+  top: var(--cabecera-alto);
+}
 
 .dialogo {
   /* `relative`: el botón de cerrar se ancla a la esquina del diálogo. */
@@ -599,7 +681,11 @@
   box-shadow: var(--sombra-4);
 }
 
-.dialogo__encabezado { display: flex; align-items: center; gap: var(--e-3); }
+.dialogo__encabezado {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+}
 
 .dialogo__icono {
   display: grid;
@@ -611,7 +697,10 @@
   color: var(--info);
   flex: 0 0 auto;
 }
-.dialogo--peligro .dialogo__icono { background: var(--error-insignia); color: var(--error); }
+.dialogo--peligro .dialogo__icono {
+  background: var(--error-insignia);
+  color: var(--error);
+}
 
 /* Retrato de héroe. El componente «Dialogo de validacion de heroe» lo pone a
    64 px, frente a los 40 del diálogo base. Es un modificador y no un cambio
@@ -633,7 +722,9 @@
 }
 
 /* Título y detalle van pegados —4 px— dentro del bloque del héroe. */
-.pila--ajustada { gap: var(--e-1); }
+.pila--ajustada {
+  gap: var(--e-1);
+}
 
 .dialogo__titulo {
   flex: 1;
@@ -643,8 +734,11 @@
 }
 
 /* El botón destructivo va a la derecha; cancelar nunca es el prominente. */
-.dialogo__acciones { display: flex; justify-content: flex-end; gap: var(--e-3); }
-
+.dialogo__acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--e-3);
+}
 
 /* =======================================================================
    Paginación — RNF-USA-001, dieciséis por página
@@ -666,7 +760,11 @@
   color: var(--texto-3);
 }
 
-.paginacion__paginas { display: flex; flex-wrap: wrap; gap: var(--e-2); }
+.paginacion__paginas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+}
 
 .paginacion__pagina {
   display: grid;
@@ -706,14 +804,20 @@
   cursor: default;
 }
 
-.paginacion__pagina[aria-current='page']:hover { color: var(--texto-sobre-color); }
+.paginacion__pagina[aria-current='page']:hover {
+  color: var(--texto-sobre-color);
+}
 
 /* Telefonos: el control se apila para no forzar desplazamiento lateral. */
 @media (max-width: 599px) {
-  .paginacion { justify-content: center; }
-  .paginacion__info { width: 100%; text-align: center; }
+  .paginacion {
+    justify-content: center;
+  }
+  .paginacion__info {
+    width: 100%;
+    text-align: center;
+  }
 }
-
 
 /* =======================================================================
    Tabla
@@ -735,7 +839,9 @@
   border-top: 1px solid var(--borde);
 }
 
-.tabla__fila:first-child { border-top: 0; }
+.tabla__fila:first-child {
+  border-top: 0;
+}
 
 .tabla__fila--encabezado {
   background: var(--fondo);
@@ -748,12 +854,22 @@
   letter-spacing: 0.03em;
 }
 
-.tabla__fila--alterna { background: var(--fondo); }
+.tabla__fila--alterna {
+  background: var(--fondo);
+}
 
-.tabla__celda { flex: 0 0 auto; font-variant-numeric: var(--cifras-tabulares); }
-.tabla__celda--principal { flex: 1; font-weight: 600; }
-.tabla__celda--accion { text-align: right; color: var(--primaria); }
-
+.tabla__celda {
+  flex: 0 0 auto;
+  font-variant-numeric: var(--cifras-tabulares);
+}
+.tabla__celda--principal {
+  flex: 1;
+  font-weight: 600;
+}
+.tabla__celda--accion {
+  text-align: right;
+  color: var(--primaria);
+}
 
 /* =======================================================================
    Pestañas
@@ -761,7 +877,11 @@
    Se recorren con las flechas, no con el tabulador.
    ======================================================================= */
 
-.pestanas { display: flex; gap: var(--e-5); border-bottom: 1px solid var(--borde); }
+.pestanas {
+  display: flex;
+  gap: var(--e-5);
+  border-bottom: 1px solid var(--borde);
+}
 
 .pestana {
   display: flex;
@@ -786,11 +906,18 @@
   font-weight: var(--t-etiqueta-peso);
 }
 
-.pestana__linea { width: 100%; height: 2px; background: transparent; }
+.pestana__linea {
+  width: 100%;
+  height: 2px;
+  background: transparent;
+}
 
-.pestana[aria-selected='true'] { color: var(--primaria); }
-.pestana[aria-selected='true'] .pestana__linea { background: var(--primaria); }
-
+.pestana[aria-selected='true'] {
+  color: var(--primaria);
+}
+.pestana[aria-selected='true'] .pestana__linea {
+  background: var(--primaria);
+}
 
 /* =======================================================================
    Menú desplegable
@@ -831,11 +958,14 @@
   cursor: pointer;
 }
 
-.menu__opcion:hover { background: var(--interaccion-velo-hover); }
+.menu__opcion:hover {
+  background: var(--interaccion-velo-hover);
+}
 
 /* Peligro siempre va la última del menú, separada del resto. */
-.menu__opcion--peligro { color: var(--error); }
-
+.menu__opcion--peligro {
+  color: var(--error);
+}
 
 /* =======================================================================
    Ayuda contextual
@@ -862,9 +992,14 @@
   border: 6px solid transparent;
 }
 
-.ayuda--abajo::after { top: -12px; border-bottom-color: var(--cromo); }
-.ayuda--arriba::after { bottom: -12px; border-top-color: var(--cromo); }
-
+.ayuda--abajo::after {
+  top: -12px;
+  border-bottom-color: var(--cromo);
+}
+.ayuda--arriba::after {
+  bottom: -12px;
+  border-top-color: var(--cromo);
+}
 
 /* =======================================================================
    Tecla — indicador de atajo
@@ -886,7 +1021,6 @@
   color: var(--texto-2);
 }
 
-
 /* =======================================================================
    Estado de conexión — HU-REN-001 y HU-DIS-003
    Informar no es interrumpir: nunca bloquea la pantalla.
@@ -903,11 +1037,22 @@
   font-weight: var(--t-etiqueta-peso);
 }
 
-.conexion--estable      { background: var(--exito-insignia);       color: var(--exito); }
-.conexion--latencia     { background: var(--advertencia-insignia); color: var(--advertencia); }
-.conexion--reconectando { background: var(--advertencia-insignia); color: var(--advertencia); }
-.conexion--sin-conexion { background: var(--error-insignia);       color: var(--error); }
-
+.conexion--estable {
+  background: var(--exito-insignia);
+  color: var(--exito);
+}
+.conexion--latencia {
+  background: var(--advertencia-insignia);
+  color: var(--advertencia);
+}
+.conexion--reconectando {
+  background: var(--advertencia-insignia);
+  color: var(--advertencia);
+}
+.conexion--sin-conexion {
+  background: var(--error-insignia);
+  color: var(--error);
+}
 
 /* =======================================================================
    Panel de resultado
@@ -936,10 +1081,18 @@
   color: var(--exito);
 }
 
-.resultado--derrota .resultado__titulo { color: var(--error); }
-.resultado--empate  .resultado__titulo { color: var(--info); }
+.resultado--derrota .resultado__titulo {
+  color: var(--error);
+}
+.resultado--empate .resultado__titulo {
+  color: var(--info);
+}
 
-.resultado__marcadores { display: flex; gap: var(--e-4); width: 100%; }
+.resultado__marcadores {
+  display: flex;
+  gap: var(--e-4);
+  width: 100%;
+}
 
 .resultado__marcador {
   flex: 1;
@@ -961,7 +1114,6 @@
   font-variant-numeric: var(--cifras-tabulares);
 }
 
-
 /* =======================================================================
    AMPLIACIÓN — componentes compartidos por los tres grupos
    -----------------------------------------------------------------------
@@ -970,7 +1122,6 @@
    lleva anotado el requisito que lo obliga. Igual que arriba: ningún
    hexadecimal, todo baja de tokens.css.
    ======================================================================= */
-
 
 /* =======================================================================
    Controles de formulario
@@ -999,11 +1150,17 @@
   background: var(--superficie);
   border: 2px solid var(--borde-int);
   cursor: pointer;
-  transition: background var(--transicion), border-color var(--transicion);
+  transition:
+    background var(--transicion),
+    border-color var(--transicion);
 }
 
-.casilla__entrada { border-radius: var(--radio-chico); }
-.radio__entrada   { border-radius: 50%; }
+.casilla__entrada {
+  border-radius: var(--radio-chico);
+}
+.radio__entrada {
+  border-radius: 50%;
+}
 
 .casilla__entrada:checked,
 .radio__entrada:checked {
@@ -1013,7 +1170,7 @@
 
 /* La marca no es solo color: se dibuja un símbolo dentro. */
 .casilla__entrada:checked::after {
-  content: "";
+  content: '';
   display: block;
   width: 6px;
   height: 10px;
@@ -1029,7 +1186,7 @@
 }
 
 .casilla__entrada:indeterminate::after {
-  content: "";
+  content: '';
   display: block;
   width: 10px;
   height: 2px;
@@ -1038,7 +1195,7 @@
 }
 
 .radio__entrada:checked::after {
-  content: "";
+  content: '';
   display: block;
   width: 8px;
   height: 8px;
@@ -1068,7 +1225,6 @@
   color: var(--texto-2);
 }
 
-
 /* Desplegable — RF-COM-009 (ordenar), RF-USR-009 (filtrar), RF-ADM-001 */
 .desplegable {
   display: flex;
@@ -1093,8 +1249,9 @@
   outline-offset: 1px;
 }
 
-.desplegable--invalido .desplegable__control { border-color: var(--error); }
-
+.desplegable--invalido .desplegable__control {
+  border-color: var(--error);
+}
 
 /* Campo — tipos añadidos. RF-COM-001 · RF-CAR-006 · RF-INV-004 · RF-SUB-004 */
 .campo--area .campo__control {
@@ -1105,7 +1262,7 @@
 }
 
 .campo--busqueda .campo__control,
-.campo--prefijo  .campo__control {
+.campo--prefijo .campo__control {
   padding-left: calc(var(--e-3) + var(--icono) + var(--e-2));
 }
 
@@ -1120,10 +1277,13 @@
   pointer-events: none;
 }
 
-.campo--prefijo .campo__adorno { color: var(--rareza-legendaria); }
+.campo--prefijo .campo__adorno {
+  color: var(--rareza-legendaria);
+}
 
-.campo__envoltorio { position: relative; }
-
+.campo__envoltorio {
+  position: relative;
+}
 
 /* Campo numérico — RF-SUB-004 (incremento mínimo), RF-JUE-001, RF-PRD-003 */
 .campo-numerico__caja {
@@ -1148,8 +1308,13 @@
   cursor: pointer;
 }
 
-.campo-numerico__boton:hover  { background: var(--interaccion-velo-hover); }
-.campo-numerico__boton:disabled { color: var(--texto-3); cursor: not-allowed; }
+.campo-numerico__boton:hover {
+  background: var(--interaccion-velo-hover);
+}
+.campo-numerico__boton:disabled {
+  color: var(--texto-3);
+  cursor: not-allowed;
+}
 
 .campo-numerico__valor {
   flex: 1 1 auto;
@@ -1159,7 +1324,6 @@
   font-variant-numeric: var(--cifras-tabulares);
   color: var(--texto);
 }
-
 
 /* =======================================================================
    Calificación en estrellas
@@ -1180,8 +1344,14 @@
   gap: 2px;
 }
 
-.estrellas__estrella      { width: 18px; height: 18px; color: var(--pista); }
-.estrellas__estrella--llena { color: var(--rareza-legendaria); }
+.estrellas__estrella {
+  width: 18px;
+  height: 18px;
+  color: var(--pista);
+}
+.estrellas__estrella--llena {
+  color: var(--rareza-legendaria);
+}
 
 .estrellas__detalle {
   font-family: var(--t-meta-familia);
@@ -1190,12 +1360,13 @@
 }
 
 /* Editable: RF-COM-002 permite calificar una sola vez por producto. */
-.estrellas--editable .estrellas__estrella { cursor: pointer; }
+.estrellas--editable .estrellas__estrella {
+  cursor: pointer;
+}
 .estrellas--editable .estrellas__entrada:focus-visible + .estrellas__estrella {
   outline: var(--foco-grosor) solid var(--anillo-foco);
   outline-offset: 2px;
 }
-
 
 /* =======================================================================
    Barra de progreso genérica
@@ -1237,7 +1408,6 @@
   transition: width var(--duracion-normal) var(--curva-estandar);
 }
 
-
 /* =======================================================================
    Contador / cuenta atrás
    RF-SUB-002 (duración) · RF-SUB-011 (subastas activas) · turno de combate
@@ -1261,7 +1431,6 @@
   background: var(--error-insignia);
   color: var(--error);
 }
-
 
 /* =======================================================================
    Tarjeta de contenido — tipos
@@ -1306,14 +1475,15 @@
   color: var(--primaria);
 }
 
-.tarjeta--producto .tarjeta__pie { color: var(--rareza-legendaria); }
+.tarjeta--producto .tarjeta__pie {
+  color: var(--rareza-legendaria);
+}
 
 /* RF-INV-011 · RF-MIS-012: producto bloqueado por subasta o por misión. */
 .tarjeta--bloqueada {
   opacity: 0.6;
   pointer-events: none;
 }
-
 
 /* =======================================================================
    Panel de métrica
@@ -1344,7 +1514,9 @@
   color: var(--exito);
 }
 
-.metrica__tendencia--baja { color: var(--error); }
+.metrica__tendencia--baja {
+  color: var(--error);
+}
 
 .metrica__grafica {
   height: 88px;
@@ -1360,13 +1532,16 @@
   color: var(--texto-3);
 }
 
-
 /* =======================================================================
    Línea de tiempo
    RF-USR-010 · RF-PRD-008 · RF-MIS-011 · RF-AUD-001
    ======================================================================= */
 
-.linea-tiempo { list-style: none; margin: 0; padding: 0; }
+.linea-tiempo {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
 
 .linea-tiempo__item {
   position: relative;
@@ -1378,7 +1553,7 @@
 
 /* El conector nace del punto y baja hasta el siguiente hito. */
 .linea-tiempo__item::before {
-  content: "";
+  content: '';
   position: absolute;
   left: 5px;
   top: 12px;
@@ -1387,7 +1562,9 @@
   background: var(--borde);
 }
 
-.linea-tiempo__item--ultima::before { display: none; }
+.linea-tiempo__item--ultima::before {
+  display: none;
+}
 
 .linea-tiempo__punto {
   width: 12px;
@@ -1407,7 +1584,6 @@
   font-size: var(--t-meta-tam);
   color: var(--texto-3);
 }
-
 
 /* =======================================================================
    Indicador de paso
@@ -1444,12 +1620,20 @@
   font-weight: var(--t-etiqueta-peso);
 }
 
-.paso--actual     .paso__marcador { background: var(--primaria-relleno); color: var(--texto-sobre-color); }
-.paso--completado .paso__marcador { background: var(--exito);            color: var(--texto-sobre-color); }
+.paso--actual .paso__marcador {
+  background: var(--primaria-relleno);
+  color: var(--texto-sobre-color);
+}
+.paso--completado .paso__marcador {
+  background: var(--exito);
+  color: var(--texto-sobre-color);
+}
 
-.paso__etiqueta { color: var(--texto-3); }
+.paso__etiqueta {
+  color: var(--texto-3);
+}
 
-.paso--actual     .paso__etiqueta,
+.paso--actual .paso__etiqueta,
 .paso--completado .paso__etiqueta {
   color: var(--texto);
   font-weight: var(--t-cuerpo-peso-enfasis);
@@ -1461,8 +1645,9 @@
   background: var(--pista);
 }
 
-.paso--completado .paso__conector { background: var(--exito); }
-
+.paso--completado .paso__conector {
+  background: var(--exito);
+}
 
 /* =======================================================================
    Barra de acciones en lote
@@ -1490,7 +1675,10 @@
   font-weight: var(--t-etiqueta-peso);
 }
 
-.lote__acciones { display: flex; gap: var(--e-2); }
+.lote__acciones {
+  display: flex;
+  gap: var(--e-2);
+}
 
 .lote__accion {
   display: inline-flex;
@@ -1505,8 +1693,9 @@
   cursor: pointer;
 }
 
-.lote__accion:hover { background: var(--interaccion-velo-hover); }
-
+.lote__accion:hover {
+  background: var(--interaccion-velo-hover);
+}
 
 /* =======================================================================
    Banner informativo rotativo
@@ -1526,8 +1715,15 @@
   border-radius: var(--radio);
 }
 
-.banner__icono { flex: 0 0 auto; width: var(--icono-grande); height: var(--icono-grande); color: var(--info); }
-.banner__cuerpo { flex: 1 1 auto; }
+.banner__icono {
+  flex: 0 0 auto;
+  width: var(--icono-grande);
+  height: var(--icono-grande);
+  color: var(--info);
+}
+.banner__cuerpo {
+  flex: 1 1 auto;
+}
 
 .banner__titulo {
   font-family: var(--t-cuerpo-familia);
@@ -1535,7 +1731,9 @@
   font-weight: var(--t-cuerpo-peso-enfasis);
 }
 
-.banner__texto { color: var(--texto-2); }
+.banner__texto {
+  color: var(--texto-2);
+}
 
 /* RF-NOT-002 exige mostrar publicación y vigencia en cada mensaje. */
 .banner__vigencia {
@@ -1544,7 +1742,10 @@
   color: var(--texto-3);
 }
 
-.banner__rotacion { display: flex; gap: var(--e-2); }
+.banner__rotacion {
+  display: flex;
+  gap: var(--e-2);
+}
 
 .banner__punto {
   width: 8px;
@@ -1556,8 +1757,9 @@
   cursor: pointer;
 }
 
-.banner__punto[aria-current="true"] { background: var(--info); }
-
+.banner__punto[aria-current='true'] {
+  background: var(--info);
+}
 
 /* =======================================================================
    Fila de resumen económico
@@ -1572,16 +1774,21 @@
 }
 
 .resumen__fila--subtotal,
-.resumen__fila--total { border-top: 1px solid var(--borde); }
+.resumen__fila--total {
+  border-top: 1px solid var(--borde);
+}
 
 .resumen__fila--total {
   font-weight: var(--t-cuerpo-peso-enfasis);
 }
 
-.resumen__fila--total .resumen__importe { color: var(--primaria); }
+.resumen__fila--total .resumen__importe {
+  color: var(--primaria);
+}
 
-.resumen__importe { font-variant-numeric: var(--cifras-tabulares); }
-
+.resumen__importe {
+  font-variant-numeric: var(--cifras-tabulares);
+}
 
 /* =======================================================================
    Insignia de logro
@@ -1610,8 +1817,13 @@
   color: var(--rareza-epica);
 }
 
-.logro--bloqueado .logro__medalla { background: var(--pista); color: var(--texto-3); }
-.logro--bloqueado .logro__titulo  { color: var(--texto-3); }
+.logro--bloqueado .logro__medalla {
+  background: var(--pista);
+  color: var(--texto-3);
+}
+.logro--bloqueado .logro__titulo {
+  color: var(--texto-3);
+}
 
 .logro__titulo {
   font-family: var(--t-etiqueta-familia);
@@ -1624,7 +1836,6 @@
   font-size: var(--t-meta-tam);
   color: var(--texto-3);
 }
-
 
 /* =======================================================================
    Ranura de equipamiento y de habilidad
@@ -1682,8 +1893,9 @@
   color: var(--texto-2);
 }
 
-.ranura--bloqueada .ranura__etiqueta { color: var(--texto-3); }
-
+.ranura--bloqueada .ranura__etiqueta {
+  color: var(--texto-3);
+}
 
 /* =======================================================================
    Encuentro del torneo
@@ -1700,7 +1912,9 @@
   box-shadow: var(--sombra-1);
 }
 
-.encuentro--en-curso { border: 2px solid var(--primaria-relleno); }
+.encuentro--en-curso {
+  border: 2px solid var(--primaria-relleno);
+}
 
 .encuentro__cabecera {
   display: flex;
@@ -1712,8 +1926,14 @@
   color: var(--texto-3);
 }
 
-.encuentro--en-curso   .encuentro__cabecera { background: var(--info-insignia);  color: var(--info); }
-.encuentro--finalizado .encuentro__cabecera { background: var(--exito-insignia); color: var(--exito); }
+.encuentro--en-curso .encuentro__cabecera {
+  background: var(--info-insignia);
+  color: var(--info);
+}
+.encuentro--finalizado .encuentro__cabecera {
+  background: var(--exito-insignia);
+  color: var(--exito);
+}
 
 .encuentro__equipo {
   display: flex;
@@ -1722,7 +1942,9 @@
   padding: var(--e-2) var(--e-3);
 }
 
-.encuentro__equipo + .encuentro__equipo { border-top: 1px solid var(--borde); }
+.encuentro__equipo + .encuentro__equipo {
+  border-top: 1px solid var(--borde);
+}
 
 /* El ganador no se distingue solo por color: cambia el peso del texto. */
 .encuentro__equipo--ganador {
@@ -1730,13 +1952,14 @@
   color: var(--texto);
 }
 
-.encuentro__equipo--ganador .encuentro__marcador { color: var(--exito); }
+.encuentro__equipo--ganador .encuentro__marcador {
+  color: var(--exito);
+}
 
 .encuentro__marcador {
   color: var(--texto-3);
   font-variant-numeric: var(--cifras-tabulares);
 }
-
 
 /* =======================================================================
    Reproductor de transmisión
@@ -1796,11 +2019,18 @@
   overflow: hidden;
 }
 
-.transmision__avance { height: 100%; background: var(--primaria-relleno); }
-.transmision--directo .transmision__avance { background: var(--error); width: 100%; }
+.transmision__avance {
+  height: 100%;
+  background: var(--primaria-relleno);
+}
+.transmision--directo .transmision__avance {
+  background: var(--error);
+  width: 100%;
+}
 
-.transmision__comentarios { padding: var(--e-3); }
-
+.transmision__comentarios {
+  padding: var(--e-3);
+}
 
 /* =======================================================================
    Mensaje del chatbot
@@ -1844,7 +2074,11 @@
   font-weight: var(--t-etiqueta-peso);
 }
 
-.chatbot__pasos { list-style: none; margin: var(--e-2) 0 0; padding: 0; }
+.chatbot__pasos {
+  list-style: none;
+  margin: var(--e-2) 0 0;
+  padding: 0;
+}
 
 .chatbot__paso {
   display: flex;
@@ -1865,7 +2099,6 @@
   font-family: var(--t-meta-familia);
   font-size: var(--t-meta-tam);
 }
-
 
 /* =======================================================================
    Cabecera — navegación completa
@@ -1903,7 +2136,9 @@
 
 /* El destino en curso se marca aquí, no con una variante de Figma. */
 .cabecera__destino.activo,
-.cabecera__destino[aria-current="page"] { border-bottom-color: var(--texto-sobre-color); }
+.cabecera__destino[aria-current='page'] {
+  border-bottom-color: var(--texto-sobre-color);
+}
 
 /* Destino cuya pantalla todavía no existe. Se conserva —RF-INV-008 exige los
    seis— pero no finge llevar a ninguna parte. `data-pendiente` dice de quién
@@ -1936,7 +2171,10 @@
   font-size: var(--t-meta-tam);
 }
 
-.cabecera__buscador-texto::placeholder { color: var(--pista); opacity: 1; }
+.cabecera__buscador-texto::placeholder {
+  color: var(--pista);
+  opacity: 1;
+}
 
 .cabecera__acciones {
   display: flex;
@@ -1972,7 +2210,10 @@
 
 /* 16 px: es el tamaño real de `Icono/buscar` y `Icono/moneda` en la cabecera.
    La campana se queda en los 20 de `.icono`. */
-.icono--menudo { width: var(--icono-menudo); height: var(--icono-menudo); }
+.icono--menudo {
+  width: var(--icono-menudo);
+  height: var(--icono-menudo);
+}
 
 /* El distintivo va AL LADO de la campana, separado 6 px, no superpuesto:
    en Figma «Notificaciones» es una fila de campana + distintivo. */
@@ -2013,7 +2254,11 @@
   flex: 0 0 auto;
 }
 
-.cabecera__identidad { display: flex; flex-direction: column; line-height: 1.2; }
+.cabecera__identidad {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
 
 .cabecera__apodo {
   font-family: var(--t-etiqueta-familia);
@@ -2031,11 +2276,19 @@
 
 /* A 1024 px el buscador se repliega a icono. Nunca se quita un destino. */
 @media (max-width: 1100px) {
-  .cabecera__nav      { gap: var(--e-4); }
-  .cabecera__buscador { flex: 0 0 auto; width: 32px; padding: 0; justify-content: center; }
-  .cabecera__buscador .cabecera__buscador-texto { display: none; }
+  .cabecera__nav {
+    gap: var(--e-4);
+  }
+  .cabecera__buscador {
+    flex: 0 0 auto;
+    width: 32px;
+    padding: 0;
+    justify-content: center;
+  }
+  .cabecera__buscador .cabecera__buscador-texto {
+    display: none;
+  }
 }
-
 
 /* =======================================================================
    Distintivo — familias añadidas
@@ -2046,28 +2299,71 @@
    Nunca fondo sólido con texto blanco. La etiqueta siempre dice el estado.
    ======================================================================= */
 
-.distintivo--en-mision      { background: var(--info-insignia);        color: var(--info); }
-.distintivo--no-disponible  { background: var(--pista);                color: var(--texto-3); }
-.distintivo--activo         { background: var(--exito-insignia);       color: var(--exito); }
-.distintivo--suspendido     { background: var(--error-insignia);       color: var(--error); }
-.distintivo--bloqueada      { background: var(--pista);                color: var(--texto-3); }
-.distintivo--en-progreso    { background: var(--info-insignia);        color: var(--info); }
-.distintivo--completada     { background: var(--exito-insignia);       color: var(--exito); }
-.distintivo--epica          { background: var(--rareza-epica-insignia); color: var(--rareza-epica); }
-.distintivo--administrador  { background: var(--rareza-epica-insignia); color: var(--acento-relleno); }
-.distintivo--moderador      { background: var(--info-insignia);        color: var(--info); }
-.distintivo--sancionado     { background: var(--error-insignia);       color: var(--error); }
-.distintivo--reportado      { background: var(--advertencia-insignia); color: var(--advertencia); }
-.distintivo--promocion      { background: var(--exito-insignia);       color: var(--exito); }
-.distintivo--maestro-juego  { background: var(--rareza-epica-insignia); color: var(--rareza-epica); }
-
+.distintivo--en-mision {
+  background: var(--info-insignia);
+  color: var(--info);
+}
+.distintivo--no-disponible {
+  background: var(--pista);
+  color: var(--texto-3);
+}
+.distintivo--activo {
+  background: var(--exito-insignia);
+  color: var(--exito);
+}
+.distintivo--suspendido {
+  background: var(--error-insignia);
+  color: var(--error);
+}
+.distintivo--bloqueada {
+  background: var(--pista);
+  color: var(--texto-3);
+}
+.distintivo--en-progreso {
+  background: var(--info-insignia);
+  color: var(--info);
+}
+.distintivo--completada {
+  background: var(--exito-insignia);
+  color: var(--exito);
+}
+.distintivo--epica {
+  background: var(--rareza-epica-insignia);
+  color: var(--rareza-epica);
+}
+.distintivo--administrador {
+  background: var(--rareza-epica-insignia);
+  color: var(--acento-relleno);
+}
+.distintivo--moderador {
+  background: var(--info-insignia);
+  color: var(--info);
+}
+.distintivo--sancionado {
+  background: var(--error-insignia);
+  color: var(--error);
+}
+.distintivo--reportado {
+  background: var(--advertencia-insignia);
+  color: var(--advertencia);
+}
+.distintivo--promocion {
+  background: var(--exito-insignia);
+  color: var(--exito);
+}
+.distintivo--maestro-juego {
+  background: var(--rareza-epica-insignia);
+  color: var(--rareza-epica);
+}
 
 /* =======================================================================
    Tabla — selección múltiple y encabezado ordenable
    RF-USR-009 (ordenar y exportar) · RF-COM-008 (lote) · RF-AUD-004
    ======================================================================= */
 
-.tabla__fila--seleccionada { background: var(--info-insignia); }
+.tabla__fila--seleccionada {
+  background: var(--info-insignia);
+}
 
 .tabla__encabezado--ordenable {
   cursor: pointer;
@@ -2080,10 +2376,14 @@
   color: var(--primaria);
 }
 
-.tabla__encabezado--ordenable[aria-sort="descending"] .tabla__orden { transform: rotate(180deg); }
+.tabla__encabezado--ordenable[aria-sort='descending'] .tabla__orden {
+  transform: rotate(180deg);
+}
 
-.tabla__seleccion { width: 40px; text-align: center; }
-
+.tabla__seleccion {
+  width: 40px;
+  text-align: center;
+}
 
 /* =======================================================================
    Bloques base que faltaban
@@ -2094,7 +2394,10 @@
    ======================================================================= */
 
 /* Barra de progreso genérica — contenedor */
-.progreso { display: block; width: 100%; }
+.progreso {
+  display: block;
+  width: 100%;
+}
 
 /* Campo numérico — contenedor. RF-SUB-004 · RF-JUE-001 · RF-PRD-003 */
 .campo-numerico {
@@ -2109,8 +2412,12 @@
   color: var(--texto-3);
 }
 
-.campo-numerico--invalido .campo-numerico__caja  { border-color: var(--error); }
-.campo-numerico--invalido .campo-numerico__ayuda { color: var(--error); }
+.campo-numerico--invalido .campo-numerico__caja {
+  border-color: var(--error);
+}
+.campo-numerico--invalido .campo-numerico__ayuda {
+  color: var(--error);
+}
 
 /* Panel de métrica — contenedor. RF-PRD-001 · RF-MET-001..004 · RF-CHA-012 */
 .metrica {
@@ -2124,13 +2431,23 @@
   box-shadow: var(--sombra-2);
 }
 
-.metrica--cifra   { min-width: 200px; }
-.metrica--grafica { min-width: 260px; }
+.metrica--cifra {
+  min-width: 200px;
+}
+.metrica--grafica {
+  min-width: 260px;
+}
 
 /* Tarjeta de contenido — tipos restantes. RF-MIS-001 · RF-SUB-011 · RF-TOR-003 */
-.tarjeta--mision  .tarjeta__pie { color: var(--primaria); }
-.tarjeta--subasta .tarjeta__pie { color: var(--error); }
-.tarjeta--equipo  .tarjeta__pie { color: var(--exito); }
+.tarjeta--mision .tarjeta__pie {
+  color: var(--primaria);
+}
+.tarjeta--subasta .tarjeta__pie {
+  color: var(--error);
+}
+.tarjeta--equipo .tarjeta__pie {
+  color: var(--exito);
+}
 
 /* Acción de combate — RF-JUE-006, RF-JUE-017 (todo control con icono) */
 .accion-combate {
@@ -2146,24 +2463,33 @@
   color: var(--texto);
   font: inherit;
   cursor: pointer;
-  transition: border-color var(--transicion), background var(--transicion);
+  transition:
+    border-color var(--transicion),
+    background var(--transicion);
 }
 
-.accion-combate:hover { background: var(--interaccion-velo-hover); }
+.accion-combate:hover {
+  background: var(--interaccion-velo-hover);
+}
 
 .accion-combate:focus-visible {
   outline: var(--foco-grosor) solid var(--anillo-foco);
   outline-offset: 2px;
 }
 
-.accion-combate__icono { width: var(--icono); height: var(--icono); }
+.accion-combate__icono {
+  width: var(--icono);
+  height: var(--icono);
+}
 
 .accion-combate__etiqueta {
   font-family: var(--t-meta-familia);
   font-size: var(--t-meta-tam);
 }
 
-.accion-combate--secundaria { background: var(--fondo); }
+.accion-combate--secundaria {
+  background: var(--fondo);
+}
 
 /* Sin poder y fuera de turno: no basta con atenuar, el motivo va en el texto. */
 .accion-combate--sin-poder,
@@ -2174,8 +2500,9 @@
 }
 
 .accion-combate--sin-poder .accion-combate__icono,
-.accion-combate--fuera-de-turno .accion-combate__icono { opacity: 0.5; }
-
+.accion-combate--fuera-de-turno .accion-combate__icono {
+  opacity: 0.5;
+}
 
 /* =======================================================================
    Zona de carga de archivos
@@ -2218,7 +2545,11 @@
   white-space: nowrap;
 }
 
-.zona-carga__icono { width: var(--icono-grande); height: var(--icono-grande); color: var(--texto-3); }
+.zona-carga__icono {
+  width: var(--icono-grande);
+  height: var(--icono-grande);
+  color: var(--texto-3);
+}
 
 .zona-carga__titulo {
   font-family: var(--t-cuerpo-familia);
@@ -2295,8 +2626,9 @@
 
 .zona-carga--error .zona-carga__titulo,
 .zona-carga--error .zona-carga__ayuda,
-.zona-carga--error .zona-carga__icono { color: var(--error); }
-
+.zona-carga--error .zona-carga__icono {
+  color: var(--error);
+}
 
 /* =======================================================================
    Casilla en caja
@@ -2314,12 +2646,13 @@
   border-radius: var(--radio);
 }
 
-.casilla--caja:hover { border-color: var(--borde-int); }
+.casilla--caja:hover {
+  border-color: var(--borde-int);
+}
 
 .casilla--caja:has(.casilla__entrada:focus-visible) {
   border-color: var(--primaria);
 }
-
 
 /* =======================================================================
    Chatbot — boton flotante
@@ -2348,7 +2681,9 @@
   cursor: pointer;
 }
 
-.chatbot-flotante:hover { background: var(--acento-relleno); }
+.chatbot-flotante:hover {
+  background: var(--acento-relleno);
+}
 
 /* =======================================================================
    Cabecera de la aplicación — HU-UX-001 (src/comun/cabecera-app.js)
@@ -2498,7 +2833,6 @@
   }
 }
 
-
 /* =======================================================================
    Encabezados de página y de sección
    -----------------------------------------------------------------------
@@ -2539,7 +2873,6 @@
   padding-bottom: var(--e-2);
   border-bottom: 1px solid var(--borde);
 }
-
 
 /* =======================================================================
    Tarjeta — partes internas
@@ -2658,13 +2991,17 @@
   cursor: pointer;
 }
 
-.dialogo__cerrar:hover { background: var(--interaccion-velo-hover); color: var(--texto); }
+.dialogo__cerrar:hover {
+  background: var(--interaccion-velo-hover);
+  color: var(--texto);
+}
 
 /* Menos movimiento para quien lo pidió en su sistema operativo. */
 @media (prefers-reduced-motion: reduce) {
-  .esqueleto { animation: none; }
+  .esqueleto {
+    animation: none;
+  }
 }
-
 
 /* =======================================================================
    Campo con acción a la derecha (ver/ocultar contraseña)
@@ -2698,8 +3035,10 @@
   cursor: pointer;
 }
 
-.campo__accion:hover { color: var(--texto); background: var(--interaccion-velo-hover); }
-
+.campo__accion:hover {
+  color: var(--texto);
+  background: var(--interaccion-velo-hover);
+}
 
 /* =======================================================================
    Entrada al juego — login, registro y recuperación
@@ -2728,7 +3067,11 @@
   }
 }
 
-.entrada__identidad { display: flex; flex-direction: column; gap: var(--e-4); }
+.entrada__identidad {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-4);
+}
 
 .entrada__marca {
   font-family: var(--t-titulo-familia);
@@ -2738,7 +3081,10 @@
 }
 
 /* El acento es del Nexo: una sola palabra, no toda la marca. */
-.entrada__marca em { font-style: normal; color: var(--primaria); }
+.entrada__marca em {
+  font-style: normal;
+  color: var(--primaria);
+}
 
 .entrada__lema {
   max-width: 46ch;
@@ -2747,7 +3093,13 @@
   line-height: var(--t-subtitulo-alto);
 }
 
-.entrada__puntos { display: grid; gap: var(--e-2); margin: 0; padding: 0; list-style: none; }
+.entrada__puntos {
+  display: grid;
+  gap: var(--e-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
 
 .entrada__punto {
   display: flex;
@@ -2804,12 +3156,14 @@
   font-size: var(--t-meta-tam);
 }
 
-
 /* =======================================================================
    Home del jugador
    ======================================================================= */
 
-.home { display: grid; gap: var(--e-5); }
+.home {
+  display: grid;
+  gap: var(--e-5);
+}
 
 .home__destacado {
   display: grid;
@@ -2817,12 +3171,28 @@
   align-items: center;
   padding: var(--e-6);
   background: var(--cromo-elevado, var(--superficie));
+  color: var(--texto-sobre-color);
   border: 1px solid var(--borde);
   border-radius: var(--radio);
 }
 
 @media (min-width: 860px) {
-  .home__destacado { grid-template-columns: 1fr auto; }
+  .home__destacado {
+    grid-template-columns: 1fr auto;
+  }
+}
+
+/* El fondo de `.home__destacado` es oscuro, asi que su texto NO puede heredar
+   `--texto` del body. Y no basta con poner el color en el contenedor: `base.css`
+   declara `color: var(--texto)` DIRECTAMENTE sobre `h1, h2, .t-titulo...`, y una
+   declaracion propia gana siempre a la herencia. Por eso van nombrados.
+
+   Sin esto, el saludo salia a 1,46:1 sobre `--cromo-elevado`, muy por debajo
+   del 4,5:1 de WCAG AA (1.4.3): el panel mas visible de la aplicacion y
+   practicamente ilegible. Lo midio el laboratorio visual (UX-R2.1); leyendo el
+   CSS no se ve, porque el color venia de tres niveles mas arriba. */
+.home__destacado :is(h1, h2, h3, .t-titulo, .t-subtitulo, .t-etiqueta, .t-cuerpo) {
+  color: var(--texto-sobre-color);
 }
 
 .home__saludo {
@@ -2842,7 +3212,6 @@
   gap: var(--e-3);
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 }
-
 
 /* =======================================================================
    Avatar e importes — Mi Cuenta
@@ -2866,9 +3235,16 @@
   flex-shrink: 0;
 }
 
-.avatar-vista-previa img { width: 100%; height: 100%; object-fit: cover; }
+.avatar-vista-previa img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 
-.avatar-placeholder { font-size: var(--t-meta-tam); color: var(--texto-3); }
+.avatar-placeholder {
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+}
 
 /* Importe de un movimiento de créditos. El color acompaña al signo que ya
    está escrito (+ / − / «apartados»): nunca es la única señal. */
@@ -2878,11 +3254,18 @@
   white-space: nowrap;
 }
 
-.movimiento__importe[data-tono='suma'] { color: var(--exito); }
-.movimiento__importe[data-tono='resta'] { color: var(--error); }
-.movimiento__importe[data-tono='aparta'] { color: var(--advertencia); }
-.movimiento__importe[data-tono='neutro'] { color: var(--texto-2); }
-
+.movimiento__importe[data-tono='suma'] {
+  color: var(--exito);
+}
+.movimiento__importe[data-tono='resta'] {
+  color: var(--error);
+}
+.movimiento__importe[data-tono='aparta'] {
+  color: var(--advertencia);
+}
+.movimiento__importe[data-tono='neutro'] {
+  color: var(--texto-2);
+}
 
 /* =======================================================================
    Rejilla de formulario
@@ -2900,18 +3283,25 @@
   gap: var(--e-4);
 }
 
-.rejilla-formulario__ancho { grid-column: 1 / -1; }
+.rejilla-formulario__ancho {
+  grid-column: 1 / -1;
+}
 
 /* Fila cuyo ultimo elemento es un boton que no debe estirarse: el boton
    se alinea con la base de los campos, no con su etiqueta. */
-.fila--fin { align-items: flex-end; }
-.fila--fin > .boton { flex: 0 0 auto; }
+.fila--fin {
+  align-items: flex-end;
+}
+.fila--fin > .boton {
+  flex: 0 0 auto;
+}
 
 /* Fila que envuelve sin repartir el ancho: distintivos, etiquetas, chips.
    `.fila` estira cada hijo a partes iguales, que es lo contrario de lo que
    necesita una lista de permisos o de estados. */
-.fila--envuelta > * { flex: 0 0 auto; }
-
+.fila--envuelta > * {
+  flex: 0 0 auto;
+}
 
 /* =======================================================================
    Turno en curso — HU-SAL-005 · RF-JUE-017
@@ -2954,7 +3344,9 @@
   flex-shrink: 0;
 }
 
-.turno-actual[data-mio='true']::before { background: var(--texto-sobre-color); }
+.turno-actual[data-mio='true']::before {
+  background: var(--texto-sobre-color);
+}
 
 /* La barra de quien juega, destacada. El borde y el desplazamiento no tapan
    el color de vida, que sigue diciendo lo suyo. */
@@ -2970,10 +3362,14 @@
 }
 
 @keyframes latido-turno {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.35; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }
-
 
 /* =======================================================================
    Arbol del torneo — HU-TOR-004 · RF-TOR-004
@@ -3003,10 +3399,14 @@
 /* En pantalla estrecha el cuadro se lee hacia abajo: un scroll horizontal
    de catorce encuentros en un movil no lo usa nadie. */
 @media (max-width: 720px) {
-  .arbol-torneo { flex-direction: column; overflow-x: visible; }
-  .encuentro { width: 100%; }
+  .arbol-torneo {
+    flex-direction: column;
+    overflow-x: visible;
+  }
+  .encuentro {
+    width: 100%;
+  }
 }
-
 
 /* =======================================================================
    Aviso flotante — HU-RBAC-004
@@ -3048,7 +3448,6 @@
     max-width: none;
   }
 }
-
 
 /* Destino de la barra que exige sesión — HU-INV-004 CA-01 · UX-R2.0
    -----------------------------------------------------------------------

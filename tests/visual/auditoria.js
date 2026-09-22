@@ -246,10 +246,20 @@ export async function contraste(pagina) {
       return (x + 0.05) / (y + 0.05);
     };
     // El fondo efectivo es el del primer ancestro que no sea transparente.
+    //
+    // Si por el camino aparece un degradado o una imagen, se devuelve `null`:
+    // el color real depende del punto de la pantalla y aquí no se puede saber.
+    // Denunciarlo igual daría un número inventado — `productos` salía a 1,08:1
+    // con texto blanco sobre `linear-gradient(125deg, var(--cromo), #2d3767)`,
+    // que en realidad se lee perfectamente. Más vale callar que mentir.
     const fondoDe = (el) => {
       let nodo = el;
       while (nodo && nodo !== document.documentElement.parentNode) {
-        const c = aRgb(getComputedStyle(nodo).backgroundColor);
+        const estilo = getComputedStyle(nodo);
+        if (estilo.backgroundImage !== 'none') {
+          return null;
+        }
+        const c = aRgb(estilo.backgroundColor);
         if (c && c.a > 0.95) {
           return c;
         }
@@ -278,14 +288,24 @@ export async function contraste(pagina) {
       if (estilo.visibility === 'hidden' || +estilo.opacity < 0.1) {
         continue;
       }
+      // WCAG 1.4.3 exceptua explicitamente los controles deshabilitados: un
+      // boton apagado DEBE verse apagado. Sin esta linea, el arnes denunciaba
+      // el «PAGAR» de la tienda por tener el color de su estado inactivo.
+      if (el.closest('[disabled], [aria-disabled="true"], :disabled')) {
+        continue;
+      }
       const texto = aRgb(estilo.color);
       if (!texto || texto.a < 0.95) {
+        continue;
+      }
+      const fondo = fondoDe(el);
+      if (!fondo) {
         continue;
       }
       const tam = parseFloat(estilo.fontSize);
       const grande = tam >= 24 || (tam >= 18.66 && +estilo.fontWeight >= 700);
       const minimo = grande ? 3 : 4.5;
-      const medida = razon(texto, fondoDe(el));
+      const medida = razon(texto, fondo);
       if (medida < minimo) {
         // Una firma por combinación color/fondo/tamaño: si la misma pareja
         // falla en veinte celdas de una tabla, el defecto es uno.

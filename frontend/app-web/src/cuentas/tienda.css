@@ -172,16 +172,29 @@ body {
 .hidden {
   display: none;
 }
+/* El azul claro que traia del Figma (#8ea2e8) deja el texto blanco en 2,48:1,
+   muy por debajo del 4,5:1 de WCAG AA — y es el boton que cierra la compra. Lo
+   midio el laboratorio visual (UX-R2.1).
+
+   No se inventa un color: se usa `--primaria-relleno`, que el kit documenta en
+   8,54:1 con blanco y que ya es el azul de los botones primarios de toda la
+   aplicacion. El claro de antes pasa a ser el estado deshabilitado, que es lo
+   que en realidad estaba comunicando: un boton apagado hasta que hay carrito.
+   Los deshabilitados quedan fuera de 1.4.3, asi que ahi si vale. */
 .btn-pagar {
   width: 100%;
-  background-color: #8ea2e8; /* Color azul claro del figma */
-  color: white;
+  background-color: var(--primaria-relleno);
+  color: var(--texto-sobre-color);
   border: none;
   padding: 15px;
   border-radius: 5px;
   font-size: 1.1rem;
   font-weight: bold;
   cursor: pointer;
+}
+.btn-pagar[disabled] {
+  background-color: #8ea2e8;
+  cursor: not-allowed;
 }
 .btn-pagar:not([disabled]):hover {
   background-color: #2b4cbf;
