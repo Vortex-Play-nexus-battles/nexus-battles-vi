@@ -71,7 +71,7 @@ describe('montarSalaBatalla', () => {
     expect(document.querySelectorAll('.barra-vida')).toHaveLength(1);
   });
 
-  test('sin transporte del canal la vista lo dice, en vez de aparentar conexion', () => {
+  test('sin transporte del canal la vista lo dice, en vez de aparentar conexión', () => {
     montarSalaBatalla(document, { idPartida: ID_PARTIDA, participantes: participantes() });
 
     expect(conexion().className).toBe('conexion conexion--sin-conexion');
@@ -181,7 +181,7 @@ describe('participantesParaElPanel · adaptar GET /partidas/{id} al panel', () =
   });
 
   describe('montada en la vista', () => {
-    test('con la partida de la API pinta una barra por participante con heroe', () => {
+    test('con la partida de la API pinta una barra por participante con héroe', () => {
       montarSalaBatalla(document, { partida: partidaDeLaApi([conHeroe, maquina]) });
 
       expect(panel().hidden).toBe(false);
@@ -189,12 +189,12 @@ describe('participantesParaElPanel · adaptar GET /partidas/{id} al panel', () =
       expect(document.querySelector('[data-zona="vidas"]').dataset.partida).toBe(ID_PARTIDA);
     });
 
-    test('una partida en curso sin ningun heroe conocido lo explica, no deja un panel vacio', () => {
+    test('una partida en curso sin ningún héroe conocido lo explica, no deja un panel vacío', () => {
       montarSalaBatalla(document, { partida: partidaDeLaApi([sinHeroe]) });
 
       expect(panel().hidden).toBe(true);
       expect(sinPartida().hidden).toBe(false);
-      expect(sinPartida().querySelector('.t-meta').textContent).toMatch(/heroe de ninguno/i);
+      expect(sinPartida().querySelector('.t-meta').textContent).toMatch(/héroe de ninguno/i);
       expect(document.querySelectorAll('.barra-vida')).toHaveLength(0);
     });
   });

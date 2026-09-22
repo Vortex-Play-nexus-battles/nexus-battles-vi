@@ -2,7 +2,7 @@
 
 import { creditos, cuantoFalta, fecha, numero, porcentaje } from './formato.js';
 
-describe('creditos', () => {
+describe('créditos', () => {
   test('separador de miles y sin decimales', () => {
     expect(creditos(1250)).toMatch(/1.250/);
     expect(creditos('60')).toBe('60');
@@ -30,7 +30,7 @@ describe('fechas', () => {
 describe('cuantoFalta', () => {
   const ahora = new Date('2026-10-01T10:00:00Z');
 
-  test('dias, horas y minutos', () => {
+  test('días, horas y minutos', () => {
     expect(cuantoFalta('2026-10-04T10:00:00Z', ahora)).toBe('en 3 d');
     expect(cuantoFalta('2026-10-01T12:15:00Z', ahora)).toBe('en 2 h 15 min');
     expect(cuantoFalta('2026-10-01T10:20:00Z', ahora)).toBe('en 20 min');

@@ -152,7 +152,7 @@ describe('la observabilidad es de administracion (#527)', () => {
     );
     expect(aviso).not.toBeNull();
     expect(aviso.className).toContain('aviso--info');
-    expect(aviso.textContent).toMatch(/administracion/i);
+    expect(aviso.textContent).toMatch(/administración/i);
     expect(aviso.textContent).not.toMatch(/403|error/i);
   });
 });
@@ -162,7 +162,7 @@ describe('vista', () => {
     document.body.innerHTML = VISTA;
   });
 
-  test('pinta la tabla tecnica con alertas y brechas, y la moderacion sin umbral lo dice', async () => {
+  test('pinta la tabla técnica con alertas y brechas, y la moderación sin umbral lo dice', async () => {
     const fetchImpl = servicio({
       '/api/v1/tecnicas': { cuerpo: tecnico() },
       '/api/v1/moderacion': { cuerpo: moderacion() },
@@ -199,7 +199,7 @@ describe('vista', () => {
     const descargas = [];
     const fetchImpl = servicio({
       '/api/v1/tecnicas': { cuerpo: tecnico() },
-      '/api/v1/tecnicas/informe/texto': { cuerpo: 'Metricas tecnicas de la plataforma' },
+      '/api/v1/tecnicas/informe/texto': { cuerpo: 'Métricas técnicas de la plataforma' },
       '/api/v1/moderacion': (url) => ({
         cuerpo: moderacion({
           alertasConfiguradas: true,
@@ -218,7 +218,7 @@ describe('vista', () => {
     await asentar();
     expect(
       document.querySelector('[data-zona="moderacion"] [data-zona="alertas"]').textContent,
-    ).toMatch(/ningun dia supera/);
+    ).toMatch(/ningún día supera/);
 
     const form = document.querySelector('[data-zona="periodo"]');
     form.querySelector('[name="desde"]').value = '2026-09-01T00:00';
@@ -242,10 +242,10 @@ describe('vista', () => {
       'metricas-tecnicas.txt',
       'metricas-moderacion.json',
     ]);
-    expect(descargas[0][1]).toMatch(/Metricas tecnicas/);
+    expect(descargas[0][1]).toMatch(/Métricas técnicas/);
   });
 
-  test('un 503 de la fuente se pinta como error con su titulo', async () => {
+  test('un 503 de la fuente se pinta como error con su título', async () => {
     montarTableroTecnico(document, {
       fetchImpl: servicio({
         '/api/v1/tecnicas': { cuerpo: tecnico() },
@@ -253,7 +253,7 @@ describe('vista', () => {
           estado: 503,
           cuerpo: {
             type: 'https://nexusbattles.local/errores/fuente-no-disponible',
-            title: 'La fuente de moderacion no responde',
+            title: 'La fuente de moderación no responde',
             detail: 'x',
           },
         },
@@ -263,6 +263,6 @@ describe('vista', () => {
     await asentar();
     expect(
       document.querySelector('[data-zona="moderacion"] .aviso--error .aviso__titulo').textContent,
-    ).toBe('La fuente de moderacion no responde');
+    ).toBe('La fuente de moderación no responde');
   });
 });

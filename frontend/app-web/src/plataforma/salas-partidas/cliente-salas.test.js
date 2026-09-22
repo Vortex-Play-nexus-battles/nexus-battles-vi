@@ -72,7 +72,7 @@ describe('listarSalas', () => {
     expect(url.searchParams.get('estado')).toBe('ABIERTA');
   });
 
-  test('un filtro vacio no se manda: no es lo mismo que filtrar por cadena vacia', async () => {
+  test('un filtro vacío no se manda: no es lo mismo que filtrar por cadena vacia', async () => {
     const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, { contenido: [] }));
 
     await listarSalas({ modalidad: '', estado: null, pagina: 0 }, { fetchImpl });
@@ -114,7 +114,7 @@ describe('ingresarASala', () => {
       respuesta(403, {
         type: 'https://nexusbattles.local/errores/sala-privada',
         title: 'Esta sala es privada',
-        detail: 'Necesitas un codigo de invitacion.',
+        detail: 'Necesitas un código de invitación.',
         status: 403,
       }),
     );
@@ -126,12 +126,12 @@ describe('ingresarASala', () => {
     expect(error.estado).toBe(403);
   });
 
-  test('un 409 de sala llena tambien llega interpretado', async () => {
+  test('un 409 de sala llena también llega interpretado', async () => {
     const fetchImpl = jest.fn().mockResolvedValue(
       respuesta(409, {
         type: 'https://nexusbattles.local/errores/ingreso-no-permitido',
         title: 'No puedes entrar',
-        detail: 'La sala ya alcanzo su maximo de participantes.',
+        detail: 'La sala ya alcanzo su máximo de participantes.',
         status: 409,
       }),
     );
@@ -139,7 +139,7 @@ describe('ingresarASala', () => {
     const error = await ingresarASala('abc', { fetchImpl }).catch((e) => e);
 
     expect(error.estado).toBe(409);
-    expect(error.detalle).toContain('maximo de participantes');
+    expect(error.detalle).toContain('máximo de participantes');
   });
 });
 
@@ -221,13 +221,13 @@ describe('crearSala', () => {
     expect(error.estado).toBe(400);
   });
 
-  test('traduce los creditos insuficientes conservando el motivo', async () => {
+  test('traduce los créditos insuficientes conservando el motivo', async () => {
     const fetchImpl = jest.fn().mockResolvedValue(
       respuesta(422, {
         type: 'https://nexusbattles.local/errores/creditos-insuficientes',
         title: 'Creditos insuficientes',
         status: 422,
-        detail: 'Tienes 240 creditos y necesitas 400 para crear esta sala.',
+        detail: 'Tienes 240 créditos y necesitas 400 para crear esta sala.',
       }),
     );
 
@@ -239,7 +239,7 @@ describe('crearSala', () => {
     expect(error.esDeFormulario).toBe(false);
   });
 
-  test('el 503 de creditos sin integrar llega con su tipo, para poder distinguirlo', async () => {
+  test('el 503 de créditos sin integrar llega con su tipo, para poder distinguirlo', async () => {
     const fetchImpl = jest.fn().mockResolvedValue(
       respuesta(503, {
         type: 'https://nexusbattles.local/errores/creditos-sin-integrar',
@@ -355,7 +355,7 @@ describe('sin backend detras', () => {
     expect(error.titulo).toBe('Metodo no permitido');
   });
 
-  test('el diagnostico nombra la URL real de la peticion cuando fetch la trae', async () => {
+  test('el diagnostico nombra la URL real de la petición cuando fetch la trae', async () => {
     const conUrl = {
       ...respuesta(404, undefined, 'text/html'),
       url: 'http://127.0.0.1:4399/api/v1/salas/s1/verificacion-heroe',
@@ -368,7 +368,7 @@ describe('sin backend detras', () => {
     expect(diagnostico).toContain('/api/v1/salas/s1/verificacion-heroe');
   });
 
-  test('un GET que devuelve la pagina HTML del servidor estatico tambien se detecta', async () => {
+  test('un GET que devuelve la página HTML del servidor estatico también se detecta', async () => {
     const fetchImpl = jest
       .fn()
       .mockResolvedValue(respuesta(404, undefined, 'text/html; charset=utf-8'));
@@ -398,7 +398,7 @@ describe('baseDeApi', () => {
     document.head.innerHTML = '';
   });
 
-  test('sin declararla, es el mismo origen: nada de localhost escrito en el codigo', () => {
+  test('sin declararla, es el mismo origen: nada de localhost escrito en el código', () => {
     expect(baseDeApi()).toBe('');
   });
 
@@ -458,12 +458,12 @@ describe('iniciarPartida', () => {
     expect(error.estado).toBe(403);
   });
 
-  test('un 409 de sala que todavia no puede empezar llega interpretado', async () => {
+  test('un 409 de sala que todavía no puede empezar llega interpretado', async () => {
     const fetchImpl = jest.fn().mockResolvedValue(
       respuesta(409, {
         type: 'https://nexusbattles.local/errores/ingreso-no-permitido',
         title: 'No puedes entrar a esta sala',
-        detail: 'La sala necesita al menos un rival o el heroe de la IA.',
+        detail: 'La sala necesita al menos un rival o el héroe de la IA.',
         status: 409,
       }),
     );
@@ -492,7 +492,7 @@ describe('obtenerPartida', () => {
     expect(fetchImpl.mock.calls[0][0]).toBe('/api/v1/partidas/p1');
   });
 
-  test('es una lectura: va sin opciones de peticion', async () => {
+  test('es una lectura: va sin opciones de petición', async () => {
     const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, { id: 'p1' }));
 
     await obtenerPartida('p1', { fetchImpl });

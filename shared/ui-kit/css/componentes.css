@@ -748,12 +748,6 @@
   gap: var(--e-1);
 }
 
-.dialogo__titulo {
-  flex: 1;
-  font-family: var(--t-titulo-familia);
-  font-size: var(--t-titulo-tam);
-  font-weight: var(--t-titulo-peso);
-}
 
 /* El botón destructivo va a la derecha; cancelar nunca es el prominente. */
 .dialogo__acciones {
@@ -3194,7 +3188,13 @@
   font-variant-numeric: var(--cifras-tabulares);
 }
 
+/* UX-R3.11 — estaba declarado dos veces en esta misma hoja, con dos escalas
+   tipograficas distintas (titulo y subtitulo). Como el selector es identico,
+   ganaba la segunda para lo que declaraba y sobrevivia el `flex: 1` de la
+   primera: el resultado en pantalla es esta union. Se deja escrita una sola
+   vez para que lo que se lee sea lo que pasa. */
 .dialogo__titulo {
+  flex: 1;
   font-family: var(--t-subtitulo-familia);
   font-size: var(--t-subtitulo-tam);
   font-weight: var(--t-subtitulo-peso);
@@ -4913,8 +4913,31 @@ button.tarjeta-heroe[aria-pressed='true'] {
    laboratorio los midió en **tres filas, 166 px de cabecera**, en las siete
    vistas de trastienda a 1024×768 — que es la resolución de una pantalla de
    portátil corriente, no un caso raro. Plegar no es esconder: los nueve
-   siguen estando, a un toque. */
-@media (max-width: 1200px) {
+   siguen estando, a un toque.
+
+   UX-R3.11 — el corte en 1200 se fijó midiendo a 1024 y no se volvió a mirar
+   más arriba. La captura del barrido, con persona de super administración a
+   1440, enseñó «AUDITORÍA» sola en una segunda fila. Medido en las cuatro
+   combinaciones (altura real de `.cabecera`, 64 px = una fila):
+
+     nueve destinos, MAYÚSCULAS + espaciado   684 px de texto
+     nueve destinos, caja normal              548 px de texto
+
+     ancho   sitio para la nav   MAYÚSCULAS   caja normal
+     1600    —                   64 px        64 px
+     1540    —                   64 px        64 px
+     1520    —                   106 px       —
+     1440    676 px              106 px       64 px
+     1366    644 px              106 px       64 px
+     1280    570 px              106 px       102 px
+
+   Las mayúsculas cuestan 136 px, que es justo la diferencia entre caber y no
+   caber en un portátil. Así que la consola se queda en mayúsculas donde hay
+   sitio, baja a caja normal en la banda de portátil —donde la densidad importa
+   más que el gesto— y se pliega cuando ya no cabe de ninguna manera. Ninguna
+   de las tres opciones esconde un destino: la tercera lo deja a un toque. */
+
+@media (max-width: 1365px) {
   .cabecera--consola .cabecera__nav--consola {
     display: none;
   }
@@ -4957,6 +4980,24 @@ button.tarjeta-heroe[aria-pressed='true'] {
   letter-spacing: 0.02em;
   text-transform: uppercase;
 }
+
+/* Banda de portátil: caben los nueve en una fila si se les quita el coste de
+   las mayúsculas. Verificado a 1440 y a 1366.
+
+   Va DESPUES de la regla de arriba a proposito: una consulta de medios no
+   suma especificidad, asi que escrita antes perdia contra ella y no hacia
+   nada — el laboratorio lo midio: seguia en 106 px. */
+@media (max-width: 1540px) and (min-width: 1366px) {
+  .cabecera--consola .cabecera__nav--consola {
+    gap: var(--e-3);
+  }
+
+  .cabecera--consola .cabecera__destino {
+    text-transform: none;
+    letter-spacing: normal;
+  }
+}
+
 
 /* El filo de acento recorre toda la barra. Es la versión a lo ancho del filo
    superior de la tarjeta de entrada: mismo gesto, mismo gradiente, distinto

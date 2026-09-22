@@ -56,7 +56,7 @@ export function textoDeContador(noLeidas) {
   if (noLeidas === 0) {
     return 'Sin notificaciones sin leer';
   }
-  return noLeidas === 1 ? '1 notificacion sin leer' : `${noLeidas} notificaciones sin leer`;
+  return noLeidas === 1 ? '1 notificación sin leer' : `${noLeidas} notificaciones sin leer`;
 }
 
 function pintarContador(raiz, noLeidas) {

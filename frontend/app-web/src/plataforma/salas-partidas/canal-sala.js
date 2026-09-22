@@ -61,7 +61,7 @@ export function textoDeCancelacion(aviso) {
   const motivo = MOTIVOS_DE_CANCELACION[aviso?.motivo] ?? 'La sala se cerro.';
   const devueltos = Number(aviso?.creditosDevueltos);
   if (Number.isFinite(devueltos) && devueltos > 0) {
-    return `${motivo} Se te devolvieron ${devueltos} creditos.`;
+    return `${motivo} Se te devolvieron ${devueltos} créditos.`;
   }
   return motivo;
 }

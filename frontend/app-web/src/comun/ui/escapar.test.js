@@ -31,7 +31,7 @@ describe('esc', () => {
     expect(span.getAttribute('title')).toBe(cargado);
   });
 
-  test('la comilla simple tambien, porque hay atributos escritos asi', () => {
+  test('la comilla simple también, porque hay atributos escritos así', () => {
     const caja = document.createElement('div');
     caja.innerHTML = `<span title='${esc("' onclick='alert(1)")}'>x</span>`;
 

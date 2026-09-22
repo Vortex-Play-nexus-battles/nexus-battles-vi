@@ -411,8 +411,8 @@ export function textoDelPromedio(hilo) {
   if (!Number.isFinite(promedio) || total === 0) {
     return 'Sin calificaciones todavía.';
   }
-  const plural = total === 1 ? 'calificacion' : 'calificaciones';
-  return `Calificacion promedio: ${promedio.toFixed(2)} de ${MAXIMO_ESTRELLAS} (${total} ${plural}).`;
+  const plural = total === 1 ? 'calificación' : 'calificaciones';
+  return `Calificación promedio: ${promedio.toFixed(2)} de ${MAXIMO_ESTRELLAS} (${total} ${plural}).`;
 }
 
 /**
@@ -589,7 +589,7 @@ export async function cargarHilo(
     // comentar y lo dice en la zona del promedio, sin inventar cifras.
     const zona = zonaHilo.querySelector('[data-zona="promedio"]');
     if (zona) {
-      zona.textContent = 'No pudimos cargar el hilo. Intentalo de nuevo en un momento.';
+      zona.textContent = 'No pudimos cargar el hilo. Inténtalo de nuevo en un momento.';
     }
     return null;
   } finally {
@@ -648,7 +648,7 @@ export function montarPublicarComentario(
       pintarAviso(zonaAviso, {
         tono: 'exito',
         titulo: 'Comentario eliminado',
-        detalle: 'Ya no aparece en el hilo y su calificacion dejo de contar.',
+        detalle: 'Ya no aparece en el hilo y su calificación dejo de contar.',
       });
       await actualizarPromedio(zonaHilo, { productoId: idProducto, consultarImpl });
     } catch (error) {
@@ -659,7 +659,7 @@ export function montarPublicarComentario(
       pintarAviso(zonaAviso, {
         tono: deApi ? tonoPara(error.estado) : 'error',
         titulo: deApi ? error.titulo : 'No pudimos contactar con el servicio',
-        detalle: deApi ? error.detalle : 'Revisa tu conexion e intentalo de nuevo.',
+        detalle: deApi ? error.detalle : 'Revisa tu conexión e inténtalo de nuevo.',
       });
     }
   };
@@ -712,9 +712,9 @@ export function montarPublicarComentario(
         // al hilo hasta que se apruebe (CA-03, caso adicional de #34).
         pintarAviso(zonaAviso, {
           tono: 'info',
-          titulo: 'Tu comentario esta en revision',
+          titulo: 'Tu comentario está en revisión',
           detalle:
-            'El filtro automatico lo senalo. Quedo guardado y un moderador lo revisara antes de publicarlo.',
+            'El filtro automático lo señaló. Quedó guardado y un moderador lo revisará antes de publicarlo.',
         });
       } else {
         // RF-COM-002 / D-07: la segunda calificacion no es un error. El
@@ -726,9 +726,9 @@ export function montarPublicarComentario(
         let detalle = 'Ya aparece en el hilo del producto.';
         if (descartada) {
           detalle =
-            'Ya habias calificado este producto: el comentario va sin estrellas y tu calificacion anterior se mantiene.';
+            'Ya habías calificado este producto: el comentario va sin estrellas y tu calificación anterior se mantiene.';
         } else if (Number.isInteger(comentario.estrellas)) {
-          detalle = 'Ya aparece en el hilo del producto con tu calificacion.';
+          detalle = 'Ya aparece en el hilo del producto con tu calificación.';
         }
         pintarAviso(zonaAviso, {
           tono: 'exito',
@@ -772,7 +772,7 @@ export function montarPublicarComentario(
           detalle: error.detalle,
           accion: {
             nombre: 'reintentar-sin-calificar',
-            texto: 'Publicar sin calificacion',
+            texto: 'Publicar sin calificación',
             alPulsar: () => {
               quitarCalificacion(formulario);
               formulario.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
@@ -790,7 +790,7 @@ export function montarPublicarComentario(
         pintarAviso(zonaAviso, {
           tono: 'error',
           titulo: 'No pudimos contactar con el servicio',
-          detalle: 'Revisa tu conexion e intentalo de nuevo.',
+          detalle: 'Revisa tu conexión e inténtalo de nuevo.',
         });
       }
     } finally {

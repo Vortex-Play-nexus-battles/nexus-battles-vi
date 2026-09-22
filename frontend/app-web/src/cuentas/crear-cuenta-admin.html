@@ -30,10 +30,9 @@
       </header>
 
       <section id="acceso-denegado" class="estado-vista estado-vista--vacio" hidden>
-        <h2 class="estado-vista__titulo">Acceso restringido</h2>
-        <p class="estado-vista__detalle">
-          Solo un Super Administrador con el permiso correspondiente puede crear cuentas
-          administrativas.
+        <h2 class="estado-vista__titulo" data-zona="titulo-bloqueo">Acceso restringido</h2>
+        <p class="estado-vista__detalle" data-zona="detalle-bloqueo">
+          Crear cuentas administrativas es del super administrador.
         </p>
         <button id="btn-cancelar-acceso" type="button" class="boton boton--secundario">
           Volver
@@ -45,7 +44,7 @@
           <div>
             <h2 class="tarjeta__titulo">Nueva cuenta administrativa</h2>
             <p class="t-meta">
-              La cuenta nace inactiva: la activacion y el segundo factor los resuelve el flujo de
+              La cuenta nace inactiva: la activación y el segundo factor los resuelve el flujo de
               seguridad del sistema.
             </p>
           </div>
@@ -178,7 +177,7 @@
         <p id="resultado-texto"></p>
         <div class="aviso aviso--info">
           <div class="aviso__cuerpo">
-            La cuenta queda sujeta al proceso de activacion, autenticacion y segundo factor definido
+            La cuenta queda sujeta al proceso de activación, autenticación y segundo factor definido
             por el sistema.
           </div>
         </div>

@@ -72,7 +72,7 @@ function servicio(rutas) {
 describe('presentacion', () => {
   test('resumenDe dice estado, ocupacion y costo', () => {
     expect(resumenDe(torneo({ equiposInscritos: 3 }))).toBe(
-      'Inscripciones abiertas · 3 de 8 equipos · 10 creditos',
+      'Inscripciones abiertas · 3 de 8 equipos · 10 créditos',
     );
     expect(resumenDe(torneo({ estado: 'EN_CURSO', costoInscripcion: 0 }))).toBe(
       'En curso · 0 de 8 equipos · gratuito',
@@ -88,7 +88,7 @@ describe('presentacion', () => {
     expect(nombreDe(t, 'desconocido-123')).toBe('desconoc');
   });
 
-  test('accionesDe: sesion, estado, cupo, equipo sin inscribir e inscrito (CA-03)', () => {
+  test('accionesDe: sesión, estado, cupo, equipo sin inscribir e inscrito (CA-03)', () => {
     expect(accionesDe(torneo(), null)).toMatchObject({ crearEquipo: false, inscribir: false });
     expect(accionesDe(torneo({ estado: 'EN_CURSO' }), UID).motivo).toMatch(/cerradas/);
     expect(accionesDe(torneo({ equiposInscritos: 8 }), UID).motivo).toMatch(/Cupo agotado/);
@@ -99,10 +99,10 @@ describe('presentacion', () => {
     });
     expect(
       accionesDe(torneo({ equipos: [equipo({ inscrito: true, posicion: 2 })] }), UID).motivo,
-    ).toMatch(/posicion 2/);
+    ).toMatch(/posición 2/);
   });
 
-  test('encuentrosDe filtra por llave y ordena por numero', () => {
+  test('encuentrosDe filtra por llave y ordena por número', () => {
     const t = torneo({
       encuentros: [
         { numero: 11, llave: 'GANADORES', estado: 'PENDIENTE' },
@@ -235,7 +235,7 @@ describe('vista', () => {
     expect(document.querySelector('[data-zona="crear-torneo"]').hidden).toBe(false);
   });
 
-  test('abrir un torneo pinta equipos, acciones y arbol; el jugador registra su equipo y lo inscribe', async () => {
+  test('abrir un torneo pinta equipos, acciones y árbol; el jugador registra su equipo y lo inscribe', async () => {
     let t = torneo();
     const fetchImpl = servicio({
       'GET /api/v1/torneos': () => ({ cuerpo: [t] }),
@@ -283,18 +283,18 @@ describe('vista', () => {
     expect(document.querySelector('.aviso--exito').textContent).toMatch(/Equipo registrado/);
 
     const inscribir = document.querySelector('[data-accion="inscribir"]');
-    expect(inscribir.textContent).toMatch(/10 creditos/);
+    expect(inscribir.textContent).toMatch(/10 créditos/);
     inscribir.click();
     await asentar();
     await asentar();
     await asentar();
-    expect(document.querySelector('.aviso--exito').textContent).toMatch(/posicion 1/);
+    expect(document.querySelector('.aviso--exito').textContent).toMatch(/posición 1/);
     expect(document.querySelector('[data-zona="acciones"]').textContent).toMatch(
-      /Ya estas inscrito/,
+      /Ya estás inscrito/,
     );
   });
 
-  test('en curso se pinta el arbol por llaves y el campeon; un rechazo del servicio se avisa', async () => {
+  test('en curso se pinta el árbol por llaves y el campeón; un rechazo del servicio se avisa', async () => {
     const a = equipo({ id: 'a', nombre: 'A', inscrito: true, posicion: 1 });
     const b = equipo({
       id: 'b',
@@ -366,7 +366,7 @@ describe('vista', () => {
       'por definir',
     );
     expect(detalle.querySelector('[data-equipo-id="b"][data-ia="true"]').textContent).toMatch(
-      /maquina/,
+      /máquina/,
     );
     expect(detalle.querySelector('[data-zona="acciones"]').textContent).toMatch(/Inicia sesión/);
 
@@ -458,7 +458,7 @@ describe('vista', () => {
   });
 });
 
-describe('el arbol usa el componente Encuentro del sistema de diseno', () => {
+describe('el árbol usa el componente Encuentro del sistema de diseno', () => {
   const equipos = [
     { id: 'eq-1', nombre: 'Los Valientes', integrantes: [UID, 'x'], inscrito: true, posicion: 1 },
     { id: 'eq-2', nombre: 'Rivales', integrantes: ['y', 'z'], inscrito: true, posicion: 2 },

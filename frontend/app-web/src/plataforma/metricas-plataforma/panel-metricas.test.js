@@ -124,7 +124,7 @@ describe('la observabilidad es de administracion (#527)', () => {
 
     const estado = caja.querySelector('.estado-vista');
     expect(estado.dataset.estado).toBe('sin-permiso');
-    expect(estado.textContent).toMatch(/administracion/i);
+    expect(estado.textContent).toMatch(/administración/i);
     expect(estado.querySelector('[data-accion="reintentar"]')).toBeNull();
   });
 
@@ -203,7 +203,7 @@ describe('lecturas y escrituras separadas', () => {
 });
 
 describe('el objetivo se presenta como referencia, no como umbral de esta pantalla', () => {
-  it('dice de donde sale el numero, en el idioma de quien opera', () => {
+  it('dice de donde sale el número, en el idioma de quien opera', () => {
     // HU-REN-002 no define ningun umbral propio. Presentar los 500 ms como
     // "su" limite seria inventarle un requisito, asi que se dice de donde
     // viene el numero.

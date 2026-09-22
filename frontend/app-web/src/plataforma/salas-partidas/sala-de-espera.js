@@ -34,7 +34,7 @@ export const CLAVE_AVISO_DEL_LISTADO = 'nexus.avisoDeSala';
 export function textoDeConfirmacion(sala) {
   const otros = Math.max(0, Number(sala?.ocupacion ?? 1) - 1);
   if (otros === 0) {
-    return '¿Cancelar la sala? Todavia no ha entrado nadie mas.';
+    return '¿Cancelar la sala? Todavía no ha entrado nadie mas.';
   }
   const gente = otros === 1 ? '1 participante' : `${otros} participantes`;
   return `¿Cancelar la sala? Se expulsara a ${gente}.`;
@@ -187,7 +187,7 @@ export function montarSalaDeEspera(
     } catch (error) {
       // 409 ya empezo · 403 no eres el anfitrion · 404 no existe. El texto lo
       // redacta el servicio, que es quien sabe el motivo.
-      decir(error?.detalle ?? error?.message ?? 'No se pudo completar la operacion.');
+      decir(error?.detalle ?? error?.message ?? 'No se pudo completar la operación.');
       boton.disabled = false;
     }
   };

@@ -159,6 +159,20 @@ a:hover { color: var(--primaria-relleno); }
   border-radius: var(--radio-chico);
 }
 
+/* UX-R3.11 — Un elemento con `tabindex="-1"` no se alcanza con el teclado: el
+   unico modo de que reciba el foco es que un script se lo de, y ahi el anillo
+   no informa de nada; informa, en falso, de que ahi se puede escribir.
+   El <h2> del dialogo de validacion de heroe se lleva el foco al abrirse para
+   que el lector de pantalla anuncie de que va el dialogo, y salia con un
+   rectangulo redondeado a todo lo ancho: en la captura se lee como un campo de
+   texto vacio con un marcador de posicion dentro.
+   El foco SIGUE moviendose -eso es lo que necesita el lector de pantalla-; lo
+   que se quita es el dibujo. */
+[tabindex='-1']:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 /* --- Utilidad de accesibilidad ------------------------------------- */
 /* Texto que solo leen los lectores de pantalla. Se usa, por ejemplo,
    para dar contexto a una barra de vida o a un icono sin etiqueta.    */

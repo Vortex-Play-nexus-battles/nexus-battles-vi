@@ -627,7 +627,7 @@ export class ControladorSubastas {
         } else {
           // Llego un enlace a una subasta que ya no esta en el listado: se
           // cerro o se adjudico. Mejor decirlo que abrir un detalle vacio.
-          this.mensajeError = 'Esa subasta ya no esta disponible.';
+          this.mensajeError = 'Esa subasta ya no está disponible.';
         }
       }
       if (this.subastaActivaId && !subastas.some((s) => s.id === this.subastaActivaId)) {
@@ -747,7 +747,7 @@ export class ControladorSubastas {
       }
       return true;
     } catch (fallo) {
-      const mensaje = fallo?.message || 'No se pudo completar la operacion.';
+      const mensaje = fallo?.message || 'No se pudo completar la operación.';
       await this.recargar();
       this.mostrarError(mensaje);
       return false;
@@ -1031,7 +1031,7 @@ export class ControladorSubastas {
       // rechace algo que el servidor habria aceptado. Lo unico que se filtra
       // es lo que ni siquiera es un monto.
       if (!Number.isFinite(monto) || monto <= 0) {
-        this.mostrarError('Escribe un monto valido.');
+        this.mostrarError('Escribe un monto válido.');
         return Promise.resolve(false);
       }
       return this.ejecutarContraElServidor(() => this.api.pujar(sub.id, monto), {
@@ -1115,7 +1115,7 @@ export class ControladorSubastas {
 
     if (this.api) {
       if (!Number.isFinite(limite) || limite <= 0) {
-        this.mostrarError('Escribe un limite valido.');
+        this.mostrarError('Escribe un límite válido.');
         return Promise.resolve(false);
       }
       return this.ejecutarContraElServidor(() => this.api.configurarAutomatica(sub.id, limite));

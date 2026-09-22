@@ -6,7 +6,7 @@
  * La tarjeta no se inventa: el conjunto `Tarjeta de sala` tiene exactamente dos
  * propiedades, la variante de estado y una unica linea de texto que los ocho
  * ejemplos de la pantalla resuelven como
- * «4 de 6 jugadores · 320 creditos · Con heroe de la IA». Ni nombre de sala, ni
+ * «4 de 6 jugadores · 320 creditos · Con héroe de la IA». Ni nombre de sala, ni
  * apodo del anfitrion, ni heroe, ni indicador de preparacion: nada de eso
  * aparece en el diseno ni lo pide RF-JUE-002.
  *
@@ -86,7 +86,7 @@ export function mostrarAvisoDeSala(raiz, aviso) {
 export function metaDeLaSala(sala) {
   const base =
     `${sala.ocupacion} de ${sala.maximoParticipantes} jugadores` +
-    ` · ${sala.recompensaCreditos} creditos`;
+    ` · ${sala.recompensaCreditos} créditos`;
   if (!sala.incluirHeroeIA) {
     return base;
   }
@@ -94,8 +94,8 @@ export function metaDeLaSala(sala) {
   // linea exacta del diseno.
   const maquinas = Number(sala.heroesIA) || 1;
   return maquinas > 1
-    ? `${base} · Con ${maquinas} heroes de la IA`
-    : `${base} · Con heroe de la IA`;
+    ? `${base} · Con ${maquinas} héroes de la IA`
+    : `${base} · Con héroe de la IA`;
 }
 
 /**
@@ -265,7 +265,7 @@ export function montarBatallas(raiz, puertos = {}) {
     .then((cliente) => {
       if (!cliente) {
         marcarCanal(
-          'Sin canal en tiempo real: inicia sesion para ver los cambios al instante.',
+          'Sin canal en tiempo real: inicia sesión para ver los cambios al instante.',
           'sin-sesion',
         );
         return;

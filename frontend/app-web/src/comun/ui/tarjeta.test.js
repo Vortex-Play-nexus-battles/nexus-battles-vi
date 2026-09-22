@@ -69,7 +69,7 @@ describe('tarjetaDeCifra', () => {
 });
 
 describe('boton', () => {
-  test('variante, tipo y accion', () => {
+  test('variante, tipo y acción', () => {
     const alPulsar = jest.fn();
     const b = boton({ texto: 'Crear sala', variante: 'primario', nombre: 'crear', alPulsar });
 
@@ -121,10 +121,10 @@ describe('distintivo', () => {
 });
 
 describe('encabezados', () => {
-  test('la pagina lleva titulo, descripcion y zona de acciones', () => {
+  test('la página lleva título, descripción y zona de acciones', () => {
     const e = encabezadoDePagina({
       titulo: 'Torneo',
-      descripcion: 'Un torneo cada 91 dias.',
+      descripcion: 'Un torneo cada 91 días.',
       acciones: [boton({ texto: 'Crear torneo' })],
     });
 

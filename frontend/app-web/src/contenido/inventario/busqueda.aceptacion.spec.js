@@ -115,7 +115,7 @@ for (const { campo, criterio, esperado } of casos) {
   });
 }
 
-test('Un criterio menor de cuatro caracteres no inicia la busqueda', async ({ page }) => {
+test('Un criterio menor de cuatro caracteres no inicia la búsqueda', async ({ page }) => {
   const busquedas = await prepararInventario(page);
   await abrirVitrina(page);
 
@@ -129,7 +129,7 @@ test('Un criterio menor de cuatro caracteres no inicia la busqueda', async ({ pa
   await expect(page.locator('.vitrina__producto')).toHaveCount(PRODUCTOS.length);
 });
 
-test('Una busqueda valida puede no tener coincidencias', async ({ page }) => {
+test('Una búsqueda válida puede no tener coincidencias', async ({ page }) => {
   await prepararInventario(page);
   await abrirVitrina(page);
 
@@ -142,7 +142,7 @@ test('Una busqueda valida puede no tener coincidencias', async ({ page }) => {
   await expect(page.locator('.estado-error')).toHaveCount(0);
 });
 
-test('El jugador limpia la busqueda y vuelve a ver su inventario', async ({ page }) => {
+test('El jugador limpia la búsqueda y vuelve a ver su inventario', async ({ page }) => {
   await prepararInventario(page);
   await abrirVitrina(page);
 

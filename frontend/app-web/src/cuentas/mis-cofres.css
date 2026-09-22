@@ -21,14 +21,6 @@ body {
   font-family: var(--t-cuerpo-familia);
 }
 
-.encabezado-contenido {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px 0;
-}
-
 .titulo {
   margin: 0 0 4px;
   font-family: var(--fuente-titulo);
@@ -48,7 +40,7 @@ body {
   padding: 12px;
   border: 1px solid var(--borde);
   border-radius: var(--radio);
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--superficie);
 }
 
 .cofre-icono {
@@ -70,26 +62,21 @@ body {
 
 .cofre-fecha {
   margin: 0;
-  color: var(--texto-2, #48536a);
+  color: var(--texto-2);
   font-size: 13px;
 }
 
-.estado {
-  margin: 12px 0 0;
-  padding: 10px 12px;
-  border-radius: var(--radio);
-  font-size: 14px;
-}
-
-.estado.carga {
-  background: #ddeef7;
-  color: #095e8c;
-}
-.estado.error {
-  background: #fbe4e4;
-  color: #b81a1a;
-}
-.estado.vacio {
-  background: #f2f4f8;
-  color: var(--texto-2, #48536a);
-}
+/* `.estado` NO se declara aqui.
+ *
+ * UX-R3.11 — esta hoja lo redefinia entero con seis colores escritos a mano
+ * (#ddeef7, #095e8c, #fbe4e4, #b81a1a, #f2f4f8, #48536a) y, como carga despues
+ * de `tema-cuentas.css`, ganaba. La version buena -la de `tema-cuentas.css`-
+ * usa `--info-insignia`, `--error-insignia`, `--advertencia-insignia` y sus
+ * pares de texto, que el kit redefine bajo `prefers-contrast: more`. Un
+ * hexadecimal no responde a esa preferencia: quien la tenia activada la recibia
+ * en casi todo el producto y no en esta pantalla.
+ *
+ * El guardian `tokens-sin-sombra` no lo veia porque comprueba que ninguna hoja
+ * de vista redefina una clase DEL KIT, y `.estado` no es del kit: es de otra
+ * hoja de vista. Dos hojas de vista, una tapando a la otra.
+ */

@@ -146,7 +146,7 @@ test.describe('Vitrina del inventario', () => {
     });
   }
 
-  test('Un inventario vacio muestra un estado explicativo', async ({ page }) => {
+  test('Un inventario vacío muestra un estado explicativo', async ({ page }) => {
     await page.setViewportSize({ width: 1360, height: 768 });
     await conInventarioDe(page, 0);
     await abrirVitrina(page);
@@ -285,7 +285,7 @@ async function conEquipamiento(page, { rechazar = false } = {}) {
       await ruta.fulfill({
         status: 409,
         contentType: 'application/problem+json',
-        body: JSON.stringify({ title: 'Limite de equipamiento', detail: 'Máximo dos armas' }),
+        body: JSON.stringify({ title: 'Límite de equipamiento', detail: 'Máximo dos armas' }),
       });
       return;
     }
@@ -303,7 +303,7 @@ async function conEquipamiento(page, { rechazar = false } = {}) {
   });
 }
 
-test.describe('Equipamiento del heroe con limites', () => {
+test.describe('Equipamiento del héroe con limites', () => {
   test('El equipamiento usa la paleta oficial del sistema de diseno', async ({ page }) => {
     await conEquipamiento(page);
     await abrirVitrina(page);
@@ -349,7 +349,7 @@ test.describe('Equipamiento del heroe con limites', () => {
     await expect(page.locator('.inventario-equipo__resumen')).toContainText('Armas 0/2');
   });
 
-  test('Un limite rechazado conserva el equipo y se explica sin codigo', async ({ page }) => {
+  test('Un límite rechazado conserva el equipo y se explica sin código', async ({ page }) => {
     await conEquipamiento(page, { rechazar: true });
     await abrirVitrina(page);
 

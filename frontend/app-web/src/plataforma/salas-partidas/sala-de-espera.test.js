@@ -213,7 +213,7 @@ describe('montarSalaDeEspera · salir (CA-01)', () => {
 });
 
 describe('montarSalaDeEspera · cancelar (CA-02, CA-05)', () => {
-  test('pulsar «Cancelar» pregunta con el numero de expulsados y, si se acepta, cancela', async () => {
+  test('pulsar «Cancelar» pregunta con el número de expulsados y, si se acepta, cancela', async () => {
     const cancelar = jest.fn().mockResolvedValue(undefined);
     const confirmar = jest.fn(() => true);
     const alSalir = jest.fn();
@@ -234,7 +234,7 @@ describe('montarSalaDeEspera · cancelar (CA-02, CA-05)', () => {
     expect(alSalir).toHaveBeenCalledWith({ motivo: 'cancelada' });
   });
 
-  test('la confirmacion usa la ocupacion VIVA, no la de cuando se monto', async () => {
+  test('la confirmación usa la ocupacion VIVA, no la de cuando se monto', async () => {
     const confirmar = jest.fn(() => false);
     const espera = montarSalaDeEspera(document, {
       sala: sala({ ocupacion: 1 }),

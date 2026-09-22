@@ -38,7 +38,7 @@ describe('cuerpoDelToken', () => {
     });
   });
 
-  test('un token ilegible no rompe la vista: se trata como sin sesion', () => {
+  test('un token ilegible no rompe la vista: se trata como sin sesión', () => {
     expect(cuerpoDelToken('esto-no-es-un-jwt')).toBeNull();
     expect(cuerpoDelToken('a.b')).toBeNull();
     expect(cuerpoDelToken(null)).toBeNull();
@@ -100,7 +100,7 @@ describe('usuarioIdDeSesion', () => {
     expect(usuarioIdDeSesion(sesion)).toBe(UID);
   });
 
-  test('sin sesion devuelve null, no una cadena vacia', () => {
+  test('sin sesión devuelve null, no una cadena vacia', () => {
     expect(usuarioIdDeSesion(almacen({}))).toBeNull();
     expect(usuarioIdDeSesion(undefined)).toBeNull();
   });

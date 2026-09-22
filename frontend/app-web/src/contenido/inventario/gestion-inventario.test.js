@@ -31,7 +31,7 @@ async function esperarHasta(condicion) {
     }
     await new Promise((resolver) => setTimeout(resolver, 0));
   }
-  throw new Error('La interfaz no termino la operacion esperada');
+  throw new Error('La interfaz no termino la operación esperada');
 }
 
 let raiz;
@@ -88,7 +88,7 @@ test('un rechazo mantiene la vitrina anterior y muestra un mensaje sin codigo', 
   const consola = jest.spyOn(console, 'error').mockImplementation(() => {});
   const consultar = async () => pagina([elemento()]);
   const modificar = async () => {
-    const fallo = new Error('El servicio de inventario respondio 403');
+    const fallo = new Error('El servicio de inventario respondió 403');
     fallo.status = 403;
     throw fallo;
   };

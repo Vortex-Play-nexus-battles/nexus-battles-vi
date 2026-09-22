@@ -137,7 +137,7 @@ describe('seguirSala', () => {
     expect(alCambiar).not.toHaveBeenCalled();
   });
 
-  test('sin suscribir no finge conexion, pero sigue procesando lo que le entreguen', () => {
+  test('sin suscribir no finge conexión, pero sigue procesando lo que le entreguen', () => {
     const canal = seguirSala(estado());
 
     expect(canal.conectado).toBe(false);
@@ -361,10 +361,10 @@ describe('cancelacion de la sala (HU-SAL-006, CA-02)', () => {
     expect(canal.estado()).toEqual(estado());
   });
 
-  test('el texto traduce el motivo y cuenta los creditos devueltos si los hubo', () => {
+  test('el texto traduce el motivo y cuenta los créditos devueltos si los hubo', () => {
     expect(textoDeCancelacion(avisoDeCancelacion())).toBe('El anfitrion cancelo la sala.');
     expect(textoDeCancelacion(avisoDeCancelacion({ creditosDevueltos: 150 }))).toBe(
-      'El anfitrion cancelo la sala. Se te devolvieron 150 creditos.',
+      'El anfitrion cancelo la sala. Se te devolvieron 150 créditos.',
     );
     expect(textoDeCancelacion({ motivo: 'INACTIVIDAD' })).toMatch(/inactividad/i);
     expect(textoDeCancelacion({ motivo: 'ALGO_NUEVO' })).toBe('La sala se cerro.');

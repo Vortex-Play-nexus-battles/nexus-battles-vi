@@ -61,7 +61,7 @@ describe('montarCampana', () => {
     );
   });
 
-  test('alCambiar pinta contador, estado del canal y lista con boton de marcar', () => {
+  test('alCambiar pinta contador, estado del canal y lista con botón de marcar', () => {
     const { callbacks, bandeja } = preparar();
 
     callbacks().alCambiar({
@@ -101,7 +101,7 @@ describe('montarCampana', () => {
     expect(document.querySelectorAll('[data-zona="lista"] li')).toHaveLength(0);
   });
 
-  test('la caida del canal se pinta como Estado de conexion, no como Aviso (mapeo 5.4)', () => {
+  test('la caida del canal se pinta como Estado de conexión, no como Aviso (mapeo 5.4)', () => {
     const { callbacks } = preparar();
     callbacks().alCambiar({ canal: ESTADO_CANAL.RECONECTANDO, noLeidas: 0, avisos: [] });
     const conexion = document.querySelector('[data-zona="conexion"]');
@@ -113,7 +113,7 @@ describe('montarCampana', () => {
     expect(document.querySelector('[data-zona="emergentes"] .aviso--error')).toBeNull();
   });
 
-  test('alAviso pinta una emergente no bloqueante con cierre propio y automatico', () => {
+  test('alAviso pinta una emergente no bloqueante con cierre propio y automático', () => {
     const { callbacks, programar } = preparar();
 
     callbacks().alAviso(aviso('n-5'));
@@ -144,13 +144,13 @@ describe('montarCampana', () => {
 });
 
 describe('utilidades', () => {
-  test('textoDeContador concuerda en numero', () => {
+  test('textoDeContador concuerda en número', () => {
     expect(textoDeContador(0)).toBe('Sin notificaciones sin leer');
-    expect(textoDeContador(1)).toBe('1 notificacion sin leer');
+    expect(textoDeContador(1)).toBe('1 notificación sin leer');
     expect(textoDeContador(3)).toBe('3 notificaciones sin leer');
   });
 
-  test('pintarEmergente con duracion 0 no programa el cierre', () => {
+  test('pintarEmergente con duración 0 no programa el cierre', () => {
     document.body.innerHTML = '<div id="z"></div>';
     const programar = jest.fn();
     pintarEmergente(document.getElementById('z'), aviso('n-1'), { duracion: 0, programar });
