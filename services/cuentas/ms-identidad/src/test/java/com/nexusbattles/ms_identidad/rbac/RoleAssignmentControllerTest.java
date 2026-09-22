@@ -45,11 +45,17 @@ class RoleAssignmentControllerTest {
         RbacAuthorizationService authorizationService =
             new RbacAuthorizationService(repository);
 
+        // R9.5 — en `true` a proposito: una de las pruebas de esta clase manda
+        // X-User-Role y espera 403 por rol insuficiente. Con el respaldo
+        // apagado seguiria dando 403, pero por otro motivo, y la prueba
+        // dejaria de comprobar lo que dice comprobar.
         SecurityInterceptor interceptor =
             new SecurityInterceptor(
                 authorizationService,
                 null,
-                jwtService
+                jwtService,
+                null,
+                true
             );
 
         RoleAssignmentController controller =
