@@ -524,3 +524,14 @@
   border-style: solid;
   border-color: var(--error);
 }
+
+/*
+ * El margen es ajustado a proposito: el criterio 1 de HU-INV-001 exige que
+ * los dieciseis productos se vean completos a 1360 x 768, y el control de
+ * paginacion comparte ese alto. Hay una prueba de aceptacion que falla si el
+ * conjunto vuelve a desbordar. Venia de `comun/paginacion.css`, que se retira
+ * por duplicar el componente del kit; esto es lo unico que era de la vista.
+ */
+.inventario__paginacion {
+  margin-top: 8px;
+}

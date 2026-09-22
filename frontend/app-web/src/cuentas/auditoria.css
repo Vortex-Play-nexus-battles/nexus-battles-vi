@@ -1,3 +1,14 @@
+/* Los componentes compartidos ya no se redefinen aqui.
+ *
+ * `.tarjeta`, `.aviso`, `.fila`, `.ayuda` y `.paginacion` son del sistema
+ * de diseno (`shared/ui-kit/css/`). Redefinirlos con el mismo nombre en una
+ * hoja de vista hacia que el MISMO componente se viera distinto segun la
+ * pantalla: la tarjeta tenia radio 8 px en unas vistas y 10 px en otras, y
+ * el aviso salia siempre azul aunque el modificador dijera error o exito.
+ * La vista carga ahora `base.css` ademas de `componentes.css`, asi que las
+ * reglas del kit llegan enteras.
+ */
+
 /* auditoria.css — Registro de auditoría (HU-AUD-002)
    Depende de tema-cuentas.css (tokens de color, .tarjeta, .fila, .aviso,
    .estado, botones, inputs). Aquí SOLO va lo que esa hoja no cubre:
@@ -41,14 +52,6 @@
   align-items: center;
 }
 
-/* El .aviso base de tema-cuentas.css usa los colores de "info" (azul).
-   Para el banner de inmutabilidad usamos el tono de advertencia (ámbar),
-   reutilizando los tokens que ya existen — sin inventar colores nuevos. */
-.aviso--advertencia {
-  background: var(--advertencia-fondo);
-  color: var(--advertencia);
-  margin-top: 20px;
-}
 .aviso--advertencia strong {
   display: block;
   margin-bottom: 2px;
@@ -153,11 +156,3 @@
 }
 
 /* Paginación */
-
-.paginacion {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  margin-top: 16px;
-}

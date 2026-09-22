@@ -654,6 +654,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* Sin `flex-wrap` el control desbordaba a lo ancho en cuanto habia muchas
+     paginas. Venia de la copia de `comun/paginacion.css`, que se retira. */
+  flex-wrap: wrap;
   gap: var(--e-3);
 }
 
@@ -663,7 +666,7 @@
   color: var(--texto-3);
 }
 
-.paginacion__paginas { display: flex; gap: var(--e-2); }
+.paginacion__paginas { display: flex; flex-wrap: wrap; gap: var(--e-2); }
 
 .paginacion__pagina {
   display: grid;
@@ -681,10 +684,34 @@
   cursor: pointer;
 }
 
+.paginacion__pagina:hover {
+  border-color: var(--primaria);
+  color: var(--primaria);
+}
+
+/* RNF-ACC-002: el foco siempre visible. El contorno va por fuera del borde
+   para que no lo tape la casilla vecina. Se declara aqui y no solo en
+   `base.css` porque hay vistas que cargan el componente sin la base. */
+.paginacion__pagina:focus-visible {
+  outline: 2px solid var(--primaria);
+  outline-offset: 2px;
+}
+
+/* La pagina en curso lleva `aria-current="page"`, que es lo que anuncia el
+   lector de pantalla; el color refuerza, no sustituye. */
 .paginacion__pagina[aria-current='page'] {
   background: var(--primaria-relleno);
   border-color: var(--primaria-relleno);
   color: var(--texto-sobre-color);
+  cursor: default;
+}
+
+.paginacion__pagina[aria-current='page']:hover { color: var(--texto-sobre-color); }
+
+/* Telefonos: el control se apila para no forzar desplazamiento lateral. */
+@media (max-width: 599px) {
+  .paginacion { justify-content: center; }
+  .paginacion__info { width: 100%; text-align: center; }
 }
 
 
