@@ -211,7 +211,7 @@ mejora del arné, no como bloqueo.
 | **Prettier** | verde sobre todo `src/` | |
 | **Playwright visual** (arné) | **156 / 156**, 0 hallazgos | |
 | **Playwright aceptación** (inventario, Grupo 2) | 2 pasan / 44 fallan | **No es regresión.** La línea base documentada en **#581** es 45 de 46 fallando desde antes del rediseño: las pruebas abren `inventario.html` **sin sesión** y el shell las manda al login. Hoy falla **una menos**. CI las corre con `continue-on-error`. |
-| **E2E completo** | corre en `.github/workflows/e2e.yml` | Banco de 10 servicios reales; no se ejecuta en local por capacidad |
+| **E2E completo** | **ROJO — pendiente, y NO es del rediseño** | Falla en el **primer paso**, la siembra, antes de abrir ningún navegador: `sembrar.sh` escribe 2 productos en Mongo y `GET /api/v1/productos/p-heroe-e2e` responde **404**. Comprobado commit a commit: el primer rojo es `da6c6b4` (**PR-UX-5, solo CSS**), **anterior** a UX-R2.0, y con otra causa. Ningún commit del bloque toca `tests/e2e/`, `sembrar.sh` ni un servicio. Diagnóstico y pistas en **#614**. |
 
 ### Guardianes activos al cierre
 
