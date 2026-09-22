@@ -183,7 +183,24 @@ function menuDeCuenta({ sesion, base, almacen, navegar, opcionesExtra = [] }) {
   const cuenta = h('div', { clase: 'cabecera__cuenta' });
   const boton = h('button', {
     clase: 'cabecera__cuenta-boton',
-    atributos: { type: 'button', 'aria-haspopup': 'menu', 'aria-expanded': 'false' },
+    atributos: {
+      type: 'button',
+      'aria-haspopup': 'menu',
+      'aria-expanded': 'false',
+      // UX-R3.11 — el nombre accesible NO puede depender del CSS.
+      //
+      // Lo unico con texto dentro de este boton es `.cabecera__identidad`, y a
+      // 375 px la cabecera la oculta (`display: none`) porque no cabe. El
+      // avatar y el chevron son `aria-hidden`: decoracion. Resultado, medido
+      // con axe en las 32 vistas: a 375 px el boton se queda SIN nombre
+      // accesible -`button-name`, impacto critico- y quien usa lector de
+      // pantalla en el movil oye «boton» y nada mas. Era la unica incidencia
+      // critica del producto, y estaba en las 32 pantallas privadas a la vez.
+      //
+      // El `aria-label` lleva el apodo dentro, asi que sigue cumpliendo
+      // «Label in Name» (WCAG 2.5.3) cuando el apodo si se ve.
+      'aria-label': `Cuenta de ${sesion.apodo}`,
+    },
     datos: { zona: 'cuenta' },
   });
   const avatar = h('span', {

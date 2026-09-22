@@ -31,7 +31,13 @@
       </header>
 
       <section class="tarjeta">
-        <div class="tabla-envoltorio">
+        <!-- Ver la nota de `auditoria.html`: region desplazable, alcanzable con teclado. -->
+        <div
+          class="tabla-envoltorio"
+          tabindex="0"
+          role="region"
+          aria-label="Historial de transacciones, desplazable en horizontal"
+        >
           <table class="tabla-historial">
             <thead>
               <tr>

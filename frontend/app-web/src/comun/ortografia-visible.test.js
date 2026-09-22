@@ -168,7 +168,7 @@ const PATRON = new RegExp(
 const CLASES = /^[a-z][a-z0-9_-]*(?:\s+[a-z][a-z0-9_-]*)*$/;
 
 const LETRA = 'A-Za-zÁÉÍÓÚÜÑáéíóúüñ';
-const SIGNO = "0-9¿¡«»,;:.()'’\\-–·%!?\"";
+const SIGNO = '0-9¿¡«»,;:.()\'’\\-–·%!?"';
 const FRASE = new RegExp(`^[${LETRA}¿¡][${LETRA}${SIGNO}]*(?:\\s+[${LETRA}${SIGNO}]+){2,}$`);
 
 function ficheros(extension) {
