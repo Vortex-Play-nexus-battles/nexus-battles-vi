@@ -499,7 +499,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/revertir.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -727,7 +727,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_CONTENIDO_DEV }}
           username: ${{ secrets.SSH_USER_CONTENIDO_DEV }}
           key: ${{ secrets.SSH_KEY_CONTENIDO_DEV }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -786,7 +786,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -889,7 +889,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/revertir.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
 
