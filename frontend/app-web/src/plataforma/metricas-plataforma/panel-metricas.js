@@ -99,6 +99,14 @@ export function pintarError(contenedor, error, alReintentar) {
       criterio.textContent = `Criterio pendiente: ${error.criterio}`;
       estado.append(criterio);
     }
+  } else if (error instanceof ErrorDeMetricas && error.esFaltaDePermiso()) {
+    // #527: la observabilidad es de administracion. No es un fallo del
+    // servicio y no se ofrece reintentar: reintentar no cambia el rol.
+    estado.dataset.estado = 'sin-permiso';
+    const { titulo: t, detalle } = error.avisoDePermiso;
+    titulo.textContent = t;
+    cuerpo.textContent = detalle;
+    estado.append(titulo, cuerpo);
   } else {
     titulo.textContent = 'No se pudo cargar el informe de latencia';
     cuerpo.textContent = error?.message ?? 'El servicio de metricas no respondio.';

@@ -307,32 +307,27 @@ test.describe('Smoke del entorno desplegado', () => {
       .toBeGreaterThan(0);
   });
 
-  test('metricas conoce a los servicios de plataforma y los ve disponibles', async () => {
-    const r = await api.get('/api/v1/disponibilidad');
-    expect(r.status()).toBe(200);
-
-    const { servicios } = await r.json();
-    expect(Array.isArray(servicios)).toBe(true);
-
-    const porNombre = Object.fromEntries(servicios.map((s) => [s.servicio, s.estado]));
-    // No se comprueba "alguno esta arriba": se comprueba que estos, que son
-    // los del bloque, lo estan.
-    for (const esperado of [
-      'comentarios',
-      'correo',
-      'salas-partidas',
-      'notificaciones',
-      'moderacion-sanciones',
-      'admin-parametros',
-      'torneos',
-    ]) {
-      expect(porNombre[esperado], `${esperado} no aparece o no esta disponible`).toBe('DISPONIBLE');
+  test('metricas esta desplegado y su observabilidad NO es publica (#527)', async () => {
+    // Antes del 22-sep-2026 este smoke leia aqui el estado de los siete
+    // servicios sin token, porque metricas-plataforma no tenia cadena de
+    // seguridad. Eso era el defecto, no la prueba: el tablero publica consumo,
+    // errores 5xx y caidas del bloque, y su ficha (RF-MET-001) dice
+    // «Como administrador».
+    //
+    // Sin una cuenta administrativa sembrada en el host de dev, lo que este
+    // smoke puede afirmar desde fuera es que el servicio esta ARRIBA y que
+    // pide credenciales: un 401 solo lo contesta el propio servicio; si
+    // estuviera caido, el borde devolveria 502 (asi se vio en #571).
+    for (const ruta of ['/api/v1/disponibilidad', '/api/v1/tecnicas', '/api/v1/moderacion']) {
+      const anonimo = await api.get(ruta);
+      expect(anonimo.status(), `${ruta} deberia pedir credenciales, no responder`).toBe(401);
     }
 
-    // Y cada comprobacion trae su momento: una foto vieja no vale.
-    for (const s of servicios) {
-      expect(new Date(s.comprobadoEn).getTime()).toBeGreaterThan(Date.now() - 10 * 60 * 1000);
-    }
+    // Un jugador autenticado tampoco ve la observabilidad del bloque.
+    const conJugador = await api.get('/api/v1/disponibilidad', {
+      headers: { Authorization: `Bearer ${jugador.token}` },
+    });
+    expect(conJugador.status()).toBe(403);
   });
 
   test('la lista negra exige rol: no basta con estar autenticado', async () => {

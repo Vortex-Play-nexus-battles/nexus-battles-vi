@@ -5,6 +5,15 @@ spring:
   application:
     name: metricas-plataforma
 
+  # HU-MET-001 (#527): servidor de recursos. La observabilidad del bloque es
+  # de administracion, no publica; el emisor es ms-identidad (ADR-002/ADR-005),
+  # el mismo JWKS que usan los demas servicios de plataforma.
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${IDENTIDAD_JWKS_URL:http://localhost:8089/api/v1/auth/jwks}
+
   # HU-DIS-001: las interrupciones y las ventanas de mantenimiento viven en el
   # esquema `metricas` de la PostgreSQL de plataforma (regla 7: esquema propio,
   # misma instancia que el resto del bloque). Mismas variables que los demas

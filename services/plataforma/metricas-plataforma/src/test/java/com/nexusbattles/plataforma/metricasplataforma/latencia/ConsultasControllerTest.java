@@ -1,5 +1,6 @@
 package com.nexusbattles.plataforma.metricasplataforma.latencia;
 
+import com.nexusbattles.plataforma.metricasplataforma.seguridad.SeguridadAbiertaDePrueba;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -26,7 +27,10 @@ import com.nexusbattles.plataforma.observabilidad.RegistroDeConsultas;
  * percentil que sale por el endpoint es el que de verdad calcula la biblioteca.
  */
 @WebMvcTest(controllers = ConsultasController.class)
-@Import(ConsultasControllerTest.Dobles.class)
+// Rebanada con una cadena ABIERTA a proposito: lo que se prueba aqui es el
+// comportamiento del endpoint. Que la observabilidad exija rol administrativo
+// (HU-MET-001, #527) lo afirma SeguridadDeObservabilidadTest con la cadena real.
+@Import({ConsultasControllerTest.Dobles.class, SeguridadAbiertaDePrueba.class})
 class ConsultasControllerTest {
 
     private static final Instant AHORA = Instant.parse("2026-09-11T10:00:00Z");

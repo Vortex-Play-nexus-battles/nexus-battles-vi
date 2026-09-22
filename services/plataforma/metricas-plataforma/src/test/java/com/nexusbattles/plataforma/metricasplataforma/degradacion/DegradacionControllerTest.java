@@ -1,5 +1,6 @@
 package com.nexusbattles.plataforma.metricasplataforma.degradacion;
 
+import com.nexusbattles.plataforma.metricasplataforma.seguridad.SeguridadAbiertaDePrueba;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -21,7 +22,10 @@ import com.nexusbattles.plataforma.resiliencia.RegistroDeDegradacion;
  * HU-DIS-003 — lo que se consulta para saber que secciones estan limitadas.
  */
 @WebMvcTest(controllers = DegradacionController.class)
-@Import(DegradacionControllerTest.Dobles.class)
+// Rebanada con una cadena ABIERTA a proposito: lo que se prueba aqui es el
+// comportamiento del endpoint. Que la observabilidad exija rol administrativo
+// (HU-MET-001, #527) lo afirma SeguridadDeObservabilidadTest con la cadena real.
+@Import({DegradacionControllerTest.Dobles.class, SeguridadAbiertaDePrueba.class})
 class DegradacionControllerTest {
 
     private static final Instant CAIDA = Instant.parse("2026-09-11T10:00:00Z");

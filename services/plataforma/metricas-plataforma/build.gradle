@@ -1,5 +1,10 @@
 plugins {
     id 'nexus.spring-conventions'
+    // HU-MET-001 (#527): el actor de la ficha es «administrador». Todo lo que
+    // publica este modulo —tablero tecnico, disponibilidad, latencia,
+    // degradacion y agregados de moderacion— describe el estado interno de la
+    // plataforma y no puede quedar abierto (ADR-002).
+    id 'nexus.seguridad-conventions'
 }
 
 dependencies {
