@@ -111,6 +111,13 @@ public class SeguridadConfig {
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/**").permitAll()
 
+                // La pagina de demo del catalogo (src/main/resources/static).
+                // No lleva un solo dato de jugador y es el unico recurso
+                // estatico del servicio; lo destapo AceptacionDeHeroesTest, que
+                // comprueba que la raiz sirve algo y salia 401 al cerrar
+                // `anyRequest`.
+                .requestMatchers(HttpMethod.GET, "/", "/index.html", "/favicon.ico").permitAll()
+
                 // --- Catalogo del juego: publico ---
                 .requestMatchers(HttpMethod.GET, "/api/v1/heroes", "/api/v1/heroes/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/progresion/niveles").permitAll()
