@@ -86,6 +86,19 @@ legend { padding: 0; }
 
 .fila > * { flex: 1 1 280px; }
 
+/* UX-R4.3 — un boton dentro de una fila no es un campo.
+   `.fila > *` reparte el ancho a partes iguales, que es lo que quieren dos
+   campos, y ademas los estira en vertical para igualar alturas. Aplicado a un
+   boton daba el resultado de `sanciones-admin` y `tablero-tecnico`: el de
+   buscar salia ocupando media pantalla y tan alto como la etiqueta mas el
+   campo juntos, con la palabra flotando en medio. No parecia un boton, parecia
+   un panel. Se queda de su tamano y se alinea con el control, no con la
+   etiqueta que tiene encima. */
+.fila > .boton {
+  flex: 0 0 auto;
+  align-self: flex-end;
+}
+
 /* Acciones de un formulario: alineadas a la derecha, como en el diseno. */
 .acciones {
   display: flex;

@@ -322,17 +322,24 @@ export function montarModeracion(raiz, { api = null, productoId = null } = {}) {
       }
     } catch (error) {
       vaciar(zonaCola);
+      // UX-R4.3 — el reintento solo cuando reintentar puede servir de algo.
+      // Un 403 no se arregla pulsando otra vez: el permiso no va a cambiar
+      // entre dos clics, y ofrecer el boton seria prometer una salida que no
+      // existe. Cualquier otro fallo si es transitorio, y hasta ahora esta
+      // pantalla era la unica del producto que dejaba al moderador con un
+      // mensaje y ninguna forma de volver a intentarlo que no fuera recargar
+      // la pagina entera a mano.
+      const sinPermiso = error?.estado === 403;
       pintarEstado(
         zonaCola,
         estadoDeError({
-          titulo:
-            error?.estado === 403
-              ? 'Esta pantalla es solo para moderación'
-              : 'No se pudo cargar la cola',
-          detalle:
-            error?.estado === 403
-              ? 'Tu cuenta no tiene permiso para revisar comentarios reportados.'
-              : (error?.detalle ?? null),
+          titulo: sinPermiso
+            ? 'Esta pantalla es solo para moderación'
+            : 'No se pudo cargar la cola',
+          detalle: sinPermiso
+            ? 'Tu cuenta no tiene permiso para revisar comentarios reportados.'
+            : (error?.detalle ?? null),
+          alReintentar: sinPermiso ? null : () => recargar({ conservarAviso: true }),
         }),
       );
     }
@@ -361,7 +368,7 @@ export function montarModeracion(raiz, { api = null, productoId = null } = {}) {
         // dejaria al moderador creyendo que el autor se entero.
         detalle: resuelto.autorNotificado
           ? 'Se aviso al autor con el motivo.'
-          : 'La decision quedo registrada, pero el aviso al autor no salio.',
+          : 'La decisión quedó registrada, pero el aviso al autor no salió.',
       });
       await recargar({ conservarAviso: true });
     } catch (error) {

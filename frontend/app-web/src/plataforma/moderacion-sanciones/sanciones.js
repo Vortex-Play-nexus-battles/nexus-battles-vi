@@ -289,7 +289,7 @@ export function tarjetaDeApelacion(apelacion, { resolver } = {}) {
     ),
   );
   if (apelacion.decisionMotivo) {
-    tarjeta.appendChild(nodo('p', 't-meta', `Decision: ${apelacion.decisionMotivo}`));
+    tarjeta.appendChild(nodo('p', 't-meta', `Decisión: ${apelacion.decisionMotivo}`));
   }
   if (apelacion.estado === 'PENDIENTE' && typeof resolver === 'function') {
     const form = nodo('form', 'pila pila--compacta');
@@ -425,8 +425,8 @@ export function montarPanelDeModeracion(
                 await api.resolver(apelacion.id, { decision, motivo, nuevaVigencia }, fetchImpl);
                 pintarAviso(zonaAviso, {
                   tono: 'exito',
-                  titulo: 'Apelacion resuelta',
-                  detalle: `Decision: ${decision.toLowerCase()}. El jugador queda avisado.`,
+                  titulo: 'Apelación resuelta',
+                  detalle: `Decisión: ${decision.toLowerCase()}. El jugador queda avisado.`,
                 });
                 await cargarApelaciones();
               } catch (error) {
