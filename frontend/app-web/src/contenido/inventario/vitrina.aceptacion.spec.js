@@ -9,6 +9,7 @@
  * legibilidad dependen del motor de maquetacion.
  */
 import { test, expect } from '@playwright/test';
+import { prepararPagina } from './entorno-de-prueba.js';
 
 const JUGADOR = 'jugador-de-prueba';
 
@@ -53,6 +54,7 @@ async function conInventarioDe(page, totalElementos) {
 }
 
 async function abrirVitrina(page) {
+  await prepararPagina(page);
   await page.goto(`/contenido/inventario/inventario.html?jugador=${JUGADOR}`);
   await page.waitForFunction(() => !document.querySelector('.estado-carga'));
 }

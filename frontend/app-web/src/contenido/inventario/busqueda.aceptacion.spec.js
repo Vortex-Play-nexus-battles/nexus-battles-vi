@@ -5,6 +5,7 @@
  * verifica la peticion que enlaza el campo de la vitrina con el endpoint.
  */
 import { test, expect } from '@playwright/test';
+import { prepararPagina } from './entorno-de-prueba.js';
 
 const JUGADOR = 'jugador-de-prueba';
 const PRODUCTOS = [
@@ -85,6 +86,7 @@ async function prepararInventario(page) {
 }
 
 async function abrirVitrina(page) {
+  await prepararPagina(page);
   await page.goto(`/contenido/inventario/inventario.html?jugador=${JUGADOR}`);
   await expect(page.locator('.vitrina__producto')).toHaveCount(PRODUCTOS.length);
 }

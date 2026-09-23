@@ -1,5 +1,6 @@
 /** HU-INV-010 - Un producto publicado en subasta figura y permanece no disponible. */
 import { test, expect } from '@playwright/test';
+import { prepararPagina } from './entorno-de-prueba.js';
 
 const HEROE = {
   id: 'heroe-1',
@@ -42,6 +43,7 @@ test('el producto bloqueado se muestra no disponible y no permite operarlo', asy
     }),
   );
 
+  await prepararPagina(page, { apodo: 'jugador-A' });
   await page.goto('/contenido/inventario/inventario.html?jugador=jugador-A');
 
   const tarjeta = page.locator('[data-elemento-id="arma-1"]');
