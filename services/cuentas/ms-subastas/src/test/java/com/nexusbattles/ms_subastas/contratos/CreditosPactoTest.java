@@ -70,7 +70,7 @@ class CreditosPactoTest {
                 .uponReceiving("una reserva de creditos para una puja")
                 .path("/api/v1/creditos/reservar")
                 .method("POST")
-                .matchHeader("Idempotency-Key", ".+")
+                .matchHeader("Idempotency-Key", ".+", "clave-de-ejemplo-0001")
                 // El cliente manda 'application/json' a secas. Pact supondria
                 // '; charset=UTF-8' si no se dice, y el pacto quedaria fijando
                 // una cabecera que nadie envia.
@@ -110,7 +110,7 @@ class CreditosPactoTest {
                 .uponReceiving("una reserva de creditos que excede el saldo")
                 .path("/api/v1/creditos/reservar")
                 .method("POST")
-                .matchHeader("Idempotency-Key", ".+")
+                .matchHeader("Idempotency-Key", ".+", "clave-de-ejemplo-0001")
                 // El cliente manda 'application/json' a secas. Pact supondria
                 // '; charset=UTF-8' si no se dice, y el pacto quedaria fijando
                 // una cabecera que nadie envia.
