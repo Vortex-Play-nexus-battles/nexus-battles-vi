@@ -1098,9 +1098,14 @@
   background: var(--advertencia-insignia);
   color: var(--advertencia);
 }
+/* UX-R3.8 — esto iba en rojo, y no es un error: sin canal en tiempo real la
+   vista sigue funcionando, sigue trayendo notificaciones y se pone al día
+   sola; lo único que pasa es que los avisos tardan un poco más. El rojo es
+   para lo que está roto. El ámbar dice «ojo, algo va distinto», que es
+   exactamente lo que pasa. */
 .conexion--sin-conexion {
-  background: var(--error-insignia);
-  color: var(--error);
+  background: var(--advertencia-insignia);
+  color: var(--advertencia);
 }
 
 /* =======================================================================
@@ -4899,9 +4904,46 @@ button.tarjeta-heroe[aria-pressed='true'] {
   text-transform: uppercase;
 }
 
-/* Ocho destinos no caben con la separación de seis. La consola comprime la
+/* Nueve destinos no caben con la separación de seis. La consola comprime la
    navegación —es su diferencia de densidad respecto al jugador— sin tocar el
-   objetivo táctil, que sigue en 44 px de alto. */
+   objetivo táctil, que sigue en 44 px de alto.
+
+   Y se pliega antes. El armazón de jugador se pliega a los 860 px porque sus
+   seis destinos caben de sobra en 1024; los nueve de la consola no: el
+   laboratorio los midió en **tres filas, 166 px de cabecera**, en las siete
+   vistas de trastienda a 1024×768 — que es la resolución de una pantalla de
+   portátil corriente, no un caso raro. Plegar no es esconder: los nueve
+   siguen estando, a un toque. */
+@media (max-width: 1200px) {
+  .cabecera--consola .cabecera__nav--consola {
+    display: none;
+  }
+
+  .cabecera--consola[data-nav-abierto='si'] .cabecera__nav--consola {
+    display: flex;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 25;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: var(--e-2) var(--e-4) var(--e-4);
+    background: var(--cromo);
+    border-bottom: 2px solid var(--acento-relleno);
+    box-shadow: var(--sombra-3);
+  }
+
+  .cabecera--consola {
+    position: relative;
+  }
+
+  .cabecera--consola .cabecera__alternar {
+    display: inline-flex;
+  }
+}
+
 .cabecera--consola .cabecera__grupo-marca {
   gap: var(--e-5);
 }
@@ -5134,4 +5176,14 @@ button.tarjeta-heroe[aria-pressed='true'] {
 
 .combate[data-sin-partida='si'] .combate__sala > .estado-vista {
   width: min(560px, 100%);
+}
+
+/* Fila de acciones que NO reparte el ancho — UX-R3.8.
+
+   `.fila` existe y da `flex: 1 1 280px` a cada hijo, que es lo correcto para
+   campos del mismo peso. Para una fila de botones no lo es: un solo botón
+   crecía de lado a lado del contenedor. Esta variante los deja medir lo que
+   mide su texto, que es lo que hace un botón. */
+.fila--acciones > * {
+  flex: 0 0 auto;
 }

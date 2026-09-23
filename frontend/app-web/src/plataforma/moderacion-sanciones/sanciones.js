@@ -494,7 +494,9 @@ export function montarMisSanciones(raiz, { uid, fetchImpl, ahora = () => Date.no
       ]);
       zonaSanciones.replaceChildren();
       if (sanciones.length === 0) {
-        zonaSanciones.appendChild(nodo('p', 't-meta', 'No tienes sanciones. Sigue asi.'));
+        zonaSanciones.appendChild(
+          nodo('p', 't-meta', 'No tienes ninguna sanción. Tu cuenta está en regla.'),
+        );
       }
       sanciones.forEach((s) =>
         zonaSanciones.appendChild(
@@ -511,11 +513,40 @@ export function montarMisSanciones(raiz, { uid, fetchImpl, ahora = () => Date.no
       );
       zonaApelaciones.replaceChildren();
       if (apelaciones.length === 0) {
-        zonaApelaciones.appendChild(nodo('p', 't-meta', 'No has apelado ninguna sancion.'));
+        zonaApelaciones.appendChild(
+          nodo(
+            'p',
+            't-meta',
+            'No has apelado ninguna sanción. Puedes hacerlo dentro de los 30 días siguientes a cada una.',
+          ),
+        );
       }
       apelaciones.forEach((a) => zonaApelaciones.appendChild(tarjetaDeApelacion(a)));
     } catch (error) {
-      avisarError(zonaAviso, error);
+      // UX-R3.8 — el fallo se pinta DONDE iban las sanciones, no solo en el
+      // aviso de arriba. Antes quedaban dos tarjetas vacias —«Sanciones» y
+      // «Mis apelaciones», con nada dentro— y el unico rastro del problema
+      // era una caja amarilla que decia «No se pudo completar» sin mas. La
+      // pantalla parecia decir que no tienes ninguna sancion, que es
+      // exactamente lo contrario de lo que se sabe.
+      console.warn('[sanciones] no se pudo cargar el historial:', error);
+      const motivo = nodo(
+        'p',
+        't-meta',
+        'No pudimos consultar tu historial disciplinario ahora mismo. No significa que no tengas sanciones: significa que no lo sabemos.',
+      );
+      const reintentar = nodo('button', 'boton boton--secundario', 'Reintentar');
+      reintentar.type = 'button';
+      reintentar.dataset.accion = 'reintentar';
+      reintentar.addEventListener('click', () => cargar());
+      // Una fila, para que el boton mida su texto: las zonas son `.pila`, que
+      // estira a lo ancho a sus hijos, y «Reintentar» salia de lado a lado.
+      const acciones = nodo('div', 'fila fila--acciones');
+      acciones.appendChild(reintentar);
+      zonaSanciones.replaceChildren(motivo, acciones);
+      zonaApelaciones.replaceChildren(
+        nodo('p', 't-meta', 'Tampoco pudimos consultar tus apelaciones.'),
+      );
     }
   }
 
@@ -533,8 +564,8 @@ export function montarMisSanciones(raiz, { uid, fetchImpl, ahora = () => Date.no
       );
       pintarAviso(zonaAviso, {
         tono: 'exito',
-        titulo: 'Apelacion enviada',
-        detalle: 'El panel de revision la atendera y recibiras la decision motivada.',
+        titulo: 'Apelación enviada',
+        detalle: 'El panel de revisión la atenderá y recibirás la decisión motivada.',
       });
       form.hidden = true;
       form.reset();

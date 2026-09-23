@@ -23,10 +23,21 @@
 import { crearBandeja, ESTADO_CANAL } from './bandeja.js';
 import { vaciar } from '../../comun/ui/dom.js';
 
+/**
+ * UX-R3.8 — el texto sin canal decia «Sin canal en tiempo real: consultando
+ * periodicamente», en rojo. Dos cosas mal a la vez:
+ *
+ *  1. Nombraba el mecanismo («canal en tiempo real», «consultando») en vez de
+ *     la consecuencia. Lo que le pasa a quien lo lee es que sus avisos llegan
+ *     con retraso, no que un canal este caido.
+ *  2. Iba en el tono de error, y esto no es un error: la vista sigue
+ *     funcionando, sigue trayendo notificaciones y se pone al dia sola. El
+ *     rojo es para lo que esta roto.
+ */
 const TEXTO_CONEXION = Object.freeze({
-  [ESTADO_CANAL.ESTABLE]: 'Notificaciones en tiempo real',
-  [ESTADO_CANAL.RECONECTANDO]: 'Reconectando con el canal…',
-  [ESTADO_CANAL.SIN_CONEXION]: 'Sin canal en tiempo real: consultando periodicamente',
+  [ESTADO_CANAL.ESTABLE]: 'Notificaciones al instante',
+  [ESTADO_CANAL.RECONECTANDO]: 'Reconectando…',
+  [ESTADO_CANAL.SIN_CONEXION]: 'Los avisos pueden tardar un poco en llegar',
 });
 
 const formatoDeFecha = new Intl.DateTimeFormat('es-CO', {

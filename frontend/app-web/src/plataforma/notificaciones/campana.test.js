@@ -106,7 +106,10 @@ describe('montarCampana', () => {
     callbacks().alCambiar({ canal: ESTADO_CANAL.RECONECTANDO, noLeidas: 0, avisos: [] });
     const conexion = document.querySelector('[data-zona="conexion"]');
     expect(conexion.className).toBe('conexion conexion--reconectando');
-    expect(conexion.textContent).toBe('Reconectando con el canal…');
+    // UX-R3.8 — el texto nombra la consecuencia, no el mecanismo: a quien lo
+    // lee no le pasa que «un canal» este reconectando, le pasa que sus avisos
+    // tardan. Y no va en rojo: la vista sigue funcionando.
+    expect(conexion.textContent).toBe('Reconectando…');
     expect(document.querySelector('[data-zona="emergentes"] .aviso--error')).toBeNull();
   });
 
