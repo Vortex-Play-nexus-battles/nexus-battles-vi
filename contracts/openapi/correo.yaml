@@ -11,8 +11,9 @@ info:
     rutas, que es un cambio compatible y no rompe a quien ya consume.
 
     Consumidores: ms-identidad (registro, confirmacion de cuenta, aviso de
-    acceso y recuperacion de contrasena), y en Sprint 2 misiones y subastas
-    (correos de evento segun preferencia del jugador).
+    acceso y recuperacion de contrasena), misiones y subastas (correos de
+    evento segun preferencia del jugador), y desde la 1.3.0 ms-finanzas
+    (confirmacion de compra tras aprobar un pago, HU-PAG-003).
 
     Desde la 1.1.0 toda ruta exige una credencial de servicio (ADR-001 via el
     emisor transitorio de ADR-005): `Authorization: Bearer` con un token de
@@ -20,7 +21,7 @@ info:
     correo es un servicio entre servicios y nunca lo llama un navegador. Por
     eso el borde tampoco expone `/api/v1/correos`. Es version menor porque
     rutas y cuerpos no cambian.
-  version: 1.2.0
+  version: 1.3.0
 servers:
   - url: http://localhost:8082/api/v1
     description: Entorno local de desarrollo
@@ -188,6 +189,29 @@ paths:
           description: >
             Correo aceptado y entregado al servidor SMTP, o suprimido a
             proposito porque debeEnviarCorreo era false.
+        '400':
+          $ref: '#/components/responses/SolicitudInvalida'
+
+  /correos/confirmacion-compra:
+    post:
+      summary: Enviar la confirmacion de un pago ya aprobado
+      description: >
+        Soporta HU-PAG-003 (issue #537). Lo dispara ms-finanzas (Grupo
+        4/Cuentas) tras aprobar el pago en su pasarela simulada. Este
+        servicio no valida el monto ni conoce la transaccion: solo la
+        transcribe al correo sobre la plantilla corporativa.
+      operationId: enviarCorreoConfirmacionCompra
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CorreoConfirmacionCompraRequest'
+      responses:
+        '202':
+          description: Correo aceptado y entregado al servidor SMTP.
         '400':
           $ref: '#/components/responses/SolicitudInvalida'
 
@@ -418,6 +442,45 @@ components:
         debeEnviarCorreo:
           type: boolean
           description: Mismo criterio que en CorreoMisionRequest.
+
+    CorreoConfirmacionCompraRequest:
+      type: object
+      description: >
+        Misma forma que Transaccion en ms-finanzas (monto/moneda/concepto),
+        para que el llamante no tenga que traducir entre convenciones.
+      required:
+        - email
+        - apodo
+        - monto
+        - moneda
+        - concepto
+        - fechaHora
+      properties:
+        email:
+          type: string
+          format: email
+        apodo:
+          type: string
+          minLength: 1
+        monto:
+          type: number
+          format: decimal
+          exclusiveMinimum: 0
+          examples: [50000.00]
+        moneda:
+          type: string
+          pattern: '^[A-Z]{3}$'
+          description: Codigo ISO 4217 en mayusculas
+          examples: ['COP']
+        concepto:
+          type: string
+          minLength: 1
+          examples: ['Paquete de créditos x500']
+        fechaHora:
+          type: string
+          format: date-time
+          description: Momento en que la pasarela aprobo el pago, en ISO-8601 con zona horaria
+          examples: ['2026-09-23T10:15:00-05:00']
 
     ProblemDetail:
       type: object
