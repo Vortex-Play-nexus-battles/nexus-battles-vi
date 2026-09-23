@@ -26,7 +26,24 @@ const el = {
   btnVolver: document.getElementById('btn-volver'),
   envoltorioTabla: document.querySelector('.tabla-envoltorio'),
   zonaEstadoVista: document.getElementById('historial-estado-vista'),
+  paginacion: document.querySelector('.paginacion'),
 };
+
+/**
+ * UX-R4.4 — cuando no hay nada que paginar, el control se va entero.
+ *
+ * Apagar los dos botones dejaba el problema a medias. En telefono el kit le da
+ * a `.paginacion__info` el ancho completo para que el control se apile en vez
+ * de desplazarse de lado, asi que la fila del medio existe aunque su texto
+ * este vacio: al fallar la carga quedaban dos botones grises separados por un
+ * hueco en blanco, sin nada que explicara que hacian ahi. Una lista que no
+ * existe no se pagina.
+ */
+function mostrarPaginacion(visible) {
+  if (el.paginacion) {
+    el.paginacion.hidden = !visible;
+  }
+}
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -159,6 +176,7 @@ function actualizarPaginacion(pagina, totalPaginas) {
   estado.pagina = pagina;
   estado.totalPaginas = Math.max(totalPaginas, 1);
   el.paginaActual.textContent = `Página ${estado.pagina + 1} de ${estado.totalPaginas}`;
+  mostrarPaginacion(estado.totalPaginas > 1);
   el.btnAnterior.disabled = estado.pagina <= 0;
   el.btnSiguiente.disabled = estado.pagina >= estado.totalPaginas - 1;
 }
@@ -246,6 +264,7 @@ function interrumpir(vista) {
   el.btnAnterior.disabled = true;
   el.btnSiguiente.disabled = true;
   el.paginaActual.textContent = '';
+  mostrarPaginacion(false);
 }
 
 /** La cabecera de columnas no se queda flotando sobre un hueco. */

@@ -2,6 +2,12 @@
   Iconos del sistema de diseno — los 30 componentes `Icono/*` del archivo de
   Figma, exportados tal cual con `exportAsync({ format: 'SVG_STRING' })`.
 
+  `cofre` NO viene de Figma: se dibujo aqui en UX-R4.1x sobre la misma reticula
+  de 24 y con el mismo trazo de 2, porque «Mis cofres» era la unica vista del
+  producto cuyo objeto central no tenia simbolo. Se probo tambien una caja con
+  banda y cierre centrado: a 16 px se leia como un maletin. La tapa arcada con
+  el labio saliente si se lee como un cofre a los tres tamanos del sistema.
+
   Unico cambio sobre el original: `stroke="#111726"` pasa a `currentColor`,
   para que el icono herede el color del texto que lo acompana. En Figma ese
   color es `texto/principal`, que es exactamente el valor por defecto.
@@ -40,4 +46,5 @@
   <symbol id="candado" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 11H5C3.89543 11 3 11.8954 3 13V20C3 21.1046 3.89543 22 5 22H19C20.1046 22 21 21.1046 21 20V13C21 11.8954 20.1046 11 19 11Z"/><path d="M7 11V7C7 5.67392 7.52678 4.40215 8.46447 3.46447C9.40215 2.52678 10.6739 2 12 2C13.3261 2 14.5979 2.52678 15.5355 3.46447C16.4732 4.40215 17 5.67392 17 7V11"/></symbol>
   <symbol id="trofeo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5C3.83696 9 3.20107 8.73661 2.73223 8.26777C2.26339 7.79893 2 7.16304 2 6.5C2 5.83696 2.26339 5.20107 2.73223 4.73223C3.20107 4.26339 3.83696 4 4.5 4H6"/><path d="M18 9H19.5C20.163 9 20.7989 8.73661 21.2678 8.26777C21.7366 7.79893 22 7.16304 22 6.5C22 5.83696 21.7366 5.20107 21.2678 4.73223C20.7989 4.26339 20.163 4 19.5 4H18"/><path d="M4 22H20"/><path d="M10 14.6599V16.9999C10 17.5499 9.53 17.9799 9.03 18.2099C7.85 18.7499 7 20.2399 7 21.9999"/><path d="M14 14.6599V16.9999C14 17.5499 14.47 17.9799 14.97 18.2099C16.15 18.7499 17 20.2399 17 21.9999"/><path d="M18 2H6V9C6 10.5913 6.63214 12.1174 7.75736 13.2426C8.88258 14.3679 10.4087 15 12 15C13.5913 15 15.1174 14.3679 16.2426 13.2426C17.3679 12.1174 18 10.5913 18 9V2Z"/></symbol>
   <symbol id="escudo-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13C20 18 16.5 20.5 12.34 21.95C12.1222 22.0238 11.8855 22.0202 11.67 21.94C7.5 20.5 4 18 4 13V5.99996C4 5.73474 4.10536 5.48039 4.29289 5.29285C4.48043 5.10532 4.73478 4.99996 5 4.99996C7 4.99996 9.5 3.79996 11.24 2.27996C11.4519 2.09896 11.7214 1.99951 12 1.99951C12.2786 1.99951 12.5481 2.09896 12.76 2.27996C14.51 3.80996 17 4.99996 19 4.99996C19.2652 4.99996 19.5196 5.10532 19.7071 5.29285C19.8946 5.48039 20 5.73474 20 5.99996V13Z"/><path d="M9 12L11 14L15 10"/></symbol>
+<symbol id="cofre" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12V9a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v3"/><path d="M2 12h20"/><path d="M3 12v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6"/><path d="M10.5 12v2.5h3V12"/></symbol>
 </svg>

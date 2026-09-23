@@ -4,6 +4,7 @@
 
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
 import { estadoDeError, estadoVacio, pintarEstado } from '../comun/ui/estado-vista.js';
+import { icono } from '../comun/ui/icono.js';
 
 const BASE_API = '/api/v1/cofres/mios';
 const TAMANO_PAGINA = 20;
@@ -21,7 +22,24 @@ const el = {
   btnSiguiente: document.getElementById('btn-siguiente'),
   paginaActual: document.getElementById('cofres-pagina-actual'),
   btnVolver: document.getElementById('btn-volver'),
+  paginacion: document.querySelector('.paginacion'),
 };
+
+/**
+ * UX-R4.4 — cuando no hay nada que paginar, el control se va entero.
+ *
+ * Apagar los dos botones (UX-R3.11) dejaba el problema a medias. En telefono
+ * el kit le da a `.paginacion__info` el ancho completo para que el control se
+ * apile en vez de desplazarse de lado, asi que la fila del medio existe
+ * aunque su texto este vacio: al fallar la carga quedaban dos botones grises
+ * separados por un hueco en blanco, sin nada que explicara que hacian ahi.
+ * Una lista que no existe no se pagina.
+ */
+function mostrarPaginacion(visible) {
+  if (el.paginacion) {
+    el.paginacion.hidden = !visible;
+  }
+}
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -65,13 +83,15 @@ function renderCofres(cofres) {
     // UX-R2.8 — `contenidoLegible` sale de `cofre.contenido`, que viene del
     // servidor. Se construye el nodo en vez de interpolarlo en una plantilla.
     //
-    // UX-R3.11 — aqui habia un emoji 🎁. El sprite del kit tiene treinta
-    // simbolos y ninguno es un cofre, asi que la vista se invento uno. Un emoji
-    // lo dibuja el sistema operativo: cambia de forma y de color entre Windows,
-    // macOS y Android, no hereda `currentColor` y no responde al alto
-    // contraste. Coger otro simbolo del sprite -«trofeo», «estrella»- seria
-    // peor: esos ya significan otra cosa en este producto.
-    // Queda sin icono, y el hueco del sprite anotado en `docs/gobierno/`.
+    // UX-R3.11 dejo esta tarjeta sin icono a proposito: aqui habia un emoji,
+    // que lo dibuja el sistema operativo y cambia de forma entre Windows,
+    // macOS y Android; y coger prestado «trofeo» o «estrella» habria sido peor,
+    // porque ya significan otra cosa en este producto. El hueco quedo anotado.
+    //
+    // UX-R4.4 lo cierra: el sprite ya trae `cofre`, dibujado sobre la misma
+    // reticula y con el mismo trazo que los otros treinta.
+    const simbolo = icono('cofre', { etiqueta: null, clase: 'icono cofre-simbolo' });
+
     const titulo = document.createElement('h3');
     titulo.className = 'cofre-titulo';
     titulo.textContent = contenidoLegible;
@@ -84,7 +104,7 @@ function renderCofres(cofres) {
     info.className = 'cofre-info';
     info.append(titulo, fecha);
 
-    tarjeta.replaceChildren(info);
+    tarjeta.replaceChildren(simbolo, info);
     el.lista.appendChild(tarjeta);
   }
 }
@@ -92,6 +112,7 @@ function renderCofres(cofres) {
 function actualizarPaginacion(pagina, totalPaginas) {
   estado.pagina = pagina;
   estado.totalPaginas = Math.max(totalPaginas, 1);
+  mostrarPaginacion(estado.totalPaginas > 1);
   el.paginaActual.textContent = `Página ${estado.pagina + 1} de ${estado.totalPaginas}`;
   el.btnAnterior.disabled = estado.pagina <= 0;
   el.btnSiguiente.disabled = estado.pagina >= estado.totalPaginas - 1;
@@ -123,6 +144,7 @@ async function cargar() {
       el.btnAnterior.disabled = true;
       el.btnSiguiente.disabled = true;
       el.paginaActual.textContent = '';
+      mostrarPaginacion(false);
       return;
     }
     if (!resp.ok) {
@@ -176,6 +198,7 @@ function fallar() {
   el.btnAnterior.disabled = true;
   el.btnSiguiente.disabled = true;
   el.paginaActual.textContent = '';
+  mostrarPaginacion(false);
 }
 
 if (!sessionStorage.getItem(CLAVE_ROL)) {

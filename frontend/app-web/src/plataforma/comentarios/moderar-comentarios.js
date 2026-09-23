@@ -214,7 +214,7 @@ export function panelDeDetalle(detalle, alDecidir) {
   });
   const confirmar = h('button', {
     clase: 'boton boton--primario',
-    texto: 'REGISTRAR DECISION',
+    texto: 'Registrar decisión',
     datos: { accion: 'decidir' },
     atributos: { type: 'submit', disabled: true },
   });

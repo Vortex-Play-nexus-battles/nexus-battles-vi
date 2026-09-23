@@ -620,6 +620,30 @@
   background: var(--superficie);
   border: 1px solid var(--borde);
   border-radius: var(--radio);
+  /* UX-R4.4 — un estado de la vista entera ocupa la vista entera, tambien
+     cuando la zona donde se pinta es una rejilla. En «Mis cofres» el fallo
+     caia dentro de `.cofres-lista`, que reparte columnas de 240 px, y se
+     colocaba como si fuera un cofre mas: una caja estrecha a la izquierda y
+     el resto de la tarjeta en blanco. Fuera de una rejilla, esta linea no
+     hace nada, asi que vale para las dos formas de pintarlo. */
+  grid-column: 1 / -1;
+}
+
+/* UX-R4.4 — dentro de una tarjeta, el estado NO dibuja otra tarjeta.
+   `historial-transacciones` y `mis-cofres` pintan su estado dentro de
+   `<section class="tarjeta">`, que ya trae superficie blanca, borde y radio.
+   El estado traia lo mismo, asi que salia un marco blanco dentro de otro
+   marco blanco separados por doce pixeles: el doble borde que se ve en
+   cuanto falla cualquiera de las dos. La tarjeta pone el papel; el estado
+   solo pone lo que dice.
+
+   Descendiente y no hijo directo: las dos vistas envuelven el estado en su
+   propia zona (`<div id="historial-estado-vista">`, `.cofres-lista`), asi que
+   `.tarjeta > .estado-vista` no llegaba a ninguna de las dos. Se probo, y el
+   doble borde seguia ahi. */
+.tarjeta .estado-vista {
+  background: none;
+  border: 0;
 }
 
 .estado-vista__icono {

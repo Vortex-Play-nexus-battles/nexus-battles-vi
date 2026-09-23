@@ -82,7 +82,7 @@ describe('variante Sin héroe', () => {
     expect(d.textContent).toContain(
       'Equipa un héroe desde tu inventario antes de entrar a la sala.',
     );
-    expect(d.querySelector('[data-accion="confirmar"]').textContent).toBe('IR AL INVENTARIO');
+    expect(d.querySelector('[data-accion="confirmar"]').textContent).toBe('Ir al inventario');
   });
 
   test('el aviso es de error y cuenta cuantos heroes hay sin equipar', () => {
@@ -120,7 +120,7 @@ describe('variante Ocupado', () => {
     expect(d.dataset.resultado).toBe('HEROE_OCUPADO');
     expect(d.textContent).toContain('Tu héroe está en otra partida');
     expect(d.textContent).toContain('«Arquero del Norte» está en la sala «Torre del Alba»');
-    expect(d.querySelector('[data-accion="confirmar"]').textContent).toBe('ELEGIR OTRO HÉROE');
+    expect(d.querySelector('[data-accion="confirmar"]').textContent).toBe('Elegir otro héroe');
   });
 
   test('el aviso es de advertencia y dice cuanto falta', () => {
@@ -156,7 +156,7 @@ describe('variante Disponible', () => {
     expect(d.dataset.resultado).toBe('DISPONIBLE');
     expect(d.textContent).toContain('Arquero del Norte, listo para combatir');
     expect(d.textContent).toContain('Vida 120 · Ataque 34 · Defensa 21 · Nivel 12');
-    expect(d.querySelector('[data-accion="confirmar"]').textContent).toBe('ENTRAR A LA SALA');
+    expect(d.querySelector('[data-accion="confirmar"]').textContent).toBe('Entrar a la sala');
   });
 
   test('el aviso es de exito y advierte del descuento', () => {
@@ -177,7 +177,7 @@ describe('separacion entre variantes', () => {
 
     expect(d.textContent).not.toContain('No tienes un héroe equipado');
     expect(d.textContent).not.toContain('otra partida');
-    expect(d.textContent).not.toContain('IR AL INVENTARIO');
+    expect(d.textContent).not.toContain('Ir al inventario');
   });
 
   test('Sin héroe no muestra estadisticas ni el descuento', () => {
@@ -186,14 +186,14 @@ describe('separacion entre variantes', () => {
 
     expect(d.textContent).not.toContain('Vida 120');
     expect(d.textContent).not.toContain('Se descontarán');
-    expect(d.textContent).not.toContain('ENTRAR A LA SALA');
+    expect(d.textContent).not.toContain('Entrar a la sala');
   });
 
   test('Ocupado no ofrece entrar a la sala', () => {
     const d = raiz();
     pintarValidacion(d, ocupado());
 
-    expect(d.textContent).not.toContain('ENTRAR A LA SALA');
+    expect(d.textContent).not.toContain('Entrar a la sala');
     expect(d.textContent).not.toContain('listo para combatir');
   });
 

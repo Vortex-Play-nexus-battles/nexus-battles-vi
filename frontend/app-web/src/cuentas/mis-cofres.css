@@ -43,9 +43,14 @@ body {
   background: var(--superficie);
 }
 
-.cofre-icono {
-  font-size: 32px;
-  line-height: 1;
+/* UX-R4.4 — `.cofre-icono` media un emoji en `font-size`. Ahora es un simbolo
+   del sprite: se mide en pixeles y toma el oro del producto, que es el color
+   con el que el resto de la aplicacion dice «esto lo has ganado». */
+.cofre-simbolo {
+  width: var(--icono-grande);
+  height: var(--icono-grande);
+  flex-shrink: 0;
+  color: var(--credito-oro);
 }
 
 .cofre-info {

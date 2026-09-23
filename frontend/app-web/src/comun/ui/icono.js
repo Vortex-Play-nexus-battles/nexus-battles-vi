@@ -56,6 +56,9 @@ export const ICONOS = Object.freeze([
   'candado',
   'trofeo',
   'escudo-check',
+  // UX-R4.4 — dibujado para este producto, no exportado de Figma: «Mis cofres»
+  // era la unica vista cuyo objeto central no tenia simbolo.
+  'cofre',
 ]);
 
 const ESPACIO_SVG = 'http://www.w3.org/2000/svg';
