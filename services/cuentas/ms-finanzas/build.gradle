@@ -25,6 +25,18 @@ dependencies {
     // misma librería y no queden desalineados en un upgrade.
     implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
 
+    // R11.4 — verificacion del pacto que ms-subastas publica sobre este
+    // servicio. Los pactos existian desde agosto en contracts/pactos/ y nadie
+    // los verificaba: eran la opinion del consumidor, escrita una vez. Con
+    // esto se convierten en compuerta, y el rojo aparece en el repositorio de
+    // quien hace el cambio y no en la integracion de la semana siguiente.
+    //
+    // `junit5spring` (y no `junit5` a secas) por el MockMvcTestTarget: un
+    // pacto describe el contrato HTTP, y montar PostgreSQL para sembrar cada
+    // estado añadiria dos minutos por corrida para probar ademas la
+    // persistencia, que ya tiene sus propias pruebas.
+    testImplementation 'au.com.dius.pact.provider:junit5spring:4.6.17'
+
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
     testCompileOnly 'org.projectlombok:lombok'
