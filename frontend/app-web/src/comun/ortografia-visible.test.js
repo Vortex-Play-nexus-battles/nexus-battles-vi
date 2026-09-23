@@ -72,6 +72,22 @@
  * escritas en `canal-sala.js` y `sala-de-espera.js` y **este guardián no las
  * habría encontrado**: las encontró una prueba de extremo a extremo que
  * esperaba el texto viejo. Conviene saber qué no cubre una prueba.
+ *
+ * ## El otro agujero: las frases cortas
+ *
+ * `FRASE` pide tres palabras o más, porque con menos casi todo lo que hay en
+ * un módulo es un identificador. El precio es que `'Apelacion resuelta'` —dos
+ * palabras, título de un aviso que el moderador lee— pasó por delante de este
+ * guardián hasta UX-R4.3, teniendo `apelacion` en la lista desde el principio.
+ * Lo encontró añadir `decision` y mirar lo que salía alrededor, no la prueba.
+ * Bajar el umbral a dos haría saltar cientos de nombres de clase; el agujero
+ * sigue abierto a sabiendas.
+ *
+ * `mas`/`más` es de la misma familia y también queda fuera (UX-R4.3). «Mas»
+ * sin tilde existe y significa «pero»: es literario, el producto no lo usa,
+ * pero una regla automática que lo cambie siempre acabaría corrigiendo una
+ * cita o un nombre propio. Las tres apariciones de `moderar-comentarios.html`
+ * se arreglaron a mano, leyéndolas.
  */
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -107,6 +123,7 @@ const PARES = Object.freeze({
   contrasena: 'contraseña',
   credito: 'crédito',
   creditos: 'créditos',
+  decision: 'decisión',
   descripcion: 'descripción',
   despues: 'después',
   dia: 'día',

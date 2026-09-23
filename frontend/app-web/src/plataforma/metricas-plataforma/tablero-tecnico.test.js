@@ -191,7 +191,7 @@ describe('vista', () => {
     expect(document.querySelectorAll('[data-zona="por-dia"] li')).toHaveLength(2);
     expect(
       document.querySelector('[data-zona="moderacion"] [data-zona="alertas"]').textContent,
-    ).toMatch(/D-25/);
+    ).toMatch(/[Ss]in umbral configurado/);
     expect(document.querySelectorAll('[data-zona="pendientes"] li')).toHaveLength(2);
   });
 

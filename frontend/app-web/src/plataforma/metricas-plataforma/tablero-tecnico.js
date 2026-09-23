@@ -284,7 +284,7 @@ export function montarTableroTecnico(raiz, { fetchImpl, descargar } = {}) {
           ultimaModeracion.alertas,
           ultimaModeracion.alertasConfiguradas
             ? 'Sin alertas: ningún día supera el umbral.'
-            : 'Sin umbral configurado (decision pendiente del PO, D-25): se publican los conteos, no se evalua ninguna alerta.',
+            : 'Sin umbral configurado: se publican los conteos, pero no se evalúa ninguna alerta.',
         ),
       );
       const pendientes = nodo('ul', 'pila pila--ajustada');

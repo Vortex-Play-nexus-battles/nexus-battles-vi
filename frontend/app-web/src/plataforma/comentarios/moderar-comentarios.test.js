@@ -234,7 +234,7 @@ describe('resolver desde la vista', () => {
       }),
     );
     expect(raiz.querySelector('[data-zona="aviso"]').textContent).toContain(
-      'el aviso al autor no salio',
+      'el aviso al autor no salió',
     );
   });
 
