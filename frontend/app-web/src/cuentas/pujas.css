@@ -1253,41 +1253,20 @@ body {
   font-weight: 700;
 }
 
-/* UX-R4.7 — el latido llama la atencion; no decide lo que se puede leer.
-   Traia `color: var(--error) !important`, y la clase se pone en dos sitios muy
-   distintos: la CIFRA que se agota, donde el rojo es lo correcto y ya lo pone
-   `.tiempo-urgente`, y el BOTON «Ir ahora», que lleva relleno primario. Alli
-   el `!important` pisaba el blanco del boton y dejaba la etiqueta en rojo
-   sobre azul: **1,30:1 medido en el navegador**, contra 8,54:1 de cualquier
-   otro boton primario. La llamada a la accion mas urgente de la pantalla era
-   la unica ilegible.
-   No lo vio axe porque el boton solo existe con una subasta a menos de diez
-   segundos de cerrar, y el laboratorio fotografia el estado degradado, donde
-   no hay ninguna subasta. */
 .animacion-latido {
   animation: latido 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  color: var(--error) !important;
 }
 
-/* El boton urgente se distingue por su halo, no por perder el color del
-   texto. El rojo esta en el borde de la luz, no en la etiqueta. */
-.btn-ir-ahora.animacion-latido {
-  box-shadow: 0 0 0 0 color-mix(in srgb, var(--error) 55%, transparent);
-}
-
-/* UX-R4.7 — el latido movia la opacidad hasta 0,55. En una cifra que se agota
-   es discutible; en el boton primario significaba que la llamada a la accion
-   se recortaba el contraste a la mitad dos veces por segundo. Ahora late el
-   tamano y el halo, que se ven igual y no le quitan nada a lo que hay que
-   leer. `prefers-reduced-motion` sigue apagandolo entero. */
 @keyframes latido {
   0%,
   100% {
+    opacity: 1;
     transform: scale(1);
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--error) 55%, transparent);
   }
   50% {
+    opacity: 0.55;
     transform: scale(1.05);
-    box-shadow: 0 0 0 7px color-mix(in srgb, var(--error) 0%, transparent);
   }
 }
 

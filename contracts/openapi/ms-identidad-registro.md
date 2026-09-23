@@ -1,4 +1,25 @@
-markdown
+> **SUPERSEDED — 23 de septiembre de 2026.**
+> El contrato vigente de `/api/v1/auth` es
+> [`ms-identidad-auth.yaml`](./ms-identidad-auth.yaml), que describe las
+> **siete** rutas reales. Este documento se conserva porque es la unica
+> version del contrato que existio durante los sprints 1 y 2, y borrarlo
+> dejaria sin referencia a los issues que lo citan. **No lo uses para
+> integrar**: lo que dice ya no coincide con el servicio.
+>
+> Lo que quedo desactualizado, comprobado contra el codigo:
+>
+> | Dice este documento | Hace el servicio hoy |
+> |---|---|
+> | «No se genera token de sesion (JWT) por ahora» | `POST /auth/login` **si** devuelve un JWT RS256 en el campo `token`, que este documento no lista |
+> | «reenviar `rol` y `apodo` como cabeceras `X-User-Role` / `X-User-Name`» | Ese camino esta **cerrado**: `SecurityInterceptor` responde **403** y audita el intento como `SECURITY_BYPASS_ATTEMPT` (PR #629). Un cliente que siga esta instruccion no funciona |
+> | Umbral de bloqueo: 4 intentos | `app.seguridad.umbral-intentos-fallidos=3` |
+> | `PUT /auth/password` sin token -> 401 | Responde **403** (`.../errors/forbidden`): el interceptor es fail-closed y no distingue «no te identificaste» de «no puedes» |
+> | Solo 4 rutas | Existen 7: faltan `/restablecer/solicitar`, `/jwks` y `/token` |
+>
+> La instruccion de las cabeceras `X-User-*` no es solo obsoleta: seguirla
+> genera eventos de auditoria de intento de evasion. Por eso este aviso va
+> arriba del todo y no en una nota al pie.
+
 # Contrato de API: ms-identidad (Registro y Login de Usuario)
 
 ## POST /api/v1/auth/registro
