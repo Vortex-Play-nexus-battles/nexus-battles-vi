@@ -42,15 +42,41 @@
 # forzar con un despliegue a demanda (workflow_dispatch) sabiendo el riesgo.
 
 services:
+  # Base de datos PROPIA de ms-finanzas (regla 7: aislamiento de datos; no
+  # comparte servidor con plataforma-db ni con la de ningun otro servicio).
+  # Sin este bloque, MS_FINANZAS_DB_HOST no tiene a que apuntar -- ni
+  # docker-compose.ms-cumplimiento.yml ni docker-compose.ms-ecommerce.yml lo
+  # tienen tampoco todavia, mismo hueco, no soy el primero en dejarlo. Mismo
+  # patron que identidad-db en docker-compose.cuentas.yml.
+  finanzas-db:
+    image: postgres:17-alpine
+    container_name: finanzas-db
+    restart: unless-stopped
+    mem_limit: 192m
+    environment:
+      POSTGRES_DB: finanzas_db
+      POSTGRES_USER: ${MS_FINANZAS_DB_USER}
+      POSTGRES_PASSWORD: ${MS_FINANZAS_DB_PASSWORD}
+    volumes:
+      - finanzas-db-datos:/var/lib/postgresql/data
+
   srv-ms-finanzas:
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-ms-finanzas:${TAG}
+    restart: unless-stopped
+    mem_limit: 384m
     ports:
       - "8093:8093"
+    depends_on:
+      - finanzas-db
     environment:
-      DB_HOST: ${MS_FINANZAS_DB_HOST}
-      DB_PORT: ${MS_FINANZAS_DB_PORT}
-      DB_NAME: ${MS_FINANZAS_DB_NAME}
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      DB_HOST: ${MS_FINANZAS_DB_HOST:-finanzas-db}
+      DB_PORT: ${MS_FINANZAS_DB_PORT:-5432}
+      DB_NAME: ${MS_FINANZAS_DB_NAME:-finanzas_db}
       DB_USER: ${MS_FINANZAS_DB_USER}
       DB_PASSWORD: ${MS_FINANZAS_DB_PASSWORD}
       # Clave publica de los tokens (ADR-002/ADR-005), dentro de la red.
       IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://srv-ms-identidad:8089/api/v1/auth/jwks}
+
+volumes:
+  finanzas-db-datos:
