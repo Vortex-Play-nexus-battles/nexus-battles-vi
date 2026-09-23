@@ -105,3 +105,36 @@ export async function prepararPagina(page, opciones) {
   await servirKitDeDiseno(page);
   await sembrarSesion(page, opciones);
 }
+
+/**
+ * Color al que resuelve un token del sistema de diseno, normalizado como lo
+ * devuelve `getComputedStyle` (`rgb(r, g, b)`), para poder compararlo con un
+ * estilo calculado.
+ *
+ * Se lee el **valor literal** de la propiedad y no `var(--token)`: si el token
+ * no estuviera definido, `var()` dejaria el color heredado y la comparacion
+ * podria pasar por casualidad contra un borde que tambien cayo a
+ * `currentColor`. Asi, un token ausente devuelve `null` y la prueba falla por
+ * el motivo correcto.
+ *
+ * Tambien evita fijar el hexadecimal a mano: `--borde-int` vale `#6F7994` en
+ * tema claro y `#111726` en oscuro, y la prueba debe seguir al tema.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} nombre por ejemplo `--borde-int`
+ * @returns {Promise<string|null>}
+ */
+export function colorDelToken(page, nombre) {
+  return page.evaluate((token) => {
+    const valor = getComputedStyle(document.body).getPropertyValue(token).trim();
+    if (!valor) {
+      return null;
+    }
+    const sonda = document.createElement('span');
+    sonda.style.color = valor;
+    document.body.appendChild(sonda);
+    const color = getComputedStyle(sonda).color;
+    sonda.remove();
+    return color;
+  }, nombre);
+}

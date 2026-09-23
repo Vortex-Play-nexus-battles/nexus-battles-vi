@@ -5,7 +5,7 @@
  * verifica la peticion que enlaza el campo de la vitrina con el endpoint.
  */
 import { test, expect } from '@playwright/test';
-import { prepararPagina } from './entorno-de-prueba.js';
+import { colorDelToken, prepararPagina } from './entorno-de-prueba.js';
 
 const JUGADOR = 'jugador-de-prueba';
 const PRODUCTOS = [
@@ -159,4 +159,34 @@ test('El jugador limpia la búsqueda y vuelve a ver su inventario', async ({ pag
   await expect(page.locator('.vitrina__producto')).toHaveCount(PRODUCTOS.length);
   await expect(campo).toHaveValue('');
   await expect(formulario.getByRole('button', { name: 'Limpiar' })).toBeHidden();
+});
+
+/*
+ * Misma familia que el realce de HU-INV-013: aqui el estilo usa el atajo
+ * `border`, asi que un token sin resolver no deja el color por defecto sino
+ * que anula la declaracion entera y el campo se queda literalmente sin borde.
+ * El campo de busqueda es un control de entrada: sin borde no se distingue del
+ * fondo. Ver #581.
+ */
+test('El campo de busqueda se dibuja con un borde visible', async ({ page }) => {
+  await prepararInventario(page);
+  await abrirVitrina(page);
+
+  const token = await colorDelToken(page, '--borde-int');
+  expect(token, 'el token --borde-int tiene que estar definido').not.toBeNull();
+
+  const borde = await formularioBusqueda(page)
+    .getByRole('searchbox')
+    .evaluate((campo) => {
+      const estilo = getComputedStyle(campo);
+      return {
+        ancho: estilo.borderTopWidth,
+        estilo: estilo.borderTopStyle,
+        color: estilo.borderTopColor,
+      };
+    });
+
+  expect(borde.estilo).toBe('solid');
+  expect(borde.ancho).toBe('1px');
+  expect(borde.color).toBe(token);
 });

@@ -8,7 +8,7 @@
  * responsiva de HU-INV-001.
  */
 import { test, expect } from '@playwright/test';
-import { prepararPagina } from './entorno-de-prueba.js';
+import { colorDelToken, prepararPagina } from './entorno-de-prueba.js';
 
 const JUGADOR = 'jugador-de-prueba';
 
@@ -239,5 +239,44 @@ test.describe('Resaltado del producto al senalar', () => {
 
     expect(await aspectoDe(tarjeta)).not.toEqual(enReposo);
     expect(await cajasDeTodas(page)).toEqual(antes);
+  });
+  // --- El realce usa el token, no un color cualquiera ---------------------
+
+  /*
+   * Las pruebas de arriba exigen que el borde **cambie** al senalar, no a que
+   * color. Esa diferencia dejo pasar un defecto real: cuando `--borde-int` no
+   * resolvia, `border-color` caia a `currentColor` y el realce se dibujaba con
+   * el color del texto. El borde si cambiaba —y la prueba seguia en verde—,
+   * pero con el color equivocado. Ver #581 y el PR #381, cerrado.
+   *
+   * Por eso estas dos fijan el valor contra el token del sistema de diseno.
+   */
+
+  test('El realce usa el borde interactivo del sistema de diseno', async ({ page }) => {
+    await conInventarioDe(page, 16);
+    await abrirVitrina(page);
+
+    const token = await colorDelToken(page, '--borde-int');
+    expect(token, 'el token --borde-int tiene que estar definido').not.toBeNull();
+
+    const tarjeta = page.locator('.vitrina__producto').first();
+    await tarjeta.hover();
+
+    // Se espera al valor y no a que deje de moverse: el realce entra con una
+    // transicion, y una lectura estable puede ser la de antes de empezar.
+    await expect.poll(async () => (await aspectoDe(tarjeta)).borde).toBe(token);
+  });
+
+  test('El realce por teclado usa el mismo borde que el puntero', async ({ page }) => {
+    await conInventarioDe(page, 16);
+    await abrirVitrina(page);
+
+    const token = await colorDelToken(page, '--borde-int');
+
+    // La tarjeta es un <li>: quien recibe el foco es un control de dentro.
+    const tarjeta = page.locator('.vitrina__producto').first();
+    await tarjeta.locator('button').first().focus();
+
+    await expect.poll(async () => (await aspectoDe(tarjeta)).borde).toBe(token);
   });
 });
