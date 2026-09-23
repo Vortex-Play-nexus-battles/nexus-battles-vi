@@ -4,11 +4,11 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 
 import com.nexusbattles.plataforma.comentarios.Comentario;
 import com.nexusbattles.plataforma.comentarios.publicacion.ComentarioRepository;
@@ -23,6 +23,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * El flujo de moderacion completo — R10.1 (RF-COM-005, RF-COM-006, RF-COM-008).
@@ -36,9 +40,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * resolverse, quedar el asiento— y comprueba que el comentario SALE del
  * estado en el que entro.
  *
- * <p>Los repositorios son dobles en memoria y no simulacros con {@code when}:
- * el flujo guarda y vuelve a leer varias veces, y un simulacro por llamada
- * acabaria probando el guion de la prueba en vez del comportamiento.
+ * <p>Los repositorios son simulacros RESPALDADOS POR COLECCIONES, no
+ * {@code when(...).thenReturn(...)} por llamada: el flujo guarda y vuelve a
+ * leer varias veces, y un simulacro por llamada acabaria probando el guion de
+ * la prueba en vez del comportamiento.
  */
 @DisplayName("R10.1: el comentario en revision tiene salida")
 class FlujoDeModeracionTest {
@@ -46,18 +51,24 @@ class FlujoDeModeracionTest {
     private static final Instant AHORA = Instant.parse("2026-09-23T10:00:00Z");
     private static final String PRODUCTO = "prod-1";
 
-    private ComentariosEnMemoria comentarios;
-    private ReportesEnMemoria reportes;
-    private AsientosEnMemoria asientos;
+    private Map<String, RegistroDeComentario> filasDeComentarios;
+    private List<RegistroDeReporte> filasDeReportes;
+    private List<AsientoDeModeracion> filasDeAsientos;
+    private ComentarioRepository comentarios;
+    private ReporteRepository reportes;
+    private AsientoRepository asientos;
     private List<String> avisos;
     private List<String> auditados;
     private ServicioDeModeracion servicio;
 
     @BeforeEach
     void montar() {
-        comentarios = new ComentariosEnMemoria();
-        reportes = new ReportesEnMemoria();
-        asientos = new AsientosEnMemoria();
+        filasDeComentarios = new LinkedHashMap<>();
+        filasDeReportes = new ArrayList<>();
+        filasDeAsientos = new ArrayList<>();
+        comentarios = comentariosEnMemoria(filasDeComentarios);
+        reportes = reportesEnMemoria(filasDeReportes);
+        asientos = asientosEnMemoria(filasDeAsientos);
         avisos = new ArrayList<>();
         auditados = new ArrayList<>();
 
@@ -221,7 +232,8 @@ class FlujoDeModeracionTest {
             servicio.resolver("c-1", "mod-1", "moderadora", AccionDeModeracion.OCULTAR, "spam");
 
             // El registro sigue ahi: es lo que la ficha exige distinguir.
-            assertTrue(comentarios.findById("c-1").isPresent());
+            assertTrue(filasDeComentarios.containsKey("c-1"),
+                    "el registro sigue en la base: es lo que la ficha exige distinguir");
 
             ServicioDeModeracion.Resuelto vuelta = servicio.resolver(
                     "c-1", "mod-1", "moderadora", AccionDeModeracion.RESTAURAR, "era una cita");
@@ -247,7 +259,7 @@ class FlujoDeModeracionTest {
                     servicio.resolver("c-1", "mod-2", "segunda",
                             AccionDeModeracion.APROBAR, "yo tambien lo veo bien"));
 
-            assertEquals(1, asientos.findByComentarioIdOrderByFechaAsc("c-1").size(),
+            assertEquals(1, filasDeAsientos.size(),
                     "el intento fallido no deja asiento: nada cambio");
         }
 
@@ -325,236 +337,81 @@ class FlujoDeModeracionTest {
     }
 
     // ----------------------------------------------------------- dobles simples
+    //
+    // Mockito respaldado por colecciones, no `when(...).thenReturn(...)` por
+    // llamada. El flujo guarda y vuelve a leer varias veces, y un simulacro por
+    // llamada acabaria probando el guion de la prueba en vez del comportamiento.
+    // Implementar JpaRepository a mano tampoco: son treinta metodos que no
+    // intervienen aqui y que cambian con cada version de Spring Data.
 
-    private static class ComentariosEnMemoria implements ComentarioRepository {
-        private final Map<String, RegistroDeComentario> datos = new HashMap<>();
+    private static ComentarioRepository comentariosEnMemoria(Map<String, RegistroDeComentario> datos) {
+        ComentarioRepository repo = mock(ComentarioRepository.class);
 
-        @Override
-        public Optional<RegistroDeComentario> findById(String id) {
-            return Optional.ofNullable(datos.get(id));
-        }
-
-        @Override
-        public <S extends RegistroDeComentario> S save(S entidad) {
-            datos.put(entidad.aDominio().id(), entidad);
-            return entidad;
-        }
-
-        @Override
-        public List<RegistroDeComentario> findByEstadoOrderByFechaPublicacionAsc(
-                Comentario.Estado estado) {
+        when(repo.save(any(RegistroDeComentario.class))).thenAnswer(inv -> {
+            RegistroDeComentario r = inv.getArgument(0);
+            datos.put(r.aDominio().id(), r);
+            return r;
+        });
+        when(repo.findById(anyString())).thenAnswer(inv ->
+                Optional.ofNullable(datos.get(inv.<String>getArgument(0))));
+        when(repo.findByEstadoOrderByFechaPublicacionAsc(any())).thenAnswer(inv -> {
+            Comentario.Estado estado = inv.getArgument(0);
             return datos.values().stream()
                     .filter(r -> r.aDominio().estado() == estado)
-                    .sorted((a, b) -> a.aDominio().fechaPublicacion()
-                            .compareTo(b.aDominio().fechaPublicacion()))
+                    .sorted(Comparator.comparing(
+                            (RegistroDeComentario r) -> r.aDominio().fechaPublicacion()))
                     .toList();
-        }
-
-        @Override
-        public List<RegistroDeComentario> findByEstadoAndProductoIdOrderByFechaPublicacionAsc(
-                Comentario.Estado estado, String productoId) {
-            return findByEstadoOrderByFechaPublicacionAsc(estado).stream()
-                    .filter(r -> r.aDominio().productoId().equals(productoId))
-                    .toList();
-        }
-
-        @Override
-        public List<RegistroDeComentario> findByProductoIdOrderByFechaPublicacionAsc(String p) {
-            throw new UnsupportedOperationException("no lo usa el flujo de moderacion");
-        }
-
-        // El resto de JpaRepository no interviene en este flujo.
-        @Override public void flush() { }
-        @Override public <S extends RegistroDeComentario> S saveAndFlush(S e) { return save(e); }
-        @Override public <S extends RegistroDeComentario> List<S> saveAllAndFlush(Iterable<S> e) {
-            throw new UnsupportedOperationException(); }
-        @Override public void deleteAllInBatch(Iterable<RegistroDeComentario> e) { }
-        @Override public void deleteAllByIdInBatch(Iterable<String> i) { }
-        @Override public void deleteAllInBatch() { }
-        @Override public RegistroDeComentario getOne(String id) { return datos.get(id); }
-        @Override public RegistroDeComentario getById(String id) { return datos.get(id); }
-        @Override public RegistroDeComentario getReferenceById(String id) { return datos.get(id); }
-        @Override public <S extends RegistroDeComentario> List<S> findAll(
-                org.springframework.data.domain.Example<S> e) { throw new UnsupportedOperationException(); }
-        @Override public <S extends RegistroDeComentario> List<S> findAll(
-                org.springframework.data.domain.Example<S> e,
-                org.springframework.data.domain.Sort s) { throw new UnsupportedOperationException(); }
-        @Override public <S extends RegistroDeComentario> List<S> saveAll(Iterable<S> e) {
-            throw new UnsupportedOperationException(); }
-        @Override public List<RegistroDeComentario> findAll() { return List.copyOf(datos.values()); }
-        @Override public List<RegistroDeComentario> findAllById(Iterable<String> i) {
-            throw new UnsupportedOperationException(); }
-        @Override public List<RegistroDeComentario> findAll(
-                org.springframework.data.domain.Sort s) { throw new UnsupportedOperationException(); }
-        @Override public org.springframework.data.domain.Page<RegistroDeComentario> findAll(
-                org.springframework.data.domain.Pageable p) { throw new UnsupportedOperationException(); }
-        @Override public boolean existsById(String id) { return datos.containsKey(id); }
-        @Override public long count() { return datos.size(); }
-        @Override public void deleteById(String id) { datos.remove(id); }
-        @Override public void delete(RegistroDeComentario e) { }
-        @Override public void deleteAllById(Iterable<? extends String> i) { }
-        @Override public void deleteAll(Iterable<? extends RegistroDeComentario> e) { }
-        @Override public void deleteAll() { datos.clear(); }
-        @Override public <S extends RegistroDeComentario> Optional<S> findOne(
-                org.springframework.data.domain.Example<S> e) { throw new UnsupportedOperationException(); }
-        @Override public <S extends RegistroDeComentario> org.springframework.data.domain.Page<S> findAll(
-                org.springframework.data.domain.Example<S> e,
-                org.springframework.data.domain.Pageable p) { throw new UnsupportedOperationException(); }
-        @Override public <S extends RegistroDeComentario> long count(
-                org.springframework.data.domain.Example<S> e) { throw new UnsupportedOperationException(); }
-        @Override public <S extends RegistroDeComentario> boolean exists(
-                org.springframework.data.domain.Example<S> e) { throw new UnsupportedOperationException(); }
-        @Override public <S extends RegistroDeComentario, R> R findBy(
-                org.springframework.data.domain.Example<S> e,
-                java.util.function.Function<org.springframework.data.repository.query.FluentQuery
-                        .FetchableFluentQuery<S>, R> f) { throw new UnsupportedOperationException(); }
+        });
+        when(repo.findByEstadoAndProductoIdOrderByFechaPublicacionAsc(any(), anyString()))
+                .thenAnswer(inv -> {
+                    Comentario.Estado estado = inv.getArgument(0);
+                    String producto = inv.getArgument(1);
+                    return datos.values().stream()
+                            .filter(r -> r.aDominio().estado() == estado)
+                            .filter(r -> r.aDominio().productoId().equals(producto))
+                            .sorted(Comparator.comparing(
+                            (RegistroDeComentario r) -> r.aDominio().fechaPublicacion()))
+                            .toList();
+                });
+        return repo;
     }
 
-    private static class ReportesEnMemoria implements ReporteRepository {
-        private final List<RegistroDeReporte> datos = new ArrayList<>();
+    private static ReporteRepository reportesEnMemoria(List<RegistroDeReporte> datos) {
+        ReporteRepository repo = mock(ReporteRepository.class);
 
-        @Override
-        public boolean existsByComentarioIdAndReportanteId(String c, String r) {
-            return datos.stream().anyMatch(x ->
-                    x.comentarioId().equals(c) && x.reportanteId().equals(r));
-        }
-
-        @Override
-        public List<RegistroDeReporte> findByComentarioIdOrderByFechaAsc(String c) {
-            return datos.stream().filter(x -> x.comentarioId().equals(c))
-                    .sorted((a, b) -> a.fecha().compareTo(b.fecha())).toList();
-        }
-
-        @Override
-        public long countByComentarioId(String c) {
-            return datos.stream().filter(x -> x.comentarioId().equals(c)).count();
-        }
-
-        @Override
-        public long countByReportanteIdAndFechaAfter(String r, Instant desde) {
-            return datos.stream().filter(x -> x.reportanteId().equals(r)
+        when(repo.save(any(RegistroDeReporte.class))).thenAnswer(inv -> {
+            RegistroDeReporte r = inv.getArgument(0);
+            datos.add(r);
+            return r;
+        });
+        when(repo.existsByComentarioIdAndReportanteId(anyString(), anyString())).thenAnswer(inv ->
+                datos.stream().anyMatch(x -> x.comentarioId().equals(inv.getArgument(0))
+                        && x.reportanteId().equals(inv.getArgument(1))));
+        when(repo.findByComentarioIdOrderByFechaAsc(anyString())).thenAnswer(inv ->
+                datos.stream().filter(x -> x.comentarioId().equals(inv.getArgument(0)))
+                        .sorted(Comparator.comparing(RegistroDeReporte::fecha))
+                        .toList());
+        when(repo.countByComentarioId(anyString())).thenAnswer(inv ->
+                datos.stream().filter(x -> x.comentarioId().equals(inv.getArgument(0))).count());
+        when(repo.countByReportanteIdAndFechaAfter(anyString(), any())).thenAnswer(inv -> {
+            String reportante = inv.getArgument(0);
+            Instant desde = inv.getArgument(1);
+            return datos.stream().filter(x -> x.reportanteId().equals(reportante)
                     && x.fecha().isAfter(desde)).count();
-        }
-
-        @Override
-        public <S extends RegistroDeReporte> S save(S e) {
-            datos.add(e);
-            return e;
-        }
-
-        @Override public void flush() { }
-        @Override public <S extends RegistroDeReporte> S saveAndFlush(S e) { return save(e); }
-        @Override public <S extends RegistroDeReporte> List<S> saveAllAndFlush(Iterable<S> e) {
-            throw new UnsupportedOperationException(); }
-        @Override public void deleteAllInBatch(Iterable<RegistroDeReporte> e) { }
-        @Override public void deleteAllByIdInBatch(Iterable<String> i) { }
-        @Override public void deleteAllInBatch() { }
-        @Override public RegistroDeReporte getOne(String id) { throw new UnsupportedOperationException(); }
-        @Override public RegistroDeReporte getById(String id) { throw new UnsupportedOperationException(); }
-        @Override public RegistroDeReporte getReferenceById(String id) { throw new UnsupportedOperationException(); }
-        @Override public <S extends RegistroDeReporte> List<S> findAll(
-                org.springframework.data.domain.Example<S> e) { throw new UnsupportedOperationException(); }
-        @Override public <S extends RegistroDeReporte> List<S> findAll(
-                org.springframework.data.domain.Example<S> e,
-                org.springframework.data.domain.Sort s) { throw new UnsupportedOperationException(); }
-        @Override public <S extends RegistroDeReporte> List<S> saveAll(Iterable<S> e) {
-            throw new UnsupportedOperationException(); }
-        @Override public List<RegistroDeReporte> findAll() { return List.copyOf(datos); }
-        @Override public List<RegistroDeReporte> findAllById(Iterable<String> i) {
-            throw new UnsupportedOperationException(); }
-        @Override public List<RegistroDeReporte> findAll(
-                org.springframework.data.domain.Sort s) { throw new UnsupportedOperationException(); }
-        @Override public org.springframework.data.domain.Page<RegistroDeReporte> findAll(
-                org.springframework.data.domain.Pageable p) { throw new UnsupportedOperationException(); }
-        @Override public Optional<RegistroDeReporte> findById(String id) {
-            return datos.stream().filter(x -> x.id().equals(id)).findFirst(); }
-        @Override public boolean existsById(String id) { return findById(id).isPresent(); }
-        @Override public long count() { return datos.size(); }
-        @Override public void deleteById(String id) { }
-        @Override public void delete(RegistroDeReporte e) { }
-        @Override public void deleteAllById(Iterable<? extends String> i) { }
-        @Override public void deleteAll(Iterable<? extends RegistroDeReporte> e) { }
-        @Override public void deleteAll() { datos.clear(); }
-        @Override public <S extends RegistroDeReporte> Optional<S> findOne(
-                org.springframework.data.domain.Example<S> e) { throw new UnsupportedOperationException(); }
-        @Override public <S extends RegistroDeReporte> org.springframework.data.domain.Page<S> findAll(
-                org.springframework.data.domain.Example<S> e,
-                org.springframework.data.domain.Pageable p) { throw new UnsupportedOperationException(); }
-        @Override public <S extends RegistroDeReporte> long count(
-                org.springframework.data.domain.Example<S> e) { throw new UnsupportedOperationException(); }
-        @Override public <S extends RegistroDeReporte> boolean exists(
-                org.springframework.data.domain.Example<S> e) { throw new UnsupportedOperationException(); }
-        @Override public <S extends RegistroDeReporte, R> R findBy(
-                org.springframework.data.domain.Example<S> e,
-                java.util.function.Function<org.springframework.data.repository.query.FluentQuery
-                        .FetchableFluentQuery<S>, R> f) { throw new UnsupportedOperationException(); }
+        });
+        return repo;
     }
 
-    private static class AsientosEnMemoria implements AsientoRepository {
-        private final List<AsientoDeModeracion> datos = new ArrayList<>();
+    private static AsientoRepository asientosEnMemoria(List<AsientoDeModeracion> datos) {
+        AsientoRepository repo = mock(AsientoRepository.class);
 
-        @Override
-        public List<AsientoDeModeracion> findByComentarioIdOrderByFechaAsc(String c) {
-            return datos.stream().filter(x -> x.comentarioId().equals(c)).toList();
-        }
-
-        @Override
-        public <S extends AsientoDeModeracion> S save(S e) {
-            datos.add(e);
-            return e;
-        }
-
-        @Override public void flush() { }
-        @Override public <S extends AsientoDeModeracion> S saveAndFlush(S e) { return save(e); }
-        @Override public <S extends AsientoDeModeracion> List<S> saveAllAndFlush(Iterable<S> e) {
-            throw new UnsupportedOperationException(); }
-        @Override public void deleteAllInBatch(Iterable<AsientoDeModeracion> e) { }
-        @Override public void deleteAllByIdInBatch(Iterable<String> i) { }
-        @Override public void deleteAllInBatch() { }
-        @Override public AsientoDeModeracion getOne(String id) { throw new UnsupportedOperationException(); }
-        @Override public AsientoDeModeracion getById(String id) { throw new UnsupportedOperationException(); }
-        @Override public AsientoDeModeracion getReferenceById(String id) { throw new UnsupportedOperationException(); }
-        @Override public <S extends AsientoDeModeracion> List<S> findAll(
-                org.springframework.data.domain.Example<S> e) { throw new UnsupportedOperationException(); }
-        @Override public <S extends AsientoDeModeracion> List<S> findAll(
-                org.springframework.data.domain.Example<S> e,
-                org.springframework.data.domain.Sort s) { throw new UnsupportedOperationException(); }
-        @Override public <S extends AsientoDeModeracion> List<S> saveAll(Iterable<S> e) {
-            throw new UnsupportedOperationException(); }
-        @Override public List<AsientoDeModeracion> findAll() { return List.copyOf(datos); }
-        @Override public List<AsientoDeModeracion> findAllById(Iterable<String> i) {
-            throw new UnsupportedOperationException(); }
-        @Override public List<AsientoDeModeracion> findAll(
-                org.springframework.data.domain.Sort s) { throw new UnsupportedOperationException(); }
-        @Override public org.springframework.data.domain.Page<AsientoDeModeracion> findAll(
-                org.springframework.data.domain.Pageable p) { throw new UnsupportedOperationException(); }
-        @Override public Optional<AsientoDeModeracion> findById(String id) {
-            return datos.stream().filter(x -> x.id().equals(id)).findFirst(); }
-        @Override public boolean existsById(String id) { return findById(id).isPresent(); }
-        @Override public long count() { return datos.size(); }
-        @Override public void deleteById(String id) { }
-        @Override public void delete(AsientoDeModeracion e) { }
-        @Override public void deleteAllById(Iterable<? extends String> i) { }
-        @Override public void deleteAll(Iterable<? extends AsientoDeModeracion> e) { }
-        @Override public void deleteAll() { datos.clear(); }
-        @Override public <S extends AsientoDeModeracion> Optional<S> findOne(
-                org.springframework.data.domain.Example<S> e) { throw new UnsupportedOperationException(); }
-        @Override public <S extends AsientoDeModeracion> org.springframework.data.domain.Page<S> findAll(
-                org.springframework.data.domain.Example<S> e,
-                org.springframework.data.domain.Pageable p) { throw new UnsupportedOperationException(); }
-        @Override public <S extends AsientoDeModeracion> long count(
-                org.springframework.data.domain.Example<S> e) { throw new UnsupportedOperationException(); }
-        @Override public <S extends AsientoDeModeracion> boolean exists(
-                org.springframework.data.domain.Example<S> e) { throw new UnsupportedOperationException(); }
-        @Override public <S extends AsientoDeModeracion, R> R findBy(
-                org.springframework.data.domain.Example<S> e,
-                java.util.function.Function<org.springframework.data.repository.query.FluentQuery
-                        .FetchableFluentQuery<S>, R> f) { throw new UnsupportedOperationException(); }
-    }
-
-    /** Para que el UUID de los ids no moleste en las aserciones. */
-    @SuppressWarnings("unused")
-    private static String id() {
-        return UUID.randomUUID().toString();
+        when(repo.save(any(AsientoDeModeracion.class))).thenAnswer(inv -> {
+            AsientoDeModeracion a = inv.getArgument(0);
+            datos.add(a);
+            return a;
+        });
+        when(repo.findByComentarioIdOrderByFechaAsc(anyString())).thenAnswer(inv ->
+                datos.stream().filter(x -> x.comentarioId().equals(inv.getArgument(0))).toList());
+        return repo;
     }
 }

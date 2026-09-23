@@ -6,7 +6,7 @@ import java.util.stream.Collectors;
 
 import com.nexusbattles.comun.seguridad.IdentidadDelToken;
 import com.nexusbattles.plataforma.comentarios.Comentario;
-import com.nexusbattles.plataforma.comentarios.publicacion.ComentarioResponse;
+import com.nexusbattles.plataforma.comentarios.publicacion.ComentariosController.ComentarioResponse;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
