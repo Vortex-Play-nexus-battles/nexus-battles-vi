@@ -99,6 +99,10 @@ test-results/
 # durante 14 dias, que es lo que se adjunta al acta del sprint.
 docs/evidencia/laboratorio-visual/**/*.png
 
+# Lo mismo para las comprobaciones puntuales de un bloque: la captura sirve
+# para mirarla al hacer el cambio, no para arrastrarla en el historial.
+docs/evidencia/ux-r*/**/*.png
+
 # Herramientas de un rato: sondas de medida, capturas puntuales para mirar un
 # cambio a ojo y los guiones que las lanzan en Windows. Lo que de estas sale y
 # merece quedarse, se queda como prueba (`ortografia-visible.test.js`,

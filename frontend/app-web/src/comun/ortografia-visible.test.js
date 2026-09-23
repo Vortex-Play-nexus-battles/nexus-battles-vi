@@ -195,6 +195,22 @@ const PATRON = new RegExp(
 const CLASES = /^[a-z][a-z0-9_-]*(?:\s+[a-z][a-z0-9_-]*)*$/;
 
 /**
+ * Un valor de CSS tampoco es copy.
+ *
+ * `color-mix(in srgb, var(--credito-oro) 85%, var(--cromo))` tiene tres
+ * palabras separadas por espacios y pasa por frase, pero lo que lleva dentro
+ * son nombres de propiedad personalizada: `--credito-oro` se llama asi porque
+ * los identificadores del repositorio van en ASCII a proposito, igual que las
+ * clases. Ponerle la tilde lo rompe.
+ *
+ * Es la misma familia de fallo que ya costo caro una vez: la pasada masiva de
+ * tildes renombro identificadores y rutas de API porque nadie distinguia el
+ * texto que se lee del que solo ejecuta la maquina.
+ */
+const VALOR_CSS =
+  /var\(--|^(?:color-mix|calc|clamp|min|max|linear-gradient|radial-gradient|rgba?|hsla?|translate|rotate|scale|cubic-bezier)\(/;
+
+/**
  * Un hueco de plantilla se sustituye por una palabra antes de mirar la frase.
  *
  * Se añadió después, y por lo mismo que el resto de este fichero: `Campeon:
@@ -276,7 +292,7 @@ function hallazgos(nombre, trozos) {
   const fuera = [];
   for (const crudo of trozos) {
     const frase = crudo.replace(HUECO, 'dato').replace(/\s+/g, ' ').trim();
-    if (!FRASE.test(frase) || CLASES.test(frase)) {
+    if (!FRASE.test(frase) || CLASES.test(frase) || VALOR_CSS.test(frase)) {
       continue;
     }
     const encontrado = PATRON.exec(frase);

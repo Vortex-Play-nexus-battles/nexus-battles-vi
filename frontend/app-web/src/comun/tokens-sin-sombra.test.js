@@ -65,6 +65,34 @@ function hojasSeguidas(patron) {
     .filter((ruta) => existsSync(new URL(ruta, raizRepo)));
 }
 
+/**
+ * Modulos de produccion: los `.js` que git sigue bajo `src/`, sin las pruebas
+ * ni los bancos de datos de prueba, que fabrican colores a proposito.
+ */
+function modulosDeProduccion() {
+  return hojasSeguidas('frontend/app-web/src/**/*.js')
+    .filter((ruta) => !/\.(test|spec|aceptacion)\.[cm]?js$/.test(ruta))
+    .map((ruta) => new URL(ruta, raizRepo));
+}
+
+/** La ruta como se lee en el informe: desde `src/`, sin el prefijo del repo. */
+function relativa(url) {
+  return url.pathname.split('/app-web/src/').pop();
+}
+
+/**
+ * El CSS sin sus comentarios.
+ *
+ * Los trinquetes de este fichero cuentan lo que la hoja DECLARA o USA, y un
+ * comentario no hace ninguna de las dos cosas. Importa porque la costumbre de
+ * la casa es dejar escrito que se quito —«aqui habia `#0B6B31`», «pedia
+ * `var(--texto-1)`, que no existe»—: sin descontar comentarios, documentar una
+ * correccion la hace fallar, y la salida es dejar de documentarla.
+ */
+function sinComentarios(css) {
+  return css.replace(/\/\*[\s\S]*?\*\//g, ' ');
+}
+
 /** Clases que el kit declara como selector suelto: `.foo {`, `.foo:hover`… */
 function clasesDelKit() {
   const kit =
@@ -177,6 +205,42 @@ describe('ninguna hoja de vista escribe un color a mano', () => {
 
     expect(encontrados).toEqual([]);
   });
+
+  /**
+   * UX-R4.2 — el agujero que dejo el trinquete de arriba.
+   *
+   * Aquel contaba literales en hojas de estilo, y por eso dio cero al cerrar
+   * R4.1 teniendo el producto una quinta paleta paralela delante: estaba en
+   * JavaScript. `pujas.js` declaraba
+   *
+   *     comun: { fondo: '#E7EAF0', texto: '#57627A', borde: '#9FABC9' }
+   *
+   * para las cuatro rarezas, con los mismos valores que `--rareza-*` del kit,
+   * y los inyectaba en la ficha como `style` en linea. Doce hexadecimales que
+   * ninguna hoja contenia.
+   *
+   * Un color escrito en un modulo es peor que uno escrito en una hoja: ademas
+   * de duplicar, llega al DOM como atributo `style`, donde ya no lo alcanza
+   * ningun `@media` ni ninguna clase. Deja de poder corregirse desde el kit.
+   *
+   * Se admite el color en los comentarios —hace falta para dejar escrito cual
+   * se quito— y en las pruebas, que fabrican datos a proposito.
+   */
+  test('ningun modulo de produccion escribe un color a mano', () => {
+    const literal = /#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?\b|\brgba?\(\s*[0-9]|\bhsla?\(\s*[0-9]/g;
+    const encontrados = [];
+
+    for (const ruta of modulosDeProduccion()) {
+      const js = readFileSync(ruta, 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, ' ')
+        .replace(/^\s*\/\/.*$/gm, ' ');
+      for (const hallazgo of js.match(literal) ?? []) {
+        encontrados.push(`${relativa(ruta)} → ${hallazgo}`);
+      }
+    }
+
+    expect(encontrados).toEqual([]);
+  });
 });
 
 describe('ninguna hoja usa variables que no existen', () => {
@@ -196,7 +260,7 @@ describe('ninguna hoja usa variables que no existen', () => {
     const huerfanas = [];
 
     for (const ruta of hojasDeVista()) {
-      const css = readFileSync(new URL(ruta, raizRepo), 'utf8');
+      const css = sinComentarios(readFileSync(new URL(ruta, raizRepo), 'utf8'));
       for (const [, nombre] of css.matchAll(/var\(\s*(--[a-z0-9-]+)/g)) {
         if (!declaradas.has(nombre)) {
           huerfanas.push(`${ruta.split('/').pop()} → ${nombre}`);
@@ -229,7 +293,7 @@ describe('ninguna hoja usa variables que no existen', () => {
     const fuera = [];
 
     for (const ruta of hojasDeVista()) {
-      const css = readFileSync(new URL(ruta, raizRepo), 'utf8');
+      const css = sinComentarios(readFileSync(new URL(ruta, raizRepo), 'utf8'));
       const propias = new Set([...css.matchAll(/^\s*(--[a-z0-9-]+)\s*:/gm)].map((m) => m[1]));
       for (const [, nombre, coma] of css.matchAll(/var\(\s*(--[a-z0-9-]+)\s*(,?)/g)) {
         // Con respaldo es una decision: `var(--x, 24px)` funciona sin `--x`.

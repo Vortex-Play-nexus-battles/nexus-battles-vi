@@ -1555,10 +1555,19 @@ export class ControladorSubastas {
 
     // Segmentos para la barra interactiva
     const conRetencion = this.subastas.filter((s) => (s.retenido || 0) > 0);
-    const PALETA_TRAMOS = ['#9A6800', '#C89A1E', '#B37D14', '#D48806', '#E6A23C', '#8A4A00'];
+    // El tramo i-esimo de la barra de credito comprometido. Aqui habia seis
+    // dorados escritos a mano —#C89A1E, #B37D14, #D48806, #E6A23C— de los que
+    // solo dos existian en el kit; los otros cuatro eran color inventado, y
+    // ademas tan parecidos entre si que dos tramos contiguos casi no se
+    // distinguian. Ahora la rampa sale del oro del producto oscureciendose
+    // contra el cromo: es monotona, se nota el orden y no entra ningun color
+    // nuevo. El color no lleva informacion por si solo — cada tramo tiene su
+    // `title` y su entrada en la leyenda con el nombre.
+    const tramoColor = (i) =>
+      `color-mix(in srgb, var(--credito-oro) ${100 - (i % 6) * 15}%, var(--cromo))`;
     const tramos = conRetencion.map((sub, i) => {
       const ancho = total > 0 ? ((sub.retenido / total) * 100).toFixed(1) : '0';
-      const color = PALETA_TRAMOS[i % PALETA_TRAMOS.length];
+      const color = tramoColor(i);
       return {
         id: sub.id,
         nombre: sub.nombre,
@@ -1572,18 +1581,18 @@ export class ControladorSubastas {
       id: 'libre',
       nombre: 'Libre para pujar',
       ancho: `${libreAncho}%`,
-      color: '#0B6B31',
+      color: 'var(--exito)',
       titulo: `Libre: ${formatearCreditos(libre)} cr`,
     });
 
     const leyenda = conRetencion
       .map((sub, i) => ({
-        color: PALETA_TRAMOS[i % PALETA_TRAMOS.length],
+        color: tramoColor(i),
         texto: `${sub.nombre.split(' ')[0]} · ${formatearCreditos(sub.retenido)} cr`,
       }))
       .concat([
         {
-          color: '#0B6B31',
+          color: 'var(--exito)',
           texto: `Libre · ${formatearCreditos(libre)} cr`,
         },
       ]);
@@ -1928,22 +1937,22 @@ export class ControladorSubastas {
         ${
           this.resultadoCierre === 'comprada' || this.resultadoCierre === 'adjudicada'
             ? `
-          <div class="alerta alerta-exito-cierre" role="alert" style="margin-bottom: 20px; background: #DFF1E6; border: 1px solid #0B6B31; border-radius: 8px; padding: 20px; text-align: center;">
-            <h2 class="titulo-grande" style="color: #0B6B31; margin-bottom: 6px;">¡ES TUYA!</h2>
-            <p style="font-size: 16px; color: var(--texto-1); margin-bottom: 12px;">
+          <div class="alerta cierre-victoria" role="alert">
+            <h2 class="titulo-grande cierre-victoria__titulo">¡ES TUYA!</h2>
+            <p class="cierre-victoria__texto">
               ${this.resultadoCierre === 'comprada' ? '¡Has comprado este objeto de inmediato!' : 'La subasta cerró exitosamente y el objeto ha sido adjudicado a tu inventario.'}
             </p>
-            <div style="display: flex; justify-content: center; gap: 16px; margin-bottom: 16px;">
-              <div style="background: #FFFFFF; padding: 10px 16px; border-radius: 6px; border: 1px solid #9FABC9;">
-                <span style="font-size: 12px; color: var(--texto-2); display: block;">Monto pagado:</span>
-                <strong class="cifra" style="font-size: 20px; color: #0B6B31;">${formatearCreditos(this.resultadoCierre === 'comprada' ? sub.compraInmediata : sub.oferta)} cr</strong>
+            <div class="cierre-victoria__cifras">
+              <div class="cierre-victoria__dato">
+                <span class="cierre-victoria__etiqueta">Monto pagado:</span>
+                <strong class="cifra cierre-victoria__monto">${formatearCreditos(this.resultadoCierre === 'comprada' ? sub.compraInmediata : sub.oferta)} cr</strong>
               </div>
-              <div style="background: #FFFFFF; padding: 10px 16px; border-radius: 6px; border: 1px solid #9FABC9;">
-                <span style="font-size: 12px; color: var(--texto-2); display: block;">Saldo libre resultante:</span>
-                <strong class="cifra" style="font-size: 20px; color: #0B6B31;">${formatearCreditos(libre)} cr</strong>
+              <div class="cierre-victoria__dato">
+                <span class="cierre-victoria__etiqueta">Saldo libre resultante:</span>
+                <strong class="cifra cierre-victoria__monto">${formatearCreditos(libre)} cr</strong>
               </div>
             </div>
-            <div style="display: flex; justify-content: center; gap: 12px;">
+            <div class="cierre-victoria__acciones">
               <button type="button" class="btn btn-primario" id="btn-resultado-mis-subastas">Ver mis subastas</button>
               <button type="button" class="btn btn-contorno" id="btn-resultado-explorar">Al listado</button>
             </div>
@@ -2149,7 +2158,7 @@ export class ControladorSubastas {
               </div>
               <div style="display: flex; align-items: center; justify-content: space-between;">
                 <span style="font-size: 13px; color: var(--texto-2);">Retenido en otras (${otrasConRetenido})</span>
-                <span class="cifra" style="font-size: 16px; font-weight: 600; color: #8A4A00;">${formatearCreditos(retenidoEnOtras)} cr</span>
+                <span class="cifra retenido-en-otras">${formatearCreditos(retenidoEnOtras)} cr</span>
               </div>
               <div style="height: 1px; background: var(--fondo); margin: 12px 0;"></div>
               <button type="button" class="btn btn-contorno" id="btn-ver-todas-mis-subastas" style="width: 100%; min-height: 32px; font-size: 13px; font-weight: 600;">
