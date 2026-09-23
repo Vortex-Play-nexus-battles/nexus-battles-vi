@@ -72,6 +72,10 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  * la plantilla fija del estado vacio y el `contenidoHtml` de los generadores.
  * Ninguna interpolacion nueva entra por ahí.
  *
+ * FI-R11 — y otras 186 posiciones: el canal en vivo gano estado visible y
+ * reconexion con espera creciente, todo ARRIBA de `render()`. Revisadas de
+ * nuevo: las mismas cuatro, con el mismo saneamiento.
+ *
  * FI-R2 — las tres de `tienda.js` se movieron por la misma razon: la tarjeta
  * ahora pinta imagen, habilidades, precio anterior y distintivo de descuento, y
  * el carrito formatea sus importes. Revisadas: la plantilla de la tarjeta sigue
@@ -92,11 +96,11 @@ const REVISADOS = new Map([
       'nombre a la variable (fila -> nodo, porque «fila» pasó a ser el modelo ' +
       'que devuelve el adaptador) y la movio 78 lineas; la plantilla es la misma.',
   ],
-  ['cuentas/pujas.js:1347', 'plantilla fija del estado de carga'],
-  ['cuentas/pujas.js:1365', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
-  ['cuentas/pujas.js:1381', 'plantilla fija del estado vacío'],
+  ['cuentas/pujas.js:1533', 'plantilla fija del estado de carga'],
+  ['cuentas/pujas.js:1551', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
+  ['cuentas/pujas.js:1567', 'plantilla fija del estado vacío'],
   [
-    'cuentas/pujas.js:1421',
+    'cuentas/pujas.js:1607',
     'DELIBERADO y SANEADO (UX-R2.8c): las 20 interpolaciones con datos del ' +
       'servidor pasan por esc(); pujas.test.js lo comprueba con cargas reales. ' +
       'La estructura (2.297 líneas de plantilla) se mueve en UX-R2.10.',

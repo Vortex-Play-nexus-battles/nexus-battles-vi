@@ -88,3 +88,21 @@ jobs:
             exit 1
           fi
           echo "OK: todos los servicios con codigo estan declarados."
+
+      # -----------------------------------------------------------------
+      # El mismo problema del Sprint 1, un piso mas arriba.
+      #
+      # Aquel era "el servicio existe pero nadie lo compila". Este es "el
+      # servicio compila, sus pruebas pasan, pero el despliegue no sabe que
+      # existe". Le paso a ms-finanzas (HU-PAG-002 #536, HU-JUE-012 #470) y a
+      # ms-subastas (#571): semanas de 502 en dev con el codigo terminado y la
+      # integracion continua en verde, porque cd.yml solo miraba
+      # services/(plataforma|contenido)/* y ellos viven en services/cuentas/.
+      #
+      # El guardian compara el catalogo de despliegue con el repositorio real:
+      # servicios ausentes del catalogo, puertos que no coinciden con el
+      # Dockerfile, rutas de salud que no coinciden con el context-path, y
+      # overrides de compose que no existen o no declaran el contenedor.
+      # -----------------------------------------------------------------
+      - name: Todo servicio desplegable esta en el catalogo de despliegue
+        run: bash scripts/cd/comprobar-catalogo-servicios.sh

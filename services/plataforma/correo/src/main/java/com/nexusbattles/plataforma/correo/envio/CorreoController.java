@@ -138,4 +138,21 @@ public class CorreoController {
                         "asunto", solicitud.asunto(),
                         "mensaje", solicitud.mensaje()));
     }
+
+    @PostMapping("/confirmacion-compra")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void enviarConfirmacionCompra(@Valid @RequestBody CorreoConfirmacionCompraRequest solicitud) {
+        // HU-PAG-003 (issue #537). ms-finanzas ya aprobo el pago antes de
+        // llamar aqui: este servicio no valida el monto ni la transaccion,
+        // solo la transcribe al correo.
+        enviador.enviar(
+                solicitud.email(),
+                "Confirmación de tu compra en The Nexus Battles VI",
+                "email/confirmacion-compra",
+                Map.of(
+                        "apodo", solicitud.apodo(),
+                        "monto", solicitud.montoFormateado(),
+                        "concepto", solicitud.concepto(),
+                        "fechaHora", solicitud.fechaHoraLegible()));
+    }
 }
