@@ -118,14 +118,22 @@ export const MATRIZ = Object.freeze({
   },
 
   // --- Vitrinas que un visitante puede mirar -------------------------------
-  // RF-INV-008 da «Visitante» como actor: el catálogo de productos, el
-  // listado de subastas y el cuadro de torneos se ven sin cuenta. Operar
-  // sobre ellos (pujar, comprar, inscribirse) sí exige sesión, y eso lo
-  // comprueba cada acción, no la pantalla.
+  // RF-INV-008 da «Visitante» como actor: el listado de subastas y el cuadro
+  // de torneos se ven sin cuenta. Operar sobre ellos (pujar, inscribirse) sí
+  // exige sesión, y eso lo comprueba cada acción, no la pantalla.
+  // UX-R3.5 — esta vista NO es el catálogo que mira un jugador: es el
+  // formulario de alta de productos del catálogo. El servidor ya lo sabía
+  // (`services/contenido/productos/.../SeguridadConfig.java`:
+  // `POST /api/v1/productos` → `hasAnyRole("ADMINISTRADOR",
+  // "SUPER_ADMINISTRADOR")`), pero la pantalla estaba clasificada como
+  // pública y no tenía guarda: un jugador que escribiera su URL veía el
+  // formulario entero, con su botón de «Administración» al lado. La Tabla 24
+  // del documento fuente lo dice igual de claro: «Gestionar productos — No /
+  // No / Sí / Sí».
   productos: {
     ruta: 'contenido/productos/productos.html',
-    acceso: ACCESO.PUBLICA,
-    armazon: 'jugador',
+    acceso: ACCESO.ADMINISTRACION,
+    armazon: 'admin',
   },
   subastas: { ruta: 'cuentas/subastas.html', acceso: ACCESO.PUBLICA, armazon: 'jugador' },
   pujas: { ruta: 'cuentas/pujas.html', acceso: ACCESO.PUBLICA, armazon: 'jugador' },

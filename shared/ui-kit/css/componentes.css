@@ -4800,7 +4800,12 @@ button.tarjeta-heroe[aria-pressed='true'] {
 /* En el portal, la barra no es una barra: es la primera línea de la escena.
    Pintar cromo sobre cromo dibujaría un rectángulo que no separa nada, así
    que se queda transparente y la marca flota sobre el degradado. */
-.cabecera--portal {
+/* En el portal la barra no es una barra: es la primera línea de la escena.
+   Pintar cromo sobre cromo dibujaría un rectángulo que no separa nada. Fuera
+   del portal —la pantalla de «sin acceso» usa esta misma variante— el fondo
+   es claro, y ahí el cromo sí separa, así que solo se hace transparente
+   dentro de `.portal`. */
+.portal .cabecera--portal {
   background: transparent;
   padding-top: var(--e-3);
 }
@@ -4972,6 +4977,10 @@ button.tarjeta-heroe[aria-pressed='true'] {
 /* §17: un 403 no es contenido. Esta pantalla sustituye a la vista entera
    —y no se superpone— para que debajo no siga cargando datos que el
    servidor va a negar de todas formas. */
+/* La pantalla de interrupción trae su propia barra de marca, así que aquí se
+   descuenta su alto igual que en cualquier otra vista. Sobre `--fondo`, no
+   sobre cromo: quien llega aquí no está en el portal, está dentro y se ha
+   topado con una puerta. */
 .interrupcion {
   min-height: calc(100vh - var(--cabecera-alto));
   display: grid;
@@ -4990,14 +4999,6 @@ button.tarjeta-heroe[aria-pressed='true'] {
   border-radius: var(--radio);
   box-shadow: var(--sombra-2);
   text-align: center;
-}
-
-.interrupcion__marca {
-  font-family: var(--t-titulo-familia);
-  font-size: var(--t-meta-tam);
-  font-weight: var(--t-titulo-peso);
-  letter-spacing: 0.12em;
-  color: var(--texto-3);
 }
 
 .interrupcion__titulo {

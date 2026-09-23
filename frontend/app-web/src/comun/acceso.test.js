@@ -120,9 +120,11 @@ describe('la matriz cubre lo que hay en disco', () => {
       .filter(([, v]) => v.acceso === ACCESO.PUBLICA)
       .map(([id]) => id)
       .sort();
+    // `productos` salió de aquí en UX-R3.5: no es el catálogo que mira un
+    // jugador, es el formulario de alta del catálogo, y el servidor ya lo
+    // restringía a ADMINISTRADOR (Tabla 24: «Gestionar productos»).
     expect(publicas).toEqual([
       'login',
-      'productos',
       'pujas',
       'registro',
       'restablecer-confirmar',
@@ -321,5 +323,34 @@ describe('la interrupción es definitiva', () => {
       ubicacion: { pathname: '/cuentas/gestion-usuarios.html', search: '' },
     });
     expect(document.documentElement.dataset.acceso).toBeUndefined();
+  });
+});
+
+describe('UX-R3.5 — el alta del catálogo es una herramienta, no una vitrina', () => {
+  test('un jugador no la ve, un administrador sí', () => {
+    // `contenido/productos/productos.html` se llama «productos» y parecía una
+    // vitrina. Es el formulario de alta: `POST /api/v1/productos` está
+    // declarado `hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")` en
+    // `services/contenido/productos/.../SeguridadConfig.java`, y la Tabla 24
+    // lo dice igual: «Gestionar productos — No / No / Sí / Sí».
+    //
+    // Estaba clasificada como pública Y sin guarda: cualquiera que escribiera
+    // su URL veía el formulario entero.
+    expect(puedeVer('productos', { autenticado: false, rol: null }).veredicto).toBe(
+      VEREDICTO.REDIRIGE,
+    );
+    expect(puedeVer('productos', { autenticado: true, rol: 'JUGADOR' }).veredicto).toBe(
+      VEREDICTO.DENEGADA,
+    );
+    expect(puedeVer('productos', { autenticado: true, rol: 'MODERADOR' }).veredicto).toBe(
+      VEREDICTO.DENEGADA,
+    );
+    expect(puedeVer('productos', { autenticado: true, rol: 'ADMINISTRADOR' }).veredicto).toBe(
+      VEREDICTO.VISIBLE,
+    );
+  });
+
+  test('vive en la consola, no en la aplicación del jugador', () => {
+    expect(armazonDeVista('productos')).toBe('admin');
   });
 });

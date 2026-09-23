@@ -63,13 +63,12 @@ quien ya tiene una sesión válida le sugiere que su sesión está rota cuando n
 
 ### Vitrinas públicas — armazón `jugador`
 
-RF-INV-008 da como actor principal «Jugador; **Visitante**»: el catálogo, las
-subastas y el cuadro de torneos se miran sin cuenta. *Operar* sobre ellos —pujar,
-comprar, inscribirse— sí exige sesión, y eso lo comprueba cada acción, no la pantalla.
+RF-INV-008 da como actor principal «Jugador; **Visitante**»: las subastas y el
+cuadro de torneos se miran sin cuenta. *Operar* sobre ellos —pujar, inscribirse—
+sí exige sesión, y eso lo comprueba cada acción, no la pantalla.
 
 | Vista | Ruta | ANON | JUG | MOD | ADM | SUP |
 |---|---|:-:|:-:|:-:|:-:|:-:|
-| productos | `contenido/productos/productos.html` | V | V | V | V | V |
 | subastas | `cuentas/subastas.html` | V | V | V | V | V |
 | pujas | `cuentas/pujas.html` | V | V | V | V | V |
 | torneos | `plataforma/torneos/torneos.html` | V | V | V | V | V |
@@ -102,11 +101,22 @@ comprar, inscribirse— sí exige sesión, y eso lo comprueba cada acción, no l
 | sanciones-admin | `plataforma/moderacion-sanciones/sanciones-admin.html` | moderación | → | ✗ | V | V | V |
 | lista-negra-admin | `plataforma/moderacion-sanciones/lista-negra-admin.html` | moderación | → | ✗ | V | V | V |
 | gestion-usuarios | `cuentas/gestion-usuarios.html` | administración | → | ✗ | ✗ | V | V |
+| productos | `contenido/productos/productos.html` | administración | → | ✗ | ✗ | V | V |
 | parametros-admin | `plataforma/admin-parametros/parametros-admin.html` | administración | → | ✗ | ✗ | V | V |
 | panel-metricas | `plataforma/metricas-plataforma/panel-metricas.html` | administración | → | ✗ | ✗ | V | V |
 | tablero-tecnico | `plataforma/metricas-plataforma/tablero-tecnico.html` | administración | → | ✗ | ✗ | V | V |
 | crear-cuenta-admin | `cuentas/crear-cuenta-admin.html` | super | → | ✗ | ✗ | ✗ | V |
 | auditoria | `cuentas/auditoria.html` | super | → | ✗ | ✗ | ✗ | V |
+
+**Por qué `productos` no es una vitrina (UX-R3.5):**
+
+`contenido/productos/productos.html` se llama «productos» y lo parecía. No lo es:
+es el **formulario de alta del catálogo**. El servidor ya lo sabía —
+`services/contenido/productos/.../SeguridadConfig.java` declara
+`POST /api/v1/productos` como `hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")`—
+y la Tabla 24 lo dice igual: «Gestionar productos — No / No / Sí / Sí». La pantalla
+estaba clasificada como pública **y sin ninguna guarda**: cualquiera que escribiera
+su URL veía el formulario entero, con su botón de «Administración» al lado.
 
 **De dónde salen los dos niveles `super`:**
 

@@ -13,18 +13,22 @@
     <div data-cabecera-app></div>
     <main id="productos-app" class="productos-pagina"></main>
     <script type="module">
+      import { exigirAcceso } from '../../comun/acceso.js';
+      import { montarCabecera } from '../../comun/cabecera-app.js';
       import { montarFormularioProductos } from './productos.js';
 
-      montarFormularioProductos(document.getElementById('productos-app'));
-    </script>
-    <script type="module">
-      import { montarCabecera } from '../../comun/cabecera-app.js';
-
-      // Cabecera unica de la aplicacion (HU-UX-001).
-      montarCabecera(document.querySelector('[data-cabecera-app]'), {
-        vista: 'productos',
-        seccionActiva: 'inventario',
-      });
+      // UX-R3.5 — esta vista no tenia NINGUNA guarda: se abria sin sesion y
+      // sin rol. El servidor negaba el POST, pero el formulario de alta del
+      // catalogo se veia entero, con sus campos y su boton de administracion.
+      // Gestionar productos es de ADMINISTRADOR hacia arriba (Tabla 24).
+      const sesion = exigirAcceso('productos');
+      if (sesion) {
+        montarCabecera(document.querySelector('[data-cabecera-app]'), {
+          vista: 'productos',
+          seccionActiva: 'productos',
+        });
+        montarFormularioProductos(document.getElementById('productos-app'));
+      }
     </script>
   </body>
 </html>

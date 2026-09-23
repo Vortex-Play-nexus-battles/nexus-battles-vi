@@ -39,10 +39,20 @@
   box-sizing: border-box;
   min-height: 100vh;
   margin: 0;
-  padding: var(--vitrina-margen);
+  /* UX-R3.5 — el relleno estaba en el `<body>`, y la cabecera de la aplicación
+     se monta dentro del `<body>`: la barra quedaba con 20 px de aire a cada
+     lado y flotando sobre el fondo, mientras en las otras treinta vistas va
+     de borde a borde. Se ve en cuanto se pone una captura al lado de otra.
+     El relleno baja al contenido, que es de quien era. */
+  padding: 0;
   background: var(--fondo);
   color: var(--texto);
   font-family: var(--fuente-texto);
+}
+
+.vitrina-pagina > main {
+  display: block;
+  padding: var(--vitrina-margen);
 }
 
 .vitrina-pagina *,
@@ -492,16 +502,25 @@
  * SCRUM-320 - Los cuatro estados.
  * ------------------------------------------------------------------------- */
 
+/* UX-R3.5 — estos estados existían antes que `.estado-vista` del kit y se
+   quedaron con su propia apariencia: caja punteada sobre el fondo de la
+   página, sin superficie debajo y sin sitio para una acción. Al lado de
+   cualquier otra vista se leía como un hueco, no como una tarjeta.
+
+   No se renombran las clases —las prueban por nombre siete ficheros de este
+   módulo— pero se alinean con el componente compartido: misma superficie,
+   mismo borde, mismo alto mínimo, mismo ritmo. */
 .estado {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  min-height: 240px;
-  padding: 32px 24px;
-  border: 1px dashed var(--borde);
-  border-radius: 10px;
+  gap: var(--e-3);
+  min-height: 260px;
+  padding: var(--e-6);
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
   text-align: center;
 }
 
@@ -526,7 +545,6 @@
 }
 
 .estado-error {
-  border-style: solid;
   border-color: var(--error);
 }
 
