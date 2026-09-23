@@ -1,0 +1,220 @@
+openapi: 3.1.0
+
+# =============================================================================
+# Nexus Battles VI — Registro de transacciones en moneda real (ms-finanzas ·
+# equipo de Cuentas y comercio, Grupo 4)
+#
+# Regla 1 de plataforma: contrato primero. Este documento se escribe A PARTIR
+# de lo que `services/cuentas/ms-finanzas` YA implementa y tiene probado
+# (`TransaccionRegistroController`, `HistorialTransaccionesController`,
+# `GlobalExceptionHandler`) — HU-PAG-002 (#536), operacion por operacion.
+#
+# Dueno del contrato: Grupo 4 (ms-finanzas). Es un libro separado del de
+# creditos (`creditos.yaml`): aqui se registra dinero real (moneda ISO 4217),
+# alla creditos del juego. Un jugador puede tener movimientos en los dos
+# libros sin que se mezclen.
+#
+# ---------------------------------------------------------------------------
+# QUIEN LO LLAMA
+#
+# `POST /transacciones` lo llama el servicio que integro la pasarela de pagos
+# simulada (HU-PAG-001, RF-PAG-001) despues de cada intento de cobro —nunca
+# el jugador, que no puede autodeclararse una compra pagada. A la fecha de
+# este contrato HU-PAG-001 todavia no llega a `develop` (#432 abierto sin
+# mergear); el endpoint queda listo para el primer consumidor real, sea
+# ms-ecommerce (tienda), subastas o inscripcion a torneos.
+#
+# `GET /transacciones/mi-historial` lo consulta el propio jugador desde
+# "Mi Cuenta"; nunca un servicio (un token de servicio no tiene `uid`).
+#
+# Idempotente por `refId`: reintentar el mismo registro responde 409
+# `transaccion-ya-registrada` en vez de duplicar el asiento.
+# =============================================================================
+
+info:
+  title: Nexus Battles VI — Registro de transacciones en moneda real
+  version: 1.0.0
+  description: |
+    Asiento permanente de cada intento de cobro en moneda real (aprobado,
+    rechazado o indeterminado) y su consulta desde el historial del jugador.
+
+    Errores en formato problem details (regla 4) con `type` estable bajo
+    `https://nexusbattles.upb.edu.co/errors/`.
+  license:
+    name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
+
+servers:
+  - url: http://localhost:8093/api/v1
+    description: Desarrollo local (context-path /api/v1 del propio servicio)
+  - url: http://srv-ms-finanzas:8093/api/v1
+    description: Red de compose
+
+tags:
+  - name: transacciones
+    description: Registro y consulta de transacciones en moneda real (HU-PAG-002)
+
+paths:
+  /transacciones:
+    post:
+      tags: [transacciones]
+      operationId: registrarTransaccion
+      summary: Registra el resultado de un cobro en moneda real (HU-PAG-002)
+      description: |
+        Persiste el asiento con todos sus atributos, asociado al usuario, al
+        concepto y al comprobante (si la pasarela ya lo genero). Un `refId`
+        repetido no duplica el asiento: responde 409 con el mismo estado que
+        ya se habia persistido, para que un reintento por timeout del
+        llamador sea seguro.
+
+        `resultado=INDETERMINADO` marca el asiento para conciliacion manual
+        (sin respuesta a tiempo, o respuesta ambigua de la pasarela); queda
+        igual de trazado que uno aprobado o rechazado, solo que su estado
+        final se resuelve despues.
+      security:
+        - credencialDeServicio: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrarTransaccion'
+            example:
+              refId: pasarela-a1b2c3
+              uidUsuario: 6f1c2a7e-3d6b-4b9a-8f0e-1c2d3e4f5a6b
+              monto: 50000
+              moneda: COP
+              concepto: compra-item-tienda
+              resultado: APROBADO
+              comprobanteUrl: https://cdn.nexusbattles.upb.edu.co/comprobantes/a1b2c3.pdf
+              pasarelaRefExterna: pasarela-abc-123
+      responses:
+        '401':
+          $ref: '#/components/responses/SinCredencial'
+        '403':
+          $ref: '#/components/responses/NoAutorizado'
+        '400':
+          description: Campo requerido faltante, moneda que no es ISO 4217 de 3 letras, o monto negativo.
+        '201':
+          description: Transaccion registrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResumenTransaccion'
+        '409':
+          description: Ya existe una transaccion con ese `refId` (idempotencia).
+
+  /transacciones/mi-historial:
+    get:
+      tags: [transacciones]
+      operationId: miHistorialDeTransacciones
+      summary: Historial de transacciones en moneda real del propio jugador
+      description: |
+        El `uid` sale del claim `uid` del token (ADR-002), nunca de query ni
+        de path: un jugador no puede consultar el historial de otro. La
+        consulta administrativa (ver el historial de otro usuario) no esta
+        en el alcance de esta HU.
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: size
+          in: query
+          required: false
+          description: Tope de 100 aplicado por el servidor, sin importar lo que pida el cliente.
+          schema: { type: integer, minimum: 1, default: 20 }
+      responses:
+        '401':
+          $ref: '#/components/responses/SinCredencial'
+        '403':
+          $ref: '#/components/responses/NoAutorizado'
+        '200':
+          description: Pagina del historial, de lo mas reciente a lo mas antiguo.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ResumenTransaccion'
+
+components:
+  securitySchemes:
+    credencialDeServicio:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Token de servicio (ADR-005): `rol=SERVICIO`, `azp=<client_id>`,
+        obtenido por `client_credentials` en `POST /api/v1/auth/token` de
+        ms-identidad y verificado contra su JWKS. Es la credencial de un
+        servicio (la pasarela simulada de HU-PAG-001), nunca la de un jugador.
+    tokenDeUsuario:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token de sesion de un usuario (ADR-002), con claim `uid`.
+
+  responses:
+    SinCredencial:
+      description: Sin token, token caducado o firmado por otra clave.
+    NoAutorizado:
+      description: |
+        El token es valido pero no puede hacer esto: un jugador intentando
+        registrar una transaccion, o un servicio consultando un historial
+        (no tiene `uid`).
+
+  schemas:
+    RegistrarTransaccion:
+      type: object
+      required: [refId, uidUsuario, monto, moneda, concepto, resultado]
+      properties:
+        refId:
+          type: string
+          maxLength: 128
+          description: Clave de idempotencia elegida por el llamador.
+        uidUsuario:
+          type: string
+          maxLength: 64
+          description: Identificador estable del jugador (`uid`, ADR-002), nunca su apodo.
+        monto:
+          type: number
+          minimum: 0
+        moneda:
+          type: string
+          minLength: 3
+          maxLength: 3
+          description: Codigo ISO 4217 (por ejemplo COP, USD). Se normaliza a mayusculas.
+        concepto:
+          type: string
+          maxLength: 128
+        resultado:
+          type: string
+          enum: [APROBADO, RECHAZADO, INDETERMINADO]
+        comprobanteUrl:
+          type: [string, 'null']
+          description: Se deja null en el primer registro si la pasarela aun no lo genera.
+        pasarelaRefExterna:
+          type: [string, 'null']
+          description: Referencia devuelta por la pasarela; solo para conciliacion interna.
+
+    ResumenTransaccion:
+      type: object
+      description: |
+        Proyeccion de lectura. NO incluye `pasarelaRefExterna`: ese dato solo
+        interesa para conciliacion interna y filtraria un detalle del
+        proveedor de pagos.
+      required: [id, refId, monto, moneda, concepto, resultado, creado]
+      properties:
+        id: { type: string, format: uuid }
+        refId: { type: string }
+        monto: { type: number }
+        moneda: { type: string }
+        concepto: { type: string }
+        resultado: { type: string, enum: [APROBADO, RECHAZADO, INDETERMINADO] }
+        comprobanteUrl: { type: [string, 'null'] }
+        creado: { type: string, format: date-time }

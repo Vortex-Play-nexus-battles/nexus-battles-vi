@@ -4,7 +4,17 @@ info:
   description: >-
     API de Control de Acceso Basado en Roles (RBAC) conforme a la Tabla 24,
     extendida con las acciones requeridas por HU-RBAC-003 y HU-USR-003.
-  version: 1.1.0
+
+
+    1.2.0 (R9.5): los tres caminos de /rbac dejan de ser publicos. Hasta esta
+    version el controlador no llevaba ninguna anotacion de permiso, asi que
+    /rbac/matrix repartia la tabla entera de quien puede hacer que a quien la
+    pidiera, y /rbac/authorize servia de oraculo para sondear la politica sin
+    acreditar nada. Ahora los tres exigen GESTIONAR_CUENTAS, que es lo que la
+    interfaz ya exigia por su cuenta: gestion-usuarios.js esconde la pantalla
+    entera con ese mismo permiso. Cambia quien puede llamar, no la forma de
+    las respuestas.
+  version: 1.2.0
 servers:
   - url: http://localhost:8089/api/v1
     description: Spring Boot local (perfil dev)
@@ -15,6 +25,8 @@ paths:
     post:
       summary: Evaluar permiso de un rol sobre una acción
       operationId: evaluatePermission
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -39,6 +51,8 @@ paths:
     get:
       summary: Obtener catálogo de roles del sistema
       operationId: getRoles
+      security:
+        - bearerAuth: []
       responses:
         '200':
           description: Lista de roles disponibles
@@ -48,11 +62,21 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/RoleDescriptor'
+        '403':
+          description: >-
+            Acceso denegado (fail-closed, HU-RBAC-004). Sin credencial, con
+            token invalido o con un rol sin GESTIONAR_CUENTAS.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
 
   /rbac/matrix:
     get:
       summary: Obtener la matriz de permisos versionada (Tabla 24 extendida)
       operationId: getMatrix
+      security:
+        - bearerAuth: []
       responses:
         '200':
           description: Matriz completa de permisos por rol y acción
@@ -60,6 +84,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PermissionMatrixResponse'
+        '403':
+          description: >-
+            Acceso denegado (fail-closed, HU-RBAC-004). Sin credencial, con
+            token invalido o con un rol sin GESTIONAR_CUENTAS.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
 
   /admin/ban:
     post:
