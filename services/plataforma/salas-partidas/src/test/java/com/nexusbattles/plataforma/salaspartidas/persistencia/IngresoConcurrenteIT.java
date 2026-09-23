@@ -89,7 +89,8 @@ class IngresoConcurrenteIT {
         CanalConcurrente canal = new CanalConcurrente();
         IngresarASala ingresar = new IngresarASala(coordinado, canal,
                 com.nexusbattles.plataforma.salaspartidas.aplicacion.InventarioEnMemoria.conHeroe(),
-                new com.nexusbattles.plataforma.salaspartidas.aplicacion.CreditosEnMemoria());
+                new com.nexusbattles.plataforma.salaspartidas.aplicacion.CreditosEnMemoria(),
+                new com.nexusbattles.plataforma.salaspartidas.aplicacion.SancionesEnMemoria());
 
         ExecutorService hilos = Executors.newFixedThreadPool(2);
         try {

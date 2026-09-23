@@ -4,7 +4,7 @@ import com.nexusbattles.plataforma.salaspartidas.chat.EnviarMensaje;
 import com.nexusbattles.plataforma.salaspartidas.chat.FiltroDeContenido;
 import com.nexusbattles.plataforma.salaspartidas.chat.HistorialDeChat;
 import com.nexusbattles.plataforma.salaspartidas.chat.PublicadorDeChat;
-import com.nexusbattles.plataforma.salaspartidas.chat.SancionesDelJugador;
+import com.nexusbattles.plataforma.salaspartidas.sanciones.SancionesDelJugador;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestClient;

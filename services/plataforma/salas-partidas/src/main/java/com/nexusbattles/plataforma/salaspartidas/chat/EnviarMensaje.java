@@ -4,6 +4,7 @@ import com.nexusbattles.plataforma.salaspartidas.chat.FiltroDeContenido.Veredict
 import com.nexusbattles.plataforma.salaspartidas.chat.MensajeDeChat.Autor;
 import com.nexusbattles.plataforma.salaspartidas.chat.MensajeDeChat.LogroCompartido;
 import com.nexusbattles.plataforma.salaspartidas.chat.MensajeDeChat.Tipo;
+import com.nexusbattles.plataforma.salaspartidas.sanciones.SancionesDelJugador;
 
 import java.time.Clock;
 import java.util.UUID;
@@ -40,7 +41,7 @@ public class EnviarMensaje {
 
     public MensajeDeChat enviar(Canal canal, Autor autor, String texto, LogroCompartido logro) {
         String limpio = validar(texto);
-        if (sanciones.estaSilenciado(autor.id())) {
+        if (sanciones.tieneSancionActiva(autor.id())) {
             throw new JugadorSilenciado();
         }
         Veredicto veredicto = filtro.verificar(limpio);

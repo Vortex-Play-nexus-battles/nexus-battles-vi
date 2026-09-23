@@ -1,4 +1,4 @@
-package com.nexusbattles.plataforma.salaspartidas.chat.integracion;
+package com.nexusbattles.plataforma.salaspartidas.sanciones;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -10,7 +10,6 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
-import com.nexusbattles.plataforma.salaspartidas.chat.SancionesNoDisponibles;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -53,7 +52,7 @@ class ClienteSancionesTest {
                 .andRespond(withSuccess("{\"sancionActiva\":false,\"motivo\":null,\"vigenteHasta\":null}",
                         MediaType.APPLICATION_JSON));
 
-        assertFalse(cliente.estaSilenciado(JUGADOR));
+        assertFalse(cliente.tieneSancionActiva(JUGADOR));
         servidor.verify();
     }
 
@@ -65,7 +64,7 @@ class ClienteSancionesTest {
                         + "\"vigenteHasta\":\"2026-09-30T00:00:00Z\"}",
                 MediaType.APPLICATION_JSON));
 
-        assertTrue(cliente.estaSilenciado(JUGADOR));
+        assertTrue(cliente.tieneSancionActiva(JUGADOR));
     }
 
     @Test
@@ -74,7 +73,7 @@ class ClienteSancionesTest {
         servidor.expect(requestTo(CONSULTA)).andRespond(withServerError());
 
         SancionesNoDisponibles error = assertThrows(SancionesNoDisponibles.class,
-                () -> cliente.estaSilenciado(JUGADOR));
+                () -> cliente.tieneSancionActiva(JUGADOR));
         assertEquals(503, error.estado());
     }
 
@@ -83,7 +82,7 @@ class ClienteSancionesTest {
     void respuestaVaciaTampoco() {
         servidor.expect(requestTo(CONSULTA)).andRespond(withSuccess("", MediaType.APPLICATION_JSON));
 
-        assertThrows(SancionesNoDisponibles.class, () -> cliente.estaSilenciado(JUGADOR));
+        assertThrows(SancionesNoDisponibles.class, () -> cliente.tieneSancionActiva(JUGADOR));
     }
 
     @Test

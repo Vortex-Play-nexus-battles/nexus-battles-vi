@@ -43,6 +43,9 @@ class CrearSalaTest {
     /** Inventario que deja pasar; la puerta se prueba aparte. */
     private final InventarioEnMemoria inventario = InventarioEnMemoria.conHeroe();
 
+    /** Sin sanciones por omision: cada prueba que quiera una la anade. */
+    private final SancionesEnMemoria sanciones = new SancionesEnMemoria();
+
     private static JugadorAutenticado como(java.util.UUID id) {
         return new JugadorAutenticado(id, "jugador-" + id.toString().substring(0, 8));
     }
@@ -103,7 +106,7 @@ class CrearSalaTest {
     void preparar() {
         repositorio = new RepositorioDeSalasEnMemoria();
         creditos = new CreditosDeMentira();
-        crearSala = new CrearSala(repositorio, creditos, inventario);
+        crearSala = new CrearSala(repositorio, creditos, inventario, sanciones);
     }
 
     private static ParametrosDeSala validos() {
@@ -195,7 +198,7 @@ class CrearSalaTest {
     @Test
     @DisplayName("si la sala no se puede guardar, los creditos vuelven al jugador")
     void devuelveLosCreditosSiFallaAlGuardar() {
-        CrearSala conRepositorioRoto = new CrearSala(new RepositorioRoto(), creditos, inventario);
+        CrearSala conRepositorioRoto = new CrearSala(new RepositorioRoto(), creditos, inventario, sanciones);
 
         assertThrows(IllegalStateException.class,
                 () -> conRepositorioRoto.ejecutar(validos(), como(ANFITRION)));

@@ -3,7 +3,7 @@ package com.nexusbattles.plataforma.salaspartidas.aplicacion;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.AcreditadorDePartidas.Acreditacion;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.AcreditadorDePartidas.InformeDePartida;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.AcreditadorDePartidas.TipoDePartida;
-import com.nexusbattles.plataforma.salaspartidas.chat.SancionesDelJugador;
+import com.nexusbattles.plataforma.salaspartidas.sanciones.SancionesDelJugador;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CreditoPorPartida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoPartida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Modalidad;
@@ -143,7 +143,7 @@ public class AcreditarRecompensa {
                 .map(ParticipanteDePartida::idJugador)
                 .toList();
         List<InformeDePartida.Jugador> jugadores = humanos.stream()
-                .map(p -> new InformeDePartida.Jugador(p.idJugador(), sanciones.estaSilenciado(p.idJugador())))
+                .map(p -> new InformeDePartida.Jugador(p.idJugador(), sanciones.tieneSancionActiva(p.idJugador())))
                 .toList();
         return new InformeDePartida(partida.id(), tipoDe(partida), ganadores, jugadores);
     }
