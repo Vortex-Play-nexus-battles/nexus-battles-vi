@@ -62,25 +62,70 @@ COMPOSE_DEPLOY="$DIRECTORIO/docker-compose.deploy.yml"
 # servidor por SCP, pero solo se agrega al comando de "docker compose" mas
 # abajo si ms-identidad viene en SERVICIOS_PUERTOS de esta corrida -- si
 # nadie toco cuentas en este push, este archivo ni se menciona.
-COMPOSE_CUENTAS="$DIRECTORIO/docker-compose.cuentas.yml"
-# Override de ms-cumplimiento (Maven, tambien equipo Cuentas). Mismo patron
-# que COMPOSE_CUENTAS: se copia siempre, solo se agrega al comando si
-# ms-cumplimiento viene en esta corrida.
-COMPOSE_MS_CUMPLIMIENTO="$DIRECTORIO/docker-compose.ms-cumplimiento.yml"
-# Override de ms-ecommerce (Maven, tambien equipo Cuentas). Mismo patron.
-COMPOSE_MS_ECOMMERCE="$DIRECTORIO/docker-compose.ms-ecommerce.yml"
-# Override de ms-finanzas (Gradle, tambien equipo Cuentas). Mismo patron que
-# los tres de arriba, aunque el servicio en si sea Gradle y no Maven -- el
-# override de despliegue es igual para los cuatro. HU-PAG-002 #536,
-# HU-JUE-012 #470. Nota de capacidad en docker-compose.ms-finanzas.yml y en
-# cd.yml (FUERA_DEL_HOST_DEV, issue #571 punto 4): que este override exista
-# no implica que quepa en el host de dev sin medirlo.
-COMPOSE_MS_FINANZAS="$DIRECTORIO/docker-compose.ms-finanzas.yml"
-# Override de los servicios de services/contenido/* (equipo Contenido):
-# mismo mecanismo que el de cuentas -- se copia siempre, se agrega al
-# comando solo si algun servicio de contenido viene en esta corrida.
-COMPOSE_CONTENIDO="$DIRECTORIO/docker-compose.contenido.yml"
-SERVICIOS_CONTENIDO="heroes inventario productos motor-combate"
+# (el override de cada servicio lo dice el catalogo; ver OVERRIDES mas abajo)
+
+# ---------------------------------------------------------------------------
+# CATALOGO DE DESPLIEGUE (fuente unica de verdad).
+#
+# Antes, cada servicio tenia que aparecer a mano en tres sitios de este
+# archivo -- una variable COMPOSE_*, una variable INCLUYE_* y un bloque de
+# secrets -- ademas de en cd.yml. Olvidar uno solo bastaba para que un
+# servicio con CI en verde no llegara nunca a dev: le paso a ms-finanzas
+# (HU-PAG-002 #536, HU-JUE-012 #470) y a ms-subastas (#571).
+#
+# Ahora el override de compose, los secrets obligatorios y la ruta de salud de
+# cada servicio salen del mismo archivo que lee cd.yml. Se copia al servidor
+# por SCP junto a los compose.
+# ---------------------------------------------------------------------------
+# En el servidor esta bajo /opt/nexus (lo copia el scp de cd.yml, conservando
+# la ruta). Corriendo desde una copia del repositorio -- las pruebas de
+# scripts/cd/pruebas/, o alguien leyendo el script en local -- esta al lado, y
+# se busca ahi como respaldo en vez de morir pidiendo una ruta de servidor que
+# en ese contexto no tiene sentido.
+CATALOGO="$DIRECTORIO/infrastructure/despliegue/servicios.json"
+if [ ! -f "$CATALOGO" ]; then
+  _raiz_repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd || true)"
+  if [ -n "$_raiz_repo" ] && [ -f "$_raiz_repo/infrastructure/despliegue/servicios.json" ]; then
+    CATALOGO="$_raiz_repo/infrastructure/despliegue/servicios.json"
+  fi
+fi
+
+# Lector minimo del catalogo. jq no esta garantizado en el host; python3 si
+# viene en Ubuntu Server. Se prefiere jq cuando existe.
+#   campo_de <nombre-servicio> <campo>   -> valor, o vacio si no esta
+#   servicios_con <campo> <valor>        -> nombres, uno por linea
+if command -v jq >/dev/null 2>&1; then
+  campo_de() { jq -r --arg n "$1" --arg c "$2" '.servicios[] | select(.nombre == $n) | .[$c] // "" | tostring' "$CATALOGO" 2>/dev/null; }
+  campos_de() { jq -r --arg n "$1" --arg c "$2" '.servicios[] | select(.nombre == $n) | .[$c][]?' "$CATALOGO" 2>/dev/null; }
+  servicios_con() { jq -r --arg c "$1" --argjson v "$2" '.servicios[] | select(.[$c] == $v) | .nombre' "$CATALOGO" 2>/dev/null; }
+else
+  campo_de() { python3 -c 'import json,sys
+d=json.load(open(sys.argv[1]))
+for s in d["servicios"]:
+    if s["nombre"]==sys.argv[2]:
+        v=s.get(sys.argv[3]);print("" if v is None else v);break' "$CATALOGO" "$1" "$2" 2>/dev/null; }
+  campos_de() { python3 -c 'import json,sys
+d=json.load(open(sys.argv[1]))
+for s in d["servicios"]:
+    if s["nombre"]==sys.argv[2]:
+        for v in (s.get(sys.argv[3]) or []): print(v)
+        break' "$CATALOGO" "$1" "$2" 2>/dev/null; }
+  servicios_con() { python3 -c 'import json,sys
+d=json.load(open(sys.argv[1]))
+v=json.loads(sys.argv[3])
+for s in d["servicios"]:
+    if s.get(sys.argv[2])==v: print(s["nombre"])' "$CATALOGO" "$1" "$2" 2>/dev/null; }
+fi
+
+if [ ! -f "$CATALOGO" ]; then
+  echo "No esta $CATALOGO en el servidor. cd.yml debe copiarlo con los compose."
+  echo "Sin catalogo no se sabe que override de compose ni que ruta de salud usa cada servicio."
+  exit 1
+fi
+
+# Servicios que viven en el host de contenido (lo dice el catalogo, ya no una
+# lista escrita aqui): se usan para resolver sus etiquetas de imagen.
+SERVICIOS_CONTENIDO=$(servicios_con claseHost '"contenido"' | tr '\n' ' ')
 # Ventana de espera del healthcheck: 36 x 5 s = 3 minutos por servicio.
 # Eran 12 x 5 s = 60 s, pensados para un servidor holgado. En el host de dev
 # real (t3.small: 2 vCPU con creditos de CPU "standard", 2 GiB) arrancar
@@ -310,131 +355,81 @@ fi
 echo "== 3) Desplegando TAG=$TAG para: $SERVICIOS_PUERTOS =="
 export TAG
 SERVICIOS_COMPOSE=""
-INCLUYE_CUENTAS=0
-INCLUYE_MS_CUMPLIMIENTO=0
-INCLUYE_MS_ECOMMERCE=0
-INCLUYE_MS_FINANZAS=0
-INCLUYE_CONTENIDO=0
+# Overrides de compose que hay que agregar al comando, deducidos del catalogo:
+# cada servicio de esta corrida aporta el suyo (composeExtra) si lo tiene, y
+# uno repetido -- los cuatro de contenido comparten archivo -- se agrega una
+# sola vez. Los servicios sin override viven en docker-compose.yml.
+OVERRIDES=""
+FALTANTES_SECRETS=""
 for par in $SERVICIOS_PUERTOS; do
   servicio="${par%%:*}"
   SERVICIOS_COMPOSE="$SERVICIOS_COMPOSE srv-${servicio}"
-  if [ "$servicio" = "ms-identidad" ]; then
-    INCLUYE_CUENTAS=1
+
+  extra=$(campo_de "$servicio" composeExtra)
+  if [ -n "$extra" ] && [ "$extra" != "null" ]; then
+    case " $OVERRIDES " in
+      *" $extra "*) : ;;
+      *) OVERRIDES="$OVERRIDES $extra" ;;
+    esac
   fi
-  if [ "$servicio" = "ms-cumplimiento" ]; then
-    INCLUYE_MS_CUMPLIMIENTO=1
-  fi
-  if [ "$servicio" = "ms-ecommerce" ]; then
-    INCLUYE_MS_ECOMMERCE=1
-  fi
-  if [ "$servicio" = "ms-finanzas" ]; then
-    INCLUYE_MS_FINANZAS=1
-  fi
-  for s in $SERVICIOS_CONTENIDO; do
-    if [ "$servicio" = "$s" ]; then
-      INCLUYE_CONTENIDO=1
+
+  # Secrets obligatorios del servicio. Mismo patron de "fallo visible" que
+  # habia escrito tres veces a mano: preferimos frenar aqui con el nombre
+  # exacto que hay que crear en GitHub, a que se entere por un contenedor que
+  # reinicia en bucle y tres minutos de healthcheck en rojo.
+  for variable in $(campos_de "$servicio" secretsRequeridos); do
+    valor=$(eval "printf '%s' \"\${$variable:-}\"")
+    if [ -z "$valor" ]; then
+      FALTANTES_SECRETS="$FALTANTES_SECRETS $servicio:$variable"
     fi
   done
 done
 
-# Si ms-identidad esta en esta corrida, sus 3 secrets de base de datos son
-# obligatorios -- application-prod.properties de ms-identidad YA lee
-# ${DB_URL}/${DB_USER}/${DB_PASSWORD} literalmente, asi que desplegar con
-# alguno vacio no es "degradado", es un contenedor que no arranca. Mismo
-# patron de fallo visible que SONAR_ORGANIZATION en ci.yml: preferimos
-# frenar aqui con un mensaje claro a que se entere por un CrashLoopBackOff
-# en el healthcheck de mas abajo.
-if [ "$INCLUYE_CUENTAS" -eq 1 ]; then
-  FALTANTES=""
-  [ -n "${MS_IDENTIDAD_DB_URL:-}" ] || FALTANTES="$FALTANTES TODO_DB_URL_MS_IDENTIDAD"
-  [ -n "${MS_IDENTIDAD_DB_USER:-}" ] || FALTANTES="$FALTANTES TODO_DB_USER_MS_IDENTIDAD"
-  [ -n "${MS_IDENTIDAD_DB_PASSWORD:-}" ] || FALTANTES="$FALTANTES TODO_DB_PASSWORD_MS_IDENTIDAD"
-  if [ -n "$FALTANTES" ]; then
-    echo "Faltan secrets de GitHub para ms-identidad, crealos en Settings > Environments:$FALTANTES"
-    exit 1
-  fi
+if [ -n "$FALTANTES_SECRETS" ]; then
+  echo "Faltan variables obligatorias para los servicios de esta corrida."
+  echo "Crealas en GitHub (Settings > Environments) y vuelve a desplegar:"
+  for f in $FALTANTES_SECRETS; do
+    echo "  - ${f#*:}   (lo necesita ${f%%:*})"
+  done
+  exit 1
 fi
 
-# Mismo patron de "fallo visible" que ms-identidad arriba, para
-# ms-cumplimiento: sus 5 secrets son obligatorios si esta en esta corrida --
-# application.properties lee ${DB_HOST}/${DB_PORT}/${DB_NAME}/${DB_USER}/
-# ${DB_PASSWORD} literalmente (DB_PASSWORD sin default, ni siquiera arranca
-# sin ella).
-if [ "$INCLUYE_MS_CUMPLIMIENTO" -eq 1 ]; then
-  FALTANTES=""
-  [ -n "${MS_CUMPLIMIENTO_DB_HOST:-}" ] || FALTANTES="$FALTANTES TODO_DB_HOST_MS_CUMPLIMIENTO"
-  [ -n "${MS_CUMPLIMIENTO_DB_PORT:-}" ] || FALTANTES="$FALTANTES TODO_DB_PORT_MS_CUMPLIMIENTO"
-  [ -n "${MS_CUMPLIMIENTO_DB_NAME:-}" ] || FALTANTES="$FALTANTES TODO_DB_NAME_MS_CUMPLIMIENTO"
-  [ -n "${MS_CUMPLIMIENTO_DB_USER:-}" ] || FALTANTES="$FALTANTES TODO_DB_USER_MS_CUMPLIMIENTO"
-  [ -n "${MS_CUMPLIMIENTO_DB_PASSWORD:-}" ] || FALTANTES="$FALTANTES TODO_DB_PASSWORD_MS_CUMPLIMIENTO"
-  if [ -n "$FALTANTES" ]; then
-    echo "Faltan secrets de GitHub para ms-cumplimiento, crealos en Settings > Environments:$FALTANTES"
-    exit 1
-  fi
-fi
-
-# Mismo patron de "fallo visible" para ms-ecommerce: sus 5 secrets son
-# obligatorios si esta en esta corrida -- application.properties lee
-# ${DB_HOST}/${DB_PORT}/${DB_NAME}/${DB_USER}/${DB_PASSWORD} literalmente
-# (DB_PASSWORD sin default, igual que ms-cumplimiento).
-if [ "$INCLUYE_MS_ECOMMERCE" -eq 1 ]; then
-  FALTANTES=""
-  [ -n "${MS_ECOMMERCE_DB_HOST:-}" ] || FALTANTES="$FALTANTES TODO_DB_HOST_MS_ECOMMERCE"
-  [ -n "${MS_ECOMMERCE_DB_PORT:-}" ] || FALTANTES="$FALTANTES TODO_DB_PORT_MS_ECOMMERCE"
-  [ -n "${MS_ECOMMERCE_DB_NAME:-}" ] || FALTANTES="$FALTANTES TODO_DB_NAME_MS_ECOMMERCE"
-  [ -n "${MS_ECOMMERCE_DB_USER:-}" ] || FALTANTES="$FALTANTES TODO_DB_USER_MS_ECOMMERCE"
-  [ -n "${MS_ECOMMERCE_DB_PASSWORD:-}" ] || FALTANTES="$FALTANTES TODO_DB_PASSWORD_MS_ECOMMERCE"
-  if [ -n "$FALTANTES" ]; then
-    echo "Faltan secrets de GitHub para ms-ecommerce, crealos en Settings > Environments:$FALTANTES"
-    exit 1
-  fi
-fi
-
-# Mismo patron de "fallo visible" para ms-finanzas: sus 5 secrets son
-# obligatorios si esta en esta corrida -- application.properties lee
-# ${DB_HOST}/${DB_PORT}/${DB_NAME}/${DB_USER}/${DB_PASSWORD} literalmente
-# (DB_PASSWORD sin default, igual que ms-cumplimiento/ms-ecommerce). Solo se
-# llega aqui en un despliegue a demanda: en push normal a dev, ms-finanzas
-# esta en FUERA_DEL_HOST_DEV y cd.yml nunca la incluye en SERVICIOS_PUERTOS.
-if [ "$INCLUYE_MS_FINANZAS" -eq 1 ]; then
-  FALTANTES=""
-  [ -n "${MS_FINANZAS_DB_HOST:-}" ] || FALTANTES="$FALTANTES TODO_DB_HOST_MS_FINANZAS"
-  [ -n "${MS_FINANZAS_DB_PORT:-}" ] || FALTANTES="$FALTANTES TODO_DB_PORT_MS_FINANZAS"
-  [ -n "${MS_FINANZAS_DB_NAME:-}" ] || FALTANTES="$FALTANTES TODO_DB_NAME_MS_FINANZAS"
-  [ -n "${MS_FINANZAS_DB_USER:-}" ] || FALTANTES="$FALTANTES TODO_DB_USER_MS_FINANZAS"
-  [ -n "${MS_FINANZAS_DB_PASSWORD:-}" ] || FALTANTES="$FALTANTES TODO_DB_PASSWORD_MS_FINANZAS"
-  if [ -n "$FALTANTES" ]; then
-    echo "Faltan secrets de GitHub para ms-finanzas, crealos en Settings > Environments:$FALTANTES"
-    exit 1
-  fi
-fi
+# Los secrets obligatorios de cada servicio ya se comprobaron arriba, de una
+# sola vez y leyendo "secretsRequeridos" del catalogo. Antes habia aqui tres
+# bloques casi identicos escritos a mano -- uno por ms-identidad, otro por
+# ms-cumplimiento y otro por ms-ecommerce -- y agregar un servicio nuevo
+# significaba acordarse de escribir un cuarto. ms-finanzas y ms-subastas
+# entran ahora sin tocar este archivo.
 
 # Siempre el base + el de despliegue de plataforma combinados: el base (de
 # desarrollo local, con "build:") nunca se usa solo. El de despliegue solo
 # agrega "image:", y como aqui no pasamos --build, Compose usa esa imagen ya
 # publicada en ghcr.io en vez de intentar construir nada en el servidor.
-# Los overrides de Cuentas (ms-identidad, ms-cumplimiento, ms-ecommerce,
-# ms-finanzas) solo se agregan si de verdad estan entre los servicios de esta
-# corrida -- si no, ni se mencionan en el comando.
+# Los overrides propios de cada servicio (ms-identidad, ms-cumplimiento,
+# ms-ecommerce, ms-finanzas, ms-subastas, contenido) solo se agregan si ese
+# servicio esta de verdad en esta corrida. Cual le toca a cada uno lo dice el
+# catalogo, no una cadena de "if" que hay que ampliar a mano.
 ARCHIVOS_COMPOSE=(-f "$COMPOSE_BASE" -f "$COMPOSE_DEPLOY")
-if [ "$INCLUYE_CUENTAS" -eq 1 ]; then
-  ARCHIVOS_COMPOSE+=(-f "$COMPOSE_CUENTAS")
-fi
-if [ "$INCLUYE_MS_CUMPLIMIENTO" -eq 1 ]; then
-  ARCHIVOS_COMPOSE+=(-f "$COMPOSE_MS_CUMPLIMIENTO")
-fi
-if [ "$INCLUYE_MS_ECOMMERCE" -eq 1 ]; then
-  ARCHIVOS_COMPOSE+=(-f "$COMPOSE_MS_ECOMMERCE")
-fi
-if [ "$INCLUYE_MS_FINANZAS" -eq 1 ]; then
-  ARCHIVOS_COMPOSE+=(-f "$COMPOSE_MS_FINANZAS")
-fi
-if [ "$INCLUYE_CONTENIDO" -eq 1 ]; then
-  ARCHIVOS_COMPOSE+=(-f "$COMPOSE_CONTENIDO")
-fi
+for override in $OVERRIDES; do
+  if [ ! -f "$DIRECTORIO/$override" ]; then
+    echo "El catalogo pide $override y no llego al servidor."
+    echo "Agregalo a la lista 'source:' del paso de copia (scp) en cd.yml."
+    exit 1
+  fi
+  ARCHIVOS_COMPOSE+=(-f "$DIRECTORIO/$override")
+done
 if [ -f "$COMPOSE_SIMULACRO" ]; then
   ARCHIVOS_COMPOSE+=(-f "$COMPOSE_SIMULACRO")
 fi
+
+# ¿Viene algun servicio de contenido en esta corrida? Se usa para resolver sus
+# etiquetas de imagen y para saber si hay que levantar el borde.
+INCLUYE_CONTENIDO=0
+for par in $SERVICIOS_PUERTOS; do
+  for c in $SERVICIOS_CONTENIDO; do
+    if [ "${par%%:*}" = "$c" ]; then INCLUYE_CONTENIDO=1; fi
+  done
+done
 
 # Las imagenes de ghcr.io son privadas (paquetes de la organizacion): el
 # servidor tiene que iniciar sesion antes del pull. Usa el token de la propia
@@ -498,14 +493,16 @@ echo "== 4) Verificando /actuator/health de cada servicio desplegado (con reinte
 # habria dado por muerto tras tres minutos de reintentos. Lo fija ahora
 # ArranqueDeLaAplicacionIT de ms-ecommerce, que comprueba las dos rutas.
 ruta_salud_de() {
-  case "$1" in
-    ms-ecommerce) echo "/ecommerce/actuator/health" ;;
-    # Confirmado en application.properties de ms-finanzas (linea 2):
-    # server.servlet.context-path=/api/v1 -- a diferencia de ms-identidad y
-    # ms-cumplimiento, que no tienen context-path y viven en la raiz.
-    ms-finanzas) echo "/api/v1/actuator/health" ;;
-    *) echo "/actuator/health" ;;
-  esac
+  # Sale del catalogo (campo "rutaSalud"), y el guardian
+  # scripts/cd/comprobar-catalogo-servicios.sh comprueba en cada pull request
+  # que coincide con el server.servlet.context-path real del servicio. Es la
+  # tercera version de esta funcion: la primera era una ruta fija, la segunda
+  # un "case" que ya se equivoco una vez por copiar la ruta de un comentario
+  # en vez de mirar la configuracion (ms-ecommerce).
+  local r
+  r=$(campo_de "$1" rutaSalud)
+  if [ -z "$r" ] || [ "$r" = "null" ]; then r="/actuator/health"; fi
+  echo "$r"
 }
 
 > ultimo-fallo.txt
