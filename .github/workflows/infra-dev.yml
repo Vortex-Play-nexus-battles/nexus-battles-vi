@@ -378,6 +378,63 @@ jobs:
       # R9.1 — la compuerta absoluta, leida del plan y no de la buena voluntad.
       # Un `destroy` o un `replace` sobre la instancia, la IP, el volumen o el
       # grupo de seguridad detiene la corrida ANTES del apply.
+      # ------------------------------------------------- COMPUERTA DE CUENTA
+      # La contradiccion que costo un dia entero de diagnostico, convertida
+      # en algo que la infraestructura detecta sola.
+      #
+      # `nexus-contenido-dev` EXISTE, pero no en esta cuenta: es del grupo 2
+      # (ver el job `desplegar-contenido-dev` de cd.yml, #656; IP elastica
+      # 34.193.90.11, encendida desde el 9-sep). El rol de vars.AWS_ROLE_ARN
+      # es de la cuenta de plataforma y no la ve. De ahi salen dos sintomas
+      # que parecen decir lo mismo y no lo dicen:
+      #
+      #   accion `inventario`  -> "No hay ninguna instancia con tag
+      #                            Name=nexus-contenido-dev"
+      #   accion `plan`        -> "5 to add" (instancia, IP, SG, llave)
+      #
+      # Ninguno significa "el host no existe". Significan "este rol no lo
+      # ve". Aplicar ese plan crearia un TERCER EC2, en la cuenta
+      # equivocada, mientras el host real sigue corriendo y recibiendo
+      # despliegues: coste nuevo y un estado partido en dos.
+      #
+      # Por que no basta IMPORTACION_CONTENIDO_COMPLETADA: es un booleano de
+      # buena fe, y el mensaje de error de esa compuerta invita justo a
+      # ponerlo en "true" ("rellena importaciones.tf -> plan limpio -> pon la
+      # variable"). Un administrador que siga las instrucciones al pie de la
+      # letra desbloquea exactamente el apply que no debe ocurrir. Esta
+      # compuerta no pregunta a nadie: lee el plan.
+      - name: Compuerta — contenido NUNCA crea un host (vive en otra cuenta)
+        if: matrix.host == 'contenido' && (steps.accion.outputs.accion == 'plan' || steps.accion.outputs.accion == 'apply')
+        run: |
+          nacimientos='aws_instance|aws_eip|aws_security_group|aws_key_pair'
+          if grep -qE "^  # ($nacimientos)\..* will be created" plan.txt \
+             || grep -qE "^# ($nacimientos)\..* will be created" plan.txt; then
+            {
+              echo "### Compuerta de cuenta — el plan de contenido propone CREAR el host"
+              echo
+              echo 'El plan quiere crear instancia/IP/SG/llave. Eso NO significa que'
+              echo '`nexus-contenido-dev` no exista: existe, en la cuenta del grupo 2'
+              echo '(cd.yml, #656). Este rol OIDC es el de plataforma y no la ve.'
+              echo
+              echo 'Aplicarlo levantaria un tercer EC2 en la cuenta equivocada.'
+              echo 'La salida correcta NO es poner IMPORTACION_CONTENIDO_COMPLETADA'
+              echo 'en "true": es gobernar esta carpeta desde la cuenta que es dueña'
+              echo 'del host, o dejarla sin gobernar y desplegar por SSH como hace'
+              echo 'hoy cd.yml. Ver infrastructure/entornos/contenido/README.md.'
+            } >> "$GITHUB_STEP_SUMMARY"
+
+            if [ "${{ steps.accion.outputs.accion }}" = "apply" ]; then
+              echo "::error::El plan de contenido CREA un host. Existe ya, en la cuenta del grupo 2 (#656): aplicar esto es un tercer EC2 y coste nuevo. NO SE APLICA."
+              exit 1
+            fi
+            # En `plan` no se falla: un PR que toque esta carpeta por otro
+            # motivo no tiene la culpa del desajuste de cuentas. Queda el
+            # aviso, bien visible, en el resumen de la corrida.
+            echo "::warning::El plan de contenido propone crear el host. Es el desajuste de cuentas de #656, no un host ausente. Un apply queda bloqueado."
+          else
+            echo "El plan de contenido no crea ningun host."
+          fi
+
       - name: Compuerta — 0 destroy y 0 replace sobre recursos criticos
         if: steps.accion.outputs.accion == 'apply'
         run: |
