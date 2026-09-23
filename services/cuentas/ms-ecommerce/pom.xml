@@ -31,10 +31,11 @@
     <!--
      Misma version del BOM de Testcontainers que ya usan heroes,
      inventario y salas-partidas en Gradle. Se fija aqui para que el
-     servicio no dependa de que el parent de Spring Boot la gestione.
+     servicio no dependa de que el parent de Spring Boot la gestiona.
     -->
     <testcontainers.version>1.21.4</testcontainers.version>
-    <spring-cloud.version>2026.0.0</spring-cloud.version>
+    <!-- Versión alineada y existente para Spring Boot 4.1.x -->
+    <spring-cloud.version>2025.0.0</spring-cloud.version>
   </properties>
 
   <dependencyManagement>
@@ -95,7 +96,7 @@
     <dependency>
       <groupId>org.springdoc</groupId>
       <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-      <version>2.8.5</version> <!-- Use the latest 2.x version for Spring Boot 3 / Java 21 -->
+      <version>2.8.5</version>
     </dependency>
 
     <!-- Regla 8 de plataforma: todo cambio de esquema por Flyway, versionado. -->
@@ -177,13 +178,7 @@
        sufijo *IT es de Failsafe, que aqui no esta configurado y que
        ademas se ata a la fase "verify" — y el CI ejecuta "mvn test".
        Sin esta inclusion, ArranqueDeLaAplicacionIT se queda sin
-       ejecutar y el build sale verde sin haberla corrido: lo
-       comprobamos en la corrida 35414172038, donde el job dijo
-       "Tests run: 3" con la prueba de arranque ya en el repo.
-
-       Se mantiene el sufijo *IT porque es el que usan los IT de
-       Testcontainers de los otros dieciseis servicios; lo que se
-       ajusta es quien los recoge.
+       ejecutar y el build sale verde sin haberla corrido.
       -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -198,10 +193,6 @@
       </plugin>
       <!--
        JaCoCo: el informe que lee SonarQube Cloud
-       (sonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
-       en ci.yml). Sin el, Sonar veia 0 % de cobertura en todo lo nuevo y
-       la compuerta (80 %) fallaba aunque las pruebas existieran. Misma
-       configuracion que ms-cumplimiento; la compuerta la aplica Sonar.
       -->
       <plugin>
         <groupId>org.jacoco</groupId>
