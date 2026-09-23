@@ -27,6 +27,13 @@ import { acusar } from '../comun/ui/acuse.js';
 /** Canal que publica ms-subastas en cada cambio (SubastaRealtimePublisher). */
 export const CANAL_SUBASTAS = '/topic/subastas/listado';
 
+/**
+ * Donde guarda el login el JWT. Misma clave que lee `pujas-api.js` para las
+ * llamadas REST: la sesion es una sola, y el canal en vivo (R9.6) tiene que
+ * acreditarse con el mismo token que ya usa todo lo demas de esta pantalla.
+ */
+const CLAVE_TOKEN_SESION = 'nexus.token';
+
 export const PALETA_RAREZA = {
   comun: { fondo: '#E7EAF0', texto: '#57627A', borde: '#9FABC9', icono: '🛡️' },
   rara: { fondo: '#DFEEF8', texto: '#095E8C', borde: '#095E8C', icono: '⚔️' },
@@ -538,6 +545,10 @@ export class ControladorSubastas {
     subastaInicialId = null,
     urlCanal = null,
     conectarCanal = conectarStomp,
+    // R9.6 — de donde sale el JWT que acredita el CONNECT del canal. Misma
+    // clave que usa pujas-api.js para las llamadas REST: la sesion es una
+    // sola. Inyectable para que las pruebas no dependan de sessionStorage.
+    leerToken = () => globalThis.sessionStorage?.getItem(CLAVE_TOKEN_SESION) || null,
   } = {}) {
     // Subasta que hay que abrir en detalle nada mas cargar. Viene de ?id= en la
     // URL: es la forma de que el listado de HU-SUB-011 entregue una subasta
@@ -578,6 +589,7 @@ export class ControladorSubastas {
     // degradacion controlada a consulta periodica si el tiempo real se cae.
     this.urlCanal = urlCanal;
     this.conectarCanal = conectarCanal;
+    this.leerToken = leerToken;
     this.canal = null;
   }
 
@@ -794,7 +806,19 @@ export class ControladorSubastas {
       return null;
     }
     try {
-      const canal = await this.conectarCanal({ url: this.urlCanal });
+      // R9.6 — el CONNECT va acreditado. Hasta ahora este canal se abria sin
+      // token: era el unico de los cuatro de la casa que no lo mandaba (el
+      // chat de sala y la bandeja de notificaciones lo hacen desde #222 y el
+      // contrato 1.1.0). El navegador no puede poner cabeceras en el
+      // handshake del WebSocket, asi que el sitio donde va es la cabecera
+      // `Authorization` del frame CONNECT — igual que en cliente-chat.js.
+      //
+      // Sin sesion se conecta igual, y a proposito: el listado de subastas es
+      // publico y quien no ha entrado tiene derecho a verlo actualizarse.
+      // Mandar `Bearer null` seria peor que no mandar nada.
+      const token = this.leerToken?.();
+      const cabeceras = token ? { Authorization: `Bearer ${token}` } : {};
+      const canal = await this.conectarCanal({ url: this.urlCanal, cabeceras });
       canal.suscribir(CANAL_SUBASTAS, (cuerpo) => this.alLlegarActualizacion(cuerpo));
       this.canal = canal;
       return canal;
