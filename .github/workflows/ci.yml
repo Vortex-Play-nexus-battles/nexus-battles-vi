@@ -245,6 +245,7 @@ jobs:
           fi
           CAMBIOS=$(git diff --name-only "$BASE" "${{ github.sha }}" \
             | grep -E '^contracts/' || true)
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
           if [ -n "$CAMBIOS" ]; then
             echo "Cambios en contratos:"; echo "$CAMBIOS"
             echo "hay=true" >> "$GITHUB_OUTPUT"
@@ -253,20 +254,47 @@ jobs:
             echo "hay=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # Hasta R11.6 los tres pasos de abajo llevaban `if: hay == 'true'`. El
+      # efecto era que un PR que solo tocaba codigo dejaba este job en verde
+      # sin haber ejecutado nada: «CI - contratos OpenAPI: pass» significaba
+      # literalmente «no se miro». Como validar los veintitantos YAML cuesta
+      # siete segundos, la condicion no ahorraba nada y si escondia el estado
+      # real. Ahora la validacion corre SIEMPRE.
+      #
+      # `detectar` sigue haciendo falta, pero para otra cosa: la comparacion
+      # con la base solo tiene sentido cuando un contrato cambio.
       - name: Preparar Python
-        if: steps.detectar.outputs.hay == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
       - name: Instalar el validador de OpenAPI
-        if: steps.detectar.outputs.hay == 'true'
         run: pip install --quiet openapi-spec-validator==0.7.1 pyyaml
 
       - name: Validar todos los contratos
-        if: steps.detectar.outputs.hay == 'true'
         shell: bash
         run: python3 tests/contratos/validar-contratos.py
+
+      # Corre siempre y sin Docker: la verificacion de proveedor de verdad
+      # (VerificacionDelPactoDeSubastasTest) esta anotada
+      # `disabledWithoutDocker = true` y se salta entera en una maquina sin
+      # Docker, dejando la corrida en un verde que no significa nada. Esto no
+      # la sustituye —no habla HTTP con nadie—, vigila que su cableado siga en
+      # su sitio: cada `given(...)` del pacto con su `@State`.
+      - name: Comprobar que los pactos tienen quien los verifique
+        shell: bash
+        run: python3 tests/contratos/pactos-verificados.py
+
+      # Regla 2: un cambio incompatible abre version nueva. Compara cada
+      # contrato tocado contra su propia version en la base de la rama, con
+      # `git show`: no consulta ningun broker ni registro externo, asi que no
+      # puede ponerse roja porque se cayera un servicio de terceros.
+      - name: Comprobar la compatibilidad de los contratos que cambiaron
+        if: steps.detectar.outputs.hay == 'true'
+        shell: bash
+        env:
+          BASE: ${{ steps.detectar.outputs.base }}
+        run: python3 tests/contratos/cambios-de-contrato.py "$BASE"
 
   # ---------------------------------------------------------------------
   # Job: ninguna linea de bitacora imprime un secreto (R11.2).

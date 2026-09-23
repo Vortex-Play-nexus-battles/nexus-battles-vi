@@ -1,0 +1,981 @@
+openapi: 3.1.0
+
+# =============================================================================
+# Nexus Battles VI — Autenticacion e identidad (ms-identidad · equipo de
+# Cuentas y comercio)
+#
+# Regla 1 de plataforma: contrato primero. Este documento NO se acordo antes
+# de implementar: el servicio ya existe y es la pieza de la que dependen los
+# otros diecinueve. Se escribe A PARTIR de lo que
+# `services/cuentas/ms-identidad` responde hoy, leyendo `AuthController`,
+# `CambioDePasswordController`, `JwksController`, `TokenController`,
+# `JwtService`, `SecurityInterceptor` y los DTO de `auth/dto`, operacion por
+# operacion y campo por campo. Es el cierre de una brecha, no un acuerdo
+# previo.
+#
+# Lo unico publicado hasta ahora era `contracts/openapi/ms-identidad-registro.md`
+# —un texto en Markdown que cubre registro y login, no las otras cinco
+# operaciones, y que ningun validador ni generador puede leer—. Este archivo
+# lo reemplaza como contrato de /auth, en formato OpenAPI.
+#
+# NOTA DE ALCANCE: aqui va solo `/api/v1/auth`. Las rutas `/rbac/**` estan en
+# `contracts/openapi/rbac.yaml`; las de administracion de cuentas
+# (`AdminCuentasController`, `AdminGestionUsuarioController`) siguen sin
+# contrato publicado y quedan anotadas como brecha conocida.
+#
+# ---------------------------------------------------------------------------
+# POR QUE ESTE CONTRATO IMPORTA MAS QUE LOS DEMAS
+#
+# ms-identidad es el emisor de credenciales de toda la plataforma (ADR-002
+# para personas, ADR-005 para servicios). `GET /api/v1/auth/jwks` y
+# `POST /api/v1/auth/token` no los consume una pantalla: los consumen los
+# otros diecinueve servicios. Un cambio incompatible en la forma del JWT que
+# emite el login rompe la autorizacion de todos a la vez, sin que ninguno
+# cambie una linea de codigo.
+# =============================================================================
+
+info:
+  title: Nexus Battles VI — Autenticacion e identidad (ms-identidad)
+  version: 1.0.0
+  description: |
+    Registro, inicio de sesion, recuperacion y cambio de contrasena de las
+    personas, mas las dos rutas que sostienen la identidad de la plataforma:
+    el juego de claves publicas (`/jwks`) y la emision de credenciales de
+    servicio (`/token`).
+
+    **Este contrato lo redacto el Equipo 6 a partir del codigo existente para
+    cerrar la regla 1 de plataforma («contrato primero»), que estas rutas
+    incumplian por no tener contrato OpenAPI publicado. Queda pendiente de
+    validacion por el dueno del modulo antes de tratarlo como acordado.**
+
+    El servicio escucha en el puerto 8089 y **no tiene context-path**: las
+    rutas que aparecen aqui son absolutas y completas, incluido el `/api/v1`
+    (regla 2).
+
+    ### Forma real del JWT que emite el login
+
+    Se documenta porque es lo que consumen los otros diecinueve servicios, no
+    una pantalla. Lo emite `JwtService.generarToken(...)`:
+
+    - **Firma RS256**, no HMAC. Con HMAC habria que repartir la clave
+      secreta, y esa misma clave sirve para emitir: cualquier servicio que la
+      tuviera podria fabricar el token de cualquier usuario. Con RSA los
+      demas solo reciben la clave publica, por el JWKS.
+    - **`kid` en la cabecera del token**, para que el verificador elija la
+      clave correcta del juego publicado.
+    - `sub` — **el apodo**, no el identificador estable. Es deliberado:
+      `SecurityInterceptor` lo lee como identidad y lo propaga a los
+      controladores de administracion como `usuarioActual`. El apodo es
+      **mutable** (se cambia desde el perfil y desde la edicion de
+      administracion), asi que **la identidad estable de un usuario es `uid`,
+      nunca `sub`** (ADR-002). Un servicio que guarde `sub` como clave
+      ajena acabara con filas huerfanas el dia que alguien se cambie el
+      apodo.
+    - `rol` — **un string singular** (`JUGADOR`, `MODERADOR`,
+      `SUPER_ADMINISTRADOR`...), **no** la estructura `realm_access.roles` de
+      Keycloak. Los conversores de rol de la plataforma leen este claim.
+    - `ver` — version de token (HU-RBAC-003). Cada cambio de rol o de
+      contrasena la incrementa, y con eso caducan los tokens ya emitidos sin
+      necesidad de una lista negra: si la version del token no coincide con
+      la del usuario en base de datos, se rechaza aunque la firma siga siendo
+      valida y no haya expirado.
+    - `uid` — UUID publico y estable del usuario, **presente solo si el
+      usuario lo tiene**. Los usuarios creados antes de que el campo
+      existiera salen **sin este claim**: no poder identificar al usuario de
+      cara a otros servicios no se considero razon para negarle el acceso al
+      suyo. Un consumidor tiene que contemplar su ausencia.
+    - `iss` — emisor, `ms-identidad` por omision (`app.jwt.emisor`).
+    - `iat` / `exp` — emision y expiracion; **24 horas** por omision
+      (`app.jwt.horas-expiracion`).
+
+    ### Los errores de este servicio NO son uniformes
+
+    Conviene saberlo antes de integrarse, porque contradice la regla 4
+    («formato de error estandar, identico en los 20 modulos») dentro de un
+    mismo prefijo de rutas:
+
+    - `/auth/registro`, `/auth/login` y las dos de `/auth/restablecer`
+      devuelven **texto plano**: el cuerpo es el mensaje de la excepcion, sin
+      `type`, sin `title` y sin `status` en el cuerpo. Es codigo heredado.
+    - `PUT /auth/password` es **la unica ruta de /auth con problem details y
+      `type` propio**, uno por motivo de rechazo.
+    - `POST /auth/token` devuelve **objetos de error de OAuth2**
+      (`error` / `error_description`), que no son problem details y no deben
+      tratarse como tales: es el formato que exige la RFC 6749.
+
+    Un consumidor que asuma problem details en todo `/auth` se encontrara
+    intentando parsear JSON sobre una cadena de texto.
+  license:
+    name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
+
+servers:
+  - url: http://localhost:8089
+    description: Desarrollo local (sin context-path; el /api/v1 va en la ruta)
+  - url: http://srv-ms-identidad:8089
+    description: Red de compose
+
+tags:
+  - name: cuenta
+    description: Alta, acceso y credenciales de una persona (HU-AUT-001, HU-AUT-006)
+  - name: plataforma
+    description: Claves publicas y credenciales de servicio (ADR-002, ADR-005)
+
+paths:
+  /api/v1/auth/registro:
+    post:
+      tags: [cuenta]
+      operationId: registrarUsuario
+      summary: Autorregistro de un jugador
+      description: |
+        Da de alta un jugador nuevo (HU-AUT-001). **Ruta publica**: quien se
+        registra todavia no tiene credencial.
+
+        **El cuerpo es `multipart/form-data`, no JSON.** Dejo de aceptar JSON
+        puro cuando el avatar paso de ser una URL de una galeria fija a ser un
+        archivo real subido por el usuario; el controlador lo recibe con
+        `@ModelAttribute`. Un cliente que mande `application/json` recibe un
+        error de tipo de medio, no un 400 de validacion.
+
+        Ademas de las validaciones declaradas en el formulario, el servicio
+        rechaza el alta si el correo o el apodo ya estan en uso, si el apodo
+        cae en la lista negra de terminos prohibidos (HU-ADM-002) o si la
+        contrasena incumple la politica. Todos esos rechazos salen por el
+        mismo 400 de texto plano, diferenciados solo por el mensaje.
+      security: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RegistroRequest'
+            encoding:
+              avatar:
+                contentType: image/jpeg, image/png, image/webp
+      responses:
+        '201':
+          description: |
+            Cuenta creada. Devuelve la entidad `Usuario` serializada, no un
+            DTO (ver la nota del esquema).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioRegistrado'
+              example:
+                id: 1
+                publicId: 6f1c2a7e-3d6b-4b9a-8f0e-1c2d3e4f5a6b
+                apodo: valkiria
+                email: valkiria@ejemplo.upb.edu.co
+                estado: ACTIVO
+                rol:
+                  id: 1
+                  nombre: JUGADOR
+                intentosFallidos: 0
+                bloqueadoHasta: null
+                suspendidoHasta: null
+                versionToken: 0
+        '400':
+          description: |
+            Alta rechazada. **El cuerpo es texto plano**, no problem details:
+            el controlador captura `RuntimeException` y devuelve
+            `e.getMessage()` tal cual. Cubre correo o apodo ya registrados,
+            apodo en la lista negra y contrasena fuera de politica, sin
+            distinguirlos por ningun campo estructurado.
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: El apodo ya está en uso.
+
+  /api/v1/auth/login:
+    post:
+      tags: [cuenta]
+      operationId: iniciarSesion
+      summary: Inicia sesion y emite el JWT de la persona
+      description: |
+        **Ruta publica.** Devuelve el token con el que se llama al resto de la
+        plataforma; su forma esta descrita en `info.description`.
+
+        **Dos cabeceras entran en la decision** aunque no aparezcan en el
+        cuerpo: `X-Forwarded-For` (si falta, se usa la direccion remota de la
+        conexion) y `User-Agent`. Con ellas el servicio reconoce el
+        dispositivo y decide `dispositivoNuevo`, que es lo que dispara el
+        aviso de acceso por correo. Un cliente que llame por detras del borde
+        sin propagar `X-Forwarded-For` hara que todos los accesos parezcan
+        venir de la misma direccion.
+
+        Los cuatro codigos de error son cuatro situaciones distintas y
+        conviene no colapsarlos: 401 es «esas credenciales no son», 403 es
+        «la cuenta existe pero no puede entrar» (baneada, suspendida o
+        inactiva) y 423 es «demasiados intentos fallidos, vuelve mas tarde».
+        Los tres estados de cuenta del 403 no se distinguen por ningun campo:
+        solo por el texto del cuerpo.
+      security: []
+      parameters:
+        - name: X-Forwarded-For
+          in: header
+          required: false
+          description: |
+            Direccion real del cliente cuando la peticion pasa por el borde.
+            Si falta o viene en blanco, el servicio usa la direccion remota de
+            la conexion, que detras de un proxy es la del propio proxy.
+          schema:
+            type: string
+        - name: User-Agent
+          in: header
+          required: false
+          description: Identifica el dispositivo; entra en el calculo de `dispositivoNuevo`.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: valkiria@ejemplo.upb.edu.co
+              password: 'Contrasena.Valida.9'
+      responses:
+        '200':
+          description: Sesion iniciada; el JWT viaja en `token`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              example:
+                usuarioId: 1
+                apodo: valkiria
+                email: valkiria@ejemplo.upb.edu.co
+                rol: JUGADOR
+                dispositivoNuevo: true
+                token: eyJraWQiOiJrMSIsImFsZyI6IlJTMjU2In0.eyJzdWIiOiJ2YWxraXJpYSJ9.firma
+        '401':
+          description: |
+            Credenciales invalidas. **Texto plano.** El mensaje es generico a
+            proposito: no dice si fallo el correo o la contrasena, para no
+            servir de oraculo de correos registrados.
+          content:
+            text/plain:
+              schema:
+                type: string
+        '403':
+          description: |
+            La cuenta no puede iniciar sesion: baneada, suspendida o inactiva.
+            **Texto plano.** Los tres casos comparten codigo y solo se
+            distinguen por el mensaje.
+          content:
+            text/plain:
+              schema:
+                type: string
+        '423':
+          description: |
+            Cuenta bloqueada temporalmente por intentos fallidos (RF-AUT-009;
+            `app.seguridad.minutos-bloqueo`, 15 por omision). **Texto plano.**
+            Se separa del 403 porque es transitorio: la misma peticion
+            funcionara sola pasado el bloqueo.
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /api/v1/auth/restablecer/solicitar:
+    post:
+      tags: [cuenta]
+      operationId: solicitarRestablecimiento
+      summary: Pide un codigo de un solo uso para restablecer la contrasena
+      description: |
+        Punto de entrada publico de autoservicio de «olvide mi contrasena»
+        (HU-COR-003). Si el correo corresponde a una cuenta, se envia el
+        mensaje con el codigo; si no, no se envia nada.
+
+        **Responde 200 siempre, exista o no la cuenta**, con el mismo texto
+        generico. Es deliberado y es lo unico que hace util esta ruta sin
+        convertirla en un problema: si respondiera 404 para un correo
+        desconocido, cualquiera podria recorrer una lista de correos y saber
+        cuales estan registrados en la plataforma —enumeracion de cuentas—,
+        que es exactamente la informacion que el mensaje generico del login
+        ya se cuida de no dar. Un 200 aqui **no significa que el correo
+        exista** ni que se haya enviado nada.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitarRestablecimientoRequest'
+            example:
+              email: valkiria@ejemplo.upb.edu.co
+      responses:
+        '200':
+          description: |
+            Acuse generico. **Texto plano.** Unico desenlace posible de esta
+            operacion: no hay ningun codigo de error que un llamador pueda
+            provocar con un correo inexistente.
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: Si el correo está registrado, recibirás un mensaje con instrucciones para restablecer tu contraseña.
+
+  /api/v1/auth/restablecer/confirmar:
+    post:
+      tags: [cuenta]
+      operationId: canjearTokenDeRestablecimiento
+      summary: Canjea el codigo recibido y fija la contrasena nueva
+      description: |
+        Segundo paso de HU-COR-003: se entrega el codigo de un solo uso que
+        llego por correo junto con la contrasena nueva. **Ruta publica**: quien
+        la usa no puede iniciar sesion todavia, esa es la situacion.
+
+        La contrasena nueva se valida dos veces: el formulario exige un minimo
+        de 9 caracteres, y ademas el servicio aplica la politica completa
+        (RF-AUT-002). Las dos clases de rechazo, y tambien el codigo invalido
+        o ya usado, salen por el mismo 400 de texto plano.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CanjearTokenRequest'
+            example:
+              token: 3f2a1b0c9d8e4f7a
+              nuevaPassword: 'Contrasena.Nueva.9'
+      responses:
+        '200':
+          description: Contrasena actualizada. **Texto plano.**
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: Contraseña actualizada correctamente. Ya puedes iniciar sesión.
+        '400':
+          description: |
+            Codigo invalido, caducado o ya usado, o contrasena nueva que no
+            cumple la politica. **Texto plano**: el mensaje dice que regla
+            falla, pero no hay campo estructurado que lo distinga.
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /api/v1/auth/password:
+    put:
+      tags: [cuenta]
+      operationId: cambiarPassword
+      summary: Cambia la contrasena de la propia sesion
+      description: |
+        HU-AUT-006 (RF-AUT-006). **Exige token**: quien cambia la contrasena
+        es quien firma el token, y el cuerpo no identifica a nadie —aceptar un
+        identificador ahi permitiria cambiarle la clave a otro—.
+
+        **Devuelve un token nuevo, y hay que guardarlo.** El cambio incrementa
+        la version de token del usuario (la misma mecanica de HU-RBAC-003), lo
+        que caduca todas las sesiones abiertas **incluida la que acaba de
+        hacer el cambio**. Para que esa siga viva se emite uno nuevo con la
+        version vigente. Un cliente que ignore el `token` de la respuesta y
+        siga usando el anterior empezara a recibir 403 en la siguiente
+        llamada.
+
+        **Es la unica ruta de `/auth` que responde problem details con `type`
+        propio** (CA-06). Los cinco motivos de rechazo estan abajo, cada uno
+        con su URI estable bajo `https://nexusbattles.upb.edu.co/errors/`:
+        la interfaz decide que mostrar por el `type`, nunca por la redaccion
+        del mensaje.
+      security:
+        - tokenDeUsuario: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CambiarPasswordRequest'
+            example:
+              passwordActual: 'Contrasena.Vieja.9'
+              nuevaPassword: 'Contrasena.Nueva.9'
+              confirmacion: 'Contrasena.Nueva.9'
+      responses:
+        '200':
+          description: Contrasena cambiada; `token` trae la credencial nueva
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CambioDePasswordResponse'
+              example:
+                token: eyJraWQiOiJrMSIsImFsZyI6IlJTMjU2In0.eyJ2ZXIiOjF9.firma
+                mensaje: Contraseña actualizada. Las demás sesiones abiertas se cerraron.
+        '403':
+          description: |
+            Falta el token, es invalido, o su version fue revocada (por un
+            cambio de rol o por un cambio de contrasena anterior). Lo produce
+            `SecurityInterceptor`, que es **fail-closed**: sin rol verificado,
+            deniega.
+
+            `type` = `https://nexusbattles.upb.edu.co/errors/forbidden`.
+
+            Notese que un token ausente responde **403, no 401**: el
+            interceptor no distingue «no te has identificado» de «no puedes»,
+            y audita el intento como `SECURITY_BYPASS_ATTEMPT` en
+            ms-cumplimiento en los dos casos.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+              example:
+                type: https://nexusbattles.upb.edu.co/errors/forbidden
+                title: Acceso denegado
+                status: 403
+                detail: Token de autenticación inválido o expirado
+                instance: /api/v1/auth/password
+        '422':
+          description: |
+            La peticion esta bien formada pero el cambio no procede. Cuatro
+            motivos, distinguibles por `type`:
+
+            - `https://nexusbattles.upb.edu.co/errors/contrasena-actual-incorrecta`
+              — CA-02: la actual no coincide. **Cuenta como intento fallido**
+              (RF-AUT-009), asi que repetirlo acaba bloqueando la cuenta y
+              pasando al 423.
+            - `https://nexusbattles.upb.edu.co/errors/contrasena-no-cumple-politica`
+              — CA-03: la nueva incumple la politica; el `detail` dice que
+              regla falla.
+            - `https://nexusbattles.upb.edu.co/errors/contrasena-repetida`
+              — CA-03: la nueva es igual a la anterior.
+            - `https://nexusbattles.upb.edu.co/errors/contrasena-confirmacion-no-coincide`
+              — `confirmacion` no coincide con `nuevaPassword`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+              example:
+                type: https://nexusbattles.upb.edu.co/errors/contrasena-repetida
+                title: La contraseña nueva es igual a la anterior
+                status: 422
+                detail: La contraseña nueva no puede ser igual a la actual.
+        '423':
+          description: |
+            Cuenta bloqueada temporalmente por intentos fallidos (RF-AUT-009).
+            `type` =
+            `https://nexusbattles.upb.edu.co/errors/cuenta-bloqueada`. Se
+            separa de los 422 porque es transitorio: la misma peticion
+            funcionara sola pasado el bloqueo.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/v1/auth/jwks:
+    get:
+      tags: [plataforma]
+      operationId: obtenerJwks
+      summary: Juego de claves publicas para verificar los tokens emitidos
+      description: |
+        Publica la clave **publica** con la que cualquiera puede verificar los
+        tokens que emite este servicio, en el formato JWK Set de la RFC 7517.
+
+        **Es lo que permite a los otros diecinueve servicios verificar un token
+        sin compartir ningun secreto** (ADR-005). Cada servidor de recursos lo
+        configura como `jwk-set-uri` (`IDENTIDAD_JWKS_URL`) y Spring Security
+        se encarga del resto: descargarlo, cachearlo y elegir la clave por el
+        `kid` de la cabecera del token. Es el equivalente exacto del
+        `/protocol/openid-connect/certs` de Keycloak, asi que el dia que la
+        identidad se mueva a Keycloak solo cambia esa URL en la configuracion
+        de cada servicio.
+
+        **Es publica a proposito y no expone ningun secreto**: una clave
+        publica sirve para comprobar firmas, nunca para producirlas. Tiene que
+        ser accesible sin autenticacion porque la consulta precisamente quien
+        todavia no ha validado ningun token.
+      security: []
+      responses:
+        '200':
+          description: |
+            Juego de claves. Hoy contiene siempre exactamente una; un
+            consumidor debe elegir por `kid` y no asumir que la lista tenga un
+            solo elemento, porque una rotacion de clave publicaria dos a la
+            vez.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JuegoDeClaves'
+              example:
+                keys:
+                  - kty: RSA
+                    use: sig
+                    alg: RS256
+                    kid: ms-identidad-1
+                    n: 0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4
+                    e: AQAB
+
+  /api/v1/auth/token:
+    post:
+      tags: [plataforma]
+      operationId: emitirTokenDeServicio
+      summary: Emite una credencial de servicio (grant client_credentials)
+      description: |
+        Grant `client_credentials` de la **RFC 6749 §4.4** — ADR-005. Es la
+        parte de un servidor de autorizacion que la plataforma necesita hoy y
+        no tiene: un lugar donde un servicio presente su `client_id` y su
+        secreto y reciba un token con el que hablarle a otro servicio.
+
+        Habla el mismo protocolo que Keycloak en
+        `/protocol/openid-connect/token`, asi que el lado cliente de
+        `plataforma-seguridad` (`TokenDeServicioOAuth2`) lo consume sin
+        cambios: basta apuntar `DIRECTORIO_ACTIVO_URL` aqui. Esa es la razon
+        de que esta operacion no siga ninguna convencion del resto del
+        repositorio —ni el cuerpo, ni el formato de error, ni las cabeceras—:
+        sigue la RFC para poder ser sustituida por Keycloak sin tocar a los
+        consumidores.
+
+        **El cuerpo es `application/x-www-form-urlencoded`**, no JSON. El
+        cliente se autentica de una de dos formas, no las dos a la vez:
+
+        - cabecera `Authorization: Basic <base64(client_id:client_secret)>`
+          (`client_secret_basic`, la forma por defecto de Spring); **si la
+          cabecera `Basic` viene presente pero mal formada, se trata como
+          credencial ausente y responde 400**, sin mirar los parametros del
+          cuerpo;
+        - o `client_id` y `client_secret` en el cuerpo
+          (`client_secret_post`).
+
+        **Los errores NO son problem details, son objetos de error de OAuth2**
+        (`error` / `error_description`), como exige la RFC. Un consumidor que
+        espere `type`/`title`/`status` no encontrara ninguno de los tres.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PeticionDeTokenDeServicio'
+            example:
+              grant_type: client_credentials
+              client_id: salas-partidas
+              client_secret: secreto-del-cliente
+      responses:
+        '200':
+          description: |
+            Credencial emitida. Se devuelve con `Cache-Control: no-store` y
+            `Pragma: no-cache` (RFC 6749 §5.1): un token de portador que
+            quedara en una cache intermedia lo puede usar cualquiera que lea
+            esa cache.
+          headers:
+            Cache-Control:
+              description: Siempre `no-store`.
+              schema:
+                type: string
+            Pragma:
+              description: Siempre `no-cache`.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenDeServicio'
+              example:
+                access_token: eyJraWQiOiJrMSIsImFsZyI6IlJTMjU2In0.eyJyb2wiOiJTRVJWSUNJTyJ9.firma
+                token_type: Bearer
+                expires_in: 900
+        '400':
+          description: |
+            Peticion mal formada. `error` toma uno de dos valores:
+
+            - `invalid_request` — falta `grant_type`, o falta la
+              autenticacion del cliente (ni `Basic` utilizable ni
+              `client_id`/`client_secret` en el cuerpo);
+            - `unsupported_grant_type` — se pidio un grant distinto de
+              `client_credentials`, que es el unico admitido.
+
+            Objeto de error de OAuth2, no problem details.
+          headers:
+            Cache-Control:
+              description: Siempre `no-store`.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOAuth2'
+              example:
+                error: unsupported_grant_type
+                error_description: Solo se admite el grant client_credentials.
+        '401':
+          description: |
+            Cliente desconocido o secreto incorrecto. `error` =
+            `invalid_client`. **No dice cual de las dos cosas fallo**, a
+            proposito: distinguirlas convertiria esta ruta en una forma de
+            averiguar que `client_id` existen. Lleva cabecera
+            `WWW-Authenticate` como exige la RFC 6749 §5.2 para un fallo de
+            autenticacion de cliente.
+
+            Objeto de error de OAuth2, no problem details.
+          headers:
+            WWW-Authenticate:
+              description: '`Basic realm="ms-identidad"`.'
+              schema:
+                type: string
+            Cache-Control:
+              description: Siempre `no-store`.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOAuth2'
+              example:
+                error: invalid_client
+                error_description: Cliente desconocido o secreto incorrecto.
+
+components:
+  securitySchemes:
+    tokenDeUsuario:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Token de sesion de una persona, emitido por **este mismo servicio** en
+        `POST /api/v1/auth/login` (ADR-002). El emisor real de la plataforma es
+        ms-identidad, no Keycloak: Keycloak no esta aprovisionado en ningun
+        entorno (ADR-005). Su forma esta descrita en `info.description`.
+
+  schemas:
+    RegistroRequest:
+      type: object
+      description: |
+        Formulario `multipart/form-data` del alta. Los cinco campos de texto
+        son obligatorios (`@NotBlank`); el archivo no.
+      required: [nombres, apellidos, email, password, apodo]
+      properties:
+        nombres:
+          type: string
+        apellidos:
+          type: string
+        email:
+          type: string
+          format: email
+          description: Unico en la plataforma; un correo ya registrado responde 400.
+        password:
+          type: string
+          format: password
+          description: |
+            Sujeta a la politica de contrasenas del servicio, que se valida
+            aparte del formulario. El incumplimiento sale por el 400 de texto
+            plano.
+        apodo:
+          type: string
+          description: |
+            Unico en la plataforma y sujeto a la lista negra de terminos
+            prohibidos (HU-ADM-002). Es ademas el `sub` del JWT, y es
+            **mutable**: ver la advertencia sobre `sub` y `uid` en
+            `info.description`.
+        avatar:
+          type: string
+          format: binary
+          description: |
+            Foto subida por el usuario. Opcional: sin archivo, el alta se
+            completa igual. Antes era una URL de una galeria fija; que ahora
+            sea un archivo es lo que obligo a que esta operacion deje de
+            aceptar JSON.
+
+    UsuarioRegistrado:
+      type: object
+      additionalProperties: true
+      description: |
+        **Aqui el contrato describe una forma que no deberia darse por
+        estable.** La operacion devuelve la **entidad JPA `Usuario`
+        serializada por Jackson**, no un DTO de salida: cualquier campo que se
+        anada a la entidad aparecera en esta respuesta sin que nadie lo
+        decida, y cualquier renombrado la cambiara. Por eso el esquema es
+        `type: object` con `additionalProperties: true` y solo se enumeran los
+        campos que hoy se observan; un consumidor no debe asumir que la lista
+        sea exhaustiva ni que vaya a mantenerse.
+
+        Lo unico que si esta garantizado por el codigo es la **ausencia de la
+        contrasena**: el campo lleva `@JsonProperty(access = WRITE_ONLY)`, asi
+        que nunca se serializa.
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: |
+            Clave primaria interna, secuencial. **No usarla como referencia
+            entre servicios**: es enumerable desde fuera. La referencia estable
+            es `publicId` (ADR-002).
+        publicId:
+          type: [string, 'null']
+          format: uuid
+          description: |
+            Identificador publico y estable; es el que viaja en el JWT como
+            claim `uid`. **Puede ser nulo** en usuarios creados antes de que el
+            campo existiera: la columna nace anulable porque el servicio corre
+            con `ddl-auto=update` y no podia anadirse `NOT NULL` sobre una
+            tabla con filas. Los de alta nueva siempre lo traen.
+        apodo:
+          type: string
+        email:
+          type: string
+          format: email
+        estado:
+          type: string
+          description: '`ACTIVO` en un alta nueva.'
+        rol:
+          type: object
+          additionalProperties: true
+          description: |
+            Rol asignado, serializado como objeto anidado (entidad `RolEntity`).
+            Un alta nueva recibe siempre `JUGADOR`.
+        intentosFallidos:
+          type: integer
+        bloqueadoHasta:
+          type: [string, 'null']
+          format: date-time
+        suspendidoHasta:
+          type: [string, 'null']
+          format: date-time
+        versionToken:
+          type: integer
+          description: Version de token vigente (HU-RBAC-003); empieza en 0.
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+
+    LoginResponse:
+      type: object
+      description: |
+        Resultado de un inicio de sesion correcto. Trae de forma redundante
+        algunos datos que ya van dentro del JWT (`apodo`, `rol`) para que la
+        interfaz no tenga que decodificarlo; la fuente de verdad para
+        autorizar sigue siendo el token firmado, no estos campos.
+      required: [usuarioId, apodo, email, rol, dispositivoNuevo, token]
+      properties:
+        usuarioId:
+          type: integer
+          format: int64
+          description: |
+            Clave primaria interna del usuario, no el `uid` publico. Para
+            referenciar al jugador desde otro servicio se usa el claim `uid`
+            del token (ADR-002).
+        apodo:
+          type: string
+        email:
+          type: string
+          format: email
+        rol:
+          type: string
+          description: Nombre del rol, en singular (`JUGADOR`, `MODERADOR`...).
+        dispositivoNuevo:
+          type: boolean
+          description: |
+            El acceso viene de un dispositivo no reconocido, deducido de
+            `X-Forwarded-For` y `User-Agent`. Es lo que dispara el aviso de
+            acceso por correo.
+        token:
+          type: string
+          description: |
+            El JWT de la sesion. Su forma —firma, cabecera y claims— esta
+            descrita en `info.description`, porque es lo que consumen los
+            otros diecinueve servicios.
+
+    SolicitarRestablecimientoRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          description: |
+            Que el correo exista o no, no cambia la respuesta: ver la nota
+            anti-enumeracion en la operacion.
+
+    CanjearTokenRequest:
+      type: object
+      required: [token, nuevaPassword]
+      properties:
+        token:
+          type: string
+          description: Codigo de un solo uso recibido por correo.
+        nuevaPassword:
+          type: string
+          format: password
+          minLength: 9
+          description: |
+            Minimo 9 caracteres por el formulario, y ademas sujeta a la
+            politica completa del servicio (RF-AUT-002), que se valida aparte.
+
+    CambiarPasswordRequest:
+      type: object
+      description: |
+        **No lleva identificador de usuario, y es deliberado:** quien cambia la
+        contrasena es quien firma el token. Aceptar un identificador aqui
+        permitiria cambiarle la clave a otro.
+      required: [passwordActual, nuevaPassword, confirmacion]
+      properties:
+        passwordActual:
+          type: string
+          format: password
+          description: Si no coincide, cuenta como intento fallido (RF-AUT-009).
+        nuevaPassword:
+          type: string
+          format: password
+        confirmacion:
+          type: string
+          format: password
+          description: Debe coincidir exactamente con `nuevaPassword`.
+
+    CambioDePasswordResponse:
+      type: object
+      required: [token, mensaje]
+      properties:
+        token:
+          type: string
+          description: |
+            JWT nuevo con la version de token vigente, para esta sesion. **Hay
+            que guardarlo en lugar del anterior**: el cambio de contrasena
+            invalido el que se acaba de usar.
+        mensaje:
+          type: string
+          description: Confirmacion legible.
+
+    JuegoDeClaves:
+      type: object
+      description: JWK Set de la RFC 7517, con las claves publicas de firma.
+      required: [keys]
+      properties:
+        keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClavePublica'
+
+    ClavePublica:
+      type: object
+      description: |
+        Clave publica RSA en formato JWK. `n` y `e` van en base64url sin
+        relleno y **sin el byte de signo** que `BigInteger` antepone cuando el
+        bit mas alto esta puesto (RFC 7518 §6.3.1): con ese cero delante, el
+        modulo publicado no coincidiria con el de la clave y ninguna firma
+        verificaria.
+      required: [kty, use, alg, kid, n, e]
+      properties:
+        kty:
+          type: string
+          description: Siempre `RSA`.
+        use:
+          type: string
+          description: Siempre `sig` — la clave es para verificar firmas.
+        alg:
+          type: string
+          description: Siempre `RS256`.
+        kid:
+          type: string
+          description: |
+            Identificador de la clave. Es el que aparece en la cabecera del
+            JWT y por el que el verificador la elige.
+        n:
+          type: string
+          description: Modulo, en base64url sin relleno.
+        e:
+          type: string
+          description: Exponente publico, en base64url sin relleno.
+
+    PeticionDeTokenDeServicio:
+      type: object
+      description: |
+        Formulario `application/x-www-form-urlencoded` de la RFC 6749 §4.4.
+        `client_id` y `client_secret` se declaran opcionales porque la
+        alternativa admitida es la cabecera `Authorization: Basic`; lo que no
+        es opcional es usar una de las dos vias.
+      required: [grant_type]
+      properties:
+        grant_type:
+          type: string
+          enum: [client_credentials]
+          description: |
+            Unico grant admitido. Cualquier otro valor responde 400
+            `unsupported_grant_type`; ausente o en blanco, 400
+            `invalid_request`.
+        client_id:
+          type: string
+          description: Identificador del servicio llamador. Viaja tambien en el `azp` del token emitido.
+        client_secret:
+          type: string
+          format: password
+
+    TokenDeServicio:
+      type: object
+      description: Respuesta de token de la RFC 6749 §5.1.
+      required: [access_token, token_type, expires_in]
+      properties:
+        access_token:
+          type: string
+          description: |
+            JWT firmado con la misma clave RS256 que los tokens de usuario, y
+            verificable por el mismo JWKS. Sus claims son otros: `sub` y `azp`
+            llevan el `client_id` —el `azp` es lo que dice que servicio habla—
+            y `rol` vale `SERVICIO`. No lleva `uid` ni `ver`: no hay ninguna
+            persona detras.
+        token_type:
+          type: string
+          description: Siempre `Bearer`.
+        expires_in:
+          type: integer
+          description: |
+            Vigencia en segundos desde la emision. **900 (15 minutos) por
+            omision**, configurable con `app.servicios.minutos-vigencia`. Es
+            mucho mas corta que las 24 horas del token de usuario: un servicio
+            puede volver a pedirla sin molestar a nadie, asi que no hay razon
+            para que una credencial filtrada siga sirviendo durante un dia.
+
+    ErrorOAuth2:
+      type: object
+      description: |
+        Error de la RFC 6749 §5.2. **No es un problem detail**: no lleva
+        `type`, ni `title`, ni `status` en el cuerpo. Se mantiene asi a
+        proposito para que el lado cliente pueda hablar indistintamente con
+        este emisor o con Keycloak.
+      required: [error, error_description]
+      properties:
+        error:
+          type: string
+          enum: [invalid_request, unsupported_grant_type, invalid_client]
+          description: |
+            Codigo de error de OAuth2. `invalid_request` y
+            `unsupported_grant_type` salen con 400; `invalid_client`, con 401.
+        error_description:
+          type: string
+          description: Explicacion legible, sin distinguir cliente inexistente de secreto incorrecto.
+
+    ProblemDetail:
+      type: object
+      description: |
+        Problem details RFC 7807 (regla 4). **Solo lo devuelven
+        `PUT /api/v1/auth/password` y el 403 del interceptor**; el resto de
+        `/auth` responde texto plano y `/auth/token` responde errores de
+        OAuth2. La interfaz decide por `type`, nunca por el texto.
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: |
+            Identificador estable del tipo de error, bajo
+            `https://nexusbattles.upb.edu.co/errors/`.
+        title:
+          type: string
+          description: Titulo corto.
+        status:
+          type: integer
+          description: Codigo HTTP.
+        detail:
+          type: string
+          description: Explicacion legible.
+        instance:
+          type: string
+          description: Ruta que produjo el error.

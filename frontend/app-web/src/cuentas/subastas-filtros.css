@@ -23,69 +23,6 @@
   }
 }
 
-/* --- El panel plegado (UX-R4.8) ---------------------------------------
- * A una columna el panel se apila encima de los resultados, y son unos
- * 1.400 px de filtros antes de la primera subasta. Se pliega para que el
- * mercado se vea al entrar. En ancho no se pliega nada: el resumen se
- * esconde y `subastas.js` lo deja abierto. */
-
-.subastas-filtros__resumen {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--e-2);
-  min-height: 44px;
-  padding: var(--e-2) var(--e-4);
-  border: 1px solid var(--borde-int);
-  border-radius: var(--radio);
-  background: var(--superficie);
-  font-family: var(--fuente-titulo);
-  font-weight: 600;
-  color: var(--texto);
-  cursor: pointer;
-  list-style: none;
-}
-
-/* Safari dibuja su propio triangulo por fuera de `list-style`. */
-.subastas-filtros__resumen::-webkit-details-marker {
-  display: none;
-}
-
-/* El indicador es del kit y gira al abrir, para que se vea que hay mas. */
-.subastas-filtros__resumen::after {
-  content: '';
-  width: 10px;
-  height: 10px;
-  border-right: 2px solid currentColor;
-  border-bottom: 2px solid currentColor;
-  transform: rotate(45deg) translate(-2px, -2px);
-  transition: transform var(--transicion, 150ms ease);
-}
-
-.subastas-filtros__plegable[open] > .subastas-filtros__resumen::after {
-  transform: rotate(225deg) translate(-2px, -2px);
-}
-
-.subastas-filtros__resumen:focus-visible {
-  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
-  outline-offset: 2px;
-}
-
-/* El panel abierto se separa de su resumen. */
-.subastas-filtros__plegable[open] > .subastas-filtros {
-  margin-top: var(--e-3);
-}
-
-@media (min-width: 900px) {
-  .subastas-filtros__resumen {
-    display: none;
-  }
-
-  .subastas-filtros__plegable[open] > .subastas-filtros {
-    margin-top: 0;
-  }
-}
-
 /* --- El panel en si --------------------------------------------------- */
 
 .subastas-filtros {
