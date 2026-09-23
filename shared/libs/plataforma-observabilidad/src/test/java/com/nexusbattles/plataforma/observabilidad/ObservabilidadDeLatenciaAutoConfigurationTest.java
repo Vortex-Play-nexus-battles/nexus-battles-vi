@@ -40,25 +40,37 @@ class ObservabilidadDeLatenciaAutoConfigurationTest {
     }
 
     @Test
-    void sinPercentilConfiguradoLaMedicionSigueActivaYElObjetivoQuedaVacio() {
-        // La medicion no depende de ninguna decision pendiente: tiene que correr
-        // en los veinte modulos desde el Sprint 1. Lo que espera al Product
-        // Owner (CA-03) es la EVALUACION, no la recoleccion.
+    void unServicioQueNoConfiguraNadaMideYEvaluaAlP95DeAdr006() {
+        // Un modulo que no toca su application.yml —el caso de dieciocho de
+        // los veinte— mide y ademas puede evaluar. Antes de ADR-006 el
+        // objetivo quedaba vacio y el informe respondia 409 para siempre.
         contexto.run(ambiente -> {
             assertThat(ambiente).hasSingleBean(FiltroDeLatencia.class);
-            assertThat(ambiente.getBean(PropiedadesDeLatencia.class).objetivo()).isEmpty();
+            ObjetivoDeLatencia objetivo = ambiente.getBean(PropiedadesDeLatencia.class).objetivo();
+            assertThat(objetivo.nombre()).isEqualTo("p95");
+            assertThat(objetivo.objetivoMs()).isEqualTo(500);
         });
     }
 
     @Test
-    void elPercentilAprobadoPorElProductOwnerEntraPorVariableDeEntorno() {
+    void elPercentilSeSigueCambiandoPorVariableDeEntorno() {
         contexto.withPropertyValues("latencia.percentil=99", "latencia.objetivo-ms=500")
                 .run(ambiente -> {
-                    ObjetivoDeLatencia objetivo =
-                            ambiente.getBean(PropiedadesDeLatencia.class).objetivo().orElseThrow();
+                    ObjetivoDeLatencia objetivo = ambiente.getBean(PropiedadesDeLatencia.class).objetivo();
                     assertThat(objetivo.nombre()).isEqualTo("p99");
                     assertThat(objetivo.objetivoMs()).isEqualTo(500);
                 });
+    }
+
+    @Test
+    void unaVariableDeEntornoVaciaVuelveAlValorPorOmisionEnVezDeRomperElArranque() {
+        // `LATENCIA_PERCENTIL=` (definida pero vacia) es un caso real en un
+        // compose mal rellenado. Tiene que degradar al p95 de ADR-006, no
+        // impedir que el servicio arranque.
+        contexto.withPropertyValues("latencia.percentil=")
+                .run(ambiente -> assertThat(
+                        ambiente.getBean(PropiedadesDeLatencia.class).objetivo().nombre())
+                        .isEqualTo("p95"));
     }
 
     @Test

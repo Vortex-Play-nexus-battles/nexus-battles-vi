@@ -1,12 +1,8 @@
 package com.nexusbattles.plataforma.metricasplataforma.latencia;
 
-import java.net.URI;
 import java.util.List;
 
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.http.ProblemDetail;
-import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -134,42 +130,17 @@ public class LatenciaController {
     }
 
     /**
-     * El objetivo vigente, o un fallo explicito si el Product Owner no aprobo el
-     * percentil.
+     * El objetivo contra el que se evalua: 500 ms de RNF-REN-001 al percentil
+     * de ADR-006 (p95), o lo que diga {@code LATENCIA_PERCENTIL}.
      *
-     * <p>Aqui es donde vive la consecuencia de CA-03. La <b>medicion</b> corre
-     * igualmente en los veinte modulos desde el Sprint 1 —no depende de ninguna
-     * decision pendiente—, pero <b>evaluar</b> el requisito exige un percentil
-     * acordado. Devolver un informe con un p95 elegido por quien programa seria
-     * fabricar la decision y presentarla al cliente como si estuviera tomada.
+     * <p>Hasta septiembre de 2026 este metodo lanzaba un 409 permanente
+     * («el Product Owner no ha aprobado el percentil»). ADR-006 revisa esa
+     * lectura de CA-03: ningun documento del proyecto fija el percentil y
+     * elegirlo es una convencion de medicion, no una decision de producto.
+     * Mantener la espera dejaba RNF-REN-001 sin poder evaluarse nunca.
      */
     private ObjetivoDeLatencia objetivoVigente() {
-        return propiedades.objetivo().orElseThrow(PercentilNoAcordado::new);
-    }
-
-    /**
-     * 409 y no 500: el servicio funciona y esta midiendo. Lo que falta es una
-     * decision de negocio, y el mensaje dice cual y donde se configura.
-     */
-    @ExceptionHandler(PercentilNoAcordado.class)
-    ProblemDetail percentilNoAcordado(PercentilNoAcordado e) {
-        ProblemDetail problema = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
-        problema.setTitle("Percentil de evaluacion no acordado");
-        problema.setType(URI.create("https://nexusbattles.local/errores/percentil-no-acordado"));
-        problema.setProperty("variable", "LATENCIA_PERCENTIL");
-        problema.setProperty("criterio", "HU-REN-001 CA-03");
-        problema.setProperty("muestrasAcumuladas", registro.cuantasMuestras());
-        return problema;
-    }
-
-    /** Configuracion incompleta a proposito: falta la aprobacion del PO. */
-    static class PercentilNoAcordado extends RuntimeException {
-        PercentilNoAcordado() {
-            super("El percentil de evaluacion no esta configurado. RNF-REN-001 se evalua en p95 o en p99 "
-                    + "y CA-03 de HU-REN-001 exige que el Product Owner lo apruebe por escrito. "
-                    + "Cuando lo apruebe, se configura en LATENCIA_PERCENTIL: no hace falta recompilar. "
-                    + "La medicion sigue activa mientras tanto y las muestras se estan acumulando.");
-        }
+        return propiedades.objetivo();
     }
 
     public record InformeResponse(
