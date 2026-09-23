@@ -108,12 +108,24 @@ salas:
   torneos:
     url: ${TORNEOS_URL:}
 
+  # HU-ADM-001 (CA-04): catalogo de parametros de producto. Este servicio lee
+  # de aqui `salas.apuestas.si-gana-la-maquina` (D-02) y `chat.historial.tamano`
+  # (D-16). Vacio = solo los respaldos de mas abajo, sin ninguna peticion.
+  # Si admin-parametros no responde, tambien se usan los respaldos: leer un
+  # parametro nunca tumba una partida (ver LectorDeParametros).
+  parametros:
+    url: ${PARAMETROS_URL:}
+    cache-segundos: ${SALAS_PARAMETROS_CACHE_SEGUNDOS:30}
+
   apuestas:
     # Cada cuanto se reintentan las liquidaciones que el libro dejo pendientes.
     reintento-ms: ${APUESTAS_REINTENTO_MS:60000}
     # Decision funcional NO tomada por ninguna HU: que pasa con lo apostado por
     # los humanos cuando gana la IA, que no tiene bolsa. LIBERAR (por defecto)
     # lo devuelve; CONSUMIR lo cobra sin beneficiario. Ver LiquidarApuesta.
+    #
+    # RESPALDO, no fuente: el valor vigente lo da admin-parametros (D-02). Esto
+    # es lo que se aplica si el catalogo no esta configurado o no responde.
     si-gana-la-maquina: ${APUESTAS_SI_GANA_LA_MAQUINA:LIBERAR}
 
 # HU-DIS-003: degradacion controlada. Cada dependencia externa (inventario,
@@ -155,6 +167,9 @@ chat:
   ws:
     origenes: ${CHAT_WS_ORIGENES:http://localhost:5173}
   historial:
+    # RESPALDO, no fuente: el valor vigente lo da admin-parametros
+    # (`chat.historial.tamano`, D-16). Esto es lo que se aplica si el catalogo
+    # no esta configurado o no responde.
     tamano: ${CHAT_HISTORIAL_TAMANO:50}
 
 # Regla 3: todo servicio expone salud y metricas.

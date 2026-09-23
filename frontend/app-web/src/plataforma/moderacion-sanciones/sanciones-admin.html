@@ -54,16 +54,15 @@
               <option value="BANEO">Baneo definitivo</option>
             </select>
           </label>
+          <!-- El rango NO va escrito aquí. `max="720"` eran los 30 días de
+               `sanciones.suspension.maxima-dias` convertidos a mano: con el
+               parámetro en 2 días el formulario aceptaba 720 horas y el
+               servicio respondía 400. `montarPanelDeModeracion` pone el
+               mínimo, el máximo y esta etiqueta desde
+               GET /api/v1/sanciones/limites. -->
           <label class="campo" data-solo="SUSPENSION">
-            <span class="campo__etiqueta">Duración en horas (1 hora a 30 días)</span>
-            <input
-              class="campo__control"
-              type="number"
-              name="duracionHoras"
-              min="1"
-              max="720"
-              value="24"
-            />
+            <span class="campo__etiqueta" data-campo="rango-suspension">Duración en horas</span>
+            <input class="campo__control" type="number" name="duracionHoras" min="1" value="24" />
           </label>
           <label class="campo">
             <span class="campo__etiqueta">Motivo (obligatorio)</span>

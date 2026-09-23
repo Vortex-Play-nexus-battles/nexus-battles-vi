@@ -537,9 +537,7 @@ jobs:
           APP_ENV: ${{ secrets.APP_ENV }}
           LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
           DB_RELACIONAL_URL: ${{ secrets.DB_RELACIONAL_URL }}
-          DB_NO_RELACIONAL_URL: ${{ secrets.DB_NO_RELACIONAL_URL }}
           DB_MEMORIA_URL: ${{ secrets.DB_MEMORIA_URL }}
-          COLA_MENSAJES_URL: ${{ secrets.COLA_MENSAJES_URL }}
           DIRECTORIO_ACTIVO_URL: ${{ secrets.DIRECTORIO_ACTIVO_URL }}
           # ADR-002: de donde baja la plataforma la clave publica con la que
           # verifica los tokens de usuario. Hoy la publica ms-identidad; el dia
@@ -549,10 +547,6 @@ jobs:
           DIRECTORIO_ACTIVO_CLIENT_ID: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_ID }}
           DIRECTORIO_ACTIVO_CLIENT_SECRET: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_SECRET }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
-          SMTP_USER: ${{ secrets.SMTP_USER }}
-          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-          PASARELA_PAGOS_API_KEY: ${{ secrets.PASARELA_PAGOS_API_KEY }}
-          WEBSOCKET_URL: ${{ secrets.WEBSOCKET_URL }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASS: ${{ secrets.DB_PASS }}
           # Configuracion NO secreta de los servicios de plataforma (nombres
@@ -613,7 +607,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,SIMULACRO_REVERSION,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,SMTP_PORT,LISTA_NEGRA_VERIFICAR_URL,SALAS_WS_ORIGENES,CHAT_WS_ORIGENES,CHAT_HISTORIAL_TAMANO,NOTIFICACIONES_WS_ORIGENES,COMENTARIOS_FORMATOS_IMAGEN,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,SIMULACRO_REVERSION,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,SMTP_PORT,LISTA_NEGRA_VERIFICAR_URL,SALAS_WS_ORIGENES,CHAT_WS_ORIGENES,CHAT_HISTORIAL_TAMANO,NOTIFICACIONES_WS_ORIGENES,COMENTARIOS_FORMATOS_IMAGEN,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -704,7 +698,8 @@ jobs:
   # llave (secrets *_CONTENIDO_DEV del entorno "dev"). Lo pide el propio
   # documento de plataforma ("desplegar por perfil de dominio, no los 20
   # servicios a la vez") y lo motiva el tamano del host de plataforma
-  # (t3.micro, 1 GB): ahi no caben 20 JVM. Los servicios de contenido solo
+  # (t3.small, 2 GiB): con nueve servicios, el borde y dos bases encima, ahi
+  # no caben 20 JVM. Los servicios de contenido solo
   # leen variables propias (URIs de Mongo internas, URLs entre servicios
   # del mismo compose), asi que no necesitan los secrets de aplicacion de
   # plataforma: desplegar.sh los deja vacios en el .env sin fallar.
@@ -739,14 +734,26 @@ jobs:
       # Ahora los dos hosts pasan por la misma accion. Es idempotente: con el
       # host ya encendido no hace nada y no cuesta un segundo de mas.
       # ------------------------------------------------------------------
-      - name: Asumir el rol de AWS por OIDC (sin claves)
+      # El host de contenido NO vive en la cuenta de AWS de plataforma: es la
+      # instancia nexus-contenido-dev de la cuenta gratuita del grupo 2
+      # (infrastructure/entornos/contenido/, IP elastica 34.193.90.11, siempre
+      # encendida). El rol OIDC de vars.AWS_ROLE_ARN pertenece a la otra cuenta,
+      # asi que buscar ahi la instancia por etiqueta fallaba siempre ("No existe
+      # ninguna instancia con la etiqueta Name=nexus-contenido-dev", corridas del
+      # 23-sep 05:59, 12:22, 15:58 y 19:47) y ningun despliegue de contenido
+      # volvia a salir. Los dos pasos corren solo si alguien configura un rol
+      # OIDC en la cuenta del grupo 2 (vars.AWS_ROLE_ARN_CONTENIDO); mientras
+      # tanto se omiten y el job sigue como antes de R9.2.
+      - name: Asumir el rol de AWS del grupo 2 por OIDC (sin claves)
+        if: vars.AWS_ROLE_ARN_CONTENIDO != ''
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN_CONTENIDO }}
           role-session-name: cd-contenido-dev-${{ github.run_id }}
-          aws-region: ${{ vars.AWS_REGION }}
+          aws-region: ${{ vars.AWS_REGION_CONTENIDO || 'us-east-1' }}
 
       - name: Asegurar que el host de contenido esta encendido
+        if: vars.AWS_ROLE_ARN_CONTENIDO != ''
         uses: ./.github/actions/asegurar-host-encendido
         with:
           nombre-instancia: nexus-contenido-dev
@@ -773,15 +780,17 @@ jobs:
           SERVICIOS_PUERTOS: ${{ steps.lista.outputs.lista }}
           APP_ENV: dev
           LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
-          # R9.7 — este job NO repartia el emisor, aunque los otros tres si.
-          # Los cuatro servicios de contenido validan tokens de ms-identidad
-          # (ADR-002 / ADR-005): heroes y motor-combate desde R8.1, e
-          # inventario y productos desde R9.7. Hasta ahora funcionaban solo
-          # por el valor por omision de docker-compose.contenido.yml, que
-          # lleva la IP elastica escrita: correcto por casualidad, y no
-          # sobreescribible sin editar el repositorio. Con la variable aqui,
-          # el dia que el emisor cambie de sitio basta cambiar la variable.
-          IDENTIDAD_JWKS_URL: ${{ vars.IDENTIDAD_JWKS_URL }}
+          # R9.7 — los cuatro servicios de contenido validan tokens de
+          # ms-identidad (ADR-002 / ADR-005). Pero vars.IDENTIDAD_JWKS_URL vale
+          # http://srv-ms-identidad:8089/..., el nombre de contenedor de la red
+          # de Compose del host de plataforma, que en el host de contenido no
+          # resuelve: con ese valor los cuatro servicios rechazaban TODOS los
+          # tokens (UnknownHost al bajar el JWKS; corridas 1b489c7 y 5d76926).
+          # Este job reparte una variable propia; vacia, docker-compose.contenido.yml
+          # cae a su valor por omision, la URL publica del emisor por su IP
+          # elastica. El dia que el emisor cambie de sitio se fija
+          # vars.IDENTIDAD_JWKS_URL_CONTENIDO con la URL alcanzable desde fuera.
+          IDENTIDAD_JWKS_URL: ${{ vars.IDENTIDAD_JWKS_URL_CONTENIDO }}
         with:
           host: ${{ secrets.DEPLOY_HOST_CONTENIDO_DEV }}
           username: ${{ secrets.SSH_USER_CONTENIDO_DEV }}
@@ -842,9 +851,7 @@ jobs:
           APP_ENV: ${{ secrets.APP_ENV }}
           LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
           DB_RELACIONAL_URL: ${{ secrets.DB_RELACIONAL_URL }}
-          DB_NO_RELACIONAL_URL: ${{ secrets.DB_NO_RELACIONAL_URL }}
           DB_MEMORIA_URL: ${{ secrets.DB_MEMORIA_URL }}
-          COLA_MENSAJES_URL: ${{ secrets.COLA_MENSAJES_URL }}
           DIRECTORIO_ACTIVO_URL: ${{ secrets.DIRECTORIO_ACTIVO_URL }}
           # ADR-002: de donde baja la plataforma la clave publica con la que
           # verifica los tokens de usuario. Hoy la publica ms-identidad; el dia
@@ -854,10 +861,6 @@ jobs:
           DIRECTORIO_ACTIVO_CLIENT_ID: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_ID }}
           DIRECTORIO_ACTIVO_CLIENT_SECRET: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_SECRET }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
-          SMTP_USER: ${{ secrets.SMTP_USER }}
-          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-          PASARELA_PAGOS_API_KEY: ${{ secrets.PASARELA_PAGOS_API_KEY }}
-          WEBSOCKET_URL: ${{ secrets.WEBSOCKET_URL }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASS: ${{ secrets.DB_PASS }}
           # PENDIENTE (TODO_*): ver el mismo comentario en el job "Desplegar
@@ -897,7 +900,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -959,9 +962,7 @@ jobs:
           APP_ENV: ${{ secrets.APP_ENV }}
           LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
           DB_RELACIONAL_URL: ${{ secrets.DB_RELACIONAL_URL }}
-          DB_NO_RELACIONAL_URL: ${{ secrets.DB_NO_RELACIONAL_URL }}
           DB_MEMORIA_URL: ${{ secrets.DB_MEMORIA_URL }}
-          COLA_MENSAJES_URL: ${{ secrets.COLA_MENSAJES_URL }}
           DIRECTORIO_ACTIVO_URL: ${{ secrets.DIRECTORIO_ACTIVO_URL }}
           # ADR-002: de donde baja la plataforma la clave publica con la que
           # verifica los tokens de usuario. Hoy la publica ms-identidad; el dia
@@ -971,10 +972,6 @@ jobs:
           DIRECTORIO_ACTIVO_CLIENT_ID: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_ID }}
           DIRECTORIO_ACTIVO_CLIENT_SECRET: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_SECRET }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
-          SMTP_USER: ${{ secrets.SMTP_USER }}
-          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-          PASARELA_PAGOS_API_KEY: ${{ secrets.PASARELA_PAGOS_API_KEY }}
-          WEBSOCKET_URL: ${{ secrets.WEBSOCKET_URL }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASS: ${{ secrets.DB_PASS }}
           # PENDIENTE (TODO_*): mismos 3 secrets de ms-identidad que en
@@ -1021,7 +1018,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_NO_RELACIONAL_URL,DB_MEMORIA_URL,COLA_MENSAJES_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,PASARELA_PAGOS_API_KEY,WEBSOCKET_URL,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh

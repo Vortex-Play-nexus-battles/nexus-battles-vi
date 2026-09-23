@@ -18,8 +18,11 @@ import {
   generarConsejoTactico,
   calcularEstadoTopesConcurrencia,
   ControladorSubastas,
+  rarezaVisible,
+  nivelRequeridoVisible,
   SUBASTAS_INICIALES,
   HEROES_BASE,
+  EVENTOS_CIERRE_DEFAULT,
 } from './pujas.js';
 
 describe('HU-SUB-004 - Reglas de Negocio de Subastas y Pujas', () => {
@@ -153,6 +156,10 @@ describe('ControladorSubastas - Interacción y Flujo DOM', () => {
       contenedor,
       subastas: SUBASTAS_INICIALES,
       heroes: HEROES_BASE,
+      // FI-R1 — los tres bancos se pasan a proposito. Ya no son el valor por
+      // defecto del controlador: la pantalla real arranca sin heroes y sin
+      // desenlaces, y estas pruebas ejercitan la version poblada de las vistas.
+      eventosCierre: EVENTOS_CIERRE_DEFAULT,
     });
     controlador.render();
   });
@@ -875,5 +882,162 @@ describe('UX-R2.8c - un servicio caido no se presenta como mercado vacío', () =
 
     controlador.destruir();
     contenedor.remove();
+  });
+});
+
+/**
+ * FI-R1 — lo que la pantalla NO puede decir cuando no lo sabe.
+ *
+ * Cada prueba de aqui correspondia a algo que la pantalla afirmaba sin tener
+ * el dato: un heroe que no es de nadie, una rareza inventada, un nivel
+ * requerido que el contrato de subastas no trae, un veredicto de
+ * compatibilidad citando RN-INV-004 sobre un cero, y un recuento de cierres
+ * («3 CERRARON») igual para todo el mundo. Son pruebas de conducta: miran lo
+ * que sale en pantalla, no como esta escrito el modulo.
+ */
+describe('FI-R1 - la pantalla no rellena lo que no sabe', () => {
+  const contenedores = [];
+
+  function montar(extra = {}) {
+    const contenedor = document.createElement('div');
+    document.body.appendChild(contenedor);
+    contenedores.push(contenedor);
+    const controlador = new ControladorSubastas({ contenedor, ...extra });
+    controlador.render();
+    return { contenedor, controlador };
+  }
+
+  afterEach(() => {
+    let c = contenedores.pop();
+    while (c) {
+      c.remove();
+      c = contenedores.pop();
+    }
+  });
+
+  test('sin heroes inyectados el controlador no arranca con ninguno', () => {
+    const { controlador } = montar({ subastas: SUBASTAS_INICIALES });
+    expect(controlador.heroes).toEqual([]);
+    expect(controlador.heroeId).toBeNull();
+    expect(controlador.getHeroeActivo()).toBeNull();
+  });
+
+  test('la ficha de subasta sin heroes no afirma compatibilidad ni ensena un selector', () => {
+    const { contenedor, controlador } = montar({ subastas: SUBASTAS_INICIALES });
+    controlador.abrirDetalle(SUBASTAS_INICIALES[0].id);
+
+    expect(contenedor.querySelector('.selector-heroes-botones')).toBeNull();
+    expect(contenedor.querySelector('.tabla-comparacion')).toBeNull();
+    expect(contenedor.textContent).not.toContain('cumple el nivel requerido');
+    expect(contenedor.textContent).not.toContain('undefined');
+    expect(contenedor.querySelector('.aviso-sin-comparativa')).not.toBeNull();
+  });
+
+  test('con heroe y objeto completos la comparativa si aparece', () => {
+    const { contenedor, controlador } = montar({
+      subastas: SUBASTAS_INICIALES,
+      heroes: HEROES_BASE,
+    });
+    controlador.abrirDetalle(SUBASTAS_INICIALES[0].id);
+
+    expect(contenedor.querySelector('.selector-heroes-botones')).not.toBeNull();
+    expect(contenedor.querySelector('.tabla-comparacion')).not.toBeNull();
+    expect(contenedor.querySelector('.aviso-sin-comparativa')).toBeNull();
+  });
+
+  test('un objeto sin nivel ni aporte no se compara aunque haya heroe', () => {
+    const sinDatos = {
+      ...SUBASTAS_INICIALES[0],
+      id: 'sin-datos',
+      nivel: null,
+      aporte: null,
+      rareza: null,
+    };
+    const { contenedor, controlador } = montar({ subastas: [sinDatos], heroes: HEROES_BASE });
+    controlador.abrirDetalle('sin-datos');
+
+    expect(contenedor.querySelector('.tabla-comparacion')).toBeNull();
+    expect(contenedor.textContent).not.toContain('Nivel insuficiente');
+    expect(contenedor.textContent).not.toContain('cumple el nivel requerido');
+    expect(contenedor.querySelector('.aviso-sin-comparativa')).not.toBeNull();
+  });
+
+  test('calcularComparacionHeroe distingue «no se pudo comparar» de «compatible»', () => {
+    const heroe = { nivel: 30, stats: { poder: 100, vida: 500, defensa: 30 } };
+    expect(calcularComparacionHeroe(heroe, { nivel: null, aporte: null }).evaluado).toBe(false);
+    expect(calcularComparacionHeroe(null, { nivel: 5, aporte: { poder: 1 } }).evaluado).toBe(false);
+    expect(
+      calcularComparacionHeroe(heroe, { nivel: 5, aporte: { poder: 1, vida: 0, defensa: 0 } })
+        .evaluado,
+    ).toBe(true);
+  });
+
+  test('una subasta sin rareza no se pinta como «comun»', () => {
+    const sinRareza = { ...SUBASTAS_INICIALES[0], id: 'sin-rareza', rareza: null };
+    const { contenedor } = montar({ subastas: [sinRareza] });
+
+    const tarjeta = contenedor.querySelector('.tarjeta-subasta');
+    expect(tarjeta).not.toBeNull();
+    expect(tarjeta.textContent).not.toContain('COMUN');
+    expect(tarjeta.textContent).not.toContain('COMÚN');
+    expect(tarjeta.querySelector('.badge-comun')).toBeNull();
+    expect(tarjeta.textContent).not.toContain('undefined');
+    expect(tarjeta.textContent).not.toContain('null');
+  });
+
+  test('rarezaVisible no adivina una rareza desconocida', () => {
+    expect(rarezaVisible('epica')).toMatchObject({
+      conocida: true,
+      clase: 'epica',
+      texto: 'EPICA',
+    });
+    expect(rarezaVisible('EPICA').clase).toBe('epica');
+    expect(rarezaVisible(null)).toMatchObject({
+      conocida: false,
+      clase: 'desconocida',
+      texto: null,
+    });
+    expect(rarezaVisible('mitica').conocida).toBe(false);
+    expect(rarezaVisible(undefined).conocida).toBe(false);
+  });
+
+  test('un nivel requerido ausente se dice, no se pinta como nivel 0 ni como null', () => {
+    expect(nivelRequeridoVisible(12)).toBe('Nivel req. 12');
+    expect(nivelRequeridoVisible(null)).not.toContain('null');
+    expect(nivelRequeridoVisible(null)).not.toContain('0');
+    expect(nivelRequeridoVisible(undefined)).toBe(nivelRequeridoVisible(null));
+
+    const sinNivel = { ...SUBASTAS_INICIALES[0], id: 'sin-nivel', nivel: null };
+    const { contenedor } = montar({ subastas: [sinNivel] });
+    const subtitulo = contenedor.querySelector('.tarjeta-subtitulo');
+    expect(subtitulo.textContent).not.toContain('Nivel req. null');
+    expect(subtitulo.textContent).not.toContain('Nivel req. 0');
+  });
+
+  test('sin desenlaces la vista de cierre no dice «0 CERRARON»', () => {
+    const { contenedor, controlador } = montar({ subastas: SUBASTAS_INICIALES });
+    controlador.abrirCierreMultiple();
+
+    expect(contenedor.textContent).not.toContain('CERRARON');
+    expect(contenedor.querySelector('.fila-evento-cierre')).toBeNull();
+    expect(contenedor.textContent).toContain('Todavía no hay resultados de cierre');
+  });
+
+  test('la pestana de cierre no ensena un contador cuando no hay desenlaces', () => {
+    const { contenedor } = montar({ subastas: SUBASTAS_INICIALES });
+    const pestana = contenedor.querySelector('.tab-btn[data-tab="cierre-multiple"]');
+    expect(pestana).not.toBeNull();
+    expect(pestana.querySelector('.badge-tab-neutral')).toBeNull();
+  });
+
+  test('con desenlaces inyectados la vista poblada sigue funcionando', () => {
+    const { contenedor, controlador } = montar({
+      subastas: SUBASTAS_INICIALES,
+      eventosCierre: EVENTOS_CIERRE_DEFAULT,
+    });
+    controlador.abrirCierreMultiple();
+
+    expect(contenedor.textContent).toContain('3 CERRARON');
+    expect(contenedor.querySelectorAll('.fila-evento-cierre').length).toBe(3);
   });
 });

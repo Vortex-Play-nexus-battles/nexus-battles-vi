@@ -60,6 +60,20 @@ public class SancionesService {
         this(sanciones, apelaciones, avisos, reloj, LimitesDeSancion.Fijos.de(minimaHoras, maximaDias, 30));
     }
 
+    /**
+     * Los limites vigentes, para que la interfaz diga el mismo numero que
+     * aplica el servicio (HU-ADM-001 CA-04).
+     *
+     * <p>No es un detalle de presentacion: el plazo de apelacion y el rango de
+     * la suspension son configurables, y una pantalla que los tenga escritos a
+     * mano miente en cuanto el Product Owner los cambie. Cada llamada pasa por
+     * la cache del lector de parametros, asi que preguntar no cuesta una
+     * peticion de red.
+     */
+    public LimitesDeSancion limitesVigentes() {
+        return limites;
+    }
+
     /** Lo que se pide al emitir. {@code confirmacion} solo se mira en el baneo (CA-01 de HU-USR-006). */
     public record SolicitudDeSancion(UUID usuarioId, Sancion.Tipo tipo, String motivo, String politica,
                                      String comentarioId, Long duracionHoras, boolean confirmacion) {
@@ -281,12 +295,28 @@ public class SancionesService {
         };
     }
 
-    static String cuerpoDe(Sancion sancion) {
+    /**
+     * El aviso que le llega al jugador.
+     *
+     * <p><b>El plazo sale del mismo sitio que la validacion.</b> Hasta aqui
+     * esta frase decia «30 dias» escrito a mano mientras {@link #apelar}
+     * rechazaba comparando contra {@code limites.plazoDeApelacion()}, que es
+     * configurable desde admin-parametros. Ese contraste —la validacion leia el
+     * parametro y el aviso no— <b>era</b> el defecto: bastaba que el Product
+     * Owner bajara {@code sanciones.apelacion.plazo-dias} a 7 para que el
+     * sistema le prometiera al sancionado treinta dias de plazo y despues le
+     * rechazara la apelacion al octavo, sin que nada en el codigo lo delatara.
+     *
+     * <p>Por eso este metodo dejo de ser estatico: necesita los limites
+     * vigentes, que son estado del servicio y no una constante.
+     */
+    String cuerpoDe(Sancion sancion) {
         StringBuilder cuerpo = new StringBuilder("Motivo: ").append(sancion.motivo()).append('.');
         if (sancion.politica() != null) {
             cuerpo.append(" Politica: ").append(sancion.politica()).append('.');
         }
-        cuerpo.append(" Puedes apelar dentro de los 30 dias siguientes desde Mi cuenta > Sanciones.");
+        cuerpo.append(" Puedes apelar dentro de los ").append(limites.plazoDeApelacion().toDays())
+                .append(" dias siguientes desde Mi cuenta > Sanciones.");
         return cuerpo.toString();
     }
 

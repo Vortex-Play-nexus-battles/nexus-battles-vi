@@ -213,6 +213,29 @@ class SancionesControllerTest {
     }
 
     @Test
+    @DisplayName("los limites vigentes salen del servicio, no de una constante de la vista (1.3.0)")
+    void limitesVigentes() throws Exception {
+        // El PO baja el plazo a 7 dias y el maximo de suspension a 2: lo que
+        // conteste este endpoint es exactamente lo que va a pintar la vista.
+        when(servicio.limitesVigentes()).thenReturn(LimitesDeSancion.Fijos.de(2, 2, 7));
+
+        mvc.perform(get("/api/v1/sanciones/limites")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeJugador("lyra", JUGADOR)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.suspensionMinimaHoras").value(2))
+                .andExpect(jsonPath("$.suspensionMaximaHoras").value(48))
+                .andExpect(jsonPath("$.suspensionMaximaDias").value(2))
+                .andExpect(jsonPath("$.apelacionPlazoDias").value(7));
+    }
+
+    @Test
+    @DisplayName("los limites exigen sesion: no son publicos como la consulta de sancion activa")
+    void limitesExigenSesion() throws Exception {
+        mvc.perform(get("/api/v1/sanciones/limites")).andExpect(status().isUnauthorized());
+        verifyNoInteractions(servicio);
+    }
+
+    @Test
     @DisplayName("la consulta de sancion activa sigue abierta entre servicios y ahora dice el tipo (1.1.0)")
     void consultaConTipo() throws Exception {
         when(consulta.consultar(JUGADOR)).thenReturn(new ConsultaSancionActivaService.ResultadoSancion(

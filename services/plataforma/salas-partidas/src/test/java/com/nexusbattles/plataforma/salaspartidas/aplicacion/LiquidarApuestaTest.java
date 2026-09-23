@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
@@ -220,6 +221,42 @@ class LiquidarApuestaTest {
                     () -> assertEquals(900, libro.saldoDe(ANA)),
                     () -> assertEquals(0, libro.reservadoDe(ANA)),
                     () -> assertEquals(Map.of(ANA, -100), porJugador(reparto)));
+        }
+
+        /**
+         * D-02 es un parametro, no una constante de arranque: desde R12 su valor
+         * sale del catalogo de admin-parametros. Si se leyera una sola vez al
+         * construir el caso de uso, cambiarlo exigiria reiniciar el servicio y
+         * seria configurable solo de nombre.
+         */
+        @Test
+        @DisplayName("la politica se pregunta en cada liquidacion, no se fija al arrancar")
+        void laPoliticaSeLeeEnCadaLiquidacion() {
+            AtomicReference<LiquidarApuesta.SiGanaLaMaquina> politica =
+                    new AtomicReference<>(LiquidarApuesta.SiGanaLaMaquina.LIBERAR);
+            LiquidarApuesta liquidar = new LiquidarApuesta(salas, liquidaciones, libro,
+                    Clock.fixed(AHORA, ZoneOffset.UTC), politica::get);
+
+            liquidar.alTerminar(contraLaMaquinaPerdida());
+            assertEquals(1_000, libro.saldoDe(ANA), "con LIBERAR se devuelve lo apostado");
+
+            // El PO cambia el parametro. El MISMO objeto tiene que obedecer.
+            politica.set(LiquidarApuesta.SiGanaLaMaquina.CONSUMIR);
+            liquidar.alTerminar(contraLaMaquinaPerdida());
+            assertEquals(900, libro.saldoDe(ANA), "con CONSUMIR la casa se queda con la apuesta");
+        }
+
+        @Test
+        @DisplayName("un proveedor que no da politica no rompe la liquidacion: se libera")
+        void sinPoliticaSeLibera() {
+            LiquidarApuesta liquidar = new LiquidarApuesta(salas, liquidaciones, libro,
+                    Clock.fixed(AHORA, ZoneOffset.UTC), () -> null);
+
+            List<RepartoDeCreditos> reparto = liquidar.alTerminar(contraLaMaquinaPerdida());
+
+            assertAll(
+                    () -> assertEquals(1_000, libro.saldoDe(ANA)),
+                    () -> assertEquals(Map.of(ANA, 0), porJugador(reparto)));
         }
     }
 
