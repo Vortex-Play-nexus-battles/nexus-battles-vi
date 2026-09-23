@@ -1,5 +1,6 @@
 /** HU-PRD-008 - Panel de estado del catálogo. */
 import { consultarEstadisticasCatalogo } from './cliente-productos.js';
+import { h, vaciar } from '../../comun/ui/dom.js';
 
 const TIPOS = [
   ['HEROE', 'Héroes'],
@@ -22,71 +23,131 @@ function cantidad(valor) {
 }
 
 function tarjetasEstado() {
-  return ESTADOS.map(
-    ([clave, etiqueta]) => `
-      <article class="panel-tarjeta panel-tarjeta--estado">
-        <strong data-estado-catalogo="${clave}">0</strong>
-        <span>${etiqueta}</span>
-      </article>`,
-  ).join('');
+  return ESTADOS.map(([clave, etiqueta]) =>
+    h('article', {
+      clase: 'panel-tarjeta panel-tarjeta--estado',
+      hijos: [
+        h('strong', {
+          texto: '0',
+          datos: { estadoCatalogo: clave },
+        }),
+        h('span', { texto: etiqueta }),
+      ],
+    }),
+  );
 }
 
 function tarjetasTipo() {
-  return TIPOS.map(
-    ([clave, etiqueta]) => `
-      <article class="panel-tarjeta panel-tarjeta--tipo">
-        <span>${etiqueta}</span>
-        <strong data-tipo-catalogo="${clave}">0</strong>
-      </article>`,
-  ).join('');
+  return TIPOS.map(([clave, etiqueta]) =>
+    h('article', {
+      clase: 'panel-tarjeta panel-tarjeta--tipo',
+      hijos: [
+        h('span', { texto: etiqueta }),
+        h('strong', {
+          texto: '0',
+          datos: { tipoCatalogo: clave },
+        }),
+      ],
+    }),
+  );
 }
 
-function plantilla() {
-  return `
-    <header class="productos-cabecera">
-      <div>
-        <p class="productos-cabecera__marca">NEXUS BATTLES VI</p>
-        <h1>Estado del catálogo</h1>
-        <p>Consulta las cantidades actuales de productos por tipo y estado.</p>
-      </div>
-      <a class="panel-enlace-crear" href="./productos.html">Crear producto</a>
-    </header>
+function crearVista() {
+  const cabecera = h('header', {
+    clase: 'productos-cabecera',
+    hijos: [
+      h('div', {
+        hijos: [
+          h('p', {
+            clase: 'productos-cabecera__marca',
+            texto: 'NEXUS BATTLES VI',
+          }),
+          h('h1', { texto: 'Estado del catálogo' }),
+          h('p', {
+            texto: 'Consulta las cantidades actuales de productos por tipo y estado.',
+          }),
+        ],
+      }),
+      h('a', {
+        clase: 'panel-enlace-crear',
+        texto: 'Crear producto',
+        atributos: { href: './productos.html' },
+      }),
+    ],
+  });
 
-    <section class="panel-catalogo" aria-labelledby="panel-resumen-titulo">
-      <div class="panel-catalogo__encabezado">
-        <div>
-          <h2 id="panel-resumen-titulo">Resumen del catálogo</h2>
-          <p>Las cifras se obtienen directamente del servicio de Productos.</p>
-        </div>
-        <button type="button" class="boton-secundario" data-actualizar-panel>
-          Actualizar cifras
-        </button>
-      </div>
+  const encabezado = h('div', {
+    clase: 'panel-catalogo__encabezado',
+    hijos: [
+      h('div', {
+        hijos: [
+          h('h2', {
+            texto: 'Resumen del catálogo',
+            atributos: { id: 'panel-resumen-titulo' },
+          }),
+          h('p', {
+            texto: 'Las cifras se obtienen directamente del servicio de Productos.',
+          }),
+        ],
+      }),
+      h('button', {
+        clase: 'boton-secundario',
+        texto: 'Actualizar cifras',
+        datos: { actualizarPanel: '' },
+        atributos: { type: 'button' },
+      }),
+    ],
+  });
 
-      <div
-        class="panel-mensaje panel-mensaje--carga"
-        data-panel-mensaje
-        role="status"
-        aria-live="polite"
-      >
-        Consultando el catálogo…
-      </div>
+  const mensaje = h('div', {
+    clase: 'panel-mensaje panel-mensaje--carga',
+    texto: 'Consultando el catálogo…',
+    datos: { panelMensaje: '' },
+    atributos: {
+      role: 'status',
+      'aria-live': 'polite',
+    },
+  });
 
-      <div class="panel-resumen">
-        <article class="panel-tarjeta panel-tarjeta--total">
-          <strong data-total-catalogo>0</strong>
-          <span>Total de productos</span>
-        </article>
-        ${tarjetasEstado()}
-      </div>
+  const resumen = h('div', {
+    clase: 'panel-resumen',
+    hijos: [
+      h('article', {
+        clase: 'panel-tarjeta panel-tarjeta--total',
+        hijos: [
+          h('strong', {
+            texto: '0',
+            datos: { totalCatalogo: '' },
+          }),
+          h('span', { texto: 'Total de productos' }),
+        ],
+      }),
+      ...tarjetasEstado(),
+    ],
+  });
 
-      <section class="panel-distribucion" aria-labelledby="panel-tipos-titulo">
-        <h2 id="panel-tipos-titulo">Distribución por tipo</h2>
-        <div class="panel-tipos">
-          ${tarjetasTipo()}
-        </div>
-      </section>
-    </section>`;
+  const distribucion = h('section', {
+    clase: 'panel-distribucion',
+    atributos: { 'aria-labelledby': 'panel-tipos-titulo' },
+    hijos: [
+      h('h2', {
+        texto: 'Distribución por tipo',
+        atributos: { id: 'panel-tipos-titulo' },
+      }),
+      h('div', {
+        clase: 'panel-tipos',
+        hijos: tarjetasTipo(),
+      }),
+    ],
+  });
+
+  const panel = h('section', {
+    clase: 'panel-catalogo',
+    atributos: { 'aria-labelledby': 'panel-resumen-titulo' },
+    hijos: [encabezado, mensaje, resumen, distribucion],
+  });
+
+  return [cabecera, panel];
 }
 
 function mostrarMensaje(raiz, texto, tipo) {
@@ -131,7 +192,7 @@ function mensajeDeError(fallo) {
  * @param {{consultar?: Function}} dependencias inyectables para pruebas.
  */
 export function montarPanelCatalogo(raiz, { consultar = consultarEstadisticasCatalogo } = {}) {
-  raiz.innerHTML = plantilla();
+  vaciar(raiz).append(...crearVista());
   const botonActualizar = raiz.querySelector('[data-actualizar-panel]');
 
   const actualizar = async () => {
