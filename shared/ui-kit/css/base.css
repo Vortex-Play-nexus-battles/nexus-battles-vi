@@ -99,6 +99,17 @@ legend { padding: 0; }
   align-self: flex-end;
 }
 
+/* UX-R4.8 — una pildora de estado tampoco es un campo. En «Notificaciones»
+   la fila es el titulo «Bandeja» y el estado del canal, asi que el reparto a
+   partes iguales dejaba «Reconectando…» dentro de una pildora de 630 px con
+   la palabra a la izquierda y medio panel de color vacio detras. Una pildora
+   dice algo corto: se ciñe a lo que dice y se va al otro extremo de la fila.
+   Mismo defecto que el boton de arriba, encontrado mirando la captura. */
+.fila > .conexion {
+  flex: 0 0 auto;
+  align-self: center;
+}
+
 /* Acciones de un formulario: alineadas a la derecha, como en el diseno. */
 .acciones {
   display: flex;
