@@ -103,6 +103,10 @@ docs/evidencia/laboratorio-visual/**/*.png
 # para mirarla al hacer el cambio, no para arrastrarla en el historial.
 docs/evidencia/ux-r*/**/*.png
 
+# La hoja de contacto del barrido: se regenera de las capturas, que tampoco
+# se versionan. Lo que se conserva es el documento que sale de mirarla.
+docs/evidencia/hoja/
+
 # Herramientas de un rato: sondas de medida, capturas puntuales para mirar un
 # cambio a ojo y los guiones que las lanzan en Windows. Lo que de estas sale y
 # merece quedarse, se queda como prueba (`ortografia-visible.test.js`,
