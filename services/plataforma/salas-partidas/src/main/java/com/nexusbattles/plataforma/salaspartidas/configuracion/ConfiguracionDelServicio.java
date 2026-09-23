@@ -1,6 +1,6 @@
 package com.nexusbattles.plataforma.salaspartidas.configuracion;
 
-import com.nexusbattles.comun.observabilidad.FiltroDeTraza;
+import com.nexusbattles.plataforma.observabilidad.InterceptorDeTraza;
 import com.nexusbattles.plataforma.resiliencia.CortaCircuitos;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.AbandonarSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CancelarSala;
@@ -18,10 +18,8 @@ import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDeSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDePartidas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.Ordered;
 import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
@@ -124,7 +122,7 @@ public class ConfiguracionDelServicio {
                         "SALAS_TORNEOS_URL no esta configurada en este entorno");
             };
         } else {
-            RestClient.Builder constructor = RestClient.builder().requestFactory(fabricaConTiempos);
+            RestClient.Builder constructor = constructorConTraza(fabricaConTiempos);
             credencial.ifAvailable(constructor::requestInterceptor);
             arbitro = new com.nexusbattles.plataforma.salaspartidas.integracion.ClienteTorneos(
                     constructor.build(), urlDeTorneos);
@@ -195,7 +193,7 @@ public class ConfiguracionDelServicio {
                     com.nexusbattles.comun.seguridad.servicio.InterceptorDePortadorDeServicio> credencial,
             @Qualifier("cortaCreditos") CortaCircuitos corta,
             ClientHttpRequestFactory fabricaConTiempos) {
-        RestClient.Builder constructor = RestClient.builder().requestFactory(fabricaConTiempos);
+        RestClient.Builder constructor = constructorConTraza(fabricaConTiempos);
         credencial.ifAvailable(constructor::requestInterceptor);
         return new com.nexusbattles.plataforma.salaspartidas.integracion.ClienteCreditos(
                 constructor.build(), urlDelLibro, corta);
@@ -214,7 +212,7 @@ public class ConfiguracionDelServicio {
                     com.nexusbattles.comun.seguridad.servicio.InterceptorDePortadorDeServicio> credencial,
             @Qualifier("cortaCreditos") CortaCircuitos corta,
             ClientHttpRequestFactory fabricaConTiempos) {
-        RestClient.Builder constructor = RestClient.builder().requestFactory(fabricaConTiempos);
+        RestClient.Builder constructor = constructorConTraza(fabricaConTiempos);
         credencial.ifAvailable(constructor::requestInterceptor);
         return new com.nexusbattles.plataforma.salaspartidas.integracion.ClienteAcreditacionDePartidas(
                 constructor.build(), urlDelLibro, corta);
@@ -248,7 +246,7 @@ public class ConfiguracionDelServicio {
             org.springframework.beans.factory.ObjectProvider<
                     com.nexusbattles.comun.seguridad.servicio.InterceptorDePortadorDeServicio> credencial,
             ClientHttpRequestFactory fabricaConTiempos) {
-        RestClient.Builder constructor = RestClient.builder().requestFactory(fabricaConTiempos);
+        RestClient.Builder constructor = constructorConTraza(fabricaConTiempos);
         credencial.ifAvailable(constructor::requestInterceptor);
         return new com.nexusbattles.plataforma.salaspartidas.integracion.ClienteMotorCombate(
                 constructor.build(), urlDelMotor, corta);
@@ -282,21 +280,30 @@ public class ConfiguracionDelServicio {
             ClientHttpRequestFactory fabricaConTiempos) {
         // Con tiempos de espera acotados (HU-DIS-003): ver
         // ConfiguracionDeResiliencia.fabricaDePeticionesConTiempos.
-        RestClient.Builder constructor = RestClient.builder().requestFactory(fabricaConTiempos);
+        RestClient.Builder constructor = constructorConTraza(fabricaConTiempos);
         credencial.ifAvailable(constructor::requestInterceptor);
         return constructor.build();
     }
 
     /**
-     * Regla 5: propagacion del trace id. Se registra el primero de todos para
-     * que cualquier error posterior, incluso los de seguridad, salga en la
-     * bitacora con su traza.
+     * Constructor de clientes HTTP con la traza puesta — regla 5, R11.
+     *
+     * <p>Existe para que <b>no se pueda olvidar</b>. Este archivo arma seis
+     * clientes hacia seis servicios distintos, y la regla 5 dice que todos
+     * propagan el trace id. Repetir `.requestInterceptor(...)` seis veces
+     * garantiza que el septimo salga sin el: lo que se repite se olvida.
+     *
+     * <p>El interceptor no tiene estado —lee el MDC y pone una cabecera—, asi
+     * que se instancia aqui en vez de inyectarse: una dependencia menos que
+     * declarar en seis firmas de metodo.
+     *
+     * <p>El {@code traceparent} de ENTRADA lo pone
+     * {@code TrazaAutoConfiguration}, que llega por las convenciones de
+     * Gradle y no hay que declarar en ningun sitio.
      */
-    @Bean
-    public FilterRegistrationBean<FiltroDeTraza> filtroDeTraza() {
-        FilterRegistrationBean<FiltroDeTraza> registro = new FilterRegistrationBean<>(new FiltroDeTraza());
-        registro.setOrder(Ordered.HIGHEST_PRECEDENCE);
-        registro.addUrlPatterns("/*");
-        return registro;
+    private static RestClient.Builder constructorConTraza(ClientHttpRequestFactory fabricaConTiempos) {
+        return RestClient.builder()
+                .requestFactory(fabricaConTiempos)
+                .requestInterceptor(new InterceptorDeTraza());
     }
 }

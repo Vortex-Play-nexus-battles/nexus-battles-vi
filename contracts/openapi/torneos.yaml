@@ -82,6 +82,7 @@ paths:
       parameters: [ { $ref: '#/components/parameters/TorneoId' } ]
       responses:
         '200':
+          description: El torneo con sus equipos y, si ya arranco, su arbol de encuentros.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Torneo' }
@@ -143,7 +144,7 @@ paths:
           description: Nombre o avatar rechazados por la politica (NOMBRE_RECHAZADO)
           content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
         '503':
-          description: La lista negra no responde: no se registra sin verificar (LISTA_NEGRA_NO_DISPONIBLE)
+          description: 'La lista negra no responde: no se registra sin verificar (LISTA_NEGRA_NO_DISPONIBLE)'
           content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
 
   /torneos/{torneoId}/equipos/{equipoId}/integrantes:
@@ -164,6 +165,7 @@ paths:
                 companeroUid: { type: string, format: uuid }
       responses:
         '200':
+          description: Integrante anadido; se devuelve el equipo completo.
           content: { application/json: { schema: { $ref: '#/components/schemas/Equipo' } } }
         '401': { $ref: '#/components/responses/SinToken' }
         '403':
@@ -254,6 +256,7 @@ paths:
             schema: { $ref: '#/components/schemas/ResultadoRequest' }
       responses:
         '200':
+          description: Resultado registrado; se devuelve el arbol con el avance aplicado.
           content: { application/json: { schema: { $ref: '#/components/schemas/Torneo' } } }
         '400':
           description: Sin ganador (ni equipo ni uid), o sin motivo cuando lo registra un administrador (SOLICITUD_INVALIDA)
