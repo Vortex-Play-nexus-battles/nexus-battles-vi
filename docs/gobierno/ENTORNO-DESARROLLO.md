@@ -14,7 +14,7 @@ el repositorio, VS Code aplica los mismos ajustes para todos.
 | **JDK 21 (Eclipse Temurin)** | 21 LTS | Compilar y ejecutar los servicios de Spring Boot | adoptium.net |
 | **Node.js** | 20 LTS o superior | Solo las herramientas de calidad del frontend | nodejs.org |
 | **Git** | 2.40 o superior | Control de versiones | git-scm.com |
-| **Docker Desktop** | Última estable | Levantar PostgreSQL, MongoDB, Redis, RabbitMQ y Keycloak | docker.com |
+| **Docker Desktop** | Última estable | Levantar PostgreSQL, MongoDB, Redis y Mailpit, y los servicios en contenedor | docker.com |
 | **Visual Studio Code** | Última estable | Editor de la empresa | code.visualstudio.com |
 
 **Java 21 y no otra.** La pila fija Java 21 LTS. Si tienes Java 17 o Java 25

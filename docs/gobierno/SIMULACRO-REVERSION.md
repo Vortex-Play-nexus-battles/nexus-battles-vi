@@ -1,5 +1,15 @@
 # Simulacro de reversión automática — HU-CICD-002, CA-02
 
+> **Nota de contexto (añadida en R13, sin tocar el acta).** Este documento es un
+> acta fechada: describe lo que pasó el 21-sep-2026 y se conserva tal cual. El
+> simulacro se ejecutó **sobre el host de plataforma** (`nexus-plataforma-dev`).
+> Donde el texto dice «el único host» hay que leer «el host de plataforma»: desde
+> el 8 de septiembre de 2026 existe un segundo host, `nexus-contenido-dev`, para
+> el dominio de contenido. El mapa vigente de los dos hosts está en
+> [`docs/arquitectura/README.md`](../arquitectura/README.md). El mecanismo de
+> reversión y el veredicto del simulacro no cambian: el CD despliega y revierte
+> host por host, con el mismo script.
+
 **Fecha:** 21 de septiembre de 2026 · **Entorno:** dev (el único host, `t3.small`) ·
 **Corrida:** [cd.yml #35623088299](https://github.com/Vortex-Play-nexus-battles/nexus-battles-vi/actions/runs/35623088299) ·
 **Servicio ejercitado:** `comentarios` · **Resultado:** superado.

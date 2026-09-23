@@ -144,9 +144,12 @@ docker compose -f tests/e2e/compose.yml down -v --remove-orphans
 
 ### Contra AWS DEV
 
-**Nunca automáticamente.** DEV es el entorno de la demo y corre en un `t3.small`
-compartido; una corrida de carga se lanza **a mano**, sabiendo que se lanza, y
-preferiblemente fuera de la ventana de una demo o una sustentación.
+**Nunca automáticamente.** DEV es el entorno de la demo: la URL que se mide es
+siempre el borde del **host de plataforma**, un `t3.small` compartido, y detrás
+de él responde el host de contenido, igual de pequeño (ver
+[`docs/arquitectura/README.md`](../../docs/arquitectura/README.md)). Una corrida
+de carga se lanza **a mano**, sabiendo que se lanza, y preferiblemente fuera de
+la ventana de una demo o una sustentación.
 
 ```bash
 cd tests/rendimiento/resultados

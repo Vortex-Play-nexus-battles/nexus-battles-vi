@@ -10,10 +10,14 @@
 #
 # ## Por que existe
 #
-# El flujo de sala NO se puede demostrar en el host de dev (#435): la puerta
-# de heroe consulta a `inventario`, que no esta desplegado en AWS, y meterlo
-# en el `t3.small` no cabe (#430). Esto es lo que demuestra que el MVP
-# funciona de punta a punta.
+# Este banco es el unico sitio donde el corte vertical corre ENTERO en una
+# sola red, con la semilla y los servicios de los tres dominios que el flujo
+# necesita. En AWS la sala si funciona —`inventario` esta desplegado en el 8102
+# del host de contenido desde el 8-sep-2026, ver docs/arquitectura/README.md—,
+# pero alli NO esta `ms-finanzas`, que no cabe por capacidad (#430), asi que la
+# apuesta de creditos no se puede demostrar en el entorno desplegado. Aqui si:
+# esto es lo que demuestra que el MVP funciona de punta a punta, con la apuesta
+# liquidada en el libro real.
 name: E2E de aceptacion
 
 on:

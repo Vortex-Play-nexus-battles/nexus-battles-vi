@@ -5,7 +5,7 @@ Instancia propia para `services/contenido/*` (héroes, inventario, productos, mo
 ## Por qué
 
 - Las reglas de trabajo de plataforma piden "desplegar por perfil de dominio, no los 20 servicios a la vez".
-- El host de plataforma es una `t3.micro` (1 GB): no caben 20 JVM más las bases de datos.
+- El host de plataforma es una `t3.small` (2 vCPU / 2 GiB): ya corre nueve servicios, el borde, PostgreSQL, Redis y Mailpit. No caben ahí 20 JVM más las bases de datos.
 - El cliente autorizó el uso de la prueba gratuita / créditos de AWS (clase del 2026-09-03).
 
 ## Estado del gobierno de esta carpeta — R9.1
