@@ -240,7 +240,7 @@
 }
 
 .btn-pagar[disabled] {
-  background-color: #8ea2e8;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 

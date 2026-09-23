@@ -184,7 +184,7 @@ test.describe('Resaltado del producto al senalar', () => {
 
   // --- Criterio 3 ---------------------------------------------------------
 
-  test('El realce no altera la posicion ni el tamano de las demas tarjetas', async ({ page }) => {
+  test('El realce no altera la posición ni el tamano de las demas tarjetas', async ({ page }) => {
     await conInventarioDe(page, 16);
     await abrirVitrina(page);
 

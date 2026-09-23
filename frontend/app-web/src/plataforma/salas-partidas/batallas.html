@@ -41,7 +41,7 @@
           <a class="boton boton--secundario" href="./chat.html" data-zona="enlace-chat-general"
             >Chat general</a
           >
-          <a class="boton boton--primario boton--grande" href="./crear-sala.html">CREAR SALA</a>
+          <a class="boton boton--primario boton--grande" href="./crear-sala.html">Crear sala</a>
         </div>
       </header>
 
@@ -116,14 +116,18 @@
       // Canal del servicio: `cliente-chat.js` pone el JWT en el CONNECT sobre el
       // transporte STOMP comun de `src/comun/transporte-stomp.js` (#351).
       import { conectarChat } from './cliente-chat.js';
-      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+      import { montarCabecera } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
 
       // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
-      if (!exigirSesion()) {
+      if (!exigirAcceso('batallas')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
       // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'jugar' });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'batallas',
+        seccionActiva: 'jugar',
+      });
 
       // El mismo token que adjunta `src/comun/interceptors/http-error.interceptor.js`
       // a cada peticion HTTP. Sin sesion no hay canal, y la vista lo dice.

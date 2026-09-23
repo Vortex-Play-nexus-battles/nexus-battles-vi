@@ -23,15 +23,27 @@
 # (los carga un administrador): DEPLOY_HOST_CONTENIDO_DEV (la IP),
 # SSH_USER_CONTENIDO_DEV (ubuntu) y SSH_KEY_CONTENIDO_DEV (el .pem completo).
 
-terraform {
-  required_providers {
-    aws = { source = "hashicorp/aws" }
-    tls = { source = "hashicorp/tls" }
-  }
-}
+# R9.1 — el bloque `terraform {}` que estaba aqui (proveedores sin version, sin
+# backend) se movio a `versiones.tf`, con el estado en S3 y los proveedores
+# fijados, igual que plataforma. Ahi esta explicado por que y cual es la
+# compuerta antes del primer `apply` desde CI.
 
 provider "aws" {
   region = var.region
+
+  # R9.1 — etiquetas en TODO recurso, como en plataforma. Sirven para dos
+  # cosas concretas: que Cost Explorer pueda separar el gasto de este host del
+  # de plataforma (hasta ahora iban juntos y no habia forma de saber cual se
+  # come el credito), y que un `destroy` encuentre lo que se creo aqui.
+  default_tags {
+    tags = {
+      Proyecto = "nexus-battles-vi"
+      Equipo   = "grupo-6"
+      Entorno  = "dev"
+      Dominio  = "contenido"
+      Gestion  = "terraform"
+    }
+  }
 }
 
 variable "region" {
@@ -47,9 +59,39 @@ variable "instance_type" {
 }
 
 variable "cidr_ssh" {
-  description = "Desde donde se acepta SSH (puerto 22). 0.0.0.0/0 solo con autenticacion por llave, que es lo unico que la AMI de Ubuntu permite; GitHub Actions no tiene IP fija."
+  description = "Desde donde se acepta SSH (puerto 22). 0.0.0.0/0 solo con autenticacion por llave, que es lo unico que la AMI de Ubuntu permite; GitHub Actions no tiene IP fija. R9.4 lo reviso y lo deja como esta a proposito: cerrarlo dejaria al CD sin forma de desplegar, y la salida de verdad es mover el despliegue a SSM Session Manager (sin puerto abierto), no adivinar un rango de IPs de los runners. Vacio = puerto cerrado, el dia que exista SSM."
   type        = list(string)
   default     = ["0.0.0.0/0"]
+}
+
+variable "cidr_servicios" {
+  description = <<-DESC
+    Origenes admitidos en 8101-8104 (heroes, inventario, productos, motor).
+
+    R9.4 — estaban abiertos a 0.0.0.0/0 y no hacia falta. Quien los consume de
+    verdad es UNO solo: el host de plataforma. Desde ahi salen las dos unicas
+    llamadas reales a estos puertos —el borde nginx, que proxea
+    /api/v1/{heroes,inventario,productos} (infrastructure/red-balanceo/
+    borde-dev.conf), y salas-partidas, que pregunta a inventario y al motor—.
+    El navegador nunca los toca: entra por el borde, en el 80.
+
+    Se comprobo antes de cerrar, no despues: smoke-dev.yml y
+    smoke-aws.smoke.spec.js solo usan http://<host-plataforma> (puerto 80), y
+    diagnostico-dev.yml consulta localhost por dentro del host. Ninguno se
+    queda fuera.
+
+    Lo que SI cambia de sitio son las colecciones de Postman de inventario y
+    productos, que su LEEME apuntaba directo a 34.193.90.11:8102/8103. Ahora
+    van por el borde (mismo origen que la aplicacion real, y de paso ejercitan
+    el enrutado). La unica peticion que no sobrevive al cambio es
+    {{baseUrl}}/actuator/health de productos: el borde solo enruta /api/v1/*.
+    La salud por host ya la cubre diagnostico-dev.yml.
+
+    Para depurar desde un portatil se anade la IP propia aqui, a proposito y
+    temporalmente. No se deja puesta.
+  DESC
+  type        = list(string)
+  default     = ["35.168.124.119/32"] # EIP del host de plataforma (nexus-plataforma-dev)
 }
 
 data "aws_ami" "ubuntu" {
@@ -85,11 +127,15 @@ resource "aws_security_group" "contenido_sg" {
     cidr_blocks = var.cidr_ssh
   }
   ingress {
-    description = "Servicios de contenido (heroes, inventario, productos, motor)"
+    # OJO con los caracteres: AWS restringe la descripcion de una regla a
+    # [0-9A-Za-z_ .:/()#,@[]+=&;{}!$*-]. Un guion largo la rechaza, y el plan
+    # falla con un mensaje que no menciona la palabra "caracter" por ninguna
+    # parte. Se descubrio asi, en la primera corrida de R9.4.
+    description = "Servicios de contenido (8101 heroes, 8102 inventario, 8103 productos, 8104 motor): solo desde el host de plataforma (R9.4)"
     from_port   = 8101
     to_port     = 8104
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = var.cidr_servicios
   }
   egress {
     from_port   = 0
@@ -106,17 +152,50 @@ resource "aws_instance" "contenido_dev" {
   vpc_security_group_ids = [aws_security_group.contenido_sg.id]
   # Lo que desplegar.sh da por hecho en el servidor: Docker, Compose v2, el
   # usuario ubuntu en el grupo docker y /opt/nexus escribible por el.
+  #
+  # R8.3 — mas un swap de 2 GB, como el de plataforma
+  # (infrastructure/entornos/plataforma/main.tf). Este host nacio sin el: con
+  # 1,9 GiB de RAM contra 1.760 MB de `mem_limit`, el margen declarado es de
+  # -114 MB, y aqui viven los cuatro servicios de los que depende el combate.
+  # Sin swap un pico de arranque no degrada: el OOM killer mata un contenedor.
+  # Es disco gp3 ya pagado; no cuesta un centavo mas.
+  #
+  # OJO — esto NO arregla el host que ya esta corriendo: `user_data` solo se
+  # ejecuta en el primer arranque. Al host vivo lo arregla
+  # `scripts/cd/asegurar-swap.sh`, que corre desde `desplegar.sh` en cada
+  # despliegue y es idempotente. Este bloque es para cualquier reconstruccion
+  # futura, para que no vuelva a nacer sin swap.
   user_data = <<-EOT
     #!/bin/bash
     apt-get update -y
     apt-get install -y docker.io docker-compose-v2
     usermod -aG docker ubuntu
     mkdir -p /opt/nexus && chown ubuntu:ubuntu /opt/nexus
+    if [ ! -f /swapfile ]; then
+      fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile
+      echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    fi
+    swapon -a
   EOT
+
+  # **Esta linea es la que impide un desastre.** Por omision, cambiar
+  # `user_data` marca la instancia para REEMPLAZO: Terraform la destruiria y
+  # crearia otra, perdiendo /opt/nexus y obligando a reasociar la IP elastica.
+  # Con `false`, el cambio se registra en el estado y no toca el host.
+  # Plataforma la lleva desde su PR original por la misma razon.
+  user_data_replace_on_change = false
+
   root_block_device {
     volume_size = 16
   }
   tags = { Name = "nexus-contenido-dev" }
+
+  lifecycle {
+    # La AMI "mas reciente" cambia cada pocas semanas. Sin esto, un `apply`
+    # rutinario recrearia el host. Mismo motivo y misma linea que en
+    # plataforma.
+    ignore_changes = [ami]
+  }
 }
 
 # IP fija: la instancia se puede apagar y prender sin que cambie el secreto.

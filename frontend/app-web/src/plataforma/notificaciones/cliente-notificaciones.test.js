@@ -95,7 +95,7 @@ describe('leerSesion', () => {
     expect(leerSesion(almacen)).toEqual({ usuarioId: 'u-1', apodo: 'Simon_P' });
   });
 
-  test('el destinatario sale del token, no de la clave que pisa el panel de administracion', () => {
+  test('el destinatario sale del token, no de la clave que pisa el panel de administración', () => {
     // `gestion-usuarios.js` escribe en `nexus.usuarioId` el id del usuario que
     // el administrador acaba de seleccionar. Suscribirse con eso le entregaria
     // las notificaciones de esa persona a quien no son.

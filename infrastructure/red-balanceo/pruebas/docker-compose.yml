@@ -13,26 +13,94 @@
 # Por que hace falta: `proxy_pass` con variable y con URI no se comporta como
 # `proxy_pass` con URI a secas —nginx manda la URI tal cual, sin el resto de
 # la ruta—, y eso no se ve leyendo el fichero. Se ve aqui.
+#
+# R8.4 — se paso de tres ecos a once. El banco cubria carrito, productos y
+# salas; el defecto de `/api/v1/admin/auditoria` (un prefijo simple tapado por
+# una regex) vivio dos semanas justamente porque su ruta no estaba aqui. Ahora
+# estan los once servicios que el borde enruta por nombre de contenedor.
+#
+# Lo que este banco NO puede cubrir: `heroes`, `inventario` y el catalogo de
+# `productos` por id, que desde el PR #611 apuntan al host de contenido por IP
+# (`34.193.90.11`). Una IP no se puede suplantar con un nombre de servicio de
+# Compose. Para esos tres hay un guardian aparte en `comprobar-rutas.sh` que
+# comprueba el fichero, no el trafico.
 services:
-  srv-ms-ecommerce:
+  srv-comentarios:
     image: nginx:1.27-alpine
-    hostname: ECOMMERCE
-    volumes:
-      - ./eco.conf:/etc/nginx/conf.d/default.conf:ro
+    hostname: COMENTARIOS
+    volumes: [./eco.conf:/etc/nginx/conf.d/default.conf:ro]
     networks: [borde]
 
-  srv-productos:
+  srv-torneos:
     image: nginx:1.27-alpine
-    hostname: PRODUCTOS
-    volumes:
-      - ./eco.conf:/etc/nginx/conf.d/default.conf:ro
+    hostname: TORNEOS
+    volumes: [./eco.conf:/etc/nginx/conf.d/default.conf:ro]
     networks: [borde]
 
   srv-salas-partidas:
     image: nginx:1.27-alpine
     hostname: SALAS
-    volumes:
-      - ./eco.conf:/etc/nginx/conf.d/default.conf:ro
+    volumes: [./eco.conf:/etc/nginx/conf.d/default.conf:ro]
+    networks: [borde]
+
+  srv-notificaciones:
+    image: nginx:1.27-alpine
+    hostname: NOTIFICACIONES
+    volumes: [./eco.conf:/etc/nginx/conf.d/default.conf:ro]
+    networks: [borde]
+
+  srv-moderacion-sanciones:
+    image: nginx:1.27-alpine
+    hostname: MODERACION
+    volumes: [./eco.conf:/etc/nginx/conf.d/default.conf:ro]
+    networks: [borde]
+
+  srv-metricas-plataforma:
+    image: nginx:1.27-alpine
+    hostname: METRICAS
+    volumes: [./eco.conf:/etc/nginx/conf.d/default.conf:ro]
+    networks: [borde]
+
+  srv-admin-parametros:
+    image: nginx:1.27-alpine
+    hostname: PARAMETROS
+    volumes: [./eco.conf:/etc/nginx/conf.d/default.conf:ro]
+    networks: [borde]
+
+  srv-ms-identidad:
+    image: nginx:1.27-alpine
+    hostname: IDENTIDAD
+    volumes: [./eco.conf:/etc/nginx/conf.d/default.conf:ro]
+    networks: [borde]
+
+  srv-ms-cumplimiento:
+    image: nginx:1.27-alpine
+    hostname: CUMPLIMIENTO
+    volumes: [./eco.conf:/etc/nginx/conf.d/default.conf:ro]
+    networks: [borde]
+
+  srv-ms-finanzas:
+    image: nginx:1.27-alpine
+    hostname: FINANZAS
+    volumes: [./eco.conf:/etc/nginx/conf.d/default.conf:ro]
+    networks: [borde]
+
+  srv-ms-subastas:
+    image: nginx:1.27-alpine
+    hostname: SUBASTAS
+    volumes: [./eco.conf:/etc/nginx/conf.d/default.conf:ro]
+    networks: [borde]
+
+  srv-ms-ecommerce:
+    image: nginx:1.27-alpine
+    hostname: ECOMMERCE
+    volumes: [./eco.conf:/etc/nginx/conf.d/default.conf:ro]
+    networks: [borde]
+
+  srv-productos:
+    image: nginx:1.27-alpine
+    hostname: PRODUCTOS
+    volumes: [./eco.conf:/etc/nginx/conf.d/default.conf:ro]
     networks: [borde]
 
   borde:
@@ -44,7 +112,20 @@ services:
     ports:
       - '8099:80'
     networks: [borde]
-    depends_on: [srv-ms-ecommerce, srv-productos, srv-salas-partidas]
+    depends_on:
+      - srv-comentarios
+      - srv-torneos
+      - srv-salas-partidas
+      - srv-notificaciones
+      - srv-moderacion-sanciones
+      - srv-metricas-plataforma
+      - srv-admin-parametros
+      - srv-ms-identidad
+      - srv-ms-cumplimiento
+      - srv-ms-finanzas
+      - srv-ms-subastas
+      - srv-ms-ecommerce
+      - srv-productos
 
 networks:
   borde:

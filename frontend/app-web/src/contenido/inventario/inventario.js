@@ -75,7 +75,25 @@ export async function montarVitrina(
     // El detalle tecnico es para el equipo; al jugador se le habla en su idioma.
     console.error('No se pudo cargar la vitrina del inventario', fallo);
     if (sigueVigente()) {
-      contenedor.replaceChildren(construirError());
+      // UX-R3.5 — §18: el estado de error trae su salida. Antes decia «vuelve
+      // a intentarlo en un momento» y la unica forma de intentarlo era
+      // recargar la pagina entera, que ademas pierde la pagina en la que se
+      // estaba. Esto reintenta la misma consulta.
+      contenedor.replaceChildren(
+        construirError(undefined, undefined, {
+          texto: 'Reintentar',
+          alPulsar: () =>
+            montarVitrina(contenedor, identidad, numeroPagina, {
+              consultar,
+              alEditar,
+              alEquipar,
+              mensajeCarga,
+              mensajeVacio,
+              detalleVacio,
+              sigueVigente,
+            }),
+        }),
+      );
     }
     return null;
   }
@@ -108,7 +126,7 @@ export async function montarVitrina(
   // solo la mejora cuando el catalogo contesta. No se espera: si tardara o
   // fallara, la vista ya esta usable.
   pintarRetratos(contenedor).catch((fallo) =>
-    console.warn('No se pudieron traer los retratos del catalogo', fallo),
+    console.warn('No se pudieron traer los retratos del catálogo', fallo),
   );
   return pagina;
 }

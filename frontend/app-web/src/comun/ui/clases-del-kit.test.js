@@ -175,3 +175,39 @@ test('ninguna ficha de sombra se usa como color de contorno (UX-R2.8d)', () => {
   }
   expect(culpables).toEqual([]);
 });
+
+/**
+ * El kit se carga en su orden — UX-R3.6.
+ *
+ * `base.css` lo dice en su primera línea: «Cargar siempre en este orden:
+ * tokens.css -> base.css -> componentes.css -> css de la vista». No es una
+ * recomendación de estilo: `base.css` declara color sobre `h1`, el ancho de
+ * `.pagina` y `[hidden] { display: none !important }`, y en una hoja cargada
+ * después le gana por orden a cualquier componente con la misma
+ * especificidad.
+ *
+ * `subastas.html` cargaba `componentes.css` primero. El síntoma era el título
+ * de la página montado encima de la barra de navegación — un fallo que se ve
+ * en la captura y que leyendo el CSS del título no aparece por ninguna parte.
+ * Una de treinta y dos; por eso esto es una prueba y no una revisión.
+ */
+test('toda vista carga el kit en el orden que el propio kit exige', () => {
+  const ORDEN = ['tokens.css', 'base.css', 'componentes.css'];
+  const fallos = [];
+
+  for (const ruta of archivos(SRC, '.html')) {
+    const vista = ruta.slice(SRC.length + 1).replaceAll('\\', '/');
+    const marcado = readFileSync(ruta, 'utf8');
+    const cargadas = [...marcado.matchAll(/ui-kit\/css\/(\w+\.css)/g)].map((m) => m[1]);
+    if (cargadas.length === 0) {
+      fallos.push(`${vista}: no carga el kit`);
+      continue;
+    }
+    const esperado = ORDEN.filter((hoja) => cargadas.includes(hoja));
+    if (cargadas.join() !== esperado.join()) {
+      fallos.push(`${vista}: ${cargadas.join(' → ')}`);
+    }
+  }
+
+  expect(fallos).toEqual([]);
+});

@@ -1,4 +1,4 @@
-/** Parametros del sistema — HU-ADM-001: presentación pura y montaje contra un servicio simulado. */
+/** Parámetros del sistema — HU-ADM-001: presentación pura y montaje contra un servicio simulado. */
 
 import { jest } from '@jest/globals';
 
@@ -8,7 +8,7 @@ const asentar = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 const parametro = (extra = {}) => ({
   clave: 'sanciones.suspension.maxima-dias',
-  descripcion: 'Duracion maxima de una suspension temporal',
+  descripcion: 'Duración maxima de una suspension temporal',
   tipo: 'ENTERO',
   valor: '30',
   unidad: 'dias',
@@ -57,7 +57,7 @@ describe('presentacion', () => {
     expect(valorDe(parametro({ unidad: null, valor: 'LIBERAR' }))).toBe('LIBERAR');
   });
 
-  test('cambioDesde: vacio es null, la vigencia solo si se dio', () => {
+  test('cambioDesde: vacío es null, la vigencia solo si se dio', () => {
     expect(cambioDesde({ valor: ' 15 ', motivo: ' Sprint Review ' })).toEqual({
       valor: '15',
       motivo: 'Sprint Review',
@@ -70,7 +70,7 @@ describe('presentacion', () => {
     expect(conFecha.vigenteDesde).toMatch(/^2026-12-01T/);
   });
 
-  test('listaDeHistorial marca la vigencia futura y el catalogo sin cambios', () => {
+  test('listaDeHistorial marca la vigencia futura y el catálogo sin cambios', () => {
     expect(listaDeHistorial([]).textContent).toMatch(/Sin cambios/);
     const ul = listaDeHistorial([
       {
@@ -105,7 +105,7 @@ describe('vista', () => {
     document.body.innerHTML = VISTA;
   });
 
-  test('un jugador ve el catalogo en solo lectura; el inalterable esta bloqueado para todos', async () => {
+  test('un jugador ve el catálogo en solo lectura; el inalterable esta bloqueado para todos', async () => {
     const fetchImpl = servicio({
       'GET /api/v1/parametros': {
         cuerpo: [
@@ -193,7 +193,7 @@ describe('vista', () => {
       (c) => c[1]?.method === 'PUT' && String(c[1].body).includes('"15"'),
     );
     expect(JSON.parse(llamada[1].body)).toEqual({ valor: '15', motivo: 'Sprint Review' });
-    expect(document.querySelector('.aviso--exito').textContent).toMatch(/Parametro actualizado/);
+    expect(document.querySelector('.aviso--exito').textContent).toMatch(/Parámetro actualizado/);
     expect(document.querySelector('[data-campo="valor"]').textContent).toBe(
       'Vigente: 15 dias · v2',
     );

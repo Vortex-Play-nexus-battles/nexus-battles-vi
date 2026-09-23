@@ -12,7 +12,7 @@ function zona() {
 }
 
 describe('aviso', () => {
-  test('lleva la clase del tono, el titulo y el detalle', () => {
+  test('lleva la clase del tono, el título y el detalle', () => {
     const caja = aviso({ tono: 'exito', titulo: 'Sala creada', detalle: '4 participantes' });
 
     expect(caja.className).toBe('aviso aviso--exito');

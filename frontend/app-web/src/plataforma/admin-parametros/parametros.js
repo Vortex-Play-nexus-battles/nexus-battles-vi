@@ -1,5 +1,5 @@
 /**
- * Parametros del sistema — HU-ADM-001, sobre contracts/openapi/admin-parametros.yaml 1.0.0.
+ * Parámetros del sistema — HU-ADM-001, sobre contracts/openapi/admin-parametros.yaml 1.0.0.
  *
  * El catalogo se pinta como tabla; cada editable tiene su formulario con el
  * rango (o las opciones) que publica el propio servicio, motivo obligatorio y
@@ -12,6 +12,7 @@
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
 import { nodo } from '../../comun/ui/dom.js';
 import { pintarAviso } from '../../comun/ui/aviso.js';
+import { estadoDeError, estadoVacio, pintarEstado } from '../../comun/ui/estado-vista.js';
 import { campo } from '../../comun/ui/campo.js';
 
 export const ROLES_DE_ADMINISTRACION = Object.freeze(['ADMINISTRADOR', 'SUPER_ADMINISTRADOR']);
@@ -113,7 +114,7 @@ function avisarError(zona, error) {
   pintarAviso(zona, {
     tono: deNegocio && error.estado < 500 ? 'advertencia' : 'error',
     titulo: deNegocio ? error.titulo : 'No pudimos contactar con el servicio',
-    detalle: deNegocio ? error.detalle : 'Revisa tu conexion e intentalo de nuevo.',
+    detalle: deNegocio ? error.detalle : 'Revisa tu conexión e inténtalo de nuevo.',
   });
 }
 
@@ -186,7 +187,7 @@ export function filaDeParametro(parametro, { administra, alCambiar, alVerHistori
     nombre: 'vigenteDesde',
     etiqueta: 'Vigente desde',
     tipo: 'datetime-local',
-    pista: 'Opcional: deja vacio para aplicarlo ya.',
+    pista: 'Opcional: deja vacío para aplicarlo ya.',
   });
   form.append(nuevoValor.elemento, motivo.elemento, vigenteDesde.elemento);
 
@@ -213,7 +214,7 @@ export function listaDeHistorial(versiones) {
   const ul = nodo('ul', 'pila pila--ajustada');
   ul.dataset.zona = 'historial';
   if (versiones.length === 0) {
-    ul.appendChild(nodo('li', 't-meta', 'Sin cambios: valor inicial del catalogo.'));
+    ul.appendChild(nodo('li', 't-meta', 'Sin cambios: valor inicial del catálogo.'));
   }
   versiones.forEach((v) => {
     ul.appendChild(
@@ -246,7 +247,7 @@ export function montarParametros(raiz, { rol = null, fetchImpl } = {}) {
     pintarAviso(zonaAviso, {
       tono: 'info',
       titulo: 'Solo lectura',
-      detalle: 'Configurar parametros es de administracion; tu rol solo consulta.',
+      detalle: 'Configurar parámetros es de administración; tu rol solo consulta.',
     });
   }
 
@@ -255,7 +256,14 @@ export function montarParametros(raiz, { rol = null, fetchImpl } = {}) {
       const catalogo = await api.listar(fetchImpl);
       zonaCatalogo.replaceChildren();
       if (catalogo.length === 0) {
-        zonaCatalogo.appendChild(nodo('p', 't-meta', 'El catalogo esta vacio.'));
+        pintarEstado(
+          zonaCatalogo,
+          estadoVacio({
+            titulo: 'No hay parámetros configurables',
+            detalle:
+              'Los servicios todavía no han registrado ninguno. Aparecerán aquí en cuanto lo hagan.',
+          }),
+        );
       }
       catalogo.forEach((p) =>
         zonaCatalogo.appendChild(
@@ -273,7 +281,7 @@ export function montarParametros(raiz, { rol = null, fetchImpl } = {}) {
                     actualizado.valorProgramado !== null &&
                     actualizado.valorProgramado !== undefined
                       ? 'Cambio programado'
-                      : 'Parametro actualizado',
+                      : 'Parámetro actualizado',
                   detalle: `${actualizado.clave} · vigente: ${valorDe(actualizado)} · v${actualizado.version}. Queda versionado y auditado.`,
                 });
                 await cargar();
@@ -295,7 +303,22 @@ export function montarParametros(raiz, { rol = null, fetchImpl } = {}) {
         ),
       );
     } catch (error) {
-      avisarError(zonaAviso, error);
+      // UX-R3.11 — antes esto pintaba SOLO un aviso arriba y dejaba el resto de
+      // la pantalla en blanco: setecientos pixeles de fondo y una pildora que
+      // decia «No se pudo completar». El fallo de la vista entera es un estado
+      // de la vista entera, y lleva reintento (MAPEO-ERRORES §5.1).
+      zonaAviso.hidden = true;
+      const deNegocio = error instanceof ErrorDeParametros;
+      pintarEstado(
+        zonaCatalogo,
+        estadoDeError({
+          titulo: deNegocio ? error.titulo : 'No pudimos cargar los parámetros',
+          detalle: deNegocio
+            ? error.detalle
+            : 'El servicio de parámetros no respondió. Vuelve a intentarlo.',
+          alReintentar: cargar,
+        }),
+      );
     }
   }
 

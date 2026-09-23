@@ -33,7 +33,8 @@ import { test, expect, request as apiRequest } from '@playwright/test';
 
 import { PANTALLAS, PREFIJO_WEB, VISTAS } from './vistas.js';
 import { auditar } from './auditoria.js';
-import { apodoEfimero, identidadReal, inyectarSesion, sesionSintetica } from './identidad.js';
+import { inyectarSesion } from './identidad.js';
+import { NOMBRE, conseguirPersonas, personasDe } from './personas.js';
 
 // Playwright transpila estos specs a CommonJS (no hay package.json con
 // "type": "module" en `tests/`), asi que `import.meta` no existe aqui y
@@ -41,7 +42,9 @@ import { apodoEfimero, identidadReal, inyectarSesion, sesionSintetica } from './
 const AQUI =
   typeof __dirname === 'undefined' ? resolve(process.cwd(), '../../tests/visual') : __dirname;
 const RAIZ = join(AQUI, '..', '..');
-const EVIDENCIA = join(RAIZ, 'docs', 'evidencia', 'ux-r2');
+// La carpeta se llamaba `ux-r2` porque nació con aquel bloque. Ya no es de
+// un bloque: es el laboratorio del producto, y se corre en cada PR.
+const EVIDENCIA = join(RAIZ, 'docs', 'evidencia', 'laboratorio-visual');
 const CON_BACKEND = Boolean(process.env.VISUAL_BASE);
 
 /** Todo lo que encuentra la corrida, para el informe final. */
@@ -49,31 +52,32 @@ const informe = [];
 
 test.describe.configure({ mode: 'serial' });
 
-let sesionJugador = null;
-let sesionAdmin = null;
+/**
+ * UX-R3.9 — una persona por rol, no dos aproximaciones.
+ *
+ * Hasta aquí había dos sesiones, y con backend real la segunda era la
+ * primera: `sesionAdmin = sesionJugador`. Es decir, las nueve pantallas de la
+ * consola se fotografiaban **con un jugador**, salía el estado de permiso
+ * denegado, y eso se archivaba como «la captura de la vista de auditoría».
+ *
+ * Ahora cada vista se abre con la persona que le corresponde según la matriz
+ * de acceso, y las personas se consiguen por los mecanismos reales del
+ * sistema. Ver `personas.js`.
+ */
+let sesiones = {};
+let avisosDePersonas = [];
 
 test.beforeAll(async ({ baseURL }) => {
   if (!CON_BACKEND) {
-    // Sin API no hay a quién registrarse: se fabrica el token que deja pintar.
-    sesionJugador = {
-      ...sesionSintetica({ apodo: 'qa_visual' }),
-      apodo: 'qa_visual',
-      rol: 'JUGADOR',
-    };
-    sesionAdmin = {
-      ...sesionSintetica({ apodo: 'qa_admin', rol: 'ADMINISTRADOR' }),
-      apodo: 'qa_admin',
-      rol: 'ADMINISTRADOR',
-    };
+    ({ sesiones, avisos: avisosDePersonas } = await conseguirPersonas(null));
     return;
   }
   const api = await apiRequest.newContext({ baseURL, ignoreHTTPSErrors: true });
   try {
-    sesionJugador = await identidadReal(api, { apodo: apodoEfimero('qa_jugador') });
-    // El rol administrativo no se puede pedir al registrarse (y está bien que
-    // no se pueda). Con backend real, las vistas de administración se
-    // capturan con su estado de permiso denegado, que también hay que mirar.
-    sesionAdmin = sesionJugador;
+    ({ sesiones, avisos: avisosDePersonas } = await conseguirPersonas(api));
+    for (const aviso of avisosDePersonas) {
+      console.warn(`  ⚠ identidades: ${aviso}`);
+    }
   } finally {
     await api.dispose();
   }
@@ -116,12 +120,9 @@ for (const vista of VISTAS) {
         baseURL,
       });
       try {
-        const sesion =
-          vista.acceso === 'admin'
-            ? sesionAdmin
-            : vista.acceso === 'jugador'
-              ? sesionJugador
-              : null;
+        // La persona sale de la matriz de acceso, no de una lista aparte.
+        const { para } = personasDe(vista);
+        const sesion = vista.acceso === 'publica' ? null : (sesiones[para] ?? null);
         await inyectarSesion(contexto, sesion);
 
         const pagina = await contexto.newPage();
@@ -161,6 +162,21 @@ for (const vista of VISTAS) {
         // estética.
         if (vista.acceso !== 'publica' && !sesion) {
           expect(pagina.url()).toContain('login.html');
+        }
+
+        // UX-R3.9 · §25 — y con la persona correcta, la vista se abre de
+        // verdad: ni redirige al login ni se queda en la pantalla de «sin
+        // acceso». Sin esto, una captura de la consola hecha con un jugador
+        // se archivaba como si fuera la vista.
+        if (sesion) {
+          expect(
+            pagina.url(),
+            `${vista.id}: ${NOMBRE[para]} debería entrar y acabó en el login`,
+          ).not.toContain('login.html');
+          const denegada = await pagina.evaluate(
+            () => document.documentElement.dataset.acceso === 'denegado',
+          );
+          expect(denegada, `${vista.id}: ${NOMBRE[para]} recibió «sin acceso»`).toBe(false);
         }
 
         // La pantalla no puede quedarse en blanco. Una vista que no pinta
@@ -205,7 +221,7 @@ test.afterAll(() => {
   writeFileSync(join(EVIDENCIA, 'informe.json'), `${JSON.stringify(resumen, null, 2)}\n`, 'utf8');
 
   const lineas = [
-    '# Auditoría visual automática — UX-R2.1',
+    '# Auditoría visual automática del producto',
     '',
     `Generado: ${resumen.generado} · modo **${resumen.modo}**`,
     '',
@@ -230,6 +246,6 @@ test.afterAll(() => {
   ];
   writeFileSync(join(EVIDENCIA, 'INFORME.md'), lineas.join('\n'), 'utf8');
   if (existsSync(join(EVIDENCIA, 'INFORME.md'))) {
-    console.log(`\n  Informe visual en docs/evidencia/ux-r2/INFORME.md`);
+    console.log(`\n  Informe visual en docs/evidencia/laboratorio-visual/INFORME.md`);
   }
 });

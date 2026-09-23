@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Nexus Battles VI - Tienda (ms-ecommerce): carrito y vitrina
+  title: 'Nexus Battles VI - Tienda (ms-ecommerce): carrito y vitrina'
   version: 1.0.0
   description: >
     Contrato de lo que ms-ecommerce publica hoy (bloque de identidad/seguridad,

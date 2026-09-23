@@ -118,6 +118,22 @@
   color: var(--texto);
 }
 
+/* Acción secundaria SOBRE cromo — UX-R3.2.
+   `--secundario` es blanco sobre superficie: puesto encima del cromo se
+   convierte en un bloque blanco que pesa más que el propio CTA de acento y
+   se lleva la mirada. Este hereda el color del contenedor y se dibuja solo
+   con el contorno, que es lo que hace una acción secundaria: estar, sin
+   competir. Solo tiene sentido dentro de una superficie oscura. */
+.boton--contorno {
+  background: transparent;
+  border-color: currentcolor;
+  color: inherit;
+}
+.boton--contorno:hover {
+  background: color-mix(in srgb, currentcolor 14%, transparent);
+  color: inherit;
+}
+
 .boton--peligro {
   background: var(--error);
   color: var(--texto-sobre-color);
@@ -604,6 +620,30 @@
   background: var(--superficie);
   border: 1px solid var(--borde);
   border-radius: var(--radio);
+  /* UX-R4.4 — un estado de la vista entera ocupa la vista entera, tambien
+     cuando la zona donde se pinta es una rejilla. En «Mis cofres» el fallo
+     caia dentro de `.cofres-lista`, que reparte columnas de 240 px, y se
+     colocaba como si fuera un cofre mas: una caja estrecha a la izquierda y
+     el resto de la tarjeta en blanco. Fuera de una rejilla, esta linea no
+     hace nada, asi que vale para las dos formas de pintarlo. */
+  grid-column: 1 / -1;
+}
+
+/* UX-R4.4 — dentro de una tarjeta, el estado NO dibuja otra tarjeta.
+   `historial-transacciones` y `mis-cofres` pintan su estado dentro de
+   `<section class="tarjeta">`, que ya trae superficie blanca, borde y radio.
+   El estado traia lo mismo, asi que salia un marco blanco dentro de otro
+   marco blanco separados por doce pixeles: el doble borde que se ve en
+   cuanto falla cualquiera de las dos. La tarjeta pone el papel; el estado
+   solo pone lo que dice.
+
+   Descendiente y no hijo directo: las dos vistas envuelven el estado en su
+   propia zona (`<div id="historial-estado-vista">`, `.cofres-lista`), asi que
+   `.tarjeta > .estado-vista` no llegaba a ninguna de las dos. Se probo, y el
+   doble borde seguia ahi. */
+.tarjeta .estado-vista {
+  background: none;
+  border: 0;
 }
 
 .estado-vista__icono {
@@ -732,12 +772,6 @@
   gap: var(--e-1);
 }
 
-.dialogo__titulo {
-  flex: 1;
-  font-family: var(--t-titulo-familia);
-  font-size: var(--t-titulo-tam);
-  font-weight: var(--t-titulo-peso);
-}
 
 /* El botón destructivo va a la derecha; cancelar nunca es el prominente. */
 .dialogo__acciones {
@@ -994,6 +1028,16 @@
    Ayuda contextual
    Aparece al señalar Y al enfocar con teclado. Se cierra con Escape.
    Máximo dos líneas: si necesita más, es documentación.
+   -----------------------------------------------------------------------
+   OJO (UX-R3.3): esto es un BOCADILLO. Lleva fondo cromo, sombra de capa 3 y
+   una flecha, y no sabe esconderse solo: quien lo pone en el marcado lo
+   enseña siempre. Tres vistas —auditoría, historial y cofres— lo usaban como
+   párrafo descriptivo bajo el `<h1>` y como indicador de página dentro de la
+   paginación. El resultado eran dos cajas oscuras flotando fijas en medio de
+   la pantalla, en la vista que consulta el registro inmutable del sistema.
+
+   Para un párrafo descriptivo, `.t-meta`. Para el indicador de página,
+   `.paginacion__info`. Este componente es para ayuda que aparece y se va.
    ======================================================================= */
 
 .ayuda {
@@ -1072,9 +1116,14 @@
   background: var(--advertencia-insignia);
   color: var(--advertencia);
 }
+/* UX-R3.8 — esto iba en rojo, y no es un error: sin canal en tiempo real la
+   vista sigue funcionando, sigue trayendo notificaciones y se pone al día
+   sola; lo único que pasa es que los avisos tardan un poco más. El rojo es
+   para lo que está roto. El ámbar dice «ojo, algo va distinto», que es
+   exactamente lo que pasa. */
 .conexion--sin-conexion {
-  background: var(--error-insignia);
-  color: var(--error);
+  background: var(--advertencia-insignia);
+  color: var(--advertencia);
 }
 
 /* =======================================================================
@@ -2298,9 +2347,15 @@
   flex: 0 0 auto;
 }
 
+/* UX-R3.3 — el distintivo de rol se pegaba al apodo y su borde superior se
+   leía como un subrayado: parecía que «qa_ux» fuera un enlace. Dos píxeles de
+   separación y el distintivo ajustado a su propio texto (`align-items`, no
+   estirado a lo ancho del apodo) lo resuelven. */
 .cabecera__identidad {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+  gap: var(--e-1);
   line-height: 1.2;
 }
 
@@ -3157,7 +3212,13 @@
   font-variant-numeric: var(--cifras-tabulares);
 }
 
+/* UX-R3.11 — estaba declarado dos veces en esta misma hoja, con dos escalas
+   tipograficas distintas (titulo y subtitulo). Como el selector es identico,
+   ganaba la segunda para lo que declaraba y sobrevivia el `flex: 1` de la
+   primera: el resultado en pantalla es esta union. Se deja escrita una sola
+   vez para que lo que se lee sea lo que pasa. */
 .dialogo__titulo {
+  flex: 1;
   font-family: var(--t-subtitulo-familia);
   font-size: var(--t-subtitulo-tam);
   font-weight: var(--t-subtitulo-peso);
@@ -3248,106 +3309,226 @@
 }
 
 /* =======================================================================
-   Entrada al juego — login, registro y recuperación
+   Portal de entrada — login, registro y recuperación (UX-R3.1)
    -----------------------------------------------------------------------
-   Dos columnas en pantalla grande: a la izquierda la identidad del producto,
-   a la derecha la tarjeta con el formulario. En móvil, la identidad se
-   reduce a la marca y el formulario ocupa el ancho: nadie se registra para
-   leer un texto de presentación.
+   Antes esto era una pantalla de aplicación: fondo gris claro, tarjeta
+   blanca, marca en texto oscuro. Funcionaba, y no se parecía a un juego —
+   se parecía a la pantalla de acceso de una intranet. Era también la única
+   vista del producto que un visitante ve antes de decidir si entra.
+
+   El cambio no introduce ni un color nuevo. Usa los que ya están, donde
+   tienen sentido: `--cromo` es el color del juego (la barra, la cabecera del
+   combate), así que el portal se pinta EN cromo en vez de flotar sobre gris,
+   y la tarjeta del formulario pasa a ser la única superficie clara de la
+   pantalla. Eso hace dos cosas a la vez: el portal se lee como juego, y el
+   sitio donde hay que escribir es el punto más luminoso de la composición.
+
+   Sin fondo animado (§22) ni ilustración inventada: la profundidad sale de
+   dos degradados de cromo y de la sombra de la tarjeta.
    ======================================================================= */
 
+.portal {
+  /* Columna, para que el `main` se quede con lo que sobra de la fila de marca
+     y el centrado vertical sea exacto. Con `min-height: 100vh` en los dos, la
+     escena medía una pantalla MÁS la cabecera y se iba media fila abajo. */
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  /* Color plano primero: si `color-mix` no está disponible, esto es lo que
+     queda, y sigue siendo correcto. */
+  background: var(--cromo);
+  background-image:
+    radial-gradient(
+      120% 80% at 15% 0%,
+      color-mix(in srgb, var(--acento-relleno) 38%, transparent),
+      transparent 60%
+    ),
+    radial-gradient(
+      90% 70% at 100% 100%,
+      color-mix(in srgb, var(--primaria) 30%, transparent),
+      transparent 55%
+    ),
+    linear-gradient(180deg, var(--cromo-elevado), var(--cromo) 55%);
+  color: var(--texto-sobre-color);
+}
+
+/* La composición ocupa lo que quede bajo la fila de marca, sea cual sea su
+   alto: `flex: 1` en vez de restar `--cabecera-alto` a mano. */
 .entrada {
-  min-height: calc(100vh - var(--cabecera-alto));
+  flex: 1;
   display: grid;
   grid-template-columns: 1fr;
-  align-items: center;
+  /* La fila se centra en el hueco que sobra; dentro de ella, las dos columnas
+     se alinean por ARRIBA. Con `align-items: center` la identidad se centraba
+     contra la altura de la tarjeta, y en el registro —una tarjeta de ocho
+     campos, más alta que la ventana— eso dejaba la marca a media página, por
+     debajo del pliegue, en la pantalla donde más falta hace. */
+  align-items: start;
+  align-content: center;
   gap: var(--e-8);
-  padding: var(--e-6) var(--e-4);
+  padding: var(--e-8) var(--e-4);
 }
 
 @media (min-width: 900px) {
   .entrada {
-    grid-template-columns: 1.1fr 1fr;
-    max-width: 1100px;
+    grid-template-columns: 1.05fr 1fr;
+    max-width: 1180px;
     margin: 0 auto;
     padding: var(--e-8) var(--e-6);
+    gap: var(--e-16);
+  }
+}
+
+/* En móvil manda el formulario. Nadie se registra para leer la presentación,
+   y en 375 px la identidad empujaba la tarjeta fuera de la primera pantalla.
+   El orden del DOM se mantiene (la identidad primero) porque es el orden en
+   que tiene sentido oírlo con un lector de pantalla. */
+/* En pantalla ancha la identidad acompaña al formulario mientras se rellena:
+   en el registro hay que desplazarse, y sin esto la marca se iba arriba y la
+   columna izquierda quedaba vacía durante todo el resto del formulario. */
+@media (min-width: 900px) {
+  .entrada__identidad {
+    position: sticky;
+    top: var(--e-8);
+  }
+}
+
+@media (max-width: 899px) {
+  .entrada__identidad {
+    order: 2;
+  }
+
+  .entrada__tarjeta {
+    order: 1;
   }
 }
 
 .entrada__identidad {
   display: flex;
   flex-direction: column;
-  gap: var(--e-4);
+  gap: var(--e-5);
+}
+
+/* «Return of the Warriors» — el subtítulo del producto, que es lo que este
+   renglón siempre debió decir. Antes decía «Proyecto Integrador II · UPB
+   Bucaramanga»: información verdadera, y de la entrega, no del juego. */
+.entrada__sobretitulo {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--pista);
+}
+
+/* La línea corta que lo precede: el gesto del filo de la tarjeta, horizontal
+   y a escala de renglón. Dos usos del mismo recurso, no dos recursos. */
+.entrada__sobretitulo::before {
+  content: '';
+  width: var(--e-8);
+  height: 2px;
+  background: linear-gradient(90deg, var(--texto-sobre-color), transparent);
 }
 
 .entrada__marca {
+  margin: 0;
   font-family: var(--t-titulo-familia);
-  font-size: var(--t-display-tam);
-  line-height: var(--t-display-alto);
-  letter-spacing: 0.02em;
+  font-size: clamp(2.5rem, 6vw, 4.25rem);
+  font-weight: var(--t-titulo-peso);
+  line-height: 1.02;
+  letter-spacing: 0.01em;
+  color: var(--texto-sobre-color);
 }
 
-/* El acento es del Nexo: una sola palabra, no toda la marca. */
+/* El acento es del Nexo: una sola palabra, no toda la marca.
+   Sobre cromo, `--primaria` es casi invisible —es un azul pensado para leerse
+   sobre fondo claro—, y `--pista` se lee como gris, no como acento. El acento
+   del portal es la MISMA primaria aclarada hacia el blanco del kit: sigue
+   siendo el azul de la marca, con el contraste que este fondo pide. No es un
+   color nuevo; es el de siempre, mezclado con otro de la paleta. */
 .entrada__marca em {
   font-style: normal;
-  color: var(--primaria);
+  color: var(--pista);
+  color: color-mix(in srgb, var(--primaria) 35%, var(--texto-sobre-color));
 }
 
 .entrada__lema {
-  max-width: 46ch;
-  color: var(--texto-2);
+  max-width: 44ch;
+  margin: 0;
+  color: var(--pista);
   font-size: var(--t-subtitulo-tam);
-  line-height: var(--t-subtitulo-alto);
+  line-height: 1.45;
 }
 
 .entrada__puntos {
   display: grid;
-  gap: var(--e-2);
+  gap: var(--e-3);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
+/* Cada capacidad con su icono del sprite compartido. No son viñetas
+   decorativas: dicen de qué va cada línea antes de leerla (§23). El icono va
+   `aria-hidden` y el texto lo dice entero, así que no aporta ni quita nada a
+   quien usa lector de pantalla. */
 .entrada__punto {
   display: flex;
-  align-items: baseline;
-  gap: var(--e-2);
-  color: var(--texto-2);
+  align-items: center;
+  gap: var(--e-4);
+  color: var(--texto-sobre-color);
+  font-size: var(--t-cuerpo-tam);
 }
 
-.entrada__punto::before {
-  content: '';
+/* Sin pastilla detrás. Se probó con una —un cuadrado tenue por icono— y tres
+   cuadrados oscuros sobre fondo oscuro no separan nada: ensucian la columna y
+   obligan al glifo a competir con su propia caja. El icono solo, en el acento
+   de la marca, hace el trabajo con menos.
+
+   `overflow: visible` porque estos glifos dibujan hasta el borde del viewBox
+   (la espada va de 3,3 a 21,21 con trazo de 2) y el SVG recorta por defecto:
+   sin esto, la punta de la espada y el asa del trofeo salían cortadas. */
+.entrada__punto .icono {
   flex: 0 0 auto;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--primaria);
+  width: var(--icono);
+  height: var(--icono);
+  overflow: visible;
+  color: var(--pista);
+  color: color-mix(in srgb, var(--primaria) 35%, var(--texto-sobre-color));
 }
+
+/* --- La tarjeta: la única superficie clara de la pantalla -------------- */
 
 .entrada__tarjeta {
-  width: min(440px, 100%);
+  width: min(452px, 100%);
   justify-self: center;
   display: flex;
   flex-direction: column;
   gap: var(--e-4);
-  padding: var(--e-6);
+  padding: var(--e-8) var(--e-6) var(--e-6);
   background: var(--superficie);
-  border: 1px solid var(--borde);
   border-radius: var(--radio);
-  box-shadow: var(--sombra-3);
+  /* Sobre cromo, un borde de 1 px no separa nada: lo que separa es la
+     sombra, y aquí puede ser la de capa 4 sin competir con ningún modal. */
+  box-shadow: var(--sombra-4);
+  color: var(--texto);
 }
 
-/* Filo superior: lo único decorativo de la pantalla, y sirve para separar
-   la tarjeta del fondo sin recurrir a una sombra más dura. */
+/* Filo superior. Lo único decorativo de la pantalla, y el mismo gesto que
+   marca la consola en su barra. */
 .entrada__tarjeta::before {
   content: '';
-  height: 3px;
-  margin: calc(var(--e-6) * -1) calc(var(--e-6) * -1) 0;
+  height: 4px;
+  margin: calc(var(--e-8) * -1) calc(var(--e-6) * -1) 0;
   border-radius: var(--radio) var(--radio) 0 0;
-  background: linear-gradient(90deg, var(--primaria), var(--acento-relleno, var(--primaria)));
+  background: linear-gradient(90deg, var(--primaria), var(--acento-relleno));
 }
 
 .entrada__titulo {
+  margin: 0;
   font-family: var(--t-titulo-familia);
   font-size: var(--t-titulo-tam);
   line-height: var(--t-titulo-alto);
@@ -3375,6 +3556,13 @@
   min-height: var(--objetivo-tactil);
 }
 
+/* Formularios largos (registro) dentro de la tarjeta: el ancho de la tarjeta
+   sube, porque apretar ocho campos en 452 px produce filas de un solo campo
+   y una columna de dos metros. */
+.entrada__tarjeta--ancha {
+  width: min(620px, 100%);
+}
+
 /* =======================================================================
    Home del jugador
    ======================================================================= */
@@ -3384,24 +3572,42 @@
   gap: var(--e-5);
 }
 
-.home__destacado {
+/* La portada del jugador — UX-R3.2.
+
+   Una sola pieza con lo que se mira al volver: quién eres y qué vas a hacer a
+   la izquierda, con qué a la derecha. Antes eran dos bloques uno debajo del
+   otro, y el orden decía «hola, juega» y solo después «ah, y este es tu
+   héroe» — al revés de como se lee un juego.
+
+   La profundidad sale del mismo recurso que el portal: cromo con dos
+   degradados. Es deliberado que se parezcan: la portada del jugador es el
+   portal una vez dentro. */
+.home__portada {
   display: grid;
-  gap: var(--e-4);
+  gap: var(--e-6);
   align-items: center;
-  padding: var(--e-6);
-  background: var(--cromo-elevado, var(--superficie));
-  color: var(--texto-sobre-color);
-  border: 1px solid var(--borde);
+  padding: var(--e-8) var(--e-6);
   border-radius: var(--radio);
+  background: var(--cromo-elevado);
+  background-image:
+    radial-gradient(
+      100% 120% at 0% 0%,
+      color-mix(in srgb, var(--acento-relleno) 40%, transparent),
+      transparent 62%
+    ),
+    linear-gradient(100deg, var(--cromo-elevado), var(--cromo) 70%);
+  color: var(--texto-sobre-color);
+  box-shadow: var(--sombra-2);
 }
 
-@media (min-width: 860px) {
-  .home__destacado {
-    grid-template-columns: 1fr auto;
+@media (min-width: 900px) {
+  .home__portada {
+    grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+    gap: var(--e-16);
   }
 }
 
-/* El fondo de `.home__destacado` es oscuro, asi que su texto NO puede heredar
+/* El fondo de la portada es oscuro, asi que su texto NO puede heredar
    `--texto` del body. Y no basta con poner el color en el contenedor: `base.css`
    declara `color: var(--texto)` DIRECTAMENTE sobre `h1, h2, .t-titulo...`, y una
    declaracion propia gana siempre a la herencia. Por eso van nombrados.
@@ -3409,15 +3615,71 @@
    Sin esto, el saludo salia a 1,46:1 sobre `--cromo-elevado`, muy por debajo
    del 4,5:1 de WCAG AA (1.4.3): el panel mas visible de la aplicacion y
    practicamente ilegible. Lo midio el laboratorio visual (UX-R2.1); leyendo el
-   CSS no se ve, porque el color venia de tres niveles mas arriba. */
-.home__destacado :is(h1, h2, h3, .t-titulo, .t-subtitulo, .t-etiqueta, .t-cuerpo) {
+   CSS no se ve, porque el color venia de tres niveles mas arriba.
+
+   La excepcion es `.home__heroe`: ahi dentro vive una tarjeta blanca del kit,
+   con su propio texto oscuro, y forzarle el blanco la dejaria ilegible. */
+.home__presentacion :is(h1, h2, h3, .t-titulo, .t-subtitulo, .t-etiqueta, .t-cuerpo) {
   color: var(--texto-sobre-color);
 }
 
+.home__presentacion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-4);
+}
+
+.home__sobretitulo {
+  margin: 0;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--pista);
+}
+
 .home__saludo {
+  margin: 0;
   font-family: var(--t-titulo-familia);
   font-size: var(--t-titulo-xl-tam);
   line-height: var(--t-titulo-xl-alto);
+  /* Un apodo puede ser largo y no lleva espacios: sin esto empujaba la
+     portada a lo ancho y sacaba el botón fuera en móvil. */
+  overflow-wrap: anywhere;
+}
+
+.home__lema {
+  max-width: 46ch;
+  margin: 0;
+  color: var(--pista);
+}
+
+.home__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-3);
+  padding-top: var(--e-2);
+}
+
+/* El héroe equipado dentro de la portada. La tarjeta que pinta `home.js` es
+   del kit —blanca, con su retrato y su anillo de rareza— y aquí solo se le
+   dice cuánto sitio tiene.
+
+   `color: var(--texto)` NO es redundante: la portada declara
+   `--texto-sobre-color` para su propio texto, y eso se hereda hacia dentro.
+   Los títulos y encabezados del kit traen su color declarado y se salvan,
+   pero los estados de vista pintan su título con `<p class="…__titulo">`, que
+   hereda — y sobre la tarjeta blanca salía blanco sobre blanco. El
+   laboratorio no lo habría marcado: el texto estaba, medía bien y no
+   desbordaba. Simplemente no se veía. */
+.home__heroe {
+  min-width: 0;
+  color: var(--texto);
+}
+
+.home__heroe > * {
+  height: 100%;
 }
 
 .home__rejilla {
@@ -4212,32 +4474,47 @@ button.tarjeta-heroe[aria-pressed='true'] {
   box-shadow: var(--sombra-2);
 }
 
-/* El héroe equipado es lo segundo que se mira: sube de la rejilla de tres a
-   su propia fila, con el retrato a la izquierda. */
+/* El héroe equipado ya no es «lo segundo que se mira»: desde UX-R3.2 vive
+   dentro de la portada, al lado de la acción de jugar. En la ranura, el
+   retrato manda y los datos se apilan debajo — la columna mide 280 px como
+   mínimo, no el ancho de la página, así que el retrato a la izquierda y el
+   texto a la derecha ya no caben cómodos. */
 .home__heroe .tarjeta {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: var(--e-4);
+  display: flex;
+  flex-direction: column;
   align-items: center;
+  gap: var(--e-3);
+  text-align: center;
 }
 
-/* Salvo cuando el bloque no trae héroe y lo que hay es un estado vacío o de
-   error, que ocupa la tarjeta entera. */
-.home__heroe .estado-vista,
-.home__heroe .tarjeta:not(:has(.marco-heroe)) {
-  display: block;
+/* UX-R3.2 — aquí había `display: block` sobre `.estado-vista`.
+
+   La intención era que el estado ocupara la tarjeta entera, y lo conseguía;
+   el efecto secundario era que deshacía el `display: flex` del propio
+   componente y con él su `align-items: center`. El resultado: el icono
+   circular de 56 px pegado al borde izquierdo, y el título y el detalle
+   centrados por el `text-align` heredado. Una pieza descuadrada, en el bloque
+   más visible de la home, en los dos estados en que aparece (sin héroe, y con
+   el inventario caído — que es el estado por omisión en dev).
+
+   `.estado-vista` ya sabe ocupar y centrar: lo que necesitaba era altura, no
+   otro `display`. */
+.home__heroe .estado-vista {
+  height: 100%;
 }
 
 @media (max-width: 767px) {
-  .home__jugar {
+  /* Las dos acciones de la portada ocupan el ancho y se apilan: en 375 px,
+     «Jugar ahora» y «Ver salas abiertas» en la misma fila dejaban la segunda
+     en dos renglones. */
+  .home__acciones > .boton {
     width: 100%;
     justify-content: center;
   }
 
-  .home__heroe .tarjeta {
-    grid-template-columns: 1fr;
-    justify-items: center;
-    text-align: center;
+  .home__jugar {
+    width: 100%;
+    justify-content: center;
   }
 }
 
@@ -4527,4 +4804,451 @@ button.tarjeta-heroe[aria-pressed='true'] {
   .presentacion {
     gap: var(--e-4);
   }
+}
+
+/* =======================================================================
+   Los tres armazones — UX-R3.0 (src/comun/shell.js)
+   -----------------------------------------------------------------------
+   RF-INV-008 («adapta las opciones visibles al estado de autenticación y al
+   rol del usuario») · RF-RBAC-001 · RF-RBAC-002.
+
+   Un solo sistema de diseño, tres densidades. Lo que cambia entre ellos no
+   es la paleta ni la tipografía —son las mismas— sino cuánta información
+   cabe por fila y qué se pone en primer plano:
+
+     portal   marca y una salida. Nada más: quien mira todavía no tiene
+              aplicación que navegar.
+     jugador  seis destinos (RF-INV-008), buscador y HUD.
+     consola  ocho herramientas, sin HUD de juego y con el rol a la vista.
+
+   Ninguna regla de aquí introduce un color nuevo: todo sale de tokens.css.
+   ======================================================================= */
+
+/* --- 1. Portal de entrada ---------------------------------------------- */
+
+/* En el portal, la barra no es una barra: es la primera línea de la escena.
+   Pintar cromo sobre cromo dibujaría un rectángulo que no separa nada, así
+   que se queda transparente y la marca flota sobre el degradado. */
+/* En el portal la barra no es una barra: es la primera línea de la escena.
+   Pintar cromo sobre cromo dibujaría un rectángulo que no separa nada. Fuera
+   del portal —la pantalla de «sin acceso» usa esta misma variante— el fondo
+   es claro, y ahí el cromo sí separa, así que solo se hace transparente
+   dentro de `.portal`. */
+.portal .cabecera--portal {
+  background: transparent;
+  padding-top: var(--e-3);
+}
+
+/* Sin navegación, la marca deja de competir por el espacio: se le da el peso
+   que tiene en la pantalla de un juego, no el de un logotipo de barra. */
+.cabecera--portal .cabecera__grupo-marca {
+  gap: var(--e-4);
+}
+
+.cabecera--portal .cabecera__marca {
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  font-weight: var(--t-titulo-peso);
+  letter-spacing: 0.04em;
+}
+
+/* «¿Primera vez en el Nexo?» acompaña al botón y explica para qué es. En
+   móvil desaparece: el botón se basta y la fila no tiene sitio. */
+.cabecera__invitacion {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--pista);
+}
+
+@media (max-width: 640px) {
+  .cabecera__invitacion {
+    display: none;
+  }
+}
+
+/* --- 2. Distintivo de rol ---------------------------------------------- */
+
+/* Quién eres cuando no eres solo jugador. Sigue la regla de las insignias de
+   tokens.css: color saturado como TEXTO sobre el fondo tenue del mismo
+   color, nunca relleno sólido con texto blanco. */
+.distintivo-rol {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--e-2);
+  border-radius: var(--radio-pildora);
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-cuerpo-peso-enfasis);
+  line-height: 1.6;
+  white-space: nowrap;
+  background: var(--info-insignia);
+  color: var(--info);
+}
+
+.distintivo-rol--moderador {
+  background: var(--info-insignia);
+  color: var(--info);
+}
+
+.distintivo-rol--administrador {
+  background: var(--rareza-epica-insignia);
+  color: var(--rareza-epica);
+}
+
+/* El super administrador se distingue del administrador a propósito: es el
+   único rol que puede crear otros administradores (RF-RBAC-003) y el único
+   cuya sesión exige doble factor. Verlo de un vistazo importa. */
+.distintivo-rol--super-administrador {
+  background: var(--advertencia-insignia);
+  color: var(--advertencia);
+}
+
+/* Dentro del cromo el fondo tenue de la insignia no contrasta: ahí el
+   distintivo se dibuja en negativo, con el borde marcando la forma. */
+.cabecera .distintivo-rol {
+  background: transparent;
+  border: 1px solid currentcolor;
+  color: var(--pista);
+}
+
+/* --- 3. Consola de operación ------------------------------------------- */
+
+/* «Control» junto a la marca. No es un adorno: es la única señal permanente
+   de que lo que se pulsa aquí afecta a otras personas. */
+.cabecera__marca-sufijo {
+  margin-left: var(--e-2);
+  padding: 0 var(--e-2);
+  border-radius: var(--radio-chico);
+  background: var(--acento-relleno);
+  color: var(--texto-sobre-color);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Nueve destinos no caben con la separación de seis. La consola comprime la
+   navegación —es su diferencia de densidad respecto al jugador— sin tocar el
+   objetivo táctil, que sigue en 44 px de alto.
+
+   Y se pliega antes. El armazón de jugador se pliega a los 860 px porque sus
+   seis destinos caben de sobra en 1024; los nueve de la consola no: el
+   laboratorio los midió en **tres filas, 166 px de cabecera**, en las siete
+   vistas de trastienda a 1024×768 — que es la resolución de una pantalla de
+   portátil corriente, no un caso raro. Plegar no es esconder: los nueve
+   siguen estando, a un toque.
+
+   UX-R3.11 — el corte en 1200 se fijó midiendo a 1024 y no se volvió a mirar
+   más arriba. La captura del barrido, con persona de super administración a
+   1440, enseñó «AUDITORÍA» sola en una segunda fila. Medido en las cuatro
+   combinaciones (altura real de `.cabecera`, 64 px = una fila):
+
+     nueve destinos, MAYÚSCULAS + espaciado   684 px de texto
+     nueve destinos, caja normal              548 px de texto
+
+     ancho   sitio para la nav   MAYÚSCULAS   caja normal
+     1600    —                   64 px        64 px
+     1540    —                   64 px        64 px
+     1520    —                   106 px       —
+     1440    676 px              106 px       64 px
+     1366    644 px              106 px       64 px
+     1280    570 px              106 px       102 px
+
+   Las mayúsculas cuestan 136 px, que es justo la diferencia entre caber y no
+   caber en un portátil. Así que la consola se queda en mayúsculas donde hay
+   sitio, baja a caja normal en la banda de portátil —donde la densidad importa
+   más que el gesto— y se pliega cuando ya no cabe de ninguna manera. Ninguna
+   de las tres opciones esconde un destino: la tercera lo deja a un toque. */
+
+@media (max-width: 1365px) {
+  .cabecera--consola .cabecera__nav--consola {
+    display: none;
+  }
+
+  .cabecera--consola[data-nav-abierto='si'] .cabecera__nav--consola {
+    display: flex;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 25;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: var(--e-2) var(--e-4) var(--e-4);
+    background: var(--cromo);
+    border-bottom: 2px solid var(--acento-relleno);
+    box-shadow: var(--sombra-3);
+  }
+
+  .cabecera--consola {
+    position: relative;
+  }
+
+  .cabecera--consola .cabecera__alternar {
+    display: inline-flex;
+  }
+}
+
+.cabecera--consola .cabecera__grupo-marca {
+  gap: var(--e-5);
+}
+
+.cabecera--consola .cabecera__nav--consola {
+  gap: var(--e-4);
+}
+
+.cabecera--consola .cabecera__destino {
+  font-size: var(--t-meta-tam);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* Banda de portátil: caben los nueve en una fila si se les quita el coste de
+   las mayúsculas. Verificado a 1440 y a 1366.
+
+   Va DESPUES de la regla de arriba a proposito: una consulta de medios no
+   suma especificidad, asi que escrita antes perdia contra ella y no hacia
+   nada — el laboratorio lo midio: seguia en 106 px. */
+@media (max-width: 1540px) and (min-width: 1366px) {
+  .cabecera--consola .cabecera__nav--consola {
+    gap: var(--e-3);
+  }
+
+  .cabecera--consola .cabecera__destino {
+    text-transform: none;
+    letter-spacing: normal;
+  }
+}
+
+
+/* El filo de acento recorre toda la barra. Es la versión a lo ancho del filo
+   superior de la tarjeta de entrada: mismo gesto, mismo gradiente, distinto
+   sitio. Marca el modo sin gastar un color nuevo. */
+.cabecera--consola {
+  border-bottom: 2px solid var(--acento-relleno);
+}
+
+/* La salida al juego es secundaria, pero tiene que existir: un administrador
+   también juega, y sin esto volvía escribiendo la URL a mano. */
+.cabecera__salida {
+  white-space: nowrap;
+}
+
+@media (max-width: 860px) {
+  /* En móvil la salida entra en el panel plegable, no en la fila. */
+  .cabecera__salida {
+    display: none;
+  }
+}
+
+/* --- 4. Aterrizaje de la consola --------------------------------------- */
+
+/* §19: la consola es más compacta que la aplicación del jugador. La densidad
+   no se consigue apretando la tipografía —que sería la misma peor leída— sino
+   ensanchando el área útil y acortando el ritmo vertical: quien opera compara
+   tablas y filtros, no contempla una portada. `.pagina` sigue poniendo el
+   centrado y el relleno; esto solo ajusta las dos medidas que cambian. */
+.consola {
+  max-width: 1600px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-6);
+}
+
+.consola__rejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--e-4);
+}
+
+.consola__herramienta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  text-decoration: none;
+  color: inherit;
+}
+
+/* El alcance del rol, al pie. Texto de lectura, no de interfaz: ancho medido
+   en caracteres para que no se convierta en una línea de 140. */
+.consola__alcance {
+  max-width: 78ch;
+  color: var(--texto-2);
+  line-height: var(--t-cuerpo-alto);
+}
+
+/* --- 5. Interrupción: sin permiso, sin sesión, servicio caído ----------- */
+
+/* §17: un 403 no es contenido. Esta pantalla sustituye a la vista entera
+   —y no se superpone— para que debajo no siga cargando datos que el
+   servidor va a negar de todas formas. */
+/* La pantalla de interrupción trae su propia barra de marca, así que aquí se
+   descuenta su alto igual que en cualquier otra vista. Sobre `--fondo`, no
+   sobre cromo: quien llega aquí no está en el portal, está dentro y se ha
+   topado con una puerta. */
+.interrupcion {
+  min-height: calc(100vh - var(--cabecera-alto));
+  display: grid;
+  place-items: center;
+  padding: var(--e-8) var(--e-4);
+}
+
+.interrupcion__tarjeta {
+  width: min(520px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+  padding: var(--e-8) var(--e-6);
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra-2);
+  text-align: center;
+}
+
+.interrupcion__titulo {
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-titulo-tam);
+  line-height: var(--t-titulo-alto);
+  color: var(--texto);
+}
+
+.interrupcion__detalle {
+  max-width: 46ch;
+  margin: 0 auto;
+  color: var(--texto-2);
+  line-height: var(--t-cuerpo-alto);
+}
+
+.interrupcion__salidas {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--e-3);
+  padding-top: var(--e-3);
+}
+
+/* =======================================================================
+   Lista negra de términos — UX-R3.3
+   -----------------------------------------------------------------------
+   RF-USR-002 / HU-ADM-002: los términos que el registro rechaza en un apodo.
+
+   La vista existía y funcionaba, pero no había adoptado el sistema: un
+   `<header>` con texto suelto, un `<input>` sin clase y dos botones que se
+   pintaban con el estilo por omisión del navegador, porque sus clases
+   (`acciones-termino`, `boton-eliminar`) no estaban definidas en ningún CSS
+   del repositorio. Una lista de filas con acciones es un patrón que el kit ya
+   sabe resolver; lo único que faltaba era la fila.
+   ======================================================================= */
+
+.lista-terminos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lista-terminos__fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+}
+
+.lista-terminos__termino {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--t-cuerpo-familia);
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+.lista-terminos__acciones {
+  display: flex;
+  gap: var(--e-2);
+}
+
+/* Formulario de una línea: un campo y su acción — UX-R3.3.
+
+   `.fila` existe y reparte el ancho a partes iguales entre sus hijos
+   (`.fila > * { flex: 1 1 280px }`), que es lo correcto para dos campos del
+   mismo peso. Para «un campo y un botón» no lo es: el botón crecía hasta
+   ocupar media pantalla. Aquí el campo se lleva el espacio y el botón mide lo
+   que mide su texto, alineado con el control y no con la etiqueta. */
+.formulario-en-linea {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--e-3);
+}
+
+.formulario-en-linea > .campo {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.formulario-en-linea > .boton {
+  flex: 0 0 auto;
+}
+
+/* El campo de combate solo existe cuando hay combate — UX-R3.4.
+
+   `.combate__campo` se lleva la franja `1fr` de la reja, que es la mayor
+   parte de la ventana: CA-01 de HU-JUE-017 pide más del 80 % del alto útil
+   para el área de juego, y eso está bien mientras haya área de juego. Sin
+   partida cargada dejaba media pantalla de degradado vacío con la tarjeta del
+   estado vacío huérfana debajo, casi en el borde inferior. La pantalla más
+   importante del producto parecía rota justo en el estado en el que más gente
+   la abre por error.
+
+   Sin partida: el campo desaparece y el estado vacío ocupa su sitio, centrado.
+   Con partida, nada de esto aplica y la reja vuelve a ser la de CA-01. */
+.combate[data-sin-partida='si'] .combate__campo {
+  display: none;
+}
+
+/* Y el hueco que dejaba pasa al estado vacío. Sin esto, la reja sigue
+   reservando su franja `1fr` —las filas las fija la plantilla, no el
+   contenido— y la tarjeta se quedaba pegada al borde inferior de la ventana,
+   que es justo lo que se venía a arreglar. */
+.combate[data-sin-partida='si'] {
+  grid-template-rows: auto 1fr;
+}
+
+/* `.combate__sala` es una CAPA: `position: absolute; inset: auto 0 0 0`, es
+   decir, pegada al borde inferior del campo, que es donde tiene que estar
+   mientras se espera a que la sala se llene y el campo ya se ve detrás.
+
+   Sin campo detrás no es una capa, es el contenido: vuelve al flujo de la
+   reja, ocupa la franja `1fr` que dejó el campo y se centra en ella. Esto era
+   lo que faltaba: ocultar el campo no bastaba, porque la tarjeta seguía
+   anclada abajo y quedaba flotando sobre medio lienzo vacío. */
+.combate[data-sin-partida='si'] .combate__sala {
+  position: static;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  min-height: 0;
+}
+
+.combate[data-sin-partida='si'] .combate__sala > .estado-vista {
+  width: min(560px, 100%);
+}
+
+/* Fila de acciones que NO reparte el ancho — UX-R3.8.
+
+   `.fila` existe y da `flex: 1 1 280px` a cada hijo, que es lo correcto para
+   campos del mismo peso. Para una fila de botones no lo es: un solo botón
+   crecía de lado a lado del contenedor. Esta variante los deja medir lo que
+   mide su texto, que es lo que hace un botón. */
+.fila--acciones > * {
+  flex: 0 0 auto;
 }

@@ -1,5 +1,10 @@
 plugins {
     id 'nexus.spring-conventions'
+    // R8.1: hasta aqui este modulo no tenia Spring Security en el classpath y
+    // sus cuatro controladores respondian a cualquiera, con el borde
+    // publicandolos a Internet. Las reglas de ruta viven en
+    // nexus/configuracion/SeguridadConfig.java, no en este plugin.
+    id 'nexus.seguridad-conventions'
     // Analisis estatico (categoria recomendada por el curso); solo este modulo
     id 'com.github.spotbugs' version '6.5.11'
 }

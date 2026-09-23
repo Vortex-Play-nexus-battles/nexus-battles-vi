@@ -164,7 +164,7 @@ test.describe('Comentarios: calificacion unica, promedio y eliminar (HU-COM-002/
     await page.goto(`${BORDE}${VISTA}?producto=${producto}`);
 
     await expect(page.locator('[data-zona="promedio"]')).toHaveText(
-      /3\.00 de 5 \(1 calificacion\)/,
+      /3\.00 de 5 \(1 calificación\)/,
       {
         timeout: 20000,
       },

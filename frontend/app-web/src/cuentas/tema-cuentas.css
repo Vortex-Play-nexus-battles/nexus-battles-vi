@@ -78,7 +78,7 @@ input[type='password'] {
 select:focus,
 input:focus,
 button:focus {
-  outline: 3px solid #9bb0e8;
+  outline: 3px solid color-mix(in srgb, var(--primaria) 45%, var(--superficie));
   outline-offset: 2px;
 }
 
@@ -128,11 +128,11 @@ button {
 
 .btn-primario {
   background: var(--primaria-relleno);
-  color: #ffffff;
+  color: var(--texto-sobre-color);
 }
 .btn-acento {
   background: var(--acento-relleno);
-  color: #ffffff;
+  color: var(--texto-sobre-color);
 }
 .btn-contorno {
   background: var(--superficie);
@@ -194,13 +194,13 @@ form > label,
 .pagina-auth::before {
   top: -120px;
   left: -120px;
-  background: rgba(34, 68, 191, 0.16);
+  background: color-mix(in srgb, var(--primaria) 16%, transparent);
   animation: flotar1 14s ease-in-out infinite;
 }
 .pagina-auth::after {
   bottom: -140px;
   right: -140px;
-  background: rgba(88, 39, 132, 0.16);
+  background: color-mix(in srgb, var(--acento-relleno) 16%, transparent);
   animation: flotar2 16s ease-in-out infinite;
 }
 .pagina-auth .tarjeta {
@@ -219,8 +219,8 @@ form > label,
   overflow: hidden;
   border-radius: 20px;
   box-shadow:
-    0 2px 8px rgba(28, 35, 64, 0.08),
-    0 20px 45px rgba(28, 35, 64, 0.16);
+    0 2px 8px color-mix(in srgb, var(--cromo) 8%, transparent),
+    0 20px 45px color-mix(in srgb, var(--cromo) 16%, transparent);
   padding: 36px 32px 32px;
   animation: entradaTarjeta 0.45s ease both;
 }
@@ -261,7 +261,7 @@ form > label,
 .pagina-auth select:focus,
 .pagina-auth input:focus {
   border-color: var(--primaria);
-  box-shadow: 0 0 0 4px rgba(34, 68, 191, 0.14);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--primaria) 14%, transparent);
   outline: none;
   transform: translateY(-1px) scale(1.015);
 }
@@ -278,7 +278,7 @@ form > label,
 }
 .pagina-auth .btn-primario:hover {
   transform: translateY(-1px) scale(1.01);
-  box-shadow: 0 8px 20px rgba(30, 63, 136, 0.28);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--primaria-relleno) 28%, transparent);
 }
 
 .enlace-secundario {

@@ -1,0 +1,110 @@
+# Deja un host de dev listo para recibir un despliegue: encendido y con el 22
+# contestando. Es idempotente: si ya esta arriba, no hace nada.
+#
+# ## Por que existe (R9.2)
+#
+# Esta logica vivia escrita dentro del job de plataforma de cd.yml y el job de
+# contenido NO la tenia. Consecuencia concreta: el host de contenido se apaga
+# igual que el de plataforma —desde R9.3 con el mismo cron— y un despliegue de
+# heroes, inventario, productos o motor que caiga fuera de horario moria con
+# "dial tcp :22: i/o timeout" tras un minuto, sin decir por que. Justo el
+# defecto que se corrigio para plataforma en #433 y que contenido heredo sin
+# corregir.
+#
+# Es una accion LOCAL (`./.github/actions/...`), no de terceros: la
+# organizacion solo admite acciones verificadas del Marketplace o appleboy/*,
+# y esta no sale del repositorio.
+#
+# cd.yml documenta la decision del equipo de no extraer logica a terceros
+# archivos "para poder leer el workflow de principio a fin". Este caso es la
+# excepcion razonada: son 45 lineas identicas para dos hosts, y duplicarlas
+# garantiza que la proxima correccion se aplique a uno y se olvide en el otro
+# —que es exactamente lo que acaba de pasar—.
+
+name: Asegurar que el host esta encendido
+description: Enciende la instancia de dev si hace falta y espera a que el puerto 22 responda.
+
+inputs:
+  nombre-instancia:
+    description: Valor de la etiqueta Name de la instancia (p. ej. nexus-plataforma-dev).
+    required: true
+  intentos-ssh:
+    description: Cuantas veces sondear el puerto 22 antes de rendirse (5 s entre intentos).
+    required: false
+    default: "30"
+
+outputs:
+  instancia:
+    description: Identificador de la instancia encontrada.
+    value: ${{ steps.encender.outputs.instancia }}
+  ip:
+    description: IP publica de la instancia.
+    value: ${{ steps.encender.outputs.ip }}
+
+runs:
+  using: composite
+  steps:
+    - id: encender
+      shell: bash
+      env:
+        NOMBRE: ${{ inputs.nombre-instancia }}
+        INTENTOS: ${{ inputs.intentos-ssh }}
+      run: |
+        set -euo pipefail
+
+        id=$(aws ec2 describe-instances \
+          --filters "Name=tag:Name,Values=$NOMBRE" \
+                    "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+          --query 'Reservations[].Instances[].InstanceId' --output text)
+
+        if [ -z "$id" ] || [ "$id" = "None" ]; then
+          echo "::error::No existe ninguna instancia con la etiqueta Name=$NOMBRE."
+          echo "Si deberia existir, revisa la region y la cuenta; si nunca se creo, lanza"
+          echo "'Infra dev' con host=<dominio> y accion=apply."
+          exit 1
+        fi
+
+        # Mas de una instancia con el mismo Name es una ambiguedad, no un
+        # detalle: desplegar en la equivocada es peor que no desplegar.
+        if [ "$(echo "$id" | wc -w)" -gt 1 ]; then
+          echo "::error::Hay mas de una instancia con Name=$NOMBRE: $id"
+          echo "Resuelve la duplicidad antes de desplegar."
+          exit 1
+        fi
+
+        estado=$(aws ec2 describe-instances --instance-ids "$id" \
+          --query 'Reservations[0].Instances[0].State.Name' --output text)
+        echo "Instancia $id ($NOMBRE) en estado $estado"
+
+        if [ "$estado" = "stopping" ]; then
+          echo "Esperando a que termine de apagarse para poder encenderla."
+          aws ec2 wait instance-stopped --instance-ids "$id"
+          estado=stopped
+        fi
+
+        if [ "$estado" = "stopped" ]; then
+          echo "Estaba apagada: se enciende para poder desplegar."
+          aws ec2 start-instances --instance-ids "$id" >/dev/null
+          aws ec2 wait instance-running --instance-ids "$id"
+          # "running" solo dice que el hipervisor la arranco; SSH tarda mas.
+          aws ec2 wait instance-status-ok --instance-ids "$id"
+          echo "Encendida y con los chequeos de EC2 en verde."
+        fi
+
+        ip=$(aws ec2 describe-instances --instance-ids "$id" \
+          --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
+        echo "instancia=$id" >> "$GITHUB_OUTPUT"
+        echo "ip=$ip" >> "$GITHUB_OUTPUT"
+
+        # Ultimo filtro antes de gastar el minuto del scp: que el 22 conteste
+        # de verdad. Asi un fallo aqui dice "SSH no responde" y no
+        # "i/o timeout" a secas desde dentro de una accion de terceros.
+        for intento in $(seq 1 "$INTENTOS"); do
+          if nc -z -w 3 "$ip" 22 2>/dev/null; then
+            echo "SSH responde en el intento $intento."
+            exit 0
+          fi
+          sleep 5
+        done
+        echo "::error::$NOMBRE esta encendida ($ip) pero el puerto 22 no responde tras $(( INTENTOS * 5 )) s."
+        exit 1

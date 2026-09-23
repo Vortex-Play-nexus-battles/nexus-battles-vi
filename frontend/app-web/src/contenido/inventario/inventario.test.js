@@ -88,12 +88,12 @@ describe('Los cuatro estados de la vitrina', () => {
     expect(contieneCodigoDeEstado(texto)).toBe(false);
   });
 
-  test('si el servicio falla, el jugador ve un aviso sin codigo de estado', async () => {
+  test('si el servicio falla, el jugador ve un aviso sin código de estado', async () => {
     const consola = jest.spyOn(console, 'error').mockImplementation(() => {});
 
     await montarVitrina(contenedor, 'jugador-A', 0, {
       consultar: async () => {
-        throw new Error('El servicio de inventario respondio 503 al pedir la pagina 0');
+        throw new Error('El servicio de inventario respondió 503 al pedir la página 0');
       },
     });
 
@@ -104,7 +104,7 @@ describe('Los cuatro estados de la vitrina', () => {
     consola.mockRestore();
   });
 
-  test('el detalle tecnico del fallo se registra para el equipo, no para el jugador', async () => {
+  test('el detalle técnico del fallo se registra para el equipo, no para el jugador', async () => {
     const consola = jest.spyOn(console, 'error').mockImplementation(() => {});
     const fallo = new Error('respondio 503');
 

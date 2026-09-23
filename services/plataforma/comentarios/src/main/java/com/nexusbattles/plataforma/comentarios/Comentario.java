@@ -43,9 +43,20 @@ public record Comentario(
     public enum Estado {
         /** Visible en el hilo del producto. */
         PUBLICADO,
-        /** Retenido por el filtro automatico, a la espera de un moderador. */
+        /** Retenido por el filtro automatico o por un reporte, esperando decision. */
         EN_REVISION,
-        /** Retirado por su autor (HU-COM-004): no se muestra ni califica. */
+        /**
+         * Retirado por moderacion conservando el registro — RF-COM-008, R10.1.
+         *
+         * <p>La ficha exige distinguirlo de ELIMINADO: "La accion «Ocultar»
+         * debe preservar el registro en base de datos, a diferencia de
+         * «Eliminar»". En el modelo eso significa que de OCULTO se vuelve
+         * (RESTAURAR) y de ELIMINADO no. Sin esa diferencia, ocultar seria un
+         * sinonimo caro de eliminar y el moderador no tendria ninguna accion
+         * reversible.
+         */
+        OCULTO,
+        /** Retirado definitivamente: por su autor (HU-COM-004) o por moderacion. */
         ELIMINADO
     }
 
@@ -74,9 +85,26 @@ public record Comentario(
         return estado == Estado.PUBLICADO;
     }
 
-    /** Si su autor lo retiro. */
+    /** Si su autor lo retiro, o moderacion lo retiro definitivamente. */
     public boolean estaEliminado() {
         return estado == Estado.ELIMINADO;
+    }
+
+    /**
+     * Si esta esperando una decision de moderacion — R10.1.
+     *
+     * <p>Antes de R10.1 este estado no tenia salida: el filtro automatico metia
+     * comentarios aqui y no habia cola donde aparecieran ni accion que los
+     * resolviera. El estado existia y el camino de vuelta no.
+     */
+    public boolean estaEnRevision() {
+        return estado == Estado.EN_REVISION;
+    }
+
+    /** El mismo comentario en otro estado. El dominio es inmutable. */
+    public Comentario con(Estado nuevo) {
+        return new Comentario(id, productoId, autorId, apodoAutor, texto, imagenes,
+                estrellas, fechaPublicacion, nuevo);
     }
 
     /** Si es de ese jugador. */

@@ -68,7 +68,7 @@ function hayDesplazamientoHorizontal(page) {
 test.describe('Paginacion del inventario', () => {
   // --- Criterio 1 ---------------------------------------------------------
 
-  test('Un inventario grande presenta diez casillas y marca la pagina en curso', async ({
+  test('Un inventario grande presenta diez casillas y marca la página en curso', async ({
     page,
   }) => {
     await conInventarioDe(page, TOTAL_ELEMENTOS);
@@ -77,10 +77,10 @@ test.describe('Paginacion del inventario', () => {
     await expect(casillas(page)).toHaveCount(10);
     await expect(casillas(page)).toHaveText(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']);
     await expect(page.locator('.paginacion__pagina[aria-current="page"]')).toHaveText('1');
-    await expect(page.locator('.paginacion__info')).toHaveText('Pagina 1 de 40');
+    await expect(page.locator('.paginacion__info')).toHaveText('Página 1 de 40');
   });
 
-  test('Pulsar una casilla trae los productos de esa pagina', async ({ page }) => {
+  test('Pulsar una casilla trae los productos de esa página', async ({ page }) => {
     await conInventarioDe(page, TOTAL_ELEMENTOS);
     await abrirVitrina(page);
 
@@ -110,7 +110,7 @@ test.describe('Paginacion del inventario', () => {
       await expect(info).not.toHaveText(antes);
     }
 
-    await expect(info).toHaveText('Pagina 10 de 40');
+    await expect(info).toHaveText('Página 10 de 40');
     await expect(casillas(page)).toHaveText([
       '5',
       '6',
@@ -127,7 +127,7 @@ test.describe('Paginacion del inventario', () => {
     await expect(flecha(page, 'siguiente')).toHaveCount(1);
   });
 
-  test('En la ultima pagina desaparece la flecha de avance', async ({ page }) => {
+  test('En la ultima página desaparece la flecha de avance', async ({ page }) => {
     await conInventarioDe(page, TOTAL_ELEMENTOS);
     await abrirVitrina(page);
 
@@ -142,19 +142,19 @@ test.describe('Paginacion del inventario', () => {
     const info = page.locator('.paginacion__info');
     for (let salto = 0; salto < 12; salto += 1) {
       const antes = await info.textContent();
-      if (antes === 'Pagina 40 de 40') {
+      if (antes === 'Página 40 de 40') {
         break;
       }
       await casillas(page).last().click();
       await expect(info).not.toHaveText(antes);
     }
 
-    await expect(info).toHaveText('Pagina 40 de 40');
+    await expect(info).toHaveText('Página 40 de 40');
     await expect(flecha(page, 'siguiente')).toHaveCount(0);
     await expect(flecha(page, 'anterior')).toHaveCount(1);
   });
 
-  test('Un inventario de una sola pagina no muestra control', async ({ page }) => {
+  test('Un inventario de una sola página no muestra control', async ({ page }) => {
     await conInventarioDe(page, 10);
     await abrirVitrina(page);
 
@@ -167,7 +167,7 @@ test.describe('Paginacion del inventario', () => {
   // cambio de pagina conserva el resto del contexto de la vista: la identidad
   // del jugador viaja igual en todas las consultas y la vista no se remonta.
 
-  test('Al cambiar de pagina se conserva el contexto de la consulta', async ({ page }) => {
+  test('Al cambiar de página se conserva el contexto de la consulta', async ({ page }) => {
     const consultadas = [];
     await page.route('**/api/v1/inventario/elementos*', async (ruta) => {
       const url = new URL(ruta.request().url());
@@ -217,7 +217,7 @@ test.describe('Paginacion del inventario', () => {
     }
   });
 
-  test('Se puede cambiar de pagina sin tocar el raton', async ({ page }) => {
+  test('Se puede cambiar de página sin tocar el raton', async ({ page }) => {
     await conInventarioDe(page, TOTAL_ELEMENTOS);
     await abrirVitrina(page);
 

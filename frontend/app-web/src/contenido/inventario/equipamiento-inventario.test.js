@@ -45,7 +45,7 @@ async function esperarHasta(condicion) {
     }
     await new Promise((resolver) => setTimeout(resolver, 0));
   }
-  throw new Error('La interfaz no termino la operacion esperada');
+  throw new Error('La interfaz no termino la operación esperada');
 }
 
 /** La ranura por su etiqueta visible, que es como la encuentra un jugador. */
@@ -191,7 +191,7 @@ test('un limite rechazado se explica sin mostrar el codigo', async () => {
   consola.mockRestore();
 });
 
-test('cada codigo del contrato tiene su frase, y ninguna lleva el numero', async () => {
+test('cada código del contrato tiene su frase, y ninguna lleva el número', async () => {
   const consola = jest.spyOn(console, 'error').mockImplementation(() => {});
   // 400 `ElementoNoEquipable`, 403 `InventarioAjeno`, 404 `ElementoNoEncontrado`.
   for (const [estado, esperado] of [

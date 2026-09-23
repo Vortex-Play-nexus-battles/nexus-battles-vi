@@ -24,7 +24,7 @@ describe('campo()', () => {
   });
 
   test('marcarError dice el motivo y lo enlaza con aria-describedby', () => {
-    const { elemento, control, marcarError } = campo({ nombre: 'creditos', etiqueta: 'Apuesta' });
+    const { elemento, control, marcarError } = campo({ nombre: 'créditos', etiqueta: 'Apuesta' });
 
     marcarError('La apuesta no puede superar tu saldo.');
 
@@ -37,7 +37,7 @@ describe('campo()', () => {
   });
 
   test('marcarError(null) deja el campo como estaba', () => {
-    const { elemento, control, marcarError } = campo({ nombre: 'creditos', etiqueta: 'Apuesta' });
+    const { elemento, control, marcarError } = campo({ nombre: 'créditos', etiqueta: 'Apuesta' });
 
     marcarError('mal');
     marcarError(null);
@@ -96,7 +96,7 @@ describe('campo()', () => {
       valor: 'CONTRA_IA',
       opciones: [
         { valor: 'UNO_VS_UNO', texto: '1 contra 1' },
-        { valor: 'CONTRA_IA', texto: 'Contra la maquina' },
+        { valor: 'CONTRA_IA', texto: 'Contra la máquina' },
       ],
     });
 
@@ -147,7 +147,7 @@ describe('mejorarContrasena()', () => {
     expect(document.querySelectorAll('[data-accion="ver-password"]')).toHaveLength(1);
   });
 
-  test('no toca un campo que no es de contrasena, ni falla sin campo', () => {
+  test('no toca un campo que no es de contraseña, ni falla sin campo', () => {
     document.body.innerHTML = '<input id="email" type="email" />';
 
     expect(mejorarContrasena(document.getElementById('email'))).toBeNull();

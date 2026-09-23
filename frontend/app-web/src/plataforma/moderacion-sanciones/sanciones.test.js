@@ -56,7 +56,7 @@ function servicio(rutas) {
 }
 
 describe('presentacion', () => {
-  test('tiempoRestante en minutos, horas o dias; vencida si paso; vacio si no aplica', () => {
+  test('tiempoRestante en minutos, horas o días; vencida si paso; vacío si no aplica', () => {
     expect(tiempoRestante(null)).toBe('');
     expect(tiempoRestante('2026-09-21T10:30:00Z', AHORA)).toBe('30 min');
     expect(tiempoRestante('2026-09-21T15:30:00Z', AHORA)).toBe('5 h 30 min');
@@ -77,7 +77,7 @@ describe('presentacion', () => {
     );
   });
 
-  test('sePuedeApelar: vigente, dentro de 30 dias y sin apelacion abierta', () => {
+  test('sePuedeApelar: vigente, dentro de 30 días y sin apelación abierta', () => {
     expect(sePuedeApelar(sancion(), [], AHORA)).toBe(true);
     expect(sePuedeApelar(sancion({ vigente: false }), [], AHORA)).toBe(false);
     expect(sePuedeApelar(sancion({ emitidaEn: '2026-08-01T00:00:00Z' }), [], AHORA)).toBe(false);
@@ -87,7 +87,7 @@ describe('presentacion', () => {
     expect(sePuedeApelar(sancion(), [{ sancionId: 's-1', estado: 'MANTENIDA' }], AHORA)).toBe(true);
   });
 
-  test('solicitudDesde solo manda los campos del contrato segun el tipo', () => {
+  test('solicitudDesde solo manda los campos del contrato según el tipo', () => {
     expect(
       solicitudDesde({
         usuarioId: ` ${UID} `,
@@ -147,13 +147,13 @@ describe('panel de moderacion', () => {
     document.body.innerHTML = PANEL;
   });
 
-  test('sin rol de moderacion, se dice y el formulario queda cerrado', () => {
+  test('sin rol de moderación, se dice y el formulario queda cerrado', () => {
     montarPanelDeModeracion(document, { rol: 'JUGADOR', fetchImpl: servicio({}) });
-    expect(document.querySelector('.aviso--advertencia').textContent).toMatch(/moderacion/);
+    expect(document.querySelector('.aviso--advertencia').textContent).toMatch(/moderación/);
     expect(document.querySelector('[data-zona="emitir"] button').disabled).toBe(true);
   });
 
-  test('un moderador no ve el baneo como opcion; un administrador si', () => {
+  test('un moderador no ve el baneo como opción; un administrador si', () => {
     montarPanelDeModeracion(document, {
       rol: 'MODERADOR',
       fetchImpl: servicio({ 'GET /api/v1/apelaciones': { cuerpo: [] } }),
@@ -199,7 +199,7 @@ describe('panel de moderacion', () => {
     expect(document.querySelectorAll('[data-zona="historial"] article')).toHaveLength(1);
   });
 
-  test('el baneo sin confirmacion no sale de la vista; el 403 del servicio se muestra tal cual', async () => {
+  test('el baneo sin confirmación no sale de la vista; el 403 del servicio se muestra tal cual', async () => {
     const fetchImpl = servicio({
       'GET /api/v1/apelaciones': { cuerpo: [] },
       'POST /api/v1/sanciones': {
@@ -327,7 +327,7 @@ describe('mis sanciones', () => {
       (c) => String(c[0]).includes('/apelaciones') && c[1]?.method === 'POST',
     );
     expect(JSON.parse(llamada[1].body)).toEqual({ argumento: 'No fui yo' });
-    expect(document.querySelector('.aviso--exito').textContent).toMatch(/Apelacion enviada/);
+    expect(document.querySelector('.aviso--exito').textContent).toMatch(/Apelación enviada/);
   });
 
   test('si no hay sanciones se dice; un error del servicio se avisa', async () => {
@@ -341,7 +341,7 @@ describe('mis sanciones', () => {
     await asentar();
     await asentar();
     expect(document.querySelector('[data-zona="sanciones"]').textContent).toMatch(
-      /No tienes sanciones/,
+      /No tienes ninguna sanción/,
     );
 
     document.body.innerHTML = MIAS;
@@ -357,10 +357,20 @@ describe('mis sanciones', () => {
     });
     await asentar();
     await asentar();
-    expect(document.querySelector('.aviso--error .aviso__titulo').textContent).toBe('Caido');
+
+    // UX-R3.8 — el fallo se dice DONDE iban las sanciones.
+    //
+    // Antes solo saltaba el aviso flotante con «Caido» y quedaban dos
+    // tarjetas vacias debajo: «Sanciones» y «Mis apelaciones», con nada
+    // dentro. La pantalla parecia decir que no tienes ninguna sancion, que es
+    // exactamente lo contrario de lo que se sabe — no se sabe nada.
+    const zona = document.querySelector('[data-zona="sanciones"]');
+    expect(zona.textContent).toMatch(/No pudimos consultar tu historial/);
+    expect(zona.textContent).toMatch(/no significa que no tengas sanciones/i);
+    expect(zona.querySelector('[data-accion="reintentar"]')).not.toBeNull();
   });
 
-  test('ErrorDeSanciones conserva estado, titulo, detalle y motivo', () => {
+  test('ErrorDeSanciones conserva estado, título, detalle y motivo', () => {
     const e = new ErrorDeSanciones({ title: 'T', detail: 'D', motivo: 'SOLICITUD_INVALIDA' }, 400);
     expect(e.estado).toBe(400);
     expect(e.titulo).toBe('T');

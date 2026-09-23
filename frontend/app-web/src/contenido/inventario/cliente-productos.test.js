@@ -22,7 +22,7 @@ function espia(cuerpo = PRODUCTO, ok = true, status = 200) {
   };
 }
 
-describe('Cliente del catalogo de productos', () => {
+describe('Cliente del catálogo de productos', () => {
   test('pide el producto a la ruta del contrato', async () => {
     const { llamadas, fetchFalso } = espia();
 
@@ -70,7 +70,7 @@ describe('Cliente del catalogo de productos', () => {
     expect(llamado).toBe(false);
   });
 
-  test('la lectura del catalogo es publica: no manda cabecera de identidad', async () => {
+  test('la lectura del catálogo es publica: no manda cabecera de identidad', async () => {
     const { llamadas, fetchFalso } = espia();
 
     await consultarProducto('p-1', { fetchImpl: fetchFalso });

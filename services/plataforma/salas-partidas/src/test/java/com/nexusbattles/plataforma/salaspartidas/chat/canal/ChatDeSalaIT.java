@@ -136,7 +136,7 @@ class ChatDeSalaIT {
     static void apuntarAlDoble(DynamicPropertyRegistry registro) {
         registro.add("chat.lista-negra.url",
                 () -> "http://127.0.0.1:" + moderacion.getAddress().getPort() + "/api/v1/lista-negra/verificar");
-        registro.add("chat.sanciones.url",
+        registro.add("salas.sanciones.url",
                 () -> "http://127.0.0.1:" + moderacion.getAddress().getPort() + "/api/v1");
     }
 

@@ -30,7 +30,7 @@ function montarBarraNavegacion() {
   const contenedor = document.createElement('div');
   contenedor.dataset.cabeceraApp = '';
   document.body.prepend(contenedor);
-  montarCabecera(contenedor, { seccionActiva: 'cuenta' });
+  montarCabecera(contenedor, { vista: 'gestion-usuarios', seccionActiva: 'usuarios' });
 }
 
 async function iniciar() {
@@ -52,6 +52,7 @@ export async function cargarMatrizYVerificarAcceso({
 } = {}) {
   const token = sessionStorage.getItem(CLAVE_TOKEN);
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  let seCargo = false;
 
   try {
     const respuesta = await fetchImpl(MATRIZ_RBAC_API, { headers });
@@ -68,12 +69,13 @@ export async function cargarMatrizYVerificarAcceso({
     }
 
     setPermissionMatrix(matriz);
+    seCargo = true;
   } catch (error) {
     console.error('No fue posible cargar la matriz RBAC:', error);
     setPermissionMatrix({});
   }
 
-  verificarAcceso();
+  verificarAcceso({ matrizDisponible: seCargo });
 }
 
 function configurarEventos() {
@@ -105,6 +107,15 @@ function configurarEventos() {
 
   if (btnVolver) {
     btnVolver.addEventListener('click', volverInicio);
+  }
+
+  const btnReintentarBloqueo = document.querySelector('[data-zona="reintentar-bloqueo"]');
+  if (btnReintentarBloqueo) {
+    // Volver a pedir la matriz, no recargar la pagina: recargar perdería lo
+    // que el administrador tuviera escrito en el buscador.
+    btnReintentarBloqueo.addEventListener('click', () => {
+      cargarMatrizYVerificarAcceso();
+    });
   }
 
   if (btnVolverAcceso) {
@@ -149,7 +160,29 @@ function configurarSelectorRoles() {
   }
 }
 
-function verificarAcceso() {
+/**
+ * Deja ver la gestión, o dice por qué no — UX-R3.3.
+ *
+ * ## Los dos «no» que antes eran el mismo
+ *
+ * El acceso se decide contra la matriz que publica el servidor
+ * (`/api/v1/rbac/matrix`), y la UI falla cerrada: sin matriz, nadie pasa. Eso
+ * está bien. Lo que estaba mal era **lo que se le decía a la persona**.
+ *
+ * Cuando `ms-identidad` no contestaba —en dev no corre—, un administrador
+ * legítimo leía «No tienes permisos suficientes para gestionar cuentas». Es
+ * falso y además es la clase de mensaje que hace perder una tarde: quien lo
+ * lee va a pedir que le revisen el rol, no a mirar si el servicio está caído.
+ *
+ * Ahora son dos estados distintos, como pide §17:
+ *
+ *   - matriz cargada y el rol no alcanza → «No tienes acceso a esta sección.»
+ *   - matriz sin cargar                  → «Esta función no está disponible
+ *                                           temporalmente.» + Reintentar
+ *
+ * @param {{matrizDisponible?: boolean}} [opciones]
+ */
+function verificarAcceso({ matrizDisponible = true } = {}) {
   const contenedor = document.getElementById('gestion-contenedor');
 
   const accesoDenegado = document.getElementById('acceso-denegado');
@@ -158,12 +191,14 @@ function verificarAcceso() {
     return;
   }
 
-  const tienePermiso = checkPermission(getCurrentRole(), PERMISO_GESTIONAR);
+  const tienePermiso = matrizDisponible && checkPermission(getCurrentRole(), PERMISO_GESTIONAR);
 
   if (!tienePermiso) {
     contenedor.hidden = true;
 
     accesoDenegado.hidden = false;
+
+    pintarMotivoDeBloqueo(accesoDenegado, matrizDisponible);
 
     return;
   }
@@ -171,6 +206,30 @@ function verificarAcceso() {
   contenedor.hidden = false;
 
   accesoDenegado.hidden = true;
+}
+
+/**
+ * @param {HTMLElement} seccion
+ * @param {boolean} matrizDisponible
+ */
+function pintarMotivoDeBloqueo(seccion, matrizDisponible) {
+  const titulo = seccion.querySelector('[data-zona="titulo-bloqueo"]');
+  const detalle = seccion.querySelector('[data-zona="detalle-bloqueo"]');
+  const reintentar = seccion.querySelector('[data-zona="reintentar-bloqueo"]');
+
+  if (titulo) {
+    titulo.textContent = matrizDisponible
+      ? 'No tienes acceso a esta sección.'
+      : 'Esta función no está disponible temporalmente.';
+  }
+  if (detalle) {
+    detalle.textContent = matrizDisponible
+      ? 'Tu cuenta no tiene habilitada la gestión de cuentas.'
+      : 'No pudimos comprobar tus permisos porque el servicio de identidad no responde. No es un problema de tu cuenta.';
+  }
+  if (reintentar) {
+    reintentar.hidden = matrizDisponible;
+  }
 }
 
 async function buscarUsuario(evento) {

@@ -447,51 +447,14 @@ jobs:
           role-session-name: cd-dev-${{ github.run_id }}
           aws-region: ${{ vars.AWS_REGION }}
 
+      # R9.2 — estas 45 lineas se movieron a una accion local para que el job
+      # de contenido pueda usar EXACTAMENTE las mismas. Antes solo las tenia
+      # plataforma, y un despliegue de contenido fuera de horario moria con
+      # "i/o timeout" sin explicar por que.
       - name: Asegurar que el host esta encendido
-        run: |
-          set -euo pipefail
-          id=$(aws ec2 describe-instances \
-            --filters "Name=tag:Name,Values=nexus-plataforma-dev" \
-                      "Name=instance-state-name,Values=pending,running,stopping,stopped" \
-            --query 'Reservations[].Instances[].InstanceId' --output text)
-          if [ -z "$id" ] || [ "$id" = "None" ]; then
-            echo "::error::No existe la instancia nexus-plataforma-dev. Lanza 'Infra dev' con accion=apply."
-            exit 1
-          fi
-
-          estado=$(aws ec2 describe-instances --instance-ids "$id" \
-            --query 'Reservations[0].Instances[0].State.Name' --output text)
-          echo "Instancia $id en estado $estado"
-
-          if [ "$estado" = "stopping" ]; then
-            echo "Esperando a que termine de apagarse para poder encenderla."
-            aws ec2 wait instance-stopped --instance-ids "$id"
-            estado=stopped
-          fi
-
-          if [ "$estado" = "stopped" ]; then
-            echo "Estaba apagada: se enciende para poder desplegar."
-            aws ec2 start-instances --instance-ids "$id" >/dev/null
-            aws ec2 wait instance-running --instance-ids "$id"
-            # "running" solo dice que el hipervisor la arranco; SSH tarda mas.
-            aws ec2 wait instance-status-ok --instance-ids "$id"
-            echo "Encendida y con los chequeos de EC2 en verde."
-          fi
-
-          # Ultimo filtro antes de gastar el minuto del scp: que el 22 conteste
-          # de verdad. Asi un fallo aqui dice "SSH no responde" y no
-          # "i/o timeout" a secas desde dentro de una accion de terceros.
-          ip=$(aws ec2 describe-instances --instance-ids "$id" \
-            --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
-          for intento in $(seq 1 30); do
-            if nc -z -w 3 "$ip" 22 2>/dev/null; then
-              echo "SSH responde en el intento $intento."
-              exit 0
-            fi
-            sleep 5
-          done
-          echo "::error::El host esta encendido pero el puerto 22 no responde tras 150 s."
-          exit 1
+        uses: ./.github/actions/asegurar-host-encendido
+        with:
+          nombre-instancia: nexus-plataforma-dev
 
       - name: Copiar docker-compose.yml, docker-compose.deploy.yml y el script de despliegue
         uses: appleboy/scp-action@v0.1.7
@@ -499,7 +462,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/revertir.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -721,13 +684,38 @@ jobs:
           LISTA=$(echo '${{ needs.detectar-servicios.outputs.servicios }}' | jq -r '[.[] | select(.ruta | startswith("services/contenido/")) | "\(.servicio):\(.puerto)"] | join(" ")')
           echo "lista=$LISTA" >> "$GITHUB_OUTPUT"
 
+      # ------------------------------------------------------------------
+      # R9.2 — este job daba por hecho que el host estaba encendido.
+      #
+      # Plataforma dejo de darlo por hecho en #433, despues de que el "start"
+      # programado del 19 de septiembre no llegara a ejecutarse y el
+      # despliegue de esa tarde muriera contra un host apagado. Contenido
+      # heredo el mismo cron (R9.3) pero no la correccion: un despliegue de
+      # heroes, inventario, productos o motor fuera de horario moria igual,
+      # con "dial tcp :22: i/o timeout" y sin decir por que.
+      #
+      # Ahora los dos hosts pasan por la misma accion. Es idempotente: con el
+      # host ya encendido no hace nada y no cuesta un segundo de mas.
+      # ------------------------------------------------------------------
+      - name: Asumir el rol de AWS por OIDC (sin claves)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-session-name: cd-contenido-dev-${{ github.run_id }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Asegurar que el host de contenido esta encendido
+        uses: ./.github/actions/asegurar-host-encendido
+        with:
+          nombre-instancia: nexus-contenido-dev
+
       - name: Copiar los compose y el script de despliegue al host de contenido
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.DEPLOY_HOST_CONTENIDO_DEV }}
           username: ${{ secrets.SSH_USER_CONTENIDO_DEV }}
           key: ${{ secrets.SSH_KEY_CONTENIDO_DEV }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -743,11 +731,20 @@ jobs:
           SERVICIOS_PUERTOS: ${{ steps.lista.outputs.lista }}
           APP_ENV: dev
           LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
+          # R9.7 — este job NO repartia el emisor, aunque los otros tres si.
+          # Los cuatro servicios de contenido validan tokens de ms-identidad
+          # (ADR-002 / ADR-005): heroes y motor-combate desde R8.1, e
+          # inventario y productos desde R9.7. Hasta ahora funcionaban solo
+          # por el valor por omision de docker-compose.contenido.yml, que
+          # lleva la IP elastica escrita: correcto por casualidad, y no
+          # sobreescribible sin editar el repositorio. Con la variable aqui,
+          # el dia que el emisor cambie de sitio basta cambiar la variable.
+          IDENTIDAD_JWKS_URL: ${{ vars.IDENTIDAD_JWKS_URL }}
         with:
           host: ${{ secrets.DEPLOY_HOST_CONTENIDO_DEV }}
           username: ${{ secrets.SSH_USER_CONTENIDO_DEV }}
           key: ${{ secrets.SSH_KEY_CONTENIDO_DEV }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,IDENTIDAD_JWKS_URL
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -786,7 +783,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -889,7 +886,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/revertir.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
 

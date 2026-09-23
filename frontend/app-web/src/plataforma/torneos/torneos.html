@@ -20,9 +20,19 @@
         ensena con sus cupos y su arbol. Mismo criterio que se aplico al umbral
         del 60/40 en la sala de batalla (PR-UX-3).
       -->
-      <h1>Torneo</h1>
+      <!-- UX-R3.6 — decia «Torneo» en singular y debajo, sin nada en medio,
+           otro encabezado «Torneos». Dos titulos para una lista. -->
+      <header class="encabezado-pagina">
+        <div class="pila pila--ajustada">
+          <h1>Torneos</h1>
+          <p class="t-meta">
+            Ocho equipos, árbol de doble eliminación. Se abre uno cada 91 días; mientras haya
+            inscripciones abiertas puedes apuntar a tu equipo.
+          </p>
+        </div>
+      </header>
 
-      <div class="aviso" data-zona="aviso" role="status" hidden></div>
+      <div data-zona="aviso" hidden></div>
 
       <form class="tarjeta pila pila--compacta" data-zona="crear-torneo" hidden>
         <h2>Crear torneo</h2>
@@ -49,7 +59,6 @@
       </form>
 
       <section class="pila pila--compacta">
-        <h2>Torneos</h2>
         <div class="pila pila--compacta" data-zona="listado"></div>
       </section>
 
@@ -60,7 +69,10 @@
       import { montarCabecera, leerSesion } from '../../comun/cabecera-app.js';
       import { montarTorneos } from './torneos.js';
 
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'torneo' });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'torneos',
+        seccionActiva: 'torneo',
+      });
       const sesion = leerSesion();
       montarTorneos(document, {
         uid: sesion.autenticado ? sesion.uid : null,

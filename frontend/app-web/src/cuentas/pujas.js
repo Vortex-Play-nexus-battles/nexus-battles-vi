@@ -11,6 +11,7 @@
  */
 
 import { conectarStomp } from '../comun/transporte-stomp.js';
+import { iconoHtml } from '../comun/ui/icono.js';
 // UX-R2.8c — esta vista se pinta con plantillas de cadena y `innerHTML`, y
 // no escapaba NADA: el nombre del objeto, su descripcion, el apodo del
 // vendedor y el del pujador salen del servidor y los escribe otra persona.
@@ -27,12 +28,30 @@ import { acusar } from '../comun/ui/acuse.js';
 /** Canal que publica ms-subastas en cada cambio (SubastaRealtimePublisher). */
 export const CANAL_SUBASTAS = '/topic/subastas/listado';
 
-export const PALETA_RAREZA = {
-  comun: { fondo: '#E7EAF0', texto: '#57627A', borde: '#9FABC9', icono: '🛡️' },
-  rara: { fondo: '#DFEEF8', texto: '#095E8C', borde: '#095E8C', icono: '⚔️' },
-  epica: { fondo: '#EDE5FA', texto: '#5B27B4', borde: '#5B27B4', icono: '🪓' },
-  legendaria: { fondo: '#FBF0DE', texto: '#9A6800', borde: '#9A6800', icono: '🏹' },
-};
+/**
+ * Donde guarda el login el JWT. Misma clave que lee `pujas-api.js` para las
+ * llamadas REST: la sesion es una sola, y el canal en vivo (R9.6) tiene que
+ * acreditarse con el mismo token que ya usa todo lo demas de esta pantalla.
+ */
+const CLAVE_TOKEN_SESION = 'nexus.token';
+
+/**
+ * El simbolo del sprite que le toca a cada rareza. Escala igual que la rareza:
+ * escudo, espada, fuego, trofeo.
+ *
+ * Aqui habia una paleta: cada rareza traia `fondo`, `texto` y `borde` escritos
+ * a mano —`#E7EAF0`, `#57627A`, `#9FABC9`…— y se inyectaban como `style` en la
+ * ficha. Eran los mismos valores que `--rareza-*` del kit, duplicados en
+ * JavaScript, y por estar en linea se saltaban `prefers-contrast: more`: quien
+ * pide mas contraste seguia viendo el tinte del dos por ciento. Ahora el color
+ * lo pone la clase y el icono hereda `currentColor`.
+ */
+export const ICONO_RAREZA = Object.freeze({
+  comun: 'escudo',
+  rara: 'espada',
+  epica: 'fuego',
+  legendaria: 'trofeo',
+});
 
 /**
  * Datos de ejemplo. **Son un banco de pruebas, no un modo de demostracion.**
@@ -538,6 +557,10 @@ export class ControladorSubastas {
     subastaInicialId = null,
     urlCanal = null,
     conectarCanal = conectarStomp,
+    // R9.6 — de donde sale el JWT que acredita el CONNECT del canal. Misma
+    // clave que usa pujas-api.js para las llamadas REST: la sesion es una
+    // sola. Inyectable para que las pruebas no dependan de sessionStorage.
+    leerToken = () => globalThis.sessionStorage?.getItem(CLAVE_TOKEN_SESION) || null,
   } = {}) {
     // Subasta que hay que abrir en detalle nada mas cargar. Viene de ?id= en la
     // URL: es la forma de que el listado de HU-SUB-011 entregue una subasta
@@ -578,6 +601,7 @@ export class ControladorSubastas {
     // degradacion controlada a consulta periodica si el tiempo real se cae.
     this.urlCanal = urlCanal;
     this.conectarCanal = conectarCanal;
+    this.leerToken = leerToken;
     this.canal = null;
   }
 
@@ -627,7 +651,7 @@ export class ControladorSubastas {
         } else {
           // Llego un enlace a una subasta que ya no esta en el listado: se
           // cerro o se adjudico. Mejor decirlo que abrir un detalle vacio.
-          this.mensajeError = 'Esa subasta ya no esta disponible.';
+          this.mensajeError = 'Esa subasta ya no está disponible.';
         }
       }
       if (this.subastaActivaId && !subastas.some((s) => s.id === this.subastaActivaId)) {
@@ -747,7 +771,7 @@ export class ControladorSubastas {
       }
       return true;
     } catch (fallo) {
-      const mensaje = fallo?.message || 'No se pudo completar la operacion.';
+      const mensaje = fallo?.message || 'No se pudo completar la operación.';
       await this.recargar();
       this.mostrarError(mensaje);
       return false;
@@ -794,7 +818,19 @@ export class ControladorSubastas {
       return null;
     }
     try {
-      const canal = await this.conectarCanal({ url: this.urlCanal });
+      // R9.6 — el CONNECT va acreditado. Hasta ahora este canal se abria sin
+      // token: era el unico de los cuatro de la casa que no lo mandaba (el
+      // chat de sala y la bandeja de notificaciones lo hacen desde #222 y el
+      // contrato 1.1.0). El navegador no puede poner cabeceras en el
+      // handshake del WebSocket, asi que el sitio donde va es la cabecera
+      // `Authorization` del frame CONNECT — igual que en cliente-chat.js.
+      //
+      // Sin sesion se conecta igual, y a proposito: el listado de subastas es
+      // publico y quien no ha entrado tiene derecho a verlo actualizarse.
+      // Mandar `Bearer null` seria peor que no mandar nada.
+      const token = this.leerToken?.();
+      const cabeceras = token ? { Authorization: `Bearer ${token}` } : {};
+      const canal = await this.conectarCanal({ url: this.urlCanal, cabeceras });
       canal.suscribir(CANAL_SUBASTAS, (cuerpo) => this.alLlegarActualizacion(cuerpo));
       this.canal = canal;
       return canal;
@@ -1031,7 +1067,7 @@ export class ControladorSubastas {
       // rechace algo que el servidor habria aceptado. Lo unico que se filtra
       // es lo que ni siquiera es un monto.
       if (!Number.isFinite(monto) || monto <= 0) {
-        this.mostrarError('Escribe un monto valido.');
+        this.mostrarError('Escribe un monto válido.');
         return Promise.resolve(false);
       }
       return this.ejecutarContraElServidor(() => this.api.pujar(sub.id, monto), {
@@ -1115,7 +1151,7 @@ export class ControladorSubastas {
 
     if (this.api) {
       if (!Number.isFinite(limite) || limite <= 0) {
-        this.mostrarError('Escribe un limite valido.');
+        this.mostrarError('Escribe un límite válido.');
         return Promise.resolve(false);
       }
       return this.ejecutarContraElServidor(() => this.api.configurarAutomatica(sub.id, limite));
@@ -1403,7 +1439,7 @@ export class ControladorSubastas {
         <header class="panel-resumen">
           <div class="resumen-titular">
             <div>
-              <span class="eyebrow">MERCADO EN VIVO · HU-SUB-004</span>
+              <span class="eyebrow">MERCADO EN VIVO</span>
               <h1 class="titulo-grande">Subastas y Pujas</h1>
             </div>
             <div class="resumen-saldo-total">
@@ -1519,10 +1555,19 @@ export class ControladorSubastas {
 
     // Segmentos para la barra interactiva
     const conRetencion = this.subastas.filter((s) => (s.retenido || 0) > 0);
-    const PALETA_TRAMOS = ['#9A6800', '#C89A1E', '#B37D14', '#D48806', '#E6A23C', '#8A4A00'];
+    // El tramo i-esimo de la barra de credito comprometido. Aqui habia seis
+    // dorados escritos a mano —#C89A1E, #B37D14, #D48806, #E6A23C— de los que
+    // solo dos existian en el kit; los otros cuatro eran color inventado, y
+    // ademas tan parecidos entre si que dos tramos contiguos casi no se
+    // distinguian. Ahora la rampa sale del oro del producto oscureciendose
+    // contra el cromo: es monotona, se nota el orden y no entra ningun color
+    // nuevo. El color no lleva informacion por si solo — cada tramo tiene su
+    // `title` y su entrada en la leyenda con el nombre.
+    const tramoColor = (i) =>
+      `color-mix(in srgb, var(--credito-oro) ${100 - (i % 6) * 15}%, var(--cromo))`;
     const tramos = conRetencion.map((sub, i) => {
       const ancho = total > 0 ? ((sub.retenido / total) * 100).toFixed(1) : '0';
-      const color = PALETA_TRAMOS[i % PALETA_TRAMOS.length];
+      const color = tramoColor(i);
       return {
         id: sub.id,
         nombre: sub.nombre,
@@ -1536,18 +1581,18 @@ export class ControladorSubastas {
       id: 'libre',
       nombre: 'Libre para pujar',
       ancho: `${libreAncho}%`,
-      color: '#0B6B31',
+      color: 'var(--exito)',
       titulo: `Libre: ${formatearCreditos(libre)} cr`,
     });
 
     const leyenda = conRetencion
       .map((sub, i) => ({
-        color: PALETA_TRAMOS[i % PALETA_TRAMOS.length],
+        color: tramoColor(i),
         texto: `${sub.nombre.split(' ')[0]} · ${formatearCreditos(sub.retenido)} cr`,
       }))
       .concat([
         {
-          color: '#0B6B31',
+          color: 'var(--exito)',
           texto: `Libre · ${formatearCreditos(libre)} cr`,
         },
       ]);
@@ -1615,7 +1660,7 @@ export class ControladorSubastas {
             sobreCompromiso.sobreCompromiso
               ? `
             <div class="alerta-sobrecompromiso" role="alert">
-              <div class="sobrecompromiso-icono">⚠️</div>
+              <div class="sobrecompromiso-icono">${iconoHtml('alerta')}</div>
               <div>
                 <div class="sobrecompromiso-titulo">Tus automáticas prometen más de lo que tienes</div>
                 <div class="sobrecompromiso-texto">
@@ -1683,7 +1728,7 @@ export class ControladorSubastas {
 
   generarFilaMiSubasta(sub) {
     const urgente = sub.segundosRestantes <= 10 && sub.segundosRestantes > 0;
-    const rarezaInfo = PALETA_RAREZA[sub.rareza] || PALETA_RAREZA.comun;
+    const simboloRareza = ICONO_RAREZA[sub.rareza] ?? ICONO_RAREZA.comun;
 
     let claseBorde = 'borde-sin-puja';
     let badgeEstado = '<span class="badge badge-neutral">Sin pujar</span>';
@@ -1711,8 +1756,8 @@ export class ControladorSubastas {
 
     return `
       <article class="fila-mi-subasta ${claseBorde} ${urgente ? 'urgente' : ''}" data-id="${sub.id}">
-        <div class="fila-icono-rareza" style="background: ${rarezaInfo.fondo}; border: 1px solid ${rarezaInfo.borde};">
-          ${rarezaInfo.icono}
+        <div class="ficha-rareza ficha-rareza--grande ficha-rareza--${sub.rareza}">
+          ${iconoHtml(simboloRareza)}
         </div>
 
         <div class="fila-info-principal">
@@ -1724,7 +1769,7 @@ export class ControladorSubastas {
               sub.autoLimite > 0
                 ? `
               <span class="chip-automatica-tope" title="Puja automática configurada">
-                ⚡ hasta ${formatearCreditos(sub.autoLimite)} cr
+                ${iconoHtml('rayo', { clase: 'icono icono--menudo' })} hasta ${formatearCreditos(sub.autoLimite)} cr
               </span>
             `
                 : ''
@@ -1749,7 +1794,7 @@ export class ControladorSubastas {
 
         <div class="fila-acciones-tiempo">
           <div class="reloj-fila ${urgente ? 'animacion-latido' : ''}" data-tiempo-subasta="${sub.id}">
-            ⏱️ <span class="cifra">${formatearTiempo(sub.segundosRestantes)}</span>
+            ${iconoHtml('reloj', { clase: 'icono icono--menudo' })} <span class="cifra">${formatearTiempo(sub.segundosRestantes)}</span>
           </div>
           <button type="button" class="btn ${claseBoton}" data-abrir="${sub.id}">
             ${textoBoton}
@@ -1800,7 +1845,7 @@ export class ControladorSubastas {
           <div class="lista-eventos-cierre">
             ${eventos
               .map((ev) => {
-                const rarezaInfo = PALETA_RAREZA[ev.rareza] || PALETA_RAREZA.comun;
+                const simboloRareza = ICONO_RAREZA[ev.rareza] ?? ICONO_RAREZA.comun;
                 let claseEvento = 'evento--superada-rival';
                 let montoHtml = `<div class="evento-cifra cifra" style="color: var(--exito);">+${formatearCreditos(ev.montoDevuelto)}</div><div class="etiqueta-sm">devuelto</div>`;
                 let btnAccion = `<button type="button" class="btn btn-contorno btn-sm btn-buscar-parecidas" data-id="${ev.id}">Parecidas</button>`;
@@ -1815,8 +1860,8 @@ export class ControladorSubastas {
 
                 return `
                 <div class="fila-evento-cierre ${claseEvento}">
-                  <div class="evento-icono" style="background: ${rarezaInfo.fondo}; border: 1px solid ${rarezaInfo.borde};">
-                    ${rarezaInfo.icono}
+                  <div class="ficha-rareza ficha-rareza--${ev.rareza}">
+                    ${iconoHtml(simboloRareza)}
                   </div>
                   <div class="evento-info">
                     <h3 class="evento-titulo">${esc(ev.nombre)}</h3>
@@ -1839,7 +1884,7 @@ export class ControladorSubastas {
             consejo
               ? `
             <div class="caja-consejo-tactico" role="region" aria-label="Consejo táctico">
-              <div class="consejo-icono">⚡</div>
+              <div class="consejo-icono">${iconoHtml('rayo')}</div>
               <div class="consejo-contenido">
                 <div class="consejo-titulo">${esc(consejo.titulo)}</div>
                 <div>${consejo.cuerpo}</div>
@@ -1892,22 +1937,22 @@ export class ControladorSubastas {
         ${
           this.resultadoCierre === 'comprada' || this.resultadoCierre === 'adjudicada'
             ? `
-          <div class="alerta alerta-exito-cierre" role="alert" style="margin-bottom: 20px; background: #DFF1E6; border: 1px solid #0B6B31; border-radius: 8px; padding: 20px; text-align: center;">
-            <h2 class="titulo-grande" style="color: #0B6B31; margin-bottom: 6px;">¡ES TUYA!</h2>
-            <p style="font-size: 16px; color: var(--texto-1); margin-bottom: 12px;">
+          <div class="alerta cierre-victoria" role="alert">
+            <h2 class="titulo-grande cierre-victoria__titulo">¡ES TUYA!</h2>
+            <p class="cierre-victoria__texto">
               ${this.resultadoCierre === 'comprada' ? '¡Has comprado este objeto de inmediato!' : 'La subasta cerró exitosamente y el objeto ha sido adjudicado a tu inventario.'}
             </p>
-            <div style="display: flex; justify-content: center; gap: 16px; margin-bottom: 16px;">
-              <div style="background: #FFFFFF; padding: 10px 16px; border-radius: 6px; border: 1px solid #9FABC9;">
-                <span style="font-size: 12px; color: var(--texto-2); display: block;">Monto pagado:</span>
-                <strong class="cifra" style="font-size: 20px; color: #0B6B31;">${formatearCreditos(this.resultadoCierre === 'comprada' ? sub.compraInmediata : sub.oferta)} cr</strong>
+            <div class="cierre-victoria__cifras">
+              <div class="cierre-victoria__dato">
+                <span class="cierre-victoria__etiqueta">Monto pagado:</span>
+                <strong class="cifra cierre-victoria__monto">${formatearCreditos(this.resultadoCierre === 'comprada' ? sub.compraInmediata : sub.oferta)} cr</strong>
               </div>
-              <div style="background: #FFFFFF; padding: 10px 16px; border-radius: 6px; border: 1px solid #9FABC9;">
-                <span style="font-size: 12px; color: var(--texto-2); display: block;">Saldo libre resultante:</span>
-                <strong class="cifra" style="font-size: 20px; color: #0B6B31;">${formatearCreditos(libre)} cr</strong>
+              <div class="cierre-victoria__dato">
+                <span class="cierre-victoria__etiqueta">Saldo libre resultante:</span>
+                <strong class="cifra cierre-victoria__monto">${formatearCreditos(libre)} cr</strong>
               </div>
             </div>
-            <div style="display: flex; justify-content: center; gap: 12px;">
+            <div class="cierre-victoria__acciones">
               <button type="button" class="btn btn-primario" id="btn-resultado-mis-subastas">Ver mis subastas</button>
               <button type="button" class="btn btn-contorno" id="btn-resultado-explorar">Al listado</button>
             </div>
@@ -1953,12 +1998,12 @@ export class ControladorSubastas {
                 comp.nivelInsuficiente
                   ? `
                 <div class="alerta alerta-advertencia" role="alert">
-                  <strong>⚠️ Nivel insuficiente:</strong> ${esc(hero.nombre)} es nivel ${esc(hero.nivel)}. Le faltan ${comp.deltaNivel} niveles para poder equipar este objeto (RN-INV-004).
+                  <strong>${iconoHtml('alerta', { clase: 'icono icono--menudo' })} Nivel insuficiente:</strong> ${esc(hero.nombre)} es nivel ${esc(hero.nivel)}. Le faltan ${comp.deltaNivel} niveles para poder equipar este objeto (RN-INV-004).
                 </div>
               `
                   : `
                 <div class="alerta alerta-exito-suave">
-                  <strong>✓ Compatible:</strong> ${esc(hero.nombre)} cumple el nivel requerido para equipar este objeto.
+                  <strong>${iconoHtml('check', { clase: 'icono icono--menudo' })} Compatible:</strong> ${esc(hero.nombre)} cumple el nivel requerido para equipar este objeto.
                 </div>
               `
               }
@@ -2113,7 +2158,7 @@ export class ControladorSubastas {
               </div>
               <div style="display: flex; align-items: center; justify-content: space-between;">
                 <span style="font-size: 13px; color: var(--texto-2);">Retenido en otras (${otrasConRetenido})</span>
-                <span class="cifra" style="font-size: 16px; font-weight: 600; color: #8A4A00;">${formatearCreditos(retenidoEnOtras)} cr</span>
+                <span class="cifra retenido-en-otras">${formatearCreditos(retenidoEnOtras)} cr</span>
               </div>
               <div style="height: 1px; background: var(--fondo); margin: 12px 0;"></div>
               <button type="button" class="btn btn-contorno" id="btn-ver-todas-mis-subastas" style="width: 100%; min-height: 32px; font-size: 13px; font-weight: 600;">
@@ -2153,7 +2198,7 @@ export class ControladorSubastas {
       <aside class="toast-cruzado-flotante" role="alert" aria-live="polite">
         <div class="toast-cruzado-cabecera">
           <div class="toast-titulo-contenedor">
-            <span class="toast-icono">⚠️</span>
+            <span class="toast-icono">${iconoHtml('alerta')}</span>
             <strong class="toast-titulo">¡Te superaron en otra subasta!</strong>
           </div>
           <button type="button" class="btn-cerrar-toast" aria-label="Cerrar aviso cruzado">×</button>
