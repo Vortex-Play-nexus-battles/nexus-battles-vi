@@ -56,6 +56,12 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  * el contenido se arma en cinco generadores que sí interpolan datos de la
  * subasta. Está anotado, no tapado.
  *
+ * HU-SUB-004 (cierre multiple) — tercera vez, 14 posiciones mas: la pestana
+ * «Cierre multiple» dejo de traer tres desenlaces inventados por omision y la
+ * vista gano su estado vacio, y ese codigo va ARRIBA del renderizado. Se
+ * volvieron a comparar contra HEAD: las cuatro son identicas caracter a
+ * caracter (1311→1325, 1329→1343, 1345→1359, 1385→1399).
+ *
  * HU-SUB-004 (canal en vivo) — segunda vez que se corren, ahora 41 posiciones:
  * el ciclo de vida del canal se separó del temporizador (`detenerTemporizador`
  * y `reconciliarSiNoHayCanal`), y ese código va ARRIBA del renderizado. Se
@@ -80,11 +86,11 @@ const REVISADOS = new Map([
 
   ['cuentas/tienda.js:226', 'cadena literal fija del carrito vacío'],
   ['cuentas/tienda.js:236', 'plantilla fija; los datos entran luego por textContent'],
-  ['cuentas/pujas.js:1311', 'plantilla fija del estado de carga'],
-  ['cuentas/pujas.js:1329', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
-  ['cuentas/pujas.js:1345', 'plantilla fija del estado vacío'],
+  ['cuentas/pujas.js:1325', 'plantilla fija del estado de carga'],
+  ['cuentas/pujas.js:1343', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
+  ['cuentas/pujas.js:1359', 'plantilla fija del estado vacío'],
   [
-    'cuentas/pujas.js:1385',
+    'cuentas/pujas.js:1399',
     'DELIBERADO y SANEADO (UX-R2.8c): las 20 interpolaciones con datos del ' +
       'servidor pasan por esc(); pujas.test.js lo comprueba con cargas reales. ' +
       'La estructura (2.297 líneas de plantilla) se mueve en UX-R2.10.',

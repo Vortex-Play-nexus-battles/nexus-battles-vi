@@ -740,6 +740,30 @@ describe('canal en vivo (HU-SUB-011 publica, esta pantalla escucha)', () => {
     ctrl.destruir();
   });
 
+  // La pantalla no puede inventarse desenlaces. `eventosCierre` tenia como
+  // valor por defecto EVENTOS_CIERRE_DEFAULT y `pujas.html` monta sin pasarlo,
+  // asi que en produccion la pestana «Cierre multiple» anunciaba siempre «3» y
+  // al abrirla se leia «3 CERRARON · Ganaste 1, te superaron en 2», con el
+  // Hacha adjudicada a andres_nv y derrotas contra thar_vex y valkyria_99.
+  // Ninguna existe, y el consejo tactico mezclaba esas cifras con el saldo real.
+  test('sin cierres del servidor no se inventa ninguno', async () => {
+    const { api } = apiQueCuenta([SUBASTA]);
+    const ctrl = new ControladorSubastas({
+      contenedor: document.createElement('div'),
+      api,
+    });
+    await ctrl.iniciar();
+
+    expect(ctrl.eventosCierre).toEqual([]);
+    ctrl.abrirCierreMultiple();
+    const texto = ctrl.contenedor.textContent;
+    expect(texto).not.toMatch(/Hacha de Obsidiana|Grebas del Centinela|Amuleto de Brasa/);
+    expect(texto).not.toMatch(/thar_vex|valkyria_99/);
+    expect(texto).not.toMatch(/CERRARON/);
+    expect(texto).toMatch(/Todav[ií]a no se ha cerrado ninguna/);
+    ctrl.destruir();
+  });
+
   test('destruir cierra el canal', async () => {
     const caja = document.createElement('div');
     const falso = canalFalso();

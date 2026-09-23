@@ -221,6 +221,20 @@ export const CONFIG_REGLAS = {
   maxPujasActivas: 50,
 };
 
+/**
+ * Cierres de ejemplo. **Banco de pruebas, no un modo de demostracion**, igual
+ * que SUBASTAS_INICIALES. Esto era el valor por defecto de `eventosCierre` en
+ * el constructor, y `pujas.html` monta sin pasar ese parametro: en produccion
+ * la pestana «Cierre multiple» anunciaba SIEMPRE «3», y al abrirla se leia
+ * «3 CERRARON · Ganaste 1, te superaron en 2», «-1.350 cobrado / +3.280
+ * devuelto», el Hacha adjudicada a andres_nv y las derrotas contra thar_vex y
+ * valkyria_99. Ninguna de esas tres subastas existe, y el consejo tactico
+ * mezclaba esas cifras inventadas con el saldo real del jugador.
+ *
+ * Mientras ms-subastas no publique los cierres del jugador (hoy no hay
+ * endpoint: ni en pujas-api.js ni en el servicio), lo honesto es no tener
+ * ninguno y decirlo.
+ */
 export const EVENTOS_CIERRE_DEFAULT = [
   {
     id: 'hacha-obsidiana',
@@ -552,7 +566,7 @@ export class ControladorSubastas {
     subastas = SUBASTAS_INICIALES,
     heroes = HEROES_BASE,
     config = CONFIG_REGLAS,
-    eventosCierre = EVENTOS_CIERRE_DEFAULT,
+    eventosCierre = [],
     api = null,
     subastaInicialId = null,
     urlCanal = null,
@@ -1845,8 +1859,35 @@ export class ControladorSubastas {
     `;
   }
 
+  /**
+   * Estado vacio de «Cierre multiple» (RNF-USA-003). Antes no existia porque
+   * la vista nunca se pintaba sin eventos: el valor por defecto traia tres.
+   */
+  generarHtmlCierreSinEventos() {
+    return `
+      <div class="subastas-app vista-cierre-multiple">
+        ${this.generarHtmlPestanas({ superadas: 0 })}
+        ${this.generarHtmlAlerta()}
+
+        <div class="panel-cierre-multiple">
+          <div class="estado-vacio" role="status">
+            <h1 class="cierre-titular">Todavía no se ha cerrado ninguna</h1>
+            <p class="cierre-subtitulo">
+              Cuando una subasta en la que participes termine, aquí verás si te
+              la llevaste y cuánto se movió en tu saldo.
+            </p>
+            <button type="button" class="btn btn-primario" data-tab="explorar">Ver subastas activas</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   generarHtmlCierreMultiple({ total }) {
     const eventos = this.eventosCierre;
+    if (!eventos.length) {
+      return this.generarHtmlCierreSinEventos();
+    }
     const balance = calcularBalanceNetoCierre(eventos, total);
     const ganadas = eventos.filter((e) => e.esGanador).length;
     const superadas = eventos.filter((e) => !e.esGanador).length;
@@ -2258,7 +2299,7 @@ export class ControladorSubastas {
 
   conectarEventos() {
     // Pestañas de navegación
-    this.contenedor.querySelectorAll('.tab-btn[data-tab]').forEach((btn) => {
+    this.contenedor.querySelectorAll('[data-tab]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const tab = btn.getAttribute('data-tab');
         if (tab === 'explorar') {

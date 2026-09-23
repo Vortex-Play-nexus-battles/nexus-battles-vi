@@ -18,6 +18,7 @@ import {
   generarConsejoTactico,
   calcularEstadoTopesConcurrencia,
   ControladorSubastas,
+  EVENTOS_CIERRE_DEFAULT,
   SUBASTAS_INICIALES,
   HEROES_BASE,
 } from './pujas.js';
@@ -382,6 +383,19 @@ describe('ControladorSubastas - Interacción y Flujo DOM', () => {
 
   describe('Vista «Cierre Múltiple»', () => {
     beforeEach(() => {
+      // Los cierres se piden EXPLICITAMENTE. Antes bastaba con no pasarlos,
+      // porque EVENTOS_CIERRE_DEFAULT era el valor por defecto del
+      // constructor -- y por eso mismo se colaban en produccion, donde
+      // `pujas.html` tampoco los pasa. Ahora el banco de pruebas solo lo usa
+      // quien lo pide, igual que SUBASTAS_INICIALES.
+      controlador.destruir();
+      controlador = new ControladorSubastas({
+        contenedor,
+        subastas: SUBASTAS_INICIALES,
+        heroes: HEROES_BASE,
+        eventosCierre: EVENTOS_CIERRE_DEFAULT,
+      });
+      controlador.render();
       controlador.abrirCierreMultiple();
     });
 
