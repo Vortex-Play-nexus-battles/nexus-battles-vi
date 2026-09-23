@@ -26,7 +26,7 @@ function apiCon(fetchFalso, { token = 'jwt-de-prueba' } = {}) {
   });
 }
 
-describe('peticiones que mueven creditos', () => {
+describe('peticiones que mueven créditos', () => {
   test('pujar manda el monto como cadena y una clave de idempotencia', async () => {
     const peticiones = [];
     const falso = jest.fn(async (url, opciones) => {
@@ -85,7 +85,7 @@ describe('peticiones que mueven creditos', () => {
 
     expect(capturado.opciones.method).toBe('PUT');
     expect(JSON.parse(capturado.opciones.body)).toEqual({ limite: '400' });
-    // Configurar todavia no mueve creditos: la reserva la hace el motor al
+    // Configurar todavia no mueve créditos: la reserva la hace el motor al
     // emitir, y esa si lleva su propia clave.
     expect(capturado.opciones.headers['Idempotency-Key']).toBeUndefined();
   });
@@ -132,7 +132,7 @@ describe('reintento de una peticion que no llego a tener respuesta', () => {
     expect(falso).toHaveBeenCalledTimes(2);
   });
 
-  test('un error del servidor NO se reintenta: ya respondio', async () => {
+  test('un error del servidor NO se reintenta: ya respondió', async () => {
     const falso = jest.fn(async () =>
       respuesta({
         ok: false,
@@ -156,14 +156,14 @@ describe('reintento de una peticion que no llego a tener respuesta', () => {
 });
 
 describe('traduccion de errores', () => {
-  test('el mensaje sale del motivo, no del texto tecnico del servidor', async () => {
+  test('el mensaje sale del motivo, no del texto técnico del servidor', async () => {
     const falso = jest.fn(async () =>
       respuesta({
         ok: false,
         status: 409,
         cuerpo: {
           motivo: 'OFERTA_INSUFICIENTE',
-          detail: 'La puja de 105 no supera la oferta vigente mas el incremento minimo (110)',
+          detail: 'La puja de 105 no supera la oferta vigente mas el incremento mínimo (110)',
         },
       }),
     );
@@ -171,11 +171,11 @@ describe('traduccion de errores', () => {
     await expect(apiCon(falso).pujar('sub-1', 105)).rejects.toMatchObject({
       estado: 409,
       motivo: 'OFERTA_INSUFICIENTE',
-      message: 'Alguien se te adelanto: la oferta ya subio. Revisa el nuevo minimo.',
+      message: 'Alguien se te adelantó: la oferta ya subió. Revisa el nuevo mínimo.',
     });
   });
 
-  test('un 401 pide volver a iniciar sesion', async () => {
+  test('un 401 pide volver a iniciar sesión', async () => {
     const falso = jest.fn(async () => respuesta({ ok: false, status: 401, cuerpo: {} }));
 
     await expect(apiCon(falso).pujar('sub-1', 110)).rejects.toMatchObject({ estado: 401 });
@@ -199,7 +199,7 @@ describe('traduccion de errores', () => {
   });
 
   test('un motivo desconocido no deja al jugador sin mensaje', () => {
-    expect(mensajePara('ALGO_QUE_NO_EXISTE_TODAVIA')).toBe('No se pudo completar la operacion.');
+    expect(mensajePara('ALGO_QUE_NO_EXISTE_TODAVIA')).toBe('No se pudo completar la operación.');
   });
 });
 

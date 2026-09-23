@@ -46,7 +46,7 @@ const CHAT_GENERAL = '../../plataforma/salas-partidas/chat.html';
 export const AVISO_SIN_ASISTENTE = Object.freeze({
   titulo: 'El asistente todavía no está disponible',
   mensaje:
-    'El asistente automatico llega en una entrega posterior. Mientras tanto puedes ' +
+    'El asistente automático llega en una entrega posterior. Mientras tanto puedes ' +
     'preguntar en el chat general: alli hay gente jugando a la misma hora que tu.',
 });
 

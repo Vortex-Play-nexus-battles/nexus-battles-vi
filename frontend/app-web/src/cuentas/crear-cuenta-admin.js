@@ -2,6 +2,7 @@ import {
   setCurrentRole,
   getCurrentRole,
   checkPermission,
+  setPermissionMatrix,
   applyHasPermissionDirective,
 } from './directives/has-permission.directive.js';
 
@@ -12,6 +13,8 @@ import { distintivo } from '../comun/ui/distintivo.js';
 import { confirmar } from '../comun/ui/dialogo.js';
 
 const BASE_API = '/api/v1/admin/cuentas';
+const MATRIZ_RBAC_API = '/api/v1/rbac/matrix';
+const CLAVE_TOKEN = 'nexus.token';
 
 const CLAVE_ROL = 'nexus.rolActual';
 
@@ -51,9 +54,51 @@ function iniciar() {
 
   configurarEventos();
 
-  verificarAcceso();
+  cargarMatrizYVerificarAcceso();
 
   actualizarPermisosVisuales();
+}
+
+/**
+ * UX-R3.11 — esta vista NO cargaba la matriz RBAC.
+ *
+ * `checkPermission` lee `permissionMatrix`, que empieza vacia y se llena desde
+ * `GET /api/v1/rbac/matrix`. Aqui nadie la pedia, asi que la comprobacion caia
+ * siempre del lado cerrado. Y ademas se llamaba con UN argumento
+ * -`checkPermission(PERMISO_CREAR)`- cuando la firma es `(rol, accion)`: el
+ * permiso entraba como rol y la accion llegaba `undefined`.
+ *
+ * Las dos cosas juntas significan que **nadie podia crear una cuenta
+ * administrativa desde esta pantalla**, tampoco un super administrador: la
+ * unica vista que cumple RF-RBAC-003 estaba muerta para todos los roles. Se vio
+ * en el barrido: la captura con persona SUPER_ADMINISTRADOR devolvia «Acceso
+ * restringido».
+ */
+export async function cargarMatrizYVerificarAcceso({
+  fetchImpl = fetchWithHttpErrorInterceptor,
+} = {}) {
+  const token = sessionStorage.getItem(CLAVE_TOKEN);
+  const cabeceras = token ? { Authorization: `Bearer ${token}` } : {};
+  let seCargo = false;
+
+  try {
+    const respuesta = await fetchImpl(MATRIZ_RBAC_API, { headers: cabeceras });
+    if (!respuesta.ok) {
+      throw new Error(`Error HTTP ${respuesta.status}`);
+    }
+    const payload = await respuesta.json();
+    const matriz = payload?.matrix;
+    if (!matriz || typeof matriz !== 'object' || Object.keys(matriz).length === 0) {
+      throw new Error('La matriz RBAC recibida no es válida.');
+    }
+    setPermissionMatrix(matriz);
+    seCargo = true;
+  } catch (error) {
+    console.error('No fue posible cargar la matriz RBAC:', error);
+    setPermissionMatrix({});
+  }
+
+  verificarAcceso({ matrizDisponible: seCargo });
 }
 
 function aplicarDirectivas() {
@@ -104,7 +149,7 @@ function configurarEventos() {
   }
 }
 
-function verificarAcceso() {
+function verificarAcceso({ matrizDisponible = true } = {}) {
   const accesoDenegado = document.getElementById('acceso-denegado');
 
   const formularioContenedor = document.getElementById('formulario-contenedor');
@@ -113,16 +158,17 @@ function verificarAcceso() {
     return;
   }
 
-  const rolActual = getCurrentRole();
+  const tienePermiso = matrizDisponible && checkPermission(getCurrentRole(), PERMISO_CREAR);
 
-  const tienePermiso = checkPermission(PERMISO_CREAR);
-
-  const esSuperAdministrador = rolActual === 'SUPER_ADMINISTRADOR';
-
-  if (!esSuperAdministrador || !tienePermiso) {
+  if (!tienePermiso) {
     accesoDenegado.hidden = false;
 
     formularioContenedor.hidden = true;
+
+    // Un servicio caido y un rol insuficiente no son lo mismo, y confundirlos
+    // manda a alguien a pedir que le revisen el rol en vez de a mirar si el
+    // servicio responde (la misma correccion que en gestion-usuarios).
+    pintarMotivoDeBloqueo(accesoDenegado, matrizDisponible);
 
     return;
   }
@@ -130,6 +176,26 @@ function verificarAcceso() {
   accesoDenegado.hidden = true;
 
   formularioContenedor.hidden = false;
+}
+
+/**
+ * @param {HTMLElement} seccion
+ * @param {boolean} matrizDisponible
+ */
+function pintarMotivoDeBloqueo(seccion, matrizDisponible) {
+  const titulo = seccion.querySelector('[data-zona="titulo-bloqueo"]');
+  const detalle = seccion.querySelector('[data-zona="detalle-bloqueo"]');
+  if (titulo) {
+    titulo.textContent = matrizDisponible
+      ? 'No tienes acceso a esta sección.'
+      : 'Esta función no está disponible temporalmente.';
+  }
+  if (detalle) {
+    detalle.textContent = matrizDisponible
+      ? 'Crear cuentas administrativas es del super administrador.'
+      : 'No pudimos comprobar tus permisos porque el servicio de identidad no responde. ' +
+        'No es un problema de tu cuenta.';
+  }
 }
 
 function actualizarPermisosVisuales() {
@@ -170,9 +236,9 @@ async function manejarCreacionCuenta(evento) {
 
   const rolActual = getCurrentRole();
 
-  const tienePermiso = checkPermission(PERMISO_CREAR);
+  const tienePermiso = checkPermission(rolActual, PERMISO_CREAR);
 
-  if (rolActual !== 'SUPER_ADMINISTRADOR' || !tienePermiso) {
+  if (!tienePermiso) {
     mostrarError('No tienes permisos para crear cuentas administrativas.');
 
     return;
@@ -202,7 +268,7 @@ async function manejarCreacionCuenta(evento) {
 
   const confirmado = await confirmar({
     titulo: 'Crear cuenta administrativa',
-    mensaje: `Se creara la cuenta "${apodo}" con rol ${rol}. Podras cambiarle el rol despues, pero la cuenta no se puede borrar desde esta vista.`,
+    mensaje: `Se creará la cuenta "${apodo}" con rol ${rol}. Podrás cambiarle el rol después, pero la cuenta no se puede borrar desde esta vista.`,
     textoConfirmar: 'Crear cuenta',
     peligro: false,
   });

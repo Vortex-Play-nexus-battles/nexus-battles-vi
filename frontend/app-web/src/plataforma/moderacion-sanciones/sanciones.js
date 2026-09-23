@@ -18,6 +18,7 @@
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
 import { nodo } from '../../comun/ui/dom.js';
 import { pintarAviso } from '../../comun/ui/aviso.js';
+import { estadoDeError, pintarEstado } from '../../comun/ui/estado-vista.js';
 import { campo } from '../../comun/ui/campo.js';
 
 export const TIPO = Object.freeze({
@@ -227,7 +228,7 @@ function avisarError(zona, error) {
     detalle:
       error instanceof ErrorDeSanciones
         ? error.detalle
-        : 'Revisa tu conexion e intentalo de nuevo.',
+        : 'Revisa tu conexión e inténtalo de nuevo.',
   });
 }
 
@@ -247,7 +248,7 @@ export function tarjetaDeSancion(
   tarjeta.appendChild(nodo('strong', 'tarjeta__titulo', descripcionDe(sancion, ahora)));
   tarjeta.appendChild(nodo('p', 't-cuerpo', `Motivo: ${sancion.motivo}`));
   if (sancion.politica) {
-    tarjeta.appendChild(nodo('p', 't-meta', `Politica: ${sancion.politica}`));
+    tarjeta.appendChild(nodo('p', 't-meta', `Política: ${sancion.politica}`));
   }
   const meta = nodo('p', 't-meta');
   meta.dataset.campo = 'meta';
@@ -277,14 +278,14 @@ export function tarjetaDeApelacion(apelacion, { resolver } = {}) {
   tarjeta.dataset.apelacionId = apelacion.id;
   tarjeta.dataset.estado = apelacion.estado;
   tarjeta.appendChild(
-    nodo('strong', 'tarjeta__titulo', `Apelacion · ${apelacion.estado.toLowerCase()}`),
+    nodo('strong', 'tarjeta__titulo', `Apelación · ${apelacion.estado.toLowerCase()}`),
   );
   tarjeta.appendChild(nodo('p', 't-cuerpo', apelacion.argumento));
   tarjeta.appendChild(
     nodo(
       'p',
       't-meta',
-      `Sancion ${apelacion.sancionId} · abierta el ${new Date(apelacion.creadaEn).toLocaleString('es-CO')}`,
+      `Sanción ${apelacion.sancionId} · abierta el ${new Date(apelacion.creadaEn).toLocaleString('es-CO')}`,
     ),
   );
   if (apelacion.decisionMotivo) {
@@ -310,7 +311,7 @@ export function tarjetaDeApelacion(apelacion, { resolver } = {}) {
       nombre: 'nuevaVigencia',
       etiqueta: 'Nueva fecha fin',
       tipo: 'datetime-local',
-      pista: 'Solo al reducir la sancion.',
+      pista: 'Solo al reducir la sanción.',
     });
     const motivacion = campo({
       nombre: 'motivo',
@@ -359,7 +360,7 @@ export function montarPanelDeModeracion(
   if (!ROLES_DE_MODERACION.includes(rol)) {
     pintarAviso(zonaAviso, {
       tono: 'advertencia',
-      titulo: 'Este panel es de moderacion',
+      titulo: 'Este panel es de moderación',
       detalle: 'Tu rol no permite emitir ni revisar sanciones.',
     });
     raiz.querySelectorAll('form button, form input, form select, form textarea').forEach((c) => {
@@ -392,8 +393,17 @@ export function montarPanelDeModeracion(
       }
       sanciones.forEach((s) => zonaHistorial.appendChild(tarjetaDeSancion(s, { ahora: ahora() })));
     } catch (error) {
-      zonaHistorial.replaceChildren();
-      avisarError(zonaAviso, error);
+      const deNegocio = error instanceof ErrorDeSanciones;
+      pintarEstado(
+        zonaHistorial,
+        estadoDeError({
+          titulo: deNegocio ? error.titulo : 'No pudimos cargar el historial',
+          detalle: deNegocio
+            ? error.detalle
+            : 'El servicio de moderación no respondió. Vuelve a intentarlo.',
+          alReintentar: () => cargarHistorial(uid),
+        }),
+      );
     }
   }
 
@@ -427,7 +437,21 @@ export function montarPanelDeModeracion(
         ),
       );
     } catch (error) {
-      avisarError(zonaAviso, error);
+      // UX-R3.11 — igual que en parametros: el fallo de una zona se cuenta EN
+      // esa zona y con reintento, no como una pildora suelta encima de una
+      // pantalla vacia.
+      zonaAviso.hidden = true;
+      const deNegocio = error instanceof ErrorDeSanciones;
+      pintarEstado(
+        zonaApelaciones,
+        estadoDeError({
+          titulo: deNegocio ? error.titulo : 'No pudimos cargar las apelaciones',
+          detalle: deNegocio
+            ? error.detalle
+            : 'El servicio de moderación no respondió. Vuelve a intentarlo.',
+          alReintentar: cargarApelaciones,
+        }),
+      );
     }
   }
 
@@ -459,7 +483,7 @@ export function montarPanelDeModeracion(
       pintarAviso(zonaAviso, {
         tono: 'exito',
         titulo: 'Sanción emitida',
-        detalle: `${descripcionDe(sancion, ahora())}. El jugador recibira el aviso.`,
+        detalle: `${descripcionDe(sancion, ahora())}. El jugador recibirá el aviso.`,
       });
       formEmitir.querySelector('[name="motivo"]').value = '';
       await cargarHistorial(cuerpo.usuarioId);

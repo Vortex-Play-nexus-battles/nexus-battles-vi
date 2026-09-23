@@ -217,9 +217,9 @@ function textoDeLaRecompensa(aviso, yo) {
   if (recompensa === null) {
     return '';
   }
-  const plural = recompensa.creditos === 1 ? 'credito' : 'creditos';
+  const plural = recompensa.creditos === 1 ? 'crédito' : 'créditos';
   const motivo = recompensa.ganador ? 'por ganar' : 'por participar';
-  const cofre = recompensa.cofre ? ' Ademas te llevas un cofre.' : '';
+  const cofre = recompensa.cofre ? ' Además te llevas un cofre.' : '';
   return ` Ganas ${recompensa.creditos} ${plural} ${motivo}.${cofre}`;
 }
 
@@ -237,12 +237,12 @@ function textoDelReparto(aviso, yo) {
     return '';
   }
   if (creditos > 0) {
-    return ` Te llevas ${creditos} creditos de la apuesta.`;
+    return ` Te llevas ${creditos} créditos de la apuesta.`;
   }
   if (creditos < 0) {
-    return ` Pierdes los ${-creditos} creditos que apostaste.`;
+    return ` Pierdes los ${-creditos} créditos que apostaste.`;
   }
-  return ' Se te devuelven los creditos apostados.';
+  return ' Se te devuelven los créditos apostados.';
 }
 
 /**
@@ -275,7 +275,7 @@ export function textoDelTurno(idJugador, participantes, yo) {
     return { texto: 'Turno de otro participante', mio: false };
   }
   const nombre = quien.heroe?.nombre ?? 'tu rival';
-  return { texto: quien.esIA ? `Juega la maquina (${nombre})` : `Turno de ${nombre}`, mio: false };
+  return { texto: quien.esIA ? `Juega la máquina (${nombre})` : `Turno de ${nombre}`, mio: false };
 }
 
 /**
@@ -443,7 +443,7 @@ export function montarControlesDeCombate(
       if (!zonaRechazo) {
         return false;
       }
-      zonaRechazo.textContent = problema?.detail ?? problema?.title ?? 'La accion fue rechazada.';
+      zonaRechazo.textContent = problema?.detail ?? problema?.title ?? 'La acción fue rechazada.';
       zonaRechazo.hidden = false;
       return true;
     },

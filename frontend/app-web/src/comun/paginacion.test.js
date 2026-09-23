@@ -42,7 +42,7 @@ describe('Control de paginacion', () => {
     expect(numeros(control)).toEqual(['1', '2', '3']);
   });
 
-  test('marca la pagina activa, y solo esa', () => {
+  test('marca la página activa, y solo esa', () => {
     const control = construirPaginacion({ paginaActual: 2, totalPaginas: 5 }, () => {});
 
     const activas = casillas(control).filter((c) => c.getAttribute('aria-current') === 'page');
@@ -145,7 +145,7 @@ describe('Control de paginacion', () => {
   // control es que al cambiar de pagina no arrastre ni reinicie nada mas:
   // emite unicamente el indice pedido y deja el resto del estado al llamador.
 
-  test('al cambiar de pagina emite solo el indice, sin tocar otro estado', () => {
+  test('al cambiar de página emite solo el indice, sin tocar otro estado', () => {
     const recibido = [];
     const control = construirPaginacion({ paginaActual: 0, totalPaginas: 5 }, (...args) =>
       recibido.push(args),

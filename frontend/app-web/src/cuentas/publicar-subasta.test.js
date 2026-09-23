@@ -328,7 +328,7 @@ test('compra inmediata incompleta no se confunde con campo opcional vacío', asy
   expect($('#error-inmediata').textContent).not.toBe('');
 });
 
-test('Subastas activas ofrece Publicar subasta sin sesion y conserva la carga del listado', async () => {
+test('Subastas activas ofrece Publicar subasta sin sesión y conserva la carga del listado', async () => {
   sessionStorage.clear();
   document.body.innerHTML = '<div data-cabecera-app></div><main id="raiz-subastas"></main>';
   globalThis.fetch = jest.fn().mockResolvedValue({
@@ -344,7 +344,7 @@ test('Subastas activas ofrece Publicar subasta sin sesion y conserva la carga de
 
     // UX-R2.8b — lo que esta prueba protege es el COMPORTAMIENTO: que sin
     // sesion se ofrezca publicar y que el listado se pida igual. Las
-    // afirmaciones que ataban ese comportamiento a una posicion concreta del
+    // afirmaciones que ataban ese comportamiento a una posición concreta del
     // DOM (`previousElementSibling`, `nextElementSibling`) se cambiaron por
     // las del encabezado del kit, que es donde vive ahora el par
     // titulo + accion. El estado vacio tambien pasa a ser el del kit.

@@ -162,9 +162,9 @@ export function montarSalaBatalla(
   if (!hayPartida && partida?.participantes?.length) {
     explicarVacio(
       zonaSinPartida,
-      `La partida ${partida.id} esta en curso con ${partida.participantes.length} participantes, ` +
-        'pero todavia no se conoce el heroe de ninguno: la verificacion de heroe no es ' +
-        'obligatoria al entrar a la sala. Sin heroe no hay vida que pintar.',
+      `La partida ${partida.id} está en curso con ${partida.participantes.length} participantes, ` +
+        'pero todavía no se conoce el héroe de ninguno: la verificación de héroe no es ' +
+        'obligatoria al entrar a la sala. Sin héroe no hay vida que pintar.',
     );
   }
 

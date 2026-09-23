@@ -3,6 +3,7 @@
 // así que aquí no hace falta leer nexus.token manualmente.
 
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
+import { estadoDeError, estadoVacio, pintarEstado } from '../comun/ui/estado-vista.js';
 
 const BASE_API = '/api/v1/cofres/mios';
 const TAMANO_PAGINA = 20;
@@ -54,7 +55,7 @@ function ocultarEstado() {
 }
 
 function renderCofres(cofres) {
-  el.lista.innerHTML = '';
+  el.lista.replaceChildren();
   for (const cofre of cofres) {
     const tarjeta = document.createElement('div');
     tarjeta.className = 'cofre-tarjeta';
@@ -63,11 +64,14 @@ function renderCofres(cofres) {
     const contenidoLegible = (cofre.contenido || 'COFRE').replace(/_/g, ' ');
     // UX-R2.8 — `contenidoLegible` sale de `cofre.contenido`, que viene del
     // servidor. Se construye el nodo en vez de interpolarlo en una plantilla.
-    const icono = document.createElement('div');
-    icono.className = 'cofre-icono';
-    icono.setAttribute('aria-hidden', 'true');
-    icono.textContent = '🎁';
-
+    //
+    // UX-R3.11 — aqui habia un emoji 🎁. El sprite del kit tiene treinta
+    // simbolos y ninguno es un cofre, asi que la vista se invento uno. Un emoji
+    // lo dibuja el sistema operativo: cambia de forma y de color entre Windows,
+    // macOS y Android, no hereda `currentColor` y no responde al alto
+    // contraste. Coger otro simbolo del sprite -«trofeo», «estrella»- seria
+    // peor: esos ya significan otra cosa en este producto.
+    // Queda sin icono, y el hueco del sprite anotado en `docs/gobierno/`.
     const titulo = document.createElement('h3');
     titulo.className = 'cofre-titulo';
     titulo.textContent = contenidoLegible;
@@ -80,7 +84,7 @@ function renderCofres(cofres) {
     info.className = 'cofre-info';
     info.append(titulo, fecha);
 
-    tarjeta.replaceChildren(icono, info);
+    tarjeta.replaceChildren(info);
     el.lista.appendChild(tarjeta);
   }
 }
@@ -94,7 +98,7 @@ function actualizarPaginacion(pagina, totalPaginas) {
 }
 
 async function cargar() {
-  el.lista.innerHTML = '';
+  el.lista.replaceChildren();
   mostrarEstado('Cargando...', 'carga');
 
   const params = new URLSearchParams({
@@ -107,13 +111,22 @@ async function cargar() {
       method: 'GET',
     });
     if (resp.status === 403) {
-      mostrarEstado('Debes iniciar sesión para ver tus cofres.', 'error');
+      ocultarEstado();
+      pintarEstado(
+        el.lista,
+        estadoVacio({
+          titulo: 'Tus cofres son tuyos',
+          detalle: 'Hace falta tu sesión iniciada para verlos.',
+          accion: { texto: 'Iniciar sesión', href: RUTA_LOGIN },
+        }),
+      );
       el.btnAnterior.disabled = true;
       el.btnSiguiente.disabled = true;
+      el.paginaActual.textContent = '';
       return;
     }
     if (!resp.ok) {
-      mostrarEstado('No se pudo cargar la lista de cofres.', 'error');
+      fallar();
       return;
     }
     const datos = await resp.json();
@@ -122,9 +135,16 @@ async function cargar() {
     const paginaActual = datos.number ?? estado.pagina;
 
     if (cofres.length === 0) {
-      mostrarEstado(
-        'Todavía no has ganado ningún cofre. Acumula 20 créditos en tus partidas para conseguir el primero.',
-        'vacio',
+      ocultarEstado();
+      pintarEstado(
+        el.lista,
+        estadoVacio({
+          titulo: 'Todavía no has ganado ningún cofre',
+          detalle:
+            'Acumula 20 créditos en tus partidas durante una semana y el primero es tuyo. ' +
+            'Como máximo, dos por semana.',
+          accion: { texto: 'Jugar ahora', href: './index.html' },
+        }),
       );
     } else {
       ocultarEstado();
@@ -132,8 +152,30 @@ async function cargar() {
     }
     actualizarPaginacion(paginaActual, totalPaginas);
   } catch {
-    mostrarEstado('Error de red al consultar los cofres.', 'error');
+    fallar();
   }
+}
+
+/**
+ * UX-R3.11 — el fallo era una pildora roja de una linea, «No se pudo cargar la
+ * lista de cofres.», sin decir que hacer y sin manera de volver a intentarlo;
+ * y la paginacion se quedaba viva debajo, ofreciendo pasar paginas de una lista
+ * que no existe. El fallo de la vista entera es un estado de la vista entera
+ * (MAPEO-ERRORES §5.1) y apaga la paginacion.
+ */
+function fallar() {
+  ocultarEstado();
+  pintarEstado(
+    el.lista,
+    estadoDeError({
+      titulo: 'No pudimos cargar tus cofres',
+      detalle: 'El servicio no respondió. Vuelve a intentarlo en un momento.',
+      alReintentar: cargar,
+    }),
+  );
+  el.btnAnterior.disabled = true;
+  el.btnSiguiente.disabled = true;
+  el.paginaActual.textContent = '';
 }
 
 if (!sessionStorage.getItem(CLAVE_ROL)) {

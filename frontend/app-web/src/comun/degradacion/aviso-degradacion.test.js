@@ -19,7 +19,7 @@ function problemaDeInventario(extra = {}) {
     title: 'Inventario no disponible temporalmente',
     status: 503,
     detail:
-      'La seccion de Inventario no esta disponible temporalmente. El resto del juego sigue funcionando.',
+      'La sección de Inventario no esta disponible temporalmente. El resto del juego sigue funcionando.',
     instance: '/api/v1/salas/abc/inventario',
     seccion: 'Inventario',
     dependencia: 'inventario',
@@ -68,7 +68,7 @@ describe('leer los datos del problema', () => {
     expect(seccionDe(problemaDeInventario())).toBe('Inventario');
   });
 
-  it('si el backend no manda seccion, usa el respaldo en vez de decir "algo fallo"', () => {
+  it('si el backend no manda sección, usa el respaldo en vez de decir "algo fallo"', () => {
     expect(seccionDe({ type: TIPO_SECCION_NO_DISPONIBLE }, 'Comentarios')).toBe('Comentarios');
     expect(seccionDe({ seccion: '   ' }, 'Comentarios')).toBe('Comentarios');
   });
@@ -118,7 +118,7 @@ describe('pintar el aviso', () => {
     expect(caja.textContent).not.toContain('ms-inventario-v2');
   });
 
-  it('siempre ofrece una salida: el boton de reintentar', () => {
+  it('siempre ofrece una salida: el botón de reintentar', () => {
     // MAPEO-ERRORES §9: no dejar un error sin salida.
     const caja = contenedor();
     const reintentos = [];
@@ -150,7 +150,7 @@ describe('pintar el aviso', () => {
     expect(caja.querySelectorAll('.seccion-degradada')).toHaveLength(1);
   });
 
-  it('al volver la seccion, el aviso desaparece', () => {
+  it('al volver la sección, el aviso desaparece', () => {
     const caja = contenedor();
     pintarSeccionDegradada(caja, problemaDeInventario());
 

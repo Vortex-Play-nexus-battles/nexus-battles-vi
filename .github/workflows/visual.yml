@@ -2,11 +2,18 @@
 #
 # ## Que hace y que no
 #
-# Abre las 31 vistas en cinco anchuras (155 combinaciones), guarda una captura
-# de cada una y mide roturas de maquetacion: desbordamiento horizontal,
-# cabecera partida en mas de dos filas, modal fuera de pantalla, objetivo
-# tactil por debajo de 44px, texto recortado sin puntos suspensivos, error
-# tecnico como texto visible y contraste por debajo de WCAG AA.
+# Corre las tres pruebas de `tests/visual/`, que son tres cosas distintas:
+#
+#   auditoria-visual  las 32 vistas en cinco anchuras (160 combinaciones), una
+#                     captura de cada una y las medidas de maquetacion:
+#                     desbordamiento horizontal, cabecera partida, modal fuera
+#                     de pantalla, objetivo tactil por debajo de 44 px, texto
+#                     recortado sin puntos suspensivos, error tecnico como
+#                     texto visible, contraste por debajo de WCAG AA y cabecera
+#                     que no llega al borde.
+#   permisos          que la matriz de acceso se cumpla de verdad: 14 pruebas.
+#   accesibilidad     axe-core sobre las 32 vistas x 2 anchuras, con la persona
+#                     que abre cada una. Falla con serious y critical.
 #
 # NO compara imagenes pixel a pixel. Una comparacion de imagenes falla con
 # cada cambio de fuente y acaba desactivada; lo que hace falta detectar es
@@ -20,12 +27,15 @@
 #
 # ## Que falla
 #
-# Hoy solo falla el guardian del catalogo (una vista nueva sin registrar) y el
-# guardian del kit (los CSS no cargaron: la raiz servida esta mal). Los
-# hallazgos de maquetacion se publican como aviso y como informe descargable.
-# Convertirlos en compuerta es el ultimo paso de UX-R2.9, cuando ya no queden
-# hallazgos heredados: una compuerta que nace roja la desactiva alguien en dos
-# dias.
+# Fallan: el guardian del catalogo (una vista nueva sin registrar), el guardian
+# del kit (los CSS no cargaron: la raiz servida esta mal), cualquier prueba de
+# permisos y cualquier hallazgo `serious` o `critical` de axe.
+#
+# Los hallazgos de maquetacion, y los `moderate`/`minor` de axe, se publican
+# como aviso y como informe descargable. Convertirlos en compuerta obliga a
+# tocar las 32 vistas en un PR: una compuerta que nace roja la desactiva
+# alguien en dos dias. UX-R3.11 dejo el laboratorio en 160 combinaciones con
+# CERO hallazgos, asi que ese paso ya esta al alcance.
 name: Laboratorio visual
 
 on:
@@ -54,7 +64,7 @@ permissions:
 
 jobs:
   auditoria:
-    name: 31 vistas en cinco anchuras
+    name: 32 vistas, permisos y accesibilidad
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

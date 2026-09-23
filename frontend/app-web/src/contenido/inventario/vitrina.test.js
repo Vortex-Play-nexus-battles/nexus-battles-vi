@@ -36,11 +36,11 @@ function tarjetas(vitrina) {
 }
 
 describe('Cuadricula de la vitrina a 1360 x 768', () => {
-  test('el tamano de pagina de referencia es 16', () => {
+  test('el tamano de página de referencia es 16', () => {
     expect(PRODUCTOS_POR_PAGINA).toBe(16);
   });
 
-  test('con 40 productos, la primera pagina muestra exactamente 16 tarjetas', () => {
+  test('con 40 productos, la primera página muestra exactamente 16 tarjetas', () => {
     const vitrina = construirVitrina(paginaCon(PRODUCTOS_POR_PAGINA, 40));
 
     expect(tarjetas(vitrina)).toHaveLength(16);
@@ -150,7 +150,7 @@ describe('Cuadricula de la vitrina a 1360 x 768', () => {
   });
 
   test('rechaza una pagina nula', () => {
-    expect(() => construirVitrina(null)).toThrow(/pagina/);
+    expect(() => construirVitrina(null)).toThrow(/página/);
   });
 
   // --- HU-INV-007: apertura de la ficha de detalle ---------------------

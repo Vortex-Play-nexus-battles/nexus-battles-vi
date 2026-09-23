@@ -72,7 +72,7 @@ describe('identidad', () => {
     expect(JSON.stringify(cabeceras)).not.toContain('usr_test_123');
   });
 
-  test('sin sesion no viaja ninguna identidad: el backend respondera 401', async () => {
+  test('sin sesión no viaja ninguna identidad: el backend respondera 401', async () => {
     sessionStorage.clear();
     globalThis.fetch.mockResolvedValue(respuesta({ content: [] }));
 
@@ -85,7 +85,7 @@ describe('identidad', () => {
 });
 
 describe('base de la API', () => {
-  test('mismo origen por omision, con el prefijo de version', async () => {
+  test('mismo origen por omision, con el prefijo de versión', async () => {
     globalThis.fetch.mockResolvedValue(respuesta({ content: [] }));
 
     await cargarVitrina(document);
@@ -93,7 +93,7 @@ describe('base de la API', () => {
     expect(globalThis.fetch.mock.calls[0][0]).toBe('/api/v1/productos');
   });
 
-  test('con meta declarada, la base la manda la pagina', async () => {
+  test('con meta declarada, la base la manda la página', async () => {
     // La cabecera se declara ANTES de esperar nada, y `beforeEach` la limpia:
     // tocarla despues de un await es lo que ESLint marca como carrera.
     document.head.innerHTML = '<meta name="nexus-api-base" content="http://127.0.0.1:8083/" />';
@@ -140,7 +140,7 @@ describe('vitrina', () => {
 });
 
 describe('carrito', () => {
-  test('un 404 SI es un carrito vacio', async () => {
+  test('un 404 SI es un carrito vacío', async () => {
     globalThis.fetch.mockRejectedValue(Object.assign(new Error('no hay'), { estado: 404 }));
 
     await cargarCarrito(document);
@@ -149,7 +149,7 @@ describe('carrito', () => {
     expect(document.getElementById('btn-pagar').disabled).toBe(true);
   });
 
-  test('un 500 NO es un carrito vacio: se avisa del fallo', async () => {
+  test('un 500 NO es un carrito vacío: se avisa del fallo', async () => {
     // El defecto anterior: cualquier error se pintaba como «carrito vacio», y
     // el jugador no veia sus productos sin que nada se lo dijera.
     globalThis.fetch.mockRejectedValue(Object.assign(new Error('roto'), { estado: 500 }));

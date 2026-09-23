@@ -155,7 +155,15 @@ function listaDeAlertas(alertas, vacio) {
   return ul;
 }
 
-function pintarError(zona, error) {
+/**
+ * @param {HTMLElement} zona
+ * @param {Error} error
+ * @param {{informe: string, alReintentar?: Function|null}} contexto que se
+ *   estaba pidiendo, en palabras. Las dos tarjetas de esta pantalla comparten
+ *   la clase de error, asi que si no lo dice quien pinta, una acaba anunciando
+ *   el fallo de la otra.
+ */
+function pintarError(zona, error, { informe, alReintentar = null } = { informe: 'el informe' }) {
   const deNegocio = error instanceof ErrorDeMetricas;
   // #527: sin rol administrativo no hay nada roto ni nada que reintentar; se
   // dice quien puede ver esto, no el codigo HTTP.
@@ -164,15 +172,23 @@ function pintarError(zona, error) {
   aviso.dataset.motivo = sinPermiso ? 'sin-permiso' : 'error';
   zona.replaceChildren(aviso);
 
-  let titulo = 'No pudimos contactar con el servicio de metricas';
-  let detalle = 'Revisa tu conexion e intentalo de nuevo.';
+  let titulo = `No pudimos cargar ${informe}`;
+  let detalle = 'El servicio de métricas no respondió. Vuelve a intentarlo.';
   if (sinPermiso) {
     ({ titulo, detalle } = error.avisoDePermiso);
-  } else if (deNegocio) {
+  } else if (deNegocio && error.titulo !== 'No se pudo obtener el informe') {
+    // Un titulo que viene del servicio (RFC 9457) dice mas que el generico.
     titulo = error.titulo;
     detalle = error.message;
   }
   aviso.append(nodo('strong', 'aviso__titulo', titulo), nodo('p', 'aviso__detalle', detalle));
+  if (alReintentar && !sinPermiso) {
+    const boton = nodo('button', 'boton boton--secundario boton--pequeno', 'Reintentar');
+    boton.type = 'button';
+    boton.dataset.accion = 'reintentar';
+    boton.addEventListener('click', () => alReintentar());
+    aviso.append(boton);
+  }
 }
 
 /**
@@ -196,7 +212,7 @@ export function montarTableroTecnico(raiz, { fetchImpl, descargar } = {}) {
   let ultimaModeracion = null;
 
   async function cargarTecnicas() {
-    zonaTecnicas.replaceChildren(nodo('p', 't-meta', 'Recolectando metricas de los servicios…'));
+    zonaTecnicas.replaceChildren(nodo('p', 't-meta', 'Recolectando métricas de los servicios…'));
     try {
       ultimoTecnico = await api.tecnicas(fetchImpl);
       zonaTecnicas.replaceChildren();
@@ -222,12 +238,15 @@ export function montarTableroTecnico(raiz, { fetchImpl, descargar } = {}) {
         listaDeAlertas(ultimoTecnico.alertas, 'Sin alertas sobre los umbrales.'),
       );
     } catch (error) {
-      pintarError(zonaTecnicas, error);
+      pintarError(zonaTecnicas, error, {
+        informe: 'las métricas técnicas',
+        alReintentar: () => cargarTecnicas(),
+      });
     }
   }
 
   async function cargarModeracion(desde, hasta) {
-    zonaModeracion.replaceChildren(nodo('p', 't-meta', 'Consultando moderacion…'));
+    zonaModeracion.replaceChildren(nodo('p', 't-meta', 'Consultando moderación…'));
     try {
       ultimaModeracion = await api.moderacion(desde, hasta, fetchImpl);
       zonaModeracion.replaceChildren();
@@ -264,7 +283,7 @@ export function montarTableroTecnico(raiz, { fetchImpl, descargar } = {}) {
         listaDeAlertas(
           ultimaModeracion.alertas,
           ultimaModeracion.alertasConfiguradas
-            ? 'Sin alertas: ningun dia supera el umbral.'
+            ? 'Sin alertas: ningún día supera el umbral.'
             : 'Sin umbral configurado (decision pendiente del PO, D-25): se publican los conteos, no se evalua ninguna alerta.',
         ),
       );
@@ -275,7 +294,10 @@ export function montarTableroTecnico(raiz, { fetchImpl, descargar } = {}) {
       );
       zonaModeracion.appendChild(pendientes);
     } catch (error) {
-      pintarError(zonaModeracion, error);
+      pintarError(zonaModeracion, error, {
+        informe: 'la actividad de usuarios y moderación',
+        alReintentar: () => cargarModeracion(desde, hasta),
+      });
     }
   }
 
@@ -287,7 +309,7 @@ export function montarTableroTecnico(raiz, { fetchImpl, descargar } = {}) {
       const texto = await api.tecnicasTexto(fetchImpl);
       guardar('metricas-tecnicas.txt', texto, 'text/plain');
     } catch (error) {
-      pintarError(zonaTecnicas, error);
+      pintarError(zonaTecnicas, error, { informe: 'el informe para exportar' });
     }
   });
   raiz.querySelector('[data-accion="exportar-moderacion"]')?.addEventListener('click', () => {

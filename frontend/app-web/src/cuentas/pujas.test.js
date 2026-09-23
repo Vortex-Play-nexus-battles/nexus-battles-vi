@@ -736,7 +736,7 @@ describe('Accesibilidad del diálogo de compra (WCAG 2.1 AA)', () => {
  * NADA. El nombre del objeto, su descripcion, el apodo del vendedor y el del
  * pujador salen del servidor y los escribe otra persona, asi que bastaba con
  * publicar una subasta con marcado en el nombre para ejecutar codigo en la
- * pantalla de quien la mirara. En la pantalla que mueve creditos.
+ * pantalla de quien la mirara. En la pantalla que mueve créditos.
  */
 describe('UX-R2.8c - datos del servidor no pueden inyectar marcado', () => {
   const CARGA = '<img src=x onerror="globalThis.__colado = true">';
@@ -835,7 +835,7 @@ describe('UX-R2.8c - datos del servidor no pueden inyectar marcado', () => {
 /**
  * UX-R2.8c — «Reintentar» no reintentaba.
  */
-describe('UX-R2.8c - un servicio caido no se presenta como mercado vacio', () => {
+describe('UX-R2.8c - un servicio caido no se presenta como mercado vacío', () => {
   test('Reintentar vuelve a pedir los datos, no solo repinta', async () => {
     const contenedor = document.createElement('div');
     document.body.appendChild(contenedor);
@@ -862,7 +862,7 @@ describe('UX-R2.8c - un servicio caido no se presenta como mercado vacio', () =>
     contenedor.remove();
   });
 
-  test('el titulo del error habla del servicio, no del catalogo', () => {
+  test('el título del error habla del servicio, no del catálogo', () => {
     const contenedor = document.createElement('div');
     document.body.appendChild(contenedor);
     const controlador = new ControladorSubastas({ contenedor, subastas: [], heroes: HEROES_BASE });

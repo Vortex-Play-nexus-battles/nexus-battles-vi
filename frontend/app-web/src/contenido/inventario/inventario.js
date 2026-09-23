@@ -126,7 +126,7 @@ export async function montarVitrina(
   // solo la mejora cuando el catalogo contesta. No se espera: si tardara o
   // fallara, la vista ya esta usable.
   pintarRetratos(contenedor).catch((fallo) =>
-    console.warn('No se pudieron traer los retratos del catalogo', fallo),
+    console.warn('No se pudieron traer los retratos del catálogo', fallo),
   );
   return pagina;
 }

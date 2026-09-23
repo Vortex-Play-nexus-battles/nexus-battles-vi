@@ -149,7 +149,7 @@ describe('llegada desde el listado (HU-SUB-011)', () => {
    * vacio seria peor que decirlo: el jugador vendria de pulsar "Ver subasta"
    * y no entenderia que esta mirando.
    */
-  test('si la subasta del enlace ya no esta, lo dice en vez de abrir un detalle vacio', async () => {
+  test('si la subasta del enlace ya no esta, lo dice en vez de abrir un detalle vacío', async () => {
     const api = apiFalsa();
     const ctrl = new ControladorSubastas({
       contenedor: contenedor(),
@@ -160,7 +160,7 @@ describe('llegada desde el listado (HU-SUB-011)', () => {
     await ctrl.iniciar();
 
     expect(ctrl.vista).not.toBe('detalle');
-    expect(ctrl.mensajeError).toContain('ya no esta disponible');
+    expect(ctrl.mensajeError).toContain('ya no está disponible');
     ctrl.destruir();
   });
 
@@ -353,12 +353,12 @@ describe('acciones', () => {
     ctrl.destruir();
   });
 
-  test('un rechazo del servidor se le ensena al jugador en el DOM sin bloquear', async () => {
+  test('un rechazo del servidor se le enseña al jugador en el DOM sin bloquear', async () => {
     const alertaSpy = jest.spyOn(globalThis, 'alert').mockImplementation(() => {});
     const api = apiFalsa({
       pujar: jest.fn(async () => {
         throw new ErrorDeSubastas(
-          'Alguien se te adelanto: la oferta ya subio. Revisa el nuevo minimo.',
+          'Alguien se te adelantó: la oferta ya subió. Revisa el nuevo mínimo.',
           { estado: 409, motivo: 'OFERTA_INSUFICIENTE' },
         );
       }),
@@ -375,12 +375,12 @@ describe('acciones', () => {
     expect(alerta).not.toBeNull();
     expect(alerta.getAttribute('role')).toBe('alert');
     expect(alerta.hidden).toBe(false);
-    expect(alerta.textContent).toContain('Alguien se te adelanto');
+    expect(alerta.textContent).toContain('Alguien se te adelantó');
     alertaSpy.mockRestore();
     ctrl.destruir();
   });
 
-  test('un monto que no es numero ni llega al servidor y ensena aviso en el DOM', async () => {
+  test('un monto que no es número ni llega al servidor y enseña aviso en el DOM', async () => {
     const alertaSpy = jest.spyOn(globalThis, 'alert').mockImplementation(() => {});
     const api = apiFalsa();
     const ctrl = new ControladorSubastas({ contenedor: contenedor(), api });
@@ -396,7 +396,7 @@ describe('acciones', () => {
     expect(alerta).not.toBeNull();
     expect(alerta.getAttribute('role')).toBe('alert');
     expect(alerta.hidden).toBe(false);
-    expect(alerta.textContent).toContain('Escribe un monto valido');
+    expect(alerta.textContent).toContain('Escribe un monto válido');
     alertaSpy.mockRestore();
     ctrl.destruir();
   });
@@ -410,7 +410,7 @@ describe('acciones', () => {
     await ctrl.pujar(Number.NaN);
     let alerta = ctrl.contenedor.querySelector('#alerta-pujas');
     expect(alerta.hidden).toBe(false);
-    expect(alerta.textContent).toContain('Escribe un monto valido');
+    expect(alerta.textContent).toContain('Escribe un monto válido');
 
     await ctrl.pujar(1500);
     alerta = ctrl.contenedor.querySelector('#alerta-pujas');
@@ -449,7 +449,7 @@ describe('acciones', () => {
 
   /**
    * Dos clics seguidos en Pujar no pueden mandar dos pujas: cada una reserva
-   * creditos por su cuenta.
+   * créditos por su cuenta.
    */
   test('no se manda una segunda peticion mientras la primera esta en vuelo', async () => {
     let resolver;

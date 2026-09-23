@@ -98,3 +98,12 @@ test-results/
 # darle historia util. Viven como artefacto de `visual.yml`, descargable
 # durante 14 dias, que es lo que se adjunta al acta del sprint.
 docs/evidencia/laboratorio-visual/**/*.png
+
+# Herramientas de un rato: sondas de medida, capturas puntuales para mirar un
+# cambio a ojo y los guiones que las lanzan en Windows. Lo que de estas sale y
+# merece quedarse, se queda como prueba (`ortografia-visible.test.js`,
+# `accesibilidad.spec.js`) o como documento (`docs/gobierno/`), no como script.
+/.ux/
+/.capturas-ux/
+/.acept.ps1
+/*.ps1

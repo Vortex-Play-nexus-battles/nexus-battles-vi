@@ -85,7 +85,7 @@ describe('comoImporte()', () => {
     expect(importe.tono).toBe(tono);
   });
 
-  test('APARTA dice que el credito esta apartado, no restado', () => {
+  test('APARTA dice que el crédito esta apartado, no restado', () => {
     const importe = comoImporte({ signo: 'APARTA', monto: 500 });
 
     expect(importe.texto).toContain('apartados');
@@ -158,7 +158,7 @@ describe('llenarFormulario() y cuerpoDeActualizacion()', () => {
 });
 
 describe('pintarHistorial() — #569', () => {
-  test('lista los movimientos de creditos, no solo los pagos', async () => {
+  test('lista los movimientos de créditos, no solo los pagos', async () => {
     const zona = montarVista().querySelector(
       '[data-zona="panel-historial"] [data-zona="contenido"]',
     );
@@ -206,7 +206,7 @@ describe('pintarHistorial() — #569', () => {
     expect(zona.querySelector('a')).not.toBeNull();
   });
 
-  test('con el servicio caido lo dice con palabras y ofrece reintentar, sin codigo HTTP', async () => {
+  test('con el servicio caido lo dice con palabras y ofrece reintentar, sin código HTTP', async () => {
     const zona = montarVista().querySelector(
       '[data-zona="panel-historial"] [data-zona="contenido"]',
     );
@@ -269,7 +269,7 @@ describe('montarCuenta()', () => {
     expect(raiz.querySelector('[data-zona="panel-resumen"]').textContent).not.toBe('');
   });
 
-  test('con los creditos caidos el perfil se sigue viendo', async () => {
+  test('con los créditos caidos el perfil se sigue viendo', async () => {
     const raiz = montarVista();
     const fetchImpl = fetchFalso({
       '/perfiles/': () => respuesta(PERFIL),
@@ -328,7 +328,7 @@ describe('montarCuenta()', () => {
 });
 
 describe('montarAccionesDeSesion()', () => {
-  test('muestra identificador y rol, y el boton de cerrar sesion llama a quien toca', () => {
+  test('muestra identificador y rol, y el botón de cerrar sesión llama a quien toca', () => {
     const raiz = montarVista();
     const alCerrarSesion = jest.fn();
 

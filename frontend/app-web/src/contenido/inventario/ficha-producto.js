@@ -68,7 +68,7 @@ let secuencia = 0;
  */
 export function construirFicha(producto) {
   if (!producto || typeof producto !== 'object') {
-    throw new TypeError('La ficha necesita un producto del catalogo');
+    throw new TypeError('La ficha necesita un producto del catálogo');
   }
 
   const ficha = document.createElement('article');
@@ -221,7 +221,7 @@ export async function abrirFicha(productoId, { consultarProducto = leerDelCatalo
   try {
     producto = await consultarProducto(productoId);
   } catch (fallo) {
-    console.error('No se pudo cargar el producto del catalogo', fallo);
+    console.error('No se pudo cargar el producto del catálogo', fallo);
     reemplazarContenido(
       capa,
       construirError('No pudimos cargar este producto.', 'Vuelve a intentarlo en un momento.'),

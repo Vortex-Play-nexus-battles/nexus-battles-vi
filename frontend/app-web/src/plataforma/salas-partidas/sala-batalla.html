@@ -363,7 +363,10 @@
       if (!partida && idSala) {
         if (zonaVacia) {
           zonaVacia.textContent =
-            `Estas en la sala ${idSala}. El combate empieza cuando el anfitrion lo inicie; ` +
+            // UX-R4 — antes empezaba por el identificador de la sala, que a quien
+            // juega no le dice nada: es un UUID. Lo que importa es de que esta
+            // esperando y quien lo desbloquea.
+            'Estás en la sala, esperando. El combate empieza cuando el anfitrión lo inicie; ' +
             'entonces esta vista pinta la vida de cada participante.';
         }
         if (zonaArranque && token) {
@@ -479,7 +482,7 @@
                   ? { tono: 'info', titulo: 'Cancelaste la sala.' }
                   : {
                       tono: 'advertencia',
-                      titulo: 'La sala se cerro',
+                      titulo: 'La sala se cerró',
                       detalle: textoDeCancelacion(aviso),
                     },
               ),

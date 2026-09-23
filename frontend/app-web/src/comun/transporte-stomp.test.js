@@ -114,7 +114,7 @@ describe('conectarStomp', () => {
     });
   });
 
-  test('un ERROR antes de CONNECTED rechaza; despues, avisa por alError', async () => {
+  test('un ERROR antes de CONNECTED rechaza; después, avisa por alError', async () => {
     const promesa = conectarStomp({ url: 'ws://x/ws', WebSocketImpl: SocketFalso });
     const socket = SocketFalso.ultimo;
     socket.abrir();
@@ -132,7 +132,7 @@ describe('conectarStomp', () => {
     expect(alError).toHaveBeenCalledTimes(1);
   });
 
-  test('el cierre del socket antes de conectar rechaza; despues, avisa por alCerrar', async () => {
+  test('el cierre del socket antes de conectar rechaza; después, avisa por alCerrar', async () => {
     const promesa = conectarStomp({ url: 'ws://x/ws', WebSocketImpl: SocketFalso });
     SocketFalso.ultimo.close();
     await expect(promesa).rejects.toThrow('No se pudo abrir el canal.');

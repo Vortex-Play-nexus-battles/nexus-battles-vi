@@ -130,7 +130,7 @@ export function pintarError(contenedor, error, alReintentar) {
     estado.append(titulo, cuerpo);
   } else {
     titulo.textContent = 'No se pudo cargar el informe de latencia';
-    cuerpo.textContent = error?.message ?? 'El servicio de metricas no respondio.';
+    cuerpo.textContent = error?.message ?? 'El servicio de métricas no respondió.';
     const boton = document.createElement('button');
     boton.type = 'button';
     boton.className = 'boton boton--secundario';
@@ -158,7 +158,7 @@ function tablaPorTipo(porTipo, percentil) {
   tabla.className = 'tabla-metricas';
   tabla.dataset.tabla = 'por-tipo';
 
-  const encabezado = cabeceraDeTabla(['Tipo de operacion', percentil, 'Maximo', 'Muestras']);
+  const encabezado = cabeceraDeTabla(['Tipo de operación', percentil, 'Máximo', 'Muestras']);
 
   const cuerpo = document.createElement('tbody');
   for (const fila of porTipo) {
@@ -245,7 +245,7 @@ export function pintarInforme(contenedor, informe) {
     const vacio = document.createElement('p');
     vacio.className = 'estado-vista__titulo';
     vacio.textContent =
-      'Sin muestras todavia: el servicio no ha atendido peticiones desde el ultimo arranque. ' +
+      'Sin muestras todavía: el servicio no ha atendido peticiones desde el último arranque. ' +
       'No se puede afirmar que cumpla, ni que incumpla.';
     tarjeta.append(vacio);
     contenedor.append(tarjeta);
@@ -256,7 +256,7 @@ export function pintarInforme(contenedor, informe) {
   resumen.dataset.campo = 'resumen';
   resumen.textContent =
     `${informe.percentil}: ${informe.percentilMs} ms · ` +
-    `maximo ${informe.maximoMs} ms · ${informe.muestras} muestras`;
+    `máximo ${informe.maximoMs} ms · ${informe.muestras} muestras`;
 
   const veredicto = document.createElement('p');
   veredicto.className = informe.cumple ? 'aviso aviso--exito' : 'aviso aviso--error';
@@ -320,15 +320,15 @@ export function informeComoTexto(informe) {
 
   lineas.push(
     `${informe.percentil}: ${informe.percentilMs} ms`,
-    `Maximo: ${informe.maximoMs} ms`,
+    `Máximo: ${informe.maximoMs} ms`,
     `Resultado: ${informe.cumple ? 'CUMPLE' : 'NO CUMPLE'}`,
     '',
-    'Por tipo de operacion:',
+    'Por tipo de operación:',
   );
 
   for (const fila of informe.porTipo ?? []) {
     lineas.push(
-      `  ${fila.tipo}: ${fila.percentilMs} ms (maximo ${fila.maximoMs} ms, ${fila.muestras} muestras)`,
+      `  ${fila.tipo}: ${fila.percentilMs} ms (máximo ${fila.maximoMs} ms, ${fila.muestras} muestras)`,
     );
   }
 
@@ -344,7 +344,7 @@ export function informeComoTexto(informe) {
  */
 export async function iniciarPanel(contenedor, opciones = {}) {
   if (!contenedor) {
-    throw new Error('panel-metricas: hace falta un contenedor donde pintar.');
+    throw new Error('panel-métricas: hace falta un contenedor donde pintar.');
   }
   const obtener = opciones.obtener ?? obtenerInforme;
 

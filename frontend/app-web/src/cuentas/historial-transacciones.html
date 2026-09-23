@@ -24,12 +24,20 @@
               tuyo.
             </p>
           </div>
-          <button id="btn-volver" type="button" class="btn-contorno">Volver</button>
+          <div class="fila fila--acciones">
+            <button id="btn-volver" type="button" class="boton boton--secundario">Volver</button>
+          </div>
         </div>
       </header>
 
       <section class="tarjeta">
-        <div class="tabla-envoltorio">
+        <!-- Ver la nota de `auditoria.html`: region desplazable, alcanzable con teclado. -->
+        <div
+          class="tabla-envoltorio"
+          tabindex="0"
+          role="region"
+          aria-label="Historial de transacciones, desplazable en horizontal"
+        >
           <table class="tabla-historial">
             <thead>
               <tr>
@@ -48,12 +56,18 @@
         </div>
 
         <p id="historial-estado" class="estado" hidden></p>
+        <!-- Estado vacio o de fallo de la vista entera: sustituye a la tabla. -->
+        <div id="historial-estado-vista" hidden></div>
       </section>
 
       <nav class="paginacion" aria-label="Paginación">
-        <button type="button" id="btn-anterior" class="btn-contorno" disabled>Anterior</button>
+        <button type="button" id="btn-anterior" class="boton boton--secundario" disabled>
+          Anterior
+        </button>
         <span id="historial-pagina-actual" class="paginacion__info">Página 1</span>
-        <button type="button" id="btn-siguiente" class="btn-contorno" disabled>Siguiente</button>
+        <button type="button" id="btn-siguiente" class="boton boton--secundario" disabled>
+          Siguiente
+        </button>
       </nav>
     </div>
 

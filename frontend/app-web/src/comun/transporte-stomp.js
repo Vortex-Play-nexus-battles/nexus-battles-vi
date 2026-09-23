@@ -111,7 +111,7 @@ export function conectarStomp({ url, cabeceras = {}, WebSocketImpl = globalThis.
         return;
       }
       if (frame.comando === 'ERROR') {
-        const error = new Error(frame.cabeceras.message || 'El canal rechazo la conexion.');
+        const error = new Error(frame.cabeceras.message || 'El canal rechazó la conexión.');
         if (!conectado) {
           rechazar(error);
         } else if (cliente.alError) {

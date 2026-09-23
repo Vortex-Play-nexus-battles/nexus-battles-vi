@@ -124,12 +124,12 @@ describe('pintarCampo', () => {
     expect(campo.textContent).toContain('Sombra');
   });
 
-  test('es decorativo: la vida y el turno se leen en el HUD, no aqui', () => {
+  test('es decorativo: la vida y el turno se leen en el HUD, no aquí', () => {
     pintarCampo(campo, PARTIDA, 'u-yo');
     expect(campo.getAttribute('aria-hidden')).toBe('true');
   });
 
-  test('la posicion va en el estilo, en porcentaje del campo', () => {
+  test('la posición va en el estilo, en porcentaje del campo', () => {
     pintarCampo(campo, PARTIDA, 'u-yo');
     const estilo = campo.querySelector('[data-puesto="u-yo"]').getAttribute('style');
     expect(estilo).toMatch(/left:\s*[\d.]+%/);

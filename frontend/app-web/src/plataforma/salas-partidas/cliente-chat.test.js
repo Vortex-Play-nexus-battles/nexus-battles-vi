@@ -106,9 +106,9 @@ test('si el servidor rechaza el CONNECT, la promesa falla en vez de colgarse', a
   const socket = WebSocketFalso.instancias[0];
   socket.onopen();
 
-  socket.recibir('ERROR', { message: 'El token de acceso no es valido.' });
+  socket.recibir('ERROR', { message: 'El token de acceso no es válido.' });
 
-  await expect(conexion).rejects.toThrow('El token de acceso no es valido.');
+  await expect(conexion).rejects.toThrow('El token de acceso no es válido.');
 });
 
 test('un problem details de la cola privada se interpreta por tipo y estado', () => {
@@ -116,7 +116,7 @@ test('un problem details de la cola privada se interpreta por tipo y estado', ()
     type: 'https://nexusbattles.local/errores/contenido-bloqueado',
     title: 'Mensaje bloqueado',
     status: 422,
-    detail: 'El mensaje contiene terminos que no estan permitidos.',
+    detail: 'El mensaje contiene terminos que no están permitidos.',
   });
 
   expect(error.tipo).toBe('https://nexusbattles.local/errores/contenido-bloqueado');
