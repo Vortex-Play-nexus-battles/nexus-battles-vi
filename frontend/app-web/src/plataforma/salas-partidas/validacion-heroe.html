@@ -39,8 +39,8 @@
 
     <script type="module">
       import { montarAsistente } from '../../comun/ui/asistente.js';
-      import { montarValidacionDeHeroe } from './validacion-heroe.js';
-      import { verificarHeroe } from './cliente-salas.js';
+      import { montarValidacionDeHeroe, avisarFalloDeAccion } from './validacion-heroe.js';
+      import { verificarHeroe, ingresarASala } from './cliente-salas.js';
       import { montarCabecera } from '../../comun/cabecera-app.js';
       import { exigirAcceso } from '../../comun/acceso.js';
 
@@ -58,6 +58,28 @@
       // como llegar; no se llama al servicio con una sala inexistente.
       const idSala = new URLSearchParams(location.search).get('sala');
 
+      /** Equipar o cambiar de heroe se hace en el inventario. */
+      const RUTA_INVENTARIO = '../../contenido/inventario/inventario.html';
+
+      /**
+       * Entra a la sala y va a ella, igual que el listado de batallas. Si el
+       * servidor lo rechaza, la vista lo dice en su aviso: quedarse callado
+       * seria volver al defecto que este bloque viene a quitar.
+       */
+      async function entrarALaSala() {
+        try {
+          const sala = await ingresarASala(idSala);
+          location.assign(`./sala-batalla.html?sala=${encodeURIComponent(sala?.id ?? idSala)}`);
+        } catch (error) {
+          avisarFalloDeAccion(
+            document.getElementById('validacion-heroe'),
+            error?.problema?.detail ??
+              error?.detalle ??
+              'No pudimos entrar a la sala. Vuelve a intentarlo en un momento.',
+          );
+        }
+      }
+
       montarValidacionDeHeroe(document.getElementById('validacion-heroe'), {
         idSala,
         // El puerto real. Hoy el servicio devuelve 404 en esta ruta porque
@@ -68,14 +90,25 @@
         // Vuelve a donde estaba; si se abrio directamente, al listado.
         alCancelar: () =>
           history.length > 1 ? history.back() : location.assign('./batallas.html'),
-        // El gancho existe y no lleva a ninguna parte TODAVIA, y eso es
-        // deliberado: entrar a la sala con el heroe verificado es HU-SAL-003,
-        // que espera a que el modulo de contenido publique cual es el heroe
-        // activo. Inventar aqui un destino seria inventar el contrato.
-        alConfirmar: (verificacion) =>
-          console.info('[validacion-heroe] confirmado; falta HU-SAL-003 para entrar', {
-            resultado: verificacion.resultado,
-          }),
+        // UX-R4.5 — el boton principal solo escribia en la consola. Es el
+        // mismo defecto que `batallas.html` ya se encontro y arreglo: «el
+        // ingreso se aceptaba en el servidor y la persona se quedaba mirando
+        // el listado sin saber que habia entrado». Aqui era peor, porque no
+        // pasaba nada en absoluto y el boton es el primario de la pantalla.
+        //
+        // Cada variante lleva a donde dice su etiqueta. Ninguno de los tres
+        // destinos se inventa: el inventario existe y es a donde se va a
+        // equipar o cambiar de heroe, y entrar a la sala es `ingresarASala`,
+        // que es por donde entra `batallas.html`. Lo que sigue pendiente de
+        // HU-SAL-003 es el veredicto —`verificacion-heroe` esta en el
+        // contrato pero no en el servicio—, no a donde ir con el.
+        alConfirmar: (verificacion) => {
+          if (verificacion.resultado === 'DISPONIBLE') {
+            return entrarALaSala();
+          }
+          location.assign(RUTA_INVENTARIO);
+          return undefined;
+        },
       });
 
       // RF-CHA-001 / HU-CHA-001 CA-03: el icono responde y dice la verdad.
