@@ -5,8 +5,28 @@ Microservicio de pagos, créditos y monetización del dominio Cuentas y Economí
 
 ## Estado
 
-Skeleton — Sprint 2, rama `chore/ms-finanzas-skeleton-gradle`. Sin HU
-implementadas todavía. Puerto 8093 (host y contenedor).
+**Implementado y probado de punta a punta — ya no es un esqueleto.** El libro de
+créditos funciona: **HU-JUE-014** (apuesta de créditos: reserva por participante,
+liberación y consolidación) y **HU-JUE-012** (recompensa por partida: acreditación
+2/4/1 y cofres, idempotente por `refId`) están implementadas, con su contrato
+publicado en `contracts/openapi/creditos.yaml` (1.4.0) y pruebas E2E que corren
+contra este servicio de verdad, no contra un doble:
+
+- `tests/e2e/apuesta-de-creditos.e2e.spec.js`
+- `tests/e2e/recompensa-por-partida.e2e.spec.js`
+
+**No está desplegado en AWS.** No tiene puerto asignado en `puerto_de()` de
+`.github/workflows/cd.yml`, así que el flujo de despliegue lo omite: ni construye
+su imagen ni lo lleva al host. La razón es capacidad —no cabe en el `t3.small` de
+plataforma junto con lo que ya corre (#430)— y es una decisión documentada, no un
+olvido; ver `docs/arquitectura/README.md`. Consecuencia visible en DEV: toda sala
+o torneo con recompensa/costo `> 0` responde `503` y no reserva nada.
+
+Donde sí corre de verdad es en el **banco E2E** (`tests/e2e/compose.yml`), que es
+donde se demuestra la apuesta liquidada. Sus pruebas unitarias y su compuerta de
+calidad corren en `ci.yml` como las de cualquier otro servicio.
+
+Puerto 8093 (host y contenedor).
 
 ## HU objetivo del Sprint 2
 
