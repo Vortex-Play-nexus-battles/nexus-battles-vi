@@ -26,8 +26,20 @@ const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const ANFITRION = process.env.E2E_ANFITRION ?? 'anfitriona_e2e';
 const INVITADO = process.env.E2E_INVITADO ?? 'invitado_e2e';
 const CLAVE = 'Contrasena-E2E-2026';
-/** Cabe en lo que `sembrar.sh` acredita (E2E_SALDO_INICIAL, 500 por defecto). */
-const APUESTA = 100;
+/**
+ * Lo minimo que hace que una sala tenga apuesta.
+ *
+ * La primera version usaba 100 —el mismo que `sala-de-batalla.e2e.spec.js`— y
+ * creaba una sala por prueba. Cinco salas de 100 con la misma anfitriona, en un
+ * banco donde `sembrar.sh` acredita 500 y las demas suites ya han reservado lo
+ * suyo, y la quinta creacion se cae con «Tienes 96 creditos y necesitas 100».
+ * CI lo encontro.
+ *
+ * Lo que estas pruebas necesitan no es una cantidad concreta: es que
+ * `recompensaCreditos > 0`, que es lo que enciende el paso de confirmacion.
+ * Diez cumple eso y deja el banco en paz para quien venga despues.
+ */
+const APUESTA = 10;
 const LISTADO = '/frontend/app-web/src/plataforma/salas-partidas/batallas.html';
 const VERIFICACION = '/frontend/app-web/src/plataforma/salas-partidas/validacion-heroe.html';
 
@@ -76,11 +88,18 @@ test.describe('La verificacion de heroe esta en el flujo (RF-JUE-003)', () => {
   let api;
   let anfitriona;
   let invitado;
+  /**
+   * Una sola sala con apuesta para todas las pruebas que NO entran en ella.
+   * Crear una por prueba multiplicaba las reservas sin anadir nada: lo que
+   * cambia entre esas pruebas es lo que hace la persona, no la sala.
+   */
+  let salaCompartida;
 
   test.beforeAll(async () => {
     api = await apiRequest.newContext({ baseURL: BORDE });
     anfitriona = await sesionDe(api, ANFITRION);
     invitado = await sesionDe(api, INVITADO);
+    salaCompartida = await salaConApuesta(api, anfitriona);
   });
 
   test.afterAll(async () => {
@@ -88,7 +107,7 @@ test.describe('La verificacion de heroe esta en el flujo (RF-JUE-003)', () => {
   });
 
   test('una sala con apuesta manda a confirmar antes de comprometer creditos', async ({ page }) => {
-    const sala = await salaConApuesta(api, anfitriona);
+    const sala = salaCompartida;
 
     await conSesion(page, invitado, INVITADO);
     await page.goto(LISTADO);
@@ -109,7 +128,7 @@ test.describe('La verificacion de heroe esta en el flujo (RF-JUE-003)', () => {
   });
 
   test('el dialogo ensena el veredicto del servicio y cuanto va a costar', async ({ page }) => {
-    const sala = await salaConApuesta(api, anfitriona);
+    const sala = salaCompartida;
 
     await conSesion(page, invitado, INVITADO);
     await page.goto(`${VERIFICACION}?sala=${sala.id}`);
@@ -119,7 +138,8 @@ test.describe('La verificacion de heroe esta en el flujo (RF-JUE-003)', () => {
     await expect(dialogo).toHaveAttribute('data-resultado', 'DISPONIBLE', { timeout: 20_000 });
     // El nombre del heroe que `inventario` reporto, no un circulo gris.
     await expect(dialogo.locator('.dialogo__encabezado')).toContainText(/\w/);
-    // Y el coste, que es la razon de que este paso exista.
+    // El coste, que es la razon de que este paso exista.
+    await expect(dialogo).toContainText(/se descontar/i);
     await expect(dialogo).toContainText(new RegExp(`${APUESTA}`));
     await expect(dialogo.locator('[data-accion="confirmar"]')).toHaveText(/Entrar a la sala/i);
   });
@@ -128,6 +148,9 @@ test.describe('La verificacion de heroe esta en el flujo (RF-JUE-003)', () => {
     // Es lo que este boton no hacia: escribia en la consola. UX-R4.5 lo
     // conecto y #648 lo borro sin querer; FI-R0 lo devolvio. Aqui queda
     // comprobado contra el servicio, no contra un doble.
+    //
+    // Sala propia: el invitado entra de verdad, y dejarlo dentro de la
+    // compartida estropearia las demas pruebas.
     const sala = await salaConApuesta(api, anfitriona);
 
     await conSesion(page, invitado, INVITADO);
@@ -183,7 +206,7 @@ test.describe('La verificacion de heroe esta en el flujo (RF-JUE-003)', () => {
   });
 
   test('Cancelar devuelve al listado con el estado que tenia', async ({ page }) => {
-    const sala = await salaConApuesta(api, anfitriona);
+    const sala = salaCompartida;
 
     await conSesion(page, invitado, INVITADO);
     await page.goto(LISTADO);
@@ -199,7 +222,7 @@ test.describe('La verificacion de heroe esta en el flujo (RF-JUE-003)', () => {
   });
 
   test('recargar la verificacion vuelve a preguntar, no se queda en blanco', async ({ page }) => {
-    const sala = await salaConApuesta(api, anfitriona);
+    const sala = salaCompartida;
 
     await conSesion(page, invitado, INVITADO);
     await page.goto(`${VERIFICACION}?sala=${sala.id}`);
