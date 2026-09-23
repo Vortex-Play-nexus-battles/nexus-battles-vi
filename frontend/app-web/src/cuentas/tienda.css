@@ -240,7 +240,7 @@
 }
 
 .btn-pagar[disabled] {
-  background-color: color-mix(in srgb, var(--primaria-relleno) 45%, var(--superficie));
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
