@@ -1,0 +1,72 @@
+# Override de despliegue de services/cuentas/ms-chatbot (HU-CHA-001, HU-CHA-004,
+# HU-CHA-008, HU-CHA-011).
+#
+# Mismo patron que los demas overrides de Cuentas (ms-finanzas, ms-subastas):
+# solo declara "image:", nunca "build:". El jar se compila y la imagen se
+# publica en ghcr.io en el job "construir-y-publicar" de cd.yml, nunca en el
+# servidor. Se combina siempre con docker-compose.yml y
+# docker-compose.deploy.yml, y solo cuando ms-chatbot esta entre los servicios
+# de la corrida (lo decide desplegar.sh leyendo
+# infrastructure/despliegue/servicios.json).
+#
+# Puerto 8094 en el host y en el contenedor (EXPOSE 8094 en su Dockerfile).
+#
+# CAPACIDAD: servicios.json lo marca desplegableDev:false, con la misma
+# medicion que ms-finanzas y ms-subastas (infrastructure/despliegue/CAPACIDAD.md):
+# la imagen se construye y se publica en cada push, pero el despliegue
+# automatico no la levanta hasta que haya RAM en el host de plataforma.
+
+services:
+  # Base de datos propia (regla 7, aislamiento de datos): no comparte servidor
+  # con plataforma-db ni con la de ningun otro servicio.
+  chatbot-db:
+    image: postgres:17-alpine
+    container_name: chatbot-db
+    restart: unless-stopped
+    mem_limit: 128m
+    environment:
+      POSTGRES_DB: ${MS_CHATBOT_DB_NAME:-chatbot_db}
+      POSTGRES_USER: ${MS_CHATBOT_DB_USER}
+      POSTGRES_PASSWORD: ${MS_CHATBOT_DB_PASSWORD}
+    volumes:
+      - chatbot-db-datos:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MS_CHATBOT_DB_USER} -d ${MS_CHATBOT_DB_NAME:-chatbot_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  srv-ms-chatbot:
+    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-ms-chatbot:${TAG}
+    container_name: srv-ms-chatbot
+    restart: unless-stopped
+    mem_limit: 256m
+    ports:
+      - "8094:8094"
+    depends_on:
+      # Flyway corre en el arranque (esquema "chatbot", con create-schemas):
+      # si Postgres todavia no acepta conexiones, el servicio no arranca.
+      chatbot-db:
+        condition: service_healthy
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      # El lado IZQUIERDO es el nombre que Spring lee (application.properties
+      # de ms-chatbot). El DERECHO lo deja desplegar.sh en el .env del
+      # servidor, con prefijo MS_CHATBOT_ para no pisar las variables de
+      # plataforma-db ni las de los demas servicios de Cuentas.
+      DB_HOST: ${MS_CHATBOT_DB_HOST:-chatbot-db}
+      DB_PORT: ${MS_CHATBOT_DB_PORT:-5432}
+      DB_NAME: ${MS_CHATBOT_DB_NAME:-chatbot_db}
+      DB_USER: ${MS_CHATBOT_DB_USER}
+      DB_PASSWORD: ${MS_CHATBOT_DB_PASSWORD}
+      # Clave publica de los tokens de usuario (ADR-002), dentro de la red.
+      IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://srv-ms-identidad:8089/api/v1/auth/jwks}
+      # Consultas asistidas (HU-CHA-008). No usa credencial de servicio
+      # (ADR-005): reenvia el token del propio jugador. Inventario vive en el
+      # host de contenido, igual que en docker-compose.deploy.yml.
+      INVENTARIO_BASE_URL: ${INVENTARIO_BASE_URL:-http://34.193.90.11:8102}
+      SUBASTAS_BASE_URL: ${SUBASTAS_BASE_URL:-http://srv-ms-subastas:8092/api/v1}
+      NOTIFICACIONES_BASE_URL: ${NOTIFICACIONES_BASE_URL:-http://srv-notificaciones:8085/api/v1}
+
+volumes:
+  chatbot-db-datos:
