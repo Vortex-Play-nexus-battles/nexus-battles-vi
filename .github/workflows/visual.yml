@@ -103,15 +103,21 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: evidencia-visual
-          path: docs/evidencia/ux-r2/
+          # La ruta era `docs/evidencia/ux-r2/`, que ningun proceso escribe:
+          # `tests/visual/auditoria-visual.spec.js:47` genera en
+          # `docs/evidencia/laboratorio-visual/`. Con `if-no-files-found: warn`
+          # el artefacto salia vacio en cada corrida y nadie se enteraba, asi
+          # que la evidencia del Definition of Done (apartado k) se perdia.
+          path: docs/evidencia/laboratorio-visual/
           retention-days: 14
-          if-no-files-found: warn
+          # `error` y no `warn`: si no hay capturas, es que algo fallo antes.
+          if-no-files-found: error
 
       - name: Resumen del informe
         if: always()
         run: |
-          if [ -f docs/evidencia/ux-r2/INFORME.md ]; then
-            cat docs/evidencia/ux-r2/INFORME.md >> "$GITHUB_STEP_SUMMARY"
+          if [ -f docs/evidencia/laboratorio-visual/INFORME.md ]; then
+            cat docs/evidencia/laboratorio-visual/INFORME.md >> "$GITHUB_STEP_SUMMARY"
           else
             echo "La corrida no llego a generar informe." >> "$GITHUB_STEP_SUMMARY"
           fi
