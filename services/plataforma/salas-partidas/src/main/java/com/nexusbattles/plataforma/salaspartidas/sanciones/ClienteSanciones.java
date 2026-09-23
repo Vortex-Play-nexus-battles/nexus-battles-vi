@@ -1,8 +1,7 @@
-package com.nexusbattles.plataforma.salaspartidas.chat.integracion;
+package com.nexusbattles.plataforma.salaspartidas.sanciones;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.nexusbattles.plataforma.salaspartidas.chat.SancionesDelJugador;
-import com.nexusbattles.plataforma.salaspartidas.chat.SancionesNoDisponibles;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -17,19 +16,24 @@ import java.util.UUID;
  * {@code contracts/openapi/moderacion-sanciones-consulta.yaml} (Grupo 6).
  *
  * <p>El contrato responde un solo hecho, {@code sancionActiva}, sin decir de
- * que tipo es la sancion. Para el chat eso basta y es lo unico que se puede
- * hacer sin inventar: <b>una sancion activa silencia</b>. Cuando el contrato
- * distinga tipos (silencio, suspension, expulsion), esta es la unica clase
- * que cambia (decision D-14 del registro).
+ * que tipo es la sancion. Es lo unico que se puede usar sin inventar
+ * (decision D-14 del registro); cuando el contrato distinga tipos
+ * —silencio, suspension, expulsion— esta es la unica clase que cambia.
+ *
+ * <p>Desde R10.2 no es solo del chat: el mismo hecho lo consultan tambien
+ * las puertas de sala (HU-USR-005/006). Por eso la clase vive aqui y no en
+ * {@code chat.integracion}, y por eso la propiedad se llama
+ * {@code salas.sanciones.url} y no {@code chat.sanciones.url}. La variable de
+ * entorno que la alimenta, {@code SANCIONES_URL}, no cambia: ningun
+ * despliegue se entera de esta mudanza.
  *
  * <p>Si el servicio no responde, no se asume «sin sancion»: se lanza
- * {@link SancionesNoDisponibles} y el caso de uso bloquea el mensaje, igual
- * que hace {@link ClienteListaNegra} con el filtro. Reemplaza a
+ * {@link SancionesNoDisponibles} y quien llamo bloquea la accion. Reemplaza a
  * {@code SancionesSinIntegrar}, que devolvia {@code false} para todo el mundo
  * con el contrato ya publicado (#441).
  */
 @Component
-class ClienteSanciones implements SancionesDelJugador {
+public class ClienteSanciones implements SancionesDelJugador {
 
     private static final Logger log = LoggerFactory.getLogger(ClienteSanciones.class);
 
@@ -39,13 +43,13 @@ class ClienteSanciones implements SancionesDelJugador {
     private final RestClient restClient;
     private final String base;
 
-    ClienteSanciones(RestClient restClientChat, @Value("${chat.sanciones.url}") String base) {
+    ClienteSanciones(RestClient restClientChat, @Value("${salas.sanciones.url}") String base) {
         this.restClient = restClientChat;
         this.base = base.replaceAll("/+$", "");
     }
 
     @Override
-    public boolean estaSilenciado(UUID idJugador) {
+    public boolean tieneSancionActiva(UUID idJugador) {
         try {
             SancionActiva respuesta = restClient.get()
                     .uri(base + RUTA, idJugador)
@@ -55,7 +59,7 @@ class ClienteSanciones implements SancionesDelJugador {
                 throw noDisponible("respuesta vacia de sanciones");
             }
             if (respuesta.sancionActiva()) {
-                log.info("Jugador {} silenciado en el chat por sancion activa: {}", idJugador, respuesta.motivo());
+                log.info("Jugador {} con sancion activa: {}", idJugador, respuesta.motivo());
             }
             return respuesta.sancionActiva();
         } catch (RestClientException ex) {
@@ -64,7 +68,7 @@ class ClienteSanciones implements SancionesDelJugador {
     }
 
     private static SancionesNoDisponibles noDisponible(String motivo) {
-        log.warn("Sanciones no disponible, el mensaje del chat se bloquea sin comprobar. Motivo: {}", motivo);
+        log.warn("Sanciones no disponible, la accion se bloquea sin comprobar. Motivo: {}", motivo);
         return new SancionesNoDisponibles();
     }
 

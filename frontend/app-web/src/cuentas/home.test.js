@@ -256,3 +256,60 @@ describe('motivoDeIndisponibilidad', () => {
     expect(motivoDeIndisponibilidad(401, 'el saldo')).toMatch(/sesión/i);
   });
 });
+
+/**
+ * UX-R3.2 — el saldo acompaña al jugador por toda la aplicación.
+ *
+ * El armazón reserva el hueco de créditos y lo deja oculto a propósito: no
+ * pinta una cifra que no sabe. Quien la sabe es la home, que es la que llamó
+ * a `ms-finanzas`. Lo que se comprueba aquí es que la publique **y que no la
+ * invente** cuando el servicio no contesta: un cero en el HUD sería peor que
+ * un hueco vacío, porque parece un saldo.
+ */
+describe('el saldo en el HUD de la cabecera', () => {
+  function cabeceraSimulada() {
+    const cabecera = document.createElement('header');
+    cabecera.innerHTML = '<span data-zona="creditos" hidden><span data-zona="saldo"></span></span>';
+    document.body.append(cabecera);
+    return cabecera;
+  }
+
+  test('publica el disponible y descubre el hueco', async () => {
+    const cabecera = cabeceraSimulada();
+
+    montarHome(document, { sesion: SESION, fetchImpl: servicio(TODO_BIEN), cabecera });
+    await asentar();
+    await asentar();
+
+    const hueco = cabecera.querySelector('[data-zona="creditos"]');
+    expect(hueco.hidden).toBe(false);
+    expect(cabecera.querySelector('[data-zona="saldo"]').textContent).toContain('380');
+    // El disponible, no el bruto: es lo que se puede apostar ahora.
+    expect(cabecera.querySelector('[data-zona="saldo"]').textContent).not.toContain('500');
+  });
+
+  test('si el servicio no responde, el hueco se queda vacío y oculto', async () => {
+    const cabecera = cabeceraSimulada();
+
+    montarHome(document, {
+      sesion: SESION,
+      fetchImpl: servicio({ ...TODO_BIEN, '/api/v1/creditos': { estado: 502 } }),
+      cabecera,
+    });
+    await asentar();
+    await asentar();
+
+    expect(cabecera.querySelector('[data-zona="creditos"]').hidden).toBe(true);
+    expect(cabecera.querySelector('[data-zona="saldo"]').textContent).toBe('');
+  });
+
+  test('sin cabecera montada, la home sigue funcionando', async () => {
+    // Las pruebas de arriba y cualquier vista que monte la home sin pasar su
+    // cabecera: el HUD es un extra, no un requisito.
+    montarHome(document, { sesion: SESION, fetchImpl: servicio(TODO_BIEN) });
+    await asentar();
+    await asentar();
+
+    expect(document.querySelector('[data-zona="bloque-saldo"]').textContent).toContain('380');
+  });
+});

@@ -89,7 +89,21 @@
   --pista:            #CBD4E6;  /* riel de la barra de vida y de las
                                    barras de progreso                   */
 
+  --superficie-2:     #F2F5FA;  /* panel ANIDADO dentro de una tarjeta:
+                                   la cabecera de una tabla, un bloque
+                                   de resumen, una caja de ayuda. Entre
+                                   `--superficie` y `--fondo`, para que
+                                   se distinga de la tarjeta que lo
+                                   contiene sin parecer otra tarjeta.
+                                   UX-R4.1                              */
+
   /* --- Bordes ------------------------------------------------------ */
+  --borde-tenue:      #E2E7F0;  /* separador DENTRO de una superficie:
+                                   la línea entre dos filas de una
+                                   lista. `--borde` separa bloques y se
+                                   ve; este ordena y no se mira.
+                                   UX-R4.1                              */
+
   --borde:            #9FABC9;  /* separadores y líneas de tabla, no
                                    interactivos                         */
   --borde-int:        #6F7994;  /* campos y botones delineados.
@@ -350,6 +364,11 @@
     --fondo:            #F5F7FB;
     --cromo:            #111726;
     --pista:            #9FABC9;
+    /* UX-R4.1 — con «aumentar contraste» un panel anidado no se puede
+       decir con un tinte del dos por ciento: se dice con su borde, y la
+       superficie vuelve a ser blanca como la tarjeta que lo contiene. */
+    --superficie-2:     #FFFFFF;
+    --borde-tenue:      #6F7994;
     --borde:            #6F7994;
     --borde-int:        #111726;
     --primaria:         #16296E;

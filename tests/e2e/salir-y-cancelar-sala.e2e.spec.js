@@ -158,7 +158,7 @@ test.describe('Salir y cancelar una sala (HU-SAL-006)', () => {
     await cancelar.click();
 
     await paginaAnfitriona.waitForURL(`**${LISTADO}`, { timeout: 20000 });
-    expect(pregunta).toBe('¿Cancelar la sala? Se expulsara a 1 participante.');
+    expect(pregunta).toBe('¿Cancelar la sala? Se expulsará a 1 participante.');
     await expect(paginaAnfitriona.locator('[data-zona="aviso-sala-titulo"]')).toHaveText(
       'Cancelaste la sala.',
     );
@@ -166,10 +166,10 @@ test.describe('Salir y cancelar una sala (HU-SAL-006)', () => {
     // CA-02: al invitado lo devuelve el aviso `sala.cancelada` del canal.
     await paginaInvitado.waitForURL(`**${LISTADO}`, { timeout: 20000 });
     await expect(paginaInvitado.locator('[data-zona="aviso-sala-titulo"]')).toHaveText(
-      'La sala se cerro',
+      'La sala se cerró',
     );
     await expect(paginaInvitado.locator('[data-zona="aviso-sala-detalle"]')).toHaveText(
-      'El anfitrion cancelo la sala.',
+      'El anfitrión canceló la sala.',
     );
 
     expect((await salaActual(api, anfitriona, sala.id)).estado).toBe('CANCELADA');

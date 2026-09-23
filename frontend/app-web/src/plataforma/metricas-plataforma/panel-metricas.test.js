@@ -124,7 +124,7 @@ describe('la observabilidad es de administracion (#527)', () => {
 
     const estado = caja.querySelector('.estado-vista');
     expect(estado.dataset.estado).toBe('sin-permiso');
-    expect(estado.textContent).toMatch(/administracion/i);
+    expect(estado.textContent).toMatch(/administración/i);
     expect(estado.querySelector('[data-accion="reintentar"]')).toBeNull();
   });
 
@@ -202,17 +202,24 @@ describe('lecturas y escrituras separadas', () => {
   });
 });
 
-describe('el objetivo se presenta como referencia, no como umbral de esta HU', () => {
-  it('dice de donde sale el numero', () => {
+describe('el objetivo se presenta como referencia, no como umbral de esta pantalla', () => {
+  it('dice de donde sale el número, en el idioma de quien opera', () => {
     // HU-REN-002 no define ningun umbral propio. Presentar los 500 ms como
-    // "su" limite seria inventarle un requisito.
+    // "su" limite seria inventarle un requisito, asi que se dice de donde
+    // viene el numero.
+    //
+    // UX-R3.1 — antes lo decia nombrando dos identificadores de requisito en
+    // pantalla. Quien opera el Nexo no sabe que es RNF-REN-001; lo que se
+    // pregunta es si puede cambiar ese numero y donde. La respuesta es la
+    // misma y ahora esta dicha: la configuracion del servicio.
     const caja = contenedor();
 
     pintarInforme(caja, informeCompleto());
 
     const referencia = caja.querySelector('[data-campo="referencia-objetivo"]').textContent;
-    expect(referencia).toContain('RNF-REN-001');
-    expect(referencia).toContain('no define un umbral propio');
+    expect(referencia).toContain('Objetivo de referencia: 500 ms');
+    expect(referencia).toContain('configuración del servicio');
+    expect(referencia).not.toMatch(/RNF-|HU-/);
   });
 
   it('el veredicto habla del objetivo configurado', () => {
@@ -247,7 +254,11 @@ describe('exportacion para el acta', () => {
     expect(texto).toContain('Resultado: CUMPLE');
     expect(texto).toContain('lectura: 10 ms');
     expect(texto).toContain('escritura: 900 ms');
-    expect(texto).toContain('RNF-REN-001');
+    // «Exactamente lo que se esta viendo» incluye NO traer lo que la pantalla
+    // ya no dice: el identificador del requisito salio del panel en UX-R3.1 y
+    // el texto exportado lo sigue al pie de la letra, que es su contrato.
+    expect(texto).toContain('Objetivo de referencia: 500 ms');
+    expect(texto).not.toMatch(/RNF-|HU-/);
   });
 
   it('sin datos, el texto tampoco se lee como un verde', () => {

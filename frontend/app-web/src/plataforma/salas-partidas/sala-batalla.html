@@ -115,8 +115,15 @@
         cargada: no se inventan participantes de ejemplo.
       -->
         <div class="estado-vista" data-zona="sin-partida">
-          <p class="estado-vista__titulo">No hay ninguna partida cargada</p>
-          <p class="t-meta">Esta vista se pinta con los participantes de una partida en curso.</p>
+          <p class="estado-vista__titulo">Aquí no hay ninguna batalla todavía</p>
+          <p class="estado-vista__detalle">
+            Esta pantalla se enciende cuando entras a una sala y empieza el combate. Entra a una que
+            esté esperando gente, o abre la tuya.
+          </p>
+          <div class="fila">
+            <a class="boton boton--primario" href="./batallas.html">Ver salas abiertas</a>
+            <a class="boton boton--secundario" href="./crear-sala.html">Crear sala</a>
+          </div>
         </div>
 
         <!--
@@ -225,14 +232,18 @@
       // cabecera Authorization, SUBSCRIBE a /tema/partidas/{id}. No hay un
       // segundo cliente.
       import { conectarChat } from './cliente-chat.js';
-      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+      import { montarCabecera } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
 
       // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
-      if (!exigirSesion()) {
+      if (!exigirAcceso('sala-batalla')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
       // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'jugar' });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'sala-batalla',
+        seccionActiva: 'jugar',
+      });
 
       const parametros = new URLSearchParams(globalThis.location.search);
       const idSala = parametros.get('sala');
@@ -352,7 +363,10 @@
       if (!partida && idSala) {
         if (zonaVacia) {
           zonaVacia.textContent =
-            `Estas en la sala ${idSala}. El combate empieza cuando el anfitrion lo inicie; ` +
+            // UX-R4 — antes empezaba por el identificador de la sala, que a quien
+            // juega no le dice nada: es un UUID. Lo que importa es de que esta
+            // esperando y quien lo desbloquea.
+            'Estás en la sala, esperando. El combate empieza cuando el anfitrión lo inicie; ' +
             'entonces esta vista pinta la vida de cada participante.';
         }
         if (zonaArranque && token) {
@@ -468,7 +482,7 @@
                   ? { tono: 'info', titulo: 'Cancelaste la sala.' }
                   : {
                       tono: 'advertencia',
-                      titulo: 'La sala se cerro',
+                      titulo: 'La sala se cerró',
                       detalle: textoDeCancelacion(aviso),
                     },
               ),

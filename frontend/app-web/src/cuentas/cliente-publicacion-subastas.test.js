@@ -106,7 +106,7 @@ test.each([
   [409, 'La clave de idempotencia fue usada con otra solicitud', /conflicto/, true],
   [503, 'Resultado transaccional desconocido; requiere conciliacion', /conciliación/, true],
   [503, 'Respuesta inesperada de finanzas: secreto', /temporalmente/, true],
-  [401, 'Se requiere un JWT valido con uid para publicar', /sesión/, false],
+  [401, 'Se requiere un JWT válido con uid para publicar', /sesión/, false],
   [404, 'Producto inexistente', /no está disponible/, false],
 ])('traduce Problem Details real %s %s', async (status, detail, esperado, incierto) => {
   const fetchImpl = async () => respuesta(status, { type: 'about:blank', status, detail });

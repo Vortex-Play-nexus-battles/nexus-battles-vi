@@ -14,11 +14,11 @@
     <main class="pagina pila" data-vista="mis-sanciones">
       <h1>Mis sanciones</h1>
       <p class="t-meta">
-        Tu historial disciplinario. Una sancion vigente se puede apelar dentro de los 30 dias
-        siguientes; el panel de revision responde con una decision motivada.
+        Tu historial disciplinario. Una sanción vigente se puede apelar dentro de los 30 días
+        siguientes; el panel de revisión responde con una decisión motivada.
       </p>
 
-      <div class="aviso" data-zona="aviso" role="status" hidden></div>
+      <div data-zona="aviso" hidden></div>
 
       <section class="tarjeta pila pila--compacta">
         <h2>Sanciones</h2>
@@ -32,7 +32,9 @@
           <span class="campo__etiqueta">Tu argumento</span>
           <textarea class="campo__control" name="argumento" rows="4" required></textarea>
         </label>
-        <button class="boton boton--primario" type="submit">Enviar apelacion</button>
+        <div class="acciones">
+          <button class="boton boton--primario" type="submit">Enviar apelación</button>
+        </div>
       </form>
 
       <section class="tarjeta pila pila--compacta">
@@ -42,13 +44,17 @@
     </main>
 
     <script type="module">
-      import { montarCabecera, exigirSesion, leerSesion } from '../../comun/cabecera-app.js';
+      import { montarCabecera, leerSesion } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
       import { montarMisSanciones } from './sanciones.js';
 
-      if (!exigirSesion()) {
+      if (!exigirAcceso('mis-sanciones')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'cuenta' });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'mis-sanciones',
+        seccionActiva: 'cuenta',
+      });
       montarMisSanciones(document, { uid: leerSesion().uid });
     </script>
   </body>

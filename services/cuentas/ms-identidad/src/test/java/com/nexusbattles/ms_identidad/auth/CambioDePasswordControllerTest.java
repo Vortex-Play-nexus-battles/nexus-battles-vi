@@ -71,10 +71,13 @@ class CambioDePasswordControllerTest {
         when(usuarioRepository.findByApodo("ana")).thenReturn(Optional.of(ana));
 
         servicio = mock(CambioDePasswordService.class);
+        // R9.5 — respaldo por cabecera APAGADO: esta clase acredita con JWT,
+        // que es la forma de produccion. Antes lo heredaba encendido de un
+        // constructor de conveniencia, sin que se viera al leer la prueba.
         SecurityInterceptor interceptor = new SecurityInterceptor(
                 new RbacAuthorizationService(new RbacMatrixRepository()),
                 new AuditoriaEventClient("http://localhost:8091/api/v1/admin/auditoria/eventos", null),
-                jwtService, usuarioRepository);
+                jwtService, usuarioRepository, false);
 
         mockMvc = MockMvcBuilders.standaloneSetup(new CambioDePasswordController(servicio))
                 .addInterceptors(interceptor)

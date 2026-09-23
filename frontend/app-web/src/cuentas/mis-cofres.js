@@ -3,6 +3,8 @@
 // así que aquí no hace falta leer nexus.token manualmente.
 
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
+import { estadoDeError, estadoVacio, pintarEstado } from '../comun/ui/estado-vista.js';
+import { icono } from '../comun/ui/icono.js';
 
 const BASE_API = '/api/v1/cofres/mios';
 const TAMANO_PAGINA = 20;
@@ -20,7 +22,24 @@ const el = {
   btnSiguiente: document.getElementById('btn-siguiente'),
   paginaActual: document.getElementById('cofres-pagina-actual'),
   btnVolver: document.getElementById('btn-volver'),
+  paginacion: document.querySelector('.paginacion'),
 };
+
+/**
+ * UX-R4.4 — cuando no hay nada que paginar, el control se va entero.
+ *
+ * Apagar los dos botones (UX-R3.11) dejaba el problema a medias. En telefono
+ * el kit le da a `.paginacion__info` el ancho completo para que el control se
+ * apile en vez de desplazarse de lado, asi que la fila del medio existe
+ * aunque su texto este vacio: al fallar la carga quedaban dos botones grises
+ * separados por un hueco en blanco, sin nada que explicara que hacian ahi.
+ * Una lista que no existe no se pagina.
+ */
+function mostrarPaginacion(visible) {
+  if (el.paginacion) {
+    el.paginacion.hidden = !visible;
+  }
+}
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -54,7 +73,7 @@ function ocultarEstado() {
 }
 
 function renderCofres(cofres) {
-  el.lista.innerHTML = '';
+  el.lista.replaceChildren();
   for (const cofre of cofres) {
     const tarjeta = document.createElement('div');
     tarjeta.className = 'cofre-tarjeta';
@@ -63,10 +82,15 @@ function renderCofres(cofres) {
     const contenidoLegible = (cofre.contenido || 'COFRE').replace(/_/g, ' ');
     // UX-R2.8 — `contenidoLegible` sale de `cofre.contenido`, que viene del
     // servidor. Se construye el nodo en vez de interpolarlo en una plantilla.
-    const icono = document.createElement('div');
-    icono.className = 'cofre-icono';
-    icono.setAttribute('aria-hidden', 'true');
-    icono.textContent = '🎁';
+    //
+    // UX-R3.11 dejo esta tarjeta sin icono a proposito: aqui habia un emoji,
+    // que lo dibuja el sistema operativo y cambia de forma entre Windows,
+    // macOS y Android; y coger prestado «trofeo» o «estrella» habria sido peor,
+    // porque ya significan otra cosa en este producto. El hueco quedo anotado.
+    //
+    // UX-R4.4 lo cierra: el sprite ya trae `cofre`, dibujado sobre la misma
+    // reticula y con el mismo trazo que los otros treinta.
+    const simbolo = icono('cofre', { etiqueta: null, clase: 'icono cofre-simbolo' });
 
     const titulo = document.createElement('h3');
     titulo.className = 'cofre-titulo';
@@ -80,7 +104,7 @@ function renderCofres(cofres) {
     info.className = 'cofre-info';
     info.append(titulo, fecha);
 
-    tarjeta.replaceChildren(icono, info);
+    tarjeta.replaceChildren(simbolo, info);
     el.lista.appendChild(tarjeta);
   }
 }
@@ -88,13 +112,14 @@ function renderCofres(cofres) {
 function actualizarPaginacion(pagina, totalPaginas) {
   estado.pagina = pagina;
   estado.totalPaginas = Math.max(totalPaginas, 1);
+  mostrarPaginacion(estado.totalPaginas > 1);
   el.paginaActual.textContent = `Página ${estado.pagina + 1} de ${estado.totalPaginas}`;
   el.btnAnterior.disabled = estado.pagina <= 0;
   el.btnSiguiente.disabled = estado.pagina >= estado.totalPaginas - 1;
 }
 
 async function cargar() {
-  el.lista.innerHTML = '';
+  el.lista.replaceChildren();
   mostrarEstado('Cargando...', 'carga');
 
   const params = new URLSearchParams({
@@ -107,13 +132,23 @@ async function cargar() {
       method: 'GET',
     });
     if (resp.status === 403) {
-      mostrarEstado('Debes iniciar sesión para ver tus cofres.', 'error');
+      ocultarEstado();
+      pintarEstado(
+        el.lista,
+        estadoVacio({
+          titulo: 'Tus cofres son tuyos',
+          detalle: 'Hace falta tu sesión iniciada para verlos.',
+          accion: { texto: 'Iniciar sesión', href: RUTA_LOGIN },
+        }),
+      );
       el.btnAnterior.disabled = true;
       el.btnSiguiente.disabled = true;
+      el.paginaActual.textContent = '';
+      mostrarPaginacion(false);
       return;
     }
     if (!resp.ok) {
-      mostrarEstado('No se pudo cargar la lista de cofres.', 'error');
+      fallar();
       return;
     }
     const datos = await resp.json();
@@ -122,9 +157,16 @@ async function cargar() {
     const paginaActual = datos.number ?? estado.pagina;
 
     if (cofres.length === 0) {
-      mostrarEstado(
-        'Todavía no has ganado ningún cofre. Acumula 20 créditos en tus partidas para conseguir el primero.',
-        'vacio',
+      ocultarEstado();
+      pintarEstado(
+        el.lista,
+        estadoVacio({
+          titulo: 'Todavía no has ganado ningún cofre',
+          detalle:
+            'Acumula 20 créditos en tus partidas durante una semana y el primero es tuyo. ' +
+            'Como máximo, dos por semana.',
+          accion: { texto: 'Jugar ahora', href: './index.html' },
+        }),
       );
     } else {
       ocultarEstado();
@@ -132,8 +174,31 @@ async function cargar() {
     }
     actualizarPaginacion(paginaActual, totalPaginas);
   } catch {
-    mostrarEstado('Error de red al consultar los cofres.', 'error');
+    fallar();
   }
+}
+
+/**
+ * UX-R3.11 — el fallo era una pildora roja de una linea, «No se pudo cargar la
+ * lista de cofres.», sin decir que hacer y sin manera de volver a intentarlo;
+ * y la paginacion se quedaba viva debajo, ofreciendo pasar paginas de una lista
+ * que no existe. El fallo de la vista entera es un estado de la vista entera
+ * (MAPEO-ERRORES §5.1) y apaga la paginacion.
+ */
+function fallar() {
+  ocultarEstado();
+  pintarEstado(
+    el.lista,
+    estadoDeError({
+      titulo: 'No pudimos cargar tus cofres',
+      detalle: 'El servicio no respondió. Vuelve a intentarlo en un momento.',
+      alReintentar: cargar,
+    }),
+  );
+  el.btnAnterior.disabled = true;
+  el.btnSiguiente.disabled = true;
+  el.paginaActual.textContent = '';
+  mostrarPaginacion(false);
 }
 
 if (!sessionStorage.getItem(CLAVE_ROL)) {

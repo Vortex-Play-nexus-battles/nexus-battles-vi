@@ -15,8 +15,11 @@
  *     ofrece reintentar. Nunca se pinta un cero como si fuera el saldo real.
  *  2. **Cada bloque falla solo.** Se piden en paralelo y un 502 en créditos no
  *     deja la home en blanco.
- *  3. **La sesión ya la comprueba el shell** (`exigirSesion`), así que aquí no
- *     se repite la redirección.
+ *  3. **La sesión ya la comprueba el armazón** (`exigirAcceso`), así que aquí
+ *     no se repite la redirección.
+ *  4. **El saldo se publica una vez.** Lo pide esta vista y lo deja también en
+ *     el HUD de la cabecera, para que acompañe al jugador por el resto de la
+ *     aplicación sin que cada pantalla vuelva a preguntarlo.
  */
 
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
@@ -113,9 +116,11 @@ export function motivoDeIndisponibilidad(estado, queEs) {
  *
  * @returns {Promise<HTMLElement>}
  */
-async function bloqueDeSaldo(uid, fetchImpl, alReintentar) {
+async function bloqueDeSaldo(uid, fetchImpl, alReintentar, cabecera = null) {
   const respuesta = await pedir(`/api/v1/creditos/${encodeURIComponent(uid)}/saldo`, fetchImpl);
   if (!respuesta.ok) {
+    // El HUD se queda oculto: mejor sin cifra que con una inventada.
+    ocultarSaldoEnCabecera(cabecera);
     return estadoDeError({
       titulo: 'Tus créditos no están disponibles',
       detalle: motivoDeIndisponibilidad(respuesta.estado, 'el saldo'),
@@ -123,6 +128,7 @@ async function bloqueDeSaldo(uid, fetchImpl, alReintentar) {
     });
   }
   const saldo = respuesta.datos;
+  publicarSaldoEnCabecera(cabecera, saldo.saldoDisponible);
   const caja = h('div', { clase: 'home__rejilla', datos: { zona: 'saldo' } });
   caja.append(
     tarjetaDeCifra({
@@ -139,6 +145,37 @@ async function bloqueDeSaldo(uid, fetchImpl, alReintentar) {
     }),
   );
   return caja;
+}
+
+/**
+ * Lleva el saldo al HUD de la cabecera — §9, «elementos persistentes útiles».
+ *
+ * El armazón reserva el hueco (`[data-zona="creditos"]`) y lo deja oculto a
+ * propósito: no pinta una cifra que no sabe. Quien la sabe es esta vista, que
+ * es la que llamó a `ms-finanzas`. Así los créditos acompañan al jugador por
+ * toda la aplicación sin que cada pantalla vuelva a preguntarlos, y sin que el
+ * armazón invente un cero cuando el servicio no responde.
+ *
+ * @param {HTMLElement|null} cabecera
+ * @param {number|string|null|undefined} disponible
+ */
+export function publicarSaldoEnCabecera(cabecera, disponible) {
+  const hueco = cabecera?.querySelector?.('[data-zona="creditos"]');
+  const cifra = cabecera?.querySelector?.('[data-zona="saldo"]');
+  if (!hueco || !cifra || disponible === null || disponible === undefined) {
+    return;
+  }
+  cifra.textContent = formatoCreditos(disponible);
+  hueco.hidden = false;
+  hueco.title = 'Créditos disponibles';
+}
+
+/** @param {HTMLElement|null} cabecera */
+export function ocultarSaldoEnCabecera(cabecera) {
+  const hueco = cabecera?.querySelector?.('[data-zona="creditos"]');
+  if (hueco) {
+    hueco.hidden = true;
+  }
 }
 
 /**
@@ -319,7 +356,10 @@ async function bloqueDeAvisos(uid, fetchImpl, alReintentar) {
  * @param {{sesion: {uid: string|null, apodo: string|null, rol: string|null},
  *          fetchImpl?: Function}} opciones
  */
-export function montarHome(raiz, { sesion, fetchImpl = fetchWithHttpErrorInterceptor }) {
+export function montarHome(
+  raiz,
+  { sesion, fetchImpl = fetchWithHttpErrorInterceptor, cabecera = null },
+) {
   const zonaSaludo = raiz.querySelector('[data-zona="saludo"]');
   const zonas = {
     saldo: raiz.querySelector('[data-zona="bloque-saldo"]'),
@@ -348,8 +388,11 @@ export function montarHome(raiz, { sesion, fetchImpl = fetchWithHttpErrorInterce
 
   function cargarTodo() {
     cargar('saldo', () =>
-      bloqueDeSaldo(sesion.uid, fetchImpl, () =>
-        cargar('saldo', () => bloqueDeSaldo(sesion.uid, fetchImpl, cargarTodo)),
+      bloqueDeSaldo(
+        sesion.uid,
+        fetchImpl,
+        () => cargar('saldo', () => bloqueDeSaldo(sesion.uid, fetchImpl, cargarTodo, cabecera)),
+        cabecera,
       ),
     );
     cargar('heroe', () =>

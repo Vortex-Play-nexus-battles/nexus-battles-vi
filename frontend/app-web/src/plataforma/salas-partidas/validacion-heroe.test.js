@@ -72,17 +72,17 @@ describe('estadisticasDe', () => {
   });
 });
 
-describe('variante Sin heroe', () => {
+describe('variante Sin héroe', () => {
   test('dice el motivo y manda al inventario', () => {
     const d = raiz();
     pintarValidacion(d, sinHeroe());
 
     expect(d.dataset.resultado).toBe('SIN_HEROE_EQUIPADO');
-    expect(d.textContent).toContain('No tienes un heroe equipado');
+    expect(d.textContent).toContain('No tienes un héroe equipado');
     expect(d.textContent).toContain(
-      'Equipa un heroe desde tu inventario antes de entrar a la sala.',
+      'Equipa un héroe desde tu inventario antes de entrar a la sala.',
     );
-    expect(d.querySelector('[data-accion="confirmar"]').textContent).toBe('IR AL INVENTARIO');
+    expect(d.querySelector('[data-accion="confirmar"]').textContent).toBe('Ir al inventario');
   });
 
   test('el aviso es de error y cuenta cuantos heroes hay sin equipar', () => {
@@ -92,18 +92,18 @@ describe('variante Sin heroe', () => {
     const aviso = d.querySelector('.aviso');
     expect(aviso.className).toContain('aviso--error');
     expect(aviso.textContent).toContain('Tu inventario');
-    expect(aviso.textContent).toContain('Tienes 3 heroes sin equipar. Equipa uno y vuelve.');
+    expect(aviso.textContent).toContain('Tienes 3 héroes sin equipar. Equipa uno y vuelve.');
   });
 
-  test('sin el dato del inventario no se pinta el aviso, en vez de inventar un numero', () => {
+  test('sin el dato del inventario no se pinta el aviso, en vez de inventar un número', () => {
     const d = raiz();
     pintarValidacion(d, sinHeroe({ heroesSinEquipar: undefined }));
 
     expect(d.querySelector('.aviso')).toBeNull();
-    expect(d.textContent).toContain('No tienes un heroe equipado');
+    expect(d.textContent).toContain('No tienes un héroe equipado');
   });
 
-  test('no hay selector de heroe: el diseno no lo tiene', () => {
+  test('no hay selector de héroe: el diseno no lo tiene', () => {
     const d = raiz();
     pintarValidacion(d, sinHeroe());
 
@@ -118,9 +118,9 @@ describe('variante Ocupado', () => {
     pintarValidacion(d, ocupado());
 
     expect(d.dataset.resultado).toBe('HEROE_OCUPADO');
-    expect(d.textContent).toContain('Tu heroe esta en otra partida');
-    expect(d.textContent).toContain('«Arquero del Norte» esta en la sala «Torre del Alba»');
-    expect(d.querySelector('[data-accion="confirmar"]').textContent).toBe('ELEGIR OTRO HEROE');
+    expect(d.textContent).toContain('Tu héroe está en otra partida');
+    expect(d.textContent).toContain('«Arquero del Norte» está en la sala «Torre del Alba»');
+    expect(d.querySelector('[data-accion="confirmar"]').textContent).toBe('Elegir otro héroe');
   });
 
   test('el aviso es de advertencia y dice cuanto falta', () => {
@@ -143,7 +143,7 @@ describe('variante Ocupado', () => {
     const d = raiz();
     pintarValidacion(d, ocupado({ salaQueLoOcupa: undefined }));
 
-    expect(d.textContent).toContain('Tu heroe esta en otra partida');
+    expect(d.textContent).toContain('Tu héroe está en otra partida');
     expect(d.textContent).not.toContain('esta en la sala');
   });
 });
@@ -156,7 +156,7 @@ describe('variante Disponible', () => {
     expect(d.dataset.resultado).toBe('DISPONIBLE');
     expect(d.textContent).toContain('Arquero del Norte, listo para combatir');
     expect(d.textContent).toContain('Vida 120 · Ataque 34 · Defensa 21 · Nivel 12');
-    expect(d.querySelector('[data-accion="confirmar"]').textContent).toBe('ENTRAR A LA SALA');
+    expect(d.querySelector('[data-accion="confirmar"]').textContent).toBe('Entrar a la sala');
   });
 
   test('el aviso es de exito y advierte del descuento', () => {
@@ -166,7 +166,7 @@ describe('variante Disponible', () => {
     const aviso = d.querySelector('.aviso');
     expect(aviso.className).toContain('aviso--exito');
     expect(aviso.textContent).toContain('Antes de entrar');
-    expect(aviso.textContent).toContain('Se descontaran 150 creditos de tu saldo al confirmar.');
+    expect(aviso.textContent).toContain('Se descontarán 150 créditos de tu saldo al confirmar.');
   });
 });
 
@@ -175,25 +175,25 @@ describe('separacion entre variantes', () => {
     const d = raiz();
     pintarValidacion(d, disponible());
 
-    expect(d.textContent).not.toContain('No tienes un heroe equipado');
+    expect(d.textContent).not.toContain('No tienes un héroe equipado');
     expect(d.textContent).not.toContain('otra partida');
-    expect(d.textContent).not.toContain('IR AL INVENTARIO');
+    expect(d.textContent).not.toContain('Ir al inventario');
   });
 
-  test('Sin heroe no muestra estadisticas ni el descuento', () => {
+  test('Sin héroe no muestra estadisticas ni el descuento', () => {
     const d = raiz();
     pintarValidacion(d, sinHeroe({ heroe: HEROE, creditosRequeridos: 150 }));
 
     expect(d.textContent).not.toContain('Vida 120');
-    expect(d.textContent).not.toContain('Se descontaran');
-    expect(d.textContent).not.toContain('ENTRAR A LA SALA');
+    expect(d.textContent).not.toContain('Se descontarán');
+    expect(d.textContent).not.toContain('Entrar a la sala');
   });
 
   test('Ocupado no ofrece entrar a la sala', () => {
     const d = raiz();
     pintarValidacion(d, ocupado());
 
-    expect(d.textContent).not.toContain('ENTRAR A LA SALA');
+    expect(d.textContent).not.toContain('Entrar a la sala');
     expect(d.textContent).not.toContain('listo para combatir');
   });
 
@@ -237,10 +237,10 @@ describe('accesibilidad', () => {
     expect(d.getAttribute('role')).toBe('dialog');
     expect(d.getAttribute('aria-modal')).toBe('true');
     const titulo = document.getElementById(d.getAttribute('aria-labelledby'));
-    expect(titulo.textContent).toBe('Verificacion de heroe');
+    expect(titulo.textContent).toBe('Verificación de héroe');
   });
 
-  test('sin heroe, el circulo del dialogo es decorativo', () => {
+  test('sin héroe, el circulo del dialogo es decorativo', () => {
     const d = raiz();
     pintarValidacion(d, sinHeroe());
 
@@ -250,7 +250,7 @@ describe('accesibilidad', () => {
   // UX-R2.2 — antes este retrato era un <span> vacio con `aria-hidden` para
   // CUALQUIER resultado, aunque el contrato trajera el heroe. El circulo era
   // el mismo para todos los heroes del juego.
-  test('con heroe, el retrato es el marco del kit y se nombra', () => {
+  test('con héroe, el retrato es el marco del kit y se nombra', () => {
     const d = raiz();
     pintarValidacion(d, disponible());
 
@@ -284,7 +284,7 @@ describe('accesibilidad', () => {
     expect(d.getAttribute('role')).toBe('dialog');
     expect(d.getAttribute('aria-modal')).toBe('true');
     expect(document.getElementById(d.getAttribute('aria-labelledby')).textContent).toBe(
-      'Verificacion de heroe',
+      'Verificación de héroe',
     );
 
     rechazar(new Error('sin red'));
@@ -293,11 +293,11 @@ describe('accesibilidad', () => {
     expect(d.dataset.resultado).toBe('ERROR');
     expect(d.getAttribute('role')).toBe('dialog');
     expect(document.getElementById(d.getAttribute('aria-labelledby')).textContent).toBe(
-      'Verificacion de heroe',
+      'Verificación de héroe',
     );
   });
 
-  test('al abrir, el foco entra al dialogo por el titulo y el primer Tab cae en Cancelar', () => {
+  test('al abrir, el foco entra al dialogo por el título y el primer Tab cae en Cancelar', () => {
     const d = raiz();
     pintarValidacion(d, disponible());
 
@@ -319,7 +319,7 @@ describe('accesibilidad', () => {
     expect(alCancelar).toHaveBeenCalledWith(v);
   });
 
-  test('Escape tambien cancela desde el estado de error', async () => {
+  test('Escape también cancela desde el estado de error', async () => {
     const d = raiz();
     const alCancelar = jest.fn();
     await montarValidacionDeHeroe(d, {
@@ -334,7 +334,7 @@ describe('accesibilidad', () => {
     expect(alCancelar).toHaveBeenCalledTimes(1);
   });
 
-  test('Tab no sale del dialogo: del ultimo boton vuelve al primero y al reves', () => {
+  test('Tab no sale del dialogo: del último botón vuelve al primero y al reves', () => {
     const d = raiz();
     pintarValidacion(d, disponible());
     const cancelar = d.querySelector('[data-accion="cancelar"]');
@@ -381,7 +381,18 @@ describe('accesibilidad', () => {
 });
 
 describe('sin sala en la direccion', () => {
-  test('no llama al servicio con /salas/null y explica como llegar', async () => {
+  /**
+   * UX-R3.11 — esta prueba exigia que el dialogo dijera «?sala=».
+   *
+   * Lo decia: «Abre esta verificacion desde el listado de Batallas, o anade
+   * ?sala=<id> a la direccion». Es una instruccion para quien programa, puesta
+   * delante de quien juega, y encima el dialogo solo ofrecia «Cancelar»: contaba
+   * un problema y no daba ninguna salida.
+   *
+   * Lo que hay que comprobar no es que aparezca la cadena de consulta, sino que
+   * (a) no se llame al servicio con una sala nula y (b) haya por donde salir.
+   */
+  test('no llama al servicio con /salas/null y ofrece por donde salir', async () => {
     const d = raiz();
     const verificar = jest.fn();
 
@@ -390,7 +401,10 @@ describe('sin sala en la direccion', () => {
     expect(verificar).not.toHaveBeenCalled();
     expect(d.dataset.resultado).toBe('SIN_SALA');
     expect(d.getAttribute('role')).toBe('dialog');
-    expect(d.textContent).toContain('?sala=');
+    expect(d.textContent).not.toContain('?sala=');
+    const salida = d.querySelector('[data-accion="salida"]');
+    expect(salida).not.toBeNull();
+    expect(salida.getAttribute('href')).toContain('batallas.html');
     expect(d.querySelector('[data-accion="cancelar"]')).not.toBeNull();
     expect(d.querySelector('[data-accion="confirmar"]')).toBeNull();
   });
@@ -412,7 +426,7 @@ describe('montarValidacionDeHeroe', () => {
     montarValidacionDeHeroe(d, { idSala: 's1', verificar: () => new Promise(() => {}) });
 
     expect(d.dataset.resultado).toBe('CARGANDO');
-    expect(d.textContent).toContain('Comprobando tu heroe');
+    expect(d.textContent).toContain('Comprobando tu héroe');
   });
 
   test('pinta la variante que devuelve el puerto', async () => {
@@ -426,13 +440,13 @@ describe('montarValidacionDeHeroe', () => {
     expect(d.dataset.resultado).toBe('DISPONIBLE');
   });
 
-  test('si la verificacion falla lo dice, no deja el dialogo en blanco', async () => {
+  test('si la verificación falla lo dice, no deja el dialogo en blanco', async () => {
     const d = raiz();
     const verificar = jest.fn().mockRejectedValue(
       new ErrorDeApi(
         {
-          title: 'No se pudo verificar tu heroe',
-          detail: 'El servicio respondio 404.',
+          title: 'No se pudo verificar tu héroe',
+          detail: 'El servicio respondió 404.',
           status: 404,
         },
         404,
@@ -443,7 +457,7 @@ describe('montarValidacionDeHeroe', () => {
     await asentar();
 
     expect(d.dataset.resultado).toBe('ERROR');
-    expect(d.textContent).toContain('El servicio respondio 404.');
+    expect(d.textContent).toContain('El servicio respondió 404.');
     expect(d.querySelector('[data-accion="cancelar"]')).not.toBeNull();
     expect(d.querySelector('[data-accion="confirmar"]')).toBeNull();
   });
@@ -458,7 +472,7 @@ describe('montarValidacionDeHeroe · inventario degradado (HU-DIS-003)', () => {
         type: 'https://nexusbattles.local/errores/seccion-no-disponible',
         title: 'Inventario no disponible temporalmente',
         status: 503,
-        detail: 'La seccion de Inventario no esta disponible temporalmente.',
+        detail: 'La sección de Inventario no esta disponible temporalmente.',
         seccion: 'Inventario',
         reintentarEnSegundos: 5,
         dependencia: 'inventario',
@@ -466,7 +480,7 @@ describe('montarValidacionDeHeroe · inventario degradado (HU-DIS-003)', () => {
       503,
     );
 
-  test('pinta Seccion degradada dentro del dialogo, sin veredicto y sin alerta', async () => {
+  test('pinta Sección degradada dentro del dialogo, sin veredicto y sin alerta', async () => {
     const d = raiz();
     const verificar = jest.fn().mockRejectedValue(inventarioCaido());
 

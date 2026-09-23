@@ -62,10 +62,10 @@ beforeEach(() => {
 describe('textoDeConfirmacion (CA-05)', () => {
   test('cuenta a los demas, no al anfitrion', () => {
     expect(textoDeConfirmacion({ ocupacion: 3 })).toBe(
-      '¿Cancelar la sala? Se expulsara a 2 participantes.',
+      '¿Cancelar la sala? Se expulsará a 2 participantes.',
     );
     expect(textoDeConfirmacion({ ocupacion: 2 })).toBe(
-      '¿Cancelar la sala? Se expulsara a 1 participante.',
+      '¿Cancelar la sala? Se expulsará a 1 participante.',
     );
   });
 
@@ -213,7 +213,7 @@ describe('montarSalaDeEspera · salir (CA-01)', () => {
 });
 
 describe('montarSalaDeEspera · cancelar (CA-02, CA-05)', () => {
-  test('pulsar «Cancelar» pregunta con el numero de expulsados y, si se acepta, cancela', async () => {
+  test('pulsar «Cancelar» pregunta con el número de expulsados y, si se acepta, cancela', async () => {
     const cancelar = jest.fn().mockResolvedValue(undefined);
     const confirmar = jest.fn(() => true);
     const alSalir = jest.fn();
@@ -229,12 +229,12 @@ describe('montarSalaDeEspera · cancelar (CA-02, CA-05)', () => {
     document.querySelector('[data-accion="cancelar-sala"]').click();
     await tick();
 
-    expect(confirmar).toHaveBeenCalledWith('¿Cancelar la sala? Se expulsara a 2 participantes.');
+    expect(confirmar).toHaveBeenCalledWith('¿Cancelar la sala? Se expulsará a 2 participantes.');
     expect(cancelar).toHaveBeenCalledWith('s1');
     expect(alSalir).toHaveBeenCalledWith({ motivo: 'cancelada' });
   });
 
-  test('la confirmacion usa la ocupacion VIVA, no la de cuando se monto', async () => {
+  test('la confirmación usa la ocupacion VIVA, no la de cuando se monto', async () => {
     const confirmar = jest.fn(() => false);
     const espera = montarSalaDeEspera(document, {
       sala: sala({ ocupacion: 1 }),
@@ -248,7 +248,7 @@ describe('montarSalaDeEspera · cancelar (CA-02, CA-05)', () => {
     document.querySelector('[data-accion="cancelar-sala"]').click();
     await tick();
 
-    expect(confirmar).toHaveBeenCalledWith('¿Cancelar la sala? Se expulsara a 3 participantes.');
+    expect(confirmar).toHaveBeenCalledWith('¿Cancelar la sala? Se expulsará a 3 participantes.');
   });
 
   test('si no se confirma, no se llama al servicio', async () => {
@@ -333,7 +333,7 @@ describe('salidaAlListado · una sola navegacion', () => {
     );
     const volver = salidaAlListado(storage, navegar, '../otro.html');
 
-    volver({ tono: 'advertencia', titulo: 'La sala se cerro' });
+    volver({ tono: 'advertencia', titulo: 'La sala se cerró' });
 
     expect(orden).toEqual([['navegar', '../otro.html', true]]);
   });

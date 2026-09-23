@@ -162,9 +162,9 @@ export function montarSalaBatalla(
   if (!hayPartida && partida?.participantes?.length) {
     explicarVacio(
       zonaSinPartida,
-      `La partida ${partida.id} esta en curso con ${partida.participantes.length} participantes, ` +
-        'pero todavia no se conoce el heroe de ninguno: la verificacion de heroe no es ' +
-        'obligatoria al entrar a la sala. Sin heroe no hay vida que pintar.',
+      `La partida ${partida.id} está en curso con ${partida.participantes.length} participantes, ` +
+        'pero todavía no se conoce el héroe de ninguno: la verificación de héroe no es ' +
+        'obligatoria al entrar a la sala. Sin héroe no hay vida que pintar.',
     );
   }
 
@@ -173,6 +173,22 @@ export function montarSalaBatalla(
   }
   if (panel) {
     panel.hidden = !hayPartida;
+  }
+
+  // UX-R3.4 — el campo de combate solo existe cuando hay combate.
+  //
+  // `.combate__campo` ocupa la franja `1fr` de la reja, que es la mayor parte
+  // de la ventana (CA-01 pide mas del 80 % del alto util para el area de
+  // juego). Sin partida cargada eso dejaba media pantalla de degradado vacio
+  // con una tarjeta blanca huerfana debajo, cerca del borde inferior: la
+  // pantalla mas importante del producto parecia rota.
+  //
+  // La marca la lleva la raiz y el resto lo decide el CSS, que es quien sabe
+  // de tamaños. `aria-hidden` ya estaba en el campo: no cambia nada de lo que
+  // oye un lector de pantalla.
+  const marco = raiz.querySelector?.('[data-zona="combate"]') ?? raiz.closest?.('.combate');
+  if (marco?.dataset) {
+    marco.dataset.sinPartida = hayPartida ? 'no' : 'si';
   }
 
   if (!hayPartida) {

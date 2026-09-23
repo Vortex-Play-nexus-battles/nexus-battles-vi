@@ -138,11 +138,11 @@ describe('leerSesion', () => {
     expect(leerSesion({ getItem: (k) => almacen.get(k) ?? null })).toEqual(SESION);
   });
 
-  test('sin sesion devuelve nulos, no cadenas vacias', () => {
+  test('sin sesión devuelve nulos, no cadenas vacías', () => {
     expect(leerSesion({ getItem: () => null })).toEqual({ usuarioId: null, apodo: null });
   });
 
-  test('el autor sale del token, no de la clave que pisa el panel de administracion', () => {
+  test('el autor sale del token, no de la clave que pisa el panel de administración', () => {
     // `gestion-usuarios.js` escribe en `nexus.usuarioId` el id del usuario que
     // el administrador acaba de seleccionar. Si el comentario se firmara con
     // eso, quedaria a nombre de otra persona.
@@ -162,7 +162,7 @@ describe('leerSesion', () => {
 });
 
 describe('leerFormulario', () => {
-  test('arma PublicacionComentarioRequest con autor, apodo, texto, imagenes y estrellas', () => {
+  test('arma PublicacionComentarioRequest con autor, apodo, texto, imágenes y estrellas', () => {
     const formulario = preparar();
     montarPublicarComentario(formulario, {
       sesion: SESION,
@@ -266,7 +266,7 @@ describe('calificacion', () => {
 });
 
 describe('montarPublicarComentario', () => {
-  test('sin sesion, deshabilita el formulario y lo explica; no llama al servicio', async () => {
+  test('sin sesión, deshabilita el formulario y lo explica; no llama al servicio', async () => {
     const formulario = preparar();
     const publicarImpl = jest.fn();
 
@@ -285,7 +285,7 @@ describe('montarPublicarComentario', () => {
     expect(publicarImpl).not.toHaveBeenCalled();
   });
 
-  test('texto vacio: marca el campo y no llama al servicio', async () => {
+  test('texto vacío: marca el campo y no llama al servicio', async () => {
     const formulario = preparar();
     const publicarImpl = jest.fn();
     montarPublicarComentario(formulario, {
@@ -390,7 +390,7 @@ describe('montarPublicarComentario', () => {
     const aviso = formulario.querySelector('.aviso--info');
     expect(aviso.getAttribute('role')).toBe('status');
     expect(aviso.querySelector('.aviso__titulo').textContent).toBe(
-      'Tu comentario esta en revision',
+      'Tu comentario está en revisión',
     );
     expect(document.querySelector('[data-zona="hilo-lista"]').children).toHaveLength(0);
     expect(document.querySelector('[data-zona="hilo-vacio"]').hidden).toBe(false);
@@ -401,7 +401,7 @@ describe('montarPublicarComentario', () => {
     const publicarImpl = jest.fn(async () => {
       throw problema(403, {
         title: 'No puedes publicar',
-        detail: 'Tienes una sancion de silencio hasta el viernes.',
+        detail: 'Tienes una sanción de silencio hasta el viernes.',
         motivo: 'AUTOR_SILENCIADO',
       });
     });
@@ -417,7 +417,7 @@ describe('montarPublicarComentario', () => {
     const aviso = formulario.querySelector('.aviso--advertencia');
     expect(aviso.getAttribute('role')).toBe('alert');
     expect(aviso.querySelector('.aviso__titulo').textContent).toBe('No puedes publicar');
-    expect(aviso.textContent).toContain('sancion de silencio hasta el viernes');
+    expect(aviso.textContent).toContain('sanción de silencio hasta el viernes');
     expect(formulario.querySelector('[type="submit"]').disabled).toBe(false);
   });
 
@@ -464,7 +464,7 @@ describe('montarPublicarComentario', () => {
       .mockImplementationOnce(async () => {
         throw problema(409, {
           title: 'Ya calificaste este producto',
-          detail: 'Otra solicitud tuya se adelanto.',
+          detail: 'Otra solicitud tuya se adelantó.',
         });
       })
       .mockImplementationOnce(async () => ({
@@ -495,7 +495,7 @@ describe('montarPublicarComentario', () => {
     const formulario = preparar();
     const publicarImpl = jest.fn(async () => {
       throw problema(400, {
-        errores: [{ campo: 'texto', mensaje: 'Supera el largo maximo.' }],
+        errores: [{ campo: 'texto', mensaje: 'Supera el largo máximo.' }],
       });
     });
     montarPublicarComentario(formulario, {
@@ -509,7 +509,7 @@ describe('montarPublicarComentario', () => {
 
     const campo = formulario.querySelector('[name="texto"]').closest('.campo');
     expect(campo.classList.contains('campo--invalido')).toBe(true);
-    expect(campo.querySelector('.campo__error').textContent).toBe('Supera el largo maximo.');
+    expect(campo.querySelector('.campo__error').textContent).toBe('Supera el largo máximo.');
     expect(formulario.querySelector('[data-zona="aviso"]').hidden).toBe(true);
   });
 
@@ -535,7 +535,7 @@ describe('montarPublicarComentario', () => {
     expect(boton.textContent).toBe('PUBLICAR COMENTARIO');
   });
 
-  test('mientras publica, el boton queda ocupado', async () => {
+  test('mientras publica, el botón queda ocupado', async () => {
     const formulario = preparar();
     let liberar;
     const publicarImpl = jest.fn(
@@ -594,8 +594,8 @@ describe('tonoPara', () => {
   });
 });
 
-describe('HU-COM-002 · calificacion unica (D-07)', () => {
-  test('la segunda calificacion entra sin estrellas y el aviso lo explica, sin tratarlo como error', async () => {
+describe('HU-COM-002 · calificación unica (D-07)', () => {
+  test('la segunda calificación entra sin estrellas y el aviso lo explica, sin tratarlo como error', async () => {
     const formulario = preparar();
     const comentario = publicado({ estrellas: undefined, calificacionDescartada: true });
     delete comentario.estrellas;
@@ -613,7 +613,7 @@ describe('HU-COM-002 · calificacion unica (D-07)', () => {
     const aviso = formulario.querySelector('.aviso--exito');
     expect(aviso).not.toBeNull();
     expect(aviso.querySelector('.aviso__titulo').textContent).toBe('Comentario publicado');
-    expect(aviso.textContent).toMatch(/Ya habias calificado/);
+    expect(aviso.textContent).toMatch(/Ya habías calificado/);
     const articulo = document.querySelector('[data-zona="hilo-lista"] article');
     expect(articulo.querySelector('.estrellas')).toBeNull();
   });
@@ -626,10 +626,10 @@ describe('HU-COM-003 · promedio', () => {
     );
     expect(textoDelPromedio({})).toBe('Sin calificaciones todavía.');
     expect(textoDelPromedio({ calificacionPromedio: 4.5, totalCalificaciones: 1 })).toBe(
-      'Calificacion promedio: 4.50 de 5 (1 calificacion).',
+      'Calificación promedio: 4.50 de 5 (1 calificación).',
     );
     expect(textoDelPromedio({ calificacionPromedio: 3.67, totalCalificaciones: 3 })).toBe(
-      'Calificacion promedio: 3.67 de 5 (3 calificaciones).',
+      'Calificación promedio: 3.67 de 5 (3 calificaciones).',
     );
   });
 
@@ -654,7 +654,7 @@ describe('HU-COM-003 · promedio', () => {
 
     expect(consultarImpl).toHaveBeenCalledWith('prod-1');
     expect(document.querySelector('[data-zona="promedio"]').textContent).toBe(
-      'Calificacion promedio: 4.00 de 5 (2 calificaciones).',
+      'Calificación promedio: 4.00 de 5 (2 calificaciones).',
     );
     const textos = Array.from(document.querySelectorAll('[data-campo="texto"]')).map(
       (n) => n.textContent,
@@ -709,7 +709,7 @@ describe('HU-COM-004 · eliminar comentarios propios', () => {
     totalCalificaciones: (mio ? 1 : 0) + (ajeno ? 1 : 0),
   });
 
-  test('CA-04: el boton Eliminar solo aparece en mis comentarios', async () => {
+  test('CA-04: el botón Eliminar solo aparece en mis comentarios', async () => {
     const formulario = preparar();
     montarPublicarComentario(formulario, {
       sesion: SESION,
@@ -746,7 +746,7 @@ describe('HU-COM-004 · eliminar comentarios propios', () => {
     expect(document.querySelector('[data-comentario-id="mio"]')).toBeNull();
     expect(document.querySelector('[data-comentario-id="ajeno"]')).not.toBeNull();
     expect(document.querySelector('[data-zona="promedio"]').textContent).toBe(
-      'Calificacion promedio: 2.00 de 5 (1 calificacion).',
+      'Calificación promedio: 2.00 de 5 (1 calificación).',
     );
     expect(formulario.querySelector('.aviso--exito .aviso__titulo').textContent).toBe(
       'Comentario eliminado',
@@ -781,7 +781,7 @@ describe('HU-COM-004 · eliminar comentarios propios', () => {
     );
   });
 
-  test('quitarDelHilo vuelve a mostrar el vacio cuando no queda nada', () => {
+  test('quitarDelHilo vuelve a mostrar el vacío cuando no queda nada', () => {
     preparar();
     const hilo = document.querySelector('[data-zona="hilo"]');
     const articulo = agregarAlHilo(hilo, publicado({ id: 'c-1' }));

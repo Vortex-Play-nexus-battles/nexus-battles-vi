@@ -60,7 +60,7 @@ Contra la instancia de contenido:
 
 ```bash
 TOKEN=$(node postman/jwks-dev/emitir-token.mjs ~/.nexus/productos-jwks-dev.pem --usuario cesar)
-npx --yes newman run productos.postman_collection.json -e local.postman_environment.json --env-var baseUrl=http://34.193.90.11:8103 --env-var token=$TOKEN
+npx --yes newman run productos.postman_collection.json -e local.postman_environment.json --env-var baseUrl=http://35.168.124.119 --env-var token=$TOKEN
 ```
 
 ## Con la app de Postman
@@ -88,3 +88,18 @@ npx --yes newman run productos.postman_collection.json -e local.postman_environm
 | Premium sin precio real | 400 |
 | Inexistente | 404 con formato de error estandar |
 | Estadisticas | 200 con token (cuenta los creados); 401 sin token |
+
+> **R9.4 — el `baseUrl` va por el borde, no al puerto del servicio.**
+> Los puertos 8101-8104 del host de contenido dejaron de estar abiertos a todo
+> internet: solo los alcanza el host de plataforma, que es quien de verdad los
+> consume (el borde nginx y salas-partidas). Desde un portatil se entra por el
+> borde, que es ademas el mismo camino que usa la aplicacion real, asi que la
+> coleccion pasa a ejercitar tambien el enrutado.
+>
+> La unica peticion que no sobrevive al cambio es `{{baseUrl}}/actuator/health`:
+> el borde solo enruta `/api/v1/*`. La salud por host la cubre
+> `.github/workflows/diagnostico-dev.yml`.
+>
+> Para depurar contra el puerto directo hay que anadir la IP propia a
+> `cidr_servicios` en `infrastructure/entornos/contenido/main.tf`, a proposito
+> y temporalmente.

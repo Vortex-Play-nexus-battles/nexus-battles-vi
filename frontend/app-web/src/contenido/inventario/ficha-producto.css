@@ -12,7 +12,7 @@
   align-items: center;
   justify-content: center;
   padding: var(--vitrina-margen, 24px);
-  background: rgb(0 0 0 / 62%);
+  background: color-mix(in srgb, var(--texto) 62%, transparent);
 }
 
 .ficha {
@@ -137,8 +137,8 @@
   margin: 0 0 12px;
   padding: 8px 12px;
   border-radius: 8px;
-  background: #fbeedd;
-  color: var(--advertencia, #8a4a00);
+  background: var(--advertencia-insignia);
+  color: var(--advertencia);
   font-size: 0.85rem;
   line-height: 1.4;
 }

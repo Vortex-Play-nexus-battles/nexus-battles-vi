@@ -102,7 +102,7 @@ describe('registroDeAvisos · reconectar no duplica', () => {
     expect(registro.yaVisto(accionResuelta(70))).toBe(false);
   });
 
-  test('el turno se identifica por su numero, que siempre sube', () => {
+  test('el turno se identifica por su número, que siempre sube', () => {
     const registro = registroDeAvisos();
     const turno = (n) => ({
       tipo: TURNO_CAMBIADO,
@@ -156,11 +156,11 @@ describe('textoDelResultado', () => {
       ],
     };
 
-    expect(textoDelResultado(fin, ANA)).toMatch(/ganado.*llevas 200 creditos/i);
-    expect(textoDelResultado(fin, BRUNO)).toMatch(/perdido.*pierdes los 100 creditos/i);
+    expect(textoDelResultado(fin, ANA)).toMatch(/ganado.*llevas 200 créditos/i);
+    expect(textoDelResultado(fin, BRUNO)).toMatch(/perdido.*pierdes los 100 créditos/i);
   });
 
-  test('en empate con apuesta se dice que los creditos vuelven', () => {
+  test('en empate con apuesta se dice que los créditos vuelven', () => {
     const fin = { ganadores: [], reparto: [{ idJugador: ANA, creditos: 0 }] };
 
     expect(textoDelResultado(fin, ANA)).toMatch(/empate.*devuelven/i);
@@ -181,7 +181,7 @@ describe('textoDelResultado', () => {
     expect(textoDelResultado(fin, BRUNO)).toBe('Gana el equipo 1. Tu equipo ha perdido.');
   });
 
-  test('un companero que cayo tambien gana con su equipo, aunque no este en ganadores', () => {
+  test('un compañero que cayo también gana con su equipo, aunque no este en ganadores', () => {
     const fin = { ganadores: [ANA], equipoGanador: 1 };
 
     expect(textoDelResultado(fin, BRUNO, 1)).toBe('Tu equipo (1) ha ganado el combate.');
@@ -226,7 +226,7 @@ describe('montarControlesDeCombate · equipos (HU-SAL-004)', () => {
 });
 
 describe('registroDeAvisos con reparto (HU-JUE-014, CA-06)', () => {
-  test('el mismo fin, primero sin reparto y despues con el, NO es un duplicado', () => {
+  test('el mismo fin, primero sin reparto y después con el, NO es un duplicado', () => {
     const registro = registroDeAvisos();
     const sinReparto = { tipo: PARTIDA_FINALIZADA, idPartida: PARTIDA, ganadores: [ANA] };
     const conReparto = { ...sinReparto, reparto: [{ idJugador: ANA, creditos: 100 }] };
@@ -257,12 +257,12 @@ describe('registroDeAvisos con reparto (HU-JUE-014, CA-06)', () => {
       ganadores: [ANA],
       reparto: [{ idJugador: ANA, creditos: 100 }],
     });
-    expect(resultado.textContent).toMatch(/llevas 100 creditos/i);
+    expect(resultado.textContent).toMatch(/llevas 100 créditos/i);
   });
 });
 
 describe('montarControlesDeCombate', () => {
-  test('hay un boton por rival, y ninguno para uno mismo', () => {
+  test('hay un botón por rival, y ninguno para uno mismo', () => {
     montarControlesDeCombate(document, {
       idPartida: PARTIDA,
       yo: ANA,
@@ -276,7 +276,7 @@ describe('montarControlesDeCombate', () => {
     expect(botones[0].textContent).toContain('Centinela');
   });
 
-  test('los botones empiezan deshabilitados: todavia no se sabe de quien es el turno', () => {
+  test('los botones empiezan deshabilitados: todavía no se sabe de quien es el turno', () => {
     montarControlesDeCombate(document, {
       idPartida: PARTIDA,
       yo: ANA,
@@ -444,7 +444,7 @@ describe('montarControlesDeCombate · motor degradado (HU-DIS-003)', () => {
     type: 'https://nexusbattles.local/errores/seccion-no-disponible',
     title: 'Motor de combate no disponible temporalmente',
     status: 503,
-    detail: 'La seccion de Motor de combate no esta disponible temporalmente.',
+    detail: 'La sección de Motor de combate no esta disponible temporalmente.',
     seccion: 'Motor de combate',
     reintentarEnSegundos: 4,
     dependencia: 'motor-combate',
@@ -454,7 +454,7 @@ describe('montarControlesDeCombate · motor degradado (HU-DIS-003)', () => {
     document.body.innerHTML = `${VISTA}<div data-zona="degradacion" data-seccion="Combate" hidden></div>`;
   }
 
-  test('pinta Seccion degradada sobre los controles y los deja vivos: el turno sigue siendo mio', () => {
+  test('pinta Sección degradada sobre los controles y los deja vivos: el turno sigue siendo mio', () => {
     conHueco();
     const controles = montarControlesDeCombate(document, {
       idPartida: PARTIDA,
@@ -474,7 +474,7 @@ describe('montarControlesDeCombate · motor degradado (HU-DIS-003)', () => {
     expect(document.querySelector('[data-zona="acciones"]').hidden).toBe(false);
   });
 
-  test('Reintentar quita el aviso y vuelve a mandar la ultima accion', () => {
+  test('Reintentar quita el aviso y vuelve a mandar la ultima acción', () => {
     conHueco();
     const alAtacar = jest.fn();
     const controles = montarControlesDeCombate(document, {
@@ -494,7 +494,7 @@ describe('montarControlesDeCombate · motor degradado (HU-DIS-003)', () => {
     expect(document.querySelector('.seccion-degradada')).toBeNull();
   });
 
-  test('una accion resuelta despues limpia el aviso: el motor volvio', () => {
+  test('una acción resuelta después limpia el aviso: el motor volvio', () => {
     conHueco();
     const controles = montarControlesDeCombate(document, {
       idPartida: PARTIDA,
@@ -555,17 +555,17 @@ describe('recompensa por jugar (HU-JUE-012)', () => {
     ],
   };
 
-  test('el texto dice cuantos creditos se ganan y por que, para quien mira', () => {
-    expect(textoDelResultado(fin, ANA)).toBe('Has ganado el combate. Ganas 2 creditos por ganar.');
+  test('el texto dice cuantos créditos se ganan y por que, para quien mira', () => {
+    expect(textoDelResultado(fin, ANA)).toBe('Has ganado el combate. Ganas 2 créditos por ganar.');
     expect(textoDelResultado(fin, BRUNO)).toBe(
-      'Has perdido el combate. Ganas 1 credito por participar. Ademas te llevas un cofre.',
+      'Has perdido el combate. Ganas 1 crédito por participar. Además te llevas un cofre.',
     );
   });
 
   test('con apuesta y recompensa, las dos coletillas van en orden: primero la apuesta', () => {
     const conApuesta = { ...fin, reparto: [{ idJugador: ANA, creditos: 100 }] };
     expect(textoDelResultado(conApuesta, ANA)).toBe(
-      'Has ganado el combate. Te llevas 100 creditos de la apuesta. Ganas 2 creditos por ganar.',
+      'Has ganado el combate. Te llevas 100 créditos de la apuesta. Ganas 2 créditos por ganar.',
     );
   });
 
@@ -608,7 +608,7 @@ describe('textoDelTurno()', () => {
       { jugador: { id: BRUNO }, heroe: { nombre: 'Golem' }, esIA: true },
     ];
 
-    expect(textoDelTurno(BRUNO, conIA, ANA).texto).toBe('Juega la maquina (Golem)');
+    expect(textoDelTurno(BRUNO, conIA, ANA).texto).toBe('Juega la máquina (Golem)');
   });
 
   test('un identificador que no esta en pantalla no deja el indicador en blanco', () => {
@@ -717,7 +717,7 @@ describe('HU-JUE-017 · presentacion del combate (UX-R2.3)', () => {
       alAtacar: () => {},
     });
 
-  test('CA-03 · cada accion lleva icono, no solo texto', () => {
+  test('CA-03 · cada acción lleva icono, no solo texto', () => {
     montar(ANA);
     const accion = document.querySelector('[data-atacar]');
 
@@ -741,7 +741,7 @@ describe('HU-JUE-017 · presentacion del combate (UX-R2.3)', () => {
     expect(accion.getAttribute('aria-label')).toContain('No es tu turno');
   });
 
-  test('cuando toca, el motivo desaparece y el boton invita a atacar', () => {
+  test('cuando toca, el motivo desaparece y el botón invita a atacar', () => {
     const controles = montar(BRUNO);
     controles.recibir({ tipo: TURNO_CAMBIADO, idPartida: PARTIDA, idJugador: ANA });
 
@@ -762,7 +762,7 @@ describe('HU-JUE-017 · presentacion del combate (UX-R2.3)', () => {
     expect(panel.querySelector('.panel-resultado__palabra').textContent).toBe('VICTORIA');
   });
 
-  test('CA-04 · perder tambien se ve, y no es el mismo panel en rojo', () => {
+  test('CA-04 · perder también se ve, y no es el mismo panel en rojo', () => {
     const controles = montar(ANA);
     controles.recibir({ tipo: PARTIDA_FINALIZADA, idPartida: PARTIDA, ganadores: [BRUNO] });
 
@@ -771,7 +771,7 @@ describe('HU-JUE-017 · presentacion del combate (UX-R2.3)', () => {
     expect(panel.querySelector('.panel-resultado__palabra').textContent).toBe('DERROTA');
   });
 
-  test('CA-04 · el reparto de creditos sale en el panel', () => {
+  test('CA-04 · el reparto de créditos sale en el panel', () => {
     const controles = montar(ANA);
     controles.recibir({
       tipo: PARTIDA_FINALIZADA,

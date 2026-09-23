@@ -39,7 +39,11 @@ export class ErrorDeMetricas extends Error {
    * @param {number} estado
    */
   constructor(problema, estado) {
-    super(problema?.detail || problema?.title || 'No se pudo obtener el informe de latencia.');
+    // UX-R3.11 — el respaldo nombraba UN informe concreto («…el informe de
+    // latencia»). Esta clase la comparten el panel de latencia y el tablero
+    // tecnico, asi que la tarjeta de «Usuarios y moderacion» anunciaba un
+    // fallo de latencia. El respaldo no nombra informe: lo nombra quien pinta.
+    super(problema?.detail || problema?.title || 'El servicio de métricas no respondió.');
     this.name = 'ErrorDeMetricas';
     this.tipo = problema?.type ?? null;
     this.titulo = problema?.title ?? 'No se pudo obtener el informe';
@@ -68,9 +72,9 @@ export class ErrorDeMetricas extends Error {
           detalle: 'Vuelve a entrar para consultar la observabilidad de la plataforma.',
         }
       : {
-          titulo: 'Esta seccion es de administracion',
+          titulo: 'Esta sección es de administración',
           detalle:
-            'El estado tecnico de la plataforma y los agregados de moderacion solo los ve ' +
+            'El estado técnico de la plataforma y los agregados de moderación solo los ve ' +
             'un administrador. Si crees que deberias verlos, pidelo al equipo.',
         };
   }

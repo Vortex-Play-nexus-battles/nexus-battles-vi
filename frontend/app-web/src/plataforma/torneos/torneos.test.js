@@ -72,7 +72,7 @@ function servicio(rutas) {
 describe('presentacion', () => {
   test('resumenDe dice estado, ocupacion y costo', () => {
     expect(resumenDe(torneo({ equiposInscritos: 3 }))).toBe(
-      'Inscripciones abiertas · 3 de 8 equipos · 10 creditos',
+      'Inscripciones abiertas · 3 de 8 equipos · 10 créditos',
     );
     expect(resumenDe(torneo({ estado: 'EN_CURSO', costoInscripcion: 0 }))).toBe(
       'En curso · 0 de 8 equipos · gratuito',
@@ -88,7 +88,7 @@ describe('presentacion', () => {
     expect(nombreDe(t, 'desconocido-123')).toBe('desconoc');
   });
 
-  test('accionesDe: sesion, estado, cupo, equipo sin inscribir e inscrito (CA-03)', () => {
+  test('accionesDe: sesión, estado, cupo, equipo sin inscribir e inscrito (CA-03)', () => {
     expect(accionesDe(torneo(), null)).toMatchObject({ crearEquipo: false, inscribir: false });
     expect(accionesDe(torneo({ estado: 'EN_CURSO' }), UID).motivo).toMatch(/cerradas/);
     expect(accionesDe(torneo({ equiposInscritos: 8 }), UID).motivo).toMatch(/Cupo agotado/);
@@ -99,10 +99,10 @@ describe('presentacion', () => {
     });
     expect(
       accionesDe(torneo({ equipos: [equipo({ inscrito: true, posicion: 2 })] }), UID).motivo,
-    ).toMatch(/posicion 2/);
+    ).toMatch(/posición 2/);
   });
 
-  test('encuentrosDe filtra por llave y ordena por numero', () => {
+  test('encuentrosDe filtra por llave y ordena por número', () => {
     const t = torneo({
       encuentros: [
         { numero: 11, llave: 'GANADORES', estado: 'PENDIENTE' },
@@ -235,7 +235,7 @@ describe('vista', () => {
     expect(document.querySelector('[data-zona="crear-torneo"]').hidden).toBe(false);
   });
 
-  test('abrir un torneo pinta equipos, acciones y arbol; el jugador registra su equipo y lo inscribe', async () => {
+  test('abrir un torneo pinta equipos, acciones y árbol; el jugador registra su equipo y lo inscribe', async () => {
     let t = torneo();
     const fetchImpl = servicio({
       'GET /api/v1/torneos': () => ({ cuerpo: [t] }),
@@ -283,18 +283,18 @@ describe('vista', () => {
     expect(document.querySelector('.aviso--exito').textContent).toMatch(/Equipo registrado/);
 
     const inscribir = document.querySelector('[data-accion="inscribir"]');
-    expect(inscribir.textContent).toMatch(/10 creditos/);
+    expect(inscribir.textContent).toMatch(/10 créditos/);
     inscribir.click();
     await asentar();
     await asentar();
     await asentar();
-    expect(document.querySelector('.aviso--exito').textContent).toMatch(/posicion 1/);
+    expect(document.querySelector('.aviso--exito').textContent).toMatch(/posición 1/);
     expect(document.querySelector('[data-zona="acciones"]').textContent).toMatch(
-      /Ya estas inscrito/,
+      /Ya estás inscrito/,
     );
   });
 
-  test('en curso se pinta el arbol por llaves y el campeon; un rechazo del servicio se avisa', async () => {
+  test('en curso se pinta el árbol por llaves y el campeón; un rechazo del servicio se avisa', async () => {
     const a = equipo({ id: 'a', nombre: 'A', inscrito: true, posicion: 1 });
     const b = equipo({
       id: 'b',
@@ -350,7 +350,7 @@ describe('vista', () => {
     await asentar();
     await asentar();
     const detalle = document.querySelector('[data-zona="detalle"]');
-    expect(detalle.querySelector('[data-zona="campeon"]').textContent).toBe('Campeon: A');
+    expect(detalle.querySelector('[data-zona="campeon"]').textContent).toBe('Campeón: A');
     // El encuentro es el componente `Encuentro` del kit: cabecera con estado y
     // una fila por equipo, no la frase corrida que habia antes.
     const primero = detalle.querySelector('[data-llave="GANADORES"] [data-numero="1"]');
@@ -366,11 +366,24 @@ describe('vista', () => {
       'por definir',
     );
     expect(detalle.querySelector('[data-equipo-id="b"][data-ia="true"]').textContent).toMatch(
-      /maquina/,
+      /máquina/,
     );
     expect(detalle.querySelector('[data-zona="acciones"]').textContent).toMatch(/Inicia sesión/);
 
+    // UX-R3.6 — un rechazo al CARGAR el listado se dice donde iban los
+    // torneos, y solo ahi.
+    //
+    // Antes se decia dos veces: el listado pintaba su estado de error con el
+    // motivo y su boton de reintentar, y ademas saltaba el aviso flotante de
+    // arriba con «No se pudo completar» y nada mas. Dos avisos del mismo
+    // fallo, y el peor primero — una caja amarilla, encima del mensaje bueno,
+    // que no decia que habia pasado ni que se podia hacer.
+    //
+    // El aviso flotante sigue siendo para los fallos de una ACCION (inscribir
+    // un equipo, abrir un torneo), donde el contenido de la pantalla sigue
+    // siendo valido y hay que decir que fallo lo que se acaba de pulsar.
     document.body.innerHTML = VISTA;
+    const avisos = jest.spyOn(console, 'warn').mockImplementation(() => {});
     montarTorneos(document, {
       uid: UID,
       fetchImpl: servicio({
@@ -381,7 +394,13 @@ describe('vista', () => {
       }),
     });
     await asentar();
-    expect(document.querySelector('.aviso--error .aviso__titulo').textContent).toBe('Caido');
+
+    const listado = document.querySelector('[data-zona="listado"]');
+    expect(listado.textContent).toContain('Los torneos no están disponibles');
+    expect(listado.querySelector('[data-accion="reintentar"]')).not.toBeNull();
+    expect(document.querySelector('.aviso--error')).toBeNull();
+    expect(avisos.mock.calls.flat().join(' ')).toContain('torneos');
+    avisos.mockRestore();
   });
 
   test('el administrador crea el torneo desde el formulario, e inicia el torneo abierto', async () => {
@@ -439,7 +458,7 @@ describe('vista', () => {
   });
 });
 
-describe('el arbol usa el componente Encuentro del sistema de diseno', () => {
+describe('el árbol usa el componente Encuentro del sistema de diseno', () => {
   const equipos = [
     { id: 'eq-1', nombre: 'Los Valientes', integrantes: [UID, 'x'], inscrito: true, posicion: 1 },
     { id: 'eq-2', nombre: 'Rivales', integrantes: ['y', 'z'], inscrito: true, posicion: 2 },

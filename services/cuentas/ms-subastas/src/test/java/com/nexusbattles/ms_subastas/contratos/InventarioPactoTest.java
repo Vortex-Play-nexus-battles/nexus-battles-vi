@@ -73,7 +73,18 @@ class InventarioPactoTest {
                 .willRespondWith()
                 .status(200)
                 .headers(Map.of("Content-Type", "application/json"))
-                .body(new PactDslJsonBody().stringType("elementoId", ELEMENTO))
+                // Sin cuerpo esperado a proposito — R11.4.
+                //
+                // Este pacto pedia `{"elementoId": ...}`, y el proveedor
+                // devuelve `ElementoInventario`, cuyo primer campo se llama
+                // `id` (inventario.yaml 1.1.1 lo declara asi, y el codigo
+                // coincide con el contrato). Era el CONSUMIDOR el que estaba
+                // equivocado, no el proveedor.
+                //
+                // No se corrige a `id` sino que se retira: `InventarioClientHttp`
+                // no lee el cuerpo de esta respuesta, solo mira el codigo. Un
+                // pacto que exige una forma que nadie usa ata las manos del
+                // proveedor sin proteger a nadie.
                 .toPact();
     }
 
@@ -124,7 +135,18 @@ class InventarioPactoTest {
                 .willRespondWith()
                 .status(200)
                 .headers(Map.of("Content-Type", "application/json"))
-                .body(new PactDslJsonBody().stringType("elementoId", ELEMENTO))
+                // Sin cuerpo esperado a proposito — R11.4.
+                //
+                // Este pacto pedia `{"elementoId": ...}`, y el proveedor
+                // devuelve `ElementoInventario`, cuyo primer campo se llama
+                // `id` (inventario.yaml 1.1.1 lo declara asi, y el codigo
+                // coincide con el contrato). Era el CONSUMIDOR el que estaba
+                // equivocado, no el proveedor.
+                //
+                // No se corrige a `id` sino que se retira: `InventarioClientHttp`
+                // no lee el cuerpo de esta respuesta, solo mira el codigo. Un
+                // pacto que exige una forma que nadie usa ata las manos del
+                // proveedor sin proteger a nadie.
                 .toPact();
     }
 

@@ -109,7 +109,7 @@ services:
       # pruebas, no de ningun entorno real.
       # e2e-banco: credencial con la que sembrar.sh acredita el saldo inicial en
       # ms-finanzas, que desde #455 solo atiende a servicios (ROLE_SERVICIO).
-      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion;torneos=e2e-secreto-de-torneos
+      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion;torneos=e2e-secreto-de-torneos;comentarios=e2e-secreto-de-comentarios
     depends_on:
       e2e-identidad-db: { condition: service_healthy }
     healthcheck:
@@ -155,7 +155,15 @@ services:
       SPRING_DATA_MONGODB_URI: mongodb://e2e-contenido-mongo:27017/productos
       # Productos exige JWT en sus rutas de escritura y valida contra este
       # JWKS. Las de lectura, que son las que usa inventario, van abiertas.
-      KEYCLOAK_JWK_SET_URI: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      #
+      # R9.7 — el emisor es ms-identidad y la variable que lo reparte es
+      # IDENTIDAD_JWKS_URL, no KEYCLOAK_JWK_SET_URI (esta ultima el CD no la
+      # pasa, y por eso en AWS ganaba siempre el jwks-dev del compose).
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      # A proposito ROTA: si alguien revierte la precedencia de R9.7 y este
+      # servicio vuelve a preferir KEYCLOAK_JWK_SET_URI, aqui no hay ningun
+      # JWKS que servir y el banco se pone rojo en vez de pasar por suerte.
+      KEYCLOAK_JWK_SET_URI: http://emisor-que-no-existe:9/jwks
     depends_on:
       e2e-contenido-mongo: { condition: service_healthy }
     healthcheck:
@@ -177,7 +185,17 @@ services:
       # dos no responden, la verificacion de heroe sale 503.
       HEROES_BASE_URL: http://srv-heroes:8080
       PRODUCTOS_BASE_URL: http://srv-productos:8080
-      KEYCLOAK_JWK_SET_URI: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      # R9.7 — inventario valida DOS cosas contra este emisor: el token del
+      # jugador que llega por el borde, y el token de SERVICIO con el que
+      # salas-partidas le pide la verificacion de heroe (HU-SAL-003) y
+      # ms-subastas sus operaciones internas (HU-INV-010). Los firma
+      # ms-identidad; la variable que reparte su JWKS es IDENTIDAD_JWKS_URL.
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      # A proposito ROTA, igual que en srv-productos: si se revierte la
+      # precedencia de R9.7, inventario validaria contra un JWKS inexistente y
+      # todo el S2S de salas-partidas -> inventario caeria en 401. El banco lo
+      # ve en sala-de-batalla.e2e.spec.js, no seis semanas despues en AWS.
+      KEYCLOAK_JWK_SET_URI: http://emisor-que-no-existe:9/jwks
     depends_on:
       e2e-contenido-mongo: { condition: service_healthy }
       srv-heroes: { condition: service_healthy }
@@ -373,9 +391,21 @@ services:
       IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
       LISTA_NEGRA_VERIFICAR_URL: http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar
       SANCIONES_URL: http://srv-moderacion-sanciones:8086/api/v1
+      # R10.1 — el aviso al autor cuando se resuelve la moderacion de su
+      # comentario (RF-COM-008). Con la credencial de ADR-005, porque
+      # /internal/notifications exige ROLE_SERVICIO. Sin esto el E2E veria
+      # autorNotificado=false y estaria dando por buena la mitad del flujo.
+      NOTIFICACIONES_URL: http://srv-notificaciones:8085/api/v1
+      DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
+      DIRECTORIO_ACTIVO_CLIENT_ID: comentarios
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-comentarios
+      # AUDITORIA_URL se deja sin poner a proposito: ms-cumplimiento no esta
+      # en este banco. El asiento queda igual en comentario_moderacion, que es
+      # el rastro que exige la ficha, y el E2E lo comprueba por el historial.
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
       srv-moderacion-sanciones: { condition: service_healthy }
+      srv-notificaciones: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8081/actuator/health || exit 1"]

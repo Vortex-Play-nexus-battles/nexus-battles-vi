@@ -88,7 +88,7 @@ export function inicializar() {
     cabecera.dataset.cabeceraApp = '';
     raiz.appendChild(cabecera);
   }
-  montarCabecera(cabecera, { seccionActiva: 'subasta' });
+  montarCabecera(cabecera, { vista: 'subastas', seccionActiva: 'subasta' });
 
   // El titulo y «Publicar subasta» iban sueltos, uno debajo del otro, con el
   // boton primario flotando a la izquierda como si fuera un parrafo mas. El

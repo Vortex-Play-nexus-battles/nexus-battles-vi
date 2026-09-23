@@ -1,7 +1,7 @@
 package com.nexusbattles.plataforma.salaspartidas.aplicacion;
 
-import com.nexusbattles.plataforma.salaspartidas.chat.SancionesDelJugador;
-import com.nexusbattles.plataforma.salaspartidas.chat.SancionesNoDisponibles;
+import com.nexusbattles.plataforma.salaspartidas.sanciones.SancionesDelJugador;
+import com.nexusbattles.plataforma.salaspartidas.sanciones.SancionesNoDisponibles;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -20,8 +20,14 @@ public class SancionesEnMemoria implements SancionesDelJugador {
         return this;
     }
 
+    /** El servicio de sanciones no responde: nadie puede dar por hecho que no hay sancion. */
+    public SancionesEnMemoria caido() {
+        caido = true;
+        return this;
+    }
+
     @Override
-    public boolean estaSilenciado(UUID idJugador) {
+    public boolean tieneSancionActiva(UUID idJugador) {
         if (caido) {
             throw new SancionesNoDisponibles();
         }

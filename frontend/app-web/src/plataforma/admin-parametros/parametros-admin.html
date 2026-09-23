@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Parametros del sistema · Nexus Battles VI</title>
+    <title>Parámetros del sistema · Nexus Battles VI</title>
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
@@ -11,28 +11,34 @@
   <body>
     <div data-cabecera-app></div>
 
-    <main class="pagina pila" data-vista="parametros-admin">
-      <h1>Parametros del sistema</h1>
+    <main class="pagina consola pila" data-vista="parametros-admin">
+      <h1>Parámetros del sistema</h1>
+      <!-- RF-ADM-001: configuración operativa con validación, versionado y
+           auditoría. La trazabilidad va aquí, no en pantalla. -->
       <p class="t-meta">
-        Configuracion operativa con validacion, versionado y auditoria (RF-ADM-001). Cada cambio
-        lleva motivo y puede programarse con fecha de vigencia. Los valores fijados por el Project
-        Charter aparecen bloqueados. Un parametro «sin definir» es una decision que el Product Owner
-        no ha tomado: el servicio que lo consume aplica su comportamiento por omision.
+        Los valores que gobiernan el juego, en caliente. Cada cambio lleva motivo, queda registrado
+        y puede programarse con fecha de vigencia. Los parámetros bloqueados no se pueden tocar
+        desde aquí. Un parámetro «sin definir» todavía no se ha decidido: mientras tanto, el
+        servicio que lo consume aplica su comportamiento por omisión.
       </p>
 
-      <div class="aviso" data-zona="aviso" role="status" hidden></div>
+      <div data-zona="aviso" hidden></div>
 
       <section class="pila pila--compacta" data-zona="catalogo"></section>
     </main>
 
     <script type="module">
-      import { montarCabecera, exigirSesion, leerSesion } from '../../comun/cabecera-app.js';
+      import { montarCabecera, leerSesion } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
       import { montarParametros } from './parametros.js';
 
-      if (!exigirSesion()) {
+      if (!exigirAcceso('parametros-admin')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'cuenta' });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'parametros-admin',
+        seccionActiva: 'parametros',
+      });
       montarParametros(document, { rol: leerSesion().rol });
     </script>
   </body>

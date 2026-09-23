@@ -24,13 +24,20 @@
         <h1 data-zona="titulo">Chat</h1>
         <p class="t-cuerpo">
           Lo que escribes pasa por el filtro de contenido antes de salir. El historial queda para
-          quien entra despues.
+          quien entra después.
           <span class="conexion conexion--reconectando" data-zona="conexion">Conectando</span>
         </p>
       </div>
 
-      <section class="tarjeta pila" aria-label="Conversacion">
+      <section class="tarjeta pila" aria-label="Conversación">
         <ol class="pila pila--compacta" data-zona="mensajes" aria-live="polite"></ol>
+        <!--
+          Sin esto la tarjeta salia vacia: un rectangulo blanco sin nada dentro
+          encima del formulario. Un canal en silencio es un estado del producto
+          y se cuenta como tal; lo pinta `chat.js` y desaparece con el primer
+          mensaje.
+        -->
+        <div data-zona="sin-mensajes"></div>
       </section>
 
       <form id="formulario-chat" class="tarjeta pila" novalidate>
@@ -51,10 +58,10 @@
 
         <!-- CA-02: compartir un logro de mision. Opcional, plegado por defecto. -->
         <details class="pila pila--compacta">
-          <summary class="t-etiqueta">Compartir un logro de mision</summary>
+          <summary class="t-etiqueta">Compartir un logro de misión</summary>
           <div class="fila">
             <div class="campo">
-              <label class="campo__etiqueta" for="logroMision">Mision</label>
+              <label class="campo__etiqueta" for="logroMision">Misión</label>
               <input class="campo__control" id="logroMision" name="logroMision" type="text" />
             </div>
             <div class="campo">
@@ -64,7 +71,11 @@
           </div>
         </details>
 
-        <button class="boton boton--primario" type="submit">Enviar</button>
+        <!-- `.fila--acciones` para que el boton mida lo que mide su texto: suelto
+             dentro de la `.pila` se estiraba a lo ancho de toda la tarjeta. -->
+        <div class="fila fila--acciones">
+          <button class="boton boton--primario" type="submit">Enviar</button>
+        </div>
       </form>
     </main>
 
@@ -77,14 +88,18 @@
     <script type="module">
       import { montarAsistente } from '../../comun/ui/asistente.js';
       import { montarChat, canalDesdeUrl, CLAVE_TOKEN } from './chat.js';
-      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+      import { montarCabecera } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
 
       // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
-      if (!exigirSesion()) {
+      if (!exigirAcceso('chat')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
       // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'jugar' });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'chat',
+        seccionActiva: 'jugar',
+      });
 
       const canal = canalDesdeUrl(window.location.search);
       document.querySelector('[data-zona="titulo"]').textContent = canal.idSala

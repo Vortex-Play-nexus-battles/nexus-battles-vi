@@ -52,6 +52,9 @@ class IngresarASalaTest {
     /** Inventario que deja pasar. La puerta en si se prueba mas abajo. */
     private InventarioEnMemoria inventario = InventarioEnMemoria.conHeroe();
 
+    /** Sin sanciones por omision: cada prueba que quiera una la anade. */
+    private final SancionesEnMemoria sanciones = new SancionesEnMemoria();
+
     /** Un identificador cualquiera, con el apodo que el inventario necesita. */
     private static JugadorAutenticado como(UUID id) {
         return new JugadorAutenticado(id, "jugador-" + id.toString().substring(0, 8));
@@ -61,7 +64,7 @@ class IngresarASalaTest {
     void preparar() {
         repositorio = new RepositorioDeSalasEnMemoria();
         canal = new CanalDeSalaEspia();
-        ingresarASala = new IngresarASala(repositorio, canal, inventario, new CreditosEnMemoria());
+        ingresarASala = new IngresarASala(repositorio, canal, inventario, new CreditosEnMemoria(), sanciones);
     }
 
     private Sala salaAbierta() {
@@ -250,7 +253,7 @@ class IngresarASalaTest {
     @DisplayName("si otro ingreso se adelanto, vuelve a leer y entra si todavia cabe")
     void reintentaTrasUnaEscrituraAdelantada() {
         RepositorioQueSeAdelanta almacen = new RepositorioQueSeAdelanta(1);
-        ingresarASala = new IngresarASala(almacen, canal, inventario, new CreditosEnMemoria());
+        ingresarASala = new IngresarASala(almacen, canal, inventario, new CreditosEnMemoria(), sanciones);
         Sala sala = Sala.crear(
                 new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null), ANFITRION);
         // La semilla es una escritura «de fuera»: no debe consumir el fallo
@@ -270,7 +273,7 @@ class IngresarASalaTest {
     @DisplayName("si otro ocupo el ultimo cupo en medio, el segundo recibe el rechazo de sala llena y no se anuncia")
     void elPerdedorDeLaCarreraRecibeSalaLlena() {
         RepositorioQueSeAdelanta almacen = new RepositorioQueSeAdelanta(1);
-        ingresarASala = new IngresarASala(almacen, canal, inventario, new CreditosEnMemoria());
+        ingresarASala = new IngresarASala(almacen, canal, inventario, new CreditosEnMemoria(), sanciones);
         Sala sala = Sala.crear(
                 new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, false, null), ANFITRION);
         // La semilla es una escritura «de fuera»: no debe consumir el fallo
@@ -303,7 +306,7 @@ class IngresarASalaTest {
     @DisplayName("si la sala no deja de cambiar, tras los intentos previstos se rinde con un 409 y sin anunciar")
     void seRindeTrasLosIntentosPrevistos() {
         RepositorioQueSeAdelanta almacen = new RepositorioQueSeAdelanta(Integer.MAX_VALUE);
-        ingresarASala = new IngresarASala(almacen, canal, inventario, new CreditosEnMemoria());
+        ingresarASala = new IngresarASala(almacen, canal, inventario, new CreditosEnMemoria(), sanciones);
         Sala sala = Sala.crear(
                 new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null), ANFITRION);
         // La semilla es una escritura «de fuera»: no debe consumir el fallo
@@ -401,7 +404,7 @@ class IngresarASalaTest {
         @BeforeEach
         void conLibro() {
             creditos = new CreditosEnMemoria().conSaldo(VISITANTE, 500);
-            ingresarASala = new IngresarASala(repositorio, canal, inventario, creditos);
+            ingresarASala = new IngresarASala(repositorio, canal, inventario, creditos, sanciones);
         }
 
         private Sala salaConApuesta() {
@@ -525,7 +528,7 @@ class IngresarASalaTest {
         void elMismoIngresoNoReservaDosVeces() {
             Sala sala = salaConApuesta();
             RepositorioRotoAlGuardar roto = new RepositorioRotoAlGuardar(repositorio);
-            IngresarASala contraElRoto = new IngresarASala(roto, canal, inventario, creditos);
+            IngresarASala contraElRoto = new IngresarASala(roto, canal, inventario, creditos, sanciones);
             creditos.fallaAlLiberar = true; // la compensacion tampoco puede: la reserva queda viva
 
             assertThrows(IllegalStateException.class, () -> contraElRoto.ejecutar(sala.id(), como(VISITANTE)));

@@ -46,13 +46,13 @@ const raizRepo = new URL('../../../../', import.meta.url);
  * @type {Record<string, string>}
  */
 const PENDIENTES = Object.freeze({
-  // Grupo 2 — Contenido. No se tocan sin su dueño.
-  'contenido/productos/productos.js': 'grupo-2',
-
   // Grupo 4 — Cuentas, comercio y subastas. No se tocan sin su dueño.
   'cuentas/auditoria.js': 'grupo-4',
-  'cuentas/historial-transacciones.js': 'grupo-4',
-  'cuentas/mis-cofres.js': 'grupo-4',
+  // UX-R3.11 — `historial-transacciones.js` y `mis-cofres.js` salen de la lista:
+  // sus dos `innerHTML = ''` pasaron a `replaceChildren()` al reescribir sus
+  // estados de vacio y de fallo. El trinquete lo exigio en cuanto se arreglaron,
+  // que es exactamente para lo que esta: una lista de pendientes que no
+  // adelgaza no es una lista de pendientes.
   'cuentas/publicar-subasta.js': 'grupo-4, ademas protegido por HU-SUB-001',
   'cuentas/pujas.js': 'grupo-4',
   'cuentas/registro.js': 'grupo-4',
@@ -70,7 +70,7 @@ function modulosDeVista() {
 }
 
 describe('el marcado se construye con nodos, no con plantillas', () => {
-  test('ningun modulo asigna innerHTML', () => {
+  test('ningún modulo asigna innerHTML', () => {
     const encontrados = [];
 
     for (const ruta of modulosDeVista()) {

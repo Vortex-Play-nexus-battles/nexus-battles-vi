@@ -24,7 +24,7 @@ describe('montarAsistente()', () => {
     expect(document.body.contains(boton)).toBe(true);
   });
 
-  test('reutiliza el boton que la vista ya traiga en su HTML, sin duplicarlo', () => {
+  test('reutiliza el botón que la vista ya traiga en su HTML, sin duplicarlo', () => {
     document.body.innerHTML =
       '<button class="chatbot-flotante" type="button" aria-label="Abrir el asistente">IA</button>';
 

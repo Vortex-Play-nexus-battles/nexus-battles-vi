@@ -94,7 +94,7 @@ body {
   border: 1px solid var(--borde);
   border-radius: 8px;
   padding: 24px;
-  box-shadow: 0 2px 8px rgba(17, 23, 38, 0.05);
+  box-shadow: var(--sombra-1);
 }
 
 .resumen-titular {
@@ -106,7 +106,7 @@ body {
 
 .resumen-saldo-total {
   text-align: right;
-  background: #f4f6fb;
+  background: var(--superficie-2);
   border: 1px solid var(--borde);
   padding: 10px 16px;
   border-radius: 6px;
@@ -126,7 +126,7 @@ body {
 
 .barra-distribucion {
   height: 12px;
-  background: #e2e7f0;
+  background: var(--borde-tenue);
   border-radius: 6px;
   display: flex;
   overflow: hidden;
@@ -156,10 +156,10 @@ body {
   gap: 8px;
   font-size: 13px;
   color: var(--texto-2);
-  background: #f8fafc;
+  background: var(--superficie-2);
   padding: 6px 12px;
   border-radius: 4px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--borde-tenue);
 }
 
 .chip-info.alerta-superada {
@@ -213,7 +213,7 @@ body {
 
 .tarjeta-subasta:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(17, 23, 38, 0.1);
+  box-shadow: var(--sombra-2);
   border-color: var(--borde-int);
 }
 
@@ -223,7 +223,7 @@ body {
 
 .tarjeta-subasta.tarjeta-superada {
   border-left: 5px solid var(--error);
-  background: #fffdfd;
+  background: color-mix(in srgb, var(--error) 3%, var(--superficie));
 }
 
 .tarjeta-subasta.urgente {
@@ -266,7 +266,7 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   padding: 12px;
-  background: #f8fafc;
+  background: var(--superficie-2);
   border-radius: 6px;
   margin-bottom: 16px;
   gap: 8px;
@@ -339,12 +339,12 @@ body {
 }
 
 .badge-neutral {
-  background: #e7eaf0;
+  background: var(--rareza-comun-insignia);
   color: var(--texto-2);
 }
 
 .badge-comun {
-  background: #e7eaf0;
+  background: var(--rareza-comun-insignia);
   color: var(--texto-2);
 }
 
@@ -354,12 +354,12 @@ body {
 }
 
 .badge-epica {
-  background: #ede5fa;
+  background: var(--rareza-epica-insignia);
   color: var(--acento-relleno);
 }
 
 .badge-legendaria {
-  background: #fbf0de;
+  background: var(--rareza-legendaria-insignia);
   color: var(--advertencia);
 }
 
@@ -381,36 +381,36 @@ body {
 
 .btn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(34, 68, 191, 0.35);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primaria) 35%, transparent);
 }
 
 .btn-primario {
   background: var(--primaria-relleno);
-  color: #ffffff;
+  color: var(--texto-sobre-color);
 }
 
 .btn-primario:hover:not(:disabled) {
-  background: #173294;
+  background: color-mix(in srgb, var(--primaria-relleno) 85%, var(--cromo));
 }
 
 .btn-contorno {
-  background: #ffffff;
+  background: var(--superficie);
   border-color: var(--borde-int);
   color: var(--primaria);
 }
 
 .btn-contorno:hover:not(:disabled) {
-  background: #f4f6fb;
+  background: var(--superficie-2);
   border-color: var(--primaria);
 }
 
 .btn-acento {
   background: var(--acento-relleno);
-  color: #ffffff;
+  color: var(--texto-sobre-color);
 }
 
 .btn-acento:hover:not(:disabled) {
-  background: #4a1e94;
+  background: color-mix(in srgb, var(--acento-relleno) 85%, var(--cromo));
 }
 
 .btn-texto {
@@ -465,7 +465,7 @@ body {
   border: 1px solid var(--borde);
   border-radius: 8px;
   padding: 24px;
-  box-shadow: 0 2px 8px rgba(17, 23, 38, 0.05);
+  box-shadow: var(--sombra-1);
 }
 
 .panel-historial {
@@ -511,7 +511,7 @@ body {
   padding: 8px 14px;
   border-radius: 6px;
   border: 1px solid var(--borde);
-  background: #ffffff;
+  background: var(--superficie);
   cursor: pointer;
   font-size: 13px;
   color: var(--texto);
@@ -524,7 +524,7 @@ body {
 
 .btn-heroe-chip.heroe-elegido {
   border-color: var(--primaria);
-  background: #dfeef8;
+  background: var(--info-insignia);
   color: var(--info);
   font-weight: 600;
 }
@@ -544,12 +544,12 @@ body {
 .tabla-comparacion th,
 .tabla-comparacion td {
   padding: 10px 14px;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--borde-tenue);
   text-align: left;
 }
 
 .tabla-comparacion th {
-  background: #f8fafc;
+  background: var(--superficie-2);
   font-weight: 600;
   color: var(--texto-2);
 }
@@ -566,7 +566,7 @@ body {
   grid-template-columns: 1.2fr 1fr 1fr 1fr;
   padding: 8px 12px;
   font-size: 13px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--borde-tenue);
 }
 
 .item-historial:last-child {
@@ -574,7 +574,7 @@ body {
 }
 
 .item-historial.historial-propio {
-  background: #f6f9fe;
+  background: color-mix(in srgb, var(--primaria) 4%, var(--superficie));
 }
 
 .postor-tu {
@@ -590,7 +590,7 @@ body {
 
 .panel-puja.panel-urgente {
   border-color: var(--error);
-  box-shadow: 0 0 12px rgba(184, 26, 26, 0.2);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--error) 20%, transparent);
 }
 
 .cabecera-panel-puja {
@@ -653,12 +653,12 @@ body {
 .input-estandar:focus {
   outline: none;
   border-color: var(--primaria);
-  box-shadow: 0 0 0 3px rgba(34, 68, 191, 0.2);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primaria) 20%, transparent);
 }
 
 .bloque-compra-inmediata {
-  background: #fbf8ff;
-  border: 1px solid #e4d7f5;
+  background: color-mix(in srgb, var(--acento-relleno) 4%, var(--superficie));
+  border: 1px solid color-mix(in srgb, var(--acento-relleno) 6%, var(--rareza-epica-insignia));
   border-radius: 6px;
   padding: 14px;
 }
@@ -677,7 +677,7 @@ body {
 }
 
 .bloque-automatica {
-  background: #f8fafc;
+  background: var(--superficie-2);
   border: 1px solid var(--borde);
   border-radius: 6px;
   padding: 14px;
@@ -687,7 +687,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: #ffffff;
+  background: var(--superficie);
   border: 1px solid var(--borde);
   padding: 8px 12px;
   border-radius: 4px;
@@ -700,6 +700,14 @@ body {
   border-radius: 6px;
   font-size: 13px;
   margin-bottom: 16px;
+}
+
+/* UX-R4.2 — El icono que abre una alerta va dentro de un `<strong>`, que no
+   es una caja flexible: sin esto el dibujo se apoya en la linea base y queda
+   medio renglon por debajo del texto que encabeza. */
+.alerta strong .icono {
+  vertical-align: -0.15em;
+  margin-right: 2px;
 }
 
 .alerta-advertencia {
@@ -715,7 +723,7 @@ body {
 }
 
 .alerta-exito-cierre {
-  background: #f4f0fb;
+  background: color-mix(in srgb, var(--acento-relleno) 8%, var(--superficie));
   border: 2px solid var(--acento-relleno);
   color: var(--acento-relleno);
 }
@@ -745,7 +753,7 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(28, 35, 64, 0.65);
+  background: color-mix(in srgb, var(--cromo) 65%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -758,7 +766,7 @@ body {
   border-radius: 8px;
   max-width: 480px;
   width: 90%;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--sombra-4);
 }
 
 .modal-acciones {
@@ -780,7 +788,7 @@ body {
 .spinner {
   width: 40px;
   height: 40px;
-  border: 4px solid #e2e8f0;
+  border: 4px solid var(--borde-tenue);
   border-top-color: var(--primaria);
   border-radius: 50%;
   animation: girar 800ms linear infinite;
@@ -826,7 +834,7 @@ body {
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.75);
+  color: color-mix(in srgb, var(--texto-sobre-color) 75%, transparent);
   font-family: 'Rajdhani', sans-serif;
   font-size: 16px;
   font-weight: 600;
@@ -835,15 +843,15 @@ body {
 }
 
 .tab-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
+  background: color-mix(in srgb, var(--texto-sobre-color) 10%, transparent);
+  color: var(--texto-sobre-color);
 }
 
 .tab-btn--activo {
   background: var(--primaria) !important;
-  color: #ffffff !important;
-  border-color: rgba(255, 255, 255, 0.25) !important;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  color: var(--texto-sobre-color) !important;
+  border-color: color-mix(in srgb, var(--texto-sobre-color) 25%, transparent) !important;
+  box-shadow: var(--sombra-1);
 }
 
 .badge-tab-aviso {
@@ -852,7 +860,7 @@ body {
   padding: 0 6px;
   border-radius: 999px;
   background: var(--error);
-  color: #ffffff;
+  color: var(--texto-sobre-color);
   font-family: 'Inter', sans-serif;
   font-size: 12px;
   font-weight: 700;
@@ -866,7 +874,7 @@ body {
   padding: 0 6px;
   border-radius: 999px;
   background: var(--cromo-elevado);
-  color: rgba(255, 255, 255, 0.9);
+  color: color-mix(in srgb, var(--texto-sobre-color) 90%, transparent);
   font-family: 'Inter', sans-serif;
   font-size: 12px;
   font-weight: 600;
@@ -881,7 +889,7 @@ body {
   background: var(--superficie);
   border: 1px solid var(--borde);
   border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(17, 23, 38, 0.08);
+  box-shadow: var(--sombra-1);
   padding: 24px;
   margin-bottom: 24px;
 }
@@ -896,7 +904,7 @@ body {
 .tarjeta-credito {
   padding: 16px;
   border-radius: 8px;
-  border: 1px solid rgba(17, 23, 38, 0.06);
+  border: 1px solid color-mix(in srgb, var(--texto) 6%, transparent);
 }
 
 .tarjeta-credito-total {
@@ -945,7 +953,7 @@ body {
   display: flex;
   border-radius: 5px;
   overflow: hidden;
-  background: #cbd4e6;
+  background: var(--pista);
   margin-bottom: 12px;
 }
 
@@ -979,8 +987,8 @@ body {
 /* Alerta sobre-compromiso */
 .alerta-sobrecompromiso {
   margin-top: 16px;
-  background: #fbe5e5;
-  border: 1px solid #e8bdbd;
+  background: var(--error-insignia);
+  border: 1px solid color-mix(in srgb, var(--error) 22%, var(--error-insignia));
   border-radius: 8px;
   padding: 14px 16px;
   display: flex;
@@ -989,9 +997,14 @@ body {
 }
 
 .sobrecompromiso-icono {
-  font-size: 20px;
+  display: flex;
   flex-shrink: 0;
-  line-height: 1.2;
+  color: var(--error);
+}
+
+.sobrecompromiso-icono .icono {
+  width: var(--icono-chico);
+  height: var(--icono-chico);
 }
 
 .sobrecompromiso-titulo {
@@ -1052,7 +1065,7 @@ body {
 .tope-barra-fondo {
   height: 6px;
   border-radius: 6px;
-  background: #cbd4e6;
+  background: var(--pista);
   overflow: hidden;
 }
 
@@ -1085,7 +1098,7 @@ body {
   height: 24px;
   padding: 0 10px;
   border-radius: 999px;
-  background: #e7eaf0;
+  background: var(--rareza-comun-insignia);
   color: var(--texto-3);
   font-size: 13px;
   font-weight: 600;
@@ -1106,7 +1119,7 @@ body {
   border: 1px solid var(--borde);
   border-radius: 8px;
   padding: 14px 18px;
-  box-shadow: 0 1px 2px rgba(17, 23, 38, 0.08);
+  box-shadow: var(--sombra-1);
   transition:
     transform 120ms ease,
     box-shadow 120ms ease;
@@ -1115,7 +1128,7 @@ body {
 
 .fila-mi-subasta:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(17, 23, 38, 0.12);
+  box-shadow: var(--sombra-2);
 }
 
 .borde-ganando {
@@ -1124,21 +1137,69 @@ body {
 
 .borde-superada {
   border-left: 5px solid var(--error) !important;
-  background: #fffdfd;
+  background: color-mix(in srgb, var(--error) 3%, var(--superficie));
 }
 
 .borde-sin-puja {
   border-left: 5px solid var(--borde) !important;
 }
 
-.fila-icono-rareza {
-  width: 56px;
-  height: 56px;
+/* UX-R4.2 — La ficha de rareza.
+   Eran dos reglas (`.fila-icono-rareza` y `.evento-icono`) que solo se
+   diferenciaban en el tamano, y el color no estaba aqui: llegaba como `style`
+   en linea desde JavaScript, con el hexadecimal escrito a mano. Eso dejaba la
+   ficha fuera de `prefers-contrast: more`, porque un estilo en linea no lo oye
+   ningun `@media`. Ahora el color es del token y el icono lo hereda. */
+.ficha-rareza {
+  width: 48px;
+  height: 48px;
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  flex-shrink: 0;
+  border: 1px solid;
+}
+
+.ficha-rareza .icono {
+  width: 22px;
+  height: 22px;
+}
+
+/* La fila de «Mis subastas» le da mas sitio: la ficha es lo primero que se
+   mira al repasar en que estas metido. */
+.ficha-rareza--grande {
+  width: 56px;
+  height: 56px;
+}
+
+.ficha-rareza--grande .icono {
+  width: 24px;
+  height: 24px;
+}
+
+.ficha-rareza--comun {
+  background: var(--rareza-comun-insignia);
+  border-color: var(--rareza-comun);
+  color: var(--rareza-comun);
+}
+
+.ficha-rareza--rara {
+  background: var(--rareza-rara-insignia);
+  border-color: var(--rareza-rara);
+  color: var(--rareza-rara);
+}
+
+.ficha-rareza--epica {
+  background: var(--rareza-epica-insignia);
+  border-color: var(--rareza-epica);
+  color: var(--rareza-epica);
+}
+
+.ficha-rareza--legendaria {
+  background: var(--rareza-legendaria-insignia);
+  border-color: var(--rareza-legendaria);
+  color: var(--rareza-legendaria);
 }
 
 .fila-nombre {
@@ -1163,7 +1224,7 @@ body {
   height: 20px;
   padding: 0 8px;
   border-radius: 999px;
-  background: #dfeef8;
+  background: var(--info-insignia);
   color: var(--info);
   font-size: 12px;
   font-weight: 600;
@@ -1224,7 +1285,7 @@ body {
   background: var(--superficie);
   border: 1px solid var(--borde);
   border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(17, 23, 38, 0.16);
+  box-shadow: var(--sombra-3);
   padding: 32px;
 }
 
@@ -1321,16 +1382,6 @@ body {
   border-left: 4px solid var(--advertencia);
 }
 
-.evento-icono {
-  width: 48px;
-  height: 48px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 22px;
-}
-
 .evento-titulo {
   font-family: 'Rajdhani', sans-serif;
   font-size: 18px;
@@ -1355,8 +1406,8 @@ body {
 
 .caja-consejo-tactico {
   padding: 14px 18px;
-  background: #dfeef8;
-  border: 1px solid #b5d5ea;
+  background: var(--info-insignia);
+  border: 1px solid color-mix(in srgb, var(--info) 20%, var(--info-insignia));
   border-radius: 8px;
   display: flex;
   gap: 12px;
@@ -1365,8 +1416,14 @@ body {
 }
 
 .consejo-icono {
-  font-size: 20px;
-  line-height: 1.2;
+  display: flex;
+  flex-shrink: 0;
+  color: var(--rareza-legendaria);
+}
+
+.consejo-icono .icono {
+  width: var(--icono-chico);
+  height: var(--icono-chico);
 }
 
 .consejo-contenido {
@@ -1400,7 +1457,7 @@ body {
   border: 1px solid var(--borde);
   border-left: 5px solid var(--error);
   border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(17, 23, 38, 0.18);
+  box-shadow: var(--sombra-3);
   padding: 16px;
   animation: entrarToast 260ms cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -1430,7 +1487,14 @@ body {
 }
 
 .toast-icono {
-  font-size: 18px;
+  display: flex;
+  flex-shrink: 0;
+  color: var(--error);
+}
+
+.toast-icono .icono {
+  width: var(--icono-chico);
+  height: var(--icono-chico);
 }
 
 .toast-titulo {
@@ -1497,4 +1561,78 @@ body {
   .fila-evento-cierre {
     grid-template-columns: 1fr;
   }
+}
+
+/* =======================================================================
+   El cierre de subasta — UX-R4.2b
+   -----------------------------------------------------------------------
+   Ganar una subasta es el momento que mas importa de esta pantalla, y era el
+   unico bloque que no tenia estilo: llegaba con once atributos `style` en
+   linea, con los hexadecimales escritos a mano —`#DFF1E6`, `#0B6B31`,
+   `#FFFFFF`, `#9FABC9`— y el reparto en flex tambien. Uno de ellos pedia
+   `var(--texto-1)`, que no existe en el kit: ese parrafo llevaba desde el
+   principio con el color heredado y nadie lo noto, porque un token inexistente
+   no falla, simplemente no hace nada.
+   ======================================================================= */
+
+.cierre-victoria {
+  margin-bottom: var(--e-5);
+  padding: var(--e-5);
+  border: 1px solid var(--exito);
+  border-radius: 8px;
+  background: var(--exito-insignia);
+  text-align: center;
+}
+
+.cierre-victoria__titulo {
+  margin-bottom: var(--e-2);
+  color: var(--exito);
+}
+
+.cierre-victoria__texto {
+  margin-bottom: var(--e-4);
+  font-size: 16px;
+  color: var(--texto);
+}
+
+.cierre-victoria__cifras {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--e-4);
+  margin-bottom: var(--e-4);
+}
+
+/* A 375 px las dos cifras no caben una al lado de la otra: se apilan en vez de
+   estrujarse, que es lo que hacia el flex sin `wrap`. */
+.cierre-victoria__dato {
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  background: var(--superficie);
+}
+
+.cierre-victoria__etiqueta {
+  display: block;
+  font-size: 12px;
+  color: var(--texto-2);
+}
+
+.cierre-victoria__monto {
+  font-size: 20px;
+  color: var(--exito);
+}
+
+.cierre-victoria__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--e-3);
+}
+
+/* Lo retenido en las demas subastas: es un aviso, no un dato neutro. */
+.retenido-en-otras {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--advertencia);
 }

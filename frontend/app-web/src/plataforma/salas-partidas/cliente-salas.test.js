@@ -72,7 +72,7 @@ describe('listarSalas', () => {
     expect(url.searchParams.get('estado')).toBe('ABIERTA');
   });
 
-  test('un filtro vacio no se manda: no es lo mismo que filtrar por cadena vacia', async () => {
+  test('un filtro vacío no se manda: no es lo mismo que filtrar por cadena vacia', async () => {
     const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, { contenido: [] }));
 
     await listarSalas({ modalidad: '', estado: null, pagina: 0 }, { fetchImpl });
@@ -114,7 +114,7 @@ describe('ingresarASala', () => {
       respuesta(403, {
         type: 'https://nexusbattles.local/errores/sala-privada',
         title: 'Esta sala es privada',
-        detail: 'Necesitas un codigo de invitacion.',
+        detail: 'Necesitas un código de invitación.',
         status: 403,
       }),
     );
@@ -126,12 +126,12 @@ describe('ingresarASala', () => {
     expect(error.estado).toBe(403);
   });
 
-  test('un 409 de sala llena tambien llega interpretado', async () => {
+  test('un 409 de sala llena también llega interpretado', async () => {
     const fetchImpl = jest.fn().mockResolvedValue(
       respuesta(409, {
         type: 'https://nexusbattles.local/errores/ingreso-no-permitido',
         title: 'No puedes entrar',
-        detail: 'La sala ya alcanzo su maximo de participantes.',
+        detail: 'La sala ya alcanzo su máximo de participantes.',
         status: 409,
       }),
     );
@@ -139,7 +139,7 @@ describe('ingresarASala', () => {
     const error = await ingresarASala('abc', { fetchImpl }).catch((e) => e);
 
     expect(error.estado).toBe(409);
-    expect(error.detalle).toContain('maximo de participantes');
+    expect(error.detalle).toContain('máximo de participantes');
   });
 });
 
@@ -221,13 +221,13 @@ describe('crearSala', () => {
     expect(error.estado).toBe(400);
   });
 
-  test('traduce los creditos insuficientes conservando el motivo', async () => {
+  test('traduce los créditos insuficientes conservando el motivo', async () => {
     const fetchImpl = jest.fn().mockResolvedValue(
       respuesta(422, {
         type: 'https://nexusbattles.local/errores/creditos-insuficientes',
         title: 'Creditos insuficientes',
         status: 422,
-        detail: 'Tienes 240 creditos y necesitas 400 para crear esta sala.',
+        detail: 'Tienes 240 créditos y necesitas 400 para crear esta sala.',
       }),
     );
 
@@ -239,7 +239,7 @@ describe('crearSala', () => {
     expect(error.esDeFormulario).toBe(false);
   });
 
-  test('el 503 de creditos sin integrar llega con su tipo, para poder distinguirlo', async () => {
+  test('el 503 de créditos sin integrar llega con su tipo, para poder distinguirlo', async () => {
     const fetchImpl = jest.fn().mockResolvedValue(
       respuesta(503, {
         type: 'https://nexusbattles.local/errores/creditos-sin-integrar',
@@ -262,7 +262,7 @@ describe('crearSala', () => {
 
     expect(error).toBeInstanceOf(ErrorDeApi);
     expect(error.estado).toBe(401);
-    expect(error.detalle).toMatch(/iniciar sesion/i);
+    expect(error.detalle).toMatch(/iniciar sesión/i);
   });
 
   test('un error sin cuerpo ni forma conocida sigue diciendo algo', async () => {
@@ -287,15 +287,45 @@ describe('crearSala', () => {
  * eso se veia como «No se pudo crear la sala · El servicio respondio 405», que
  * culpa al servicio de salas de algo que ni siquiera esta levantado.
  */
+/**
+ * UX-R3.4 — el diagnostico y el mensaje son dos cosas distintas.
+ *
+ * Cuando no hay API detras, el cliente lo detecta y lo dice. Hasta ahora lo
+ * decia EN LA PANTALLA: «Estas viendo la vista servida como HTML estatico:
+ * nadie atiende /api/v1/salas. Levanta el servicio de salas, o declara en la
+ * pagina <meta name="nexus-api-base">…». Es el mensaje correcto y va a la
+ * persona equivocada: a quien programa le dice exactamente que hacer; a un
+ * jugador le enseña una etiqueta HTML y le pide que levante un servicio.
+ *
+ * La deteccion no cambia —sigue siendo util, y es la que evita confundir un
+ * servidor estatico con un fallo del servicio—; lo que cambia es a donde va
+ * cada mensaje.
+ */
 describe('sin backend detras', () => {
-  test('un 405 de servidor estatico se nombra por lo que es, no como fallo del servicio', async () => {
+  let avisos;
+
+  beforeEach(() => {
+    avisos = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    avisos.mockRestore();
+  });
+
+  test('un 405 de servidor estatico se diagnostica en consola, no en pantalla', async () => {
     const fetchImpl = jest.fn().mockResolvedValue(respuesta(405, undefined, 'text/html'));
 
     const error = await crearSala(PARAMETROS, { fetchImpl }).catch((e) => e);
 
-    expect(error.titulo).toMatch(/no hay ninguna api/i);
-    expect(error.detalle).toContain('/api/v1/salas');
+    // Lo que lee el jugador: un servicio que no esta, como cualquier otro.
+    expect(error.titulo).toBe('Las batallas no están disponibles');
+    expect(error.detalle).not.toMatch(/<meta|html estatico|levanta el servicio/i);
     expect(error.detalle).not.toMatch(/respondio 405/i);
+
+    // Lo que lee quien puede arreglarlo.
+    const diagnostico = avisos.mock.calls.map((c) => c.join(' ')).join(' ');
+    expect(diagnostico).toContain('/api/v1/salas');
+    expect(diagnostico).toMatch(/nexus-api-base/);
   });
 
   test('el 405 real de http-server llega como text/plain y tambien se reconoce', async () => {
@@ -304,9 +334,9 @@ describe('sin backend detras', () => {
     // justo este caso, que es el que motivo la distincion.
     const fetchImpl = jest.fn().mockResolvedValue(respuesta(405, undefined, 'text/plain'));
 
-    const error = await crearSala(PARAMETROS, { fetchImpl }).catch((e) => e);
+    await crearSala(PARAMETROS, { fetchImpl }).catch((e) => e);
 
-    expect(error.titulo).toMatch(/no hay ninguna api/i);
+    expect(avisos).toHaveBeenCalled();
   });
 
   test('un 405 con problem details es un fallo del servicio, no un servidor estatico', async () => {
@@ -325,26 +355,28 @@ describe('sin backend detras', () => {
     expect(error.titulo).toBe('Metodo no permitido');
   });
 
-  test('el mensaje nombra la URL real de la peticion cuando fetch la trae', async () => {
+  test('el diagnostico nombra la URL real de la petición cuando fetch la trae', async () => {
     const conUrl = {
       ...respuesta(404, undefined, 'text/html'),
       url: 'http://127.0.0.1:4399/api/v1/salas/s1/verificacion-heroe',
     };
     const fetchImpl = jest.fn().mockResolvedValue(conUrl);
 
-    const error = await verificarHeroe('s1', { fetchImpl }).catch((e) => e);
+    await verificarHeroe('s1', { fetchImpl }).catch((e) => e);
 
-    expect(error.detalle).toContain('/api/v1/salas/s1/verificacion-heroe');
+    const diagnostico = avisos.mock.calls.map((c) => c.join(' ')).join(' ');
+    expect(diagnostico).toContain('/api/v1/salas/s1/verificacion-heroe');
   });
 
-  test('un GET que devuelve la pagina HTML del servidor estatico tambien se detecta', async () => {
+  test('un GET que devuelve la página HTML del servidor estatico también se detecta', async () => {
     const fetchImpl = jest
       .fn()
       .mockResolvedValue(respuesta(404, undefined, 'text/html; charset=utf-8'));
 
     const error = await listarSalas({}, { fetchImpl }).catch((e) => e);
 
-    expect(error.titulo).toMatch(/no hay ninguna api/i);
+    expect(avisos).toHaveBeenCalled();
+    expect(error.titulo).toBe('Las batallas no están disponibles');
   });
 
   test('un fallo real del servicio sigue siendo un fallo del servicio', async () => {
@@ -366,7 +398,7 @@ describe('baseDeApi', () => {
     document.head.innerHTML = '';
   });
 
-  test('sin declararla, es el mismo origen: nada de localhost escrito en el codigo', () => {
+  test('sin declararla, es el mismo origen: nada de localhost escrito en el código', () => {
     expect(baseDeApi()).toBe('');
   });
 
@@ -426,12 +458,12 @@ describe('iniciarPartida', () => {
     expect(error.estado).toBe(403);
   });
 
-  test('un 409 de sala que todavia no puede empezar llega interpretado', async () => {
+  test('un 409 de sala que todavía no puede empezar llega interpretado', async () => {
     const fetchImpl = jest.fn().mockResolvedValue(
       respuesta(409, {
         type: 'https://nexusbattles.local/errores/ingreso-no-permitido',
         title: 'No puedes entrar a esta sala',
-        detail: 'La sala necesita al menos un rival o el heroe de la IA.',
+        detail: 'La sala necesita al menos un rival o el héroe de la IA.',
         status: 409,
       }),
     );
@@ -460,7 +492,7 @@ describe('obtenerPartida', () => {
     expect(fetchImpl.mock.calls[0][0]).toBe('/api/v1/partidas/p1');
   });
 
-  test('es una lectura: va sin opciones de peticion', async () => {
+  test('es una lectura: va sin opciones de petición', async () => {
     const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, { id: 'p1' }));
 
     await obtenerPartida('p1', { fetchImpl });
@@ -561,5 +593,41 @@ describe('cancelarSala', () => {
 
     expect(error).toBeInstanceOf(ErrorDeApi);
     expect(error.estado).toBe(403);
+  });
+});
+
+/**
+ * UX-R3.4 — un 404 no siempre significa «esa sala ya no existe».
+ *
+ * El detalle del 404 estaba escrito para UNA sala y se usaba para todo. Sin
+ * backend, quien abria el listado de batallas leia, en la pantalla del
+ * listado, que volviera al listado para ver una sala que nadie habia abierto.
+ * Un mensaje que se contradice con la pantalla en la que está enseña a no
+ * leer los mensajes.
+ */
+describe('§17 — el 404 dice lo que falta, no lo que se supone', () => {
+  test('pidiendo el listado, no habla de una sala que no se pidio', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(404, undefined));
+
+    const error = await listarSalas({}, { fetchImpl }).catch((e) => e);
+
+    expect(error.detalle).not.toMatch(/esa sala|vuelve al listado/i);
+    expect(error.detalle).toMatch(/no está disponible/i);
+  });
+
+  test('pidiendo una sala concreta, sigue diciendo que ya no existe', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(404, undefined));
+
+    const error = await obtenerSala('s-1', { fetchImpl }).catch((e) => e);
+
+    expect(error.detalle).toMatch(/esa sala ya no existe/i);
+  });
+
+  test('ningun mensaje lleva el codigo a la pantalla', async () => {
+    for (const estado of [401, 403, 404, 409, 500]) {
+      const fetchImpl = jest.fn().mockResolvedValue(respuesta(estado, undefined));
+      const error = await listarSalas({}, { fetchImpl }).catch((e) => e);
+      expect(`${error.titulo} ${error.detalle}`).not.toMatch(/\b(401|403|404|409|500|502)\b/);
+    }
   });
 });

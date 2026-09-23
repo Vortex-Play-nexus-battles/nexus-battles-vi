@@ -81,7 +81,11 @@ test.describe('Metricas tecnicas y de moderacion (HU-MET-004 / HU-MET-001)', () 
     const r = await api.get('/api/v1/tecnicas', comoAdmin());
     expect(r.status(), await r.text()).toBe(200);
     const tablero = await r.json();
-    expect(tablero.umbrales).toEqual({ cpu: 0.75, latenciaMs: 500, disponibilidadPorcentaje: 99.95 });
+    expect(tablero.umbrales).toEqual({
+      cpu: 0.75,
+      latenciaMs: 500,
+      disponibilidadPorcentaje: 99.95,
+    });
     const porServicio = Object.fromEntries(tablero.servicios.map((s) => [s.servicio, s]));
     for (const nombre of EN_EL_BANCO) {
       const s = porServicio[nombre];
@@ -96,9 +100,9 @@ test.describe('Metricas tecnicas y de moderacion (HU-MET-004 / HU-MET-001)', () 
       expect(tablero.brechas.some((b) => b.startsWith(`${nombre}:`))).toBe(true);
     }
     // Un servicio caido tambien sale como alerta de disponibilidad, con su nombre.
-    expect(tablero.alertas.filter((a) => a.metrica === 'disponibilidad').map((a) => a.servicio)).toEqual(
-      expect.arrayContaining(FUERA_DEL_BANCO),
-    );
+    expect(
+      tablero.alertas.filter((a) => a.metrica === 'disponibilidad').map((a) => a.servicio),
+    ).toEqual(expect.arrayContaining(FUERA_DEL_BANCO));
   });
 
   test('/tecnicas/informe/texto exporta el tablero redactado (CA-02)', async () => {
@@ -120,7 +124,11 @@ test.describe('Metricas tecnicas y de moderacion (HU-MET-004 / HU-MET-001)', () 
 
     const emitida = await api.post('/api/v1/sanciones', {
       headers: { Authorization: `Bearer ${moderadora.token}`, 'Content-Type': 'application/json' },
-      data: { usuarioId: objetivo.claims.uid, tipo: 'ADVERTENCIA', motivo: 'Para la metrica (E2E)' },
+      data: {
+        usuarioId: objetivo.claims.uid,
+        tipo: 'ADVERTENCIA',
+        motivo: 'Para la metrica (E2E)',
+      },
     });
     expect(emitida.status(), await emitida.text()).toBe(201);
 
@@ -130,7 +138,9 @@ test.describe('Metricas tecnicas y de moderacion (HU-MET-004 / HU-MET-001)', () 
     expect(actual.sanciones.porTipo.ADVERTENCIA).toBe(previo.sanciones.porTipo.ADVERTENCIA + 1);
     expect(actual.sanciones.moderadoresActivos).toBeGreaterThanOrEqual(1);
     const hoy = new Date().toISOString().slice(0, 10);
-    expect(actual.sanciones.porDia.find((d) => d.fecha === hoy)?.emitidas).toBeGreaterThanOrEqual(1);
+    expect(actual.sanciones.porDia.find((d) => d.fecha === hoy)?.emitidas).toBeGreaterThanOrEqual(
+      1,
+    );
 
     const invertido = await api.get(
       '/api/v1/moderacion?desde=2026-10-02T00:00:00Z&hasta=2026-10-01T00:00:00Z',
@@ -178,10 +188,20 @@ test.describe('Metricas tecnicas y de moderacion (HU-MET-004 / HU-MET-001)', () 
     await page.goto(`${BORDE}${VISTA}`);
     const tabla = page.locator('[data-zona="tabla-tecnica"]');
     await expect(tabla).toBeVisible({ timeout: 30000 });
-    await expect(tabla.locator('tr[data-servicio="torneos"]')).not.toHaveAttribute('data-brecha', 'true');
-    await expect(tabla.locator('tr[data-servicio="correo"]')).toHaveAttribute('data-brecha', 'true');
+    await expect(tabla.locator('tr[data-servicio="torneos"]')).not.toHaveAttribute(
+      'data-brecha',
+      'true',
+    );
+    await expect(tabla.locator('tr[data-servicio="correo"]')).toHaveAttribute(
+      'data-brecha',
+      'true',
+    );
     await expect(page.locator('[data-zona="brechas"]')).toContainText('correo');
-    await expect(page.locator('[data-zona="resumen-moderacion"]')).toContainText(/sanciones/, { timeout: 20000 });
-    await expect(page.locator('[data-zona="moderacion"] [data-zona="alertas"]')).toContainText('D-25');
+    await expect(page.locator('[data-zona="resumen-moderacion"]')).toContainText(/sanciones/, {
+      timeout: 20000,
+    });
+    await expect(page.locator('[data-zona="moderacion"] [data-zona="alertas"]')).toContainText(
+      'D-25',
+    );
   });
 });
