@@ -49,7 +49,7 @@ const VARIANTES = {
       typeof v.heroesSinEquipar === 'number'
         ? `Tienes ${v.heroesSinEquipar} héroes sin equipar. Equipa uno y vuelve.`
         : null,
-    accion: 'IR AL INVENTARIO',
+    accion: 'Ir al inventario',
   },
 
   [RESULTADOS.OCUPADO]: {
@@ -65,7 +65,7 @@ const VARIANTES = {
       typeof v.minutosRestantes === 'number'
         ? `La partida en curso termina en unos ${v.minutosRestantes} minutos.`
         : null,
-    accion: 'ELEGIR OTRO HÉROE',
+    accion: 'Elegir otro héroe',
   },
 
   [RESULTADOS.DISPONIBLE]: {
@@ -77,7 +77,7 @@ const VARIANTES = {
       typeof v.creditosRequeridos === 'number'
         ? `Se descontarán ${v.creditosRequeridos} créditos de tu saldo al confirmar.`
         : null,
-    accion: 'ENTRAR A LA SALA',
+    accion: 'Entrar a la sala',
   },
 };
 
