@@ -56,6 +56,13 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  * el contenido se arma en cinco generadores que sí interpolan datos de la
  * subasta. Está anotado, no tapado.
  *
+ * HU-SUB-004 (canal en vivo) — segunda vez que se corren, ahora 41 posiciones:
+ * el ciclo de vida del canal se separó del temporizador (`detenerTemporizador`
+ * y `reconciliarSiNoHayCanal`), y ese código va ARRIBA del renderizado. Se
+ * volvieron a comparar una por una contra `origin/develop`: las cuatro
+ * asignaciones son idénticas carácter a carácter, solo cambió su número de
+ * línea (1270→1311, 1288→1329, 1304→1345, 1344→1385).
+ *
  * R9.6a — las cuatro líneas de `pujas.js` se corrieron 24 posiciones porque el
  * canal STOMP pasó a acreditarse y eso añadió código ARRIBA de ellas. Ninguna
  * asignación cambió: cambió su número de línea. El guardián hizo exactamente
@@ -73,11 +80,11 @@ const REVISADOS = new Map([
 
   ['cuentas/tienda.js:226', 'cadena literal fija del carrito vacío'],
   ['cuentas/tienda.js:236', 'plantilla fija; los datos entran luego por textContent'],
-  ['cuentas/pujas.js:1270', 'plantilla fija del estado de carga'],
-  ['cuentas/pujas.js:1288', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
-  ['cuentas/pujas.js:1304', 'plantilla fija del estado vacío'],
+  ['cuentas/pujas.js:1311', 'plantilla fija del estado de carga'],
+  ['cuentas/pujas.js:1329', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
+  ['cuentas/pujas.js:1345', 'plantilla fija del estado vacío'],
   [
-    'cuentas/pujas.js:1344',
+    'cuentas/pujas.js:1385',
     'DELIBERADO y SANEADO (UX-R2.8c): las 20 interpolaciones con datos del ' +
       'servidor pasan por esc(); pujas.test.js lo comprueba con cargas reales. ' +
       'La estructura (2.297 líneas de plantilla) se mueve en UX-R2.10.',

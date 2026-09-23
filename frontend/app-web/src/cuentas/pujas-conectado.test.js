@@ -695,6 +695,51 @@ describe('canal en vivo (HU-SUB-011 publica, esta pantalla escucha)', () => {
     ctrl.destruir();
   });
 
+  // Las dos pruebas que siguen existen porque el resto de este bloque abre el
+  // canal a mano (`await ctrl.abrirCanalEnVivo()` despues de `iniciar()`), y
+  // eso tapaba el fallo: en produccion nadie lo reabre. `recargar()` termina
+  // llamando a `iniciarTemporizador()`, que llamaba a `destruir()`, que cierra
+  // el canal. Resultado: el canal moria en la recarga del arranque, y el unico
+  // mensaje en vivo que llegaba lo volvia a cerrar al releer. La pantalla
+  // parecia tener tiempo real y no lo tenia.
+  test('el canal sobrevive a la recarga del arranque', async () => {
+    const falso = canalFalso();
+    const { api } = apiQueCuenta([SUBASTA]);
+
+    const ctrl = new ControladorSubastas({
+      contenedor: document.createElement('div'),
+      api,
+      urlCanal: 'ws://x/ws-subastas',
+      conectarCanal: async () => falso.cliente,
+    });
+    await ctrl.iniciar();
+    await new Promise((resolver) => setTimeout(resolver, 0));
+
+    expect(ctrl.canal).toBe(falso.cliente);
+    ctrl.destruir();
+  });
+
+  test('un mensaje en vivo no cierra el canal por el que llego', async () => {
+    const falso = canalFalso();
+    const { api } = apiQueCuenta([SUBASTA]);
+
+    const ctrl = new ControladorSubastas({
+      contenedor: document.createElement('div'),
+      api,
+      urlCanal: 'ws://x/ws-subastas',
+      conectarCanal: async () => falso.cliente,
+    });
+    await ctrl.iniciar();
+    await ctrl.abrirCanalEnVivo();
+
+    ctrl.alLlegarActualizacion({ id: 's1', oferta: 150 });
+    await new Promise((resolver) => setTimeout(resolver, 0));
+
+    expect(falso.cliente.cerrar).not.toHaveBeenCalled();
+    expect(ctrl.canal).toBe(falso.cliente);
+    ctrl.destruir();
+  });
+
   test('destruir cierra el canal', async () => {
     const caja = document.createElement('div');
     const falso = canalFalso();

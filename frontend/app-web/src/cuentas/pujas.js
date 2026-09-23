@@ -666,6 +666,10 @@ export class ControladorSubastas {
       this.mensajeError = fallo?.message || 'No se pudo cargar el listado de subastas.';
     }
     this.iniciarTemporizador();
+    // Si el canal nunca levanto o se cayo (token caducado, reinicio del
+    // servidor), esta es la ocasion de recuperarlo. Es no-op cuando ya hay
+    // canal abierto, asi que no cuesta nada llamarlo en cada recarga.
+    this.abrirCanalEnVivo();
     this.render();
 
     // Si al terminar la recarga estamos en un detalle, hay que traer tambien
@@ -880,15 +884,30 @@ export class ControladorSubastas {
   }
 
   destruir() {
+    this.detenerTemporizador();
+    this.cerrarCanalEnVivo();
+  }
+
+  /**
+   * Para la cuenta atras, y nada mas. Existe aparte de destruir() porque
+   * confundir las dos cosas dejaba el canal en vivo muerto en produccion:
+   * iniciarTemporizador() llamaba a destruir(), destruir() cierra el canal, y
+   * recargar() termina llamando a iniciarTemporizador(). O sea que el canal se
+   * cerraba en la primera recarga -- que es la del arranque -- y el unico
+   * mensaje en vivo que alcanzaba a llegar lo volvia a cerrar al releer. La
+   * pantalla aparentaba tiempo real sin tenerlo, y las pruebas no lo veian
+   * porque abrian el canal a mano despues de iniciar().
+   */
+  detenerTemporizador() {
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
-    this.cerrarCanalEnVivo();
   }
 
   iniciarTemporizador() {
-    this.destruir();
+    this.detenerTemporizador();
+    this.segundosSinCanal = 0;
     this.intervalId = setInterval(() => {
       let cambio = false;
       this.subastas.forEach((sub) => {
@@ -913,7 +932,29 @@ export class ControladorSubastas {
       if (cambio && this.contenedor) {
         this.actualizarTiemposEnDOM();
       }
+      this.reconciliarSiNoHayCanal();
     }, 1000);
+  }
+
+  /**
+   * Degradacion controlada, riesgo #7 del acta: si el canal en vivo no esta
+   * abierto, la pantalla vuelve a preguntarle al servidor cada 5 s en vez de
+   * quedarse congelada con lo que trajo la ultima vez. Con el canal abierto no
+   * pregunta nada, porque el servidor avisa. Esto estaba prometido en un
+   * comentario ("la pantalla sigue con el sondeo de 5 s") y no existia.
+   */
+  reconciliarSiNoHayCanal() {
+    if (!this.api || this.canal) {
+      this.segundosSinCanal = 0;
+      return false;
+    }
+    this.segundosSinCanal = (this.segundosSinCanal || 0) + 1;
+    if (this.segundosSinCanal < 5) {
+      return false;
+    }
+    this.segundosSinCanal = 0;
+    this.recargar();
+    return true;
   }
 
   /**
