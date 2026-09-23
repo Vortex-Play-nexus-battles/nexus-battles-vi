@@ -55,6 +55,15 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  * Las de `pujas.js` son la deuda grande y conocida (2.297 líneas, UX-R2.8c):
  * el contenido se arma en cinco generadores que sí interpolan datos de la
  * subasta. Está anotado, no tapado.
+ *
+ * R9.6a — las cuatro líneas de `pujas.js` se corrieron 24 posiciones porque el
+ * canal STOMP pasó a acreditarse y eso añadió código ARRIBA de ellas. Ninguna
+ * asignación cambió: cambió su número de línea. El guardián hizo exactamente
+ * lo que promete («si la línea se mueve, vuelve a fallar»), y revisarlas de
+ * nuevo confirmó que siguen siendo las mismas cuatro, con el mismo
+ * saneamiento. Queda dicho para quien mantenga esto: la clave por número de
+ * línea es deliberadamente incómoda, y el precio es este — una revisión
+ * obligatoria cada vez que alguien toca el archivo por encima.
  */
 const REVISADOS = new Map([
   ['contenido/productos/productos.js:159', 'plantilla() devuelve marcado fijo, sin datos'],
@@ -64,11 +73,11 @@ const REVISADOS = new Map([
 
   ['cuentas/tienda.js:226', 'cadena literal fija del carrito vacío'],
   ['cuentas/tienda.js:236', 'plantilla fija; los datos entran luego por textContent'],
-  ['cuentas/pujas.js:1234', 'plantilla fija del estado de carga'],
-  ['cuentas/pujas.js:1252', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
-  ['cuentas/pujas.js:1268', 'plantilla fija del estado vacío'],
+  ['cuentas/pujas.js:1258', 'plantilla fija del estado de carga'],
+  ['cuentas/pujas.js:1276', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
+  ['cuentas/pujas.js:1292', 'plantilla fija del estado vacío'],
   [
-    'cuentas/pujas.js:1308',
+    'cuentas/pujas.js:1332',
     'DELIBERADO y SANEADO (UX-R2.8c): las 20 interpolaciones con datos del ' +
       'servidor pasan por esc(); pujas.test.js lo comprueba con cargas reales. ' +
       'La estructura (2.297 líneas de plantilla) se mueve en UX-R2.10.',
