@@ -77,7 +77,18 @@ COMPOSE_DEPLOY="$DIRECTORIO/docker-compose.deploy.yml"
 # cada servicio salen del mismo archivo que lee cd.yml. Se copia al servidor
 # por SCP junto a los compose.
 # ---------------------------------------------------------------------------
+# En el servidor esta bajo /opt/nexus (lo copia el scp de cd.yml, conservando
+# la ruta). Corriendo desde una copia del repositorio -- las pruebas de
+# scripts/cd/pruebas/, o alguien leyendo el script en local -- esta al lado, y
+# se busca ahi como respaldo en vez de morir pidiendo una ruta de servidor que
+# en ese contexto no tiene sentido.
 CATALOGO="$DIRECTORIO/infrastructure/despliegue/servicios.json"
+if [ ! -f "$CATALOGO" ]; then
+  _raiz_repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd || true)"
+  if [ -n "$_raiz_repo" ] && [ -f "$_raiz_repo/infrastructure/despliegue/servicios.json" ]; then
+    CATALOGO="$_raiz_repo/infrastructure/despliegue/servicios.json"
+  fi
+fi
 
 # Lector minimo del catalogo. jq no esta garantizado en el host; python3 si
 # viene en Ubuntu Server. Se prefiere jq cuando existe.
