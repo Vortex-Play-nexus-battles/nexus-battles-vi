@@ -1,25 +1,49 @@
-# Infraestructura del host de plataforma en AWS (infrastructure/entornos/plataforma).
+# Infraestructura de dev en AWS: LOS DOS hosts (plataforma y contenido).
 #
 # Sin claves de AWS en GitHub: el job asume el rol IAM github-actions-nexus-dev
 # por OIDC (permissions.id-token). El rol solo confia en workflows de ESTE
 # repositorio (condicion `sub` = repo:Vortex-Play-nexus-battles/nexus-battles-vi:*).
 #
-# Variables del repositorio (Settings > Secrets and variables > Actions > Variables):
-#   AWS_ROLE_ARN        arn:aws:iam::<cuenta>:role/github-actions-nexus-dev
-#   AWS_REGION          us-east-1
-#   TFSTATE_BUCKET      bucket S3 del estado (versionado, sin acceso publico)
-#   AWS_CORREO_ALERTAS  buzon del equipo para presupuestos y recordatorios
+# ## R9.1/R9.3 — que cambio y por que
+#
+# Este workflow gobernaba SOLO el host de plataforma. El de contenido
+# (`nexus-contenido-dev`, los cuatro servicios de Grupo 2 y su MongoDB) se
+# aplicaba a mano, con el estado en el disco de quien lo aplico, sin bloqueo y
+# sin versionado; y el apagado nocturno no lo tocaba, asi que gastaba credito
+# las 24 h mientras plataforma se apagaba a las 23:23. Ahora los dos hosts
+# pasan por aqui, con la MISMA politica horaria, seleccionados por la matriz.
+#
+# ## Compuerta del host de contenido
+#
+# Su estado remoto nace vacio (ver infrastructure/entornos/contenido/
+# versiones.tf). Con el estado vacio, `plan` no dice "sin cambios": propone
+# CREAR instancia, IP, grupo de seguridad y llave — un tercer EC2 y coste
+# duplicado mientras los actuales siguen corriendo. Por eso `apply` sobre
+# contenido esta BLOQUEADO hasta que la importacion este hecha y la variable
+# de repositorio IMPORTACION_CONTENIDO_COMPLETADA valga "true". No depende de
+# que nadie se acuerde: el paso falla solo.
+#
+# Variables del repositorio (Settings > Secrets and variables > Actions):
+#   AWS_ROLE_ARN                        arn:aws:iam::<cuenta>:role/github-actions-nexus-dev
+#   AWS_REGION                          us-east-1
+#   TFSTATE_BUCKET                      bucket S3 del estado (versionado, sin acceso publico)
+#   AWS_CORREO_ALERTAS                  buzon del equipo para presupuestos y recordatorios
+#   IMPORTACION_CONTENIDO_COMPLETADA    "true" solo cuando el plan de contenido salga limpio
 #
 # Acciones:
-#   plan     -> siempre segura; corre sola en cada PR que toque la carpeta y
-#               deja el plan como comentario: eso es lo que aprueba el revisor.
+#   inventario -> SOLO LECTURA. Imprime los identificadores reales del host
+#               (instancia, IP, SG, subred, VPC, volumen, AMI, llave) para
+#               rellenar los bloques `import`. No toca nada.
+#   plan     -> siempre segura; corre sola en cada PR que toque una carpeta de
+#               entornos y deja el plan como comentario: eso aprueba el revisor.
 #   apply    -> crea/actualiza el host. Corre SOLA al fusionar en develop un
-#               cambio de la carpeta (el plan aprobado en el PR es la
-#               confirmacion humana). A mano exige escribir "apply" en `confirmar`.
+#               cambio de la carpeta de PLATAFORMA (el plan aprobado en el PR
+#               es la confirmacion humana). Sobre contenido NUNCA corre sola.
+#               A mano exige escribir "apply" en `confirmar`.
 #   start    -> enciende la instancia (tambien por cron lun-vie 07:00 Colombia).
 #   stop     -> apaga la instancia (tambien por cron todos los dias 23:00 Colombia).
 #               Apagada solo factura la IP elastica (3,60 USD/mes) y el disco.
-#   destroy  -> borra TODO lo de esta carpeta, incluida la IP. Exige "destroy".
+#   destroy  -> borra TODO lo de esa carpeta, incluida la IP. Exige "destroy".
 #               Nunca corre sola.
 #
 # Limite de GitHub: el boton "Run workflow" y los `cron` solo existen cuando el
@@ -35,12 +59,18 @@ name: Infra dev (AWS Free Plan)
 on:
   workflow_dispatch:
     inputs:
+      host:
+        description: "Sobre que host actuar"
+        type: choice
+        required: true
+        default: plataforma
+        options: [plataforma, contenido, ambos]
       accion:
-        description: "Que hacer con el host de plataforma"
+        description: "Que hacer"
         type: choice
         required: true
         default: plan
-        options: [plan, apply, start, stop, destroy]
+        options: [inventario, plan, apply, start, stop, destroy]
       confirmar:
         description: "Para apply/destroy: escribe la misma accion aqui"
         type: string
@@ -50,12 +80,17 @@ on:
     branches: [develop]
     paths:
       - "infrastructure/entornos/plataforma/**"
+      - "infrastructure/entornos/contenido/**"
       - ".github/workflows/infra-dev.yml"
   # Fusion en develop de un cambio de la carpeta -> apply (GitOps).
+  # OJO: el paso que decide la accion limita este apply automatico a
+  # PLATAFORMA. Contenido se queda en `plan` hasta que la importacion este
+  # hecha; ver la compuerta arriba.
   push:
     branches: [develop]
     paths:
       - "infrastructure/entornos/plataforma/**"
+      - "infrastructure/entornos/contenido/**"
       - ".github/workflows/infra-dev.yml"
   # OJO con la hora exacta. Estas tareas estaban a las 04:00 y 12:00 en punto,
   # y GitHub retrasa las programadas cuando hay carga —el arranque de cada
@@ -67,6 +102,9 @@ on:
   # Dos cambios: minutos fuera de punto, y cada accion se intenta DOS veces
   # con una hora de diferencia. Repetir no molesta porque la accion es
   # idempotente: si ya esta en el estado pedido, el paso dice "Nada que hacer".
+  #
+  # R9.3: estos mismos crones cubren ahora LOS DOS hosts (matriz). No se
+  # cambia ni un horario: se aplica el vigente al host que no lo tenia.
   schedule:
     # Apagar: 04:23 y 05:23 UTC = 23:23 y 00:23 Colombia, todos los dias.
     # El segundo intento importa mas que el primero: una noche sin apagar se
@@ -74,9 +112,9 @@ on:
     - cron: "23 4 * * *"
     - cron: "23 5 * * *"
     # Encender: 12:17 y 13:17 UTC = 07:17 y 08:17 Colombia, de lunes a viernes.
-    # Los fines de semana el host queda apagado a proposito, por coste; quien
-    # necesite desplegar un sabado no tiene que hacer nada: el propio CD lo
-    # enciende (ver "Asegurar que el host esta encendido" en cd.yml).
+    # Los fines de semana los hosts quedan apagados a proposito, por coste;
+    # quien necesite desplegar un sabado no tiene que hacer nada: el propio CD
+    # los enciende (ver "Asegurar que el host esta encendido" en cd.yml).
     - cron: "17 12 * * 1-5"
     - cron: "17 13 * * 1-5"
 
@@ -85,27 +123,63 @@ permissions:
   contents: read
   pull-requests: write
 
-# Nunca dos ejecuciones a la vez sobre el mismo estado.
-concurrency:
-  group: infra-dev-plataforma
-  cancel-in-progress: false
-
 env:
   AWS_REGION: ${{ vars.AWS_REGION }}
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   TF_VAR_correo_alertas: ${{ vars.AWS_CORREO_ALERTAS }}
-  NOMBRE_INSTANCIA: nexus-plataforma-dev
-
-defaults:
-  run:
-    working-directory: infrastructure/entornos/plataforma
 
 jobs:
+  # Que hosts entran en esta corrida. Se resuelve una vez y la matriz lo lee.
+  objetivos:
+    name: Resolver hosts
+    runs-on: ubuntu-latest
+    outputs:
+      hosts: ${{ steps.calcular.outputs.hosts }}
+    steps:
+      - id: calcular
+        run: |
+          case "${{ github.event_name }}" in
+            workflow_dispatch)
+              case "${{ inputs.host }}" in
+                plataforma) hosts='["plataforma"]' ;;
+                contenido)  hosts='["contenido"]' ;;
+                ambos)      hosts='["plataforma","contenido"]' ;;
+                *) echo "::error::host no reconocido: '${{ inputs.host }}'"; exit 1 ;;
+              esac ;;
+            # Encender/apagar es para los dos: es justo el trabajo que antes
+            # solo cubria a plataforma y dejaba a contenido gastando 24 h.
+            schedule) hosts='["plataforma","contenido"]' ;;
+            # En PR y en fusion se miran los dos; el paso "Resolver la accion"
+            # decide despues si a cada uno le toca plan o apply.
+            *) hosts='["plataforma","contenido"]' ;;
+          esac
+          echo "hosts=$hosts" >> "$GITHUB_OUTPUT"
+          echo "Hosts de esta corrida: $hosts"
+
   infra:
-    name: Host de plataforma
+    name: Host de ${{ matrix.host }}
+    needs: objetivos
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      # Un host que falle no debe impedir que el otro se apague.
+      fail-fast: false
+      matrix:
+        host: ${{ fromJSON(needs.objetivos.outputs.hosts) }}
+
+    # Nunca dos ejecuciones a la vez sobre el MISMO estado. Por host: apagar
+    # contenido y aplicar plataforma a la vez es perfectamente seguro.
+    concurrency:
+      group: infra-dev-${{ matrix.host }}
+      cancel-in-progress: false
+
+    defaults:
+      run:
+        working-directory: infrastructure/entornos/${{ matrix.host }}
+
+    env:
+      NOMBRE_INSTANCIA: nexus-${{ matrix.host }}-dev
 
     steps:
       - name: Resolver la accion
@@ -124,11 +198,16 @@ jobs:
                 "17 12 * * 1-5"|"17 13 * * 1-5") accion=start ;;
                 *) echo "::error::Cron no reconocido: '${{ github.event.schedule }}'. Revisa el bloque schedule de este workflow."; exit 1 ;;
               esac ;;
-            push) accion=apply ;;
+            push)
+              # R9.1: el apply automatico al fusionar es SOLO para plataforma.
+              # El estado de contenido nace vacio y un apply ahi crearia una
+              # instancia nueva en vez de adoptar la que ya corre. Hasta que
+              # la importacion este hecha, a contenido le toca plan.
+              if [ "${{ matrix.host }}" = "plataforma" ]; then accion=apply; else accion=plan; fi ;;
             *) accion=plan ;;
           esac
           echo "accion=$accion" >> "$GITHUB_OUTPUT"
-          echo "Accion: $accion"
+          echo "Host ${{ matrix.host }} — accion: $accion"
 
       - name: Exigir confirmacion para apply/destroy manuales
         if: github.event_name == 'workflow_dispatch' && (steps.accion.outputs.accion == 'apply' || steps.accion.outputs.accion == 'destroy')
@@ -139,22 +218,20 @@ jobs:
             exit 1
           fi
 
-      - name: Verificar variables del repositorio
+      # --------------------------------------------------------- COMPUERTA R9.1
+      - name: Compuerta — no aplicar sobre contenido hasta que este importado
+        if: matrix.host == 'contenido' && (steps.accion.outputs.accion == 'apply' || steps.accion.outputs.accion == 'destroy')
         working-directory: .
         run: |
-          faltan=""
-          for v in AWS_ROLE_ARN AWS_REGION TFSTATE_BUCKET AWS_CORREO_ALERTAS; do
-            eval "valor=\${$v:-}"
-            [ -n "$valor" ] || faltan="$faltan $v"
-          done
-          if [ -n "$faltan" ]; then
-            echo "::error::Faltan variables del repositorio:$faltan"
+          if [ "${{ vars.IMPORTACION_CONTENIDO_COMPLETADA }}" != "true" ]; then
+            echo "::error::El estado de contenido todavia no ha adoptado la infraestructura existente."
+            echo "Con el estado vacio, un apply CREARIA una instancia, una IP y un grupo de"
+            echo "seguridad nuevos mientras los actuales siguen corriendo: un tercer EC2 y coste"
+            echo "duplicado. Pasos: accion 'inventario' -> rellenar importaciones.tf -> plan"
+            echo "limpio ('No changes') -> poner IMPORTACION_CONTENIDO_COMPLETADA=true."
             exit 1
           fi
-        env:
-          AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
-          TFSTATE_BUCKET: ${{ vars.TFSTATE_BUCKET }}
-          AWS_CORREO_ALERTAS: ${{ vars.AWS_CORREO_ALERTAS }}
+          echo "Importacion declarada completada. Continua."
 
       - name: Descargar el repositorio
         uses: actions/checkout@v4
@@ -175,7 +252,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          role-session-name: infra-dev-${{ steps.accion.outputs.accion }}-${{ github.run_id }}
+          role-session-name: infra-${{ matrix.host }}-${{ steps.accion.outputs.accion }}-${{ github.run_id }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Comprobar que la cuenta sigue en Free Plan
@@ -189,6 +266,58 @@ jobs:
             echo "::error::La cuenta esta en Paid Plan. Politica del proyecto: USD 0 de bolsillo. Detenido."
             exit 1
           fi
+
+      # ------------------------------------------------------------- inventario
+      # SOLO LECTURA. Sirve para rellenar los bloques `import` de R9.1 sin que
+      # nadie tenga que abrir la consola ni pasarse identificadores por chat.
+      # No imprime ningun secreto: identificadores de recursos, nada mas.
+      - name: Inventario real del host (solo lectura)
+        if: steps.accion.outputs.accion == 'inventario'
+        working-directory: .
+        run: |
+          set -o pipefail
+          echo "## Inventario de $NOMBRE_INSTANCIA" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          instancia=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=$NOMBRE_INSTANCIA" "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+            --query 'Reservations[].Instances[0]' --output json)
+
+          if [ "$instancia" = "[]" ] || [ -z "$instancia" ]; then
+            echo "No hay ninguna instancia con tag Name=$NOMBRE_INSTANCIA." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "$instancia" | jq -r '.[0] | {
+            instancia:        .InstanceId,
+            estado:           .State.Name,
+            tipo:             .InstanceType,
+            ami:              .ImageId,
+            llave:            .KeyName,
+            vpc:              .VpcId,
+            subred:           .SubnetId,
+            ip_privada:       .PrivateIpAddress,
+            ip_publica:       .PublicIpAddress,
+            perfil_iam:       (.IamInstanceProfile.Arn // "ninguno"),
+            grupos_seguridad: [.SecurityGroups[] | {id: .GroupId, nombre: .GroupName}],
+            volumenes:        [.BlockDeviceMappings[] | {dispositivo: .DeviceName, volumen: .Ebs.VolumeId}],
+            etiquetas:        ([.Tags[] | {(.Key): .Value}] | add)
+          }' | tee -a "$GITHUB_STEP_SUMMARY"
+
+          id=$(echo "$instancia" | jq -r '.[0].InstanceId')
+          echo "--- IP elastica asociada ---" | tee -a "$GITHUB_STEP_SUMMARY"
+          aws ec2 describe-addresses --filters "Name=instance-id,Values=$id" \
+            --query 'Addresses[].{asignacion:AllocationId,ip:PublicIp,asociacion:AssociationId}' \
+            --output json | tee -a "$GITHUB_STEP_SUMMARY"
+
+          echo "--- Reglas de entrada de sus grupos de seguridad ---" | tee -a "$GITHUB_STEP_SUMMARY"
+          for sg in $(echo "$instancia" | jq -r '.[0].SecurityGroups[].GroupId'); do
+            aws ec2 describe-security-groups --group-ids "$sg" \
+              --query 'SecurityGroups[].{id:GroupId,nombre:GroupName,vpc:VpcId,entrada:IpPermissions}' \
+              --output json | tee -a "$GITHUB_STEP_SUMMARY"
+          done
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       # --------------------------------------------------------------- start/stop
       - name: Encender o apagar la instancia
@@ -246,17 +375,40 @@ jobs:
           set -o pipefail
           tofu plan -no-color -out=plan.tfplan | tee plan.txt
 
+      # R9.1 — la compuerta absoluta, leida del plan y no de la buena voluntad.
+      # Un `destroy` o un `replace` sobre la instancia, la IP, el volumen o el
+      # grupo de seguridad detiene la corrida ANTES del apply.
+      - name: Compuerta — 0 destroy y 0 replace sobre recursos criticos
+        if: steps.accion.outputs.accion == 'apply'
+        run: |
+          # "must be replaced" y "will be destroyed" son las dos formas en que
+          # el plan anuncia que algo desaparece. Se buscan en el bloque de cada
+          # recurso critico.
+          criticos='aws_instance|aws_eip|aws_ebs_volume|aws_security_group'
+          if grep -nE "^# ($criticos)\..* (must be replaced|will be destroyed)" plan.txt; then
+            echo "::error::El plan destruye o reemplaza un recurso critico. NO SE APLICA."
+            echo "Abre issue tecnico con: recurso, motivo, riesgo y alternativa, y sigue con el resto del bloque."
+            exit 1
+          fi
+          # Red de seguridad por si cambia el formato del encabezado.
+          if grep -qE "^Plan: .* to destroy\.$" plan.txt && ! grep -qE "^Plan: .* 0 to destroy\.$" plan.txt; then
+            echo "::error::El plan declara destrucciones. NO SE APLICA."
+            exit 1
+          fi
+          echo "Sin destroy ni replace sobre recursos criticos."
+
       - name: Publicar el plan en el PR
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            const plan = fs.readFileSync('infrastructure/entornos/plataforma/plan.txt', 'utf8');
+            const host = '${{ matrix.host }}';
+            const plan = fs.readFileSync(`infrastructure/entornos/${host}/plan.txt`, 'utf8');
             const resumen = (plan.match(/^(Plan:.*|No changes.*)$/m) || ['Sin resumen (ver el log).'])[0];
             const recortado = plan.length > 60000 ? plan.slice(0, 60000) + '\n... (recortado)' : plan;
             const cuerpo = [
-              '### Infra dev — `tofu plan` (host de plataforma, AWS Free Plan)',
+              `### Infra dev — \`tofu plan\` (host de ${host}, AWS Free Plan)`,
               '',
               '`' + resumen.trim() + '`',
               '',
@@ -282,8 +434,8 @@ jobs:
       - name: Salidas
         if: steps.accion.outputs.accion == 'apply'
         run: |
-          echo "## Host de plataforma (dev)" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Host de ${{ matrix.host }} (dev)" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           tofu output -no-color >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          echo "Secretos del entorno dev a actualizar por un administrador: DEPLOY_HOST_DEV = ip_publica, SSH_USER_DEV = ubuntu, SSH_KEY_DEV = valor del parametro indicado en parametro_llave_privada (Systems Manager > Parameter Store)." >> "$GITHUB_STEP_SUMMARY"
+          echo "Secretos del entorno dev a actualizar por un administrador (sufijo _CONTENIDO_DEV para el host de contenido): DEPLOY_HOST_DEV = ip_publica, SSH_USER_DEV = ubuntu, SSH_KEY_DEV = valor del parametro indicado en parametro_llave_privada (Systems Manager > Parameter Store)." >> "$GITHUB_STEP_SUMMARY"

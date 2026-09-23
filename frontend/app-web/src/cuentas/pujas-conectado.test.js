@@ -549,6 +549,59 @@ describe('canal en vivo (HU-SUB-011 publica, esta pantalla escucha)', () => {
     rareza: 'comun',
   };
 
+  test('R9.6: el CONNECT del canal lleva el JWT de la sesion', async () => {
+    // El navegador no puede poner cabeceras en el handshake del WebSocket, asi
+    // que el token viaja en la cabecera `Authorization` del frame CONNECT.
+    // Antes de R9.6 este canal era el unico de los cuatro de la casa que se
+    // abria sin acreditar nada: cualquiera con la URL escuchaba el listado.
+    const caja = document.createElement('div');
+    const falso = canalFalso();
+    const { api } = apiQueCuenta([SUBASTA]);
+    let recibido = null;
+
+    const ctrl = new ControladorSubastas({
+      contenedor: caja,
+      api,
+      urlCanal: 'ws://servidor/api/v1/ws-subastas',
+      conectarCanal: async (opciones) => {
+        recibido = opciones;
+        return falso.cliente;
+      },
+      leerToken: () => 'jwt-de-lyra',
+    });
+    await ctrl.iniciar();
+    await ctrl.abrirCanalEnVivo();
+
+    expect(recibido.cabeceras).toEqual({ Authorization: 'Bearer jwt-de-lyra' });
+    ctrl.destruir();
+  });
+
+  test('R9.6: sin sesion se conecta igual, sin cabecera vacia', async () => {
+    // El listado es publico: quien no ha entrado tiene derecho a verlo
+    // actualizarse. Mandar `Bearer null` seria peor que no mandar nada.
+    const caja = document.createElement('div');
+    const falso = canalFalso();
+    const { api } = apiQueCuenta([SUBASTA]);
+    let recibido = null;
+
+    const ctrl = new ControladorSubastas({
+      contenedor: caja,
+      api,
+      urlCanal: 'ws://servidor/api/v1/ws-subastas',
+      conectarCanal: async (opciones) => {
+        recibido = opciones;
+        return falso.cliente;
+      },
+      leerToken: () => null,
+    });
+    await ctrl.iniciar();
+    await ctrl.abrirCanalEnVivo();
+
+    expect(recibido.cabeceras).toEqual({});
+    expect(ctrl.canal).toBe(falso.cliente);
+    ctrl.destruir();
+  });
+
   test('se suscribe al canal que publica el servidor', async () => {
     const caja = document.createElement('div');
     const falso = canalFalso();
