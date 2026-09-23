@@ -225,14 +225,18 @@
       // cabecera Authorization, SUBSCRIBE a /tema/partidas/{id}. No hay un
       // segundo cliente.
       import { conectarChat } from './cliente-chat.js';
-      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+      import { montarCabecera } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
 
       // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
-      if (!exigirSesion()) {
+      if (!exigirAcceso('sala-batalla')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
       // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'jugar' });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'sala-batalla',
+        seccionActiva: 'jugar',
+      });
 
       const parametros = new URLSearchParams(globalThis.location.search);
       const idSala = parametros.get('sala');

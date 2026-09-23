@@ -51,9 +51,14 @@ import com.nexusbattles.comun.seguridad.ConversorRolesJwt;
  *   <li>{@code POST /partidas/resultado} (HU-JUE-012) crea saldo: solo
  *       {@code ROLE_SERVICIO}. Con {@code authenticated()} cualquier jugador
  *       podía inventar un resultado con su {@code uid} como ganador.</li>
- *   <li>{@code /transacciones/**} y {@code /cofres/**} son del propio usuario:
- *       autenticado y <b>no</b> servicio (un token de servicio no tiene
- *       {@code uid} y su principal sería el {@code client_id}).</li>
+ *   <li>{@code /transacciones/**} (lectura del historial) y {@code /cofres/**}
+ *       son del propio usuario: autenticado y <b>no</b> servicio (un token de
+ *       servicio no tiene {@code uid} y su principal sería el {@code client_id}).</li>
+ *   <li>{@code POST /transacciones} (HU-PAG-002) es la excepción: registra el
+ *       resultado de un cobro en moneda real y solo lo sabe el servicio que
+ *       habló con la pasarela (HU-PAG-001) — <b>solo</b> {@code ROLE_SERVICIO},
+ *       igual que {@code /partidas/resultado}. Va antes del matcher general de
+ *       {@code /transacciones/**} porque es más específico.</li>
  * </ul>
  *
  * <p>Las pruebas de estas reglas están en {@code SecurityConfigTest} con tokens
@@ -90,6 +95,11 @@ public class SecurityConfig {
                 // HU-JUE-012: el resultado de una partida lo informa salas-partidas,
                 // nunca un jugador (crea saldo a favor del ganador).
                 .requestMatchers("/partidas/**").hasRole(ROL_SERVICIO)
+                // HU-PAG-002: registrar el resultado de un cobro en moneda real lo
+                // hace el servicio que habló con la pasarela (HU-PAG-001), nunca el
+                // jugador — va antes del matcher general de abajo por ser más
+                // específico.
+                .requestMatchers(HttpMethod.POST, "/transacciones").hasRole(ROL_SERVICIO)
                 // HU-PAG-002 / HU-JUE-013: historial y cofres del propio usuario. El
                 // controller lee el uid del principal, así que un servicio (sin uid)
                 // no tiene nada que consultar aquí.

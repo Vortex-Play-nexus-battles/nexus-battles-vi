@@ -10,24 +10,39 @@
     <!-- Solo el recortador de avatar: lo demas sale del kit. -->
     <link rel="stylesheet" href="./registro.css" />
   </head>
-  <body>
+  <body class="portal">
     <div data-cabecera-app></div>
     <main class="entrada">
       <section class="entrada__identidad">
-        <p class="t-etiqueta">Proyecto Integrador II · UPB Bucaramanga</p>
+        <p class="entrada__sobretitulo">Return of the Warriors</p>
         <h1 class="entrada__marca">NEXUS <em>BATTLES</em> VI</h1>
         <p class="entrada__lema">
-          Crea tu cuenta y empieza con creditos para tu primera apuesta. El apodo es el nombre con
-          el que te veran en las salas, el chat y los torneos.
+          Crea tu cuenta y empieza con créditos para tu primera apuesta. El apodo es el nombre con
+          el que te verán en las salas, el chat y los torneos.
         </p>
         <ul class="entrada__puntos">
-          <li class="entrada__punto">Tu héroe equipado decide con qué entras al combate</li>
-          <li class="entrada__punto">Ganar una partida da 2 créditos; jugarla, 1</li>
-          <li class="entrada__punto">Puedes cambiar tu apodo después, con confirmación</li>
+          <li class="entrada__punto">
+            <svg class="icono" aria-hidden="true">
+              <use href="../../../../shared/ui-kit/iconos/sprite.svg#escudo" />
+            </svg>
+            <span>Tu héroe equipado decide con qué entras al combate</span>
+          </li>
+          <li class="entrada__punto">
+            <svg class="icono" aria-hidden="true">
+              <use href="../../../../shared/ui-kit/iconos/sprite.svg#moneda" />
+            </svg>
+            <span>Ganar una partida da 2 créditos; jugarla, 1</span>
+          </li>
+          <li class="entrada__punto">
+            <svg class="icono" aria-hidden="true">
+              <use href="../../../../shared/ui-kit/iconos/sprite.svg#usuario" />
+            </svg>
+            <span>Puedes cambiar tu apodo después, con confirmación</span>
+          </li>
         </ul>
       </section>
 
-      <section class="entrada__tarjeta">
+      <section class="entrada__tarjeta entrada__tarjeta--ancha">
         <div class="pila pila--ajustada">
           <h2 class="entrada__titulo">Crea tu cuenta</h2>
           <p class="t-meta">Solo hace falta un correo y un apodo libre.</p>
@@ -197,7 +212,10 @@
       import { mejorarContrasena } from '../comun/ui/campo.js';
 
       // Cabecera unica de la aplicacion (HU-UX-001).
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: null });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'registro',
+        seccionActiva: null,
+      });
       mejorarContrasena(document.getElementById('password'));
       mejorarContrasena(document.getElementById('confirmarPassword'));
     </script>

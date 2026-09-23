@@ -14,12 +14,12 @@
     <main id="publicar-subasta" class="publicacion pagina"></main>
     <noscript>Activa JavaScript para publicar una subasta.</noscript>
     <script type="module">
-      import { exigirSesion } from '../comun/cabecera-app.js';
+      import { exigirAcceso } from '../comun/acceso.js';
 
       // UX-R2.0 — esta vista se abria SIN sesion: cargaba entera y solo
       // despues comprobaba permisos en cliente. El servidor protegia la API,
       // pero la pantalla se veia. El guard va lo primero.
-      if (!exigirSesion()) {
+      if (!exigirAcceso('publicar-subasta')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
     </script>

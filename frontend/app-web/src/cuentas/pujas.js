@@ -1427,7 +1427,7 @@ export class ControladorSubastas {
         <header class="panel-resumen">
           <div class="resumen-titular">
             <div>
-              <span class="eyebrow">MERCADO EN VIVO · HU-SUB-004</span>
+              <span class="eyebrow">MERCADO EN VIVO</span>
               <h1 class="titulo-grande">Subastas y Pujas</h1>
             </div>
             <div class="resumen-saldo-total">

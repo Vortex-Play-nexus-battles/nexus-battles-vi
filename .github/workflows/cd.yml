@@ -743,11 +743,20 @@ jobs:
           SERVICIOS_PUERTOS: ${{ steps.lista.outputs.lista }}
           APP_ENV: dev
           LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
+          # R9.7 — este job NO repartia el emisor, aunque los otros tres si.
+          # Los cuatro servicios de contenido validan tokens de ms-identidad
+          # (ADR-002 / ADR-005): heroes y motor-combate desde R8.1, e
+          # inventario y productos desde R9.7. Hasta ahora funcionaban solo
+          # por el valor por omision de docker-compose.contenido.yml, que
+          # lleva la IP elastica escrita: correcto por casualidad, y no
+          # sobreescribible sin editar el repositorio. Con la variable aqui,
+          # el dia que el emisor cambie de sitio basta cambiar la variable.
+          IDENTIDAD_JWKS_URL: ${{ vars.IDENTIDAD_JWKS_URL }}
         with:
           host: ${{ secrets.DEPLOY_HOST_CONTENIDO_DEV }}
           username: ${{ secrets.SSH_USER_CONTENIDO_DEV }}
           key: ${{ secrets.SSH_KEY_CONTENIDO_DEV }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,IDENTIDAD_JWKS_URL
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh

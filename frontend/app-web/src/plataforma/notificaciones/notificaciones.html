@@ -73,14 +73,18 @@
       import { montarAsistente } from '../../comun/ui/asistente.js';
       import { montarCampana } from './campana.js';
       import { leerSesion, identificadorDeSesion } from './cliente-notificaciones.js';
-      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+      import { montarCabecera } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
 
       // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
-      if (!exigirSesion()) {
+      if (!exigirAcceso('notificaciones')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
       // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: null });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'notificaciones',
+        seccionActiva: null,
+      });
       // En esta vista la campana de la cabecera abre el panel de aqui mismo.
       const campana = document.querySelector('[data-cabecera-app] .cabecera__campana');
       campana.dataset.zona = 'boton';

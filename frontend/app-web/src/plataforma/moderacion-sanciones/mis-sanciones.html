@@ -42,13 +42,17 @@
     </main>
 
     <script type="module">
-      import { montarCabecera, exigirSesion, leerSesion } from '../../comun/cabecera-app.js';
+      import { montarCabecera, leerSesion } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
       import { montarMisSanciones } from './sanciones.js';
 
-      if (!exigirSesion()) {
+      if (!exigirAcceso('mis-sanciones')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'cuenta' });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'mis-sanciones',
+        seccionActiva: 'cuenta',
+      });
       montarMisSanciones(document, { uid: leerSesion().uid });
     </script>
   </body>
