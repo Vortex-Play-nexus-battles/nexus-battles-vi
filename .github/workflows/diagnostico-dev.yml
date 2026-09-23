@@ -21,7 +21,7 @@ on:
         type: choice
         required: true
         default: dev
-        options: [dev]
+        options: [dev, contenido]
 
 permissions:
   id-token: write
@@ -31,23 +31,33 @@ jobs:
   diagnostico:
     name: Estado del host de ${{ inputs.ambiente }}
     runs-on: ubuntu-latest
-    environment: ${{ inputs.ambiente }}
+    environment: dev
     steps:
+      # El host de contenido es del grupo 2 y vive en OTRA cuenta de AWS
+      # (ver el job "desplegar-contenido-dev" de cd.yml, #656): su rol y su
+      # region son variables distintas. Si la variable del rol de contenido
+      # no esta configurada, se salta este paso y el diagnostico sigue
+      # adelante por SSH -- la parte de EC2 es la unica que necesita AWS.
       - name: Asumir el rol de AWS por OIDC (sin claves)
+        id: aws
+        if: inputs.ambiente == 'dev' || vars.AWS_ROLE_ARN_CONTENIDO != ''
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-to-assume: ${{ inputs.ambiente == 'contenido' && vars.AWS_ROLE_ARN_CONTENIDO || vars.AWS_ROLE_ARN }}
           role-session-name: diagnostico-${{ github.run_id }}
-          aws-region: ${{ vars.AWS_REGION }}
+          aws-region: ${{ inputs.ambiente == 'contenido' && (vars.AWS_REGION_CONTENIDO || 'us-east-1') || vars.AWS_REGION }}
 
       # Lo primero, porque es la causa mas probable y la mas barata de
       # descartar: si la instancia esta apagada, todo lo demas sobra.
       - name: Estado de la instancia en EC2
+        if: steps.aws.outcome == 'success'
+        env:
+          NOMBRE_INSTANCIA: ${{ inputs.ambiente == 'contenido' && (vars.NOMBRE_INSTANCIA_CONTENIDO || 'nexus-contenido-dev') || 'nexus-plataforma-dev' }}
         run: |
           set -euo pipefail
           # Mismo nombre de etiqueta que infra-dev.yml (NOMBRE_INSTANCIA).
           id=$(aws ec2 describe-instances \
-            --filters "Name=tag:Name,Values=nexus-plataforma-dev" \
+            --filters "Name=tag:Name,Values=$NOMBRE_INSTANCIA" \
                       "Name=instance-state-name,Values=pending,running,stopping,stopped" \
             --query 'Reservations[].Instances[].InstanceId' --output text)
           if [ -z "$id" ] || [ "$id" = "None" ]; then
@@ -69,10 +79,15 @@ jobs:
       # consecuencia y no causa.
       - name: Que dice el host por dentro
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          # La lista "servicio:puerto" que se consulta al final cambia segun
+          # el host: plataforma publica 8081-8091, contenido 8101-8104.
+          PARES_SALUD: ${{ inputs.ambiente == 'contenido' && 'heroes:8101 inventario:8102 productos:8103 motor-combate:8104' || 'comentarios:8081 correo:8082 torneos:8083 salas-partidas:8084 notificaciones:8085 moderacion-sanciones:8086 metricas-plataforma:8087 admin-parametros:8088 ms-identidad:8089' }}
         with:
-          host: ${{ secrets.DEPLOY_HOST_DEV }}
-          username: ${{ secrets.SSH_USER_DEV }}
-          key: ${{ secrets.SSH_KEY_DEV }}
+          host: ${{ inputs.ambiente == 'contenido' && secrets.DEPLOY_HOST_CONTENIDO_DEV || secrets.DEPLOY_HOST_DEV }}
+          username: ${{ inputs.ambiente == 'contenido' && secrets.SSH_USER_CONTENIDO_DEV || secrets.SSH_USER_DEV }}
+          key: ${{ inputs.ambiente == 'contenido' && secrets.SSH_KEY_CONTENIDO_DEV || secrets.SSH_KEY_DEV }}
+          envs: PARES_SALUD
           command_timeout: 3m
           script: |
             echo "===================== ARRANQUE Y CARGA ====================="
@@ -82,6 +97,9 @@ jobs:
             echo
             echo "===================== MEMORIA (MiB) ========================"
             free -m
+            echo
+            echo "  Swap configurado:"
+            swapon --show 2>/dev/null | sed 's/^/    /' || echo "    (sin swap)"
             echo
             echo "Los cinco procesos que mas memoria usan:"
             ps -eo rss,comm --sort=-rss | head -6 | awk 'NR==1{print "  RSS(KB) PROCESO"} NR>1{printf "  %7d %s\n", $1, $2}'
@@ -120,19 +138,43 @@ jobs:
               --format 'table {{.Name}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.CPUPerc}}'
 
             echo
+            echo "=========== CUANTA MEMORIA HAY COMPROMETIDA (mem_limit) ====="
+            # La suma de los mem_limit declarados frente a la RAM real del
+            # host: es lo que decide si cabe UN servicio mas sin empujar a
+            # los que sostienen el MVP a swap. Un total muy por encima de la
+            # RAM no es un error por si mismo (Docker no reserva), pero dice
+            # cuanto se esta confiando en el swap.
+            total_lim=0
+            for c in $(sudo docker ps -q); do
+              n=$(sudo docker inspect -f '{{.Name}}' "$c" | tr -d /)
+              l=$(sudo docker inspect -f '{{.HostConfig.Memory}}' "$c")
+              lm=$(( l / 1024 / 1024 ))
+              total_lim=$(( total_lim + lm ))
+              printf '    %-28s limite=%s MiB\n' "$n" "$lm"
+            done
+            ram=$(free -m | awk '/^Mem:/{print $2}')
+            libre=$(free -m | awk '/^Mem:/{print $7}')
+            echo "    ----"
+            printf '    %-28s %s MiB\n' "SUMA DE LIMITES" "$total_lim"
+            printf '    %-28s %s MiB\n' "RAM DEL HOST" "$ram"
+            printf '    %-28s %s MiB\n' "RAM DISPONIBLE AHORA" "$libre"
+
+            echo
             echo "===================== SALUD DE CADA SERVICIO ==============="
-            # El puerto y la ruta salen de scripts/cd/desplegar.sh; ms-ecommerce
-            # es la excepcion porque tiene context-path /ecommerce.
-            for par in "comentarios:8081" "correo:8082" "salas-partidas:8084" \
-                       "notificaciones:8085" "moderacion-sanciones:8086" \
-                       "metricas-plataforma:8087" "admin-parametros:8088" \
-                       "torneos:8083" "ms-identidad:8089"; do
+            # Los pares "servicio:puerto" los pone el workflow segun el host
+            # (PARES_SALUD); ms-ecommerce y ms-finanzas son la excepcion
+            # porque tienen context-path propio (/ecommerce y /api/v1).
+            for par in $PARES_SALUD; do
               s=${par%%:*}; p=${par##*:}
               r=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://localhost:$p/actuator/health" || echo "---")
               printf '    %-24s %s\n' "$s" "$r"
             done
-            r=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:8090/ecommerce/actuator/health || echo "---")
-            printf '    %-24s %s\n' "ms-ecommerce" "$r"
+            for par in "ms-ecommerce:8090:/ecommerce" "ms-cumplimiento:8091:" \
+                       "ms-subastas:8092:/api/v1" "ms-finanzas:8093:/api/v1"; do
+              s=$(echo "$par" | cut -d: -f1); p=$(echo "$par" | cut -d: -f2); ctx=$(echo "$par" | cut -d: -f3)
+              r=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://localhost:$p$ctx/actuator/health" || echo "---")
+              printf '    %-24s %s\n' "$s" "$r"
+            done
 
             echo
             echo "===================== BORDE ================================"
