@@ -227,11 +227,12 @@ export async function cancelarSala(idSala, { fetchImpl = fetchWithHttpErrorInter
 /**
  * Verifica el heroe antes de intentar entrar — HU-SAL-003, RF-JUE-003.
  *
- * Habla con `GET /salas/{idSala}/verificacion-heroe`, que ya esta publicado en
- * `contracts/openapi/salas-partidas.yaml`. La ruta existe en el contrato pero
- * **todavia no en el servicio**: depende de que el modulo de contenido publique
- * cual es el heroe activo del jugador. Por eso este cliente se escribe contra
- * el contrato y se inyecta en la vista, que se prueba con datos de ejemplo.
+ * Habla con `GET /salas/{idSala}/verificacion-heroe`, publicado en
+ * `contracts/openapi/salas-partidas.yaml` e **implementado** en
+ * `SalasController`. FI-R0 — aqui ponia que la ruta «todavia no» existia en el
+ * servicio; se comprobo y si existe, con dos pruebas de extremo a extremo que
+ * la ejercitan. Se sigue inyectando en la vista para poder probarla sin
+ * levantar el servicio, no porque el servicio falte.
  *
  * No comprueba ni decide nada: solo trae el veredicto. Quien decide es el
  * servidor, y la vista solo lo pinta.
