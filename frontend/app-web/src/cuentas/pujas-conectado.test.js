@@ -695,6 +695,77 @@ describe('canal en vivo (HU-SUB-011 publica, esta pantalla escucha)', () => {
     ctrl.destruir();
   });
 
+  // Las dos pruebas que siguen existen porque el resto de este bloque abre el
+  // canal a mano (`await ctrl.abrirCanalEnVivo()` despues de `iniciar()`), y
+  // eso tapaba el fallo: en produccion nadie lo reabre. `recargar()` termina
+  // llamando a `iniciarTemporizador()`, que llamaba a `destruir()`, que cierra
+  // el canal. Resultado: el canal moria en la recarga del arranque, y el unico
+  // mensaje en vivo que llegaba lo volvia a cerrar al releer. La pantalla
+  // parecia tener tiempo real y no lo tenia.
+  test('el canal sobrevive a la recarga del arranque', async () => {
+    const falso = canalFalso();
+    const { api } = apiQueCuenta([SUBASTA]);
+
+    const ctrl = new ControladorSubastas({
+      contenedor: document.createElement('div'),
+      api,
+      urlCanal: 'ws://x/ws-subastas',
+      conectarCanal: async () => falso.cliente,
+    });
+    await ctrl.iniciar();
+    await new Promise((resolver) => setTimeout(resolver, 0));
+
+    expect(ctrl.canal).toBe(falso.cliente);
+    ctrl.destruir();
+  });
+
+  test('un mensaje en vivo no cierra el canal por el que llego', async () => {
+    const falso = canalFalso();
+    const { api } = apiQueCuenta([SUBASTA]);
+
+    const ctrl = new ControladorSubastas({
+      contenedor: document.createElement('div'),
+      api,
+      urlCanal: 'ws://x/ws-subastas',
+      conectarCanal: async () => falso.cliente,
+    });
+    await ctrl.iniciar();
+    await ctrl.abrirCanalEnVivo();
+
+    ctrl.alLlegarActualizacion({ id: 's1', oferta: 150 });
+    await new Promise((resolver) => setTimeout(resolver, 0));
+
+    expect(falso.cliente.cerrar).not.toHaveBeenCalled();
+    expect(ctrl.canal).toBe(falso.cliente);
+    ctrl.destruir();
+  });
+
+  // La pantalla no puede inventarse desenlaces. Lo arreglo Simon en FI-R1
+  // (#654) y esta prueba lo fija desde el lado de HU-SUB-004, que es quien
+  // sufre el defecto: `eventosCierre` tenia como valor por defecto
+  // EVENTOS_CIERRE_DEFAULT y `pujas.html` monta sin pasarlo,
+  // asi que en produccion la pestana «Cierre multiple» anunciaba siempre «3» y
+  // al abrirla se leia «3 CERRARON · Ganaste 1, te superaron en 2», con el
+  // Hacha adjudicada a andres_nv y derrotas contra thar_vex y valkyria_99.
+  // Ninguna existe, y el consejo tactico mezclaba esas cifras con el saldo real.
+  test('sin cierres del servidor no se inventa ninguno', async () => {
+    const { api } = apiQueCuenta([SUBASTA]);
+    const ctrl = new ControladorSubastas({
+      contenedor: document.createElement('div'),
+      api,
+    });
+    await ctrl.iniciar();
+
+    expect(ctrl.eventosCierre).toEqual([]);
+    ctrl.abrirCierreMultiple();
+    const texto = ctrl.contenedor.textContent;
+    expect(texto).not.toMatch(/Hacha de Obsidiana|Grebas del Centinela|Amuleto de Brasa/);
+    expect(texto).not.toMatch(/thar_vex|valkyria_99/);
+    expect(texto).not.toMatch(/CERRARON/);
+    expect(texto).toMatch(/Todav[ií]a no hay resultados de cierre/);
+    ctrl.destruir();
+  });
+
   test('destruir cierra el canal', async () => {
     const caja = document.createElement('div');
     const falso = canalFalso();

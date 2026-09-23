@@ -1,5 +1,6 @@
 package nexus.inventario.api;
 
+import nexus.inventario.aplicacion.TransferenciaSinBloqueoException;
 import nexus.inventario.aplicacion.CriterioBusquedaInvalidoException;
 import nexus.inventario.aplicacion.IdentidadRequeridaException;
 import nexus.inventario.aplicacion.IdentificadorHistoricoException;
@@ -39,6 +40,16 @@ public class ManejadorDeErrores {
     @ExceptionHandler(IdentificadorHistoricoException.class)
     public ProblemDetail identificadorHistorico(IdentificadorHistoricoException error) {
         return problema(HttpStatus.CONFLICT, "Inventario pendiente de migracion", error.getMessage());
+    }
+
+    /**
+     * 409 y no 403: la peticion viene de quien puede (ms-subastas, por azp), y
+     * lo que falla es el estado del elemento. Distinguir "no tienes permiso" de
+     * "ese elemento no esta en esa subasta" evita reintentar algo que fallara igual.
+     */
+    @ExceptionHandler(TransferenciaSinBloqueoException.class)
+    public ProblemDetail transferenciaSinBloqueo(TransferenciaSinBloqueoException error) {
+        return problema(HttpStatus.CONFLICT, "Transferencia sin bloqueo", error.getMessage());
     }
 
     @ExceptionHandler(ElementoNoEncontradoException.class)

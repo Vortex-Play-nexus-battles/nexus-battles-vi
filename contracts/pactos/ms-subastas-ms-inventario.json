@@ -17,7 +17,7 @@
         },
         "headers": {
           "Content-Type": "application/json",
-          "Idempotency-Key": "{"
+          "Idempotency-Key": "clave-de-ejemplo-0001"
         },
         "matchingRules": {
           "body": {
@@ -56,33 +56,8 @@
         "path": "/api/v1/inventario/elementos/elem-hacha-01/transferencias"
       },
       "response": {
-        "body": {
-          "elementoId": "elem-hacha-01",
-          "propietarioUid": "99999999-0000-0000-0000-0000000000ee"
-        },
         "headers": {
           "Content-Type": "application/json"
-        },
-        "matchingRules": {
-          "body": {
-            "$.elementoId": {
-              "combine": "AND",
-              "matchers": [
-                {
-                  "match": "type"
-                }
-              ]
-            },
-            "$.propietarioUid": {
-              "combine": "AND",
-              "matchers": [
-                {
-                  "match": "regex",
-                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
-                }
-              ]
-            }
-          }
         },
         "status": 200
       }
@@ -95,27 +70,28 @@
         }
       ],
       "request": {
-        "method": "DELETE",
-        "path": "/api/v1/inventario/elementos/elem-hacha-01/bloqueo-subasta/aaaaaaaa-0000-0000-0000-000000000001"
-      },
-      "response": {
-        "body": {
-          "elementoId": "elem-hacha-01"
-        },
         "headers": {
-          "Content-Type": "application/json"
+          "Idempotency-Key": "clave-de-ejemplo-0001"
         },
         "matchingRules": {
-          "body": {
-            "$.elementoId": {
+          "header": {
+            "Idempotency-Key": {
               "combine": "AND",
               "matchers": [
                 {
-                  "match": "type"
+                  "match": "regex",
+                  "regex": ".+"
                 }
               ]
             }
           }
+        },
+        "method": "DELETE",
+        "path": "/api/v1/inventario/elementos/elem-hacha-01/bloqueo-subasta/aaaaaaaa-0000-0000-0000-000000000001"
+      },
+      "response": {
+        "headers": {
+          "Content-Type": "application/json"
         },
         "status": 200
       }
@@ -134,7 +110,7 @@
         },
         "headers": {
           "Content-Type": "application/json",
-          "Idempotency-Key": "\u5D10\uAB77\uAC31\u7A1B\uE7CE"
+          "Idempotency-Key": "clave-de-ejemplo-0001"
         },
         "matchingRules": {
           "body": {
@@ -173,23 +149,8 @@
         "path": "/api/v1/inventario/elementos/elem-hacha-01/bloqueo-subasta"
       },
       "response": {
-        "body": {
-          "elementoId": "elem-hacha-01"
-        },
         "headers": {
           "Content-Type": "application/json"
-        },
-        "matchingRules": {
-          "body": {
-            "$.elementoId": {
-              "combine": "AND",
-              "matchers": [
-                {
-                  "match": "type"
-                }
-              ]
-            }
-          }
         },
         "status": 200
       }
@@ -294,7 +255,7 @@
         },
         "headers": {
           "Content-Type": "application/json",
-          "Idempotency-Key": "\uAF6E\u38B5\uDA29"
+          "Idempotency-Key": "clave-de-ejemplo-0001"
         },
         "matchingRules": {
           "body": {
@@ -333,33 +294,8 @@
         "path": "/api/v1/inventario/elementos/elem-hacha-01/transferencias"
       },
       "response": {
-        "body": {
-          "elementoId": "elem-hacha-01",
-          "propietarioUid": "99999999-0000-0000-0000-0000000000ee"
-        },
         "headers": {
           "Content-Type": "application/json"
-        },
-        "matchingRules": {
-          "body": {
-            "$.elementoId": {
-              "combine": "AND",
-              "matchers": [
-                {
-                  "match": "type"
-                }
-              ]
-            },
-            "$.propietarioUid": {
-              "combine": "AND",
-              "matchers": [
-                {
-                  "match": "regex",
-                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
-                }
-              ]
-            }
-          }
         },
         "status": 200
       }
