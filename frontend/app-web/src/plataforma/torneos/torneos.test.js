@@ -350,7 +350,7 @@ describe('vista', () => {
     await asentar();
     await asentar();
     const detalle = document.querySelector('[data-zona="detalle"]');
-    expect(detalle.querySelector('[data-zona="campeon"]').textContent).toBe('Campeon: A');
+    expect(detalle.querySelector('[data-zona="campeon"]').textContent).toBe('Campeón: A');
     // El encuentro es el componente `Encuentro` del kit: cabecera con estado y
     // una fila por equipo, no la frase corrida que habia antes.
     const primero = detalle.querySelector('[data-llave="GANADORES"] [data-numero="1"]');

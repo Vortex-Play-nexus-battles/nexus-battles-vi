@@ -320,7 +320,7 @@ export function informeComoTexto(informe) {
 
   lineas.push(
     `${informe.percentil}: ${informe.percentilMs} ms`,
-    `Maximo: ${informe.maximoMs} ms`,
+    `Máximo: ${informe.maximoMs} ms`,
     `Resultado: ${informe.cumple ? 'CUMPLE' : 'NO CUMPLE'}`,
     '',
     'Por tipo de operación:',

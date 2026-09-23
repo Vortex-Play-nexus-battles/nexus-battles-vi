@@ -31,6 +31,8 @@
  *   - los atributos que una persona lee: `placeholder`, `title`, `aria-label`,
  *     `alt`, `value`;
  *   - las cadenas de los módulos que parecen una frase (tres palabras o más);
+ *   - las plantillas, con sus `${…}` rellenados, para que una frase partida por
+ *     una interpolación siga leyéndose como una frase;
  *   - y las cadenas de los `<script>` **del propio marcado**. Esto último se
  *     añadió después: la primera versión los descartaba enteros y por eso se le
  *     escapó `titulo: 'La sala se cerro'` en `sala-batalla.html`, que sí se
@@ -192,6 +194,18 @@ const PATRON = new RegExp(
  */
 const CLASES = /^[a-z][a-z0-9_-]*(?:\s+[a-z][a-z0-9_-]*)*$/;
 
+/**
+ * Un hueco de plantilla se sustituye por una palabra antes de mirar la frase.
+ *
+ * Se añadió después, y por lo mismo que el resto de este fichero: `Campeon:
+ * ${nombreDe(...)}` no pasaba por «frase» —los `$`, `{` y `}` no están entre
+ * los caracteres que se aceptan— y por eso el campeón del torneo se anunciaba
+ * sin tilde en la vista de torneos hasta que **lo encontró una prueba de
+ * extremo a extremo**, no este guardián. Rellenando el hueco, la plantilla se
+ * lee como lo que es: una frase.
+ */
+const HUECO = /\$\{[^{}]*\}/g;
+
 const LETRA = 'A-Za-zÁÉÍÓÚÜÑáéíóúüñ';
 const SIGNO = '0-9¿¡«»,;:.()\'’\\-–·%!?"';
 const FRASE = new RegExp(`^[${LETRA}¿¡][${LETRA}${SIGNO}]*(?:\\s+[${LETRA}${SIGNO}]+){2,}$`);
@@ -261,7 +275,7 @@ function visibleDeModulo(ruta) {
 function hallazgos(nombre, trozos) {
   const fuera = [];
   for (const crudo of trozos) {
-    const frase = crudo.replace(/\s+/g, ' ').trim();
+    const frase = crudo.replace(HUECO, 'dato').replace(/\s+/g, ' ').trim();
     if (!FRASE.test(frase) || CLASES.test(frase)) {
       continue;
     }

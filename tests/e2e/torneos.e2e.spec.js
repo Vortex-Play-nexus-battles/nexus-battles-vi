@@ -569,7 +569,7 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     const detalleVista = page.locator('[data-zona="detalle"]');
     await expect(detalleVista).toHaveAttribute('data-estado', 'FINALIZADO');
     await expect(detalleVista.locator('[data-zona="campeon"]')).toHaveText(
-      'Campeon: Los Valientes',
+      'Campeón: Los Valientes',
     );
     // R8.2 — mismos <article> del kit (#592). Este test estaba SALTADO porque
     // el describe es `serial` y el anterior fallaba; al arreglarlo despierta, y

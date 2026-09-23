@@ -373,7 +373,7 @@ export function fechaLegible(iso) {
 function nodoDeEstrellas(valor) {
   const contenedor = document.createElement('span');
   contenedor.className = 'estrellas';
-  contenedor.setAttribute('aria-label', `Calificacion: ${valor} de ${MAXIMO_ESTRELLAS}`);
+  contenedor.setAttribute('aria-label', `Calificación: ${valor} de ${MAXIMO_ESTRELLAS}`);
 
   const lista = document.createElement('span');
   lista.className = 'estrellas__lista';

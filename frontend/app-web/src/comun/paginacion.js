@@ -74,7 +74,7 @@ export function construirPaginacion({ paginaActual, totalPaginas }, alCambiarPag
   // no es un error, es el estado vacio de HU-INV-001.
   if (totalPaginas > 0 && paginaActual >= totalPaginas) {
     throw new RangeError(
-      `paginacion: la pagina ${paginaActual} no existe en un total de ${totalPaginas}`,
+      `paginación: la página ${paginaActual} no existe en un total de ${totalPaginas}`,
     );
   }
 

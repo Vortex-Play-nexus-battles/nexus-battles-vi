@@ -77,7 +77,7 @@ export function construirVitrina(pagina, { alEditar, alEquipar, alAbrirDetalle }
   }
   if (pagina.elementos.length > PRODUCTOS_POR_PAGINA) {
     throw new RangeError(
-      `La vitrina muestra ${PRODUCTOS_POR_PAGINA} productos por pagina y llegaron ` +
+      `La vitrina muestra ${PRODUCTOS_POR_PAGINA} productos por página y llegaron ` +
         `${pagina.elementos.length} elementos: el servicio rompio su contrato`,
     );
   }

@@ -786,7 +786,7 @@ test.describe('Sala de batalla de punta a punta', () => {
     expect(delPerdedor.reservado).toBe(reservadoAlEmpezar[perdedor.claims.uid] - APUESTA);
 
     await expect(page.locator('[data-zona="resultado"]')).toHaveText(
-      new RegExp(`(llevas|pierdes los) ${APUESTA} creditos`, 'i'),
+      new RegExp(`(llevas|pierdes los) ${APUESTA} créditos`, 'i'),
       { timeout: 20000 },
     );
   });

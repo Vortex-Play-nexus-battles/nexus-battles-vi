@@ -432,7 +432,7 @@ export function montarTorneos(
       const campeon = nodo(
         'p',
         'aviso aviso--exito',
-        `Campeon: ${nombreDe(torneo, torneo.campeonEquipoId)}`,
+        `Campeón: ${nombreDe(torneo, torneo.campeonEquipoId)}`,
       );
       campeon.dataset.zona = 'campeon';
       zonaDetalle.appendChild(campeon);

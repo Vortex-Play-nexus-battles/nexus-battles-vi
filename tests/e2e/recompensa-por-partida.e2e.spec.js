@@ -181,8 +181,8 @@ test.describe('Recompensa por jugar (HU-JUE-012)', () => {
     // La vista lo dice con la coletilla de HU-JUE-012 (contrato 1.4.0).
     await expect(page.locator('[data-zona="resultado"]')).toHaveText(
       gano
-        ? /has ganado.*ganas 2 creditos por ganar/i
-        : /has perdido.*ganas 1 credito por participar/i,
+        ? /has ganado.*ganas 2 créditos por ganar/i
+        : /has perdido.*ganas 1 crédito por participar/i,
       { timeout: 20000 },
     );
 
