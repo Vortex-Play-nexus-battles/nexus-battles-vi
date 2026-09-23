@@ -1,23 +1,8 @@
 {
-  "generado": "2026-09-23T18:15:04.449Z",
+  "generado": "2026-09-23T20:29:45.458Z",
   "modo": "sin-servicios",
   "combinaciones": 170,
-  "conHallazgos": 1,
-  "porMotivo": {
-    "objetivo-tactil-pequeno": 1
-  },
-  "detalle": [
-    {
-      "vista": "productos",
-      "grupo": "admin",
-      "pantalla": "movil",
-      "ancho": 375,
-      "hallazgos": [
-        {
-          "motivo": "objetivo-tactil-pequeno",
-          "detalle": "a«Estado del catálogo» mide 151×38"
-        }
-      ]
-    }
-  ]
+  "conHallazgos": 0,
+  "porMotivo": {},
+  "detalle": []
 }
