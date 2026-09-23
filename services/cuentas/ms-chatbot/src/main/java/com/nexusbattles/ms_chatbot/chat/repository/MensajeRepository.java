@@ -1,8 +1,14 @@
 package com.nexusbattles.ms_chatbot.chat.repository;
 
+import com.nexusbattles.ms_chatbot.chat.analitica.ConteoDeTema;
+import com.nexusbattles.ms_chatbot.chat.analitica.RegistroDePregunta;
+import com.nexusbattles.ms_chatbot.chat.analitica.RegistroDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.model.Mensaje;
 import com.nexusbattles.ms_chatbot.chat.model.Remitente;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.List;
@@ -30,4 +36,46 @@ public interface MensajeRepository extends JpaRepository<Mensaje, UUID> {
     // respuesta del bot cuente como su pregunta.
     Optional<Mensaje> findFirstByConversacionIdAndRemitenteAndFechaEnvioLessThanEqualOrderByFechaEnvioDesc(
         UUID conversacionId, Remitente remitente, Instant fechaEnvio);
+
+    // HU-CHA-012 (analiticas). Todas filtran por [desde, hasta) sobre
+    // fecha_envio, que tiene indice desde V4. Devuelven proyecciones livianas,
+    // no entidades completas, porque solo se cuentan y se agrupan.
+
+    @Query("""
+        select new com.nexusbattles.ms_chatbot.chat.analitica.RegistroDePregunta(m.fechaEnvio, m.conversacion.id)
+        from Mensaje m
+        where m.remitente = :remitente
+          and m.fechaEnvio >= :desde and m.fechaEnvio < :hasta
+        """)
+    List<RegistroDePregunta> buscarPreguntasEntre(@Param("remitente") Remitente remitente,
+                                                  @Param("desde") Instant desde,
+                                                  @Param("hasta") Instant hasta);
+
+    // Solo respuestas medidas (escalado no nulo): las anteriores a V4 no
+    // tienen estos datos y distorsionarian la tasa de resolucion.
+    @Query("""
+        select new com.nexusbattles.ms_chatbot.chat.analitica.RegistroDeRespuesta(
+            m.fechaEnvio, m.escalado, m.tiempoRespuestaMs)
+        from Mensaje m
+        where m.remitente = :remitente
+          and m.escalado is not null
+          and m.fechaEnvio >= :desde and m.fechaEnvio < :hasta
+        """)
+    List<RegistroDeRespuesta> buscarRespuestasMedidasEntre(@Param("remitente") Remitente remitente,
+                                                           @Param("desde") Instant desde,
+                                                           @Param("hasta") Instant hasta);
+
+    @Query("""
+        select new com.nexusbattles.ms_chatbot.chat.analitica.ConteoDeTema(m.temaClave, count(m))
+        from Mensaje m
+        where m.remitente = :remitente
+          and m.temaClave is not null
+          and m.fechaEnvio >= :desde and m.fechaEnvio < :hasta
+        group by m.temaClave
+        order by count(m) desc
+        """)
+    List<ConteoDeTema> contarRespuestasPorTemaEntre(@Param("remitente") Remitente remitente,
+                                                    @Param("desde") Instant desde,
+                                                    @Param("hasta") Instant hasta,
+                                                    Pageable limite);
 }

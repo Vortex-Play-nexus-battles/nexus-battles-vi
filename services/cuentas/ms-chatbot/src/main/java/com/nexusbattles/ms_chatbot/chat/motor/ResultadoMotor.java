@@ -15,20 +15,29 @@ import java.util.List;
  *                              tanto se debe ofrecer contacto con soporte humano
  * @param temasSugeridos        hasta 3 títulos de temas relacionados, para sugerir cuando
  *                              la consulta se escala o hubo ambigüedad
+ * @param temaClave             clave estable del tema que respondió (HU-CHA-012, analíticas
+ *                              de temas frecuentes); null si no respondió un tema de la base
+ *                              de conocimiento (escalamiento o consulta asistida)
  */
 public record ResultadoMotor(
     String texto,
     Categoria categoria,
     TipoRespuesta tipoRespuesta,
     boolean requiereEscalamiento,
-    List<String> temasSugeridos
+    List<String> temasSugeridos,
+    String temaClave
 ) {
 
     public static ResultadoMotor deTema(String texto, Categoria categoria, TipoRespuesta tipoRespuesta) {
-        return new ResultadoMotor(texto, categoria, tipoRespuesta, false, List.of());
+        return deTema(texto, categoria, tipoRespuesta, null);
+    }
+
+    public static ResultadoMotor deTema(String texto, Categoria categoria, TipoRespuesta tipoRespuesta,
+                                        String temaClave) {
+        return new ResultadoMotor(texto, categoria, tipoRespuesta, false, List.of(), temaClave);
     }
 
     public static ResultadoMotor escalado(String texto, List<String> temasSugeridos) {
-        return new ResultadoMotor(texto, null, null, true, temasSugeridos);
+        return new ResultadoMotor(texto, null, null, true, temasSugeridos, null);
     }
 }

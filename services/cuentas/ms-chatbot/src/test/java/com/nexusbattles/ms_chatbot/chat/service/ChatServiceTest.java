@@ -31,6 +31,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 @ExtendWith(MockitoExtension.class)
 class ChatServiceTest {
@@ -197,6 +199,44 @@ class ChatServiceTest {
 
         assertEquals(Remitente.BOT, respuesta.getRemitente());
         verify(mensajeRepository, times(2)).save(any(Mensaje.class));
+    }
+
+    // HU-CHA-012: la respuesta del bot guarda que tema la respondio, su
+    // categoria, que no se escalo y cuanto tardo, para las analiticas.
+    @Test
+    void enviarMensaje_guardaLosDatosDeAnalitica_cuandoRespondeUnTema() {
+        String idSesion = "visitante-008";
+        when(conversacionRepository.findByIdentificadorSesion(idSesion)).thenReturn(Optional.empty());
+        when(conversacionRepository.save(any(Conversacion.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(mensajeRepository.save(any(Mensaje.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(motorRespuestas.generarRespuesta(anyString()))
+            .thenReturn(ResultadoMotor.deTema("Respuesta de prueba", Categoria.CUENTA_Y_REGISTRO,
+                TipoRespuesta.PASO_A_PASO, "clave-registro"));
+
+        Mensaje respuesta = chatService.enviarMensaje(idSesion, false, "como me registro", null, null);
+
+        assertEquals("clave-registro", respuesta.getTemaClave());
+        assertEquals(Categoria.CUENTA_Y_REGISTRO, respuesta.getCategoria());
+        assertFalse(respuesta.getEscalado());
+        assertTrue(respuesta.getTiempoRespuestaMs() >= 0);
+    }
+
+    // HU-CHA-012: una respuesta escalada queda marcada como tal y sin tema,
+    // que es lo que alimenta la tasa de resolucion.
+    @Test
+    void enviarMensaje_marcaLaRespuestaComoEscalada_cuandoElMotorEscala() {
+        String idSesion = "visitante-009";
+        when(conversacionRepository.findByIdentificadorSesion(idSesion)).thenReturn(Optional.empty());
+        when(conversacionRepository.save(any(Conversacion.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(mensajeRepository.save(any(Mensaje.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(motorRespuestas.generarRespuesta(anyString()))
+            .thenReturn(ResultadoMotor.escalado("No estoy seguro de haber entendido tu consulta.", List.of()));
+
+        Mensaje respuesta = chatService.enviarMensaje(idSesion, false, "pregunta rara", null, null);
+
+        assertTrue(respuesta.getEscalado());
+        assertNull(respuesta.getTemaClave());
+        assertNull(respuesta.getCategoria());
     }
 
     @Test

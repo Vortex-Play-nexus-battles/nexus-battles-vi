@@ -56,6 +56,16 @@ public class TemaConocimiento {
     @Column(nullable = false)
     private boolean activo = true;
 
+    // HU-CHA-012: identifica al MISMO tema en todas sus copias, una por version
+    // de la base de conocimiento (V4). El id cambia en cada copia; la clave no.
+    // Las analiticas de "temas frecuentes" agrupan por este valor.
+    @Column(nullable = false, length = 80)
+    private String clave;
+
+    // HU-CHA-012: desempata cuando dos temas empatan en puntaje (gana el mayor).
+    @Column(nullable = false)
+    private int prioridad;
+
     public TemaConocimiento(Categoria categoria, TipoRespuesta tipoRespuesta, String titulo,
                             String palabrasClaveEs, String palabrasClaveEn,
                             String contenidoRespuestaEs, String contenidoRespuestaEn) {

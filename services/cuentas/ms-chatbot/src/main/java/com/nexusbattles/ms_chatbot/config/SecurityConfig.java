@@ -1,11 +1,12 @@
 package com.nexusbattles.ms_chatbot.config;
 
+import com.nexusbattles.comun.seguridad.CadenaDeSeguridad;
+import com.nexusbattles.comun.seguridad.ConversorRolesJwt;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
@@ -19,38 +20,52 @@ import org.springframework.security.web.SecurityFilterChain;
 // HU-CHA-008: un JWT presente pero invalido/vencido no debe tumbar el chat
 // con 401 -- debe degradar a modo visitante. Por eso /chat/** vive en su
 // propia cadena de seguridad (orden 1), con JwtInvalidoComoVisitanteFilter
-// delante del filtro de Resource Server. El resto de rutas (por ejemplo las
-// administrativas de HU-CHA-012, pendiente) usa la cadena estricta normal
-// (orden 2), donde un JWT invalido si se rechaza con 401.
+// delante del filtro de Resource Server. El resto de rutas usa la cadena
+// estricta normal (orden 2), donde un JWT invalido si se rechaza con 401.
+//
+// HU-CHA-012: el panel de administracion (/chatbot/admin/**) va en la cadena
+// estricta y exige rol ADMINISTRADOR o SUPER_ADMINISTRADOR. Los roles salen
+// del claim "rol" del token de ms-identidad, traducido a ROLE_<rol> por
+// ConversorRolesJwt (plataforma-seguridad, mismo patron que ms-finanzas).
+//
+// Por que /chatbot/admin y no /admin/chatbot: el borde (borde-dev.conf) envia
+// todo /api/v1/admin... a ms-identidad; con ese prefijo, en el despliegue las
+// peticiones del panel nunca llegarian a este servicio.
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
+    static final String ROL_ADMINISTRADOR = "ADMINISTRADOR";
+    static final String ROL_SUPER_ADMINISTRADOR = "SUPER_ADMINISTRADOR";
+
+    @Bean
+    public ConversorRolesJwt conversorRolesJwt() {
+        return new ConversorRolesJwt();
+    }
+
     @Bean
     @Order(1)
-    public SecurityFilterChain filterChainChat(HttpSecurity http, JwtDecoder jwtDecoder) throws Exception {
+    public SecurityFilterChain filterChainChat(HttpSecurity http, JwtDecoder jwtDecoder,
+                                               ConversorRolesJwt conversor) throws Exception {
+        http.securityMatcher("/chat/**");
+        CadenaDeSeguridad.aplicarBase(http, conversor);
         http
-            .securityMatcher("/chat/**")
-            .csrf(AbstractHttpConfigurer::disable)
             .addFilterBefore(new JwtInvalidoComoVisitanteFilter(jwtDecoder), BearerTokenAuthenticationFilter.class)
-            .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
-            .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> {
-            }));
+            .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
 
         return http.build();
     }
 
     @Bean
     @Order(2)
-    public SecurityFilterChain filterChainPorDefecto(HttpSecurity http) throws Exception {
-        http
-            .csrf(AbstractHttpConfigurer::disable)
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/actuator/**").permitAll()
-                .anyRequest().authenticated()
-            )
-            .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> {
-            }));
+    public SecurityFilterChain filterChainPorDefecto(HttpSecurity http, ConversorRolesJwt conversor) throws Exception {
+        CadenaDeSeguridad.aplicarBase(http, conversor);
+        http.authorizeHttpRequests(auth -> auth
+            // Regla 3 de plataforma: actuator abierto para la sonda de salud.
+            .requestMatchers("/actuator/**").permitAll()
+            .requestMatchers("/chatbot/admin/**").hasAnyRole(ROL_ADMINISTRADOR, ROL_SUPER_ADMINISTRADOR)
+            .anyRequest().authenticated()
+        );
 
         return http.build();
     }

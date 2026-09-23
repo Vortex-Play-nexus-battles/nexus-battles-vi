@@ -89,7 +89,7 @@ public class MotorRespuestas {
             if (texto == null || texto.isBlank()) {
                 texto = tema.getContenidoRespuestaEs();
             }
-            return ResultadoMotor.deTema(texto, tema.getCategoria(), tema.getTipoRespuesta());
+            return ResultadoMotor.deTema(texto, tema.getCategoria(), tema.getTipoRespuesta(), tema.getClave());
         }
 
         List<String> sugerencias = todas.stream()
