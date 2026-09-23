@@ -23,15 +23,27 @@
 # (los carga un administrador): DEPLOY_HOST_CONTENIDO_DEV (la IP),
 # SSH_USER_CONTENIDO_DEV (ubuntu) y SSH_KEY_CONTENIDO_DEV (el .pem completo).
 
-terraform {
-  required_providers {
-    aws = { source = "hashicorp/aws" }
-    tls = { source = "hashicorp/tls" }
-  }
-}
+# R9.1 — el bloque `terraform {}` que estaba aqui (proveedores sin version, sin
+# backend) se movio a `versiones.tf`, con el estado en S3 y los proveedores
+# fijados, igual que plataforma. Ahi esta explicado por que y cual es la
+# compuerta antes del primer `apply` desde CI.
 
 provider "aws" {
   region = var.region
+
+  # R9.1 — etiquetas en TODO recurso, como en plataforma. Sirven para dos
+  # cosas concretas: que Cost Explorer pueda separar el gasto de este host del
+  # de plataforma (hasta ahora iban juntos y no habia forma de saber cual se
+  # come el credito), y que un `destroy` encuentre lo que se creo aqui.
+  default_tags {
+    tags = {
+      Proyecto = "nexus-battles-vi"
+      Equipo   = "grupo-6"
+      Entorno  = "dev"
+      Dominio  = "contenido"
+      Gestion  = "terraform"
+    }
+  }
 }
 
 variable "region" {
@@ -47,9 +59,39 @@ variable "instance_type" {
 }
 
 variable "cidr_ssh" {
-  description = "Desde donde se acepta SSH (puerto 22). 0.0.0.0/0 solo con autenticacion por llave, que es lo unico que la AMI de Ubuntu permite; GitHub Actions no tiene IP fija."
+  description = "Desde donde se acepta SSH (puerto 22). 0.0.0.0/0 solo con autenticacion por llave, que es lo unico que la AMI de Ubuntu permite; GitHub Actions no tiene IP fija. R9.4 lo reviso y lo deja como esta a proposito: cerrarlo dejaria al CD sin forma de desplegar, y la salida de verdad es mover el despliegue a SSM Session Manager (sin puerto abierto), no adivinar un rango de IPs de los runners. Vacio = puerto cerrado, el dia que exista SSM."
   type        = list(string)
   default     = ["0.0.0.0/0"]
+}
+
+variable "cidr_servicios" {
+  description = <<-DESC
+    Origenes admitidos en 8101-8104 (heroes, inventario, productos, motor).
+
+    R9.4 — estaban abiertos a 0.0.0.0/0 y no hacia falta. Quien los consume de
+    verdad es UNO solo: el host de plataforma. Desde ahi salen las dos unicas
+    llamadas reales a estos puertos —el borde nginx, que proxea
+    /api/v1/{heroes,inventario,productos} (infrastructure/red-balanceo/
+    borde-dev.conf), y salas-partidas, que pregunta a inventario y al motor—.
+    El navegador nunca los toca: entra por el borde, en el 80.
+
+    Se comprobo antes de cerrar, no despues: smoke-dev.yml y
+    smoke-aws.smoke.spec.js solo usan http://<host-plataforma> (puerto 80), y
+    diagnostico-dev.yml consulta localhost por dentro del host. Ninguno se
+    queda fuera.
+
+    Lo que SI cambia de sitio son las colecciones de Postman de inventario y
+    productos, que su LEEME apuntaba directo a 34.193.90.11:8102/8103. Ahora
+    van por el borde (mismo origen que la aplicacion real, y de paso ejercitan
+    el enrutado). La unica peticion que no sobrevive al cambio es
+    {{baseUrl}}/actuator/health de productos: el borde solo enruta /api/v1/*.
+    La salud por host ya la cubre diagnostico-dev.yml.
+
+    Para depurar desde un portatil se anade la IP propia aqui, a proposito y
+    temporalmente. No se deja puesta.
+  DESC
+  type        = list(string)
+  default     = ["35.168.124.119/32"] # EIP del host de plataforma (nexus-plataforma-dev)
 }
 
 data "aws_ami" "ubuntu" {
@@ -85,11 +127,11 @@ resource "aws_security_group" "contenido_sg" {
     cidr_blocks = var.cidr_ssh
   }
   ingress {
-    description = "Servicios de contenido (heroes, inventario, productos, motor)"
+    description = "Servicios de contenido (8101 heroes, 8102 inventario, 8103 productos, 8104 motor) — solo desde el host de plataforma (R9.4)"
     from_port   = 8101
     to_port     = 8104
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = var.cidr_servicios
   }
   egress {
     from_port   = 0
