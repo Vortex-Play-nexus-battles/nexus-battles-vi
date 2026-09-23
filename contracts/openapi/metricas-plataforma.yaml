@@ -293,6 +293,7 @@ paths:
       operationId: tableroTecnicoTexto
       responses:
         '200':
+          description: Informe tecnico en texto plano, para pegar en el acta del sprint.
           content:
             text/plain:
               schema: { type: string }
@@ -312,6 +313,7 @@ paths:
           schema: { type: string, format: date-time }
       responses:
         '200':
+          description: Agregados de moderacion por dia (RF-MET-001).
           content:
             application/json:
               schema: { $ref: '#/components/schemas/TableroDeModeracion' }

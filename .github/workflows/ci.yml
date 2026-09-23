@@ -204,6 +204,70 @@ jobs:
         working-directory: infrastructure/red-balanceo/pruebas
         run: docker compose down -v
 
+  # ---------------------------------------------------------------------
+  # Job: los contratos se validan (regla 1 de plataforma) — R11.
+  #
+  # La regla 1 dice «contrato primero: OpenAPI/AsyncAPI se publica y se
+  # acuerda antes de implementar». Habia 21 YAML en `contracts/openapi/` y
+  # **nadie los abria nunca**. La unica mencion de `contracts/` en toda la
+  # integracion continua era un filtro de rutas que dispara una compilacion
+  # de Java: tocar un contrato compilaba el monorepo, pero nadie parseaba el
+  # YAML. Un `$ref` colgando, una indentacion rota o un `paths` duplicado
+  # entraban a develop sin que nada fallara, y se descubrian cuando alguien
+  # intentaba generar un cliente.
+  #
+  # Se valida con Redocly, que ademas de comprobar que el documento es
+  # OpenAPI valido avisa de operaciones sin `operationId` y de esquemas sin
+  # usar. Cuesta ~30 s y solo corre cuando cambia `contracts/`.
+  # ---------------------------------------------------------------------
+  ci-contratos:
+    name: CI - contratos OpenAPI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el repositorio con historial completo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detectar si cambiaron los contratos
+        id: detectar
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE=$(git merge-base "origin/${{ github.base_ref }}" "${{ github.sha }}")
+          else
+            BASE="${{ github.event.before }}"
+            ZERO="0000000000000000000000000000000000000000"
+            if [ "$BASE" = "$ZERO" ] || [ -z "$BASE" ]; then
+              BASE=$(git rev-parse "${{ github.sha }}^" 2>/dev/null || echo "4b825dc642cb6eb9a060e54bf8d69288fbee4904")
+            fi
+          fi
+          CAMBIOS=$(git diff --name-only "$BASE" "${{ github.sha }}" \
+            | grep -E '^contracts/' || true)
+          if [ -n "$CAMBIOS" ]; then
+            echo "Cambios en contratos:"; echo "$CAMBIOS"
+            echo "hay=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Los contratos no cambiaron."
+            echo "hay=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Preparar Python
+        if: steps.detectar.outputs.hay == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar el validador de OpenAPI
+        if: steps.detectar.outputs.hay == 'true'
+        run: pip install --quiet openapi-spec-validator==0.7.1 pyyaml
+
+      - name: Validar todos los contratos
+        if: steps.detectar.outputs.hay == 'true'
+        shell: bash
+        run: python3 tests/contratos/validar-contratos.py
+
   ci-transversal:
     name: CI - cambios transversales
     runs-on: ubuntu-latest

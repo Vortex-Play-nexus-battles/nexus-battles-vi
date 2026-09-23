@@ -31,6 +31,13 @@ dependencyManagement {
 }
 
 dependencies {
+    // R11 — regla 5. `FiltroDeTraza` vive en plataforma-comun (que no arrastra
+    // Spring a proposito) y esta biblioteca es la que lo enciende. Va como
+    // `api` y no `implementation` para que el servicio que ya usa
+    // `ErrorDeNegocio` de esa misma biblioteca lo siga teniendo sin declararla
+    // dos veces.
+    api project(':shared:libs:plataforma-comun')
+
     // Todo compileOnly: los servicios que usan esta biblioteca ya traen
     // spring-boot-starter-webmvc por las convenciones, que aporta spring-web,
     // spring-webmvc y la API de servlet en tiempo de ejecucion. Declararlas
@@ -45,12 +52,25 @@ dependencies {
     // convenciones ya trae spring-boot-autoconfigure por sus starters.
     compileOnly 'org.springframework.boot:spring-boot-autoconfigure'
 
+    // R11 — `RestClientCustomizer`, que es el gancho por el que el interceptor
+    // de traza llega a los clientes HTTP de los veinte servicios. En Spring
+    // Boot 4 vive en su propio modulo (`org.springframework.boot.restclient`),
+    // no en `spring-boot-web`.
+    compileOnly 'org.springframework.boot:spring-boot-restclient'
+
+    // `FilterRegistrationBean`, para registrar el filtro de traza en el primer
+    // lugar de la cadena. Esta en el artefacto nucleo `spring-boot`, no en
+    // `spring-boot-web-server` (se comprobo abriendo los dos jar).
+    compileOnly 'org.springframework.boot:spring-boot'
+
     testImplementation 'org.springframework:spring-web'
     testImplementation 'org.springframework:spring-webmvc'
     testImplementation 'jakarta.servlet:jakarta.servlet-api'
     testImplementation 'org.springframework:spring-test'
     testImplementation 'org.springframework.boot:spring-boot-autoconfigure'
     testImplementation 'org.springframework.boot:spring-boot-test'
+    testImplementation 'org.springframework.boot:spring-boot-restclient'
+    testImplementation 'org.springframework.boot:spring-boot'
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testImplementation 'org.assertj:assertj-core'
 
