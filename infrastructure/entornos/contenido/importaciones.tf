@@ -1,5 +1,29 @@
 # Adopcion del host de contenido que YA existe — R9.1
 #
+# ============================================================================
+# AVISO (23-sep): ESTOS BLOQUES NO SE PUEDEN RELLENAR DESDE ESTA CUENTA.
+#
+# `nexus-contenido-dev` existe y esta encendido, pero en la cuenta gratuita
+# del GRUPO 2 (ver cd.yml, job `desplegar-contenido-dev`, #656). El rol OIDC
+# de esta carpeta (vars.AWS_ROLE_ARN) es el de plataforma y no la ve, asi que
+# la accion `inventario` de infra-dev.yml contesta "no hay ninguna instancia"
+# por mucho que la haya. Un `import` de OpenTofu no cruza cuentas: no hay
+# identificador que poner aqui que funcione con este rol.
+#
+# Por eso el camino descrito mas abajo ("inventario -> rellenar -> plan limpio
+# -> IMPORTACION_CONTENIDO_COMPLETADA=true") NO se puede recorrer hoy, y poner
+# esa variable en "true" seria peor que no hacer nada: desbloquearia un apply
+# que CREA un tercer EC2 en la cuenta equivocada. Lo impide la compuerta
+# "contenido NUNCA crea un host" de infra-dev.yml.
+#
+# Que hace falta para que esto vuelva a tener sentido: un rol OIDC en la
+# cuenta del grupo 2 (vars.AWS_ROLE_ARN_CONTENIDO ya esta previsto) y el
+# estado de esta carpeta en un bucket de esa misma cuenta. Es una decision de
+# los duenos de las dos cuentas, no un paso tecnico pendiente.
+#
+# Ver infrastructure/entornos/contenido/README.md.
+# ============================================================================
+#
 # ## Por que este archivo existe
 #
 # `nexus-contenido-dev` lleva corriendo desde antes de que esta carpeta
