@@ -1,5 +1,8 @@
 plugins {
     id 'nexus.spring-conventions'
+    // R9.7 — trae plataforma-seguridad (ConversorRolesJwt, que entiende la
+    // forma de ms-identidad) y sus fixtures de tokens reales para las pruebas.
+    id 'nexus.seguridad-conventions'
 }
 
 group = 'nexus'
