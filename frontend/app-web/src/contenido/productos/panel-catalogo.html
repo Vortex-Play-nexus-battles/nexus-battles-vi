@@ -4,16 +4,30 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Estado del catálogo | Nexus Battles VI</title>
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
     <link rel="stylesheet" href="./productos.css" />
     <link rel="stylesheet" href="./panel-catalogo.css" />
   </head>
   <body>
+    <div data-cabecera-app></div>
     <main id="panel-catalogo-app" class="productos-pagina"></main>
 
     <script type="module">
+      import { exigirAcceso } from '../../comun/acceso.js';
+      import { montarCabecera } from '../../comun/cabecera-app.js';
       import { montarPanelCatalogo } from './panel-catalogo.js';
 
-      montarPanelCatalogo(document.getElementById('panel-catalogo-app'));
+      const sesion = exigirAcceso('panel-catalogo');
+
+      if (sesion) {
+        montarCabecera(document.querySelector('[data-cabecera-app]'), {
+          vista: 'panel-catalogo',
+          seccionActiva: 'productos',
+        });
+        montarPanelCatalogo(document.getElementById('panel-catalogo-app'));
+      }
     </script>
   </body>
 </html>

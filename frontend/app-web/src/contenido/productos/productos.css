@@ -41,8 +41,8 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  /* UX-R3.5 — era `#7091ff`, un azul que no está en ninguna parte del kit.
-     El foco es uno solo en toda la aplicación (RNF-ACC-002): si aquí es otro,
+  /* UX-R3.5 â€” era `#7091ff`, un azul que no estÃ¡ en ninguna parte del kit.
+     El foco es uno solo en toda la aplicaciÃ³n (RNF-ACC-002): si aquÃ­ es otro,
      quien navega con teclado aprende dos veces. */
   outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
   outline-offset: 2px;
@@ -58,13 +58,13 @@ textarea:focus-visible {
   padding: 32px 0 56px;
 }
 
-/* UX-R3.5 — esta cabecera escribia sus propios colores (`#fff`, `#2d3767`,
+/* UX-R3.5 â€” esta cabecera escribia sus propios colores (`var(--texto-sobre-color)`, `#2d3767`,
    `#c8d5ff`, `rgb(255 255 255 / 45%)`), su propia pila tipografica y sus
    propias medidas en pixeles, al margen del kit. La regla del proyecto es que
    ningun CSS escribe un color en hexadecimal: para eso estan los tokens.
 
    Y tenia un defecto que solo se ve mirando: el titulo salia OSCURO sobre el
-   panel oscuro, ilegible. `color: #fff` en el contenedor se hereda, pero
+   panel oscuro, ilegible. `color: var(--texto-sobre-color)` en el contenedor se hereda, pero
    `base.css` declara `color: var(--texto)` DIRECTAMENTE sobre `h1`, y una
    declaracion propia gana siempre a la herencia. Es el mismo fallo que la
    portada de la home; por eso aqui el `h1` va nombrado. */
@@ -124,9 +124,9 @@ textarea:focus-visible {
 
 .productos-cabecera__enlace {
   padding: 8px 12px;
-  border: 1px solid rgb(255 255 255 / 55%);
+  border: 1px solid var(--texto-sobre-color);
   border-radius: 7px;
-  color: #fff;
+  color: var(--texto-sobre-color);
   font-size: 0.82rem;
   font-weight: 700;
   text-decoration: none;
@@ -134,7 +134,7 @@ textarea:focus-visible {
 }
 
 .productos-cabecera__enlace:hover {
-  background: #2854ad;
+  background: var(--primaria);
 }
 
 .producto-formulario {
@@ -176,7 +176,7 @@ textarea:focus-visible {
 .producto-seccion select,
 .producto-seccion textarea {
   width: 100%;
-  /* 44 px, no 42: es el objetivo táctil mínimo del kit (WCAG 2.5.8). */
+  /* 44 px, no 42: es el objetivo tÃ¡ctil mÃ­nimo del kit (WCAG 2.5.8). */
   min-height: var(--campo-alto);
   padding: var(--e-2) var(--e-3);
   border: 1px solid var(--borde-int);
@@ -204,7 +204,7 @@ textarea:focus-visible {
   display: flex !important;
   align-items: center;
   align-self: center;
-  /* UX-R2.9 — 42 px se quedaban a dos del minimo tactil de 44. */
+  /* UX-R2.9 â€” 42 px se quedaban a dos del minimo tactil de 44. */
   min-height: var(--objetivo-tactil);
 }
 

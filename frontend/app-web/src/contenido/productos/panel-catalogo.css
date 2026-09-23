@@ -2,20 +2,20 @@
   flex: 0 0 auto;
   min-height: 42px;
   padding: 10px 16px;
-  border: 1px solid rgb(255 255 255 / 55%);
+  border: 1px solid var(--texto-sobre-color);
   border-radius: 7px;
-  color: #fff;
+  color: var(--texto-sobre-color);
   font-weight: 700;
   text-decoration: none;
   background: var(--primaria-relleno);
 }
 
 .panel-enlace-crear:hover {
-  background: #2854ad;
+  background: var(--primaria);
 }
 
 .panel-enlace-crear:focus-visible {
-  outline: 3px solid #91a9ff;
+  outline: 3px solid var(--interaccion-foco-anillo);
   outline-offset: 3px;
 }
 
@@ -97,7 +97,7 @@
   padding: 18px;
   border: 1px solid var(--borde);
   border-radius: 10px;
-  background: #f7f9ff;
+  background: var(--fondo);
 }
 
 .panel-tarjeta strong {
@@ -113,8 +113,8 @@
 }
 
 .panel-tarjeta--total {
-  border-color: #8097d4;
-  background: #e8edfb;
+  border-color: var(--borde);
+  background: var(--pista);
 }
 
 .panel-tarjeta--total strong {
