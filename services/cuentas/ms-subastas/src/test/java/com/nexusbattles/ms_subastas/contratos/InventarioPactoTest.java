@@ -64,7 +64,7 @@ class InventarioPactoTest {
                 .uponReceiving("el bloqueo del elemento al publicar la subasta")
                 .path("/api/v1/inventario/elementos/" + ELEMENTO + "/bloqueo-subasta")
                 .method("PUT")
-                .matchHeader("Idempotency-Key", ".+")
+                .matchHeader("Idempotency-Key", ".+", "clave-de-ejemplo-0001")
                 .headers(Map.of("Content-Type", "application/json"))
                 .body(new PactDslJsonBody()
                         // Lo que este pacto existe para proteger.
@@ -195,7 +195,7 @@ class InventarioPactoTest {
                 .uponReceiving("la transferencia del producto al ganador al cerrar la subasta")
                 .path("/api/v1/inventario/elementos/" + ELEMENTO + "/transferencias")
                 .method("POST")
-                .matchHeader("Idempotency-Key", ".+")
+                .matchHeader("Idempotency-Key", ".+", "clave-de-ejemplo-0001")
                 .headers(Map.of("Content-Type", "application/json"))
                 .body(new PactDslJsonBody()
                         // El nuevo dueno viaja como UUID en el cuerpo, igual que
@@ -233,7 +233,7 @@ class InventarioPactoTest {
                 .uponReceiving("el reintento de una transferencia ya aplicada")
                 .path("/api/v1/inventario/elementos/" + ELEMENTO + "/transferencias")
                 .method("POST")
-                .matchHeader("Idempotency-Key", ".+")
+                .matchHeader("Idempotency-Key", ".+", "clave-de-ejemplo-0001")
                 .headers(Map.of("Content-Type", "application/json"))
                 .body(new PactDslJsonBody()
                         .uuid("nuevoPropietarioUid", NUEVO_DUENO)
