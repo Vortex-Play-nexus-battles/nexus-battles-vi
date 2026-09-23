@@ -1,7 +1,8 @@
 /**
  * Sanciones y apelaciones — HU-USR-004/005/006/007 y HU-NOT-005.
  *
- * Habla con `contracts/openapi/moderacion-sanciones-admin.yaml` (1.0.0)
+ * Habla con `contracts/openapi/moderacion-sanciones-admin.yaml` (1.0.0) y con
+ * `moderacion-sanciones-consulta.yaml` (1.3.0, para los límites vigentes)
  * por el borde. Dos vistas lo montan:
  *
  *   - `sanciones-admin.html` (moderación): historial de un usuario por su
@@ -85,6 +86,12 @@ const json = (cuerpo) => ({
 
 export const api = {
   historial: (uid, f) => pedir(`/api/v1/sanciones/usuarios/${encodeURIComponent(uid)}`, {}, f),
+  /**
+   * Los límites que aplica HOY el servicio (HU-ADM-001 CA-04): rango de la
+   * suspensión y plazo de apelación. Son configurables desde admin-parametros,
+   * así que la vista los pregunta en vez de llevarlos escritos.
+   */
+  limites: (f) => pedir('/api/v1/sanciones/limites', {}, f),
   emitir: (cuerpo, f) => pedir('/api/v1/sanciones', json(cuerpo), f),
   apelar: (sancionId, argumento, f) =>
     pedir(`/api/v1/sanciones/${encodeURIComponent(sancionId)}/apelaciones`, json({ argumento }), f),
@@ -153,21 +160,72 @@ export function descripcionDe(sancion, ahora = Date.now()) {
 }
 
 /**
- * Si todavía se puede apelar: vigente, sin apelación abierta y dentro de los
- * 30 días desde la emisión (misma regla que el servicio, para no ofrecer un
+ * Cómo se nombra el plazo de apelación dentro de un texto.
+ *
+ * El número sale del servicio (`GET /api/v1/sanciones/limites`), nunca de una
+ * constante: `sanciones.apelacion.plazo-dias` es configurable y el día que el
+ * Product Owner lo baje, un «30 días» escrito a mano deja a la pantalla
+ * prometiendo lo que el servicio va a rechazar. Cuando el dato no está —la
+ * vista cargó sin sesión, el servicio no respondió— se dice el plazo sin
+ * número. Nunca se inventa un 30.
+ *
+ * @param {number|null|undefined} plazoDias
+ * @returns {string}
+ */
+export function frasePlazoDeApelacion(plazoDias) {
+  return Number.isFinite(plazoDias) && plazoDias > 0
+    ? `dentro de los ${plazoDias} días siguientes`
+    : 'dentro del plazo de apelación vigente';
+}
+
+/**
+ * La etiqueta del campo de duración de una suspensión, con el rango que aplica
+ * hoy el servicio. Sin límites conocidos, la etiqueta no promete ningún rango:
+ * el servicio sigue validando y su 400 dice el real.
+ *
+ * @param {{suspensionMinimaHoras?: number, suspensionMaximaDias?: number}|null} limites
+ * @returns {string}
+ */
+export function textoDeRangoDeSuspension(limites) {
+  const horas = Number(limites?.suspensionMinimaHoras);
+  const dias = Number(limites?.suspensionMaximaDias);
+  if (!Number.isFinite(horas) || !Number.isFinite(dias) || horas <= 0 || dias <= 0) {
+    return 'Duración en horas';
+  }
+  const enHoras = `${horas} ${horas === 1 ? 'hora' : 'horas'}`;
+  const enDias = `${dias} ${dias === 1 ? 'día' : 'días'}`;
+  return `Duración en horas (${enHoras} a ${enDias})`;
+}
+
+/**
+ * Si todavía se puede apelar: vigente, sin apelación abierta y dentro del
+ * plazo desde la emisión (misma regla que el servicio, para no ofrecer un
  * botón que va a fallar).
+ *
+ * `plazoDias` viene de `GET /api/v1/sanciones/limites`. Cuando no se conoce,
+ * el plazo **no** se aplica: ofrecer el botón y dejar que el servicio conteste
+ * con su motivo es más honesto que esconder una acción legítima por un número
+ * que no tenemos. Lo que no se hace nunca es suponer 30.
  *
  * @param {object} sancion
  * @param {object[]} apelaciones del propio usuario
  * @param {number} [ahora]
+ * @param {number|null} [plazoDias] plazo vigente, o null si no se conoce
  * @returns {boolean}
  */
-export function sePuedeApelar(sancion, apelaciones = [], ahora = Date.now()) {
+export function sePuedeApelar(sancion, apelaciones = [], ahora = Date.now(), plazoDias = null) {
   if (!sancion.vigente || sancion.revertidaEn) {
     return false;
   }
   const emitida = new Date(sancion.emitidaEn).getTime();
-  if (Number.isNaN(emitida) || ahora - emitida > 30 * 24 * 60 * 60 * 1000) {
+  if (Number.isNaN(emitida)) {
+    return false;
+  }
+  const fueraDePlazo =
+    Number.isFinite(plazoDias) &&
+    plazoDias > 0 &&
+    ahora - emitida > plazoDias * 24 * 60 * 60 * 1000;
+  if (fueraDePlazo) {
     return false;
   }
   return !apelaciones.some((a) => a.sancionId === sancion.id && a.estado === 'PENDIENTE');
@@ -383,6 +441,50 @@ export function montarPanelDeModeracion(
   selectorTipo?.addEventListener('change', sincronizarCampos);
   sincronizarCampos();
 
+  /**
+   * El rango de la suspensión sale del servicio, no del HTML.
+   *
+   * El `max="720"` que había escrito en la vista eran 30 días convertidos a
+   * mano: con `sanciones.suspension.maxima-dias` en 2, el formulario aceptaba
+   * 720 horas y el servidor respondía 400. Ahora el tope, el mínimo y la
+   * etiqueta salen de `GET /api/v1/sanciones/limites`, que es la misma fuente
+   * que usa la validación.
+   */
+  async function aplicarLimites() {
+    const duracion = formEmitir?.querySelector('[name="duracionHoras"]');
+    const etiqueta = raiz.querySelector('[data-campo="rango-suspension"]');
+    let limites;
+    try {
+      limites = await api.limites(fetchImpl);
+    } catch (error) {
+      // Sin límites el campo se queda sin tope y la etiqueta sin rango: el
+      // servicio sigue validando, y su 400 dice el rango real. Inventar un
+      // tope aquí sería volver al defecto que esto corrige.
+      console.warn('[sanciones] no se pudieron leer los límites vigentes:', error);
+      return null;
+    }
+    if (etiqueta) {
+      etiqueta.textContent = textoDeRangoDeSuspension(limites);
+    }
+    if (duracion) {
+      const minimo = Number(limites?.suspensionMinimaHoras);
+      const maximo = Number(limites?.suspensionMaximaHoras);
+      if (Number.isFinite(minimo) && minimo > 0) {
+        duracion.min = String(minimo);
+        if (Number(duracion.value) < minimo) {
+          duracion.value = String(minimo);
+        }
+      }
+      if (Number.isFinite(maximo) && maximo > 0) {
+        duracion.max = String(maximo);
+        if (Number(duracion.value) > maximo) {
+          duracion.value = String(maximo);
+        }
+      }
+    }
+    return limites;
+  }
+
   async function cargarHistorial(uid) {
     zonaHistorial.replaceChildren(nodo('p', 't-meta', 'Cargando…'));
     try {
@@ -494,8 +596,9 @@ export function montarPanelDeModeracion(
     }
   });
 
+  aplicarLimites();
   cargarApelaciones();
-  return { cargarHistorial, cargarApelaciones };
+  return { cargarHistorial, cargarApelaciones, aplicarLimites };
 }
 
 /**
@@ -508,14 +611,27 @@ export function montarMisSanciones(raiz, { uid, fetchImpl, ahora = () => Date.no
   const zonaAviso = raiz.querySelector('[data-zona="aviso"]');
   const zonaSanciones = raiz.querySelector('[data-zona="sanciones"]');
   const zonaApelaciones = raiz.querySelector('[data-zona="apelaciones"]');
+  const zonaIntro = raiz.querySelector('[data-zona="intro"]');
   const formApelar = raiz.querySelector('[data-zona="apelar"]');
 
   async function cargar() {
     try {
-      const [sanciones, apelaciones] = await Promise.all([
+      // Los límites no son críticos: si no se pueden leer, la vista sigue y
+      // habla del plazo sin número. Por eso van con su propio `catch` y no
+      // arrastran al `Promise.all` entero.
+      const [sanciones, apelaciones, limites] = await Promise.all([
         api.historial(uid, fetchImpl),
         api.misApelaciones(fetchImpl),
+        api.limites(fetchImpl).catch(() => null),
       ]);
+      const plazoLeido = Number(limites?.apelacionPlazoDias);
+      const plazoDias = Number.isFinite(plazoLeido) && plazoLeido > 0 ? plazoLeido : null;
+      const frase = frasePlazoDeApelacion(plazoDias);
+      if (zonaIntro) {
+        zonaIntro.textContent =
+          `Tu historial disciplinario. Una sanción vigente se puede apelar ${frase}; ` +
+          'el panel de revisión responde con una decisión motivada.';
+      }
       zonaSanciones.replaceChildren();
       if (sanciones.length === 0) {
         zonaSanciones.appendChild(
@@ -526,7 +642,7 @@ export function montarMisSanciones(raiz, { uid, fetchImpl, ahora = () => Date.no
         zonaSanciones.appendChild(
           tarjetaDeSancion(s, {
             ahora: ahora(),
-            puedeApelar: sePuedeApelar(s, apelaciones, ahora()),
+            puedeApelar: sePuedeApelar(s, apelaciones, ahora(), plazoDias),
             apelar: (sancion) => {
               formApelar.hidden = false;
               formApelar.querySelector('[name="sancionId"]').value = sancion.id;
@@ -538,11 +654,7 @@ export function montarMisSanciones(raiz, { uid, fetchImpl, ahora = () => Date.no
       zonaApelaciones.replaceChildren();
       if (apelaciones.length === 0) {
         zonaApelaciones.appendChild(
-          nodo(
-            'p',
-            't-meta',
-            'No has apelado ninguna sanción. Puedes hacerlo dentro de los 30 días siguientes a cada una.',
-          ),
+          nodo('p', 't-meta', `No has apelado ninguna sanción. Puedes apelar cada una ${frase}.`),
         );
       }
       apelaciones.forEach((a) => zonaApelaciones.appendChild(tarjetaDeApelacion(a)));

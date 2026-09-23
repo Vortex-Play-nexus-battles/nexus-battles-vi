@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
  * Liquidacion de la apuesta al terminar la partida — HU-JUE-014, CA-04 y CA-06.
@@ -52,6 +53,9 @@ public class LiquidarApuesta {
 
     private static final Logger BITACORA = LoggerFactory.getLogger(LiquidarApuesta.class);
 
+    /** D-02 / HU-JUE-014: la clave de esta decision en el catalogo de admin-parametros. */
+    public static final String CLAVE_SI_GANA_LA_MAQUINA = "salas.apuestas.si-gana-la-maquina";
+
     /** Que hacer con las reservas de los humanos cuando gana la IA. */
     public enum SiGanaLaMaquina {
         /** Se devuelven: nadie pierde contra la maquina. Valor por defecto. */
@@ -64,16 +68,53 @@ public class LiquidarApuesta {
     private final RepositorioDeLiquidaciones liquidaciones;
     private final CreditosDelJugador creditos;
     private final Clock reloj;
-    private final SiGanaLaMaquina siGanaLaMaquina;
+    private final Supplier<SiGanaLaMaquina> siGanaLaMaquina;
 
+    /**
+     * La politica se pide en cada liquidacion, no se fija al arrancar.
+     *
+     * <p>D-02 la declara configurable, y desde R12 su valor vigente vive en el
+     * catalogo de admin-parametros ({@code salas.apuestas.si-gana-la-maquina}).
+     * Si se guardara aqui como valor fijo, cambiarla exigiria reiniciar el
+     * servicio y el parametro seria configurable solo de nombre. El proveedor
+     * que pasa el cableado ya trae cache y respaldo, asi que preguntar en cada
+     * liquidacion no cuesta una llamada de red.
+     */
     public LiquidarApuesta(RepositorioDeSalas salas, RepositorioDeLiquidaciones liquidaciones,
                            CreditosDelJugador creditos, Clock reloj,
-                           SiGanaLaMaquina siGanaLaMaquina) {
+                           Supplier<SiGanaLaMaquina> siGanaLaMaquina) {
         this.salas = Objects.requireNonNull(salas);
         this.liquidaciones = Objects.requireNonNull(liquidaciones);
         this.creditos = Objects.requireNonNull(creditos, "Hace falta el libro de creditos.");
         this.reloj = Objects.requireNonNull(reloj);
         this.siGanaLaMaquina = Objects.requireNonNull(siGanaLaMaquina);
+    }
+
+    /** Con una politica fija: la usan las pruebas y cualquier entorno sin catalogo. */
+    public LiquidarApuesta(RepositorioDeSalas salas, RepositorioDeLiquidaciones liquidaciones,
+                           CreditosDelJugador creditos, Clock reloj,
+                           SiGanaLaMaquina siGanaLaMaquina) {
+        this(salas, liquidaciones, creditos, reloj, constante(siGanaLaMaquina));
+    }
+
+    private static Supplier<SiGanaLaMaquina> constante(SiGanaLaMaquina politica) {
+        Objects.requireNonNull(politica, "Hace falta la politica de apuesta contra la maquina.");
+        return () -> politica;
+    }
+
+    /**
+     * La politica vigente. Nunca puede salir nula: el proveedor devuelve su
+     * respaldo cuando el catalogo no responde, pero si alguien cableara uno
+     * que no lo cumple, aqui se cae del lado seguro (LIBERAR: devolver lo
+     * apostado es lo unico que no le quita nada a nadie sin una regla detras).
+     */
+    private SiGanaLaMaquina politicaVigente() {
+        SiGanaLaMaquina politica = siGanaLaMaquina.get();
+        if (politica == null) {
+            BITACORA.warn("Sin politica para 'gana la maquina'; se libera la apuesta, que es lo que no quita nada");
+            return SiGanaLaMaquina.LIBERAR;
+        }
+        return politica;
     }
 
     /**
@@ -154,7 +195,7 @@ public class LiquidarApuesta {
             // Empate: nadie se lleva nada, todos recuperan lo suyo.
             reservas.values().forEach(creditos::liberar);
         } else if (ganador.get().esIA()) {
-            if (siGanaLaMaquina == SiGanaLaMaquina.CONSUMIR) {
+            if (politicaVigente() == SiGanaLaMaquina.CONSUMIR) {
                 reservas.values().forEach(reserva -> creditos.consumir(reserva, null));
             } else {
                 reservas.values().forEach(creditos::liberar);
@@ -179,7 +220,7 @@ public class LiquidarApuesta {
         Optional<ParticipanteDePartida> ganador = partida.ganador();
         boolean ganaLaMaquina = ganador.isPresent() && ganador.get().esIA();
         boolean seDevuelve = ganador.isEmpty()
-                || (ganaLaMaquina && siGanaLaMaquina == SiGanaLaMaquina.LIBERAR);
+                || (ganaLaMaquina && politicaVigente() == SiGanaLaMaquina.LIBERAR);
 
         List<RepartoDeCreditos> reparto = new ArrayList<>();
         for (UUID jugador : reservas.keySet()) {

@@ -135,6 +135,12 @@ services:
       # valor por defecto es localhost, que dentro del contenedor es el propio
       # servicio, y todo mensaje se bloquearia con «sanciones no disponibles».
       SANCIONES_URL: ${SANCIONES_URL:-http://srv-moderacion-sanciones:8086/api/v1}
+      # HU-ADM-001 CA-04: `salas.apuestas.si-gana-la-maquina` (D-02) y
+      # `chat.historial.tamano` (D-16) salen del catalogo; APUESTAS_* y
+      # CHAT_HISTORIAL_TAMANO quedan como respaldo. Si admin-parametros no
+      # responde, se usa el respaldo y queda en la bitacora: leer un parametro
+      # nunca tumba una partida.
+      PARAMETROS_URL: ${PARAMETROS_URL:-http://srv-admin-parametros:8088/api/v1}
 
   srv-notificaciones:
     <<: *servicio-plataforma

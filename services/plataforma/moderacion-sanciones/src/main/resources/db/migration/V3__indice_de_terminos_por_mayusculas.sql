@@ -1,0 +1,33 @@
+-- HU-REN-003 CA-02 — la busqueda mas caliente del bloque deja de recorrer la tabla.
+--
+-- `TerminoProhibidoRepository` expone `existsByTerminoIgnoreCase` y
+-- `findByTerminoIgnoreCase`. Spring Data traduce `IgnoreCase` a
+-- `upper(termino) = upper(?)`. El indice que crea la restriccion UNIQUE de V1
+-- es un btree sobre la COLUMNA, y PostgreSQL no puede usarlo para resolver una
+-- expresion: el plan resultante es un Seq Scan de la tabla entera.
+--
+-- Eso importa porque esta consulta se ejecuta una vez por cada mensaje de chat
+-- y una vez por cada comentario publicado. Es la lectura mas frecuente del
+-- bloque, y era la unica de las tres criticas que no usaba indice.
+--
+-- MEDIDO el 23-sep-2026 sobre PostgreSQL 16 con 100 000 terminos sembrados,
+-- con la misma sentencia que genera Spring Data:
+--
+--   ANTES   Seq Scan    368 buffers   49 999 filas descartadas por el filtro
+--           Execution Time: 5.713 ms
+--
+--   DESPUES Index Scan    4 buffers
+--           Execution Time: 0.038 ms
+--
+--   Control: la MISMA consulta sin `upper()` ya usaba el UNIQUE de V1
+--           (Index Only Scan, 4 buffers, 0.034 ms). Es decir: el indice
+--           existia y la mayusculizacion lo dejaba fuera.
+--
+-- 150 veces mas rapida y 92 veces menos paginas leidas. A un mensaje de chat no
+-- se le notaban 5,7 ms; a la tabla si, porque cada mensaje la recorria entera.
+--
+-- `docs/CONSULTAS-CRITICAS.md` del modulo de metricas tenia esta migracion
+-- escrita como PROPUESTA desde el Sprint 1, sin aplicar, porque hasta ahora era
+-- una sospecha razonada a partir del esquema y no un hecho medido. Ya lo es.
+CREATE INDEX IF NOT EXISTS idx_terminos_prohibidos_upper
+    ON terminos_prohibidos (upper(termino));
