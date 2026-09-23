@@ -5,9 +5,9 @@
  *
  * `identidad.js` sabe registrar **un jugador** por los mecanismos reales del
  * sistema, y eso resolvía UX-R2: casi todo lo que había que mirar era de
- * jugador. UX-R3 separó la consola de la aplicación, y de pronto hay nueve
- * pantallas que solo existen para tres roles que **no se pueden crear
- * registrándose** — y está bien que no se pueda: RF-RBAC-003 dice que asignar
+ * jugador. UX-R3 separó la consola de la aplicación, y de pronto hay una
+ * trastienda entera de pantallas que solo existen para tres roles que **no se
+ * pueden crear registrándose** — y está bien que no se pueda: RF-RBAC-003 dice que asignar
  * roles es «exclusivamente» del super administrador.
  *
  * El laboratorio lo estaba resolviendo de la peor manera posible: con backend

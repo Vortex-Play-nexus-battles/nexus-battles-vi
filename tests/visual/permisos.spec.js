@@ -33,7 +33,15 @@ import { NOMBRE, conseguirPersonas, personasDe } from './personas.js';
 
 const CON_BACKEND = Boolean(process.env.VISUAL_BASE);
 
-/** Las nueve de la trastienda, según la matriz. */
+/**
+ * Las de la trastienda, según la matriz.
+ *
+ * UX-R4.6 — el nombre de la prueba decía «las nueve» y ya son once. La lista
+ * siempre estuvo bien, porque sale de `MATRIZ` y crece con ella; lo que
+ * envejeció fue la frase, y nadie volvió a contar. Ahora el número se escribe
+ * solo, así que el informe de Playwright dice cuántas vistas se comprobaron
+ * de verdad en vez de cuántas había el día que se escribió la prueba.
+ */
 const TRASTIENDA = VISTAS.filter((v) => v.armazon === 'admin');
 
 /** Una privada de jugador, para la comprobación del visitante. */
@@ -106,10 +114,13 @@ test.describe('un visitante no ve la aplicación', () => {
 });
 
 test.describe('un jugador no ve la trastienda (§15)', () => {
-  test('las nueve vistas de consola le dicen que no, y no se pintan', async ({
+  test(`las ${TRASTIENDA.length} vistas de consola le dicen que no, y no se pintan`, async ({
     browser,
     baseURL,
   }) => {
+    // Si un día el filtro deja de acertar, esto falla en vez de pasar
+    // recorriendo una lista vacía, que es como una comprobación de permisos
+    // se convierte en un adorno verde.
     expect(TRASTIENDA.length).toBeGreaterThanOrEqual(9);
     const fallos = [];
     for (const vista of TRASTIENDA) {
