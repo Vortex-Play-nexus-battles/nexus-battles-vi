@@ -874,14 +874,14 @@ describe('FI-R6 - la verificacion de heroe esta en el camino', () => {
     }
   };
 
-  function montar({ ingresar, sala = salaR6() }) {
+  function montar({ ingresar, sala: salaDelCaso = salaR6() }) {
     document.body.innerHTML = HTML_R6;
     raiz = document.getElementById('vista');
     const irAVerificacion = jest.fn();
     const alEntrar = jest.fn();
     const vista = montarBatallas(raiz, {
       listar: jest.fn().mockResolvedValue({
-        contenido: [sala],
+        contenido: [salaDelCaso],
         pagina: 0,
         tamano: 12,
         totalElementos: 1,
