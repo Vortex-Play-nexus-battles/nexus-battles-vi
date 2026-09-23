@@ -122,7 +122,14 @@ comprobar GET  /api/v1/products/p-1/comments \
 comprobar GET  /api/v1/latencia            "metricas GET /api/v1/latencia"
 comprobar GET  /api/v1/disponibilidad      "metricas GET /api/v1/disponibilidad"
 comprobar GET  /api/v1/tecnicas            "metricas GET /api/v1/tecnicas"
+# Las dos lineas siguientes son el par que importa, y por eso van juntas:
+# /api/v1/moderacion es de metricas (sus agregados, HU-MET) y
+# /api/v1/comentarios/moderacion es la cola de comentarios de R10.1. Se
+# parecen a proposito: si alguien colgara la cola de /api/v1/moderacion, este
+# guion lo detectaria porque la primera linea empezaria a irse a comentarios.
 comprobar GET  /api/v1/moderacion          "metricas GET /api/v1/moderacion"
+comprobar GET  /api/v1/comentarios/moderacion \
+                                           "comentarios GET /api/v1/comentarios/moderacion"
 
 echo
 echo "Lo que el borde contesta el mismo"

@@ -78,6 +78,18 @@ services:
       # moderacion-sanciones, que corre en este host (misma nota que en
       # srv-salas-partidas: sin esto localhost seria el propio contenedor).
       SANCIONES_URL: ${SANCIONES_URL:-http://srv-moderacion-sanciones:8086/api/v1}
+      # R10.1 / RF-COM-008: al resolver la moderacion de un comentario se
+      # avisa a su autor. El destino exige ROLE_SERVICIO, asi que va con la
+      # credencial de comentarios (ADR-005) que desplegar.sh ya genera y
+      # persiste en secretos-servicios.env.
+      NOTIFICACIONES_URL: ${NOTIFICACIONES_URL:-http://srv-notificaciones:8085/api/v1}
+      DIRECTORIO_ACTIVO_URL: ${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}
+      DIRECTORIO_ACTIVO_CLIENT_ID: comentarios
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_COMENTARIOS:-}
+      # AUDITORIA_URL se queda sin poner: ms-cumplimiento no corre en el host
+      # de dev por capacidad (ver srv-salas-partidas). El asiento queda en la
+      # tabla comentario_moderacion, que es el rastro que exige la ficha, y
+      # ademas en la bitacora como AUDITORIA_MODERACION.
 
   srv-correo:
     <<: *servicio-plataforma

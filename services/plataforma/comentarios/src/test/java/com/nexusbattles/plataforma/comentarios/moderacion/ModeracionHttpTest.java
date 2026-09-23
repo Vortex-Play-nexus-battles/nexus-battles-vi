@@ -69,7 +69,7 @@ class ModeracionHttpTest {
     private static final String COMENTARIO = "com-1";
     private static final String RUTA_REPORTES =
             "/api/v1/products/" + PRODUCTO + "/comments/" + COMENTARIO + "/reportes";
-    private static final String RUTA_COLA = "/api/v1/moderacion/comentarios";
+    private static final String RUTA_COLA = "/api/v1/comentarios/moderacion";
     private static final String RUTA_DECISION = RUTA_COLA + "/" + COMENTARIO + "/decision";
 
     private static final UUID UID_LYRA = UUID.fromString("7a1e1c4e-2d2b-4b6e-9a0f-0d1c2b3a4f55");

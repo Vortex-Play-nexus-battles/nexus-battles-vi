@@ -30,9 +30,24 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>Quien puede entrar lo decide {@code SecurityConfig} por rol. Aqui no hay
  * ni un {@code if (rol == ...)}: la autorizacion se declara en un sitio.
+ *
+ * <h2>Por que la ruta NO es {@code /api/v1/moderacion/comentarios}</h2>
+ *
+ * <p>Era la ruta natural y fue la primera que se escribio. No se puede usar:
+ * {@code /api/v1/moderacion} ya es de <b>metricas-plataforma</b>, que publica
+ * ahi los agregados de moderacion de HU-MET (contrato metricas-plataforma
+ * 1.6.0), y el borde lo enruta a {@code srv-metricas-plataforma:8087} por una
+ * regex. Colgar un segundo servicio del mismo prefijo habria funcionado en
+ * pruebas —donde no hay borde— y habria dado 404 en el navegador.
+ *
+ * <p>Se podria haber forzado con un {@code location ^~} que le ganara a la
+ * regex. No se hizo: dejar dos servicios compartiendo prefijo es una trampa
+ * para el siguiente que anada una ruta a cualquiera de los dos y no entienda
+ * por que se va al servicio equivocado. El prefijo {@code /api/v1/comentarios}
+ * es de este servicio y de nadie mas.
  */
 @RestController
-@RequestMapping("/api/v1/moderacion/comentarios")
+@RequestMapping("/api/v1/comentarios/moderacion")
 public class ModeracionController {
 
     private final ServicioDeModeracion servicio;

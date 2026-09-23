@@ -65,7 +65,10 @@ public class SecurityConfig {
                 // que las dos mitades del flujo se lean de un vistazo.
                 .requestMatchers(HttpMethod.POST, "/api/v1/products/*/comments/*/reportes")
                     .hasAnyRole(ROLES_DE_USUARIO)
-                .requestMatchers("/api/v1/moderacion/**").hasAnyRole(ROLES_DE_MODERACION)
+                // NO es /api/v1/moderacion/**: ese prefijo ya es de
+                // metricas-plataforma y el borde lo enruta alli. Ver el
+                // javadoc de ModeracionController.
+                .requestMatchers("/api/v1/comentarios/moderacion/**").hasAnyRole(ROLES_DE_MODERACION)
                 .anyRequest().authenticated());
 
         return http.build();

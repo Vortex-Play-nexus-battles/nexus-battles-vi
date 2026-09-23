@@ -268,7 +268,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProblemDetail"
 
-  /moderacion/comentarios:
+  # La ruta NO es /moderacion/comentarios, que seria la natural: el prefijo
+  # /api/v1/moderacion ya es de metricas-plataforma (sus agregados de
+  # moderacion, metricas-plataforma.yaml 1.6.0) y el borde lo enruta alli por
+  # una regex. Dos servicios bajo el mismo prefijo habrian funcionado en
+  # pruebas y dado 404 en el navegador. /api/v1/comentarios es de este
+  # servicio y de nadie mas.
+  /comentarios/moderacion:
     get:
       summary: Cola de comentarios pendientes de revision (RF-COM-005)
       operationId: colaDeModeracion
@@ -325,7 +331,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProblemDetail"
 
-  /moderacion/comentarios/{commentId}:
+  /comentarios/moderacion/{commentId}:
     get:
       summary: Un comentario en revision, con su contexto (RF-COM-005)
       operationId: detalleDeModeracion
@@ -363,7 +369,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProblemDetail"
 
-  /moderacion/comentarios/{commentId}/decision:
+  /comentarios/moderacion/{commentId}/decision:
     post:
       summary: Resolver un comentario en revision (RF-COM-008)
       operationId: resolverComentario
