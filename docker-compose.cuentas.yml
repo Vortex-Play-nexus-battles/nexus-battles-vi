@@ -99,6 +99,17 @@ services:
       AUTH_CLIENTES_SERVICIO: ${AUTH_CLIENTES_SERVICIO:-}
       # Clave de firma estable (ADR-002); sin valor se genera una efimera.
       JWT_CLAVE_PRIVADA: ${JWT_CLAVE_PRIVADA:-}
+      # R9.5 — origenes CORS. Antes eran comodin escrito en WebSecurityConfig;
+      # ahora son configuracion (regla 10). Vacio = la lista de desarrollo que
+      # trae el servicio, que es restrictiva pero utilizable: en AWS el
+      # navegador llega por el borde y es mismo origen, asi que hoy no hace
+      # falta darle valor. Se rellena el dia que el frontend viva en otro
+      # dominio, sin tocar el codigo.
+      IDENTIDAD_CORS_ORIGENES: ${IDENTIDAD_CORS_ORIGENES:-}
+      # R9.5 — el respaldo por cabecera X-User-Role viene APAGADO. Encenderlo
+      # aqui reabre la escalada sin token: solo para una demo local y a
+      # sabiendas. Nunca en un host compartido.
+      RBAC_PERMITIR_HEADER_ROL: ${RBAC_PERMITIR_HEADER_ROL:-false}
 
 volumes:
   identidad-db-datos:
