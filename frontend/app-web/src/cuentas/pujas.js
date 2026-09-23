@@ -11,6 +11,7 @@
  */
 
 import { conectarStomp } from '../comun/transporte-stomp.js';
+import { iconoHtml } from '../comun/ui/icono.js';
 // UX-R2.8c — esta vista se pinta con plantillas de cadena y `innerHTML`, y
 // no escapaba NADA: el nombre del objeto, su descripcion, el apodo del
 // vendedor y el del pujador salen del servidor y los escribe otra persona.
@@ -34,12 +35,23 @@ export const CANAL_SUBASTAS = '/topic/subastas/listado';
  */
 const CLAVE_TOKEN_SESION = 'nexus.token';
 
-export const PALETA_RAREZA = {
-  comun: { fondo: '#E7EAF0', texto: '#57627A', borde: '#9FABC9', icono: '🛡️' },
-  rara: { fondo: '#DFEEF8', texto: '#095E8C', borde: '#095E8C', icono: '⚔️' },
-  epica: { fondo: '#EDE5FA', texto: '#5B27B4', borde: '#5B27B4', icono: '🪓' },
-  legendaria: { fondo: '#FBF0DE', texto: '#9A6800', borde: '#9A6800', icono: '🏹' },
-};
+/**
+ * El simbolo del sprite que le toca a cada rareza. Escala igual que la rareza:
+ * escudo, espada, fuego, trofeo.
+ *
+ * Aqui habia una paleta: cada rareza traia `fondo`, `texto` y `borde` escritos
+ * a mano —`#E7EAF0`, `#57627A`, `#9FABC9`…— y se inyectaban como `style` en la
+ * ficha. Eran los mismos valores que `--rareza-*` del kit, duplicados en
+ * JavaScript, y por estar en linea se saltaban `prefers-contrast: more`: quien
+ * pide mas contraste seguia viendo el tinte del dos por ciento. Ahora el color
+ * lo pone la clase y el icono hereda `currentColor`.
+ */
+export const ICONO_RAREZA = Object.freeze({
+  comun: 'escudo',
+  rara: 'espada',
+  epica: 'fuego',
+  legendaria: 'trofeo',
+});
 
 /**
  * Datos de ejemplo. **Son un banco de pruebas, no un modo de demostracion.**
@@ -1639,7 +1651,7 @@ export class ControladorSubastas {
             sobreCompromiso.sobreCompromiso
               ? `
             <div class="alerta-sobrecompromiso" role="alert">
-              <div class="sobrecompromiso-icono">⚠️</div>
+              <div class="sobrecompromiso-icono">${iconoHtml('alerta')}</div>
               <div>
                 <div class="sobrecompromiso-titulo">Tus automáticas prometen más de lo que tienes</div>
                 <div class="sobrecompromiso-texto">
@@ -1707,7 +1719,7 @@ export class ControladorSubastas {
 
   generarFilaMiSubasta(sub) {
     const urgente = sub.segundosRestantes <= 10 && sub.segundosRestantes > 0;
-    const rarezaInfo = PALETA_RAREZA[sub.rareza] || PALETA_RAREZA.comun;
+    const simboloRareza = ICONO_RAREZA[sub.rareza] ?? ICONO_RAREZA.comun;
 
     let claseBorde = 'borde-sin-puja';
     let badgeEstado = '<span class="badge badge-neutral">Sin pujar</span>';
@@ -1735,8 +1747,8 @@ export class ControladorSubastas {
 
     return `
       <article class="fila-mi-subasta ${claseBorde} ${urgente ? 'urgente' : ''}" data-id="${sub.id}">
-        <div class="fila-icono-rareza" style="background: ${rarezaInfo.fondo}; border: 1px solid ${rarezaInfo.borde};">
-          ${rarezaInfo.icono}
+        <div class="ficha-rareza ficha-rareza--grande ficha-rareza--${sub.rareza}">
+          ${iconoHtml(simboloRareza)}
         </div>
 
         <div class="fila-info-principal">
@@ -1748,7 +1760,7 @@ export class ControladorSubastas {
               sub.autoLimite > 0
                 ? `
               <span class="chip-automatica-tope" title="Puja automática configurada">
-                ⚡ hasta ${formatearCreditos(sub.autoLimite)} cr
+                ${iconoHtml('rayo', { clase: 'icono icono--menudo' })} hasta ${formatearCreditos(sub.autoLimite)} cr
               </span>
             `
                 : ''
@@ -1773,7 +1785,7 @@ export class ControladorSubastas {
 
         <div class="fila-acciones-tiempo">
           <div class="reloj-fila ${urgente ? 'animacion-latido' : ''}" data-tiempo-subasta="${sub.id}">
-            ⏱️ <span class="cifra">${formatearTiempo(sub.segundosRestantes)}</span>
+            ${iconoHtml('reloj', { clase: 'icono icono--menudo' })} <span class="cifra">${formatearTiempo(sub.segundosRestantes)}</span>
           </div>
           <button type="button" class="btn ${claseBoton}" data-abrir="${sub.id}">
             ${textoBoton}
@@ -1824,7 +1836,7 @@ export class ControladorSubastas {
           <div class="lista-eventos-cierre">
             ${eventos
               .map((ev) => {
-                const rarezaInfo = PALETA_RAREZA[ev.rareza] || PALETA_RAREZA.comun;
+                const simboloRareza = ICONO_RAREZA[ev.rareza] ?? ICONO_RAREZA.comun;
                 let claseEvento = 'evento--superada-rival';
                 let montoHtml = `<div class="evento-cifra cifra" style="color: var(--exito);">+${formatearCreditos(ev.montoDevuelto)}</div><div class="etiqueta-sm">devuelto</div>`;
                 let btnAccion = `<button type="button" class="btn btn-contorno btn-sm btn-buscar-parecidas" data-id="${ev.id}">Parecidas</button>`;
@@ -1839,8 +1851,8 @@ export class ControladorSubastas {
 
                 return `
                 <div class="fila-evento-cierre ${claseEvento}">
-                  <div class="evento-icono" style="background: ${rarezaInfo.fondo}; border: 1px solid ${rarezaInfo.borde};">
-                    ${rarezaInfo.icono}
+                  <div class="ficha-rareza ficha-rareza--${ev.rareza}">
+                    ${iconoHtml(simboloRareza)}
                   </div>
                   <div class="evento-info">
                     <h3 class="evento-titulo">${esc(ev.nombre)}</h3>
@@ -1863,7 +1875,7 @@ export class ControladorSubastas {
             consejo
               ? `
             <div class="caja-consejo-tactico" role="region" aria-label="Consejo táctico">
-              <div class="consejo-icono">⚡</div>
+              <div class="consejo-icono">${iconoHtml('rayo')}</div>
               <div class="consejo-contenido">
                 <div class="consejo-titulo">${esc(consejo.titulo)}</div>
                 <div>${consejo.cuerpo}</div>
@@ -1977,12 +1989,12 @@ export class ControladorSubastas {
                 comp.nivelInsuficiente
                   ? `
                 <div class="alerta alerta-advertencia" role="alert">
-                  <strong>⚠️ Nivel insuficiente:</strong> ${esc(hero.nombre)} es nivel ${esc(hero.nivel)}. Le faltan ${comp.deltaNivel} niveles para poder equipar este objeto (RN-INV-004).
+                  <strong>${iconoHtml('alerta', { clase: 'icono icono--menudo' })} Nivel insuficiente:</strong> ${esc(hero.nombre)} es nivel ${esc(hero.nivel)}. Le faltan ${comp.deltaNivel} niveles para poder equipar este objeto (RN-INV-004).
                 </div>
               `
                   : `
                 <div class="alerta alerta-exito-suave">
-                  <strong>✓ Compatible:</strong> ${esc(hero.nombre)} cumple el nivel requerido para equipar este objeto.
+                  <strong>${iconoHtml('check', { clase: 'icono icono--menudo' })} Compatible:</strong> ${esc(hero.nombre)} cumple el nivel requerido para equipar este objeto.
                 </div>
               `
               }
@@ -2177,7 +2189,7 @@ export class ControladorSubastas {
       <aside class="toast-cruzado-flotante" role="alert" aria-live="polite">
         <div class="toast-cruzado-cabecera">
           <div class="toast-titulo-contenedor">
-            <span class="toast-icono">⚠️</span>
+            <span class="toast-icono">${iconoHtml('alerta')}</span>
             <strong class="toast-titulo">¡Te superaron en otra subasta!</strong>
           </div>
           <button type="button" class="btn-cerrar-toast" aria-label="Cerrar aviso cruzado">×</button>

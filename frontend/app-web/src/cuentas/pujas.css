@@ -702,6 +702,14 @@ body {
   margin-bottom: 16px;
 }
 
+/* UX-R4.2 — El icono que abre una alerta va dentro de un `<strong>`, que no
+   es una caja flexible: sin esto el dibujo se apoya en la linea base y queda
+   medio renglon por debajo del texto que encabeza. */
+.alerta strong .icono {
+  vertical-align: -0.15em;
+  margin-right: 2px;
+}
+
 .alerta-advertencia {
   background: var(--advertencia-insignia);
   border: 1px solid var(--advertencia);
@@ -989,9 +997,14 @@ body {
 }
 
 .sobrecompromiso-icono {
-  font-size: 20px;
+  display: flex;
   flex-shrink: 0;
-  line-height: 1.2;
+  color: var(--error);
+}
+
+.sobrecompromiso-icono .icono {
+  width: var(--icono-chico);
+  height: var(--icono-chico);
 }
 
 .sobrecompromiso-titulo {
@@ -1131,14 +1144,62 @@ body {
   border-left: 5px solid var(--borde) !important;
 }
 
-.fila-icono-rareza {
-  width: 56px;
-  height: 56px;
+/* UX-R4.2 — La ficha de rareza.
+   Eran dos reglas (`.fila-icono-rareza` y `.evento-icono`) que solo se
+   diferenciaban en el tamano, y el color no estaba aqui: llegaba como `style`
+   en linea desde JavaScript, con el hexadecimal escrito a mano. Eso dejaba la
+   ficha fuera de `prefers-contrast: more`, porque un estilo en linea no lo oye
+   ningun `@media`. Ahora el color es del token y el icono lo hereda. */
+.ficha-rareza {
+  width: 48px;
+  height: 48px;
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  flex-shrink: 0;
+  border: 1px solid;
+}
+
+.ficha-rareza .icono {
+  width: 22px;
+  height: 22px;
+}
+
+/* La fila de «Mis subastas» le da mas sitio: la ficha es lo primero que se
+   mira al repasar en que estas metido. */
+.ficha-rareza--grande {
+  width: 56px;
+  height: 56px;
+}
+
+.ficha-rareza--grande .icono {
+  width: 24px;
+  height: 24px;
+}
+
+.ficha-rareza--comun {
+  background: var(--rareza-comun-insignia);
+  border-color: var(--rareza-comun);
+  color: var(--rareza-comun);
+}
+
+.ficha-rareza--rara {
+  background: var(--rareza-rara-insignia);
+  border-color: var(--rareza-rara);
+  color: var(--rareza-rara);
+}
+
+.ficha-rareza--epica {
+  background: var(--rareza-epica-insignia);
+  border-color: var(--rareza-epica);
+  color: var(--rareza-epica);
+}
+
+.ficha-rareza--legendaria {
+  background: var(--rareza-legendaria-insignia);
+  border-color: var(--rareza-legendaria);
+  color: var(--rareza-legendaria);
 }
 
 .fila-nombre {
@@ -1321,16 +1382,6 @@ body {
   border-left: 4px solid var(--advertencia);
 }
 
-.evento-icono {
-  width: 48px;
-  height: 48px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 22px;
-}
-
 .evento-titulo {
   font-family: 'Rajdhani', sans-serif;
   font-size: 18px;
@@ -1365,8 +1416,14 @@ body {
 }
 
 .consejo-icono {
-  font-size: 20px;
-  line-height: 1.2;
+  display: flex;
+  flex-shrink: 0;
+  color: var(--rareza-legendaria);
+}
+
+.consejo-icono .icono {
+  width: var(--icono-chico);
+  height: var(--icono-chico);
 }
 
 .consejo-contenido {
@@ -1430,7 +1487,14 @@ body {
 }
 
 .toast-icono {
-  font-size: 18px;
+  display: flex;
+  flex-shrink: 0;
+  color: var(--error);
+}
+
+.toast-icono .icono {
+  width: var(--icono-chico);
+  height: var(--icono-chico);
 }
 
 .toast-titulo {

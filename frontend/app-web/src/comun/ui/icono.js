@@ -105,3 +105,33 @@ export function icono(nombre, { etiqueta, clase = 'icono', tam } = {}) {
   svg.append(uso);
   return svg;
 }
+
+/**
+ * El mismo icono, pero como texto de marcado.
+ *
+ * `icono()` devuelve un nodo, que es lo correcto cuando se construye el DOM
+ * pieza a pieza. Las vistas que todavia arman su marcado con plantillas de
+ * cadena —`pujas.js` entre ellas— no pueden usarlo sin reescribirse enteras,
+ * y hasta que les toque el turno la alternativa real no era `icono()`: era un
+ * emoji. Un emoji no hereda `currentColor`, cambia de dibujo en cada sistema
+ * operativo y el lector de pantalla lo lee en voz alta.
+ *
+ * Valida contra `ICONOS` igual que `icono()`: el simbolo que no existe falla
+ * aqui y no en la demo, pintando un hueco que nadie nota.
+ *
+ * @param {string} nombre uno de `ICONOS`
+ * @param {{etiqueta?: string|null, clase?: string}} [opciones]
+ * @returns {string}
+ */
+export function iconoHtml(nombre, { etiqueta = null, clase = 'icono' } = {}) {
+  if (!ICONOS.includes(nombre)) {
+    throw new Error(
+      `iconoHtml: «${nombre}» no esta en el sprite. Disponibles: ${ICONOS.join(', ')}`,
+    );
+  }
+  const accesible =
+    etiqueta === null || etiqueta === undefined
+      ? 'aria-hidden="true"'
+      : `role="img" aria-label="${etiqueta.replace(/"/g, '&quot;')}"`;
+  return `<svg class="${clase}" focusable="false" ${accesible}><use href="${rutaDelSprite()}#${nombre}" /></svg>`;
+}
