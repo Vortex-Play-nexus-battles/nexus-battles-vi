@@ -62,7 +62,7 @@ export async function montarPublicacion(
 ) {
   const cabecera = document.querySelector('[data-cabecera-app]');
   if (cabecera) {
-    montarCabecera(cabecera, { seccionActiva: 'subasta' });
+    montarCabecera(cabecera, { vista: 'publicar-subasta', seccionActiva: 'subasta' });
   }
   // Solo marcado estático. Nombres de inventario y respuestas se asignan con textContent.
   raiz.innerHTML = `

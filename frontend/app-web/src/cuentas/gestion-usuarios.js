@@ -30,7 +30,7 @@ function montarBarraNavegacion() {
   const contenedor = document.createElement('div');
   contenedor.dataset.cabeceraApp = '';
   document.body.prepend(contenedor);
-  montarCabecera(contenedor, { seccionActiva: 'cuenta' });
+  montarCabecera(contenedor, { vista: 'gestion-usuarios', seccionActiva: 'usuarios' });
 }
 
 async function iniciar() {

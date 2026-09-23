@@ -21,7 +21,10 @@
       import { montarCabecera } from '../../comun/cabecera-app.js';
 
       // Cabecera unica de la aplicacion (HU-UX-001).
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: null });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'productos',
+        seccionActiva: 'inventario',
+      });
     </script>
   </body>
 </html>

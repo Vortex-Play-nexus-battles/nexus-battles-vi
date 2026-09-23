@@ -106,13 +106,17 @@
 
     <!-- Carga del módulo de la barra compartida -->
     <script type="module">
-      import { montarCabecera, exigirSesion } from '../comun/cabecera-app.js';
+      import { montarCabecera } from '../comun/cabecera-app.js';
+      import { exigirAcceso } from '../comun/acceso.js';
 
-      if (!exigirSesion()) {
+      if (!exigirAcceso('auditoria')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
       // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
-      montarCabecera(document.getElementById('navbar-container'), { seccionActiva: 'cuenta' });
+      montarCabecera(document.getElementById('navbar-container'), {
+        vista: 'auditoria',
+        seccionActiva: 'auditoria',
+      });
     </script>
 
     <script src="auditoria.js"></script>

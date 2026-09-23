@@ -42,13 +42,17 @@
     </div>
 
     <script type="module">
-      import { montarCabecera, exigirSesion } from '../comun/cabecera-app.js';
+      import { montarCabecera } from '../comun/cabecera-app.js';
+      import { exigirAcceso } from '../comun/acceso.js';
 
-      if (!exigirSesion()) {
+      if (!exigirAcceso('mis-cofres')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
       // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
-      montarCabecera(document.getElementById('navbar-container'), { seccionActiva: 'cuenta' });
+      montarCabecera(document.getElementById('navbar-container'), {
+        vista: 'mis-cofres',
+        seccionActiva: 'cuenta',
+      });
     </script>
 
     <script type="module" src="./mis-cofres.js"></script>

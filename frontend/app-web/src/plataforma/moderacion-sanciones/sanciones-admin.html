@@ -12,10 +12,12 @@
     <div data-cabecera-app></div>
 
     <main class="pagina pila" data-vista="sanciones-admin">
-      <h1>Moderacion · Sanciones</h1>
+      <h1>Moderación · Sanciones</h1>
+      <!-- Advertencias RF-USR-004, suspensiones RF-USR-005, baneos RF-USR-006,
+           apelaciones RF-USR-007. -->
       <p class="t-meta">
-        Advertencias (RF-USR-004), suspensiones temporales (RF-USR-005), baneos definitivos
-        (RF-USR-006) y apelaciones (RF-USR-007). Quien emite queda registrado; nada se borra.
+        Advertencias, suspensiones temporales, baneos definitivos y apelaciones. Quien emite queda
+        registrado y nada se borra: una sanción se revoca, no se elimina.
       </p>
 
       <div class="aviso" data-zona="aviso" role="status" hidden></div>
@@ -92,13 +94,17 @@
     </main>
 
     <script type="module">
-      import { montarCabecera, exigirSesion, leerSesion } from '../../comun/cabecera-app.js';
+      import { montarCabecera, leerSesion } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
       import { montarPanelDeModeracion } from './sanciones.js';
 
-      if (!exigirSesion()) {
+      if (!exigirAcceso('sanciones-admin')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'cuenta' });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'sanciones-admin',
+        seccionActiva: 'sanciones',
+      });
       montarPanelDeModeracion(document, { rol: leerSesion().rol });
       // Un 403 de RBAC lleva al menu, no al login (mismo criterio que la lista negra).
       window.addEventListener('nexus:rbac-forbidden', () => {

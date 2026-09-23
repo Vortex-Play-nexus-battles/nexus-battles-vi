@@ -189,13 +189,17 @@
 
     <script type="module" src="./lista-negra-admin.js"></script>
     <script type="module">
-      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+      import { montarCabecera } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
 
-      if (!exigirSesion()) {
+      if (!exigirAcceso('lista-negra-admin')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
       // Cabecera unica de la aplicacion (HU-UX-001).
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'cuenta' });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'lista-negra-admin',
+        seccionActiva: 'lista-negra',
+      });
     </script>
   </body>
 </html>

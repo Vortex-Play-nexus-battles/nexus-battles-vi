@@ -198,14 +198,18 @@
     <script type="module">
       import { montarAsistente } from '../../comun/ui/asistente.js';
       import { montarCrearSala, encuentroDesde } from './crear-sala.js';
-      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+      import { montarCabecera } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
 
       // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
-      if (!exigirSesion()) {
+      if (!exigirAcceso('crear-sala')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
       // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'jugar' });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'crear-sala',
+        seccionActiva: 'jugar',
+      });
 
       montarCrearSala(document.getElementById('formulario-crear-sala'), {
         encuentro: encuentroDesde(window.location.search),

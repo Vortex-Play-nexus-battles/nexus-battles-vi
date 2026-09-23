@@ -268,12 +268,16 @@ export function pintarInforme(contenedor, informe) {
   // El objetivo se nombra "configurado" y no "umbral de HU-REN-002" a
   // proposito: esa historia no define ningun numero propio. El que se muestra
   // es el de RNF-REN-001, que es el unico que existe en los requisitos.
+  //
+  // UX-R3.1 — esa explicacion se queda AQUI. Antes se pintaba en la pantalla:
+  // quien opera el Nexo leia dos identificadores de requisito y ninguna
+  // respuesta a lo unico que se pregunta, que es de donde sale el numero.
   const referencia = document.createElement('p');
   referencia.className = 'campo__pista';
   referencia.dataset.campo = 'referencia-objetivo';
   referencia.textContent =
-    `Objetivo de referencia: ${informe.objetivoMs} ms, configurado desde RNF-REN-001. ` +
-    'HU-REN-002 no define un umbral propio.';
+    `Objetivo de referencia: ${informe.objetivoMs} ms. Lo fija la configuración del ` +
+    'servicio, no esta pantalla.';
 
   tarjeta.append(resumen, veredicto, referencia);
 
@@ -305,7 +309,7 @@ export function pintarInforme(contenedor, informe) {
 export function informeComoTexto(informe) {
   const lineas = [
     `Informe de latencia — ${informe.servicio}`,
-    `Objetivo de referencia: ${informe.objetivoMs} ms (RNF-REN-001)`,
+    `Objetivo de referencia: ${informe.objetivoMs} ms`,
     `Muestras: ${informe.muestras}`,
   ];
 

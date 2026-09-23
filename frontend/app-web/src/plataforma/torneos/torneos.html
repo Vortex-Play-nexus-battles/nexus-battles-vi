@@ -60,7 +60,10 @@
       import { montarCabecera, leerSesion } from '../../comun/cabecera-app.js';
       import { montarTorneos } from './torneos.js';
 
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'torneo' });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'torneos',
+        seccionActiva: 'torneo',
+      });
       const sesion = leerSesion();
       montarTorneos(document, {
         uid: sesion.autenticado ? sesion.uid : null,
