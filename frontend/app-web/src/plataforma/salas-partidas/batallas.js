@@ -479,16 +479,36 @@ export function montarBatallas(raiz, puertos = {}) {
     }
 
     zonaInvitacion.hidden = false;
-    zonaInvitacion.dataset.sala = idSala;
+    // `data-sala-invitada` y no `data-sala`: la escucha de las tarjetas esta
+    // delegada en TODA la vista y busca `closest('[data-sala]')`. Con ese
+    // nombre, pulsar «Entrar con el codigo» disparaba **dos** ingresos: el del
+    // formulario, con codigo, y el de la delegacion, sin el. El segundo 403
+    // llegaba despues y reescribia el aviso con el mensaje de la primera vez,
+    // que es lo que CI encontro y lo que dejaba a la persona sin saber si su
+    // codigo se habia enviado. En una sala con apuesta habrian sido dos
+    // intentos de reserva.
+    zonaInvitacion.dataset.salaInvitada = idSala;
     const campo = zonaInvitacion.querySelector('[name="codigoInvitacion"]');
     const aviso = zonaInvitacion.querySelector('[data-zona="aviso-codigo"]');
+
+    // Que el codigo ya se intento es una propiedad de la interaccion, no del
+    // parametro que llega por el catch. Lo marca el propio formulario al
+    // enviarse, asi que el mensaje es correcto aunque el rechazo vuelva por un
+    // camino distinto del que lo pidio.
+    const yaIntento = zonaInvitacion.dataset.intentado === 'si';
     if (aviso) {
-      aviso.textContent = codigoPrevio
+      aviso.textContent = yaIntento
         ? 'Ese código no vale para esta sala. Compruébalo con quien te invitó.'
         : (problema.detalle ?? 'Pide el código a quien creó la sala.');
     }
     if (campo) {
-      campo.value = codigoPrevio;
+      // No se pisa lo que la persona tenga escrito. Un rechazo que llega
+      // mientras alguien teclea no puede borrarle el campo: pasa cuando se
+      // abre un enlace de invitacion, que intenta entrar solo, y su 403 llega
+      // despues de que la persona ya haya empezado a escribir.
+      if (codigoPrevio || !campo.value) {
+        campo.value = codigoPrevio;
+      }
       campo.focus();
     }
   }
@@ -496,7 +516,8 @@ export function montarBatallas(raiz, puertos = {}) {
   function cerrarPeticionDeCodigo() {
     if (zonaInvitacion) {
       zonaInvitacion.hidden = true;
-      delete zonaInvitacion.dataset.sala;
+      delete zonaInvitacion.dataset.salaInvitada;
+      delete zonaInvitacion.dataset.intentado;
       const campo = zonaInvitacion.querySelector('[name="codigoInvitacion"]');
       if (campo) {
         campo.value = '';
@@ -506,12 +527,13 @@ export function montarBatallas(raiz, puertos = {}) {
 
   zonaInvitacion?.addEventListener('submit', (evento) => {
     evento.preventDefault();
-    const idSala = zonaInvitacion.dataset.sala;
+    const idSala = zonaInvitacion.dataset.salaInvitada;
     const campo = zonaInvitacion.querySelector('[name="codigoInvitacion"]');
     const codigo = campo?.value?.trim() ?? '';
     if (!idSala || !codigo) {
       return;
     }
+    zonaInvitacion.dataset.intentado = 'si';
     entrarA(idSala, codigo);
   });
 

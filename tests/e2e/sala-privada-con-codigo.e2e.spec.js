@@ -138,6 +138,18 @@ test.describe('Sala privada con codigo de invitacion (RF-JUE-002)', () => {
 
   test('B con un codigo equivocado sigue fuera, y se le dice por que', async ({ page }) => {
     await conSesion(page, invitado, INVITADO);
+
+    // Se cuentan los intentos de ingreso con su cuerpo: sin esto, un
+    // formulario que no llega a enviarse pasaria la prueba —la ocupacion sigue
+    // en uno y el aviso sigue puesto— y el fallo quedaria escondido. La primera
+    // version de esta prueba tenia justo ese agujero, y lo destapo CI.
+    const envios = [];
+    page.on('request', (peticion) => {
+      if (peticion.url().includes('/participantes') && peticion.method() === 'POST') {
+        envios.push(peticion.postData() ?? '');
+      }
+    });
+
     await page.goto(`${LISTADO}?sala=${sala.id}`);
 
     const formulario = page.locator('[data-zona="pedir-codigo"]');
@@ -145,6 +157,13 @@ test.describe('Sala privada con codigo de invitacion (RF-JUE-002)', () => {
 
     await page.locator('[name="codigoInvitacion"]').fill('ZZZZ-9999');
     await formulario.locator('button[type="submit"]').click();
+
+    // El codigo llego al servicio de verdad.
+    await expect
+      .poll(() => envios.filter((cuerpo) => cuerpo.includes('ZZZZ-9999')).length, {
+        timeout: 20_000,
+      })
+      .toBeGreaterThan(0);
 
     // Sigue pidiendo el codigo, y ahora dice que el que escribio no vale: el
     // mensaje cambia para que no haya duda de si se envio.

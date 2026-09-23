@@ -656,7 +656,7 @@ describe('FI-R4 - entrar a una sala privada con codigo', () => {
     await vaciarCola();
 
     expect(formulario().hidden).toBe(false);
-    expect(formulario().dataset.sala).toBe(ID);
+    expect(formulario().dataset.salaInvitada).toBe(ID);
     // Y la rejilla sigue ahi: quien se equivoco de sala elige otra sin recargar.
     expect(raiz.querySelector('[data-zona="salas"]').hidden).toBe(false);
   });
@@ -730,6 +730,43 @@ describe('FI-R4 - entrar a una sala privada con codigo', () => {
     await vaciarCola();
 
     expect(ingresar).toHaveBeenCalledTimes(1);
+  });
+
+  test('enviar el codigo manda UN ingreso, no dos', async () => {
+    // El defecto que encontro CI contra el backend real: el formulario llevaba
+    // `data-sala`, y la escucha de las tarjetas esta delegada en toda la vista
+    // con `closest('[data-sala]')`. Pulsar «Entrar con el codigo» disparaba dos
+    // ingresos —el del formulario con codigo, y el de la delegacion sin el— y
+    // el 403 del segundo llegaba despues, reescribiendo el aviso con el mensaje
+    // de la primera vez. En una sala con apuesta habrian sido dos reservas.
+    const ingresar = jest.fn().mockRejectedValue(rechazoPrivada());
+    montar(ingresar);
+    await vaciarCola();
+
+    raiz.querySelector(`[data-sala="${ID}"]`).click();
+    await vaciarCola();
+    const trasAbrir = ingresar.mock.calls.length;
+
+    campo().value = 'WXYZ-2345';
+    formulario().querySelector('button[type="submit"]').click();
+    await vaciarCola();
+
+    expect(ingresar.mock.calls.length - trasAbrir).toBe(1);
+    expect(ingresar).toHaveBeenLastCalledWith(ID, { codigoInvitacion: 'WXYZ-2345' });
+  });
+
+  test('un codigo rechazado no borra lo que la persona escribio', async () => {
+    const ingresar = jest.fn().mockRejectedValue(rechazoPrivada());
+    montar(ingresar);
+    await vaciarCola();
+    raiz.querySelector(`[data-sala="${ID}"]`).click();
+    await vaciarCola();
+
+    campo().value = 'WXYZ-2345';
+    formulario().querySelector('button[type="submit"]').click();
+    await vaciarCola();
+
+    expect(campo().value).toBe('WXYZ-2345');
   });
 
   test('Cancelar cierra el formulario sin entrar a ninguna parte', async () => {
