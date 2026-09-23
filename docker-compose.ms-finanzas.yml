@@ -57,6 +57,12 @@ services:
         condition: service_healthy
     environment:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      # Credencial de servicio (ADR-005). desplegar.sh genera y persiste
+      # SECRETO_SERVICIO_MS_FINANZAS en el host y se la da a ms-identidad en
+      # AUTH_CLIENTES_SERVICIO; sin estas dos lineas el servicio pide el token
+      # con el client_id global, que no esta registrado, y se lo niegan.
+      DIRECTORIO_ACTIVO_CLIENT_ID: ms-finanzas
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_MS_FINANZAS:-}
       # El lado IZQUIERDO es el nombre que Spring lee de verdad (confirmado en
       # application.properties de ms-finanzas). El DERECHO lo deja desplegar.sh
       # en el .env del servidor, con prefijo MS_FINANZAS_ para no pisar ni las

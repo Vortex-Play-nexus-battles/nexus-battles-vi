@@ -43,6 +43,12 @@ services:
         condition: service_healthy
     environment:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      # Credencial de servicio (ADR-005). desplegar.sh genera y persiste
+      # SECRETO_SERVICIO_MS_SUBASTAS en el host y se la da a ms-identidad en
+      # AUTH_CLIENTES_SERVICIO; sin estas dos lineas el servicio pide el token
+      # con el client_id global, que no esta registrado, y se lo niegan.
+      DIRECTORIO_ACTIVO_CLIENT_ID: ms-subastas
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_MS_SUBASTAS:-}
       DB_HOST: ${MS_SUBASTAS_DB_HOST:-subastas-db}
       DB_PORT: ${MS_SUBASTAS_DB_PORT:-5432}
       DB_NAME: ${MS_SUBASTAS_DB_NAME:-subastas_db}

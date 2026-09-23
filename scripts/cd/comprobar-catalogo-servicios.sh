@@ -141,6 +141,31 @@ for script in scripts/cd/desplegar.sh scripts/cd/revertir.sh; do
 done
 
 echo
+echo "== 5) Todo cliente de servicio recibe su propia credencial =="
+# desplegar.sh registra en el emisor (AUTH_CLIENTES_SERVICIO) una credencial
+# por cada nombre de CLIENTES_DE_SERVICIO. Si el compose de ese servicio no le
+# pasa DIRECTORIO_ACTIVO_CLIENT_ID/SECRET, el servicio pide su token con el
+# client_id global, que no esta registrado, y se lo niegan -- en silencio,
+# porque la llamada fallida se ve como un timeout aguas abajo y no como un
+# problema de credenciales. Le pasaba a notificaciones, ms-finanzas y
+# ms-subastas a la vez.
+CLIENTES=$(grep -E '^CLIENTES_DE_SERVICIO=' scripts/cd/desplegar.sh | head -1 | cut -d'"' -f2)
+if [ -z "$CLIENTES" ]; then
+  fallo "No se pudo leer CLIENTES_DE_SERVICIO de scripts/cd/desplegar.sh."
+else
+  for cliente in $CLIENTES; do
+    if grep -qhE "DIRECTORIO_ACTIVO_CLIENT_ID: ${cliente}\$" docker-compose*.yml 2>/dev/null; then
+      echo "  ok    $cliente"
+    else
+      fallo "$cliente esta registrado como cliente de servicio pero ningun compose le pasa su credencial." \
+        "Agrega a su bloque environment:" \
+        "  DIRECTORIO_ACTIVO_CLIENT_ID: $cliente" \
+        "  DIRECTORIO_ACTIVO_CLIENT_SECRET: \${SECRETO_SERVICIO_$(echo "$cliente" | tr 'a-z-' 'A-Z_'):-}"
+    fi
+  done
+fi
+
+echo
 if [ "$FALLOS" -gt 0 ]; then
   echo "::error::$FALLOS problema(s) en el catalogo de despliegue."
   exit 1

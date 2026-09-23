@@ -191,6 +191,12 @@ services:
     <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-moderacion-sanciones:${TAG}
     environment:
+      # Credencial de servicio (ADR-005). desplegar.sh genera y persiste
+      # SECRETO_SERVICIO_NOTIFICACIONES en el host y se la da a ms-identidad en
+      # AUTH_CLIENTES_SERVICIO; sin estas dos lineas el servicio pide el token
+      # con el client_id global, que no esta registrado, y se lo niegan.
+      DIRECTORIO_ACTIVO_CLIENT_ID: notificaciones
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_NOTIFICACIONES:-}
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
       # HU-NOT-005: el aviso de sancion/apelacion va a la bandeja del jugador
       # por /internal/notifications de notificaciones, que corre en este host,
