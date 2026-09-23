@@ -44,7 +44,7 @@ services:
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-ms-finanzas:${TAG}
     container_name: srv-ms-finanzas
     restart: unless-stopped
-    mem_limit: 256m
+    mem_limit: 192m
     ports:
       - "8093:8093"
     depends_on:
