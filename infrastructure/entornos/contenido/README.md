@@ -8,6 +8,30 @@ Instancia propia para `services/contenido/*` (héroes, inventario, productos, mo
 - El host de plataforma es una `t3.small` (2 vCPU / 2 GiB): ya corre nueve servicios, el borde, PostgreSQL, Redis y Mailpit. No caben ahí 20 JVM más las bases de datos.
 - El cliente autorizó el uso de la prueba gratuita / créditos de AWS (clase del 2026-09-03).
 
+## ANTES DE NADA: este host no vive en la cuenta de plataforma
+
+`nexus-contenido-dev` **existe y está encendido** (IP elástica `34.193.90.11`, arrancado el 9 de septiembre, sin reinicios). Pero vive en la **cuenta gratuita del grupo 2**, no en la de plataforma. El rol OIDC de `vars.AWS_ROLE_ARN` —el que usan `infra-dev.yml` y `cd.yml`— es de la cuenta de plataforma y **no lo ve**.
+
+De ahí salen dos mensajes que parecen decir "el host no existe" y no lo dicen:
+
+| Lo que sale | Lo que significa de verdad |
+|---|---|
+| `inventario` → *"No hay ninguna instancia con tag Name=nexus-contenido-dev"* | Este rol no la ve. La instancia está corriendo en la otra cuenta. |
+| `plan` → *"5 to add"* (instancia, IP, SG, llave) | El estado remoto está vacío **y** el rol no ve el host. No es un host ausente. |
+
+**No se aplica ese plan, y `IMPORTACION_CONTENIDO_COMPLETADA` no se pone en `true` para desbloquearlo.** Aplicarlo crearía un **tercer EC2 en la cuenta equivocada**, con coste nuevo, mientras el host real sigue corriendo y recibiendo despliegues por SSH. Tampoco se puede importar: un `import` de OpenTofu no cruza cuentas, y el rol de esta carpeta es el de plataforma.
+
+Lo comprueba solo el paso *"Compuerta — contenido NUNCA crea un host (vive en otra cuenta)"* de `infra-dev.yml`: si el plan propone crear el host, avisa en `plan` y **falla en `apply`**.
+
+### Entonces, ¿cómo se despliega hoy?
+
+Por SSH, sin tocar esta carpeta: `cd.yml` → job `desplegar-contenido-dev` → secrets `DEPLOY_HOST_CONTENIDO_DEV`, `SSH_USER_CONTENIDO_DEV`, `SSH_KEY_CONTENIDO_DEV`. Funciona y está probado (corrida #353 del 23-sep: los cuatro servicios desplegados y sanos). Lo que **no** está gobernado por OpenTofu es la forma del host; eso sigue pendiente y solo se arregla de una de estas dos maneras:
+
+1. crear un rol OIDC en la cuenta del grupo 2 y apuntar esta carpeta (y su bucket de estado) allí — es lo que ya prevén `vars.AWS_ROLE_ARN_CONTENIDO` y `vars.AWS_REGION_CONTENIDO` en `cd.yml` y `diagnostico-dev.yml`; o
+2. aceptar por escrito que este host se gobierna a mano desde la cuenta del grupo 2, y borrar esta carpeta para que no vuelva a proponer crear nada.
+
+Decidirlo es de los dueños de las dos cuentas. Hasta entonces, lo de abajo describe el diseño **como se pensó cuando se creía que el host estaba en esta cuenta**; se conserva porque sigue siendo válido el día que se elija la opción 1.
+
 ## Estado del gobierno de esta carpeta — R9.1
 
 Hasta R9.1, esta carpeta se aplicaba **a mano**, con el estado en el disco de quien la aplicó. Cuatro consecuencias, todas reales:
