@@ -1,0 +1,348 @@
+openapi: 3.1.0
+
+# =============================================================================
+# Nexus Battles VI — Chatbot de soporte (ms-chatbot · equipo de Cuentas y
+# comercio, Grupo 4)
+#
+# Regla 1 de plataforma: contrato primero. Este documento se escribe A PARTIR
+# de lo que `services/cuentas/ms-chatbot` YA implementa y tiene probado
+# (`ChatController`, `ChatService`, `CalificacionService`), historia por
+# historia:
+#
+#   HU-CHA-001  chat 24/7 para visitantes y usuarios autenticados
+#   HU-CHA-004  motor de respuestas basado en reglas con escalamiento
+#   HU-CHA-008  consultas y acciones asistidas para usuarios autenticados
+#   HU-CHA-011  calificacion de respuestas y brechas de conocimiento
+#
+# Dueno del contrato: Grupo 4 (ms-chatbot).
+#
+# ---------------------------------------------------------------------------
+# QUIEN LO LLAMA
+#
+# Solo la ventana de chat del frontend (`frontend/app-web`). Ningun otro
+# servicio llama a ms-chatbot.
+#
+# ---------------------------------------------------------------------------
+# IDENTIDAD: VISITANTE O USUARIO AUTENTICADO
+#
+# Todas las rutas aceptan las dos formas, porque el chat debe funcionar para
+# visitantes sin cuenta (criterio de HU-CHA-001):
+#
+#   * Usuario autenticado: `Authorization: Bearer <JWT de ms-identidad>`. La
+#     conversacion se identifica por el claim `uid` (ADR-002).
+#   * Visitante: sin token, con la cabecera `X-Id-Sesion-Anonima`, un
+#     identificador que genera y conserva el propio frontend.
+#
+# Sin token valido y sin esa cabecera, la respuesta es 400.
+#
+# Un JWT invalido o vencido NO produce 401 en estas rutas: la peticion se
+# atiende como la de un visitante (HU-CHA-008). Asi, a un jugador cuya sesion
+# vence a mitad de conversacion no se le corta el chat; solo pierde las
+# consultas asistidas, que exigen token valido.
+#
+# ---------------------------------------------------------------------------
+# DEPENDENCIAS SALIENTES (HU-CHA-008)
+#
+# Con un usuario autenticado, `POST /chat/mensajes` puede consultar
+# inventario (`inventario.yaml`), subastas (`ms-subastas-pujas.yaml`) y
+# notificaciones (`notificaciones.yaml`), reenviando el MISMO token del
+# jugador (nunca una credencial de servicio): esos servicios derivan el dueno
+# del claim `uid`. Si alguno no responde, el chatbot contesta igual, con un
+# aviso de "servicio no disponible" solo para esa parte.
+# =============================================================================
+
+info:
+  title: Nexus Battles VI — Chatbot de soporte
+  version: 1.0.0
+  description: |
+    Chat de soporte 24/7 para visitantes y jugadores: respuestas desde una
+    base de conocimiento, consultas en vivo sobre la propia cuenta,
+    historial de conversacion y calificacion de respuestas.
+
+    Errores en formato problem details (regla 4), con el `ProblemDetail`
+    estandar de Spring.
+  license:
+    name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
+
+servers:
+  - url: http://localhost:8094/api/v1
+    description: Desarrollo local (context-path /api/v1 del propio servicio)
+
+tags:
+  - name: chat
+    description: Conversacion con el chatbot e historial (HU-CHA-001, HU-CHA-004, HU-CHA-008)
+  - name: calificaciones
+    description: Calificacion de respuestas del chatbot (HU-CHA-011)
+
+paths:
+  /chat/mensajes:
+    post:
+      tags: [chat]
+      operationId: enviarMensajeAlChatbot
+      summary: Envia un mensaje al chatbot y devuelve su respuesta
+      description: |
+        Guarda el mensaje del usuario en su conversacion (la crea si es el
+        primero de esa sesion) y devuelve la respuesta del bot, que tambien
+        queda guardada.
+
+        Como se genera la respuesta:
+
+        1. Solo con usuario autenticado: si el mensaje pide datos de la
+           propia cuenta (inventario, subastas, notificaciones), ir a una
+           seccion del sitio o un informe de actividad, se responde con
+           datos en vivo (HU-CHA-008). Misiones y torneos responden, por
+           ahora, que estan en construccion.
+        2. Si no, se busca en la base de conocimiento (HU-CHA-004).
+        3. Si la pregunta no se entiende, se escala: la respuesta ofrece
+           soporte humano y temas relacionados, y la pregunta se registra
+           como brecha de conocimiento (HU-CHA-011).
+
+        Nunca ejecuta operaciones economicas (pujas, compras): solo consulta.
+      security:
+        - {}
+        - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/IdSesionAnonima'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnviarMensaje'
+            example:
+              contenido: como subo de nivel a mi heroe
+      responses:
+        '200':
+          description: Respuesta del bot, ya guardada en el historial.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Mensaje'
+              example:
+                id: 0148c91d-1436-4a7c-8dbc-f339f8f634ce
+                remitente: BOT
+                contenido: Puedes revisar tu inventario en la seccion de Inventario del menu principal.
+                adjuntoUrl: null
+                fechaEnvio: '2026-09-23T18:09:10.326633Z'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+
+  /chat/historial:
+    get:
+      tags: [chat]
+      operationId: obtenerHistorialDelChatbot
+      summary: Historial de la conversacion de la sesion
+      description: |
+        Todos los mensajes (del usuario y del bot) de la conversacion de esta
+        sesion, del mas antiguo al mas reciente. Lista vacia si la sesion
+        todavia no ha escrito.
+      security:
+        - {}
+        - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/IdSesionAnonima'
+      responses:
+        '200':
+          description: Mensajes de la conversacion, en orden cronologico.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Mensaje'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+
+    delete:
+      tags: [chat]
+      operationId: limpiarHistorialDelChatbot
+      summary: Borra el historial de la conversacion de la sesion
+      description: |
+        Borra todos los mensajes de la conversacion y, con ellos, sus
+        calificaciones. Las brechas de conocimiento ya registradas NO se
+        borran: son un agregado anonimo, sin vinculo con la sesion.
+        Idempotente: sin conversacion previa, responde igual.
+      security:
+        - {}
+        - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/IdSesionAnonima'
+      responses:
+        '204':
+          description: Historial borrado (o no habia nada que borrar).
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+
+  /chat/mensajes/{mensajeId}/calificacion:
+    post:
+      tags: [calificaciones]
+      operationId: calificarRespuestaDelChatbot
+      summary: Califica una respuesta del bot como util o no util (HU-CHA-011)
+      description: |
+        Una sola calificacion por respuesta. Solo se califican mensajes del
+        bot, y solo los de la propia conversacion: un mensaje de otra sesion
+        responde 404, igual que uno inexistente, para no revelar que existe.
+
+        Una calificacion "no util" registra como brecha de conocimiento la
+        pregunta del usuario que origino esa respuesta.
+      security:
+        - {}
+        - tokenDeUsuario: []
+      parameters:
+        - name: mensajeId
+          in: path
+          required: true
+          description: '`id` de un mensaje del bot, tal como lo devolvio `POST /chat/mensajes`.'
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdSesionAnonima'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CalificarRespuesta'
+            example:
+              util: false
+              comentario: No respondio lo que pregunte
+      responses:
+        '201':
+          description: Calificacion registrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Calificacion'
+        '400':
+          description: |
+            Cuerpo invalido (falta `util`, comentario de mas de 1000
+            caracteres), `mensajeId` que no es un UUID, falta de identidad, o
+            el mensaje es del usuario y no del bot.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '404':
+          description: No existe un mensaje con ese `id` en la conversacion de quien llama.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: Esa respuesta ya fue calificada.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+components:
+  securitySchemes:
+    tokenDeUsuario:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Token de sesion de un usuario (ADR-002), firmado por ms-identidad y
+        verificado contra su JWKS, con claim `uid`. Opcional en todas las
+        rutas: sin el, la peticion es de un visitante.
+
+  parameters:
+    IdSesionAnonima:
+      name: X-Id-Sesion-Anonima
+      in: header
+      required: false
+      description: |
+        Identificador de la sesion de un visitante, generado y conservado por
+        el frontend. Obligatorio si no hay token valido; se ignora si lo hay.
+      schema:
+        type: string
+        maxLength: 255
+
+  responses:
+    PeticionInvalida:
+      description: Cuerpo invalido, o ni token valido ni `X-Id-Sesion-Anonima`.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+
+  schemas:
+    EnviarMensaje:
+      type: object
+      required: [contenido]
+      properties:
+        contenido:
+          type: string
+          minLength: 1
+          maxLength: 4000
+          description: Texto del mensaje; no puede ser solo espacios.
+        adjuntoUrl:
+          type: [string, 'null']
+          maxLength: 500
+          description: |
+            URL de una captura ya subida a otro lado (HU-CHA-001). El chatbot
+            solo guarda la URL; el tamano maximo del adjunto sigue pendiente
+            con el cliente (RF-CHA-002).
+
+    Mensaje:
+      type: object
+      required: [id, remitente, contenido, fechaEnvio]
+      properties:
+        id:
+          type: string
+          format: uuid
+        remitente:
+          type: string
+          enum: [USUARIO, BOT]
+        contenido:
+          type: string
+        adjuntoUrl:
+          type: [string, 'null']
+        fechaEnvio:
+          type: string
+          format: date-time
+
+    CalificarRespuesta:
+      type: object
+      required: [util]
+      properties:
+        util:
+          type: boolean
+          description: Obligatorio. Un cuerpo sin este campo responde 400, nunca se asume "no util".
+        comentario:
+          type: [string, 'null']
+          maxLength: 1000
+          description: Comentario libre opcional. Vacio o solo espacios se guarda como sin comentario.
+
+    Calificacion:
+      type: object
+      required: [id, mensajeId, util, fechaCalificacion]
+      properties:
+        id:
+          type: string
+          format: uuid
+        mensajeId:
+          type: string
+          format: uuid
+        util:
+          type: boolean
+        comentario:
+          type: [string, 'null']
+        fechaCalificacion:
+          type: string
+          format: date-time
+
+    ProblemDetail:
+      type: object
+      description: Formato estandar de error (RFC 9457, regla 4 de plataforma).
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string

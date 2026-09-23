@@ -5,6 +5,6 @@ import jakarta.validation.constraints.Size;
 
 public record EnviarMensajeRequest(
     @NotBlank @Size(max = 4000) String contenido,
-    String adjuntoUrl
+    @Size(max = 500) String adjuntoUrl
 ) {
 }
