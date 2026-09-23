@@ -33,15 +33,11 @@ import { estadoDeCarga, estadoDeError, estadoVacio } from '../comun/ui/estado-vi
 /**
  * Cabeceras de cada petición.
  *
- * `X-User-Id` lo exige `CarritoController` de `ms-ecommerce`, así que se manda;
- * lo que cambia es que ahora lleva **al usuario de verdad**. Sin sesión se
- * omite: mejor que el backend responda 400 a que el carrito de alguien se
- * mezcle con el de otro.
+ * La identidad viaja en el token Bearer manejado por el interceptor, cumpliendo
+ * con el estándar ADR-002.
  */
 function cabeceras() {
-  const usuario = usuarioIdDeSesion();
-  const base = { 'Content-Type': 'application/json' };
-  return usuario ? { ...base, 'X-User-Id': usuario } : base;
+  return { 'Content-Type': 'application/json' };
 }
 
 /** @returns {boolean} true si hay una sesión utilizable */
