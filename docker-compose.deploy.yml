@@ -146,6 +146,42 @@ services:
       # responde, se usa el respaldo y queda en la bitacora: leer un parametro
       # nunca tumba una partida.
       PARAMETROS_URL: ${PARAMETROS_URL:-http://srv-admin-parametros:8088/api/v1}
+      # ------------------------------------------------------------------
+      # Los cuatro servicios de CONTENIDO, que no viven en este host.
+      #
+      # salas-partidas habla con heroes, inventario, productos y el motor de
+      # combate. En `tests/e2e/compose.yml` los cuatro estan en la misma red
+      # de Compose y el banco E2E los resuelve por nombre de contenedor
+      # (`srv-inventario`, `srv-motor-combate`...). En AWS no: corren en el
+      # host del grupo 2 (ver el job `desplegar-contenido-dev` de cd.yml,
+      # #656), y aqui NADIE fijaba estas cuatro variables. Sin ellas
+      # `application.yml` cae a `http://localhost:8080` y
+      # `motor.combate.url` a `http://localhost:8104`, que dentro de este
+      # contenedor es el propio salas-partidas.
+      #
+      # Consecuencia medida el 23-sep contra el entorno desplegado: con
+      # inventario CORRIENDO y sano en 34.193.90.11:8102,
+      # `POST /api/v1/salas` contestaba 503 `seccion-no-disponible`
+      # (seccion=Inventario). Es decir, la limitacion que el smoke daba por
+      # "inventario no esta desplegado" (#435) no era eso: inventario estaba
+      # desplegado y respondiendo, pero salas-partidas se lo preguntaba a si
+      # mismo. Por el mismo motivo el combate no podia llegar nunca al motor,
+      # y HU-JUE-002 y HU-JUE-008 no eran demostrables en AWS por mucho que
+      # su logica estuviera completa y verde en el banco E2E.
+      #
+      # La IP es la elastica del host de contenido, la misma que ya usa el
+      # borde para /api/v1/productos (infrastructure/red-balanceo/
+      # borde-dev.conf) y la misma que aquel host usa en sentido contrario
+      # para el JWKS. Cada URL es sobreescribible por su variable, sin tocar
+      # este archivo, el dia que el host se mude.
+      #
+      # Interpolacion de un solo nivel a proposito: el resto del archivo usa
+      # exactamente esta forma y no se estrena aqui una anidada.
+      # ------------------------------------------------------------------
+      HEROES_BASE_URL: ${HEROES_BASE_URL:-http://34.193.90.11:8101}
+      INVENTARIO_BASE_URL: ${INVENTARIO_BASE_URL:-http://34.193.90.11:8102}
+      PRODUCTOS_BASE_URL: ${PRODUCTOS_BASE_URL:-http://34.193.90.11:8103}
+      MOTOR_COMBATE_URL: ${MOTOR_COMBATE_URL:-http://34.193.90.11:8104}
 
   srv-notificaciones:
     <<: *servicio-plataforma
