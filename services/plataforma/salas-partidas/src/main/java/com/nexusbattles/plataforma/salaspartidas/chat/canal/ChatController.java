@@ -5,6 +5,8 @@ import com.nexusbattles.plataforma.salaspartidas.chat.Canal;
 import com.nexusbattles.plataforma.salaspartidas.chat.EnviarMensaje;
 import com.nexusbattles.plataforma.salaspartidas.chat.HistorialDeChat;
 import com.nexusbattles.plataforma.salaspartidas.chat.MensajeDeChat.Autor;
+import com.nexusbattles.plataforma.resiliencia.parametros.LectorDeParametros;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -36,15 +38,48 @@ import java.util.UUID;
 @Controller
 public class ChatController {
 
+    /** D-16 / HU-JUE-015: cuantos mensajes se cargan al entrar a un chat. */
+    static final String CLAVE_TAMANO = "chat.historial.tamano";
+
     private final EnviarMensaje enviarMensaje;
     private final HistorialDeChat historial;
-    private final int tamanoHistorial;
+    private final LectorDeParametros parametros;
+    private final int respaldoTamano;
 
+    /**
+     * El tamano del historial es una decision de producto (D-16), no una
+     * constante del servicio: vive en el catalogo de admin-parametros y
+     * {@code CHAT_HISTORIAL_TAMANO} pasa a ser el <b>respaldo</b>, el valor que
+     * se aplica cuando el catalogo no responde o el Product Owner no lo ha
+     * fijado. Si el catalogo se cae, el chat sigue cargando su historial.
+     */
+    @Autowired
     public ChatController(EnviarMensaje enviarMensaje, HistorialDeChat historial,
-            @Value("${chat.historial.tamano:50}") int tamanoHistorial) {
+            LectorDeParametros parametros,
+            @Value("${chat.historial.tamano:50}") int respaldoTamano) {
         this.enviarMensaje = enviarMensaje;
         this.historial = historial;
-        this.tamanoHistorial = tamanoHistorial;
+        this.parametros = parametros;
+        this.respaldoTamano = respaldoTamano;
+    }
+
+    /** Con un tamano fijo, sin catalogo: lo usan las pruebas. */
+    public ChatController(EnviarMensaje enviarMensaje, HistorialDeChat historial, int tamanoHistorial) {
+        this(enviarMensaje, historial, LectorDeParametros.soloRespaldo(), tamanoHistorial);
+    }
+
+    /**
+     * El tamano vigente. Se pregunta en cada suscripcion —no al arrancar—
+     * porque si no, cambiar el parametro exigiria reiniciar el servicio.
+     * La lectura pasa por la cache del lector, asi que no es una llamada de
+     * red por suscripcion.
+     *
+     * <p>Se acota por abajo a 1: un catalogo con 0 o un numero negativo no
+     * puede convertir «carga los ultimos N» en una consulta sin sentido.
+     */
+    private int tamanoHistorial() {
+        long vigente = parametros.entero(CLAVE_TAMANO, respaldoTamano);
+        return (int) Math.min(Math.max(vigente, 1L), Integer.MAX_VALUE);
     }
 
     @MessageMapping("/salas/{idSala}/chat")
@@ -60,13 +95,13 @@ public class ChatController {
 
     @SubscribeMapping("/salas/{idSala}/chat/historial")
     public List<MensajeDeChatResponse> historialDeSala(@DestinationVariable UUID idSala) {
-        return historial.ultimos(Canal.deSala(idSala), tamanoHistorial).stream()
+        return historial.ultimos(Canal.deSala(idSala), tamanoHistorial()).stream()
                 .map(MensajeDeChatResponse::de).toList();
     }
 
     @SubscribeMapping("/chat/general/historial")
     public List<MensajeDeChatResponse> historialGeneral() {
-        return historial.ultimos(Canal.general(), tamanoHistorial).stream()
+        return historial.ultimos(Canal.general(), tamanoHistorial()).stream()
                 .map(MensajeDeChatResponse::de).toList();
     }
 

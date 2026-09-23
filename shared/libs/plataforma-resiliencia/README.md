@@ -28,6 +28,24 @@ implementation project(':shared:libs:plataforma-resiliencia')
 | `RegistroDeDegradacion` | qué secciones están limitadas ahora y desde cuándo |
 | `ErroresDeDegradacion` | el problem detail estándar de sección limitada (regla 4) |
 | `ManejadorDeDegradacion` | lo traduce a la respuesta HTTP, idéntico en los 20 módulos |
+| `parametros.LectorDeParametros` | lee un parámetro de `admin-parametros` **sin que su caída tumbe al que lo lee** |
+
+### `LectorDeParametros` — por qué está aquí
+
+Un parámetro dinámico es una llamada saliente más, y la que tiene el peor perfil de
+riesgo: está en el camino caliente y su valor casi nunca cambia. Si `admin-parametros` se
+cae, el servicio que lo consulta tiene que seguir funcionando con el valor de su variable
+de entorno — no devolver 500 porque no pudo leer una configuración.
+
+```java
+var parametros = LectorDeParametros.desde(
+        restClient, System.getenv("PARAMETROS_URL"), Clock.systemUTC(), Duration.ofSeconds(30));
+
+int historial = (int) parametros.entero("chat.historial.tamano", respaldoDeLaVariableDeEntorno);
+```
+
+El orden es siempre: **cacheado → catálogo → respaldo, dejándolo escrito en la bitácora**.
+Nunca lanza. Con `PARAMETROS_URL` vacía no hace ni una petición.
 
 ## Cómo se usa
 

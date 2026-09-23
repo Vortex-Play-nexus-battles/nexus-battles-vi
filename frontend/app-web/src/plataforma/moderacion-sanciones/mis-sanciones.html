@@ -13,9 +13,14 @@
 
     <main class="pagina pila" data-vista="mis-sanciones">
       <h1>Mis sanciones</h1>
-      <p class="t-meta">
-        Tu historial disciplinario. Una sanción vigente se puede apelar dentro de los 30 días
-        siguientes; el panel de revisión responde con una decisión motivada.
+      <!-- El plazo NO va escrito aquí: `sanciones.apelacion.plazo-dias` es
+           configurable desde admin-parametros y este texto decía «30 días»
+           mientras el servicio podía estar aplicando otro. Arranca sin número
+           y `montarMisSanciones` lo sustituye por el vigente en cuanto
+           responde GET /api/v1/sanciones/limites. -->
+      <p class="t-meta" data-zona="intro">
+        Tu historial disciplinario. Una sanción vigente se puede apelar dentro del plazo de
+        apelación vigente; el panel de revisión responde con una decisión motivada.
       </p>
 
       <div data-zona="aviso" hidden></div>

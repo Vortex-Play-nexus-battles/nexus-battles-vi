@@ -8,15 +8,25 @@ import { jest } from '@jest/globals';
 import {
   ErrorDeSanciones,
   descripcionDe,
+  frasePlazoDeApelacion,
   montarMisSanciones,
   montarPanelDeModeracion,
   sePuedeApelar,
   solicitudDesde,
+  textoDeRangoDeSuspension,
   tiempoRestante,
 } from './sanciones.js';
 
 const AHORA = Date.parse('2026-09-21T10:00:00Z');
 const UID = '11111111-1111-1111-1111-111111111111';
+
+/** Lo que responde `GET /api/v1/sanciones/limites` con el catálogo por omisión. */
+const LIMITES = {
+  suspensionMinimaHoras: 1,
+  suspensionMaximaHoras: 720,
+  suspensionMaximaDias: 30,
+  apelacionPlazoDias: 30,
+};
 
 const sancion = (extra = {}) => ({
   id: 's-1',
@@ -77,14 +87,51 @@ describe('presentacion', () => {
     );
   });
 
-  test('sePuedeApelar: vigente, dentro de 30 días y sin apelación abierta', () => {
-    expect(sePuedeApelar(sancion(), [], AHORA)).toBe(true);
-    expect(sePuedeApelar(sancion({ vigente: false }), [], AHORA)).toBe(false);
-    expect(sePuedeApelar(sancion({ emitidaEn: '2026-08-01T00:00:00Z' }), [], AHORA)).toBe(false);
-    expect(sePuedeApelar(sancion(), [{ sancionId: 's-1', estado: 'PENDIENTE' }], AHORA)).toBe(
+  test('sePuedeApelar: vigente, dentro del plazo vigente y sin apelación abierta', () => {
+    expect(sePuedeApelar(sancion(), [], AHORA, 30)).toBe(true);
+    expect(sePuedeApelar(sancion({ vigente: false }), [], AHORA, 30)).toBe(false);
+    expect(sePuedeApelar(sancion({ emitidaEn: '2026-08-01T00:00:00Z' }), [], AHORA, 30)).toBe(
       false,
     );
-    expect(sePuedeApelar(sancion(), [{ sancionId: 's-1', estado: 'MANTENIDA' }], AHORA)).toBe(true);
+    expect(sePuedeApelar(sancion(), [{ sancionId: 's-1', estado: 'PENDIENTE' }], AHORA, 30)).toBe(
+      false,
+    );
+    expect(sePuedeApelar(sancion(), [{ sancionId: 's-1', estado: 'MANTENIDA' }], AHORA, 30)).toBe(
+      true,
+    );
+  });
+
+  test('sePuedeApelar: el plazo es el que diga el servicio, no un 30 quemado', () => {
+    // Emitida hace 20 días: dentro de plazo con 30, fuera con 7.
+    const hace20Dias = sancion({ emitidaEn: '2026-09-01T10:00:00Z' });
+    expect(sePuedeApelar(hace20Dias, [], AHORA, 30)).toBe(true);
+    expect(sePuedeApelar(hace20Dias, [], AHORA, 7)).toBe(false);
+  });
+
+  test('sePuedeApelar: sin plazo conocido no se esconde el botón, decide el servicio', () => {
+    const antigua = sancion({ emitidaEn: '2026-01-01T00:00:00Z' });
+    expect(sePuedeApelar(antigua, [], AHORA, null)).toBe(true);
+    expect(sePuedeApelar(antigua, [], AHORA)).toBe(true);
+    // Lo que no depende del plazo se sigue descartando igual.
+    expect(sePuedeApelar(sancion({ vigente: false }), [], AHORA, null)).toBe(false);
+  });
+
+  test('frasePlazoDeApelacion: con dato el número, sin dato una frase honesta sin número', () => {
+    expect(frasePlazoDeApelacion(7)).toBe('dentro de los 7 días siguientes');
+    expect(frasePlazoDeApelacion(30)).toBe('dentro de los 30 días siguientes');
+    expect(frasePlazoDeApelacion(null)).toBe('dentro del plazo de apelación vigente');
+    expect(frasePlazoDeApelacion(undefined)).toBe('dentro del plazo de apelación vigente');
+    expect(frasePlazoDeApelacion(0)).toBe('dentro del plazo de apelación vigente');
+    expect(frasePlazoDeApelacion(Number.NaN)).toBe('dentro del plazo de apelación vigente');
+  });
+
+  test('textoDeRangoDeSuspension: el rango real, con singular y plural; sin dato, sin rango', () => {
+    expect(textoDeRangoDeSuspension(LIMITES)).toBe('Duración en horas (1 hora a 30 días)');
+    expect(textoDeRangoDeSuspension({ suspensionMinimaHoras: 2, suspensionMaximaDias: 1 })).toBe(
+      'Duración en horas (2 horas a 1 día)',
+    );
+    expect(textoDeRangoDeSuspension(null)).toBe('Duración en horas');
+    expect(textoDeRangoDeSuspension({})).toBe('Duración en horas');
   });
 
   test('solicitudDesde solo manda los campos del contrato según el tipo', () => {
@@ -133,7 +180,7 @@ const PANEL = `
   <form data-zona="emitir">
     <input name="usuarioId" />
     <select name="tipo"><option value="ADVERTENCIA" selected>A</option><option value="SUSPENSION">S</option><option value="BANEO">B</option></select>
-    <label data-solo="SUSPENSION"><input name="duracionHoras" value="24" /></label>
+    <label data-solo="SUSPENSION"><span data-campo="rango-suspension">Duración en horas</span><input type="number" name="duracionHoras" min="1" value="24" /></label>
     <textarea name="motivo"></textarea>
     <input name="politica" /><input name="comentarioId" />
     <label data-solo="BANEO"><input type="checkbox" name="confirmacion" /></label>
@@ -156,13 +203,19 @@ describe('panel de moderacion', () => {
   test('un moderador no ve el baneo como opción; un administrador si', () => {
     montarPanelDeModeracion(document, {
       rol: 'MODERADOR',
-      fetchImpl: servicio({ 'GET /api/v1/apelaciones': { cuerpo: [] } }),
+      fetchImpl: servicio({
+        'GET /api/v1/apelaciones': { cuerpo: [] },
+        'GET /api/v1/sanciones/limites': { cuerpo: LIMITES },
+      }),
     });
     expect(document.querySelector('option[value="BANEO"]').disabled).toBe(true);
     document.body.innerHTML = PANEL;
     montarPanelDeModeracion(document, {
       rol: 'ADMINISTRADOR',
-      fetchImpl: servicio({ 'GET /api/v1/apelaciones': { cuerpo: [] } }),
+      fetchImpl: servicio({
+        'GET /api/v1/apelaciones': { cuerpo: [] },
+        'GET /api/v1/sanciones/limites': { cuerpo: LIMITES },
+      }),
     });
     expect(document.querySelector('option[value="BANEO"]').disabled).toBe(false);
   });
@@ -170,6 +223,7 @@ describe('panel de moderacion', () => {
   test('emitir una advertencia manda el cuerpo del contrato, avisa y recarga el historial', async () => {
     const fetchImpl = servicio({
       'GET /api/v1/apelaciones': { cuerpo: [] },
+      'GET /api/v1/sanciones/limites': { cuerpo: LIMITES },
       'POST /api/v1/sanciones': (opciones) => {
         const cuerpo = JSON.parse(opciones.body);
         return {
@@ -202,6 +256,7 @@ describe('panel de moderacion', () => {
   test('el baneo sin confirmación no sale de la vista; el 403 del servicio se muestra tal cual', async () => {
     const fetchImpl = servicio({
       'GET /api/v1/apelaciones': { cuerpo: [] },
+      'GET /api/v1/sanciones/limites': { cuerpo: LIMITES },
       'POST /api/v1/sanciones': {
         estado: 403,
         cuerpo: {
@@ -241,6 +296,7 @@ describe('panel de moderacion', () => {
     };
     const fetchImpl = servicio({
       'GET /api/v1/apelaciones': { cuerpo: [pendiente] },
+      'GET /api/v1/sanciones/limites': { cuerpo: LIMITES },
       'POST /api/v1/apelaciones/a-1/resolucion': (opciones) => ({
         cuerpo: {
           ...pendiente,
@@ -266,10 +322,74 @@ describe('panel de moderacion', () => {
     });
     expect(document.querySelector('.aviso--exito').textContent).toMatch(/revertida/);
   });
+
+  // El defecto: `max="720"` en el HTML eran los 30 dias del catalogo pasados a
+  // horas a mano. Con el parametro en 2 dias, el formulario aceptaba 720 y el
+  // servicio devolvia 400.
+  test('el rango de la suspensión sale del servicio, no del HTML', async () => {
+    const fetchImpl = servicio({
+      'GET /api/v1/apelaciones': { cuerpo: [] },
+      'GET /api/v1/sanciones/limites': {
+        cuerpo: {
+          suspensionMinimaHoras: 2,
+          suspensionMaximaHoras: 48,
+          suspensionMaximaDias: 2,
+          apelacionPlazoDias: 7,
+        },
+      },
+    });
+    montarPanelDeModeracion(document, { rol: 'ADMINISTRADOR', fetchImpl });
+    await asentar();
+    await asentar();
+
+    const duracion = document.querySelector('[name="duracionHoras"]');
+    expect(duracion.getAttribute('max')).toBe('48');
+    expect(duracion.getAttribute('min')).toBe('2');
+    // 24 seguía dentro del rango, así que el valor por omisión no se toca.
+    expect(duracion.value).toBe('24');
+    expect(document.querySelector('[data-campo="rango-suspension"]').textContent).toBe(
+      'Duración en horas (2 horas a 2 días)',
+    );
+  });
+
+  test('el valor por omisión se ajusta si queda fuera del rango vigente', async () => {
+    const fetchImpl = servicio({
+      'GET /api/v1/apelaciones': { cuerpo: [] },
+      'GET /api/v1/sanciones/limites': {
+        cuerpo: {
+          suspensionMinimaHoras: 1,
+          suspensionMaximaHoras: 6,
+          suspensionMaximaDias: 1,
+          apelacionPlazoDias: 7,
+        },
+      },
+    });
+    montarPanelDeModeracion(document, { rol: 'ADMINISTRADOR', fetchImpl });
+    await asentar();
+    await asentar();
+
+    expect(document.querySelector('[name="duracionHoras"]').value).toBe('6');
+  });
+
+  test('sin límites no se inventa un tope: el campo queda sin max y la etiqueta sin rango', async () => {
+    const fetchImpl = servicio({
+      'GET /api/v1/apelaciones': { cuerpo: [] },
+      'GET /api/v1/sanciones/limites': { estado: 503, cuerpo: { title: 'Caido', detail: 'x' } },
+    });
+    montarPanelDeModeracion(document, { rol: 'ADMINISTRADOR', fetchImpl });
+    await asentar();
+    await asentar();
+
+    expect(document.querySelector('[name="duracionHoras"]').getAttribute('max')).toBeNull();
+    expect(document.querySelector('[data-campo="rango-suspension"]').textContent).toBe(
+      'Duración en horas',
+    );
+  });
 });
 
 const MIAS = `
   <div data-zona="aviso" hidden></div>
+  <p data-zona="intro">Tu historial disciplinario. Una sanción vigente se puede apelar dentro del plazo de apelación vigente; el panel de revisión responde con una decisión motivada.</p>
   <div data-zona="sanciones"></div>
   <form data-zona="apelar" hidden><input type="hidden" name="sancionId" /><textarea name="argumento"></textarea><button type="submit">Enviar</button></form>
   <div data-zona="apelaciones"></div>`;
@@ -293,6 +413,7 @@ describe('mis sanciones', () => {
         ],
       },
       'GET /api/v1/apelaciones?mias=true': { cuerpo: [] },
+      'GET /api/v1/sanciones/limites': { cuerpo: LIMITES },
       'POST /api/v1/sanciones/s-1/apelaciones': (opciones) => ({
         estado: 201,
         cuerpo: {
@@ -336,6 +457,7 @@ describe('mis sanciones', () => {
       fetchImpl: servicio({
         [`GET /api/v1/sanciones/usuarios/${UID}`]: { cuerpo: [] },
         'GET /api/v1/apelaciones?mias=true': { cuerpo: [] },
+        'GET /api/v1/sanciones/limites': { cuerpo: LIMITES },
       }),
     });
     await asentar();
@@ -353,6 +475,7 @@ describe('mis sanciones', () => {
           cuerpo: { title: 'Caido', detail: 'x' },
         },
         'GET /api/v1/apelaciones?mias=true': { cuerpo: [] },
+        'GET /api/v1/sanciones/limites': { cuerpo: LIMITES },
       }),
     });
     await asentar();
@@ -368,6 +491,65 @@ describe('mis sanciones', () => {
     expect(zona.textContent).toMatch(/No pudimos consultar tu historial/);
     expect(zona.textContent).toMatch(/no significa que no tengas sanciones/i);
     expect(zona.querySelector('[data-accion="reintentar"]')).not.toBeNull();
+  });
+
+  test('el plazo de los textos es el vigente, no un 30 escrito a mano', async () => {
+    const fetchImpl = servicio({
+      [`GET /api/v1/sanciones/usuarios/${UID}`]: { cuerpo: [] },
+      'GET /api/v1/apelaciones?mias=true': { cuerpo: [] },
+      'GET /api/v1/sanciones/limites': { cuerpo: { ...LIMITES, apelacionPlazoDias: 7 } },
+    });
+    montarMisSanciones(document, { uid: UID, fetchImpl, ahora: () => AHORA });
+    await asentar();
+    await asentar();
+
+    expect(document.querySelector('[data-zona="intro"]').textContent).toMatch(
+      /dentro de los 7 días siguientes/,
+    );
+    expect(document.querySelector('[data-zona="apelaciones"]').textContent).toMatch(
+      /dentro de los 7 días siguientes/,
+    );
+    expect(document.body.textContent).not.toMatch(/30 días/);
+  });
+
+  test('sin límites, los textos hablan del plazo sin número y nunca de 30 días', async () => {
+    const fetchImpl = servicio({
+      [`GET /api/v1/sanciones/usuarios/${UID}`]: { cuerpo: [] },
+      'GET /api/v1/apelaciones?mias=true': { cuerpo: [] },
+      'GET /api/v1/sanciones/limites': { estado: 401, cuerpo: { title: 'Sin sesión' } },
+    });
+    montarMisSanciones(document, { uid: UID, fetchImpl, ahora: () => AHORA });
+    await asentar();
+    await asentar();
+
+    // El fallo de los límites NO tumba la vista: el historial se pintó igual.
+    expect(document.querySelector('[data-zona="sanciones"]').textContent).toMatch(
+      /No tienes ninguna sanción/,
+    );
+    expect(document.querySelector('[data-zona="intro"]').textContent).toMatch(
+      /dentro del plazo de apelación vigente/,
+    );
+    expect(document.querySelector('[data-zona="apelaciones"]').textContent).toMatch(
+      /dentro del plazo de apelación vigente/,
+    );
+    expect(document.body.textContent).not.toMatch(/30 días/);
+  });
+
+  test('con el plazo en 7 días, una sanción de hace 20 ya no ofrece el botón de apelar', async () => {
+    const fetchImpl = servicio({
+      [`GET /api/v1/sanciones/usuarios/${UID}`]: {
+        cuerpo: [sancion({ emitidaEn: '2026-09-01T10:00:00Z' })],
+      },
+      'GET /api/v1/apelaciones?mias=true': { cuerpo: [] },
+      'GET /api/v1/sanciones/limites': { cuerpo: { ...LIMITES, apelacionPlazoDias: 7 } },
+    });
+    montarMisSanciones(document, { uid: UID, fetchImpl, ahora: () => AHORA });
+    await asentar();
+    await asentar();
+
+    const tarjeta = document.querySelector('[data-zona="sanciones"] article');
+    expect(tarjeta).not.toBeNull();
+    expect(tarjeta.querySelector('[data-accion="apelar"]')).toBeNull();
   });
 
   test('ErrorDeSanciones conserva estado, título, detalle y motivo', () => {
