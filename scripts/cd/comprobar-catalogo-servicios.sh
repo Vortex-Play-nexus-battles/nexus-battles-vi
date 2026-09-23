@@ -119,9 +119,13 @@ fi
 if ! grep -q "$CATALOGO" .github/workflows/cd.yml 2>/dev/null; then
   fallo "cd.yml no lee $CATALOGO."
 fi
-if ! grep -q "servicios.json" scripts/cd/desplegar.sh 2>/dev/null; then
-  fallo "scripts/cd/desplegar.sh no lee el catalogo."
-fi
+for script in scripts/cd/desplegar.sh scripts/cd/revertir.sh; do
+  if ! grep -q "servicios.json" "$script" 2>/dev/null; then
+    fallo "$script no lee el catalogo." \
+      "Una lista de overrides paralela aqui significa revertir un servicio" \
+      "sin su base de datos, justo cuando algo ya fallo."
+  fi
+done
 
 echo
 if [ "$FALLOS" -gt 0 ]; then

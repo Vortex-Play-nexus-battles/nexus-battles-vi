@@ -17,9 +17,29 @@ set -euo pipefail
 DIRECTORIO=/opt/nexus
 COMPOSE_BASE="$DIRECTORIO/docker-compose.yml"
 COMPOSE_DEPLOY="$DIRECTORIO/docker-compose.deploy.yml"
-COMPOSE_CUENTAS="$DIRECTORIO/docker-compose.cuentas.yml"
-COMPOSE_MS_CUMPLIMIENTO="$DIRECTORIO/docker-compose.ms-cumplimiento.yml"
-COMPOSE_MS_ECOMMERCE="$DIRECTORIO/docker-compose.ms-ecommerce.yml"
+
+# El override de cada servicio sale del mismo catalogo que usa desplegar.sh
+# (infrastructure/despliegue/servicios.json). Antes habia aqui una tercera
+# copia de la lista -- una en cd.yml, otra en desplegar.sh y esta -- y la de
+# aqui solo conocia tres servicios: revertir ms-finanzas o ms-subastas habria
+# levantado el contenedor sin su override, o sea sin su base de datos, justo
+# en el momento en que algo ya habia fallado.
+CATALOGO="$DIRECTORIO/infrastructure/despliegue/servicios.json"
+if [ ! -f "$CATALOGO" ]; then
+  _raiz_repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd || true)"
+  if [ -n "$_raiz_repo" ] && [ -f "$_raiz_repo/infrastructure/despliegue/servicios.json" ]; then
+    CATALOGO="$_raiz_repo/infrastructure/despliegue/servicios.json"
+  fi
+fi
+if command -v jq >/dev/null 2>&1; then
+  compose_extra_de() { jq -r --arg n "$1" '.servicios[] | select(.nombre == $n) | .composeExtra // ""' "$CATALOGO" 2>/dev/null; }
+else
+  compose_extra_de() { python3 -c 'import json,sys
+d=json.load(open(sys.argv[1]))
+for s in d["servicios"]:
+    if s["nombre"]==sys.argv[2]:
+        print(s.get("composeExtra") or "");break' "$CATALOGO" "$1" 2>/dev/null; }
+fi
 ARCHIVO_FALLO="$DIRECTORIO/ultimo-fallo.txt"
 
 cd "$DIRECTORIO"
@@ -52,14 +72,13 @@ while IFS=: read -r servicio tag_fallido tag_anterior; do
   export TAG="$tag_anterior"
 
   ARCHIVOS_COMPOSE=(-f "$COMPOSE_BASE" -f "$COMPOSE_DEPLOY")
-  if [ "$servicio" = "ms-identidad" ]; then
-    ARCHIVOS_COMPOSE+=(-f "$COMPOSE_CUENTAS")
-  fi
-  if [ "$servicio" = "ms-cumplimiento" ]; then
-    ARCHIVOS_COMPOSE+=(-f "$COMPOSE_MS_CUMPLIMIENTO")
-  fi
-  if [ "$servicio" = "ms-ecommerce" ]; then
-    ARCHIVOS_COMPOSE+=(-f "$COMPOSE_MS_ECOMMERCE")
+  extra=$(compose_extra_de "$servicio")
+  if [ -n "$extra" ] && [ "$extra" != "null" ]; then
+    if [ -f "$DIRECTORIO/$extra" ]; then
+      ARCHIVOS_COMPOSE+=(-f "$DIRECTORIO/$extra")
+    else
+      echo "  ADVERTENCIA: el catalogo pide $extra y no esta en el servidor; se revierte sin su override."
+    fi
   fi
 
   imagen=$(docker compose "${ARCHIVOS_COMPOSE[@]}" config --images "srv-${servicio}" 2>/dev/null | head -1 || true)

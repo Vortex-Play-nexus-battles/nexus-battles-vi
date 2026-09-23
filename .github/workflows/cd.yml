@@ -198,6 +198,70 @@ jobs:
               '. + [{ruta:$ruta, rutaGradle:$rutaGradle, servicio:$servicio, puerto:$puerto, herramienta:$herramienta, claseHost:$claseHost}]')
           done < <(jq -r '.servicios[] | [.nombre, .ruta, .herramienta, .puertoHost, .claseHost] | @tsv' "$CATALOGO")
 
+          # 6) Servicios que NO cambiaron pero quedan desactualizados igual.
+          #
+          #    Un cambio en shared/libs o en buildSrc no toca ninguna carpeta
+          #    de services/, asi que hasta hoy no desplegaba nada: ci.yml lo
+          #    compilaba y lo probaba entero (job "cambios transversales") y
+          #    dev se quedaba con la imagen vieja. Otra forma distinta del
+          #    mismo problema de siempre -- verde en integracion continua,
+          #    codigo viejo en el entorno -- y mas dificil de ver, porque
+          #    ningun servicio "cambio".
+          #
+          #    Quien consume que NO se escribe aqui: se deduce de los propios
+          #    build.gradle, que es donde vive esa verdad. Un servicio depende
+          #    de una biblioteca si la declara el mismo, o si la inyecta una
+          #    convencion de buildSrc que ese servicio aplica (hoy:
+          #    spring-conventions -> plataforma-observabilidad,
+          #    seguridad-conventions -> plataforma-seguridad). Un cambio en
+          #    buildSrc afecta a todos los modulos Gradle por definicion.
+          LIBS_CAMBIADAS=$(echo "$ARCHIVOS" | grep -oE '^shared/libs/[^/]+' | sed 's|shared/libs/||' | sort -u || true)
+          CAMBIO_BUILDSRC=$(echo "$ARCHIVOS" | grep -cE '^buildSrc/' || true)
+
+          if [ -n "$LIBS_CAMBIADAS" ] || [ "$CAMBIO_BUILDSRC" -gt 0 ]; then
+            echo "Cambio transversal detectado (libs: ${LIBS_CAMBIADAS:-ninguna}; buildSrc: $CAMBIO_BUILDSRC)."
+            while IFS=$'\t' read -r nombre ruta herramienta puerto clase; do
+              [ "$herramienta" = "gradle" ] || continue
+              [ -f "$ruta/build.gradle" ] || continue
+              # Ya esta por su propio cambio: no se duplica.
+              if echo "$MATRIZ" | jq -e --arg s "$nombre" 'any(.[]; .servicio == $s)' > /dev/null; then
+                continue
+              fi
+
+              afectado=0
+              if [ "$CAMBIO_BUILDSRC" -gt 0 ]; then
+                afectado=1
+              else
+                # Bibliotecas que este servicio declara directamente...
+                SUYAS=$(grep -oE "project\(':shared:libs:[a-z-]+'\)" "$ruta/build.gradle" \
+                  | sed "s|project(':shared:libs:||;s|')||" | sort -u)
+                # ...mas las que le inyectan las convenciones que aplica.
+                for conv in $(grep -oE "id '(nexus\.[a-z-]+)'" "$ruta/build.gradle" | sed "s|id '||;s|'||"); do
+                  archivo="buildSrc/src/main/groovy/$conv.gradle"
+                  [ -f "$archivo" ] || continue
+                  DE_LA_CONVENCION=$(grep -oE "project\(':shared:libs:[a-z-]+'\)" "$archivo" | sed "s|project(':shared:libs:||;s|')||")
+                  SUYAS=$(printf '%s\n%s' "$SUYAS" "$DE_LA_CONVENCION")
+                done
+                for lib in $LIBS_CAMBIADAS; do
+                  if echo "$SUYAS" | grep -qx "$lib"; then afectado=1; fi
+                done
+              fi
+
+              if [ "$afectado" -eq 1 ]; then
+                echo "  $nombre se redesplegaria: consume una biblioteca que cambio"
+                ruta_gradle=":$(echo "$ruta" | tr '/' ':')"
+                MATRIZ=$(echo "$MATRIZ" | jq -c \
+                  --arg ruta "$ruta" \
+                  --arg rutaGradle "$ruta_gradle" \
+                  --arg servicio "$nombre" \
+                  --arg puerto "$puerto" \
+                  --arg herramienta "$herramienta" \
+                  --arg claseHost "$clase" \
+                  '. + [{ruta:$ruta, rutaGradle:$rutaGradle, servicio:$servicio, puerto:$puerto, herramienta:$herramienta, claseHost:$claseHost}]')
+              fi
+            done < <(jq -r '.servicios[] | [.nombre, .ruta, .herramienta, .puertoHost, .claseHost] | @tsv' "$CATALOGO")
+          fi
+
           # 7) Lo que NO cabe en el host de dev. Ya no es una lista escrita
           #    aqui: es el campo "desplegableDev" del catalogo, con su motivo
           #    al lado, medido y fechado (ver infrastructure/despliegue/
