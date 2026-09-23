@@ -268,6 +268,30 @@ jobs:
         shell: bash
         run: python3 tests/contratos/validar-contratos.py
 
+  # ---------------------------------------------------------------------
+  # Job: ninguna linea de bitacora imprime un secreto (R11.2).
+  #
+  # Desde R11 la bitacora sale en JSON en los veinte servicios. Eso es bueno
+  # para diagnosticar y es exactamente lo que convierte un `log.info("token=
+  # {}", token)` descuidado en un incidente: lo que antes se perdia en una
+  # consola ahora va a un agregador, queda indexado y lo lee cualquiera con
+  # acceso al tablero.
+  #
+  # Cuando se escribio, la auditoria encontro CERO fugas. Este job no arregla
+  # nada: fija ese estado para que la primera fuga sea un fallo de CI y no un
+  # hallazgo de auditoria seis semanas despues. Cuesta ~5 s sobre 761 archivos.
+  # ---------------------------------------------------------------------
+  ci-secretos-bitacora:
+    name: CI - secretos en la bitacora
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Ninguna linea de bitacora imprime un secreto
+        shell: bash
+        run: python3 tests/contratos/sin-secretos-en-bitacora.py
+
   ci-transversal:
     name: CI - cambios transversales
     runs-on: ubuntu-latest
