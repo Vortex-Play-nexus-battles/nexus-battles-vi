@@ -54,6 +54,42 @@ export const ICONO_RAREZA = Object.freeze({
 });
 
 /**
+ * Como se dice una rareza que puede no venir — FI-R1.
+ *
+ * `rareza` esta en `SubastaResumen`, pero **no es obligatoria y no trae
+ * enumeracion**: el contrato dice `type: string` y nada mas. Hasta ahora el
+ * cliente rellenaba 'comun' cuando faltaba —inventarse un escalon real del
+ * juego— y la vista hacia `sub.rareza.toUpperCase()` sin guarda, que revienta
+ * en cuanto llega sin ella.
+ *
+ * Lo que no se sabe no se dice: sin rareza no se pinta distintivo, y la ficha
+ * usa su variante neutra. Una rareza que llegue con un nombre que el juego no
+ * conoce se trata igual, porque adivinar cual de los cuatro escalones quiso
+ * decir el servidor seria lo mismo que inventarla.
+ *
+ * @param {unknown} rareza
+ * @returns {{conocida: boolean, clase: string, texto: string|null, simbolo: string}}
+ */
+export function nivelRequeridoVisible(nivel) {
+  return typeof nivel === 'number' && Number.isFinite(nivel)
+    ? `Nivel req. ${nivel}`
+    : 'Nivel requerido: sin dato';
+}
+
+export function rarezaVisible(rareza) {
+  const limpia = typeof rareza === 'string' ? rareza.toLowerCase().trim() : null;
+  if (limpia && Object.hasOwn(ICONO_RAREZA, limpia)) {
+    return {
+      conocida: true,
+      clase: limpia,
+      texto: limpia.toUpperCase(),
+      simbolo: ICONO_RAREZA[limpia],
+    };
+  }
+  return { conocida: false, clase: 'desconocida', texto: null, simbolo: 'escudo' };
+}
+
+/**
  * Datos de ejemplo. **Son un banco de pruebas, no un modo de demostracion.**
  * La pantalla ya no tiene ningun camino hasta aqui: pujas.html monta siempre
  * contra el servicio real. Solo los usa pujas.test.js, para poder ejercitar el
@@ -193,6 +229,17 @@ export const SUBASTAS_INICIALES = [
   },
 ];
 
+/**
+ * Heroes de ejemplo. **Banco de pruebas, no el heroe de nadie.**
+ *
+ * FI-R1 — hasta ahora esto era el valor por defecto del controlador, y
+ * `pujas.html` nunca pasa `heroes`: el selector de la ficha de subasta
+ * ofrecia «Kaelen (Niv. 26 - Guerrero)» y «Lyra (Niv. 21 - Exploradora)» a
+ * cualquiera que abriera la pantalla, y la tabla de comparacion sumaba el
+ * aporte del objeto a las estadisticas de un heroe inventado. Ahora el
+ * defecto es `[]` y estos dos solo entran cuando alguien los pasa a proposito
+ * (pruebas y laboratorio visual).
+ */
 export const HEROES_BASE = [
   {
     id: 'kaelen',
@@ -221,6 +268,16 @@ export const CONFIG_REGLAS = {
   maxPujasActivas: 50,
 };
 
+/**
+ * Desenlaces de ejemplo. **Banco de pruebas, no el historial de nadie.**
+ *
+ * FI-R1 — ms-subastas no expone hoy ningun recurso de cierres: `/mis-pujas`
+ * solo tiene `/resumen` (MisPujasController) y ni el contrato de listado ni
+ * el de pujas declaran un desenlace. Con estos tres como valor por defecto,
+ * la pestana «Cierre multiple» ensenaba a todo el mundo el mismo «3
+ * CERRARON», el mismo hacha adjudicada y el mismo balance. Ahora el defecto
+ * es `[]` y la vista dice que no hay datos de cierre.
+ */
 export const EVENTOS_CIERRE_DEFAULT = [
   {
     id: 'hacha-obsidiana',
@@ -372,13 +429,29 @@ export function validarLimiteAuto(
 }
 
 export function calcularComparacionHeroe(heroe, item) {
-  if (!heroe || !item) {
-    return { comparaciones: [], nivelInsuficiente: false, deltaNivel: 0 };
+  // FI-R1 — `evaluado` separa «no se pudo comparar» de «compara bien». Antes
+  // faltando datos se devolvia `nivelInsuficiente: false`, y la vista leia ese
+  // false como un veredicto: pintaba «Compatible: <heroe> cumple el nivel
+  // requerido» citando RN-INV-004 sin haber comprobado nada. Sin heroe
+  // conectado el texto salia literalmente «Compatible: undefined cumple».
+  //
+  // El `|| { poder: 0, vida: 0, defensa: 0 }` de `aporte` hacia lo mismo con
+  // la tabla: un objeto del que no se sabe que aporta pasaba a aportar cero,
+  // y la columna «Diferencia» quedaba en «igual» para las tres filas.
+  const faltanDatos =
+    !heroe ||
+    !item ||
+    !heroe.stats ||
+    !Number.isFinite(heroe.nivel) ||
+    !Number.isFinite(item.nivel) ||
+    !item.aporte;
+  if (faltanDatos) {
+    return { evaluado: false, comparaciones: [], nivelInsuficiente: false, deltaNivel: 0 };
   }
   const nivelInsuficiente = heroe.nivel < item.nivel;
   const deltaNivel = item.nivel - heroe.nivel;
   const st = heroe.stats;
-  const ap = item.aporte || { poder: 0, vida: 0, defensa: 0 };
+  const ap = item.aporte;
 
   const comparaciones = [
     { stat: 'Poder', actual: st.poder, nuevo: st.poder + ap.poder, delta: ap.poder },
@@ -386,7 +459,7 @@ export function calcularComparacionHeroe(heroe, item) {
     { stat: 'Defensa', actual: st.defensa, nuevo: st.defensa + ap.defensa, delta: ap.defensa },
   ];
 
-  return { comparaciones, nivelInsuficiente, deltaNivel };
+  return { evaluado: true, comparaciones, nivelInsuficiente, deltaNivel };
 }
 
 export function calcularSumaTopesAuto(subastas = []) {
@@ -550,9 +623,9 @@ export class ControladorSubastas {
   constructor({
     contenedor,
     subastas = SUBASTAS_INICIALES,
-    heroes = HEROES_BASE,
+    heroes = [],
     config = CONFIG_REGLAS,
-    eventosCierre = EVENTOS_CIERRE_DEFAULT,
+    eventosCierre = [],
     api = null,
     subastaInicialId = null,
     urlCanal = null,
@@ -580,7 +653,11 @@ export class ControladorSubastas {
     this.heroes = JSON.parse(JSON.stringify(heroes));
     this.config = Object.assign({}, CONFIG_REGLAS, config);
     this.eventosCierre = JSON.parse(JSON.stringify(eventosCierre));
-    this.heroeId = this.heroes[0]?.id || 'kaelen';
+    // FI-R1 — sin heroes no hay heroe activo. Antes caia en 'kaelen', el id
+    // del primer heroe del banco de pruebas, aunque no se hubiera cargado
+    // ninguno: `getHeroeActivo()` devolvia undefined y la ficha comparaba
+    // contra la nada diciendo que todo cuadraba.
+    this.heroeId = this.heroes[0]?.id || null;
     this.vista = 'lista'; // 'lista' | 'explorar' | 'mis-subastas' | 'detalle' | 'cierre-multiple'
     this.origenVista = 'explorar';
     this.subastaActivaId = null;
@@ -962,7 +1039,7 @@ export class ControladorSubastas {
   }
 
   getHeroeActivo() {
-    return this.heroes.find((h) => h.id === this.heroeId) || this.heroes[0];
+    return this.heroes.find((h) => h.id === this.heroeId) || this.heroes[0] || null;
   }
 
   cambiarVista(nuevaVista) {
@@ -1420,7 +1497,7 @@ export class ControladorSubastas {
         </button>
         <button type="button" role="tab" class="tab-btn ${esCierre ? 'tab-btn--activo' : ''}" data-tab="cierre-multiple" aria-selected="${esCierre}">
           Cierre múltiple
-          <span class="badge-tab-neutral">${this.eventosCierre.length}</span>
+          ${this.eventosCierre.length > 0 ? `<span class="badge-tab-neutral">${this.eventosCierre.length}</span>` : ''}
         </button>
         <button type="button" role="tab" class="tab-btn ${esDetalle ? 'tab-btn--activo' : ''}" data-tab="detalle" aria-selected="${esDetalle}">
           ${esDetalle && subActiva ? `Detalle: ${subActiva.nombre.split(' ')[0]}` : 'Detalle de subasta'}
@@ -1481,6 +1558,7 @@ export class ControladorSubastas {
 
   generarTarjetaSubasta(sub) {
     const urgente = sub.segundosRestantes <= 10 && sub.segundosRestantes > 0;
+    const rz = rarezaVisible(sub.rareza);
     let badgeEstado = '<span class="badge badge-neutral">Sin pujar</span>';
     let claseBorde = '';
     let textoBoton = 'Ver subasta';
@@ -1510,13 +1588,13 @@ export class ControladorSubastas {
     return `
       <article class="tarjeta tarjeta-subasta ${claseBorde} ${urgente ? 'urgente' : ''}" data-id="${sub.id}">
         <div class="tarjeta-cabecera">
-          <span class="badge badge-${sub.rareza}">${sub.rareza.toUpperCase()}</span>
+          ${rz.conocida ? `<span class="badge badge-${rz.clase}">${rz.texto}</span>` : ''}
           ${badgeEstado}
         </div>
 
         <div class="tarjeta-cuerpo">
           <h3 class="tarjeta-titulo">${esc(sub.nombre)}</h3>
-          <p class="tarjeta-subtitulo">${sub.tipo} · Nivel req. ${sub.nivel}</p>
+          <p class="tarjeta-subtitulo">${esc(sub.tipo)} · ${nivelRequeridoVisible(sub.nivel)}</p>
           <p class="tarjeta-desc">${esc(sub.descripcion)}</p>
         </div>
 
@@ -1728,7 +1806,7 @@ export class ControladorSubastas {
 
   generarFilaMiSubasta(sub) {
     const urgente = sub.segundosRestantes <= 10 && sub.segundosRestantes > 0;
-    const simboloRareza = ICONO_RAREZA[sub.rareza] ?? ICONO_RAREZA.comun;
+    const rz = rarezaVisible(sub.rareza);
 
     let claseBorde = 'borde-sin-puja';
     let badgeEstado = '<span class="badge badge-neutral">Sin pujar</span>';
@@ -1756,14 +1834,14 @@ export class ControladorSubastas {
 
     return `
       <article class="fila-mi-subasta ${claseBorde} ${urgente ? 'urgente' : ''}" data-id="${sub.id}">
-        <div class="ficha-rareza ficha-rareza--grande ficha-rareza--${sub.rareza}">
-          ${iconoHtml(simboloRareza)}
+        <div class="ficha-rareza ficha-rareza--grande ficha-rareza--${rz.clase}">
+          ${iconoHtml(rz.simbolo)}
         </div>
 
         <div class="fila-info-principal">
           <h3 class="fila-nombre">${esc(sub.nombre)}</h3>
           <div class="fila-badges">
-            <span class="badge badge-${sub.rareza}">${sub.rareza.toUpperCase()}</span>
+            ${rz.conocida ? `<span class="badge badge-${rz.clase}">${rz.texto}</span>` : ''}
             ${badgeEstado}
             ${
               sub.autoLimite > 0
@@ -1806,6 +1884,28 @@ export class ControladorSubastas {
 
   generarHtmlCierreMultiple({ total }) {
     const eventos = this.eventosCierre;
+    // FI-R1 — sin desenlaces no se dice «0 CERRARON». Cero cierres es una
+    // afirmacion sobre lo que paso con tus subastas, y hoy nadie la sostiene:
+    // ms-subastas no publica ningun recurso de cierres (MisPujasController
+    // solo tiene /resumen). Lo que corresponde decir es que no hay de donde
+    // sacarlo.
+    if (eventos.length === 0) {
+      return `
+      <div class="subastas-app vista-cierre-multiple">
+        ${this.generarHtmlPestanas({ superadas: 0 })}
+        ${this.generarHtmlAlerta()}
+
+        <div class="estado-contenedor estado-vacio">
+          <h1 class="titulo-mediano">Todavía no hay resultados de cierre</h1>
+          <p>
+            El servicio de subastas no publica por ahora el desenlace de las subastas
+            en las que participaste. Cuando una termine, el resultado llegará por tus
+            notificaciones y el saldo se verá reflejado en «Mis subastas activas».
+          </p>
+        </div>
+      </div>
+    `;
+    }
     const balance = calcularBalanceNetoCierre(eventos, total);
     const ganadas = eventos.filter((e) => e.esGanador).length;
     const superadas = eventos.filter((e) => !e.esGanador).length;
@@ -1845,7 +1945,7 @@ export class ControladorSubastas {
           <div class="lista-eventos-cierre">
             ${eventos
               .map((ev) => {
-                const simboloRareza = ICONO_RAREZA[ev.rareza] ?? ICONO_RAREZA.comun;
+                const rz = rarezaVisible(ev.rareza);
                 let claseEvento = 'evento--superada-rival';
                 let montoHtml = `<div class="evento-cifra cifra" style="color: var(--exito);">+${formatearCreditos(ev.montoDevuelto)}</div><div class="etiqueta-sm">devuelto</div>`;
                 let btnAccion = `<button type="button" class="btn btn-contorno btn-sm btn-buscar-parecidas" data-id="${ev.id}">Parecidas</button>`;
@@ -1860,8 +1960,8 @@ export class ControladorSubastas {
 
                 return `
                 <div class="fila-evento-cierre ${claseEvento}">
-                  <div class="ficha-rareza ficha-rareza--${ev.rareza}">
-                    ${iconoHtml(simboloRareza)}
+                  <div class="ficha-rareza ficha-rareza--${rz.clase}">
+                    ${iconoHtml(rz.simbolo)}
                   </div>
                   <div class="evento-info">
                     <h3 class="evento-titulo">${esc(ev.nombre)}</h3>
@@ -1908,6 +2008,7 @@ export class ControladorSubastas {
     const sub = this.getSubastaActiva();
     const hero = this.getHeroeActivo();
     const comp = calcularComparacionHeroe(hero, sub);
+    const rz = rarezaVisible(sub.rareza);
     const minPuja = calcularMinimoPuja(sub.oferta, this.config.incrementoMinimo);
     const disponibleAqui = libre + (sub.retenido || 0);
     const cerrada = sub.segundosRestantes <= 0 || this.resultadoCierre !== null;
@@ -1966,25 +2067,36 @@ export class ControladorSubastas {
           <section class="columna-info-objeto">
             <div class="panel-objeto">
               <div class="objeto-badges">
-                <span class="badge badge-${sub.rareza}">${sub.rareza.toUpperCase()}</span>
+                ${rz.conocida ? `<span class="badge badge-${rz.clase}">${rz.texto}</span>` : ''}
                 <span class="badge badge-neutral">Vendedor: ${esc(sub.vendedor)}</span>
-                <span class="badge ${comp.nivelInsuficiente ? 'badge-error' : 'badge-exito'}">
+                ${
+                  Number.isFinite(sub.nivel)
+                    ? `<span class="badge ${comp.nivelInsuficiente ? 'badge-error' : 'badge-exito'}">
                   Req. Nivel ${sub.nivel}
-                </span>
+                </span>`
+                    : ''
+                }
               </div>
 
               <h1 class="titulo-grande titulo-objeto">${esc(sub.nombre)}</h1>
               <p class="objeto-tipo">${sub.tipo}</p>
               <p class="objeto-descripcion">${esc(sub.descripcion)}</p>
 
-              <!-- Selector de Héroe para Comparación de Estadísticas -->
+              <!-- Comparativa con el héroe. FI-R1 — este bloque entero depende de
+                   datos que el contrato de subastas NO trae (nivel requerido y
+                   aporte del objeto) y de un héroe que esta pantalla todavia no
+                   carga de ningún servicio. Mientras falten, se dice; no se
+                   rellena con un héroe de ejemplo ni con ceros. -->
+              ${
+                comp.evaluado
+                  ? `
               <div class="selector-heroes-seccion">
                 <span class="etiqueta-sm">Comparar compatibilidad con héroe activo:</span>
                 <div class="selector-heroes-botones" role="radiogroup" aria-label="Elegir héroe">
                   ${this.heroes
                     .map(
                       (h) => `
-                    <button type="button" class="btn-heroe-chip ${h.id === this.heroeId ? 'heroe-elegido' : ''}" data-heroe="${h.id}">
+                    <button type="button" class="btn-heroe-chip ${h.id === this.heroeId ? 'heroe-elegido' : ''}" data-heroe="${h.id}" role="radio" aria-checked="${h.id === this.heroeId}">
                       <strong>${esc(h.nombre)}</strong> (Niv. ${esc(h.nivel)} · ${esc(h.clase)})
                     </button>
                   `,
@@ -1993,7 +2105,6 @@ export class ControladorSubastas {
                 </div>
               </div>
 
-              <!-- Alerta de nivel si aplica -->
               ${
                 comp.nivelInsuficiente
                   ? `
@@ -2008,7 +2119,6 @@ export class ControladorSubastas {
               `
               }
 
-              <!-- Tabla de Comparación de Atributos -->
               <div class="tabla-comparacion-contenedor">
                 <table class="tabla-comparacion">
                   <thead>
@@ -2038,7 +2148,15 @@ export class ControladorSubastas {
                       .join('')}
                   </tbody>
                 </table>
-              </div>
+              </div>`
+                  : `
+              <div class="alerta alerta-informativa aviso-sin-comparativa" role="note">
+                <strong>${iconoHtml('alerta', { clase: 'icono icono--menudo' })} Sin comparativa de héroe.</strong>
+                El servicio de subastas no publica el nivel requerido ni lo que aporta este objeto,
+                y esta pantalla todavía no consulta tus héroes. Revisa el objeto en tu inventario
+                antes de pujar.
+              </div>`
+              }
             </div>
 
             <!-- Historial de Pujas -->

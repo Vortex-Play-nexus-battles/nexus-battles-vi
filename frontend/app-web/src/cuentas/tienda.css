@@ -113,6 +113,77 @@
   font-variant-numeric: var(--cifras-tabulares);
 }
 
+/* FI-R2 — el precio, lo que costaba antes y el porcentaje viven juntos: el
+   pie de la tarjeta es un `flex` de dos columnas y sin envolverlos el
+   distintivo se iba al otro lado del boton. */
+.precio-bloque {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--e-2);
+}
+
+.price-antes {
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+.badge-descuento {
+  padding: 0 var(--e-2);
+  border-radius: var(--radio-chico);
+  background: var(--exito-insignia);
+  color: var(--exito);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+/* «Precio no disponible» no es una cifra: se dice en el tono de un dato que
+   falta, no en el del importe que se va a cobrar. */
+.precio-ausente {
+  font-weight: normal;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.habilidades {
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+/* RF-CAR-001 pide la imagen del producto. La caja de color sigue estando
+   debajo como respaldo cuando el catalogo no trae `imagenUrl`. */
+.product-image.con-imagen {
+  background-color: var(--cromo);
+}
+
+.product-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--radio-chico);
+  display: block;
+}
+
+/* RF-CAR-005 — distincion de lo que ya es tuyo y de lo que esta en la lista de
+   deseos. `ProductoVitrinaDto` trae los dos campos, pero hoy `VitrinaService`
+   los escribe siempre en `false`: el realce existe y no se activara hasta que
+   el servicio los calcule de verdad (deuda de Grupo de Santiago). */
+.product-card[data-propio='si'] {
+  border-color: var(--exito);
+}
+
+.product-card[data-deseado='si'] {
+  border-color: var(--acento-relleno);
+}
+
+/* El motivo por el que «Pagar» esta apagado, junto al boton. */
+.aviso-pago {
+  margin-top: var(--e-2);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
 .btn-add {
   min-height: var(--boton-pequeno);
   padding: var(--e-2) var(--e-5);

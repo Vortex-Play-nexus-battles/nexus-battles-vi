@@ -60,11 +60,13 @@
           <div class="cart-summary">
             <div class="summary-row">
               <span>Subtotal</span>
-              <span id="cart-subtotal">0 COP</span>
+              <!-- Sin carrito cargado todavia no se sabe el importe: «—» y no
+                   «0 COP», que afirmaria que el carrito esta vacio. -->
+              <span id="cart-subtotal">—</span>
             </div>
             <div class="summary-row total-row">
               <span>Total a pagar</span>
-              <span id="cart-total" class="total-price">0 COP</span>
+              <span id="cart-total" class="total-price">—</span>
             </div>
           </div>
 
@@ -74,7 +76,19 @@
             carro.
           </div>
 
+          <!--
+            FI-R2 — el boton nace deshabilitado y se queda asi, con el motivo
+            escrito al lado. RF-CAR-010 y RF-PAG-001 estan confirmados, pero su
+            implementacion es de Grupo de Santiago y todavia no existe:
+            `CarritoController` no tiene ninguna ruta de pago. Antes el boton se
+            encendia en cuanto el carrito tenia algo y no tenia manejador
+            ninguno — pulsarlo no hacia nada.
+          -->
           <button id="btn-pagar" class="btn-pagar" disabled>Pagar</button>
+          <p id="aviso-pago-pendiente" class="aviso-pago">
+            El pago todavía no está disponible. Tu carrito queda guardado y podrás terminar la
+            compra cuando se habilite.
+          </p>
         </div>
       </aside>
     </main>

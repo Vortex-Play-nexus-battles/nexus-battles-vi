@@ -734,6 +734,29 @@ body {
   color: var(--error);
 }
 
+/* FI-R1 — el tono de «esto no lo sabemos». No es advertencia (no hay nada que
+   el jugador haya hecho mal) ni error (el servicio responde): es un dato que
+   el contrato no trae. Antes este hueco se llenaba con el veredicto verde
+   «Compatible», que afirmaba una comprobacion que nunca ocurrio. */
+.alerta-informativa {
+  background: var(--info-insignia);
+  border: 1px solid var(--info);
+  color: var(--info);
+}
+
+.aviso-sin-comparativa {
+  line-height: 1.5;
+}
+
+/* FI-R1 — la ficha de un objeto cuya rareza no vino. `ficha-rareza--comun` era
+   el relleno de antes, y «comun» es un escalon real del juego: decia que el
+   objeto es comun, no que no se sabe. */
+.ficha-rareza--desconocida {
+  background: var(--cromo);
+  border: 1px solid var(--borde);
+  color: var(--pista);
+}
+
 .alerta-pujas {
   display: flex;
   align-items: center;
