@@ -77,6 +77,15 @@ dependencies {
     // Para las pruebas del envoltorio de DataSource: JDBC son interfaces de
     // cincuenta metodos y escribir dobles a mano solo aportaria ruido.
     testImplementation 'org.mockito:mockito-core'
+    // Una implementacion de SLF4J en las PRUEBAS, o el MDC no existe.
+    //
+    // `InterceptorDeTraza` lee el trace id del MDC. Con solo `slf4j-api` en el
+    // classpath, SLF4J instala un adaptador NOP: `MDC.put(...)` no guarda nada
+    // y `MDC.get(...)` devuelve siempre null. La prueba fallaba por eso y no
+    // por el interceptor —que hacia exactamente lo correcto: sin traza, no
+    // pone cabecera—. En un servicio real no se nota porque Spring Boot trae
+    // logback; aqui, en una biblioteca aislada, hay que traerlo a mano.
+    testRuntimeOnly 'ch.qos.logback:logback-classic'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
