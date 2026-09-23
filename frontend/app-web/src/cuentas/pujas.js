@@ -29,6 +29,43 @@ import { acusar } from '../comun/ui/acuse.js';
 export const CANAL_SUBASTAS = '/topic/subastas/listado';
 
 /**
+ * Estado del canal en vivo — FI-R11.
+ *
+ * Las mismas tres variantes que usa la bandeja de notificaciones
+ * (`plataforma/notificaciones/bandeja.js`) y las mismas clases del kit
+ * (`.conexion--*`), a proposito: la persona ya aprendio lo que significa esa
+ * pildora ambar en la campana, y ensenarle otra distinta aqui seria pedirle que
+ * lo aprenda dos veces.
+ *
+ * Que habia antes: nada. `abrirCanalEnVivo` devolvia `null` en silencio si el
+ * WebSocket no abria, y no habia reconexion ninguna. La pantalla decia lo mismo
+ * con canal y sin el, y el sondeo de 5 s tapaba el hueco lo justo para que
+ * nadie lo notara — que es peor, porque en una subasta que cierra en diez
+ * segundos la diferencia entre tiempo real y cinco segundos de retraso es la
+ * subasta.
+ */
+export const ESTADO_CANAL = Object.freeze({
+  CONECTANDO: 'reconectando',
+  ESTABLE: 'estable',
+  RECONECTANDO: 'reconectando',
+  SIN_CONEXION: 'sin-conexion',
+});
+
+/** Lo que se lee en la pildora. */
+export const TEXTO_CANAL = Object.freeze({
+  [ESTADO_CANAL.ESTABLE]: 'Pujas al instante',
+  [ESTADO_CANAL.RECONECTANDO]: 'Reconectando…',
+  [ESTADO_CANAL.SIN_CONEXION]: 'Las pujas pueden tardar unos segundos',
+});
+
+/**
+ * Espera creciente entre reintentos. La misma escalera que la bandeja: empieza
+ * en un segundo porque una caida de red suele durar menos que eso, y se para en
+ * treinta para no castigar a un servidor que esta reiniciando.
+ */
+export const ESPERAS_DE_RECONEXION = Object.freeze([1000, 2000, 5000, 10000, 30000]);
+
+/**
  * Donde guarda el login el JWT. Misma clave que lee `pujas-api.js` para las
  * llamadas REST: la sesion es una sola, y el canal en vivo (R9.6) tiene que
  * acreditarse con el mismo token que ya usa todo lo demas de esta pantalla.
@@ -634,6 +671,10 @@ export class ControladorSubastas {
     // clave que usa pujas-api.js para las llamadas REST: la sesion es una
     // sola. Inyectable para que las pruebas no dependan de sessionStorage.
     leerToken = () => globalThis.sessionStorage?.getItem(CLAVE_TOKEN_SESION) || null,
+    // FI-R11 — inyectables para que las pruebas no esperen treinta segundos de
+    // verdad ni dependan de temporizadores reales.
+    esperas = ESPERAS_DE_RECONEXION,
+    esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   } = {}) {
     // Subasta que hay que abrir en detalle nada mas cargar. Viene de ?id= en la
     // URL: es la forma de que el listado de HU-SUB-011 entregue una subasta
@@ -680,6 +721,15 @@ export class ControladorSubastas {
     this.conectarCanal = conectarCanal;
     this.leerToken = leerToken;
     this.canal = null;
+    // FI-R11 — sin canal pedido, el estado es «sin conexion» y la pildora no se
+    // pinta: una pantalla que no quiere tiempo real no tiene por que disculparse
+    // por no tenerlo. Las pruebas unitarias caen aqui.
+    this.estadoCanal = urlCanal ? ESTADO_CANAL.CONECTANDO : ESTADO_CANAL.SIN_CONEXION;
+    this.esperas = esperas;
+    this.esperar = esperar;
+    /** Promesa del ciclo de reconexion en curso: nunca dos a la vez. */
+    this.reconexion = null;
+    this.vivo = true;
   }
 
   iniciar() {
@@ -689,7 +739,14 @@ export class ControladorSubastas {
       // Sin await: si el canal tarda o no levanta, la pantalla ya funciona con
       // el sondeo. Encadenarlo aqui retrasaria el primer pintado por algo que
       // es opcional.
-      this.abrirCanalEnVivo();
+      //
+      // FI-R11 — y si no abre, se reintenta. Antes se devolvia null y ahi
+      // moria: el canal no volvia ni cuando el servidor si.
+      this.abrirCanalEnVivo().then((canal) => {
+        if (!canal && this.vivo && this.urlCanal) {
+          this.reconectar();
+        }
+      });
       return this.recargar();
     }
     this.iniciarTemporizador();
@@ -890,17 +947,59 @@ export class ControladorSubastas {
    * ilegible, la pantalla sigue con el sondeo de 5 s y el jugador no se entera.
    * Un canal opcional no puede tumbar la pantalla.
    */
+  /**
+   * Cambia el estado del canal y lo refleja en la pildora — FI-R11.
+   *
+   * Se repinta solo la pildora, no la vista entera: un repintado completo en
+   * medio de una puja le robaria el foco al campo del monto y perderia lo que
+   * la persona estuviera escribiendo. Es el mismo motivo por el que el
+   * temporizador toca los relojes por `data-tiempo-subasta` y no repinta.
+   *
+   * @param {string} nuevo una de las variantes de ESTADO_CANAL
+   */
+  cambiarEstadoCanal(nuevo) {
+    if (this.estadoCanal === nuevo) {
+      return;
+    }
+    this.estadoCanal = nuevo;
+    this.pintarEstadoCanal();
+  }
+
+  pintarEstadoCanal() {
+    const zona = this.contenedor?.querySelector('[data-zona="conexion-subastas"]');
+    if (!zona) {
+      return;
+    }
+    // Sin canal pedido no se pinta nada: no hay promesa que romper.
+    if (!this.urlCanal) {
+      zona.hidden = true;
+      return;
+    }
+    zona.hidden = false;
+    zona.className = `conexion conexion--${this.estadoCanal}`;
+    zona.textContent = TEXTO_CANAL[this.estadoCanal] ?? this.estadoCanal;
+  }
+
+  /**
+   * Abre el canal y se suscribe. Es el UNICO sitio que lo hace: el ciclo de
+   * reconexion llama aqui, no repite el cableado. Dos copias del mismo enganche
+   * es como se acaba teniendo un canal que se suscribe y otro que no.
+   *
+   * Nunca rechaza: si el servidor no tiene WebSocket, el navegador lo bloquea o
+   * el token no vale, la pantalla sigue con el sondeo de 5 s y **lo dice**.
+   *
+   * @returns {Promise<object|null>} el canal abierto, o null
+   */
   async abrirCanalEnVivo() {
     if (!this.urlCanal || !this.conectarCanal || this.canal) {
       return null;
     }
     try {
-      // R9.6 — el CONNECT va acreditado. Hasta ahora este canal se abria sin
-      // token: era el unico de los cuatro de la casa que no lo mandaba (el
-      // chat de sala y la bandeja de notificaciones lo hacen desde #222 y el
-      // contrato 1.1.0). El navegador no puede poner cabeceras en el
-      // handshake del WebSocket, asi que el sitio donde va es la cabecera
-      // `Authorization` del frame CONNECT — igual que en cliente-chat.js.
+      // R9.6 — el CONNECT va acreditado. Hasta R9.6 este canal se abria sin
+      // token: era el unico de los cuatro de la casa que no lo mandaba. El
+      // navegador no puede poner cabeceras en el handshake del WebSocket, asi
+      // que el sitio donde va es la cabecera `Authorization` del frame CONNECT,
+      // igual que en cliente-chat.js.
       //
       // Sin sesion se conecta igual, y a proposito: el listado de subastas es
       // publico y quien no ha entrado tiene derecho a verlo actualizarse.
@@ -910,9 +1009,68 @@ export class ControladorSubastas {
       const canal = await this.conectarCanal({ url: this.urlCanal, cabeceras });
       canal.suscribir(CANAL_SUBASTAS, (cuerpo) => this.alLlegarActualizacion(cuerpo));
       this.canal = canal;
+      // FI-R11 — un canal que se muere en silencio es peor que uno que no abre:
+      // la pantalla seguiria diciendo «al instante» mientras las pujas de los
+      // demas pasan sin que nadie las vea. Al cerrarse se reconecta, y mientras
+      // tanto se dice.
+      canal.alCerrar = () => {
+        if (this.canal === canal) {
+          this.canal = null;
+          if (this.vivo) {
+            this.reconectar();
+          }
+        }
+      };
+      this.cambiarEstadoCanal(ESTADO_CANAL.ESTABLE);
       return canal;
     } catch {
+      // Ni con un token invalido se finge conexion: el CONNECT falla y el
+      // estado lo dice. Poner «estable» aqui seria prometer tiempo real a quien
+      // no lo tiene.
+      this.cambiarEstadoCanal(ESTADO_CANAL.SIN_CONEXION);
       return null;
+    }
+  }
+
+  /**
+   * Vuelve a intentarlo con espera creciente — FI-R11.
+   *
+   * No sustituye al sondeo de 5 s: ese sigue corriendo y es lo que mantiene la
+   * pantalla al dia mientras no hay canal (riesgo #7 del acta: degradacion
+   * controlada, no apagon). Esto recupera la inmediatez cuando el servidor
+   * vuelve, que antes no pasaba nunca — una vez caido el canal, se quedaba
+   * caido hasta que alguien recargara la pagina.
+   *
+   * Un solo ciclo a la vez: sin esta guarda, un canal que se abre y se cierra
+   * varias veces seguidas deja varios ciclos compitiendo, cada uno con su
+   * propia escalera de esperas.
+   *
+   * @returns {Promise<void>}
+   */
+  reconectar() {
+    if (!this.reconexion) {
+      this.reconexion = this.cicloDeReconexion().finally(() => {
+        this.reconexion = null;
+      });
+    }
+    return this.reconexion;
+  }
+
+  async cicloDeReconexion() {
+    let intento = 0;
+    while (this.vivo && !this.canal && this.urlCanal) {
+      this.cambiarEstadoCanal(ESTADO_CANAL.RECONECTANDO);
+      await this.esperar(this.esperas[Math.min(intento, this.esperas.length - 1)]);
+      if (!this.vivo) {
+        return;
+      }
+      if (await this.abrirCanalEnVivo()) {
+        // Al volver se relee una vez: mientras no habia canal pudieron cambiar
+        // ofertas que el sondeo no alcanzo a traer.
+        await this.recargar();
+        return;
+      }
+      intento += 1;
     }
   }
 
@@ -956,16 +1114,44 @@ export class ControladorSubastas {
     this.canal = null;
   }
 
-  destruir() {
+  /** Solo el reloj. Lo que `iniciarTemporizador` necesita reiniciar. */
+  pararTemporizador() {
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
+  }
+
+  /** El reloj y el canal. Sigue existiendo porque lo llaman desde fuera. */
+  destruir() {
+    this.pararTemporizador();
     this.cerrarCanalEnVivo();
   }
 
-  iniciarTemporizador() {
+  /**
+   * Suelta la pantalla del todo — FI-R11.
+   *
+   * `destruir()` no vale para esto: lo llama `iniciarTemporizador` en cada
+   * recarga para no dejar dos intervalos, asi que si apagara la reconexion, la
+   * primera recarga la mataria. Esto es lo que llama la pagina al irse.
+   */
+  desmontar() {
+    this.vivo = false;
     this.destruir();
+  }
+
+  iniciarTemporizador() {
+    // FI-R11 — aqui se llamaba a `destruir()`, que ADEMAS de parar el reloj
+    // cerraba el canal en vivo. Y `recargar()` termina llamando a este metodo,
+    // asi que la secuencia real de cada carga era: abrir el canal, pedir el
+    // listado, y cerrar el canal que se acababa de abrir. Con cada recarga
+    // posterior, lo mismo.
+    //
+    // O sea que el tiempo real de las subastas estaba apagado en la practica
+    // desde que existe, y no se noto porque el sondeo de 5 s tapaba el hueco:
+    // el sintoma era que las pujas tardaban unos segundos, que es exactamente
+    // lo que uno espera de un sondeo y lo que nadie va a investigar.
+    this.pararTemporizador();
     this.intervalId = setInterval(() => {
       let cambio = false;
       this.subastas.forEach((sub) => {
@@ -1487,6 +1673,17 @@ export class ControladorSubastas {
     const subActiva = this.getSubastaActiva();
 
     return `
+      <!-- FI-R11 · el estado del canal, con las mismas clases y el mismo tono
+           que la campana de notificaciones. Va junto a las pestanas porque esta
+           en las tres vistas que traen datos del servidor. -->
+      <span
+        class="conexion conexion--${this.estadoCanal}"
+        data-zona="conexion-subastas"
+        role="status"
+        aria-live="polite"
+        ${this.urlCanal ? '' : 'hidden'}
+        >${this.urlCanal ? (TEXTO_CANAL[this.estadoCanal] ?? this.estadoCanal) : ''}</span
+      >
       <nav class="subastas-tabs" role="tablist" aria-label="Secciones de subastas">
         <button type="button" role="tab" class="tab-btn ${esExplorar ? 'tab-btn--activo' : ''}" data-tab="explorar" aria-selected="${esExplorar}">
           Explorar subastas
