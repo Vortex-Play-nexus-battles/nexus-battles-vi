@@ -24,8 +24,14 @@ on:
   # de ese commit y las imagenes se construyen desde el, igual que en push.
   workflow_dispatch:
     inputs:
+      perfil:
+        description: "Perfil de despliegue (infrastructure/despliegue/servicios.json). Agrega sus servicios a los que ya corren; no apaga nada. 'ninguno' = usar solo la lista de abajo."
+        type: choice
+        required: false
+        default: ninguno
+        options: [ninguno, base, finanzas, auditoria, subastas, tienda]
       servicios:
-        description: "Servicios a desplegar, separados por coma (ej: salas-partidas,notificaciones,ms-identidad). Vacio = solo frontend y borde."
+        description: "Servicios a desplegar, separados por coma (ej: salas-partidas,notificaciones,ms-identidad). Se suma al perfil. Vacio y sin perfil = solo frontend y borde."
         type: string
         required: false
         default: ""
@@ -148,17 +154,42 @@ jobs:
             # services/plataforma/ms-subastas/a-demanda, que no existe, y el
             # servicio se omitia en silencio (issue #571). Un nombre que no
             # este en el catalogo ahora se avisa en voz alta.
+            PEDIDOS="${{ inputs.servicios }}"
+            PERFIL="${{ inputs.perfil }}"
+            if [ -n "$PERFIL" ] && [ "$PERFIL" != "ninguno" ]; then
+              if ! jq -e --arg p "$PERFIL" '.perfiles | has($p)' "$CATALOGO" > /dev/null; then
+                echo "::error::El perfil '$PERFIL' no existe en $CATALOGO."
+                exit 1
+              fi
+              DEL_PERFIL=$(jq -r --arg p "$PERFIL" '.perfiles[$p] | join(",")' "$CATALOGO")
+              echo "Perfil '$PERFIL' -> ${DEL_PERFIL:-(solo frontend y borde)}"
+              PEDIDOS=$(echo "$PEDIDOS,$DEL_PERFIL" | tr ',' '\n' | sed '/^$/d' | sort -u | tr '\n' ',')
+            fi
+
             ARCHIVOS=""
-            for s in $(echo "${{ inputs.servicios }}" | tr ',' ' '); do
+            DESCONOCIDOS=""
+            for s in $(echo "$PEDIDOS" | tr ',' ' '); do
               ruta_s=$(jq -r --arg s "$s" '.servicios[] | select(.nombre == $s) | .ruta' "$CATALOGO")
               if [ -z "$ruta_s" ]; then
-                echo "::warning::'$s' no esta en $CATALOGO; no se puede desplegar a demanda. Agregalo al catalogo."
+                # Antes esto era un aviso y se seguia adelante. Un aviso en un
+                # log de 900 lineas no lo lee nadie, y quien pidio el servicio
+                # se queda creyendo que se desplego: es el mismo silencio que
+                # tuvo a ms-subastas invisible durante semanas (#571).
+                DESCONOCIDOS="$DESCONOCIDOS $s"
                 continue
               fi
               ARCHIVOS="$ARCHIVOS $ruta_s/a-demanda"
             done
+            if [ -n "$DESCONOCIDOS" ]; then
+              echo "::error::No estan en $CATALOGO:$DESCONOCIDOS"
+              echo "Servicios que si se pueden pedir:"
+              jq -r '.servicios[] | "  - " + .nombre' "$CATALOGO"
+              echo "Perfiles disponibles:"
+              jq -r '.perfiles | keys[] | "  - " + .' "$CATALOGO"
+              exit 1
+            fi
             ARCHIVOS=$(echo "$ARCHIVOS" | tr ' ' '\n' | sed '/^$/d')
-            echo "Despliegue a demanda de: ${{ inputs.servicios }}"
+            echo "Despliegue a demanda de: ${PEDIDOS:-(nada; solo frontend y borde)}"
           else
             ARCHIVOS=$(git diff --name-only "$BASE" "$HEAD")
           fi
@@ -547,38 +578,40 @@ jobs:
           # todavia no creados en GitHub. Prefijo "MS_CUMPLIMIENTO_" para no
           # chocar con DB_USER/DB_PASS de plataforma ni con el esquema
           # DB_URL de ms-identidad (ver docker-compose.ms-cumplimiento.yml).
-          MS_CUMPLIMIENTO_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_CUMPLIMIENTO }}
-          MS_CUMPLIMIENTO_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_CUMPLIMIENTO }}
-          MS_CUMPLIMIENTO_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_CUMPLIMIENTO }}
-          MS_CUMPLIMIENTO_DB_USER: ${{ secrets.TODO_DB_USER_MS_CUMPLIMIENTO }}
-          MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_HOST: ${{ vars.MS_CUMPLIMIENTO_DB_HOST }}
+          MS_CUMPLIMIENTO_DB_PORT: ${{ vars.MS_CUMPLIMIENTO_DB_PORT }}
+          MS_CUMPLIMIENTO_DB_NAME: ${{ vars.MS_CUMPLIMIENTO_DB_NAME }}
+          MS_CUMPLIMIENTO_DB_USER: ${{ secrets.MS_CUMPLIMIENTO_DB_USER }}
+          MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.MS_CUMPLIMIENTO_DB_PASSWORD }}
           # PENDIENTE (TODO_*): mismo patron de placeholder que los otros dos
           # servicios de Cuentas -- 5 secrets propios de ms-ecommerce,
           # todavia no creados en GitHub. Prefijo "MS_ECOMMERCE_" para no
           # chocar con ningun otro esquema (ver docker-compose.ms-ecommerce.yml).
-          MS_ECOMMERCE_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_ECOMMERCE }}
-          MS_ECOMMERCE_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_ECOMMERCE }}
-          MS_ECOMMERCE_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_ECOMMERCE }}
-          MS_ECOMMERCE_DB_USER: ${{ secrets.TODO_DB_USER_MS_ECOMMERCE }}
-          MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_ECOMMERCE }}
-          # PENDIENTE (TODO_*): mismo patron de marcador que los otros
-          # servicios de Cuentas. Los nombres exactos que hay que crear en
-          # GitHub estan en infrastructure/despliegue/servicios.json
-          # (secretsRequeridos) y en infrastructure/despliegue/CAPACIDAD.md.
-          # Que existan no despliega nada por si solo: ms-finanzas y
-          # ms-subastas siguen con desplegableDev:false mientras el host de
-          # plataforma no tenga RAM. Prefijo propio por servicio a proposito,
-          # para no pisar DB_USER/DB_PASS de plataforma-db.
-          MS_FINANZAS_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_FINANZAS }}
-          MS_FINANZAS_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_FINANZAS }}
-          MS_FINANZAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_FINANZAS }}
-          MS_FINANZAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_FINANZAS }}
-          MS_FINANZAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_FINANZAS }}
-          MS_SUBASTAS_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_SUBASTAS }}
-          MS_SUBASTAS_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_SUBASTAS }}
-          MS_SUBASTAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_SUBASTAS }}
-          MS_SUBASTAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_SUBASTAS }}
-          MS_SUBASTAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_SUBASTAS }}
+          # Los cuatro servicios de economia usan nombres definitivos, no
+          # marcadores "TODO_": el host, el puerto y el nombre de la base no
+          # son secretos -- son el nombre de un contenedor de la propia red de
+          # despliegue -- y meterlos en "secrets" solo servia para que nadie
+          # pudiera comprobarlos sin permisos de administracion. Credencial
+          # (usuario y clave) en secrets; el resto en variables.
+          #
+          # ms-identidad sigue con sus TODO_*: esta desplegado y funcionando
+          # con esos valores, y migrarlo exige conocerlos. Queda anotado en
+          # infrastructure/despliegue/CAPACIDAD.md.
+          MS_ECOMMERCE_DB_HOST: ${{ vars.MS_ECOMMERCE_DB_HOST }}
+          MS_ECOMMERCE_DB_PORT: ${{ vars.MS_ECOMMERCE_DB_PORT }}
+          MS_ECOMMERCE_DB_NAME: ${{ vars.MS_ECOMMERCE_DB_NAME }}
+          MS_ECOMMERCE_DB_USER: ${{ secrets.MS_ECOMMERCE_DB_USER }}
+          MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.MS_ECOMMERCE_DB_PASSWORD }}
+          MS_FINANZAS_DB_HOST: ${{ vars.MS_FINANZAS_DB_HOST }}
+          MS_FINANZAS_DB_PORT: ${{ vars.MS_FINANZAS_DB_PORT }}
+          MS_FINANZAS_DB_NAME: ${{ vars.MS_FINANZAS_DB_NAME }}
+          MS_FINANZAS_DB_USER: ${{ secrets.MS_FINANZAS_DB_USER }}
+          MS_FINANZAS_DB_PASSWORD: ${{ secrets.MS_FINANZAS_DB_PASSWORD }}
+          MS_SUBASTAS_DB_HOST: ${{ vars.MS_SUBASTAS_DB_HOST }}
+          MS_SUBASTAS_DB_PORT: ${{ vars.MS_SUBASTAS_DB_PORT }}
+          MS_SUBASTAS_DB_NAME: ${{ vars.MS_SUBASTAS_DB_NAME }}
+          MS_SUBASTAS_DB_USER: ${{ secrets.MS_SUBASTAS_DB_USER }}
+          MS_SUBASTAS_DB_PASSWORD: ${{ secrets.MS_SUBASTAS_DB_PASSWORD }}
           # Origenes permitidos del canal STOMP de subastas. NO es un secreto
           # (es la URL publica del borde) pero va por el mismo camino que
           # SALAS_WS_ORIGENES. Vacio = no se acepta ningun origen: el panel de
@@ -855,36 +888,38 @@ jobs:
           MS_IDENTIDAD_SPRING_PROFILES_ACTIVE: "dev"
           # PENDIENTE (TODO_*): ver el mismo comentario en el job "Desplegar
           # en Dev" -- misma logica para los 5 secrets de ms-cumplimiento.
-          MS_CUMPLIMIENTO_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_CUMPLIMIENTO }}
-          MS_CUMPLIMIENTO_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_CUMPLIMIENTO }}
-          MS_CUMPLIMIENTO_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_CUMPLIMIENTO }}
-          MS_CUMPLIMIENTO_DB_USER: ${{ secrets.TODO_DB_USER_MS_CUMPLIMIENTO }}
-          MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_HOST: ${{ vars.MS_CUMPLIMIENTO_DB_HOST }}
+          MS_CUMPLIMIENTO_DB_PORT: ${{ vars.MS_CUMPLIMIENTO_DB_PORT }}
+          MS_CUMPLIMIENTO_DB_NAME: ${{ vars.MS_CUMPLIMIENTO_DB_NAME }}
+          MS_CUMPLIMIENTO_DB_USER: ${{ secrets.MS_CUMPLIMIENTO_DB_USER }}
+          MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.MS_CUMPLIMIENTO_DB_PASSWORD }}
           # PENDIENTE (TODO_*): ver el mismo comentario en el job "Desplegar
           # en Dev" -- misma logica para los 5 secrets de ms-ecommerce.
-          MS_ECOMMERCE_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_ECOMMERCE }}
-          MS_ECOMMERCE_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_ECOMMERCE }}
-          MS_ECOMMERCE_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_ECOMMERCE }}
-          MS_ECOMMERCE_DB_USER: ${{ secrets.TODO_DB_USER_MS_ECOMMERCE }}
-          MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_ECOMMERCE }}
-          # PENDIENTE (TODO_*): mismo patron de marcador que los otros
-          # servicios de Cuentas. Los nombres exactos que hay que crear en
-          # GitHub estan en infrastructure/despliegue/servicios.json
-          # (secretsRequeridos) y en infrastructure/despliegue/CAPACIDAD.md.
-          # Que existan no despliega nada por si solo: ms-finanzas y
-          # ms-subastas siguen con desplegableDev:false mientras el host de
-          # plataforma no tenga RAM. Prefijo propio por servicio a proposito,
-          # para no pisar DB_USER/DB_PASS de plataforma-db.
-          MS_FINANZAS_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_FINANZAS }}
-          MS_FINANZAS_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_FINANZAS }}
-          MS_FINANZAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_FINANZAS }}
-          MS_FINANZAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_FINANZAS }}
-          MS_FINANZAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_FINANZAS }}
-          MS_SUBASTAS_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_SUBASTAS }}
-          MS_SUBASTAS_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_SUBASTAS }}
-          MS_SUBASTAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_SUBASTAS }}
-          MS_SUBASTAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_SUBASTAS }}
-          MS_SUBASTAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_SUBASTAS }}
+          # Los cuatro servicios de economia usan nombres definitivos, no
+          # marcadores "TODO_": el host, el puerto y el nombre de la base no
+          # son secretos -- son el nombre de un contenedor de la propia red de
+          # despliegue -- y meterlos en "secrets" solo servia para que nadie
+          # pudiera comprobarlos sin permisos de administracion. Credencial
+          # (usuario y clave) en secrets; el resto en variables.
+          #
+          # ms-identidad sigue con sus TODO_*: esta desplegado y funcionando
+          # con esos valores, y migrarlo exige conocerlos. Queda anotado en
+          # infrastructure/despliegue/CAPACIDAD.md.
+          MS_ECOMMERCE_DB_HOST: ${{ vars.MS_ECOMMERCE_DB_HOST }}
+          MS_ECOMMERCE_DB_PORT: ${{ vars.MS_ECOMMERCE_DB_PORT }}
+          MS_ECOMMERCE_DB_NAME: ${{ vars.MS_ECOMMERCE_DB_NAME }}
+          MS_ECOMMERCE_DB_USER: ${{ secrets.MS_ECOMMERCE_DB_USER }}
+          MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.MS_ECOMMERCE_DB_PASSWORD }}
+          MS_FINANZAS_DB_HOST: ${{ vars.MS_FINANZAS_DB_HOST }}
+          MS_FINANZAS_DB_PORT: ${{ vars.MS_FINANZAS_DB_PORT }}
+          MS_FINANZAS_DB_NAME: ${{ vars.MS_FINANZAS_DB_NAME }}
+          MS_FINANZAS_DB_USER: ${{ secrets.MS_FINANZAS_DB_USER }}
+          MS_FINANZAS_DB_PASSWORD: ${{ secrets.MS_FINANZAS_DB_PASSWORD }}
+          MS_SUBASTAS_DB_HOST: ${{ vars.MS_SUBASTAS_DB_HOST }}
+          MS_SUBASTAS_DB_PORT: ${{ vars.MS_SUBASTAS_DB_PORT }}
+          MS_SUBASTAS_DB_NAME: ${{ vars.MS_SUBASTAS_DB_NAME }}
+          MS_SUBASTAS_DB_USER: ${{ secrets.MS_SUBASTAS_DB_USER }}
+          MS_SUBASTAS_DB_PASSWORD: ${{ secrets.MS_SUBASTAS_DB_PASSWORD }}
           # Origenes permitidos del canal STOMP de subastas. NO es un secreto
           # (es la URL publica del borde) pero va por el mismo camino que
           # SALAS_WS_ORIGENES. Vacio = no se acepta ningun origen: el panel de
@@ -985,37 +1020,39 @@ jobs:
           # PENDIENTE (TODO_*): mismos 5 secrets de ms-cumplimiento que en
           # dev/test -- este servicio no tiene perfiles Spring (un solo
           # application.properties), asi que no hace falta forzar ninguno.
-          MS_CUMPLIMIENTO_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_CUMPLIMIENTO }}
-          MS_CUMPLIMIENTO_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_CUMPLIMIENTO }}
-          MS_CUMPLIMIENTO_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_CUMPLIMIENTO }}
-          MS_CUMPLIMIENTO_DB_USER: ${{ secrets.TODO_DB_USER_MS_CUMPLIMIENTO }}
-          MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_HOST: ${{ vars.MS_CUMPLIMIENTO_DB_HOST }}
+          MS_CUMPLIMIENTO_DB_PORT: ${{ vars.MS_CUMPLIMIENTO_DB_PORT }}
+          MS_CUMPLIMIENTO_DB_NAME: ${{ vars.MS_CUMPLIMIENTO_DB_NAME }}
+          MS_CUMPLIMIENTO_DB_USER: ${{ secrets.MS_CUMPLIMIENTO_DB_USER }}
+          MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.MS_CUMPLIMIENTO_DB_PASSWORD }}
           # PENDIENTE (TODO_*): mismos 5 secrets de ms-ecommerce que en
           # dev/test -- tampoco tiene perfiles Spring, no hace falta forzar
           # ninguno.
-          MS_ECOMMERCE_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_ECOMMERCE }}
-          MS_ECOMMERCE_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_ECOMMERCE }}
-          MS_ECOMMERCE_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_ECOMMERCE }}
-          MS_ECOMMERCE_DB_USER: ${{ secrets.TODO_DB_USER_MS_ECOMMERCE }}
-          MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_ECOMMERCE }}
-          # PENDIENTE (TODO_*): mismo patron de marcador que los otros
-          # servicios de Cuentas. Los nombres exactos que hay que crear en
-          # GitHub estan en infrastructure/despliegue/servicios.json
-          # (secretsRequeridos) y en infrastructure/despliegue/CAPACIDAD.md.
-          # Que existan no despliega nada por si solo: ms-finanzas y
-          # ms-subastas siguen con desplegableDev:false mientras el host de
-          # plataforma no tenga RAM. Prefijo propio por servicio a proposito,
-          # para no pisar DB_USER/DB_PASS de plataforma-db.
-          MS_FINANZAS_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_FINANZAS }}
-          MS_FINANZAS_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_FINANZAS }}
-          MS_FINANZAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_FINANZAS }}
-          MS_FINANZAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_FINANZAS }}
-          MS_FINANZAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_FINANZAS }}
-          MS_SUBASTAS_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_SUBASTAS }}
-          MS_SUBASTAS_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_SUBASTAS }}
-          MS_SUBASTAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_SUBASTAS }}
-          MS_SUBASTAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_SUBASTAS }}
-          MS_SUBASTAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_SUBASTAS }}
+          # Los cuatro servicios de economia usan nombres definitivos, no
+          # marcadores "TODO_": el host, el puerto y el nombre de la base no
+          # son secretos -- son el nombre de un contenedor de la propia red de
+          # despliegue -- y meterlos en "secrets" solo servia para que nadie
+          # pudiera comprobarlos sin permisos de administracion. Credencial
+          # (usuario y clave) en secrets; el resto en variables.
+          #
+          # ms-identidad sigue con sus TODO_*: esta desplegado y funcionando
+          # con esos valores, y migrarlo exige conocerlos. Queda anotado en
+          # infrastructure/despliegue/CAPACIDAD.md.
+          MS_ECOMMERCE_DB_HOST: ${{ vars.MS_ECOMMERCE_DB_HOST }}
+          MS_ECOMMERCE_DB_PORT: ${{ vars.MS_ECOMMERCE_DB_PORT }}
+          MS_ECOMMERCE_DB_NAME: ${{ vars.MS_ECOMMERCE_DB_NAME }}
+          MS_ECOMMERCE_DB_USER: ${{ secrets.MS_ECOMMERCE_DB_USER }}
+          MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.MS_ECOMMERCE_DB_PASSWORD }}
+          MS_FINANZAS_DB_HOST: ${{ vars.MS_FINANZAS_DB_HOST }}
+          MS_FINANZAS_DB_PORT: ${{ vars.MS_FINANZAS_DB_PORT }}
+          MS_FINANZAS_DB_NAME: ${{ vars.MS_FINANZAS_DB_NAME }}
+          MS_FINANZAS_DB_USER: ${{ secrets.MS_FINANZAS_DB_USER }}
+          MS_FINANZAS_DB_PASSWORD: ${{ secrets.MS_FINANZAS_DB_PASSWORD }}
+          MS_SUBASTAS_DB_HOST: ${{ vars.MS_SUBASTAS_DB_HOST }}
+          MS_SUBASTAS_DB_PORT: ${{ vars.MS_SUBASTAS_DB_PORT }}
+          MS_SUBASTAS_DB_NAME: ${{ vars.MS_SUBASTAS_DB_NAME }}
+          MS_SUBASTAS_DB_USER: ${{ secrets.MS_SUBASTAS_DB_USER }}
+          MS_SUBASTAS_DB_PASSWORD: ${{ secrets.MS_SUBASTAS_DB_PASSWORD }}
           # Origenes permitidos del canal STOMP de subastas. NO es un secreto
           # (es la URL publica del borde) pero va por el mismo camino que
           # SALAS_WS_ORIGENES. Vacio = no se acepta ningun origen: el panel de
