@@ -137,7 +137,7 @@ jobs:
             ARCHIVOS=""
             for s in $(echo "${{ inputs.servicios }}" | tr ',' ' '); do
               case "$s" in
-                ms-identidad|ms-cumplimiento|ms-ecommerce) ARCHIVOS="$ARCHIVOS services/cuentas/$s/a-demanda" ;;
+                ms-identidad|ms-cumplimiento|ms-ecommerce|ms-finanzas) ARCHIVOS="$ARCHIVOS services/cuentas/$s/a-demanda" ;;
                 heroes|inventario|productos|motor-combate) ARCHIVOS="$ARCHIVOS services/contenido/$s/a-demanda" ;;
                 *) ARCHIVOS="$ARCHIVOS services/plataforma/$s/a-demanda" ;;
               esac
@@ -264,6 +264,29 @@ jobs:
             fi
           fi
 
+          # 6.5) services/cuentas/ms-finanzas (Gradle, equipo Cuentas). A
+          #      diferencia de ms-identidad/ms-cumplimiento/ms-ecommerce
+          #      (Maven, bloques 4-6 de arriba), este es un modulo Gradle del
+          #      build raiz -- igual que los de plataforma -- pero vive bajo
+          #      services/cuentas/, fuera de la regex generica del paso 2
+          #      (que solo mira services/(plataforma|contenido)/*). Necesita
+          #      su propio bloque, con la misma forma que los de Maven de
+          #      arriba pero con rutaGradle y herramienta:"gradle". Puerto
+          #      8093, el mismo que ya usan borde-dev.conf y las URLs
+          #      CREDITOS_URL de salas-partidas/torneos (EXPOSE 8093 en su
+          #      Dockerfile) -- HU-PAG-002/#536, HU-JUE-012/#470, issue #571.
+          if echo "$ARCHIVOS" | grep -q '^services/cuentas/ms-finanzas/'; then
+            if [ -f "services/cuentas/ms-finanzas/build.gradle" ]; then
+              MATRIZ=$(echo "$MATRIZ" | jq -c \
+                --arg ruta "services/cuentas/ms-finanzas" \
+                --arg rutaGradle ":services:cuentas:ms-finanzas" \
+                --arg servicio "ms-finanzas" \
+                '. + [{ruta:$ruta, rutaGradle:$rutaGradle, servicio:$servicio, puerto:"8093", herramienta:"gradle"}]')
+            else
+              echo "Se omite services/cuentas/ms-finanzas: no tiene build.gradle"
+            fi
+          fi
+
           # 7) Lo que NO cabe en el host de dev. El t3.small (1,9 GB) corre 9
           #    servicios + borde con ~330 MB libres y 1,1 GB ya en swap
           #    (diagnostico-dev del 21/sep). Meter otra JVM no "desplegaria un
@@ -275,7 +298,15 @@ jobs:
           #    siguen corriendo en ci.yml. A demanda (workflow_dispatch) SI se
           #    intentan: quien los pide sabe lo que hace y ve el fallo con sus
           #    secrets faltantes.
-          FUERA_DEL_HOST_DEV="ms-cumplimiento ms-ecommerce"
+          #
+          #    ms-finanzas se agrega aqui por la misma razon, no porque su
+          #    codigo tenga un problema (HU-PAG-002 #536 y HU-JUE-012 #470
+          #    estan completas y en verde en ci.yml): sumar otra JVM + su
+          #    propio Postgres al mismo t3.small con ~330 MB libres arriesga
+          #    tumbar lo que ya sostiene el MVP (issue #571, punto 4). Sacarla
+          #    de aqui es decision de quien mida la capacidad real del host,
+          #    no de este archivo.
+          FUERA_DEL_HOST_DEV="ms-cumplimiento ms-ecommerce ms-finanzas"
           if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
             for fuera in $FUERA_DEL_HOST_DEV; do
               if echo "$MATRIZ" | jq -e --arg s "$fuera" 'any(.[]; .servicio == $s)' > /dev/null; then
@@ -561,11 +592,22 @@ jobs:
           MS_ECOMMERCE_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_ECOMMERCE }}
           MS_ECOMMERCE_DB_USER: ${{ secrets.TODO_DB_USER_MS_ECOMMERCE }}
           MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_ECOMMERCE }}
+          # PENDIENTE (TODO_*): mismo patron de placeholder que los otros tres
+          # servicios de Cuentas -- 5 secrets propios de ms-finanzas, todavia
+          # no creados en GitHub. Prefijo "MS_FINANZAS_" por la misma razon
+          # (ver docker-compose.ms-finanzas.yml). Recordar que aunque los
+          # secrets existan, en dev ms-finanzas sigue en FUERA_DEL_HOST_DEV
+          # (arriba, job detectar-servicios) hasta que alguien mida que cabe.
+          MS_FINANZAS_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_FINANZAS }}
+          MS_FINANZAS_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_FINANZAS }}
+          MS_FINANZAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_FINANZAS }}
+          MS_FINANZAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_FINANZAS }}
+          MS_FINANZAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_FINANZAS }}
         with:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,SIMULACRO_REVERSION,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,SMTP_PORT,LISTA_NEGRA_VERIFICAR_URL,SALAS_WS_ORIGENES,CHAT_WS_ORIGENES,CHAT_HISTORIAL_TAMANO,NOTIFICACIONES_WS_ORIGENES,COMENTARIOS_FORMATOS_IMAGEN,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,SIMULACRO_REVERSION,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,SMTP_PORT,LISTA_NEGRA_VERIFICAR_URL,SALAS_WS_ORIGENES,CHAT_WS_ORIGENES,CHAT_HISTORIAL_TAMANO,NOTIFICACIONES_WS_ORIGENES,COMENTARIOS_FORMATOS_IMAGEN,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -843,11 +885,22 @@ jobs:
           MS_ECOMMERCE_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_ECOMMERCE }}
           MS_ECOMMERCE_DB_USER: ${{ secrets.TODO_DB_USER_MS_ECOMMERCE }}
           MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_ECOMMERCE }}
+          # PENDIENTE (TODO_*): mismo patron de placeholder que los otros tres
+          # servicios de Cuentas -- 5 secrets propios de ms-finanzas, todavia
+          # no creados en GitHub. Prefijo "MS_FINANZAS_" por la misma razon
+          # (ver docker-compose.ms-finanzas.yml). Recordar que aunque los
+          # secrets existan, en dev ms-finanzas sigue en FUERA_DEL_HOST_DEV
+          # (arriba, job detectar-servicios) hasta que alguien mida que cabe.
+          MS_FINANZAS_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_FINANZAS }}
+          MS_FINANZAS_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_FINANZAS }}
+          MS_FINANZAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_FINANZAS }}
+          MS_FINANZAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_FINANZAS }}
+          MS_FINANZAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_FINANZAS }}
         with:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -950,11 +1003,22 @@ jobs:
           MS_ECOMMERCE_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_ECOMMERCE }}
           MS_ECOMMERCE_DB_USER: ${{ secrets.TODO_DB_USER_MS_ECOMMERCE }}
           MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_ECOMMERCE }}
+          # PENDIENTE (TODO_*): mismo patron de placeholder que los otros tres
+          # servicios de Cuentas -- 5 secrets propios de ms-finanzas, todavia
+          # no creados en GitHub. Prefijo "MS_FINANZAS_" por la misma razon
+          # (ver docker-compose.ms-finanzas.yml). Recordar que aunque los
+          # secrets existan, en dev ms-finanzas sigue en FUERA_DEL_HOST_DEV
+          # (arriba, job detectar-servicios) hasta que alguien mida que cabe.
+          MS_FINANZAS_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_FINANZAS }}
+          MS_FINANZAS_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_FINANZAS }}
+          MS_FINANZAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_FINANZAS }}
+          MS_FINANZAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_FINANZAS }}
+          MS_FINANZAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_FINANZAS }}
         with:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh

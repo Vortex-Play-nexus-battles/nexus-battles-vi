@@ -69,6 +69,13 @@ COMPOSE_CUENTAS="$DIRECTORIO/docker-compose.cuentas.yml"
 COMPOSE_MS_CUMPLIMIENTO="$DIRECTORIO/docker-compose.ms-cumplimiento.yml"
 # Override de ms-ecommerce (Maven, tambien equipo Cuentas). Mismo patron.
 COMPOSE_MS_ECOMMERCE="$DIRECTORIO/docker-compose.ms-ecommerce.yml"
+# Override de ms-finanzas (Gradle, tambien equipo Cuentas). Mismo patron que
+# los tres de arriba, aunque el servicio en si sea Gradle y no Maven -- el
+# override de despliegue es igual para los cuatro. HU-PAG-002 #536,
+# HU-JUE-012 #470. Nota de capacidad en docker-compose.ms-finanzas.yml y en
+# cd.yml (FUERA_DEL_HOST_DEV, issue #571 punto 4): que este override exista
+# no implica que quepa en el host de dev sin medirlo.
+COMPOSE_MS_FINANZAS="$DIRECTORIO/docker-compose.ms-finanzas.yml"
 # Override de los servicios de services/contenido/* (equipo Contenido):
 # mismo mecanismo que el de cuentas -- se copia siempre, se agrega al
 # comando solo si algun servicio de contenido viene en esta corrida.
@@ -306,6 +313,7 @@ SERVICIOS_COMPOSE=""
 INCLUYE_CUENTAS=0
 INCLUYE_MS_CUMPLIMIENTO=0
 INCLUYE_MS_ECOMMERCE=0
+INCLUYE_MS_FINANZAS=0
 INCLUYE_CONTENIDO=0
 for par in $SERVICIOS_PUERTOS; do
   servicio="${par%%:*}"
@@ -318,6 +326,9 @@ for par in $SERVICIOS_PUERTOS; do
   fi
   if [ "$servicio" = "ms-ecommerce" ]; then
     INCLUYE_MS_ECOMMERCE=1
+  fi
+  if [ "$servicio" = "ms-finanzas" ]; then
+    INCLUYE_MS_FINANZAS=1
   fi
   for s in $SERVICIOS_CONTENIDO; do
     if [ "$servicio" = "$s" ]; then
@@ -379,13 +390,32 @@ if [ "$INCLUYE_MS_ECOMMERCE" -eq 1 ]; then
   fi
 fi
 
+# Mismo patron de "fallo visible" para ms-finanzas: sus 5 secrets son
+# obligatorios si esta en esta corrida -- application.properties lee
+# ${DB_HOST}/${DB_PORT}/${DB_NAME}/${DB_USER}/${DB_PASSWORD} literalmente
+# (DB_PASSWORD sin default, igual que ms-cumplimiento/ms-ecommerce). Solo se
+# llega aqui en un despliegue a demanda: en push normal a dev, ms-finanzas
+# esta en FUERA_DEL_HOST_DEV y cd.yml nunca la incluye en SERVICIOS_PUERTOS.
+if [ "$INCLUYE_MS_FINANZAS" -eq 1 ]; then
+  FALTANTES=""
+  [ -n "${MS_FINANZAS_DB_HOST:-}" ] || FALTANTES="$FALTANTES TODO_DB_HOST_MS_FINANZAS"
+  [ -n "${MS_FINANZAS_DB_PORT:-}" ] || FALTANTES="$FALTANTES TODO_DB_PORT_MS_FINANZAS"
+  [ -n "${MS_FINANZAS_DB_NAME:-}" ] || FALTANTES="$FALTANTES TODO_DB_NAME_MS_FINANZAS"
+  [ -n "${MS_FINANZAS_DB_USER:-}" ] || FALTANTES="$FALTANTES TODO_DB_USER_MS_FINANZAS"
+  [ -n "${MS_FINANZAS_DB_PASSWORD:-}" ] || FALTANTES="$FALTANTES TODO_DB_PASSWORD_MS_FINANZAS"
+  if [ -n "$FALTANTES" ]; then
+    echo "Faltan secrets de GitHub para ms-finanzas, crealos en Settings > Environments:$FALTANTES"
+    exit 1
+  fi
+fi
+
 # Siempre el base + el de despliegue de plataforma combinados: el base (de
 # desarrollo local, con "build:") nunca se usa solo. El de despliegue solo
 # agrega "image:", y como aqui no pasamos --build, Compose usa esa imagen ya
 # publicada en ghcr.io en vez de intentar construir nada en el servidor.
-# Los overrides de Cuentas (ms-identidad, ms-cumplimiento, ms-ecommerce)
-# solo se agregan si de verdad estan entre los servicios de esta corrida --
-# si no, ni se mencionan en el comando.
+# Los overrides de Cuentas (ms-identidad, ms-cumplimiento, ms-ecommerce,
+# ms-finanzas) solo se agregan si de verdad estan entre los servicios de esta
+# corrida -- si no, ni se mencionan en el comando.
 ARCHIVOS_COMPOSE=(-f "$COMPOSE_BASE" -f "$COMPOSE_DEPLOY")
 if [ "$INCLUYE_CUENTAS" -eq 1 ]; then
   ARCHIVOS_COMPOSE+=(-f "$COMPOSE_CUENTAS")
@@ -395,6 +425,9 @@ if [ "$INCLUYE_MS_CUMPLIMIENTO" -eq 1 ]; then
 fi
 if [ "$INCLUYE_MS_ECOMMERCE" -eq 1 ]; then
   ARCHIVOS_COMPOSE+=(-f "$COMPOSE_MS_ECOMMERCE")
+fi
+if [ "$INCLUYE_MS_FINANZAS" -eq 1 ]; then
+  ARCHIVOS_COMPOSE+=(-f "$COMPOSE_MS_FINANZAS")
 fi
 if [ "$INCLUYE_CONTENIDO" -eq 1 ]; then
   ARCHIVOS_COMPOSE+=(-f "$COMPOSE_CONTENIDO")
@@ -467,6 +500,10 @@ echo "== 4) Verificando /actuator/health de cada servicio desplegado (con reinte
 ruta_salud_de() {
   case "$1" in
     ms-ecommerce) echo "/ecommerce/actuator/health" ;;
+    # Confirmado en application.properties de ms-finanzas (linea 2):
+    # server.servlet.context-path=/api/v1 -- a diferencia de ms-identidad y
+    # ms-cumplimiento, que no tienen context-path y viven en la raiz.
+    ms-finanzas) echo "/api/v1/actuator/health" ;;
     *) echo "/actuator/health" ;;
   esac
 }
