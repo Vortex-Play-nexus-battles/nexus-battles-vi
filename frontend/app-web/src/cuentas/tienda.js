@@ -29,6 +29,7 @@ import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.
 import { rutaDeApi } from '../comun/base-api.js';
 import { usuarioIdDeSesion } from '../comun/identidad.js';
 import { estadoDeCarga, estadoDeError, estadoVacio } from '../comun/ui/estado-vista.js';
+import { aProductoDeVitrina, aFilaDeCarrito, textoDePrecio, aImporte } from './tienda-adaptador.js';
 
 /**
  * Cabeceras de cada petición.
@@ -128,10 +129,13 @@ function pintarEn(contenedor, estado) {
  * escucha está delegada en la rejilla (ver `montarTienda`), que es lo único que
  * funciona cuando este archivo se carga como módulo.
  */
-function tarjetaDeProducto(producto, doc) {
+function tarjetaDeProducto(dto, doc) {
+  // FI-R2 — la traduccion del DTO es explicita y esta probada aparte. Antes
+  // esta funcion leia `dto.precio`, un campo que el servicio no devuelve.
+  const producto = aProductoDeVitrina(dto);
   const tarjeta = doc.createElement('div');
   tarjeta.className = 'product-card';
-  tarjeta.dataset.tipo = producto.tipo ?? '';
+  tarjeta.dataset.tipo = producto.tipo;
   // UX-R2.8 — el color de la caja se interpolaba dentro de la plantilla
   // (`background-color: ${colorCaja}`). Los dos valores eran constantes, asi
   // que no habia agujero, pero era `innerHTML` con una interpolacion: la
@@ -142,17 +146,81 @@ function tarjetaDeProducto(producto, doc) {
     <div class="product-image"></div>
     <h4></h4>
     <p></p>
+    <p class="habilidades"></p>
     <div class="product-footer">
-      <span class="price"></span>
+      <span class="precio-bloque">
+        <span class="price"></span>
+        <s class="price-antes"></s>
+        <span class="badge-descuento"></span>
+      </span>
       <button class="btn-add" type="button">Añadir</button>
     </div>
   `;
   // textContent y no innerHTML: el nombre y la descripción vienen del
   // catálogo, y un producto con `<script>` en el nombre no debe ejecutarse.
-  tarjeta.querySelector('h4').textContent = producto.nombre ?? '';
-  tarjeta.querySelector('p').textContent = producto.descripcion ?? '';
-  tarjeta.querySelector('.price').textContent = `${producto.precio ?? 0} COP`;
-  tarjeta.querySelector('.btn-add').dataset.producto = producto.id;
+  tarjeta.querySelector('h4').textContent = producto.nombre;
+  tarjeta.querySelector('p').textContent = producto.descripcion;
+
+  // RF-CAR-001 pide la imagen del producto. La caja de color era el marcador
+  // de posicion de la maqueta; `imagenUrl` viene en el DTO desde el principio.
+  const caja = tarjeta.querySelector('.product-image');
+  if (producto.imagenUrl) {
+    const img = doc.createElement('img');
+    img.src = producto.imagenUrl;
+    img.alt = '';
+    img.loading = 'lazy';
+    caja.appendChild(img);
+    caja.classList.add('con-imagen');
+  }
+
+  // RF-CAR-001 pide tambien las habilidades. Estaban en el DTO y no se
+  // pintaban en ningun sitio.
+  const habilidades = tarjeta.querySelector('.habilidades');
+  if (producto.habilidades) {
+    habilidades.textContent = producto.habilidades;
+  } else {
+    habilidades.remove();
+  }
+
+  // FI-R2 — sin precio no se escribe «0 COP». Cero es un precio, y decirle a
+  // alguien que un objeto es gratis cuando lo que pasa es que no llego el dato
+  // es exactamente la clase de mentira que esta ronda persigue.
+  const precio = tarjeta.querySelector('.price');
+  precio.textContent = producto.precioTexto ?? 'Precio no disponible';
+  if (producto.precioTexto === null) {
+    precio.classList.add('precio-ausente');
+  }
+
+  const antes = tarjeta.querySelector('.price-antes');
+  if (producto.precioAnteriorTexto) {
+    antes.textContent = producto.precioAnteriorTexto;
+  } else {
+    antes.remove();
+  }
+
+  const distintivo = tarjeta.querySelector('.badge-descuento');
+  if (producto.descuento !== null) {
+    distintivo.textContent = `-${producto.descuento}%`;
+  } else {
+    distintivo.remove();
+  }
+
+  if (producto.esPropio) {
+    tarjeta.dataset.propio = 'si';
+  }
+  if (producto.enListaDeseos) {
+    tarjeta.dataset.deseado = 'si';
+  }
+
+  // Sin id no hay nada que anadir al carrito: el boton se deshabilita en vez
+  // de mandar `undefined` al servicio.
+  const boton = tarjeta.querySelector('.btn-add');
+  if (producto.id === null) {
+    boton.disabled = true;
+    boton.title = 'Este producto llegó incompleto y no se puede añadir al carrito.';
+  } else {
+    boton.dataset.producto = String(producto.id);
+  }
 
   return tarjeta;
 }
@@ -224,28 +292,71 @@ export function actualizarUI(carrito, doc = document) {
 
   if (!carrito || !carrito.items || carrito.items.length === 0) {
     contenedor.innerHTML = '<p class="t-meta">Tu carrito está vacío</p>';
-    subtotal.textContent = '0 COP';
-    total.textContent = '0 COP';
+    // Un carrito vacio suma cero de verdad, pero la moneda no se sabe: la trae
+    // cada producto, y aqui no hay ninguno. Se ensena la cifra sola.
+    subtotal.textContent = '0';
+    total.textContent = '0';
     botonPagar.disabled = true;
     return;
   }
 
+  // La moneda del carrito es la del primer producto que la declare: el DTO la
+  // trae por producto, no por carrito, y suponer COP seria decirle al jugador
+  // en que paga sin saberlo.
+  const moneda =
+    carrito.items.map((i) => i.producto?.moneda).find((m) => typeof m === 'string' && m.trim()) ||
+    null;
+
   for (const item of carrito.items) {
-    const fila = doc.createElement('div');
-    fila.className = 'cart-item';
-    fila.innerHTML = `
+    const fila = aFilaDeCarrito(item, moneda);
+    const nodo = doc.createElement('div');
+    nodo.className = 'cart-item';
+    nodo.innerHTML = `
       <div class="item-info"><h5></h5><span></span></div>
       <div class="item-price"></div>
     `;
-    fila.querySelector('h5').textContent = item.producto ? item.producto.nombre : 'Producto';
-    fila.querySelector('span').textContent = `x${item.cantidad}`;
-    fila.querySelector('.item-price').textContent = `${item.subtotal} COP`;
-    contenedor.appendChild(fila);
+    nodo.querySelector('h5').textContent = fila.nombre;
+    nodo.querySelector('span').textContent = `x${fila.cantidad}`;
+    // FI-R2 — antes salia «undefined COP» cuando el item no traia subtotal.
+    nodo.querySelector('.item-price').textContent = fila.subtotalTexto ?? 'Sin precio';
+    contenedor.appendChild(nodo);
   }
 
-  subtotal.textContent = `${carrito.total} COP`;
-  total.textContent = `${carrito.total} COP`;
-  botonPagar.disabled = false;
+  const totalTexto = textoDePrecio(aImporte(carrito.total), moneda) ?? 'Sin total';
+  subtotal.textContent = totalTexto;
+  total.textContent = totalTexto;
+  prepararBotonDePago(botonPagar);
+}
+
+/**
+ * El boton «Pagar» — FI-R2 / FI-R14.
+ *
+ * RF-CAR-010 («Resumen de compra y formulario de pago») y RF-PAG-001
+ * («Integracion con pasarela de pagos simulada») existen, son de prioridad
+ * Alta y estan confirmados. Lo que **no** existe es su implementacion:
+ * `CarritoController` expone `GET /carrito`, `POST /carrito/items` y
+ * `DELETE /carrito/items/{itemId}`, y nada mas; `ecommerce-carrito.yaml`
+ * declara esas mismas tres rutas y ninguna de pago.
+ *
+ * Los dos requisitos son de **Grupo de Santiago** (ver
+ * `docs/gobierno/MAPA-RESPONSABILIDAD-RF.md`), asi que construir aqui la
+ * pasarela seria adelantarles el Sprint, no completarlo.
+ *
+ * Mientras tanto el boton no puede quedarse encendido: estaba habilitado en
+ * cuanto el carrito tenia algo y **no tenia ningun manejador**. Pulsarlo no
+ * hacia nada, ni siquiera avisar. Un boton que se enciende es una promesa.
+ *
+ * @param {HTMLButtonElement|null} boton
+ */
+function prepararBotonDePago(boton) {
+  if (!boton) {
+    return;
+  }
+  boton.disabled = true;
+  // El identificador del requisito vive en el comentario de arriba, no en la
+  // pantalla: a quien compra no le dice nada «RF-PAG-001».
+  boton.title = 'El pago todavía no está disponible.';
+  boton.setAttribute('aria-describedby', 'aviso-pago-pendiente');
 }
 
 /**

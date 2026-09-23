@@ -77,6 +77,6 @@ export const PERFILES = {
     vus: 20,
     duracionSegundos: 120,
     pausaMs: 200,
-    proposito: 'Concurrencia alta dentro de lo que aguanta el t3.small de DEV.',
+    proposito: 'Concurrencia alta dentro de lo que aguanta el t3.small de plataforma en DEV.',
   },
 };

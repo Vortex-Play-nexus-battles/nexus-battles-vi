@@ -13,6 +13,7 @@ import {
   montarValidacionDeHeroe,
   pintarValidacion,
   estadisticasDe,
+  avisarFalloDeAccion,
   RESULTADOS,
 } from './validacion-heroe.js';
 import { ErrorDeApi } from './cliente-salas.js';
@@ -513,5 +514,34 @@ describe('montarValidacionDeHeroe · inventario degradado (HU-DIS-003)', () => {
     expect(d.dataset.resultado).toBe('DISPONIBLE');
     expect(d.querySelector('.seccion-degradada')).toBeNull();
     expect(d.querySelector('[data-accion="confirmar"]')).not.toBeNull();
+  });
+});
+
+describe('el fallo de la accion tiene sitio — UX-R4.5', () => {
+  test('no se pinta ningun aviso mientras nada ha fallado', () => {
+    const d = raiz();
+    pintarValidacion(d, disponible());
+    expect(d.querySelector('[data-zona="aviso-confirmar"]')).toBeNull();
+  });
+
+  test('al fallar aparece delante de las acciones, y lo lee el lector', () => {
+    const d = raiz();
+    pintarValidacion(d, disponible());
+    avisarFalloDeAccion(d, 'No pudimos entrar a la sala.');
+
+    const aviso = d.querySelector('[data-zona="aviso-confirmar"]');
+    expect(aviso.textContent).toBe('No pudimos entrar a la sala.');
+    expect(aviso.getAttribute('role')).toBe('alert');
+    expect(aviso.nextElementSibling.className).toContain('dialogo__acciones');
+  });
+
+  test('avisar dos veces reemplaza el texto y no apila avisos', () => {
+    const d = raiz();
+    pintarValidacion(d, disponible());
+    avisarFalloDeAccion(d, 'Primero');
+    avisarFalloDeAccion(d, 'Segundo');
+
+    expect(d.querySelectorAll('[data-zona="aviso-confirmar"]')).toHaveLength(1);
+    expect(d.querySelector('[data-zona="aviso-confirmar"]').textContent).toBe('Segundo');
   });
 });

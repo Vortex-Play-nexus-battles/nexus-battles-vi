@@ -93,5 +93,6 @@ resto de la vista sigue. Probado apagando contenedores de verdad en
 Requiere Docker Desktop: `RepositorioSalasJpaIT`, `IngresoConcurrenteIT`,
 `CanalDeSalaIT` y `CanalDePartidaIT` levantan PostgreSQL 17 por Testcontainers
 y **fallan** si no está, en vez de omitirse. El único doble de seguridad en las
-IT es el `JwtDecoder` (que en producción valida contra Keycloak); la cadena de
-filtros y la exigencia de token no se debilitan.
+IT es el `JwtDecoder` (que en despliegue valida contra el JWKS de `ms-identidad`,
+`IDENTIDAD_JWKS_URL`; no hay Keycloak — ADR-005); la cadena de filtros y la
+exigencia de token no se debilitan.

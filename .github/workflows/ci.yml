@@ -184,23 +184,28 @@ jobs:
             echo "hay=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # Hasta R13 estos cuatro pasos llevaban `if: hay == 'true'`, asi que un PR
+      # que cambiara un controlador y rompiera la correspondencia con el borde
+      # dejaba «CI - reparto de rutas del borde: pass» sin haber levantado nada.
+      # Es el mismo antipatron que R11.6 quito de `ci-contratos`, y la misma
+      # respuesta: levantar el banco cuesta unos segundos y la condicion no
+      # ahorraba nada; solo escondia el estado real. Este guardian es el que
+      # habria evitado #614, asi que menos aun conviene que se salte solo.
       - name: Levantar el banco con el borde-dev.conf REAL
-        if: steps.detectar.outputs.hay == 'true'
         working-directory: infrastructure/red-balanceo/pruebas
         run: docker compose up -d --wait
 
       - name: Comprobar el reparto de las 33 rutas
-        if: steps.detectar.outputs.hay == 'true'
         working-directory: infrastructure/red-balanceo/pruebas
         run: ./comprobar-rutas.sh
 
       - name: Recoger la bitacora del borde si algo fallo
-        if: failure() && steps.detectar.outputs.hay == 'true'
+        if: failure()
         working-directory: infrastructure/red-balanceo/pruebas
         run: docker compose logs borde --tail 80
 
       - name: Desmontar el banco
-        if: always() && steps.detectar.outputs.hay == 'true'
+        if: always()
         working-directory: infrastructure/red-balanceo/pruebas
         run: docker compose down -v
 
@@ -309,6 +314,24 @@ jobs:
   # nada: fija ese estado para que la primera fuga sea un fallo de CI y no un
   # hallazgo de auditoria seis semanas despues. Cuesta ~5 s sobre 761 archivos.
   # ---------------------------------------------------------------------
+  # Prueba de regresion del reparto de etiquetas de imagen del CD. Existia
+  # desde el 9-sep, escrita a raiz de un despliegue que se cayo de verdad
+  # (corrida 34307790392: `docker compose up` arrastro a srv-heroes con una
+  # etiqueta que no existia), y **nadie la ejecutaba nunca**: la unica mencion
+  # en todo el repositorio era su propia cabecera diciendo como correrla a
+  # mano. Una prueba de regresion que no corre no protege de la regresion.
+  #
+  # No necesita Docker —el script se trae su propio `docker` falso— asi que
+  # cuesta segundos y puede correr siempre.
+  ci-etiquetas-cd:
+    name: CI - reparto de etiquetas del CD
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Comprobar la resolucion de etiquetas por servicio de contenido
+        shell: bash
+        run: bash scripts/cd/pruebas/desplegar-etiquetas-contenido.sh
+
   ci-secretos-bitacora:
     name: CI - secretos en la bitacora
     runs-on: ubuntu-latest

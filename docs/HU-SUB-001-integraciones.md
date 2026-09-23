@@ -13,7 +13,7 @@ No se hicieron commits ni push.
 | Identidad | PR #347, `ValidadorDeToken`, `IdentidadDesdeToken`, `SeguridadConfig` | Reutilizados. `exigirJugadorId()` ya existe y exige `uid`. Se corrige únicamente el caso de `uid` con tipo JSON distinto de string, para devolver 401. No se consulta tokenVersion ni se duplica el validador. |
 | Catálogo | `contracts/openapi/productos.yaml`, cliente existente | Conservado GET `/api/v1/productos/{id}`, sus pruebas y `JacksonConfig`. |
 | Inventario | `contracts/openapi/inventario.yaml`, modelo/controllers actuales; PR #347 y commits de inventario #309/#310 | El cliente de subastas agregado en #347 contiene rutas que todavía no ofrece el proveedor. No se modificó ni se consideró una integración oficial de publicación. |
-| Finanzas | PR #345, `services/cuentas/ms-finanzas` | Solo skeleton. No hay contrato/controller de comisión ni compensación. No se reutiliza el crédito de pujas. |
+| Finanzas | PR #345, `services/cuentas/ms-finanzas` | **Caduco al momento de leerlo:** en la fecha de esta revisión era solo esqueleto, pero el libro de créditos ya está implementado — `contracts/openapi/creditos.yaml` existe y va por 1.4.0, con HU-JUE-012 y HU-JUE-014 probadas en E2E. Lo que sigue sin existir es el contrato/controller de comisión y compensación de subastas. Estado vigente en `services/cuentas/ms-finanzas/README.md`. |
 | Listado/modelo | PR #343 y versión actual de `SubastaListadoService` | Se conserva prioridad MdJ solo en orden por defecto. `Subasta.java`, V4, pujas y cierre permanecen sin cambios. |
 
 ## Qué queda implementado
