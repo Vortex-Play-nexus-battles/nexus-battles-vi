@@ -17,7 +17,7 @@
  * no tenerlo. Quedan los dos filtros con respaldo, modalidad y estado.
  */
 
-import { listarSalas, ingresarASala } from './cliente-salas.js';
+import { listarSalas, ingresarASala, esSalaPrivada } from './cliente-salas.js';
 import { vaciar } from '../../comun/ui/dom.js';
 import { seguirSala, estadoDesdeFicha } from './canal-sala.js';
 import {
@@ -210,6 +210,11 @@ export function montarBatallas(raiz, puertos = {}) {
   // porque el inventario (o el libro de creditos) no responde. Aparte del
   // estado de vista a proposito: el listado sigue siendo util y no se oculta.
   const zonaDegradacion = raiz.querySelector('[data-zona="degradacion"]');
+  // FI-R4: el formulario del codigo de invitacion. No se ensena de entrada:
+  // aparece cuando el servidor dice que esa sala es privada, que es cuando
+  // hace falta. Pedir un codigo antes de saber si la sala lo necesita seria
+  // pedirselo a todo el mundo.
+  const zonaInvitacion = raiz.querySelector('[data-zona="pedir-codigo"]');
   const filtroModalidad = raiz.querySelector('[name="modalidad"]');
   const filtroEstado = raiz.querySelector('[name="estado"]');
 
@@ -434,11 +439,80 @@ export function montarBatallas(raiz, puertos = {}) {
     await entrarA(tarjeta.dataset.sala);
   });
 
-  /** Entra a una sala; reutilizable por el reintento de la seccion degradada. */
-  async function entrarA(idSala) {
+  /**
+   * Pide el codigo de invitacion de una sala privada — FI-R4.
+   *
+   * Se pinta en su propia zona, sobre el listado, y no oculta las salas:
+   * quien se equivoco de sala tiene que poder elegir otra sin recargar.
+   *
+   * @param {string} idSala
+   * @param {{titulo?: string, detalle?: string}} problema lo que dijo el servicio
+   * @param {string} [codigoPrevio] lo que ya habia escrito, si el codigo fallo
+   */
+  function pedirCodigo(idSala, problema, codigoPrevio = '') {
+    if (!zonaInvitacion) {
+      // Sin la zona en el marcado no se puede pedir nada: al menos se dice
+      // que la sala es privada, en vez de callar.
+      mostrarEstado(
+        'estado-vista--error',
+        problema.titulo ?? 'Esta sala es privada',
+        problema.detalle ?? 'Necesitas un código de invitación.',
+      );
+      return;
+    }
+
+    zonaInvitacion.hidden = false;
+    zonaInvitacion.dataset.sala = idSala;
+    const campo = zonaInvitacion.querySelector('[name="codigoInvitacion"]');
+    const aviso = zonaInvitacion.querySelector('[data-zona="aviso-codigo"]');
+    if (aviso) {
+      aviso.textContent = codigoPrevio
+        ? 'Ese código no vale para esta sala. Compruébalo con quien te invitó.'
+        : (problema.detalle ?? 'Pide el código a quien creó la sala.');
+    }
+    if (campo) {
+      campo.value = codigoPrevio;
+      campo.focus();
+    }
+  }
+
+  function cerrarPeticionDeCodigo() {
+    if (zonaInvitacion) {
+      zonaInvitacion.hidden = true;
+      delete zonaInvitacion.dataset.sala;
+      const campo = zonaInvitacion.querySelector('[name="codigoInvitacion"]');
+      if (campo) {
+        campo.value = '';
+      }
+    }
+  }
+
+  zonaInvitacion?.addEventListener('submit', (evento) => {
+    evento.preventDefault();
+    const idSala = zonaInvitacion.dataset.sala;
+    const campo = zonaInvitacion.querySelector('[name="codigoInvitacion"]');
+    const codigo = campo?.value?.trim() ?? '';
+    if (!idSala || !codigo) {
+      return;
+    }
+    entrarA(idSala, codigo);
+  });
+
+  zonaInvitacion
+    ?.querySelector('[data-accion="cerrar-codigo"]')
+    ?.addEventListener('click', cerrarPeticionDeCodigo);
+
+  /**
+   * Entra a una sala; reutilizable por el reintento de la seccion degradada y
+   * por el formulario del codigo de invitacion.
+   *
+   * @param {string} idSala
+   * @param {string|null} [codigoInvitacion] solo para salas privadas
+   */
+  async function entrarA(idSala, codigoInvitacion = null) {
     limpiarSeccionDegradada(zonaDegradacion);
     try {
-      const dentro = await ingresar(idSala);
+      const dentro = await ingresar(idSala, { codigoInvitacion });
       // Ya se es participante: ahora si se puede seguir la sala aunque sea
       // privada, y la tarjeta refleja la entrada sin esperar al canal.
       if (dentro && dentro.id) {
@@ -449,8 +523,18 @@ export function montarBatallas(raiz, puertos = {}) {
         }
         seguir(dentro);
       }
+      cerrarPeticionDeCodigo();
       alEntrar(dentro);
     } catch (error) {
+      // FI-R4 — el 403 de sala privada no es un callejon sin salida: es una
+      // puerta que pide llave. Antes se pintaba como error final («Esta sala
+      // es privada») y ahi se acababa, porque no habia donde escribir el
+      // codigo ni forma de mandarlo. El backend lo acepta desde la migracion
+      // V5; lo que faltaba estaba aqui.
+      if (esSalaPrivada(error)) {
+        pedirCodigo(idSala, error, codigoInvitacion ?? '');
+        return;
+      }
       if (zonaDegradacion && esSeccionDegradada(error?.problema)) {
         // HU-DIS-003: no es que no se pueda entrar, es que quien lo comprueba
         // no responde. El listado se queda; se dice que seccion esta limitada
@@ -479,5 +563,34 @@ export function montarBatallas(raiz, puertos = {}) {
   }
 
   refrescar();
-  return { refrescar };
+  return {
+    refrescar,
+    /**
+     * Entra directamente a una sala — lo que usa el enlace de invitacion
+     * (`?sala=<id>&codigo=<codigo>`) para que quien lo recibe no tenga que
+     * buscar la sala en el listado ni teclear el codigo. Si el codigo no vale,
+     * cae en el formulario como cualquier otro intento: el enlace no es una
+     * llave maestra, es un atajo.
+     *
+     * @param {string} idSala
+     * @param {string|null} [codigoInvitacion]
+     */
+    entrarA: (idSala, codigoInvitacion = null) => entrarA(idSala, codigoInvitacion),
+  };
+}
+
+/**
+ * La invitacion que venga en la URL — FI-R4.
+ *
+ * @param {string} busqueda `location.search`
+ * @returns {{idSala: string, codigo: string|null}|null}
+ */
+export function invitacionDeLaUrl(busqueda) {
+  const parametros = new URLSearchParams(busqueda);
+  const idSala = parametros.get('sala');
+  if (!idSala) {
+    return null;
+  }
+  const codigo = parametros.get('codigo');
+  return { idSala, codigo: codigo && codigo.trim() ? codigo.trim() : null };
 }

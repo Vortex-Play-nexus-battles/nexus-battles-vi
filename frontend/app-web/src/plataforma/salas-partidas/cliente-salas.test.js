@@ -21,6 +21,7 @@ import {
   abandonarSala,
   cancelarSala,
   baseDeApi,
+  esSalaPrivada,
   ErrorDeApi,
 } from './cliente-salas.js';
 
@@ -98,7 +99,7 @@ describe('listarSalas', () => {
 });
 
 describe('ingresarASala', () => {
-  test('llama a la subruta de participantes sin cuerpo: el jugador sale del token', async () => {
+  test('a una sala publica se entra sin cuerpo: el jugador sale del token', async () => {
     const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, { id: 'abc' }));
 
     await ingresarASala('abc', { fetchImpl });
@@ -106,7 +107,93 @@ describe('ingresarASala', () => {
     const [url, opciones] = fetchImpl.mock.calls[0];
     expect(url).toBe('/api/v1/salas/abc/participantes');
     expect(opciones.method).toBe('POST');
+    // El contrato declara el cuerpo opcional justamente para esto: mandar
+    // `{"codigoInvitacion": null}` seria pedirle ruido al cliente.
     expect(opciones.body).toBeUndefined();
+  });
+
+  /**
+   * FI-R4 — el codigo de invitacion viaja.
+   *
+   * Esta funcion hacia `POST` **sin cuerpo siempre**. El servidor recibia
+   * `null` como codigo y el agregado rechaza con 403 toda sala privada, porque
+   * `codigoCoincide(null)` nunca es cierto. Una sala privada era, por
+   * construccion, una sala a la que no podia entrar nadie salvo su anfitrion —
+   * y nada lo decia. El backend lleva el mecanismo completo desde la migracion
+   * V5.
+   */
+  describe('FI-R4 - el codigo de invitacion', () => {
+    test('con codigo, va en el cuerpo y con su Content-Type', async () => {
+      const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, { id: 'abc' }));
+
+      await ingresarASala('abc', { codigoInvitacion: 'WXYZ-2345', fetchImpl });
+
+      const [, opciones] = fetchImpl.mock.calls[0];
+      expect(JSON.parse(opciones.body)).toEqual({ codigoInvitacion: 'WXYZ-2345' });
+      expect(opciones.headers['Content-Type']).toBe('application/json');
+    });
+
+    test('el codigo se manda tal cual lo escribio la persona', async () => {
+      // El servidor normaliza mayusculas, espacios y guiones (`Sala.normalizar`).
+      // Limpiarlo aqui crearia una segunda verdad sobre que forma tiene un
+      // codigo valido, y las dos se desincronizarian.
+      const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, { id: 'abc' }));
+
+      await ingresarASala('abc', { codigoInvitacion: '  wxyz2345  ', fetchImpl });
+
+      expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
+        codigoInvitacion: 'wxyz2345',
+      });
+    });
+
+    test('un codigo en blanco no manda cuerpo: es lo mismo que no tenerlo', async () => {
+      const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, { id: 'abc' }));
+
+      await ingresarASala('abc', { codigoInvitacion: '   ', fetchImpl });
+
+      expect(fetchImpl.mock.calls[0][1].body).toBeUndefined();
+    });
+
+    test('esSalaPrivada reconoce el 403 del dominio por su tipo, no por su texto', async () => {
+      const fetchImpl = jest.fn().mockResolvedValue(
+        respuesta(403, {
+          type: 'https://nexusbattles.local/errores/sala-privada',
+          title: 'Esta sala es privada',
+          status: 403,
+        }),
+      );
+
+      const error = await ingresarASala('abc', { fetchImpl }).catch((e) => e);
+
+      expect(esSalaPrivada(error)).toBe(true);
+    });
+
+    test('otros rechazos no se confunden con una sala privada', async () => {
+      // Un 409 dice «prueba con otra sala»; un 403 de otro tipo no se arregla
+      // escribiendo un codigo. Pedirlo en esos casos seria mandar a la persona
+      // a buscar algo que no existe.
+      const llena = await ingresarASala('abc', {
+        fetchImpl: jest
+          .fn()
+          .mockResolvedValue(
+            respuesta(409, {
+              type: 'urn:llena',
+              title: 'La sala ya alcanzo su maximo',
+              status: 409,
+            }),
+          ),
+      }).catch((e) => e);
+      expect(esSalaPrivada(llena)).toBe(false);
+
+      const otro403 = await ingresarASala('abc', {
+        fetchImpl: jest
+          .fn()
+          .mockResolvedValue(
+            respuesta(403, { type: 'urn:otra-cosa', title: 'Prohibido', status: 403 }),
+          ),
+      }).catch((e) => e);
+      expect(esSalaPrivada(otro403)).toBe(false);
+    });
   });
 
   test('un 403 de sala privada llega con su tipo, para que la vista lo distinga', async () => {

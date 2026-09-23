@@ -17,6 +17,7 @@ import {
   metaDeLaSala,
   subtituloDeSalas,
   textoDePaginacion,
+  invitacionDeLaUrl,
 } from './batallas.js';
 import { ErrorDeApi } from './cliente-salas.js';
 
@@ -193,7 +194,11 @@ describe('montarBatallas', () => {
     raiz.querySelector('[data-sala]').click();
     await asentar();
 
-    expect(ingresar).toHaveBeenCalledWith('11111111-1111-1111-1111-111111111111');
+    // FI-R4: la firma lleva ahora el codigo de invitacion; en una sala
+    // publica es null y el cliente no manda cuerpo.
+    expect(ingresar).toHaveBeenCalledWith('11111111-1111-1111-1111-111111111111', {
+      codigoInvitacion: null,
+    });
     expect(alEntrar).toHaveBeenCalledWith(expect.objectContaining({ ocupacion: 5 }));
   });
 
@@ -268,7 +273,7 @@ describe('montarBatallas', () => {
     await asentar();
 
     expect(ingresar).toHaveBeenCalledTimes(2);
-    expect(ingresar).toHaveBeenLastCalledWith(sala().id);
+    expect(ingresar).toHaveBeenLastCalledWith(sala().id, { codigoInvitacion: null });
     expect(raiz.querySelector('[data-zona="degradacion"] .seccion-degradada')).toBeNull();
     expect(alEntrar).toHaveBeenCalledWith(expect.objectContaining({ ocupacion: 5 }));
   });
@@ -543,5 +548,244 @@ describe('mostrarAvisoDeSala', () => {
     const zona = document.querySelector('[data-zona="aviso-sala"]');
     expect(zona.className).toBe('aviso aviso--info');
     expect(zona.querySelector('[data-zona="aviso-sala-detalle"]').hidden).toBe(true);
+  });
+});
+
+/**
+ * FI-R4 — una sala privada se puede usar.
+ *
+ * El 403 de sala privada se pintaba como error final («Esta sala es privada»)
+ * y ahi se acababa: no habia donde escribir el codigo ni forma de mandarlo, y
+ * `ingresarASala` hacia POST sin cuerpo. El backend acepta el codigo desde la
+ * migracion V5.
+ */
+describe('FI-R4 - entrar a una sala privada con codigo', () => {
+  const ID = '22222222-2222-2222-2222-222222222222';
+
+  const HTML_CON_CODIGO = `
+    <main id="vista">
+      <p data-zona="subtitulo"></p>
+      <select name="modalidad"><option value="">todas</option></select>
+      <select name="estado"><option value="">todos</option></select>
+      <div class="estado-vista" data-zona="estado"></div>
+      <div data-zona="degradacion" data-seccion="Inventario" hidden></div>
+      <form data-zona="pedir-codigo" hidden>
+        <p data-zona="aviso-codigo"></p>
+        <input name="codigoInvitacion" />
+        <button type="submit">Entrar</button>
+        <button type="button" data-accion="cerrar-codigo">Cancelar</button>
+      </form>
+      <p data-zona="canal" hidden></p>
+      <div class="rejilla-salas" data-zona="salas" hidden></div>
+      <nav class="paginacion" data-zona="paginacion" hidden></nav>
+    </main>
+  `;
+
+  const privada = () => ({
+    id: ID,
+    estado: 'PRIVADA',
+    modalidad: 'HASTA_SEIS',
+    maximoParticipantes: 6,
+    ocupacion: 1,
+    recompensaCreditos: 0,
+    incluirHeroeIA: false,
+    privada: true,
+    idAnfitrion: '33333333-3333-3333-3333-333333333333',
+    participantes: [],
+  });
+
+  const rechazoPrivada = () =>
+    new ErrorDeApi(
+      {
+        type: 'https://nexusbattles.local/errores/sala-privada',
+        title: 'Esta sala es privada',
+        detail: 'A una sala privada se entra por invitacion, no desde el listado.',
+        status: 403,
+      },
+      403,
+    );
+
+  let raiz;
+  const vaciarCola = async () => {
+    for (let i = 0; i < 8; i++) {
+      await Promise.resolve();
+    }
+  };
+  const formulario = () => raiz.querySelector('[data-zona="pedir-codigo"]');
+  const campo = () => raiz.querySelector('[name="codigoInvitacion"]');
+
+  function montar(ingresar) {
+    document.body.innerHTML = HTML_CON_CODIGO;
+    raiz = document.getElementById('vista');
+    const listar = jest.fn().mockResolvedValue({
+      contenido: [privada()],
+      pagina: 0,
+      tamano: 12,
+      totalElementos: 1,
+      totalPaginas: 1,
+    });
+    const alEntrar = jest.fn();
+    const vista = montarBatallas(raiz, { listar, ingresar, alEntrar });
+    return { vista, alEntrar, listar };
+  }
+
+  test('el 403 de sala privada pide el codigo en vez de cerrar la puerta', async () => {
+    const ingresar = jest.fn().mockRejectedValue(rechazoPrivada());
+    montar(ingresar);
+    await vaciarCola();
+
+    raiz.querySelector(`[data-sala="${ID}"]`).click();
+    await vaciarCola();
+
+    expect(formulario().hidden).toBe(false);
+    expect(formulario().dataset.sala).toBe(ID);
+    // Y la rejilla sigue ahi: quien se equivoco de sala elige otra sin recargar.
+    expect(raiz.querySelector('[data-zona="salas"]').hidden).toBe(false);
+  });
+
+  test('el codigo escrito se manda al servicio', async () => {
+    const ingresar = jest
+      .fn()
+      .mockRejectedValueOnce(rechazoPrivada())
+      .mockResolvedValueOnce({ ...privada(), ocupacion: 2 });
+    const { alEntrar } = montar(ingresar);
+    await vaciarCola();
+
+    raiz.querySelector(`[data-sala="${ID}"]`).click();
+    await vaciarCola();
+
+    campo().value = 'WXYZ-2345';
+    formulario().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await vaciarCola();
+
+    expect(ingresar).toHaveBeenNthCalledWith(2, ID, { codigoInvitacion: 'WXYZ-2345' });
+    expect(alEntrar).toHaveBeenCalledTimes(1);
+  });
+
+  test('un codigo aceptado cierra el formulario', async () => {
+    const ingresar = jest
+      .fn()
+      .mockRejectedValueOnce(rechazoPrivada())
+      .mockResolvedValueOnce({ ...privada(), ocupacion: 2 });
+    montar(ingresar);
+    await vaciarCola();
+    raiz.querySelector(`[data-sala="${ID}"]`).click();
+    await vaciarCola();
+
+    campo().value = 'WXYZ-2345';
+    formulario().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await vaciarCola();
+
+    expect(formulario().hidden).toBe(true);
+    expect(campo().value).toBe('');
+  });
+
+  test('un codigo que no vale lo dice y deja volver a intentarlo', async () => {
+    const ingresar = jest.fn().mockRejectedValue(rechazoPrivada());
+    montar(ingresar);
+    await vaciarCola();
+    raiz.querySelector(`[data-sala="${ID}"]`).click();
+    await vaciarCola();
+
+    campo().value = 'MALO-0000';
+    formulario().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await vaciarCola();
+
+    expect(formulario().hidden).toBe(false);
+    // El aviso cambia: la primera vez dice que pidas el codigo, la segunda que
+    // el que escribiste no vale. Repetir el mismo texto haria dudar de si se
+    // envio.
+    expect(raiz.querySelector('[data-zona="aviso-codigo"]').textContent).toMatch(/no vale/i);
+    expect(campo().value).toBe('MALO-0000');
+  });
+
+  test('un codigo vacio no molesta al servicio', async () => {
+    const ingresar = jest.fn().mockRejectedValue(rechazoPrivada());
+    montar(ingresar);
+    await vaciarCola();
+    raiz.querySelector(`[data-sala="${ID}"]`).click();
+    await vaciarCola();
+    expect(ingresar).toHaveBeenCalledTimes(1);
+
+    campo().value = '   ';
+    formulario().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await vaciarCola();
+
+    expect(ingresar).toHaveBeenCalledTimes(1);
+  });
+
+  test('Cancelar cierra el formulario sin entrar a ninguna parte', async () => {
+    const ingresar = jest.fn().mockRejectedValue(rechazoPrivada());
+    const { alEntrar } = montar(ingresar);
+    await vaciarCola();
+    raiz.querySelector(`[data-sala="${ID}"]`).click();
+    await vaciarCola();
+
+    raiz.querySelector('[data-accion="cerrar-codigo"]').click();
+
+    expect(formulario().hidden).toBe(true);
+    expect(alEntrar).not.toHaveBeenCalled();
+  });
+
+  test('una sala publica entra sin pedir nada', async () => {
+    const ingresar = jest.fn().mockResolvedValue({ ...privada(), privada: false, ocupacion: 2 });
+    const { alEntrar } = montar(ingresar);
+    await vaciarCola();
+
+    raiz.querySelector(`[data-sala="${ID}"]`).click();
+    await vaciarCola();
+
+    expect(ingresar).toHaveBeenCalledWith(ID, { codigoInvitacion: null });
+    expect(formulario().hidden).toBe(true);
+    expect(alEntrar).toHaveBeenCalledTimes(1);
+  });
+
+  test('un 409 no pide codigo: escribirlo no arreglaria una sala llena', async () => {
+    const ingresar = jest
+      .fn()
+      .mockRejectedValue(
+        new ErrorDeApi(
+          { type: 'urn:llena', title: 'Sala llena', detail: 'Ya esta completa.', status: 409 },
+          409,
+        ),
+      );
+    montar(ingresar);
+    await vaciarCola();
+
+    raiz.querySelector(`[data-sala="${ID}"]`).click();
+    await vaciarCola();
+
+    expect(formulario().hidden).toBe(true);
+    expect(raiz.querySelector('[data-zona="estado"]').textContent).toMatch(/llena/i);
+  });
+
+  test('entrarA queda expuesto para el enlace de invitacion', async () => {
+    const ingresar = jest.fn().mockResolvedValue({ ...privada(), ocupacion: 2 });
+    const { vista, alEntrar } = montar(ingresar);
+    await vaciarCola();
+
+    await vista.entrarA(ID, 'WXYZ-2345');
+
+    expect(ingresar).toHaveBeenCalledWith(ID, { codigoInvitacion: 'WXYZ-2345' });
+    expect(alEntrar).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('FI-R4 - invitacionDeLaUrl', () => {
+  test('lee la sala y el codigo del enlace que reparte el anfitrion', () => {
+    expect(invitacionDeLaUrl('?sala=abc&codigo=WXYZ-2345')).toEqual({
+      idSala: 'abc',
+      codigo: 'WXYZ-2345',
+    });
+  });
+
+  test('un enlace sin codigo sigue valiendo: la sala puede ser publica', () => {
+    expect(invitacionDeLaUrl('?sala=abc')).toEqual({ idSala: 'abc', codigo: null });
+    expect(invitacionDeLaUrl('?sala=abc&codigo=')).toEqual({ idSala: 'abc', codigo: null });
+  });
+
+  test('sin sala no hay invitacion que seguir', () => {
+    expect(invitacionDeLaUrl('')).toBeNull();
+    expect(invitacionDeLaUrl('?codigo=WXYZ-2345')).toBeNull();
   });
 });
