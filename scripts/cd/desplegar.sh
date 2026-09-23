@@ -195,7 +195,8 @@ EOF
 # ANULA el valor por defecto de ${VARIABLE:defecto} en application.yml;
 # omitirla conserva ese valor por defecto.
 for variable in SMTP_PORT LISTA_NEGRA_VERIFICAR_URL SALAS_WS_ORIGENES CHAT_WS_ORIGENES IDENTIDAD_JWKS_URL JWT_CLAVE_PRIVADA \
-    CHAT_HISTORIAL_TAMANO NOTIFICACIONES_WS_ORIGENES COMENTARIOS_FORMATOS_IMAGEN; do
+    CHAT_HISTORIAL_TAMANO NOTIFICACIONES_WS_ORIGENES COMENTARIOS_FORMATOS_IMAGEN \
+    IDENTIDAD_CORS_ORIGENES; do
   valor="${!variable:-}"
   if [ -n "$valor" ]; then
     echo "$variable=$valor" >> .env

@@ -41,7 +41,15 @@ public class SecurityBypassTest {
         RbacMatrixRepository repository = new RbacMatrixRepository();
         RbacAuthorizationService service = new RbacAuthorizationService(repository);
         AuditoriaEventClient auditoriaClient = new AuditoriaEventClient("http://localhost:8083/api/v1/admin/auditoria/eventos", null);
-        SecurityInterceptor interceptor = new SecurityInterceptor(service, auditoriaClient, jwtService);
+        // R9.5 — el ultimo parametro ya no se hereda de un constructor de
+        // conveniencia: se declara. Aqui va en `true` a proposito, porque en
+        // esta clase hay pruebas que ejercitan justamente el respaldo por
+        // cabecera (testAdminCanBan, testJugadorCannotBypassAdminEndpoint):
+        // con el apagado, el 403 del jugador saldria por "header
+        // deshabilitado" y no por "el rol no alcanza", que es lo que esas
+        // pruebas dicen estar comprobando.
+        SecurityInterceptor interceptor =
+            new SecurityInterceptor(service, auditoriaClient, jwtService, null, true);
         AdminActionDemoController controller = new AdminActionDemoController();
 
         this.mockMvc = MockMvcBuilders.standaloneSetup(controller)
@@ -142,7 +150,10 @@ public class SecurityBypassTest {
         RbacMatrixRepository repository = new RbacMatrixRepository();
         RbacAuthorizationService service = new RbacAuthorizationService(repository);
         AuditoriaEventClient auditoriaClient = new AuditoriaEventClient("http://localhost:8083/api/v1/admin/auditoria/eventos", null);
-        SecurityInterceptor interceptor = new SecurityInterceptor(service, auditoriaClient, jwtService, mockRepo);
+        // R9.5 — aqui el respaldo por cabecera va APAGADO: esta prueba acredita
+        // con JWT, asi que reproduce la forma de produccion.
+        SecurityInterceptor interceptor =
+            new SecurityInterceptor(service, auditoriaClient, jwtService, mockRepo, false);
         AdminActionDemoController controller = new AdminActionDemoController();
 
         MockMvc mockMvcConRepo = MockMvcBuilders.standaloneSetup(controller)
