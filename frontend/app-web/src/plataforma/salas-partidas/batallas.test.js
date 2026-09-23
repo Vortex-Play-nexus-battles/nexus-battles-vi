@@ -466,7 +466,13 @@ describe('canal en tiempo real en el listado', () => {
     expect(raiz.querySelectorAll('[data-sala]')).toHaveLength(1);
   });
 
-  test('si el canal se rechaza, se informa como no disponible sin romper el listado', async () => {
+  test('si el canal se rechaza, se dice que consecuencia tiene, no cual fue el error', async () => {
+    // UX-R3.4 — decía «Canal en tiempo real no disponible: El token de acceso
+    // no es valido.»: el motivo tecnico del fallo, dirigido a quien programa,
+    // en la pantalla de quien queria jugar. Y no decía lo unico que le importa
+    // a quien lo lee: que el listado SIGUE funcionando, solo que no se
+    // actualiza solo. El motivo no se pierde — baja a la consola.
+    const avisos = jest.spyOn(console, 'warn').mockImplementation(() => {});
     const raiz = preparar();
     montarBatallas(raiz, {
       listar: jest.fn().mockResolvedValue(pagina([sala()])),
@@ -476,8 +482,13 @@ describe('canal en tiempo real en el listado', () => {
 
     const zona = raiz.querySelector('[data-zona="canal"]');
     expect(zona.dataset.estado).toBe('error');
-    expect(zona.textContent).toContain('no es valido');
+    expect(zona.textContent).toContain('no se actualizan solas');
+    expect(zona.textContent).toContain('El listado funciona');
+    expect(zona.textContent).not.toContain('token');
+    // Y el listado, efectivamente, sigue ahi.
     expect(raiz.querySelectorAll('[data-sala]')).toHaveLength(1);
+    expect(avisos.mock.calls.flat().join(' ')).toContain('canal en tiempo real');
+    avisos.mockRestore();
   });
 
   test('sin el puerto del canal, la vista se comporta como siempre', async () => {

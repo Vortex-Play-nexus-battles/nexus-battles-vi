@@ -175,6 +175,22 @@ export function montarSalaBatalla(
     panel.hidden = !hayPartida;
   }
 
+  // UX-R3.4 — el campo de combate solo existe cuando hay combate.
+  //
+  // `.combate__campo` ocupa la franja `1fr` de la reja, que es la mayor parte
+  // de la ventana (CA-01 pide mas del 80 % del alto util para el area de
+  // juego). Sin partida cargada eso dejaba media pantalla de degradado vacio
+  // con una tarjeta blanca huerfana debajo, cerca del borde inferior: la
+  // pantalla mas importante del producto parecia rota.
+  //
+  // La marca la lleva la raiz y el resto lo decide el CSS, que es quien sabe
+  // de tamaños. `aria-hidden` ya estaba en el campo: no cambia nada de lo que
+  // oye un lector de pantalla.
+  const marco = raiz.querySelector?.('[data-zona="combate"]') ?? raiz.closest?.('.combate');
+  if (marco?.dataset) {
+    marco.dataset.sinPartida = hayPartida ? 'no' : 'si';
+  }
+
   if (!hayPartida) {
     return;
   }

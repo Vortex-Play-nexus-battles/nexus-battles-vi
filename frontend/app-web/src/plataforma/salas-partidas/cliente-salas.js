@@ -98,7 +98,7 @@ export async function crearSala(parametros, { fetchImpl = fetchWithHttpErrorInte
     return respuesta.json();
   }
 
-  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'operacion'), respuesta.status);
 }
 
 /**
@@ -130,7 +130,7 @@ export async function listarSalas(
     return respuesta.json();
   }
 
-  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'listado'), respuesta.status);
 }
 
 /**
@@ -153,7 +153,7 @@ export async function ingresarASala(idSala, { fetchImpl = fetchWithHttpErrorInte
     return respuesta.json();
   }
 
-  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'sala'), respuesta.status);
 }
 
 /**
@@ -175,7 +175,7 @@ export async function obtenerSala(idSala, { fetchImpl = fetchWithHttpErrorInterc
     return respuesta.json();
   }
 
-  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'sala'), respuesta.status);
 }
 
 /**
@@ -199,7 +199,7 @@ export async function abandonarSala(idSala, { fetchImpl = fetchWithHttpErrorInte
     return;
   }
 
-  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'sala'), respuesta.status);
 }
 
 /**
@@ -221,7 +221,7 @@ export async function cancelarSala(idSala, { fetchImpl = fetchWithHttpErrorInter
     return;
   }
 
-  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'sala'), respuesta.status);
 }
 
 /**
@@ -248,7 +248,7 @@ export async function verificarHeroe(idSala, { fetchImpl = fetchWithHttpErrorInt
     return respuesta.json();
   }
 
-  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'sala'), respuesta.status);
 }
 
 /**
@@ -275,7 +275,7 @@ export async function iniciarPartida(idSala, { fetchImpl = fetchWithHttpErrorInt
     return respuesta.json();
   }
 
-  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'sala'), respuesta.status);
 }
 
 /**
@@ -304,7 +304,7 @@ export async function obtenerPartida(
     return respuesta.json();
   }
 
-  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'sala'), respuesta.status);
 }
 
 /**
@@ -331,26 +331,39 @@ function sinApiDetras(respuesta) {
 /**
  * Que decirle a quien mira, segun por que fallo. Nunca el codigo.
  *
+ * ## Por que hace falta saber QUE se pidio (UX-R3.4)
+ *
+ * El 404 devolvia siempre «Esa sala ya no existe. Vuelve al listado para ver
+ * las que siguen abiertas», y eso vale cuando se pidio UNA sala. Cuando lo
+ * que fallaba era el LISTADO —que es lo que pasa sin backend detras— el
+ * jugador leia, en la pantalla del listado, que vuelva al listado para ver
+ * una sala que nadie habia abierto. Un mensaje que se contradice con la
+ * pantalla en la que esta enseña a no leer los mensajes.
+ *
  * @param {number} estado
+ * @param {'listado'|'sala'|'operacion'} recurso que se estaba pidiendo
  * @returns {string}
  */
-function detalleDelFallo(estado) {
+function detalleDelFallo(estado, recurso = 'operacion') {
   if (estado === 401) {
-    return 'Vuelve a iniciar sesion para continuar.';
+    return 'Vuelve a iniciar sesión para continuar.';
   }
   if (estado === 403) {
     return 'Tu cuenta no tiene permiso para ver esto.';
   }
   if (estado === 404) {
+    if (recurso === 'listado') {
+      return 'El servicio de batallas no está disponible en este momento.';
+    }
     return 'Esa sala ya no existe. Vuelve al listado para ver las que siguen abiertas.';
   }
   if (estado === 409) {
-    return 'Alguien se te adelanto: el estado de la sala cambio mientras mirabas.';
+    return 'Alguien se te adelantó: el estado de la sala cambió mientras mirabas.';
   }
   if (estado >= 500 || estado === 0) {
     return 'El servicio de batallas no responde ahora mismo. Vuelve a intentarlo en un momento.';
   }
-  return 'No pudimos completar la operacion. Vuelve a intentarlo.';
+  return 'No pudimos completar la operación. Vuelve a intentarlo.';
 }
 
 /**
@@ -363,7 +376,7 @@ function detalleDelFallo(estado) {
  * @param {Response} respuesta
  * @returns {Promise<object>}
  */
-async function cuerpoDelProblema(respuesta) {
+async function cuerpoDelProblema(respuesta, recurso = 'operacion') {
   try {
     const problema = await respuesta.json();
     if (problema && typeof problema === 'object') {
@@ -374,15 +387,25 @@ async function cuerpoDelProblema(respuesta) {
   }
 
   if (sinApiDetras(respuesta)) {
-    // La URL real de la peticion cuando `fetch` la trae; la base como respaldo.
+    // UX-R3.4 — esto se pintaba EN LA PANTALLA: «Estas viendo la vista servida
+    // como HTML estatico: nadie atiende /api/v1/salas. Levanta el servicio de
+    // salas, o declara en la pagina <meta name="nexus-api-base">…».
+    //
+    // Es el mensaje correcto y va a la persona equivocada. A quien programa le
+    // dice exactamente que hacer; a un jugador le enseña una etiqueta HTML y
+    // le pide que levante un servicio. El diagnostico se queda donde lo mira
+    // quien puede actuar sobre el, y la pantalla dice lo que dice siempre que
+    // un servicio no esta.
     const direccion = respuesta.url || ruta();
+    console.warn(
+      `[salas] No hay API detras de ${direccion}: la vista se esta sirviendo como HTML ` +
+        'estatico. Levanta el servicio de salas, o declara <meta name="nexus-api-base"> ' +
+        'apuntando a donde este corriendo.',
+    );
     return {
       status: respuesta.status,
-      title: 'No hay ninguna API detras de esta ruta',
-      detail:
-        `Estas viendo la vista servida como HTML estatico: nadie atiende ${direccion}. ` +
-        'Levanta el servicio de salas, o declara en la pagina ' +
-        '<meta name="nexus-api-base"> apuntando a donde este corriendo.',
+      title: 'Las batallas no están disponibles',
+      detail: 'El servicio de batallas no responde ahora mismo. Vuelve a intentarlo en un momento.',
     };
   }
 
@@ -393,8 +416,7 @@ async function cuerpoDelProblema(respuesta) {
   // quien programa.
   return {
     status: respuesta.status,
-    title:
-      respuesta.status === 401 ? 'Tu sesion no es valida' : 'Las batallas no estan disponibles',
-    detail: detalleDelFallo(respuesta.status),
+    title: respuesta.status === 401 ? 'Tu sesión terminó' : 'Las batallas no están disponibles',
+    detail: detalleDelFallo(respuesta.status, recurso),
   };
 }
