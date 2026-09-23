@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Revisar comentarios reportados · The Nexus Battles VI</title>
+
+    <!--
+      Ejecucion INTEGRADA (Spring Boot sirve esta vista): la API vive en el
+      mismo origen. Para revision visual contra un backend en otro sitio:
+      <meta name="nexus-api-base" content="http://127.0.0.1:8081" />
+    -->
+
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
+  </head>
+
+  <body>
+    <div data-cabecera-app></div>
+
+    <main class="pagina pila" data-vista="moderar-comentarios">
+      <div class="pila pila--compacta">
+        <h1>Comentarios reportados</h1>
+        <p class="t-cuerpo">
+          Lo mas reportado va primero y, a igualdad, lo que lleva mas tiempo esperando. Toda
+          decision necesita un motivo: el autor lo recibe y queda en el historial.
+        </p>
+      </div>
+
+      <!-- Zona del aviso. Vacia y oculta hasta que hay algo que decir. -->
+      <div data-zona="aviso" hidden></div>
+
+      <!--
+        La cola y el detalle van en la MISMA pantalla a proposito: el
+        moderador decide mirando el texto, quien lo reporto y por que.
+        Mandarlo a otra pantalla y volver es como se acaba resolviendo sin
+        leer. Se apilan con `.pila` y no con una rejilla propia: el kit no
+        tiene clase de dos columnas y esta vista no es sitio para inventar
+        una (guardian clases-del-kit).
+      -->
+      <section class="pila pila--compacta">
+        <h2>Cola</h2>
+        <div class="pila pila--compacta" data-zona="cola" aria-live="polite"></div>
+      </section>
+
+      <section class="pila pila--compacta" data-zona="detalle-contenedor" aria-live="polite">
+        <p class="t-meta">Elige un comentario de la cola para revisarlo.</p>
+      </section>
+    </main>
+
+    <script type="module">
+      import { montarAsistente } from '../../comun/ui/asistente.js';
+      import { montarModeracion } from './moderar-comentarios.js';
+      import { montarCabecera } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
+
+      // Vista privada. El permiso de verdad lo comprueba el servicio por rol
+      // (403 si no es moderacion); esto solo evita entrar sin sesion.
+      if (!exigirAcceso('moderar-comentarios')) {
+        throw new Error('sin sesion: redirigiendo al login');
+      }
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'moderar-comentarios',
+        seccionActiva: null,
+      });
+
+      const productoId = new URLSearchParams(location.search).get('producto');
+      montarModeracion(document.querySelector('[data-vista="moderar-comentarios"]'), {
+        productoId,
+      });
+
+      montarAsistente(document);
+    </script>
+  </body>
+</html>

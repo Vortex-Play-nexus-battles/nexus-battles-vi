@@ -109,7 +109,7 @@ services:
       # pruebas, no de ningun entorno real.
       # e2e-banco: credencial con la que sembrar.sh acredita el saldo inicial en
       # ms-finanzas, que desde #455 solo atiende a servicios (ROLE_SERVICIO).
-      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion;torneos=e2e-secreto-de-torneos
+      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion;torneos=e2e-secreto-de-torneos;comentarios=e2e-secreto-de-comentarios
     depends_on:
       e2e-identidad-db: { condition: service_healthy }
     healthcheck:
@@ -391,9 +391,21 @@ services:
       IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
       LISTA_NEGRA_VERIFICAR_URL: http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar
       SANCIONES_URL: http://srv-moderacion-sanciones:8086/api/v1
+      # R10.1 — el aviso al autor cuando se resuelve la moderacion de su
+      # comentario (RF-COM-008). Con la credencial de ADR-005, porque
+      # /internal/notifications exige ROLE_SERVICIO. Sin esto el E2E veria
+      # autorNotificado=false y estaria dando por buena la mitad del flujo.
+      NOTIFICACIONES_URL: http://srv-notificaciones:8085/api/v1
+      DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
+      DIRECTORIO_ACTIVO_CLIENT_ID: comentarios
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-comentarios
+      # AUDITORIA_URL se deja sin poner a proposito: ms-cumplimiento no esta
+      # en este banco. El asiento queda igual en comentario_moderacion, que es
+      # el rastro que exige la ficha, y el E2E lo comprueba por el historial.
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
       srv-moderacion-sanciones: { condition: service_healthy }
+      srv-notificaciones: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8081/actuator/health || exit 1"]

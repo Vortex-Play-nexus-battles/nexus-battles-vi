@@ -217,6 +217,15 @@ export const MATRIZ = Object.freeze({
     acceso: ACCESO.MODERACION,
     armazon: 'admin',
   },
+  // R10.1 — la cola de comentarios reportados (RF-COM-005/008). Mismo nivel
+  // que las otras herramientas de moderación, y el mismo que exige
+  // `SecurityConfig` del servicio de comentarios sobre
+  // `/api/v1/comentarios/moderacion/**`: un JUGADOR reporta, pero no resuelve.
+  'moderar-comentarios': {
+    ruta: 'plataforma/comentarios/moderar-comentarios.html',
+    acceso: ACCESO.MODERACION,
+    armazon: 'admin',
+  },
   'gestion-usuarios': {
     ruta: 'cuentas/gestion-usuarios.html',
     acceso: ACCESO.ADMINISTRACION,
