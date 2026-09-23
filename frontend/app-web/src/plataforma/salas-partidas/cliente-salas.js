@@ -202,6 +202,31 @@ export function esSalaPrivada(error) {
 }
 
 /**
+ * Si este rechazo es el de RF-JUE-003 — FI-R6.
+ *
+ * `PuertaDeHeroe.comprobar` corre en `IngresarASala` antes que nada, y lanza
+ * `HeroeNoDisponible` con 422 y uno de dos tipos: `/errores/heroe-no-equipado`
+ * o `/errores/heroe-ocupado`. Son los mismos dos casos que el dialogo de
+ * verificacion sabe explicar, y el unico rechazo del ingreso que se arregla
+ * yendo al inventario.
+ *
+ * Por el tipo y no por el texto, igual que {@link esSalaPrivada}.
+ *
+ * @param {{estado?: number, tipo?: string|null} | null} error un `ErrorDeApi`
+ * @returns {boolean}
+ */
+export function esHeroeNoDisponible(error) {
+  if (error?.estado !== 422) {
+    return false;
+  }
+  const tipo = error?.tipo ?? '';
+  return (
+    typeof tipo === 'string' &&
+    (tipo.includes('/errores/heroe-no-equipado') || tipo.includes('/errores/heroe-ocupado'))
+  );
+}
+
+/**
  * Trae una sala por su identificador — `GET /salas/{idSala}`.
  *
  * La vista de espera lo necesita para saber quien es el anfitrion (y por

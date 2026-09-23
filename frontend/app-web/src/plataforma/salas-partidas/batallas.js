@@ -17,7 +17,7 @@
  * no tenerlo. Quedan los dos filtros con respaldo, modalidad y estado.
  */
 
-import { listarSalas, ingresarASala, esSalaPrivada } from './cliente-salas.js';
+import { listarSalas, ingresarASala, esSalaPrivada, esHeroeNoDisponible } from './cliente-salas.js';
 import { vaciar } from '../../comun/ui/dom.js';
 import { seguirSala, estadoDesdeFicha } from './canal-sala.js';
 import {
@@ -192,11 +192,28 @@ export function fichaEnVivo(sala, estado) {
  *        dependencias inyectables; por defecto las del cliente HTTP real y sin canal
  * @returns {{refrescar: Function}}
  */
+/**
+ * A donde se manda a verificar el heroe — FI-R6.
+ *
+ * @param {string} idSala
+ * @param {string|null} [codigo]
+ * @returns {string}
+ */
+export function rutaDeVerificacion(idSala, codigo = null) {
+  const base = `./validacion-heroe.html?sala=${encodeURIComponent(idSala)}`;
+  return codigo ? `${base}&codigo=${encodeURIComponent(codigo)}` : base;
+}
+
 export function montarBatallas(raiz, puertos = {}) {
   const {
     listar = listarSalas,
     ingresar = ingresarASala,
     alEntrar = () => {},
+    // FI-R6 — a donde se va a verificar el heroe. Inyectable para que las
+    // pruebas no naveguen de verdad.
+    irAVerificacion = (destino) => {
+      globalThis.location.assign(destino);
+    },
     conectarCanal = () => Promise.resolve(null),
   } = puertos;
 
@@ -511,6 +528,24 @@ export function montarBatallas(raiz, puertos = {}) {
    */
   async function entrarA(idSala, codigoInvitacion = null) {
     limpiarSeccionDegradada(zonaDegradacion);
+
+    // FI-R6 · RF-JUE-003 — una sala con apuesta se confirma antes de entrar.
+    //
+    // Entrar compromete creditos: `IngresarASala` los reserva antes de meter a
+    // nadie. El dialogo de verificacion existe justamente para ensenar el
+    // heroe con el que vas a jugar y cuanto te va a costar **antes** de que se
+    // reserve nada, y hasta ahora no habia forma de llegar a el: la pantalla
+    // estaba en la matriz de acceso y no la enlazaba nadie.
+    //
+    // En una sala sin apuesta no hay nada que confirmar, asi que no se
+    // interpone un paso: se entra, y si el servidor rechaza por el heroe, el
+    // catch de abajo lleva al mismo dialogo con el veredicto ya hecho.
+    const ficha = fichas.get(idSala);
+    if (Number(ficha?.recompensaCreditos ?? 0) > 0) {
+      irAVerificacion(rutaDeVerificacion(idSala, codigoInvitacion));
+      return;
+    }
+
     try {
       const dentro = await ingresar(idSala, { codigoInvitacion });
       // Ya se es participante: ahora si se puede seguir la sala aunque sea
@@ -533,6 +568,15 @@ export function montarBatallas(raiz, puertos = {}) {
       // V5; lo que faltaba estaba aqui.
       if (esSalaPrivada(error)) {
         pedirCodigo(idSala, error, codigoInvitacion ?? '');
+        return;
+      }
+      // FI-R6 · RF-JUE-003 — «no tienes heroe equipado» y «tu heroe esta en
+      // otra partida» no son errores del listado: son veredictos sobre tu
+      // inventario, y tienen una pantalla que los explica y lleva a
+      // arreglarlos. Pintarlos aqui como un aviso rojo mas dejaba a la persona
+      // sin saber que hacer.
+      if (esHeroeNoDisponible(error)) {
+        irAVerificacion(rutaDeVerificacion(idSala, codigoInvitacion));
         return;
       }
       if (zonaDegradacion && esSeccionDegradada(error?.problema)) {

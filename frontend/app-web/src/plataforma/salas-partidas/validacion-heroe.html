@@ -56,7 +56,12 @@
 
       // Sin `?sala=` el modulo pinta su estado de error con la instruccion de
       // como llegar; no se llama al servicio con una sala inexistente.
-      const idSala = new URLSearchParams(location.search).get('sala');
+      const parametros = new URLSearchParams(location.search);
+      const idSala = parametros.get('sala');
+      // FI-R6 · el codigo de una sala privada viaja con el enlace: quien llega
+      // aqui desde el listado ya lo escribio una vez, y volver a pedirselo
+      // seria hacerle repetir el mismo tramite.
+      const codigoInvitacion = parametros.get('codigo')?.trim() || null;
 
       /** Equipar o cambiar de heroe se hace en el inventario. */
       const RUTA_INVENTARIO = '../../contenido/inventario/inventario.html';
@@ -68,7 +73,7 @@
        */
       async function entrarALaSala() {
         try {
-          const sala = await ingresarASala(idSala);
+          const sala = await ingresarASala(idSala, { codigoInvitacion });
           location.assign(`./sala-batalla.html?sala=${encodeURIComponent(sala?.id ?? idSala)}`);
         } catch (error) {
           avisarFalloDeAccion(
@@ -92,6 +97,12 @@
         // nada.
         verificar: (sala) => verificarHeroe(sala),
         // Vuelve a donde estaba; si se abrio directamente, al listado.
+        //
+        // FI-R6 — `history.back()` importa ahora mas que antes: a esta pantalla
+        // se llega desde el listado, y «Cancelar» tiene que devolver a la
+        // pagina y los filtros que la persona tenia puestos, no a un listado
+        // recien cargado. Cuando se abre de cero (enlace pegado, pestana
+        // nueva) no hay a donde volver y se va al listado.
         alCancelar: () =>
           history.length > 1 ? history.back() : location.assign('./batallas.html'),
         // UX-R4.5 — el boton principal solo escribia en la consola. Es el

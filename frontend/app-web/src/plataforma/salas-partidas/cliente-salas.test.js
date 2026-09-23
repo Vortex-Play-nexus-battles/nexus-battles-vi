@@ -22,6 +22,7 @@ import {
   cancelarSala,
   baseDeApi,
   esSalaPrivada,
+  esHeroeNoDisponible,
   ErrorDeApi,
 } from './cliente-salas.js';
 
@@ -173,15 +174,13 @@ describe('ingresarASala', () => {
       // escribiendo un codigo. Pedirlo en esos casos seria mandar a la persona
       // a buscar algo que no existe.
       const llena = await ingresarASala('abc', {
-        fetchImpl: jest
-          .fn()
-          .mockResolvedValue(
-            respuesta(409, {
-              type: 'urn:llena',
-              title: 'La sala ya alcanzo su maximo',
-              status: 409,
-            }),
-          ),
+        fetchImpl: jest.fn().mockResolvedValue(
+          respuesta(409, {
+            type: 'urn:llena',
+            title: 'La sala ya alcanzo su maximo',
+            status: 409,
+          }),
+        ),
       }).catch((e) => e);
       expect(esSalaPrivada(llena)).toBe(false);
 
@@ -716,5 +715,44 @@ describe('§17 — el 404 dice lo que falta, no lo que se supone', () => {
       const error = await listarSalas({}, { fetchImpl }).catch((e) => e);
       expect(`${error.titulo} ${error.detalle}`).not.toMatch(/\b(401|403|404|409|500|502)\b/);
     }
+  });
+});
+
+/**
+ * FI-R6 — reconocer el rechazo de RF-JUE-003.
+ *
+ * `PuertaDeHeroe.comprobar` corre dentro de `IngresarASala` antes que nada y
+ * lanza `HeroeNoDisponible` con 422. Es el unico rechazo del ingreso que se
+ * arregla yendo al inventario, y hasta FI-R6 el listado lo pintaba como un
+ * aviso rojo cualquiera.
+ */
+describe('FI-R6 - esHeroeNoDisponible', () => {
+  const con = (status, type) => new ErrorDeApi({ type, title: 't', status }, status);
+
+  test('reconoce los dos tipos de RF-JUE-003', () => {
+    expect(
+      esHeroeNoDisponible(con(422, 'https://nexusbattles.local/errores/heroe-no-equipado')),
+    ).toBe(true);
+    expect(esHeroeNoDisponible(con(422, 'https://nexusbattles.local/errores/heroe-ocupado'))).toBe(
+      true,
+    );
+  });
+
+  test('no confunde otros rechazos con un problema de heroe', () => {
+    expect(esHeroeNoDisponible(con(422, 'urn:otra-cosa'))).toBe(false);
+    expect(esHeroeNoDisponible(con(409, 'urn:llena'))).toBe(false);
+    expect(esHeroeNoDisponible(con(403, 'https://nexusbattles.local/errores/sala-privada'))).toBe(
+      false,
+    );
+    expect(esHeroeNoDisponible(null)).toBe(false);
+  });
+
+  test('los dos reconocedores no se pisan', () => {
+    const privada = con(403, 'https://nexusbattles.local/errores/sala-privada');
+    const heroe = con(422, 'https://nexusbattles.local/errores/heroe-no-equipado');
+    expect(esSalaPrivada(privada)).toBe(true);
+    expect(esHeroeNoDisponible(privada)).toBe(false);
+    expect(esSalaPrivada(heroe)).toBe(false);
+    expect(esHeroeNoDisponible(heroe)).toBe(true);
   });
 });
