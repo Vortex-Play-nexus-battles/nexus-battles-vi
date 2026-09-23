@@ -2,9 +2,12 @@ package com.nexusbattles.ms_subastas.subastas.realtime;
 
 import java.util.Arrays;
 
+import com.nexusbattles.comun.seguridad.ConversorRolesJwt;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
@@ -34,12 +37,18 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
  * casa se configuran ya del mismo modo (regla 10). Vacio = la lista de
  * desarrollo de abajo, que cubre el borde y el propio servicio en local.
  *
- * <p>Lo que <b>no</b> trae este cambio es la autenticacion del CONNECT. El
- * canal sigue abriendose sin token, y eso tiene un orden obligatorio: primero
- * el navegador tiene que mandar el Bearer y estar desplegado, y solo despues
- * se puede exigir. Al reves, el listado en vivo se cae —degrada al sondeo de
- * 5 s, no se rompe, pero se cae— entre un despliegue y el siguiente. El
- * interceptor va en el PR que sigue a este.
+ * <h2>R9.6b — la politica del canal</h2>
+ *
+ * R9.6a dejo dicho que la autenticacion del CONNECT iba en el PR siguiente, y
+ * este es. El orden se respeto: primero el navegador aprendio a mandar el
+ * Bearer (#631, ya desplegado), y solo ahora el servidor lo mira. Al reves, el
+ * listado en vivo se habria quedado sin canal entre un despliegue y el
+ * siguiente.
+ *
+ * <p>Quien decide que se admite es {@link PoliticaDelCanalDeSubastas}, y su
+ * javadoc explica por que aqui NO vale el {@code AutenticacionStomp}
+ * compartido tal cual: este canal sirve una vista publica por decision de
+ * producto y no acepta ni un mensaje del cliente.
  */
 @Configuration
 @EnableWebSocketMessageBroker
@@ -52,9 +61,31 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     };
 
     private final String[] origenesPermitidos;
+    private final JwtDecoder decodificador;
 
-    public WebSocketConfig(@Value("${subastas.ws.origenes:}") String[] origenesConfigurados) {
+    public WebSocketConfig(
+            @Value("${subastas.ws.origenes:}") String[] origenesConfigurados,
+            JwtDecoder decodificador) {
         this.origenesPermitidos = normalizar(origenesConfigurados);
+        this.decodificador = decodificador;
+    }
+
+    /**
+     * R9.6b — el interceptor que decide quien entra y que puede hacer.
+     *
+     * <p>Es el MISMO decodificador que valida los Bearer de la API HTTP (el
+     * que Boot construye a partir de {@code jwk-set-uri}, apuntando al JWKS de
+     * ms-identidad desde R4.2) y el MISMO conversor de roles: un token que
+     * sirve para la API sirve para el canal, y uno que no, tampoco. Dos
+     * cadenas de validacion distintas sobre el mismo token es como se acaba
+     * teniendo una puerta abierta sin darse cuenta.
+     */
+    @Override
+    public void configureClientInboundChannel(ChannelRegistration registro) {
+        registro.interceptors(new PoliticaDelCanalDeSubastas(
+                decodificador,
+                new ConversorRolesJwt(),
+                SubastaRealtimePublisher.CANAL_LISTADO));
     }
 
     /**
