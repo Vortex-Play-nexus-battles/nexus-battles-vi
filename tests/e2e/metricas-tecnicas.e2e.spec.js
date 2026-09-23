@@ -9,7 +9,8 @@
  *   2. /tecnicas/informe/texto exporta el mismo tablero (CA-02)
  *   3. /moderacion agrega lo que moderacion-sanciones publica: se emite una
  *      advertencia y el total del dia sube; sin umbral del PO no hay alertas
- *      (D-25) y lo pendiente se dice por su nombre
+ *      (decision D-25) y lo pendiente se dice por su nombre —en la copia
+ *      visible, sin citar el identificador de la decision
  *   4. la observabilidad es de administracion (#527): sin token 401, con
  *      token de moderadora 403, con token de administradora 200
  *   5. la vista pinta la tabla con la brecha marcada
@@ -200,8 +201,17 @@ test.describe('Metricas tecnicas y de moderacion (HU-MET-004 / HU-MET-001)', () 
     await expect(page.locator('[data-zona="resumen-moderacion"]')).toContainText(/sanciones/, {
       timeout: 20000,
     });
+    // Se afirma el SIGNIFICADO —que no hay umbral y por eso no se evalua
+    // ninguna alerta—, no el identificador interno de la decision. La prueba
+    // exigia el literal «D-25» y el bloque UX lo quito de la copia visible,
+    // con razon: «D-25» no le dice nada a una administradora. Desde entonces
+    // el E2E de develop estaba rojo, y la unica afirmacion que fallaba era
+    // esta. Un codigo de decision interno no es contrato de interfaz.
     await expect(page.locator('[data-zona="moderacion"] [data-zona="alertas"]')).toContainText(
-      'D-25',
+      /sin umbral/i,
+    );
+    await expect(page.locator('[data-zona="moderacion"] [data-zona="alertas"]')).toContainText(
+      /no se evalua|no se evalúa/i,
     );
   });
 });
