@@ -31,11 +31,16 @@ dependencies {
     // esto se convierten en compuerta, y el rojo aparece en el repositorio de
     // quien hace el cambio y no en la integracion de la semana siguiente.
     //
-    // `junit5spring` (y no `junit5` a secas) por el MockMvcTestTarget: un
-    // pacto describe el contrato HTTP, y montar PostgreSQL para sembrar cada
-    // estado añadiria dos minutos por corrida para probar ademas la
-    // persistencia, que ya tiene sus propias pruebas.
-    testImplementation 'au.com.dius.pact.provider:junit5spring:4.6.17'
+    // `junit5` a secas, NO `junit5spring`. El modulo de Spring de pact-jvm
+    // 4.6.x esta compilado contra Spring 5.3.39 y `javax.servlet` 3.1.0 (ver
+    // su build.gradle): su `MockMvcTestTarget` lee las cookies de toda
+    // peticion devolviendo un `javax.servlet.http.Cookie`, clase que no existe
+    // en Spring Boot 4.1, donde todo es `jakarta`. Compila —el simbolo se
+    // resuelve desde el jar— y revienta con NoClassDefFoundError en la primera
+    // interaccion. `junit5` no tiene ni una linea de Spring: habla HTTP con
+    // Apache HttpClient 5, asi que la verificacion corre contra el servicio
+    // arrancado de verdad y no depende de la version de Spring.
+    testImplementation 'au.com.dius.pact.provider:junit5:4.6.17'
 
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

@@ -1,16 +1,15 @@
 package com.nexusbattles.ms_finanzas.contratos;
 
+import au.com.dius.pact.provider.junit5.HttpTestTarget;
 import au.com.dius.pact.provider.junit5.PactVerificationContext;
 import au.com.dius.pact.provider.junit5.PactVerificationInvocationContextProvider;
 import au.com.dius.pact.provider.junitsupport.Provider;
 import au.com.dius.pact.provider.junitsupport.State;
 import au.com.dius.pact.provider.junitsupport.loader.PactFolder;
-import au.com.dius.pact.provider.spring.junit5.MockMvcTestTarget;
 
+import com.nexusbattles.comun.seguridad.pruebas.EmisorDeTokensDePrueba;
 import com.nexusbattles.ms_finanzas.common.exception.ReservaNoEncontradaException;
 import com.nexusbattles.ms_finanzas.common.exception.SaldoInsuficienteException;
-import com.nexusbattles.ms_finanzas.comun.GlobalExceptionHandler;
-import com.nexusbattles.ms_finanzas.creditos.controller.CreditoController;
 import com.nexusbattles.ms_finanzas.creditos.dto.CreditoDTOs.ConsumirRequest;
 import com.nexusbattles.ms_finanzas.creditos.dto.CreditoDTOs.ConsumirResponse;
 import com.nexusbattles.ms_finanzas.creditos.dto.CreditoDTOs.ReservaResponse;
@@ -18,12 +17,22 @@ import com.nexusbattles.ms_finanzas.creditos.dto.CreditoDTOs.ReservarRequest;
 import com.nexusbattles.ms_finanzas.creditos.dto.CreditoDTOs.SaldoResponse;
 import com.nexusbattles.ms_finanzas.creditos.service.CreditoService;
 
+import org.apache.hc.core5.http.HttpRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.TestTemplate;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -45,29 +54,53 @@ import java.util.UUID;
  * se pone roja <b>en el repositorio de quien hizo el cambio</b>, no en la
  * integracion de la semana siguiente.
  *
- * <h2>Por que MockMvc y no el servicio arrancado con su base de datos</h2>
+ * <h2>Por que el servicio arrancado y no MockMvc</h2>
  *
- * Un pacto describe el <b>contrato HTTP</b>: ruta, metodo, codigos, forma del
- * cuerpo. Arrancar PostgreSQL y sembrar filas para cada estado añadiria unos
- * dos minutos por corrida y probaria ademas la persistencia, que ya tiene sus
- * propias pruebas. Aqui se monta el controlador real con su
- * {@link GlobalExceptionHandler} real —que es quien fija los {@code type} URI
- * que el consumidor compara literalmente— y se simula la capa de servicio.
+ * El primer intento uso {@code MockMvcTestTarget} de
+ * {@code au.com.dius.pact.provider:junit5spring}, que evita levantar nada. No
+ * sirve aqui: ese modulo de pact-jvm 4.6.x esta compilado contra Spring 5.3.39
+ * y {@code javax.servlet} 3.1.0, y lee las cookies de toda peticion como
+ * {@code javax.servlet.http.Cookie}, clase que en Spring Boot 4.1 no existe
+ * —todo es {@code jakarta}—. Compila contra el jar y revienta al ejecutar.
  *
- * <p>Dicho de otro modo: esto verifica que <b>la puerta</b> es la que el
- * consumidor espera. Que detras haya saldo de verdad lo comprueban las
- * pruebas de {@code CreditoService} y el banco E2E.
+ * <p>El modulo {@code junit5} a secas no tiene ni una linea de Spring: habla
+ * HTTP con Apache HttpClient 5 contra un puerto real. Sale mas caro —un
+ * PostgreSQL de Testcontainers y el contexto entero— y a cambio la
+ * verificacion recorre el camino de produccion completo: el borde de
+ * seguridad, el {@code context-path} {@code /api/v1}, los convertidores de
+ * mensajes reales y el {@code GlobalExceptionHandler} que fija los {@code
+ * type} URI que el consumidor compara con valor exacto.
+ *
+ * <p>La capa de servicio si se simula ({@link CreditoService} es un
+ * {@code @MockitoBean}): un pacto describe la <b>puerta</b> —ruta, metodo,
+ * codigos, forma del cuerpo—, y sembrar filas para cada estado probaria
+ * ademas la persistencia, que ya tiene sus propias pruebas en
+ * {@code CreditoServiceTest} y {@code TransaccionRepositoryIT}.
+ *
+ * <h2>El pacto no registra la autorizacion, y eso es un hallazgo</h2>
+ *
+ * Ninguna de las cinco interacciones lleva cabecera {@code Authorization},
+ * pero {@code /creditos/**} exige {@code ROLE_SERVICIO} desde #455/ADR-005 y
+ * ms-subastas <b>si</b> manda su credencial en produccion (#631). El pacto
+ * quedo desactualizado respecto al consumidor. No se arregla aqui: los pactos
+ * los genera {@code CreditosPactoTest} del lado de ms-subastas y el README de
+ * {@code contracts/pactos/} dice que no se editan a mano. Mientras tanto la
+ * peticion se firma en {@link #verificarCadaInteraccion} con un token de
+ * servicio real —el mismo emisor y el mismo JWKS que usa produccion—, de modo
+ * que lo que se verifica sigue siendo la respuesta del servicio y no un 401.
  *
  * <h2>Por que ms-finanzas y no tambien ms-inventario</h2>
  *
  * El otro pacto, {@code ms-subastas-ms-inventario.json}, describe dos
  * interacciones sobre {@code POST /elementos/{id}/transferencias}, un endpoint
  * que <b>todavia no existe</b> (el propio README del directorio lo marca con
- * ⚠️). Montar su verificacion hoy seria montar una compuerta roja a
+ * un aviso). Montar su verificacion hoy seria montar una compuerta roja a
  * proposito, y las compuertas rojas por diseño se acaban desactivando.
  */
 @Provider("ms-finanzas")
 @PactFolder("../../../contracts/pactos")
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@Testcontainers(disabledWithoutDocker = true)
 @DisplayName("Pacto: ms-finanzas cumple lo que ms-subastas espera")
 class VerificacionDelPactoDeSubastasTest {
 
@@ -76,27 +109,35 @@ class VerificacionDelPactoDeSubastasTest {
     private static final String VENDEDOR = "88888888-0000-0000-0000-0000000000dd";
     private static final UUID RESERVA = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002");
 
-    private final CreditoService creditos = Mockito.mock(CreditoService.class);
+    @Container
+    @ServiceConnection
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:17-alpine");
+
+    @DynamicPropertySource
+    static void identidad(DynamicPropertyRegistry registro) {
+        EmisorDeTokensDePrueba.registrarJwks(registro);
+    }
+
+    /** Ver el javadoc de la clase: el pacto describe la puerta, no el almacen. */
+    @MockitoBean
+    private CreditoService creditos;
+
+    @LocalServerPort
+    private int puerto;
 
     @BeforeEach
-    void apuntarAlControladorReal(PactVerificationContext contexto) {
-        MockMvcTestTarget objetivo = new MockMvcTestTarget();
-        // El manejador de errores entra a proposito: es quien pone los `type`
-        // URI que el consumidor compara con valor exacto. Sin el, los dos
-        // casos de error pasarian por casualidad o fallarian por el motivo
-        // equivocado.
-        objetivo.setControllers(new CreditoController(creditos));
-        objetivo.setControllerAdvice(new GlobalExceptionHandler());
-        // El contexto de servlet arranca en /api/v1 en produccion
-        // (server.servlet.context-path), y el pacto pide rutas con ese
-        // prefijo: sin esto, MockMvc no encontraria ninguna.
-        objetivo.setServletPath("/api/v1");
-        contexto.setTarget(objetivo);
+    void apuntarAlServicioArrancado(PactVerificationContext contexto) {
+        contexto.setTarget(new HttpTestTarget("localhost", puerto));
     }
 
     @TestTemplate
     @ExtendWith(PactVerificationInvocationContextProvider.class)
-    void verificarCadaInteraccion(PactVerificationContext contexto) {
+    void verificarCadaInteraccion(PactVerificationContext contexto, HttpRequest peticion) {
+        // Ver el javadoc: el pacto no registra la credencial que el consumidor
+        // si manda. Sin esto, las cinco interacciones responderian 401 y la
+        // prueba mediria la cadena de seguridad en vez del contrato.
+        peticion.addHeader("Authorization",
+                "Bearer " + EmisorDeTokensDePrueba.emisor().tokenDeServicio("ms-subastas"));
         contexto.verifyInteraction();
     }
 
