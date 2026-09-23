@@ -1010,6 +1010,16 @@
    Ayuda contextual
    Aparece al señalar Y al enfocar con teclado. Se cierra con Escape.
    Máximo dos líneas: si necesita más, es documentación.
+   -----------------------------------------------------------------------
+   OJO (UX-R3.3): esto es un BOCADILLO. Lleva fondo cromo, sombra de capa 3 y
+   una flecha, y no sabe esconderse solo: quien lo pone en el marcado lo
+   enseña siempre. Tres vistas —auditoría, historial y cofres— lo usaban como
+   párrafo descriptivo bajo el `<h1>` y como indicador de página dentro de la
+   paginación. El resultado eran dos cajas oscuras flotando fijas en medio de
+   la pantalla, en la vista que consulta el registro inmutable del sistema.
+
+   Para un párrafo descriptivo, `.t-meta`. Para el indicador de página,
+   `.paginacion__info`. Este componente es para ayuda que aparece y se va.
    ======================================================================= */
 
 .ayuda {
@@ -2314,9 +2324,15 @@
   flex: 0 0 auto;
 }
 
+/* UX-R3.3 — el distintivo de rol se pegaba al apodo y su borde superior se
+   leía como un subrayado: parecía que «qa_ux» fuera un enlace. Dos píxeles de
+   separación y el distintivo ajustado a su propio texto (`align-items`, no
+   estirado a lo ancho del apodo) lo resuelven. */
 .cabecera__identidad {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+  gap: var(--e-1);
   line-height: 1.2;
 }
 
@@ -5004,4 +5020,73 @@ button.tarjeta-heroe[aria-pressed='true'] {
   justify-content: center;
   gap: var(--e-3);
   padding-top: var(--e-3);
+}
+
+/* =======================================================================
+   Lista negra de términos — UX-R3.3
+   -----------------------------------------------------------------------
+   RF-USR-002 / HU-ADM-002: los términos que el registro rechaza en un apodo.
+
+   La vista existía y funcionaba, pero no había adoptado el sistema: un
+   `<header>` con texto suelto, un `<input>` sin clase y dos botones que se
+   pintaban con el estilo por omisión del navegador, porque sus clases
+   (`acciones-termino`, `boton-eliminar`) no estaban definidas en ningún CSS
+   del repositorio. Una lista de filas con acciones es un patrón que el kit ya
+   sabe resolver; lo único que faltaba era la fila.
+   ======================================================================= */
+
+.lista-terminos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lista-terminos__fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+}
+
+.lista-terminos__termino {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--t-cuerpo-familia);
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+.lista-terminos__acciones {
+  display: flex;
+  gap: var(--e-2);
+}
+
+/* Formulario de una línea: un campo y su acción — UX-R3.3.
+
+   `.fila` existe y reparte el ancho a partes iguales entre sus hijos
+   (`.fila > * { flex: 1 1 280px }`), que es lo correcto para dos campos del
+   mismo peso. Para «un campo y un botón» no lo es: el botón crecía hasta
+   ocupar media pantalla. Aquí el campo se lleva el espacio y el botón mide lo
+   que mide su texto, alineado con el control y no con la etiqueta. */
+.formulario-en-linea {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--e-3);
+}
+
+.formulario-en-linea > .campo {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.formulario-en-linea > .boton {
+  flex: 0 0 auto;
 }

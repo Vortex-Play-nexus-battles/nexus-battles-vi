@@ -12,7 +12,7 @@
   <body>
     <div data-cabecera-app></div>
 
-    <main class="pagina pila" data-vista="gestion-usuarios">
+    <main class="pagina consola pila" data-vista="gestion-usuarios">
       <header class="encabezado-pagina">
         <div>
           <p class="t-etiqueta">Administracion</p>
@@ -27,15 +27,34 @@
         </div>
       </header>
 
+      <!-- UX-R3.3 — dos estados, no uno. El texto lo pone `verificarAcceso()`
+           segun se sepa que el rol no alcanza o no se haya podido comprobar. -->
       <section
         id="acceso-denegado"
         class="estado-vista estado-vista--vacio"
         hidden
         aria-live="polite"
       >
-        <h2 class="estado-vista__titulo">Acceso restringido</h2>
-        <p class="estado-vista__detalle">No tienes permisos suficientes para gestionar cuentas.</p>
-        <button type="button" id="btn-volver-acceso" class="boton boton--secundario">Volver</button>
+        <h2 class="estado-vista__titulo" data-zona="titulo-bloqueo">
+          No tienes acceso a esta sección.
+        </h2>
+        <p class="estado-vista__detalle" data-zona="detalle-bloqueo">
+          Tu cuenta no tiene habilitada la gestión de cuentas.
+        </p>
+        <div class="fila">
+          <button
+            type="button"
+            class="boton boton--primario"
+            data-zona="reintentar-bloqueo"
+            data-accion="reintentar"
+            hidden
+          >
+            Reintentar
+          </button>
+          <button type="button" id="btn-volver-acceso" class="boton boton--secundario">
+            Volver
+          </button>
+        </div>
       </section>
 
       <div id="gestion-contenedor" class="pila" hidden>
