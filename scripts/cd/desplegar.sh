@@ -292,6 +292,40 @@ if [ -n "${DIRECTORIO_ACTIVO_URL:-}" ] && [ "${DIRECTORIO_ACTIVO_URL}" != "$EMIS
   echo "  DIRECTORIO_ACTIVO_URL del secret se ignora: bajo ADR-005 el emisor es ms-identidad (no se imprime el valor)"
 fi
 sed -i "s#^DIRECTORIO_ACTIVO_URL=.*#DIRECTORIO_ACTIVO_URL=${EMISOR_ADR_005}#" .env
+# ...y TAMBIEN en el shell, que es la mitad que faltaba.
+#
+# Corregir solo el archivo arreglaba nada mas la mitad de los servicios, y por
+# eso el defecto sobrevivio a su propia correccion durante semanas. Compose
+# resuelve el valor de una variable en dos sitios distintos segun como se lo
+# pida el compose:
+#
+#   env_file: [.env]                  -> lee el ARCHIVO (el sed de arriba)
+#   environment: X: ${X:-por_omision} -> INTERPOLA, y ahi el shell gana al
+#                                        archivo; ademas "environment:" pisa a
+#                                        "env_file:" para esa clave
+#
+# appleboy/ssh-action exporta al shell, via "envs:", el secret tal cual. Los
+# ocho servicios de plataforma declaran env_file, pero cuatro
+# --admin-parametros, comentarios, moderacion-sanciones y torneos-- declaran
+# ademas la variable en "environment:" de docker-compose.deploy.yml. Medido en
+# el host el 23-sep 20:25 UTC (diagnostico 35915851276, leyendo la variable
+# dentro de cada contenedor con docker exec):
+#
+#   srv-correo, srv-metricas-plataforma, srv-notificaciones, srv-salas-partidas
+#       emisor de credenciales: http://srv-ms-identidad:8089/api/v1/auth/token
+#   srv-admin-parametros, srv-comentarios, srv-moderacion-sanciones, srv-torneos
+#       emisor de credenciales: http://keycloak:8180/realms/nexus-battles
+#
+# Esos cuatro pedian su credencial de servicio a un Keycloak que no existe en
+# ningun entorno (ADR-005). No se cayeron, y por eso nadie lo vio: fallan hacia
+# el lado abierto, asi que el sintoma no era un error sino una funcion que no
+# ocurria -- torneos sin reservar los creditos de la inscripcion, comentarios
+# sin consultar sanciones antes de publicar.
+#
+# DIRECTORIO_ACTIVO_URL es la unica variable del repositorio con esta sombra:
+# la unica que el script recalcula, que algun compose interpola y que ademas
+# viaja en "envs:". Comprobado cruzando las tres listas.
+export DIRECTORIO_ACTIVO_URL="$EMISOR_ADR_005"
 
 echo "== 2) Guardando el tag estable actual de cada servicio, antes de tocarlo =="
 # Si el servicio ya estaba corriendo con algun tag, lo guardamos en un
