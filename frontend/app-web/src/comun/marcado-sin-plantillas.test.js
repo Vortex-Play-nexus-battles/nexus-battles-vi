@@ -46,9 +46,6 @@ const raizRepo = new URL('../../../../', import.meta.url);
  * @type {Record<string, string>}
  */
 const PENDIENTES = Object.freeze({
-  // Grupo 2 — Contenido. No se tocan sin su dueño.
-  'contenido/productos/productos.js': 'grupo-2',
-
   // Grupo 4 — Cuentas, comercio y subastas. No se tocan sin su dueño.
   'cuentas/auditoria.js': 'grupo-4',
   // UX-R3.11 — `historial-transacciones.js` y `mis-cofres.js` salen de la lista:

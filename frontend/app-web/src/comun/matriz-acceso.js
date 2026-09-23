@@ -135,6 +135,11 @@ export const MATRIZ = Object.freeze({
     acceso: ACCESO.ADMINISTRACION,
     armazon: 'admin',
   },
+  'panel-catalogo': {
+    ruta: 'contenido/productos/panel-catalogo.html',
+    acceso: ACCESO.ADMINISTRACION,
+    armazon: 'admin',
+  },
   subastas: { ruta: 'cuentas/subastas.html', acceso: ACCESO.PUBLICA, armazon: 'jugador' },
   pujas: { ruta: 'cuentas/pujas.html', acceso: ACCESO.PUBLICA, armazon: 'jugador' },
   torneos: { ruta: 'plataforma/torneos/torneos.html', acceso: ACCESO.PUBLICA, armazon: 'jugador' },
