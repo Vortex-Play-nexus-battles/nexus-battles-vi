@@ -47,7 +47,7 @@ public class WebSecurityConfig implements WebMvcConfigurer {
      * toda peticion con origen, sin que nadie entendiera por que. Ante eso se
      * cae a la lista de desarrollo, que es restrictiva pero utilizable.
      */
-    private static String[] normalizar(String[] configurados) {
+    static String[] normalizar(String[] configurados) {
         if (configurados == null) {
             return ORIGENES_POR_OMISION.clone();
         }
