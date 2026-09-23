@@ -54,7 +54,7 @@ done
 
 echo
 echo "== 2) Lo que dice el catalogo coincide con el servicio real =="
-while IFS=$'\t' read -r nombre ruta herramienta puertoContenedor rutaSalud composeExtra; do
+while IFS=$'\t' read -r nombre ruta herramienta puertoContenedor rutaSalud composeExtra memLimit; do
   [ -d "$ruta" ] || { fallo "$nombre: la ruta $ruta no existe."; continue; }
 
   # a) herramienta declarada vs la que hay
@@ -86,6 +86,19 @@ while IFS=$'\t' read -r nombre ruta herramienta puertoContenedor rutaSalud compo
       "No copies la ruta de un comentario: miralo en application.properties."
   fi
 
+  # c2) el techo de memoria declarado en el catalogo es el que aplica el
+  #     compose. Si divergen, las decisiones de capacidad se toman con un
+  #     numero y el host ejecuta otro -- y el JVM se dimensiona con el del
+  #     compose (MaxRAMPercentage), no con el del catalogo.
+  if [ "$composeExtra" != "null" ] && [ -n "$composeExtra" ] && [ -f "$composeExtra" ] && [ -n "$memLimit" ] && [ "$memLimit" != "null" ]; then
+    enCompose=$(grep -A4 -E "^ *srv-${nombre}:" "$composeExtra" | grep -oE 'mem_limit: [0-9]+m' | head -1 | grep -oE '[0-9]+')
+    if [ -n "$enCompose" ] && [ "$enCompose" != "$memLimit" ]; then
+      fallo "$nombre: el catalogo dice memLimitMiB=$memLimit y $composeExtra aplica ${enCompose}m." \
+        "La capacidad se decide con el numero del catalogo y el host ejecuta el" \
+        "del compose: tienen que ser el mismo."
+    fi
+  fi
+
   # d) el override de compose existe y define de verdad el contenedor
   if [ "$composeExtra" != "null" ] && [ -n "$composeExtra" ]; then
     if [ ! -f "$composeExtra" ]; then
@@ -99,7 +112,7 @@ while IFS=$'\t' read -r nombre ruta herramienta puertoContenedor rutaSalud compo
       fallo "$nombre: no tiene composeExtra y docker-compose.yml no declara srv-${nombre}."
     fi
   fi
-done < <(jq -r '.servicios[] | [.nombre, .ruta, .herramienta, .puertoContenedor, .rutaSalud, (.composeExtra // "null")] | @tsv' "$CATALOGO")
+done < <(jq -r '.servicios[] | [.nombre, .ruta, .herramienta, .puertoContenedor, .rutaSalud, (.composeExtra // "null"), (.memLimitMiB // "null")] | @tsv' "$CATALOGO")
 
 echo
 echo "== 3) Los puertos de host no chocan entre si =="
@@ -126,6 +139,31 @@ for script in scripts/cd/desplegar.sh scripts/cd/revertir.sh; do
       "sin su base de datos, justo cuando algo ya fallo."
   fi
 done
+
+echo
+echo "== 5) Todo cliente de servicio recibe su propia credencial =="
+# desplegar.sh registra en el emisor (AUTH_CLIENTES_SERVICIO) una credencial
+# por cada nombre de CLIENTES_DE_SERVICIO. Si el compose de ese servicio no le
+# pasa DIRECTORIO_ACTIVO_CLIENT_ID/SECRET, el servicio pide su token con el
+# client_id global, que no esta registrado, y se lo niegan -- en silencio,
+# porque la llamada fallida se ve como un timeout aguas abajo y no como un
+# problema de credenciales. Le pasaba a notificaciones, ms-finanzas y
+# ms-subastas a la vez.
+CLIENTES=$(grep -E '^CLIENTES_DE_SERVICIO=' scripts/cd/desplegar.sh | head -1 | cut -d'"' -f2)
+if [ -z "$CLIENTES" ]; then
+  fallo "No se pudo leer CLIENTES_DE_SERVICIO de scripts/cd/desplegar.sh."
+else
+  for cliente in $CLIENTES; do
+    if grep -qhE "DIRECTORIO_ACTIVO_CLIENT_ID: ${cliente}\$" docker-compose*.yml 2>/dev/null; then
+      echo "  ok    $cliente"
+    else
+      fallo "$cliente esta registrado como cliente de servicio pero ningun compose le pasa su credencial." \
+        "Agrega a su bloque environment:" \
+        "  DIRECTORIO_ACTIVO_CLIENT_ID: $cliente" \
+        "  DIRECTORIO_ACTIVO_CLIENT_SECRET: \${SECRETO_SERVICIO_$(echo "$cliente" | tr 'a-z-' 'A-Z_'):-}"
+    fi
+  done
+fi
 
 echo
 if [ "$FALLOS" -gt 0 ]; then

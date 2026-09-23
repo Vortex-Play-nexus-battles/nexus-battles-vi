@@ -581,6 +581,53 @@ if [ "$HUBO_FALLO" -eq 1 ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# 4b) ¿Y desde fuera? Un contenedor sano no es una API accesible.
+#
+# Un servicio puede responder 200 en su /actuator/health de localhost y aun asi
+# dar 502 por el borde: puerto mal publicado, nombre de contenedor que nginx no
+# resuelve, o una ruta que apunta a otro sitio. Con solo el paso 4, el CD
+# declaraba "success" mientras la vista seguia rota -- que es lo que ocurrio
+# durante semanas con creditos y subastas, y nadie lo vio desde el pipeline.
+#
+# La ruta de comprobacion de cada servicio sale del catalogo (pruebaBorde). No
+# se comprueba el codigo exacto, porque depende de la credencial: 401, 403 o
+# 404 significan "hay alguien ahi detras", que es justo lo que se quiere
+# saber. Solo el 502 (y el 000, sin respuesta) son fallo.
+#
+# Se salta entero en el host de contenido, que no tiene borde.
+if [ "$INCLUYE_BORDE" -eq 1 ]; then
+  echo "== 4b) Comprobando que el borde llega de verdad a lo desplegado =="
+  FALLO_BORDE=0
+  for par in $SERVICIOS_PUERTOS; do
+    servicio="${par%%:*}"
+    ruta=$(campo_de "$servicio" pruebaBorde)
+    if [ -z "$ruta" ] || [ "$ruta" = "null" ]; then
+      echo "  $servicio: sin ruta publica en el borde (servicio entre servicios); no aplica"
+      continue
+    fi
+    codigo=""
+    for intento in 1 2 3 4 5 6; do
+      codigo=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://localhost${ruta}" || echo "000")
+      case "$codigo" in
+        502|000) sleep 5 ;;
+        *) break ;;
+      esac
+    done
+    if [ "$codigo" = "502" ] || [ "$codigo" = "000" ]; then
+      echo "  $servicio: el borde responde $codigo en $ruta -- el contenedor esta sano pero no se llega a el"
+      FALLO_BORDE=1
+    else
+      echo "  $servicio: el borde responde $codigo en $ruta (hay alguien detras)"
+    fi
+  done
+  if [ "$FALLO_BORDE" -eq 1 ]; then
+    echo "El contenedor esta arriba pero el borde no llega. Revisa el puerto publicado,"
+    echo "el nombre del contenedor y su 'location' en infrastructure/red-balanceo/borde-dev.conf."
+    exit 1
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 # Higiene de disco. SOLO despues de que todo este saludable: mientras algun
 # servicio pueda necesitar una reversion, su imagen anterior no se toca.
 #
