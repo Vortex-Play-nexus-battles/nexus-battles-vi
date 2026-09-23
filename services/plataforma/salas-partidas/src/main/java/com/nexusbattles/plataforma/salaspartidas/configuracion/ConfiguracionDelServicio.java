@@ -39,8 +39,9 @@ public class ConfiguracionDelServicio {
 
     @Bean
     public CrearSala crearSala(RepositorioDeSalas repositorio, CreditosDelJugador creditos,
-                               HeroeDelJugador heroes) {
-        return new CrearSala(repositorio, creditos, heroes);
+                               HeroeDelJugador heroes,
+                               com.nexusbattles.plataforma.salaspartidas.sanciones.SancionesDelJugador sanciones) {
+        return new CrearSala(repositorio, creditos, heroes, sanciones);
     }
 
     @Bean
@@ -50,8 +51,9 @@ public class ConfiguracionDelServicio {
 
     @Bean
     public IngresarASala ingresarASala(RepositorioDeSalas repositorio, CanalDeSala canal,
-                                       HeroeDelJugador heroes, CreditosDelJugador creditos) {
-        return new IngresarASala(repositorio, canal, heroes, creditos);
+                                       HeroeDelJugador heroes, CreditosDelJugador creditos,
+                                       com.nexusbattles.plataforma.salaspartidas.sanciones.SancionesDelJugador sanciones) {
+        return new IngresarASala(repositorio, canal, heroes, creditos, sanciones);
     }
 
     @Bean
@@ -141,7 +143,7 @@ public class ConfiguracionDelServicio {
             RepositorioDeSalas salas,
             com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeRecompensas recompensas,
             com.nexusbattles.plataforma.salaspartidas.aplicacion.AcreditadorDePartidas libro,
-            com.nexusbattles.plataforma.salaspartidas.chat.SancionesDelJugador sanciones) {
+            com.nexusbattles.plataforma.salaspartidas.sanciones.SancionesDelJugador sanciones) {
         return new com.nexusbattles.plataforma.salaspartidas.aplicacion.AcreditarRecompensa(
                 salas, recompensas, libro, sanciones, Clock.systemUTC());
     }

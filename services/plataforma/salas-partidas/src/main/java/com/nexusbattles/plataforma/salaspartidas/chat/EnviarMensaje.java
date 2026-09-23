@@ -40,7 +40,7 @@ public class EnviarMensaje {
 
     public MensajeDeChat enviar(Canal canal, Autor autor, String texto, LogroCompartido logro) {
         String limpio = validar(texto);
-        if (sanciones.estaSilenciado(autor.id())) {
+        if (sanciones.tieneSancionActiva(autor.id())) {
             throw new JugadorSilenciado();
         }
         Veredicto veredicto = filtro.verificar(limpio);

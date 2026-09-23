@@ -73,7 +73,7 @@ info:
     administrador con motivo; la partida termina igual. Un encuentro fuera de
     rango o sin torneo es `400` `parametros-invalidos` con el campo
     (`torneo.numeroEncuentro` / `torneo.torneoId`) y la sala no se crea.
-  version: 1.4.0
+  version: 1.5.0
   contact:
     name: Grupo 6 — Tiempo real, comunidad y plataforma
   license:
@@ -133,6 +133,8 @@ paths:
           $ref: '#/components/responses/ParametrosInvalidos'
         '401':
           $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/JugadorSancionado'
         '422':
           description: |
             El anfitrion no cumple algun requisito para crear la sala.
@@ -313,10 +315,33 @@ paths:
         '401':
           $ref: '#/components/responses/NoAutenticado'
         '403':
-          description: Sala privada y codigo de invitacion ausente o invalido
+          description: |
+            No puede entrar. Distinguir por `type`:
+
+            - `codigo-invitacion-invalido`: la sala es privada y el codigo
+              falta o no corresponde.
+            - `jugador-sancionado` (HU-USR-005/006, R10.2): tiene una sancion
+              activa. Se comprueba ANTES que el heroe y antes de reservar
+              creditos, asi que un rechazo por esta via no deja nada a medias.
+              Ver la respuesta `JugadorSancionado`.
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ProblemDetail' }
+              examples:
+                codigoInvalido:
+                  summary: sala privada sin codigo valido
+                  value:
+                    type: 'https://nexusbattles.local/errores/codigo-invitacion-invalido'
+                    title: 'Codigo de invitacion invalido'
+                    status: 403
+                    detail: 'Esta sala es privada y el codigo no corresponde.'
+                jugadorSancionado:
+                  summary: HU-USR-005/006 — sancion activa
+                  value:
+                    type: 'https://nexusbattles.local/errores/jugador-sancionado'
+                    title: 'Tienes una sancion activa'
+                    status: 403
+                    detail: 'Mientras la sancion siga vigente no puedes crear salas ni entrar a batallas. Puedes consultarla, y apelarla si crees que es injusta, en «Mis sanciones».'
         '404':
           $ref: '#/components/responses/SalaNoEncontrada'
         '409':
@@ -561,6 +586,11 @@ components:
           recompensa. `type` estable.
         - `inventario-no-disponible` (HU-SAL-003): inventario contesto con un
           rechazo (4xx) y no hay veredicto sobre el heroe.
+        - `sanciones-no-disponibles` (HU-USR-005/006, R10.2): no se pudo
+          comprobar si el jugador esta sancionado. A diferencia de los
+          anteriores **no se degrada**: la accion se bloquea. Es la excepcion
+          deliberada a HU-DIS-003, porque aqui no se degrada una consulta sino
+          una puerta.
       headers:
         Retry-After:
           description: Segundos tras los que conviene reintentar. Solo con `seccion-no-disponible`.
@@ -589,6 +619,31 @@ components:
                 status: 503
                 detail: 'No se pudieron comprometer los creditos de la apuesta: el libro rechazo la reserva con 400. Nada quedo reservado; vuelve a intentarlo en unos segundos.'
                 instance: '/api/v1/salas'
+    # HU-USR-005/006 (R10.2) — la sancion dejo de ser solo un silencio en el chat.
+    JugadorSancionado:
+      description: |
+        El jugador tiene una **sancion activa** (RF-USR-004): una suspension
+        temporal o un baneo emitidos en moderacion-sanciones. Mientras siga
+        vigente no puede crear salas ni entrar a ninguna.
+
+        Es `403` y no `422` a proposito: no le falta un requisito que pueda
+        arreglar —equipar un heroe, conseguir creditos—, es que **no tiene
+        permitido** hacerlo ahora. La interfaz debe llevarlo a «Mis sanciones»,
+        donde puede verla y apelarla (HU-USR-007).
+
+        Si el servicio de sanciones **no responde**, la respuesta es `503`
+        (`sanciones-no-disponibles`) y no `403`: no es que no pueda, es que no
+        se sabe. Se bloquea igualmente (fail-closed, decision D-14): dar por
+        buena la entrada convertiria una caida en una via de escape.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+          example:
+            type: 'https://nexusbattles.local/errores/jugador-sancionado'
+            title: 'Tienes una sancion activa'
+            status: 403
+            detail: 'Mientras la sancion siga vigente no puedes crear salas ni entrar a batallas. Puedes consultarla, y apelarla si crees que es injusta, en «Mis sanciones».'
+            instance: '/api/v1/salas'
     SalaNoEncontrada:
       description: La sala no existe o ya fue cerrada
       content:

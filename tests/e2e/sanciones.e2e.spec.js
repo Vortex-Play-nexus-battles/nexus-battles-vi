@@ -91,6 +91,22 @@ test.describe('Sanciones y apelaciones (HU-USR-004/005/006/007, HU-NOT-005)', ()
     });
   }
 
+  /**
+   * Intentar crear una sala como la jugadora — R10.2.
+   *
+   * Se usa como sonda de bloqueo REAL. No importa que la sala llegue a
+   * crearse: lo que se mira es si la respuesta es el 403 de sancion o
+   * cualquier otra cosa. Sin heroe equipado seria un 422 (`heroe-no-equipado`)
+   * y con sancion activa tiene que ser 403 ANTES de llegar a preguntar por el
+   * heroe. Esa diferencia es justo la que demuestra el orden de las puertas.
+   */
+  async function intentarCrearSala() {
+    return api.post('/api/v1/salas', {
+      headers: conToken(jugadora.token),
+      data: { maximoParticipantes: 2, modalidad: 'UNO_CONTRA_UNO', recompensaCreditos: 0, privada: false },
+    });
+  }
+
   async function emitir(quien, cuerpo) {
     return api.post('/api/v1/sanciones', { headers: conToken(quien.token), data: cuerpo });
   }
@@ -193,6 +209,14 @@ test.describe('Sanciones y apelaciones (HU-USR-004/005/006/007, HU-NOT-005)', ()
     expect((await activa()).sancionActiva, 'nada de lo anterior sanciono').toBe(false);
   });
 
+  test('sin sancion que restrinja, la puerta de sala no es la que rechaza (R10.2)', async () => {
+    // Control negativo, y a la vez linea base de la prueba siguiente: con
+    // solo una ADVERTENCIA encima, crear sala falla —o no— por cualquier
+    // motivo MENOS por sancion.
+    const r = await intentarCrearSala();
+    expect(r.status(), 'una advertencia no restringe el acceso').not.toBe(403);
+  });
+
   test('suspension de 2 horas: activa, con fecha fin, y el comentario se rechaza', async () => {
     const r = await emitir(moderadora, {
       usuarioId: jugadora.claims.uid,
@@ -215,6 +239,14 @@ test.describe('Sanciones y apelaciones (HU-USR-004/005/006/007, HU-NOT-005)', ()
     const comentario = await comentar('Esto no deberia entrar');
     expect(comentario.status(), await comentario.text()).toBe(403);
     expect((await comentario.json()).motivo).toBe('AUTOR_SILENCIADO');
+
+    // R10.2 — HU-USR-005: hasta aqui la sancion era, en la practica, un mute.
+    // El comentario se rechazaba y el chat de sala silenciaba, pero la
+    // suspendida seguia pudiendo crear salas y entrar a batallas. Esta es la
+    // linea que lo demuestra cerrado.
+    const sala = await intentarCrearSala();
+    expect(sala.status(), `crear sala suspendida: ${await sala.text()}`).toBe(403);
+    expect((await sala.json()).type).toMatch(/jugador-sancionado$/);
 
     await esperarAviso('SANCION_SUSPENSION');
   });
@@ -274,6 +306,17 @@ test.describe('Sanciones y apelaciones (HU-USR-004/005/006/007, HU-NOT-005)', ()
     expect((await activa()).sancionActiva, 'revertida: ya no restringe').toBe(false);
     const comentario = await comentar('De vuelta tras la apelacion');
     expect(comentario.status(), await comentario.text()).toBe(201);
+
+    // R10.2 — y la puerta de sala tambien se levanta. Se afirma «ya no es el
+    // 403 de sancion» y no «es 201» a proposito: si esta jugadora no tiene
+    // heroe equipado la respuesta correcta es un 422, y exigir 201 ataria
+    // esta prueba a una semilla de inventario que no es lo que se esta
+    // probando aqui.
+    const sala = await intentarCrearSala();
+    if (sala.status() === 403) {
+      expect((await sala.json()).type, 'la sancion se revirtio: no puede ser este 403')
+        .not.toMatch(/jugador-sancionado$/);
+    }
 
     await esperarAviso('APELACION_REVERTIDA');
   });
