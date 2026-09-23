@@ -28,4 +28,23 @@ dependencies {
     testImplementation platform('org.testcontainers:testcontainers-bom:1.21.4')
     testImplementation 'org.testcontainers:junit-jupiter'
     testImplementation 'org.testcontainers:mongodb'
+
+    // Verificacion del pacto que ms-subastas publica sobre este servicio
+    // (contracts/pactos/ms-subastas-ms-inventario.json). Misma version y mismo
+    // modulo que ms-finanzas: `junit5` a secas, NO `junit5spring`, que esta
+    // compilado contra javax.servlet y revienta en Spring Boot 4 (ver el
+    // javadoc de VerificacionDelPactoDeSubastasTest en ms-finanzas).
+    testImplementation 'au.com.dius.pact.provider:junit5:4.6.17'
+}
+
+// Los pactos viven fuera de este modulo, en contracts/pactos/, asi que Gradle
+// no los ve como entrada de `test`: si solo cambia el pacto, la tarea queda
+// UP-TO-DATE y la verificacion no se repite. Se comprobo metiendo a mano en el
+// pacto los dos defectos que la verificacion destapo: siguio en verde sin
+// correr. Declararlos hace que cualquier cambio del contrato la vuelva a
+// ejecutar.
+tasks.named('test') {
+    inputs.dir(rootProject.file('contracts/pactos'))
+            .withPropertyName('pactos')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
 }
