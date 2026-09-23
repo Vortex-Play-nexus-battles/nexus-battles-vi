@@ -45,21 +45,17 @@ public class SecurityInterceptor implements HandlerInterceptor {
      */
     private final boolean permitirHeaderRol;
 
-    public SecurityInterceptor(RbacAuthorizationService rbacService) {
-        this(rbacService, null, null, null, true);
-    }
-
-    public SecurityInterceptor(RbacAuthorizationService rbacService, AuditoriaEventClient auditoriaClient) {
-        this(rbacService, auditoriaClient, null, null, true);
-    }
-
-    public SecurityInterceptor(RbacAuthorizationService rbacService, AuditoriaEventClient auditoriaClient, JwtService jwtService) {
-        this(rbacService, auditoriaClient, jwtService, null, true);
-    }
-
-    public SecurityInterceptor(RbacAuthorizationService rbacService, AuditoriaEventClient auditoriaClient, JwtService jwtService, UsuarioRepository usuarioRepository) {
-        this(rbacService, auditoriaClient, jwtService, usuarioRepository, true);
-    }
+    // R9.5 — aqui vivian CUATRO constructores de conveniencia. Los cuatro
+    // terminaban en `this(..., true)`: encendian el respaldo por cabecera sin
+    // decirlo. Ninguno tenia uso en produccion —solo los llamaban pruebas—,
+    // pero el efecto era que la forma comoda de construir el interceptor era
+    // tambien la insegura, y cada prueba escrita con ellos afirmaba sobre un
+    // interceptor con la puerta trasera abierta creyendo que probaba el
+    // comportamiento real.
+    //
+    // Ahora hay un solo constructor y el ultimo parametro es obligatorio: una
+    // prueba que quiera el respaldo de desarrollo tiene que pedirlo en voz
+    // alta, y al leerla se ve que esa es la condicion que esta ejercitando.
 
     @Autowired
     public SecurityInterceptor(
