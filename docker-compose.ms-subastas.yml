@@ -18,7 +18,7 @@ services:
     image: postgres:17-alpine
     container_name: subastas-db
     restart: unless-stopped
-    mem_limit: 192m
+    mem_limit: 128m
     environment:
       POSTGRES_DB: ${MS_SUBASTAS_DB_NAME:-subastas_db}
       POSTGRES_USER: ${MS_SUBASTAS_DB_USER}
@@ -35,7 +35,7 @@ services:
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-ms-subastas:${TAG}
     container_name: srv-ms-subastas
     restart: unless-stopped
-    mem_limit: 384m
+    mem_limit: 256m
     ports:
       - "8092:8092"
     depends_on:
@@ -43,6 +43,12 @@ services:
         condition: service_healthy
     environment:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      # Credencial de servicio (ADR-005). desplegar.sh genera y persiste
+      # SECRETO_SERVICIO_MS_SUBASTAS en el host y se la da a ms-identidad en
+      # AUTH_CLIENTES_SERVICIO; sin estas dos lineas el servicio pide el token
+      # con el client_id global, que no esta registrado, y se lo niegan.
+      DIRECTORIO_ACTIVO_CLIENT_ID: ms-subastas
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_MS_SUBASTAS:-}
       DB_HOST: ${MS_SUBASTAS_DB_HOST:-subastas-db}
       DB_PORT: ${MS_SUBASTAS_DB_PORT:-5432}
       DB_NAME: ${MS_SUBASTAS_DB_NAME:-subastas_db}

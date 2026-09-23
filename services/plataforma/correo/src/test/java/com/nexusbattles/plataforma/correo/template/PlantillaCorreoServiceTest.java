@@ -185,4 +185,23 @@ class PlantillaCorreoServiceTest {
                 .contains("Ganaste la subasta")
                 .contains("Espada Legendaria");
     }
+
+    // ----- HU-PAG-003: plantilla de confirmacion de compra -----
+
+    @Test
+    void laPlantillaDeConfirmacionDeCompraVaSobreLaPlantillaCorporativaYMuestraElContenido() {
+        String html = service.renderizar("email/confirmacion-compra",
+                Map.of("apodo", "ElGuerrero", "monto", "50000.00 COP",
+                        "concepto", "Paquete de créditos x500",
+                        "fechaHora", "23/09/2026 a las 10:15 (GMT-05:00)"));
+
+        assertThat(html)
+                .contains("THE NEXUS BATTLES VI")
+                .contains("src=\"cid:logo-nexus\"")
+                .contains("ElGuerrero")
+                .contains("50000.00 COP")
+                .contains("Paquete de créditos x500")
+                .contains("23/09/2026 a las 10:15")
+                .doesNotContain("�");
+    }
 }
