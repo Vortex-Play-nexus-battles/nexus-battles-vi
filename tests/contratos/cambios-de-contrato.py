@@ -21,9 +21,21 @@ de mantenimiento:
     empieza a recibir 404.
   * **desaparece un `operationId`**. Aunque la ruta siga ahi, el metodo
     generado cambia de nombre y el codigo del consumidor no compila.
-  * **desaparece un codigo de respuesta** de una operacion que sigue
-    existiendo. El consumidor que distinguia un 422 de negocio de un 500 deja
-    de poder hacerlo.
+  * **desaparece un codigo de respuesta 2xx** de una operacion que sigue
+    existiendo. El consumidor que sabia leer esa respuesta deja de poder
+    hacerlo.
+
+Un **codigo de error (4xx/5xx) que desaparece NO es incompatible**, y esa
+regla se afino porque lo primero que esta compuerta marco fue el cambio de
+quien la escribio: ADR-006 quito los dos `409` de `metricas-plataforma.yaml`
+porque el servicio ya no puede producirlos. Pensandolo bien, un consumidor no
+puede *depender* de recibir un error: si deja de llegar, su rama de manejo
+queda muerta, no rota. Quitar un error que el servidor ya no emite es corregir
+la documentacion, no romper el contrato. Lo contrario —dar el visto bueno a la
+excepcion porque era nuestra— habria convertido la compuerta en un adorno.
+
+Se sigue exigiendo que la version se mueva, de modo que el cambio no pasa en
+silencio; solo deja de exigirse que sea MAYOR.
   * **un parametro que era opcional pasa a obligatorio**, o **aparece un
     parametro obligatorio nuevo**. Las peticiones que ya se enviaban empiezan
     a fallar con 400.
@@ -109,9 +121,10 @@ def opcionales(operacion: dict) -> set[str]:
     }
 
 
-def incompatibilidades(antes: dict, ahora: dict) -> list[str]:
-    """Los cambios que romperian a un consumidor que ya funcionaba."""
+def incompatibilidades(antes: dict, ahora: dict) -> tuple[list[str], list[str]]:
+    """(incompatibles, compatibles-dignos-de-mencion)."""
     rotos: list[str] = []
+    notas: list[str] = []
 
     ops_antes = operaciones(antes)
     ops_ahora = operaciones(ahora)
@@ -130,7 +143,12 @@ def incompatibilidades(antes: dict, ahora: dict) -> list[str]:
         codigos_antes = set((antigua.get("responses") or {}).keys())
         codigos_ahora = set((nueva.get("responses") or {}).keys())
         for codigo in sorted(codigos_antes - codigos_ahora):
-            rotos.append(f"«{clave}» ya no declara la respuesta {codigo}")
+            if str(codigo).startswith("2"):
+                rotos.append(f"«{clave}» ya no declara la respuesta {codigo}")
+            else:
+                # Ver el docstring: un error que desaparece deja al consumidor
+                # con una rama muerta, no con una peticion rota.
+                notas.append(f"«{clave}» ya no declara la respuesta {codigo} (error: compatible)")
 
         nuevos_obligatorios = obligatorios(nueva) - obligatorios(antigua)
         for nombre in sorted(nuevos_obligatorios):
@@ -139,7 +157,7 @@ def incompatibilidades(antes: dict, ahora: dict) -> list[str]:
             else:
                 rotos.append(f"«{clave}»: parametro obligatorio nuevo «{nombre}»")
 
-    return rotos
+    return rotos, notas
 
 
 def mayor(version: object) -> int | None:
@@ -187,7 +205,7 @@ def main() -> int:
         ahora = leer(ruta)
         version_antes = (antes.get("info") or {}).get("version")
         version_ahora = (ahora.get("info") or {}).get("version")
-        rotos = incompatibilidades(antes, ahora)
+        rotos, notas = incompatibilidades(antes, ahora)
 
         if rotos:
             subio_mayor = (
@@ -213,6 +231,8 @@ def main() -> int:
             continue
 
         print(f"ok      {ruta}: cambio compatible, {version_antes} -> {version_ahora}")
+        for nota in notas:
+            print(f"          · {nota}")
 
     if fallos:
         print(f"\n{fallos} contrato(s) incumplen la regla 2.")
