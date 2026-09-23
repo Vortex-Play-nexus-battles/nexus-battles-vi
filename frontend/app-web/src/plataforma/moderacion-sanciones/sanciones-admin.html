@@ -11,7 +11,7 @@
   <body>
     <div data-cabecera-app></div>
 
-    <main class="contenedor pila" data-vista="sanciones-admin">
+    <main class="pagina pila" data-vista="sanciones-admin">
       <h1>Moderacion · Sanciones</h1>
       <p class="t-meta">
         Advertencias (RF-USR-004), suspensiones temporales (RF-USR-005), baneos definitivos
@@ -38,7 +38,7 @@
       </section>
 
       <section class="tarjeta pila pila--compacta">
-        <h2>Emitir sancion</h2>
+        <h2>Emitir sanción</h2>
         <form class="pila pila--compacta" data-zona="emitir">
           <label class="campo">
             <span class="campo__etiqueta">Usuario (uid)</span>
@@ -53,7 +53,7 @@
             </select>
           </label>
           <label class="campo" data-solo="SUSPENSION">
-            <span class="campo__etiqueta">Duracion en horas (1 hora a 30 dias)</span>
+            <span class="campo__etiqueta">Duración en horas (1 hora a 30 días)</span>
             <input
               class="campo__control"
               type="number"
@@ -75,7 +75,7 @@
             <span class="campo__etiqueta">Comentario de origen (opcional)</span>
             <input class="campo__control" name="comentarioId" />
           </label>
-          <label class="campo campo--linea" data-solo="BANEO">
+          <label class="campo fila--envuelta" data-solo="BANEO">
             <input type="checkbox" name="confirmacion" />
             <span
               >Confirmo que el baneo es definitivo y solo lo revierte una apelacion favorable</span

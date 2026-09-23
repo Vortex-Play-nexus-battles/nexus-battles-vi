@@ -11,6 +11,10 @@
  */
 
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
+import { nodo } from '../../comun/ui/dom.js';
+import { pintarAviso } from '../../comun/ui/aviso.js';
+import { campo } from '../../comun/ui/campo.js';
+import { estadoDeCarga, estadoDeError, estadoVacio } from '../../comun/ui/estado-vista.js';
 
 export const ROLES_DE_ADMINISTRACION = Object.freeze(['ADMINISTRADOR', 'SUPER_ADMINISTRADOR']);
 
@@ -108,7 +112,7 @@ export function miEquipo(torneo, uid) {
  */
 export function accionesDe(torneo, uid) {
   if (!uid) {
-    return { crearEquipo: false, inscribir: false, motivo: 'Inicia sesion para inscribirte.' };
+    return { crearEquipo: false, inscribir: false, motivo: 'Inicia sesión para inscribirte.' };
   }
   if (torneo.estado !== 'INSCRIPCIONES_ABIERTAS') {
     return { crearEquipo: false, inscribir: false, motivo: 'Las inscripciones estan cerradas.' };
@@ -150,26 +154,6 @@ export function encuentrosDe(torneo, llave) {
 
 /* ---- DOM ---- */
 
-function nodo(etiqueta, clase, texto) {
-  const el = document.createElement(etiqueta);
-  if (clase) {
-    el.className = clase;
-  }
-  if (texto !== undefined) {
-    el.textContent = texto;
-  }
-  return el;
-}
-
-export function pintarAviso(zona, { tono, titulo, detalle }) {
-  zona.className = `aviso aviso--${tono}`;
-  zona.replaceChildren(
-    nodo('strong', 'aviso__titulo', titulo),
-    nodo('p', 'aviso__detalle', detalle ?? ''),
-  );
-  zona.hidden = false;
-}
-
 function avisarError(zona, error) {
   const deNegocio = error instanceof ErrorDeTorneos;
   let detalle = deNegocio ? error.detalle : 'Revisa tu conexion e intentalo de nuevo.';
@@ -184,7 +168,12 @@ function avisarError(zona, error) {
 }
 
 export function tarjetaDeTorneo(torneo, { alAbrir } = {}) {
-  const tarjeta = nodo('article', 'tarjeta pila pila--compacta tarjeta--pulsable');
+  // `.tarjeta--pulsable` esta documentada en el kit como «tarjeta que ademas
+  // es un boton o un enlace» y pone `cursor: pointer` sobre toda la tarjeta.
+  // Aqui estaba puesta sobre un `<article>` sin manejador: el cursor cambiaba
+  // a mano en toda la superficie y solo funcionaba el boton pequeno de abajo.
+  // Una afordancia que miente es peor que ninguna.
+  const tarjeta = nodo('article', 'tarjeta pila pila--compacta');
   tarjeta.dataset.torneoId = torneo.id;
   tarjeta.dataset.estado = torneo.estado;
   tarjeta.appendChild(nodo('strong', 'tarjeta__titulo', torneo.nombre));
@@ -230,21 +219,115 @@ export function tarjetaDeEquipo(torneo, equipo, uid) {
   return tarjeta;
 }
 
-export function filaDeEncuentro(torneo, encuentro) {
-  const fila = nodo('li', 'encuentro');
-  fila.dataset.numero = String(encuentro.numero);
-  fila.dataset.estado = encuentro.estado;
-  const a = nombreDe(torneo, encuentro.equipoA);
-  const b = nombreDe(torneo, encuentro.equipoB);
-  const etiqueta = encuentro.numero === 14 ? 'Final' : `Encuentro ${encuentro.numero}`;
-  let resultado = '';
-  if (encuentro.estado === 'JUGADO') {
-    resultado = ` → gana ${nombreDe(torneo, encuentro.ganador)}`;
-  } else if (encuentro.estado === 'LISTO') {
-    resultado = ' · listo para jugarse';
+/**
+ * HU-TOR-004 CA-04: un encuentro LISTO en el que juega mi equipo se juega en
+ * una sala de batalla vinculada; al terminar, salas-partidas informa el
+ * ganador a torneos. Aqui solo se decide si mostrar el acceso.
+ *
+ * @returns {boolean}
+ */
+export function puedoJugar(torneo, encuentro, uid) {
+  if (encuentro.estado !== 'LISTO' || torneo.estado !== 'EN_CURSO') {
+    return false;
   }
-  fila.textContent = `${etiqueta}: ${a} vs ${b}${resultado}`;
-  return fila;
+  const equipo = miEquipo(torneo, uid);
+  return Boolean(equipo) && (equipo.id === encuentro.equipoA || equipo.id === encuentro.equipoB);
+}
+
+/** Ruta relativa de crear sala con el encuentro prefijado (misma carpeta `plataforma/`). */
+export function rutaDeSalaDelEncuentro(torneo, encuentro) {
+  const parametros = new URLSearchParams({
+    torneo: torneo.id,
+    encuentro: String(encuentro.numero),
+  });
+  return `../salas-partidas/crear-sala.html?${parametros}`;
+}
+
+/** Estados del encuentro, en palabras y con la variante del componente. */
+const ESTADO_DEL_ENCUENTRO = Object.freeze({
+  PENDIENTE: { texto: 'Pendiente', clase: '' },
+  LISTO: { texto: 'Listo para jugarse', clase: ' encuentro--en-curso' },
+  JUGADO: { texto: 'Jugado', clase: ' encuentro--finalizado' },
+});
+
+/**
+ * Un encuentro del arbol, con el componente `Encuentro` del sistema de diseno.
+ *
+ * **Por que cambio.** El kit trae ese componente completo desde el Figma —
+ * cabecera con el estado, una fila por equipo, el ganador distinguido por
+ * **peso** de letra y no solo por color (`.encuentro__equipo--ganador`)— y
+ * esta vista lo ignoraba: ponia la clase `.encuentro` sobre un `<li>` y le
+ * metia una frase corrida, «Encuentro 5: Los Dragones vs Los Lobos → gana Los
+ * Dragones», dentro de una caja de 220 px pensada para dos filas. El resultado
+ * era un arbol de doble eliminacion imposible de leer de un vistazo.
+ *
+ * El marcador (`.encuentro__marcador`) se queda fuera a proposito: el contrato
+ * no trae puntuacion por encuentro, y un hueco vacio es mas honesto que un
+ * cero inventado.
+ *
+ * @param {object} torneo
+ * @param {object} encuentro esquema `Encuentro` del contrato
+ * @param {string|null} [uid] quien mira, para ofrecerle jugar el suyo
+ * @returns {HTMLElement}
+ */
+export function tarjetaDeEncuentro(torneo, encuentro, uid = null) {
+  const estado = ESTADO_DEL_ENCUENTRO[encuentro.estado] ?? { texto: encuentro.estado, clase: '' };
+  const tarjeta = nodo('article', `encuentro${estado.clase}`);
+  tarjeta.dataset.numero = String(encuentro.numero);
+  tarjeta.dataset.estado = encuentro.estado;
+
+  const cabecera = nodo('header', 'encuentro__cabecera');
+  cabecera.appendChild(
+    nodo('span', undefined, encuentro.numero === 14 ? 'Final' : `Encuentro ${encuentro.numero}`),
+  );
+  cabecera.appendChild(nodo('span', undefined, estado.texto));
+  tarjeta.appendChild(cabecera);
+
+  for (const lado of ['equipoA', 'equipoB']) {
+    const id = encuentro[lado];
+    const gana = Boolean(encuentro.ganador) && id === encuentro.ganador;
+    const fila = nodo('div', `encuentro__equipo${gana ? ' encuentro__equipo--ganador' : ''}`);
+    fila.dataset.lado = lado === 'equipoA' ? 'a' : 'b';
+    fila.appendChild(nodo('span', undefined, nombreDe(torneo, id)));
+    if (gana) {
+      // El peso de la letra solo lo ve quien mira la pantalla: para un lector
+      // de pantalla hay que decirlo.
+      fila.appendChild(nodo('span', 'solo-lectores', ' (gana este encuentro)'));
+    }
+    tarjeta.appendChild(fila);
+  }
+
+  if (puedoJugar(torneo, encuentro, uid)) {
+    const pie = nodo('div', 'encuentro__equipo');
+    const enlace = nodo('a', 'boton boton--primario boton--pequeno', 'Crear sala del encuentro');
+    enlace.href = rutaDeSalaDelEncuentro(torneo, encuentro);
+    enlace.dataset.accion = 'jugar-encuentro';
+    pie.appendChild(enlace);
+    tarjeta.appendChild(pie);
+  }
+  return tarjeta;
+}
+
+/**
+ * Los encuentros de una llave agrupados por ronda, que es lo que da forma al
+ * arbol. Una lista plana de catorce encuentros no se parece a un cuadro de
+ * doble eliminacion; el contrato ya trae `ronda` y no se estaba usando.
+ *
+ * @param {Array<object>} encuentros ya filtrados por llave y ordenados
+ * @returns {Array<{ronda: number, encuentros: Array<object>}>}
+ */
+export function porRonda(encuentros) {
+  const rondas = new Map();
+  for (const encuentro of encuentros) {
+    const clave = Number.isInteger(encuentro.ronda) ? encuentro.ronda : 0;
+    if (!rondas.has(clave)) {
+      rondas.set(clave, []);
+    }
+    rondas.get(clave).push(encuentro);
+  }
+  return [...rondas.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([ronda, lista]) => ({ ronda, encuentros: lista }));
 }
 
 /**
@@ -269,17 +352,52 @@ export function montarTorneos(
 
   async function cargarListado() {
     try {
+      zonaListado.replaceChildren(estadoDeCarga({ filas: 2, etiqueta: 'Buscando torneos…' }));
       const torneos = await api.listar(fetchImpl);
       zonaListado.replaceChildren();
+
+      // UX-R2.7 — el vacio era un parrafo gris de una linea: «Todavia no hay
+      // torneos publicados». Cierto y completamente inutil — el jugador se
+      // queda mirando una pantalla con un titulo y nada mas, sin saber que
+      // hacer ni cuando volver. Ahora se dice que NO hay torneo, que el
+      // formato es por temporadas, y se ofrece lo unico que si puede hacer
+      // ahora mismo: jugar una sala.
+      //
+      // No se inventa una fecha: `torneos.yaml` no publica cuando empieza el
+      // siguiente, y poner «vuelve en X dias» seria adivinarlo.
       if (torneos.length === 0) {
         zonaListado.appendChild(
-          nodo('p', 't-meta', 'Todavia no hay torneos publicados. El proximo aparecera aqui.'),
+          estadoVacio({
+            titulo: 'No hay ningún torneo abierto',
+            detalle:
+              'Los torneos se abren por temporadas. Cuando haya uno, aparecerá aquí con sus ' +
+              'equipos, sus cupos y el árbol de encuentros.',
+            accion: {
+              texto: 'Jugar una batalla',
+              href: '../salas-partidas/batallas.html',
+            },
+          }),
         );
+        return;
       }
       torneos.forEach((t) =>
         zonaListado.appendChild(tarjetaDeTorneo(t, { alAbrir: (x) => abrir(x.id) })),
       );
     } catch (error) {
+      // El fallo se pinta DONDE iban los torneos, no solo en el aviso de
+      // arriba: hasta ahora quedaba un encabezado «Torneos» huerfano con
+      // setecientos pixeles de vacio debajo, y el unico rastro del problema
+      // era una caja amarilla que decia «No se pudo completar» sin mas.
+      zonaListado.replaceChildren(
+        estadoDeError({
+          titulo: 'Los torneos no están disponibles',
+          detalle:
+            error instanceof ErrorDeTorneos && error.estado < 500
+              ? error.detalle
+              : 'El servicio de torneos no responde ahora mismo.',
+          alReintentar: () => cargarListado(),
+        }),
+      );
       avisarError(zonaAviso, error);
     }
   }
@@ -424,10 +542,18 @@ export function montarTorneos(
         return;
       }
       arbol.appendChild(nodo('h4', 't-etiqueta', titulo));
-      const ul = nodo('ul', 'pila pila--ajustada');
-      ul.dataset.llave = llave;
-      lista.forEach((e) => ul.appendChild(filaDeEncuentro(torneo, e)));
-      arbol.appendChild(ul);
+      const cuadro = nodo('div', 'arbol-torneo');
+      cuadro.dataset.llave = llave;
+      for (const { ronda, encuentros } of porRonda(lista)) {
+        const columna = nodo('div', 'arbol-torneo__ronda');
+        columna.dataset.ronda = String(ronda);
+        if (ronda > 0) {
+          columna.appendChild(nodo('p', 't-meta', `Ronda ${ronda}`));
+        }
+        encuentros.forEach((e) => columna.appendChild(tarjetaDeEncuentro(torneo, e, uid)));
+        cuadro.appendChild(columna);
+      }
+      arbol.appendChild(cuadro);
     });
     zonaDetalle.appendChild(arbol);
   }
@@ -435,15 +561,37 @@ export function montarTorneos(
   function formularioDeEquipo(torneo) {
     const form = nodo('form', 'tarjeta pila pila--compacta');
     form.dataset.zona = 'crear-equipo';
-    form.innerHTML = `
-      <h3>Registrar mi equipo</h3>
-      <label class="campo"><span class="campo__etiqueta">Nombre del equipo</span>
-        <input class="campo__control" name="nombre" minlength="3" maxlength="40" required /></label>
-      <label class="campo"><span class="campo__etiqueta">Avatar (identificador o URL)</span>
-        <input class="campo__control" name="avatar" maxlength="300" required /></label>
-      <label class="campo"><span class="campo__etiqueta">Identificador (uid) de tu companero</span>
-        <input class="campo__control" name="companeroUid" required /></label>
-      <button class="boton boton--primario" type="submit">Registrar equipo</button>`;
+    form.appendChild(nodo('h3', undefined, 'Registrar mi equipo'));
+    // Con `campo()` en vez de innerHTML: etiqueta asociada por for/id y pista
+    // bajo el control. La del companero importa — pedir un uid a secas es
+    // pedir un dato que nadie se sabe de memoria; ahora dice donde sacarlo.
+    for (const uno of [
+      campo({
+        nombre: 'nombre',
+        etiqueta: 'Nombre del equipo',
+        requerido: true,
+        atributos: { minlength: 3, maxlength: 40 },
+        pista: 'Entre 3 y 40 caracteres. Pasa por la lista negra de terminos prohibidos.',
+      }),
+      campo({
+        nombre: 'avatar',
+        etiqueta: 'Avatar del equipo',
+        requerido: true,
+        atributos: { maxlength: 300 },
+        pista: 'Identificador o direccion de la imagen.',
+      }),
+      campo({
+        nombre: 'companeroUid',
+        etiqueta: 'Identificador de tu companero',
+        requerido: true,
+        pista: 'Cada quien ve el suyo en Mi Cuenta, pestana Seguridad.',
+      }),
+    ]) {
+      form.appendChild(uno.elemento);
+    }
+    const enviar = nodo('button', 'boton boton--primario', 'Registrar equipo');
+    enviar.type = 'submit';
+    form.appendChild(enviar);
     form.addEventListener('submit', async (evento) => {
       evento.preventDefault();
       const datos = new FormData(form);

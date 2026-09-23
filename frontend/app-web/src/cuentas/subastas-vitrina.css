@@ -31,14 +31,6 @@
   box-sizing: inherit;
 }
 
-.subastas-titulo {
-  margin: 0 0 var(--e-4);
-  font-family: var(--t-titulo-familia);
-  font-size: var(--t-titulo-tam);
-  font-weight: var(--t-titulo-peso);
-  line-height: var(--t-titulo-alto);
-}
-
 /* --- Barra de orden, encima de la rejilla --------------------------- */
 
 .subastas-orden {
@@ -71,6 +63,8 @@
 }
 
 .subastas__producto {
+  /* UX-R2.10 — el acuse de una puja se coloca dentro de la tarjeta. */
+  position: relative;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -235,34 +229,11 @@
   box-shadow: var(--anillo-foco);
 }
 
-/* --- Paginacion ------------------------------------------------------ */
-
-.subastas-paginacion {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: var(--e-2);
-  margin-top: var(--e-6);
-  font-size: var(--t-cuerpo-tam);
-  color: var(--texto-2);
-}
-
-.subastas-paginacion__pagina {
-  min-width: var(--boton-pequeno);
-  min-height: var(--boton-pequeno);
-  border: none;
-  border-radius: var(--radio-chico);
-  background: none;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-
-.subastas-paginacion__pagina--activa {
-  background: var(--primaria-relleno);
-  color: var(--texto-sobre-color);
-  font-weight: var(--t-cuerpo-peso-enfasis);
-}
+/* La paginacion se retiro en UX-R2.8b: `.subastas-paginacion__*` era una
+   copia de `.paginacion`, que vive en el kit desde PR-UX-6. El estado activo
+   ademas se marcaba con una clase modificadora ADEMAS de `aria-current`, y
+   las dos podian desincronizarse; el kit estiliza `[aria-current='page']`
+   directamente. */
 
 /* ---------------------------------------------------------------------
  * Reorganizacion en resoluciones inferiores -- mismos 3 puntos de
@@ -297,45 +268,9 @@
   }
 }
 
-/* ---------------------------------------------------------------------
- * Estados -- mismo nombre y forma que vitrina.css a proposito, duplicado
- * mientras shared/ui-kit siga vacio (ver comentario de deuda pendiente
- * en ese archivo). Cuando ese componente compartido exista, esta copia
- * se retira y ambos modulos consumen el mismo.
- * ------------------------------------------------------------------- */
-
-.estado {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--e-2);
-  min-height: 240px;
-  padding: var(--e-8) var(--e-6);
-  border: 1px dashed var(--borde);
-  border-radius: var(--radio);
-  text-align: center;
-}
-
-.estado__mensaje {
-  margin: 0;
-  font-family: var(--fuente-titulo);
-  font-size: 1.05rem;
-  font-weight: 600;
-}
-
-.estado__detalle {
-  margin: 0;
-  font-size: var(--t-cuerpo-tam);
-  color: var(--texto-2);
-}
-
-.estado-carga,
-.estado-vacio {
-  color: var(--texto);
-}
-
-.estado-error {
-  border-style: solid;
-  border-color: var(--error);
-}
+/* Los estados (`.estado`, `.estado-carga`, `.estado-vacio`, `.estado-error`)
+   se retiraron en UX-R2.8b. Su propio comentario dejaba dicho que eran una
+   copia «mientras shared/ui-kit siga vacio» y que se retirarian cuando el
+   componente compartido existiera. Existe: `.estado-vista` en
+   `componentes.css`, con estado de carga con esqueletos y boton de
+   reintentar, que es justo lo que a esta pantalla le faltaba. */

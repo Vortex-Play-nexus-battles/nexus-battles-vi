@@ -124,6 +124,21 @@ class TorneosControllerTest {
         assertThat(actor.getValue().esServicio()).isTrue();
         assertThat(actor.getValue().nombre()).isEqualTo("salas-partidas");
 
+        // 1.1.0: ganadorUid + partidaId, como lo manda salas-partidas
+        UUID uid = UUID.randomUUID();
+        UUID partida = UUID.randomUUID();
+        mvc.perform(post("/api/v1/torneos/" + torneoId + "/encuentros/4/resultado")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeServicio("salas-partidas"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ganadorUid\":\"" + uid + "\",\"partidaId\":\"" + partida + "\"}"))
+                .andExpect(status().isOk());
+        ArgumentCaptor<TorneosService.SolicitudDeResultado> solicitud =
+                ArgumentCaptor.forClass(TorneosService.SolicitudDeResultado.class);
+        verify(servicio).registrarResultado(any(), eq(torneoId), eq(4), solicitud.capture());
+        assertThat(solicitud.getValue().ganadorEquipoId()).isNull();
+        assertThat(solicitud.getValue().ganadorUid()).isEqualTo(uid);
+        assertThat(solicitud.getValue().partidaId()).isEqualTo(partida);
+
         mvc.perform(post("/api/v1/torneos/" + torneoId + "/encuentros/3/resultado")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeJugador("lyra", JUGADORA))
                         .contentType(MediaType.APPLICATION_JSON)

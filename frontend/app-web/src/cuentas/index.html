@@ -1,171 +1,137 @@
 <!doctype html>
-
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-    <title>Inicio - Nexus Battles</title>
-
+    <title>Inicio — NEXUS BATTLES VI</title>
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
-    <link rel="stylesheet" href="./index.css" />
   </head>
-
   <body>
-    <header class="encabezado-inicio">
-      <div class="encabezado-inicio-contenido">
-        <div>
-          <p class="eyebrow">NEXUS BATTLES VI</p>
+    <!-- Cabecera única de la aplicación (HU-UX-001). Antes esta vista tenía su
+         propio encabezado con su propio botón de cerrar sesión. -->
+    <div data-cabecera-app></div>
 
-          <h1 class="titulo-grande titulo-bienvenida">
-            Hola, <span id="bienvenida-apodo">jugador</span>
-          </h1>
-
-          <p class="descripcion">Elige a dónde quieres ir.</p>
+    <main class="pagina home">
+      <!-- Lo primero: quién eres y la acción principal. -->
+      <section class="home__destacado">
+        <div class="pila pila--ajustada">
+          <p class="t-etiqueta">Tu Nexo</p>
+          <h1 class="home__saludo" data-zona="saludo">Hola</h1>
+          <p class="t-cuerpo">
+            Equipa tu héroe, entra a una sala y decide el combate turno a turno.
+          </p>
         </div>
+        <!--
+          UX-R2.6 — el CTA domina. Era un botón primario del mismo tamaño que
+          los «Reintentar» de las tarjetas de abajo: la acción por la que uno
+          entra al juego pesaba visualmente lo mismo que reintentar una
+          consulta de saldo. `.home__jugar` le da el tamaño y el acento.
+        -->
+        <a
+          class="boton boton--acento boton--grande home__jugar"
+          href="../plataforma/salas-partidas/crear-sala.html"
+        >
+          Jugar ahora
+        </a>
+      </section>
 
-        <button type="button" id="btn-cerrar-sesion" class="btn-contorno">Cerrar sesión</button>
+      <!--
+        UX-R2.6 — orden del hub. Antes venia primero «Tus créditos» y después
+        «Tu héroe». La jerarquía de una pantalla de inicio de juego es otra:
+        primero JUGAR (arriba, en el destacado), después con QUÉ se juega —el
+        héroe equipado, que es lo que decide si se puede entrar a una sala
+        (HU-SAL-003)— y solo entonces cuánto se tiene para apostar. El saldo
+        importa, pero no es lo primero que uno mira al volver a un juego.
+
+        Cada bloque se carga por su cuenta y dice por su nombre si su servicio
+        no está en este entorno.
+      -->
+      <section class="pila pila--compacta home__heroe">
+        <h2 class="t-subtitulo">Tu héroe</h2>
+        <div data-zona="bloque-heroe"></div>
+      </section>
+
+      <div class="home__rejilla">
+        <section class="pila pila--compacta">
+          <h2 class="t-subtitulo">Tus créditos</h2>
+          <div data-zona="bloque-saldo"></div>
+        </section>
+
+        <section class="pila pila--compacta">
+          <h2 class="t-subtitulo">Torneo</h2>
+          <div data-zona="bloque-torneo"></div>
+        </section>
+
+        <section class="pila pila--compacta">
+          <h2 class="t-subtitulo">Tus avisos</h2>
+          <div data-zona="bloque-avisos"></div>
+        </section>
       </div>
-    </header>
 
-    <main class="contenedor-principal">
-      <!-- =====================================================
-       CUENTA — visible para todos los roles autenticados
-       ===================================================== -->
-
-      <section class="seccion-menu">
-        <h2 class="titulo-seccion">Cuenta</h2>
-
-        <div class="tarjetas-acceso">
-          <a class="tarjeta tarjeta-acceso" href="./perfil.html">
-            <h3>Mi perfil</h3>
-            <p>Consulta y actualiza tu información personal.</p>
-          </a>
-
-          <a class="tarjeta tarjeta-acceso" href="./historial-transacciones.html">
-            <h3>Historial de transacciones</h3>
-            <p>Revisa tus pagos y cargas en moneda real.</p>
-          </a>
-
-          <a class="tarjeta tarjeta-acceso" href="./mis-cofres.html">
-            <h3>Mis cofres</h3>
-            <p>Cofres que ganaste acumulando créditos en tus partidas.</p>
-          </a>
-        </div>
+      <section class="pila pila--compacta">
+        <h2 class="t-subtitulo">A dónde ir</h2>
+        <div class="home__accesos" data-zona="accesos"></div>
       </section>
 
-      <!-- =====================================================
-       JUEGO Y CONTENIDO — visible para todos los roles
-       ===================================================== -->
-
-      <section class="seccion-menu">
-        <h2 class="titulo-seccion">Juego y contenido</h2>
-
-        <div class="tarjetas-acceso">
-          <a class="tarjeta tarjeta-acceso" href="../contenido/inventario/inventario.html">
-            <h3>Inventario</h3>
-            <p>Vitrina de tu inventario de productos.</p>
-          </a>
-
-          <a class="tarjeta tarjeta-acceso" href="../contenido/productos/productos.html">
-            <h3>Productos</h3>
-            <p>Crea y administra productos del catálogo.</p>
-          </a>
-
-          <a class="tarjeta tarjeta-acceso" href="./tienda.html">
-            <h3>Tienda</h3>
-            <p>Explora la tienda de Nexus Battles.</p>
-          </a>
-
-          <a class="tarjeta tarjeta-acceso" href="./subastas.html">
-            <h3>Subastas</h3>
-            <p>Participa en pujas en vivo y compras inmediatas de objetos.</p>
-          </a>
-        </div>
-      </section>
-
-      <!-- =====================================================
-       SALAS Y PARTIDAS — visible para todos los roles
-       ===================================================== -->
-
-      <section class="seccion-menu">
-        <h2 class="titulo-seccion">Salas y partidas</h2>
-
-        <div class="tarjetas-acceso">
-          <a class="tarjeta tarjeta-acceso" href="../plataforma/salas-partidas/crear-sala.html">
-            <h3>Crear sala</h3>
-            <p>Configura una nueva sala de batalla.</p>
-          </a>
-
-          <a class="tarjeta tarjeta-acceso" href="../plataforma/salas-partidas/batallas.html">
-            <h3>Batallas</h3>
-            <p>Entra a la sala de batalla y su canal en tiempo real.</p>
-          </a>
-
+      <!-- Administración: solo para quien tiene rol. La cabecera ya lleva su
+           propio menú; esto es el atajo desde la home. -->
+      <section class="pila pila--compacta" data-zona="administracion" hidden>
+        <h2 class="t-subtitulo">Administración</h2>
+        <div class="home__accesos">
           <a
-            class="tarjeta tarjeta-acceso"
-            href="../plataforma/salas-partidas/validacion-heroe.html"
-          >
-            <h3>Validación de héroe</h3>
-            <p>Verifica el héroe equipado antes de jugar.</p>
-          </a>
-        </div>
-      </section>
-
-      <!-- =====================================================
-       ADMINISTRACIÓN — solo según rol.
-       Si para el rol actual no queda ninguna tarjeta visible,
-       index.js oculta también esta sección completa.
-       ===================================================== -->
-
-      <section class="seccion-menu">
-        <h2 class="titulo-seccion">Administración</h2>
-
-        <div class="tarjetas-acceso">
-          <a
-            class="tarjeta tarjeta-acceso"
+            class="tarjeta tarjeta--pulsable pila pila--ajustada"
             href="./gestion-usuarios.html"
             data-roles="ADMINISTRADOR,SUPER_ADMINISTRADOR"
             hidden
           >
-            <h3>Gestión de usuarios</h3>
-            <p>Administra perfiles, roles y estado de las cuentas.</p>
+            <h3 class="tarjeta__titulo">Gestión de usuarios</h3>
+            <p class="t-meta">Perfiles, roles y estado de las cuentas.</p>
           </a>
-
           <a
-            class="tarjeta tarjeta-acceso"
+            class="tarjeta tarjeta--pulsable pila pila--ajustada"
             href="./crear-cuenta-admin.html"
             data-roles="SUPER_ADMINISTRADOR"
             hidden
           >
-            <h3>Crear cuenta administrativa</h3>
-            <p>Registra una nueva cuenta con rol administrativo.</p>
+            <h3 class="tarjeta__titulo">Crear cuenta administrativa</h3>
+            <p class="t-meta">Registra una cuenta con rol administrativo.</p>
           </a>
-
           <a
-            class="tarjeta tarjeta-acceso"
+            class="tarjeta tarjeta--pulsable pila pila--ajustada"
             href="./auditoria.html"
             data-roles="SUPER_ADMINISTRADOR"
             hidden
           >
-            <h3>Auditoría</h3>
-            <p>Revisa el registro de acciones administrativas.</p>
+            <h3 class="tarjeta__titulo">Auditoría</h3>
+            <p class="t-meta">Registro de acciones administrativas.</p>
           </a>
-
           <a
-            class="tarjeta tarjeta-acceso"
-            href="../plataforma/moderacion-sanciones/lista-negra-admin.html"
+            class="tarjeta tarjeta--pulsable pila pila--ajustada"
+            href="../plataforma/moderacion-sanciones/sanciones-admin.html"
             data-roles="MODERADOR,ADMINISTRADOR,SUPER_ADMINISTRADOR"
             hidden
           >
-            <h3>Lista negra</h3>
-            <p>Administra los términos prohibidos del sistema.</p>
+            <h3 class="tarjeta__titulo">Moderación</h3>
+            <p class="t-meta">Sanciones, apelaciones y lista negra.</p>
           </a>
         </div>
       </section>
     </main>
 
+    <!--
+      RF-CHA-001: el icono flotante del asistente va en todas las vistas.
+      Lo monta `comun/ui/asistente.js`, que ademas le da comportamiento:
+      hasta ahora el boton estaba copiado aqui y no hacia nada al pulsarlo.
+    -->
+
     <script type="module" src="./index.js"></script>
+    <script type="module">
+      import { montarAsistente } from '../comun/ui/asistente.js';
+
+      // RF-CHA-001 / HU-CHA-001 CA-03: el icono responde y dice la verdad.
+      montarAsistente(document);
+    </script>
   </body>
 </html>

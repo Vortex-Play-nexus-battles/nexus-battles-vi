@@ -1,57 +1,57 @@
 <!doctype html>
-
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-    <title>Gestión de usuarios - Nexus Battles</title>
-
+    <title>Gestion de usuarios · Nexus Battles VI</title>
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
-    <link rel="stylesheet" href="./tema-cuentas.css" />
-    <link rel="stylesheet" href="./gestion-usuarios.css" />
   </head>
 
   <body>
-    <main class="pagina">
-      <header class="encabezado">
+    <div data-cabecera-app></div>
+
+    <main class="pagina pila" data-vista="gestion-usuarios">
+      <header class="encabezado-pagina">
         <div>
-          <p class="eyebrow">NEXUS BATTLES</p>
-
-          <h1>Gestión de usuarios</h1>
-
-          <p class="descripcion">
-            Administra perfiles, estados y acciones de seguridad de las cuentas de usuario.
+          <p class="t-etiqueta">Administracion</p>
+          <h1>Gestion de usuarios</h1>
+          <p class="t-meta">
+            Perfil, rol, estado de la cuenta y restablecimiento de contrasena. Cada accion exige el
+            permiso correspondiente; las que no tienes no aparecen habilitadas.
           </p>
         </div>
-
-        <button type="button" id="btn-volver" class="btn btn-secundario">Volver</button>
+        <div class="encabezado-pagina__acciones">
+          <button type="button" id="btn-volver" class="boton boton--secundario">Volver</button>
+        </div>
       </header>
 
-      <section id="acceso-denegado" class="estado estado-denegado" hidden aria-live="polite">
-        <div class="estado-icono">Acceso restringido</div>
-
-        <h2>Acceso denegado</h2>
-
-        <p>No tienes permisos suficientes para gestionar cuentas.</p>
-
-        <button type="button" id="btn-volver-acceso" class="btn btn-secundario">Volver</button>
+      <section
+        id="acceso-denegado"
+        class="estado-vista estado-vista--vacio"
+        hidden
+        aria-live="polite"
+      >
+        <h2 class="estado-vista__titulo">Acceso restringido</h2>
+        <p class="estado-vista__detalle">No tienes permisos suficientes para gestionar cuentas.</p>
+        <button type="button" id="btn-volver-acceso" class="boton boton--secundario">Volver</button>
       </section>
 
-      <section id="gestion-contenedor" hidden>
-        <section class="tarjeta busqueda">
-          <div class="seccion-cabecera">
-            <h2>Buscar usuario</h2>
-
-            <p>Ingresa el ID del usuario que deseas gestionar.</p>
+      <div id="gestion-contenedor" class="pila" hidden>
+        <section class="tarjeta pila pila--compacta">
+          <div class="encabezado-seccion">
+            <div>
+              <h2 class="tarjeta__titulo">Buscar usuario</h2>
+              <p class="t-meta">Ingresa el identificador del usuario que deseas gestionar.</p>
+            </div>
           </div>
 
-          <form id="form-buscar-usuario" class="form-busqueda" novalidate>
+          <form id="form-buscar-usuario" class="fila fila--fin" novalidate>
             <div class="campo">
-              <label for="usuario-id"> ID del usuario </label>
-
+              <label class="campo__etiqueta" for="usuario-id">ID del usuario</label>
               <input
+                class="campo__control"
                 type="number"
                 id="usuario-id"
                 name="usuario-id"
@@ -60,79 +60,71 @@
                 placeholder="Ej. 15"
               />
             </div>
-
-            <button type="submit" id="btn-buscar" class="btn btn-principal">Buscar usuario</button>
+            <button type="submit" id="btn-buscar" class="boton boton--primario">Buscar</button>
           </form>
 
           <div
             id="mensaje-busqueda"
-            class="mensaje"
+            class="aviso aviso--advertencia"
             hidden
             role="alert"
             aria-live="assertive"
           ></div>
         </section>
 
-        <section id="panel-usuario" class="panel-usuario" hidden>
-          <section class="tarjeta resumen-usuario">
-            <div class="seccion-cabecera">
-              <h2>Usuario seleccionado</h2>
-            </div>
-
-            <div class="datos-usuario">
+        <div id="panel-usuario" class="pila" hidden>
+          <section class="tarjeta pila pila--compacta">
+            <h2 class="tarjeta__titulo">Usuario seleccionado</h2>
+            <dl class="tarjeta__datos">
               <div>
-                <span class="etiqueta">ID</span>
-                <strong id="usuario-id-mostrado">-</strong>
+                <dt>ID</dt>
+                <dd id="usuario-id-mostrado">-</dd>
               </div>
-
               <div>
-                <span class="etiqueta">Apodo</span>
-                <strong id="usuario-apodo-mostrado">-</strong>
+                <dt>Apodo</dt>
+                <dd id="usuario-apodo-mostrado">-</dd>
               </div>
-
               <div>
-                <span class="etiqueta">Correo</span>
-                <strong id="usuario-email-mostrado">-</strong>
+                <dt>Correo</dt>
+                <dd id="usuario-email-mostrado">-</dd>
               </div>
-
               <div>
-                <span class="etiqueta">Rol</span>
-                <strong id="usuario-rol-mostrado">-</strong>
+                <dt>Rol</dt>
+                <dd id="usuario-rol-mostrado">-</dd>
               </div>
-
               <div>
-                <span class="etiqueta">Estado</span>
-                <strong id="usuario-estado-mostrado">-</strong>
+                <dt>Estado</dt>
+                <dd id="usuario-estado-mostrado">-</dd>
               </div>
-            </div>
+            </dl>
           </section>
 
-          <section class="tarjeta">
-            <div class="seccion-cabecera">
-              <h2>Rol del usuario</h2>
-
-              <p>Asigna uno de los roles válidos del sistema al usuario seleccionado.</p>
+          <section class="tarjeta pila pila--compacta">
+            <div class="encabezado-seccion">
+              <div>
+                <h2 class="tarjeta__titulo">Rol del usuario</h2>
+                <p class="t-meta">Asigna uno de los roles validos del sistema.</p>
+              </div>
             </div>
 
             <div class="campo">
-              <label for="nuevo-rol"> Nuevo rol </label>
-
-              <select id="nuevo-rol" name="nuevo-rol"></select>
+              <label class="campo__etiqueta" for="nuevo-rol">Nuevo rol</label>
+              <select class="campo__control" id="nuevo-rol" name="nuevo-rol"></select>
             </div>
 
             <div
               id="mensaje-cambio-rol"
-              class="mensaje"
+              class="aviso aviso--advertencia"
               hidden
               role="alert"
               aria-live="assertive"
             ></div>
 
-            <div class="acciones">
+            <div class="tarjeta__acciones">
               <button
                 type="button"
                 id="btn-cambiar-rol"
-                class="btn btn-principal"
+                class="boton boton--primario"
                 data-has-permission="ASIGNAR_ROL"
               >
                 Cambiar rol
@@ -140,68 +132,73 @@
             </div>
           </section>
 
-          <section class="tarjeta">
-            <div class="seccion-cabecera">
-              <h2>Perfil</h2>
-
-              <p>Modifica la información básica del usuario.</p>
+          <section class="tarjeta pila pila--compacta">
+            <div class="encabezado-seccion">
+              <div>
+                <h2 class="tarjeta__titulo">Perfil</h2>
+                <p class="t-meta">Modifica la información básica del usuario.</p>
+              </div>
             </div>
 
-            <form id="formulario-perfil-admin" novalidate>
-              <div class="grid-formulario">
+            <form id="formulario-perfil-admin" class="pila pila--compacta" novalidate>
+              <div class="rejilla-formulario">
                 <div class="campo">
-                  <label for="nombres"> Nombres </label>
-
-                  <input type="text" id="nombres" name="nombres" required />
+                  <label class="campo__etiqueta" for="nombres">Nombres</label>
+                  <input class="campo__control" type="text" id="nombres" name="nombres" required />
                 </div>
 
                 <div class="campo">
-                  <label for="apellidos"> Apellidos </label>
-
-                  <input type="text" id="apellidos" name="apellidos" required />
-                </div>
-
-                <div class="campo">
-                  <label for="apodo"> Apodo </label>
-
-                  <input type="text" id="apodo" name="apodo" required />
-                </div>
-
-                <div class="campo">
-                  <label for="avatar">
-                    Avatar (opcional, deja vacío para conservar el actual)
-                  </label>
-
-                  <img id="preview-avatar-gestion" class="oculto" alt="Avatar actual del usuario" />
-
+                  <label class="campo__etiqueta" for="apellidos">Apellidos</label>
                   <input
+                    class="campo__control"
+                    type="text"
+                    id="apellidos"
+                    name="apellidos"
+                    required
+                  />
+                </div>
+
+                <div class="campo">
+                  <label class="campo__etiqueta" for="apodo">Apodo</label>
+                  <input class="campo__control" type="text" id="apodo" name="apodo" required />
+                </div>
+
+                <div class="campo">
+                  <label class="campo__etiqueta" for="avatar">Avatar</label>
+                  <input
+                    class="campo__control"
                     type="file"
                     id="avatar"
                     name="avatar"
                     accept="image/jpeg,image/png,image/webp"
                   />
+                  <p class="campo__pista">Opcional. Vacio conserva el avatar actual.</p>
                 </div>
 
-                <div class="campo campo-completo">
-                  <label for="preferencias"> Preferencias </label>
-
-                  <textarea id="preferencias" name="preferencias" rows="4"></textarea>
+                <div class="campo campo--area rejilla-formulario__ancho">
+                  <label class="campo__etiqueta" for="preferencias">Preferencias</label>
+                  <textarea
+                    class="campo__control"
+                    id="preferencias"
+                    name="preferencias"
+                    rows="4"
+                  ></textarea>
                 </div>
               </div>
 
               <div
                 id="mensaje-perfil"
-                class="mensaje"
+                class="aviso aviso--advertencia"
                 hidden
                 role="alert"
                 aria-live="assertive"
               ></div>
 
-              <div class="acciones">
+              <div class="tarjeta__acciones">
                 <button
                   type="submit"
                   id="btn-guardar-perfil"
-                  class="btn btn-principal"
+                  class="boton boton--primario"
                   data-has-permission="GESTIONAR_CUENTAS"
                 >
                   Guardar cambios
@@ -210,56 +207,59 @@
             </form>
           </section>
 
-          <section class="tarjeta">
-            <div class="seccion-cabecera">
-              <h2>Estado de la cuenta</h2>
-
-              <p>Administra el estado actual de la cuenta.</p>
+          <section class="tarjeta pila pila--compacta">
+            <div class="encabezado-seccion">
+              <div>
+                <h2 class="tarjeta__titulo">Estado de la cuenta</h2>
+                <p class="t-meta">
+                  Suspender fija una fecha de fin; banear es definitivo y no se revierte desde aqui.
+                </p>
+              </div>
             </div>
 
-            <div class="campo">
-              <label for="estado"> Estado </label>
+            <div class="rejilla-formulario">
+              <div class="campo">
+                <label class="campo__etiqueta" for="estado">Estado</label>
+                <select class="campo__control" id="estado" name="estado" disabled>
+                  <option value="ACTIVO">Activo</option>
+                  <option value="INACTIVO">Inactivo</option>
+                  <option value="SUSPENDIDO">Suspendido</option>
+                  <option value="BANEADO">Baneado</option>
+                </select>
+              </div>
 
-              <select id="estado" name="estado" disabled>
-                <option value="ACTIVO">Activo</option>
-
-                <option value="INACTIVO">Inactivo</option>
-
-                <option value="SUSPENDIDO">Suspendido</option>
-
-                <option value="BANEADO">Baneado</option>
-              </select>
+              <div class="campo">
+                <label class="campo__etiqueta" for="suspendido-hasta">Suspendido hasta</label>
+                <input
+                  class="campo__control"
+                  type="datetime-local"
+                  id="suspendido-hasta"
+                  name="suspendido-hasta"
+                />
+              </div>
             </div>
 
-            <div class="campo campo-suspension">
-              <label for="suspendido-hasta"> Suspendido hasta </label>
-
-              <input type="datetime-local" id="suspendido-hasta" name="suspendido-hasta" />
-            </div>
-
-            <div class="acciones acciones-estado">
+            <div class="tarjeta__acciones">
               <button
                 type="button"
                 id="btn-suspender"
-                class="btn btn-secundario"
+                class="boton boton--secundario"
                 data-has-permission="SUSPENDER_USUARIOS"
               >
                 Suspender
               </button>
-
               <button
                 type="button"
                 id="btn-reactivar"
-                class="btn btn-secundario"
+                class="boton boton--secundario"
                 data-has-permission="SUSPENDER_USUARIOS"
               >
                 Reactivar
               </button>
-
               <button
                 type="button"
                 id="btn-banear"
-                class="btn btn-peligro"
+                class="boton boton--peligro"
                 data-has-permission="BANEAR_DEFINITIVAMENTE"
               >
                 Banear definitivamente
@@ -267,48 +267,42 @@
             </div>
           </section>
 
-          <section class="tarjeta">
-            <div class="seccion-cabecera">
-              <h2>Seguridad</h2>
-
-              <p>
-                Puedes solicitar el restablecimiento de contraseña sin conocer ni recibir la nueva
-                contraseña del usuario.
-              </p>
+          <section class="tarjeta pila pila--compacta">
+            <div class="encabezado-seccion">
+              <div>
+                <h2 class="tarjeta__titulo">Seguridad</h2>
+                <p class="t-meta">
+                  El restablecimiento se envia al correo del usuario. Ni tu ni el sistema ven la
+                  contrasena nueva.
+                </p>
+              </div>
             </div>
 
-            <div class="acciones">
+            <div class="tarjeta__acciones">
               <button
                 type="button"
                 id="btn-restablecer-password"
-                class="btn btn-principal"
+                class="boton boton--primario"
                 data-has-permission="GESTIONAR_CUENTAS"
               >
-                Restablecer contraseña
+                Restablecer contrasena
               </button>
             </div>
           </section>
-
-          <section class="tarjeta">
-            <div class="seccion-cabecera">
-              <h2>Inventario y privacidad</h2>
-
-              <p>
-                Esta sección queda preparada para las operaciones administrativas que serán
-                conectadas posteriormente con sus endpoints correspondientes.
-              </p>
-            </div>
-
-            <div class="bloque-informativo">
-              <p>
-                Inventario, privacidad y configuraciones de seguridad adicionales requieren
-                endpoints administrativos específicos.
-              </p>
-            </div>
-          </section>
-        </section>
-      </section>
+        </div>
+      </div>
     </main>
+
+    <script type="module">
+      import { exigirSesion } from '../comun/cabecera-app.js';
+
+      // UX-R2.0 — esta vista se abria SIN sesion: cargaba entera y solo
+      // despues comprobaba permisos en cliente. El servidor protegia la API,
+      // pero la pantalla se veia. El guard va lo primero.
+      if (!exigirSesion()) {
+        throw new Error('sin sesion: redirigiendo al login');
+      }
+    </script>
 
     <script type="module" src="./gestion-usuarios.js"></script>
   </body>

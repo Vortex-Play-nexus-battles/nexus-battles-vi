@@ -118,7 +118,10 @@ class ClienteInventarioHeroesTest {
 
     private void esperarVitrina(String cuerpo) {
         servidor.expect(requestTo(VITRINA))
-                .andExpect(header("X-User-Name", "vael"))
+                // Contrato 1.1.1 (#575): el propietario es el identificador
+                // estable. Mandar el apodo dejaba la vitrina vacia y la puerta
+                // de heroe rechazaba a quien si tenia heroe equipado.
+                .andExpect(header("X-User-Name", "11111111-1111-1111-1111-111111111111"))
                 .andRespond(withSuccess(cuerpo, MediaType.APPLICATION_JSON));
     }
 

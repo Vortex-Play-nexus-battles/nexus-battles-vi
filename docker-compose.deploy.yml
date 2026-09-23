@@ -115,6 +115,9 @@ services:
       # nada queda reservado; las salas sin recompensa no pasan por aqui. El
       # dia que se despliegue, esta URL ya apunta a donde estara.
       CREDITOS_URL: ${CREDITOS_URL:-http://srv-ms-finanzas:8093/api/v1}
+      # HU-TOR-004 CA-04: la sala que es un encuentro de torneo informa el
+      # ganador a torneos al terminar, con la credencial de arriba.
+      TORNEOS_URL: ${TORNEOS_URL:-http://srv-torneos:8083/api/v1}
       # HU-JUE-015 / RF-USR-004: el chat consulta la sancion activa del autor
       # en moderacion-sanciones, que SI corre en este host. Sin esta URL el
       # valor por defecto es localhost, que dentro del contenedor es el propio
@@ -172,6 +175,9 @@ services:
       SALUD_ADMIN_PARAMETROS: http://srv-admin-parametros:8088/actuator/health
       # HU-MET-001: agregados de moderacion desde moderacion-sanciones.
       SANCIONES_URL: ${SANCIONES_URL:-http://srv-moderacion-sanciones:8086/api/v1}
+      # HU-MET-001 (#527): la observabilidad exige rol administrativo; el
+      # emisor de los tokens es ms-identidad, igual que en el resto del bloque.
+      IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://srv-ms-identidad:8089/api/v1/auth/jwks}
 
   srv-admin-parametros:
     <<: *servicio-plataforma

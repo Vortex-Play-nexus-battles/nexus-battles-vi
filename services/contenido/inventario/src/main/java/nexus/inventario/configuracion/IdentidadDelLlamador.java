@@ -5,6 +5,7 @@ import nexus.inventario.aplicacion.IdentidadRequeridaException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
@@ -22,11 +23,16 @@ import java.util.Set;
  * viaja explicito como dato de la peticion). Cuando quien llama es un jugador,
  * el propietario es <b>el del token</b> y la cabecera se ignora.
  *
- * <p>Por que el apodo y no el {@code uid}: el inventario guarda
- * {@code propietarioId} por apodo desde HU-INV-001 y asi lo consultan
- * salas-partidas (ADR-004) y la semilla del E2E. Cambiar la clave de
- * propiedad al identificador estable de ADR-002 es una migracion de datos
- * del equipo de Contenido; este cambio cierra la suplantacion sin moverla.
+ * <p>Por que el identificador estable ({@code uid}, o {@code sub} en UUID) y
+ * no el apodo: el apodo es mutable y puede reasignarse; atar la propiedad a
+ * el deja inventarios huerfanos cuando alguien se renombra y hereda objetos
+ * ajenos cuando otro toma un apodo liberado. Es la misma clave que exige
+ * HU-INV-010 ({@code propietarioUid}) y la que ya usan salas-partidas y
+ * subastas para recordar a la gente. Decision del equipo de Contenido,
+ * 21-sep-2026 (ver decisiones.md): los inventarios guardados por apodo se
+ * atienden con la respuesta 409 "pendiente de migracion" de HU-INV-010.
+ * Un servicio con credencial debe poner en {@code X-User-Name} ese mismo
+ * identificador estable del jugador afectado.
  */
 @Component
 public class IdentidadDelLlamador {
@@ -43,11 +49,13 @@ public class IdentidadDelLlamador {
      *
      * @param autenticacion la que dejo la cadena de seguridad
      * @param cabecera      valor de {@code X-User-Name}, o nulo
-     * @return el apodo del jugador
-     * @throws ResponseStatusException 401 sin autenticacion; 400 si un
-     *                                 servicio no dice a que jugador afecta;
-     *                                 403 si el token no es de usuario ni de
-     *                                 servicio
+     * @return el identificador estable del jugador (UUID en texto)
+     * @throws ResponseStatusException 400 si un servicio no dice a que
+     *                                 jugador afecta; 403 si el token no es
+     *                                 de usuario ni de servicio, o si es de
+     *                                 usuario y no trae un identificador
+     *                                 estable
+     * @throws IdentidadRequeridaException sin autenticacion (401)
      */
     public String propietario(Authentication autenticacion, String cabecera) {
         if (!(autenticacion instanceof JwtAuthenticationToken jwt)) {
@@ -56,7 +64,7 @@ public class IdentidadDelLlamador {
             throw new IdentidadRequeridaException();
         }
         if (esUsuario(jwt)) {
-            return IdentidadDelToken.apodoDe(jwt.getToken());
+            return identificadorEstableDe(jwt.getToken());
         }
         if (esServicio(jwt)) {
             if (cabecera == null || cabecera.isBlank()) {
@@ -69,6 +77,15 @@ public class IdentidadDelLlamador {
     }
 
     /** Si quien llama es un servicio (ADR-005) y no un jugador. */
+    private static String identificadorEstableDe(Jwt token) {
+        try {
+            return IdentidadDelToken.idDe(token).toString();
+        } catch (IllegalArgumentException sinIdentificador) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "El token del jugador no trae un identificador estable (uid, o sub en UUID).");
+        }
+    }
+
     public boolean esServicio(Authentication autenticacion) {
         return autenticacion != null && autenticacion.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)

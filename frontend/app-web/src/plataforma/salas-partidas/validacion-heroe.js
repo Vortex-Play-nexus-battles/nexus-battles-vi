@@ -23,6 +23,8 @@ import {
   esSeccionDegradada,
   pintarSeccionDegradada,
 } from '../../comun/degradacion/aviso-degradacion.js';
+import { vaciar } from '../../comun/ui/dom.js';
+import { retratoDeHeroe } from '../../comun/ui/juego/heroe.js';
 
 /** Resultados del esquema `VerificacionHeroe` del contrato OpenAPI. */
 export const RESULTADOS = {
@@ -138,14 +140,30 @@ export function pintarValidacion(raiz, verificacion, acciones = {}) {
   // 1 · Titulo del dialogo. Fijo en las tres variantes.
   raiz.append(tituloDelDialogo(doc));
 
-  // 2 · Retrato mas mensaje, en fila. El retrato es decorativo: lo que
-  //     comunica es el texto, no el circulo.
+  // 2 · Retrato mas mensaje, en fila. Lo que comunica sigue siendo el texto;
+  //     el retrato acompana.
   const fila = doc.createElement('div');
   fila.className = 'dialogo__encabezado';
 
-  const retrato = doc.createElement('span');
-  retrato.className = 'dialogo__icono dialogo__icono--grande';
-  retrato.setAttribute('aria-hidden', 'true');
+  // UX-R2.2 — este retrato era un <span> vacio con `aria-hidden`: un circulo
+  // gris. El contrato trae `retratoUrl` y `nivel` en `HeroeEnPartida` desde que
+  // se escribio y nadie los pintaba, asi que el jugador veia el mismo circulo
+  // para cualquier heroe. Cuando hay heroe se usa el marco del kit; cuando no
+  // lo hay (SIN_HEROE_EQUIPADO) se queda el circulo decorativo de antes.
+  const retrato = verificacion.heroe
+    ? retratoDeHeroe(
+        {
+          nombre: verificacion.heroe.nombre,
+          nivel: verificacion.heroe.nivel ?? undefined,
+          imagen: verificacion.heroe.retratoUrl ?? undefined,
+        },
+        { conNombre: false },
+      )
+    : doc.createElement('span');
+  if (!verificacion.heroe) {
+    retrato.className = 'dialogo__icono dialogo__icono--grande';
+    retrato.setAttribute('aria-hidden', 'true');
+  }
 
   const mensaje = doc.createElement('div');
   mensaje.className = 'pila pila--ajustada';
@@ -313,7 +331,7 @@ function prepararDialogo(raiz, resultado) {
   raiz.setAttribute('aria-modal', 'true');
   raiz.setAttribute('aria-labelledby', ID_TITULO);
   raiz.dataset.resultado = resultado;
-  raiz.innerHTML = '';
+  vaciar(raiz);
 }
 
 /**

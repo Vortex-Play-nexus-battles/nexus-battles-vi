@@ -52,11 +52,16 @@
   color: var(--texto-2);
 }
 
+/* UX-R2.9 — la etiqueta ES el objetivo tactil: `<label>` reenvia el clic al
+   `input`, asi que lo que hay que poder pulsar es ella, no la casilla de 13
+   px. Con `padding: 3px` medía 25 px de alto y las veinticinco opciones del
+   panel salian en el laboratorio visual. Ahora llega al minimo de 44. */
 .subastas-filtros__opcion {
   display: flex;
   align-items: center;
   gap: var(--e-2);
-  padding: 3px 0;
+  min-height: var(--objetivo-tactil);
+  padding: var(--e-1) 0;
   font-size: var(--t-cuerpo-tam);
   color: var(--texto);
   cursor: pointer;

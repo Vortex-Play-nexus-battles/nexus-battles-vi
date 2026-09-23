@@ -90,7 +90,8 @@ public class TorneosController {
     public TorneoResponse resultado(@AuthenticationPrincipal Jwt actor, @PathVariable UUID torneoId,
                                     @PathVariable int numero, @RequestBody ResultadoRequest request) {
         return TorneoResponse.desde(servicio.registrarResultado(actorDe(actor), torneoId, numero,
-                new TorneosService.SolicitudDeResultado(request.ganadorEquipoId(), request.partidaId(), request.motivo())));
+                new TorneosService.SolicitudDeResultado(request.ganadorEquipoId(), request.ganadorUid(),
+                        request.partidaId(), request.motivo())));
     }
 
     // ---- formas del contrato ----------------------------------------------
@@ -103,7 +104,7 @@ public class TorneosController {
 
     public record CompaneroRequest(UUID companeroUid) { }
 
-    public record ResultadoRequest(UUID ganadorEquipoId, UUID partidaId, String motivo) { }
+    public record ResultadoRequest(UUID ganadorEquipoId, UUID ganadorUid, UUID partidaId, String motivo) { }
 
     public record TorneoResumenResponse(UUID id, String nombre, Torneo.Estado estado, OffsetDateTime creadoEn,
                                         OffsetDateTime inscripcionesCierranEn, int costoInscripcion,

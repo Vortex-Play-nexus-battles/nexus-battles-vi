@@ -23,68 +23,32 @@
  */
 
 import { actualizar } from '../../../../../shared/ui-kit/js/barra-vida.js';
+import { acusarCambioDeVida } from '../../comun/ui/acuse.js';
+import { barraDeVida } from '../../comun/ui/juego/combate.js';
 
 /** Tipo del mensaje del contrato AsyncAPI que mueve las barras. */
 const ACCION_RESUELTA = 'partida.accion.resuelta';
 
 /**
- * Construye el marcado de una barra, con la estructura que documenta el
- * componente compartido.
+ * Traduce un `Participante` del contrato al componente del kit.
+ *
+ * Hasta UX-R2.2 esta funcion construia los cinco nodos a mano, con
+ * `document.createElement`, y era la unica copia de una estructura que el CSS
+ * del kit ya definia. Ahora la estructura vive en un solo sitio
+ * (`comun/ui/juego/combate.js`) y una prueba comprueba que coincide con los
+ * selectores que consulta `shared/ui-kit/js/barra-vida.js`.
  *
  * @param {object} participante  esquema `Participante` del contrato
  * @returns {HTMLElement}
  */
 function crearBarra(participante) {
   const { jugador, heroe, esIA, equipo } = participante;
-
-  const barra = document.createElement('div');
-  barra.className = 'barra-vida';
-  barra.dataset.barraVida = '';
-  barra.dataset.jugador = jugador.id;
-
-  // Se marca a la IA porque el requisito permite que cualquier participante
-  // de una partida de seis este controlado por la maquina, y quien mira la
-  // pantalla necesita distinguirlo de una persona.
-  if (esIA) {
-    barra.dataset.ia = 'true';
-  }
-  // Y el equipo, en el modo cooperativo (HU-SAL-004): sin el, no se sabe a
-  // quien se puede atacar ni con quien se gana.
-  if (Number.isInteger(equipo) && equipo > 0) {
-    barra.dataset.equipo = String(equipo);
-  }
-
-  const nombre = document.createElement('span');
-  nombre.className = 'barra-vida__nombre';
-  nombre.textContent = heroe.nombre;
-
-  const pista = document.createElement('div');
-  pista.className = 'barra-vida__pista';
-  const relleno = document.createElement('div');
-  relleno.className = 'barra-vida__relleno';
-  pista.appendChild(relleno);
-
-  const valor = document.createElement('span');
-  valor.className = 'barra-vida__valor';
-
-  barra.append(nombre);
-  // Quien es la maquina y de que equipo: al lado del nombre, sin ensuciarlo.
-  const etiquetas = [];
-  if (esIA) {
-    etiquetas.push('IA');
-  }
-  if (Number.isInteger(equipo) && equipo > 0) {
-    etiquetas.push(`Equipo ${equipo}`);
-  }
-  if (etiquetas.length > 0) {
-    const etiqueta = document.createElement('span');
-    etiqueta.className = 'barra-vida__etiqueta t-meta';
-    etiqueta.dataset.etiqueta = '';
-    etiqueta.textContent = etiquetas.join(' · ');
-    barra.append(etiqueta);
-  }
-  barra.append(pista, valor);
-  return barra;
+  return barraDeVida({
+    nombre: heroe.nombre,
+    idJugador: jugador.id,
+    esIA,
+    equipo,
+  });
 }
 
 /**
@@ -145,7 +109,24 @@ export function aplicarAccionResuelta(contenedor, evento) {
       continue;
     } // espectador, o participante ya retirado de la vista
 
+    // UX-R2.10 — la vida ANTES, para poder decir cuánto cambió.
+    //
+    // La barra ya se movía y ya se anunciaba el valor nuevo, pero el jugador
+    // no veía **el golpe**: en una sala de seis, una barra que baja un poco
+    // entre otras cinco pasa desapercibida. `acusarCambioDeVida` marca cuál
+    // fue y con cuánto, y lo deja escrito — la cifra es texto con
+    // `aria-live`, así que con `prefers-reduced-motion` puesto se pierde el
+    // movimiento pero no el dato.
+    //
+    // Se lee de `aria-valuenow`, que es lo que `actualizar()` deja puesto:
+    // no hace falta llevar un estado paralelo que pueda desincronizarse.
+    const antes = Number(barra.getAttribute('aria-valuenow'));
+
     actualizar(barra, afectado.vidaActual, afectado.vidaMaxima);
+
+    if (Number.isFinite(antes)) {
+      acusarCambioDeVida(barra, antes, afectado.vidaActual);
+    }
   }
 }
 

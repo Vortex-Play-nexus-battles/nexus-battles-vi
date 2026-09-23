@@ -50,6 +50,32 @@ export class ErrorDeMetricas extends Error {
   }
 
   /**
+   * HU-MET-001 (#527): la observabilidad del bloque es de administracion. Un
+   * 401 (sesion caducada) o un 403 (rol insuficiente) no son un fallo del
+   * servicio y no se pintan como tal: no hay nada que reintentar.
+   *
+   * @returns {boolean}
+   */
+  esFaltaDePermiso() {
+    return this.estado === 401 || this.estado === 403;
+  }
+
+  /** Titulo y detalle en lenguaje de persona para ese caso. */
+  get avisoDePermiso() {
+    return this.estado === 401
+      ? {
+          titulo: 'Tu sesión ya no es válida',
+          detalle: 'Vuelve a entrar para consultar la observabilidad de la plataforma.',
+        }
+      : {
+          titulo: 'Esta seccion es de administracion',
+          detalle:
+            'El estado tecnico de la plataforma y los agregados de moderacion solo los ve ' +
+            'un administrador. Si crees que deberias verlos, pidelo al equipo.',
+        };
+  }
+
+  /**
    * True cuando el informe no sale porque falta una decision del Product
    * Owner, no porque algo este roto.
    *

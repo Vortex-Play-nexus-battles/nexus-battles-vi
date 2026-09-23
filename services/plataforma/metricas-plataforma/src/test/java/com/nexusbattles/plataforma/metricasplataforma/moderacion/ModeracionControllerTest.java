@@ -1,5 +1,6 @@
 package com.nexusbattles.plataforma.metricasplataforma.moderacion;
 
+import com.nexusbattles.plataforma.metricasplataforma.seguridad.SeguridadAbiertaDePrueba;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -25,7 +26,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /** HU-MET-001: agregados de la fuente, umbral solo si esta configurado, pendientes por su nombre. */
 @WebMvcTest(controllers = ModeracionController.class)
-@Import(ModeracionControllerTest.Dobles.class)
+// Rebanada con una cadena ABIERTA a proposito: lo que se prueba aqui es el
+// comportamiento del endpoint. Que la observabilidad exija rol administrativo
+// (HU-MET-001, #527) lo afirma SeguridadDeObservabilidadTest con la cadena real.
+@Import({ModeracionControllerTest.Dobles.class, SeguridadAbiertaDePrueba.class})
 @TestPropertySource(properties = "metricas.moderacion.umbral-sanciones-por-dia=3")
 class ModeracionControllerTest {
 

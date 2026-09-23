@@ -1,11 +1,21 @@
 openapi: 3.1.0
 info:
   title: Servicio de héroes
-  version: 1.0.0
+  version: 1.1.0
   description: >
     Catálogo de prototipos de héroe de THE NEXUS BATTLES VI (HU-HER-001, HU-HER-002).
     Contrato publicado antes de consumir, conforme a la regla de plataforma
-    "contrato primero". Los datos provienen de las Tablas 5, 6 y 7 del documento
+    "contrato primero".
+
+    **1.1.0 (R8.1) — el servicio dejó de ser anónimo.** Hasta esta versión el
+    módulo no tenía Spring Security en el classpath y las siete operaciones
+    respondían sin credencial, con el borde publicándolas a Internet. El
+    catálogo (los tres `GET` de héroes y las dos tablas de progresión) sigue
+    siendo **público**: son datos del producto, iguales para todo el mundo, y
+    los leen sin token motor-combate, inventario y salas-partidas. Lo que se
+    cierra es lo que decide algo: `decision` (la jugada de la máquina) y
+    `experiencia` (la subida de nivel) pasan a ser exclusivas de servicio, y
+    las dos validaciones exigen un usuario autenticado. Los datos provienen de las Tablas 5, 6 y 7 del documento
     del cliente. El catálogo no fija la cantidad de prototipos.
 paths:
   /api/v1/heroes:
@@ -101,6 +111,7 @@ paths:
         del servicio (criterio 3 de la historia; RC-09, pendiente V-09): por defecto los
         sanadores solo participan en combate por equipos.
       operationId: validarComposicionDeEquipo
+      security: [{ tokenDePortador: [] }]
       requestBody:
         required: true
         content:
@@ -138,6 +149,7 @@ paths:
         misiones (RNF-16, ERS CU-61). Un rechazo responde 200 con el motivo y las habilidades
         válidas (ERS CU-61 E1), no un error de la petición.
       operationId: validarEstrategiaDeCombate
+      security: [{ tokenDePortador: [] }]
       requestBody:
         required: true
         content:
@@ -177,6 +189,7 @@ paths:
         no tiene umbral definido por el cliente (pendiente P-E): el héroe debe tener vida.
         Una estrategia inválida aquí es un error de la petición: debió validarse antes.
       operationId: decidirAccionDelTurno
+      security: [{ tokenDeServicio: [] }]
       requestBody:
         required: true
         content:
@@ -224,6 +237,7 @@ paths:
         Sin estado y sin prototipo: la regla no depende del héroe. El sobrante se conserva,
         los niveles se encadenan y el 8 es tope. Quien persiste el resultado es el inventario.
       operationId: progresar
+      security: [{ tokenDeServicio: [] }]
       requestBody:
         required: true
         content:
@@ -271,6 +285,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/DetalleDeProblema"
 components:
+  # R8.1 — el emisor es ms-identidad (ADR-002 / ADR-005), no Keycloak todavía.
+  # Los dos esquemas son el MISMO token Bearer; se declaran por separado porque
+  # lo que distinguen es el `rol` que lleva dentro, y eso es justo lo que separa
+  # una operación de jugador de una de servidor.
+  securitySchemes:
+    tokenDePortador:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Token de un usuario autenticado. `sub` es el apodo y `uid` el
+        identificador estable (ADR-002). Roles aceptados: JUGADOR, MODERADOR,
+        ADMINISTRADOR, SUPER_ADMINISTRADOR o SERVICIO.
+    tokenDeServicio:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Credencial de servicio por `client_credentials` (ADR-005), con
+        `rol=SERVICIO` y el `client_id` en `azp`. Ningún token de usuario sirve
+        aquí, por alto que sea su rol.
   schemas:
     VistaPorNivel:
       type: object

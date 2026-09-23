@@ -1,5 +1,6 @@
 package com.nexusbattles.plataforma.metricasplataforma.latencia;
 
+import com.nexusbattles.plataforma.metricasplataforma.seguridad.SeguridadAbiertaDePrueba;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -30,7 +31,10 @@ import com.nexusbattles.plataforma.observabilidad.RegistroDeLatencia;
  * compartida, no el que un mock diga que calcula.
  */
 @WebMvcTest(controllers = LatenciaController.class)
-@Import(LatenciaControllerTest.Dobles.class)
+// Rebanada con una cadena ABIERTA a proposito: lo que se prueba aqui es el
+// comportamiento del endpoint. Que la observabilidad exija rol administrativo
+// (HU-MET-001, #527) lo afirma SeguridadDeObservabilidadTest con la cadena real.
+@Import({LatenciaControllerTest.Dobles.class, SeguridadAbiertaDePrueba.class})
 class LatenciaControllerTest {
 
     private static final Instant AHORA = Instant.parse("2026-09-10T10:00:00Z");

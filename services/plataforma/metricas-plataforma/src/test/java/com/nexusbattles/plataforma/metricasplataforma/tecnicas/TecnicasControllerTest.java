@@ -1,5 +1,6 @@
 package com.nexusbattles.plataforma.metricasplataforma.tecnicas;
 
+import com.nexusbattles.plataforma.metricasplataforma.seguridad.SeguridadAbiertaDePrueba;
 import com.nexusbattles.plataforma.metricasplataforma.disponibilidad.Comprobacion;
 import com.nexusbattles.plataforma.metricasplataforma.disponibilidad.ConfiguracionDeDisponibilidad;
 import com.nexusbattles.plataforma.metricasplataforma.disponibilidad.InformeDeDisponibilidad;
@@ -31,7 +32,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /** HU-MET-004: el tablero recorre los servicios configurados y publica alertas y brechas. */
 @WebMvcTest(controllers = TecnicasController.class)
-@Import(TecnicasControllerTest.Dobles.class)
+// Rebanada con una cadena ABIERTA a proposito: lo que se prueba aqui es el
+// comportamiento del endpoint. Que la observabilidad exija rol administrativo
+// (HU-MET-001, #527) lo afirma SeguridadDeObservabilidadTest con la cadena real.
+@Import({TecnicasControllerTest.Dobles.class, SeguridadAbiertaDePrueba.class})
 class TecnicasControllerTest {
 
     private static final Instant AHORA = Instant.parse("2026-10-01T10:00:00Z");

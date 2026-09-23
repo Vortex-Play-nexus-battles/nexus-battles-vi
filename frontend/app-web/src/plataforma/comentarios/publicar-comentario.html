@@ -194,7 +194,7 @@
       -->
       <section class="pila pila--compacta" data-zona="hilo" hidden>
         <h2>Hilo del producto</h2>
-        <p class="t-meta" data-zona="promedio" aria-live="polite">Sin calificaciones todavia.</p>
+        <p class="t-meta" data-zona="promedio" aria-live="polite">Sin calificaciones todavía.</p>
         <p class="t-meta" data-zona="hilo-cargando" hidden>Cargando el hilo…</p>
         <p class="t-meta" data-zona="hilo-vacio">
           Todavia nadie ha comentado este producto. Se el primero.
@@ -203,10 +203,14 @@
       </section>
     </main>
 
-    <!-- RNF-DIS-002: el chatbot esta en todas las vistas, sin excepcion. -->
-    <button class="chatbot-flotante" type="button" aria-label="Abrir el asistente">IA</button>
+    <!--
+      RF-CHA-001: el icono flotante del asistente va en todas las vistas.
+      Lo monta `comun/ui/asistente.js`, que ademas le da comportamiento:
+      hasta ahora el boton estaba copiado aqui y no hacia nada al pulsarlo.
+    -->
 
     <script type="module">
+      import { montarAsistente } from '../../comun/ui/asistente.js';
       import { montarPublicarComentario, leerSesion } from './publicar-comentario.js';
       import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
 
@@ -229,6 +233,9 @@
         hilo.hidden = false;
         montarPublicarComentario(formulario, { productoId, sesion, hilo });
       }
+
+      // RF-CHA-001 / HU-CHA-001 CA-03: el icono responde y dice la verdad.
+      montarAsistente(document);
     </script>
   </body>
 </html>

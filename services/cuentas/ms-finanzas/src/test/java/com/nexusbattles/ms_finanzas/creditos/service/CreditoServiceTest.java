@@ -154,4 +154,62 @@ class CreditoServiceTest {
         assertEquals(new BigDecimal("110.00"), cuenta.getSaldoBruto());
         verify(reservaRepository, times(1)).save(any(ReservaCredito.class));
     }
+
+    // ------------------------------------------------------------------
+    // Historial de movimientos (#569)
+    // ------------------------------------------------------------------
+
+    /**
+     * El signo lo decide el servicio una sola vez, y no la vista: es la regla
+     * que hace que «apuesta liberada» no se pinte como un gasto.
+     */
+    @Test
+    void elSignoDeCadaMovimientoSaleDelTipoYDelEstado() {
+        assertEquals("SUMA", signoDe(ReservaCredito.TipoOperacion.CREDITO,
+                ReservaCredito.EstadoReserva.CONSUMIDA));
+        assertEquals("RESTA", signoDe(ReservaCredito.TipoOperacion.DEBITO,
+                ReservaCredito.EstadoReserva.CONSUMIDA));
+        assertEquals("RESTA", signoDe(ReservaCredito.TipoOperacion.RESERVA,
+                ReservaCredito.EstadoReserva.CONSUMIDA));
+        assertEquals("APARTA", signoDe(ReservaCredito.TipoOperacion.RESERVA,
+                ReservaCredito.EstadoReserva.ACTIVA));
+        // Una apuesta devuelta no movio el saldo: pintarla como gasto seria mentir.
+        assertEquals("NEUTRO", signoDe(ReservaCredito.TipoOperacion.RESERVA,
+                ReservaCredito.EstadoReserva.LIBERADA));
+    }
+
+    @Test
+    void elHistorialDevuelveLoQueGuardaLaTablaDeOperaciones() {
+        ReservaCredito operacion = ReservaCredito.builder()
+                .jugadorUid("ana")
+                .monto(new BigDecimal("60"))
+                .concepto("apuesta-sala")
+                .referenciaId("sala-1")
+                .estado(ReservaCredito.EstadoReserva.LIBERADA)
+                .tipoOperacion(ReservaCredito.TipoOperacion.RESERVA)
+                .build();
+        org.springframework.data.domain.Pageable pagina =
+                org.springframework.data.domain.PageRequest.of(0, 20);
+        when(reservaRepository.findByJugadorUidOrderByCreadoDesc("ana", pagina))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(java.util.List.of(operacion)));
+
+        var resultado = creditoService.movimientos("ana", pagina);
+
+        assertEquals(1, resultado.getTotalElements());
+        MovimientoResponse linea = resultado.getContent().get(0);
+        assertEquals("apuesta-sala", linea.concepto());
+        assertEquals("sala-1", linea.referenciaId());
+        assertEquals("RESERVA", linea.tipo());
+        assertEquals("LIBERADA", linea.estado());
+        assertEquals("NEUTRO", linea.signo());
+    }
+
+    private static String signoDe(ReservaCredito.TipoOperacion tipo, ReservaCredito.EstadoReserva estado) {
+        return CreditoService.comoMovimiento(ReservaCredito.builder()
+                .jugadorUid("ana")
+                .monto(BigDecimal.ONE)
+                .tipoOperacion(tipo)
+                .estado(estado)
+                .build()).signo();
+    }
 }

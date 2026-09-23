@@ -1,3 +1,17 @@
+/* Los tokens del sistema de diseno YA NO se copian aqui.
+ *
+ * Este bloque replicaba la paleta entera «porque estas vistas todavia no
+ * enlazan el ui-kit». Eso dejo de ser cierto: `inventario.html` carga
+ * `tokens.css` desde hace varias entregas. La copia pasaba de ser un
+ * respaldo a ser una sombra: `tokens.css` redefine 18 variables dentro de
+ * `@media (prefers-contrast: more)` sobre `:root`, y una copia en
+ * `.vitrina-pagina` —que es descendiente— ganaba siempre. Resultado: quien
+ * activa «aumentar contraste» en su sistema lo recibia en casi toda la
+ * aplicacion y NO aqui.
+ *
+ * Quedan solo las variables propias de esta rejilla.
+ */
+
 /*
  * SCRUM-319 - Cuadricula de 16 productos a la resolucion de referencia.
  *
@@ -18,30 +32,9 @@
   --vitrina-margen: 20px;
 
   /* Paleta del sistema de diseno (Figma iMcw1JhmSAD6XjzDZuYlIz). */
-  --fondo: #d7deed;
-  --superficie: #ffffff;
-  --cromo: #1c2340;
-  --texto: #111726;
-  --texto-2: #48536a;
-  --texto-3: #57627a;
-  --borde: #9fabc9;
-  --borde-int: #6f7994;
-  --primaria: #2244bf;
-  --primaria-relleno: #1e3fb8;
-  --acento-relleno: #5b27b4;
-  --texto-sobre-color: #ffffff;
-  --exito: #0b6b31;
-  --advertencia: #8a4a00;
-  --error: #b81a1a;
-  --info: #095e8c;
-  --radio: 8px;
   /* HU-INV-013: sombra de capa elevada del sistema de diseno (--sombra-2 de
      shared/ui-kit/css/tokens.css). Se replica aqui por la misma razon que
      el resto de la paleta: estas vistas todavia no enlazan el ui-kit. */
-  --sombra-2: 0 4px 12px rgba(17, 23, 38, 0.12);
-  --transicion: 150ms cubic-bezier(0.4, 0, 0.2, 1);
-  --tipografia-titulo: 'Rajdhani', system-ui, 'Segoe UI', sans-serif;
-  --tipografia-texto: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
 
   box-sizing: border-box;
   min-height: 100vh;
@@ -49,7 +42,7 @@
   padding: var(--vitrina-margen);
   background: var(--fondo);
   color: var(--texto);
-  font-family: var(--tipografia-texto);
+  font-family: var(--fuente-texto);
 }
 
 .vitrina-pagina *,
@@ -60,7 +53,7 @@
 
 .vitrina-titulo {
   margin: 0;
-  font-family: var(--tipografia-titulo);
+  font-family: var(--fuente-titulo);
   font-size: 1.25rem;
   font-weight: 600;
   letter-spacing: 0.01em;
@@ -85,7 +78,9 @@
 .inventario-equipo__cerrar,
 .inventario-equipo__equipar,
 .inventario-equipo__desequipar {
-  min-height: 36px;
+  /* UX-R2.9 — 36 px estaban ocho por debajo del minimo tactil (WCAG 2.5.5).
+     Son once botones de esta vista. */
+  min-height: var(--objetivo-tactil);
   padding: 7px 12px;
   border: 1px solid var(--borde);
   border-radius: 6px;
@@ -146,11 +141,15 @@
   border: 0;
 }
 
+/* UX-R2.9 — 40 px era lo que traia la maqueta; el minimo tactil son 44
+   (WCAG 2.5.5). Se cambia la ALTURA MINIMA, nada mas: el relleno lateral y
+   el tamano de letra siguen igual, asi que el control se ve como se veia y
+   ademas se puede pulsar. */
 .inventario-busqueda__control {
   width: 100%;
-  min-height: 40px;
+  min-height: var(--objetivo-tactil);
   padding: 8px 12px;
-  border: 1px solid var(--borde-interactivo);
+  border: 1px solid var(--borde-int);
   border-radius: 6px;
   color: var(--texto);
   background: var(--superficie);
@@ -159,7 +158,8 @@
 
 .inventario-busqueda__buscar,
 .inventario-busqueda__limpiar {
-  min-height: 40px;
+  /* UX-R2.9 — 40 px no llega al minimo tactil de 44 (WCAG 2.5.5). */
+  min-height: var(--objetivo-tactil);
 }
 
 .inventario-busqueda__buscar {
@@ -190,7 +190,7 @@
 
 .inventario-editor__titulo {
   margin: 0 0 12px;
-  font-family: var(--tipografia-titulo);
+  font-family: var(--fuente-titulo);
   font-size: 1rem;
 }
 
@@ -256,7 +256,7 @@
 }
 
 .inventario-equipo__titulo {
-  font-family: var(--tipografia-titulo);
+  font-family: var(--fuente-titulo);
   font-size: 1rem;
 }
 
@@ -341,7 +341,7 @@
  */
 .vitrina__producto:hover,
 .vitrina__producto:focus-within {
-  border-color: var(--borde-interactivo);
+  border-color: var(--borde-int);
   box-shadow: var(--sombra-2);
 }
 
@@ -390,7 +390,7 @@
 
 .vitrina__tipo {
   margin: 0;
-  font-family: var(--tipografia-titulo);
+  font-family: var(--fuente-titulo);
   font-size: 0.75rem;
   font-weight: 500;
   letter-spacing: 0.06em;
@@ -507,7 +507,7 @@
 
 .estado__mensaje {
   margin: 0;
-  font-family: var(--tipografia-titulo);
+  font-family: var(--fuente-titulo);
   font-size: 1.05rem;
   font-weight: 600;
 }
@@ -528,4 +528,61 @@
 .estado-error {
   border-style: solid;
   border-color: var(--error);
+}
+
+/*
+ * El margen es ajustado a proposito: el criterio 1 de HU-INV-001 exige que
+ * los dieciseis productos se vean completos a 1360 x 768, y el control de
+ * paginacion comparte ese alto. Hay una prueba de aceptacion que falla si el
+ * conjunto vuelve a desbordar. Venia de `comun/paginacion.css`, que se retira
+ * por duplicar el componente del kit; esto es lo unico que era de la vista.
+ */
+.inventario__paginacion {
+  margin-top: 8px;
+}
+
+/* =======================================================================
+   Retrato de la tarjeta — UX-R2.5 (HU-INV-001)
+   -----------------------------------------------------------------------
+   El marco lo dibuja `.marco-heroe` del kit; aqui solo va lo que es propio
+   de esta rejilla: que el retrato sea mas pequeno que en el campo de
+   combate, porque caben dieciseis en 1360x768.
+   ======================================================================= */
+
+.vitrina__marco {
+  width: auto;
+}
+
+.vitrina__marco .marco-heroe__retrato {
+  width: 72px;
+  height: 72px;
+}
+
+.vitrina__marco .marco-heroe__imagen {
+  width: 60px;
+  height: 60px;
+}
+
+.vitrina__icono {
+  width: 32px;
+  height: 32px;
+  color: var(--texto-2);
+}
+
+/* Lo que no esta disponible (bloqueado por una subasta, HU-INV-010) se
+   atenua tambien en el retrato: ya lo dice el texto, esto lo acompana. */
+.vitrina__producto--no-disponible .vitrina__marco {
+  opacity: 0.55;
+  filter: grayscale(1);
+}
+
+/* El panel de equipamiento pasa a ser los tres grupos de ranuras, que se
+   reparten segun quepan en vez de en tres columnas fijas. */
+.inventario-equipo__lista {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }

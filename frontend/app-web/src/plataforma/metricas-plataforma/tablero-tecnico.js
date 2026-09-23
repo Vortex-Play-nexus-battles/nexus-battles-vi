@@ -10,6 +10,7 @@
 
 import { baseDeApi, ErrorDeMetricas } from './cliente-metricas.js';
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
+import { nodo } from '../../comun/ui/dom.js';
 
 async function pedir(
   ruta,
@@ -94,17 +95,6 @@ export function resumenDeModeracion(tablero) {
 
 /* ---- DOM ---- */
 
-function nodo(etiqueta, clase, texto) {
-  const el = document.createElement(etiqueta);
-  if (clase) {
-    el.className = clase;
-  }
-  if (texto !== undefined) {
-    el.textContent = texto;
-  }
-  return el;
-}
-
 function celda(texto, enAlerta = false) {
   const td = nodo('td', enAlerta ? 'celda--alerta' : undefined, texto);
   if (enAlerta) {
@@ -167,19 +157,22 @@ function listaDeAlertas(alertas, vacio) {
 
 function pintarError(zona, error) {
   const deNegocio = error instanceof ErrorDeMetricas;
-  zona.replaceChildren(nodo('div', 'aviso aviso--error'));
-  zona.firstChild.append(
-    nodo(
-      'strong',
-      'aviso__titulo',
-      deNegocio ? error.titulo : 'No pudimos contactar con el servicio de metricas',
-    ),
-    nodo(
-      'p',
-      'aviso__detalle',
-      deNegocio ? error.message : 'Revisa tu conexion e intentalo de nuevo.',
-    ),
-  );
+  // #527: sin rol administrativo no hay nada roto ni nada que reintentar; se
+  // dice quien puede ver esto, no el codigo HTTP.
+  const sinPermiso = deNegocio && error.esFaltaDePermiso();
+  const aviso = nodo('div', sinPermiso ? 'aviso aviso--info' : 'aviso aviso--error');
+  aviso.dataset.motivo = sinPermiso ? 'sin-permiso' : 'error';
+  zona.replaceChildren(aviso);
+
+  let titulo = 'No pudimos contactar con el servicio de metricas';
+  let detalle = 'Revisa tu conexion e intentalo de nuevo.';
+  if (sinPermiso) {
+    ({ titulo, detalle } = error.avisoDePermiso);
+  } else if (deNegocio) {
+    titulo = error.titulo;
+    detalle = error.message;
+  }
+  aviso.append(nodo('strong', 'aviso__titulo', titulo), nodo('p', 'aviso__detalle', detalle));
 }
 
 /**

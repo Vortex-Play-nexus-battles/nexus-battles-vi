@@ -132,7 +132,7 @@ test('sin token no se conecta y se pide iniciar sesion', async () => {
   expect(cliente).toBeNull();
   expect(conectar).not.toHaveBeenCalled();
   expect(contenedor.querySelector('[type="submit"]').disabled).toBe(true);
-  expect(contenedor.querySelector('[data-zona="aviso"]').textContent).toContain('Inicia sesion');
+  expect(contenedor.querySelector('[data-zona="aviso"]').textContent).toContain('Inicia sesión');
 });
 
 test('si el servidor rechaza la conexion, la vista lo dice y bloquea el envio', async () => {

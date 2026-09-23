@@ -22,13 +22,16 @@ const el = {
   btnVolver: document.getElementById('btn-volver'),
 };
 
-const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun',
-               'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
 function formatearFecha(iso) {
-  if (!iso) { return '—'; }
+  if (!iso) {
+    return '—';
+  }
   const f = new Date(iso);
-  if (Number.isNaN(f.getTime())) { return iso; }
+  if (Number.isNaN(f.getTime())) {
+    return iso;
+  }
   const dia = f.getDate();
   const mes = MESES[f.getMonth()];
   const horas = String(f.getHours()).padStart(2, '0');
@@ -40,7 +43,9 @@ function mostrarEstado(texto, tipo) {
   el.estado.hidden = false;
   el.estado.textContent = texto;
   el.estado.classList.remove('carga', 'error', 'vacio');
-  if (tipo) { el.estado.classList.add(tipo); }
+  if (tipo) {
+    el.estado.classList.add(tipo);
+  }
 }
 
 function ocultarEstado() {
@@ -56,13 +61,26 @@ function renderCofres(cofres) {
     // Etiqueta legible para el placeholder de contenido — el valor real
     // sale de RF-JUE-013 y se ajustará cuando el PO lo defina.
     const contenidoLegible = (cofre.contenido || 'COFRE').replace(/_/g, ' ');
-    tarjeta.innerHTML = `
-      <div class="cofre-icono" aria-hidden="true">🎁</div>
-      <div class="cofre-info">
-        <h3 class="cofre-titulo">${contenidoLegible}</h3>
-        <p class="cofre-fecha">Entregado ${formatearFecha(cofre.entregadoEn)}</p>
-      </div>
-    `;
+    // UX-R2.8 — `contenidoLegible` sale de `cofre.contenido`, que viene del
+    // servidor. Se construye el nodo en vez de interpolarlo en una plantilla.
+    const icono = document.createElement('div');
+    icono.className = 'cofre-icono';
+    icono.setAttribute('aria-hidden', 'true');
+    icono.textContent = '🎁';
+
+    const titulo = document.createElement('h3');
+    titulo.className = 'cofre-titulo';
+    titulo.textContent = contenidoLegible;
+
+    const fecha = document.createElement('p');
+    fecha.className = 'cofre-fecha';
+    fecha.textContent = `Entregado ${formatearFecha(cofre.entregadoEn)}`;
+
+    const info = document.createElement('div');
+    info.className = 'cofre-info';
+    info.append(titulo, fecha);
+
+    tarjeta.replaceChildren(icono, info);
     el.lista.appendChild(tarjeta);
   }
 }
@@ -85,7 +103,9 @@ async function cargar() {
   });
 
   try {
-    const resp = await fetchWithHttpErrorInterceptor(`${BASE_API}?${params.toString()}`, { method: 'GET' });
+    const resp = await fetchWithHttpErrorInterceptor(`${BASE_API}?${params.toString()}`, {
+      method: 'GET',
+    });
     if (resp.status === 403) {
       mostrarEstado('Debes iniciar sesión para ver tus cofres.', 'error');
       el.btnAnterior.disabled = true;
@@ -102,7 +122,10 @@ async function cargar() {
     const paginaActual = datos.number ?? estado.pagina;
 
     if (cofres.length === 0) {
-      mostrarEstado('Todavía no has ganado ningún cofre. Acumula 20 créditos en tus partidas para conseguir el primero.', 'vacio');
+      mostrarEstado(
+        'Todavía no has ganado ningún cofre. Acumula 20 créditos en tus partidas para conseguir el primero.',
+        'vacio',
+      );
     } else {
       ocultarEstado();
       renderCofres(cofres);
@@ -117,10 +140,16 @@ if (!sessionStorage.getItem(CLAVE_ROL)) {
   window.location.href = RUTA_LOGIN;
 } else {
   el.btnAnterior.addEventListener('click', () => {
-    if (estado.pagina > 0) { estado.pagina -= 1; cargar(); }
+    if (estado.pagina > 0) {
+      estado.pagina -= 1;
+      cargar();
+    }
   });
   el.btnSiguiente.addEventListener('click', () => {
-    if (estado.pagina < estado.totalPaginas - 1) { estado.pagina += 1; cargar(); }
+    if (estado.pagina < estado.totalPaginas - 1) {
+      estado.pagina += 1;
+      cargar();
+    }
   });
   el.btnVolver.addEventListener('click', () => {
     window.location.href = RUTA_MENU;

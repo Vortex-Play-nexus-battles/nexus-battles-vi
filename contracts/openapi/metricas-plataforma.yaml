@@ -59,10 +59,24 @@ info:
     /sanciones/metricas (consulta 1.2.0); la alerta de alta frecuencia solo
     se evalua si el PO fijo el umbral (D-25) y lo que falta (registro de
     usuarios, reportes) se dice por su nombre en `pendientes`.
-  version: 1.5.0
+
+    1.6.0 (HU-MET-001, #527): **toda la API de este modulo exige token con rol
+    administrativo** (`ADMINISTRADOR`, `SUPER_ADMINISTRADOR`) o credencial de
+    servicio (`SERVICIO`, ADR-005). La ficha de RF-MET-001 dice «Como
+    administrador», y el resto de lo que se publica aqui —consumo y errores de
+    cada servicio, historico de caidas, latencias y agregados de moderacion—
+    describe el estado interno del bloque. Hasta esa version el servicio no
+    tenia cadena de seguridad y respondia sin token a cualquiera que llegara
+    por el borde; era un defecto, no una decision. `/actuator/**` sigue
+    abierto (regla 3). Sin token: `401`. Con rol insuficiente (incluido
+    `MODERADOR`, que nunca vio este panel en la cabecera): `403`.
+  version: 1.6.0
 servers:
   - url: http://localhost:8087/api/v1
     description: Entorno local de desarrollo
+
+security:
+  - tokenDeAdministracion: []
 
 paths:
   /disponibilidad:
@@ -307,6 +321,15 @@ paths:
           description: moderacion-sanciones no responde (type fuente-no-disponible); nada se disimula
 
 components:
+  securitySchemes:
+    tokenDeAdministracion:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        JWT emitido por ms-identidad (ADR-002). Rol `ADMINISTRADOR`,
+        `SUPER_ADMINISTRADOR` o `SERVICIO`.
+
   schemas:
     EstadoResponse:
       type: object

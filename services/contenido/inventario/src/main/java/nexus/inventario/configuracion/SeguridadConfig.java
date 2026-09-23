@@ -5,6 +5,15 @@ import com.nexusbattles.comun.seguridad.ConversorRolesJwt;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.beans.factory.annotation.Value;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import nexus.inventario.aplicacion.IdentidadRequeridaException;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.authorization.AuthorizationManager;
@@ -50,6 +59,11 @@ public class SeguridadConfig {
             ConversorRolesJwt conversor,
             @Value("${integraciones.subastas.client-id}") String subastasClientId) throws Exception {
         CadenaDeSeguridad.aplicarBase(http, conversor);
+        // La cadena base deja el 401 de Spring (cuerpo vacio). El contrato de
+        // inventario promete el problem detail "Identidad requerida" tambien
+        // cuando no hay token, asi que el punto de entrada lo escribe aqui.
+        http.exceptionHandling(excepciones -> excepciones
+                .authenticationEntryPoint(SeguridadConfig::responderIdentidadRequerida));
         AuthorizationManager<RequestAuthorizationContext> soloSubastas = (authentication, context) -> {
             if (authentication.get() instanceof JwtAuthenticationToken jwt) {
                 return new AuthorizationDecision(
@@ -72,5 +86,18 @@ public class SeguridadConfig {
                 .requestMatchers("/api/v1/inventario/**").hasAnyRole(ROLES_DEL_INVENTARIO)
                 .anyRequest().authenticated());
         return http.build();
+    }
+
+    static void responderIdentidadRequerida(
+            HttpServletRequest solicitud,
+            HttpServletResponse respuesta,
+            AuthenticationException error) throws IOException {
+        respuesta.setStatus(HttpStatus.UNAUTHORIZED.value());
+        respuesta.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
+        respuesta.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        respuesta.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+        respuesta.getWriter().write("""
+                {"type":"about:blank","title":"Identidad requerida","status":401,"detail":"%s","instance":"%s"}"""
+                .formatted(new IdentidadRequeridaException().getMessage(), solicitud.getRequestURI()));
     }
 }

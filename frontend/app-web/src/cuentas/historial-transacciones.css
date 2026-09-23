@@ -1,3 +1,14 @@
+/* Los componentes compartidos ya no se redefinen aqui.
+ *
+ * `.tarjeta`, `.aviso`, `.fila`, `.ayuda` y `.paginacion` son del sistema
+ * de diseno (`shared/ui-kit/css/`). Redefinirlos con el mismo nombre en una
+ * hoja de vista hacia que el MISMO componente se viera distinto segun la
+ * pantalla: la tarjeta tenia radio 8 px en unas vistas y 10 px en otras, y
+ * el aviso salia siempre azul aunque el modificador dijera error o exito.
+ * La vista carga ahora `base.css` ademas de `componentes.css`, asi que las
+ * reglas del kit llegan enteras.
+ */
+
 /* ============================================================
    historial-transacciones.css — HU-PAG-002
    Usa los tokens de tema-cuentas.css importado desde el HTML.
@@ -7,13 +18,7 @@ body {
   margin: 0;
   background: var(--fondo);
   color: var(--texto);
-  font-family: var(--tipografia-cuerpo, Inter, system-ui, sans-serif);
-}
-
-.contenedor {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 16px;
+  font-family: var(--t-cuerpo-familia);
 }
 
 .encabezado-contenido {
@@ -26,22 +31,8 @@ body {
 
 .titulo {
   margin: 0 0 4px;
-  font-family: var(--tipografia-titulo);
+  font-family: var(--fuente-titulo);
   font-size: 24px;
-}
-
-.ayuda {
-  margin: 0;
-  color: var(--texto-2, #48536a);
-  font-size: 14px;
-}
-
-.tarjeta {
-  background: var(--superficie);
-  border: 1px solid var(--borde);
-  border-radius: var(--radio);
-  padding: 12px;
-  margin-top: 8px;
 }
 
 .tabla-envoltorio {
@@ -63,7 +54,7 @@ body {
 }
 
 .tabla-historial thead th {
-  font-family: var(--tipografia-titulo);
+  font-family: var(--fuente-titulo);
   font-weight: 600;
   color: var(--texto-2, #48536a);
   background: rgba(0, 0, 0, 0.02);
@@ -102,14 +93,6 @@ body {
 .badge--indeterminado {
   color: #8a4a00;
   background: #fbeeed;
-}
-
-.paginacion {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  margin-top: 12px;
 }
 
 /* Estados de la tabla. */

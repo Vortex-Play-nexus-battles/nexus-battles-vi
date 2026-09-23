@@ -16,6 +16,9 @@
  */
 
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
+import { nodo } from '../../comun/ui/dom.js';
+import { pintarAviso } from '../../comun/ui/aviso.js';
+import { campo } from '../../comun/ui/campo.js';
 
 export const TIPO = Object.freeze({
   ADVERTENCIA: 'ADVERTENCIA',
@@ -209,26 +212,6 @@ export function solicitudDesde(datos) {
 
 /* ---- DOM ---- */
 
-function nodo(etiqueta, clase, texto) {
-  const el = document.createElement(etiqueta);
-  if (clase) {
-    el.className = clase;
-  }
-  if (texto !== undefined) {
-    el.textContent = texto;
-  }
-  return el;
-}
-
-export function pintarAviso(zona, { tono, titulo, detalle }) {
-  zona.className = `aviso aviso--${tono}`;
-  zona.replaceChildren(
-    nodo('strong', 'aviso__titulo', titulo),
-    nodo('p', 'aviso__detalle', detalle ?? ''),
-  );
-  zona.hidden = false;
-}
-
 function tonoDe(error) {
   if (!(error instanceof ErrorDeSanciones)) {
     return 'error';
@@ -310,28 +293,44 @@ export function tarjetaDeApelacion(apelacion, { resolver } = {}) {
   if (apelacion.estado === 'PENDIENTE' && typeof resolver === 'function') {
     const form = nodo('form', 'pila pila--compacta');
     form.dataset.zona = 'resolucion';
-    form.innerHTML = `
-      <label class="campo"><span class="campo__etiqueta">Decision</span>
-        <select class="campo__control" name="decision" required>
-          <option value="MANTENIDA">Mantener</option>
-          <option value="REDUCIDA">Reducir (suspension)</option>
-          <option value="REVERTIDA">Revertir</option>
-        </select></label>
-      <label class="campo"><span class="campo__etiqueta">Nueva fecha fin (solo reducir)</span>
-        <input class="campo__control" type="datetime-local" name="nuevaVigencia" /></label>
-      <label class="campo"><span class="campo__etiqueta">Motivacion</span>
-        <textarea class="campo__control" name="motivo" required rows="2"></textarea></label>
-      <button class="boton boton--primario boton--pequeno" type="submit" data-accion="resolver">Resolver</button>`;
+    // Con `campo()` en vez de una plantilla en `innerHTML`: etiqueta asociada
+    // por for/id y el motivo del rechazo en su sitio, igual que en el resto
+    // de formularios del producto.
+    const decision = campo({
+      nombre: 'decision',
+      etiqueta: 'Decision',
+      requerido: true,
+      opciones: [
+        { valor: 'MANTENIDA', texto: 'Mantener' },
+        { valor: 'REDUCIDA', texto: 'Reducir (suspension)' },
+        { valor: 'REVERTIDA', texto: 'Revertir' },
+      ],
+    });
+    const nuevaVigencia = campo({
+      nombre: 'nuevaVigencia',
+      etiqueta: 'Nueva fecha fin',
+      tipo: 'datetime-local',
+      pista: 'Solo al reducir la sancion.',
+    });
+    const motivacion = campo({
+      nombre: 'motivo',
+      etiqueta: 'Motivacion',
+      requerido: true,
+      multilinea: true,
+    });
+    const resolverBoton = nodo('button', 'boton boton--primario boton--pequeno', 'Resolver');
+    resolverBoton.type = 'submit';
+    resolverBoton.dataset.accion = 'resolver';
+    form.append(decision.elemento, nuevaVigencia.elemento, motivacion.elemento, resolverBoton);
     form.addEventListener('submit', (evento) => {
       evento.preventDefault();
       const datos = new FormData(form);
       const local = String(datos.get('nuevaVigencia') ?? '');
-      const nuevaVigencia = local ? new Date(local).toISOString() : null;
       resolver(
         apelacion,
         String(datos.get('decision')),
         String(datos.get('motivo') ?? '').trim(),
-        nuevaVigencia,
+        local ? new Date(local).toISOString() : null,
       );
     });
     tarjeta.appendChild(form);
@@ -376,8 +375,8 @@ export function montarPanelDeModeracion(
 
   const sincronizarCampos = () => {
     const tipo = selectorTipo?.value;
-    formEmitir.querySelectorAll('[data-solo]').forEach((campo) => {
-      campo.hidden = campo.dataset.solo !== tipo;
+    formEmitir.querySelectorAll('[data-solo]').forEach((zona) => {
+      zona.hidden = zona.dataset.solo !== tipo;
     });
   };
   selectorTipo?.addEventListener('change', sincronizarCampos);
@@ -449,7 +448,7 @@ export function montarPanelDeModeracion(
       pintarAviso(zonaAviso, {
         tono: 'advertencia',
         titulo: 'El baneo es definitivo',
-        detalle: 'Marca la confirmacion para continuar.',
+        detalle: 'Marca la confirmación para continuar.',
       });
       return;
     }
@@ -459,7 +458,7 @@ export function montarPanelDeModeracion(
       const sancion = await api.emitir(cuerpo, fetchImpl);
       pintarAviso(zonaAviso, {
         tono: 'exito',
-        titulo: 'Sancion emitida',
+        titulo: 'Sanción emitida',
         detalle: `${descripcionDe(sancion, ahora())}. El jugador recibira el aviso.`,
       });
       formEmitir.querySelector('[name="motivo"]').value = '';

@@ -12,6 +12,8 @@
  */
 
 import { crearSala, ErrorDeApi } from './cliente-salas.js';
+import { vaciar } from '../../comun/ui/dom.js';
+import { pintarAviso } from '../../comun/ui/aviso.js';
 import {
   esSeccionDegradada,
   pintarSeccionDegradada,
@@ -90,7 +92,7 @@ export function leerFormulario(formulario) {
     }
   }
 
-  return {
+  const cuerpo = {
     maximoParticipantes: Number(datos.get('maximoParticipantes')),
     modalidad,
     recompensaCreditos: Number(datos.get('recompensaCreditos') || 0),
@@ -99,6 +101,76 @@ export function leerFormulario(formulario) {
     privada: datos.get('privada') === 'on',
     tamanoEquipo: limites.equipos && tamano ? Number(tamano) : null,
   };
+  // HU-TOR-004 (contrato 1.4.0): la sala es un encuentro de torneo solo si la
+  // vista lo trae prefijado; el jugador no lo escribe a mano.
+  const torneoId = datos.get('torneoId');
+  const numeroEncuentro = datos.get('numeroEncuentro');
+  if (torneoId && numeroEncuentro) {
+    cuerpo.torneo = { torneoId, numeroEncuentro: Number(numeroEncuentro) };
+  }
+  return cuerpo;
+}
+
+/**
+ * El encuentro de torneo que viene en la URL (`?torneo=<id>&encuentro=<n>`),
+ * puesto por la vista de torneos — HU-TOR-004 CA-04.
+ *
+ * @param {string} busqueda `location.search`
+ * @returns {{torneoId: string, numeroEncuentro: number}|null}
+ */
+export function encuentroDesde(busqueda) {
+  const parametros = new URLSearchParams(busqueda);
+  const torneoId = parametros.get('torneo');
+  const numero = Number(parametros.get('encuentro'));
+  if (!torneoId || !Number.isInteger(numero) || numero < 1 || numero > 14) {
+    return null;
+  }
+  return { torneoId, numeroEncuentro: numero };
+}
+
+/**
+ * Deja el formulario listo para jugar un encuentro de torneo: campos ocultos
+ * con el vinculo, nota visible y, como los encuentros son de equipos de dos
+ * (D-22), sugiere hasta seis con cuatro jugadores en equipos de 2. Todo queda
+ * editable: el servicio es quien valida.
+ */
+export function prefijarEncuentro(formulario, encuentro) {
+  if (!encuentro) {
+    return;
+  }
+  for (const [nombre, valor] of [
+    ['torneoId', encuentro.torneoId],
+    ['numeroEncuentro', String(encuentro.numeroEncuentro)],
+  ]) {
+    let oculto = formulario.querySelector(`input[name="${nombre}"]`);
+    if (!oculto) {
+      oculto = document.createElement('input');
+      oculto.type = 'hidden';
+      oculto.name = nombre;
+      formulario.prepend(oculto);
+    }
+    oculto.value = valor;
+  }
+  const nota = formulario.querySelector('[data-zona="nota-torneo"]');
+  if (nota) {
+    nota.hidden = false;
+    nota.textContent =
+      `Esta sala es el encuentro ${encuentro.numeroEncuentro} del torneo. ` +
+      'Al terminar la partida, el resultado se informa al torneo automaticamente.';
+  }
+  const hastaSeis = formulario.querySelector('[name="modalidad"][value="HASTA_SEIS"]');
+  if (hastaSeis) {
+    hastaSeis.checked = true;
+  }
+  const participantes = formulario.querySelector('[name="maximoParticipantes"]');
+  if (participantes) {
+    participantes.value = '4';
+  }
+  const tamano = formulario.querySelector('[name="tamanoEquipo"]');
+  if (tamano) {
+    tamano.value = '2';
+  }
+  ajustarPorModalidad(formulario);
 }
 
 /**
@@ -200,27 +272,6 @@ function marcarCampos(formulario, errores) {
   return primero;
 }
 
-function pintarAviso(zona, { tono, titulo, detalle }) {
-  zona.innerHTML = '';
-  const aviso = document.createElement('div');
-  aviso.className = `aviso aviso--${tono}`;
-  aviso.setAttribute('role', tono === 'error' || tono === 'advertencia' ? 'alert' : 'status');
-
-  const encabezado = document.createElement('p');
-  encabezado.className = 'aviso__titulo';
-  encabezado.textContent = titulo;
-  aviso.appendChild(encabezado);
-
-  if (detalle) {
-    const cuerpo = document.createElement('p');
-    cuerpo.textContent = detalle;
-    aviso.appendChild(cuerpo);
-  }
-
-  zona.appendChild(aviso);
-  zona.hidden = false;
-}
-
 /**
  * Bloquea el boton mientras se espera y lo restaura tal cual estaba.
  *
@@ -241,9 +292,13 @@ function cargando(boton, activo) {
  * Conecta el formulario con el servicio.
  *
  * @param {HTMLFormElement} formulario
- * @param {{crearSalaImpl?: Function, alCrear?: Function}} [opciones]
+ * @param {{crearSalaImpl?: Function, alCrear?: Function, encuentro?: {torneoId: string, numeroEncuentro: number}|null}} [opciones]
+ *   `encuentro`: HU-TOR-004, la sala juega ese encuentro de torneo (ver `encuentroDesde`)
  */
-export function montarCrearSala(formulario, { crearSalaImpl = crearSala, alCrear } = {}) {
+export function montarCrearSala(
+  formulario,
+  { crearSalaImpl = crearSala, alCrear, encuentro = null } = {},
+) {
   const zonaAviso = formulario.querySelector('[data-zona="aviso"]');
   // HU-DIS-003: el hueco donde se pinta `Seccion degradada` cuando el
   // inventario (o el libro de creditos) no responde. Distinto del aviso:
@@ -255,6 +310,7 @@ export function montarCrearSala(formulario, { crearSalaImpl = crearSala, alCrear
   // RF-JUE-004: la modalidad manda sobre el resto del formulario, desde el
   // primer pintado y cada vez que cambia ella o el aforo.
   ajustarPorModalidad(formulario);
+  prefijarEncuentro(formulario, encuentro);
   formulario.addEventListener('change', (evento) => {
     const nombre = evento.target?.name;
     if (nombre === 'modalidad' || nombre === 'maximoParticipantes') {
@@ -265,7 +321,7 @@ export function montarCrearSala(formulario, { crearSalaImpl = crearSala, alCrear
   async function enviar() {
     limpiarErroresDeCampo(formulario);
     zonaAviso.hidden = true;
-    zonaAviso.innerHTML = '';
+    vaciar(zonaAviso);
     limpiarSeccionDegradada(zonaDegradacion);
     cargando(boton, true);
 
@@ -280,6 +336,7 @@ export function montarCrearSala(formulario, { crearSalaImpl = crearSala, alCrear
           `participantes${sala.recompensaCreditos ? `, ${sala.recompensaCreditos} creditos en juego` : ''}.`,
       });
       formulario.reset();
+      prefijarEncuentro(formulario, encuentro);
       if (alCrear) {
         alCrear(sala);
       }

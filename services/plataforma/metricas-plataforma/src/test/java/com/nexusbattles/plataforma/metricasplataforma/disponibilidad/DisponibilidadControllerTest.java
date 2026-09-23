@@ -1,5 +1,6 @@
 package com.nexusbattles.plataforma.metricasplataforma.disponibilidad;
 
+import com.nexusbattles.plataforma.metricasplataforma.seguridad.SeguridadAbiertaDePrueba;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -13,6 +14,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -23,6 +25,10 @@ import org.springframework.test.web.servlet.MockMvc;
  * el estado en vivo (CP-01) y el informe del periodo (CP-02).
  */
 @WebMvcTest(controllers = DisponibilidadController.class)
+// Rebanada con una cadena ABIERTA a proposito: lo que se prueba aqui es el
+// comportamiento del endpoint. Que la observabilidad exija rol administrativo
+// (HU-MET-001, #527) lo afirma SeguridadDeObservabilidadTest con la cadena real.
+@Import(SeguridadAbiertaDePrueba.class)
 class DisponibilidadControllerTest {
 
     private static final Instant DESDE = Instant.parse("2026-09-01T00:00:00Z");

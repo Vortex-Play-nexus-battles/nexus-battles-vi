@@ -34,6 +34,8 @@ import {
   ESTADO,
 } from './cliente-comentarios.js';
 import { usuarioIdDeSesion } from '../../comun/identidad.js';
+import { pintarAviso } from '../../comun/ui/aviso.js';
+import { vaciar } from '../../comun/ui/dom.js';
 
 const CLAVE_APODO = 'nexus.apodoActual';
 
@@ -180,39 +182,9 @@ function marcarZonaDeCarga(formulario, motivo) {
   }
 }
 
-function pintarAviso(zona, { tono, titulo, detalle, accion }) {
-  zona.innerHTML = '';
-  const aviso = document.createElement('div');
-  aviso.className = `aviso aviso--${tono}`;
-  aviso.setAttribute('role', tono === 'error' || tono === 'advertencia' ? 'alert' : 'status');
-
-  const cuerpo = document.createElement('div');
-  const encabezado = document.createElement('p');
-  encabezado.className = 'aviso__titulo';
-  encabezado.textContent = titulo;
-  cuerpo.appendChild(encabezado);
-  if (detalle) {
-    const texto = document.createElement('p');
-    texto.textContent = detalle;
-    cuerpo.appendChild(texto);
-  }
-  if (accion) {
-    const boton = document.createElement('button');
-    boton.type = 'button';
-    boton.className = 'boton boton--secundario boton--pequeno';
-    boton.dataset.accion = accion.nombre;
-    boton.textContent = accion.texto;
-    boton.addEventListener('click', accion.alPulsar);
-    cuerpo.appendChild(boton);
-  }
-  aviso.appendChild(cuerpo);
-  zona.appendChild(aviso);
-  zona.hidden = false;
-}
-
 function ocultarAviso(zona) {
   zona.hidden = true;
-  zona.innerHTML = '';
+  vaciar(zona);
 }
 
 function cargando(boton, activo) {
@@ -372,7 +344,7 @@ function montarZonaDeCarga(formulario) {
 function vaciarMiniaturas(formulario) {
   const lista = formulario.querySelector('[data-zona="miniaturas"]');
   if (lista) {
-    lista.innerHTML = '';
+    vaciar(lista);
   }
   const zonaCarga = formulario.querySelector('[data-zona="carga"]');
   if (zonaCarga) {
@@ -437,7 +409,7 @@ export function textoDelPromedio(hilo) {
   const promedio = hilo?.calificacionPromedio;
   const total = Number.isInteger(hilo?.totalCalificaciones) ? hilo.totalCalificaciones : 0;
   if (!Number.isFinite(promedio) || total === 0) {
-    return 'Sin calificaciones todavia.';
+    return 'Sin calificaciones todavía.';
   }
   const plural = total === 1 ? 'calificacion' : 'calificaciones';
   return `Calificacion promedio: ${promedio.toFixed(2)} de ${MAXIMO_ESTRELLAS} (${total} ${plural}).`;
@@ -709,8 +681,8 @@ export function montarPublicarComentario(
     });
     pintarAviso(zonaAviso, {
       tono: 'advertencia',
-      titulo: 'Inicia sesion para comentar',
-      detalle: 'Tu comentario se publica con tu apodo, y para eso hace falta tu sesion.',
+      titulo: 'Inicia sesión para comentar',
+      detalle: 'Tu comentario se publica con tu apodo, y para eso hace falta tu sesión.',
     });
     return;
   }

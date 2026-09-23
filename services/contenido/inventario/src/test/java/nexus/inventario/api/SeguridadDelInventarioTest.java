@@ -4,6 +4,9 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -87,28 +90,52 @@ class SeguridadDelInventarioTest {
     }
 
     @Test
-    @DisplayName("un jugador es quien dice su token: la vitrina que ve es la suya aunque la cabecera diga otra")
+    @DisplayName("un jugador es quien dice su token: el propietario es su identificador estable (uid), no el apodo ni la cabecera")
     void elJugadorEsElDelToken() throws Exception {
-        when(consulta.consultar(eq("lyra_roja"), anyInt())).thenReturn(paginaVacia());
+        UUID uid = UUID.randomUUID();
+        when(consulta.consultar(eq(uid.toString()), anyInt())).thenReturn(paginaVacia());
 
         mvc.perform(get(VITRINA)
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + EMISOR.tokenDeJugador("lyra_roja", UUID.randomUUID()))
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + EMISOR.tokenDeJugador("lyra_roja", uid))
                         .header("X-User-Name", "jugador-suplantado"))
                 .andExpect(status().isOk());
 
-        verify(consulta).consultar("lyra_roja", 0);
+        verify(consulta).consultar(uid.toString(), 0);
+        verify(consulta, never()).consultar(eq("lyra_roja"), anyInt());
+    }
+
+    @Test
+    @DisplayName("sin token, el 401 sigue siendo el problem detail 'Identidad requerida' que promete el contrato")
+    void sinTokenRespondeConProblemDetail() throws Exception {
+        mvc.perform(get(VITRINA))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Identidad requerida"))
+                .andExpect(jsonPath("$.detail").value("Debes autenticarte para operar sobre tu inventario."))
+                .andExpect(jsonPath("$.status").value(401));
+    }
+
+    @Test
+    @DisplayName("un token de usuario sin identificador estable (ni uid ni sub en UUID) no puede ser dueno de nada: 403")
+    void tokenDeUsuarioSinIdentificadorEstable() throws Exception {
+        mvc.perform(get(VITRINA)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + EMISOR.token().sujeto("lyra_roja").rol("JUGADOR").firmar()))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(consulta);
     }
 
     @Test
     @DisplayName("un jugador crea y equipa en su propio inventario, sin cabecera")
     void elJugadorOperaSobreLoSuyo() throws Exception {
-        when(gestion.crear(eq("lyra_roja"), anyString(), org.mockito.ArgumentMatchers.any(), anyString(),
+        UUID uid = UUID.randomUUID();
+        String propietario = uid.toString();
+        when(gestion.crear(eq(propietario), anyString(), org.mockito.ArgumentMatchers.any(), anyString(),
                 org.mockito.ArgumentMatchers.any()))
                 .thenReturn(new ElementoInventario("e-1", "p", TipoElementoInventario.ITEM, "x"));
-        when(equipamiento.equipar("lyra_roja", "heroe-1", "arma-1"))
+        when(equipamiento.equipar(propietario, "heroe-1", "arma-1"))
                 .thenReturn(EquipamientoHeroe.vacio("heroe-1"));
 
-        String token = "Bearer " + EMISOR.tokenDeJugador("lyra_roja", UUID.randomUUID());
+        String token = "Bearer " + EMISOR.tokenDeJugador("lyra_roja", uid);
         mvc.perform(post(VITRINA).header(HttpHeaders.AUTHORIZATION, token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"productoId\":\"p\",\"tipo\":\"ITEM\",\"nombrePropio\":\"x\"}"))
@@ -117,9 +144,9 @@ class SeguridadDelInventarioTest {
                         .header(HttpHeaders.AUTHORIZATION, token))
                 .andExpect(status().isOk());
 
-        verify(gestion).crear(eq("lyra_roja"), eq("p"), org.mockito.ArgumentMatchers.any(), eq("x"),
+        verify(gestion).crear(eq(propietario), eq("p"), org.mockito.ArgumentMatchers.any(), eq("x"),
                 org.mockito.ArgumentMatchers.any());
-        verify(equipamiento).equipar("lyra_roja", "heroe-1", "arma-1");
+        verify(equipamiento).equipar(propietario, "heroe-1", "arma-1");
     }
 
     @Test

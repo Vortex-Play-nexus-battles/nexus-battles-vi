@@ -132,6 +132,10 @@ services:
       SPRING_PROFILES_ACTIVE: mongo
       SPRING_MONGODB_URI: mongodb://e2e-contenido-mongo:27017/heroes
       SPRING_DATA_MONGODB_URI: mongodb://e2e-contenido-mongo:27017/heroes
+      # R8.1: heroes ya es servidor de recursos. El catalogo sigue siendo
+      # publico (el seed y los tres consumidores lo leen sin token), pero las
+      # cuatro rutas POST exigen token del emisor real de este banco.
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
     depends_on:
       e2e-contenido-mongo: { condition: service_healthy }
     healthcheck:
@@ -192,6 +196,10 @@ services:
         JAR: services/contenido/motor-combate/build/libs/*.jar
     environment:
       MOTOR_HEROES_URL: http://srv-heroes:8080
+      # R8.1: POST /api/v1/combate/ataques exige ROLE_SERVICIO. Quien lo llama
+      # es salas-partidas con su credencial (DIRECTORIO_ACTIVO_CLIENT_ID:
+      # salas-partidas, mas abajo), firmada por este mismo ms-identidad.
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
     depends_on:
       srv-heroes: { condition: service_healthy }
     healthcheck:
@@ -454,8 +462,11 @@ services:
       SALUD_MODERACION: http://srv-moderacion-sanciones:8086/actuator/health
       SALUD_ADMIN_PARAMETROS: http://srv-admin-parametros:8088/actuator/health
       SANCIONES_URL: http://srv-moderacion-sanciones:8086/api/v1
+      # HU-MET-001 (#527): la observabilidad es de administracion.
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
       srv-moderacion-sanciones: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8087/actuator/health || exit 1"]
@@ -509,6 +520,8 @@ services:
       # guion de la demo no podia mostrar el chat.
       LISTA_NEGRA_VERIFICAR_URL: http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar
       SANCIONES_URL: http://srv-moderacion-sanciones:8086/api/v1
+      # HU-TOR-004 CA-04: el resultado del encuentro sale de la partida jugada.
+      TORNEOS_URL: http://srv-torneos:8083/api/v1
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
       srv-inventario: { condition: service_healthy }
@@ -527,18 +540,80 @@ services:
   # ---------------------------------------------------------------- borde
   # El MISMO archivo que corre en AWS, sin una linea distinta. Si el reparto
   # de rutas se rompe, se rompe aqui antes que en la demo.
+  # ------------------------------------------------- adaptador del borde
+  # R8.2 (#614) — por que este contenedor existe.
+  #
+  # Este banco monta el `borde-dev.conf` REAL, y eso es deliberado: probar una
+  # copia recortada no prueba nada. Pero desde el PR #611 ese fichero enruta
+  # heroes, inventario y productos al host de contenido de AWS por IP
+  # (34.193.90.11), porque en AWS los servicios de contenido viven en otra
+  # maquina. Correcto alli, catastrofico aqui: la siembra escribia en la Mongo
+  # de este banco y el borde le preguntaba a AWS, que nunca vio esos
+  # documentos. De ahi el 404 de `/api/v1/productos/p-heroe-e2e` de #614, y de
+  # ahi tambien los 401 de la siembra del inventario.
+  #
+  # Revertir #611 no es la respuesta: es correcto para el despliegue. La
+  # respuesta es una **capa de adaptacion**, que es literalmente lo que manda
+  # el Riesgo #3 del Project Charter cuando un contrato ajeno cambia a mitad
+  # de sprint. Este contenedor deriva la configuracion del fichero real,
+  # sustituyendo los tres destinos por los contenedores de esta red, y la deja
+  # en un volumen que monta `srv-borde`.
+  #
+  # Vive en el compose y no en `levantar.sh` a proposito: el workflow de CI
+  # llama a `docker compose up` directamente, sin pasar por ese script, asi que
+  # una adaptacion que viviera alli habria arreglado el local y dejado CI roja.
+  #
+  # Falla cerrado: si manana cambia la IP y las sustituciones no aplican, el
+  # `grep` final deja el contenedor en codigo distinto de cero y `--wait` no
+  # levanta el banco. Mejor no arrancar que arrancar hablando con AWS.
+  e2e-borde-conf:
+    image: nginx:1.27-alpine
+    volumes:
+      - ../../infrastructure/red-balanceo/borde-dev.conf:/origen/borde-dev.conf:ro
+      - conf-del-borde:/salida
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        sed -e 's|34\.193\.90\.11:8101|srv-heroes:8080|g' \
+            -e 's|34\.193\.90\.11:8102|srv-inventario:8080|g' \
+            -e 's|34\.193\.90\.11:8103|srv-productos:8080|g' \
+            /origen/borde-dev.conf > /salida/default.conf
+        # Solo lineas efectivas: `borde-dev.conf` menciona la IP en sus
+        # comentarios a proposito, para explicar de donde sale, y un guardian
+        # que cuente comentarios se pone rojo sin que nada este mal.
+        if grep -v '^[[:space:]]*#' /salida/default.conf | grep -q '34\.193\.90\.11'; then
+          echo "ADAPTACION INCOMPLETA: queda una IP del host de contenido sin sustituir." >&2
+          grep -vn '^[[:space:]]*#' /salida/default.conf | grep '34\.193\.90\.11' >&2
+          exit 1
+        fi
+        for esperado in srv-heroes:8080 srv-inventario:8080 srv-productos:8080; do
+          grep -q "$esperado" /salida/default.conf || {
+            echo "ADAPTACION INCOMPLETA: no aparece $esperado." >&2; exit 1; }
+        done
+        echo "Borde adaptado al banco: heroes, inventario y productos son locales."
+
   srv-borde:
     image: nginx:1.27-alpine
     ports:
       - "8099:80"
     volumes:
-      - ../../infrastructure/red-balanceo/borde-dev.conf:/etc/nginx/conf.d/default.conf:ro
+      # La configuracion DERIVADA (ver e2e-borde-conf), no el fichero de
+      # despliegue: el de despliegue apunta a AWS.
+      - conf-del-borde:/etc/nginx/conf.d:ro
       - ../../frontend:/srv/nexus/frontend:ro
       - ../../shared:/srv/nexus/shared:ro
     depends_on:
+      e2e-borde-conf: { condition: service_completed_successfully }
       srv-salas-partidas: { condition: service_healthy }
       srv-torneos: { condition: service_healthy }
       srv-metricas-plataforma: { condition: service_healthy }
+      # R8.2: el borde reparte a estos tres, asi que tienen que estar sanos
+      # antes de que la siembra empiece a hablar por el.
+      srv-heroes: { condition: service_healthy }
+      srv-inventario: { condition: service_healthy }
+      srv-productos: { condition: service_healthy }
     healthcheck:
       # 127.0.0.1 y no `localhost` a proposito. El entrypoint de la imagen
       # intenta anadir un `listen [::]:80` y no puede, porque la
@@ -552,3 +627,14 @@ services:
       interval: 3s
       timeout: 3s
       retries: 20
+
+# ---------------------------------------------------------------------------
+# R8.2 — volumen de la configuracion derivada del borde.
+#
+# Lo escribe `e2e-borde-conf` y lo monta `srv-borde`. Es efimero por diseno:
+# `docker compose down -v` lo borra, de modo que la siguiente corrida siempre
+# lo deriva otra vez del `borde-dev.conf` actual. Si el fichero de despliegue
+# cambia, el banco prueba lo cambiado, que es justo lo que se queria conservar
+# de la decision original de montar el fichero real.
+volumes:
+  conf-del-borde:

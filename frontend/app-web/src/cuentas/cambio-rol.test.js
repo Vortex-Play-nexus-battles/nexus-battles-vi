@@ -26,19 +26,13 @@ describe('HU-RBAC-003 - cambio de rol desde frontend', () => {
       });
     };
 
-    await cambiarRol(
-      25,
-      'MODERADOR',
-      {
-        fetchImpl: fetchFalso,
-      },
-    );
+    await cambiarRol(25, 'MODERADOR', {
+      fetchImpl: fetchFalso,
+    });
 
     expect(llamadas).toHaveLength(1);
 
-    expect(llamadas[0].url).toBe(
-      '/api/v1/rbac/usuarios/25/rol',
-    );
+    expect(llamadas[0].url).toBe('/api/v1/rbac/usuarios/25/rol');
 
     expect(llamadas[0].opciones).toEqual({
       method: 'PUT',
@@ -61,13 +55,9 @@ describe('HU-RBAC-003 - cambio de rol desde frontend', () => {
     };
 
     await expect(
-      cambiarRol(
-        25,
-        'MODERADOR',
-        {
-          fetchImpl: fetchFalso,
-        },
-      ),
+      cambiarRol(25, 'MODERADOR', {
+        fetchImpl: fetchFalso,
+      }),
     ).rejects.toThrow(/sesión autenticada/i);
 
     expect(llamado).toBe(false);
@@ -84,13 +74,9 @@ describe('HU-RBAC-003 - cambio de rol desde frontend', () => {
     };
 
     await expect(
-      cambiarRol(
-        25,
-        'DIOS_SUPREMO',
-        {
-          fetchImpl: fetchFalso,
-        },
-      ),
+      cambiarRol(25, 'DIOS_SUPREMO', {
+        fetchImpl: fetchFalso,
+      }),
     ).rejects.toThrow(/rol seleccionado no es válido/i);
 
     expect(llamado).toBe(false);
@@ -109,13 +95,9 @@ describe('HU-RBAC-003 - cambio de rol desde frontend', () => {
       );
 
     await expect(
-      cambiarRol(
-        25,
-        'ADMINISTRADOR',
-        {
-          fetchImpl: fetchFalso,
-        },
-      ),
+      cambiarRol(25, 'ADMINISTRADOR', {
+        fetchImpl: fetchFalso,
+      }),
     ).rejects.toThrow(/no tienes permiso/i);
   });
 

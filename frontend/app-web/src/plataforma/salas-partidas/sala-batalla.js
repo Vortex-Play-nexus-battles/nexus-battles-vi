@@ -17,6 +17,8 @@
  */
 
 import { montarPanelVidas } from './panel-vidas.js';
+import { pintarCampo } from './campo.js';
+import { mostrarPresentacion } from '../../comun/ui/juego/presentacion.js';
 
 /**
  * Destino del canal `partidaEstado` del AsyncAPI
@@ -138,11 +140,16 @@ function explicarVacio(zona, texto) {
  *   Transporte del canal de la partida. Se inyecta desde fuera para que el dia
  *   que exista STOMP no haya que rehacer nada de aqui.
  */
-export function montarSalaBatalla(raiz, { partida, idPartida, participantes, suscribir } = {}) {
+export function montarSalaBatalla(
+  raiz,
+  { partida, idPartida, participantes, suscribir, yo, turnoActual = null, presentar = false } = {},
+) {
   const zonaConexion = raiz.querySelector('[data-zona="conexion"]');
   const zonaSinPartida = raiz.querySelector('[data-zona="sin-partida"]');
   const panel = raiz.querySelector('[data-zona="panel"]');
   const vidas = raiz.querySelector('[data-zona="vidas"]');
+  const campo = raiz.querySelector('[data-zona="campo"]');
+  const zonaPresentacion = raiz.querySelector('[data-zona="presentacion"]');
 
   pintarConexion(zonaConexion, typeof suscribir === 'function');
 
@@ -168,9 +175,46 @@ export function montarSalaBatalla(raiz, { partida, idPartida, participantes, sus
     panel.hidden = !hayPartida;
   }
 
-  if (!hayPartida || !vidas) {
+  if (!hayPartida) {
+    return;
+  }
+
+  // HU-JUE-017 CA-01 y CA-03: el campo con los heroes colocados. Es lo que
+  // ocupa mas del 80 % de la pantalla; la barra de vida y los controles van
+  // alrededor, nunca encima. Si la vista no trae campo (o una prueba monta
+  // solo el panel), no pasa nada: el resto sigue funcionando igual.
+  if (campo) {
+    pintarCampo(campo, enPantalla, yo ?? null);
+  }
+
+  if (!vidas) {
     return;
   }
 
   montarPanelVidas(vidas, { idPartida: id, participantes: enPantalla, suscribir });
+
+  // HU-JUE-017 CA-04 · la presentacion de los heroes.
+  //
+  // `presentar` solo es true cuando se llega AQUI desde el aviso
+  // `sala.partida.iniciada`, no al recargar una partida que ya estaba en
+  // curso: entrar a mitad de combate y que te presenten a los heroes como si
+  // empezara ahora seria mentir sobre el momento.
+  //
+  // Se cierra con una accion o con el primer aviso del canal, nunca con un
+  // tiempo fijo. Si alguien tarda en leer, la presentacion espera.
+  if (presentar && zonaPresentacion) {
+    const cerrar = mostrarPresentacion(zonaPresentacion, {
+      participantes: enPantalla,
+      turnoActual,
+      yo: yo ?? null,
+    });
+    if (typeof suscribir === 'function') {
+      suscribir((aviso) => {
+        // Cualquier aviso de la partida significa que el combate ya corre.
+        if (aviso?.idPartida === id) {
+          cerrar();
+        }
+      });
+    }
+  }
 }

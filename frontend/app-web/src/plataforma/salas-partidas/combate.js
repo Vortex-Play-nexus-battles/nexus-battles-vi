@@ -15,6 +15,9 @@ import {
   pintarSeccionDegradada,
   limpiarSeccionDegradada,
 } from '../../comun/degradacion/aviso-degradacion.js';
+import { vaciar } from '../../comun/ui/dom.js';
+import { accionDeCombate } from '../../comun/ui/juego/combate.js';
+import { panelDeResultado } from '../../comun/ui/juego/resultado.js';
 
 /** Destino `accionDelJugador` del AsyncAPI. Prefijo de envío `/app`. */
 export function destinoDeAccion(idPartida) {
@@ -143,18 +146,40 @@ export function creditosDe(aviso, yo) {
  * @returns {string}
  */
 export function textoDelResultado(aviso, yo, miEquipo = null) {
-  const ganadores = aviso?.ganadores ?? [];
   const equipo = aviso?.equipoGanador;
   let base = 'Combate terminado en empate.';
   if (Number.isInteger(equipo) && equipo > 0) {
-    const gane = ganadores.includes(yo) || (miEquipo !== null && miEquipo === equipo);
-    base = gane
+    base = gano(aviso, yo, miEquipo)
       ? `Tu equipo (${equipo}) ha ganado el combate.`
       : `Gana el equipo ${equipo}. Tu equipo ha perdido.`;
-  } else if (ganadores.length > 0) {
-    base = ganadores.includes(yo) ? 'Has ganado el combate.' : 'Has perdido el combate.';
+  } else if ((aviso?.ganadores ?? []).length > 0) {
+    base = gano(aviso, yo, miEquipo) ? 'Has ganado el combate.' : 'Has perdido el combate.';
   }
   return `${base}${textoDelReparto(aviso, yo)}${textoDeLaRecompensa(aviso, yo)}`;
+}
+
+/**
+ * Si quien mira gano.
+ *
+ * Se extrajo de `textoDelResultado` para que el panel de desenlace (UX-R2.3)
+ * decida VICTORIA o DERROTA con la MISMA regla y no adivinandola del texto: un
+ * `/ganado/.test(...)` sobre una frase traducible es un defecto esperando a
+ * que alguien reescriba la frase.
+ *
+ * En el modo cooperativo se gana con el equipo aunque uno haya caido.
+ *
+ * @param {{ganadores?: string[], equipoGanador?: number}} aviso
+ * @param {string} yo
+ * @param {number|null} [miEquipo]
+ * @returns {boolean}
+ */
+export function gano(aviso, yo, miEquipo = null) {
+  const ganadores = aviso?.ganadores ?? [];
+  const equipo = aviso?.equipoGanador;
+  if (Number.isInteger(equipo) && equipo > 0) {
+    return ganadores.includes(yo) || (miEquipo !== null && miEquipo === equipo);
+  }
+  return ganadores.includes(yo);
 }
 
 /**
@@ -221,6 +246,39 @@ function textoDelReparto(aviso, yo) {
 }
 
 /**
+ * De quién es el turno, dicho para quien mira.
+ *
+ * Hasta ahora el turno **solo** se notaba en que los botones de atacar
+ * estaban grises o no. Eso deja fuera a tres personas: a quien usa lector de
+ * pantalla (que solo se entera tabulando hasta un botón deshabilitado), a
+ * quien espera su turno (que no sabe a quién está esperando) y a quien juega
+ * contra la máquina (que no ve nada mientras la IA piensa). El dato ya venía
+ * en `turnoActual.idJugador` y en cada `partida.turno.cambiado`: solo no se
+ * enseñaba.
+ *
+ * @param {string|null} idJugador de quién es el turno
+ * @param {Array<object>} participantes esquema del panel
+ * @param {string} yo quién mira
+ * @returns {{texto: string, mio: boolean}} vacío si aún no se sabe
+ */
+export function textoDelTurno(idJugador, participantes, yo) {
+  if (!idJugador) {
+    return { texto: '', mio: false };
+  }
+  if (idJugador === yo) {
+    return { texto: 'Es tu turno', mio: true };
+  }
+  const quien = (participantes ?? []).find((p) => p.jugador?.id === idJugador);
+  if (!quien) {
+    // Un identificador que no está en pantalla: se dice que no es el turno
+    // propio, que es lo único que se sabe con certeza, en vez de callar.
+    return { texto: 'Turno de otro participante', mio: false };
+  }
+  const nombre = quien.heroe?.nombre ?? 'tu rival';
+  return { texto: quien.esIA ? `Juega la maquina (${nombre})` : `Turno de ${nombre}`, mio: false };
+}
+
+/**
  * Monta los controles de combate sobre el marcado de la vista.
  *
  * @param {ParentNode} raiz
@@ -245,12 +303,15 @@ export function montarControlesDeCombate(
 ) {
   const zona = raiz.querySelector('[data-zona="acciones"]');
   const aviso = raiz.querySelector('[data-zona="resultado"]');
+  // Indicador de turno y panel de vidas: el turno se dice con palabras y se
+  // marca sobre la barra de quien juega.
+  const zonaTurno = raiz.querySelector('[data-zona="turno"]');
+  const zonaVidas = raiz.querySelector('[data-zona="vidas"]');
   // HU-DIS-003: hueco de «Seccion degradada» cuando el motor de combate no
   // responde; y la zona para los demas rechazos de la cola privada.
   const zonaDegradacion = raiz.querySelector('[data-zona="degradacion"]');
   const zonaRechazo = raiz.querySelector('[data-zona="rechazo"]');
   const registro = registroDeAvisos();
-  const doc = raiz.ownerDocument ?? document;
   /** La ultima accion enviada, para poder reintentarla tal cual. */
   let ultimaAccion = null;
 
@@ -263,13 +324,22 @@ export function montarControlesDeCombate(
   );
 
   if (zona) {
-    zona.innerHTML = '';
+    vaciar(zona);
     for (const rival of rivales) {
-      const boton = doc.createElement('button');
-      boton.type = 'button';
-      boton.className = 'boton boton--primario';
+      // UX-R2.3 (HU-JUE-017 CA-03: «todos los efectos y controles mediante
+      // iconos»). Antes esto era `<button class="boton boton--primario">Atacar
+      // a X</button>`: el mismo boton azul que «Guardar cambios» en un
+      // formulario de perfil. `.accion-combate` estaba en el kit desde el
+      // Figma, con icono, etiqueta y sus dos variantes de «no se puede», y
+      // ninguna vista lo usaba.
+      const boton = accionDeCombate({
+        nombre: rival.heroe?.nombre ?? 'Tu rival',
+        icono: 'espada',
+        // El motivo se rellena en `habilitar()`: aqui todavia no se sabe de
+        // quien es el turno.
+        impedimento: 'No es tu turno',
+      });
       boton.dataset.atacar = rival.jugador.id;
-      boton.textContent = `Atacar a ${rival.heroe?.nombre ?? 'tu rival'}`;
       zona.append(boton);
     }
     zona.addEventListener('click', (evento) => {
@@ -290,16 +360,56 @@ export function montarControlesDeCombate(
     alAtacar(accion);
   }
 
-  /** Solo se puede atacar en el turno propio. */
+  /**
+   * Solo se puede atacar en el turno propio.
+   *
+   * No basta con apagar el boton: el kit distingue «fuera de turno» de «sin
+   * poder» y el motivo tiene que leerse. Un boton gris sin explicacion es el
+   * defecto clasico del juego por turnos — el jugador pulsa, no pasa nada, y
+   * no sabe si le falta algo o si la pantalla esta rota.
+   */
   function habilitar(esMiTurno) {
     for (const boton of zona?.querySelectorAll('[data-atacar]') ?? []) {
       boton.disabled = !esMiTurno;
+      boton.classList.toggle('accion-combate--fuera-de-turno', !esMiTurno);
+      const nombre = boton.dataset.accion ?? 'tu rival';
+      if (esMiTurno) {
+        boton.title = `Atacar a ${nombre}`;
+        boton.setAttribute('aria-label', `Atacar a ${nombre}`);
+      } else {
+        boton.title = 'No es tu turno';
+        boton.setAttribute('aria-label', `${nombre}. No es tu turno`);
+      }
+    }
+  }
+
+  /**
+   * Deja dicho de quién es el turno: en el indicador (región viva, así que un
+   * lector de pantalla lo anuncia solo) y sobre la barra de quien juega.
+   *
+   * @param {string|null} idJugador
+   */
+  function marcarTurno(idJugador) {
+    const turno = textoDelTurno(idJugador, participantes, yo);
+    if (zonaTurno) {
+      zonaTurno.textContent = turno.texto;
+      zonaTurno.hidden = turno.texto === '';
+      zonaTurno.dataset.mio = String(turno.mio);
+    }
+    for (const barra of zonaVidas?.querySelectorAll('[data-jugador]') ?? []) {
+      // `delete` y no `= 'no'`: el selector del kit mira si el atributo está.
+      if (idJugador && barra.dataset.jugador === idJugador) {
+        barra.dataset.turno = 'si';
+      } else {
+        delete barra.dataset.turno;
+      }
     }
   }
 
   // Con `turnoDe` conocido se decide ya; sin él, cerrados, que es lo prudente:
   // abrir un botón que el servidor va a rechazar es peor que hacer esperar.
   habilitar(Boolean(turnoDe) && turnoDe === yo);
+  marcarTurno(turnoDe ?? null);
 
   return {
     /**
@@ -349,15 +459,31 @@ export function montarControlesDeCombate(
       }
       if (mensaje?.tipo === TURNO_CAMBIADO && mensaje.idPartida === idPartida) {
         habilitar(mensaje.idJugador === yo);
+        marcarTurno(mensaje.idJugador);
         return;
       }
       if (mensaje?.tipo === PARTIDA_FINALIZADA && mensaje.idPartida === idPartida) {
         habilitar(false);
+        // Se acabo: ya no es el turno de nadie. Dejar la marca puesta haria
+        // creer que la partida sigue.
+        marcarTurno(null);
         if (zona) {
           zona.hidden = true;
         }
         if (aviso) {
-          aviso.textContent = textoDelResultado(mensaje, yo, miEquipo);
+          // UX-R2.3 (HU-JUE-017 CA-04: «vistas de alto impacto al inicio y al
+          // final»). Antes el final de la partida era un parrafo del mismo
+          // tamano que el resto de la pantalla. `--t-display-tam` estaba en
+          // `tokens.css` reservada para esto desde el principio.
+          const recompensa = recompensaDe(mensaje, yo);
+          vaciar(aviso);
+          aviso.append(
+            panelDeResultado({
+              victoria: gano(mensaje, yo, miEquipo),
+              detalle: textoDelResultado(mensaje, yo, miEquipo),
+              creditos: recompensa?.creditos ?? null,
+            }),
+          );
           aviso.hidden = false;
         }
       }

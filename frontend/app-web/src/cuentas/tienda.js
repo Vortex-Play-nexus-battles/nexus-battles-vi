@@ -28,6 +28,7 @@
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
 import { rutaDeApi } from '../comun/base-api.js';
 import { usuarioIdDeSesion } from '../comun/identidad.js';
+import { estadoDeCarga, estadoDeError, estadoVacio } from '../comun/ui/estado-vista.js';
 
 /**
  * Cabeceras de cada petición.
@@ -52,6 +53,13 @@ export function haySesion() {
 
 export async function cargarVitrina(doc = document) {
   const rejilla = doc.getElementById('productos-grid');
+
+  // UX-R2.8d — no habia estado de carga: el HTML traia un comentario
+  // (`<!-- Cargando productos... -->`) donde deberia ir, asi que la rejilla
+  // estaba en blanco hasta que llegaba la respuesta. Ahora se ve la forma de
+  // lo que viene, como en el resto de la aplicacion (RNF-USA-003).
+  pintarEn(rejilla, estadoDeCarga({ filas: 4, etiqueta: 'Cargando la tienda…' }));
+
   try {
     const respuesta = await fetchWithHttpErrorInterceptor(rutaDeApi('/productos'), {
       method: 'GET',
@@ -59,17 +67,60 @@ export async function cargarVitrina(doc = document) {
     });
 
     const datos = await respuesta.json();
-    rejilla.innerHTML = '';
+    const productos = datos.content ?? [];
 
-    for (const producto of datos.content ?? []) {
+    if (productos.length === 0) {
+      // Un catalogo vacio es un estado legitimo, y distinto de un fallo.
+      pintarEn(
+        rejilla,
+        estadoVacio({
+          titulo: 'La tienda no tiene productos ahora mismo',
+          detalle: 'Vuelve más tarde: el catálogo lo publica la administración.',
+          icono: '◇',
+        }),
+      );
+      return;
+    }
+
+    rejilla.replaceChildren();
+    for (const producto of productos) {
       rejilla.appendChild(tarjetaDeProducto(producto, doc));
     }
   } catch (error) {
     // Antes esto no existía: un fallo dejaba el cargador girando para siempre.
-    rejilla.innerHTML =
-      '<p class="empty-cart-msg">No se pudo cargar la vitrina. Vuelve a intentarlo.</p>';
+    // `.empty-cart-msg` no existe en ningun CSS (el guardian de clases solo
+    // mira el HTML, y esta estaba escrita en JavaScript): el mensaje salia con
+    // el estilo por defecto del navegador.
+    //
+    // UX-R2.8d — y ademas era un callejon sin salida: el mensaje no ofrecia
+    // volver a intentarlo, asi que la unica salida era recargar la pagina.
+    pintarEn(
+      rejilla,
+      estadoDeError({
+        titulo: 'No se pudo cargar la tienda',
+        detalle: 'Vuelve a intentarlo en unos momentos.',
+        alReintentar: () => cargarVitrina(doc),
+      }),
+    );
     console.error('Error al cargar la vitrina:', error);
   }
+}
+
+/**
+ * Coloca un estado del kit dentro de un contenedor.
+ *
+ * La rejilla es un `grid`, asi que el estado se saltaria a una celda; por eso
+ * ocupa todas las columnas en vez de quedarse en la primera.
+ *
+ * @param {HTMLElement} contenedor
+ * @param {HTMLElement} estado
+ */
+function pintarEn(contenedor, estado) {
+  if (!contenedor) {
+    return;
+  }
+  estado.style.gridColumn = '1 / -1';
+  contenedor.replaceChildren(estado);
 }
 
 /**
@@ -80,12 +131,17 @@ export async function cargarVitrina(doc = document) {
  * funciona cuando este archivo se carga como módulo.
  */
 function tarjetaDeProducto(producto, doc) {
-  const colorCaja = producto.tipo === 'ARMA' ? '#006b8f' : '#6a1b9a';
-
   const tarjeta = doc.createElement('div');
   tarjeta.className = 'product-card';
+  tarjeta.dataset.tipo = producto.tipo ?? '';
+  // UX-R2.8 — el color de la caja se interpolaba dentro de la plantilla
+  // (`background-color: ${colorCaja}`). Los dos valores eran constantes, asi
+  // que no habia agujero, pero era `innerHTML` con una interpolacion: la
+  // forma exacta que el guardian persigue, y la que alguien copia el dia que
+  // el color venga del catalogo. Ahora el marcado es fijo y el color se pone
+  // por `dataset`, con las fichas del kit.
   tarjeta.innerHTML = `
-    <div class="product-image" style="background-color: ${colorCaja};"></div>
+    <div class="product-image"></div>
     <h4></h4>
     <p></p>
     <div class="product-footer">
@@ -144,8 +200,15 @@ function mostrarFalloDelCarrito(doc) {
   const contenedor = doc.getElementById('cart-items');
   const botonPagar = doc.getElementById('btn-pagar');
   if (contenedor) {
-    contenedor.innerHTML =
-      '<p class="empty-cart-msg">No se pudo cargar tu carrito. Vuelve a intentarlo.</p>';
+    // UX-R2.8d — era un parrafo sin salida. Ahora ofrece reintentar, que es
+    // lo que alguien quiere hacer cuando su carrito no carga.
+    contenedor.replaceChildren(
+      estadoDeError({
+        titulo: 'No se pudo cargar tu carrito',
+        detalle: 'Tus productos siguen ahí. Vuelve a intentarlo.',
+        alReintentar: () => cargarCarrito(doc),
+      }),
+    );
   }
   if (botonPagar) {
     // No se paga lo que no se ha podido leer.
@@ -162,7 +225,7 @@ export function actualizarUI(carrito, doc = document) {
   contenedor.innerHTML = '';
 
   if (!carrito || !carrito.items || carrito.items.length === 0) {
-    contenedor.innerHTML = '<p class="empty-cart-msg">Tu carrito está vacío</p>';
+    contenedor.innerHTML = '<p class="t-meta">Tu carrito está vacío</p>';
     subtotal.textContent = '0 COP';
     total.textContent = '0 COP';
     botonPagar.disabled = true;

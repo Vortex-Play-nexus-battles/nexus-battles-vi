@@ -97,9 +97,38 @@ public class ConfiguracionDelServicio {
             RepositorioDePartidas partidas, CanalDePartida canal,
             com.nexusbattles.plataforma.salaspartidas.dominio.MotorDeCombate motor,
             com.nexusbattles.plataforma.salaspartidas.aplicacion.LiquidarApuesta apuesta,
-            com.nexusbattles.plataforma.salaspartidas.aplicacion.AcreditarRecompensa recompensa) {
+            com.nexusbattles.plataforma.salaspartidas.aplicacion.AcreditarRecompensa recompensa,
+            com.nexusbattles.plataforma.salaspartidas.aplicacion.InformarEncuentroDeTorneo torneo) {
         return new com.nexusbattles.plataforma.salaspartidas.aplicacion.EjecutarAccion(
-                partidas, canal, motor, apuesta, recompensa);
+                partidas, canal, motor, apuesta, recompensa, torneo);
+    }
+
+    /**
+     * HU-TOR-004 (CA-04): la sala que es un encuentro de torneo informa el
+     * ganador a torneos al terminar, con la credencial de servicio de este
+     * modulo. Sin URL, el arbitro anota el fallo y lo resuelve el administrador.
+     */
+    @Bean
+    public com.nexusbattles.plataforma.salaspartidas.aplicacion.InformarEncuentroDeTorneo informarEncuentroDeTorneo(
+            com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeVinculosDeTorneo vinculos,
+            @org.springframework.beans.factory.annotation.Value("${salas.torneos.url:}") String urlDeTorneos,
+            org.springframework.beans.factory.ObjectProvider<
+                    com.nexusbattles.comun.seguridad.servicio.InterceptorDePortadorDeServicio> credencial,
+            ClientHttpRequestFactory fabricaConTiempos) {
+        com.nexusbattles.plataforma.salaspartidas.aplicacion.ArbitroDeTorneo arbitro;
+        if (urlDeTorneos == null || urlDeTorneos.isBlank()) {
+            arbitro = (idTorneo, numero, ganador, idPartida) -> {
+                throw new com.nexusbattles.plataforma.salaspartidas.aplicacion.ArbitroDeTorneo.TorneoNoDisponible(
+                        "SALAS_TORNEOS_URL no esta configurada en este entorno");
+            };
+        } else {
+            RestClient.Builder constructor = RestClient.builder().requestFactory(fabricaConTiempos);
+            credencial.ifAvailable(constructor::requestInterceptor);
+            arbitro = new com.nexusbattles.plataforma.salaspartidas.integracion.ClienteTorneos(
+                    constructor.build(), urlDeTorneos);
+        }
+        return new com.nexusbattles.plataforma.salaspartidas.aplicacion.InformarEncuentroDeTorneo(
+                vinculos, arbitro, Clock.systemUTC());
     }
 
     /**
@@ -196,15 +225,31 @@ public class ConfiguracionDelServicio {
      * distintas y el dia que una necesite su propio tiempo de espera no debe
      * arrastrar a la otra. Por eso mismo cada uno lleva su corta circuitos
      * (HU-DIS-003, ver {@link ConfiguracionDeResiliencia}).
+     *
+     * <p><b>R8.1 — la credencial de servicio.</b> Hasta aqui este era el
+     * <b>unico</b> cliente HTTP del servicio que se construia con un
+     * {@code RestClient.builder()} pelado, sin el interceptor de portador: no
+     * hacia falta, porque {@code motor-combate} no tenia seguridad ninguna y
+     * aceptaba peticiones anonimas. Ahora {@code POST /api/v1/combate/ataques}
+     * exige {@code ROLE_SERVICIO}, asi que la credencial de
+     * {@code salas-partidas} (ADR-001 via el emisor de ADR-005) viaja tambien
+     * aqui. Sin credencial configurada el cliente sale sin {@code Authorization}
+     * y el motor responde 401, que el corta circuitos traduce a la degradacion
+     * de HU-DIS-003: la partida avisa de que el combate no esta disponible en
+     * vez de resolver un ataque que nadie autorizo.
      */
     @Bean
     public com.nexusbattles.plataforma.salaspartidas.dominio.MotorDeCombate motorDeCombate(
             @org.springframework.beans.factory.annotation.Value("${motor.combate.url:http://localhost:8104}")
             String urlDelMotor,
             @Qualifier("cortaMotorCombate") CortaCircuitos corta,
+            org.springframework.beans.factory.ObjectProvider<
+                    com.nexusbattles.comun.seguridad.servicio.InterceptorDePortadorDeServicio> credencial,
             ClientHttpRequestFactory fabricaConTiempos) {
+        RestClient.Builder constructor = RestClient.builder().requestFactory(fabricaConTiempos);
+        credencial.ifAvailable(constructor::requestInterceptor);
         return new com.nexusbattles.plataforma.salaspartidas.integracion.ClienteMotorCombate(
-                RestClient.builder().requestFactory(fabricaConTiempos).build(), urlDelMotor, corta);
+                constructor.build(), urlDelMotor, corta);
     }
 
     /** RF-JUE-017: estado de la partida, para pintar y para reconectar. */

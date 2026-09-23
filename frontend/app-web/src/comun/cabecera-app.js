@@ -245,17 +245,46 @@ export function montarCabecera(
   // --- marca + navegación --------------------------------------------------
   const grupoMarca = document.createElement('div');
   grupoMarca.className = 'cabecera__grupo-marca';
-  const marca = enlace(
-    'NEXUS BATTLES VI',
-    resolver(sesion.autenticado ? RUTAS.inicio : RUTAS.login, base),
-    'cabecera__marca',
-  );
+  // UX-R2.9 — la marca en dos longitudes. «NEXUS BATTLES VI» mide 154 px, y a
+  // 375 px de pantalla se comia casi la mitad de la fila ella sola. El nombre
+  // accesible NO cambia: `aria-label` lo fija, y la version corta va
+  // `aria-hidden`, asi que un lector de pantalla siempre oye el nombre entero.
+  const marca = document.createElement('a');
+  marca.className = 'cabecera__marca';
+  marca.href = resolver(sesion.autenticado ? RUTAS.inicio : RUTAS.login, base);
   marca.setAttribute('aria-label', 'Nexus Battles VI — inicio');
+  const marcaLarga = document.createElement('span');
+  marcaLarga.className = 'cabecera__marca-larga';
+  marcaLarga.textContent = 'NEXUS BATTLES VI';
+  const marcaCorta = document.createElement('span');
+  marcaCorta.className = 'cabecera__marca-corta';
+  marcaCorta.setAttribute('aria-hidden', 'true');
+  marcaCorta.textContent = 'NB VI';
+  marca.append(marcaLarga, marcaCorta);
   grupoMarca.appendChild(marca);
+
+  // UX-R2.9 — el disparador del menu de navegacion en pantallas estrechas.
+  //
+  // Los seis destinos siguen estando TODOS (HU-INV-004 CA-01 los exige
+  // siempre): lo que cambia es que a partir de 860 px dejan de repartirse en
+  // tres filas apiladas —el laboratorio visual media 180 px de cabecera en
+  // movil, casi tres veces los 64 px de diseno— y se pliegan detras de este
+  // boton, a un toque. En escritorio el boton no existe: `display: none`.
+  const alternarNav = document.createElement('button');
+  alternarNav.type = 'button';
+  alternarNav.className = 'cabecera__alternar';
+  alternarNav.dataset.zona = 'alternar-nav';
+  alternarNav.setAttribute('aria-expanded', 'false');
+  alternarNav.setAttribute('aria-controls', 'cabecera-nav');
+  alternarNav.setAttribute('aria-label', 'Abrir el menú de navegación');
+  alternarNav.appendChild(icono('mas', base, 'icono'));
+  grupoMarca.appendChild(alternarNav);
 
   const nav = document.createElement('nav');
   nav.className = 'cabecera__nav';
-  nav.setAttribute('aria-label', 'Navegacion principal');
+  nav.id = 'cabecera-nav';
+  nav.setAttribute('aria-label', 'Navegación principal');
+
   for (const seccion of SECCIONES) {
     const destino = document.createElement('a');
     destino.className = 'cabecera__destino';
@@ -265,7 +294,7 @@ export function montarCabecera(
       destino.classList.add('cabecera__destino--pendiente');
       destino.setAttribute('aria-disabled', 'true');
       destino.dataset.pendiente = seccion.pendiente;
-      destino.title = `Todavia no publicada: ${seccion.pendiente}`;
+      destino.title = `Todavía no publicada: ${seccion.pendiente}`;
     } else {
       destino.href = resolver(seccion.destino, base);
       if (seccion.privada && !sesion.autenticado) {
@@ -274,6 +303,15 @@ export function montarCabecera(
         login.searchParams.set('volver', new URL(destino.href).pathname);
         destino.href = login.href;
         destino.dataset.exigeSesion = '';
+
+        // UX-R2.0 — antes solo se sabia al pulsar: el visitante veia seis
+        // destinos identicos y cuatro le devolvian al login. HU-INV-004 CA-01
+        // exige los seis accesos siempre, asi que no se esconden; lo que
+        // faltaba era decir cual pide sesion ANTES de pulsarlo. El titulo lo
+        // dice, y `.cabecera__destino--con-sesion` lo marca en pantalla sin
+        // que el color sea la unica senal.
+        destino.classList.add('cabecera__destino--con-sesion');
+        destino.title = `${seccion.etiqueta}: hay que iniciar sesión`;
       }
     }
     if (seccion.id === seccionActiva) {
@@ -325,7 +363,7 @@ export function montarCabecera(
       );
     }
     zona.appendChild(
-      enlace('Iniciar sesion', login.href, 'boton boton--secundario boton--pequeno'),
+      enlace('Iniciar sesión', login.href, 'boton boton--secundario boton--pequeno'),
     );
     zona.appendChild(
       enlace('Registrarse', resolver(RUTAS.registro, base), 'boton boton--primario boton--pequeno'),
@@ -334,7 +372,7 @@ export function montarCabecera(
       const aviso = document.createElement('span');
       aviso.className = 'cabecera__aviso-sesion';
       aviso.setAttribute('role', 'status');
-      aviso.textContent = 'Tu sesion caduco';
+      aviso.textContent = 'Tu sesión caducó';
       zona.prepend(aviso);
     }
     acciones.appendChild(zona);
@@ -408,14 +446,14 @@ export function montarCabecera(
     ];
     if (ROLES_ADMINISTRATIVOS.includes(sesion.rol)) {
       opciones.push(
-        ['Gestion de usuarios', RUTAS.gestionUsuarios],
+        ['Gestión de usuarios', RUTAS.gestionUsuarios],
         ['Lista negra', RUTAS.listaNegra],
         ['Sanciones', RUTAS.sanciones],
       );
       if (sesion.rol !== 'MODERADOR') {
         opciones.push(
-          ['Parametros', RUTAS.parametros],
-          ['Auditoria', RUTAS.auditoria],
+          ['Parámetros', RUTAS.parametros],
+          ['Auditoría', RUTAS.auditoria],
           ['Panel de observabilidad', RUTAS.metricas],
         );
       }
@@ -430,7 +468,7 @@ export function montarCabecera(
     salir.className = 'menu__opcion menu__opcion--peligro';
     salir.setAttribute('role', 'menuitem');
     salir.dataset.zona = 'cerrar-sesion';
-    salir.textContent = 'Cerrar sesion';
+    salir.textContent = 'Cerrar sesión';
     salir.addEventListener('click', () => cerrarSesion({ almacen, navegar, base }));
     grupo.appendChild(salir);
     menu.appendChild(grupo);
@@ -453,6 +491,37 @@ export function montarCabecera(
   }
 
   cabecera.appendChild(acciones);
+
+  // UX-R2.9 — el plegado de la navegacion en pantallas estrechas.
+  //
+  // Se marca con un atributo en la cabecera y no con `hidden` en el `<nav>`,
+  // porque quien decide si el menu esta plegado o no es el ANCHO, y eso solo
+  // lo sabe el CSS. Con `hidden` habria que escuchar el `resize` y mantener
+  // dos verdades sincronizadas; con `data-nav-abierto` el escritorio ignora
+  // el atributo y ensena los seis destinos siempre, pase lo que pase aqui.
+  alternarNav.addEventListener('click', () => {
+    const abierto = cabecera.dataset.navAbierto !== 'si';
+    cabecera.dataset.navAbierto = abierto ? 'si' : 'no';
+    alternarNav.setAttribute('aria-expanded', String(abierto));
+    alternarNav.setAttribute(
+      'aria-label',
+      abierto ? 'Cerrar el menú de navegación' : 'Abrir el menú de navegación',
+    );
+  });
+  cabecera.dataset.navAbierto = 'no';
+
+  // Escape cierra, igual que el menu de cuenta. Sin esto el teclado se queda
+  // con el menu abierto y sin forma de cerrarlo que no sea tabular hasta el
+  // boton (WCAG 2.1.2, «sin trampas de teclado»).
+  document.addEventListener('keydown', (evento) => {
+    if (evento.key === 'Escape' && cabecera.dataset.navAbierto === 'si') {
+      cabecera.dataset.navAbierto = 'no';
+      alternarNav.setAttribute('aria-expanded', 'false');
+      alternarNav.setAttribute('aria-label', 'Abrir el menú de navegación');
+      alternarNav.focus();
+    }
+  });
+
   raiz.replaceChildren(cabecera);
   return { elemento: cabecera, sesion };
 }

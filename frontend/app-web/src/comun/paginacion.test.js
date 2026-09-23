@@ -210,6 +210,6 @@ describe('Control de paginacion', () => {
   test('informa en texto la pagina en curso y el total', () => {
     const control = construirPaginacion({ paginaActual: 2, totalPaginas: 5 }, () => {});
 
-    expect(control.querySelector('.paginacion__info').textContent).toBe('Pagina 3 de 5');
+    expect(control.querySelector('.paginacion__info').textContent).toBe('Página 3 de 5');
   });
 });

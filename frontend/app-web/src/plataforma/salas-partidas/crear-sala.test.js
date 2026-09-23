@@ -13,6 +13,8 @@ import { jest } from '@jest/globals';
 import {
   montarCrearSala,
   leerFormulario,
+  encuentroDesde,
+  prefijarEncuentro,
   tonoPara,
   limitesDe,
   maximoDeMaquinas,
@@ -52,6 +54,7 @@ const HTML = `
       </select>
     </div>
     <input type="checkbox" name="privada" />
+    <p data-zona="nota-torneo" hidden></p>
 
     <button type="submit">CREAR SALA</button>
   </form>
@@ -128,6 +131,65 @@ describe('leerFormulario', () => {
       </form>`;
 
     expect(leerFormulario(document.getElementById('f')).heroesIA).toBe(1);
+  });
+});
+
+describe('encuentro de torneo (HU-TOR-004 CA-04)', () => {
+  test('encuentroDesde lee ?torneo=&encuentro= y rechaza lo que no es un encuentro 1..14', () => {
+    expect(encuentroDesde('?torneo=t-1&encuentro=3')).toEqual({
+      torneoId: 't-1',
+      numeroEncuentro: 3,
+    });
+    expect(encuentroDesde('')).toBeNull();
+    expect(encuentroDesde('?torneo=t-1')).toBeNull();
+    expect(encuentroDesde('?torneo=t-1&encuentro=15')).toBeNull();
+    expect(encuentroDesde('?torneo=t-1&encuentro=abc')).toBeNull();
+    expect(encuentroDesde('?encuentro=2')).toBeNull();
+  });
+
+  test('sin encuentro el cuerpo no lleva torneo: el cuerpo 1.3.0 sigue igual', () => {
+    const formulario = preparar();
+    expect(leerFormulario(formulario)).not.toHaveProperty('torneo');
+  });
+
+  test('prefijar deja el vinculo en campos ocultos, muestra la nota y sugiere 4 en equipos de 2', () => {
+    const formulario = preparar();
+    elegir(formulario, 'UNO_CONTRA_UNO');
+
+    prefijarEncuentro(formulario, { torneoId: 't-1', numeroEncuentro: 3 });
+
+    const cuerpo = leerFormulario(formulario);
+    expect(cuerpo.torneo).toEqual({ torneoId: 't-1', numeroEncuentro: 3 });
+    expect(cuerpo.modalidad).toBe('HASTA_SEIS');
+    expect(cuerpo.maximoParticipantes).toBe(4);
+    expect(cuerpo.tamanoEquipo).toBe(2);
+    const nota = formulario.querySelector('[data-zona="nota-torneo"]');
+    expect(nota.hidden).toBe(false);
+    expect(nota.textContent).toContain('encuentro 3');
+    expect(formulario.querySelectorAll('input[name="torneoId"]')).toHaveLength(1);
+
+    // Volver a prefijar no duplica los campos ocultos.
+    prefijarEncuentro(formulario, { torneoId: 't-1', numeroEncuentro: 3 });
+    expect(formulario.querySelectorAll('input[name="torneoId"]')).toHaveLength(1);
+  });
+
+  test('montar con encuentro manda torneo al servicio y lo conserva tras crear (reset)', async () => {
+    const formulario = preparar();
+    const crearSalaImpl = jest
+      .fn()
+      .mockResolvedValue({ id: 'a1', maximoParticipantes: 4, recompensaCreditos: 0 });
+    montarCrearSala(formulario, {
+      crearSalaImpl,
+      encuentro: { torneoId: 't-1', numeroEncuentro: 1 },
+    });
+
+    formulario.dispatchEvent(new Event('submit'));
+    await asentar();
+
+    expect(crearSalaImpl).toHaveBeenCalledWith(
+      expect.objectContaining({ torneo: { torneoId: 't-1', numeroEncuentro: 1 } }),
+    );
+    expect(leerFormulario(formulario).torneo).toEqual({ torneoId: 't-1', numeroEncuentro: 1 });
   });
 });
 
@@ -340,7 +402,7 @@ describe('montarCrearSala', () => {
       new ErrorDeApi(
         {
           type: 'https://nexusbattles.local/errores/creditos-sin-integrar',
-          title: 'Las apuestas todavia no estan disponibles',
+          title: 'Las apuestas todavía no están disponibles',
           status: 503,
           detail: 'Por ahora solo se pueden crear salas sin recompensa.',
         },
@@ -354,7 +416,7 @@ describe('montarCrearSala', () => {
 
     const aviso = document.querySelector('.aviso');
     expect(aviso.className).toContain('aviso--error');
-    expect(aviso.textContent).toContain('apuestas todavia no estan disponibles');
+    expect(aviso.textContent).toContain('apuestas todavía no están disponibles');
     expect(aviso.textContent).toContain('sin recompensa');
     expect(aviso.getAttribute('role')).toBe('alert');
   });

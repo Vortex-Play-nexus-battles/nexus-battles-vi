@@ -11,12 +11,16 @@
   <body>
     <div data-cabecera-app></div>
 
-    <main class="contenedor pila" data-vista="torneos">
+    <main class="pagina pila" data-vista="torneos">
+      <!--
+        UX-R2.7 — aqui habia una nota de la especificacion: «Un torneo cada 91
+        dias, ocho equipos de dos jugadores y un arbol de doble eliminacion».
+        Son las reglas del formato (RF-TOR-001, RF-TOR-004), no algo que quien
+        juega necesite leer cada vez que entra; el torneo que haya ya las
+        ensena con sus cupos y su arbol. Mismo criterio que se aplico al umbral
+        del 60/40 en la sala de batalla (PR-UX-3).
+      -->
       <h1>Torneo</h1>
-      <p class="t-meta">
-        Un torneo cada 91 dias, ocho equipos de dos jugadores y un arbol de doble eliminacion.
-        Cualquiera consulta los equipos y el arbol; para inscribirte necesitas sesion.
-      </p>
 
       <div class="aviso" data-zona="aviso" role="status" hidden></div>
 
@@ -37,7 +41,7 @@
             />
           </label>
           <label class="campo">
-            <span class="campo__etiqueta">Inscripcion (creditos, 0 = gratis)</span>
+            <span class="campo__etiqueta">Inscripción (créditos, 0 = gratis)</span>
             <input class="campo__control" type="number" name="costoInscripcion" min="0" value="0" />
           </label>
         </div>

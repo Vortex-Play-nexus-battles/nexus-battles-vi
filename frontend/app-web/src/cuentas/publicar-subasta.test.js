@@ -342,20 +342,26 @@ test('Subastas activas ofrece Publicar subasta sin sesion y conserva la carga de
     document.dispatchEvent(new Event('DOMContentLoaded'));
     await vaciar();
 
-    const enlace = $('#raiz-subastas a');
+    // UX-R2.8b — lo que esta prueba protege es el COMPORTAMIENTO: que sin
+    // sesion se ofrezca publicar y que el listado se pida igual. Las
+    // afirmaciones que ataban ese comportamiento a una posicion concreta del
+    // DOM (`previousElementSibling`, `nextElementSibling`) se cambiaron por
+    // las del encabezado del kit, que es donde vive ahora el par
+    // titulo + accion. El estado vacio tambien pasa a ser el del kit.
+    const enlace = $('#raiz-subastas .encabezado-pagina a');
     expect(enlace).not.toBeNull();
     expect(enlace.textContent).toBe('Publicar subasta');
     expect(enlace.getAttribute('href')).toBe('./publicar-subasta.html');
     expect(enlace.hidden).toBe(false);
-    expect(enlace.previousElementSibling.textContent).toBe('Subastas activas');
-    expect(enlace.nextElementSibling.className).toBe('subastas-busqueda');
+    expect($('#raiz-subastas .encabezado-pagina h1').textContent).toBe('Subastas activas');
+    expect($('#raiz-subastas .subastas-busqueda')).not.toBeNull();
     expect($('.cabecera [data-seccion="subasta"]').getAttribute('aria-current')).toBe('page');
     expect($('.subastas-filtros')).not.toBeNull();
     expect($('.subastas-orden__control')).not.toBeNull();
     expect(globalThis.fetch).toHaveBeenCalledWith(
       '/api/v1/subastas?page=0&size=16&ordenarPor=FECHA_PUBLICACION',
     );
-    expect($('#subastas-resultados .estado-vacio')).not.toBeNull();
+    expect($('#subastas-resultados [data-estado="vacio"]')).not.toBeNull();
   } finally {
     document.removeEventListener('DOMContentLoaded', inicializar);
   }

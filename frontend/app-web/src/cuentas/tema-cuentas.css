@@ -1,3 +1,18 @@
+/* Los componentes compartidos ya no se redefinen aqui.
+ *
+ * `.tarjeta`, `.aviso`, `.fila`, `.ayuda` y `.paginacion` son del sistema
+ * de diseno (`shared/ui-kit/css/`). Redefinirlos con el mismo nombre en una
+ * hoja de vista hacia que el MISMO componente se viera distinto segun la
+ * pantalla: la tarjeta tenia radio 8 px en unas vistas y 10 px en otras, y
+ * el aviso salia siempre azul aunque el modificador dijera error o exito.
+ * La vista carga ahora `base.css` ademas de `componentes.css`, asi que las
+ * reglas del kit llegan enteras.
+ */
+
+/* Los tokens del sistema de diseno ya no se copian aqui: los que compartian
+ * nombre con `tokens.css` tapaban el modo de alto contraste del kit. Quedan
+ * los alias propios de este tema. */
+
 /* ============================================================
    tema-cuentas.css
    Copia exacta de los tokens y clases base de demo-rbac.css
@@ -19,25 +34,6 @@
 /* ---- Copiado tal cual de demo-rbac.css ---- */
 
 :root {
-  --fondo: #d7deed;
-  --superficie: #ffffff;
-  --cromo: #1c2340;
-  --borde-decorativo: #9fabc9;
-  --borde-interactivo: #6f7994;
-  --accion: #2244bf;
-  --accion-relleno: #1e3f88;
-  --acento: #582784;
-  --exito: #086b31;
-  --exito-fondo: #e4f5e9;
-  --advertencia: #8a4a00;
-  --advertencia-fondo: #fbeedd;
-  --error: #b81a1a;
-  --error-fondo: #fbe4e4;
-  --info: #095e8c;
-  --info-fondo: #ddeef7;
-  --texto: #111726;
-  --texto-secundario: #48536a;
-  --texto-terciario: #57627a;
 }
 
 * {
@@ -54,40 +50,13 @@ body {
   line-height: 1.45;
 }
 
-.aviso {
-  background: var(--info-fondo);
-  color: var(--info);
-  border: 1px solid var(--borde-decorativo);
-  border-radius: 8px;
-  padding: 12px 16px;
-  margin-bottom: 20px;
-}
-.aviso[hidden] {
-  display: none;
-}
-
-.tarjeta {
-  background: var(--superficie);
-  border: 1px solid var(--borde-decorativo);
-  border-radius: 10px;
-  padding: 20px;
-  margin-bottom: 20px;
-}
-
-.fila {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  align-items: flex-end;
-}
-
 label {
   display: flex;
   flex-direction: column;
   gap: 6px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--texto-secundario);
+  color: var(--texto-2);
 }
 
 select,
@@ -96,9 +65,10 @@ input[type='url'],
 input[type='email'],
 input[type='password'] {
   min-width: 240px;
-  height: 40px;
+  /* UX-R2.9 — ver la nota del boton, mas abajo. */
+  min-height: var(--objetivo-tactil);
   padding: 0 12px;
-  border: 1px solid var(--borde-interactivo);
+  border: 1px solid var(--borde-int);
   border-radius: 6px;
   font: inherit;
   color: var(--texto);
@@ -125,24 +95,28 @@ button:focus {
 }
 
 .estado.carga {
-  background: var(--info-fondo);
+  background: var(--info-insignia);
   color: var(--info);
 }
 .estado.error {
-  background: var(--error-fondo);
+  background: var(--error-insignia);
   color: var(--error);
 }
 .estado.exito {
-  background: var(--exito-fondo);
+  background: var(--exito-insignia);
   color: var(--exito);
 }
 .estado.vacio {
-  background: var(--advertencia-fondo);
+  background: var(--advertencia-insignia);
   color: var(--advertencia);
 }
 
+/* UX-R2.9 — 40 px era lo que traia la maqueta; el minimo tactil son 44
+   (WCAG 2.5.5). Se cambia la ALTURA MINIMA, nada mas: el relleno lateral y
+   el tamano de letra siguen igual, asi que el control se ve como se veia y
+   ademas se puede pulsar. */
 button {
-  min-height: 40px;
+  min-height: var(--objetivo-tactil);
   padding: 8px 16px;
   border: 0;
   border-radius: 6px;
@@ -153,26 +127,17 @@ button {
 }
 
 .btn-primario {
-  background: var(--accion-relleno);
+  background: var(--primaria-relleno);
   color: #ffffff;
 }
 .btn-acento {
-  background: var(--acento);
+  background: var(--acento-relleno);
   color: #ffffff;
 }
 .btn-contorno {
   background: var(--superficie);
-  color: var(--accion);
-  border: 1px solid var(--borde-interactivo);
-}
-
-.ayuda {
-  margin: 8px 0 16px;
-  color: var(--texto-terciario);
-  font-size: 13px;
-}
-.ayuda.error-campo {
-  color: var(--error);
+  color: var(--primaria);
+  border: 1px solid var(--borde-int);
 }
 
 /* ---- Adiciones propias de registro/login ----
@@ -197,7 +162,7 @@ form > label,
   font-family: Rajdhani, 'Trebuchet MS', sans-serif;
   font-weight: 600;
   font-size: 20px;
-  color: var(--texto-secundario);
+  color: var(--texto-2);
   text-align: center;
   margin: 0 0 20px;
 }
@@ -266,7 +231,7 @@ form > label,
   left: 0;
   right: 0;
   height: 6px;
-  background: linear-gradient(90deg, var(--accion) 0%, var(--acento) 100%);
+  background: linear-gradient(90deg, var(--primaria) 0%, var(--acento-relleno) 100%);
 }
 
 .pagina-auth .fila > label {
@@ -290,12 +255,12 @@ form > label,
 .pagina-auth input[type='text']:hover,
 .pagina-auth input[type='email']:hover,
 .pagina-auth input[type='password']:hover {
-  border-color: var(--texto-secundario);
+  border-color: var(--texto-2);
   transform: scale(1.015);
 }
 .pagina-auth select:focus,
 .pagina-auth input:focus {
-  border-color: var(--accion);
+  border-color: var(--primaria);
   box-shadow: 0 0 0 4px rgba(34, 68, 191, 0.14);
   outline: none;
   transform: translateY(-1px) scale(1.015);
@@ -321,7 +286,7 @@ form > label,
   text-align: center;
   margin-top: 20px;
   font-size: 13px;
-  color: var(--accion);
+  color: var(--primaria);
   text-decoration: none;
 }
 .enlace-secundario:hover {

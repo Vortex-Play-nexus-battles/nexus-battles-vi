@@ -1,30 +1,13 @@
+/* Los tokens del sistema de diseno ya no se copian aqui: los 21 que
+ * compartian nombre con `tokens.css` tapaban el modo de alto contraste del
+ * kit (18 de ellos estan en `@media (prefers-contrast: more)`). */
+
 /* =======================================================================
    The Nexus Battles VI — Módulo de Subastas y Pujas (HU-SUB-004)
    Alineado con shared/ui-kit/css/tokens.css y .claude/rules/frontend-web.md
    ======================================================================= */
 
 :root {
-  --fondo: #d7deed;
-  --superficie: #ffffff;
-  --cromo: #1c2340;
-  --cromo-elevado: #2a3358;
-  --pista: #cbd4e6;
-  --borde: #9fabc9;
-  --borde-int: #6f7994;
-  --primaria: #2244bf;
-  --primaria-relleno: #1e3fb8;
-  --acento-relleno: #5b27b4;
-  --exito: #0b6b31;
-  --exito-insignia: #dff1e6;
-  --advertencia: #8a4a00;
-  --advertencia-insignia: #fbf0de;
-  --error: #b81a1a;
-  --error-insignia: #fbe5e5;
-  --info: #095e8c;
-  --info-insignia: #ddeef7;
-  --texto: #111726;
-  --texto-2: #48536a;
-  --texto-3: #57627a;
 }
 
 body {
@@ -620,6 +603,8 @@ body {
 }
 
 .precio-actual {
+  /* UX-R2.10 — el acuse de una puja aceptada se posiciona dentro. */
+  position: relative;
   font-size: 32px;
   font-weight: 700;
   color: var(--cromo);

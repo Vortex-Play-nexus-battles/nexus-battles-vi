@@ -6,7 +6,34 @@
  * donde sale el tope de 16: es el mismo numero que el servicio devuelve por
  * pagina en SCRUM-318, y ambos lados lo declaran por separado a proposito,
  * para que un cambio en uno rompa ruidosamente en el otro.
+ *
+ * ## UX-R2.5 — de tabla a coleccion
+ *
+ * Hasta aqui la tarjeta era dos parrafos de texto —nombre y tipo— y una fila
+ * de botones. Funcionaba y no mentia, pero un inventario de un juego de
+ * heroes que se lee como una lista de la compra no da ninguna sensacion de
+ * poseer nada.
+ *
+ * Lo que se anade es SOLO lo que el contrato sostiene:
+ *
+ *  - **Retrato.** `ElementoInventario` no trae imagen, pero `productos.yaml`
+ *    si: `GET /api/v1/productos/{id}` devuelve `imagen`. Se pide despues de
+ *    pintar y se rellena cuando llega (ver `retratos.js`); mientras tanto, y
+ *    si el catalogo no responde, queda el icono del tipo.
+ *  - **Icono por tipo.** Del sprite del kit, que tenia treinta simbolos
+ *    dibujados y usaban dos vistas. Un arma y una armadura dejan de ser dos
+ *    rectangulos iguales.
+ *  - **Marco de heroe.** `.marco-heroe` del kit, que nadie consumia.
+ *
+ * Lo que **no** se anade, porque no existe en ningun contrato del repositorio
+ * —ni en `inventario.yaml`, ni en `productos.yaml`, ni en `heroes.yaml`—:
+ * **rareza** y **nivel** del elemento. El kit tiene `distintivo--rareza` y
+ * cuatro marcos de color esperandolos; el dia que el contrato los publique,
+ * la tarjeta los pinta sin tocar el CSS. Inventarlos aqui seria ensenarle al
+ * jugador un dato que el servidor no conoce.
  */
+
+import { icono } from '../../comun/ui/icono.js';
 
 /** Productos por pagina en la resolucion de referencia. */
 export const PRODUCTOS_POR_PAGINA = 16;
@@ -22,10 +49,26 @@ const NOMBRE_DEL_TIPO = {
 };
 
 /**
+ * Simbolo del sprite para cada tipo del catalogo.
+ *
+ * El enum sale de `ElementoInventario.tipo` en `inventario.yaml`. Un tipo que
+ * no este aqui cae en `estrella`, que es neutro: mejor un simbolo generico que
+ * un hueco.
+ */
+export const ICONO_DEL_TIPO = Object.freeze({
+  HEROE: 'usuario',
+  HABILIDAD: 'rayo',
+  ARMA: 'espada',
+  ARMADURA: 'escudo',
+  ITEM: 'frasco',
+  EPICA: 'estrella',
+});
+
+/**
  * Devuelve la rejilla de una pagina de inventario.
  *
  * @param {{elementos: Array<object>}} pagina respuesta de SCRUM-318.
- * @param {{alEditar?: Function, alEquipar?: Function}} opciones acciones de cada tarjeta.
+ * @param {{alEditar?: Function, alEquipar?: Function, alAbrirDetalle?: Function}} opciones
  * @returns {HTMLUListElement} rejilla lista para insertar en el documento.
  */
 export function construirVitrina(pagina, { alEditar, alEquipar, alAbrirDetalle } = {}) {
@@ -48,6 +91,40 @@ export function construirVitrina(pagina, { alEditar, alEquipar, alAbrirDetalle }
 }
 
 /**
+ * El retrato de la tarjeta: marco, icono del tipo y hueco para la imagen.
+ *
+ * Se usa `.marco-heroe` tambien para los objetos, y no solo para los heroes,
+ * porque es el unico marco circular que el kit tiene dibujado y la alternativa
+ * era inventar uno identico con otro nombre. El tipo se distingue por el icono
+ * y por el texto, no por el marco.
+ *
+ * @param {object} elemento
+ * @returns {HTMLElement}
+ */
+function construirRetrato(elemento) {
+  const marco = document.createElement('div');
+  marco.className = 'marco-heroe vitrina__marco';
+
+  const retrato = document.createElement('div');
+  retrato.className = 'marco-heroe__retrato';
+  // `retratos.js` busca esto para colgar la imagen cuando el catalogo
+  // responda. Si no responde, se queda el icono y no pasa nada.
+  retrato.dataset.retratoDe = elemento.productoId;
+
+  // Decorativo: el tipo ya va escrito debajo, en `.vitrina__tipo`. Repetirlo
+  // aqui obligaria a oirlo dos veces con lector de pantalla.
+  retrato.append(
+    icono(ICONO_DEL_TIPO[elemento.tipo] ?? 'estrella', {
+      clase: 'vitrina__icono',
+      etiqueta: null,
+    }),
+  );
+
+  marco.append(retrato);
+  return marco;
+}
+
+/**
  * Una tarjeta de producto. El nombre propio lo escribe el jugador, asi que
  * entra por textContent y nunca por innerHTML.
  */
@@ -56,6 +133,7 @@ function construirTarjeta(elemento, alEditar, alEquipar, alAbrirDetalle) {
   tarjeta.className = 'vitrina__producto';
   tarjeta.dataset.elementoId = elemento.id;
   tarjeta.dataset.productoId = elemento.productoId;
+  tarjeta.dataset.tipo = elemento.tipo;
 
   const disponible = elemento.disponible !== false;
   if (!disponible) {
@@ -69,9 +147,13 @@ function construirTarjeta(elemento, alEditar, alEquipar, alAbrirDetalle) {
 
   const tipo = document.createElement('p');
   tipo.className = 'vitrina__tipo';
-  tipo.textContent = NOMBRE_DEL_TIPO[elemento.tipo] ?? elemento.tipo;
+  // La parte de armadura es lo que distingue un casco de unas botas, y venia
+  // en el contrato desde el principio sin que la tarjeta la ensenara.
+  tipo.textContent = elemento.parteArmadura
+    ? `${NOMBRE_DEL_TIPO[elemento.tipo] ?? elemento.tipo} · ${etiquetaDeParte(elemento.parteArmadura)}`
+    : (NOMBRE_DEL_TIPO[elemento.tipo] ?? elemento.tipo);
 
-  tarjeta.append(nombre, tipo);
+  tarjeta.append(construirRetrato(elemento), nombre, tipo);
 
   if (!disponible) {
     const estado = document.createElement('span');
@@ -120,4 +202,22 @@ function construirTarjeta(elemento, alEditar, alEquipar, alAbrirDetalle) {
     tarjeta.appendChild(acciones);
   }
   return tarjeta;
+}
+
+/**
+ * Nombre legible de una parte de armadura (`ParteArmadura` del contrato).
+ *
+ * @param {string} parte
+ * @returns {string}
+ */
+export function etiquetaDeParte(parte) {
+  const nombres = {
+    CASCO: 'Casco',
+    PECHO: 'Pecho',
+    GUANTES: 'Guantes',
+    BRAZALETES: 'Brazaletes',
+    PANTALON: 'Pantalón',
+    ZAPATOS: 'Zapatos',
+  };
+  return nombres[parte] ?? parte;
 }

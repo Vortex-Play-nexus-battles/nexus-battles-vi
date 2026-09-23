@@ -45,8 +45,8 @@
       </div>
 
       <div class="estado-vista" data-zona="sin-sesion" hidden>
-        <p class="estado-vista__titulo">Inicia sesion para ver tus notificaciones</p>
-        <p class="t-meta">Los avisos son tuyos: hace falta tu sesion para pedirlos.</p>
+        <p class="estado-vista__titulo">Inicia sesión para ver tus notificaciones</p>
+        <p class="t-meta">Los avisos son tuyos: hace falta tu sesión para pedirlos.</p>
       </div>
 
       <section class="tarjeta pila" id="panel-notificaciones" data-zona="panel" hidden>
@@ -58,15 +58,19 @@
           >
         </div>
 
-        <p class="t-meta" data-zona="lista-vacia">Todavia no tienes notificaciones.</p>
+        <p class="t-meta" data-zona="lista-vacia">Todavía no tienes notificaciones.</p>
         <ul class="pila pila--compacta" data-zona="lista" aria-label="Notificaciones"></ul>
       </section>
     </main>
 
-    <!-- RNF-DIS-002: el chatbot esta en todas las vistas, sin excepcion. -->
-    <button class="chatbot-flotante" type="button" aria-label="Abrir el asistente">IA</button>
+    <!--
+      RF-CHA-001: el icono flotante del asistente va en todas las vistas.
+      Lo monta `comun/ui/asistente.js`, que ademas le da comportamiento:
+      hasta ahora el boton estaba copiado aqui y no hacia nada al pulsarlo.
+    -->
 
     <script type="module">
+      import { montarAsistente } from '../../comun/ui/asistente.js';
       import { montarCampana } from './campana.js';
       import { leerSesion, identificadorDeSesion } from './cliente-notificaciones.js';
       import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
@@ -94,6 +98,9 @@
         // En la vista de notificaciones el panel arranca abierto.
         abrir();
       }
+
+      // RF-CHA-001 / HU-CHA-001 CA-03: el icono responde y dice la verdad.
+      montarAsistente(document);
     </script>
   </body>
 </html>

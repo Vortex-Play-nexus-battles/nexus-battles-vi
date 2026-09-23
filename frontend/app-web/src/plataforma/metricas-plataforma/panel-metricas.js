@@ -16,6 +16,27 @@
  */
 
 import { ErrorDeMetricas, obtenerInforme } from './cliente-metricas.js';
+import { h } from '../../comun/ui/dom.js';
+
+/**
+ * Cabecera de tabla con celdas de verdad.
+ *
+ * Era `encabezado.innerHTML = '<tr><th…>' + percentil + …`. `percentil` es un
+ * texto del informe del servicio, asi que iba al parser de HTML sin escapar.
+ * No hay motivo: una fila de cabecera se construye con nodos.
+ *
+ * @param {string[]} titulos
+ * @returns {HTMLTableSectionElement}
+ */
+function cabeceraDeTabla(titulos) {
+  const thead = document.createElement('thead');
+  thead.append(
+    h('tr', {
+      hijos: titulos.map((texto) => h('th', { texto, atributos: { scope: 'col' } })),
+    }),
+  );
+  return thead;
+}
 
 /** Etiquetas legibles de cada tipo. El backend manda el identificador. */
 const NOMBRES_DE_TIPO = {
@@ -99,6 +120,14 @@ export function pintarError(contenedor, error, alReintentar) {
       criterio.textContent = `Criterio pendiente: ${error.criterio}`;
       estado.append(criterio);
     }
+  } else if (error instanceof ErrorDeMetricas && error.esFaltaDePermiso()) {
+    // #527: la observabilidad es de administracion. No es un fallo del
+    // servicio y no se ofrece reintentar: reintentar no cambia el rol.
+    estado.dataset.estado = 'sin-permiso';
+    const { titulo: t, detalle } = error.avisoDePermiso;
+    titulo.textContent = t;
+    cuerpo.textContent = detalle;
+    estado.append(titulo, cuerpo);
   } else {
     titulo.textContent = 'No se pudo cargar el informe de latencia';
     cuerpo.textContent = error?.message ?? 'El servicio de metricas no respondio.';
@@ -129,12 +158,7 @@ function tablaPorTipo(porTipo, percentil) {
   tabla.className = 'tabla-metricas';
   tabla.dataset.tabla = 'por-tipo';
 
-  const encabezado = document.createElement('thead');
-  encabezado.innerHTML =
-    '<tr><th scope="col">Tipo de operacion</th>' +
-    `<th scope="col">${percentil}</th>` +
-    '<th scope="col">Maximo</th>' +
-    '<th scope="col">Muestras</th></tr>';
+  const encabezado = cabeceraDeTabla(['Tipo de operacion', percentil, 'Maximo', 'Muestras']);
 
   const cuerpo = document.createElement('tbody');
   for (const fila of porTipo) {
@@ -183,11 +207,7 @@ function tablaOperaciones(operaciones, percentil) {
   tabla.className = 'tabla-metricas';
   tabla.dataset.tabla = 'operaciones';
 
-  const encabezado = document.createElement('thead');
-  encabezado.innerHTML =
-    '<tr><th scope="col">Operacion</th>' +
-    `<th scope="col">${percentil}</th>` +
-    '<th scope="col">Muestras</th></tr>';
+  const encabezado = cabeceraDeTabla(['Operacion', percentil, 'Muestras']);
 
   const cuerpo = document.createElement('tbody');
   for (const operacion of operaciones) {
@@ -265,7 +285,7 @@ export function pintarInforme(contenedor, informe) {
 
   if (Array.isArray(informe.operacionesMasLentas) && informe.operacionesMasLentas.length > 0) {
     const subtitulo = document.createElement('h3');
-    subtitulo.textContent = 'Operaciones mas lentas';
+    subtitulo.textContent = 'Operaciones más lentas';
     tarjeta.append(subtitulo, tablaOperaciones(informe.operacionesMasLentas, informe.percentil));
   }
 

@@ -10,6 +10,9 @@
  */
 
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
+import { nodo } from '../../comun/ui/dom.js';
+import { pintarAviso } from '../../comun/ui/aviso.js';
+import { campo } from '../../comun/ui/campo.js';
 
 export const ROLES_DE_ADMINISTRACION = Object.freeze(['ADMINISTRADOR', 'SUPER_ADMINISTRADOR']);
 
@@ -105,26 +108,6 @@ export function cambioDesde(datos) {
 
 /* ---- DOM ---- */
 
-function nodo(etiqueta, clase, texto) {
-  const el = document.createElement(etiqueta);
-  if (clase) {
-    el.className = clase;
-  }
-  if (texto !== undefined) {
-    el.textContent = texto;
-  }
-  return el;
-}
-
-export function pintarAviso(zona, { tono, titulo, detalle }) {
-  zona.className = `aviso aviso--${tono}`;
-  zona.replaceChildren(
-    nodo('strong', 'aviso__titulo', titulo),
-    nodo('p', 'aviso__detalle', detalle ?? ''),
-  );
-  zona.hidden = false;
-}
-
 function avisarError(zona, error) {
   const deNegocio = error instanceof ErrorDeParametros;
   pintarAviso(zona, {
@@ -171,23 +154,50 @@ export function filaDeParametro(parametro, { administra, alCambiar, alVerHistori
   }
   const form = nodo('form', 'fila');
   form.dataset.zona = 'cambio';
-  const opciones = Array.isArray(parametro.opciones) && parametro.opciones.length > 0;
-  form.innerHTML = `
-    <label class="campo"><span class="campo__etiqueta">Nuevo valor${parametro.unidad ? ` (${parametro.unidad})` : ''}</span>
-      ${
-        opciones
-          ? `<select class="campo__control" name="valor">${parametro.opciones.map((o) => `<option value="${o}">${o}</option>`).join('')}</select>`
-          : `<input class="campo__control" name="valor" ${parametro.tipo === 'ENTERO' || parametro.tipo === 'DECIMAL' ? 'inputmode="decimal"' : ''} placeholder="vacio = sin definir" />`
-      }</label>
-    <label class="campo"><span class="campo__etiqueta">Motivo</span>
-      <input class="campo__control" name="motivo" minlength="3" maxlength="500" required /></label>
-    <label class="campo"><span class="campo__etiqueta">Vigente desde (opcional)</span>
-      <input class="campo__control" type="datetime-local" name="vigenteDesde" /></label>
-    <button class="boton boton--primario boton--pequeno" type="submit" data-accion="guardar">Guardar</button>
-    <button class="boton boton--secundario boton--pequeno" type="button" data-accion="historial">Historial</button>`;
-  if (opciones && parametro.valor) {
-    form.querySelector('[name="valor"]').value = parametro.valor;
-  }
+
+  // Antes esto era una plantilla dentro de `form.innerHTML`, con
+  // `parametro.opciones` y `parametro.unidad` —dos valores que llegan del
+  // servicio— interpolados SIN escapar dentro de `<option value="${o}">`. Un
+  // valor con una comilla o un `<` rompia el marcado del panel de
+  // administracion, y no hay ninguna razon para construirlo asi: `campo()`
+  // pone cada opcion con `textContent`, que no interpreta marcado.
+  const conOpciones = Array.isArray(parametro.opciones) && parametro.opciones.length > 0;
+  const nuevoValor = campo({
+    nombre: 'valor',
+    etiqueta: parametro.unidad ? `Nuevo valor (${parametro.unidad})` : 'Nuevo valor',
+    valor: conOpciones ? (parametro.valor ?? '') : '',
+    opciones: conOpciones
+      ? parametro.opciones.map((o) => ({ valor: String(o), texto: String(o) }))
+      : null,
+    atributos: conOpciones
+      ? {}
+      : {
+          placeholder: 'vacio = sin definir',
+          inputmode: parametro.tipo === 'ENTERO' || parametro.tipo === 'DECIMAL' ? 'decimal' : null,
+        },
+  });
+  const motivo = campo({
+    nombre: 'motivo',
+    etiqueta: 'Motivo',
+    requerido: true,
+    atributos: { minlength: 3, maxlength: 500 },
+  });
+  const vigenteDesde = campo({
+    nombre: 'vigenteDesde',
+    etiqueta: 'Vigente desde',
+    tipo: 'datetime-local',
+    pista: 'Opcional: deja vacio para aplicarlo ya.',
+  });
+  form.append(nuevoValor.elemento, motivo.elemento, vigenteDesde.elemento);
+
+  const guardar = nodo('button', 'boton boton--primario boton--pequeno', 'Guardar');
+  guardar.type = 'submit';
+  guardar.dataset.accion = 'guardar';
+  const historial = nodo('button', 'boton boton--secundario boton--pequeno', 'Historial');
+  historial.type = 'button';
+  historial.dataset.accion = 'historial';
+  form.append(guardar, historial);
+
   form.addEventListener('submit', (evento) => {
     evento.preventDefault();
     alCambiar?.(parametro, cambioDesde(new FormData(form)), form);
