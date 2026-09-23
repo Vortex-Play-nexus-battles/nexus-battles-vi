@@ -17,8 +17,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.nexusbattles.comun.seguridad.IdentidadDelToken;
 import com.nexusbattles.plataforma.comentarios.Comentario;
-import com.nexusbattles.plataforma.comentarios.moderacion.CategoriaDeReporte;
-import com.nexusbattles.plataforma.comentarios.moderacion.ServicioDeModeracion;
 
 /**
  * Endpoint de publicacion de comentarios de HU-COM-001, segun el contrato
@@ -44,12 +42,9 @@ import com.nexusbattles.plataforma.comentarios.moderacion.ServicioDeModeracion;
 public class ComentariosController {
 
     private final ServicioDePublicacionDeComentarios servicio;
-    private final ServicioDeModeracion moderacion;
 
-    public ComentariosController(ServicioDePublicacionDeComentarios servicio,
-            ServicioDeModeracion moderacion) {
+    public ComentariosController(ServicioDePublicacionDeComentarios servicio) {
         this.servicio = servicio;
-        this.moderacion = moderacion;
     }
 
     /**
@@ -90,58 +85,11 @@ public class ComentariosController {
      * <p>Quien retira es el {@code uid} del token; el cuerpo no manda nada.
      * 204 tambien si ya estaba retirado (idempotente); 403 si es de otro;
      * 404 si no esta en el hilo del producto.
-     */
-    /**
-     * Reportar un comentario — RF-COM-006 (contrato 1.3.0).
      *
-     * <p>Vive aqui y no en el controlador de moderacion a proposito: reportar
-     * lo hace un JUGADOR desde el hilo del producto, y su ruta es la del
-     * comentario. La cola y las acciones son del moderador y viven en
-     * {@code /api/v1/moderacion}. Mezclarlos daria una ruta donde la mitad de
-     * los metodos son para cualquiera y la otra mitad para moderadores, que es
-     * como se acaba abriendo una por descuido.
-     *
-     * <p>El reportante es el {@code uid} del token. El cuerpo no manda a nadie.
+     * <p>Reportar un comentario ajeno (RF-COM-006) no esta aqui: su ruta si
+     * cuelga de este recurso, pero la clase vive en {@code moderacion} para
+     * que publicar no dependa de moderar. Ver {@code ReportesController}.
      */
-    @PostMapping("/{commentId}/reportes")
-    public ResponseEntity<ReporteCreadoResponse> reportar(
-            @PathVariable String productId,
-            @PathVariable String commentId,
-            @AuthenticationPrincipal Jwt reportante,
-            @RequestBody ReporteRequest peticion) {
-
-        ServicioDeModeracion.Reportado reportado = moderacion.reportar(
-                productId,
-                commentId,
-                IdentidadDelToken.idDe(reportante).toString(),
-                peticion.categoria(),
-                peticion.descripcion());
-
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ReporteCreadoResponse.desde(reportado));
-    }
-
-    /** Cuerpo del reporte segun el contrato 1.3.0. */
-    public record ReporteRequest(CategoriaDeReporte categoria, String descripcion) {
-    }
-
-    /** Lo que el jugador recibe al reportar. */
-    public record ReporteCreadoResponse(String id, String comentarioId,
-            CategoriaDeReporte categoria, String descripcion, String fecha,
-            String estadoDelComentario, long reportesTotales) {
-
-        static ReporteCreadoResponse desde(ServicioDeModeracion.Reportado r) {
-            return new ReporteCreadoResponse(
-                    r.reporte().id(),
-                    r.reporte().comentarioId(),
-                    r.reporte().categoria(),
-                    r.reporte().descripcion(),
-                    r.reporte().fecha().toString(),
-                    r.comentario().estado().name(),
-                    r.totales());
-        }
-    }
-
     @DeleteMapping("/{commentId}")
     public ResponseEntity<Void> eliminar(
             @PathVariable String productId,
