@@ -364,6 +364,12 @@ export async function montarInventario(
     pintarEquipamiento(vista.equipoLista, {
       equipo: equipoActual,
       elementos: paginaMostrada?.elementos ?? [],
+      // FI-R7 — el selector ya no se queda con los dieciseis elementos de la
+      // pagina que se esta viendo. Antes, un objeto de la pagina 3 no se podia
+      // equipar: no aparecia entre los candidatos y nada decia por que. Con
+      // este puerto el dialogo recorre el inventario en tandas hasta juntar
+      // candidatos, y para cuando los tiene.
+      pedirPagina: (pagina) => consultar(identidad, pagina),
       alEquipar: (ranura, elemento) => cambiarEquipo(true, elemento),
       alDesequipar: (ranura) => cambiarEquipo(false, ranura.elemento),
       alPintarRetratos: (panel) =>

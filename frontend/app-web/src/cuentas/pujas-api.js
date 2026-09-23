@@ -121,14 +121,27 @@ export function aVistaDeSubasta(resumen, apodoPropio = null) {
     nombre: resumen.nombreProducto || 'Objeto sin nombre',
     tipo: resumen.tipoProducto || '',
     descripcion: resumen.descripcionCorta || '',
-    rareza: (resumen.rareza || 'comun').toLowerCase(),
-    nivel: 0,
+    // FI-R1 — `rareza` esta en `SubastaResumen` pero NO es obligatoria y no
+    // trae enumeracion. Aqui se ponia 'comun' cuando faltaba, y «comun» es un
+    // escalon real del juego: eso es inventarse la rareza de un objeto, no
+    // decir que no se sabe. Null significa que no vino.
+    rareza: typeof resumen.rareza === 'string' ? resumen.rareza.toLowerCase() : null,
+    // FI-R1 — `nivel` NO existe en el contrato de subastas. Era un cero fijo
+    // que alimentaba el veredicto «Nivel insuficiente / Compatible» citando
+    // RN-INV-004: una regla de negocio real aplicada a un dato inventado.
+    // Null es «no se sabe»; el cero decia «no pide nivel», que es distinto.
+    nivel: null,
     vendedor: resumen.vendedorId || '',
     oferta: Number(resumen.ofertaVigente || 0),
     // ?? y no ||: un precio de 0 es un dato, aunque sea raro, y || lo
     // confundiria con "no hay precio de compra inmediata".
     compraInmediata: Number(resumen.precioCompraInmediata ?? 0),
-    mediaMercado: 0,
+    // `miniaturaUrl` si esta en el contrato y hasta ahora no se traia; la
+    // vitrina del listado ya la pinta (`subastas-vitrina.js`).
+    miniaturaUrl: resumen.miniaturaUrl || null,
+    // FI-R1 — tampoco esta en el contrato. Un cero aqui se leia como «este
+    // objeto vale cero de media», que es una afirmacion sobre el mercado.
+    mediaMercado: null,
     segundosRestantes: restantes,
     ganando: false,
     superado: false,
@@ -137,7 +150,9 @@ export function aVistaDeSubasta(resumen, apodoPropio = null) {
     retenido: 0,
     rival: null,
     rivales: Number(resumen.cantidadPujas || 0),
-    aporte: { poder: 0, vida: 0, defensa: 0 },
+    // FI-R1 — el contrato no dice que aporta un objeto a un heroe. Los tres
+    // ceros llenaban la columna «Con <objeto>» y toda la de «Diferencia».
+    aporte: null,
     historial: [],
     esMaestroDeJuego: Boolean(resumen.esMaestroDeJuego),
     apodoPropio,

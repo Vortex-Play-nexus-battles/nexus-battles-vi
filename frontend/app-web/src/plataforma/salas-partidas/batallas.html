@@ -90,6 +90,37 @@
       <div data-zona="degradacion" data-seccion="Inventario" hidden></div>
 
       <!--
+        FI-R4 · El codigo de una sala privada. Nace oculto y aparece cuando el
+        servicio responde 403 con el tipo `/errores/sala-privada`: pedir el
+        codigo antes de saber si la sala lo necesita seria pedirselo a todo el
+        mundo. No oculta la rejilla, porque quien se equivoco de sala tiene que
+        poder elegir otra sin recargar.
+      -->
+      <form class="tarjeta pila pila--compacta" data-zona="pedir-codigo" hidden>
+        <p class="tarjeta__titulo">Esta sala es privada</p>
+        <p class="t-cuerpo" data-zona="aviso-codigo" role="status" aria-live="polite"></p>
+        <div class="campo">
+          <label class="campo__etiqueta" for="codigo-invitacion-sala">Código de invitación</label>
+          <input
+            class="campo__control"
+            type="text"
+            id="codigo-invitacion-sala"
+            name="codigoInvitacion"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="ABCD-2345"
+            required
+          />
+        </div>
+        <div class="fila">
+          <button class="boton boton--primario" type="submit">Entrar con el código</button>
+          <button class="boton boton--secundario" type="button" data-accion="cerrar-codigo">
+            Cancelar
+          </button>
+        </div>
+      </form>
+
+      <!--
         Estado del canal en tiempo real (HU-SAL-002, criterio 3). Se dice con
         todas las letras si esta conectado o no, en vez de dejar que la persona
         adivine por que una sala no cambia.
@@ -109,7 +140,7 @@
 
     <script type="module">
       import { montarAsistente } from '../../comun/ui/asistente.js';
-      import { montarBatallas, mostrarAvisoDeSala } from './batallas.js';
+      import { montarBatallas, mostrarAvisoDeSala, invitacionDeLaUrl } from './batallas.js';
       import { urlDelCanal } from './canal-sala.js';
       import { baseDeApi } from './cliente-salas.js';
       import { recogerAvisoDelListado } from './sala-de-espera.js';
@@ -136,7 +167,7 @@
       // HU-SAL-006: si se viene de salir o de una cancelacion, se dice.
       mostrarAvisoDeSala(document, recogerAvisoDelListado(sessionStorage));
 
-      montarBatallas(document.getElementById('vista-batallas'), {
+      const vista = montarBatallas(document.getElementById('vista-batallas'), {
         conectarCanal: () =>
           token
             ? conectarChat({ url: urlDelCanal({ base: baseDeApi() }), token })
@@ -148,6 +179,15 @@
           globalThis.location.href = `./sala-batalla.html?sala=${encodeURIComponent(sala.id)}`;
         },
       });
+
+      // FI-R4 · Un enlace de invitacion (`?sala=<id>&codigo=<codigo>`) entra
+      // solo. Es lo que el anfitrion copia desde la sala de espera; sin esto,
+      // quien lo recibia aterrizaba en el listado sin saber a cual de las salas
+      // le habian invitado.
+      const invitacion = invitacionDeLaUrl(globalThis.location.search);
+      if (invitacion) {
+        vista.entrarA(invitacion.idSala, invitacion.codigo);
+      }
 
       // RF-CHA-001 / HU-CHA-001 CA-03: el icono responde y dice la verdad.
       montarAsistente(document);

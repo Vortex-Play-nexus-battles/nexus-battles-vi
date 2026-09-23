@@ -122,7 +122,18 @@ textarea:focus-visible {
   gap: 10px;
 }
 
+/* FI-R15 — el enlace medía 151x38 y el objetivo táctil mínimo son 44 px
+   (`--objetivo-tactil`, WCAG 2.5.5). Era el único hallazgo del barrido de 170
+   combinaciones vista × resolución, y solo se veía a 375 px: en un teléfono es
+   donde un objetivo de 38 px se falla con el pulgar.
+
+   Se resuelve con `min-height` y centrado en vez de subir el relleno: el
+   relleno de arriba y abajo tendría que pasar de 8 a 11 px, y eso descoloca el
+   enlace respecto a la insignia que tiene al lado. */
 .productos-cabecera__enlace {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--objetivo-tactil);
   padding: 8px 12px;
   border: 1px solid var(--texto-sobre-color);
   border-radius: 7px;

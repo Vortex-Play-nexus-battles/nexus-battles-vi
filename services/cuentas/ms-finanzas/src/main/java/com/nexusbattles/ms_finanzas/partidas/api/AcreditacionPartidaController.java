@@ -24,9 +24,12 @@ import com.nexusbattles.ms_finanzas.partidas.ResultadoPartidaResponse;
  * a los participantes) y sin auth cualquiera podría inventar un resultado
  * de partida con su propio uid como ganador y regalarse créditos, saltándose
  * el cierre de {@code /creditos/acreditar} porque el service se llama como
- * bean local. Consecuencia: ms-salas-partidas necesita el token de servicio
- * de Keycloak (ADR-001) para llamar. Mientras infra no registre el cliente
- * m2m, en dev/local se prueba con un JWT de jugador válido.
+ * bean local. Consecuencia: ms-salas-partidas necesita un token de servicio
+ * ({@code rol=SERVICIO}) para llamar. ADR-001 lo decidió contra Keycloak, pero
+ * Keycloak nunca se aprovisionó: desde ADR-005 lo emite {@code ms-identidad}
+ * por {@code POST /api/v1/auth/token} con {@code grant_type=client_credentials},
+ * y {@code salas-partidas} ya lleva su credencial propia. Ya no se prueba con
+ * un JWT de jugador: uno de jugador recibe 403.
  */
 @RestController
 @RequestMapping("/partidas")

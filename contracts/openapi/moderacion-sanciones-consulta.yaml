@@ -12,7 +12,15 @@ info:
     (CA-02 de HU-USR-004). Se anade `tipo` para que el consumidor distinga
     (D-14 actualizada: silencia la suspension o el baneo, no la advertencia).
     Compatible con 1.0.0: la forma anterior no cambia.
-  version: 1.2.0
+
+    1.3.0 (R12, HU-ADM-001 CA-04): se anade `GET /sanciones/limites`. El rango
+    de la suspension y el plazo de apelacion son configurables desde
+    admin-parametros, y la interfaz los tenia escritos a mano en cinco sitios
+    («30 dias», `max="720"`): bajar el plazo a 7 dejaba al jugador con un boton
+    «Apelar» que el servicio rechazaba. Este recurso publica los que el
+    servicio aplica AHORA, que es la unica fuente que no se puede desincronizar.
+    Aditivo: no cambia nada de 1.2.0.
+  version: 1.3.0
 servers:
   - url: http://localhost:8086/api/v1
     description: Entorno local de desarrollo
@@ -76,7 +84,43 @@ paths:
         '400':
           description: Periodo invalido (hasta no posterior a desde)
 
+  /sanciones/limites:
+    get:
+      summary: Limites vigentes de sancion (HU-ADM-001 CA-04 / RF-ADM-001)
+      description: >
+        Rango de la suspension temporal y plazo de apelacion tal como los
+        aplica el servicio en este momento. Salen de admin-parametros
+        (`sanciones.suspension.minima-horas`, `sanciones.suspension.maxima-dias`
+        y `sanciones.apelacion.plazo-dias`) y, si el catalogo no responde, del
+        respaldo de variable de entorno del propio servicio: nunca falla por
+        esa causa.
+
+        Lo consume la interfaz para no llevar los numeros escritos a mano. No
+        devuelve ningun identificador de jugador, pero exige sesion como el
+        resto de `/sanciones/**`: las dos vistas que lo usan son de usuario
+        autenticado. Si el consumidor no lo puede leer, debe hablar del plazo
+        SIN numero, nunca suponer uno.
+      operationId: limitesDeSancion
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Los limites que aplica el servicio ahora mismo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LimitesDeSancion'
+        '401':
+          description: Sin sesion.
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+
   schemas:
     SancionActivaResponse:
       type: object
@@ -108,6 +152,39 @@ components:
           motivo: "Lenguaje ofensivo reiterado"
           vigenteHasta: "2026-09-20T00:00:00Z"
           tipo: SUSPENSION
+
+    LimitesDeSancion:
+      type: object
+      required:
+        - suspensionMinimaHoras
+        - suspensionMaximaHoras
+        - suspensionMaximaDias
+        - apelacionPlazoDias
+      properties:
+        suspensionMinimaHoras:
+          type: integer
+          description: Duracion minima de una suspension temporal, en horas.
+        suspensionMaximaHoras:
+          type: integer
+          description: >
+            El mismo maximo que `suspensionMaximaDias`, en horas. Va las dos
+            veces para que el formulario use el tope de su campo sin repetir la
+            conversion (y equivocarse, que es lo que pasaba con `max="720"`).
+        suspensionMaximaDias:
+          type: integer
+          description: Duracion maxima de una suspension temporal, en dias.
+        apelacionPlazoDias:
+          type: integer
+          description: Dias desde la emision durante los que se puede apelar.
+      examples:
+        - suspensionMinimaHoras: 1
+          suspensionMaximaHoras: 720
+          suspensionMaximaDias: 30
+          apelacionPlazoDias: 30
+        - suspensionMinimaHoras: 2
+          suspensionMaximaHoras: 48
+          suspensionMaximaDias: 2
+          apelacionPlazoDias: 7
 
     ProblemDetail:
       type: object

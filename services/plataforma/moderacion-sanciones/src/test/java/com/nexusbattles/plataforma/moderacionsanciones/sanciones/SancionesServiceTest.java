@@ -109,6 +109,52 @@ class SancionesServiceTest {
     }
 
     @Nested
+    @DisplayName("HU-ADM-001 CA-04 · el aviso y la validacion dicen el mismo plazo")
+    class PlazoDeApelacionEnElAviso {
+
+        /**
+         * El defecto que esta prueba cierra: el aviso llevaba «30 dias»
+         * escrito a mano mientras {@code apelar} validaba con
+         * {@code limites.plazoDeApelacion()}. Con el plazo del catalogo en 7,
+         * el sistema prometia treinta dias y rechazaba al octavo.
+         */
+        @Test
+        @DisplayName("con el plazo en 7 dias, el aviso promete 7 y no 30")
+        void elAvisoUsaElPlazoConfigurado() {
+            SancionesService conPlazoCorto = new SancionesService(sanciones, apelaciones, avisos,
+                    Clock.fixed(AHORA, ZoneOffset.UTC), LimitesDeSancion.Fijos.de(1, 30, 7));
+
+            conPlazoCorto.emitir(MODERADORA, solicitud(Sancion.Tipo.ADVERTENCIA, null, false));
+
+            ArgumentCaptor<AvisoPendiente> aviso = ArgumentCaptor.forClass(AvisoPendiente.class);
+            verify(avisos).save(aviso.capture());
+            assertThat(aviso.getValue().cuerpo())
+                    .contains("dentro de los 7 dias")
+                    .doesNotContain("30 dias");
+        }
+
+        @Test
+        @DisplayName("el numero del aviso es el mismo que aplica el rechazo por fuera de plazo")
+        void elAvisoYElRechazoCoinciden() {
+            SancionesService conPlazoCorto = new SancionesService(sanciones, apelaciones, avisos,
+                    Clock.fixed(AHORA, ZoneOffset.UTC), LimitesDeSancion.Fijos.de(1, 30, 7));
+            Sancion baneo = conPlazoCorto.emitir(ADMIN, solicitud(Sancion.Tipo.BANEO, null, true));
+            when(sanciones.findById(baneo.id())).thenReturn(Optional.of(baneo));
+
+            ArgumentCaptor<AvisoPendiente> aviso = ArgumentCaptor.forClass(AvisoPendiente.class);
+            verify(avisos).save(aviso.capture());
+            assertThat(aviso.getValue().cuerpo()).contains("dentro de los 7 dias");
+
+            SancionesService alOctavoDia = new SancionesService(sanciones, apelaciones, avisos,
+                    Clock.fixed(AHORA.plus(java.time.Duration.ofDays(8)), ZoneOffset.UTC),
+                    LimitesDeSancion.Fijos.de(1, 30, 7));
+            assertThatThrownBy(() -> alOctavoDia.apelar(SANCIONADO, baneo.id(), "tarde"))
+                    .hasMessageContaining("7 dias")
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.APELACION_NO_PROCEDE);
+        }
+    }
+
+    @Nested
     @DisplayName("HU-USR-005 · suspension temporal")
     class Suspension {
 

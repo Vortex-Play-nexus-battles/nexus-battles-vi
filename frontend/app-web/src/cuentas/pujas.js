@@ -29,6 +29,43 @@ import { acusar } from '../comun/ui/acuse.js';
 export const CANAL_SUBASTAS = '/topic/subastas/listado';
 
 /**
+ * Estado del canal en vivo — FI-R11.
+ *
+ * Las mismas tres variantes que usa la bandeja de notificaciones
+ * (`plataforma/notificaciones/bandeja.js`) y las mismas clases del kit
+ * (`.conexion--*`), a proposito: la persona ya aprendio lo que significa esa
+ * pildora ambar en la campana, y ensenarle otra distinta aqui seria pedirle que
+ * lo aprenda dos veces.
+ *
+ * Que habia antes: nada. `abrirCanalEnVivo` devolvia `null` en silencio si el
+ * WebSocket no abria, y no habia reconexion ninguna. La pantalla decia lo mismo
+ * con canal y sin el, y el sondeo de 5 s tapaba el hueco lo justo para que
+ * nadie lo notara — que es peor, porque en una subasta que cierra en diez
+ * segundos la diferencia entre tiempo real y cinco segundos de retraso es la
+ * subasta.
+ */
+export const ESTADO_CANAL = Object.freeze({
+  CONECTANDO: 'reconectando',
+  ESTABLE: 'estable',
+  RECONECTANDO: 'reconectando',
+  SIN_CONEXION: 'sin-conexion',
+});
+
+/** Lo que se lee en la pildora. */
+export const TEXTO_CANAL = Object.freeze({
+  [ESTADO_CANAL.ESTABLE]: 'Pujas al instante',
+  [ESTADO_CANAL.RECONECTANDO]: 'Reconectando…',
+  [ESTADO_CANAL.SIN_CONEXION]: 'Las pujas pueden tardar unos segundos',
+});
+
+/**
+ * Espera creciente entre reintentos. La misma escalera que la bandeja: empieza
+ * en un segundo porque una caida de red suele durar menos que eso, y se para en
+ * treinta para no castigar a un servidor que esta reiniciando.
+ */
+export const ESPERAS_DE_RECONEXION = Object.freeze([1000, 2000, 5000, 10000, 30000]);
+
+/**
  * Donde guarda el login el JWT. Misma clave que lee `pujas-api.js` para las
  * llamadas REST: la sesion es una sola, y el canal en vivo (R9.6) tiene que
  * acreditarse con el mismo token que ya usa todo lo demas de esta pantalla.
@@ -52,6 +89,42 @@ export const ICONO_RAREZA = Object.freeze({
   epica: 'fuego',
   legendaria: 'trofeo',
 });
+
+/**
+ * Como se dice una rareza que puede no venir — FI-R1.
+ *
+ * `rareza` esta en `SubastaResumen`, pero **no es obligatoria y no trae
+ * enumeracion**: el contrato dice `type: string` y nada mas. Hasta ahora el
+ * cliente rellenaba 'comun' cuando faltaba —inventarse un escalon real del
+ * juego— y la vista hacia `sub.rareza.toUpperCase()` sin guarda, que revienta
+ * en cuanto llega sin ella.
+ *
+ * Lo que no se sabe no se dice: sin rareza no se pinta distintivo, y la ficha
+ * usa su variante neutra. Una rareza que llegue con un nombre que el juego no
+ * conoce se trata igual, porque adivinar cual de los cuatro escalones quiso
+ * decir el servidor seria lo mismo que inventarla.
+ *
+ * @param {unknown} rareza
+ * @returns {{conocida: boolean, clase: string, texto: string|null, simbolo: string}}
+ */
+export function nivelRequeridoVisible(nivel) {
+  return typeof nivel === 'number' && Number.isFinite(nivel)
+    ? `Nivel req. ${nivel}`
+    : 'Nivel requerido: sin dato';
+}
+
+export function rarezaVisible(rareza) {
+  const limpia = typeof rareza === 'string' ? rareza.toLowerCase().trim() : null;
+  if (limpia && Object.hasOwn(ICONO_RAREZA, limpia)) {
+    return {
+      conocida: true,
+      clase: limpia,
+      texto: limpia.toUpperCase(),
+      simbolo: ICONO_RAREZA[limpia],
+    };
+  }
+  return { conocida: false, clase: 'desconocida', texto: null, simbolo: 'escudo' };
+}
 
 /**
  * Datos de ejemplo. **Son un banco de pruebas, no un modo de demostracion.**
@@ -193,6 +266,17 @@ export const SUBASTAS_INICIALES = [
   },
 ];
 
+/**
+ * Heroes de ejemplo. **Banco de pruebas, no el heroe de nadie.**
+ *
+ * FI-R1 — hasta ahora esto era el valor por defecto del controlador, y
+ * `pujas.html` nunca pasa `heroes`: el selector de la ficha de subasta
+ * ofrecia «Kaelen (Niv. 26 - Guerrero)» y «Lyra (Niv. 21 - Exploradora)» a
+ * cualquiera que abriera la pantalla, y la tabla de comparacion sumaba el
+ * aporte del objeto a las estadisticas de un heroe inventado. Ahora el
+ * defecto es `[]` y estos dos solo entran cuando alguien los pasa a proposito
+ * (pruebas y laboratorio visual).
+ */
 export const HEROES_BASE = [
   {
     id: 'kaelen',
@@ -222,18 +306,14 @@ export const CONFIG_REGLAS = {
 };
 
 /**
- * Cierres de ejemplo. **Banco de pruebas, no un modo de demostracion**, igual
- * que SUBASTAS_INICIALES. Esto era el valor por defecto de `eventosCierre` en
- * el constructor, y `pujas.html` monta sin pasar ese parametro: en produccion
- * la pestana «Cierre multiple» anunciaba SIEMPRE «3», y al abrirla se leia
- * «3 CERRARON · Ganaste 1, te superaron en 2», «-1.350 cobrado / +3.280
- * devuelto», el Hacha adjudicada a andres_nv y las derrotas contra thar_vex y
- * valkyria_99. Ninguna de esas tres subastas existe, y el consejo tactico
- * mezclaba esas cifras inventadas con el saldo real del jugador.
+ * Desenlaces de ejemplo. **Banco de pruebas, no el historial de nadie.**
  *
- * Mientras ms-subastas no publique los cierres del jugador (hoy no hay
- * endpoint: ni en pujas-api.js ni en el servicio), lo honesto es no tener
- * ninguno y decirlo.
+ * FI-R1 — ms-subastas no expone hoy ningun recurso de cierres: `/mis-pujas`
+ * solo tiene `/resumen` (MisPujasController) y ni el contrato de listado ni
+ * el de pujas declaran un desenlace. Con estos tres como valor por defecto,
+ * la pestana «Cierre multiple» ensenaba a todo el mundo el mismo «3
+ * CERRARON», el mismo hacha adjudicada y el mismo balance. Ahora el defecto
+ * es `[]` y la vista dice que no hay datos de cierre.
  */
 export const EVENTOS_CIERRE_DEFAULT = [
   {
@@ -386,13 +466,29 @@ export function validarLimiteAuto(
 }
 
 export function calcularComparacionHeroe(heroe, item) {
-  if (!heroe || !item) {
-    return { comparaciones: [], nivelInsuficiente: false, deltaNivel: 0 };
+  // FI-R1 — `evaluado` separa «no se pudo comparar» de «compara bien». Antes
+  // faltando datos se devolvia `nivelInsuficiente: false`, y la vista leia ese
+  // false como un veredicto: pintaba «Compatible: <heroe> cumple el nivel
+  // requerido» citando RN-INV-004 sin haber comprobado nada. Sin heroe
+  // conectado el texto salia literalmente «Compatible: undefined cumple».
+  //
+  // El `|| { poder: 0, vida: 0, defensa: 0 }` de `aporte` hacia lo mismo con
+  // la tabla: un objeto del que no se sabe que aporta pasaba a aportar cero,
+  // y la columna «Diferencia» quedaba en «igual» para las tres filas.
+  const faltanDatos =
+    !heroe ||
+    !item ||
+    !heroe.stats ||
+    !Number.isFinite(heroe.nivel) ||
+    !Number.isFinite(item.nivel) ||
+    !item.aporte;
+  if (faltanDatos) {
+    return { evaluado: false, comparaciones: [], nivelInsuficiente: false, deltaNivel: 0 };
   }
   const nivelInsuficiente = heroe.nivel < item.nivel;
   const deltaNivel = item.nivel - heroe.nivel;
   const st = heroe.stats;
-  const ap = item.aporte || { poder: 0, vida: 0, defensa: 0 };
+  const ap = item.aporte;
 
   const comparaciones = [
     { stat: 'Poder', actual: st.poder, nuevo: st.poder + ap.poder, delta: ap.poder },
@@ -400,7 +496,7 @@ export function calcularComparacionHeroe(heroe, item) {
     { stat: 'Defensa', actual: st.defensa, nuevo: st.defensa + ap.defensa, delta: ap.defensa },
   ];
 
-  return { comparaciones, nivelInsuficiente, deltaNivel };
+  return { evaluado: true, comparaciones, nivelInsuficiente, deltaNivel };
 }
 
 export function calcularSumaTopesAuto(subastas = []) {
@@ -564,7 +660,7 @@ export class ControladorSubastas {
   constructor({
     contenedor,
     subastas = SUBASTAS_INICIALES,
-    heroes = HEROES_BASE,
+    heroes = [],
     config = CONFIG_REGLAS,
     eventosCierre = [],
     api = null,
@@ -575,6 +671,10 @@ export class ControladorSubastas {
     // clave que usa pujas-api.js para las llamadas REST: la sesion es una
     // sola. Inyectable para que las pruebas no dependan de sessionStorage.
     leerToken = () => globalThis.sessionStorage?.getItem(CLAVE_TOKEN_SESION) || null,
+    // FI-R11 — inyectables para que las pruebas no esperen treinta segundos de
+    // verdad ni dependan de temporizadores reales.
+    esperas = ESPERAS_DE_RECONEXION,
+    esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   } = {}) {
     // Subasta que hay que abrir en detalle nada mas cargar. Viene de ?id= en la
     // URL: es la forma de que el listado de HU-SUB-011 entregue una subasta
@@ -594,7 +694,11 @@ export class ControladorSubastas {
     this.heroes = JSON.parse(JSON.stringify(heroes));
     this.config = Object.assign({}, CONFIG_REGLAS, config);
     this.eventosCierre = JSON.parse(JSON.stringify(eventosCierre));
-    this.heroeId = this.heroes[0]?.id || 'kaelen';
+    // FI-R1 — sin heroes no hay heroe activo. Antes caia en 'kaelen', el id
+    // del primer heroe del banco de pruebas, aunque no se hubiera cargado
+    // ninguno: `getHeroeActivo()` devolvia undefined y la ficha comparaba
+    // contra la nada diciendo que todo cuadraba.
+    this.heroeId = this.heroes[0]?.id || null;
     this.vista = 'lista'; // 'lista' | 'explorar' | 'mis-subastas' | 'detalle' | 'cierre-multiple'
     this.origenVista = 'explorar';
     this.subastaActivaId = null;
@@ -617,6 +721,15 @@ export class ControladorSubastas {
     this.conectarCanal = conectarCanal;
     this.leerToken = leerToken;
     this.canal = null;
+    // FI-R11 — sin canal pedido, el estado es «sin conexion» y la pildora no se
+    // pinta: una pantalla que no quiere tiempo real no tiene por que disculparse
+    // por no tenerlo. Las pruebas unitarias caen aqui.
+    this.estadoCanal = urlCanal ? ESTADO_CANAL.CONECTANDO : ESTADO_CANAL.SIN_CONEXION;
+    this.esperas = esperas;
+    this.esperar = esperar;
+    /** Promesa del ciclo de reconexion en curso: nunca dos a la vez. */
+    this.reconexion = null;
+    this.vivo = true;
   }
 
   iniciar() {
@@ -626,7 +739,14 @@ export class ControladorSubastas {
       // Sin await: si el canal tarda o no levanta, la pantalla ya funciona con
       // el sondeo. Encadenarlo aqui retrasaria el primer pintado por algo que
       // es opcional.
-      this.abrirCanalEnVivo();
+      //
+      // FI-R11 — y si no abre, se reintenta. Antes se devolvia null y ahi
+      // moria: el canal no volvia ni cuando el servidor si.
+      this.abrirCanalEnVivo().then((canal) => {
+        if (!canal && this.vivo && this.urlCanal) {
+          this.reconectar();
+        }
+      });
       return this.recargar();
     }
     this.iniciarTemporizador();
@@ -680,10 +800,6 @@ export class ControladorSubastas {
       this.mensajeError = fallo?.message || 'No se pudo cargar el listado de subastas.';
     }
     this.iniciarTemporizador();
-    // Si el canal nunca levanto o se cayo (token caducado, reinicio del
-    // servidor), esta es la ocasion de recuperarlo. Es no-op cuando ya hay
-    // canal abierto, asi que no cuesta nada llamarlo en cada recarga.
-    this.abrirCanalEnVivo();
     this.render();
 
     // Si al terminar la recarga estamos en un detalle, hay que traer tambien
@@ -831,17 +947,59 @@ export class ControladorSubastas {
    * ilegible, la pantalla sigue con el sondeo de 5 s y el jugador no se entera.
    * Un canal opcional no puede tumbar la pantalla.
    */
+  /**
+   * Cambia el estado del canal y lo refleja en la pildora — FI-R11.
+   *
+   * Se repinta solo la pildora, no la vista entera: un repintado completo en
+   * medio de una puja le robaria el foco al campo del monto y perderia lo que
+   * la persona estuviera escribiendo. Es el mismo motivo por el que el
+   * temporizador toca los relojes por `data-tiempo-subasta` y no repinta.
+   *
+   * @param {string} nuevo una de las variantes de ESTADO_CANAL
+   */
+  cambiarEstadoCanal(nuevo) {
+    if (this.estadoCanal === nuevo) {
+      return;
+    }
+    this.estadoCanal = nuevo;
+    this.pintarEstadoCanal();
+  }
+
+  pintarEstadoCanal() {
+    const zona = this.contenedor?.querySelector('[data-zona="conexion-subastas"]');
+    if (!zona) {
+      return;
+    }
+    // Sin canal pedido no se pinta nada: no hay promesa que romper.
+    if (!this.urlCanal) {
+      zona.hidden = true;
+      return;
+    }
+    zona.hidden = false;
+    zona.className = `conexion conexion--${this.estadoCanal}`;
+    zona.textContent = TEXTO_CANAL[this.estadoCanal] ?? this.estadoCanal;
+  }
+
+  /**
+   * Abre el canal y se suscribe. Es el UNICO sitio que lo hace: el ciclo de
+   * reconexion llama aqui, no repite el cableado. Dos copias del mismo enganche
+   * es como se acaba teniendo un canal que se suscribe y otro que no.
+   *
+   * Nunca rechaza: si el servidor no tiene WebSocket, el navegador lo bloquea o
+   * el token no vale, la pantalla sigue con el sondeo de 5 s y **lo dice**.
+   *
+   * @returns {Promise<object|null>} el canal abierto, o null
+   */
   async abrirCanalEnVivo() {
     if (!this.urlCanal || !this.conectarCanal || this.canal) {
       return null;
     }
     try {
-      // R9.6 — el CONNECT va acreditado. Hasta ahora este canal se abria sin
-      // token: era el unico de los cuatro de la casa que no lo mandaba (el
-      // chat de sala y la bandeja de notificaciones lo hacen desde #222 y el
-      // contrato 1.1.0). El navegador no puede poner cabeceras en el
-      // handshake del WebSocket, asi que el sitio donde va es la cabecera
-      // `Authorization` del frame CONNECT — igual que en cliente-chat.js.
+      // R9.6 — el CONNECT va acreditado. Hasta R9.6 este canal se abria sin
+      // token: era el unico de los cuatro de la casa que no lo mandaba. El
+      // navegador no puede poner cabeceras en el handshake del WebSocket, asi
+      // que el sitio donde va es la cabecera `Authorization` del frame CONNECT,
+      // igual que en cliente-chat.js.
       //
       // Sin sesion se conecta igual, y a proposito: el listado de subastas es
       // publico y quien no ha entrado tiene derecho a verlo actualizarse.
@@ -851,9 +1009,68 @@ export class ControladorSubastas {
       const canal = await this.conectarCanal({ url: this.urlCanal, cabeceras });
       canal.suscribir(CANAL_SUBASTAS, (cuerpo) => this.alLlegarActualizacion(cuerpo));
       this.canal = canal;
+      // FI-R11 — un canal que se muere en silencio es peor que uno que no abre:
+      // la pantalla seguiria diciendo «al instante» mientras las pujas de los
+      // demas pasan sin que nadie las vea. Al cerrarse se reconecta, y mientras
+      // tanto se dice.
+      canal.alCerrar = () => {
+        if (this.canal === canal) {
+          this.canal = null;
+          if (this.vivo) {
+            this.reconectar();
+          }
+        }
+      };
+      this.cambiarEstadoCanal(ESTADO_CANAL.ESTABLE);
       return canal;
     } catch {
+      // Ni con un token invalido se finge conexion: el CONNECT falla y el
+      // estado lo dice. Poner «estable» aqui seria prometer tiempo real a quien
+      // no lo tiene.
+      this.cambiarEstadoCanal(ESTADO_CANAL.SIN_CONEXION);
       return null;
+    }
+  }
+
+  /**
+   * Vuelve a intentarlo con espera creciente — FI-R11.
+   *
+   * No sustituye al sondeo de 5 s: ese sigue corriendo y es lo que mantiene la
+   * pantalla al dia mientras no hay canal (riesgo #7 del acta: degradacion
+   * controlada, no apagon). Esto recupera la inmediatez cuando el servidor
+   * vuelve, que antes no pasaba nunca — una vez caido el canal, se quedaba
+   * caido hasta que alguien recargara la pagina.
+   *
+   * Un solo ciclo a la vez: sin esta guarda, un canal que se abre y se cierra
+   * varias veces seguidas deja varios ciclos compitiendo, cada uno con su
+   * propia escalera de esperas.
+   *
+   * @returns {Promise<void>}
+   */
+  reconectar() {
+    if (!this.reconexion) {
+      this.reconexion = this.cicloDeReconexion().finally(() => {
+        this.reconexion = null;
+      });
+    }
+    return this.reconexion;
+  }
+
+  async cicloDeReconexion() {
+    let intento = 0;
+    while (this.vivo && !this.canal && this.urlCanal) {
+      this.cambiarEstadoCanal(ESTADO_CANAL.RECONECTANDO);
+      await this.esperar(this.esperas[Math.min(intento, this.esperas.length - 1)]);
+      if (!this.vivo) {
+        return;
+      }
+      if (await this.abrirCanalEnVivo()) {
+        // Al volver se relee una vez: mientras no habia canal pudieron cambiar
+        // ofertas que el sondeo no alcanzo a traer.
+        await this.recargar();
+        return;
+      }
+      intento += 1;
     }
   }
 
@@ -897,31 +1114,44 @@ export class ControladorSubastas {
     this.canal = null;
   }
 
-  destruir() {
-    this.detenerTemporizador();
-    this.cerrarCanalEnVivo();
-  }
-
-  /**
-   * Para la cuenta atras, y nada mas. Existe aparte de destruir() porque
-   * confundir las dos cosas dejaba el canal en vivo muerto en produccion:
-   * iniciarTemporizador() llamaba a destruir(), destruir() cierra el canal, y
-   * recargar() termina llamando a iniciarTemporizador(). O sea que el canal se
-   * cerraba en la primera recarga -- que es la del arranque -- y el unico
-   * mensaje en vivo que alcanzaba a llegar lo volvia a cerrar al releer. La
-   * pantalla aparentaba tiempo real sin tenerlo, y las pruebas no lo veian
-   * porque abrian el canal a mano despues de iniciar().
-   */
-  detenerTemporizador() {
+  /** Solo el reloj. Lo que `iniciarTemporizador` necesita reiniciar. */
+  pararTemporizador() {
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
   }
 
+  /** El reloj y el canal. Sigue existiendo porque lo llaman desde fuera. */
+  destruir() {
+    this.pararTemporizador();
+    this.cerrarCanalEnVivo();
+  }
+
+  /**
+   * Suelta la pantalla del todo — FI-R11.
+   *
+   * `destruir()` no vale para esto: lo llama `iniciarTemporizador` en cada
+   * recarga para no dejar dos intervalos, asi que si apagara la reconexion, la
+   * primera recarga la mataria. Esto es lo que llama la pagina al irse.
+   */
+  desmontar() {
+    this.vivo = false;
+    this.destruir();
+  }
+
   iniciarTemporizador() {
-    this.detenerTemporizador();
-    this.segundosSinCanal = 0;
+    // FI-R11 — aqui se llamaba a `destruir()`, que ADEMAS de parar el reloj
+    // cerraba el canal en vivo. Y `recargar()` termina llamando a este metodo,
+    // asi que la secuencia real de cada carga era: abrir el canal, pedir el
+    // listado, y cerrar el canal que se acababa de abrir. Con cada recarga
+    // posterior, lo mismo.
+    //
+    // O sea que el tiempo real de las subastas estaba apagado en la practica
+    // desde que existe, y no se noto porque el sondeo de 5 s tapaba el hueco:
+    // el sintoma era que las pujas tardaban unos segundos, que es exactamente
+    // lo que uno espera de un sondeo y lo que nadie va a investigar.
+    this.pararTemporizador();
     this.intervalId = setInterval(() => {
       let cambio = false;
       this.subastas.forEach((sub) => {
@@ -946,29 +1176,7 @@ export class ControladorSubastas {
       if (cambio && this.contenedor) {
         this.actualizarTiemposEnDOM();
       }
-      this.reconciliarSiNoHayCanal();
     }, 1000);
-  }
-
-  /**
-   * Degradacion controlada, riesgo #7 del acta: si el canal en vivo no esta
-   * abierto, la pantalla vuelve a preguntarle al servidor cada 5 s en vez de
-   * quedarse congelada con lo que trajo la ultima vez. Con el canal abierto no
-   * pregunta nada, porque el servidor avisa. Esto estaba prometido en un
-   * comentario ("la pantalla sigue con el sondeo de 5 s") y no existia.
-   */
-  reconciliarSiNoHayCanal() {
-    if (!this.api || this.canal) {
-      this.segundosSinCanal = 0;
-      return false;
-    }
-    this.segundosSinCanal = (this.segundosSinCanal || 0) + 1;
-    if (this.segundosSinCanal < 5) {
-      return false;
-    }
-    this.segundosSinCanal = 0;
-    this.recargar();
-    return true;
   }
 
   /**
@@ -1017,7 +1225,7 @@ export class ControladorSubastas {
   }
 
   getHeroeActivo() {
-    return this.heroes.find((h) => h.id === this.heroeId) || this.heroes[0];
+    return this.heroes.find((h) => h.id === this.heroeId) || this.heroes[0] || null;
   }
 
   cambiarVista(nuevaVista) {
@@ -1465,6 +1673,17 @@ export class ControladorSubastas {
     const subActiva = this.getSubastaActiva();
 
     return `
+      <!-- FI-R11 · el estado del canal, con las mismas clases y el mismo tono
+           que la campana de notificaciones. Va junto a las pestanas porque esta
+           en las tres vistas que traen datos del servidor. -->
+      <span
+        class="conexion conexion--${this.estadoCanal}"
+        data-zona="conexion-subastas"
+        role="status"
+        aria-live="polite"
+        ${this.urlCanal ? '' : 'hidden'}
+        >${this.urlCanal ? (TEXTO_CANAL[this.estadoCanal] ?? this.estadoCanal) : ''}</span
+      >
       <nav class="subastas-tabs" role="tablist" aria-label="Secciones de subastas">
         <button type="button" role="tab" class="tab-btn ${esExplorar ? 'tab-btn--activo' : ''}" data-tab="explorar" aria-selected="${esExplorar}">
           Explorar subastas
@@ -1475,7 +1694,7 @@ export class ControladorSubastas {
         </button>
         <button type="button" role="tab" class="tab-btn ${esCierre ? 'tab-btn--activo' : ''}" data-tab="cierre-multiple" aria-selected="${esCierre}">
           Cierre múltiple
-          <span class="badge-tab-neutral">${this.eventosCierre.length}</span>
+          ${this.eventosCierre.length > 0 ? `<span class="badge-tab-neutral">${this.eventosCierre.length}</span>` : ''}
         </button>
         <button type="button" role="tab" class="tab-btn ${esDetalle ? 'tab-btn--activo' : ''}" data-tab="detalle" aria-selected="${esDetalle}">
           ${esDetalle && subActiva ? `Detalle: ${subActiva.nombre.split(' ')[0]}` : 'Detalle de subasta'}
@@ -1536,6 +1755,7 @@ export class ControladorSubastas {
 
   generarTarjetaSubasta(sub) {
     const urgente = sub.segundosRestantes <= 10 && sub.segundosRestantes > 0;
+    const rz = rarezaVisible(sub.rareza);
     let badgeEstado = '<span class="badge badge-neutral">Sin pujar</span>';
     let claseBorde = '';
     let textoBoton = 'Ver subasta';
@@ -1565,13 +1785,13 @@ export class ControladorSubastas {
     return `
       <article class="tarjeta tarjeta-subasta ${claseBorde} ${urgente ? 'urgente' : ''}" data-id="${sub.id}">
         <div class="tarjeta-cabecera">
-          <span class="badge badge-${sub.rareza}">${sub.rareza.toUpperCase()}</span>
+          ${rz.conocida ? `<span class="badge badge-${rz.clase}">${rz.texto}</span>` : ''}
           ${badgeEstado}
         </div>
 
         <div class="tarjeta-cuerpo">
           <h3 class="tarjeta-titulo">${esc(sub.nombre)}</h3>
-          <p class="tarjeta-subtitulo">${sub.tipo} · Nivel req. ${sub.nivel}</p>
+          <p class="tarjeta-subtitulo">${esc(sub.tipo)} · ${nivelRequeridoVisible(sub.nivel)}</p>
           <p class="tarjeta-desc">${esc(sub.descripcion)}</p>
         </div>
 
@@ -1783,7 +2003,7 @@ export class ControladorSubastas {
 
   generarFilaMiSubasta(sub) {
     const urgente = sub.segundosRestantes <= 10 && sub.segundosRestantes > 0;
-    const simboloRareza = ICONO_RAREZA[sub.rareza] ?? ICONO_RAREZA.comun;
+    const rz = rarezaVisible(sub.rareza);
 
     let claseBorde = 'borde-sin-puja';
     let badgeEstado = '<span class="badge badge-neutral">Sin pujar</span>';
@@ -1811,14 +2031,14 @@ export class ControladorSubastas {
 
     return `
       <article class="fila-mi-subasta ${claseBorde} ${urgente ? 'urgente' : ''}" data-id="${sub.id}">
-        <div class="ficha-rareza ficha-rareza--grande ficha-rareza--${sub.rareza}">
-          ${iconoHtml(simboloRareza)}
+        <div class="ficha-rareza ficha-rareza--grande ficha-rareza--${rz.clase}">
+          ${iconoHtml(rz.simbolo)}
         </div>
 
         <div class="fila-info-principal">
           <h3 class="fila-nombre">${esc(sub.nombre)}</h3>
           <div class="fila-badges">
-            <span class="badge badge-${sub.rareza}">${sub.rareza.toUpperCase()}</span>
+            ${rz.conocida ? `<span class="badge badge-${rz.clase}">${rz.texto}</span>` : ''}
             ${badgeEstado}
             ${
               sub.autoLimite > 0
@@ -1859,34 +2079,29 @@ export class ControladorSubastas {
     `;
   }
 
-  /**
-   * Estado vacio de «Cierre multiple» (RNF-USA-003). Antes no existia porque
-   * la vista nunca se pintaba sin eventos: el valor por defecto traia tres.
-   */
-  generarHtmlCierreSinEventos() {
-    return `
+  generarHtmlCierreMultiple({ total }) {
+    const eventos = this.eventosCierre;
+    // FI-R1 — sin desenlaces no se dice «0 CERRARON». Cero cierres es una
+    // afirmacion sobre lo que paso con tus subastas, y hoy nadie la sostiene:
+    // ms-subastas no publica ningun recurso de cierres (MisPujasController
+    // solo tiene /resumen). Lo que corresponde decir es que no hay de donde
+    // sacarlo.
+    if (eventos.length === 0) {
+      return `
       <div class="subastas-app vista-cierre-multiple">
         ${this.generarHtmlPestanas({ superadas: 0 })}
         ${this.generarHtmlAlerta()}
 
-        <div class="panel-cierre-multiple">
-          <div class="estado-vacio" role="status">
-            <h1 class="cierre-titular">Todavía no se ha cerrado ninguna</h1>
-            <p class="cierre-subtitulo">
-              Cuando una subasta en la que participes termine, aquí verás si te
-              la llevaste y cuánto se movió en tu saldo.
-            </p>
-            <button type="button" class="btn btn-primario" data-tab="explorar">Ver subastas activas</button>
-          </div>
+        <div class="estado-contenedor estado-vacio">
+          <h1 class="titulo-mediano">Todavía no hay resultados de cierre</h1>
+          <p>
+            El servicio de subastas no publica por ahora el desenlace de las subastas
+            en las que participaste. Cuando una termine, el resultado llegará por tus
+            notificaciones y el saldo se verá reflejado en «Mis subastas activas».
+          </p>
         </div>
       </div>
     `;
-  }
-
-  generarHtmlCierreMultiple({ total }) {
-    const eventos = this.eventosCierre;
-    if (!eventos.length) {
-      return this.generarHtmlCierreSinEventos();
     }
     const balance = calcularBalanceNetoCierre(eventos, total);
     const ganadas = eventos.filter((e) => e.esGanador).length;
@@ -1927,7 +2142,7 @@ export class ControladorSubastas {
           <div class="lista-eventos-cierre">
             ${eventos
               .map((ev) => {
-                const simboloRareza = ICONO_RAREZA[ev.rareza] ?? ICONO_RAREZA.comun;
+                const rz = rarezaVisible(ev.rareza);
                 let claseEvento = 'evento--superada-rival';
                 let montoHtml = `<div class="evento-cifra cifra" style="color: var(--exito);">+${formatearCreditos(ev.montoDevuelto)}</div><div class="etiqueta-sm">devuelto</div>`;
                 let btnAccion = `<button type="button" class="btn btn-contorno btn-sm btn-buscar-parecidas" data-id="${ev.id}">Parecidas</button>`;
@@ -1942,8 +2157,8 @@ export class ControladorSubastas {
 
                 return `
                 <div class="fila-evento-cierre ${claseEvento}">
-                  <div class="ficha-rareza ficha-rareza--${ev.rareza}">
-                    ${iconoHtml(simboloRareza)}
+                  <div class="ficha-rareza ficha-rareza--${rz.clase}">
+                    ${iconoHtml(rz.simbolo)}
                   </div>
                   <div class="evento-info">
                     <h3 class="evento-titulo">${esc(ev.nombre)}</h3>
@@ -1990,6 +2205,7 @@ export class ControladorSubastas {
     const sub = this.getSubastaActiva();
     const hero = this.getHeroeActivo();
     const comp = calcularComparacionHeroe(hero, sub);
+    const rz = rarezaVisible(sub.rareza);
     const minPuja = calcularMinimoPuja(sub.oferta, this.config.incrementoMinimo);
     const disponibleAqui = libre + (sub.retenido || 0);
     const cerrada = sub.segundosRestantes <= 0 || this.resultadoCierre !== null;
@@ -2048,25 +2264,36 @@ export class ControladorSubastas {
           <section class="columna-info-objeto">
             <div class="panel-objeto">
               <div class="objeto-badges">
-                <span class="badge badge-${sub.rareza}">${sub.rareza.toUpperCase()}</span>
+                ${rz.conocida ? `<span class="badge badge-${rz.clase}">${rz.texto}</span>` : ''}
                 <span class="badge badge-neutral">Vendedor: ${esc(sub.vendedor)}</span>
-                <span class="badge ${comp.nivelInsuficiente ? 'badge-error' : 'badge-exito'}">
+                ${
+                  Number.isFinite(sub.nivel)
+                    ? `<span class="badge ${comp.nivelInsuficiente ? 'badge-error' : 'badge-exito'}">
                   Req. Nivel ${sub.nivel}
-                </span>
+                </span>`
+                    : ''
+                }
               </div>
 
               <h1 class="titulo-grande titulo-objeto">${esc(sub.nombre)}</h1>
               <p class="objeto-tipo">${sub.tipo}</p>
               <p class="objeto-descripcion">${esc(sub.descripcion)}</p>
 
-              <!-- Selector de Héroe para Comparación de Estadísticas -->
+              <!-- Comparativa con el héroe. FI-R1 — este bloque entero depende de
+                   datos que el contrato de subastas NO trae (nivel requerido y
+                   aporte del objeto) y de un héroe que esta pantalla todavia no
+                   carga de ningún servicio. Mientras falten, se dice; no se
+                   rellena con un héroe de ejemplo ni con ceros. -->
+              ${
+                comp.evaluado
+                  ? `
               <div class="selector-heroes-seccion">
                 <span class="etiqueta-sm">Comparar compatibilidad con héroe activo:</span>
                 <div class="selector-heroes-botones" role="radiogroup" aria-label="Elegir héroe">
                   ${this.heroes
                     .map(
                       (h) => `
-                    <button type="button" class="btn-heroe-chip ${h.id === this.heroeId ? 'heroe-elegido' : ''}" data-heroe="${h.id}">
+                    <button type="button" class="btn-heroe-chip ${h.id === this.heroeId ? 'heroe-elegido' : ''}" data-heroe="${h.id}" role="radio" aria-checked="${h.id === this.heroeId}">
                       <strong>${esc(h.nombre)}</strong> (Niv. ${esc(h.nivel)} · ${esc(h.clase)})
                     </button>
                   `,
@@ -2075,7 +2302,6 @@ export class ControladorSubastas {
                 </div>
               </div>
 
-              <!-- Alerta de nivel si aplica -->
               ${
                 comp.nivelInsuficiente
                   ? `
@@ -2090,7 +2316,6 @@ export class ControladorSubastas {
               `
               }
 
-              <!-- Tabla de Comparación de Atributos -->
               <div class="tabla-comparacion-contenedor">
                 <table class="tabla-comparacion">
                   <thead>
@@ -2120,7 +2345,15 @@ export class ControladorSubastas {
                       .join('')}
                   </tbody>
                 </table>
-              </div>
+              </div>`
+                  : `
+              <div class="alerta alerta-informativa aviso-sin-comparativa" role="note">
+                <strong>${iconoHtml('alerta', { clase: 'icono icono--menudo' })} Sin comparativa de héroe.</strong>
+                El servicio de subastas no publica el nivel requerido ni lo que aporta este objeto,
+                y esta pantalla todavía no consulta tus héroes. Revisa el objeto en tu inventario
+                antes de pujar.
+              </div>`
+              }
             </div>
 
             <!-- Historial de Pujas -->
@@ -2299,7 +2532,7 @@ export class ControladorSubastas {
 
   conectarEventos() {
     // Pestañas de navegación
-    this.contenedor.querySelectorAll('[data-tab]').forEach((btn) => {
+    this.contenedor.querySelectorAll('.tab-btn[data-tab]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const tab = btn.getAttribute('data-tab');
         if (tab === 'explorar') {

@@ -3785,6 +3785,39 @@
 }
 
 /* =======================================================================
+   Codigo de invitacion — FI-R4 · RF-JUE-002
+   -----------------------------------------------------------------------
+   Ocho caracteres que alguien va a leer en voz alta, copiar de una captura o
+   teclear de memoria. Se pinta como una llave, no como texto corrido: fondo
+   propio, cifras tabulares para que los grupos de cuatro no bailen, y espacio
+   entre letras para que no se confundan al dictarlas. El alfabeto del servicio
+   ya excluye O, 0, I y 1 (`Sala.ALFABETO_DEL_CODIGO`); esto es la otra mitad
+   del mismo cuidado.
+   ======================================================================= */
+.fila--invitacion {
+  align-items: center;
+  flex-wrap: wrap;
+}
+.fila--invitacion > * {
+  flex: 0 0 auto;
+}
+
+.codigo-invitacion {
+  padding: var(--e-1) var(--e-3);
+  border: 1px solid var(--borde-int);
+  border-radius: var(--radio-chico);
+  background: var(--superficie);
+  color: var(--texto);
+  font-variant-numeric: var(--cifras-tabulares);
+  font-weight: var(--t-cuerpo-peso-enfasis);
+  letter-spacing: 0.08em;
+  /* Seleccionable de una pasada: quien no tenga portapapeles lo copia a mano,
+     y arrastrar sobre ocho caracteres con un guion en medio falla mas de lo
+     que parece. */
+  user-select: all;
+}
+
+/* =======================================================================
    Turno en curso — HU-SAL-005 · RF-JUE-017
    -----------------------------------------------------------------------
    En un juego por turnos, de quien es el turno es el dato mas importante de

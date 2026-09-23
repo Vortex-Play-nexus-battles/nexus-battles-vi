@@ -137,23 +137,93 @@ export async function listarSalas(
  * Ingresa a una sala existente — HU-SAL-002, RF-JUE-002.
  *
  * El jugador no viaja en el cuerpo: lo pone el servidor desde el token, igual
- * que el anfitrion al crear.
+ * que el anfitrion al crear. Lo que si viaja —y hasta FI-R4 no viajaba— es el
+ * codigo de invitacion.
+ *
+ * ## El agujero que esto cierra
+ *
+ * Esta funcion hacia `POST` **sin cuerpo**. El servidor lo recibe como `null`
+ * y se lo pasa al agregado, que rechaza con 403 toda sala privada:
+ * `codigoCoincide(null)` siempre es falso. O sea que una sala privada era
+ * inaccesible para todo el mundo salvo su anfitrion, por construccion, y sin
+ * que nada lo dijera. El backend lleva el mecanismo completo desde la
+ * migracion V5 —columna `codigo_invitacion`, generacion con `SecureRandom`,
+ * comparacion normalizada—; lo unico que faltaba era mandarlo.
+ *
+ * El cuerpo se omite cuando no hay codigo, en vez de mandar
+ * `{"codigoInvitacion": null}`: el contrato lo declara opcional justamente
+ * para que a una sala publica se entre sin mandar ruido.
  *
  * @param {string} idSala
- * @param {{fetchImpl?: Function}} [opciones] inyeccion para las pruebas
+ * @param {{codigoInvitacion?: string|null, fetchImpl?: Function}} [opciones]
  * @returns {Promise<object>} la sala con el jugador dentro
- * @throws {ErrorDeApi} 404 no existe · 403 privada · 409 llena o ya empezo
+ * @throws {ErrorDeApi} 404 no existe · 403 privada o codigo que no vale ·
+ *   409 llena o ya empezo
  */
-export async function ingresarASala(idSala, { fetchImpl = fetchWithHttpErrorInterceptor } = {}) {
-  const respuesta = await fetchImpl(ruta(`/${encodeURIComponent(idSala)}/participantes`), {
-    method: 'POST',
-  });
+export async function ingresarASala(
+  idSala,
+  { codigoInvitacion = null, fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const codigo = typeof codigoInvitacion === 'string' ? codigoInvitacion.trim() : '';
+  const peticion = { method: 'POST' };
+  if (codigo) {
+    peticion.headers = { 'Content-Type': 'application/json' };
+    // Se manda tal cual lo escribio la persona: el servidor normaliza
+    // mayusculas, espacios y guiones (`Sala.normalizar`). Limpiarlo aqui
+    // seria una segunda verdad sobre que forma tiene un codigo valido.
+    peticion.body = JSON.stringify({ codigoInvitacion: codigo });
+  }
+
+  const respuesta = await fetchImpl(ruta(`/${encodeURIComponent(idSala)}/participantes`), peticion);
 
   if (respuesta.ok) {
     return respuesta.json();
   }
 
   throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'sala'), respuesta.status);
+}
+
+/**
+ * Si este problema es el rechazo de una sala privada —403 con el tipo que
+ * declara el dominio—, que es el unico que se arregla escribiendo un codigo.
+ *
+ * Se mira el `type`, no el texto: el texto del servicio puede cambiar sin
+ * avisar y el tipo es lo que el contrato fija.
+ *
+ * @param {{estado?: number, tipo?: string|null} | null} error un `ErrorDeApi`
+ * @returns {boolean}
+ */
+export function esSalaPrivada(error) {
+  if (error?.estado !== 403) {
+    return false;
+  }
+  const tipo = error?.tipo ?? '';
+  return typeof tipo === 'string' && tipo.includes('/errores/sala-privada');
+}
+
+/**
+ * Si este rechazo es el de RF-JUE-003 — FI-R6.
+ *
+ * `PuertaDeHeroe.comprobar` corre en `IngresarASala` antes que nada, y lanza
+ * `HeroeNoDisponible` con 422 y uno de dos tipos: `/errores/heroe-no-equipado`
+ * o `/errores/heroe-ocupado`. Son los mismos dos casos que el dialogo de
+ * verificacion sabe explicar, y el unico rechazo del ingreso que se arregla
+ * yendo al inventario.
+ *
+ * Por el tipo y no por el texto, igual que {@link esSalaPrivada}.
+ *
+ * @param {{estado?: number, tipo?: string|null} | null} error un `ErrorDeApi`
+ * @returns {boolean}
+ */
+export function esHeroeNoDisponible(error) {
+  if (error?.estado !== 422) {
+    return false;
+  }
+  const tipo = error?.tipo ?? '';
+  return (
+    typeof tipo === 'string' &&
+    (tipo.includes('/errores/heroe-no-equipado') || tipo.includes('/errores/heroe-ocupado'))
+  );
 }
 
 /**
@@ -227,11 +297,12 @@ export async function cancelarSala(idSala, { fetchImpl = fetchWithHttpErrorInter
 /**
  * Verifica el heroe antes de intentar entrar — HU-SAL-003, RF-JUE-003.
  *
- * Habla con `GET /salas/{idSala}/verificacion-heroe`, que ya esta publicado en
- * `contracts/openapi/salas-partidas.yaml`. La ruta existe en el contrato pero
- * **todavia no en el servicio**: depende de que el modulo de contenido publique
- * cual es el heroe activo del jugador. Por eso este cliente se escribe contra
- * el contrato y se inyecta en la vista, que se prueba con datos de ejemplo.
+ * Habla con `GET /salas/{idSala}/verificacion-heroe`, publicado en
+ * `contracts/openapi/salas-partidas.yaml` e **implementado** en
+ * `SalasController`. FI-R0 — aqui ponia que la ruta «todavia no» existia en el
+ * servicio; se comprobo y si existe, con dos pruebas de extremo a extremo que
+ * la ejercitan. Se sigue inyectando en la vista para poder probarla sin
+ * levantar el servicio, no porque el servicio falte.
  *
  * No comprueba ni decide nada: solo trae el veredicto. Quien decide es el
  * servidor, y la vista solo lo pinta.

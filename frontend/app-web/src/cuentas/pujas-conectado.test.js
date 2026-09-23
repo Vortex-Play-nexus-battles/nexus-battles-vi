@@ -740,8 +740,10 @@ describe('canal en vivo (HU-SUB-011 publica, esta pantalla escucha)', () => {
     ctrl.destruir();
   });
 
-  // La pantalla no puede inventarse desenlaces. `eventosCierre` tenia como
-  // valor por defecto EVENTOS_CIERRE_DEFAULT y `pujas.html` monta sin pasarlo,
+  // La pantalla no puede inventarse desenlaces. Lo arreglo Simon en FI-R1
+  // (#654) y esta prueba lo fija desde el lado de HU-SUB-004, que es quien
+  // sufre el defecto: `eventosCierre` tenia como valor por defecto
+  // EVENTOS_CIERRE_DEFAULT y `pujas.html` monta sin pasarlo,
   // asi que en produccion la pestana «Cierre multiple» anunciaba siempre «3» y
   // al abrirla se leia «3 CERRARON · Ganaste 1, te superaron en 2», con el
   // Hacha adjudicada a andres_nv y derrotas contra thar_vex y valkyria_99.
@@ -760,7 +762,7 @@ describe('canal en vivo (HU-SUB-011 publica, esta pantalla escucha)', () => {
     expect(texto).not.toMatch(/Hacha de Obsidiana|Grebas del Centinela|Amuleto de Brasa/);
     expect(texto).not.toMatch(/thar_vex|valkyria_99/);
     expect(texto).not.toMatch(/CERRARON/);
-    expect(texto).toMatch(/Todav[ií]a no se ha cerrado ninguna/);
+    expect(texto).toMatch(/Todav[ií]a no hay resultados de cierre/);
     ctrl.destruir();
   });
 

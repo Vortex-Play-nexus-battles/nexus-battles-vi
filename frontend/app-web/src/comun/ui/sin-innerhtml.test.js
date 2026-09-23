@@ -56,19 +56,6 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  * el contenido se arma en cinco generadores que sí interpolan datos de la
  * subasta. Está anotado, no tapado.
  *
- * HU-SUB-004 (cierre multiple) — tercera vez, 14 posiciones mas: la pestana
- * «Cierre multiple» dejo de traer tres desenlaces inventados por omision y la
- * vista gano su estado vacio, y ese codigo va ARRIBA del renderizado. Se
- * volvieron a comparar contra HEAD: las cuatro son identicas caracter a
- * caracter (1311→1325, 1329→1343, 1345→1359, 1385→1399).
- *
- * HU-SUB-004 (canal en vivo) — segunda vez que se corren, ahora 41 posiciones:
- * el ciclo de vida del canal se separó del temporizador (`detenerTemporizador`
- * y `reconciliarSiNoHayCanal`), y ese código va ARRIBA del renderizado. Se
- * volvieron a comparar una por una contra `origin/develop`: las cuatro
- * asignaciones son idénticas carácter a carácter, solo cambió su número de
- * línea (1270→1311, 1288→1329, 1304→1345, 1344→1385).
- *
  * R9.6a — las cuatro líneas de `pujas.js` se corrieron 24 posiciones porque el
  * canal STOMP pasó a acreditarse y eso añadió código ARRIBA de ellas. Ninguna
  * asignación cambió: cambió su número de línea. El guardián hizo exactamente
@@ -77,20 +64,43 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  * saneamiento. Queda dicho para quien mantenga esto: la clave por número de
  * línea es deliberadamente incómoda, y el precio es este — una revisión
  * obligatoria cada vez que alguien toca el archivo por encima.
+ *
+ * FI-R1 — y otras 77 posiciones por lo mismo: sacar los bancos de datos de
+ * ejemplo del camino de produccion añadió comentarios y ramas ARRIBA de las
+ * cuatro asignaciones. Revisadas otra vez una por una: siguen siendo la
+ * plantilla fija de carga, el estado de error con su unico dato por `esc()`,
+ * la plantilla fija del estado vacio y el `contenidoHtml` de los generadores.
+ * Ninguna interpolacion nueva entra por ahí.
+ *
+ * FI-R11 — y otras 186 posiciones: el canal en vivo gano estado visible y
+ * reconexion con espera creciente, todo ARRIBA de `render()`. Revisadas de
+ * nuevo: las mismas cuatro, con el mismo saneamiento.
+ *
+ * FI-R2 — las tres de `tienda.js` se movieron por la misma razon: la tarjeta
+ * ahora pinta imagen, habilidades, precio anterior y distintivo de descuento, y
+ * el carrito formatea sus importes. Revisadas: la plantilla de la tarjeta sigue
+ * siendo fija (todo dato entra despues por `textContent` o por `src` de un
+ * `<img>` creado con `createElement`), la del carrito vacio sigue siendo una
+ * cadena literal, y la de la fila del carrito sigue siendo fija.
  */
 const REVISADOS = new Map([
   ['contenido/productos/productos.js:159', 'plantilla() devuelve marcado fijo, sin datos'],
   ['cuentas/publicar-subasta.js:68', 'plantilla fija del formulario, sin interpolación'],
   ['cuentas/registro.js:235', 'cadena literal fija, sin interpolación'],
-  ['cuentas/tienda.js:141', 'plantilla fija; el color pasó a data-tipo en UX-R2.8'],
+  ['cuentas/tienda.js:145', 'plantilla fija; el color pasó a data-tipo en UX-R2.8'],
 
-  ['cuentas/tienda.js:226', 'cadena literal fija del carrito vacío'],
-  ['cuentas/tienda.js:236', 'plantilla fija; los datos entran luego por textContent'],
-  ['cuentas/pujas.js:1325', 'plantilla fija del estado de carga'],
-  ['cuentas/pujas.js:1343', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
-  ['cuentas/pujas.js:1359', 'plantilla fija del estado vacío'],
+  ['cuentas/tienda.js:294', 'cadena literal fija del carrito vacío'],
   [
-    'cuentas/pujas.js:1399',
+    'cuentas/tienda.js:314',
+    'plantilla fija; los datos entran luego por textContent. FI-R2 le cambio el ' +
+      'nombre a la variable (fila -> nodo, porque «fila» pasó a ser el modelo ' +
+      'que devuelve el adaptador) y la movio 78 lineas; la plantilla es la misma.',
+  ],
+  ['cuentas/pujas.js:1533', 'plantilla fija del estado de carga'],
+  ['cuentas/pujas.js:1551', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
+  ['cuentas/pujas.js:1567', 'plantilla fija del estado vacío'],
+  [
+    'cuentas/pujas.js:1607',
     'DELIBERADO y SANEADO (UX-R2.8c): las 20 interpolaciones con datos del ' +
       'servidor pasan por esc(); pujas.test.js lo comprueba con cargas reales. ' +
       'La estructura (2.297 líneas de plantilla) se mueve en UX-R2.10.',

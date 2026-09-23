@@ -2,6 +2,7 @@ package com.nexusbattles.plataforma.salaspartidas.configuracion;
 
 import com.nexusbattles.plataforma.observabilidad.InterceptorDeTraza;
 import com.nexusbattles.plataforma.resiliencia.CortaCircuitos;
+import com.nexusbattles.plataforma.resiliencia.parametros.LectorDeParametros;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.AbandonarSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CancelarSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CreditosDelJugador;
@@ -24,6 +25,7 @@ import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 import java.time.Clock;
+import java.time.Duration;
 
 /**
  * Cableado del servicio.
@@ -147,21 +149,53 @@ public class ConfiguracionDelServicio {
     }
 
     /**
+     * El lector del catalogo de parametros de HU-ADM-001.
+     *
+     * <p>Se construye SIEMPRE, tambien con {@code PARAMETROS_URL} vacia: en ese
+     * caso {@code LectorDeParametros.desde(...)} devuelve un lector sin
+     * catalogo que no hace ni una peticion y sirve solo respaldos. Asi el
+     * camino «sin catalogo» pasa por el mismo codigo que el de produccion.
+     *
+     * <p>Va por el constructor con traza y con tiempos de espera acotados, como
+     * todo cliente saliente de este servicio (regla 5 y HU-DIS-003): una
+     * lectura de configuracion tampoco puede colgar un hilo dos minutos.
+     */
+    @Bean
+    public LectorDeParametros lectorDeParametros(
+            @org.springframework.beans.factory.annotation.Value("${salas.parametros.url:}") String urlDelCatalogo,
+            @org.springframework.beans.factory.annotation.Value("${salas.parametros.cache-segundos:30}")
+            long cacheSegundos,
+            ClientHttpRequestFactory fabricaConTiempos) {
+        return LectorDeParametros.desde(constructorConTraza(fabricaConTiempos).build(), urlDelCatalogo,
+                Clock.systemUTC(), Duration.ofSeconds(cacheSegundos));
+    }
+
+    /**
      * HU-JUE-014: liquidacion de la apuesta al terminar.
      *
-     * <p>{@code salas.apuestas.si-gana-la-maquina} es una decision funcional
-     * que ninguna HU toma (la IA no tiene bolsa a la que pagar); por defecto
-     * se devuelve lo apostado. Ver {@code LiquidarApuesta}.
+     * <p>{@code salas.apuestas.si-gana-la-maquina} es una decision funcional que
+     * ninguna HU toma (la IA no tiene bolsa a la que pagar), asi que el PO la
+     * decide: desde R12 su valor vigente sale del catalogo de admin-parametros
+     * y {@code APUESTAS_SI_GANA_LA_MAQUINA} queda como <b>respaldo</b>, no como
+     * fuente. Se pasa un proveedor y no un valor para que cambiarla no exija
+     * reiniciar el servicio; sin catalogo, el proveedor devuelve el respaldo y
+     * el comportamiento es exactamente el de antes. Ver {@code LiquidarApuesta}.
      */
     @Bean
     public com.nexusbattles.plataforma.salaspartidas.aplicacion.LiquidarApuesta liquidarApuesta(
             RepositorioDeSalas salas,
             com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeLiquidaciones liquidaciones,
             CreditosDelJugador creditos,
+            LectorDeParametros parametros,
             @org.springframework.beans.factory.annotation.Value("${salas.apuestas.si-gana-la-maquina:LIBERAR}")
-            com.nexusbattles.plataforma.salaspartidas.aplicacion.LiquidarApuesta.SiGanaLaMaquina siGanaLaMaquina) {
+            com.nexusbattles.plataforma.salaspartidas.aplicacion.LiquidarApuesta.SiGanaLaMaquina respaldo) {
         return new com.nexusbattles.plataforma.salaspartidas.aplicacion.LiquidarApuesta(
-                salas, liquidaciones, creditos, Clock.systemUTC(), siGanaLaMaquina);
+                salas, liquidaciones, creditos, Clock.systemUTC(),
+                () -> parametros.opcion(
+                        com.nexusbattles.plataforma.salaspartidas.aplicacion.LiquidarApuesta
+                                .CLAVE_SI_GANA_LA_MAQUINA,
+                        com.nexusbattles.plataforma.salaspartidas.aplicacion.LiquidarApuesta.SiGanaLaMaquina.class,
+                        respaldo));
     }
 
     /** HU-JUE-014, CA-06: las liquidaciones que el libro dejo pendientes se reintentan. */

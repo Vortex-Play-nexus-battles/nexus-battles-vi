@@ -552,6 +552,11 @@ services:
       SANCIONES_URL: http://srv-moderacion-sanciones:8086/api/v1
       # HU-TOR-004 CA-04: el resultado del encuentro sale de la partida jugada.
       TORNEOS_URL: http://srv-torneos:8083/api/v1
+      # HU-ADM-001 CA-04: politica de apuesta contra la maquina (D-02) y tamano
+      # del historial de chat (D-16). NO se declara en `depends_on`: el lector
+      # degrada al respaldo si el catalogo no esta, y ese es justamente el
+      # comportamiento que se quiere en el banco.
+      PARAMETROS_URL: http://srv-admin-parametros:8088/api/v1
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
       srv-inventario: { condition: service_healthy }
