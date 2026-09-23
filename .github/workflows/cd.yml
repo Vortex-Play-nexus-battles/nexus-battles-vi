@@ -692,14 +692,26 @@ jobs:
       # Ahora los dos hosts pasan por la misma accion. Es idempotente: con el
       # host ya encendido no hace nada y no cuesta un segundo de mas.
       # ------------------------------------------------------------------
-      - name: Asumir el rol de AWS por OIDC (sin claves)
+      # El host de contenido NO vive en la cuenta de AWS de plataforma: es la
+      # instancia nexus-contenido-dev de la cuenta gratuita del grupo 2
+      # (infrastructure/entornos/contenido/, IP elastica 34.193.90.11, siempre
+      # encendida). El rol OIDC de vars.AWS_ROLE_ARN pertenece a la otra cuenta,
+      # asi que buscar ahi la instancia por etiqueta fallaba siempre ("No existe
+      # ninguna instancia con la etiqueta Name=nexus-contenido-dev", corridas del
+      # 23-sep 05:59, 12:22, 15:58 y 19:47) y ningun despliegue de contenido
+      # volvia a salir. Los dos pasos corren solo si alguien configura un rol
+      # OIDC en la cuenta del grupo 2 (vars.AWS_ROLE_ARN_CONTENIDO); mientras
+      # tanto se omiten y el job sigue como antes de R9.2.
+      - name: Asumir el rol de AWS del grupo 2 por OIDC (sin claves)
+        if: vars.AWS_ROLE_ARN_CONTENIDO != ''
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN_CONTENIDO }}
           role-session-name: cd-contenido-dev-${{ github.run_id }}
-          aws-region: ${{ vars.AWS_REGION }}
+          aws-region: ${{ vars.AWS_REGION_CONTENIDO || 'us-east-1' }}
 
       - name: Asegurar que el host de contenido esta encendido
+        if: vars.AWS_ROLE_ARN_CONTENIDO != ''
         uses: ./.github/actions/asegurar-host-encendido
         with:
           nombre-instancia: nexus-contenido-dev
@@ -726,15 +738,17 @@ jobs:
           SERVICIOS_PUERTOS: ${{ steps.lista.outputs.lista }}
           APP_ENV: dev
           LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
-          # R9.7 — este job NO repartia el emisor, aunque los otros tres si.
-          # Los cuatro servicios de contenido validan tokens de ms-identidad
-          # (ADR-002 / ADR-005): heroes y motor-combate desde R8.1, e
-          # inventario y productos desde R9.7. Hasta ahora funcionaban solo
-          # por el valor por omision de docker-compose.contenido.yml, que
-          # lleva la IP elastica escrita: correcto por casualidad, y no
-          # sobreescribible sin editar el repositorio. Con la variable aqui,
-          # el dia que el emisor cambie de sitio basta cambiar la variable.
-          IDENTIDAD_JWKS_URL: ${{ vars.IDENTIDAD_JWKS_URL }}
+          # R9.7 — los cuatro servicios de contenido validan tokens de
+          # ms-identidad (ADR-002 / ADR-005). Pero vars.IDENTIDAD_JWKS_URL vale
+          # http://srv-ms-identidad:8089/..., el nombre de contenedor de la red
+          # de Compose del host de plataforma, que en el host de contenido no
+          # resuelve: con ese valor los cuatro servicios rechazaban TODOS los
+          # tokens (UnknownHost al bajar el JWKS; corridas 1b489c7 y 5d76926).
+          # Este job reparte una variable propia; vacia, docker-compose.contenido.yml
+          # cae a su valor por omision, la URL publica del emisor por su IP
+          # elastica. El dia que el emisor cambie de sitio se fija
+          # vars.IDENTIDAD_JWKS_URL_CONTENIDO con la URL alcanzable desde fuera.
+          IDENTIDAD_JWKS_URL: ${{ vars.IDENTIDAD_JWKS_URL_CONTENIDO }}
         with:
           host: ${{ secrets.DEPLOY_HOST_CONTENIDO_DEV }}
           username: ${{ secrets.SSH_USER_CONTENIDO_DEV }}
