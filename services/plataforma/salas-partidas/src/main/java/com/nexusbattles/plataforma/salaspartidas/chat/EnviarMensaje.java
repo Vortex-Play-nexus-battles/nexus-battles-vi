@@ -4,6 +4,7 @@ import com.nexusbattles.plataforma.salaspartidas.chat.FiltroDeContenido.Veredict
 import com.nexusbattles.plataforma.salaspartidas.chat.MensajeDeChat.Autor;
 import com.nexusbattles.plataforma.salaspartidas.chat.MensajeDeChat.LogroCompartido;
 import com.nexusbattles.plataforma.salaspartidas.chat.MensajeDeChat.Tipo;
+import com.nexusbattles.plataforma.salaspartidas.sanciones.SancionesDelJugador;
 
 import java.time.Clock;
 import java.util.UUID;
