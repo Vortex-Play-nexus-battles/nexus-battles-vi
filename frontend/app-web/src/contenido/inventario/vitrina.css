@@ -357,7 +357,7 @@
 
 .vitrina__producto--no-disponible {
   border-color: var(--advertencia);
-  background: #fbeedd;
+  background: var(--advertencia-insignia);
 }
 
 .vitrina__disponibilidad {

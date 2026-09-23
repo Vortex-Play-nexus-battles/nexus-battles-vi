@@ -135,6 +135,50 @@ describe('los componentes compartidos no se redefinen en las vistas', () => {
   });
 });
 
+describe('ninguna hoja de vista escribe un color a mano', () => {
+  /**
+   * UX-R4.1 — el trinquete que faltaba.
+   *
+   * Los dos de arriba impiden que una hoja de vista **tape** algo del kit: un
+   * token redeclarado, una clase redefinida. Lo que no miraban es lo contrario:
+   * una hoja que se inventa su propio color sin tapar nada.
+   *
+   * Y eso era lo que quedaba. Medido al cerrar UX-R3: **94 literales de color
+   * en nueve hojas**, con los comentarios descontados. `pujas.css` tenia 59, en
+   * 21 colores distintos, entre ellos las insignias de rareza —que el kit
+   * define desde el principio— y cuatro sombras escritas a mano cuando hay
+   * cuatro fichas de elevacion (`--sombra-1..4`). `historial-transacciones.css`
+   * traia una cuarta paleta paralela: `#086b31` donde el kit dice `--exito`.
+   *
+   * Un hexadecimal escrito a mano no responde a `prefers-contrast: more`, y
+   * ademas hace que el mismo estado se vea de dos maneras segun la pantalla.
+   *
+   * ## Que se admite
+   *
+   * - `transparent` y `currentColor`, que no son colores sino relaciones.
+   * - `color-mix(in srgb, var(--x) N%, …)`: es la forma que tiene el
+   *   repositorio de sacar un tinte o un halo de un color que YA existe sin
+   *   anadir otro a la paleta.
+   * - Los comentarios, para poder dejar escrito que hexadecimal se quito.
+   *
+   * `shared/ui-kit/css/tokens.css` no cae aqui: es el fichero cuyo trabajo es
+   * escribir los colores. Los demas los consumen.
+   */
+  test('ninguna hoja de vista escribe un hexadecimal ni un rgb()', () => {
+    const literal = /#[0-9a-fA-F]{3,8}\b|\brgba?\(\s*[0-9]|\bhsla?\(\s*[0-9]/g;
+    const encontrados = [];
+
+    for (const ruta of hojasDeVista()) {
+      const css = readFileSync(new URL(ruta, raizRepo), 'utf8').replace(/\/\*[\s\S]*?\*\//g, ' ');
+      for (const hallazgo of css.match(literal) ?? []) {
+        encontrados.push(`${ruta.split('/').pop()} → ${hallazgo}`);
+      }
+    }
+
+    expect(encontrados).toEqual([]);
+  });
+});
+
 describe('ninguna hoja usa variables que no existen', () => {
   /**
    * `panel-metricas.css` usaba diez variables inexistentes

@@ -22,7 +22,12 @@ body {
   min-height: 100vh;
   margin: 0;
   background:
-    radial-gradient(circle at 90% 0%, rgb(88 39 132 / 12%), transparent 30rem), var(--fondo);
+    radial-gradient(
+      circle at 90% 0%,
+      color-mix(in srgb, var(--acento-relleno) 12%, transparent),
+      transparent 30rem
+    ),
+    var(--fondo);
 }
 
 button,
