@@ -1,13 +1,9 @@
 package com.nexusbattles.plataforma.metricasplataforma.latencia;
 
-import java.net.URI;
 import java.time.Instant;
 import java.util.List;
 
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.http.ProblemDetail;
-import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -78,9 +74,8 @@ public class ConsultasController {
     /**
      * CA-03: el registro de consultas lentas.
      *
-     * <p>No necesita el percentil acordado por el Product Owner —marcar una
-     * consulta lenta es comparar contra un umbral, no evaluar un percentil—,
-     * asi que esta ruta responde aunque CA-03 de HU-REN-001 siga pendiente.
+     * <p>No depende del percentil: marcar una consulta lenta es comparar
+     * contra un umbral, no evaluar una distribucion.
      */
     @GetMapping(value = "/lentas", produces = MediaType.APPLICATION_JSON_VALUE)
     public LentasResponse lentas() {
@@ -93,30 +88,9 @@ public class ConsultasController {
                 registro.servicio(), registro.umbralLentaMs(), registro.totalLentas(), lentas);
     }
 
+    /** El mismo objetivo que el informe de latencia: 500 ms al p95 de ADR-006. */
     private ObjetivoDeLatencia objetivoVigente() {
-        return propiedades.objetivo().orElseThrow(PercentilNoAcordado::new);
-    }
-
-    @ExceptionHandler(PercentilNoAcordado.class)
-    ProblemDetail percentilNoAcordado(PercentilNoAcordado e) {
-        ProblemDetail problema = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
-        problema.setTitle("Percentil de evaluacion no acordado");
-        problema.setType(URI.create("https://nexusbattles.local/errores/percentil-no-acordado"));
-        problema.setProperty("variable", "LATENCIA_PERCENTIL");
-        problema.setProperty("criterio", "HU-REN-001 CA-03");
-        problema.setProperty("muestrasAcumuladas", registro.cuantasMuestras());
-        return problema;
-    }
-
-    /** Mismo motivo que en el informe de latencia: falta la decision del PO. */
-    static class PercentilNoAcordado extends RuntimeException {
-        PercentilNoAcordado() {
-            super("El percentil de evaluacion no esta configurado. Se comparte con RNF-REN-001 y "
-                    + "CA-03 de HU-REN-001 exige que el Product Owner lo apruebe por escrito. "
-                    + "Cuando lo apruebe, se configura en LATENCIA_PERCENTIL: no hace falta recompilar. "
-                    + "El registro de consultas lentas (/api/v1/consultas/lentas) si responde mientras tanto, "
-                    + "porque marcar una consulta lenta no depende del percentil.");
-        }
+        return propiedades.objetivo();
     }
 
     public record InformeResponse(

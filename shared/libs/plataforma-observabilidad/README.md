@@ -67,29 +67,34 @@ su `build.gradle`.
 | Variable | Por omisión | Para qué |
 |---|---|---|
 | `LATENCIA_OBJETIVO_MS` | `500` | Objetivo de RNF-REN-001. Este sí tiene valor por omisión: no lo decide el equipo |
-| `LATENCIA_PERCENTIL` | **ninguno** | Percentil de evaluación. **Obligatorio y a propósito sin valor por omisión** |
+| `LATENCIA_PERCENTIL` | `95` | Percentil de evaluación (ADR-006). Convención de medición del equipo, no del cliente |
 | `LATENCIA_CAPACIDAD` | `10000` | Tamaño de la ventana de muestras |
 | `LATENCIA_SERVICIO` | `spring.application.name` | Nombre del módulo en las muestras |
 | `LATENCIA_OPERACIONES_EN_INFORME` | `5` | Cuántas de las operaciones más lentas lista el informe |
 | `LATENCIA_ACTIVA` | `true` | Válvula de escape para apagar la instrumentación en un servicio |
 
-### Por qué el percentil no tiene valor por omisión
+### De dónde sale cada número
 
-CA-03 de #68 dice que el Product Owner debe aprobar **por escrito** si el
-requisito se evalúa en p95 o en p99. Poner uno por omisión sería tomar esa
-decisión en su lugar y que nadie volviera a mirarla. `ObjetivoDeLatencia` falla
-al construirse si el percentil no es válido, y el mensaje de error apunta a
-`LATENCIA_PERCENTIL` para que quede claro dónde se arregla.
+Los **500 ms** los fija RNF-REN-001 y el Project Charter: no los decide el
+equipo y el catálogo de `admin-parametros` los marca inalterables.
 
-Cambiar de p95 a p99 el día que el PO decida es cambiar esa variable: **no exige
-recompilar ni tocar código**, y hay una prueba que lo demuestra.
+El **percentil** no lo fija ningún documento del proyecto. Una latencia es una
+distribución, no un número: «bajo 500 ms» puede leerse en la mediana, el p95,
+el p99 o el máximo, y cada lectura da un veredicto distinto. Elegir esa lectura
+es una convención de medición de ingeniería, así que la fija
+[ADR-006](../../../docs/gobierno/ADR-006-percentil-de-evaluacion-de-latencia.md):
+**p95**, escrito una sola vez en `ObjetivoDeLatencia.PERCENTIL_POR_OMISION` y
+no copiado en veinte `application.yml`.
 
-Que falte el percentil **no impide medir**. La distinción importa: la
-*recolección* no depende de ninguna decisión pendiente y tiene que estar activa
-en los veinte módulos desde el Sprint 1. Lo que espera al Product Owner es la
-*evaluación* — decir «cumple» o «no cumple» —, y eso falla de forma explícita y
-localizada en `GET /api/v1/latencia/informe` (409, con el nombre de la variable
-y el criterio), en vez de impedir que arranquen servicios de los tres equipos.
+Hasta septiembre de 2026 esto se leyó como una aprobación pendiente del Product
+Owner y el informe respondía 409 de forma permanente: se medía en los veinte
+módulos y el requisito no se podía evaluar en ninguno. ADR-006 explica la
+revisión.
+
+Cambiar a p99 para una campaña concreta sigue siendo cambiar
+`LATENCIA_PERCENTIL`: **no exige recompilar**, y hay prueba de ello. Dejarla
+definida pero vacía degrada al valor por omisión en vez de romper el arranque,
+y también hay prueba de eso.
 
 ## Medición de consultas (HU-REN-003)
 
@@ -122,12 +127,20 @@ sin que nadie tenga que acordarse de nada.
 |---|---|---|
 | CA-01 · instrumentación activa capturando el tiempo extremo a extremo | ✅ | esta biblioteca + la línea de `nexus.spring-conventions.gradle` |
 | CA-02 · exportación de las métricas para el informe | ✅ | `InformeDeLatencia` + `/api/v1/latencia/informe` en `metricas-plataforma` |
-| CA-03 · objetivo de 500 ms cumplido en el percentil acordado | ⛔ | **BLOQUEADA — el PO debe aprobar por escrito p95 o p99** |
+| CA-03 · objetivo de 500 ms cumplido en el percentil acordado | ✅ | percentil fijado por [ADR-006](../../../docs/gobierno/ADR-006-percentil-de-evaluacion-de-latencia.md) (p95); veredicto en `InformeDeLatencia.cumple()` |
 
-**La HU no está terminada.** CA-03 no es una tarea pendiente de programar: es una
-decisión de negocio sin tomar, y no se puede cerrar la historia eligiendo por el
-Product Owner. Mientras tanto la instrumentación acumula evidencia, que es lo
-que permitirá responder el día que la decisión llegue.
+**CA-03 estuvo marcado como bloqueado hasta el 23-sep-2026** por una lectura del
+criterio que exigía aprobación escrita del Product Owner sobre p95 o p99. La
+revisión (ADR-006) encontró que ningún documento del proyecto fija el percentil
+y que elegirlo es una convención de medición, no una decisión de producto:
+esperar una firma que nadie iba a pedir dejaba el RNF sin poder evaluarse
+nunca.
+
+Lo que CA-03 exige ahora —un veredicto contra un objetivo concreto— lo emite
+`/api/v1/latencia/informe`. Lo que sigue faltando para cerrar la historia no es
+una decisión sino **carga medida**: el informe de un servicio que nunca atendió
+peticiones responde `sinDatos: true` y no cumple. Esa es la parte que cubre la
+suite k6 de `tests/rendimiento/`.
 
 ### Deuda declarada
 
