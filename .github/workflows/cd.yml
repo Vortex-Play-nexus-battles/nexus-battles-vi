@@ -124,158 +124,94 @@ jobs:
 
           echo "Comparando $BASE..$HEAD"
 
-          # 2) Nos importan los servicios de services/plataforma/* (8, con
-          #    imagen en docker-compose.yml) y los de services/contenido/*
-          #    que ya esten registrados en puerto_de() y en
-          #    docker-compose.contenido.yml. Un servicio sin puerto
-          #    registrado se omite mas abajo con un mensaje, no rompe nada.
+          # 2) Que servicios existen y donde viven: lo dice el CATALOGO
+          #    (infrastructure/despliegue/servicios.json), que es la fuente
+          #    unica de verdad del despliegue desde el 23-sep.
+          #
+          #    Antes esto era una regex fija -- '^services/(plataforma|
+          #    contenido)/[^/]+/' -- mas tres bloques escritos a mano para
+          #    services/cuentas/*. Cualquier servicio de cuentas sin su bloque
+          #    era invisible para el despliegue por mucho que su CI estuviera
+          #    en verde: ci.yml si miraba '^services/[^/]+/[^/]+/', las tres
+          #    familias. Esa asimetria es la causa raiz de los 502 de
+          #    ms-finanzas (HU-PAG-002 #536, HU-JUE-012 #470) y ms-subastas
+          #    (#571). El guardian scripts/cd/comprobar-catalogo-servicios.sh
+          #    falla el pull request si vuelve a abrirse la brecha.
+          CATALOGO="infrastructure/despliegue/servicios.json"
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             # Despliegue a demanda: se fabrica la misma lista de rutas que
-            # produciria un push, una por servicio pedido, para reutilizar
-            # sin cambios la deteccion de abajo. Los nombres de cuentas y
-            # contenido se reconocen por su lista fija; el resto es plataforma.
+            # produciria un push, una por servicio pedido, para reutilizar sin
+            # cambios la deteccion de abajo. La ruta de cada nombre sale del
+            # CATALOGO, no de un "case" con tres familias escritas a mano: ese
+            # case mandaba cualquier nombre desconocido a services/plataforma/,
+            # asi que pedir "ms-subastas" generaba
+            # services/plataforma/ms-subastas/a-demanda, que no existe, y el
+            # servicio se omitia en silencio (issue #571). Un nombre que no
+            # este en el catalogo ahora se avisa en voz alta.
             ARCHIVOS=""
             for s in $(echo "${{ inputs.servicios }}" | tr ',' ' '); do
-              case "$s" in
-                ms-identidad|ms-cumplimiento|ms-ecommerce) ARCHIVOS="$ARCHIVOS services/cuentas/$s/a-demanda" ;;
-                heroes|inventario|productos|motor-combate) ARCHIVOS="$ARCHIVOS services/contenido/$s/a-demanda" ;;
-                *) ARCHIVOS="$ARCHIVOS services/plataforma/$s/a-demanda" ;;
-              esac
+              ruta_s=$(jq -r --arg s "$s" '.servicios[] | select(.nombre == $s) | .ruta' "$CATALOGO")
+              if [ -z "$ruta_s" ]; then
+                echo "::warning::'$s' no esta en $CATALOGO; no se puede desplegar a demanda. Agregalo al catalogo."
+                continue
+              fi
+              ARCHIVOS="$ARCHIVOS $ruta_s/a-demanda"
             done
             ARCHIVOS=$(echo "$ARCHIVOS" | tr ' ' '\n' | sed '/^$/d')
             echo "Despliegue a demanda de: ${{ inputs.servicios }}"
           else
             ARCHIVOS=$(git diff --name-only "$BASE" "$HEAD")
           fi
-          CARPETAS=$(echo "$ARCHIVOS" | grep -E '^services/(plataforma|contenido)/[^/]+/' | awk -F'/' '{print $1"/"$2"/"$3}' | sort -u || true)
 
-          # 3) Puerto fijo por servicio, mismo orden que docker-compose.yml
-          #    (8081 a 8088). Si se agrega un noveno servicio de plataforma
-          #    algun dia, hay que sumarlo aqui Y en docker-compose.yml Y en
-          #    docker-compose.deploy.yml -- no se deriva solo.
-          puerto_de() {
-            case "$1" in
-              comentarios) echo 8081 ;;
-              correo) echo 8082 ;;
-              torneos) echo 8083 ;;
-              salas-partidas) echo 8084 ;;
-              notificaciones) echo 8085 ;;
-              moderacion-sanciones) echo 8086 ;;
-              metricas-plataforma) echo 8087 ;;
-              admin-parametros) echo 8088 ;;
-              # services/contenido/* (equipo Contenido): bloque 8101-8104.
-              # Es el puerto del HOST (el que consulta el healthcheck de
-              # desplegar.sh); dentro del contenedor todos escuchan en 8080
-              # y docker-compose.contenido.yml los publica como 810x:8080.
-              # No se usa 8090-8094: cuentas ya fija ms-ecommerce en 8090 y
-              # ms-cumplimiento en 8091. Cada servicio de aqui se construye
-              # desde la raiz del monorepo con -f (ver "Construir la imagen").
-              heroes) echo 8101 ;;
-              inventario) echo 8102 ;;
-              productos) echo 8103 ;;
-              motor-combate) echo 8104 ;;
-              *) echo "" ;;
-            esac
-          }
-
+          # 3) Un servicio entra en esta corrida si el push (o el despliegue a
+          #    demanda) toco algo dentro de su carpeta. Puerto, herramienta de
+          #    construccion y clase de host salen del catalogo: aqui ya no hay
+          #    ninguna lista escrita a mano que se pueda quedar desfasada.
           MATRIZ="[]"
-          for carpeta in $CARPETAS; do
-            servicio=$(basename "$carpeta")
-            puerto=$(puerto_de "$servicio")
+          while IFS=$'\t' read -r nombre ruta herramienta puerto clase; do
+            echo "$ARCHIVOS" | grep -q "^$ruta/" || continue
 
-            if [ ! -f "$carpeta/build.gradle" ]; then
-              echo "Se omite $carpeta: no tiene build.gradle (o no es un servicio de plataforma reconocido)"
+            # El catalogo puede ir por delante del codigo (servicio declarado
+            # que todavia no compila). Se comprueba contra el repositorio de
+            # verdad antes de mandarlo a construir.
+            if [ "$herramienta" = "gradle" ] && [ ! -f "$ruta/build.gradle" ]; then
+              echo "Se omite $ruta: el catalogo dice gradle pero no tiene build.gradle"
               continue
             fi
-            if [ -z "$puerto" ]; then
-              echo "Se omite $carpeta: no tiene puerto asignado en este workflow (servicio nuevo sin registrar)"
+            if [ "$herramienta" = "maven" ] && [ ! -f "$ruta/pom.xml" ]; then
+              echo "Se omite $ruta: el catalogo dice maven pero no tiene pom.xml"
               continue
             fi
 
-            ruta_gradle=":$(echo "$carpeta" | tr '/' ':')"
+            ruta_gradle=""
+            if [ "$herramienta" = "gradle" ]; then
+              ruta_gradle=":$(echo "$ruta" | tr '/' ':')"
+            fi
 
             MATRIZ=$(echo "$MATRIZ" | jq -c \
-              --arg ruta "$carpeta" \
+              --arg ruta "$ruta" \
               --arg rutaGradle "$ruta_gradle" \
-              --arg servicio "$servicio" \
+              --arg servicio "$nombre" \
               --arg puerto "$puerto" \
-              '. + [{ruta:$ruta, rutaGradle:$rutaGradle, servicio:$servicio, puerto:$puerto, herramienta:"gradle"}]')
-          done
+              --arg herramienta "$herramienta" \
+              --arg claseHost "$clase" \
+              '. + [{ruta:$ruta, rutaGradle:$rutaGradle, servicio:$servicio, puerto:$puerto, herramienta:$herramienta, claseHost:$claseHost}]')
+          done < <(jq -r '.servicios[] | [.nombre, .ruta, .herramienta, .puertoHost, .claseHost] | @tsv' "$CATALOGO")
 
-          # 4) services/cuentas/ms-identidad (Maven), a proposito NO
-          #    generalizado a todo services/cuentas/* -- ms-ecommerce y
-          #    ms-cumplimiento todavia no tienen Dockerfile, asi que este
-          #    flujo no puede desplegarlos aun. Cuando lo tengan, se agregan
-          #    aqui uno por uno igual que este, no con un grep generico.
-          #    Puerto 8089, mismo del lado del host que del contenedor.
-          #    PENDIENTE DE CONFIRMAR: Cristian va a mover el puerto REAL de
-          #    ms-identidad (Dockerfile EXPOSE y server.port) de 8081 a 8089
-          #    para que ya no choque con srv-comentarios (que usa 8081) y no
-          #    haga falta mapear host:contenedor distinto. El codigo de aqui
-          #    YA asume el 8089 nuevo, pero Cristian todavia no confirmo que
-          #    el cambio este hecho y probado de su lado -- si el Dockerfile
-          #    de ms-identidad sigue en 8081 cuando esto se despliegue, el
-          #    healthcheck de este workflow va a fallar contra el puerto
-          #    equivocado. No desplegar hasta que el confirme.
-          if echo "$ARCHIVOS" | grep -q '^services/cuentas/ms-identidad/'; then
-            if [ -f "services/cuentas/ms-identidad/pom.xml" ]; then
-              MATRIZ=$(echo "$MATRIZ" | jq -c \
-                --arg ruta "services/cuentas/ms-identidad" \
-                --arg servicio "ms-identidad" \
-                '. + [{ruta:$ruta, rutaGradle:"", servicio:$servicio, puerto:"8089", herramienta:"maven"}]')
-            else
-              echo "Se omite services/cuentas/ms-identidad: no tiene pom.xml"
-            fi
-          fi
-
-          # 5) services/cuentas/ms-cumplimiento (Maven), mismo patron exacto
-          #    que ms-identidad arriba -- bloque especifico, NO generalizado
-          #    a un grep de cuentas/* (ms-ecommerce sigue sin Dockerfile).
-          #    Puerto 8091, mismo del lado del host que del contenedor
-          #    (confirmado en su Dockerfile: EXPOSE 8091, sin el desfase que
-          #    tuvo ms-identidad).
-          if echo "$ARCHIVOS" | grep -q '^services/cuentas/ms-cumplimiento/'; then
-            if [ -f "services/cuentas/ms-cumplimiento/pom.xml" ]; then
-              MATRIZ=$(echo "$MATRIZ" | jq -c \
-                --arg ruta "services/cuentas/ms-cumplimiento" \
-                --arg servicio "ms-cumplimiento" \
-                '. + [{ruta:$ruta, rutaGradle:"", servicio:$servicio, puerto:"8091", herramienta:"maven"}]')
-            else
-              echo "Se omite services/cuentas/ms-cumplimiento: no tiene pom.xml"
-            fi
-          fi
-
-          # 6) services/cuentas/ms-ecommerce (Maven), mismo patron exacto que
-          #    ms-identidad y ms-cumplimiento arriba -- bloque especifico, NO
-          #    generalizado a un grep de cuentas/*. Puerto 8090, mismo del
-          #    lado del host que del contenedor (confirmado en su Dockerfile:
-          #    EXPOSE 8090). A diferencia de los otros dos, este servicio
-          #    tiene server.servlet.context-path=/api/v1 -- el healthcheck
-          #    generico de desplegar.sh no sirve tal cual para el, ver el
-          #    comentario de "ruta_salud_de" en ese script.
-          if echo "$ARCHIVOS" | grep -q '^services/cuentas/ms-ecommerce/'; then
-            if [ -f "services/cuentas/ms-ecommerce/pom.xml" ]; then
-              MATRIZ=$(echo "$MATRIZ" | jq -c \
-                --arg ruta "services/cuentas/ms-ecommerce" \
-                --arg servicio "ms-ecommerce" \
-                '. + [{ruta:$ruta, rutaGradle:"", servicio:$servicio, puerto:"8090", herramienta:"maven"}]')
-            else
-              echo "Se omite services/cuentas/ms-ecommerce: no tiene pom.xml"
-            fi
-          fi
-
-          # 7) Lo que NO cabe en el host de dev. El t3.small (1,9 GB) corre 9
-          #    servicios + borde con ~330 MB libres y 1,1 GB ya en swap
-          #    (diagnostico-dev del 21/sep). Meter otra JVM no "desplegaria un
-          #    servicio mas": tumbaria los que sostienen el MVP. Hasta que haya
-          #    un segundo host (fuera del plan gratuito, decision del cliente),
-          #    estos se quedan fuera del flujo automatico -- ni imagen ni
-          #    despliegue -- en vez de fallar por secrets que nadie va a crear
-          #    (corrida 35571690523). Sus pruebas y su compuerta de calidad
-          #    siguen corriendo en ci.yml. A demanda (workflow_dispatch) SI se
-          #    intentan: quien los pide sabe lo que hace y ve el fallo con sus
-          #    secrets faltantes.
-          FUERA_DEL_HOST_DEV="ms-cumplimiento ms-ecommerce"
+          # 7) Lo que NO cabe en el host de dev. Ya no es una lista escrita
+          #    aqui: es el campo "desplegableDev" del catalogo, con su motivo
+          #    al lado, medido y fechado (ver infrastructure/despliegue/
+          #    CAPACIDAD.md). Medicion del 23-sep en nexus-plataforma-dev:
+          #    135 MiB de RAM disponible de 1910, y 1364 de 2047 MiB de swap
+          #    ya en uso. Meter otra JVM no "desplegaria un servicio mas":
+          #    empujaria a swap a los que sostienen el MVP.
+          #
+          #    OJO con la diferencia, que es justo lo que se confundia antes:
+          #    estar aqui significa "no cabe, decision de capacidad medida",
+          #    NO "el pipeline no lo conoce". La imagen se construye y se
+          #    publica igual en cada push, y un despliegue a demanda si lo
+          #    intenta. Sus pruebas siguen corriendo en ci.yml.
+          FUERA_DEL_HOST_DEV=$(jq -r '.servicios[] | select(.desplegableDev == false) | .nombre' "$CATALOGO" | tr '\n' ' ')
           if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
             for fuera in $FUERA_DEL_HOST_DEV; do
               if echo "$MATRIZ" | jq -e --arg s "$fuera" 'any(.[]; .servicio == $s)' > /dev/null; then
@@ -297,8 +233,8 @@ jobs:
 
           # Por dominio: contenido despliega en su propio host (job
           # "desplegar-contenido-dev"); todo lo demas en el de plataforma.
-          CONTENIDO=$(echo "$MATRIZ" | jq '[.[] | select(.ruta | startswith("services/contenido/"))] | length')
-          PLATAFORMA=$(echo "$MATRIZ" | jq '[.[] | select(.ruta | startswith("services/contenido/") | not)] | length')
+          CONTENIDO=$(echo "$MATRIZ" | jq '[.[] | select(.claseHost == "contenido")] | length')
+          PLATAFORMA=$(echo "$MATRIZ" | jq '[.[] | select(.claseHost != "contenido")] | length')
           # El host de plataforma tambien sirve el frontend (borde nginx, ver
           # infrastructure/red-balanceo/borde-dev.conf): un cambio en las
           # vistas, el ui-kit o el propio borde se despliega aunque ningun
@@ -424,7 +360,7 @@ jobs:
       - name: Preparar lista "servicio:puerto" para este ambiente (sin contenido)
         id: lista
         run: |
-          LISTA=$(echo '${{ needs.detectar-servicios.outputs.servicios }}' | jq -r '[.[] | select(.ruta | startswith("services/contenido/") | not) | "\(.servicio):\(.puerto)"] | join(" ")')
+          LISTA=$(echo '${{ needs.detectar-servicios.outputs.servicios }}' | jq -r '[.[] | select(.claseHost != "contenido") | "\(.servicio):\(.puerto)"] | join(" ")')
           echo "lista=$LISTA" >> "$GITHUB_OUTPUT"
 
       # ------------------------------------------------------------------
@@ -462,7 +398,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/revertir.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -561,11 +497,35 @@ jobs:
           MS_ECOMMERCE_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_ECOMMERCE }}
           MS_ECOMMERCE_DB_USER: ${{ secrets.TODO_DB_USER_MS_ECOMMERCE }}
           MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_ECOMMERCE }}
+          # PENDIENTE (TODO_*): mismo patron de marcador que los otros
+          # servicios de Cuentas. Los nombres exactos que hay que crear en
+          # GitHub estan en infrastructure/despliegue/servicios.json
+          # (secretsRequeridos) y en infrastructure/despliegue/CAPACIDAD.md.
+          # Que existan no despliega nada por si solo: ms-finanzas y
+          # ms-subastas siguen con desplegableDev:false mientras el host de
+          # plataforma no tenga RAM. Prefijo propio por servicio a proposito,
+          # para no pisar DB_USER/DB_PASS de plataforma-db.
+          MS_FINANZAS_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_FINANZAS }}
+          MS_FINANZAS_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_FINANZAS }}
+          MS_FINANZAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_FINANZAS }}
+          MS_FINANZAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_FINANZAS }}
+          MS_FINANZAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_FINANZAS }}
+          MS_SUBASTAS_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_SUBASTAS }}
+          MS_SUBASTAS_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_SUBASTAS }}
+          MS_SUBASTAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_SUBASTAS }}
+          MS_SUBASTAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_SUBASTAS }}
+          MS_SUBASTAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_SUBASTAS }}
+          # Origenes permitidos del canal STOMP de subastas. NO es un secreto
+          # (es la URL publica del borde) pero va por el mismo camino que
+          # SALAS_WS_ORIGENES. Vacio = no se acepta ningun origen: el panel de
+          # subastas se conectaria y el servidor le cerraria el handshake.
+          SUBASTAS_WS_ORIGENES: ${{ vars.SUBASTAS_WS_ORIGENES }}
+          SUBASTAS_CORS_ORIGENES: ${{ vars.SUBASTAS_CORS_ORIGENES }}
         with:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,SIMULACRO_REVERSION,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,SMTP_PORT,LISTA_NEGRA_VERIFICAR_URL,SALAS_WS_ORIGENES,CHAT_WS_ORIGENES,CHAT_HISTORIAL_TAMANO,NOTIFICACIONES_WS_ORIGENES,COMENTARIOS_FORMATOS_IMAGEN,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,SIMULACRO_REVERSION,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,SMTP_PORT,LISTA_NEGRA_VERIFICAR_URL,SALAS_WS_ORIGENES,CHAT_WS_ORIGENES,CHAT_HISTORIAL_TAMANO,NOTIFICACIONES_WS_ORIGENES,COMENTARIOS_FORMATOS_IMAGEN,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD,MS_SUBASTAS_DB_HOST,MS_SUBASTAS_DB_PORT,MS_SUBASTAS_DB_NAME,MS_SUBASTAS_DB_USER,MS_SUBASTAS_DB_PASSWORD,SUBASTAS_WS_ORIGENES,SUBASTAS_CORS_ORIGENES
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -676,7 +636,7 @@ jobs:
       - name: Preparar lista "servicio:puerto" (solo contenido)
         id: lista
         run: |
-          LISTA=$(echo '${{ needs.detectar-servicios.outputs.servicios }}' | jq -r '[.[] | select(.ruta | startswith("services/contenido/")) | "\(.servicio):\(.puerto)"] | join(" ")')
+          LISTA=$(echo '${{ needs.detectar-servicios.outputs.servicios }}' | jq -r '[.[] | select(.claseHost == "contenido") | "\(.servicio):\(.puerto)"] | join(" ")')
           echo "lista=$LISTA" >> "$GITHUB_OUTPUT"
 
       # ------------------------------------------------------------------
@@ -722,7 +682,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_CONTENIDO_DEV }}
           username: ${{ secrets.SSH_USER_CONTENIDO_DEV }}
           key: ${{ secrets.SSH_KEY_CONTENIDO_DEV }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -792,7 +752,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -843,11 +803,35 @@ jobs:
           MS_ECOMMERCE_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_ECOMMERCE }}
           MS_ECOMMERCE_DB_USER: ${{ secrets.TODO_DB_USER_MS_ECOMMERCE }}
           MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_ECOMMERCE }}
+          # PENDIENTE (TODO_*): mismo patron de marcador que los otros
+          # servicios de Cuentas. Los nombres exactos que hay que crear en
+          # GitHub estan en infrastructure/despliegue/servicios.json
+          # (secretsRequeridos) y en infrastructure/despliegue/CAPACIDAD.md.
+          # Que existan no despliega nada por si solo: ms-finanzas y
+          # ms-subastas siguen con desplegableDev:false mientras el host de
+          # plataforma no tenga RAM. Prefijo propio por servicio a proposito,
+          # para no pisar DB_USER/DB_PASS de plataforma-db.
+          MS_FINANZAS_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_FINANZAS }}
+          MS_FINANZAS_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_FINANZAS }}
+          MS_FINANZAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_FINANZAS }}
+          MS_FINANZAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_FINANZAS }}
+          MS_FINANZAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_FINANZAS }}
+          MS_SUBASTAS_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_SUBASTAS }}
+          MS_SUBASTAS_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_SUBASTAS }}
+          MS_SUBASTAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_SUBASTAS }}
+          MS_SUBASTAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_SUBASTAS }}
+          MS_SUBASTAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_SUBASTAS }}
+          # Origenes permitidos del canal STOMP de subastas. NO es un secreto
+          # (es la URL publica del borde) pero va por el mismo camino que
+          # SALAS_WS_ORIGENES. Vacio = no se acepta ningun origen: el panel de
+          # subastas se conectaria y el servidor le cerraria el handshake.
+          SUBASTAS_WS_ORIGENES: ${{ vars.SUBASTAS_WS_ORIGENES }}
+          SUBASTAS_CORS_ORIGENES: ${{ vars.SUBASTAS_CORS_ORIGENES }}
         with:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD,MS_SUBASTAS_DB_HOST,MS_SUBASTAS_DB_PORT,MS_SUBASTAS_DB_NAME,MS_SUBASTAS_DB_USER,MS_SUBASTAS_DB_PASSWORD,SUBASTAS_WS_ORIGENES,SUBASTAS_CORS_ORIGENES
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -889,7 +873,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/revertir.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -950,11 +934,35 @@ jobs:
           MS_ECOMMERCE_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_ECOMMERCE }}
           MS_ECOMMERCE_DB_USER: ${{ secrets.TODO_DB_USER_MS_ECOMMERCE }}
           MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_ECOMMERCE }}
+          # PENDIENTE (TODO_*): mismo patron de marcador que los otros
+          # servicios de Cuentas. Los nombres exactos que hay que crear en
+          # GitHub estan en infrastructure/despliegue/servicios.json
+          # (secretsRequeridos) y en infrastructure/despliegue/CAPACIDAD.md.
+          # Que existan no despliega nada por si solo: ms-finanzas y
+          # ms-subastas siguen con desplegableDev:false mientras el host de
+          # plataforma no tenga RAM. Prefijo propio por servicio a proposito,
+          # para no pisar DB_USER/DB_PASS de plataforma-db.
+          MS_FINANZAS_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_FINANZAS }}
+          MS_FINANZAS_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_FINANZAS }}
+          MS_FINANZAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_FINANZAS }}
+          MS_FINANZAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_FINANZAS }}
+          MS_FINANZAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_FINANZAS }}
+          MS_SUBASTAS_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_SUBASTAS }}
+          MS_SUBASTAS_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_SUBASTAS }}
+          MS_SUBASTAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_SUBASTAS }}
+          MS_SUBASTAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_SUBASTAS }}
+          MS_SUBASTAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_SUBASTAS }}
+          # Origenes permitidos del canal STOMP de subastas. NO es un secreto
+          # (es la URL publica del borde) pero va por el mismo camino que
+          # SALAS_WS_ORIGENES. Vacio = no se acepta ningun origen: el panel de
+          # subastas se conectaria y el servidor le cerraria el handshake.
+          SUBASTAS_WS_ORIGENES: ${{ vars.SUBASTAS_WS_ORIGENES }}
+          SUBASTAS_CORS_ORIGENES: ${{ vars.SUBASTAS_CORS_ORIGENES }}
         with:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD,MS_SUBASTAS_DB_HOST,MS_SUBASTAS_DB_PORT,MS_SUBASTAS_DB_NAME,MS_SUBASTAS_DB_USER,MS_SUBASTAS_DB_PASSWORD,SUBASTAS_WS_ORIGENES,SUBASTAS_CORS_ORIGENES
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
