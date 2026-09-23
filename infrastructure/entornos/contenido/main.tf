@@ -127,7 +127,11 @@ resource "aws_security_group" "contenido_sg" {
     cidr_blocks = var.cidr_ssh
   }
   ingress {
-    description = "Servicios de contenido (8101 heroes, 8102 inventario, 8103 productos, 8104 motor) — solo desde el host de plataforma (R9.4)"
+    # OJO con los caracteres: AWS restringe la descripcion de una regla a
+    # [0-9A-Za-z_ .:/()#,@[]+=&;{}!$*-]. Un guion largo la rechaza, y el plan
+    # falla con un mensaje que no menciona la palabra "caracter" por ninguna
+    # parte. Se descubrio asi, en la primera corrida de R9.4.
+    description = "Servicios de contenido (8101 heroes, 8102 inventario, 8103 productos, 8104 motor): solo desde el host de plataforma (R9.4)"
     from_port   = 8101
     to_port     = 8104
     protocol    = "tcp"
