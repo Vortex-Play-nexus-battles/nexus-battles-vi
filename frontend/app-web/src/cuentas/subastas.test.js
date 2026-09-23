@@ -220,3 +220,46 @@ describe('estructura de la pantalla', () => {
     await asentar();
   });
 });
+
+describe('el panel de filtros no tapa el mercado en telefono — UX-R4.8', () => {
+  const panel = () => document.querySelector('.subastas-filtros__plegable');
+  const resumen = () => document.querySelector('.subastas-filtros__resumen');
+
+  test('los filtros viven dentro de un desplegable, con su resumen delante', async () => {
+    await montar();
+
+    expect(panel()).not.toBeNull();
+    expect(panel().tagName).toBe('DETAILS');
+    // El resumen tiene que ser el PRIMER hijo o el navegador no lo trata como
+    // el control que abre y cierra.
+    expect(panel().firstElementChild).toBe(resumen());
+    expect(resumen().tagName).toBe('SUMMARY');
+    expect(panel().querySelector('.subastas-filtros')).not.toBeNull();
+  });
+
+  test('los resultados van DESPUES del panel, no dentro', async () => {
+    await montar();
+
+    expect(panel().contains(zona())).toBe(false);
+    expect(panel().nextElementSibling).toBe(zona());
+  });
+
+  test('sin filtros puestos el resumen no promete nada', async () => {
+    await montar();
+
+    expect(resumen().textContent).toBe('Filtros');
+  });
+
+  test('con filtros puestos el resumen dice cuantos, aunque este plegado', async () => {
+    await montar();
+
+    const casilla = document.querySelector('input[name="tipoProducto"]');
+    casilla.checked = true;
+    casilla.dispatchEvent(new Event('change', { bubbles: true }));
+    await asentar();
+
+    // Un panel plegado que esconde filtros activos deja a alguien mirando
+    // «ninguna subasta coincide» sin saber por que.
+    expect(resumen().textContent).toBe('Filtros · 1 activos');
+  });
+});

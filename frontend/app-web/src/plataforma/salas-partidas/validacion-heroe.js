@@ -313,6 +313,36 @@ function pintarFalloDeVerificacion(raiz, error, alCancelar, resultado = 'ERROR',
   enfocarTitulo(raiz);
 }
 
+/**
+ * Dice, dentro del dialogo, que la accion no se pudo completar — UX-R4.5.
+ *
+ * El aviso que pinta cada variante explica el VEREDICTO, que llega antes de
+ * pulsar nada. Lo que no tenia sitio era el fallo de la ACCION: hasta ahora el
+ * boton principal solo escribia en la consola, asi que tampoco hacia falta.
+ * Ahora entra a la sala de verdad, y si el servidor la rechaza el dialogo
+ * tiene que decirlo; quedarse callado seria volver al defecto que este bloque
+ * viene a quitar.
+ *
+ * Se crea al fallar y no antes: un aviso vacio siempre presente es un adorno,
+ * que es justo lo que el resto de este fichero evita.
+ *
+ * @param {HTMLElement} raiz el dialogo
+ * @param {string} mensaje
+ * @returns {HTMLElement} el aviso
+ */
+export function avisarFalloDeAccion(raiz, mensaje) {
+  let aviso = raiz.querySelector('[data-zona="aviso-confirmar"]');
+  if (!aviso) {
+    aviso = raiz.ownerDocument.createElement('p');
+    aviso.className = 'aviso aviso--error';
+    aviso.dataset.zona = 'aviso-confirmar';
+    aviso.setAttribute('role', 'alert');
+    raiz.querySelector('.dialogo__acciones')?.before(aviso);
+  }
+  aviso.textContent = mensaje;
+  return aviso;
+}
+
 /* -- Dialogo modal: identidad, foco y teclado (RNF-ACC-002). -------------- */
 
 const ID_TITULO = 'titulo-validacion-heroe';
