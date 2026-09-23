@@ -23,6 +23,8 @@ import {
   esSeccionDegradada,
   pintarSeccionDegradada,
 } from '../../comun/degradacion/aviso-degradacion.js';
+import { vaciar } from '../../comun/ui/dom.js';
+import { retratoDeHeroe } from '../../comun/ui/juego/heroe.js';
 
 /** Resultados del esquema `VerificacionHeroe` del contrato OpenAPI. */
 export const RESULTADOS = {
@@ -39,23 +41,23 @@ export const RESULTADOS = {
  */
 const VARIANTES = {
   [RESULTADOS.SIN_HEROE]: {
-    titulo: () => 'No tienes un heroe equipado',
-    detalle: () => 'Equipa un heroe desde tu inventario antes de entrar a la sala.',
+    titulo: () => 'No tienes un héroe equipado',
+    detalle: () => 'Equipa un héroe desde tu inventario antes de entrar a la sala.',
     avisoTono: 'error',
     avisoTitulo: () => 'Tu inventario',
     avisoCuerpo: (v) =>
       typeof v.heroesSinEquipar === 'number'
-        ? `Tienes ${v.heroesSinEquipar} heroes sin equipar. Equipa uno y vuelve.`
+        ? `Tienes ${v.heroesSinEquipar} héroes sin equipar. Equipa uno y vuelve.`
         : null,
-    accion: 'IR AL INVENTARIO',
+    accion: 'Ir al inventario',
   },
 
   [RESULTADOS.OCUPADO]: {
-    titulo: () => 'Tu heroe esta en otra partida',
+    titulo: () => 'Tu héroe está en otra partida',
     detalle: (v) =>
       v.heroe?.nombre && v.salaQueLoOcupa
-        ? `«${v.heroe.nombre}» esta en la sala «${v.salaQueLoOcupa}». ` +
-          'Espera a que termine o elige otro heroe.'
+        ? `«${v.heroe.nombre}» está en la sala «${v.salaQueLoOcupa}». ` +
+          'Espera a que termine o elige otro héroe.'
         : null,
     avisoTono: 'advertencia',
     avisoTitulo: () => 'Cuanto falta',
@@ -63,7 +65,7 @@ const VARIANTES = {
       typeof v.minutosRestantes === 'number'
         ? `La partida en curso termina en unos ${v.minutosRestantes} minutos.`
         : null,
-    accion: 'ELEGIR OTRO HEROE',
+    accion: 'Elegir otro héroe',
   },
 
   [RESULTADOS.DISPONIBLE]: {
@@ -73,9 +75,9 @@ const VARIANTES = {
     avisoTitulo: () => 'Antes de entrar',
     avisoCuerpo: (v) =>
       typeof v.creditosRequeridos === 'number'
-        ? `Se descontaran ${v.creditosRequeridos} creditos de tu saldo al confirmar.`
+        ? `Se descontarán ${v.creditosRequeridos} créditos de tu saldo al confirmar.`
         : null,
-    accion: 'ENTRAR A LA SALA',
+    accion: 'Entrar a la sala',
   },
 };
 
@@ -127,7 +129,7 @@ export function pintarValidacion(raiz, verificacion, acciones = {}) {
     prepararDialogo(raiz, 'DESCONOCIDO');
     raiz.append(
       tituloDelDialogo(doc),
-      texto(doc, 'p', 't-cuerpo', 'No se pudo interpretar la respuesta de la verificacion.'),
+      texto(doc, 'p', 't-cuerpo', 'No se pudo interpretar la respuesta de la verificación.'),
     );
     enfocarTitulo(raiz);
     return;
@@ -138,14 +140,30 @@ export function pintarValidacion(raiz, verificacion, acciones = {}) {
   // 1 · Titulo del dialogo. Fijo en las tres variantes.
   raiz.append(tituloDelDialogo(doc));
 
-  // 2 · Retrato mas mensaje, en fila. El retrato es decorativo: lo que
-  //     comunica es el texto, no el circulo.
+  // 2 · Retrato mas mensaje, en fila. Lo que comunica sigue siendo el texto;
+  //     el retrato acompana.
   const fila = doc.createElement('div');
   fila.className = 'dialogo__encabezado';
 
-  const retrato = doc.createElement('span');
-  retrato.className = 'dialogo__icono dialogo__icono--grande';
-  retrato.setAttribute('aria-hidden', 'true');
+  // UX-R2.2 — este retrato era un <span> vacio con `aria-hidden`: un circulo
+  // gris. El contrato trae `retratoUrl` y `nivel` en `HeroeEnPartida` desde que
+  // se escribio y nadie los pintaba, asi que el jugador veia el mismo circulo
+  // para cualquier heroe. Cuando hay heroe se usa el marco del kit; cuando no
+  // lo hay (SIN_HEROE_EQUIPADO) se queda el circulo decorativo de antes.
+  const retrato = verificacion.heroe
+    ? retratoDeHeroe(
+        {
+          nombre: verificacion.heroe.nombre,
+          nivel: verificacion.heroe.nivel ?? undefined,
+          imagen: verificacion.heroe.retratoUrl ?? undefined,
+        },
+        { conNombre: false },
+      )
+    : doc.createElement('span');
+  if (!verificacion.heroe) {
+    retrato.className = 'dialogo__icono dialogo__icono--grande';
+    retrato.setAttribute('aria-hidden', 'true');
+  }
 
   const mensaje = doc.createElement('div');
   mensaje.className = 'pila pila--ajustada';
@@ -224,19 +242,23 @@ export async function montarValidacionDeHeroe(
     pintarFalloDeVerificacion(
       raiz,
       {
-        titulo: 'Falta saber a que sala quieres entrar',
-        detalle:
-          'Abre esta verificacion desde el listado de Batallas, o anade ?sala=<id> ' +
-          'a la direccion.',
+        // UX-R3.11 — antes decia: «Abre esta verificación desde el listado de
+        // Batallas, o añade ?sala=<id> a la dirección». Eso es una instruccion
+        // para quien programa. Quien juega no construye consultas a mano, y el
+        // dialogo solo ofrecia «Cancelar»: contaba un problema y no daba
+        // ninguna salida (§18). Ahora la salida es la accion primaria.
+        titulo: 'Falta saber a qué sala quieres entrar',
+        detalle: 'Esta comprobación se abre desde una sala concreta. Elige una y vuelve.',
       },
       alCancelar,
       'SIN_SALA',
+      { texto: 'Ver salas abiertas', href: RUTA_BATALLAS },
     );
     return;
   }
 
   prepararDialogo(raiz, 'CARGANDO');
-  raiz.append(tituloDelDialogo(doc), texto(doc, 'p', 't-cuerpo', 'Comprobando tu heroe.'));
+  raiz.append(tituloDelDialogo(doc), texto(doc, 'p', 't-cuerpo', 'Comprobando tu héroe.'));
   enfocarTitulo(raiz);
 
   try {
@@ -280,13 +302,13 @@ function pintarInventarioDegradado(raiz, problema, alCancelar, alReintentar) {
  * la vista real: un 404 explicado, no un dialogo en blanco ni un veredicto
  * inventado.
  */
-function pintarFalloDeVerificacion(raiz, error, alCancelar, resultado = 'ERROR') {
+function pintarFalloDeVerificacion(raiz, error, alCancelar, resultado = 'ERROR', salida = null) {
   const doc = raiz.ownerDocument;
   prepararDialogo(raiz, resultado);
   raiz.append(
     tituloDelDialogo(doc),
     avisoDeError(doc, error),
-    accionesSoloCancelar(doc, alCancelar),
+    accionesSoloCancelar(doc, alCancelar, salida),
   );
   enfocarTitulo(raiz);
 }
@@ -294,6 +316,9 @@ function pintarFalloDeVerificacion(raiz, error, alCancelar, resultado = 'ERROR')
 /* -- Dialogo modal: identidad, foco y teclado (RNF-ACC-002). -------------- */
 
 const ID_TITULO = 'titulo-validacion-heroe';
+
+/** A donde se manda a quien llega aqui sin sala. */
+const RUTA_BATALLAS = './batallas.html';
 
 const FOCALIZABLES =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), ' +
@@ -313,7 +338,7 @@ function prepararDialogo(raiz, resultado) {
   raiz.setAttribute('aria-modal', 'true');
   raiz.setAttribute('aria-labelledby', ID_TITULO);
   raiz.dataset.resultado = resultado;
-  raiz.innerHTML = '';
+  vaciar(raiz);
 }
 
 /**
@@ -322,7 +347,7 @@ function prepararDialogo(raiz, resultado) {
  * primer Tab cae en «Cancelar». Patron de dialogo modal de WAI-ARIA.
  */
 function tituloDelDialogo(doc) {
-  const titulo = texto(doc, 'h2', 'dialogo__titulo', 'Verificacion de heroe', ID_TITULO);
+  const titulo = texto(doc, 'h2', 'dialogo__titulo', 'Verificación de héroe', ID_TITULO);
   titulo.tabIndex = -1;
   return titulo;
 }
@@ -401,19 +426,27 @@ function avisoDeError(doc, error) {
   aviso.setAttribute('role', 'alert');
   const dentro = doc.createElement('div');
   dentro.append(
-    texto(doc, 'p', 'aviso__titulo', error?.titulo ?? 'No se pudo verificar tu heroe'),
+    texto(doc, 'p', 'aviso__titulo', error?.titulo ?? 'No se pudo verificar tu héroe'),
     texto(doc, 'p', '', error?.detalle ?? error?.message ?? 'Intentalo de nuevo en un momento.'),
   );
   aviso.append(dentro);
   return aviso;
 }
 
-function accionesSoloCancelar(doc, alCancelar) {
+function accionesSoloCancelar(doc, alCancelar, salida = null) {
   const zona = doc.createElement('div');
   zona.className = 'dialogo__acciones';
   const cancelar = boton(doc, 'boton boton--secundario', 'Cancelar');
   cancelar.dataset.accion = 'cancelar';
   cancelar.addEventListener('click', () => alCancelar?.());
   zona.append(cancelar);
+  if (salida) {
+    const ir = doc.createElement('a');
+    ir.className = 'boton boton--primario';
+    ir.href = salida.href;
+    ir.textContent = salida.texto;
+    ir.dataset.accion = 'salida';
+    zona.append(ir);
+  }
   return zona;
 }

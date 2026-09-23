@@ -1,3 +1,14 @@
+/* Los componentes compartidos ya no se redefinen aqui.
+ *
+ * `.tarjeta`, `.aviso`, `.fila`, `.ayuda` y `.paginacion` son del sistema
+ * de diseno (`shared/ui-kit/css/`). Redefinirlos con el mismo nombre en una
+ * hoja de vista hacia que el MISMO componente se viera distinto segun la
+ * pantalla: la tarjeta tenia radio 8 px en unas vistas y 10 px en otras, y
+ * el aviso salia siempre azul aunque el modificador dijera error o exito.
+ * La vista carga ahora `base.css` ademas de `componentes.css`, asi que las
+ * reglas del kit llegan enteras.
+ */
+
 /* ============================================================
    historial-transacciones.css — HU-PAG-002
    Usa los tokens de tema-cuentas.css importado desde el HTML.
@@ -7,13 +18,7 @@ body {
   margin: 0;
   background: var(--fondo);
   color: var(--texto);
-  font-family: var(--tipografia-cuerpo, Inter, system-ui, sans-serif);
-}
-
-.contenedor {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 16px;
+  font-family: var(--t-cuerpo-familia);
 }
 
 .encabezado-contenido {
@@ -26,22 +31,8 @@ body {
 
 .titulo {
   margin: 0 0 4px;
-  font-family: var(--tipografia-titulo);
+  font-family: var(--fuente-titulo);
   font-size: 24px;
-}
-
-.ayuda {
-  margin: 0;
-  color: var(--texto-2, #48536a);
-  font-size: 14px;
-}
-
-.tarjeta {
-  background: var(--superficie);
-  border: 1px solid var(--borde);
-  border-radius: var(--radio);
-  padding: 12px;
-  margin-top: 8px;
 }
 
 .tabla-envoltorio {
@@ -63,15 +54,15 @@ body {
 }
 
 .tabla-historial thead th {
-  font-family: var(--tipografia-titulo);
+  font-family: var(--fuente-titulo);
   font-weight: 600;
-  color: var(--texto-2, #48536a);
-  background: rgba(0, 0, 0, 0.02);
+  color: var(--texto-2);
+  background: var(--superficie-2);
 }
 
 .tabla-historial .celda-fecha {
   white-space: nowrap;
-  color: var(--texto-2, #48536a);
+  color: var(--texto-2);
 }
 
 .tabla-historial .celda-monto {
@@ -90,45 +81,28 @@ body {
 }
 
 .badge--aprobado {
-  color: #086b31;
-  background: #e4f5e9;
+  color: var(--exito);
+  background: var(--exito-insignia);
 }
 
 .badge--rechazado {
-  color: #b81a1a;
-  background: #fbe4e4;
+  color: var(--error);
+  background: var(--error-insignia);
 }
 
 .badge--indeterminado {
-  color: #8a4a00;
-  background: #fbeeed;
-}
-
-.paginacion {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  margin-top: 12px;
+  color: var(--advertencia);
+  background: var(--advertencia-insignia);
 }
 
 /* Estados de la tabla. */
-.estado {
-  margin: 12px 0 0;
-  padding: 10px 12px;
-  border-radius: var(--radio);
-  font-size: 14px;
-}
-
-.estado.carga {
-  background: #ddeef7;
-  color: #095e8c;
-}
-.estado.error {
-  background: #fbe4e4;
-  color: #b81a1a;
-}
-.estado.vacio {
-  background: #f2f4f8;
-  color: var(--texto-2, #48536a);
-}
+/* `.estado` NO se declara aqui.
+ *
+ * UX-R4.1 — esta hoja lo redefinia entero, igual que hacia `mis-cofres.css`
+ * antes de UX-R3.11 y por la misma via: como carga despues de
+ * `tema-cuentas.css`, su version ganaba. Las dos decian lo mismo con colores
+ * distintos -#ddeef7/#095e8c aqui, `--info-insignia`/`--info` alli- asi que el
+ * mismo estado de carga se veia de dos maneras segun la pantalla.
+ *
+ * La version buena es la de `tema-cuentas.css`, que ademas ya tiene `.exito`.
+ */

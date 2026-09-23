@@ -40,13 +40,13 @@
         <h1>Notificaciones</h1>
         <p class="t-cuerpo">
           Lo que te pasa en el juego, en todas tus sesiones abiertas a la vez. Si pierdes la
-          conexion, esta vista consulta periodicamente y se pone al dia al volver.
+          conexión, esta vista los consulta cada poco y se pone al día sola.
         </p>
       </div>
 
       <div class="estado-vista" data-zona="sin-sesion" hidden>
-        <p class="estado-vista__titulo">Inicia sesion para ver tus notificaciones</p>
-        <p class="t-meta">Los avisos son tuyos: hace falta tu sesion para pedirlos.</p>
+        <p class="estado-vista__titulo">Inicia sesión para ver tus notificaciones</p>
+        <p class="t-meta">Los avisos son tuyos: hace falta tu sesión para pedirlos.</p>
       </div>
 
       <section class="tarjeta pila" id="panel-notificaciones" data-zona="panel" hidden>
@@ -58,25 +58,36 @@
           >
         </div>
 
-        <p class="t-meta" data-zona="lista-vacia">Todavia no tienes notificaciones.</p>
+        <p class="t-meta" data-zona="lista-vacia">
+          Todavía no tienes notificaciones. Aquí llegan los avisos de tus partidas, tus pujas, tus
+          torneos y tus sanciones.
+        </p>
         <ul class="pila pila--compacta" data-zona="lista" aria-label="Notificaciones"></ul>
       </section>
     </main>
 
-    <!-- RNF-DIS-002: el chatbot esta en todas las vistas, sin excepcion. -->
-    <button class="chatbot-flotante" type="button" aria-label="Abrir el asistente">IA</button>
+    <!--
+      RF-CHA-001: el icono flotante del asistente va en todas las vistas.
+      Lo monta `comun/ui/asistente.js`, que ademas le da comportamiento:
+      hasta ahora el boton estaba copiado aqui y no hacia nada al pulsarlo.
+    -->
 
     <script type="module">
+      import { montarAsistente } from '../../comun/ui/asistente.js';
       import { montarCampana } from './campana.js';
       import { leerSesion, identificadorDeSesion } from './cliente-notificaciones.js';
-      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+      import { montarCabecera } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
 
       // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
-      if (!exigirSesion()) {
+      if (!exigirAcceso('notificaciones')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
       // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: null });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'notificaciones',
+        seccionActiva: null,
+      });
       // En esta vista la campana de la cabecera abre el panel de aqui mismo.
       const campana = document.querySelector('[data-cabecera-app] .cabecera__campana');
       campana.dataset.zona = 'boton';
@@ -94,6 +105,9 @@
         // En la vista de notificaciones el panel arranca abierto.
         abrir();
       }
+
+      // RF-CHA-001 / HU-CHA-001 CA-03: el icono responde y dice la verdad.
+      montarAsistente(document);
     </script>
   </body>
 </html>

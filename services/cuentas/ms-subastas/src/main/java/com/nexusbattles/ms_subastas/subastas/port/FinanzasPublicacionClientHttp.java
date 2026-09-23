@@ -2,6 +2,7 @@ package com.nexusbattles.ms_subastas.subastas.port;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nexusbattles.ms_subastas.subastas.service.PublicacionSubastaException;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.URI;
@@ -126,22 +127,64 @@ public class FinanzasPublicacionClientHttp implements FinanzasPublicacionClient 
         try {
             response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         } catch (IOException e) {
-            throw new FinanzasPublicacionClientException("No se pudo contactar a finanzas", e);
+            consultarTrasFallo(operacion, payload, refId, e);
+            return;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new FinanzasPublicacionClientException("Operacion de finanzas interrumpida", e);
+            throw new FinanzasPublicacionClientException("Resultado financiero incierto: " + refId, e, true);
         }
         if (response.statusCode() != 200) {
-            throw new FinanzasPublicacionClientException("Respuesta inesperada de finanzas: " + response.statusCode());
-        }
-        try {
-            Resultado resultado = objectMapper.readValue(response.body(), Resultado.class);
-            if (resultado == null || !refId.equals(resultado.refId())) {
-                throw new FinanzasPublicacionClientException("Finanzas devolvio un refId distinto o ausente");
+            if (operacion.equals("debitar") && response.statusCode() == 422
+                    && tipoDelProblema(response).equals("https://nexusbattles.upb.edu.co/errors/saldo-insuficiente")) {
+                throw new PublicacionSubastaException(
+                        "Creditos insuficientes para publicar la subasta");
             }
-        } catch (IOException | IllegalArgumentException e) {
-            throw new FinanzasPublicacionClientException("Respuesta de finanzas invalida", e);
+            throw new FinanzasPublicacionClientException("Respuesta inesperada de finanzas: " + response.statusCode(),
+                    null, response.statusCode() >= 500);
         }
+        leerResultado(response.body(), refId);
+    }
+
+    private String tipoDelProblema(HttpResponse<String> response) {
+        try {
+            var json = objectMapper.readTree(response.body());
+            return json == null ? "" : json.path("type").asText("");
+        } catch (IOException | IllegalArgumentException e) { return ""; }
+    }
+
+    private Resultado leerResultado(String body, String refId) {
+        try {
+            Resultado resultado = objectMapper.readValue(body, Resultado.class);
+            if (resultado == null || !refId.equals(resultado.refId())) {
+                throw new FinanzasPublicacionClientException("Finanzas devolvio un refId distinto o ausente", null, true);
+            }
+            return resultado;
+        } catch (IOException | IllegalArgumentException e) {
+            throw new FinanzasPublicacionClientException("Respuesta de finanzas invalida", e, true);
+        }
+    }
+
+    /** Una lectura no prueba que una mutacion aun en vuelo no vaya a completarse. */
+    private void consultarTrasFallo(String operacion, Object payload, String refId, IOException causa) {
+        try {
+            var request = firmada(HttpRequest.newBuilder(baseUri.resolve("creditos/operaciones/" + refId)))
+                    .header("Accept", "application/json").timeout(timeout).GET().build();
+            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 200) {
+                Resultado resultado = leerResultado(response.body(), refId);
+                if (operacion.equals("reversar") && "LIBERADA".equals(resultado.estado())) return;
+                if (payload instanceof Debito debito && "CONSUMIDA".equals(resultado.estado())
+                        && debito.uid().equals(resultado.uid()) && resultado.monto() != null
+                        && debito.monto().compareTo(resultado.monto()) == 0
+                        && debito.concepto().equals(resultado.concepto())) return;
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            causa.addSuppressed(e);
+        } catch (IOException | RuntimeException e) {
+            if (e != causa) causa.addSuppressed(e);
+        }
+        throw new FinanzasPublicacionClientException("Resultado financiero incierto; requiere conciliacion: " + refId, causa, true);
     }
 
     /** Credencial de ms-subastas (ADR-005); sin ella, la comision no se intenta cobrar. */
@@ -157,5 +200,5 @@ public class FinanzasPublicacionClientHttp implements FinanzasPublicacionClient 
     private record Debito(UUID uid, BigDecimal monto, String refId, String concepto) { }
     private record Reversa(String refId, String motivo) { }
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record Resultado(String refId) { }
+    private record Resultado(String refId, String estado, UUID uid, BigDecimal monto, String concepto) { }
 }

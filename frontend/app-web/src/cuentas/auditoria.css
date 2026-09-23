@@ -1,13 +1,18 @@
+/* Los componentes compartidos ya no se redefinen aqui.
+ *
+ * `.tarjeta`, `.aviso`, `.fila`, `.ayuda` y `.paginacion` son del sistema
+ * de diseno (`shared/ui-kit/css/`). Redefinirlos con el mismo nombre en una
+ * hoja de vista hacia que el MISMO componente se viera distinto segun la
+ * pantalla: la tarjeta tenia radio 8 px en unas vistas y 10 px en otras, y
+ * el aviso salia siempre azul aunque el modificador dijera error o exito.
+ * La vista carga ahora `base.css` ademas de `componentes.css`, asi que las
+ * reglas del kit llegan enteras.
+ */
+
 /* auditoria.css — Registro de auditoría (HU-AUD-002)
    Depende de tema-cuentas.css (tokens de color, .tarjeta, .fila, .aviso,
    .estado, botones, inputs). Aquí SOLO va lo que esa hoja no cubre:
    layout de página, tabla, badges por tipo de acción, y paginación. */
-
-.contenedor {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 32px 16px 64px;
-}
 
 .auditoria-titulo {
   font-family: Inter, 'Segoe UI', system-ui, sans-serif;
@@ -30,7 +35,7 @@
   flex-direction: column;
   font-size: 13px;
   font-weight: 600;
-  color: var(--texto-secundario);
+  color: var(--texto-2);
   gap: 4px;
 }
 
@@ -47,14 +52,6 @@
   align-items: center;
 }
 
-/* El .aviso base de tema-cuentas.css usa los colores de "info" (azul).
-   Para el banner de inmutabilidad usamos el tono de advertencia (ámbar),
-   reutilizando los tokens que ya existen — sin inventar colores nuevos. */
-.aviso--advertencia {
-  background: var(--advertencia-fondo);
-  color: var(--advertencia);
-  margin-top: 20px;
-}
 .aviso--advertencia strong {
   display: block;
   margin-bottom: 2px;
@@ -75,16 +72,16 @@
 .tabla-auditoria th {
   text-align: left;
   font-size: 12px;
-  color: var(--texto-terciario);
+  color: var(--texto-3);
   font-weight: 600;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--borde-decorativo);
+  border-bottom: 1px solid var(--borde);
   white-space: nowrap;
 }
 
 .tabla-auditoria td {
   padding: 10px 12px;
-  border-bottom: 1px solid var(--borde-decorativo);
+  border-bottom: 1px solid var(--borde);
   vertical-align: top;
   font-size: 14px;
 }
@@ -122,48 +119,40 @@
 }
 
 .badge--creacion {
-  background: var(--exito-fondo);
+  background: var(--exito-insignia);
   color: var(--exito);
 }
 .badge--aprobacion {
-  background: var(--exito-fondo);
+  background: var(--exito-insignia);
   color: var(--exito);
 }
 .badge--actualizacion {
-  background: var(--info-fondo);
+  background: var(--info-insignia);
   color: var(--info);
 }
 .badge--suspension {
-  background: var(--advertencia-fondo);
+  background: var(--advertencia-insignia);
   color: var(--advertencia);
 }
 .badge--sancion {
-  background: var(--error-fondo);
+  background: var(--error-insignia);
   color: var(--error);
 }
 .badge--rechazo {
-  background: var(--error-fondo);
+  background: var(--error-insignia);
   color: var(--error);
 }
 .badge--cambio_rol {
-  background: #efe6f7;
-  color: var(--acento);
+  background: var(--rareza-epica-insignia);
+  color: var(--acento-relleno);
 }
 .badge--eliminacion_logica {
   background: var(--fondo);
-  color: var(--texto-secundario);
+  color: var(--texto-2);
 }
 .badge--otro {
   background: var(--fondo);
-  color: var(--texto-secundario);
+  color: var(--texto-2);
 }
 
 /* Paginación */
-
-.paginacion {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  margin-top: 16px;
-}

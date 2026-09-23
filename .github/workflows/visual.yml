@@ -1,0 +1,117 @@
+# Laboratorio visual — UX-R2.1.
+#
+# ## Que hace y que no
+#
+# Corre las tres pruebas de `tests/visual/`, que son tres cosas distintas:
+#
+#   auditoria-visual  las 32 vistas en cinco anchuras (160 combinaciones), una
+#                     captura de cada una y las medidas de maquetacion:
+#                     desbordamiento horizontal, cabecera partida, modal fuera
+#                     de pantalla, objetivo tactil por debajo de 44 px, texto
+#                     recortado sin puntos suspensivos, error tecnico como
+#                     texto visible, contraste por debajo de WCAG AA y cabecera
+#                     que no llega al borde.
+#   permisos          que la matriz de acceso se cumpla de verdad: 14 pruebas.
+#   accesibilidad     axe-core sobre las 32 vistas x 2 anchuras, con la persona
+#                     que abre cada una. Falla con serious y critical.
+#
+# NO compara imagenes pixel a pixel. Una comparacion de imagenes falla con
+# cada cambio de fuente y acaba desactivada; lo que hace falta detectar es
+# estructura rota, y eso se mide.
+#
+# ## Por que si cabe en cada PR (a diferencia de e2e.yml)
+#
+# No levanta ningun servicio: sirve el repositorio con un servidor estatico y
+# fotografia las vistas en su estado degradado, que es justamente el que nadie
+# mira y el que mas se rompe. Son tres minutos y medio, no quince.
+#
+# ## Que falla
+#
+# Fallan: el guardian del catalogo (una vista nueva sin registrar), el guardian
+# del kit (los CSS no cargaron: la raiz servida esta mal), cualquier prueba de
+# permisos y cualquier hallazgo `serious` o `critical` de axe.
+#
+# Los hallazgos de maquetacion, y los `moderate`/`minor` de axe, se publican
+# como aviso y como informe descargable. Convertirlos en compuerta obliga a
+# tocar las 32 vistas en un PR: una compuerta que nace roja la desactiva
+# alguien en dos dias. UX-R3.11 dejo el laboratorio en 160 combinaciones con
+# CERO hallazgos, asi que ese paso ya esta al alcance.
+name: Laboratorio visual
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - "frontend/app-web/src/**"
+      - "shared/ui-kit/**"
+      - "tests/visual/**"
+      - "frontend/app-web/playwright.visual.config.js"
+      - ".github/workflows/visual.yml"
+  push:
+    branches: [develop]
+    paths:
+      - "frontend/app-web/src/**"
+      - "shared/ui-kit/**"
+      - "tests/visual/**"
+  workflow_dispatch:
+
+concurrency:
+  group: visual-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  auditoria:
+    name: 32 vistas, permisos y accesibilidad
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/app-web/package-lock.json
+
+      - name: Instalar dependencias y el navegador
+        working-directory: frontend/app-web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      # Las pruebas viven en `tests/visual/`, que es su sitio segun la
+      # estructura del monorepo, pero `node_modules` esta en
+      # `frontend/app-web/`. Node resuelve los imports subiendo directorios
+      # desde el archivo, asi que un enlace en la raiz hace que
+      # `tests/visual/*.js` encuentre `@playwright/test`. Mismo apaño que en
+      # `e2e.yml`: es un enlace del runner, no un cambio del repositorio.
+      - name: Enlazar node_modules en la raiz para las pruebas de tests/
+        run: ln -sfn frontend/app-web/node_modules node_modules
+
+      - name: Recorrer las vistas
+        working-directory: frontend/app-web
+        run: npx playwright test --config=playwright.visual.config.js
+
+      # Las capturas son la evidencia que se adjunta al acta del sprint
+      # (Definition of Done, apartado k). Se suben pase o falle.
+      - name: Publicar capturas e informe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidencia-visual
+          path: docs/evidencia/ux-r2/
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Resumen del informe
+        if: always()
+        run: |
+          if [ -f docs/evidencia/ux-r2/INFORME.md ]; then
+            cat docs/evidencia/ux-r2/INFORME.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "La corrida no llego a generar informe." >> "$GITHUB_STEP_SUMMARY"
+          fi

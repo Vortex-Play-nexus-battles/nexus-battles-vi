@@ -1,3 +1,17 @@
 plugins {
     id 'nexus.spring-conventions'
+    // Un esquema propio en el PostgreSQL de la plataforma (regla 7, misma
+    // convencion que moderacion-sanciones): torneos, equipos y encuentros.
+    id 'nexus.persistencia-conventions'
+    // Servidor de recursos (ADR-002): quien crea, inscribe o registra un
+    // resultado sale del token. Trae plataforma-seguridad y sus fixtures.
+    id 'nexus.seguridad-conventions'
+}
+
+dependencies {
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation platform('org.testcontainers:testcontainers-bom:1.21.4')
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:postgresql'
 }

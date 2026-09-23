@@ -41,7 +41,7 @@ const FORMATEADOR_CREDITOS = new Intl.NumberFormat('es-CO');
  */
 export function construirVitrinaSubastas(pagina, { alAbrirDetalle, alComprarAhora } = {}) {
   if (!pagina || !Array.isArray(pagina.contenido)) {
-    throw new TypeError('La pagina de subastas debe traer un arreglo "contenido"');
+    throw new TypeError('La página de subastas debe traer un arreglo "contenido"');
   }
 
   const vitrina = document.createElement('ul');

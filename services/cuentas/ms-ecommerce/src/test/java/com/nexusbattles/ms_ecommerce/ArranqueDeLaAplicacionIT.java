@@ -37,10 +37,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Las dos comprobaciones de abajo fijan eso: si alguien cambia el
  * context-path, esta prueba se pone roja antes de que lo haga el despliegue.
  *
- * <p>Con PostgreSQL de verdad y no con H2: {@code ddl-auto=update} deja que
- * Hibernate cree el esquema contra el motor real, que es lo que pasa en el
- * servidor. Con H2 la prueba diria "arranca" sin haber probado lo que se
- * despliega.
+ * <p>Con PostgreSQL de verdad y no con H2: Flyway aplica V1 contra el motor
+ * real y Hibernate ({@code ddl-auto=validate}) comprueba que las entidades
+ * casan con esas tablas, que es lo que pasa en el servidor. Con H2 la prueba
+ * diria "arranca" sin haber probado lo que se despliega.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers

@@ -1,259 +1,216 @@
 <!doctype html>
-
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-    <title>Mi perfil - Nexus Battles</title>
-
+    <title>Mi cuenta — NEXUS BATTLES VI</title>
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
-    <link rel="stylesheet" href="./tema-cuentas.css" />
-    <link rel="stylesheet" href="./perfil.css" />
   </head>
-
   <body>
-    <header class="encabezado">
-      <div class="encabezado-contenido">
-        <div>
-          <h1>Mi perfil</h1>
-          <p>Administra tu información personal y preferencias.</p>
+    <!-- Cabecera única (HU-UX-001). Antes esta vista tenía su propio
+         encabezado con su propio botón «Volver». -->
+    <div data-cabecera-app></div>
+
+    <main class="pagina pila">
+      <header class="encabezado-pagina">
+        <div class="pila pila--ajustada">
+          <h1>Mi cuenta</h1>
+          <p class="t-cuerpo">Tus datos, tu seguridad y todo lo que movió tus créditos.</p>
         </div>
+      </header>
 
-        <button id="btn-volver" type="button" class="btn btn-secundario">Volver</button>
-      </div>
-    </header>
+      <!-- Aviso global de la pantalla: guardado, rechazo del servicio. -->
+      <div data-zona="aviso" hidden></div>
 
-    <main class="contenedor-principal">
-      <!-- =====================================================
-       MENSAJE DE SESIÓN
-       ===================================================== -->
+      <!-- Las cuatro cosas que esta pantalla hace de verdad. La navegación
+           por pestañas la monta `comun/ui/pestanas.js` (patrón ARIA tabs). -->
+      <div data-zona="pestanas"></div>
 
-      <section id="mensaje-sesion" class="mensaje mensaje-error" hidden></section>
+      <!-- ---------------------------------------------------- Resumen -->
+      <section data-zona="panel-resumen" hidden>
+        <div class="pila" data-zona="contenido"></div>
+      </section>
 
-      <!-- =====================================================
-       CONTENIDO DEL PERFIL
-       ===================================================== -->
-
-      <section id="perfil-contenedor" hidden>
-        <!-- =================================================
-         INFORMACIÓN PERSONAL
-         ================================================= -->
-
-        <section class="tarjeta">
-          <div class="tarjeta-cabecera">
-            <div>
-              <h2>Información personal</h2>
-
-              <p>Actualiza los datos que aparecen en tu perfil.</p>
+      <!-- ---------------------------------------------------- Perfil -->
+      <section data-zona="panel-perfil" hidden>
+        <form id="formulario-perfil" class="tarjeta pila" novalidate>
+          <div class="encabezado-seccion">
+            <div class="pila pila--ajustada">
+              <h2 class="t-subtitulo">Información personal</h2>
+              <p class="t-meta">Así te ven el resto de jugadores.</p>
             </div>
           </div>
 
-          <form id="formulario-perfil">
-            <div class="formulario-grid">
-              <div class="campo">
-                <label for="nombres"> Nombres </label>
-
-                <input id="nombres" name="nombres" type="text" autocomplete="given-name" required />
-              </div>
-
-              <div class="campo">
-                <label for="apellidos"> Apellidos </label>
-
-                <input
-                  id="apellidos"
-                  name="apellidos"
-                  type="text"
-                  autocomplete="family-name"
-                  required
-                />
-              </div>
-
-              <div class="campo">
-                <label for="apodo"> Apodo </label>
-
-                <input id="apodo" name="apodo" type="text" autocomplete="nickname" required />
-
-                <small> Cambiar el apodo requiere confirmación y validación. </small>
-              </div>
-            </div>
-
-            <!-- =========================================
-             PREFERENCIAS
-             ========================================= -->
-
+          <div class="fila">
             <div class="campo">
-              <label for="preferencias"> Preferencias </label>
-
-              <textarea
-                id="preferencias"
-                name="preferencias"
-                rows="5"
-                placeholder="Escribe tus preferencias..."
-              >
-              </textarea>
+              <label class="campo__etiqueta" for="nombres">Nombres</label>
+              <input class="campo__control" type="text" id="nombres" name="nombres" required />
             </div>
-
-            <!-- =========================================
-             AVATAR
-             ========================================= -->
-
-            <div class="seccion-avatar">
-              <div class="seccion-avatar-cabecera">
-                <div>
-                  <h3>Avatar</h3>
-
-                  <p>Sube una foto tuya (JPG, PNG o WEBP).</p>
-                </div>
-              </div>
-
-              <img id="preview-avatar" class="oculto" alt="Vista previa del avatar" />
-
-              <input
-                type="file"
-                id="campo-avatar-archivo"
-                name="avatar"
-                accept="image/jpeg,image/png,image/webp"
-              />
-            </div>
-
-            <!-- =========================================
-             MENSAJE
-             ========================================= -->
-
-            <div id="mensaje-perfil" class="mensaje" role="alert" aria-live="polite" hidden></div>
-
-            <!-- =========================================
-             ACCIONES
-             ========================================= -->
-
-            <div class="acciones-formulario">
-              <button id="btn-descartar" type="button" class="btn btn-secundario">
-                Descartar cambios
-              </button>
-
-              <button id="btn-guardar" type="submit" class="btn btn-principal">
-                Guardar cambios
-              </button>
-            </div>
-          </form>
-        </section>
-
-        <!-- =================================================
-         CAMBIAR CONTRASEÑA — HU-AUT-006 (RF-AUT-006)
-         ================================================= -->
-
-        <section class="tarjeta" data-zona="cambiar-password">
-          <div class="tarjeta-cabecera">
-            <div>
-              <h2>Cambiar contraseña</h2>
-
-              <p>
-                Indica tu contraseña actual y la nueva. Debe tener más de 8 caracteres con
-                mayúscula, minúscula, número y símbolo. Las demás sesiones abiertas se cerrarán.
-              </p>
+            <div class="campo">
+              <label class="campo__etiqueta" for="apellidos">Apellidos</label>
+              <input class="campo__control" type="text" id="apellidos" name="apellidos" required />
             </div>
           </div>
 
-          <form id="formulario-password" autocomplete="off">
-            <div class="formulario-grid">
+          <div class="campo">
+            <label class="campo__etiqueta" for="apodo">Apodo</label>
+            <input class="campo__control" type="text" id="apodo" name="apodo" />
+            <p class="campo__pista">
+              Cambiarlo pide confirmación: es el nombre con el que te ven en las salas, el chat y
+              los comentarios.
+            </p>
+          </div>
+
+          <div class="campo">
+            <label class="campo__etiqueta" for="preferencias">Preferencias</label>
+            <textarea
+              class="campo__control campo--area"
+              id="preferencias"
+              name="preferencias"
+              rows="4"
+            ></textarea>
+          </div>
+
+          <div class="pila pila--ajustada">
+            <p class="campo__etiqueta">Avatar</p>
+            <p class="campo__pista">Opcional. Formatos JPG, PNG o WEBP.</p>
+            <img class="avatar-vista-previa" data-zona="avatar-previo" alt="Tu avatar" hidden />
+            <input
+              class="campo__control"
+              type="file"
+              id="avatar"
+              name="avatar"
+              accept="image/jpeg,image/png,image/webp"
+            />
+          </div>
+
+          <div class="tarjeta__acciones">
+            <button type="button" class="boton boton--secundario" data-accion="descartar-perfil">
+              Descartar cambios
+            </button>
+            <button type="submit" class="boton boton--primario" data-accion="guardar-perfil">
+              Guardar cambios
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <!-- ---------------------------------------------------- Seguridad -->
+      <section data-zona="panel-seguridad" hidden>
+        <div class="home__rejilla">
+          <!-- HU-AUT-006: lo monta `cambiar-password.js`, que ya existe. -->
+          <section class="tarjeta pila" data-zona="cambiar-password">
+            <div class="encabezado-seccion">
+              <div class="pila pila--ajustada">
+                <h2 class="t-subtitulo">Cambiar contraseña</h2>
+                <p class="t-meta">Al cambiarla se renueva tu sesión en este navegador.</p>
+              </div>
+            </div>
+
+            <form autocomplete="off" class="pila">
               <div class="campo">
-                <label for="password-actual">Contraseña actual</label>
+                <label class="campo__etiqueta" for="passwordActual">Contraseña actual</label>
                 <input
-                  id="password-actual"
+                  class="campo__control"
+                  type="password"
+                  id="passwordActual"
                   name="passwordActual"
-                  type="password"
+                  required
                   autocomplete="current-password"
-                  required
                 />
               </div>
-
               <div class="campo">
-                <label for="password-nueva">Contraseña nueva</label>
+                <label class="campo__etiqueta" for="nuevaPassword">Nueva contraseña</label>
                 <input
-                  id="password-nueva"
+                  class="campo__control"
+                  type="password"
+                  id="nuevaPassword"
                   name="nuevaPassword"
-                  type="password"
-                  autocomplete="new-password"
                   required
+                  autocomplete="new-password"
                 />
+                <p class="campo__pista">
+                  Mínimo 9 caracteres, con mayúscula, minúscula, número y símbolo.
+                </p>
               </div>
-
               <div class="campo">
-                <label for="password-confirmacion">Confirmar contraseña nueva</label>
+                <label class="campo__etiqueta" for="confirmacion">Repetir la nueva</label>
                 <input
-                  id="password-confirmacion"
-                  name="confirmacion"
+                  class="campo__control"
                   type="password"
-                  autocomplete="new-password"
+                  id="confirmacion"
+                  name="confirmacion"
                   required
+                  autocomplete="new-password"
                 />
               </div>
+
+              <p
+                class="campo__error"
+                data-zona="mensaje-password"
+                role="alert"
+                aria-live="polite"
+                hidden
+              ></p>
+
+              <div class="tarjeta__acciones">
+                <button
+                  type="button"
+                  class="boton boton--secundario"
+                  data-accion="cancelar-password"
+                >
+                  Cancelar
+                </button>
+                <button type="submit" class="boton boton--primario" data-accion="guardar-password">
+                  Cambiar contraseña
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <section class="tarjeta pila" data-zona="sesion-caja">
+            <div class="encabezado-seccion">
+              <div class="pila pila--ajustada">
+                <h2 class="t-subtitulo">Esta sesión</h2>
+                <p class="t-meta">Con qué identidad te ven los servicios.</p>
+              </div>
             </div>
+            <div class="pila" data-zona="sesion"></div>
+          </section>
+        </div>
+      </section>
 
-            <div
-              class="mensaje"
-              data-zona="mensaje-password"
-              role="alert"
-              aria-live="polite"
-              hidden
-            ></div>
-
-            <div class="acciones-formulario">
-              <button type="button" class="btn btn-secundario" data-accion="cancelar-password">
-                Cancelar
-              </button>
-
-              <button type="submit" class="btn btn-principal" data-accion="guardar-password">
-                Cambiar contraseña
-              </button>
+      <!-- ---------------------------------------------------- Historial -->
+      <section data-zona="panel-historial" hidden>
+        <div class="pila">
+          <div class="encabezado-seccion">
+            <div class="pila pila--ajustada">
+              <h2 class="t-subtitulo">Movimientos de créditos</h2>
+              <p class="t-meta">Apuestas, recompensas por jugar e inscripciones a torneos.</p>
             </div>
-          </form>
-        </section>
-
-        <!-- =================================================
-         INFORMACIÓN DE LA CUENTA
-         ================================================= -->
-
-        <section class="tarjeta">
-          <div class="tarjeta-cabecera">
-            <div>
-              <h2>Información de la cuenta</h2>
-
-              <p>Información básica asociada a tu cuenta.</p>
-            </div>
+            <a class="boton boton--secundario" href="./historial-transacciones.html">
+              Ver pagos en dinero real
+            </a>
           </div>
-
-          <div class="informacion-cuenta">
-            <div class="dato-cuenta">
-              <span> ID de usuario </span>
-
-              <strong id="usuario-id"> - </strong>
-            </div>
-
-            <div class="dato-cuenta">
-              <span> Correo electrónico </span>
-
-              <strong id="email"> - </strong>
-            </div>
-
-            <div class="dato-cuenta">
-              <span> Rol </span>
-
-              <strong id="rol"> - </strong>
-            </div>
-          </div>
-        </section>
+          <div data-zona="contenido"></div>
+        </div>
       </section>
     </main>
 
-    <script type="module" src="./perfil.js"></script>
-    <!-- HU-AUT-006: modulo propio, con sus pruebas; no toca perfil.js. -->
-    <script type="module">
-      import { montarCambioDePassword } from './cambiar-password.js';
+    <!--
+      RF-CHA-001: el icono flotante del asistente va en todas las vistas.
+      Lo monta `comun/ui/asistente.js`, que ademas le da comportamiento:
+      hasta ahora el boton estaba copiado aqui y no hacia nada al pulsarlo.
+    -->
 
-      montarCambioDePassword(document);
+    <script type="module" src="./perfil.js"></script>
+    <script type="module">
+      import { montarAsistente } from '../comun/ui/asistente.js';
+
+      // RF-CHA-001 / HU-CHA-001 CA-03: el icono responde y dice la verdad.
+      montarAsistente(document);
     </script>
   </body>
 </html>

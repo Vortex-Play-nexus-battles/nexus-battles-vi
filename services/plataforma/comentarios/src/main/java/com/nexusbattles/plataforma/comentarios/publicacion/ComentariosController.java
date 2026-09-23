@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -64,7 +65,7 @@ public class ComentariosController {
             @AuthenticationPrincipal Jwt autor,
             @RequestBody PublicacionComentarioRequest request) {
 
-        Comentario comentario = servicio.publicar(
+        ServicioDePublicacionDeComentarios.Publicado publicado = servicio.publicar(
                 productId,
                 IdentidadDelToken.idDe(autor).toString(),
                 IdentidadDelToken.apodoDe(autor),
@@ -72,8 +73,30 @@ public class ComentariosController {
                 request.imagenes(),
                 request.estrellas());
 
+        Comentario comentario = publicado.comentario();
         HttpStatus estado = comentario.estaPublicado() ? HttpStatus.CREATED : HttpStatus.ACCEPTED;
-        return ResponseEntity.status(estado).body(ComentarioResponse.desde(comentario));
+        return ResponseEntity.status(estado)
+                .body(ComentarioResponse.desde(comentario, publicado.calificacionDescartada()));
+    }
+
+    /**
+     * Retira un comentario propio — HU-COM-004 (contrato 1.2.0).
+     *
+     * <p>Quien retira es el {@code uid} del token; el cuerpo no manda nada.
+     * 204 tambien si ya estaba retirado (idempotente); 403 si es de otro;
+     * 404 si no esta en el hilo del producto.
+     *
+     * <p>Reportar un comentario ajeno (RF-COM-006) no esta aqui: su ruta si
+     * cuelga de este recurso, pero la clase vive en {@code moderacion} para
+     * que publicar no dependa de moderar. Ver {@code ReportesController}.
+     */
+    @DeleteMapping("/{commentId}")
+    public ResponseEntity<Void> eliminar(
+            @PathVariable String productId,
+            @PathVariable String commentId,
+            @AuthenticationPrincipal Jwt autor) {
+        servicio.eliminar(productId, commentId, IdentidadDelToken.idDe(autor).toString());
+        return ResponseEntity.noContent().build();
     }
 
     /**
@@ -91,7 +114,14 @@ public class ComentariosController {
             Integer estrellas) {
     }
 
-    /** Respuesta del contrato, con las estrellas ausentes si ya habia calificado. */
+    /**
+     * Respuesta del contrato, con las estrellas ausentes si ya habia calificado.
+     *
+     * <p>{@code calificacionDescartada} (1.2.0, RF-COM-002 / D-07) dice que
+     * las estrellas que venian se descartaron porque el autor ya habia
+     * calificado el producto: el comentario entro igual. Va a {@code false}
+     * en el hilo, donde no hay solicitud que descartar.
+     */
     public record ComentarioResponse(
             String id,
             String productoId,
@@ -101,9 +131,20 @@ public class ComentariosController {
             List<String> imagenes,
             Integer estrellas,
             Instant fechaPublicacion,
-            String estado) {
+            String estado,
+            boolean calificacionDescartada) {
 
         static ComentarioResponse desde(Comentario comentario) {
+            return desde(comentario, false);
+        }
+
+        /**
+         * R10.1 — publico para que la cola de moderacion pinte el comentario
+         * con el MISMO cuerpo que el hilo. Dos representaciones del mismo
+         * comentario acabarian divergiendo, y el moderador veria algo distinto
+         * de lo que ve el jugador justo cuando mas importa que coincidan.
+         */
+        public static ComentarioResponse desde(Comentario comentario, boolean calificacionDescartada) {
             return new ComentarioResponse(
                     comentario.id(),
                     comentario.productoId(),
@@ -113,7 +154,8 @@ public class ComentariosController {
                     comentario.imagenes(),
                     comentario.calificacion().orElse(null),
                     comentario.fechaPublicacion(),
-                    comentario.estado().name());
+                    comentario.estado().name(),
+                    calificacionDescartada);
         }
     }
 

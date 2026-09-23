@@ -30,7 +30,7 @@
       <div class="pila pila--compacta">
         <h1>Comentar un producto</h1>
         <p class="t-cuerpo">
-          Tu comentario se publica con tu apodo, tu calificacion y la fecha. Puedes comentar cuantas
+          Tu comentario se publica con tu apodo, tu calificación y la fecha. Puedes comentar cuantas
           veces quieras; calificar, una sola vez por producto.
         </p>
       </div>
@@ -41,8 +41,14 @@
         es quien enlaza aqui.
       -->
       <div class="estado-vista" data-zona="sin-producto" hidden>
-        <p class="estado-vista__titulo">No hay ningun producto seleccionado</p>
-        <p class="t-meta">Abre esta vista desde la ficha de un producto del catalogo.</p>
+        <p class="estado-vista__titulo">No hay ningún producto seleccionado</p>
+        <p class="estado-vista__detalle">
+          Esta pantalla se abre desde la ficha de un producto. Entra a tu inventario, abre el que
+          quieras comentar y pulsa «Comentar».
+        </p>
+        <a class="boton boton--primario" href="../../contenido/inventario/inventario.html">
+          Ir a mi inventario
+        </a>
       </div>
 
       <form id="formulario-comentario" class="tarjeta pila" novalidate hidden>
@@ -53,8 +59,8 @@
           <label class="campo__etiqueta" for="texto">Tu comentario</label>
           <textarea class="campo__control" id="texto" name="texto" rows="4"></textarea>
           <p class="campo__pista">
-            Pasa por el filtro automatico antes de publicarse. Si el filtro lo senala, queda en
-            revision.
+            Pasa por el filtro automático antes de publicarse. Si el filtro lo señala, queda en
+            revisión.
           </p>
         </div>
 
@@ -84,7 +90,7 @@
             <svg class="zona-carga__icono" aria-hidden="true">
               <use href="../../../../../shared/ui-kit/iconos/sprite.svg#mas" />
             </svg>
-            <p class="zona-carga__titulo">Arrastra tus imagenes o pulsa para elegirlas</p>
+            <p class="zona-carga__titulo">Arrastra tus imágenes o pulsa para elegirlas</p>
             <p class="zona-carga__ayuda">Opcional. Puedes quitar cualquiera antes de publicar.</p>
             <ul class="zona-carga__miniaturas" data-zona="miniaturas" aria-live="polite"></ul>
           </div>
@@ -96,7 +102,7 @@
           prohibe controles con clic sin input.
         -->
         <fieldset class="pila pila--compacta">
-          <legend class="campo__etiqueta">Tu calificacion</legend>
+          <legend class="campo__etiqueta">Tu calificación</legend>
           <div class="fila">
             <div class="estrellas estrellas--editable" data-zona="calificacion">
               <span class="estrellas__lista">
@@ -182,38 +188,48 @@
         </fieldset>
 
         <div class="fila">
-          <button class="boton boton--primario" type="submit">PUBLICAR COMENTARIO</button>
+          <button class="boton boton--primario" type="submit">Publicar comentario</button>
         </div>
       </form>
 
       <!--
-        Hilo del producto. Muestra lo publicado en esta sesion: el contrato de
-        comentarios no define todavia una consulta del hilo existente, y la
-        vista no lo disimula.
+        Hilo del producto (HU-COM-003 / HU-INV-014): se carga del servicio al
+        abrir la vista y se completa con lo que se publique. La calificacion
+        promedio va arriba; sin calificaciones se dice, no se pinta un 0.
+        Solo los comentarios propios traen «Eliminar» (HU-COM-004, CA-04).
       -->
       <section class="pila pila--compacta" data-zona="hilo" hidden>
         <h2>Hilo del producto</h2>
+        <p class="t-meta" data-zona="promedio" aria-live="polite">Sin calificaciones todavía.</p>
+        <p class="t-meta" data-zona="hilo-cargando" hidden>Cargando el hilo…</p>
         <p class="t-meta" data-zona="hilo-vacio">
-          Aqui aparece lo que publiques. La lectura del hilo completo llegara cuando el contrato de
-          comentarios defina la consulta.
+          Todavía nadie ha comentado este producto. Sé el primero.
         </p>
         <div class="pila pila--compacta" data-zona="hilo-lista"></div>
       </section>
     </main>
 
-    <!-- RNF-DIS-002: el chatbot esta en todas las vistas, sin excepcion. -->
-    <button class="chatbot-flotante" type="button" aria-label="Abrir el asistente">IA</button>
+    <!--
+      RF-CHA-001: el icono flotante del asistente va en todas las vistas.
+      Lo monta `comun/ui/asistente.js`, que ademas le da comportamiento:
+      hasta ahora el boton estaba copiado aqui y no hacia nada al pulsarlo.
+    -->
 
     <script type="module">
+      import { montarAsistente } from '../../comun/ui/asistente.js';
       import { montarPublicarComentario, leerSesion } from './publicar-comentario.js';
-      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+      import { montarCabecera } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
 
       // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
-      if (!exigirSesion()) {
+      if (!exigirAcceso('publicar-comentario')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
       // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'subasta' });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'publicar-comentario',
+        seccionActiva: null,
+      });
 
       const productoId = new URLSearchParams(location.search).get('producto');
       const formulario = document.getElementById('formulario-comentario');
@@ -227,6 +243,9 @@
         hilo.hidden = false;
         montarPublicarComentario(formulario, { productoId, sesion, hilo });
       }
+
+      // RF-CHA-001 / HU-CHA-001 CA-03: el icono responde y dice la verdad.
+      montarAsistente(document);
     </script>
   </body>
 </html>

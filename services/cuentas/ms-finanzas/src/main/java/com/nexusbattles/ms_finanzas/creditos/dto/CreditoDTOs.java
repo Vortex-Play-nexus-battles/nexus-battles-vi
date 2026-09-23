@@ -90,4 +90,22 @@ public class CreditoDTOs {
         BigDecimal montoAcreditado,
         BigDecimal nuevoSaldoDisponible
     ) {}
+
+    /**
+     * Una linea del historial de creditos del jugador (#569).
+     *
+     * <p>`tipo` dice que clase de operacion fue (RESERVA, DEBITO, CREDITO),
+     * `estado` en que quedo (ACTIVA, LIBERADA, CONSUMIDA) y `signo` resume
+     * para la interfaz si el saldo subio, bajo o quedo apartado, para que la
+     * vista no tenga que reimplementar esa regla.
+     */
+    public record MovimientoResponse(
+        java.util.UUID id,
+        java.math.BigDecimal monto,
+        String concepto,
+        String referenciaId,
+        String tipo,
+        String estado,
+        String signo,
+        java.time.OffsetDateTime creado) { }
 }

@@ -5,33 +5,70 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Recuperar contraseña — NEXUS BATTLES VI</title>
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
-    <link rel="stylesheet" href="./login.css" />
   </head>
-  <body>
+  <body class="portal">
     <div data-cabecera-app></div>
-    <main class="pagina-auth">
-      <section class="tarjeta">
-        <h1 class="titulo-grande">NEXUS BATTLES VI</h1>
-        <p class="titulo-mediano">Recuperar contraseña</p>
 
-        <p class="ayuda">
-          Ingresa tu correo y te enviaremos un código para restablecer tu contraseña.
+    <main class="entrada">
+      <section class="entrada__identidad">
+        <p class="entrada__sobretitulo">Recuperar el acceso</p>
+        <h1 class="entrada__marca">NEXUS <em>BATTLES</em> VI</h1>
+        <p class="entrada__lema">
+          Recuperar el acceso al Nexo son tres pasos: pides el código, lo recibes en el correo de tu
+          cuenta y eliges una contraseña nueva.
         </p>
+        <ul class="entrada__puntos">
+          <li class="entrada__punto">
+            <svg class="icono" aria-hidden="true">
+              <use href="../../../../shared/ui-kit/iconos/sprite.svg#reloj" />
+            </svg>
+            <span>El código caduca y no sirve dos veces</span>
+          </li>
+          <li class="entrada__punto">
+            <svg class="icono" aria-hidden="true">
+              <use href="../../../../shared/ui-kit/iconos/sprite.svg#candado" />
+            </svg>
+            <span>La contraseña nueva se elige desde el propio código</span>
+          </li>
+        </ul>
+      </section>
+
+      <section class="entrada__tarjeta">
+        <div class="pila pila--ajustada">
+          <h2 class="entrada__titulo">Recuperar contraseña</h2>
+          <p class="t-meta">Escribe el correo con el que creaste la cuenta.</p>
+        </div>
 
         <p class="estado" id="estadoSolicitud" hidden role="status"></p>
 
-        <form id="formSolicitud" novalidate>
-          <label>
-            Correo electrónico
-            <input type="email" id="email" name="email" required autocomplete="email" />
-          </label>
+        <form id="formSolicitud" class="pila" novalidate>
+          <div class="campo">
+            <label class="campo__etiqueta" for="email">Correo electrónico</label>
+            <input
+              class="campo__control"
+              type="email"
+              id="email"
+              name="email"
+              required
+              autocomplete="email"
+              placeholder="tu@correo.com"
+            />
+            <p class="campo__pista">
+              Por seguridad, la respuesta es la misma exista o no la cuenta.
+            </p>
+          </div>
 
-          <button type="submit" class="btn-primario" id="botonEnviar">Enviar código</button>
+          <button type="submit" class="boton boton--primario boton--grande" id="botonEnviar">
+            Enviar código
+          </button>
         </form>
 
-        <a class="enlace-secundario" href="./restablecer-confirmar.html">Ya tengo un código</a>
-        <a class="enlace-secundario" href="./login.html">Volver a iniciar sesión</a>
+        <div class="entrada__pie">
+          <a href="./restablecer-confirmar.html">Ya tengo un código</a>
+          <a href="./login.html">Volver a entrar</a>
+        </div>
       </section>
     </main>
 
@@ -39,8 +76,10 @@
     <script type="module">
       import { montarCabecera } from '../comun/cabecera-app.js';
 
-      // Cabecera unica de la aplicacion (HU-UX-001).
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: null });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'restablecer-solicitar',
+        seccionActiva: null,
+      });
     </script>
   </body>
 </html>

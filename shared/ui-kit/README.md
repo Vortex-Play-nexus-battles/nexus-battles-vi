@@ -15,6 +15,21 @@ tres Scrum Teams; **cualquier cambio aquí pasa por revisión de los tres SM**
 | Tipografías autoalojadas | `fuentes/` |
 | Muestrario navegable de todo lo anterior | `guia-estilo.html` |
 | Cómo se traduce cada error HTTP a la interfaz | `MAPEO-ERRORES.md` |
+| **Los mismos componentes, en JavaScript** | `frontend/app-web/src/comun/ui/` |
+
+## Por qué la capa JS no vive aquí
+
+El CSS es de los tres equipos y por eso está en `shared/`. El JavaScript que
+**construye** esos componentes (`h()`, `aviso()`, `tarjeta()`, `estadoVacio()`,
+`abrirDialogo()`…) vive en `frontend/app-web/src/comun/ui/` por una razón
+práctica: ESLint y Prettier sólo alcanzan `frontend/app-web/src`, y este
+README pide expresamente no formatear `shared/ui-kit`. Poner ahí código nuevo
+lo dejaría fuera de dos compuertas de calidad. `js/barra-vida.js` se queda
+donde está por compatibilidad con quien ya lo importa.
+
+Regla práctica: **la apariencia se define aquí, la construcción del DOM en
+`comun/ui/`**. Una vista no debería escribir `document.createElement` ni
+nombres de clase CSS a mano.
 
 Para usarlo desde una vista, enlazar las tres hojas en este orden:
 

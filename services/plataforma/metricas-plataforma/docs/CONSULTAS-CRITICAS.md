@@ -97,16 +97,64 @@ el hallazgo que hay que corregir, no un resultado que se pueda presentar como ap
 La salida de los tres `EXPLAIN` es la evidencia que se adjunta al acta, junto con el informe
 de `GET /api/v1/consultas/informe` filtrado por esas sentencias.
 
-## 4 · Qué falta para cerrar CA-02
+## 4 · CA-02: ejecutado el 23-sep-2026
 
-CA-02 **no está cumplido** y no se marca como tal:
+Los tres `EXPLAIN (ANALYZE, BUFFERS)` se ejecutaron sobre **PostgreSQL 16** con el esquema
+exacto de las migraciones y 100 000 filas sembradas. La sospecha de B-01 **se confirmó**.
 
-- Hace falta un PostgreSQL desplegado con datos de volumen para ejecutar los `EXPLAIN`. Es
-  evidencia de entorno, no de código, y la propia historia la declara como «evidencia a
-  enlazar durante el Sprint».
-- Si el plan de B-01 confirma el `Seq Scan`, la migración del índice funcional la tiene que
-  aprobar y aplicar el dueño de `moderacion-sanciones`.
+### B-01 · término prohibido — era un `Seq Scan`, y ya no
 
-Lo que sí queda cubierto desde ahora es la **medición** (CA-01) y el **registro de consultas
-lentas** (CA-03): cuando B-01 se ejecute contra datos reales, aparecerá sola en
-`GET /api/v1/consultas/lentas` sin que nadie tenga que ir a buscarla.
+Sentencia, la que genera Spring Data para `existsByTerminoIgnoreCase`:
+
+```sql
+SELECT EXISTS (SELECT 1 FROM terminos_prohibidos t WHERE upper(t.termino) = upper(?))
+```
+
+| | Plan | Buffers | Tiempo |
+|---|---|---|---|
+| **Antes** (solo el UNIQUE de V1) | `Seq Scan`, 49 999 filas descartadas por el filtro | 368 | **5,713 ms** |
+| **Después** (`V3__indice_de_terminos_por_mayusculas.sql`) | `Index Scan using idx_terminos_prohibidos_upper` | 4 | **0,038 ms** |
+| *Control*: la misma consulta **sin** `upper()` | `Index Only Scan using terminos_prohibidos_termino_key` | 4 | 0,034 ms |
+
+**150 veces más rápida, 92 veces menos páginas leídas.** El control es lo que cierra el
+argumento: el índice existía desde V1 y la mayusculización lo dejaba fuera. No era falta de
+índice, era un índice inalcanzable.
+
+A un mensaje de chat no se le notaban 5,7 ms. A la tabla sí, porque **cada mensaje del chat
+y cada comentario publicado la recorrían entera**.
+
+### B-02 · bandeja del usuario — ya estaba bien
+
+```
+Sort (Sort Method: quicksort, 33kB)
+  -> Bitmap Heap Scan on notificaciones
+       -> Bitmap Index Scan on idx_notificaciones_usuario
+Buffers: shared hit=148 · Execution Time: 0,339 ms
+```
+
+Usa `idx_notificaciones_usuario (usuario_id, creada_en)`. El `Sort` posterior es sobre las
+100 filas ya filtradas, no sobre la tabla.
+
+### B-03 · qué avisos recibió una sesión — ya estaba bien
+
+```
+Bitmap Heap Scan on notificacion_entregas
+  -> Bitmap Index Scan on idx_entregas_usuario
+Buffers: shared hit=109 · Execution Time: 0,248 ms
+```
+
+Y la del camino caliente, `existsByUsuarioIdAndAvisoIdAndSesionId`, resuelve por
+`Index Only Scan using uk_entrega` en **0,033 ms** con 4 buffers.
+
+### Veredicto
+
+**CA-02 cumplido.** Las tres búsquedas críticas usan índice y ninguna se acerca al objetivo
+de 500 ms de RNF-REN-001: la peor está tres órdenes de magnitud por debajo.
+
+La única que no lo cumplía era B-01, y su migración va en este mismo cambio. Se aplica con
+la evidencia medida delante, no como propuesta: el `docs/` decía «si el plan de B-01
+confirma el Seq Scan», y lo confirma.
+
+CA-01 (medición) y CA-03 (registro de consultas lentas) ya estaban cubiertos. Con el índice
+aplicado, B-01 deja además de aparecer en `GET /api/v1/consultas/lentas`, que es la
+comprobación en vivo de que esto funcionó.

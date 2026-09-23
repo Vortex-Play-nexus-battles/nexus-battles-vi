@@ -33,7 +33,7 @@
       <div class="pila pila--compacta">
         <h1>Crear sala de batalla</h1>
         <p class="t-cuerpo">
-          Configura la partida a tu medida. Los campos invalidos te dicen el motivo del rechazo.
+          Configura la partida a tu medida. Los campos inválidos te dicen el motivo del rechazo.
         </p>
       </div>
 
@@ -44,11 +44,13 @@
              libro de creditos no responden. data-seccion es solo el respaldo:
              el nombre real viene en el problem detail. -->
         <div data-zona="degradacion" data-seccion="Inventario" hidden></div>
+        <!-- HU-TOR-004: solo cuando se llega desde un encuentro de torneo. -->
+        <p class="aviso aviso--info" data-zona="nota-torneo" hidden></p>
 
         <!-- Dos campos a lo ancho, como en el diseno. -->
         <div class="fila">
           <div class="campo">
-            <label class="campo__etiqueta" for="maximoParticipantes">Numero de participantes</label>
+            <label class="campo__etiqueta" for="maximoParticipantes">Número de participantes</label>
             <input
               class="campo__control"
               id="maximoParticipantes"
@@ -63,7 +65,7 @@
           </div>
 
           <div class="campo">
-            <label class="campo__etiqueta" for="recompensaCreditos">Recompensa en creditos</label>
+            <label class="campo__etiqueta" for="recompensaCreditos">Recompensa en créditos</label>
             <input
               class="campo__control"
               id="recompensaCreditos"
@@ -95,7 +97,7 @@
               />
               <label class="modalidad__cara" for="modalidad-duelo">
                 <span class="modalidad__titulo">1 contra 1</span>
-                <span class="modalidad__detalle">Duelo directo entre dos heroes.</span>
+                <span class="modalidad__detalle">Duelo directo entre dos héroes.</span>
               </label>
             </div>
 
@@ -123,7 +125,7 @@
               />
               <label class="modalidad__cara" for="modalidad-seis">
                 <span class="modalidad__titulo">Hasta seis</span>
-                <span class="modalidad__detalle">Combate multiple, suelto o por equipos.</span>
+                <span class="modalidad__detalle">Combate múltiple, suelto o por equipos.</span>
               </label>
             </div>
           </div>
@@ -142,7 +144,7 @@
 
         <div class="fila" data-zona="opciones-hasta-seis" hidden>
           <div class="campo">
-            <label class="campo__etiqueta" for="heroesIA">Heroes controlados por la IA</label>
+            <label class="campo__etiqueta" for="heroesIA">Héroes controlados por la IA</label>
             <input
               class="campo__control"
               id="heroesIA"
@@ -163,7 +165,7 @@
               <option value="2">Equipos de 2</option>
               <option value="3">Equipos de 3</option>
             </select>
-            <p class="campo__pista">Se forman por orden de entrada; maximo 3 por equipo.</p>
+            <p class="campo__pista">Se forman por orden de entrada; máximo 3 por equipo.</p>
           </div>
         </div>
 
@@ -171,7 +173,7 @@
           <input class="casilla__entrada" type="checkbox" name="privada" />
           <span class="casilla__etiqueta">
             Sala privada
-            <small class="campo__pista">Solo accesible por invitacion.</small>
+            <small class="campo__pista">Solo accesible por invitación.</small>
           </span>
         </label>
 
@@ -182,26 +184,39 @@
             funciona aunque el modulo JS no haya cargado.
           -->
           <a class="boton boton--secundario" href="./batallas.html">Cancelar</a>
-          <button class="boton boton--primario boton--grande" type="submit">CREAR SALA</button>
+          <button class="boton boton--primario boton--grande" type="submit">Crear sala</button>
         </div>
       </form>
     </main>
 
-    <!-- RNF-DIS-002: el chatbot esta en todas las vistas, sin excepcion. -->
-    <button class="chatbot-flotante" type="button" aria-label="Abrir el asistente">IA</button>
+    <!--
+      RF-CHA-001: el icono flotante del asistente va en todas las vistas.
+      Lo monta `comun/ui/asistente.js`, que ademas le da comportamiento:
+      hasta ahora el boton estaba copiado aqui y no hacia nada al pulsarlo.
+    -->
 
     <script type="module">
-      import { montarCrearSala } from './crear-sala.js';
-      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+      import { montarAsistente } from '../../comun/ui/asistente.js';
+      import { montarCrearSala, encuentroDesde } from './crear-sala.js';
+      import { montarCabecera } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
 
       // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
-      if (!exigirSesion()) {
+      if (!exigirAcceso('crear-sala')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
       // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'jugar' });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'crear-sala',
+        seccionActiva: 'jugar',
+      });
 
-      montarCrearSala(document.getElementById('formulario-crear-sala'));
+      montarCrearSala(document.getElementById('formulario-crear-sala'), {
+        encuentro: encuentroDesde(window.location.search),
+      });
+
+      // RF-CHA-001 / HU-CHA-001 CA-03: el icono responde y dice la verdad.
+      montarAsistente(document);
     </script>
   </body>
 </html>

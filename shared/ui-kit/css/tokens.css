@@ -89,7 +89,21 @@
   --pista:            #CBD4E6;  /* riel de la barra de vida y de las
                                    barras de progreso                   */
 
+  --superficie-2:     #F2F5FA;  /* panel ANIDADO dentro de una tarjeta:
+                                   la cabecera de una tabla, un bloque
+                                   de resumen, una caja de ayuda. Entre
+                                   `--superficie` y `--fondo`, para que
+                                   se distinga de la tarjeta que lo
+                                   contiene sin parecer otra tarjeta.
+                                   UX-R4.1                              */
+
   /* --- Bordes ------------------------------------------------------ */
+  --borde-tenue:      #E2E7F0;  /* separador DENTRO de una superficie:
+                                   la línea entre dos filas de una
+                                   lista. `--borde` separa bloques y se
+                                   ve; este ordena y no se mira.
+                                   UX-R4.1                              */
+
   --borde:            #9FABC9;  /* separadores y líneas de tabla, no
                                    interactivos                         */
   --borde-int:        #6F7994;  /* campos y botones delineados.
@@ -182,11 +196,29 @@
      para que nadie tenga que adivinarlo. */
   --cabecera-alto: 64px;
 
+  /* UX-R2.9 — estas cuatro subieron a 44 px, el objetivo tactil minimo.
+     Venian de la maqueta, donde un boton pequeno eran 32 px y un campo 40.
+     Sobre el papel se ven bien; en el laboratorio visual daban **327
+     hallazgos** de control pequeno, y en un movil se fallan con el pulgar.
+
+     Se sube la ALTURA MINIMA, no el tamano del texto ni el espaciado: un
+     boton pequeno sigue siendo visualmente compacto —menos relleno lateral,
+     letra mas chica— pero ya se puede pulsar. La densidad que se pierde es
+     mucho menos que la precision que se gana, y WCAG 2.5.5 lo pide. */
   --boton-grande:  48px;  /* acciones principales: Atacar, Confirmar, Pagar */
-  --boton-mediano: 40px;  /* acciones secundarias del formulario            */
-  --boton-pequeno: 32px;  /* barras de acciones compactas                   */
-  --campo-alto:    40px;  /* formularios, chat y buscadores                 */
+  --boton-mediano: 44px;  /* acciones secundarias del formulario            */
+  --boton-pequeno: 44px;  /* barras de acciones compactas                   */
+  --campo-alto:    44px;  /* formularios, chat y buscadores                 */
   --icono:         24px;  /* controles e indicadores de estado (20 a 24)    */
+
+  /* Objetivo táctil mínimo — WCAG 2.5.8 (AA, nivel de 2.2) y 2.5.5 (AAA).
+     44 px es lo que mide la yema de un pulgar adulto. El laboratorio visual
+     de UX-R2.1 medía 327 controles por debajo, casi todos en la cabecera:
+     enlaces de 84×31, 55×31, 48×31.
+
+     No es un color, así que no toca la restricción de paleta: es una medida,
+     y está aquí para que nadie vuelva a escribir «44px» a mano. */
+  --objetivo-tactil: 44px;
 
   /* --- Espaciado, escala de 4 en 4 --------------------------------- */
   --e-1:  0.25rem;   /*  4px */
@@ -332,6 +364,11 @@
     --fondo:            #F5F7FB;
     --cromo:            #111726;
     --pista:            #9FABC9;
+    /* UX-R4.1 — con «aumentar contraste» un panel anidado no se puede
+       decir con un tinte del dos por ciento: se dice con su borde, y la
+       superficie vuelve a ser blanca como la tarjeta que lo contiene. */
+    --superficie-2:     #FFFFFF;
+    --borde-tenue:      #6F7994;
     --borde:            #6F7994;
     --borde-int:        #111726;
     --primaria:         #16296E;

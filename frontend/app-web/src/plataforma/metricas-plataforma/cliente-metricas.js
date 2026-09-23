@@ -39,7 +39,11 @@ export class ErrorDeMetricas extends Error {
    * @param {number} estado
    */
   constructor(problema, estado) {
-    super(problema?.detail || problema?.title || 'No se pudo obtener el informe de latencia.');
+    // UX-R3.11 — el respaldo nombraba UN informe concreto («…el informe de
+    // latencia»). Esta clase la comparten el panel de latencia y el tablero
+    // tecnico, asi que la tarjeta de «Usuarios y moderacion» anunciaba un
+    // fallo de latencia. El respaldo no nombra informe: lo nombra quien pinta.
+    super(problema?.detail || problema?.title || 'El servicio de métricas no respondió.');
     this.name = 'ErrorDeMetricas';
     this.tipo = problema?.type ?? null;
     this.titulo = problema?.title ?? 'No se pudo obtener el informe';
@@ -47,6 +51,32 @@ export class ErrorDeMetricas extends Error {
     this.variable = problema?.variable ?? null;
     this.criterio = problema?.criterio ?? null;
     this.muestrasAcumuladas = problema?.muestrasAcumuladas ?? null;
+  }
+
+  /**
+   * HU-MET-001 (#527): la observabilidad del bloque es de administracion. Un
+   * 401 (sesion caducada) o un 403 (rol insuficiente) no son un fallo del
+   * servicio y no se pintan como tal: no hay nada que reintentar.
+   *
+   * @returns {boolean}
+   */
+  esFaltaDePermiso() {
+    return this.estado === 401 || this.estado === 403;
+  }
+
+  /** Titulo y detalle en lenguaje de persona para ese caso. */
+  get avisoDePermiso() {
+    return this.estado === 401
+      ? {
+          titulo: 'Tu sesión ya no es válida',
+          detalle: 'Vuelve a entrar para consultar la observabilidad de la plataforma.',
+        }
+      : {
+          titulo: 'Esta sección es de administración',
+          detalle:
+            'El estado técnico de la plataforma y los agregados de moderación solo los ve ' +
+            'un administrador. Si crees que deberias verlos, pidelo al equipo.',
+        };
   }
 
   /**

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Verificacion de heroe · The Nexus Battles VI</title>
+    <title>Verificación de héroe · The Nexus Battles VI</title>
 
     <!--
       Ejecucion INTEGRADA (Spring Boot sirve esta vista): la API vive en el
@@ -31,20 +31,28 @@
       <section id="validacion-heroe" class="dialogo dialogo--ancho pila"></section>
     </div>
 
-    <!-- RNF-DIS-002: el chatbot esta en todas las vistas, sin excepcion. -->
-    <button class="chatbot-flotante" type="button" aria-label="Abrir el asistente">IA</button>
+    <!--
+      RF-CHA-001: el icono flotante del asistente va en todas las vistas.
+      Lo monta `comun/ui/asistente.js`, que ademas le da comportamiento:
+      hasta ahora el boton estaba copiado aqui y no hacia nada al pulsarlo.
+    -->
 
     <script type="module">
+      import { montarAsistente } from '../../comun/ui/asistente.js';
       import { montarValidacionDeHeroe } from './validacion-heroe.js';
       import { verificarHeroe } from './cliente-salas.js';
-      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+      import { montarCabecera } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
 
       // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
-      if (!exigirSesion()) {
+      if (!exigirAcceso('validacion-heroe')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
       // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'jugar' });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'validacion-heroe',
+        seccionActiva: 'jugar',
+      });
 
       // Sin `?sala=` el modulo pinta su estado de error con la instruccion de
       // como llegar; no se llama al servicio con una sala inexistente.
@@ -60,9 +68,18 @@
         // Vuelve a donde estaba; si se abrio directamente, al listado.
         alCancelar: () =>
           history.length > 1 ? history.back() : location.assign('./batallas.html'),
+        // El gancho existe y no lleva a ninguna parte TODAVIA, y eso es
+        // deliberado: entrar a la sala con el heroe verificado es HU-SAL-003,
+        // que espera a que el modulo de contenido publique cual es el heroe
+        // activo. Inventar aqui un destino seria inventar el contrato.
         alConfirmar: (verificacion) =>
-          console.info('Accion principal del dialogo', verificacion.resultado),
+          console.info('[validacion-heroe] confirmado; falta HU-SAL-003 para entrar', {
+            resultado: verificacion.resultado,
+          }),
       });
+
+      // RF-CHA-001 / HU-CHA-001 CA-03: el icono responde y dice la verdad.
+      montarAsistente(document);
     </script>
   </body>
 </html>

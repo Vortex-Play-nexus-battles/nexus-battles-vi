@@ -7,6 +7,8 @@ import {
   TIPOS_PRODUCTO,
 } from './solicitud-producto.js';
 
+import { h, vaciar } from '../../comun/ui/dom.js';
+
 const ETIQUETAS_TIPO = {
   HEROE: 'Héroe',
   HABILIDAD: 'Habilidad',
@@ -17,97 +19,358 @@ const ETIQUETAS_TIPO = {
 };
 
 function opciones(valores, etiquetas = {}) {
-  return valores
-    .map((valor) => `<option value="${valor}">${etiquetas[valor] || valor}</option>`)
-    .join('');
+  return valores.map((valor) =>
+    h('option', {
+      texto: etiquetas[valor] || valor,
+      atributos: { value: valor },
+    }),
+  );
 }
 
-function plantilla() {
-  return `
-    <header class="productos-cabecera">
-      <div>
-        <p class="productos-cabecera__marca">NEXUS BATTLES VI</p>
-        <h1>Crear producto del catálogo</h1>
-        <p>Registra un producto con los atributos definidos para su tipo.</p>
-      </div>
-      <span class="productos-cabecera__insignia">Administración</span>
-    </header>
+function control(etiqueta, nombre, atributos = {}) {
+  return h(etiqueta, {
+    atributos: {
+      name: nombre,
+      ...atributos,
+    },
+  });
+}
 
-    <form class="producto-formulario" novalidate>
-      <section class="producto-seccion" aria-labelledby="datos-generales">
-        <h2 id="datos-generales">Datos generales</h2>
-        <div class="producto-rejilla">
-          <label>Nombre <input name="nombre" maxlength="120" required /></label>
-          <label>Tipo
-            <select name="tipo" required>${opciones(TIPOS_PRODUCTO, ETIQUETAS_TIPO)}</select>
-          </label>
-          <label class="producto-campo--ancho">Referencia de imagen
-            <input name="imagen" placeholder="Ruta o referencia de la imagen" required />
-          </label>
-          <label class="producto-campo--ancho">Descripción
-            <textarea name="descripcion" rows="4" required></textarea>
-          </label>
-          <label>Tiraje
-            <input name="tiraje" type="number" step="1" value="-1" required />
-            <small>-1 significa ilimitado; los demás valores deben ser mayores que cero.</small>
-          </label>
-          <label class="producto-premium">
-            <input name="premium" type="checkbox" /> Producto premium
-          </label>
-          <label data-precio="creditos">Precio en créditos
-            <input name="precioCreditos" type="number" min="0" step="1" value="0" required />
-          </label>
-          <label data-precio="real" hidden>Precio en moneda real
-            <input name="precioMonedaReal" type="number" min="0" step="0.01" value="0" disabled />
-          </label>
-        </div>
-      </section>
+function campo(texto, elemento, { clase, datos, adicionales = [] } = {}) {
+  return h('label', {
+    clase,
+    datos,
+    hijos: [texto, elemento, ...adicionales],
+  });
+}
 
-      <section class="producto-seccion" aria-labelledby="datos-tipo">
-        <h2 id="datos-tipo">Atributos del tipo</h2>
-        <div class="producto-tipo" data-tipo="HEROE">
-          <label>Prototipo
-            <select name="prototipo" required>${opciones(PROTOTIPOS)}</select>
-          </label>
-        </div>
-        <div class="producto-tipo" data-tipo="HABILIDAD" hidden>
-          <label>UUID del héroe <input name="heroe" required disabled /></label>
-          <label>Costo de poder <input name="costoPoder" type="number" min="1" step="1" required disabled /></label>
-          <label>Multiplicador de nivel <input name="multiplicadorNivel" type="number" min="0.000001" step="any" required disabled /></label>
-          <label>Turnos de carga <input name="turnosCarga" type="number" min="0" step="1" required disabled /></label>
-        </div>
-        <div class="producto-tipo" data-tipo="ARMA" hidden>
-          <label>Poder de ataque <input name="poderDeAtaque" type="number" min="1" step="1" required disabled /></label>
-          <label>Tasa de caída (%) <input name="tasaDeCaida" type="number" min="0" max="100" step="any" required disabled /></label>
-        </div>
-        <div class="producto-tipo" data-tipo="ARMADURA" hidden>
-          <label>Defensa <input name="defensa" type="number" min="1" step="1" required disabled /></label>
-          <label>Parte
-            <select name="parte" required disabled>${opciones(PARTES_ARMADURA)}</select>
-          </label>
-          <label>Tasa de caída (%) <input name="tasaDeCaida" type="number" min="0" max="100" step="any" required disabled /></label>
-        </div>
-        <div class="producto-tipo" data-tipo="ITEM" hidden>
-          <label>Efecto <textarea name="efecto" rows="3" required disabled></textarea></label>
-          <label>Tasa de caída (%) <input name="tasaDeCaida" type="number" min="0" max="100" step="any" required disabled /></label>
-        </div>
-        <div class="producto-tipo" data-tipo="EPICA" hidden>
-          <label>UUID del héroe <input name="heroe" required disabled /></label>
-          <label>Turnos de recarga <input name="turnosRecarga" type="number" min="0" step="1" required disabled /></label>
-          <label>Efecto general <textarea name="efectoGeneral" rows="3" required disabled></textarea></label>
-          <label>Efecto potenciado <textarea name="efectoPotenciado" rows="3" required disabled></textarea></label>
-        </div>
-      </section>
+function grupoTipo(tipo, hijos, oculto = true) {
+  return h('div', {
+    clase: 'producto-tipo',
+    datos: { tipo },
+    atributos: { hidden: oculto ? true : null },
+    hijos,
+  });
+}
 
-      <div id="nexus-rbac-forbidden" class="producto-estado producto-estado--error" role="alert" hidden></div>
-      <div class="producto-estado" data-estado="vacio" role="status" aria-live="polite">
-        Completa los campos para registrar el producto.
-      </div>
-      <div class="producto-acciones">
-        <button type="reset" class="boton-secundario">Limpiar</button>
-        <button type="submit" class="boton-primario">Crear producto</button>
-      </div>
-    </form>`;
+function crearVista() {
+  const cabecera = h('header', {
+    clase: 'productos-cabecera',
+    hijos: [
+      h('div', {
+        hijos: [
+          h('p', {
+            clase: 'productos-cabecera__marca',
+            texto: 'NEXUS BATTLES VI',
+          }),
+          h('h1', { texto: 'Crear producto del catálogo' }),
+          h('p', {
+            texto: 'Registra un producto con los atributos definidos para su tipo.',
+          }),
+        ],
+      }),
+      h('div', {
+        clase: 'productos-cabecera__acciones',
+        hijos: [
+          h('span', {
+            clase: 'productos-cabecera__insignia',
+            texto: 'Administración',
+          }),
+          h('a', {
+            clase: 'productos-cabecera__enlace',
+            texto: 'Estado del catálogo',
+            atributos: { href: './panel-catalogo.html' },
+          }),
+        ],
+      }),
+    ],
+  });
+
+  const datosGenerales = h('section', {
+    clase: 'producto-seccion',
+    atributos: { 'aria-labelledby': 'datos-generales' },
+    hijos: [
+      h('h2', {
+        texto: 'Datos generales',
+        atributos: { id: 'datos-generales' },
+      }),
+      h('div', {
+        clase: 'producto-rejilla',
+        hijos: [
+          campo(
+            'Nombre ',
+            control('input', 'nombre', {
+              maxlength: 120,
+              required: true,
+            }),
+          ),
+          campo(
+            'Tipo ',
+            h('select', {
+              atributos: { name: 'tipo', required: true },
+              hijos: opciones(TIPOS_PRODUCTO, ETIQUETAS_TIPO),
+            }),
+          ),
+          campo(
+            'Referencia de imagen ',
+            control('input', 'imagen', {
+              placeholder: 'Ruta o referencia de la imagen',
+              required: true,
+            }),
+            { clase: 'producto-campo--ancho' },
+          ),
+          campo(
+            'Descripción ',
+            control('textarea', 'descripcion', {
+              rows: 4,
+              required: true,
+            }),
+            { clase: 'producto-campo--ancho' },
+          ),
+          campo(
+            'Tiraje ',
+            control('input', 'tiraje', {
+              type: 'number',
+              step: 1,
+              value: -1,
+              required: true,
+            }),
+            {
+              adicionales: [
+                h('small', {
+                  texto: '-1 significa ilimitado; los demás valores deben ser mayores que cero.',
+                }),
+              ],
+            },
+          ),
+          h('label', {
+            clase: 'producto-premium',
+            hijos: [control('input', 'premium', { type: 'checkbox' }), ' Producto premium'],
+          }),
+          campo(
+            'Precio en créditos ',
+            control('input', 'precioCreditos', {
+              type: 'number',
+              min: 0,
+              step: 1,
+              value: 0,
+              required: true,
+            }),
+            { datos: { precio: 'creditos' } },
+          ),
+          campo(
+            'Precio en moneda real ',
+            control('input', 'precioMonedaReal', {
+              type: 'number',
+              min: 0,
+              step: 0.01,
+              value: 0,
+              disabled: true,
+            }),
+            { datos: { precio: 'real' } },
+          ),
+        ],
+      }),
+    ],
+  });
+
+  const tipoHeroe = grupoTipo(
+    'HEROE',
+    [
+      campo(
+        'Prototipo ',
+        h('select', {
+          atributos: { name: 'prototipo', required: true },
+          hijos: opciones(PROTOTIPOS),
+        }),
+      ),
+    ],
+    false,
+  );
+
+  const tipoHabilidad = grupoTipo('HABILIDAD', [
+    campo('UUID del héroe ', control('input', 'heroe', { required: true, disabled: true })),
+    campo(
+      'Costo de poder ',
+      control('input', 'costoPoder', {
+        type: 'number',
+        min: 1,
+        step: 1,
+        required: true,
+        disabled: true,
+      }),
+    ),
+    campo(
+      'Multiplicador de nivel ',
+      control('input', 'multiplicadorNivel', {
+        type: 'number',
+        min: 0.000001,
+        step: 'any',
+        required: true,
+        disabled: true,
+      }),
+    ),
+    campo(
+      'Turnos de carga ',
+      control('input', 'turnosCarga', {
+        type: 'number',
+        min: 0,
+        step: 1,
+        required: true,
+        disabled: true,
+      }),
+    ),
+  ]);
+
+  const tipoArma = grupoTipo('ARMA', [
+    campo(
+      'Poder de ataque ',
+      control('input', 'poderDeAtaque', {
+        type: 'number',
+        min: 1,
+        step: 1,
+        required: true,
+        disabled: true,
+      }),
+    ),
+    campo(
+      'Tasa de caída (%) ',
+      control('input', 'tasaDeCaida', {
+        type: 'number',
+        min: 0,
+        max: 100,
+        step: 'any',
+        required: true,
+        disabled: true,
+      }),
+    ),
+  ]);
+
+  const tipoArmadura = grupoTipo('ARMADURA', [
+    campo(
+      'Defensa ',
+      control('input', 'defensa', {
+        type: 'number',
+        min: 1,
+        step: 1,
+        required: true,
+        disabled: true,
+      }),
+    ),
+    campo(
+      'Parte ',
+      h('select', {
+        atributos: { name: 'parte', required: true, disabled: true },
+        hijos: opciones(PARTES_ARMADURA),
+      }),
+    ),
+    campo(
+      'Tasa de caída (%) ',
+      control('input', 'tasaDeCaida', {
+        type: 'number',
+        min: 0,
+        max: 100,
+        step: 'any',
+        required: true,
+        disabled: true,
+      }),
+    ),
+  ]);
+
+  const tipoItem = grupoTipo('ITEM', [
+    campo('Efecto ', control('textarea', 'efecto', { rows: 3, required: true, disabled: true })),
+    campo(
+      'Tasa de caída (%) ',
+      control('input', 'tasaDeCaida', {
+        type: 'number',
+        min: 0,
+        max: 100,
+        step: 'any',
+        required: true,
+        disabled: true,
+      }),
+    ),
+  ]);
+
+  const tipoEpica = grupoTipo('EPICA', [
+    campo('UUID del héroe ', control('input', 'heroe', { required: true, disabled: true })),
+    campo(
+      'Turnos de recarga ',
+      control('input', 'turnosRecarga', {
+        type: 'number',
+        min: 0,
+        step: 1,
+        required: true,
+        disabled: true,
+      }),
+    ),
+    campo(
+      'Efecto general ',
+      control('textarea', 'efectoGeneral', { rows: 3, required: true, disabled: true }),
+    ),
+    campo(
+      'Efecto potenciado ',
+      control('textarea', 'efectoPotenciado', {
+        rows: 3,
+        required: true,
+        disabled: true,
+      }),
+    ),
+  ]);
+
+  const atributosTipo = h('section', {
+    clase: 'producto-seccion',
+    atributos: { 'aria-labelledby': 'datos-tipo' },
+    hijos: [
+      h('h2', { texto: 'Atributos del tipo', atributos: { id: 'datos-tipo' } }),
+      tipoHeroe,
+      tipoHabilidad,
+      tipoArma,
+      tipoArmadura,
+      tipoItem,
+      tipoEpica,
+    ],
+  });
+
+  const estadoProhibido = h('div', {
+    clase: 'producto-estado producto-estado--error',
+    atributos: { id: 'nexus-rbac-forbidden', role: 'alert', hidden: true },
+  });
+
+  const estado = h('div', {
+    clase: 'producto-estado',
+    texto: 'Completa los campos para registrar el producto.',
+    datos: { estado: 'vacio' },
+    atributos: { role: 'status', 'aria-live': 'polite' },
+  });
+
+  const acciones = h('div', {
+    clase: 'producto-acciones',
+    hijos: [
+      h('button', {
+        clase: 'boton-secundario',
+        texto: 'Limpiar',
+        atributos: { type: 'reset' },
+      }),
+      h('button', {
+        clase: 'boton-primario',
+        texto: 'Crear producto',
+        atributos: { type: 'submit' },
+      }),
+    ],
+  });
+
+  const formulario = h('form', {
+    clase: 'producto-formulario',
+    atributos: { novalidate: true },
+    hijos: [datosGenerales, atributosTipo, estadoProhibido, estado, acciones],
+  });
+
+  const precioReal = formulario.querySelector('[data-precio="real"]');
+  if (precioReal instanceof HTMLElement) {
+    precioReal.hidden = true;
+  }
+  return [cabecera, formulario];
 }
 
 function gruposPorTipo(raiz) {
@@ -118,8 +381,8 @@ function mostrarTipo(raiz, tipo) {
   for (const grupo of gruposPorTipo(raiz)) {
     const activo = grupo.dataset.tipo === tipo;
     grupo.hidden = !activo;
-    for (const control of grupo.querySelectorAll('input, select, textarea')) {
-      control.disabled = !activo;
+    for (const elementoControl of grupo.querySelectorAll('input, select, textarea')) {
+      elementoControl.disabled = !activo;
     }
   }
 }
@@ -156,7 +419,7 @@ function mensajeFallo(fallo) {
 
 /** Monta la vista de creación y delega la autenticación al interceptor común. */
 export function montarFormularioProductos(raiz, { crear = crearProducto } = {}) {
-  raiz.innerHTML = plantilla();
+  vaciar(raiz).append(...crearVista());
   const formulario = raiz.querySelector('form');
   const tipo = formulario.elements.namedItem('tipo');
   const premium = formulario.elements.namedItem('premium');

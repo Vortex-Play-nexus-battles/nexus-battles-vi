@@ -37,6 +37,7 @@ import com.nexusbattles.ms_finanzas.creditos.controller.CreditoController;
 import com.nexusbattles.ms_finanzas.creditos.dto.CreditoDTOs.AcreditarRequest;
 import com.nexusbattles.ms_finanzas.creditos.dto.CreditoDTOs.AcreditarResponse;
 import com.nexusbattles.ms_finanzas.creditos.dto.CreditoDTOs.ConsumirResponse;
+import com.nexusbattles.ms_finanzas.creditos.dto.CreditoDTOs.MovimientoResponse;
 import com.nexusbattles.ms_finanzas.creditos.dto.CreditoDTOs.ReservaResponse;
 import com.nexusbattles.ms_finanzas.creditos.dto.CreditoDTOs.ReservarRequest;
 import com.nexusbattles.ms_finanzas.creditos.dto.CreditoDTOs.SaldoResponse;
@@ -49,7 +50,10 @@ import com.nexusbattles.ms_finanzas.partidas.api.MisCofresController;
 import com.nexusbattles.ms_finanzas.transacciones.HistorialTransaccionesController;
 import com.nexusbattles.ms_finanzas.transacciones.ResultadoTransaccion;
 import com.nexusbattles.ms_finanzas.transacciones.ResumenTransaccion;
+import com.nexusbattles.ms_finanzas.transacciones.Transaccion;
 import com.nexusbattles.ms_finanzas.transacciones.TransaccionConsultaService;
+import com.nexusbattles.ms_finanzas.transacciones.TransaccionRegistroController;
+import com.nexusbattles.ms_finanzas.transacciones.TransaccionRegistroService;
 
 /**
  * Reglas de acceso del libro de créditos (#455, ADR-001/ADR-005), probadas con
@@ -67,6 +71,7 @@ import com.nexusbattles.ms_finanzas.transacciones.TransaccionConsultaService;
         CreditoController.class,
         AcreditacionPartidaController.class,
         HistorialTransaccionesController.class,
+        TransaccionRegistroController.class,
         MisCofresController.class})
 @Import({SecurityConfig.class, DecodificadorDePrueba.class})
 class SecurityConfigTest {
@@ -89,6 +94,9 @@ class SecurityConfigTest {
 
     @MockitoBean
     private TransaccionConsultaService consultaService;
+
+    @MockitoBean
+    private TransaccionRegistroService registroService;
 
     @MockitoBean
     private MisCofresConsultaService cofresService;
@@ -133,6 +141,27 @@ class SecurityConfigTest {
                 Instant.parse("2026-09-18T10:00:00Z"));
     }
 
+    private static String registroDe(UUID uid) {
+        return """
+                {"refId":"ref-pasarela-1","uidUsuario":"%s","monto":50000,"moneda":"COP",
+                 "concepto":"compra-item-tienda","resultado":"APROBADO"}
+                """.formatted(uid);
+    }
+
+    private Transaccion transaccionRegistrada() {
+        Transaccion t = new Transaccion();
+        t.setId(UUID.randomUUID());
+        t.setRefId("ref-pasarela-1");
+        t.setUidUsuario(UID_ANA.toString());
+        t.setMonto(new BigDecimal("50000"));
+        t.setMoneda("COP");
+        t.setConcepto("compra-item-tienda");
+        t.setResultado(ResultadoTransaccion.APROBADO);
+        t.setCreado(Instant.parse("2026-09-22T10:00:00Z"));
+        t.setActualizado(Instant.parse("2026-09-22T10:00:00Z"));
+        return t;
+    }
+
     // --- casos ---------------------------------------------------------------
 
     @Nested
@@ -150,7 +179,9 @@ class SecurityConfigTest {
                     .andExpect(status().isUnauthorized());
             mvc.perform(post("/partidas/resultado").contentType(JSON).content(resultadoConGanador(UID_ANA)))
                     .andExpect(status().isUnauthorized());
-            verifyNoInteractions(creditoService, acreditacionPartidaService);
+            mvc.perform(post("/transacciones").contentType(JSON).content(registroDe(UID_ANA)))
+                    .andExpect(status().isUnauthorized());
+            verifyNoInteractions(creditoService, acreditacionPartidaService, registroService);
         }
 
         @Test
@@ -216,8 +247,27 @@ class SecurityConfigTest {
         }
 
         @Test
+        void unJugadorNoRegistraSuPropiaTransaccion() throws Exception {
+            // Solo el servicio que hablo con la pasarela sabe si el cobro fue
+            // aprobado; un jugador no puede autodeclararse una compra pagada.
+            mvc.perform(post("/transacciones").contentType(JSON)
+                            .header(HttpHeaders.AUTHORIZATION, comoAna()).content(registroDe(UID_ANA)))
+                    .andExpect(status().isForbidden());
+            verifyNoInteractions(registroService);
+        }
+
+        @Test
         void unJugadorNoMiraElSaldoDeOtro() throws Exception {
             mvc.perform(get("/creditos/" + UID_OTRO + "/saldo").header(HttpHeaders.AUTHORIZATION, comoAna()))
+                    .andExpect(status().isForbidden());
+            verifyNoInteractions(creditoService);
+        }
+
+        @Test
+        void unJugadorNoMiraElHistorialDeCreditosDeOtro() throws Exception {
+            // #569: el historial dice cuanto aposto y cuanto gano alguien. Es
+            // lectura, pero no es publica entre jugadores.
+            mvc.perform(get("/creditos/" + UID_OTRO + "/movimientos").header(HttpHeaders.AUTHORIZATION, comoAna()))
                     .andExpect(status().isForbidden());
             verifyNoInteractions(creditoService);
         }
@@ -247,6 +297,37 @@ class SecurityConfigTest {
             mvc.perform(get("/creditos/" + UID_ANA + "/saldo").header(HttpHeaders.AUTHORIZATION, comoAna()))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.saldoDisponible").value(380));
+        }
+
+        @Test
+        void unJugadorConsultaSuPropioHistorialDeCreditos() throws Exception {
+            // #569: antes de este endpoint, una partida con apuesta no aparecia
+            // en ninguna vista aunque el saldo hubiera cambiado.
+            when(creditoService.movimientos(eq(UID_ANA.toString()), any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of(new MovimientoResponse(
+                            RESERVA, new BigDecimal("60"), "apuesta-sala", "sala-1",
+                            "RESERVA", "LIBERADA", "NEUTRO",
+                            OffsetDateTime.parse("2026-09-22T02:28:00Z")))));
+
+            mvc.perform(get("/creditos/" + UID_ANA + "/movimientos")
+                            .header(HttpHeaders.AUTHORIZATION, comoAna()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content[0].concepto").value("apuesta-sala"))
+                    .andExpect(jsonPath("$.content[0].signo").value("NEUTRO"));
+        }
+
+        @Test
+        void elTamanoDePaginaDelHistorialSeAcotaEnElServidor() throws Exception {
+            when(creditoService.movimientos(eq(UID_ANA.toString()), any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of()));
+
+            mvc.perform(get("/creditos/" + UID_ANA + "/movimientos?size=100000")
+                            .header(HttpHeaders.AUTHORIZATION, comoAna()))
+                    .andExpect(status().isOk());
+
+            org.mockito.ArgumentCaptor<Pageable> pagina = org.mockito.ArgumentCaptor.forClass(Pageable.class);
+            verify(creditoService).movimientos(eq(UID_ANA.toString()), pagina.capture());
+            org.assertj.core.api.Assertions.assertThat(pagina.getValue().getPageSize()).isEqualTo(100);
         }
 
         @Test
@@ -303,6 +384,17 @@ class SecurityConfigTest {
                             .header(HttpHeaders.AUTHORIZATION, comoSalasPartidas())
                             .content(resultadoConGanador(UID_ANA)))
                     .andExpect(status().isOk());
+        }
+
+        @Test
+        void unServicioRegistraUnaTransaccion() throws Exception {
+            when(registroService.registrar(any())).thenReturn(transaccionRegistrada());
+
+            mvc.perform(post("/transacciones").contentType(JSON)
+                            .header(HttpHeaders.AUTHORIZATION, comoSalasPartidas())
+                            .content(registroDe(UID_ANA)))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.refId").value("ref-pasarela-1"));
         }
 
         @Test

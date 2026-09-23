@@ -180,9 +180,19 @@ Sprint 1: https://www.figma.com/design/PXanKCqsAYLemJhyTyTTHk — usar como fuen
 
 ## Comandos
 
-_Aún no hay `build.gradle` real en el repo. En cuanto exista: `./gradlew build`, `./gradlew test`;
-frontend sin build step; lint de JS con ESLint. Actualizar esta sección apenas existan los primeros
-wrappers de Gradle._
+- **Backend (Gradle, raíz):** `./gradlew :services:plataforma:<servicio>:check` (compila, pruebas
+  unitarias + IT con Testcontainers, JaCoCo ≥80 % como compuerta). `./gradlew build` para todo.
+  Servicios Maven (`ms-identidad`, `ms-cumplimiento`, `ms-ecommerce`): `./mvnw -B test` en su carpeta.
+- **Frontend (`frontend/app-web`):** `npm ci` · `npm test` (Jest, bloqueante) · `npm run lint` (ESLint)
+  · `npm run format:check` (Prettier, alcance `src/`; **`shared/ui-kit` queda fuera: no formatearlo**).
+  Aceptación en navegador: `npx playwright test --config=playwright.config.js` (inventario, #581).
+- **E2E completo (banco de servicios reales):** `docker compose -f tests/e2e/compose.yml up -d --build`,
+  `./tests/e2e/sembrar.sh`, `npx playwright test --config=playwright.e2e.config.js` desde
+  `frontend/app-web`. En CI lo corre `.github/workflows/e2e.yml`.
+- **Contratos:** `contracts/openapi/*.yaml` (regla 1: primero el contrato). Rutas del borde en
+  `infrastructure/red-balanceo/borde-dev.conf`; su reparto lo fija `comprobar-rutas.sh`.
+- **Decisiones del PO:** `docs/gobierno/DECISIONES-PENDIENTES-DEL-PO.md` (D-01..D-25) — antes de
+  rellenar un hueco funcional, buscar ahí; los configurables ya tienen parámetro en `admin-parametros`.
 
 ## Convenciones de código
 

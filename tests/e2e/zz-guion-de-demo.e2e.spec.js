@@ -78,7 +78,11 @@ async function saldoDe(api, quien) {
   });
   expect(r.status(), `saldo de ${quien.apodo}: ${await r.text()}`).toBe(200);
   const s = await r.json();
-  return { bruto: Number(s.saldoBruto), reservado: Number(s.saldoReservado), disponible: Number(s.saldoDisponible) };
+  return {
+    bruto: Number(s.saldoBruto),
+    reservado: Number(s.saldoReservado),
+    disponible: Number(s.saldoDisponible),
+  };
 }
 
 /** Deja la sesión en el navegador como la deja login.js. */
@@ -132,7 +136,9 @@ test.describe('Guion de demostración del Sprint 2', () => {
         .catch(() => {});
     }
     if (sala?.id) {
-      await api.delete(`/api/v1/salas/${sala.id}`, { headers: conToken(anfitriona.token) }).catch(() => {});
+      await api
+        .delete(`/api/v1/salas/${sala.id}`, { headers: conToken(anfitriona.token) })
+        .catch(() => {});
     }
     await api?.dispose();
   });
@@ -158,10 +164,16 @@ test.describe('Guion de demostración del Sprint 2', () => {
     expect(token, 'login.js guarda el token de sesion').toBeTruthy();
     expect(cuerpoDelToken(token).uid).toBe(anfitriona.claims.uid);
     const inicio = await capturar(page, 2, 'inicio-tras-login');
-    anotar(2, 'Login', { apodo: anfitriona.apodo, uid: anfitriona.claims.uid, capturas: [captura, inicio] });
+    anotar(2, 'Login', {
+      apodo: anfitriona.apodo,
+      uid: anfitriona.claims.uid,
+      capturas: [captura, inicio],
+    });
   });
 
-  test('4 · la anfitriona crea la sala 1 contra 1 con apuesta desde el formulario', async ({ page }) => {
+  test('4 · la anfitriona crea la sala 1 contra 1 con apuesta desde el formulario', async ({
+    page,
+  }) => {
     saldosAntes[anfitriona.apodo] = await saldoDe(api, anfitriona);
     saldosAntes[invitado.apodo] = await saldoDe(api, invitado);
 
@@ -182,52 +194,80 @@ test.describe('Guion de demostración del Sprint 2', () => {
     const creacion = await respuesta;
     expect(creacion.status(), await creacion.text()).toBe(201);
     sala = await creacion.json();
-    await expect(page.locator('[data-zona="aviso"]')).toContainText(/Sala creada/i, { timeout: 20000 });
+    await expect(page.locator('[data-zona="aviso"]')).toContainText(/Sala creada/i, {
+      timeout: 20000,
+    });
     const creada = await capturar(page, 4, 'crear-sala-creada');
     expect(sala.modalidad).toBe('UNO_CONTRA_UNO');
     expect(sala.recompensaCreditos).toBe(APUESTA);
     // Crear reserva la apuesta de la anfitriona en el libro real.
-    expect((await saldoDe(api, anfitriona)).reservado).toBe(saldosAntes[anfitriona.apodo].reservado + APUESTA);
-    anotar(4, 'Sala creada desde la vista', { salaId: sala.id, apuesta: APUESTA, capturas: [formulario, creada] });
+    expect((await saldoDe(api, anfitriona)).reservado).toBe(
+      saldosAntes[anfitriona.apodo].reservado + APUESTA,
+    );
+    anotar(4, 'Sala creada desde la vista', {
+      salaId: sala.id,
+      apuesta: APUESTA,
+      capturas: [formulario, creada],
+    });
   });
 
   test('3 · la puerta de héroe encuentra el héroe equipado en inventario', async ({ page }) => {
-    const r = await api.get(`/api/v1/salas/${sala.id}/verificacion-heroe`, { headers: conToken(anfitriona.token) });
+    const r = await api.get(`/api/v1/salas/${sala.id}/verificacion-heroe`, {
+      headers: conToken(anfitriona.token),
+    });
     expect(r.status(), await r.text()).toBe(200);
     const veredicto = await r.json();
     expect(veredicto.resultado).toBe('DISPONIBLE');
 
     await conSesion(page, anfitriona);
-    await page.goto(`${BORDE}${VISTAS}/plataforma/salas-partidas/validacion-heroe.html?sala=${sala.id}`);
+    await page.goto(
+      `${BORDE}${VISTAS}/plataforma/salas-partidas/validacion-heroe.html?sala=${sala.id}`,
+    );
     await expect(page.locator('body')).toContainText(veredicto.heroe.nombre, { timeout: 20000 });
     const captura = await capturar(page, 3, 'heroe-verificado');
-    anotar(3, 'Héroe equipado verificado contra inventario real', { heroe: veredicto.heroe, capturas: [captura] });
+    anotar(3, 'Héroe equipado verificado contra inventario real', {
+      heroe: veredicto.heroe,
+      capturas: [captura],
+    });
   });
 
-  test('5 · el segundo jugador entra desde el listado y la sala pasa a 2 de 2', async ({ page }) => {
+  test('5 · el segundo jugador entra desde el listado y la sala pasa a 2 de 2', async ({
+    page,
+  }) => {
     await conSesion(page, invitado);
     await page.goto(`${BORDE}${VISTAS}/plataforma/salas-partidas/batallas.html`);
     await expect(page.locator('body')).toContainText(/salas? abiertas?/i, { timeout: 20000 });
     const listado = await capturar(page, 5, 'listado-de-batallas');
 
-    const r = await api.post(`/api/v1/salas/${sala.id}/participantes`, { headers: conToken(invitado.token) });
+    const r = await api.post(`/api/v1/salas/${sala.id}/participantes`, {
+      headers: conToken(invitado.token),
+    });
     expect(r.status(), `ingreso del invitado: ${await r.text()}`).toBe(200);
     const actualizada = await r.json();
     expect(actualizada.ocupacion).toBe(2);
     const reservado = (await saldoDe(api, invitado)).reservado;
     expect(reservado).toBe(saldosAntes[invitado.apodo].reservado + APUESTA);
     anotar(5, 'Segundo jugador dentro; su apuesta queda reservada en el libro', {
-      ocupacion: actualizada.ocupacion, reservadoInvitado: reservado, capturas: [listado],
+      ocupacion: actualizada.ocupacion,
+      reservadoInvitado: reservado,
+      capturas: [listado],
     });
   });
 
-  test('6 · modalidad contra la IA: la máquina ocupa cupo y aparece en el listado', async ({ page }) => {
+  test('6 · modalidad contra la IA: la máquina ocupa cupo y aparece en el listado', async ({
+    page,
+  }) => {
     // Un tercer jugador con heroe (lo siembra sembrar.sh): los dos de la sala
     // 1v1 ya estan ocupados y no pueden abrir otra.
     const curioso = await sesionDe(api, CURIOSO);
     const r = await api.post('/api/v1/salas', {
       headers: conToken(curioso.token),
-      data: { maximoParticipantes: 2, modalidad: 'CONTRA_IA', recompensaCreditos: 0, privada: false },
+      data: {
+        maximoParticipantes: 2,
+        modalidad: 'CONTRA_IA',
+        recompensaCreditos: 0,
+        privada: false,
+      },
     });
     expect(r.status(), `sala contra la IA: ${await r.text()}`).toBe(201);
     salaContraIA = { ...(await r.json()), dueno: curioso };
@@ -236,28 +276,41 @@ test.describe('Guion de demostración del Sprint 2', () => {
 
     await conSesion(page, anfitriona);
     await page.goto(`${BORDE}${VISTAS}/plataforma/salas-partidas/batallas.html`);
-    await expect(page.locator('body')).toContainText(/heroe de la IA/i, { timeout: 20000 });
+    await expect(page.locator('body')).toContainText(/héroe de la IA/i, { timeout: 20000 });
     const captura = await capturar(page, 6, 'modalidades-en-el-listado');
     anotar(6, 'Modalidades: 1v1, contra la IA y hasta seis (HU-SAL-004)', {
-      salaContraIA: salaContraIA.id, capturas: [captura],
+      salaContraIA: salaContraIA.id,
+      capturas: [captura],
     });
   });
 
-  test('7 · la partida empieza: turnos repartidos, dos barras a tope en el navegador', async ({ page }) => {
-    const r = await api.post(`/api/v1/salas/${sala.id}/partida`, { headers: conToken(anfitriona.token) });
+  test('7 · la partida empieza: turnos repartidos, dos barras a tope en el navegador', async ({
+    page,
+  }) => {
+    const r = await api.post(`/api/v1/salas/${sala.id}/partida`, {
+      headers: conToken(anfitriona.token),
+    });
     expect(r.status(), `iniciar: ${await r.text()}`).toBe(201);
     partida = await r.json();
     expect(partida.estado).toBe('EN_CURSO');
 
     await conSesion(page, anfitriona);
-    await page.goto(`${BORDE}${VISTAS}/plataforma/salas-partidas/sala-batalla.html?sala=${sala.id}&partida=${partida.id}`);
+    await page.goto(
+      `${BORDE}${VISTAS}/plataforma/salas-partidas/sala-batalla.html?sala=${sala.id}&partida=${partida.id}`,
+    );
     await expect(page.locator('[data-barra-vida]')).toHaveCount(2, { timeout: 20000 });
     await expect(page.locator('[data-zona="conexion"]')).toHaveText(/conectado/i);
     const captura = await capturar(page, 7, 'partida-iniciada');
-    anotar(7, 'Partida en curso', { partidaId: partida.id, turno: partida.turnoActual, capturas: [captura] });
+    anotar(7, 'Partida en curso', {
+      partidaId: partida.id,
+      turno: partida.turnoActual,
+      capturas: [captura],
+    });
   });
 
-  test('8-9-10 · combate por turnos hasta el final, con la barra de vida cambiando de color', async ({ page }) => {
+  test('8-9-10 · combate por turnos hasta el final, con la barra de vida cambiando de color', async ({
+    page,
+  }) => {
     test.setTimeout(240000);
     const jugadores = { [anfitriona.claims.uid]: anfitriona, [invitado.claims.uid]: invitado };
     const capturas = [];
@@ -267,14 +320,18 @@ test.describe('Guion de demostración del Sprint 2', () => {
     let capturaRoja = false;
 
     for (let ronda = 0; ronda < 60; ronda += 1) {
-      const estado = await (await api.get(`/api/v1/partidas/${partida.id}`, { headers: conToken(anfitriona.token) })).json();
+      const estado = await (
+        await api.get(`/api/v1/partidas/${partida.id}`, { headers: conToken(anfitriona.token) })
+      ).json();
       if (estado.estado !== 'EN_CURSO') {
         partida = estado;
         break;
       }
       const leToca = jugadores[estado.turnoActual.idJugador];
       await conSesion(page, leToca);
-      await page.goto(`${BORDE}${VISTAS}/plataforma/salas-partidas/sala-batalla.html?sala=${sala.id}&partida=${partida.id}`);
+      await page.goto(
+        `${BORDE}${VISTAS}/plataforma/salas-partidas/sala-batalla.html?sala=${sala.id}&partida=${partida.id}`,
+      );
       const boton = page.locator('[data-zona="acciones"] [data-atacar]').first();
       if (await boton.isEnabled({ timeout: 10000 }).catch(() => false)) {
         const turnoAntes = estado.turnoActual.numeroTurno;
@@ -286,7 +343,9 @@ test.describe('Guion de demostración del Sprint 2', () => {
           .poll(
             async () => {
               const ahora = await (
-                await api.get(`/api/v1/partidas/${partida.id}`, { headers: conToken(anfitriona.token) })
+                await api.get(`/api/v1/partidas/${partida.id}`, {
+                  headers: conToken(anfitriona.token),
+                })
               ).json();
               return ahora.estado !== 'EN_CURSO' || ahora.turnoActual.numeroTurno > turnoAntes;
             },
@@ -312,13 +371,19 @@ test.describe('Guion de demostración del Sprint 2', () => {
     expect(partida.estado, `la partida no termino en ${golpes} golpes`).not.toBe('EN_CURSO');
     // La ultima vista abierta es la de quien dio el ultimo golpe: su aviso
     // `partida.finalizada` llego por el canal y cuenta el desenlace.
-    await expect(page.locator('[data-zona="resultado"]')).toHaveText(/has ganado|has perdido|empate/i, {
-      timeout: 20000,
-    });
+    await expect(page.locator('[data-zona="resultado"]')).toHaveText(
+      /has ganado|has perdido|empate/i,
+      {
+        timeout: 20000,
+      },
+    );
     capturas.push(await capturar(page, 10, 'partida-finalizada'));
     const enPie = partida.participantes.filter((p) => p.heroe.vidaActual > 0).map((p) => p.jugador);
     anotar(8, 'Combate real contra motor-combate', { golpes });
-    anotar(9, 'Barra de vida con umbrales 60 % / 40 %', { amarilla: capturaAmarilla, roja: capturaRoja });
+    anotar(9, 'Barra de vida con umbrales 60 % / 40 %', {
+      amarilla: capturaAmarilla,
+      roja: capturaRoja,
+    });
     anotar(10, 'Final de la partida', { estado: partida.estado, enPie, capturas });
   });
 
@@ -332,13 +397,21 @@ test.describe('Guion de demostración del Sprint 2', () => {
     await expect
       .poll(async () => (await saldoDe(api, ganador)).reservado, { timeout: 60000 })
       .toBe(saldosAntes[ganador.apodo].reservado);
+    // HU-JUE-012: ademas de la apuesta, 2 creditos al ganador y 1 al perdedor por jugar.
+    await expect
+      .poll(async () => (await saldoDe(api, ganador)).bruto, { timeout: 60000 })
+      .toBe(saldosAntes[ganador.apodo].bruto + APUESTA + 2);
     const delGanador = await saldoDe(api, ganador);
     const delPerdedor = await saldoDe(api, perdedor);
-    expect(delGanador.bruto).toBe(saldosAntes[ganador.apodo].bruto + APUESTA);
-    expect(delPerdedor.bruto).toBe(saldosAntes[perdedor.apodo].bruto - APUESTA);
-    anotar(11, 'Apuesta liquidada (HU-JUE-014)', {
-      ganador: ganador.apodo, perdedor: perdedor.apodo,
-      antes: { [ganador.apodo]: saldosAntes[ganador.apodo], [perdedor.apodo]: saldosAntes[perdedor.apodo] },
+    expect(delGanador.bruto).toBe(saldosAntes[ganador.apodo].bruto + APUESTA + 2);
+    expect(delPerdedor.bruto).toBe(saldosAntes[perdedor.apodo].bruto - APUESTA + 1);
+    anotar(11, 'Apuesta liquidada (HU-JUE-014) + recompensa por jugar (HU-JUE-012)', {
+      ganador: ganador.apodo,
+      perdedor: perdedor.apodo,
+      antes: {
+        [ganador.apodo]: saldosAntes[ganador.apodo],
+        [perdedor.apodo]: saldosAntes[perdedor.apodo],
+      },
       despues: { [ganador.apodo]: delGanador, [perdedor.apodo]: delPerdedor },
     });
   });
@@ -346,7 +419,9 @@ test.describe('Guion de demostración del Sprint 2', () => {
   test('12 · el chat de la sala funciona por el canal real', async ({ page }) => {
     await conSesion(page, anfitriona);
     await page.goto(`${BORDE}${VISTAS}/plataforma/salas-partidas/chat.html?sala=${sala.id}`);
-    await expect(page.locator('[data-zona="conexion"]')).toHaveText(/conectado/i, { timeout: 20000 });
+    await expect(page.locator('[data-zona="conexion"]')).toHaveText(/conectado/i, {
+      timeout: 20000,
+    });
     const texto = `Buena partida — demo ${new Date().toISOString().slice(11, 19)}`;
     await page.fill('#formulario-chat [name="texto"]', texto);
     await page.click('#formulario-chat button[type="submit"]');

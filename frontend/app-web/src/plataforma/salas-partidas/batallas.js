@@ -6,7 +6,7 @@
  * La tarjeta no se inventa: el conjunto `Tarjeta de sala` tiene exactamente dos
  * propiedades, la variante de estado y una unica linea de texto que los ocho
  * ejemplos de la pantalla resuelven como
- * «4 de 6 jugadores · 320 creditos · Con heroe de la IA». Ni nombre de sala, ni
+ * «4 de 6 jugadores · 320 creditos · Con héroe de la IA». Ni nombre de sala, ni
  * apodo del anfitrion, ni heroe, ni indicador de preparacion: nada de eso
  * aparece en el diseno ni lo pide RF-JUE-002.
  *
@@ -18,6 +18,7 @@
  */
 
 import { listarSalas, ingresarASala } from './cliente-salas.js';
+import { vaciar } from '../../comun/ui/dom.js';
 import { seguirSala, estadoDesdeFicha } from './canal-sala.js';
 import {
   esSeccionDegradada,
@@ -85,7 +86,7 @@ export function mostrarAvisoDeSala(raiz, aviso) {
 export function metaDeLaSala(sala) {
   const base =
     `${sala.ocupacion} de ${sala.maximoParticipantes} jugadores` +
-    ` · ${sala.recompensaCreditos} creditos`;
+    ` · ${sala.recompensaCreditos} créditos`;
   if (!sala.incluirHeroeIA) {
     return base;
   }
@@ -93,8 +94,8 @@ export function metaDeLaSala(sala) {
   // linea exacta del diseno.
   const maquinas = Number(sala.heroesIA) || 1;
   return maquinas > 1
-    ? `${base} · Con ${maquinas} heroes de la IA`
-    : `${base} · Con heroe de la IA`;
+    ? `${base} · Con ${maquinas} héroes de la IA`
+    : `${base} · Con héroe de la IA`;
 }
 
 /**
@@ -264,7 +265,7 @@ export function montarBatallas(raiz, puertos = {}) {
     .then((cliente) => {
       if (!cliente) {
         marcarCanal(
-          'Sin canal en tiempo real: inicia sesion para ver los cambios al instante.',
+          'Sin canal en tiempo real: inicia sesión para ver los cambios al instante.',
           'sin-sesion',
         );
         return;
@@ -283,35 +284,68 @@ export function montarBatallas(raiz, puertos = {}) {
       seguirVisibles();
     })
     .catch((error) => {
+      // UX-R3.4 — el mensaje era «Canal en tiempo real no disponible: No se
+      // pudo abrir el canal..»: el motivo repetía el título, con dos puntos
+      // en medio y dos puntos finales porque el error ya traía el suyo. Y lo
+      // que no decía es lo único que le importa a quien lo lee: que el
+      // listado sigue funcionando, solo que no se actualiza solo.
+      console.warn('[salas] canal en tiempo real no disponible:', error);
       marcarCanal(
-        `Canal en tiempo real no disponible: ${error?.message ?? 'no se pudo conectar'}.`,
+        'Las salas no se actualizan solas ahora mismo. El listado funciona: vuelve a cargarlo para ver los cambios.',
         'error',
       );
     });
 
-  /** Muestra uno de los cuatro estados de RNF-USA-003 y oculta la rejilla. */
-  function mostrarEstado(claseExtra, titulo, detalle) {
+  /**
+   * Muestra uno de los cuatro estados de RNF-USA-003 y oculta la rejilla.
+   *
+   * UX-R3.4 — antes solo pintaba titulo y detalle. Un estado vacio que dice
+   * «crea una sala y espera a que alguien se una» y no trae el boton de crear
+   * sala obliga a leerlo, entenderlo y subir a buscar la accion arriba a la
+   * derecha; y un estado de error sin reintentar obliga a recargar la pagina.
+   * §18: una pantalla vacia explica que pasa Y que puede hacer quien mira.
+   *
+   * @param {string} claseExtra
+   * @param {string} titulo
+   * @param {string} detalle
+   * @param {{texto: string, href?: string, alPulsar?: () => void}|null} [accion]
+   */
+  function mostrarEstado(claseExtra, titulo, detalle, accion = null) {
     zonaSalas.hidden = true;
     zonaPaginacion.hidden = true;
     zonaEstado.hidden = false;
     zonaEstado.className = `estado-vista ${claseExtra}`;
-    zonaEstado.innerHTML = '';
+    vaciar(zonaEstado);
 
     const encabezado = doc.createElement('p');
     encabezado.className = 'estado-vista__titulo';
     encabezado.textContent = titulo;
 
     const cuerpo = doc.createElement('p');
-    cuerpo.className = 't-cuerpo';
+    cuerpo.className = 'estado-vista__detalle';
     cuerpo.textContent = detalle;
 
     zonaEstado.append(encabezado, cuerpo);
+
+    if (accion) {
+      const control = doc.createElement(accion.href ? 'a' : 'button');
+      control.className = 'boton boton--primario';
+      control.textContent = accion.texto;
+      if (accion.href) {
+        control.href = accion.href;
+      } else {
+        control.type = 'button';
+        control.dataset.accion = 'reintentar';
+        control.addEventListener('click', accion.alPulsar);
+      }
+      zonaEstado.append(control);
+    }
   }
 
   function pintar(pagina) {
     zonaEstado.hidden = true;
     zonaSalas.hidden = false;
-    zonaSalas.innerHTML = '';
+    vaciar(zonaSalas);
 
     subtitulo.textContent = subtituloDeSalas(pagina.totalElementos);
 
@@ -319,7 +353,8 @@ export function montarBatallas(raiz, puertos = {}) {
       mostrarEstado(
         'estado-vista--vacio',
         'No hay batallas abiertas',
-        'Crea una sala y espera a que alguien se una.',
+        'Nadie tiene una sala esperando ahora mismo. Abre la tuya y decide la modalidad, la apuesta y cuántos entran.',
+        { texto: 'Crear sala', href: './crear-sala.html' },
       );
       subtitulo.textContent = subtituloDeSalas(0);
       return;
@@ -337,7 +372,7 @@ export function montarBatallas(raiz, puertos = {}) {
 
   function pintarPaginacion(pagina) {
     zonaPaginacion.hidden = false;
-    zonaPaginacion.innerHTML = '';
+    vaciar(zonaPaginacion);
 
     const info = doc.createElement('span');
     info.className = 'paginacion__info';
@@ -372,10 +407,14 @@ export function montarBatallas(raiz, puertos = {}) {
         }),
       );
     } catch (error) {
+      // UX-R3.4 — el subtitulo se quedaba en «Buscando batallas» para siempre:
+      // la pantalla decia a la vez que estaba buscando y que habia fallado.
+      subtitulo.textContent = 'No se pudo consultar el listado';
       mostrarEstado(
         'estado-vista--error',
         error.titulo ?? 'No se pudo cargar el listado',
         error.detalle ?? error.message,
+        { texto: 'Reintentar', alPulsar: () => refrescar() },
       );
     }
   }

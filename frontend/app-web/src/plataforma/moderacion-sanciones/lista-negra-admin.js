@@ -4,6 +4,7 @@
  */
 
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
+import { vaciar } from '../../comun/ui/dom.js';
 
 const BASE_URL = '/api/v1/lista-negra/terminos';
 
@@ -64,7 +65,7 @@ function mostrarTerminos(terminos) {
     return;
   }
 
-  listaTerminos.innerHTML = '';
+  vaciar(listaTerminos);
   for (const termino of terminos) {
     listaTerminos.appendChild(crearFilaTermino(termino));
   }
@@ -76,24 +77,34 @@ function mostrarTerminos(terminos) {
  * @returns {HTMLLIElement}
  */
 function crearFilaTermino(termino) {
+  // UX-R3.3 — las clases de aquí (`acciones-termino`, `boton-eliminar`) no
+  // existían en ningún CSS: ni en el kit, ni en una hoja propia de la vista.
+  // Los dos botones se pintaban con el estilo por omisión del navegador,
+  // dentro de una pantalla que sí tiene sistema de diseño. Ahora usan el kit,
+  // y «Eliminar» usa la variante de peligro, que es lo que hace.
   const item = document.createElement('li');
+  item.className = 'lista-terminos__fila';
 
   const texto = document.createElement('span');
+  texto.className = 'lista-terminos__termino';
   texto.textContent = termino;
   item.appendChild(texto);
 
   const acciones = document.createElement('div');
-  acciones.className = 'acciones-termino';
+  acciones.className = 'lista-terminos__acciones';
 
   const botonEditar = document.createElement('button');
   botonEditar.type = 'button';
+  botonEditar.className = 'boton boton--secundario boton--pequeno';
   botonEditar.textContent = 'Editar';
+  botonEditar.setAttribute('aria-label', `Editar el término ${termino}`);
   botonEditar.addEventListener('click', () => editarTermino(termino));
 
   const botonEliminar = document.createElement('button');
   botonEliminar.type = 'button';
-  botonEliminar.className = 'boton-eliminar';
+  botonEliminar.className = 'boton boton--peligro boton--pequeno';
   botonEliminar.textContent = 'Eliminar';
+  botonEliminar.setAttribute('aria-label', `Eliminar el término ${termino}`);
   botonEliminar.addEventListener('click', () => eliminarTermino(termino));
 
   acciones.appendChild(botonEditar);

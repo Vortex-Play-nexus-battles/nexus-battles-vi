@@ -91,7 +91,7 @@ class EjecutarAccionTest {
     }
 
     private EjecutarAccion casoDeUso(MotorDeMentira motor) {
-        return new EjecutarAccion(partidas, canal, motor, LiquidacionSinApuesta.nueva());
+        return new EjecutarAccion(partidas, canal, motor, LiquidacionSinApuesta.nueva(), RecompensaSinLibro.nueva());
     }
 
     @Test
@@ -157,6 +157,53 @@ class EjecutarAccionTest {
                 // Accion y DESPUES fin. Nunca turno: no hay siguiente.
                 () -> assertEquals(2, canal.anuncios.size()),
                 () -> assertEquals("accion", canal.anuncios.get(0).tipo()),
+                () -> assertEquals("fin", canal.anuncios.get(1).tipo()));
+    }
+
+    @Test
+    @DisplayName("HU-TOR-004 CA-04: al terminar, la partida se pasa al informe de torneo, despues del aviso de fin")
+    void alTerminarInformaAlTorneo() {
+        Partida partida = partidaDe(ANA, BRUNO);
+        List<Partida> informadas = new ArrayList<>();
+        InformarEncuentroDeTorneoTest.VinculosEnMemoria vinculos = new InformarEncuentroDeTorneoTest.VinculosEnMemoria();
+        InformarEncuentroDeTorneo torneo = new InformarEncuentroDeTorneo(vinculos,
+                (idTorneo, numero, ganador, idPartida) -> { }, java.time.Clock.systemUTC()) {
+            @Override
+            public java.util.Optional<com.nexusbattles.plataforma.salaspartidas.dominio.VinculoDeTorneo> alTerminar(
+                    Partida terminada) {
+                informadas.add(terminada);
+                assertEquals("fin", canal.anuncios.get(canal.anuncios.size() - 1).tipo(), "primero el aviso");
+                return java.util.Optional.empty();
+            }
+        };
+
+        new EjecutarAccion(partidas, canal, MotorDeMentira.queHace(100), LiquidacionSinApuesta.nueva(),
+                RecompensaSinLibro.nueva(), torneo).ejecutar(partida.id(), ANA, BRUNO, null);
+
+        assertAll(
+                () -> assertEquals(1, informadas.size()),
+                () -> assertEquals(EstadoPartida.FINALIZADA, informadas.get(0).estado()));
+    }
+
+    @Test
+    @DisplayName("HU-TOR-004: si el informe de torneo revienta, la partida termina igual y el fin ya salio")
+    void unFalloDelTorneoNoRompeLaPartida() {
+        Partida partida = partidaDe(ANA, BRUNO);
+        InformarEncuentroDeTorneo torneo = new InformarEncuentroDeTorneo(
+                new InformarEncuentroDeTorneoTest.VinculosEnMemoria(),
+                (idTorneo, numero, ganador, idPartida) -> { }, java.time.Clock.systemUTC()) {
+            @Override
+            public java.util.Optional<com.nexusbattles.plataforma.salaspartidas.dominio.VinculoDeTorneo> alTerminar(
+                    Partida terminada) {
+                throw new IllegalStateException("la base de vinculos no responde");
+            }
+        };
+
+        Partida despues = new EjecutarAccion(partidas, canal, MotorDeMentira.queHace(100), LiquidacionSinApuesta.nueva(),
+                RecompensaSinLibro.nueva(), torneo).ejecutar(partida.id(), ANA, BRUNO, null);
+
+        assertAll(
+                () -> assertEquals(EstadoPartida.FINALIZADA, despues.estado()),
                 () -> assertEquals("fin", canal.anuncios.get(1).tipo()));
     }
 
@@ -282,11 +329,16 @@ class EjecutarAccionTest {
         private final RepositorioDeSalasEnMemoria salas = new RepositorioDeSalasEnMemoria();
         private final CreditosEnMemoria libro = new CreditosEnMemoria().conSaldo(ANA, 1_000).conSaldo(BRUNO, 1_000);
 
+        private final AcreditadorEnMemoria libroDeRecompensas = new AcreditadorEnMemoria();
+
         private EjecutarAccion casoDeUsoConApuesta(MotorDeMentira motor) {
             LiquidarApuesta liquidar = new LiquidarApuesta(salas, new RepositorioDeLiquidacionesEnMemoria(), libro,
                     java.time.Clock.fixed(AHORA, java.time.ZoneOffset.UTC),
                     LiquidarApuesta.SiGanaLaMaquina.LIBERAR);
-            return new EjecutarAccion(partidas, canal, motor, liquidar);
+            AcreditarRecompensa recompensa = new AcreditarRecompensa(salas, new RepositorioDeRecompensasEnMemoria(),
+                    libroDeRecompensas, new SancionesEnMemoria(),
+                    java.time.Clock.fixed(AHORA, java.time.ZoneOffset.UTC));
+            return new EjecutarAccion(partidas, canal, motor, liquidar, recompensa);
         }
 
         /** Ana y Bruno apuestan 100; Bruno tiene 10 de vida: cae al primer golpe. */
@@ -316,6 +368,38 @@ class EjecutarAccionTest {
                             canal.repartos.get(0)),
                     () -> assertEquals(1_100, libro.saldoDe(ANA)),
                     () -> assertEquals(900, libro.saldoDe(BRUNO)));
+        }
+
+        @Test
+        @DisplayName("HU-JUE-012 CA-03: con apuesta, el mismo fin lleva ademas la recompensa por jugar, aparte del reparto")
+        void elFinLlevaLaRecompensa() {
+            Partida partida = partidaApostada();
+
+            casoDeUsoConApuesta(MotorDeMentira.queHace(50)).ejecutar(partida.id(), ANA, BRUNO, "ATAQUE_BASICO");
+
+            assertAll(
+                    () -> assertEquals(1, libroDeRecompensas.informes.size(), "se informo una vez"),
+                    () -> assertEquals(partida.id(), libroDeRecompensas.informes.get(0).idPartida()),
+                    () -> assertEquals(List.of(ANA), libroDeRecompensas.informes.get(0).ganadores()),
+                    () -> assertEquals(List.of(
+                                    new com.nexusbattles.plataforma.salaspartidas.dominio.CreditoPorPartida(ANA, 4, true, null),
+                                    new com.nexusbattles.plataforma.salaspartidas.dominio.CreditoPorPartida(BRUNO, 1, false, null)),
+                            canal.recompensas.get(0), "hasta seis es grupal: 4 al ganador"),
+                    () -> assertEquals(2, canal.repartos.get(0).size(), "y el reparto de la apuesta sigue ahi"));
+        }
+
+        @Test
+        @DisplayName("HU-JUE-012 CA-05: si solo falla la recompensa, la apuesta se liquida igual y el fin sale sin recompensa")
+        void soloLaRecompensaCaida() {
+            Partida partida = partidaApostada();
+            libroDeRecompensas.caido = true;
+
+            casoDeUsoConApuesta(MotorDeMentira.queHace(50)).ejecutar(partida.id(), ANA, BRUNO, "ATAQUE_BASICO");
+
+            assertAll(
+                    () -> assertEquals(1_100, libro.saldoDe(ANA), "la apuesta se liquido"),
+                    () -> assertEquals(2, canal.repartos.get(0).size()),
+                    () -> assertTrue(canal.recompensas.get(0).isEmpty(), "la recompensa queda pendiente"));
         }
 
         @Test

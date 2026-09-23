@@ -3,6 +3,7 @@ package com.nexusbattles.plataforma.salaspartidas.aplicacion;
 import com.nexusbattles.plataforma.resiliencia.DependenciaDegradada;
 import com.nexusbattles.plataforma.salaspartidas.dominio.AccionResuelta;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDePartida;
+import com.nexusbattles.plataforma.salaspartidas.dominio.CreditoPorPartida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoPartida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.MotorDeCombate;
 import com.nexusbattles.plataforma.salaspartidas.dominio.MotorNoDisponible;
@@ -11,6 +12,7 @@ import com.nexusbattles.plataforma.salaspartidas.dominio.Partida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.PartidaNoEncontrada;
 import com.nexusbattles.plataforma.salaspartidas.dominio.PartidaYaTerminada;
 import com.nexusbattles.plataforma.salaspartidas.dominio.ParticipanteDePartida;
+import com.nexusbattles.plataforma.salaspartidas.dominio.RepartoDeCreditos;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDePartidas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.ResolucionDelMotor;
 import com.nexusbattles.plataforma.salaspartidas.dominio.SinObjetivoPosible;
@@ -51,13 +53,28 @@ public class EjecutarAccion {
     private final CanalDePartida canal;
     private final MotorDeCombate motor;
     private final LiquidarApuesta apuesta;
+    private final AcreditarRecompensa recompensa;
+    private static final org.slf4j.Logger BITACORA_TORNEO = org.slf4j.LoggerFactory.getLogger(EjecutarAccion.class);
+    private final InformarEncuentroDeTorneo torneo;
 
     public EjecutarAccion(RepositorioDePartidas partidas, CanalDePartida canal,
-                          MotorDeCombate motor, LiquidarApuesta apuesta) {
+                          MotorDeCombate motor, LiquidarApuesta apuesta, AcreditarRecompensa recompensa) {
+        this(partidas, canal, motor, apuesta, recompensa, null);
+    }
+
+    /**
+     * @param torneo informa el ganador a torneos cuando la sala es un encuentro
+     *               (HU-TOR-004, CA-04); nulo en los dobles que no lo miran
+     */
+    public EjecutarAccion(RepositorioDePartidas partidas, CanalDePartida canal,
+                          MotorDeCombate motor, LiquidarApuesta apuesta, AcreditarRecompensa recompensa,
+                          InformarEncuentroDeTorneo torneo) {
         this.partidas = Objects.requireNonNull(partidas);
         this.canal = Objects.requireNonNull(canal);
         this.motor = Objects.requireNonNull(motor, "Sin motor no hay combate.");
         this.apuesta = Objects.requireNonNull(apuesta, "Sin liquidacion la apuesta se perderia.");
+        this.recompensa = Objects.requireNonNull(recompensa, "Sin recompensa jugar no daria creditos.");
+        this.torneo = torneo;
     }
 
     /**
@@ -135,17 +152,31 @@ public class EjecutarAccion {
     }
 
     /**
-     * La partida termino: se liquida la apuesta y se anuncia el resultado con
-     * el reparto — HU-JUE-014, CA-04.
+     * La partida termino: se liquida la apuesta (HU-JUE-014, CA-04), se
+     * informa el resultado al libro para la recompensa por jugar (HU-JUE-012)
+     * y se anuncia el resultado con las dos cosas.
      *
-     * <p>La liquidacion va ANTES del aviso para que el reparto viaje en el
-     * mismo mensaje. Si el libro de creditos no responde, {@code alTerminar}
-     * lo deja anotado como pendiente y devuelve vacio: el aviso sale igual, sin
-     * reparto, y el reintento lo completara despues. El ultimo golpe ya se dio
-     * y esta guardado; un fallo del libro no puede deshacerlo ni esconderlo.
+     * <p>Los dos movimientos van ANTES del aviso para que viajen en el mismo
+     * mensaje, y en este orden (HU-JUE-012, CA-03): primero la apuesta, luego
+     * la recompensa. Si el libro de creditos no responde, cada uno queda
+     * anotado como pendiente por su lado y devuelve vacio: el aviso sale igual
+     * y el reintento lo completara despues. El ultimo golpe ya se dio y esta
+     * guardado; un fallo del libro no puede deshacerlo ni esconderlo.
      */
     private void anunciarFin(Partida terminada) {
-        canal.anunciarFin(terminada, apuesta.alTerminar(terminada));
+        List<RepartoDeCreditos> reparto = apuesta.alTerminar(terminada);
+        List<CreditoPorPartida> premio = recompensa.alTerminar(terminada);
+        canal.anunciarFin(terminada, reparto, premio);
+        // Despues del aviso: el resultado del encuentro es cosa de torneos y un
+        // fallo ahi no puede retrasar lo que ven los jugadores. Nunca lanza.
+        if (torneo != null) {
+            try {
+                torneo.alTerminar(terminada);
+            } catch (RuntimeException fallo) {
+                BITACORA_TORNEO.warn("La partida {} termino pero no se pudo anotar el encuentro de torneo: {}",
+                        terminada.id(), fallo.getMessage());
+            }
+        }
     }
 
     /**

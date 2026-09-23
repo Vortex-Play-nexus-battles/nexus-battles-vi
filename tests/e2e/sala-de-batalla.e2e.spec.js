@@ -766,18 +766,27 @@ test.describe('Sala de batalla de punta a punta', () => {
         message: 'la reserva del ganador no se libero',
       })
       .toBe(reservadoAlEmpezar[ganador.claims.uid] - APUESTA);
+    // Desde HU-JUE-012 el fin de la partida acredita ademas la recompensa por
+    // jugar (uno contra uno: 2 al ganador, 1 al perdedor). Llega justo despues
+    // de la apuesta y por el mismo libro: se espera a que entre.
+    await expect
+      .poll(async () => (await saldoDe(api, ganador)).bruto, {
+        timeout: 20000,
+        message: 'el libro no acredito apuesta + recompensa al ganador',
+      })
+      .toBe(brutoAlEmpezar[ganador.claims.uid] + APUESTA + 2);
     const delGanador = await saldoDe(api, ganador);
     const delPerdedor = await saldoDe(api, perdedor);
     // Relativo a lo que tenian al empezar la partida, no a la semilla: asi la
     // afirmacion vale tambien en un banco reutilizado de una corrida anterior.
-    expect(delGanador.bruto).toBe(brutoAlEmpezar[ganador.claims.uid] + APUESTA);
-    expect(delPerdedor.bruto).toBe(brutoAlEmpezar[perdedor.claims.uid] - APUESTA);
+    expect(delGanador.bruto).toBe(brutoAlEmpezar[ganador.claims.uid] + APUESTA + 2);
+    expect(delPerdedor.bruto).toBe(brutoAlEmpezar[perdedor.claims.uid] - APUESTA + 1);
     // Al perdedor se le cobro la reserva (consumida), no se le devolvio: en
     // cualquiera de los dos casos deja de estar reservada.
     expect(delPerdedor.reservado).toBe(reservadoAlEmpezar[perdedor.claims.uid] - APUESTA);
 
     await expect(page.locator('[data-zona="resultado"]')).toHaveText(
-      new RegExp(`(llevas|pierdes los) ${APUESTA} creditos`, 'i'),
+      new RegExp(`(llevas|pierdes los) ${APUESTA} créditos`, 'i'),
       { timeout: 20000 },
     );
   });

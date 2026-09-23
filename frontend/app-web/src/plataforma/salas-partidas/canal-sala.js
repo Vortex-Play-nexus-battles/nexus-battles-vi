@@ -46,9 +46,9 @@ export const TIPO_CANCELADA = 'sala.cancelada';
  * mensaje viaja como enumerado a proposito: el idioma lo pone la interfaz.
  */
 export const MOTIVOS_DE_CANCELACION = Object.freeze({
-  CANCELADA_POR_ANFITRION: 'El anfitrion cancelo la sala.',
-  INACTIVIDAD: 'La sala se cerro por inactividad.',
-  ERROR_DEL_SISTEMA: 'La sala se cerro por un error del sistema.',
+  CANCELADA_POR_ANFITRION: 'El anfitrión canceló la sala.',
+  INACTIVIDAD: 'La sala se cerró por inactividad.',
+  ERROR_DEL_SISTEMA: 'La sala se cerró por un error del sistema.',
 });
 
 /**
@@ -58,10 +58,10 @@ export const MOTIVOS_DE_CANCELACION = Object.freeze({
  * @returns {string}
  */
 export function textoDeCancelacion(aviso) {
-  const motivo = MOTIVOS_DE_CANCELACION[aviso?.motivo] ?? 'La sala se cerro.';
+  const motivo = MOTIVOS_DE_CANCELACION[aviso?.motivo] ?? 'La sala se cerró.';
   const devueltos = Number(aviso?.creditosDevueltos);
   if (Number.isFinite(devueltos) && devueltos > 0) {
-    return `${motivo} Se te devolvieron ${devueltos} creditos.`;
+    return `${motivo} Se te devolvieron ${devueltos} créditos.`;
   }
   return motivo;
 }

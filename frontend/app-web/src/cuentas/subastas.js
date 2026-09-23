@@ -6,17 +6,47 @@
  * modulos que ya existen por separado (cliente-subastas, subastas-vitrina,
  * subastas-filtros). Mismo patron que login.js junto a login.html.
  *
- * PENDIENTE, a proposito fuera de este archivo: el contador en vivo real
- * (suscripcion STOMP al canal /topic/subastas/listado) todavia no esta
- * conectado aqui. Este archivo carga y refresca solo por accion del
- * usuario (filtrar, ordenar, paginar, buscar) -- la actualizacion push en
- * tiempo real queda como el siguiente incremento, no silenciada.
+ * ## UX-R2.8b — tres cosas que esta pantalla hacia mal
+ *
+ * 1. **Un servicio caido se leia como un mercado vacio.** El estado de error
+ *    era un `<p>` gris con el mensaje y, debajo, el `error.message` tal cual:
+ *    el laboratorio visual (#600) detectaba «Error 404» en las CINCO
+ *    anchuras. Ahora es `estadoDeError` del kit, con boton de **Reintentar**,
+ *    y el detalle tecnico no aparece nunca: si el error no viene del contrato
+ *    (no trae `estado`), se usa una frase generica en vez de «Failed to
+ *    fetch».
+ *
+ * 2. **El contador no contaba.** `subastas-vitrina.js` calcula «42m» al
+ *    pintar la tarjeta y deja escrito en un comentario que mantenerlo al dia
+ *    le toca a quien llama. Nadie lo hacia, asi que un lote decia «2m»
+ *    durante media hora. Ahora se adopta cada contador con
+ *    `comun/ui/cuenta-atras.js`, que late de verdad. La vitrina **no se
+ *    toca**: es un modulo protegido y ademas esto es exactamente lo que su
+ *    comentario pedia.
+ *
+ * 3. **Tres estados propios y una paginacion propia** donde el kit ya tenia
+ *    ambos. `.estado`/`.estado-carga`/`.estado-error` y
+ *    `.subastas-paginacion__*` eran copias locales de `.estado-vista` y
+ *    `.paginacion`.
+ *
+ * PENDIENTE, a proposito fuera de este archivo: la suscripcion STOMP al canal
+ * `/topic/subastas/listado`. El contador ya es real; lo que sigue sin llegar
+ * solo es la puja de otra persona, que exige el canal.
  */
 
 import { montarCabecera } from '../comun/cabecera-app.js';
 import { listarSubastas, sugerirSubastas } from './cliente-subastas.js';
 import { construirVitrinaSubastas } from './subastas-vitrina.js';
 import { construirFiltros } from './subastas-filtros.js';
+import { h } from '../comun/ui/dom.js';
+import { encabezadoDePagina } from '../comun/ui/pagina.js';
+import {
+  estadoDeCarga,
+  estadoDeError,
+  estadoVacio,
+  pintarEstado,
+} from '../comun/ui/estado-vista.js';
+import { adoptarCuentaAtras, vigilarCuentasAtras } from '../comun/ui/cuenta-atras.js';
 
 const TAMANO_PAGINA = 16;
 const ESPERA_DEBOUNCE_MS = 300;
@@ -27,9 +57,22 @@ const estado = {
   ordenarPor: 'FECHA_PUBLICACION',
 };
 
+/** Como parar el latido de los contadores de la tanda anterior. */
+let detenerContadores = null;
+
 document.addEventListener('DOMContentLoaded', inicializar);
 
-function inicializar() {
+/**
+ * Monta la pantalla sobre `#raiz-subastas`.
+ *
+ * Exportada desde UX-R2.8b: era privada y por eso la vista principal del
+ * mercado —la que enseñaba «Error 404» en las cinco anchuras— no tenia ni
+ * una prueba. Se sigue enganchando a `DOMContentLoaded` como siempre.
+ */
+export function inicializar() {
+  estado.pagina = 0;
+  estado.filtros = {};
+  estado.ordenarPor = 'FECHA_PUBLICACION';
   const raiz = document.getElementById('raiz-subastas');
   if (!raiz) {
     throw new Error('subastas.html debe traer un elemento con id="raiz-subastas"');
@@ -45,15 +88,29 @@ function inicializar() {
     cabecera.dataset.cabeceraApp = '';
     raiz.appendChild(cabecera);
   }
-  montarCabecera(cabecera, { seccionActiva: 'subasta' });
+  montarCabecera(cabecera, { vista: 'subastas', seccionActiva: 'subasta' });
 
-  const titulo = document.createElement('h1');
-  titulo.className = 'subastas-titulo';
-  titulo.textContent = 'Subastas activas';
-  raiz.appendChild(titulo);
+  // El titulo y «Publicar subasta» iban sueltos, uno debajo del otro, con el
+  // boton primario flotando a la izquierda como si fuera un parrafo mas. El
+  // encabezado del kit los pone donde estan en el resto de la aplicacion.
+  raiz.appendChild(
+    encabezadoDePagina({
+      titulo: 'Subastas activas',
+      descripcion: 'Compra y vende objetos con el resto de jugadores.',
+      acciones: [
+        h('a', {
+          clase: 'boton boton--primario',
+          texto: 'Publicar subasta',
+          atributos: { href: './publicar-subasta.html' },
+        }),
+      ],
+    }),
+  );
 
-  raiz.appendChild(construirBarraBusqueda());
-  raiz.appendChild(construirBarraOrden());
+  // Buscar y ordenar son el mismo control compuesto, no dos bloques apilados.
+  const controles = h('div', { clase: 'mercado__controles' });
+  controles.append(construirBarraBusqueda(), construirBarraOrden());
+  raiz.appendChild(controles);
 
   const contenido = document.createElement('div');
   contenido.className = 'subastas-contenido';
@@ -210,7 +267,11 @@ async function cargarYRenderizar() {
     return;
   }
 
-  zona.replaceChildren(construirEstado('carga', 'Cargando subastas...'));
+  // Cada tanda se lleva por delante el latido de la anterior: si no, cada
+  // filtro dejaria un temporizador corriendo sobre elementos ya borrados.
+  pararContadores();
+
+  pintarEstado(zona, estadoDeCarga({ filas: 4, etiqueta: 'Cargando subastas…' }));
 
   let pagina;
   try {
@@ -220,14 +281,12 @@ async function cargarYRenderizar() {
       TAMANO_PAGINA,
     );
   } catch (error) {
-    zona.replaceChildren(
-      construirEstado('error', 'No se pudieron cargar las subastas', error.message),
-    );
+    pintarEstado(zona, estadoDelFallo(error));
     return;
   }
 
   if (pagina.contenido.length === 0) {
-    zona.replaceChildren(construirEstado('vacio', 'No hay subastas que coincidan con tu búsqueda'));
+    pintarEstado(zona, estadoSinResultados());
     return;
   }
 
@@ -239,59 +298,157 @@ async function cargarYRenderizar() {
   });
 
   zona.replaceChildren(vitrina, construirPaginacion(pagina));
+  ponerEnHoraLosContadores(zona, pagina.contenido);
 }
 
-function construirEstado(tipo, mensaje, detalle) {
-  const contenedor = document.createElement('div');
-  contenedor.className = `estado estado-${tipo}`;
+/**
+ * Un mercado caido NO es un mercado vacio.
+ *
+ * El detalle solo sale si el error viene del contrato (`error.estado`, que
+ * pone `cliente-subastas.js`): esos mensajes ya estan escritos para leerse.
+ * Un `TypeError` de red trae «Failed to fetch», que no se le ensena a nadie.
+ *
+ * @param {Error & {estado?: number}} error
+ * @returns {HTMLElement}
+ */
+function estadoDelFallo(error) {
+  const esDeSesion = error.estado === 401 || error.estado === 403;
+  return estadoDeError({
+    titulo: esDeSesion ? 'No podemos mostrarte las subastas' : 'El mercado no responde',
+    detalle:
+      typeof error.estado === 'number'
+        ? error.message
+        : 'No pudimos conectar con el mercado. Revisa tu conexión e inténtalo otra vez.',
+    alReintentar: () => cargarYRenderizar(),
+  });
+}
 
-  const titulo = document.createElement('p');
-  titulo.className = 'estado__mensaje';
-  titulo.textContent = mensaje;
-  contenedor.appendChild(titulo);
+/**
+ * Vacio util: distingue «no hay nada» de «tu filtro no encuentra nada», que
+ * son dos situaciones con dos salidas distintas.
+ *
+ * @returns {HTMLElement}
+ */
+function estadoSinResultados() {
+  const hayFiltro =
+    Boolean(estado.filtros.q) ||
+    Object.entries(estado.filtros).some(([clave, valor]) => clave !== 'q' && valor !== undefined);
 
-  if (detalle) {
-    const parrafoDetalle = document.createElement('p');
-    parrafoDetalle.className = 'estado__detalle';
-    parrafoDetalle.textContent = detalle;
-    contenedor.appendChild(parrafoDetalle);
+  if (hayFiltro) {
+    return estadoVacio({
+      titulo: 'Ninguna subasta coincide con lo que buscas',
+      detalle: 'Prueba con menos filtros o con otro término.',
+      icono: '⌕',
+      accion: { texto: 'Quitar los filtros', alPulsar: limpiarFiltros },
+    });
   }
-
-  return contenedor;
+  return estadoVacio({
+    titulo: 'Todavía no hay subastas activas',
+    detalle: 'Cuando alguien publique un lote aparecerá aquí. También puedes publicar tú.',
+    icono: '◇',
+    accion: { texto: 'Publicar subasta', href: './publicar-subasta.html' },
+  });
 }
 
+/**
+ * Deja la busqueda y los filtros como al entrar.
+ *
+ * El panel de filtros es un `<form>` con un boton `type="reset"` nativo, y
+ * escucha su propio evento `reset` para avisar. Asi que basta con pulsarlo:
+ * el panel se vacia y el `alCambiar` que ya esta enganchado recarga solo.
+ * Se evita a proposito tener dos caminos distintos para lo mismo.
+ */
+function limpiarFiltros() {
+  const campo = document.querySelector('.subastas-busqueda__campo');
+  if (campo) {
+    campo.value = '';
+  }
+  estado.filtros = {};
+  estado.pagina = 0;
+
+  const limpiarPanel = document.querySelector('.subastas-filtros__limpiar');
+  if (limpiarPanel) {
+    limpiarPanel.click(); // Dispara `reset` → `alCambiar` → `cargarYRenderizar`.
+    return;
+  }
+  cargarYRenderizar();
+}
+
+/**
+ * Adopta los contadores que pinto la vitrina y los pone a latir.
+ *
+ * `subastas-vitrina.js` es un modulo protegido: no se toca. Lo que hace falta
+ * —la fecha de cierre de cada lote— ya esta en la respuesta, y la tarjeta
+ * lleva `data-subasta-id`, asi que se emparejan sin tocar aquel archivo.
+ *
+ * @param {HTMLElement} zona
+ * @param {Array<object>} subastas
+ */
+function ponerEnHoraLosContadores(zona, subastas) {
+  // Por indice de `data-subasta-id` y no con un selector: un id de subasta es
+  // texto del servidor y meterlo en un `querySelector` obliga a escaparlo
+  // (`CSS.escape`, que ademas no existe en todos los entornos). Recorrer las
+  // tarjetas que ya estan en el DOM no tiene ese problema.
+  const porId = new Map(subastas.map((s) => [String(s.id), s]));
+  for (const tarjeta of zona.querySelectorAll('[data-subasta-id]')) {
+    const subasta = porId.get(tarjeta.dataset.subastaId);
+    const contador = tarjeta.querySelector('.subastas__contador');
+    if (subasta?.fechaFin && contador) {
+      adoptarCuentaAtras(contador, subasta.fechaFin);
+    }
+  }
+  detenerContadores = vigilarCuentasAtras(zona);
+}
+
+function pararContadores() {
+  if (detenerContadores) {
+    detenerContadores();
+    detenerContadores = null;
+  }
+}
+
+/**
+ * Paginacion sobre `.paginacion` del kit (UX-R2.8b).
+ *
+ * Era un bloque `subastas-paginacion__*` propio, calcado del que ya vive en
+ * `componentes.css` desde PR-UX-6. El estado activo ademas se marcaba con una
+ * clase modificadora ADEMAS de `aria-current`; el kit estiliza directamente
+ * `[aria-current='page']`, asi que la clase sobraba y podia desincronizarse.
+ */
 function construirPaginacion(pagina) {
-  const nav = document.createElement('nav');
-  nav.className = 'subastas-paginacion';
-  nav.setAttribute('aria-label', 'Paginación de subastas');
+  const nav = h('nav', {
+    clase: 'paginacion',
+    atributos: { 'aria-label': 'Paginación de subastas' },
+  });
 
   const irA = (numeroPagina) => {
     estado.pagina = numeroPagina;
     cargarYRenderizar();
   };
 
-  nav.appendChild(construirBotonPagina('Anterior', pagina.pagina - 1, pagina.pagina > 0, irA));
+  const paginas = h('div', { clase: 'paginacion__paginas' });
+  paginas.append(construirBotonPagina('Anterior', pagina.pagina - 1, pagina.pagina > 0, irA));
 
   for (const numero of paginasVisibles(pagina.pagina, pagina.totalPaginas)) {
     if (numero === '...') {
-      const puntos = document.createElement('span');
-      puntos.textContent = '...';
-      nav.appendChild(puntos);
+      paginas.append(h('span', { clase: 'paginacion__info', texto: '…' }));
       continue;
     }
-    const boton = document.createElement('button');
-    boton.type = 'button';
-    boton.className = 'subastas-paginacion__pagina';
-    if (numero === pagina.pagina) {
-      boton.classList.add('subastas-paginacion__pagina--activa');
-      boton.setAttribute('aria-current', 'page');
-    }
-    boton.textContent = String(numero + 1); // Vista 1-indexada; el backend es 0-indexado.
+    const boton = h('button', {
+      clase: 'paginacion__pagina',
+      // Vista 1-indexada; el backend es 0-indexado.
+      texto: String(numero + 1),
+      atributos: {
+        type: 'button',
+        'aria-current': numero === pagina.pagina ? 'page' : null,
+        'aria-label': `Página ${numero + 1}`,
+      },
+    });
     boton.addEventListener('click', () => irA(numero));
-    nav.appendChild(boton);
+    paginas.append(boton);
   }
 
-  nav.appendChild(
+  paginas.append(
     construirBotonPagina(
       'Siguiente',
       pagina.pagina + 1,
@@ -300,14 +457,22 @@ function construirPaginacion(pagina) {
     ),
   );
 
+  nav.append(
+    h('p', {
+      clase: 'paginacion__info',
+      texto: `Página ${pagina.pagina + 1} de ${Math.max(pagina.totalPaginas, 1)}`,
+    }),
+    paginas,
+  );
   return nav;
 }
 
 function construirBotonPagina(etiqueta, numeroDestino, habilitado, irA) {
-  const boton = document.createElement('button');
-  boton.type = 'button';
-  boton.className = 'subastas-paginacion__pagina';
-  boton.textContent = etiqueta;
+  const boton = h('button', {
+    clase: 'paginacion__pagina',
+    texto: etiqueta,
+    atributos: { type: 'button' },
+  });
   boton.disabled = !habilitado;
   if (habilitado) {
     boton.addEventListener('click', () => irA(numeroDestino));

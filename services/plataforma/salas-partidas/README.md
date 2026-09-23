@@ -23,7 +23,7 @@ Los errores salen como problem details (RFC 7807) y la interfaz decide por
 | `POST /api/v1/salas/{id}/participantes` — ingreso con cupo y bloqueo optimista | Implementado | HU-SAL-002 |
 | `/tema/salas/{idSala}` — `sala.participante.ingreso` a los suscritos | Implementado y probado extremo a extremo (`CanalDeSalaIT`) | HU-SAL-002 |
 | `/tema/salas/{idSala}/chat`, `/tema/chat/general` — chat con filtro de lista negra | Implementado | HU-JUE-015 |
-| `/tema/partidas/{idPartida}` — `partida.accion.resuelta`, `partida.turno.cambiado`, `partida.finalizada` (con `reparto` y `equipoGanador`) | Implementado; lo dispara `EjecutarAccion` | HU-SAL-005, HU-JUE-014 |
+| `/tema/partidas/{idPartida}` — `partida.accion.resuelta`, `partida.turno.cambiado`, `partida.finalizada` (con `reparto`, `equipoGanador` y `recompensa`) | Implementado; lo dispara `EjecutarAccion` | HU-SAL-005, HU-JUE-014, HU-JUE-012 |
 | `GET /salas/{id}/verificacion-heroe` | Implementado (`PuertaDeHeroe` contra inventario) | HU-SAL-003 |
 | Modalidades: `CONTRA_IA` con la máquina en el segundo cupo; `HASTA_SEIS` con `heroesIA` (0..n−1) que ocupan cupo y `tamanoEquipo` (1–3) con equipos por orden de entrada, victoria por equipo y sin fuego amigo; el turno salta a los caídos | Implementado (V10, contrato 1.2.0); decisiones D-05/D-12/D-13 en `docs/gobierno` | HU-SAL-004 |
 
@@ -45,10 +45,12 @@ Los errores salen como problem details (RFC 7807) y la interfaz decide por
 
 | Puerto | Adaptador hoy | Qué falta y de quién |
 |---|---|---|
-| `CreditosDelJugador` (reservar/liberar/consumir la apuesta, HU-JUE-014) | `ClienteCreditos` contra `ms-finanzas` por `contracts/openapi/creditos.yaml` (`CREDITOS_URL`), con la credencial de servicio de ADR-005. Si el libro contesta algo que no sirve: `503 creditos-no-disponibles`; si no responde: degradación (abajo). Nada queda reservado; una partida ya terminada deja su liquidacion `PENDIENTE` (tabla `liquidaciones_de_apuesta`, V9) y `ReintentarLiquidaciones` la cierra despues. | Que Cuentas cierre `/creditos/**` a `ROLE_SERVICIO` (hoy `permitAll`) y desplegar `ms-finanzas` en el host de dev cuando quepa. |
+| `CreditosDelJugador` (reservar/liberar/consumir la apuesta, HU-JUE-014) | `ClienteCreditos` contra `ms-finanzas` por `contracts/openapi/creditos.yaml` (`CREDITOS_URL`), con la credencial de servicio de ADR-005. Si el libro contesta algo que no sirve: `503 creditos-no-disponibles`; si no responde: degradación (abajo). Nada queda reservado; una partida ya terminada deja su liquidacion `PENDIENTE` (tabla `liquidaciones_de_apuesta`, V9) y `ReintentarLiquidaciones` la cierra despues. | Desplegar `ms-finanzas` en el host de dev cuando quepa (`/creditos/**` y `/partidas/**` ya son `ROLE_SERVICIO`, #455). |
+| `AcreditadorDePartidas` (informar el resultado para la recompensa por jugar, HU-JUE-012) | `ClienteAcreditacionDePartidas` contra `POST /partidas/resultado` del mismo libro (misma URL, credencial y corta circuitos). Este servicio informa humanos, tipo (uno contra uno / grupal por la modalidad) y ganadores (uno o todo el equipo); ms-finanzas acredita 2/4/1 y los cofres. Un `409 partida-ya-procesada` es «ya esta hecho». Si el libro no responde, la recompensa queda `PENDIENTE` (tabla `recompensas_de_partida`, V11) y `ReintentarLiquidaciones` la cierra despues, re-anunciando el fin con `recompensa`. La maquina no se informa (D-18). | Igual que la fila anterior. |
 | `HeroeDelJugador` (puerta de héroe, HU-SAL-003) | `ClienteInventarioHeroes` contra `inventario.yaml` (`INVENTARIO_BASE_URL`) con la credencial de servicio; prototipo y defensa de `productos`/`heroes` (degradan solos). | Que inventario publique «el héroe activo»: hoy se toma el primero disponible y equipado. Contenido (#27). |
 | `MotorDeCombate` (resultado de la acción) | `ClienteMotorCombate` contra `motor-combate.yaml` (`MOTOR_COMBATE_URL`). | Mapeo héroe → prototipo de distribución (hoy `GUERRERO_ARMAS` para todos). Grupo 2 (#31). |
 | Sanción activa (chat, HU-JUE-015) | `ClienteSanciones` contra `moderacion-sanciones-consulta.yaml` (`SANCIONES_URL`); sin respuesta, `503 sanciones-no-disponibles` y nada sale al canal (D-14). | Tipo de sanción en el contrato, si el PO distingue silencio de otras. |
+| `ArbitroDeTorneo` (informar el ganador del encuentro, HU-TOR-004 CA-04) | `ClienteTorneos` contra `POST /torneos/{id}/encuentros/{n}/resultado` de `torneos.yaml` 1.1.0 (`TORNEOS_URL`) con `ganadorUid` y la credencial de servicio. El vínculo sala↔encuentro va en `encuentros_de_torneo` (V12) y se crea con `torneo` en `CrearSalaRequest` (1.4.0). Si torneos no responde o gana la máquina (D-26), queda `ultimo_fallo` y lo resuelve el administrador con motivo; la partida termina igual. | Reintento automático del informe pendiente (hoy solo administrador). |
 
 ## Degradación controlada (HU-DIS-003)
 
@@ -75,7 +77,7 @@ resto de la vista sigue. Probado apagando contenedores de verdad en
 `DB_RELACIONAL_URL`, `DB_USER`, `DB_PASS`, `DIRECTORIO_ACTIVO_URL`,
 `DIRECTORIO_ACTIVO_CLIENT_ID`, `DIRECTORIO_ACTIVO_CLIENT_SECRET`,
 `INVENTARIO_BASE_URL`, `PRODUCTOS_BASE_URL`, `HEROES_BASE_URL`,
-`MOTOR_COMBATE_URL`, `CREDITOS_URL`, `SANCIONES_URL`,
+`MOTOR_COMBATE_URL`, `CREDITOS_URL`, `SANCIONES_URL`, `TORNEOS_URL`,
 `RESILIENCIA_FALLOS_PARA_ABRIR`, `RESILIENCIA_REINTENTAR_EN_SEGUNDOS`,
 `RESILIENCIA_TIEMPO_CONEXION_MS`, `RESILIENCIA_TIEMPO_RESPUESTA_MS`,
 `SALAS_WS_ENDPOINT`, `SALAS_WS_ORIGENES`, `LISTA_NEGRA_VERIFICAR_URL`,

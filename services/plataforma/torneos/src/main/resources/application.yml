@@ -1,2 +1,59 @@
+# Torneos — M13 (HU-TOR-001..005, HU-ADM-005). Contrato: contracts/openapi/torneos.yaml.
+#
+# Regla 10: ningun valor real vive aqui; todo baja de variable de entorno y lo
+# que hay detras de los dos puntos es el valor de desarrollo local.
 server:
   port: 8083
+
+spring:
+  application:
+    name: torneos
+  mvc:
+    problemdetails:
+      enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${IDENTIDAD_JWKS_URL:http://localhost:8089/api/v1/auth/jwks}
+  datasource:
+    url: ${DB_RELACIONAL_URL:jdbc:postgresql://localhost:5432/plataformadb}
+    username: ${DB_USER:usuario_nexus}
+    password: ${DB_PASS:password_secreta_123}
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        default_schema: torneos
+  flyway:
+    schemas: torneos
+    default-schema: torneos
+
+torneos:
+  # RF-TOR-001: un torneo cada noventa y un dias. Valor inalterable (Charter);
+  # se deja visible, no configurable.
+  # Dependencias por HTTP dentro de la red de compose (nombres, no secretos).
+  creditos:
+    url: ${CREDITOS_URL:http://localhost:8093/api/v1}
+  lista-negra:
+    url: ${LISTA_NEGRA_VERIFICAR_URL:http://localhost:8086/api/v1/lista-negra/verificar}
+  sanciones:
+    url: ${SANCIONES_URL:http://localhost:8086/api/v1}
+
+# Credencial de servicio (ADR-005) con la que este servicio reserva y cobra en
+# el libro de creditos y consulta sanciones. Sin client-id no se crea ninguna.
+seguridad:
+  servicio:
+    url: ${DIRECTORIO_ACTIVO_URL:}
+    client-id: ${DIRECTORIO_ACTIVO_CLIENT_ID:}
+    client-secret: ${DIRECTORIO_ACTIVO_CLIENT_SECRET:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true

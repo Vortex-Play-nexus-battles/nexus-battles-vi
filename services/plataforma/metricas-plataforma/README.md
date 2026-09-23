@@ -95,28 +95,27 @@ objetivo no se cumple.
 | Variable | Por omisión | Para qué |
 |---|---|---|
 | `LATENCIA_OBJETIVO_MS` | `500` | Objetivo de RNF-REN-001 |
-| `LATENCIA_PERCENTIL` | **ninguno** | Percentil de evaluación — ver abajo |
+| `LATENCIA_PERCENTIL` | `95` | Percentil de evaluación (ADR-006) — ver abajo |
 | `LATENCIA_CAPACIDAD` | `10000` | Tamaño de la ventana de muestras |
 | `LATENCIA_OPERACIONES_EN_INFORME` | `5` | Cuántas operaciones lentas lista el informe |
 
-### Por qué `LATENCIA_PERCENTIL` no tiene valor por omisión
+### El percentil es `p95`, y lo decide el equipo
 
-**CA-03 exige que el Product Owner apruebe por escrito si RNF-REN-001 se evalúa
-en p95 o en p99.** Poner un `95` en el `application.yml` tomaría esa decisión en
-su lugar y nadie volvería a mirarla.
+Los **500 ms** vienen de RNF-REN-001 y del Project Charter y son inalterables.
+El **percentil** con que se comprueba ese umbral no lo fija ningún documento
+del proyecto, así que lo fija
+[ADR-006](../../../docs/gobierno/ADR-006-percentil-de-evaluacion-de-latencia.md)
+como convención de medición: **p95**.
 
-Mientras falte esa aprobación:
+Hasta septiembre de 2026 los dos informes respondían **409** mientras nadie
+«aprobara» el percentil. El efecto real: la medición corría en los veinte
+módulos y el requisito no se podía evaluar en ninguno, así que el informe
+técnico de CA-02 no se podía emitir. ADR-006 revisa esa lectura de CA-03 y
+cierra la espera.
 
-- la **medición sigue activa** en los veinte módulos y las muestras se acumulan;
-- el informe responde **409** con el nombre de la variable, el criterio
-  (`HU-REN-001 CA-03`) y cuántas muestras lleva acumuladas.
-
-Fallar así —explícito, localizado en un endpoint— y no al arrancar es
-deliberado: arrancar en rojo por una decisión de negocio pendiente tumbaría
-servicios de los tres equipos por algo que no es un defecto.
-
-El día que el PO decida, es cambiar la variable. No hay que recompilar, y hay
-una prueba que lo demuestra (`cambiarElPercentilCambiaElInformeSinTocarCodigo`).
+Cambiar a `p99` para una campaña de medición concreta es cambiar la variable:
+no hay que recompilar, y hay prueba
+(`cambiarElPercentilCambiaElInformeSinTocarCodigo`).
 
 ### Deuda de latencia
 
@@ -240,3 +239,9 @@ red ni esperas.
   reinicio (ver «Persistencia»), pero nadie las borra: con una fila por caída el
   crecimiento es mínimo, y cuánto tiempo conservarlas es una decisión del PO que
   no se ha tomado. El registro de latencia (HU-REN-001) sí sigue en memoria.
+
+## Seguridad
+
+Desde #527 la API exige rol administrativo (`ADMINISTRADOR`, `SUPER_ADMINISTRADOR`)
+o credencial de servicio; `/actuator/**` queda abierto (regla 3). Emisor:
+`IDENTIDAD_JWKS_URL`.

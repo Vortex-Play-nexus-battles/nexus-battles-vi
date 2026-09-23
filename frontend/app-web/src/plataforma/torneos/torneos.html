@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Torneo · Nexus Battles VI</title>
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
+  </head>
+  <body>
+    <div data-cabecera-app></div>
+
+    <main class="pagina pila" data-vista="torneos">
+      <!--
+        UX-R2.7 — aqui habia una nota de la especificacion: «Un torneo cada 91
+        dias, ocho equipos de dos jugadores y un arbol de doble eliminacion».
+        Son las reglas del formato (RF-TOR-001, RF-TOR-004), no algo que quien
+        juega necesite leer cada vez que entra; el torneo que haya ya las
+        ensena con sus cupos y su arbol. Mismo criterio que se aplico al umbral
+        del 60/40 en la sala de batalla (PR-UX-3).
+      -->
+      <!-- UX-R3.6 — decia «Torneo» en singular y debajo, sin nada en medio,
+           otro encabezado «Torneos». Dos titulos para una lista. -->
+      <header class="encabezado-pagina">
+        <div class="pila pila--ajustada">
+          <h1>Torneos</h1>
+          <p class="t-meta">
+            Ocho equipos, árbol de doble eliminación. Se abre uno cada 91 días; mientras haya
+            inscripciones abiertas puedes apuntar a tu equipo.
+          </p>
+        </div>
+      </header>
+
+      <div data-zona="aviso" hidden></div>
+
+      <form class="tarjeta pila pila--compacta" data-zona="crear-torneo" hidden>
+        <h2>Crear torneo</h2>
+        <div class="fila">
+          <label class="campo">
+            <span class="campo__etiqueta">Nombre</span>
+            <input class="campo__control" name="nombre" minlength="3" maxlength="80" required />
+          </label>
+          <label class="campo">
+            <span class="campo__etiqueta">Inscripciones hasta</span>
+            <input
+              class="campo__control"
+              type="datetime-local"
+              name="inscripcionesCierranEn"
+              required
+            />
+          </label>
+          <label class="campo">
+            <span class="campo__etiqueta">Inscripción (créditos, 0 = gratis)</span>
+            <input class="campo__control" type="number" name="costoInscripcion" min="0" value="0" />
+          </label>
+        </div>
+        <button class="boton boton--primario" type="submit">Crear y abrir inscripciones</button>
+      </form>
+
+      <section class="pila pila--compacta">
+        <div class="pila pila--compacta" data-zona="listado"></div>
+      </section>
+
+      <section class="tarjeta pila pila--compacta" data-zona="detalle" hidden></section>
+    </main>
+
+    <script type="module">
+      import { montarCabecera, leerSesion } from '../../comun/cabecera-app.js';
+      import { montarTorneos } from './torneos.js';
+
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'torneos',
+        seccionActiva: 'torneo',
+      });
+      const sesion = leerSesion();
+      montarTorneos(document, {
+        uid: sesion.autenticado ? sesion.uid : null,
+        rol: sesion.autenticado ? sesion.rol : null,
+        torneoInicial: new URLSearchParams(location.search).get('torneo'),
+      });
+    </script>
+  </body>
+</html>

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Nexus Battles VI - Tienda</title>
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
     <link rel="stylesheet" href="./tema-cuentas.css" />
     <link rel="stylesheet" href="tienda.css" />
@@ -19,20 +20,24 @@
     <div id="navbar-container"></div>
 
     <script type="module">
-      import { montarCabecera, exigirSesion } from '../comun/cabecera-app.js';
+      import { montarCabecera } from '../comun/cabecera-app.js';
+      import { exigirAcceso } from '../comun/acceso.js';
 
-      if (!exigirSesion()) {
+      if (!exigirAcceso('tienda')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
       // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
-      montarCabecera(document.getElementById('navbar-container'), { seccionActiva: 'cuenta' });
+      montarCabecera(document.getElementById('navbar-container'), {
+        vista: 'tienda',
+        seccionActiva: 'cuenta',
+      });
     </script>
 
     <main class="main-container">
       <!-- Columna de Productos -->
       <section class="store-section">
         <div class="store-header">
-          <h2>Tienda</h2>
+          <h1>Tienda</h1>
           <p>Paga con moneda local (COP) usando tus métodos registrados.</p>
         </div>
 
@@ -49,7 +54,7 @@
 
           <div id="cart-items" class="cart-items-container">
             <!-- JS inyectará los items del carrito aquí -->
-            <p class="empty-cart-msg">Tu carrito está vacío</p>
+            <p class="t-meta">Tu carrito está vacío</p>
           </div>
 
           <div class="cart-summary">
@@ -69,7 +74,7 @@
             carro.
           </div>
 
-          <button id="btn-pagar" class="btn-pagar" disabled>PAGAR</button>
+          <button id="btn-pagar" class="btn-pagar" disabled>Pagar</button>
         </div>
       </aside>
     </main>

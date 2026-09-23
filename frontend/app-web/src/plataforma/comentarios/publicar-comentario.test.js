@@ -22,6 +22,9 @@ import {
   nombresDeImagenes,
   pintarEstrellas,
   agregarAlHilo,
+  quitarDelHilo,
+  cargarHilo,
+  textoDelPromedio,
   fechaLegible,
   tonoPara,
 } from './publicar-comentario.js';
@@ -58,6 +61,8 @@ const HTML = `
   </form>
 
   <section data-zona="hilo">
+    <p data-zona="promedio">Sin calificaciones todavía.</p>
+    <p data-zona="hilo-cargando" hidden>Cargando…</p>
     <p data-zona="hilo-vacio">Aqui aparece lo que publiques.</p>
     <div data-zona="hilo-lista"></div>
   </section>
@@ -69,6 +74,16 @@ function preparar() {
   document.body.innerHTML = HTML;
   return document.getElementById('f');
 }
+
+/** Hilo vacio por omision: las pruebas de publicar no miran la carga inicial. */
+const HILO_VACIO = {
+  productoId: 'prod-1',
+  comentarios: [],
+  total: 0,
+  calificacionPromedio: null,
+  totalCalificaciones: 0,
+};
+const consultarVacio = () => jest.fn(async () => HILO_VACIO);
 
 /** Deja que se resuelvan las promesas encadenadas del manejador de submit. */
 const asentar = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -123,11 +138,11 @@ describe('leerSesion', () => {
     expect(leerSesion({ getItem: (k) => almacen.get(k) ?? null })).toEqual(SESION);
   });
 
-  test('sin sesion devuelve nulos, no cadenas vacias', () => {
+  test('sin sesión devuelve nulos, no cadenas vacías', () => {
     expect(leerSesion({ getItem: () => null })).toEqual({ usuarioId: null, apodo: null });
   });
 
-  test('el autor sale del token, no de la clave que pisa el panel de administracion', () => {
+  test('el autor sale del token, no de la clave que pisa el panel de administración', () => {
     // `gestion-usuarios.js` escribe en `nexus.usuarioId` el id del usuario que
     // el administrador acaba de seleccionar. Si el comentario se firmara con
     // eso, quedaria a nombre de otra persona.
@@ -147,9 +162,13 @@ describe('leerSesion', () => {
 });
 
 describe('leerFormulario', () => {
-  test('arma PublicacionComentarioRequest con autor, apodo, texto, imagenes y estrellas', () => {
+  test('arma PublicacionComentarioRequest con autor, apodo, texto, imágenes y estrellas', () => {
     const formulario = preparar();
-    montarPublicarComentario(formulario, { sesion: SESION, publicarImpl: jest.fn() });
+    montarPublicarComentario(formulario, {
+      sesion: SESION,
+      publicarImpl: jest.fn(),
+      consultarImpl: consultarVacio(),
+    });
     escribir(formulario, '  Buena espada  ');
     adjuntar(formulario, ['espada.png', 'detalle.jpg']);
     calificar(formulario, 4);
@@ -177,7 +196,11 @@ describe('leerFormulario', () => {
 describe('zona de carga', () => {
   test('pinta una miniatura por archivo, sin repetir nombres, y permite quitarla', () => {
     const formulario = preparar();
-    montarPublicarComentario(formulario, { sesion: SESION, publicarImpl: jest.fn() });
+    montarPublicarComentario(formulario, {
+      sesion: SESION,
+      publicarImpl: jest.fn(),
+      consultarImpl: consultarVacio(),
+    });
 
     adjuntar(formulario, ['a.png', 'b.png']);
     adjuntar(formulario, ['b.png', 'c.png']);
@@ -194,7 +217,11 @@ describe('zona de carga', () => {
 
   test('la zona abre el selector con teclado y clic', () => {
     const formulario = preparar();
-    montarPublicarComentario(formulario, { sesion: SESION, publicarImpl: jest.fn() });
+    montarPublicarComentario(formulario, {
+      sesion: SESION,
+      publicarImpl: jest.fn(),
+      consultarImpl: consultarVacio(),
+    });
     const entrada = formulario.querySelector('[name="imagenes"]');
     const abrir = jest.spyOn(entrada, 'click');
 
@@ -223,7 +250,11 @@ describe('calificacion', () => {
 
   test('al elegir una estrella se repinta, y «Sin calificar» la quita', () => {
     const formulario = preparar();
-    montarPublicarComentario(formulario, { sesion: SESION, publicarImpl: jest.fn() });
+    montarPublicarComentario(formulario, {
+      sesion: SESION,
+      publicarImpl: jest.fn(),
+      consultarImpl: consultarVacio(),
+    });
 
     calificar(formulario, 5);
     expect(formulario.querySelectorAll('.estrellas__estrella--llena')).toHaveLength(5);
@@ -235,28 +266,33 @@ describe('calificacion', () => {
 });
 
 describe('montarPublicarComentario', () => {
-  test('sin sesion, deshabilita el formulario y lo explica; no llama al servicio', async () => {
+  test('sin sesión, deshabilita el formulario y lo explica; no llama al servicio', async () => {
     const formulario = preparar();
     const publicarImpl = jest.fn();
 
     montarPublicarComentario(formulario, {
       sesion: { usuarioId: null, apodo: null },
       publicarImpl,
+      consultarImpl: consultarVacio(),
     });
     escribir(formulario, 'hola');
     await enviar(formulario);
 
     expect(formulario.querySelector('[type="submit"]').disabled).toBe(true);
     expect(formulario.querySelector('.aviso--advertencia .aviso__titulo').textContent).toBe(
-      'Inicia sesion para comentar',
+      'Inicia sesión para comentar',
     );
     expect(publicarImpl).not.toHaveBeenCalled();
   });
 
-  test('texto vacio: marca el campo y no llama al servicio', async () => {
+  test('texto vacío: marca el campo y no llama al servicio', async () => {
     const formulario = preparar();
     const publicarImpl = jest.fn();
-    montarPublicarComentario(formulario, { sesion: SESION, publicarImpl });
+    montarPublicarComentario(formulario, {
+      sesion: SESION,
+      publicarImpl,
+      consultarImpl: consultarVacio(),
+    });
 
     await enviar(formulario);
 
@@ -274,7 +310,12 @@ describe('montarPublicarComentario', () => {
     const comentario = publicado({ imagenes: ['espada.png'], estrellas: 4 });
     const publicarImpl = jest.fn(async () => ({ comentario, estado: ESTADO.PUBLICADO }));
     const alPublicar = jest.fn();
-    montarPublicarComentario(formulario, { sesion: SESION, publicarImpl, alPublicar });
+    montarPublicarComentario(formulario, {
+      sesion: SESION,
+      publicarImpl,
+      alPublicar,
+      consultarImpl: consultarVacio(),
+    });
 
     escribir(formulario, 'Buena espada');
     adjuntar(formulario, ['espada.png']);
@@ -314,7 +355,11 @@ describe('montarPublicarComentario', () => {
       comentario: publicado({ id: 'c-2', texto: 'Otra opinion' }),
       estado: ESTADO.PUBLICADO,
     }));
-    montarPublicarComentario(formulario, { sesion: SESION, publicarImpl });
+    montarPublicarComentario(formulario, {
+      sesion: SESION,
+      publicarImpl,
+      consultarImpl: consultarVacio(),
+    });
 
     escribir(formulario, 'Otra opinion');
     calificar(formulario, 5);
@@ -333,7 +378,11 @@ describe('montarPublicarComentario', () => {
       comentario: publicado({ estado: 'EN_REVISION' }),
       estado: ESTADO.EN_REVISION,
     }));
-    montarPublicarComentario(formulario, { sesion: SESION, publicarImpl });
+    montarPublicarComentario(formulario, {
+      sesion: SESION,
+      publicarImpl,
+      consultarImpl: consultarVacio(),
+    });
 
     escribir(formulario, 'texto senalado');
     await enviar(formulario);
@@ -341,7 +390,7 @@ describe('montarPublicarComentario', () => {
     const aviso = formulario.querySelector('.aviso--info');
     expect(aviso.getAttribute('role')).toBe('status');
     expect(aviso.querySelector('.aviso__titulo').textContent).toBe(
-      'Tu comentario esta en revision',
+      'Tu comentario está en revisión',
     );
     expect(document.querySelector('[data-zona="hilo-lista"]').children).toHaveLength(0);
     expect(document.querySelector('[data-zona="hilo-vacio"]').hidden).toBe(false);
@@ -352,11 +401,15 @@ describe('montarPublicarComentario', () => {
     const publicarImpl = jest.fn(async () => {
       throw problema(403, {
         title: 'No puedes publicar',
-        detail: 'Tienes una sancion de silencio hasta el viernes.',
+        detail: 'Tienes una sanción de silencio hasta el viernes.',
         motivo: 'AUTOR_SILENCIADO',
       });
     });
-    montarPublicarComentario(formulario, { sesion: SESION, publicarImpl });
+    montarPublicarComentario(formulario, {
+      sesion: SESION,
+      publicarImpl,
+      consultarImpl: consultarVacio(),
+    });
 
     escribir(formulario, 'hola');
     await enviar(formulario);
@@ -364,7 +417,7 @@ describe('montarPublicarComentario', () => {
     const aviso = formulario.querySelector('.aviso--advertencia');
     expect(aviso.getAttribute('role')).toBe('alert');
     expect(aviso.querySelector('.aviso__titulo').textContent).toBe('No puedes publicar');
-    expect(aviso.textContent).toContain('sancion de silencio hasta el viernes');
+    expect(aviso.textContent).toContain('sanción de silencio hasta el viernes');
     expect(formulario.querySelector('[type="submit"]').disabled).toBe(false);
   });
 
@@ -377,7 +430,11 @@ describe('montarPublicarComentario', () => {
         motivo: 'FORMATO_DE_IMAGEN_NO_ADMITIDO',
       });
     });
-    montarPublicarComentario(formulario, { sesion: SESION, publicarImpl });
+    montarPublicarComentario(formulario, {
+      sesion: SESION,
+      publicarImpl,
+      consultarImpl: consultarVacio(),
+    });
 
     escribir(formulario, 'hola');
     adjuntar(formulario, ['captura.bmp']);
@@ -407,14 +464,18 @@ describe('montarPublicarComentario', () => {
       .mockImplementationOnce(async () => {
         throw problema(409, {
           title: 'Ya calificaste este producto',
-          detail: 'Otra solicitud tuya se adelanto.',
+          detail: 'Otra solicitud tuya se adelantó.',
         });
       })
       .mockImplementationOnce(async () => ({
         comentario: publicado(),
         estado: ESTADO.PUBLICADO,
       }));
-    montarPublicarComentario(formulario, { sesion: SESION, publicarImpl });
+    montarPublicarComentario(formulario, {
+      sesion: SESION,
+      publicarImpl,
+      consultarImpl: consultarVacio(),
+    });
 
     escribir(formulario, 'hola');
     calificar(formulario, 3);
@@ -434,17 +495,21 @@ describe('montarPublicarComentario', () => {
     const formulario = preparar();
     const publicarImpl = jest.fn(async () => {
       throw problema(400, {
-        errores: [{ campo: 'texto', mensaje: 'Supera el largo maximo.' }],
+        errores: [{ campo: 'texto', mensaje: 'Supera el largo máximo.' }],
       });
     });
-    montarPublicarComentario(formulario, { sesion: SESION, publicarImpl });
+    montarPublicarComentario(formulario, {
+      sesion: SESION,
+      publicarImpl,
+      consultarImpl: consultarVacio(),
+    });
 
     escribir(formulario, 'x'.repeat(10));
     await enviar(formulario);
 
     const campo = formulario.querySelector('[name="texto"]').closest('.campo');
     expect(campo.classList.contains('campo--invalido')).toBe(true);
-    expect(campo.querySelector('.campo__error').textContent).toBe('Supera el largo maximo.');
+    expect(campo.querySelector('.campo__error').textContent).toBe('Supera el largo máximo.');
     expect(formulario.querySelector('[data-zona="aviso"]').hidden).toBe(true);
   });
 
@@ -453,7 +518,11 @@ describe('montarPublicarComentario', () => {
     const publicarImpl = jest.fn(async () => {
       throw new TypeError('Failed to fetch');
     });
-    montarPublicarComentario(formulario, { sesion: SESION, publicarImpl });
+    montarPublicarComentario(formulario, {
+      sesion: SESION,
+      publicarImpl,
+      consultarImpl: consultarVacio(),
+    });
 
     escribir(formulario, 'hola');
     await enviar(formulario);
@@ -466,7 +535,7 @@ describe('montarPublicarComentario', () => {
     expect(boton.textContent).toBe('PUBLICAR COMENTARIO');
   });
 
-  test('mientras publica, el boton queda ocupado', async () => {
+  test('mientras publica, el botón queda ocupado', async () => {
     const formulario = preparar();
     let liberar;
     const publicarImpl = jest.fn(
@@ -475,7 +544,11 @@ describe('montarPublicarComentario', () => {
           liberar = () => resolve({ comentario: publicado(), estado: ESTADO.PUBLICADO });
         }),
     );
-    montarPublicarComentario(formulario, { sesion: SESION, publicarImpl });
+    montarPublicarComentario(formulario, {
+      sesion: SESION,
+      publicarImpl,
+      consultarImpl: consultarVacio(),
+    });
 
     escribir(formulario, 'hola');
     formulario.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
@@ -518,5 +591,213 @@ describe('tonoPara', () => {
     expect(tonoPara(409)).toBe('advertencia');
     expect(tonoPara(422)).toBe('advertencia');
     expect(tonoPara(500)).toBe('error');
+  });
+});
+
+describe('HU-COM-002 · calificación unica (D-07)', () => {
+  test('la segunda calificación entra sin estrellas y el aviso lo explica, sin tratarlo como error', async () => {
+    const formulario = preparar();
+    const comentario = publicado({ estrellas: undefined, calificacionDescartada: true });
+    delete comentario.estrellas;
+    const publicarImpl = jest.fn(async () => ({ comentario, estado: ESTADO.PUBLICADO }));
+    montarPublicarComentario(formulario, {
+      sesion: SESION,
+      publicarImpl,
+      consultarImpl: consultarVacio(),
+    });
+
+    escribir(formulario, 'Sigue siendo buena');
+    calificar(formulario, 5);
+    await enviar(formulario);
+
+    const aviso = formulario.querySelector('.aviso--exito');
+    expect(aviso).not.toBeNull();
+    expect(aviso.querySelector('.aviso__titulo').textContent).toBe('Comentario publicado');
+    expect(aviso.textContent).toMatch(/Ya habías calificado/);
+    const articulo = document.querySelector('[data-zona="hilo-lista"] article');
+    expect(articulo.querySelector('.estrellas')).toBeNull();
+  });
+});
+
+describe('HU-COM-003 · promedio', () => {
+  test('sin calificaciones se dice, nunca 0; con ellas, dos decimales y el total', () => {
+    expect(textoDelPromedio({ calificacionPromedio: null, totalCalificaciones: 0 })).toBe(
+      'Sin calificaciones todavía.',
+    );
+    expect(textoDelPromedio({})).toBe('Sin calificaciones todavía.');
+    expect(textoDelPromedio({ calificacionPromedio: 4.5, totalCalificaciones: 1 })).toBe(
+      'Calificación promedio: 4.50 de 5 (1 calificación).',
+    );
+    expect(textoDelPromedio({ calificacionPromedio: 3.67, totalCalificaciones: 3 })).toBe(
+      'Calificación promedio: 3.67 de 5 (3 calificaciones).',
+    );
+  });
+
+  test('al montar se carga el hilo del servicio: promedio arriba y comentarios del mas nuevo al mas viejo', async () => {
+    const formulario = preparar();
+    const consultarImpl = jest.fn(async () => ({
+      productoId: 'prod-1',
+      comentarios: [
+        publicado({ id: 'c-1', texto: 'viejo', autorId: 'otro', apodoAutor: 'Otro', estrellas: 3 }),
+        publicado({ id: 'c-2', texto: 'nuevo', autorId: 'jugador-7', estrellas: 5 }),
+      ],
+      total: 2,
+      calificacionPromedio: 4,
+      totalCalificaciones: 2,
+    }));
+    montarPublicarComentario(formulario, {
+      sesion: SESION,
+      publicarImpl: jest.fn(),
+      consultarImpl,
+    });
+    await asentar();
+
+    expect(consultarImpl).toHaveBeenCalledWith('prod-1');
+    expect(document.querySelector('[data-zona="promedio"]').textContent).toBe(
+      'Calificación promedio: 4.00 de 5 (2 calificaciones).',
+    );
+    const textos = Array.from(document.querySelectorAll('[data-campo="texto"]')).map(
+      (n) => n.textContent,
+    );
+    expect(textos).toEqual(['nuevo', 'viejo']);
+    expect(document.querySelector('[data-zona="hilo-vacio"]').hidden).toBe(true);
+  });
+
+  test('si el hilo no carga, la vista lo dice y el formulario sigue sirviendo', async () => {
+    const formulario = preparar();
+    const consultarImpl = jest.fn(async () => {
+      throw problema(503);
+    });
+    montarPublicarComentario(formulario, {
+      sesion: SESION,
+      publicarImpl: jest.fn(),
+      consultarImpl,
+    });
+    await asentar();
+
+    expect(document.querySelector('[data-zona="promedio"]').textContent).toMatch(
+      /No pudimos cargar el hilo/,
+    );
+    expect(formulario.querySelector('[type="submit"]').disabled).toBe(false);
+  });
+});
+
+describe('HU-COM-004 · eliminar comentarios propios', () => {
+  const promedioDe = (mio, ajeno) => {
+    if (mio && ajeno) {
+      return 3;
+    }
+    if (mio) {
+      return 4;
+    }
+    return ajeno ? 2 : null;
+  };
+  const hiloCon = (mio, ajeno) => ({
+    productoId: 'prod-1',
+    comentarios: [
+      publicado({
+        id: 'ajeno',
+        texto: 'de otro',
+        autorId: 'otro',
+        apodoAutor: 'Otro',
+        estrellas: 2,
+      }),
+      publicado({ id: 'mio', texto: 'mio', autorId: 'jugador-7', estrellas: 4 }),
+    ].filter((c) => (c.id === 'mio' ? mio : ajeno)),
+    total: (mio ? 1 : 0) + (ajeno ? 1 : 0),
+    calificacionPromedio: promedioDe(mio, ajeno),
+    totalCalificaciones: (mio ? 1 : 0) + (ajeno ? 1 : 0),
+  });
+
+  test('CA-04: el botón Eliminar solo aparece en mis comentarios', async () => {
+    const formulario = preparar();
+    montarPublicarComentario(formulario, {
+      sesion: SESION,
+      publicarImpl: jest.fn(),
+      consultarImpl: jest.fn(async () => hiloCon(true, true)),
+    });
+    await asentar();
+
+    const mio = document.querySelector('[data-comentario-id="mio"]');
+    const ajeno = document.querySelector('[data-comentario-id="ajeno"]');
+    expect(mio.querySelector('[data-accion="eliminar"]')).not.toBeNull();
+    expect(ajeno.querySelector('[data-accion="eliminar"]')).toBeNull();
+  });
+
+  test('CA-01: eliminar el mio lo quita del hilo y el promedio se vuelve a leer del servicio', async () => {
+    const formulario = preparar();
+    const eliminarImpl = jest.fn(async () => undefined);
+    const consultarImpl = jest
+      .fn()
+      .mockImplementationOnce(async () => hiloCon(true, true))
+      .mockImplementationOnce(async () => hiloCon(false, true));
+    montarPublicarComentario(formulario, {
+      sesion: SESION,
+      publicarImpl: jest.fn(),
+      consultarImpl,
+      eliminarImpl,
+    });
+    await asentar();
+
+    document.querySelector('[data-comentario-id="mio"] [data-accion="eliminar"]').click();
+    await asentar();
+
+    expect(eliminarImpl).toHaveBeenCalledWith('prod-1', 'mio');
+    expect(document.querySelector('[data-comentario-id="mio"]')).toBeNull();
+    expect(document.querySelector('[data-comentario-id="ajeno"]')).not.toBeNull();
+    expect(document.querySelector('[data-zona="promedio"]').textContent).toBe(
+      'Calificación promedio: 2.00 de 5 (1 calificación).',
+    );
+    expect(formulario.querySelector('.aviso--exito .aviso__titulo').textContent).toBe(
+      'Comentario eliminado',
+    );
+  });
+
+  test('si el servicio rechaza (403 ajeno), el comentario se queda y se avisa', async () => {
+    const formulario = preparar();
+    const eliminarImpl = jest.fn(async () => {
+      throw problema(403, {
+        title: 'Ese comentario no es tuyo',
+        detail: 'Solo su autor puede retirarlo.',
+      });
+    });
+    montarPublicarComentario(formulario, {
+      sesion: SESION,
+      publicarImpl: jest.fn(),
+      consultarImpl: jest.fn(async () => hiloCon(true, false)),
+      eliminarImpl,
+    });
+    await asentar();
+
+    document.querySelector('[data-comentario-id="mio"] [data-accion="eliminar"]').click();
+    await asentar();
+
+    expect(document.querySelector('[data-comentario-id="mio"]')).not.toBeNull();
+    expect(
+      document.querySelector('[data-comentario-id="mio"] [data-accion="eliminar"]').disabled,
+    ).toBe(false);
+    expect(formulario.querySelector('.aviso--advertencia .aviso__titulo').textContent).toBe(
+      'Ese comentario no es tuyo',
+    );
+  });
+
+  test('quitarDelHilo vuelve a mostrar el vacío cuando no queda nada', () => {
+    preparar();
+    const hilo = document.querySelector('[data-zona="hilo"]');
+    const articulo = agregarAlHilo(hilo, publicado({ id: 'c-1' }));
+    expect(hilo.querySelector('[data-zona="hilo-vacio"]').hidden).toBe(true);
+    quitarDelHilo(hilo, articulo);
+    expect(hilo.querySelector('[data-zona="hilo-vacio"]').hidden).toBe(false);
+  });
+
+  test('cargarHilo devuelve el hilo y pinta el promedio', async () => {
+    preparar();
+    const hilo = document.querySelector('[data-zona="hilo"]');
+    const resultado = await cargarHilo(hilo, {
+      productoId: 'prod-1',
+      consultarImpl: jest.fn(async () => hiloCon(false, true)),
+    });
+    expect(resultado.total).toBe(1);
+    expect(hilo.querySelector('[data-zona="promedio"]').textContent).toMatch(/2\.00 de 5/);
   });
 });

@@ -3,6 +3,7 @@ package com.nexusbattles.plataforma.salaspartidas.api;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.AbandonarSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CancelarSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CrearSala;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.InformarEncuentroDeTorneo;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.IngresarASala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.IniciarPartida;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.JugadorAutenticado;
@@ -51,12 +52,14 @@ public class SalasController {
     private final CancelarSala cancelarSala;
     private final VerificarHeroe verificarHeroe;
     private final IniciarPartida iniciarPartida;
+    private final InformarEncuentroDeTorneo encuentroDeTorneo;
 
     SalasController(CrearSala crearSala, ListarSalas listarSalas, IngresarASala ingresarASala,
                     ObtenerSala obtenerSala, AbandonarSala abandonarSala,
                     CancelarSala cancelarSala, VerificarHeroe verificarHeroe,
-                    IniciarPartida iniciarPartida) {
+                    IniciarPartida iniciarPartida, InformarEncuentroDeTorneo encuentroDeTorneo) {
         this.iniciarPartida = iniciarPartida;
+        this.encuentroDeTorneo = encuentroDeTorneo;
         this.crearSala = crearSala;
         this.listarSalas = listarSalas;
         this.ingresarASala = ingresarASala;
@@ -75,7 +78,17 @@ public class SalasController {
     public ResponseEntity<SalaResponse> crear(@RequestBody CrearSalaRequest peticion,
                                               @AuthenticationPrincipal Jwt token) {
 
-        Sala sala = crearSala.ejecutar(peticion.aParametros(), jugadorDe(token));
+        JugadorAutenticado anfitrion = jugadorDe(token);
+        if (peticion.torneo() != null) {
+            // Se valida ANTES de crear la sala: un encuentro fuera de rango no
+            // deja una sala huerfana. El numero nulo cae en el mismo 400.
+            validarEncuentro(peticion.torneo());
+        }
+        Sala sala = crearSala.ejecutar(peticion.aParametros(), anfitrion);
+        if (peticion.torneo() != null) {
+            encuentroDeTorneo.vincular(sala.id(), peticion.torneo().torneoId(),
+                    peticion.torneo().numeroEncuentro(), anfitrion.id());
+        }
 
         return ResponseEntity
                 .created(UriComponentsBuilder.fromPath("/api/v1/salas/{id}")
@@ -241,6 +254,18 @@ public class SalasController {
      * recurso queda el sujeto: en los tokens de {@code ms-identidad} anteriores
      * a ADR-002 el sujeto <i>era</i> el apodo.
      */
+    private static void validarEncuentro(CrearSalaRequest.EncuentroDeTorneoRequest encuentro) {
+        if (encuentro.torneoId() == null) {
+            throw new com.nexusbattles.plataforma.salaspartidas.dominio.ParametrosInvalidos(
+                    "torneo.torneoId", "Falta el torneo del encuentro");
+        }
+        Integer numero = encuentro.numeroEncuentro();
+        if (numero == null || numero < 1 || numero > 14) {
+            throw new com.nexusbattles.plataforma.salaspartidas.dominio.ParametrosInvalidos(
+                    "torneo.numeroEncuentro", "El encuentro de un torneo va del 1 al 14");
+        }
+    }
+
     private static JugadorAutenticado jugadorDe(Jwt token) {
         return new JugadorAutenticado(
                 com.nexusbattles.comun.seguridad.IdentidadDelToken.idDe(token),

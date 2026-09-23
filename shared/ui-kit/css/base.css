@@ -86,6 +86,19 @@ legend { padding: 0; }
 
 .fila > * { flex: 1 1 280px; }
 
+/* UX-R4.3 — un boton dentro de una fila no es un campo.
+   `.fila > *` reparte el ancho a partes iguales, que es lo que quieren dos
+   campos, y ademas los estira en vertical para igualar alturas. Aplicado a un
+   boton daba el resultado de `sanciones-admin` y `tablero-tecnico`: el de
+   buscar salia ocupando media pantalla y tan alto como la etiqueta mas el
+   campo juntos, con la palabra flotando en medio. No parecia un boton, parecia
+   un panel. Se queda de su tamano y se alinea con el control, no con la
+   etiqueta que tiene encima. */
+.fila > .boton {
+  flex: 0 0 auto;
+  align-self: flex-end;
+}
+
 /* Acciones de un formulario: alineadas a la derecha, como en el diseno. */
 .acciones {
   display: flex;
@@ -157,6 +170,20 @@ a:hover { color: var(--primaria-relleno); }
   outline-offset: 2px;
   box-shadow: var(--anillo-foco);
   border-radius: var(--radio-chico);
+}
+
+/* UX-R3.11 — Un elemento con `tabindex="-1"` no se alcanza con el teclado: el
+   unico modo de que reciba el foco es que un script se lo de, y ahi el anillo
+   no informa de nada; informa, en falso, de que ahi se puede escribir.
+   El <h2> del dialogo de validacion de heroe se lleva el foco al abrirse para
+   que el lector de pantalla anuncie de que va el dialogo, y salia con un
+   rectangulo redondeado a todo lo ancho: en la captura se lee como un campo de
+   texto vacio con un marcador de posicion dentro.
+   El foco SIGUE moviendose -eso es lo que necesita el lector de pantalla-; lo
+   que se quita es el dibujo. */
+[tabindex='-1']:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 /* --- Utilidad de accesibilidad ------------------------------------- */

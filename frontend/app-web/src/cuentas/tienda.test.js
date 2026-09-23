@@ -72,7 +72,7 @@ describe('identidad', () => {
     expect(JSON.stringify(cabeceras)).not.toContain('usr_test_123');
   });
 
-  test('sin sesion no viaja ninguna identidad: el backend respondera 401', async () => {
+  test('sin sesión no viaja ninguna identidad: el backend respondera 401', async () => {
     sessionStorage.clear();
     globalThis.fetch.mockResolvedValue(respuesta({ content: [] }));
 
@@ -85,7 +85,7 @@ describe('identidad', () => {
 });
 
 describe('base de la API', () => {
-  test('mismo origen por omision, con el prefijo de version', async () => {
+  test('mismo origen por omision, con el prefijo de versión', async () => {
     globalThis.fetch.mockResolvedValue(respuesta({ content: [] }));
 
     await cargarVitrina(document);
@@ -93,7 +93,7 @@ describe('base de la API', () => {
     expect(globalThis.fetch.mock.calls[0][0]).toBe('/api/v1/productos');
   });
 
-  test('con meta declarada, la base la manda la pagina', async () => {
+  test('con meta declarada, la base la manda la página', async () => {
     // La cabecera se declara ANTES de esperar nada, y `beforeEach` la limpia:
     // tocarla despues de un await es lo que ESLint marca como carrera.
     document.head.innerHTML = '<meta name="nexus-api-base" content="http://127.0.0.1:8083/" />';
@@ -140,7 +140,7 @@ describe('vitrina', () => {
 });
 
 describe('carrito', () => {
-  test('un 404 SI es un carrito vacio', async () => {
+  test('un 404 SI es un carrito vacío', async () => {
     globalThis.fetch.mockRejectedValue(Object.assign(new Error('no hay'), { estado: 404 }));
 
     await cargarCarrito(document);
@@ -149,7 +149,7 @@ describe('carrito', () => {
     expect(document.getElementById('btn-pagar').disabled).toBe(true);
   });
 
-  test('un 500 NO es un carrito vacio: se avisa del fallo', async () => {
+  test('un 500 NO es un carrito vacío: se avisa del fallo', async () => {
     // El defecto anterior: cualquier error se pintaba como «carrito vacio», y
     // el jugador no veia sus productos sin que nada se lo dijera.
     globalThis.fetch.mockRejectedValue(Object.assign(new Error('roto'), { estado: 500 }));
@@ -201,5 +201,65 @@ describe('montarTienda', () => {
 
     expect(globalThis.fetch.mock.calls[0][0]).toBe('/api/v1/carrito/items');
     expect(JSON.parse(globalThis.fetch.mock.calls[0][1].body).productoId).toBe('p1');
+  });
+});
+
+/**
+ * UX-R2.8d — los estados que le faltaban a la Tienda.
+ */
+describe('UX-R2.8d - estados de la vitrina', () => {
+  test('mientras carga se ve la forma de lo que viene, no una rejilla en blanco', async () => {
+    // El HTML traia `<!-- Cargando productos... -->`: un comentario, o sea
+    // nada en la pantalla hasta que respondiera el servicio.
+    let resolver;
+    globalThis.fetch.mockReturnValue(new Promise((r) => (resolver = r)));
+
+    const pintando = cargarVitrina(document);
+    expect(document.querySelector('#productos-grid [data-estado="cargando"]')).not.toBeNull();
+
+    resolver({ ok: true, status: 200, json: async () => ({ content: [] }) });
+    await pintando;
+  });
+
+  test('un catalogo vacio no se confunde con un fallo', async () => {
+    globalThis.fetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ content: [] }),
+    });
+
+    await cargarVitrina(document);
+
+    const rejilla = document.getElementById('productos-grid');
+    expect(rejilla.querySelector('[data-estado="vacio"]')).not.toBeNull();
+    expect(rejilla.querySelector('[data-estado="error"]')).toBeNull();
+    expect(rejilla.textContent).not.toMatch(/no se pudo/i);
+  });
+
+  test('un fallo ofrece reintentar, y reintenta de verdad', async () => {
+    globalThis.fetch.mockRejectedValueOnce(new Error('sin red'));
+    await cargarVitrina(document);
+
+    const reintentar = document.querySelector('#productos-grid [data-accion="reintentar"]');
+    expect(reintentar).not.toBeNull();
+
+    globalThis.fetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ content: [{ id: 'p1', nombre: 'Espada', precio: 10, tipo: 'ARMA' }] }),
+    });
+    reintentar.click();
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(document.querySelectorAll('.product-card')).toHaveLength(1);
+  });
+
+  test('el carrito caido tambien ofrece reintentar', async () => {
+    globalThis.fetch.mockRejectedValue(Object.assign(new Error('roto'), { estado: 500 }));
+
+    await cargarCarrito(document);
+
+    expect(document.querySelector('#cart-items [data-accion="reintentar"]')).not.toBeNull();
+    expect(document.getElementById('btn-pagar').disabled).toBe(true);
   });
 });

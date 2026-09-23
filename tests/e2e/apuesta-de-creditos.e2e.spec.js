@@ -114,14 +114,24 @@ test.describe('Apuesta de creditos (HU-JUE-014)', () => {
     // R0 esto respondia 200 y el jugador se regalaba creditos.
     const autoregalo = await api.post(`${FINANZAS}/creditos/acreditar`, {
       headers: conToken(pobre.token),
-      data: { uid: pobre.claims.uid, monto: 999999, refId: `autoregalo-${Date.now()}`, concepto: 'suplantacion' },
+      data: {
+        uid: pobre.claims.uid,
+        monto: 999999,
+        refId: `autoregalo-${Date.now()}`,
+        concepto: 'suplantacion',
+      },
     });
     expect(autoregalo.status(), await autoregalo.text()).toBe(403);
     expect((await saldoDe(api, pobre)).disponible).toBe(0);
 
     const reservaAjena = await api.post(`${FINANZAS}/creditos/reservar`, {
       headers: { ...conToken(pobre.token), 'Idempotency-Key': `robo-${Date.now()}` },
-      data: { jugadorUid: anfitriona.claims.uid, monto: 50, concepto: 'reserva ajena', referenciaId: 'x' },
+      data: {
+        jugadorUid: anfitriona.claims.uid,
+        monto: 50,
+        concepto: 'reserva ajena',
+        referenciaId: 'x',
+      },
     });
     expect(reservaAjena.status()).toBe(403);
 
@@ -200,12 +210,8 @@ test.describe('Apuesta de creditos (HU-JUE-014)', () => {
       headers: conToken(invitado.token),
     });
     expect(entrada.status(), await entrada.text()).toBe(200);
-    expect((await saldoDe(api, anfitriona)).reservado).toBe(
-      deAnfitriona.reservado + APUESTA,
-    );
-    expect((await saldoDe(api, invitado)).reservado).toBe(
-      deInvitado.reservado + APUESTA,
-    );
+    expect((await saldoDe(api, anfitriona)).reservado).toBe(deAnfitriona.reservado + APUESTA);
+    expect((await saldoDe(api, invitado)).reservado).toBe(deInvitado.reservado + APUESTA);
 
     const cancelacion = await api.delete(`/api/v1/salas/${sala.id}`, {
       headers: conToken(anfitriona.token),

@@ -10,11 +10,14 @@ import { jest } from '@jest/globals';
 
 import {
   creditosDe,
+  recompensaDe,
   destinoDeAccion,
   enviarAccion,
   registroDeAvisos,
   textoDelResultado,
+  textoDelTurno,
   montarControlesDeCombate,
+  gano,
   ACCION_RESUELTA,
   TURNO_CAMBIADO,
   PARTIDA_FINALIZADA,
@@ -25,6 +28,11 @@ const ANA = '22222222-2222-2222-2222-222222222222';
 const BRUNO = '33333333-3333-3333-3333-333333333333';
 
 const VISTA = `
+  <p class="turno-actual" data-zona="turno" role="status" hidden></p>
+  <div class="pila" data-zona="vidas">
+    <div class="barra-vida" data-jugador="22222222-2222-2222-2222-222222222222"></div>
+    <div class="barra-vida" data-jugador="33333333-3333-3333-3333-333333333333"></div>
+  </div>
   <div class="fila" data-zona="acciones"></div>
   <p class="t-cuerpo" data-zona="resultado" hidden></p>
 `;
@@ -94,7 +102,7 @@ describe('registroDeAvisos · reconectar no duplica', () => {
     expect(registro.yaVisto(accionResuelta(70))).toBe(false);
   });
 
-  test('el turno se identifica por su numero, que siempre sube', () => {
+  test('el turno se identifica por su número, que siempre sube', () => {
     const registro = registroDeAvisos();
     const turno = (n) => ({
       tipo: TURNO_CAMBIADO,
@@ -148,11 +156,11 @@ describe('textoDelResultado', () => {
       ],
     };
 
-    expect(textoDelResultado(fin, ANA)).toMatch(/ganado.*llevas 200 creditos/i);
-    expect(textoDelResultado(fin, BRUNO)).toMatch(/perdido.*pierdes los 100 creditos/i);
+    expect(textoDelResultado(fin, ANA)).toMatch(/ganado.*llevas 200 créditos/i);
+    expect(textoDelResultado(fin, BRUNO)).toMatch(/perdido.*pierdes los 100 créditos/i);
   });
 
-  test('en empate con apuesta se dice que los creditos vuelven', () => {
+  test('en empate con apuesta se dice que los créditos vuelven', () => {
     const fin = { ganadores: [], reparto: [{ idJugador: ANA, creditos: 0 }] };
 
     expect(textoDelResultado(fin, ANA)).toMatch(/empate.*devuelven/i);
@@ -173,7 +181,7 @@ describe('textoDelResultado', () => {
     expect(textoDelResultado(fin, BRUNO)).toBe('Gana el equipo 1. Tu equipo ha perdido.');
   });
 
-  test('un companero que cayo tambien gana con su equipo, aunque no este en ganadores', () => {
+  test('un compañero que cayo también gana con su equipo, aunque no este en ganadores', () => {
     const fin = { ganadores: [ANA], equipoGanador: 1 };
 
     expect(textoDelResultado(fin, BRUNO, 1)).toBe('Tu equipo (1) ha ganado el combate.');
@@ -218,7 +226,7 @@ describe('montarControlesDeCombate · equipos (HU-SAL-004)', () => {
 });
 
 describe('registroDeAvisos con reparto (HU-JUE-014, CA-06)', () => {
-  test('el mismo fin, primero sin reparto y despues con el, NO es un duplicado', () => {
+  test('el mismo fin, primero sin reparto y después con el, NO es un duplicado', () => {
     const registro = registroDeAvisos();
     const sinReparto = { tipo: PARTIDA_FINALIZADA, idPartida: PARTIDA, ganadores: [ANA] };
     const conReparto = { ...sinReparto, reparto: [{ idJugador: ANA, creditos: 100 }] };
@@ -238,7 +246,10 @@ describe('registroDeAvisos con reparto (HU-JUE-014, CA-06)', () => {
     const resultado = document.querySelector('[data-zona="resultado"]');
 
     controles.recibir({ tipo: PARTIDA_FINALIZADA, idPartida: PARTIDA, ganadores: [ANA] });
-    expect(resultado.textContent).toBe('Has ganado el combate.');
+    // Desde UX-R2.3 el desenlace es un panel con la palabra grande delante
+    // (HU-JUE-017 CA-04), asi que se comprueba el detalle, no la cadena exacta.
+    expect(resultado.textContent).toContain('Has ganado el combate.');
+    expect(resultado.textContent).toContain('VICTORIA');
 
     controles.recibir({
       tipo: PARTIDA_FINALIZADA,
@@ -246,12 +257,12 @@ describe('registroDeAvisos con reparto (HU-JUE-014, CA-06)', () => {
       ganadores: [ANA],
       reparto: [{ idJugador: ANA, creditos: 100 }],
     });
-    expect(resultado.textContent).toMatch(/llevas 100 creditos/i);
+    expect(resultado.textContent).toMatch(/llevas 100 créditos/i);
   });
 });
 
 describe('montarControlesDeCombate', () => {
-  test('hay un boton por rival, y ninguno para uno mismo', () => {
+  test('hay un botón por rival, y ninguno para uno mismo', () => {
     montarControlesDeCombate(document, {
       idPartida: PARTIDA,
       yo: ANA,
@@ -265,7 +276,7 @@ describe('montarControlesDeCombate', () => {
     expect(botones[0].textContent).toContain('Centinela');
   });
 
-  test('los botones empiezan deshabilitados: todavia no se sabe de quien es el turno', () => {
+  test('los botones empiezan deshabilitados: todavía no se sabe de quien es el turno', () => {
     montarControlesDeCombate(document, {
       idPartida: PARTIDA,
       yo: ANA,
@@ -433,7 +444,7 @@ describe('montarControlesDeCombate · motor degradado (HU-DIS-003)', () => {
     type: 'https://nexusbattles.local/errores/seccion-no-disponible',
     title: 'Motor de combate no disponible temporalmente',
     status: 503,
-    detail: 'La seccion de Motor de combate no esta disponible temporalmente.',
+    detail: 'La sección de Motor de combate no esta disponible temporalmente.',
     seccion: 'Motor de combate',
     reintentarEnSegundos: 4,
     dependencia: 'motor-combate',
@@ -443,7 +454,7 @@ describe('montarControlesDeCombate · motor degradado (HU-DIS-003)', () => {
     document.body.innerHTML = `${VISTA}<div data-zona="degradacion" data-seccion="Combate" hidden></div>`;
   }
 
-  test('pinta Seccion degradada sobre los controles y los deja vivos: el turno sigue siendo mio', () => {
+  test('pinta Sección degradada sobre los controles y los deja vivos: el turno sigue siendo mio', () => {
     conHueco();
     const controles = montarControlesDeCombate(document, {
       idPartida: PARTIDA,
@@ -463,7 +474,7 @@ describe('montarControlesDeCombate · motor degradado (HU-DIS-003)', () => {
     expect(document.querySelector('[data-zona="acciones"]').hidden).toBe(false);
   });
 
-  test('Reintentar quita el aviso y vuelve a mandar la ultima accion', () => {
+  test('Reintentar quita el aviso y vuelve a mandar la ultima acción', () => {
     conHueco();
     const alAtacar = jest.fn();
     const controles = montarControlesDeCombate(document, {
@@ -483,7 +494,7 @@ describe('montarControlesDeCombate · motor degradado (HU-DIS-003)', () => {
     expect(document.querySelector('.seccion-degradada')).toBeNull();
   });
 
-  test('una accion resuelta despues limpia el aviso: el motor volvio', () => {
+  test('una acción resuelta después limpia el aviso: el motor volvio', () => {
     conHueco();
     const controles = montarControlesDeCombate(document, {
       idPartida: PARTIDA,
@@ -530,5 +541,270 @@ describe('montarControlesDeCombate · motor degradado (HU-DIS-003)', () => {
     });
 
     expect(controles.rechazar(motorCaido())).toBe(false);
+  });
+});
+
+describe('recompensa por jugar (HU-JUE-012)', () => {
+  const fin = {
+    tipo: 'partida.finalizada',
+    idPartida: 'p1',
+    ganadores: [ANA],
+    recompensa: [
+      { idJugador: ANA, creditos: 2, ganador: true },
+      { idJugador: BRUNO, creditos: 1, ganador: false, cofre: 'cofre-1' },
+    ],
+  };
+
+  test('el texto dice cuantos créditos se ganan y por que, para quien mira', () => {
+    expect(textoDelResultado(fin, ANA)).toBe('Has ganado el combate. Ganas 2 créditos por ganar.');
+    expect(textoDelResultado(fin, BRUNO)).toBe(
+      'Has perdido el combate. Ganas 1 crédito por participar. Además te llevas un cofre.',
+    );
+  });
+
+  test('con apuesta y recompensa, las dos coletillas van en orden: primero la apuesta', () => {
+    const conApuesta = { ...fin, reparto: [{ idJugador: ANA, creditos: 100 }] };
+    expect(textoDelResultado(conApuesta, ANA)).toBe(
+      'Has ganado el combate. Te llevas 100 créditos de la apuesta. Ganas 2 créditos por ganar.',
+    );
+  });
+
+  test('sin recompensa en el aviso (pendiente o sancionado) no se inventa nada', () => {
+    expect(recompensaDe({ ganadores: [ANA] }, ANA)).toBeNull();
+    expect(recompensaDe(fin, 'otro')).toBeNull();
+    expect(textoDelResultado({ ganadores: [ANA] }, ANA)).toBe('Has ganado el combate.');
+  });
+
+  test('el aviso que llega despues con la recompensa no es un duplicado del que llego sin ella', () => {
+    const registro = registroDeAvisos();
+    const sin = { tipo: PARTIDA_FINALIZADA, idPartida: 'p1', ganadores: [ANA] };
+    expect(registro.yaVisto(sin)).toBe(false);
+    expect(registro.yaVisto(fin)).toBe(false);
+    expect(registro.yaVisto(fin)).toBe(true);
+  });
+});
+
+// --------------------------------------------------------------- el turno
+
+describe('textoDelTurno()', () => {
+  test('sin turno conocido no dice nada, en vez de inventarse uno', () => {
+    expect(textoDelTurno(null, participantes(), ANA)).toEqual({ texto: '', mio: false });
+  });
+
+  test('mi turno se dice en segunda persona y se marca como mio', () => {
+    expect(textoDelTurno(ANA, participantes(), ANA)).toEqual({ texto: 'Es tu turno', mio: true });
+  });
+
+  test('el turno de otra persona nombra a su heroe', () => {
+    expect(textoDelTurno(BRUNO, participantes(), ANA)).toEqual({
+      texto: 'Turno de Centinela',
+      mio: false,
+    });
+  });
+
+  test('el turno de la maquina se distingue del de una persona', () => {
+    const conIA = [
+      participantes()[0],
+      { jugador: { id: BRUNO }, heroe: { nombre: 'Golem' }, esIA: true },
+    ];
+
+    expect(textoDelTurno(BRUNO, conIA, ANA).texto).toBe('Juega la máquina (Golem)');
+  });
+
+  test('un identificador que no esta en pantalla no deja el indicador en blanco', () => {
+    expect(textoDelTurno('44444444-4444-4444-4444-444444444444', participantes(), ANA)).toEqual({
+      texto: 'Turno de otro participante',
+      mio: false,
+    });
+  });
+});
+
+describe('indicador de turno en la vista', () => {
+  /**
+   * El turno era invisible: lo unico que cambiaba era que los botones de
+   * atacar estuvieran grises. Estas pruebas afirman que ahora se dice.
+   */
+  function montar(turnoDe) {
+    return montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      turnoDe,
+      alAtacar: () => {},
+    });
+  }
+
+  test('al montar con el turno propio lo dice y marca la barra', () => {
+    montar(ANA);
+
+    const indicador = document.querySelector('[data-zona="turno"]');
+    expect(indicador.hidden).toBe(false);
+    expect(indicador.textContent).toBe('Es tu turno');
+    expect(indicador.dataset.mio).toBe('true');
+    expect(document.querySelector(`[data-jugador="${ANA}"]`).dataset.turno).toBe('si');
+    expect(document.querySelector(`[data-jugador="${BRUNO}"]`).dataset.turno).toBeUndefined();
+  });
+
+  test('es una region viva: se anuncia sin que nadie mire la pantalla', () => {
+    montar(ANA);
+
+    expect(document.querySelector('[data-zona="turno"]').getAttribute('role')).toBe('status');
+  });
+
+  test('sin turno conocido el indicador no aparece', () => {
+    montar(undefined);
+
+    expect(document.querySelector('[data-zona="turno"]').hidden).toBe(true);
+  });
+
+  test('un cambio de turno mueve el texto y la marca a quien juega', () => {
+    const controles = montar(ANA);
+
+    controles.recibir({ tipo: TURNO_CAMBIADO, idPartida: PARTIDA, idJugador: BRUNO });
+
+    const indicador = document.querySelector('[data-zona="turno"]');
+    expect(indicador.textContent).toBe('Turno de Centinela');
+    expect(indicador.dataset.mio).toBe('false');
+    expect(document.querySelector(`[data-jugador="${BRUNO}"]`).dataset.turno).toBe('si');
+    expect(document.querySelector(`[data-jugador="${ANA}"]`).dataset.turno).toBeUndefined();
+  });
+
+  test('al acabar la partida ya no es el turno de nadie', () => {
+    const controles = montar(ANA);
+
+    controles.recibir({ tipo: PARTIDA_FINALIZADA, idPartida: PARTIDA, ganadores: [ANA] });
+
+    expect(document.querySelector('[data-zona="turno"]').hidden).toBe(true);
+    expect(document.querySelector(`[data-jugador="${ANA}"]`).dataset.turno).toBeUndefined();
+  });
+
+  test('un turno de OTRA partida no toca el indicador', () => {
+    const controles = montar(ANA);
+
+    controles.recibir({ tipo: TURNO_CAMBIADO, idPartida: 'otra', idJugador: BRUNO });
+
+    expect(document.querySelector('[data-zona="turno"]').textContent).toBe('Es tu turno');
+  });
+
+  test('sin las zonas en el HTML los controles siguen funcionando', () => {
+    document.body.innerHTML = `
+      <div class="fila" data-zona="acciones"></div>
+      <p data-zona="resultado" hidden></p>`;
+
+    expect(() => montar(ANA)).not.toThrow();
+  });
+});
+
+/**
+ * HU-JUE-017 (RF-JUE-017) — la interfaz de combate, criterio por criterio.
+ *
+ * Estas pruebas no comprueban que el combate funcione (eso ya lo hacen las de
+ * arriba): comprueban que se PRESENTE como pide la ficha. Son las que se caen
+ * si alguien vuelve a poner un boton azul de formulario en la barra de
+ * acciones o si el final de partida vuelve a ser un parrafo.
+ */
+describe('HU-JUE-017 · presentacion del combate (UX-R2.3)', () => {
+  beforeEach(() => {
+    document.body.innerHTML = VISTA;
+  });
+
+  const montar = (turnoDe) =>
+    montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      turnoDe,
+      alAtacar: () => {},
+    });
+
+  test('CA-03 · cada acción lleva icono, no solo texto', () => {
+    montar(ANA);
+    const accion = document.querySelector('[data-atacar]');
+
+    expect(accion.className).toContain('accion-combate');
+    expect(accion.querySelector('.accion-combate__icono')).not.toBeNull();
+    expect(accion.querySelector('use').getAttribute('href')).toContain('#espada');
+  });
+
+  test('CA-03 · el icono no sustituye al nombre del rival', () => {
+    montar(ANA);
+    expect(document.querySelector('[data-atacar]').textContent).toContain('Centinela');
+  });
+
+  test('fuera de turno se dice POR QUE, no solo se apaga', () => {
+    montar(BRUNO);
+    const accion = document.querySelector('[data-atacar]');
+
+    expect(accion.disabled).toBe(true);
+    expect(accion.className).toContain('accion-combate--fuera-de-turno');
+    expect(accion.getAttribute('title')).toBe('No es tu turno');
+    expect(accion.getAttribute('aria-label')).toContain('No es tu turno');
+  });
+
+  test('cuando toca, el motivo desaparece y el botón invita a atacar', () => {
+    const controles = montar(BRUNO);
+    controles.recibir({ tipo: TURNO_CAMBIADO, idPartida: PARTIDA, idJugador: ANA });
+
+    const accion = document.querySelector('[data-atacar]');
+    expect(accion.disabled).toBe(false);
+    expect(accion.className).not.toContain('accion-combate--fuera-de-turno');
+    expect(accion.getAttribute('title')).toMatch(/^Atacar a /);
+  });
+
+  test('CA-04 · el final de la partida es una vista de alto impacto', () => {
+    const controles = montar(ANA);
+    controles.recibir({ tipo: PARTIDA_FINALIZADA, idPartida: PARTIDA, ganadores: [ANA] });
+
+    const panel = document.querySelector('[data-zona="resultado"] .panel-resultado');
+    expect(panel).not.toBeNull();
+    expect(panel.dataset.resultado).toBe('victoria');
+    // La palabra, no solo el color: quien no distinga verde de rojo la lee.
+    expect(panel.querySelector('.panel-resultado__palabra').textContent).toBe('VICTORIA');
+  });
+
+  test('CA-04 · perder también se ve, y no es el mismo panel en rojo', () => {
+    const controles = montar(ANA);
+    controles.recibir({ tipo: PARTIDA_FINALIZADA, idPartida: PARTIDA, ganadores: [BRUNO] });
+
+    const panel = document.querySelector('[data-zona="resultado"] .panel-resultado');
+    expect(panel.dataset.resultado).toBe('derrota');
+    expect(panel.querySelector('.panel-resultado__palabra').textContent).toBe('DERROTA');
+  });
+
+  test('CA-04 · el reparto de créditos sale en el panel', () => {
+    const controles = montar(ANA);
+    controles.recibir({
+      tipo: PARTIDA_FINALIZADA,
+      idPartida: PARTIDA,
+      ganadores: [ANA],
+      recompensa: [{ idJugador: ANA, creditos: 40, ganador: true }],
+    });
+
+    expect(
+      document.querySelector('[data-zona="resultado"] .panel-resultado__creditos').textContent,
+    ).toBe('+40');
+  });
+});
+
+describe('gano · la regla del desenlace, en un solo sitio', () => {
+  test('gana quien esta en la lista de ganadores', () => {
+    expect(gano({ ganadores: [ANA] }, ANA)).toBe(true);
+    expect(gano({ ganadores: [BRUNO] }, ANA)).toBe(false);
+  });
+
+  test('por equipos se gana con los companeros aunque uno haya caido', () => {
+    expect(gano({ ganadores: [BRUNO], equipoGanador: 2 }, ANA, 2)).toBe(true);
+    expect(gano({ ganadores: [BRUNO], equipoGanador: 2 }, ANA, 1)).toBe(false);
+  });
+
+  test('sin ganadores nadie gano: es empate', () => {
+    expect(gano({ ganadores: [] }, ANA)).toBe(false);
+    expect(gano({}, ANA)).toBe(false);
+  });
+
+  test('coincide con lo que dice el texto, que es de donde se extrajo', () => {
+    const aviso = { ganadores: [ANA] };
+    expect(textoDelResultado(aviso, ANA)).toContain('Has ganado');
+    expect(gano(aviso, ANA)).toBe(true);
   });
 });

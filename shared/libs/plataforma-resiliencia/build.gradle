@@ -35,14 +35,28 @@ dependencyManagement {
 dependencies {
     // El nucleo —corta circuitos y registro— no conoce Spring: es Java puro y
     // se prueba sin contexto. Spring solo aparece para construir el problem
-    // detail de la regla 4, y entra compileOnly porque todo servicio que use
-    // esta biblioteca ya trae spring-web por las convenciones.
+    // detail de la regla 4 y para el cliente HTTP de `parametros`, y entra
+    // compileOnly porque todo servicio que use esta biblioteca ya trae
+    // spring-web por las convenciones.
     compileOnly 'org.springframework:spring-web'
     compileOnly 'org.springframework:spring-webmvc'
     compileOnly 'org.springframework.boot:spring-boot-autoconfigure'
 
-    testImplementation 'org.springframework:spring-web'
-    testImplementation 'org.springframework:spring-webmvc'
+    // `LectorDeParametros` deja constancia en la bitacora cada vez que usa un
+    // respaldo: sin ese rastro, un catalogo caido seria indistinguible de un
+    // catalogo que devuelve justo el valor por omision. `api` y no
+    // `implementation` por lo mismo que en plataforma-comun: es una fachada de
+    // registro, no una implementacion, y todo servicio ya la tiene.
+    api 'org.slf4j:slf4j-api'
+
+    // Las pruebas del lector necesitan un cliente HTTP DE VERDAD con sus
+    // conversores de mensaje (MockRestServiceServer solo sustituye el
+    // transporte). Se declara el mismo starter que aplican las convenciones a
+    // los veinte servicios, en vez de escoger a mano artefactos de Spring y
+    // de Jackson: asi la biblioteca se prueba contra exactamente la misma pila
+    // en la que se va a ejecutar.
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.boot:spring-boot-autoconfigure'
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testImplementation 'org.assertj:assertj-core'

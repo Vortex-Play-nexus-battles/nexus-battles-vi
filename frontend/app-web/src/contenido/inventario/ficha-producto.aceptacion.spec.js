@@ -7,6 +7,7 @@
  * `GET /api/v1/productos/{id}`.
  */
 import { test, expect } from '@playwright/test';
+import { prepararPagina } from './entorno-de-prueba.js';
 
 const PAGINA = '/contenido/inventario/inventario.html?jugador=jugador-de-prueba';
 
@@ -53,6 +54,7 @@ async function conUnProducto(page) {
       body: JSON.stringify(PRODUCTO),
     }),
   );
+  await prepararPagina(page);
   await page.goto(PAGINA);
   await page.waitForFunction(() => !document.querySelector('.estado-carga'));
 }
@@ -170,6 +172,7 @@ test.describe('Ficha de detalle del producto', () => {
         body: JSON.stringify({ ...PRODUCTO, estado: 'SUSPENDIDO' }),
       }),
     );
+    await prepararPagina(page);
     await page.goto(PAGINA);
     await page.waitForFunction(() => !document.querySelector('.estado-carga'));
 

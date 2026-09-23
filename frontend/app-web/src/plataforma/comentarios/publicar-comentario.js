@@ -25,8 +25,19 @@
  * en esta sesion y lo dice.
  */
 
-import { publicarComentario, ErrorDeApi, MOTIVO, ESTADO } from './cliente-comentarios.js';
+import {
+  publicarComentario,
+  consultarHilo,
+  eliminarComentario,
+  ErrorDeApi,
+  MOTIVO,
+  ESTADO,
+} from './cliente-comentarios.js';
+import { reportarComentario, CATEGORIAS, MOTIVO_MODERACION } from './cliente-moderacion.js';
 import { usuarioIdDeSesion } from '../../comun/identidad.js';
+import { pintarAviso } from '../../comun/ui/aviso.js';
+import { vaciar } from '../../comun/ui/dom.js';
+import { abrirDialogo } from '../../comun/ui/dialogo.js';
 
 const CLAVE_APODO = 'nexus.apodoActual';
 
@@ -173,39 +184,9 @@ function marcarZonaDeCarga(formulario, motivo) {
   }
 }
 
-function pintarAviso(zona, { tono, titulo, detalle, accion }) {
-  zona.innerHTML = '';
-  const aviso = document.createElement('div');
-  aviso.className = `aviso aviso--${tono}`;
-  aviso.setAttribute('role', tono === 'error' || tono === 'advertencia' ? 'alert' : 'status');
-
-  const cuerpo = document.createElement('div');
-  const encabezado = document.createElement('p');
-  encabezado.className = 'aviso__titulo';
-  encabezado.textContent = titulo;
-  cuerpo.appendChild(encabezado);
-  if (detalle) {
-    const texto = document.createElement('p');
-    texto.textContent = detalle;
-    cuerpo.appendChild(texto);
-  }
-  if (accion) {
-    const boton = document.createElement('button');
-    boton.type = 'button';
-    boton.className = 'boton boton--secundario boton--pequeno';
-    boton.dataset.accion = accion.nombre;
-    boton.textContent = accion.texto;
-    boton.addEventListener('click', accion.alPulsar);
-    cuerpo.appendChild(boton);
-  }
-  aviso.appendChild(cuerpo);
-  zona.appendChild(aviso);
-  zona.hidden = false;
-}
-
 function ocultarAviso(zona) {
   zona.hidden = true;
-  zona.innerHTML = '';
+  vaciar(zona);
 }
 
 function cargando(boton, activo) {
@@ -365,7 +346,7 @@ function montarZonaDeCarga(formulario) {
 function vaciarMiniaturas(formulario) {
   const lista = formulario.querySelector('[data-zona="miniaturas"]');
   if (lista) {
-    lista.innerHTML = '';
+    vaciar(lista);
   }
   const zonaCarga = formulario.querySelector('[data-zona="carga"]');
   if (zonaCarga) {
@@ -394,7 +375,7 @@ export function fechaLegible(iso) {
 function nodoDeEstrellas(valor) {
   const contenedor = document.createElement('span');
   contenedor.className = 'estrellas';
-  contenedor.setAttribute('aria-label', `Calificacion: ${valor} de ${MAXIMO_ESTRELLAS}`);
+  contenedor.setAttribute('aria-label', `Calificación: ${valor} de ${MAXIMO_ESTRELLAS}`);
 
   const lista = document.createElement('span');
   lista.className = 'estrellas__lista';
@@ -418,15 +399,59 @@ function nodoDeEstrellas(valor) {
 }
 
 /**
+ * Texto de la calificacion promedio del producto — HU-COM-003.
+ *
+ * `null` (o ausente) es «sin calificaciones», nunca un 0: un producto que nadie
+ * ha calificado no es un producto malo (CA-03).
+ *
+ * @param {{calificacionPromedio?: number|null, totalCalificaciones?: number}} hilo
+ * @returns {string}
+ */
+export function textoDelPromedio(hilo) {
+  const promedio = hilo?.calificacionPromedio;
+  const total = Number.isInteger(hilo?.totalCalificaciones) ? hilo.totalCalificaciones : 0;
+  if (!Number.isFinite(promedio) || total === 0) {
+    return 'Sin calificaciones todavía.';
+  }
+  const plural = total === 1 ? 'calificación' : 'calificaciones';
+  return `Calificación promedio: ${promedio.toFixed(2)} de ${MAXIMO_ESTRELLAS} (${total} ${plural}).`;
+}
+
+/**
+ * Pinta el promedio y el total en la zona `[data-zona="promedio"]` del hilo.
+ *
+ * @param {HTMLElement} zonaHilo
+ * @param {object} hilo `HiloDeComentariosResponse`
+ */
+export function pintarPromedio(zonaHilo, hilo) {
+  const zona = zonaHilo.querySelector('[data-zona="promedio"]');
+  if (zona) {
+    zona.textContent = textoDelPromedio(hilo);
+  }
+}
+
+/**
  * Anade un comentario publicado al hilo, con apodo, calificacion y fecha
  * (RN-CMT-001). Un comentario sin `estrellas` es normal, no un error: es el
  * segundo comentario del mismo jugador sobre el producto (CA-02).
  *
+ * Si el comentario es de quien mira (`opciones.yo` = `autorId`), lleva el boton
+ * «Eliminar» (HU-COM-004, CA-04); pulsarlo llama a `opciones.alEliminar(id)`.
+ *
  * @param {HTMLElement} zonaHilo elemento con `[data-zona="hilo"]`
  * @param {object} comentario `ComentarioResponse` del contrato
+ * @param {{yo?: string|null, alEliminar?: (id: string) => void,
+ *          alReportar?: (id: string, articulo: HTMLElement) => void,
+ *          alFinal?: boolean}} [opciones]
+ *   `alReportar` (RF-COM-006) solo se ofrece sobre comentarios AJENOS, y
+ *   `alEliminar` solo sobre los propios: ver el porque mas abajo.
  * @returns {HTMLElement} el articulo pintado
  */
-export function agregarAlHilo(zonaHilo, comentario) {
+export function agregarAlHilo(
+  zonaHilo,
+  comentario,
+  { yo = null, alEliminar, alReportar, alFinal = false } = {},
+) {
   const vacio = zonaHilo.querySelector('[data-zona="hilo-vacio"]');
   if (vacio) {
     vacio.hidden = true;
@@ -477,9 +502,124 @@ export function agregarAlHilo(zonaHilo, comentario) {
     articulo.appendChild(imagenes);
   }
 
+  // Las dos acciones son excluyentes a proposito: sobre lo mio se puede
+  // retirar (HU-COM-004) y sobre lo de otro se puede reportar (RF-COM-006).
+  // Reportarse a uno mismo no significa nada, y «Eliminar» sobre un
+  // comentario ajeno seria una promesa que el servicio contesta con 403.
+  const esMio = Boolean(yo) && comentario.autorId === yo;
+  if (esMio && typeof alEliminar === 'function') {
+    const acciones = document.createElement('div');
+    acciones.className = 'fila';
+    const eliminar = document.createElement('button');
+    eliminar.type = 'button';
+    eliminar.className = 'boton boton--secundario boton--pequeno';
+    eliminar.dataset.accion = 'eliminar';
+    eliminar.textContent = 'Eliminar';
+    eliminar.addEventListener('click', () => alEliminar(comentario.id, articulo));
+    acciones.appendChild(eliminar);
+    articulo.appendChild(acciones);
+  } else if (!esMio && typeof alReportar === 'function') {
+    const acciones = document.createElement('div');
+    acciones.className = 'fila';
+    const reportar = document.createElement('button');
+    reportar.type = 'button';
+    reportar.className = 'boton boton--secundario boton--pequeno';
+    reportar.dataset.accion = 'reportar';
+    reportar.textContent = 'Reportar';
+    reportar.addEventListener('click', () => alReportar(comentario.id, articulo));
+    acciones.appendChild(reportar);
+    articulo.appendChild(acciones);
+  }
+
   const lista = zonaHilo.querySelector('[data-zona="hilo-lista"]') ?? zonaHilo;
-  lista.prepend(articulo);
+  if (alFinal) {
+    lista.appendChild(articulo);
+  } else {
+    lista.prepend(articulo);
+  }
   return articulo;
+}
+
+/**
+ * Quita un articulo del hilo y, si no queda ninguno, vuelve a mostrar el vacio.
+ *
+ * @param {HTMLElement} zonaHilo
+ * @param {HTMLElement} articulo
+ */
+export function quitarDelHilo(zonaHilo, articulo) {
+  articulo.remove();
+  const lista = zonaHilo.querySelector('[data-zona="hilo-lista"]') ?? zonaHilo;
+  const vacio = zonaHilo.querySelector('[data-zona="hilo-vacio"]');
+  if (vacio && lista.children.length === 0) {
+    vacio.hidden = false;
+  }
+}
+
+/**
+ * Vuelve a leer el promedio del servicio, sin tocar la lista: el servicio es
+ * quien lo calcula (regla 7), la vista no lo estima.
+ *
+ * @param {HTMLElement} zonaHilo
+ * @param {{productoId: string, consultarImpl?: Function}} opciones
+ */
+export async function actualizarPromedio(zonaHilo, { productoId, consultarImpl = consultarHilo }) {
+  try {
+    pintarPromedio(zonaHilo, await consultarImpl(productoId));
+  } catch {
+    // El promedio anterior sigue en pantalla; no se inventa uno nuevo.
+  }
+}
+
+/**
+ * Carga el hilo del servicio y lo pinta: promedio arriba y los comentarios
+ * del mas reciente al mas antiguo, con «Eliminar» en los propios
+ * (HU-COM-003, HU-COM-004).
+ *
+ * @param {HTMLElement} zonaHilo
+ * @param {object} opciones
+ * @param {string} opciones.productoId
+ * @param {string|null} [opciones.yo] `autorId` de quien mira
+ * @param {Function} [opciones.consultarImpl]
+ * @param {(id: string, articulo: HTMLElement) => void} [opciones.alEliminar]
+ * @param {(id: string, articulo: HTMLElement) => void} [opciones.alReportar]
+ * @returns {Promise<object|null>} el hilo, o `null` si no se pudo cargar
+ */
+export async function cargarHilo(
+  zonaHilo,
+  { productoId, yo = null, consultarImpl = consultarHilo, alEliminar, alReportar } = {},
+) {
+  const indicador = zonaHilo.querySelector('[data-zona="hilo-cargando"]');
+  const vacio = zonaHilo.querySelector('[data-zona="hilo-vacio"]');
+  const lista = zonaHilo.querySelector('[data-zona="hilo-lista"]') ?? zonaHilo;
+  if (indicador) {
+    indicador.hidden = false;
+  }
+  try {
+    const hilo = await consultarImpl(productoId);
+    lista.replaceChildren();
+    pintarPromedio(zonaHilo, hilo);
+    const comentarios = Array.isArray(hilo?.comentarios) ? hilo.comentarios : [];
+    // El servicio los da del mas antiguo al mas reciente; el hilo se lee al reves.
+    comentarios.forEach((comentario) => {
+      agregarAlHilo(zonaHilo, comentario, { yo, alEliminar, alReportar });
+    });
+    if (vacio) {
+      vacio.hidden = comentarios.length > 0;
+    }
+    return hilo;
+  } catch {
+    // Sin hilo no se bloquea la publicacion: la vista sigue sirviendo para
+    // comentar y lo dice en la zona del promedio, sin inventar cifras.
+    const zona = zonaHilo.querySelector('[data-zona="promedio"]');
+    if (zona) {
+      zona.textContent = 'No pudimos cargar el hilo. Inténtalo de nuevo en un momento.';
+    }
+    return null;
+  } finally {
+    if (indicador) {
+      indicador.hidden = true;
+    }
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -499,7 +639,16 @@ export function agregarAlHilo(zonaHilo, comentario) {
  */
 export function montarPublicarComentario(
   formulario,
-  { productoId, sesion = leerSesion(), publicarImpl = publicarComentario, hilo, alPublicar } = {},
+  {
+    productoId,
+    sesion = leerSesion(),
+    publicarImpl = publicarComentario,
+    consultarImpl = consultarHilo,
+    eliminarImpl = eliminarComentario,
+    reportarImpl = reportarComentario,
+    hilo,
+    alPublicar,
+  } = {},
 ) {
   const zonaAviso = formulario.querySelector('[data-zona="aviso"]');
   const boton = formulario.querySelector('[type="submit"]');
@@ -509,6 +658,151 @@ export function montarPublicarComentario(
   montarCalificacion(formulario);
   montarZonaDeCarga(formulario);
 
+  // HU-COM-004: retirar un comentario propio. El servicio decide si es mio
+  // (403 si no); la vista solo pinta el boton en los mios (CA-04) y, tras el
+  // 204, recarga el promedio, que ya no cuenta esa calificacion (CA-01).
+  const alEliminar = async (comentarioId, articulo) => {
+    const botonEliminar = articulo.querySelector('[data-accion="eliminar"]');
+    if (botonEliminar) {
+      botonEliminar.disabled = true;
+    }
+    try {
+      await eliminarImpl(idProducto, comentarioId);
+      quitarDelHilo(zonaHilo, articulo);
+      pintarAviso(zonaAviso, {
+        tono: 'exito',
+        titulo: 'Comentario eliminado',
+        detalle: 'Ya no aparece en el hilo y su calificación dejo de contar.',
+      });
+      await actualizarPromedio(zonaHilo, { productoId: idProducto, consultarImpl });
+    } catch (error) {
+      if (botonEliminar) {
+        botonEliminar.disabled = false;
+      }
+      const deApi = error instanceof ErrorDeApi;
+      pintarAviso(zonaAviso, {
+        tono: deApi ? tonoPara(error.estado) : 'error',
+        titulo: deApi ? error.titulo : 'No pudimos contactar con el servicio',
+        detalle: deApi ? error.detalle : 'Revisa tu conexión e inténtalo de nuevo.',
+      });
+    }
+  };
+
+  /**
+   * Titulo del aviso cuando un reporte no entra.
+   *
+   * Los dos casos con nombre se dicen por lo que son. «Ya reportaste este
+   * comentario» no es un fallo del jugador: es que su reporte YA cuenta, y
+   * un «409 Conflict» generico le haria pensar que no sirvio de nada.
+   *
+   * @param {unknown} error
+   * @param {boolean} deApi si el error viene del servicio con problem detail
+   * @returns {string}
+   */
+  function tituloDelFalloAlReportar(error, deApi) {
+    if (error?.motivo === MOTIVO_MODERACION.REPORTE_DUPLICADO) {
+      return 'Ya reportaste este comentario';
+    }
+    if (error?.motivo === MOTIVO_MODERACION.LIMITE_DE_REPORTES) {
+      return 'Alcanzaste el limite de reportes por hoy';
+    }
+    return deApi ? error.titulo : 'No pudimos contactar con el servicio';
+  }
+
+  // RF-COM-006: reportar un comentario AJENO. El reportante sale del token,
+  // no de aqui: el cuerpo solo lleva la categoria y la descripcion.
+  //
+  // La categoria se pide en un dialogo en vez de reportar de un solo clic a
+  // proposito. Un reporte sin categoria no le sirve al moderador —que es
+  // quien tiene que decidir si esto es acoso o es spam— y un boton que
+  // dispara sin preguntar convierte «Reportar» en algo que se pulsa sin
+  // querer.
+  const alReportar = (comentarioId, articulo) => {
+    const seleccion = document.createElement('select');
+    seleccion.className = 'desplegable';
+    seleccion.id = 'categoria-reporte';
+    CATEGORIAS.forEach(({ valor, etiqueta }) => {
+      const opcion = document.createElement('option');
+      opcion.value = valor;
+      opcion.textContent = etiqueta;
+      seleccion.appendChild(opcion);
+    });
+
+    const descripcion = document.createElement('textarea');
+    descripcion.className = 'campo__control';
+    descripcion.id = 'descripcion-reporte';
+    descripcion.rows = 2;
+
+    const cuerpo = document.createElement('div');
+    cuerpo.className = 'pila pila--compacta';
+    const campoCategoria = document.createElement('div');
+    campoCategoria.className = 'campo';
+    const etiquetaCategoria = document.createElement('label');
+    etiquetaCategoria.className = 'campo__etiqueta';
+    etiquetaCategoria.htmlFor = seleccion.id;
+    etiquetaCategoria.textContent = 'Motivo del reporte';
+    campoCategoria.append(etiquetaCategoria, seleccion);
+    const campoDescripcion = document.createElement('div');
+    campoDescripcion.className = 'campo campo--area';
+    const etiquetaDescripcion = document.createElement('label');
+    etiquetaDescripcion.className = 'campo__etiqueta';
+    etiquetaDescripcion.htmlFor = descripcion.id;
+    etiquetaDescripcion.textContent = 'Detalles (opcional)';
+    campoDescripcion.append(etiquetaDescripcion, descripcion);
+    cuerpo.append(campoCategoria, campoDescripcion);
+
+    const enviar = document.createElement('button');
+    enviar.type = 'button';
+    enviar.className = 'boton boton--primario';
+    enviar.dataset.accion = 'confirmar-reporte';
+    enviar.textContent = 'REPORTAR';
+
+    const { cerrar } = abrirDialogo({
+      titulo: 'Reportar este comentario',
+      cuerpo,
+      acciones: [enviar],
+    });
+
+    enviar.addEventListener('click', async () => {
+      enviar.disabled = true;
+      try {
+        await reportarImpl(idProducto, comentarioId, {
+          categoria: seleccion.value,
+          descripcion: descripcion.value.trim() || null,
+        });
+        cerrar();
+        // El comentario pasa a EN_REVISION y deja de verse: quitarlo del
+        // hilo aqui es lo que el servidor ya hizo, no un adelanto.
+        quitarDelHilo(zonaHilo, articulo);
+        pintarAviso(zonaAviso, {
+          tono: 'exito',
+          titulo: 'Reporte enviado',
+          detalle: 'Un moderador lo revisara. Mientras tanto no se muestra en el hilo.',
+        });
+      } catch (error) {
+        enviar.disabled = false;
+        const deApi = error instanceof ErrorDeApi;
+        pintarAviso(zonaAviso, {
+          tono: deApi ? tonoPara(error.estado) : 'error',
+          titulo: tituloDelFalloAlReportar(error, deApi),
+          detalle: deApi ? error.detalle : 'Revisa tu conexión e inténtalo de nuevo.',
+        });
+        cerrar();
+      }
+    });
+  };
+
+  // HU-COM-003: el hilo real, con su promedio, desde el primer momento.
+  if (zonaHilo && idProducto) {
+    cargarHilo(zonaHilo, {
+      productoId: idProducto,
+      yo: sesion?.usuarioId,
+      consultarImpl,
+      alEliminar,
+      alReportar,
+    });
+  }
+
   // Sin sesion no hay autor ni apodo que mandar: el contrato los exige.
   if (!sesion?.usuarioId || !sesion?.apodo) {
     formulario.querySelectorAll('input, textarea, button').forEach((control) => {
@@ -516,8 +810,8 @@ export function montarPublicarComentario(
     });
     pintarAviso(zonaAviso, {
       tono: 'advertencia',
-      titulo: 'Inicia sesion para comentar',
-      detalle: 'Tu comentario se publica con tu apodo, y para eso hace falta tu sesion.',
+      titulo: 'Inicia sesión para comentar',
+      detalle: 'Tu comentario se publica con tu apodo, y para eso hace falta tu sesión.',
     });
     return;
   }
@@ -547,20 +841,40 @@ export function montarPublicarComentario(
         // al hilo hasta que se apruebe (CA-03, caso adicional de #34).
         pintarAviso(zonaAviso, {
           tono: 'info',
-          titulo: 'Tu comentario esta en revision',
+          titulo: 'Tu comentario está en revisión',
           detalle:
-            'El filtro automatico lo senalo. Quedo guardado y un moderador lo revisara antes de publicarlo.',
+            'El filtro automático lo señaló. Quedó guardado y un moderador lo revisará antes de publicarlo.',
         });
       } else {
+        // RF-COM-002 / D-07: la segunda calificacion no es un error. El
+        // servicio publica sin estrellas y lo dice (calificacionDescartada).
+        // Tambien si un servicio 1.1.0 quito las estrellas sin decirlo.
+        const descartada =
+          comentario.calificacionDescartada === true ||
+          (Number.isInteger(cuerpo.estrellas) && !Number.isInteger(comentario.estrellas));
+        let detalle = 'Ya aparece en el hilo del producto.';
+        if (descartada) {
+          detalle =
+            'Ya habías calificado este producto: el comentario va sin estrellas y tu calificación anterior se mantiene.';
+        } else if (Number.isInteger(comentario.estrellas)) {
+          detalle = 'Ya aparece en el hilo del producto con tu calificación.';
+        }
         pintarAviso(zonaAviso, {
           tono: 'exito',
           titulo: 'Comentario publicado',
-          detalle: Number.isInteger(comentario.estrellas)
-            ? 'Ya aparece en el hilo del producto con tu calificacion.'
-            : 'Ya aparece en el hilo del producto. Como ya habias calificado este producto, va sin estrellas.',
+          detalle,
         });
         if (zonaHilo) {
-          agregarAlHilo(zonaHilo, comentario);
+          agregarAlHilo(zonaHilo, comentario, {
+            yo: sesion?.usuarioId,
+            alEliminar,
+            alReportar,
+          });
+          if (Number.isInteger(comentario.estrellas)) {
+            // Con estrellas nuevas el promedio cambio: se lee del servicio,
+            // que es quien lo calcula (regla 7), no se estima aqui.
+            actualizarPromedio(zonaHilo, { productoId: idProducto, consultarImpl });
+          }
         }
       }
 
@@ -591,7 +905,7 @@ export function montarPublicarComentario(
           detalle: error.detalle,
           accion: {
             nombre: 'reintentar-sin-calificar',
-            texto: 'Publicar sin calificacion',
+            texto: 'Publicar sin calificación',
             alPulsar: () => {
               quitarCalificacion(formulario);
               formulario.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
@@ -609,7 +923,7 @@ export function montarPublicarComentario(
         pintarAviso(zonaAviso, {
           tono: 'error',
           titulo: 'No pudimos contactar con el servicio',
-          detalle: 'Revisa tu conexion e intentalo de nuevo.',
+          detalle: 'Revisa tu conexión e inténtalo de nuevo.',
         });
       }
     } finally {

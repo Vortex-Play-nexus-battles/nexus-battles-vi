@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Publicar subasta · Nexus Battles VI</title>
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
+    <link rel="stylesheet" href="./publicar-subasta.css" />
+  </head>
+  <body>
+    <div data-cabecera-app></div>
+    <main id="publicar-subasta" class="publicacion pagina"></main>
+    <noscript>Activa JavaScript para publicar una subasta.</noscript>
+    <script type="module">
+      import { exigirAcceso } from '../comun/acceso.js';
+
+      // UX-R2.0 — esta vista se abria SIN sesion: cargaba entera y solo
+      // despues comprobaba permisos en cliente. El servidor protegia la API,
+      // pero la pantalla se veia. El guard va lo primero.
+      if (!exigirAcceso('publicar-subasta')) {
+        throw new Error('sin sesion: redirigiendo al login');
+      }
+    </script>
+
+    <script type="module">
+      import { montarPublicacion } from './publicar-subasta.js';
+      montarPublicacion(document.getElementById('publicar-subasta'));
+    </script>
+  </body>
+</html>

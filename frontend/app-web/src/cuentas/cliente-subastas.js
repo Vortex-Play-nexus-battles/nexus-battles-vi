@@ -38,7 +38,7 @@ export async function listarSubastas(filtros = {}, pagina = 0, tamano = 16) {
   const respuesta = await fetch(`${BASE_URL}?${parametros}`);
 
   if (!respuesta.ok) {
-    throw await errorDesdeRespuesta(respuesta);
+    throw await errorDesdeRespuesta(respuesta, 'listado');
   }
 
   const pagina_ = await respuesta.json();
@@ -66,7 +66,7 @@ export async function sugerirSubastas(q, limite = 8) {
   const respuesta = await fetch(`${BASE_URL}/sugerencias?${parametros}`);
 
   if (!respuesta.ok) {
-    throw await errorDesdeRespuesta(respuesta);
+    throw await errorDesdeRespuesta(respuesta, 'listado');
   }
 
   const cuerpo = await respuesta.json();
@@ -98,11 +98,54 @@ function construirParametros(filtros, pagina, tamano) {
  * Se envuelve en un Error normal para que quien llame no tenga que conocer
  * el formato problem+json.
  */
-async function errorDesdeRespuesta(respuesta) {
+async function errorDesdeRespuesta(respuesta, recurso = 'subasta') {
+  // UX-R2.8 — el respaldo era `Error ${status} al consultar subastas`, y ese
+  // texto acababa en la pantalla: el laboratorio visual (#600) lo detectaba
+  // en la vista `subastas` en las cinco anchuras. «Error 502» no le dice a
+  // nadie si esperar, reintentar o irse. El codigo sigue viajando en
+  // `error.estado`, para quien programa y para la traza.
+  const fallo = (mensaje) => {
+    const error = new Error(mensaje);
+    error.estado = respuesta.status;
+    return error;
+  };
   try {
     const problema = await respuesta.json();
-    return new Error(problema.detail ?? `Error ${respuesta.status} al consultar subastas`);
+    return fallo(problema.detail ?? mensajeDelFallo(respuesta.status, recurso));
   } catch {
-    return new Error(`Error ${respuesta.status} al consultar subastas`);
+    return fallo(mensajeDelFallo(respuesta.status, recurso));
   }
+}
+
+/**
+ * Que leer cuando el mercado no responde. Nunca el codigo.
+ *
+ * ## Por que hace falta saber QUE se pidio (UX-R3.6)
+ *
+ * El 404 devolvia siempre «Esa subasta ya no existe», y eso vale cuando se
+ * pidio UNA subasta. Cuando lo que fallaba era el LISTADO —que es lo que pasa
+ * sin backend detras— quien abria el mercado leia que una subasta que no
+ * habia pedido ya no existe, con el listado entero vacio detras. Mismo
+ * defecto que tenia el listado de batallas, y misma correccion.
+ *
+ * @param {number} estado
+ * @param {'listado'|'subasta'} [recurso]
+ * @returns {string}
+ */
+function mensajeDelFallo(estado, recurso = 'subasta') {
+  if (estado === 401 || estado === 403) {
+    return 'Tu sesión no alcanza para ver las subastas.';
+  }
+  if (estado === 404) {
+    return recurso === 'listado'
+      ? 'El mercado no está disponible en este momento.'
+      : 'Esa subasta ya no existe.';
+  }
+  if (estado === 409) {
+    return 'La subasta cambió mientras la mirabas. Vuelve a cargarla.';
+  }
+  if (estado >= 500 || estado === 0) {
+    return 'El mercado no está disponible ahora mismo. Puedes reintentar en unos momentos.';
+  }
+  return 'No pudimos consultar las subastas.';
 }

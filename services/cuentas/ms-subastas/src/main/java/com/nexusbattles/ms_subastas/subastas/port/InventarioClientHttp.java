@@ -35,7 +35,7 @@ import com.nexusbattles.ms_subastas.seguridad.PortadorDeServicio;
  * <p>Todas las operaciones internas entre servicios usan identidad por UUID estable y tokens
  * S2S (bearerAuth), sin depender de la cabecera {@code X-User-Name}.
  */
-public class InventarioClientHttp implements InventarioClient {
+public class InventarioClientHttp implements InventarioClient, InventarioPublicacionClient {
 
     private static final Logger log = LoggerFactory.getLogger(InventarioClientHttp.class);
 

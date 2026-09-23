@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mis sanciones · Nexus Battles VI</title>
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
+  </head>
+  <body>
+    <div data-cabecera-app></div>
+
+    <main class="pagina pila" data-vista="mis-sanciones">
+      <h1>Mis sanciones</h1>
+      <!-- El plazo NO va escrito aquí: `sanciones.apelacion.plazo-dias` es
+           configurable desde admin-parametros y este texto decía «30 días»
+           mientras el servicio podía estar aplicando otro. Arranca sin número
+           y `montarMisSanciones` lo sustituye por el vigente en cuanto
+           responde GET /api/v1/sanciones/limites. -->
+      <p class="t-meta" data-zona="intro">
+        Tu historial disciplinario. Una sanción vigente se puede apelar dentro del plazo de
+        apelación vigente; el panel de revisión responde con una decisión motivada.
+      </p>
+
+      <div data-zona="aviso" hidden></div>
+
+      <section class="tarjeta pila pila--compacta">
+        <h2>Sanciones</h2>
+        <div class="pila pila--compacta" data-zona="sanciones"></div>
+      </section>
+
+      <form class="tarjeta pila pila--compacta" data-zona="apelar" hidden>
+        <h2>Apelar</h2>
+        <input type="hidden" name="sancionId" />
+        <label class="campo">
+          <span class="campo__etiqueta">Tu argumento</span>
+          <textarea class="campo__control" name="argumento" rows="4" required></textarea>
+        </label>
+        <div class="acciones">
+          <button class="boton boton--primario" type="submit">Enviar apelación</button>
+        </div>
+      </form>
+
+      <section class="tarjeta pila pila--compacta">
+        <h2>Mis apelaciones</h2>
+        <div class="pila pila--compacta" data-zona="apelaciones"></div>
+      </section>
+    </main>
+
+    <script type="module">
+      import { montarCabecera, leerSesion } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
+      import { montarMisSanciones } from './sanciones.js';
+
+      if (!exigirAcceso('mis-sanciones')) {
+        throw new Error('sin sesion: redirigiendo al login');
+      }
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'mis-sanciones',
+        seccionActiva: 'cuenta',
+      });
+      montarMisSanciones(document, { uid: leerSesion().uid });
+    </script>
+  </body>
+</html>

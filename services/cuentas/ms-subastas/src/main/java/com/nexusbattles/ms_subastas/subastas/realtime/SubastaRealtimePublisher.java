@@ -34,7 +34,15 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @Component
 public class SubastaRealtimePublisher {
 
-    private static final String CANAL_LISTADO = "/topic/subastas/listado";
+    /**
+     * El unico destino de este servicio, y el unico publico.
+     *
+     * <p>R9.6b lo hace visible: {@code PoliticaDelCanalDeSubastas} necesita
+     * saber cual es el destino publico para dejar entrar a un visitante ahi y
+     * solo ahi. Tenerlo en dos sitios seria la forma de que un dia dejaran de
+     * coincidir y el canal publico se cerrara —o, peor, se abriera otro—.
+     */
+    public static final String CANAL_LISTADO = "/topic/subastas/listado";
 
     private final SimpMessagingTemplate mensajeria;
 

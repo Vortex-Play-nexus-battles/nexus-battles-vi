@@ -52,9 +52,19 @@ class RutasPublicadasIT {
 
     private final HttpClient cliente = HttpClient.newHttpClient();
 
+    /** Con la cadena de seguridad real, una ruta protegida sin token es 401 exista o no: se pide con un jugador. */
+    @org.springframework.test.context.DynamicPropertySource
+    static void jwks(org.springframework.test.context.DynamicPropertyRegistry registro) {
+        com.nexusbattles.comun.seguridad.pruebas.EmisorDeTokensDePrueba.registrarJwks(registro);
+    }
+
+    private static final String TOKEN = com.nexusbattles.comun.seguridad.pruebas.EmisorDeTokensDePrueba.emisor()
+            .tokenDeJugador("rutas", java.util.UUID.randomUUID());
+
     private HttpResponse<String> pedir(String metodo, String ruta, String cuerpo) throws Exception {
         HttpRequest peticion = HttpRequest.newBuilder(URI.create("http://localhost:" + puerto + ruta))
                 .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + TOKEN)
                 .method(metodo, cuerpo == null
                         ? HttpRequest.BodyPublishers.noBody()
                         : HttpRequest.BodyPublishers.ofString(cuerpo))
@@ -113,7 +123,8 @@ class RutasPublicadasIT {
         resuelve("POST", subasta + "/pujas", "{}");
         resuelve("POST", subasta + "/compra-inmediata", "{}");
         resuelve("PUT", subasta + "/puja-automatica", "{}");
-        resuelve("DELETE", subasta + "/puja-automatica", null);
+        // Con el token real la peticion llega al negocio: sin subasta, 404 de esta API.
+        resuelveAunqueElRecursoNoExista("DELETE", subasta + "/puja-automatica");
     }
 
     /**

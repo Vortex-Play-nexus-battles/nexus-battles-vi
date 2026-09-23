@@ -113,16 +113,41 @@
 
     registros.forEach((registro) => {
       const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td class="celda-fecha">${formatearFecha(registro.fechaHora)}</td>
-        <td>${registro.administrador ?? '—'}</td>
-        <td><span class="${claseBadge(registro.tipoAccion)}">${registro.tipoAccion ?? '—'}</span></td>
-        <td>${registro.afectado ?? '—'}</td>
-        <td class="celda-valor" title="${registro.valorAnterior ?? ''}">${textoCorto(registro.valorAnterior)}</td>
-        <td class="celda-valor" title="${registro.valorNuevo ?? ''}">${textoCorto(registro.valorNuevo)}</td>
-        <td class="celda-valor" title="${registro.motivo ?? ''}">${textoCorto(registro.motivo)}</td>
-        <td>${registro.ipOrigen ?? '—'}</td>
-      `;
+
+      // UX-R2.8 — esto era una plantilla con nueve interpolaciones dentro de
+      // `innerHTML`. `motivo`, `valorAnterior` y `valorNuevo` son texto que
+      // escribio una persona, y ademas iban tambien dentro de `title="..."`,
+      // donde una comilla cierra el atributo. Un registro de auditoria es el
+      // ultimo sitio donde uno quiere marcado inyectado: lo lee un
+      // administrador, con sesion de administrador.
+      const celda = (texto, clase, titulo) => {
+        const td = document.createElement('td');
+        if (clase) {
+          td.className = clase;
+        }
+        if (titulo) {
+          td.title = titulo;
+        }
+        td.textContent = texto;
+        return td;
+      };
+
+      const distintivo = document.createElement('span');
+      distintivo.className = claseBadge(registro.tipoAccion);
+      distintivo.textContent = registro.tipoAccion ?? '—';
+      const celdaAccion = document.createElement('td');
+      celdaAccion.append(distintivo);
+
+      tr.append(
+        celda(formatearFecha(registro.fechaHora), 'celda-fecha'),
+        celda(registro.administrador ?? '—'),
+        celdaAccion,
+        celda(registro.afectado ?? '—'),
+        celda(textoCorto(registro.valorAnterior), 'celda-valor', registro.valorAnterior ?? ''),
+        celda(textoCorto(registro.valorNuevo), 'celda-valor', registro.valorNuevo ?? ''),
+        celda(textoCorto(registro.motivo), 'celda-valor', registro.motivo ?? ''),
+        celda(registro.ipOrigen ?? '—'),
+      );
       el.tbody.appendChild(tr);
     });
   }
@@ -151,7 +176,7 @@
 
       if (respuesta.status === 401) {
         mostrarEstado(
-          'Inicia sesion como Super Administrador para consultar este registro.',
+          'Inicia sesión como Super Administrador para consultar este registro.',
           'error',
         );
         el.btnAnterior.disabled = true;

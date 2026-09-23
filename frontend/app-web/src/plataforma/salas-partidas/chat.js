@@ -17,6 +17,9 @@
  */
 
 import { conectarChat, ErrorDeCanal } from './cliente-chat.js';
+import { vaciar } from '../../comun/ui/dom.js';
+import { pintarAviso } from '../../comun/ui/aviso.js';
+import { estadoVacio, pintarEstado } from '../../comun/ui/estado-vista.js';
 
 export const CLAVE_TOKEN = 'nexus.token';
 export const COLA_DE_ERRORES = '/usuario/cola/salas';
@@ -87,28 +90,10 @@ export function pintarMensaje(mensaje) {
   return item;
 }
 
-function pintarAviso(zona, { tono, titulo, detalle }) {
-  zona.innerHTML = '';
-  const aviso = document.createElement('div');
-  aviso.className = `aviso aviso--${tono}`;
-  aviso.setAttribute('role', tono === 'error' || tono === 'advertencia' ? 'alert' : 'status');
-  const encabezado = document.createElement('p');
-  encabezado.className = 'aviso__titulo';
-  encabezado.textContent = titulo;
-  aviso.appendChild(encabezado);
-  if (detalle) {
-    const cuerpo = document.createElement('p');
-    cuerpo.textContent = detalle;
-    aviso.appendChild(cuerpo);
-  }
-  zona.appendChild(aviso);
-  zona.hidden = false;
-}
-
 const TEXTO_CONEXION = {
   estable: 'Conectado',
   reconectando: 'Conectando',
-  'sin-conexion': 'Sin conexion',
+  'sin-conexion': 'Sin conexión',
 };
 
 function marcarConexion(indicador, estado) {
@@ -140,20 +125,40 @@ export async function montarChat(
   { canal, token, conectar = conectarChat, url = urlDelCanal() },
 ) {
   const lista = raiz.querySelector('[data-zona="mensajes"]');
+  const zonaSinMensajes = raiz.querySelector('[data-zona="sin-mensajes"]');
   const zonaAviso = raiz.querySelector('[data-zona="aviso"]');
   const indicador = raiz.querySelector('[data-zona="conexion"]');
   const formulario = raiz.querySelector('form');
   const boton = formulario.querySelector('[type="submit"]');
   const destinos = destinosDe(canal);
 
+  const repasarSilencio = () => {
+    if (!zonaSinMensajes) {
+      return;
+    }
+    if (lista.children.length > 0) {
+      zonaSinMensajes.replaceChildren();
+      zonaSinMensajes.hidden = true;
+      return;
+    }
+    pintarEstado(
+      zonaSinMensajes,
+      estadoVacio({
+        titulo: 'El canal está en silencio',
+        detalle: 'Todavía no hay mensajes aquí. El primero puede ser el tuyo.',
+      }),
+    );
+  };
+
   if (!token) {
     marcarConexion(indicador, 'sin-conexion');
     boton.disabled = true;
     pintarAviso(zonaAviso, {
       tono: 'advertencia',
-      titulo: 'Inicia sesion para chatear',
-      detalle: 'El chat necesita tu sesion iniciada para saber quien escribe.',
+      titulo: 'Inicia sesión para chatear',
+      detalle: 'El chat necesita tu sesión iniciada para saber quién escribe.',
     });
+    repasarSilencio();
     return null;
   }
 
@@ -161,14 +166,23 @@ export async function montarChat(
   let cliente;
   try {
     cliente = await conectar({ url, token });
-  } catch (error) {
+  } catch {
     marcarConexion(indicador, 'sin-conexion');
     boton.disabled = true;
     pintarAviso(zonaAviso, {
       tono: 'error',
-      titulo: 'No hay conexion con el chat',
-      detalle: error.message,
+      // UX-R3.11 — decia «No hay conexión con el chat» y debajo el mensaje
+      // tecnico del transporte («No se pudo abrir el canal»). Las dos frases
+      // cuentan el mecanismo; ninguna dice que le pasa a quien esta leyendo.
+      titulo: 'No puedes escribir ahora mismo',
+      detalle: 'El canal no respondió. Los mensajes nuevos no llegan hasta que vuelva.',
+      accion: {
+        texto: 'Reintentar',
+        nombre: 'reintentar',
+        alPulsar: () => globalThis.location?.reload(),
+      },
     });
+    repasarSilencio();
     return null;
   }
   marcarConexion(indicador, 'estable');
@@ -176,11 +190,13 @@ export async function montarChat(
   const agregar = (mensaje) => {
     lista.appendChild(pintarMensaje(mensaje));
     lista.scrollTop = lista.scrollHeight;
+    repasarSilencio();
   };
 
   cliente.suscribir(destinos.historial, (mensajes) => {
-    lista.innerHTML = '';
+    vaciar(lista);
     (mensajes ?? []).forEach(agregar);
+    repasarSilencio();
   });
   cliente.suscribir(destinos.vivo, agregar);
   cliente.suscribir(COLA_DE_ERRORES, (problema) => {
@@ -203,7 +219,7 @@ export async function montarChat(
       return;
     }
     zonaAviso.hidden = true;
-    zonaAviso.innerHTML = '';
+    vaciar(zonaAviso);
     cliente.enviar(destinos.envio, { texto, logro: leerLogro(formulario) });
     formulario.reset();
   });

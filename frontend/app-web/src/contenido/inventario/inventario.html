@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Vitrina del inventario</title>
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
     <link rel="stylesheet" href="./vitrina.css" />
     <link rel="stylesheet" href="./ficha-producto.css" />
-    <link rel="stylesheet" href="../../comun/paginacion.css" />
   </head>
   <body class="vitrina-pagina">
     <div id="contenedor-barra"></div>
@@ -24,7 +24,8 @@
   -->
     <script type="module">
       import { montarInventario } from './inventario.js';
-      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+      import { montarCabecera } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
 
       const parametros = new URLSearchParams(location.search);
       const contenedor = document.getElementById('inventario-app');
@@ -32,10 +33,13 @@
       const numeroPagina = Number(parametros.get('pagina') ?? 0);
 
       // Vista privada (HU-UX-001): sin sesion se va al login con vuelta aqui.
-      if (!exigirSesion()) {
+      if (!exigirAcceso('inventario')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
-      montarCabecera(document.getElementById('contenedor-barra'), { seccionActiva: 'inventario' });
+      montarCabecera(document.getElementById('contenedor-barra'), {
+        vista: 'inventario',
+        seccionActiva: 'inventario',
+      });
 
       montarInventario(contenedor, identidad, numeroPagina);
     </script>

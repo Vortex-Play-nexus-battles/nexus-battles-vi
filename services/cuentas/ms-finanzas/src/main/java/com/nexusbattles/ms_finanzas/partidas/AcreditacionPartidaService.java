@@ -73,12 +73,14 @@ public class AcreditacionPartidaService {
 
     @Transactional
     public ResultadoPartidaResponse procesarResultadoPartida(ResultadoPartidaRequest req) {
+        req.validar();
         if (partidaProcesadaRepositorio.existsById(req.partidaId())) {
             throw new PartidaYaProcesadaException(req.partidaId());
         }
 
         List<AcreditacionAplicada> acreditaciones = new ArrayList<>();
         List<String> sancionadosExcluidos = new ArrayList<>();
+        List<String> ganadores = req.ganadores();
 
         for (ParticipantePartidaRequest participante : req.participantes()) {
             if (participante.sancionado()) {
@@ -86,7 +88,7 @@ public class AcreditacionPartidaService {
                 continue;
             }
 
-            boolean esGanador = participante.uid().equals(req.ganadorUid());
+            boolean esGanador = ganadores.contains(participante.uid());
             int monto = calcularMonto(esGanador, req.tipoPartida());
             String concepto = esGanador ? CONCEPTO_GANADOR : CONCEPTO_PARTICIPANTE;
             String refId = "partida-" + req.partidaId() + "-jugador-" + participante.uid();

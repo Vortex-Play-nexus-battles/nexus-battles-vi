@@ -6,6 +6,8 @@ import java.util.OptionalDouble;
 import java.util.Set;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +32,9 @@ import com.nexusbattles.plataforma.comentarios.SolicitudDePublicacion;
 @Service
 public class ServicioDePublicacionDeComentarios {
 
+    private static final Logger BITACORA = LoggerFactory.getLogger(ServicioDePublicacionDeComentarios.class);
+
+
     private final ComentarioRepository repositorio;
     private final FiltroDeContenido filtro;
     private final ConsultaDeSanciones sanciones;
@@ -49,13 +54,13 @@ public class ServicioDePublicacionDeComentarios {
     /**
      * Publica un comentario sobre un producto.
      *
-     * @return el comentario tal como quedo guardado: sin estrellas si el autor
-     *     ya habia calificado, y en revision si el filtro lo senalo
+     * @return el comentario tal como quedo guardado —sin estrellas si el autor
+     *     ya habia calificado (y se dice), en revision si el filtro lo senalo—
      * @throws HiloDeComentarios.PublicacionRechazada si el autor esta
      *     silenciado o alguna imagen viene en formato no admitido
      */
     @Transactional
-    public Comentario publicar(
+    public Publicado publicar(
             String productoId,
             String autorId,
             String apodoAutor,
@@ -87,7 +92,43 @@ public class ServicioDePublicacionDeComentarios {
                 filtro.verificar(texto));
 
         repositorio.save(RegistroDeComentario.desde(comentario));
-        return comentario;
+        return new Publicado(comentario, hilo.ultimaCalificacionDescartada());
+    }
+
+    /**
+     * Lo que quedo publicado y si la calificacion que traia se descarto por
+     * ser la segunda del autor sobre el producto (RF-COM-002, D-07).
+     */
+    public record Publicado(Comentario comentario, boolean calificacionDescartada) {
+    }
+
+    /**
+     * Retira un comentario propio — HU-COM-004.
+     *
+     * <p>El autor es el {@code uid} del token, nunca el cuerpo (CA-02). La
+     * regla de quien puede retirar que la decide {@link HiloDeComentarios#eliminar};
+     * aqui se carga el hilo, se aplica y se guarda. Se deja asiento en la
+     * bitacora (JSON a stdout, regla 6) con producto, comentario y autor.
+     *
+     * @return el comentario retirado
+     * @throws HiloDeComentarios.ComentarioNoEncontrado si no esta en el hilo
+     * @throws HiloDeComentarios.ComentarioAjeno        si es de otro jugador
+     */
+    @Transactional
+    public Comentario eliminar(String productoId, String comentarioId, String autorId) {
+        List<Comentario> existentes = repositorio
+                .findByProductoIdOrderByFechaPublicacionAsc(productoId)
+                .stream()
+                .map(RegistroDeComentario::aDominio)
+                .toList();
+        HiloDeComentarios hilo =
+                HiloDeComentarios.reconstituir(productoId, formatosAdmitidos, existentes);
+
+        Comentario retirado = hilo.eliminar(comentarioId, autorId);
+        repositorio.save(RegistroDeComentario.desde(retirado));
+        BITACORA.info("Comentario retirado por su autor: producto={} comentario={} autor={}",
+                productoId, comentarioId, autorId);
+        return retirado;
     }
 
     /**

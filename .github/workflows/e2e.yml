@@ -71,7 +71,13 @@ jobs:
             :services:contenido:inventario:bootJar \
             :services:contenido:motor-combate:bootJar \
             :services:cuentas:ms-finanzas:bootJar \
+            :services:cuentas:ms-subastas:bootJar \
             :services:plataforma:moderacion-sanciones:bootJar \
+            :services:plataforma:notificaciones:bootJar \
+            :services:plataforma:torneos:bootJar \
+            :services:plataforma:metricas-plataforma:bootJar \
+            :services:plataforma:admin-parametros:bootJar \
+            :services:plataforma:comentarios:bootJar \
             :services:plataforma:salas-partidas:bootJar
 
       - name: Construir el jar de ms-identidad (Maven)
@@ -118,8 +124,8 @@ jobs:
       - name: Logs de los servicios si algo fallo
         if: failure()
         run: |
-          for s in srv-ms-identidad srv-ms-finanzas srv-heroes srv-productos srv-inventario \
-                   srv-motor-combate srv-moderacion-sanciones srv-salas-partidas srv-borde; do
+          for s in srv-ms-identidad srv-ms-finanzas srv-ms-subastas srv-comentarios srv-heroes srv-productos srv-inventario \
+                   srv-motor-combate srv-moderacion-sanciones srv-notificaciones srv-torneos srv-metricas-plataforma srv-admin-parametros srv-salas-partidas srv-borde; do
             echo "=============== $s ==============="
             # Primero la cabecera de las excepciones: con `--tail` a secas se
             # ve el final de una pila de cien lineas y no la causa.

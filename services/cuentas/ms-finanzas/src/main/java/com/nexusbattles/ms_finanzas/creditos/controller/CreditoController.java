@@ -23,6 +23,24 @@ public class CreditoController {
         return ResponseEntity.ok(creditoService.obtenerSaldo(uid));
     }
 
+    /**
+     * {@code GET /creditos/{uid}/movimientos} — historial de creditos del
+     * jugador (#569). Misma regla de acceso que el saldo: un servicio ve el de
+     * cualquiera; una persona, solo el suyo (SecurityConfig).
+     */
+    @GetMapping("/{uid}/movimientos")
+    public ResponseEntity<org.springframework.data.domain.Page<MovimientoResponse>> movimientos(
+            @PathVariable("uid") String uid,
+            @RequestParam(name = "page", defaultValue = "0") int pagina,
+            @RequestParam(name = "size", defaultValue = "20") int tamano) {
+        // Sin tope, un cliente podria pedir size=100000 y obligar al servicio a
+        // materializar todo el historial en memoria. Mismo criterio que
+        // HistorialTransaccionesController.
+        var pageable = org.springframework.data.domain.PageRequest.of(
+                Math.max(pagina, 0), Math.min(Math.max(tamano, 1), 100));
+        return ResponseEntity.ok(creditoService.movimientos(uid, pageable));
+    }
+
     @PostMapping("/reservar")
     public ResponseEntity<ReservaResponse> reservar(
         @RequestHeader(value = "Idempotency-Key", required = true) String idempotencyKey,

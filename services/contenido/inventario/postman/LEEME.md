@@ -26,7 +26,31 @@ SPRING_DATA_MONGODB_URI=mongodb://localhost:27017/inventario ./gradlew :services
   genera dos UUID nuevos para que cada corrida use inventarios independientes.
 - Para las operaciones internas, obtener con OAuth2 `client_credentials` un
   access token cuyo cliente sea `ms-subastas` y asignarlo a la variable de
-  coleccion `s2sAccessToken`. El token autentica al servicio y
+  coleccion `s2sAccessToken`.
+
+  **Contrato 1.1.0 (#451): la identidad del jugador sale del Bearer.** Cada
+  peticion de jugador lleva `Authorization: Bearer {{tokenJugadorA}}` (o `B`);
+  `X-User-Name` se conserva solo para servicios con credencial. Los apodos
+  `jugadorA`/`jugadorB` deben coincidir con el `preferred_username` de cada
+  token. Con el JWKS de desarrollo:
+
+  ```bash
+  A=jugador-a-$RANDOM; B=jugador-b-$RANDOM
+  TA=$(node ../../productos/postman/jwks-dev/emitir-token.mjs ~/.nexus/productos-jwks-dev.pem --rol JUGADOR --usuario $A)
+  TB=$(node ../../productos/postman/jwks-dev/emitir-token.mjs ~/.nexus/productos-jwks-dev.pem --rol JUGADOR --usuario $B)
+  S2S=$(node ../../productos/postman/jwks-dev/emitir-token.mjs ~/.nexus/productos-jwks-dev.pem --azp ms-subastas)
+  npx --yes newman run inventario.postman_collection.json -e local.postman_environment.json --env-var baseUrl=http://35.168.124.119 --env-var jugadorA=$A --env-var tokenJugadorA=$TA --env-var jugadorB=$B --env-var tokenJugadorB=$TB --env-var s2sAccessToken=$S2S
+  ```
+
+  **Sin Keycloak (instancia de contenido y local con Compose):** inventario
+  apunta al JWKS de desarrollo (`jwks-dev`, ver
+  `services/contenido/productos/postman/LEEME.md`) y el token de servicio se
+  emite con la clave privada de desarrollo:
+
+  ```bash
+  S2S=$(node ../../productos/postman/jwks-dev/emitir-token.mjs ~/.nexus/productos-jwks-dev.pem --azp ms-subastas)
+  npx --yes newman run inventario.postman_collection.json -e local.postman_environment.json --env-var baseUrl=http://35.168.124.119 --env-var s2sAccessToken=$S2S
+  ``` El token autentica al servicio y
   `propietarioUid` viaja por separado como dato del negocio.
 
 ## Con la app de Postman
@@ -67,3 +91,18 @@ Contra otro puerto: `--env-var baseUrl=http://localhost:8082`.
 
 Cuando cambie el contrato (`contracts/openapi/inventario.yaml`), actualizar
 aqui la peticion afectada en el mismo cambio.
+
+> **R9.4 — el `baseUrl` va por el borde, no al puerto del servicio.**
+> Los puertos 8101-8104 del host de contenido dejaron de estar abiertos a todo
+> internet: solo los alcanza el host de plataforma, que es quien de verdad los
+> consume (el borde nginx y salas-partidas). Desde un portatil se entra por el
+> borde, que es ademas el mismo camino que usa la aplicacion real, asi que la
+> coleccion pasa a ejercitar tambien el enrutado.
+>
+> La unica peticion que no sobrevive al cambio es `{{baseUrl}}/actuator/health`:
+> el borde solo enruta `/api/v1/*`. La salud por host la cubre
+> `.github/workflows/diagnostico-dev.yml`.
+>
+> Para depurar contra el puerto directo hay que anadir la IP propia a
+> `cidr_servicios` en `infrastructure/entornos/contenido/main.tf`, a proposito
+> y temporalmente.

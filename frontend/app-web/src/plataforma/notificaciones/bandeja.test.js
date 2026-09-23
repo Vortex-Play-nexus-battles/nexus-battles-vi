@@ -129,7 +129,7 @@ describe('identidad del canal', () => {
 });
 
 describe('iniciar', () => {
-  test('pinta la bandeja por HTTP, conecta, se suscribe a la cola privada y anuncia la sesion (CA-02)', async () => {
+  test('pinta la bandeja por HTTP, conecta, se suscribe a la cola privada y anuncia la sesión (CA-02)', async () => {
     const { bandeja, cliente, canales } = preparar({
       bandejaInicial: {
         usuarioId: 'u-1',
@@ -153,7 +153,7 @@ describe('iniciar', () => {
     expect(bandeja.estado.avisos.map((a) => a.id)).toEqual(['n-2', 'n-1']);
   });
 
-  test('CA-02: lo que la sesion se perdio llega por la cola tras el alta y se anuncia como nuevo', async () => {
+  test('CA-02: lo que la sesión se perdio llega por la cola tras el alta y se anuncia como nuevo', async () => {
     const { bandeja, canales, alAviso } = preparar();
     await bandeja.iniciar();
 
@@ -278,7 +278,7 @@ describe('CA-03: caida del canal', () => {
     expect(conectar).toHaveBeenCalledTimes(4);
   });
 
-  test('si la conexion inicial falla, no se queda callada: recupera igual', async () => {
+  test('si la conexión inicial falla, no se queda callada: recupera igual', async () => {
     const conectar = jest
       .fn()
       .mockRejectedValueOnce(new Error('sin red'))

@@ -1,5 +1,6 @@
 package com.nexusbattles.plataforma.metricasplataforma.latencia;
 
+import com.nexusbattles.plataforma.metricasplataforma.seguridad.SeguridadAbiertaDePrueba;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -26,7 +27,10 @@ import com.nexusbattles.plataforma.observabilidad.RegistroDeConsultas;
  * percentil que sale por el endpoint es el que de verdad calcula la biblioteca.
  */
 @WebMvcTest(controllers = ConsultasController.class)
-@Import(ConsultasControllerTest.Dobles.class)
+// Rebanada con una cadena ABIERTA a proposito: lo que se prueba aqui es el
+// comportamiento del endpoint. Que la observabilidad exija rol administrativo
+// (HU-MET-001, #527) lo afirma SeguridadDeObservabilidadTest con la cadena real.
+@Import({ConsultasControllerTest.Dobles.class, SeguridadAbiertaDePrueba.class})
 class ConsultasControllerTest {
 
     private static final Instant AHORA = Instant.parse("2026-09-11T10:00:00Z");
@@ -113,9 +117,9 @@ class ConsultasControllerTest {
     }
 
     @Test
-    void elRegistroDeLentasRespondeAunqueElProductOwnerNoHayaElegidoPercentil() throws Exception {
-        // Marcar una consulta lenta es comparar contra un umbral, no evaluar un
-        // percentil: no tiene por que esperar a la decision del PO.
+    void elRegistroDeLentasNoDependeDelPercentil() throws Exception {
+        // Marcar una consulta lenta es comparar contra un umbral, no evaluar
+        // una distribucion: esta ruta responde con cualquier configuracion.
         propiedades.setPercentil(null);
         medir(LISTA_NEGRA, 900);
 
@@ -125,16 +129,17 @@ class ConsultasControllerTest {
     }
 
     @Test
-    void sinPercentilAprobadoElInformeFallaDeFormaExplicita() throws Exception {
+    void sinPercentilConfiguradoElInformeUsaElDeAdr006() throws Exception {
+        // Antes: 409 permanente esperando una aprobacion que ningun documento
+        // del proyecto pide. ADR-006 fija p95 y el informe sale.
         propiedades.setPercentil(null);
         medir(BANDEJA, 3, 4);
 
         mockMvc.perform(get("/api/v1/consultas/informe"))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.status").value(409))
-                .andExpect(jsonPath("$.variable").value("LATENCIA_PERCENTIL"))
-                .andExpect(jsonPath("$.criterio").value("HU-REN-001 CA-03"))
-                .andExpect(jsonPath("$.muestrasAcumuladas").value(2));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.percentil").value("p95"))
+                .andExpect(jsonPath("$.objetivoMs").value(500))
+                .andExpect(jsonPath("$.muestras").value(2));
     }
 
     @TestConfiguration

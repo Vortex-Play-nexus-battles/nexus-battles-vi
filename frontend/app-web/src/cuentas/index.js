@@ -1,95 +1,29 @@
-// index.js
-// Menú principal GLOBAL de toda la app tras iniciar sesión — es el destino al
-// que login.js redirige con `window.location.href = './'`, así que este
-// módulo asume responsabilidad completa por la sesión: si no hay rol
-// guardado, no hay sesión.
-//
-// BORRADOR/PROTOTIPO: enlaza a páginas de los tres dominios (cuentas,
-// contenido, plataforma) para mostrarle al equipo cómo podría quedar el
-// punto de entrada. Las rutas se tomaron del listado real de
-// frontend/app-web/src/, no se inventó ninguna.
-//
-// La barra compartida (../comun/barra-navegacion.js) no contempla opciones de
-// rol admin (solo trae opciones fijas de jugador), así que el filtrado de los
-// accesos administrativos por rol se resuelve aquí, no dentro de la barra.
-
-import { montarCabecera, cerrarSesion } from '../comun/cabecera-app.js';
-
-const RUTA_LOGIN = './login.html';
-
-const CLAVE_ROL = 'nexus.rolActual';
-const CLAVE_APODO = 'nexus.apodoActual';
-
-const rolActual = sessionStorage.getItem(CLAVE_ROL);
-
-if (!rolActual) {
-  window.location.href = RUTA_LOGIN;
-} else {
-  iniciar();
-}
-
-function iniciar() {
-  montarBarraNavegacion();
-  mostrarBienvenida();
-  filtrarTarjetasPorRol();
-  ocultarSeccionesVacias();
-  configurarCerrarSesion();
-}
-
-function montarBarraNavegacion() {
-  // Cabecera unica de la aplicacion (HU-UX-001): la sesion la lee ella del login.
-  const contenedor = document.createElement('div');
-  contenedor.dataset.cabeceraApp = '';
-  document.body.prepend(contenedor);
-  montarCabecera(contenedor, { seccionActiva: 'cuenta' });
-}
-
-function mostrarBienvenida() {
-  const apodo = sessionStorage.getItem(CLAVE_APODO);
-  const elementoApodo = document.getElementById('bienvenida-apodo');
-
-  if (elementoApodo && apodo) {
-    elementoApodo.textContent = apodo;
-  }
-}
-
 /**
- * Muestra u oculta cada tarjeta de acceso según su atributo
- * `data-roles` (lista separada por comas). Las tarjetas sin ese
- * atributo se ven para cualquier rol autenticado.
+ * Arranque de la home del jugador.
+ *
+ * Solo tres cosas: exigir acceso, montar el armazón y montar la home. La
+ * lógica de qué se pinta y qué se pide vive en `home.js`, que sí se prueba.
+ *
+ * Hasta UX-R3.2 había una cuarta: `mostrarAdministracion()`, que recorría el
+ * marcado buscando `data-roles` y enseñaba u ocultaba cuatro atajos
+ * administrativos. Era la cuarta lista de roles del producto —escrita a mano,
+ * en el HTML— y mezclaba en la home del jugador lo que ahora tiene consola
+ * propia.
  */
-function filtrarTarjetasPorRol() {
-  const tarjetas = document.querySelectorAll('[data-roles]');
 
-  tarjetas.forEach((tarjeta) => {
-    const rolesPermitidos = tarjeta.dataset.roles.split(',').map((rol) => rol.trim());
+import { montarCabecera } from '../comun/cabecera-app.js';
+import { exigirAcceso } from '../comun/acceso.js';
+import { montarHome } from './home.js';
 
-    tarjeta.hidden = !rolesPermitidos.includes(rolActual);
+// Vista privada: sin sesión (o caducada) se va al login con vuelta aquí;
+// con sesión pero sin permiso, se explica en vez de rebotar (§17).
+// `exigirAcceso` comprueba sesión y rol contra la matriz, y devuelve la
+// sesión ya leída, así que no se lee dos veces.
+const sesion = exigirAcceso('home');
+if (sesion) {
+  const { elemento: cabecera } = montarCabecera(document.querySelector('[data-cabecera-app]'), {
+    vista: 'home',
+    seccionActiva: 'cuenta',
   });
-}
-
-/**
- * Una sección (ej. "Administración") deja de tener sentido si, tras
- * filtrar por rol, ninguna de sus tarjetas quedó visible — oculta
- * también su subtítulo para no dejar un encabezado huérfano.
- */
-function ocultarSeccionesVacias() {
-  const secciones = document.querySelectorAll('.seccion-menu');
-
-  secciones.forEach((seccion) => {
-    const tarjetas = seccion.querySelectorAll('.tarjeta-acceso');
-    const tieneTarjetaVisible = Array.from(tarjetas).some((tarjeta) => !tarjeta.hidden);
-
-    seccion.hidden = !tieneTarjetaVisible;
-  });
-}
-
-function configurarCerrarSesion() {
-  const boton = document.getElementById('btn-cerrar-sesion');
-
-  if (!boton) {
-    return;
-  }
-
-  boton.addEventListener('click', () => cerrarSesion());
+  montarHome(document, { sesion, cabecera });
 }

@@ -67,29 +67,29 @@ function preparar() {
 const asentar = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('metaDeLaSala', () => {
-  test('reproduce la linea del diseno cuando no hay heroe de la IA', () => {
-    expect(metaDeLaSala(sala())).toBe('4 de 6 jugadores · 320 creditos');
+  test('reproduce la linea del diseno cuando no hay héroe de la IA', () => {
+    expect(metaDeLaSala(sala())).toBe('4 de 6 jugadores · 320 créditos');
   });
 
-  test('anade el sufijo de la IA solo cuando la hay', () => {
+  test('añade el sufijo de la IA solo cuando la hay', () => {
     expect(metaDeLaSala(sala({ incluirHeroeIA: true }))).toBe(
-      '4 de 6 jugadores · 320 creditos · Con heroe de la IA',
+      '4 de 6 jugadores · 320 créditos · Con héroe de la IA',
     );
   });
 
   test('con varios cupos de la IA dice cuantos (HU-SAL-004)', () => {
     expect(metaDeLaSala(sala({ incluirHeroeIA: true, heroesIA: 3 }))).toBe(
-      '4 de 6 jugadores · 320 creditos · Con 3 heroes de la IA',
+      '4 de 6 jugadores · 320 créditos · Con 3 héroes de la IA',
     );
     expect(metaDeLaSala(sala({ incluirHeroeIA: true, heroesIA: 1 }))).toMatch(
-      /Con heroe de la IA$/,
+      /Con héroe de la IA$/,
     );
   });
 
-  test('una apuesta de cero se escribe igual: el diseno la pinta como 0 creditos', () => {
+  test('una apuesta de cero se escribe igual: el diseno la pinta como 0 créditos', () => {
     expect(
       metaDeLaSala(sala({ ocupacion: 1, maximoParticipantes: 2, recompensaCreditos: 0 })),
-    ).toBe('1 de 2 jugadores · 0 creditos');
+    ).toBe('1 de 2 jugadores · 0 créditos');
   });
 });
 
@@ -121,7 +121,7 @@ describe('montarBatallas', () => {
     expect(tarjetas).toHaveLength(1);
     expect(tarjetas[0].querySelector('.distintivo').textContent).toBe('Abierta');
     expect(tarjetas[0].querySelector('.tarjeta__meta').textContent).toBe(
-      '4 de 6 jugadores · 320 creditos',
+      '4 de 6 jugadores · 320 créditos',
     );
   });
 
@@ -166,7 +166,7 @@ describe('montarBatallas', () => {
     expect(tarjeta.disabled).toBe(false);
   });
 
-  test('sin salas muestra el estado vacio, no una rejilla en blanco', async () => {
+  test('sin salas muestra el estado vacío, no una rejilla en blanco', async () => {
     const raiz = preparar();
     montarBatallas(raiz, { listar: jest.fn().mockResolvedValue(pagina([])) });
     await asentar();
@@ -204,7 +204,7 @@ describe('montarBatallas', () => {
         {
           type: 'https://nexusbattles.local/errores/sala-privada',
           title: 'Esta sala es privada',
-          detail: 'Necesitas un codigo de invitacion para entrar.',
+          detail: 'Necesitas un código de invitación para entrar.',
           status: 403,
         },
         403,
@@ -222,20 +222,20 @@ describe('montarBatallas', () => {
 
     const estado = raiz.querySelector('[data-zona="estado"]');
     expect(estado.hidden).toBe(false);
-    expect(estado.textContent).toContain('Necesitas un codigo de invitacion');
+    expect(estado.textContent).toContain('Necesitas un código de invitación');
   });
 
   // HU-DIS-003 · CA-02 y CA-03: si el inventario no responde al entrar, el
   // listado NO desaparece; se pinta Seccion degradada aparte y se puede
   // reintentar la misma sala.
-  test('inventario degradado al entrar: el listado sigue y aparece Seccion degradada con reintento', async () => {
+  test('inventario degradado al entrar: el listado sigue y aparece Sección degradada con reintento', async () => {
     const raiz = preparar();
     const degradado = new ErrorDeApi(
       {
         type: 'https://nexusbattles.local/errores/seccion-no-disponible',
         title: 'Inventario no disponible temporalmente',
         status: 503,
-        detail: 'La seccion de Inventario no esta disponible temporalmente.',
+        detail: 'La sección de Inventario no esta disponible temporalmente.',
         seccion: 'Inventario',
         reintentarEnSegundos: 3,
       },
@@ -280,7 +280,7 @@ describe('montarBatallas', () => {
         new ErrorDeApi(
           {
             title: 'No se pudo cargar el listado',
-            detail: 'El servicio respondio 503.',
+            detail: 'El servicio respondió 503.',
             status: 503,
           },
           503,
@@ -290,7 +290,7 @@ describe('montarBatallas', () => {
     await asentar();
 
     expect(raiz.querySelector('[data-zona="estado"]').textContent).toContain(
-      'El servicio respondio 503.',
+      'El servicio respondió 503.',
     );
   });
 
@@ -349,7 +349,7 @@ const PRIVADA = '33333333-3333-3333-3333-333333333333';
 const JUGADOR = 'bbbbbbbb-0000-0000-0000-000000000002';
 
 describe('fichaEnVivo', () => {
-  test('cuando la ocupacion alcanza el maximo la sala pasa a LLENA', () => {
+  test('cuando la ocupacion alcanza el máximo la sala pasa a LLENA', () => {
     const viva = fichaEnVivo(sala({ ocupacion: 5, maximoParticipantes: 6 }), {
       ocupacion: { actual: 6, maximo: 6 },
     });
@@ -454,7 +454,7 @@ describe('canal en tiempo real en el listado', () => {
     );
   });
 
-  test('sin sesion no hay canal, la vista lo dice y el listado funciona igual', async () => {
+  test('sin sesión no hay canal, la vista lo dice y el listado funciona igual', async () => {
     const raiz = preparar();
     montarBatallas(raiz, {
       listar: jest.fn().mockResolvedValue(pagina([sala()])),
@@ -466,18 +466,29 @@ describe('canal en tiempo real en el listado', () => {
     expect(raiz.querySelectorAll('[data-sala]')).toHaveLength(1);
   });
 
-  test('si el canal se rechaza, se informa como no disponible sin romper el listado', async () => {
+  test('si el canal se rechaza, se dice que consecuencia tiene, no cual fue el error', async () => {
+    // UX-R3.4 — decía «Canal en tiempo real no disponible: El token de acceso
+    // no es valido.»: el motivo tecnico del fallo, dirigido a quien programa,
+    // en la pantalla de quien queria jugar. Y no decía lo unico que le importa
+    // a quien lo lee: que el listado SIGUE funcionando, solo que no se
+    // actualiza solo. El motivo no se pierde — baja a la consola.
+    const avisos = jest.spyOn(console, 'warn').mockImplementation(() => {});
     const raiz = preparar();
     montarBatallas(raiz, {
       listar: jest.fn().mockResolvedValue(pagina([sala()])),
-      conectarCanal: () => Promise.reject(new Error('El token de acceso no es valido.')),
+      conectarCanal: () => Promise.reject(new Error('El token de acceso no es válido.')),
     });
     await asentar();
 
     const zona = raiz.querySelector('[data-zona="canal"]');
     expect(zona.dataset.estado).toBe('error');
-    expect(zona.textContent).toContain('no es valido');
+    expect(zona.textContent).toContain('no se actualizan solas');
+    expect(zona.textContent).toContain('El listado funciona');
+    expect(zona.textContent).not.toContain('token');
+    // Y el listado, efectivamente, sigue ahi.
     expect(raiz.querySelectorAll('[data-sala]')).toHaveLength(1);
+    expect(avisos.mock.calls.flat().join(' ')).toContain('canal en tiempo real');
+    avisos.mockRestore();
   });
 
   test('sin el puerto del canal, la vista se comporta como siempre', async () => {
@@ -501,13 +512,13 @@ describe('mostrarAvisoDeSala', () => {
     </div>
   `;
 
-  test('pinta titulo, detalle y tono, y destapa la zona', () => {
+  test('pinta título, detalle y tono, y destapa la zona', () => {
     document.body.innerHTML = ZONA;
 
     const mostrado = mostrarAvisoDeSala(document, {
       tono: 'advertencia',
-      titulo: 'La sala se cerro',
-      detalle: 'El anfitrion cancelo la sala. Se te devolvieron 150 creditos.',
+      titulo: 'La sala se cerró',
+      detalle: 'El anfitrion cancelo la sala. Se te devolvieron 150 créditos.',
     });
 
     const zona = document.querySelector('[data-zona="aviso-sala"]');
@@ -515,10 +526,10 @@ describe('mostrarAvisoDeSala', () => {
     expect(zona.hidden).toBe(false);
     expect(zona.className).toBe('aviso aviso--advertencia');
     expect(zona.querySelector('[data-zona="aviso-sala-titulo"]').textContent).toBe(
-      'La sala se cerro',
+      'La sala se cerró',
     );
     expect(zona.querySelector('[data-zona="aviso-sala-detalle"]').textContent).toContain(
-      '150 creditos',
+      '150 créditos',
     );
   });
 

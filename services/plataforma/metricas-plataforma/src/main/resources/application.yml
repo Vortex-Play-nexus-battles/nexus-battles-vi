@@ -5,6 +5,15 @@ spring:
   application:
     name: metricas-plataforma
 
+  # HU-MET-001 (#527): servidor de recursos. La observabilidad del bloque es
+  # de administracion, no publica; el emisor es ms-identidad (ADR-002/ADR-005),
+  # el mismo JWKS que usan los demas servicios de plataforma.
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${IDENTIDAD_JWKS_URL:http://localhost:8089/api/v1/auth/jwks}
+
   # HU-DIS-001: las interrupciones y las ventanas de mantenimiento viven en el
   # esquema `metricas` de la PostgreSQL de plataforma (regla 7: esquema propio,
   # misma instancia que el resto del bloque). Mismas variables que los demas
@@ -31,11 +40,10 @@ spring:
 # y a los otros diecinueve modulos desde nexus.spring-conventions. Lo unico que
 # vive en el application.yml son los valores.
 #
-# OJO con el percentil: se deja SIN valor por omision a proposito. CA-03 exige
-# que el Product Owner apruebe por escrito si RNF-REN-001 se evalua en p95 o en
-# p99; poner un 95 aqui tomaria esa decision en su lugar. Mientras falte, la
-# medicion sigue corriendo y el endpoint del informe responde 409 diciendo que
-# falta la aprobacion. Ver README.md.
+# El percentil: vacio aqui significa «el de ADR-006», p95, que lo aplica
+# ObjetivoDeLatencia.PERCENTIL_POR_OMISION. No se escribe el 95 en este archivo
+# para que la convencion viva en un solo sitio y los veinte modulos no puedan
+# divergir. Poner LATENCIA_PERCENTIL=99 cambia la medicion sin recompilar.
 latencia:
   objetivo-ms: ${LATENCIA_OBJETIVO_MS:500}
   percentil: ${LATENCIA_PERCENTIL:}
@@ -91,12 +99,22 @@ disponibilidad:
     moderacion-sanciones: ${SALUD_MODERACION:http://localhost:8086/actuator/health}
     admin-parametros: ${SALUD_ADMIN_PARAMETROS:http://localhost:8088/actuator/health}
 
+# HU-MET-001 — metricas de usuarios y moderacion. La fuente es
+# moderacion-sanciones (GET /sanciones/metricas, agregados sin identificadores).
+# umbral-sanciones-por-dia SIN valor a proposito: la ficha pide «alertas de
+# alta frecuencia» pero ningun documento fija la cifra (D-25); mientras el PO
+# no la apruebe, el tablero publica los conteos y dice que no hay umbral.
+metricas:
+  moderacion:
+    url: ${SANCIONES_URL:http://localhost:8086/api/v1}
+    umbral-sanciones-por-dia: ${METRICAS_UMBRAL_SANCIONES_POR_DIA:}
+
 # Regla 3 de plataforma: este servicio tambien expone su propia salud.
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       show-details: always

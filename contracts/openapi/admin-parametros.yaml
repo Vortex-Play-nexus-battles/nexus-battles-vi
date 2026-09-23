@@ -1,0 +1,211 @@
+openapi: 3.1.0
+info:
+  title: Nexus Battles VI - Parametros del sistema (HU-ADM-001)
+  description: >
+    Configuracion de los parametros operativos desde un panel, con
+    validacion, versionado y auditoria (RF-ADM-001). Grupo 6, servicio
+    `admin-parametros`.
+
+    Un parametro tiene clave, tipo, rango (o lista de opciones), valor
+    vigente, quien lo cambio y cuando, y un historial de versiones. Los
+    valores que el Project Charter fija como inalterables (91 dias entre
+    torneos, 8 cupos, creditos por partida 2/4/1, 75 % de procesador para el
+    autoescalado, 500 ms, 99,95 %...) estan en el catalogo con
+    `inalterable: true`: se consultan igual que los demas pero no se editan
+    (409). Un cambio puede programarse con `vigenteDesde` en el futuro: hasta
+    esa fecha el valor vigente sigue siendo el anterior.
+
+    Quien lee: cualquier servicio (regla 7: nadie toca la base de este
+    modulo; `GET /parametros/{clave}/valor` es la lectura ligera). Quien
+    edita: ADMINISTRADOR o SUPER_ADMINISTRADOR, con motivo. Cada cambio queda
+    versionado aqui y se envia a la auditoria de ms-cumplimiento
+    (HU-AUD-001, `POST /admin/auditoria/eventos` con la credencial de
+    servicio); si la auditoria no responde el cambio se aplica igual y queda
+    en la bitacora (fail-open, como el correo de registro).
+
+    El catalogo inicial sale de docs/gobierno/DECISIONES-PENDIENTES-DEL-PO.md
+    (D-02, D-16, D-20, D-23, D-25) y de los parametros que ms-subastas
+    declara «configurables desde admin-parametros». Un parametro sin valor
+    (`valor: null`) es una decision que el PO no ha tomado: el consumidor
+    aplica su comportamiento por omision y lo dice.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8088/api/v1
+    description: Entorno local de desarrollo
+
+security:
+  - tokenDeUsuario: []
+
+paths:
+  /parametros:
+    get:
+      summary: Catalogo completo con el valor vigente de cada parametro
+      operationId: listarParametros
+      security: []
+      responses:
+        '200':
+          description: Catalogo completo de parametros vigentes.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Parametro' }
+
+  /parametros/{clave}:
+    get:
+      summary: Un parametro con su valor vigente y el programado, si lo hay
+      operationId: obtenerParametro
+      security: []
+      parameters: [ { $ref: '#/components/parameters/Clave' } ]
+      responses:
+        '200':
+          description: El parametro con su valor vigente, su rango y su version.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Parametro' } } }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+    put:
+      summary: Cambiar el valor (ahora o con vigencia futura), con motivo
+      operationId: cambiarParametro
+      parameters: [ { $ref: '#/components/parameters/Clave' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CambioDeParametro' }
+      responses:
+        '200':
+          description: Cambio aplicado (o programado); nueva version en el historial
+          content: { application/json: { schema: { $ref: '#/components/schemas/Parametro' } } }
+        '400':
+          description: Valor fuera de rango, de tipo distinto, fuera de las opciones o sin motivo (VALOR_INVALIDO / SOLICITUD_INVALIDA)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+        '401': { description: Sin token }
+        '403':
+          description: El rol no configura parametros (PERMISO_INSUFICIENTE)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409':
+          description: El parametro es inalterable por el Charter (INALTERABLE)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+
+  /parametros/{clave}/valor:
+    get:
+      summary: Lectura ligera del valor vigente, para los servicios
+      operationId: valorVigente
+      security: []
+      parameters: [ { $ref: '#/components/parameters/Clave' } ]
+      responses:
+        '200':
+          description: Solo el valor vigente, para el consumidor que no necesita el resto.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [clave, version]
+                properties:
+                  clave: { type: string }
+                  valor: { type: [string, 'null'], description: Siempre como texto; el tipo dice como leerlo. null = sin decision del PO }
+                  tipo: { $ref: '#/components/schemas/Tipo' }
+                  version: { type: integer }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+
+  /parametros/{clave}/historial:
+    get:
+      summary: Versiones del parametro, de la mas reciente a la mas antigua
+      operationId: historialDeParametro
+      parameters: [ { $ref: '#/components/parameters/Clave' } ]
+      responses:
+        '200':
+          description: Historial de cambios del parametro, del mas reciente al mas antiguo.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Version' }
+        '401': { description: Sin token }
+        '403':
+          description: Solo administracion ve el historial (PERMISO_INSUFICIENTE)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+
+components:
+  securitySchemes:
+    tokenDeUsuario:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    Clave:
+      name: clave
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[a-z0-9.-]+$' }
+      description: Por ejemplo `sanciones.suspension.maxima-dias`
+
+  responses:
+    NoEncontrado:
+      description: No existe un parametro con esa clave (NO_ENCONTRADO)
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+
+  schemas:
+    Tipo:
+      type: string
+      enum: [ENTERO, DECIMAL, BOOLEANO, TEXTO]
+
+    Parametro:
+      type: object
+      required: [clave, descripcion, tipo, inalterable, version, origen]
+      properties:
+        clave: { type: string }
+        descripcion: { type: string }
+        tipo: { $ref: '#/components/schemas/Tipo' }
+        valor: { type: [string, 'null'], description: Valor vigente ahora, como texto. null = sin decision del PO }
+        unidad: { type: [string, 'null'] }
+        minimo: { type: [number, 'null'] }
+        maximo: { type: [number, 'null'] }
+        opciones:
+          type: [array, 'null']
+          items: { type: string }
+          description: Para TEXTO con valores cerrados (por ejemplo LIBERAR | CONSUMIR)
+        inalterable: { type: boolean, description: Fijado por el Charter; no editable }
+        origen: { type: string, description: De donde sale el valor (D-xx, Charter, HU) }
+        version: { type: integer }
+        actualizadoPor: { type: [string, 'null'], format: uuid }
+        actualizadoEn: { type: [string, 'null'], format: date-time }
+        valorProgramado: { type: [string, 'null'] }
+        vigenteDesde: { type: [string, 'null'], format: date-time, description: Cuando entra el valor programado }
+
+    CambioDeParametro:
+      type: object
+      required: [motivo]
+      properties:
+        valor: { type: [string, 'null'], description: Nuevo valor como texto; null vacia una decision (solo si el parametro lo admite) }
+        motivo: { type: string, minLength: 3, maxLength: 500 }
+        vigenteDesde:
+          type: [string, 'null']
+          format: date-time
+          description: Si es futura, el cambio queda programado (CA-03); si falta o ya paso, se aplica ahora
+
+    Version:
+      type: object
+      required: [version, cambiadoPor, cambiadoEn, motivo]
+      properties:
+        version: { type: integer }
+        valorAnterior: { type: [string, 'null'] }
+        valorNuevo: { type: [string, 'null'] }
+        motivo: { type: string }
+        cambiadoPor: { type: string, format: uuid }
+        cambiadoEn: { type: string, format: date-time }
+        vigenteDesde: { type: string, format: date-time }
+
+    ProblemDetail:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        motivo:
+          type: string
+          enum: [PERMISO_INSUFICIENTE, SOLICITUD_INVALIDA, VALOR_INVALIDO, NO_ENCONTRADO, INALTERABLE]

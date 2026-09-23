@@ -16,6 +16,7 @@
 .git/
 **/.gradle/
 **/build/
+**/build.nosync/
 **/node_modules/
 **/.venv/
 frontend/app-web/playwright-report/
@@ -28,8 +29,19 @@ docs/
 !services/contenido/inventario/build/libs/*.jar
 !services/contenido/motor-combate/build/libs/*.jar
 !services/plataforma/salas-partidas/build/libs/*.jar
+!services/plataforma/comentarios/build/libs/*.jar
 !services/cuentas/ms-finanzas/build/libs/*.jar
+# ms-subastas fija su carpeta de build en build.nosync (build.gradle).
+!services/cuentas/ms-subastas/build.nosync/libs/*.jar
 # R1 (guion de demo): lista negra y sanciones reales para el chat.
 !services/plataforma/moderacion-sanciones/build/libs/*.jar
+# HU-NOT-005: la bandeja real, para ver llegar el aviso de la sancion.
+!services/plataforma/notificaciones/build/libs/*.jar
+# M13: torneos.
+!services/plataforma/torneos/build/libs/*.jar
+# M16A: metricas de plataforma.
+!services/plataforma/metricas-plataforma/build/libs/*.jar
+# HU-ADM-001: parametros del sistema.
+!services/plataforma/admin-parametros/build/libs/*.jar
 
 # ms-identidad es Maven: su jar vive en `target/`, que no esta excluido.

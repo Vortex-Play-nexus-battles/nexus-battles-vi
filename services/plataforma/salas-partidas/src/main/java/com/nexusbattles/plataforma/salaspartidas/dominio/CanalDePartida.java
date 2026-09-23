@@ -63,4 +63,21 @@ public interface CanalDePartida {
      *                reparto, cuando el reintento la cierre.
      */
     void anunciarFin(Partida partida, java.util.List<RepartoDeCreditos> reparto);
+
+    /**
+     * Igual que {@link #anunciarFin(Partida, java.util.List)}, con la
+     * recompensa por jugar de HU-JUE-012. El adaptador real la incluye en el
+     * mismo mensaje; por omision se descarta, para los dobles que no la miran.
+     *
+     * @param recompensa lo que el libro de creditos acredito por jugar (2/4 al
+     *                   ganador, 1 por participar, cofre si hubo). Vacio si el
+     *                   libro no respondio y quedo pendiente; entonces el fin se
+     *                   vuelve a anunciar, con la recompensa, cuando el reintento
+     *                   entre. Es distinto de {@code reparto}: uno es la apuesta
+     *                   y el otro el premio por jugar, y viajan separados.
+     */
+    default void anunciarFin(Partida partida, java.util.List<RepartoDeCreditos> reparto,
+                             java.util.List<CreditoPorPartida> recompensa) {
+        anunciarFin(partida, reparto);
+    }
 }

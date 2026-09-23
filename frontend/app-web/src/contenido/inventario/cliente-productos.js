@@ -26,7 +26,7 @@ export async function consultarProducto(
   { fetchImpl = fetchWithHttpErrorInterceptor } = {},
 ) {
   if (typeof productoId !== 'string' || productoId.trim() === '') {
-    throw new TypeError('El identificador del producto no puede estar vacio');
+    throw new TypeError('El identificador del producto no puede estar vacío');
   }
 
   const respuesta = await fetchImpl(`${RUTA}/${encodeURIComponent(productoId.trim())}`);
