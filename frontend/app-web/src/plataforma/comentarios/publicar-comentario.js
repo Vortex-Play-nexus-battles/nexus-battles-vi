@@ -33,9 +33,11 @@ import {
   MOTIVO,
   ESTADO,
 } from './cliente-comentarios.js';
+import { reportarComentario, CATEGORIAS, MOTIVO_MODERACION } from './cliente-moderacion.js';
 import { usuarioIdDeSesion } from '../../comun/identidad.js';
 import { pintarAviso } from '../../comun/ui/aviso.js';
 import { vaciar } from '../../comun/ui/dom.js';
+import { abrirDialogo } from '../../comun/ui/dialogo.js';
 
 const CLAVE_APODO = 'nexus.apodoActual';
 
@@ -438,13 +440,17 @@ export function pintarPromedio(zonaHilo, hilo) {
  *
  * @param {HTMLElement} zonaHilo elemento con `[data-zona="hilo"]`
  * @param {object} comentario `ComentarioResponse` del contrato
- * @param {{yo?: string|null, alEliminar?: (id: string) => void, alFinal?: boolean}} [opciones]
+ * @param {{yo?: string|null, alEliminar?: (id: string) => void,
+ *          alReportar?: (id: string, articulo: HTMLElement) => void,
+ *          alFinal?: boolean}} [opciones]
+ *   `alReportar` (RF-COM-006) solo se ofrece sobre comentarios AJENOS, y
+ *   `alEliminar` solo sobre los propios: ver el porque mas abajo.
  * @returns {HTMLElement} el articulo pintado
  */
 export function agregarAlHilo(
   zonaHilo,
   comentario,
-  { yo = null, alEliminar, alFinal = false } = {},
+  { yo = null, alEliminar, alReportar, alFinal = false } = {},
 ) {
   const vacio = zonaHilo.querySelector('[data-zona="hilo-vacio"]');
   if (vacio) {
@@ -496,7 +502,12 @@ export function agregarAlHilo(
     articulo.appendChild(imagenes);
   }
 
-  if (yo && comentario.autorId === yo && typeof alEliminar === 'function') {
+  // Las dos acciones son excluyentes a proposito: sobre lo mio se puede
+  // retirar (HU-COM-004) y sobre lo de otro se puede reportar (RF-COM-006).
+  // Reportarse a uno mismo no significa nada, y «Eliminar» sobre un
+  // comentario ajeno seria una promesa que el servicio contesta con 403.
+  const esMio = Boolean(yo) && comentario.autorId === yo;
+  if (esMio && typeof alEliminar === 'function') {
     const acciones = document.createElement('div');
     acciones.className = 'fila';
     const eliminar = document.createElement('button');
@@ -506,6 +517,17 @@ export function agregarAlHilo(
     eliminar.textContent = 'Eliminar';
     eliminar.addEventListener('click', () => alEliminar(comentario.id, articulo));
     acciones.appendChild(eliminar);
+    articulo.appendChild(acciones);
+  } else if (!esMio && typeof alReportar === 'function') {
+    const acciones = document.createElement('div');
+    acciones.className = 'fila';
+    const reportar = document.createElement('button');
+    reportar.type = 'button';
+    reportar.className = 'boton boton--secundario boton--pequeno';
+    reportar.dataset.accion = 'reportar';
+    reportar.textContent = 'Reportar';
+    reportar.addEventListener('click', () => alReportar(comentario.id, articulo));
+    acciones.appendChild(reportar);
     articulo.appendChild(acciones);
   }
 
@@ -559,11 +581,12 @@ export async function actualizarPromedio(zonaHilo, { productoId, consultarImpl =
  * @param {string|null} [opciones.yo] `autorId` de quien mira
  * @param {Function} [opciones.consultarImpl]
  * @param {(id: string, articulo: HTMLElement) => void} [opciones.alEliminar]
+ * @param {(id: string, articulo: HTMLElement) => void} [opciones.alReportar]
  * @returns {Promise<object|null>} el hilo, o `null` si no se pudo cargar
  */
 export async function cargarHilo(
   zonaHilo,
-  { productoId, yo = null, consultarImpl = consultarHilo, alEliminar } = {},
+  { productoId, yo = null, consultarImpl = consultarHilo, alEliminar, alReportar } = {},
 ) {
   const indicador = zonaHilo.querySelector('[data-zona="hilo-cargando"]');
   const vacio = zonaHilo.querySelector('[data-zona="hilo-vacio"]');
@@ -578,7 +601,7 @@ export async function cargarHilo(
     const comentarios = Array.isArray(hilo?.comentarios) ? hilo.comentarios : [];
     // El servicio los da del mas antiguo al mas reciente; el hilo se lee al reves.
     comentarios.forEach((comentario) => {
-      agregarAlHilo(zonaHilo, comentario, { yo, alEliminar });
+      agregarAlHilo(zonaHilo, comentario, { yo, alEliminar, alReportar });
     });
     if (vacio) {
       vacio.hidden = comentarios.length > 0;
@@ -622,6 +645,7 @@ export function montarPublicarComentario(
     publicarImpl = publicarComentario,
     consultarImpl = consultarHilo,
     eliminarImpl = eliminarComentario,
+    reportarImpl = reportarComentario,
     hilo,
     alPublicar,
   } = {},
@@ -664,6 +688,110 @@ export function montarPublicarComentario(
     }
   };
 
+  /**
+   * Titulo del aviso cuando un reporte no entra.
+   *
+   * Los dos casos con nombre se dicen por lo que son. «Ya reportaste este
+   * comentario» no es un fallo del jugador: es que su reporte YA cuenta, y
+   * un «409 Conflict» generico le haria pensar que no sirvio de nada.
+   *
+   * @param {unknown} error
+   * @param {boolean} deApi si el error viene del servicio con problem detail
+   * @returns {string}
+   */
+  function tituloDelFalloAlReportar(error, deApi) {
+    if (error?.motivo === MOTIVO_MODERACION.REPORTE_DUPLICADO) {
+      return 'Ya reportaste este comentario';
+    }
+    if (error?.motivo === MOTIVO_MODERACION.LIMITE_DE_REPORTES) {
+      return 'Alcanzaste el limite de reportes por hoy';
+    }
+    return deApi ? error.titulo : 'No pudimos contactar con el servicio';
+  }
+
+  // RF-COM-006: reportar un comentario AJENO. El reportante sale del token,
+  // no de aqui: el cuerpo solo lleva la categoria y la descripcion.
+  //
+  // La categoria se pide en un dialogo en vez de reportar de un solo clic a
+  // proposito. Un reporte sin categoria no le sirve al moderador —que es
+  // quien tiene que decidir si esto es acoso o es spam— y un boton que
+  // dispara sin preguntar convierte «Reportar» en algo que se pulsa sin
+  // querer.
+  const alReportar = (comentarioId, articulo) => {
+    const seleccion = document.createElement('select');
+    seleccion.className = 'desplegable';
+    seleccion.id = 'categoria-reporte';
+    CATEGORIAS.forEach(({ valor, etiqueta }) => {
+      const opcion = document.createElement('option');
+      opcion.value = valor;
+      opcion.textContent = etiqueta;
+      seleccion.appendChild(opcion);
+    });
+
+    const descripcion = document.createElement('textarea');
+    descripcion.className = 'campo__control';
+    descripcion.id = 'descripcion-reporte';
+    descripcion.rows = 2;
+
+    const cuerpo = document.createElement('div');
+    cuerpo.className = 'pila pila--compacta';
+    const campoCategoria = document.createElement('div');
+    campoCategoria.className = 'campo';
+    const etiquetaCategoria = document.createElement('label');
+    etiquetaCategoria.className = 'campo__etiqueta';
+    etiquetaCategoria.htmlFor = seleccion.id;
+    etiquetaCategoria.textContent = 'Motivo del reporte';
+    campoCategoria.append(etiquetaCategoria, seleccion);
+    const campoDescripcion = document.createElement('div');
+    campoDescripcion.className = 'campo campo--area';
+    const etiquetaDescripcion = document.createElement('label');
+    etiquetaDescripcion.className = 'campo__etiqueta';
+    etiquetaDescripcion.htmlFor = descripcion.id;
+    etiquetaDescripcion.textContent = 'Detalles (opcional)';
+    campoDescripcion.append(etiquetaDescripcion, descripcion);
+    cuerpo.append(campoCategoria, campoDescripcion);
+
+    const enviar = document.createElement('button');
+    enviar.type = 'button';
+    enviar.className = 'boton boton--primario';
+    enviar.dataset.accion = 'confirmar-reporte';
+    enviar.textContent = 'REPORTAR';
+
+    const { cerrar } = abrirDialogo({
+      titulo: 'Reportar este comentario',
+      cuerpo,
+      acciones: [enviar],
+    });
+
+    enviar.addEventListener('click', async () => {
+      enviar.disabled = true;
+      try {
+        await reportarImpl(idProducto, comentarioId, {
+          categoria: seleccion.value,
+          descripcion: descripcion.value.trim() || null,
+        });
+        cerrar();
+        // El comentario pasa a EN_REVISION y deja de verse: quitarlo del
+        // hilo aqui es lo que el servidor ya hizo, no un adelanto.
+        quitarDelHilo(zonaHilo, articulo);
+        pintarAviso(zonaAviso, {
+          tono: 'exito',
+          titulo: 'Reporte enviado',
+          detalle: 'Un moderador lo revisara. Mientras tanto no se muestra en el hilo.',
+        });
+      } catch (error) {
+        enviar.disabled = false;
+        const deApi = error instanceof ErrorDeApi;
+        pintarAviso(zonaAviso, {
+          tono: deApi ? tonoPara(error.estado) : 'error',
+          titulo: tituloDelFalloAlReportar(error, deApi),
+          detalle: deApi ? error.detalle : 'Revisa tu conexion e intentalo de nuevo.',
+        });
+        cerrar();
+      }
+    });
+  };
+
   // HU-COM-003: el hilo real, con su promedio, desde el primer momento.
   if (zonaHilo && idProducto) {
     cargarHilo(zonaHilo, {
@@ -671,6 +799,7 @@ export function montarPublicarComentario(
       yo: sesion?.usuarioId,
       consultarImpl,
       alEliminar,
+      alReportar,
     });
   }
 
@@ -736,7 +865,11 @@ export function montarPublicarComentario(
           detalle,
         });
         if (zonaHilo) {
-          agregarAlHilo(zonaHilo, comentario, { yo: sesion?.usuarioId, alEliminar });
+          agregarAlHilo(zonaHilo, comentario, {
+            yo: sesion?.usuarioId,
+            alEliminar,
+            alReportar,
+          });
           if (Number.isInteger(comentario.estrellas)) {
             // Con estrellas nuevas el promedio cambio: se lee del servicio,
             // que es quien lo calcula (regla 7), no se estima aqui.

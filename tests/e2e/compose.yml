@@ -396,6 +396,7 @@ services:
       # /internal/notifications exige ROLE_SERVICIO. Sin esto el E2E veria
       # autorNotificado=false y estaria dando por buena la mitad del flujo.
       NOTIFICACIONES_URL: http://srv-notificaciones:8085/api/v1
+      DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
       DIRECTORIO_ACTIVO_CLIENT_ID: comentarios
       DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-comentarios
       # AUDITORIA_URL se deja sin poner a proposito: ms-cumplimiento no esta
