@@ -219,13 +219,40 @@ MVP, y se eligió el MVP.
 
 | Servicio | AWS dev | Banco E2E (CI) | Estado y motivo |
 |---|---|---|---|
-| `ms-finanzas` (M07, libro de créditos) | **NO DESPLEGADO** | **SÍ** (`tests/e2e/compose.yml`) | No tiene puerto asignado en `puerto_de()` de `cd.yml`, así que el flujo lo omite explícitamente: no se construye su imagen ni se despliega. En el banco E2E corre de verdad y contra él se ejercitan la apuesta de créditos y la recompensa por partida. |
-| `ms-subastas` (M08) | **NO DESPLEGADO** | **SÍ** (`tests/e2e/compose.yml`) | Mismo caso: sin puerto en `cd.yml`, fuera del flujo automático. En el banco E2E corre con el JWKS real de `ms-identidad`. |
+| `ms-finanzas` (M07, libro de créditos) | **NO DESPLEGADO** (solo a demanda) | **SÍ** (`tests/e2e/compose.yml`) | Desde #651 y #658 el flujo **sí lo conoce**: está en `infrastructure/despliegue/servicios.json` con su puerto 8093, su compose y su ruta de salud, y su imagen se construye y publica en cada push. Lo único que lo frena es la RAM (`desplegableDev: false`). En el banco E2E corre de verdad y contra él se ejercitan la apuesta de créditos y la recompensa por partida. |
+| `ms-subastas` (M08) | **NO DESPLEGADO** (solo a demanda) | **SÍ** (`tests/e2e/compose.yml`) | Idéntico, puerto 8092. En el banco E2E corre con el JWKS real de `ms-identidad`. Aunque se despliegue a demanda, su cliente de inventario se queda en el doble: la ruta de transferencia de propiedad que necesita **no existe** (ver abajo, #660). |
 | `ms-ecommerce` (M06, tienda y carrito) | **NO DESPLEGADO** (solo a demanda) | NO | Sí tiene bloque de detección y puerto 8090 en `cd.yml`, pero está en `FUERA_DEL_HOST_DEV`: en cualquier disparo que no sea `workflow_dispatch` se le saca de la matriz por capacidad. A demanda sí se intenta — quien lo pide sabe lo que hace. |
 | `ms-cumplimiento` (auditoría y privacidad) | **NO DESPLEGADO** (solo a demanda) | NO | Idéntico, puerto 8091. Su ausencia es la razón de que `AUDITORIA_URL` se deje sin poner: el asiento de auditoría queda en la tabla del propio servicio y en la bitácora JSON, que es el rastro que exige la ficha. |
 
 **Las pruebas y la compuerta de calidad de los cuatro siguen corriendo en
 `ci.yml`.** No estar desplegado no es estar sin verificar.
+
+Y conviene no volver a confundir dos cosas que hasta R14 se parecían:
+
+- **Antes** — el flujo no sabía que existían. Ni imagen, ni compose, ni forma de
+  pedirlos. Eso era un olvido, y se corrigió (#651, #658).
+- **Ahora** — el flujo los conoce, construye y publica su imagen en cada push,
+  y sabe desplegarlos. Lo único que los frena es la memoria del host, medida:
+  `infrastructure/despliegue/CAPACIDAD.md`. Eso es una decisión, no un defecto.
+
+### Una ausencia que NO es de capacidad
+
+`ms-subastas` necesita `POST /api/v1/inventario/elementos/{id}/transferencias`
+para cambiar de dueño el elemento cuando la subasta se adjudica — el criterio 3
+de HU-SUB-004 y el último paso del flujo. Su cliente HTTP la llama; **la ruta no
+existe**: ni en `services/contenido/inventario/src/main`, ni en ningún contrato
+de `contracts/openapi/`. Las otras tres que ese mismo cliente usa (bloqueo,
+consulta y liberación) sí están.
+
+Por eso `app.inventario.modo` se queda en `fake` aunque el servicio se
+despliegue: con el cliente real, la subasta cobraría la puja y fallaría con 404
+justo al transferir la propiedad. Es peor que no desplegarla, porque el dinero
+sí se mueve. El doble completa el flujo en memoria y lo avisa con un `log.warn`
+al arrancar.
+
+`inventario` es del equipo Contenido; el alta de esa operación es suya, con su
+contrato primero (regla 1). Levantado en **#660**, no resuelto por la puerta de
+atrás.
 
 ### Qué se ve en DEV cuando se toca uno de ellos
 

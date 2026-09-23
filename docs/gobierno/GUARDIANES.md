@@ -27,6 +27,30 @@ condición no ahorraba nada y escondía el estado real.
 «¿cuánto cuesta correrlo siempre?».** Si la respuesta son segundos, que corra
 siempre.
 
+## La otra regla: verde no significa desplegado
+
+R14 destapó una familia entera de defectos que **ninguna compuerta veía**,
+porque todas miran el código y ninguna miraba si el código llega a algún sitio:
+
+- `ms-finanzas` y `ms-subastas` llevaban semanas implementados, probados, con
+  el borde enrutándolos — y devolviendo 502 en dev. El detector del CD los
+  perdía por una regex de carpeta (#658).
+- El diagnóstico se hizo **dos veces por separado** (#571 para subastas, #651
+  para finanzas) sin que nadie relacionara los dos casos. Era el mismo defecto.
+- Cuatro servicios de plataforma pedían su credencial a un Keycloak que no
+  existe en ningún entorno. La corrección estaba escrita desde a8aa581, pero
+  solo alcanzaba a la mitad de ellos, y **nadie lo notó porque fallan hacia el
+  lado abierto**: el síntoma no era un error, era una función que no ocurría.
+
+De ahí la regla que este bloque deja escrita: **`PR fusionado` + `CI verde` no
+es evidencia de que algo esté desplegado, y mucho menos de que funcione.**
+
+La consecuencia práctica, para el que añada un guardián: si solo lee archivos
+del repositorio, no puede afirmar nada sobre el entorno. Por eso los que sí lo
+afirman —catálogo de servicios, smoke de comportamiento, E2E— miran la cadena
+entera, y por eso el diagnóstico del host lee las variables **dentro del
+contenedor** (`docker exec`) en vez de deducirlas del compose.
+
 ## Contratos e integración
 
 | Guardián | Implementación | Dónde corre | Defecto que previene |
@@ -71,6 +95,7 @@ siempre.
 | Guardián | Implementación | Dónde corre | Defecto que previene |
 |---|---|---|---|
 | **Reparto de etiquetas del CD** | `scripts/cd/pruebas/desplegar-etiquetas-contenido.sh` | `ci.yml` · `ci-etiquetas-cd`, **siempre** desde R13 | Que `docker compose up` arrastre un servicio que no cambió con una etiqueta que no existe. Pasó de verdad (corrida 34307790392, 9-sep) y tumbó el despliegue. **La prueba existía desde entonces y nadie la ejecutaba jamás.** |
+| **Catálogo de servicios desplegables** | `scripts/cd/comprobar-catalogo-servicios.sh` contra `infrastructure/despliegue/servicios.json` | `guardia-monorepo.yml` (#658) | Un servicio construible que el despliegue no conoce — código fusionado y verde que no llega a ningún entorno. También: puerto del catálogo ≠ `EXPOSE` del Dockerfile (le pasó a `ms-identidad` al mover 8081→8089); `rutaSalud` ≠ `context-path` real (le pasó a `ms-ecommerce`, por copiar la ruta de un comentario); override de compose ausente o que no declara su contenedor; y que alguien vuelva a escribir una lista de puertos paralela en `cd.yml`. Nació de `ms-finanzas` y `ms-subastas`, invisibles durante semanas. |
 | **Salud tras desplegar y reversión** | healthcheck de `scripts/cd/desplegar.sh` + `scripts/cd/revertir.sh` | `cd.yml` | Que una imagen mala se quede en pie. Reversión medida: 24 s (`SIMULACRO-REVERSION.md`). |
 | **Guardián del propio simulacro** | aserción en `cd.yml` del job de simulacro | `cd.yml`, solo en `workflow_dispatch` | Que el mecanismo de reversión deje de detectar fallos **en silencio**. |
 | **Importación del host de contenido** | condición sobre `vars.IMPORTACION_CONTENIDO_COMPLETADA` en `infra-dev.yml` | `infra-dev.yml` | Que un `apply` con el estado remoto vacío **cree un tercer EC2** y duplique el coste. |
