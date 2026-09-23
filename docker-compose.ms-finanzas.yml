@@ -1,0 +1,56 @@
+# HU-CICD-002 (SCRUM-165): override de despliegue para services/cuentas/ms-finanzas.
+#
+# Mismo patron que docker-compose.ms-cumplimiento.yml y
+# docker-compose.ms-ecommerce.yml: solo declara "image:", nunca "build:" -- el
+# jar se compila y la imagen se publica en ghcr.io en el job
+# "construir-y-publicar" de cd.yml, nunca en el servidor. Se combina siempre
+# con docker-compose.yml (nunca solo), y SOLO cuando ms-finanzas esta entre
+# los servicios modificados de esa corrida:
+#   docker compose -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.ms-finanzas.yml pull|up -d
+#
+# A diferencia de ms-identidad/ms-cumplimiento/ms-ecommerce, ms-finanzas es
+# Gradle (build.gradle propio, modulo del build raiz) -- pero el patron de
+# override de despliegue es el mismo para los cuatro: cada servicio de otro
+# equipo mantiene su propio archivo, para que quede claro quien es dueno de
+# que.
+#
+# Puerto: 8093 tanto en el host como en el contenedor (confirmado en el
+# Dockerfile de ms-finanzas: EXPOSE 8093, sin el desfase host/contenedor que
+# tuvo ms-identidad). Ya es el puerto que espera borde-dev.conf y las
+# CREDITOS_URL de salas-partidas/torneos (HU-JUE-012 #470, HU-JUE-014 #442).
+#
+# ${TAG} lo exporta scripts/cd/desplegar.sh antes de invocar "docker compose"
+# (mismo sha corto de esta corrida que usan las demas imagenes).
+#
+# Variables de entorno: el lado IZQUIERDO de cada linea es el nombre que
+# Spring realmente lee (confirmado en application.properties de ms-finanzas:
+# ${DB_HOST}, ${DB_PORT}, ${DB_NAME}, ${DB_USER}, ${DB_PASSWORD},
+# ${IDENTIDAD_JWKS_URL}). El lado DERECHO (${MS_FINANZAS_...}) es la variable
+# que desplegar.sh deja en el .env del servidor -- con el prefijo
+# "MS_FINANZAS_" a proposito, para no chocar ni con las variables de
+# plataforma (DB_USER/DB_PASS, que usa plataforma-db) ni con las de
+# ms-identidad (que usa otro esquema: DB_URL en vez de DB_HOST/PORT/NAME).
+#
+# Todas las variables quedan PENDIENTES por ahora (ver los secrets TODO_*
+# en cd.yml, mismo patron de placeholder que ms-cumplimiento/ms-ecommerce).
+#
+# NOTA DE CAPACIDAD (issue #571, punto 4): que este archivo exista y que
+# cd.yml sepa construir la imagen de ms-finanzas NO significa que quepa en el
+# host de dev actual (t3.small, ~330 MB libres). cd.yml deja a ms-finanzas en
+# FUERA_DEL_HOST_DEV a proposito: la imagen se publica, pero el despliegue
+# automatico no la incluye hasta que alguien mida la capacidad real. Se puede
+# forzar con un despliegue a demanda (workflow_dispatch) sabiendo el riesgo.
+
+services:
+  srv-ms-finanzas:
+    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-ms-finanzas:${TAG}
+    ports:
+      - "8093:8093"
+    environment:
+      DB_HOST: ${MS_FINANZAS_DB_HOST}
+      DB_PORT: ${MS_FINANZAS_DB_PORT}
+      DB_NAME: ${MS_FINANZAS_DB_NAME}
+      DB_USER: ${MS_FINANZAS_DB_USER}
+      DB_PASSWORD: ${MS_FINANZAS_DB_PASSWORD}
+      # Clave publica de los tokens (ADR-002/ADR-005), dentro de la red.
+      IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://srv-ms-identidad:8089/api/v1/auth/jwks}
