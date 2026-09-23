@@ -73,11 +73,11 @@ const REVISADOS = new Map([
 
   ['cuentas/tienda.js:226', 'cadena literal fija del carrito vacío'],
   ['cuentas/tienda.js:236', 'plantilla fija; los datos entran luego por textContent'],
-  ['cuentas/pujas.js:1258', 'plantilla fija del estado de carga'],
-  ['cuentas/pujas.js:1276', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
-  ['cuentas/pujas.js:1292', 'plantilla fija del estado vacío'],
+  ['cuentas/pujas.js:1270', 'plantilla fija del estado de carga'],
+  ['cuentas/pujas.js:1288', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
+  ['cuentas/pujas.js:1304', 'plantilla fija del estado vacío'],
   [
-    'cuentas/pujas.js:1332',
+    'cuentas/pujas.js:1344',
     'DELIBERADO y SANEADO (UX-R2.8c): las 20 interpolaciones con datos del ' +
       'servidor pasan por esc(); pujas.test.js lo comprueba con cargas reales. ' +
       'La estructura (2.297 líneas de plantilla) se mueve en UX-R2.10.',
