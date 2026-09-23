@@ -108,15 +108,18 @@ const vus = Math.round(numero('VUS', perfil.vus));
 const techoDeVus = Math.round(numero('TECHO_VUS', TECHO_DE_VUS_POR_OMISION));
 if (vus > techoDeVus) {
   // El techo es una decision de ingenieria, no una limitacion de k6: el host de
-  // DEV es un t3.small (2 vCPU / 2 GiB) que corre nueve servicios. Se puede
-  // subir, pero a proposito y sabiendo contra que se esta disparando.
+  // PLATAFORMA en DEV es un t3.small (2 vCPU / 2 GiB) que corre nueve servicios,
+  // y detras de el responde el host de contenido, igual de pequeno
+  // (docs/arquitectura/README.md). Se puede subir, pero a proposito y sabiendo
+  // contra que se esta disparando.
   throw new Error(
     'VUS=' +
       vus +
       ' supera el techo de ' +
       techoDeVus +
       ' usuarios virtuales.\n' +
-      '  El host de DEV es un t3.small (2 vCPU / 2 GiB) con nueve servicios encima:\n' +
+      '  El host de plataforma en DEV es un t3.small (2 vCPU / 2 GiB) con nueve\n' +
+      '  servicios encima, y detras de el responde el host de contenido:\n' +
       '  pasar de ahi no mide latencia, tumba el entorno de la demo. Si de verdad\n' +
       '  hace falta, subir el techo explicitamente con TECHO_VUS y avisar al equipo.\n' +
       '  Ver tests/rendimiento/README.md, seccion «El techo de carga».',

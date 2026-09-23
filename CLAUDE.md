@@ -43,7 +43,12 @@ servicios y datos, en `.claude/rules/backend-spring.md`; frontend, paleta y tipo
 - **Backend:** Java 21 LTS + Spring Boot 4.1, build con Gradle
 - **Frontend:** HTML5 + CSS3 + JavaScript ES2022 sin framework, servido por Spring Boot como estático
 - **Datos:** PostgreSQL 17 (relacional), MongoDB 8 (documental), Redis 8 (caché/estado)
-- **Identidad:** Keycloak 26 · **Mensajería:** RabbitMQ 4 · **Tiempo real:** WebSocket + STOMP
+- **Identidad:** `ms-identidad` — emisor propio RS256, tokens de usuario y de servicio por
+  `client_credentials`, JWKS en `/api/v1/auth/jwks` (ADR-002, ADR-005). **Keycloak no está
+  desplegado en ningún entorno**: la pila lo contemplaba, ADR-005 lo sustituyó y no hay realm.
+- **Mensajería:** **no hay bus de mensajes desplegado**. RabbitMQ figuraba en la pila pero ningún
+  compose ni entorno lo levanta; hoy la integración entre servicios es REST síncrono y STOMP.
+- **Tiempo real:** WebSocket + STOMP
 - **Infra:** Docker, k3s, OpenTofu, **AWS** (cuenta normal con el plan gratuito, no AWS Academy)
 - **Calidad:** JUnit5/JaCoCo (80% mínimo), Testcontainers, Pact JVM, ArchUnit, Playwright, k6,
   SonarQube Cloud, GitHub Actions, Conventional Commits

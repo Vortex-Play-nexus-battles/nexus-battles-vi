@@ -1,3 +1,30 @@
+# =============================================================================
+# SUPERSEDED — NO APLICABLE. Se conserva solo como referencia histórica.
+# =============================================================================
+#
+# Este archivo declara tres instancias `t3.micro` (`nexus-dev`, `nexus-test`,
+# `nexus-prod`) con estado LOCAL y sin backend remoto. Corresponde al diseño
+# inicial de tres entornos, anterior a la cuenta AWS con Free Plan.
+#
+# **Ningún workflow lo aplica.** `infra-dev.yml` solo opera sobre las dos
+# carpetas de abajo, y ninguna de las tres instancias de aquí existe en la
+# cuenta. No hacer `tofu/terraform apply` sobre esta carpeta: crearía
+# infraestructura duplicada, con estado en el disco de quien la aplique.
+#
+# Lo que SÍ gobierna la infraestructura real (dos hosts, ambos `t3.small`,
+# con el estado en S3 versionado y bloqueo):
+#
+#   infrastructure/entornos/plataforma/  -> nexus-plataforma-dev (35.168.124.119)
+#   infrastructure/entornos/contenido/   -> nexus-contenido-dev  (34.193.90.11)
+#
+# El mapa completo de qué corre en cada host está en
+# docs/arquitectura/README.md.
+#
+# Retirarlo del repositorio es una decisión pendiente de coordinación con los
+# dueños de HU-CICD-002 / HU-POR-003 (Néstor y Santiago G.); hasta entonces se
+# deja como está, marcado, para no perder el registro del diseño original.
+# =============================================================================
+
 provider "aws" {
   region = "us-east-1"
 }

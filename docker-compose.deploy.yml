@@ -19,8 +19,13 @@
 # del commit que paso CI para ese servicio).
 
 #
-# Host unico de dev en AWS (t3.small, 2 GiB + 2 GB de swap; ver
-# infrastructure/entornos/plataforma/README.md). Cada JVM queda acotada a
+# Host de PLATAFORMA en dev (nexus-plataforma-dev, t3.small, 2 GiB + 2 GB de
+# swap). No es el unico host de dev: desde el 8-sep-2026 el dominio de
+# contenido corre en su propia instancia (nexus-contenido-dev), con su propio
+# compose (docker-compose.contenido.yml). Este archivo solo gobierna lo que
+# vive en plataforma; el mapa completo esta en docs/arquitectura/README.md y
+# el detalle de la instancia en
+# infrastructure/entornos/plataforma/README.md. Cada JVM queda acotada a
 # 384 MB (MaxRAMPercentage=70 sobre el limite del contenedor) para que un
 # arranque no se coma la memoria de los demas, y todo se reinicia solo
 # cuando la instancia vuelve del apagado nocturno (restart: unless-stopped;

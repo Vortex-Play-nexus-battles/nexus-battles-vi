@@ -8,14 +8,18 @@ bus de notificaciones y comentarios**.
 
 | Entorno | Qué corre | Qué se demuestra allí |
 |---|---|---|
-| **AWS dev** (`http://35.168.124.119`, un `t3.small`) | borde nginx, ms-identidad, salas-partidas, comentarios, notificaciones, correo, moderación-sanciones, métricas, torneos, admin-parámetros | Registro y login reales, listado de salas por el borde, canal STOMP con JWT, comentarios, bandeja de notificaciones, correo de bienvenida (Mailpit), informe de disponibilidad, degradación controlada (`seccion-no-disponible`), reversión automática (acta en `SIMULACRO-REVERSION.md`). Lo comprueba el smoke `smoke-dev.yml` en cada despliegue. |
+| **AWS dev — host de plataforma** (`http://35.168.124.119`, un `t3.small`) | borde nginx, ms-identidad, salas-partidas, comentarios, notificaciones, correo, moderación-sanciones, métricas, torneos, admin-parámetros | Registro y login reales, listado de salas por el borde, canal STOMP con JWT, comentarios, bandeja de notificaciones, correo de bienvenida (Mailpit), informe de disponibilidad, degradación controlada (`seccion-no-disponible`), reversión automática (acta en `SIMULACRO-REVERSION.md`). Lo comprueba el smoke `smoke-dev.yml` en cada despliegue. |
+| **AWS dev — host de contenido** (`34.193.90.11`, un `t3.small`; solo alcanzable desde el host de plataforma) | héroes (8101), inventario (8102), productos (8103), motor-combate (8104), MongoDB | Puerta de héroe (HU-SAL-003) y combate real contra el motor, servidos al navegador **por el borde del host de plataforma**: el segundo host nunca aparece en una URL del cliente. |
 | **Banco E2E** (`tests/e2e/compose.yml`, en un portátil) | identidad, héroes, productos, inventario, motor-combate, **ms-finanzas**, moderación-sanciones (lista negra y sanciones del chat), salas-partidas y el **mismo** `borde-dev.conf` | El corte vertical completo de la batalla: héroe equipado → sala → segundo jugador → modalidad → partida → combate → barra de vida → final → **apuesta liquidada en el libro real**. |
 
-El host de dev no puede correr la batalla porque `inventario` (MongoDB) y
-`ms-finanzas` no caben en 2 GiB junto con lo que ya hay (#435, #430), y la
-regla del bloque es costo cero y un solo host. No es una limitación del
-producto sino del entorno de demostración; el banco E2E usa los mismos
-contratos, los mismos jars y la misma configuración del borde.
+Lo que falta en AWS dev es **`ms-finanzas`**: el libro de créditos no cabe en el
+host de plataforma junto con lo que ya hay (#430), así que la apuesta liquidada
+solo se demuestra en el banco E2E. `inventario` **sí** está desplegado —corre en
+el 8102 del segundo host, `nexus-contenido-dev`, desde el 8-sep-2026 (ver
+[`docs/arquitectura/README.md`](../arquitectura/README.md))—, y con él la puerta
+de héroe y el combate funcionan en AWS. No es una limitación del producto sino
+del entorno de demostración; el banco E2E usa los mismos contratos, los mismos
+jars y la misma configuración del borde.
 
 ## Evidencia automática
 

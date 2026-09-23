@@ -9,11 +9,13 @@
 #
 # ## ESTE WORKFLOW NUNCA APUNTA SOLO A AWS DEV
 #
-# Y no es un descuido: es la decisión. DEV es un `t3.small` del plan gratuito
-# que corre nueve servicios y es el entorno donde se hace la demo. Una prueba
-# de carga automática contra él es una forma elaborada de tumbar la
-# sustentación. Medir AWS exige que una persona abra Actions, elija el perfil,
-# escriba la URL y —para `load`— confirme por escrito.
+# Y no es un descuido: es la decisión. El **host de plataforma** en DEV es un
+# `t3.small` del plan gratuito que corre nueve servicios y es el entorno donde
+# se hace la demo; toda URL medible pasa por su borde, y detrás de él está
+# además el host de contenido, igual de pequeño (ver docs/arquitectura/README.md).
+# Una prueba de carga automática contra ellos es una forma elaborada de tumbar
+# la sustentación. Medir AWS exige que una persona abra Actions, elija el
+# perfil, escriba la URL y —para `load`— confirme por escrito.
 #
 # Ninguna URL de AWS está escrita en este archivo, para que tampoco se pueda
 # disparar «por inercia» dándole a Run workflow sin mirar.
@@ -208,7 +210,7 @@ jobs:
         run: |
           if [ "$CONFIRMACION" != "entiendo-el-riesgo" ]; then
             echo "::error::El perfil 'load' exige escribir 'entiendo-el-riesgo' en el campo de confirmacion."
-            echo "El host de DEV es un t3.small con nueve servicios y es el entorno de la demo."
+            echo "El host de plataforma en DEV es un t3.small con nueve servicios y es el entorno de la demo."
             echo "Ver tests/rendimiento/README.md, seccion «El techo de carga»."
             exit 1
           fi
