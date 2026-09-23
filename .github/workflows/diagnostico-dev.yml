@@ -90,6 +90,40 @@ jobs:
           envs: PARES_SALUD
           command_timeout: 3m
           script: |
+            echo "============== IDENTIDAD REAL DE ESTA MAQUINA =============="
+            # Quien es esta instancia SEGUN ELLA MISMA, no segun el workflow que
+            # la consulta. Sale del servicio de metadatos de EC2 (169.254.169.254),
+            # que no necesita credenciales de AWS y solo lee.
+            #
+            # Existe porque durante semanas se discutio de memoria si los dos
+            # hosts estaban en la misma cuenta, y una suposicion equivocada ahi
+            # termina en un tercer EC2 en la cuenta que no es (#666). El numero
+            # de cuenta no es un secreto -- aparece en el ARN del rol que ya esta
+            # en las variables del repositorio -- pero la clave privada de la
+            # instancia si, y aqui no se toca nada de eso.
+            TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+              -H "X-aws-ec2-metadata-token-ttl-seconds: 120" --max-time 5 || true)
+            meta() {
+              if [ -n "$TOKEN" ]; then
+                curl -s --max-time 5 -H "X-aws-ec2-metadata-token: $TOKEN" "http://169.254.169.254/latest/$1" || true
+              else
+                curl -s --max-time 5 "http://169.254.169.254/latest/$1" || true
+              fi
+            }
+            identidad=$(meta dynamic/instance-identity/document)
+            if [ -n "$identidad" ]; then
+              echo "$identidad" | sed 's/^/  /'
+              mac=$(meta meta-data/mac)
+              echo "  vpc-id:             $(meta meta-data/network/interfaces/macs/$mac/vpc-id)"
+              echo "  subnet-id:          $(meta meta-data/network/interfaces/macs/$mac/subnet-id)"
+              echo "  security-group-ids: $(meta meta-data/network/interfaces/macs/$mac/security-group-ids | tr '\n' ' ')"
+              echo "  ip publica:         $(meta meta-data/public-ipv4)"
+              echo "  perfil IAM:         $(meta meta-data/iam/info | tr -d '\n' | cut -c1-200)"
+            else
+              echo "  El servicio de metadatos no contesto (¿IMDS deshabilitado?)."
+            fi
+
+            echo
             echo "===================== ARRANQUE Y CARGA ====================="
             uptime
             echo "Ultimo arranque: $(who -b 2>/dev/null || stat -c %y /proc/1 2>/dev/null)"
