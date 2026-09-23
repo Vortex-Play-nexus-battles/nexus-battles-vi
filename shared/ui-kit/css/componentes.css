@@ -118,6 +118,22 @@
   color: var(--texto);
 }
 
+/* Acción secundaria SOBRE cromo — UX-R3.2.
+   `--secundario` es blanco sobre superficie: puesto encima del cromo se
+   convierte en un bloque blanco que pesa más que el propio CTA de acento y
+   se lleva la mirada. Este hereda el color del contenedor y se dibuja solo
+   con el contorno, que es lo que hace una acción secundaria: estar, sin
+   competir. Solo tiene sentido dentro de una superficie oscura. */
+.boton--contorno {
+  background: transparent;
+  border-color: currentcolor;
+  color: inherit;
+}
+.boton--contorno:hover {
+  background: color-mix(in srgb, currentcolor 14%, transparent);
+  color: inherit;
+}
+
 .boton--peligro {
   background: var(--error);
   color: var(--texto-sobre-color);
@@ -3511,24 +3527,42 @@
   gap: var(--e-5);
 }
 
-.home__destacado {
+/* La portada del jugador — UX-R3.2.
+
+   Una sola pieza con lo que se mira al volver: quién eres y qué vas a hacer a
+   la izquierda, con qué a la derecha. Antes eran dos bloques uno debajo del
+   otro, y el orden decía «hola, juega» y solo después «ah, y este es tu
+   héroe» — al revés de como se lee un juego.
+
+   La profundidad sale del mismo recurso que el portal: cromo con dos
+   degradados. Es deliberado que se parezcan: la portada del jugador es el
+   portal una vez dentro. */
+.home__portada {
   display: grid;
-  gap: var(--e-4);
+  gap: var(--e-6);
   align-items: center;
-  padding: var(--e-6);
-  background: var(--cromo-elevado, var(--superficie));
-  color: var(--texto-sobre-color);
-  border: 1px solid var(--borde);
+  padding: var(--e-8) var(--e-6);
   border-radius: var(--radio);
+  background: var(--cromo-elevado);
+  background-image:
+    radial-gradient(
+      100% 120% at 0% 0%,
+      color-mix(in srgb, var(--acento-relleno) 40%, transparent),
+      transparent 62%
+    ),
+    linear-gradient(100deg, var(--cromo-elevado), var(--cromo) 70%);
+  color: var(--texto-sobre-color);
+  box-shadow: var(--sombra-2);
 }
 
-@media (min-width: 860px) {
-  .home__destacado {
-    grid-template-columns: 1fr auto;
+@media (min-width: 900px) {
+  .home__portada {
+    grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+    gap: var(--e-16);
   }
 }
 
-/* El fondo de `.home__destacado` es oscuro, asi que su texto NO puede heredar
+/* El fondo de la portada es oscuro, asi que su texto NO puede heredar
    `--texto` del body. Y no basta con poner el color en el contenedor: `base.css`
    declara `color: var(--texto)` DIRECTAMENTE sobre `h1, h2, .t-titulo...`, y una
    declaracion propia gana siempre a la herencia. Por eso van nombrados.
@@ -3536,15 +3570,71 @@
    Sin esto, el saludo salia a 1,46:1 sobre `--cromo-elevado`, muy por debajo
    del 4,5:1 de WCAG AA (1.4.3): el panel mas visible de la aplicacion y
    practicamente ilegible. Lo midio el laboratorio visual (UX-R2.1); leyendo el
-   CSS no se ve, porque el color venia de tres niveles mas arriba. */
-.home__destacado :is(h1, h2, h3, .t-titulo, .t-subtitulo, .t-etiqueta, .t-cuerpo) {
+   CSS no se ve, porque el color venia de tres niveles mas arriba.
+
+   La excepcion es `.home__heroe`: ahi dentro vive una tarjeta blanca del kit,
+   con su propio texto oscuro, y forzarle el blanco la dejaria ilegible. */
+.home__presentacion :is(h1, h2, h3, .t-titulo, .t-subtitulo, .t-etiqueta, .t-cuerpo) {
   color: var(--texto-sobre-color);
 }
 
+.home__presentacion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-4);
+}
+
+.home__sobretitulo {
+  margin: 0;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--pista);
+}
+
 .home__saludo {
+  margin: 0;
   font-family: var(--t-titulo-familia);
   font-size: var(--t-titulo-xl-tam);
   line-height: var(--t-titulo-xl-alto);
+  /* Un apodo puede ser largo y no lleva espacios: sin esto empujaba la
+     portada a lo ancho y sacaba el botón fuera en móvil. */
+  overflow-wrap: anywhere;
+}
+
+.home__lema {
+  max-width: 46ch;
+  margin: 0;
+  color: var(--pista);
+}
+
+.home__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-3);
+  padding-top: var(--e-2);
+}
+
+/* El héroe equipado dentro de la portada. La tarjeta que pinta `home.js` es
+   del kit —blanca, con su retrato y su anillo de rareza— y aquí solo se le
+   dice cuánto sitio tiene.
+
+   `color: var(--texto)` NO es redundante: la portada declara
+   `--texto-sobre-color` para su propio texto, y eso se hereda hacia dentro.
+   Los títulos y encabezados del kit traen su color declarado y se salvan,
+   pero los estados de vista pintan su título con `<p class="…__titulo">`, que
+   hereda — y sobre la tarjeta blanca salía blanco sobre blanco. El
+   laboratorio no lo habría marcado: el texto estaba, medía bien y no
+   desbordaba. Simplemente no se veía. */
+.home__heroe {
+  min-width: 0;
+  color: var(--texto);
+}
+
+.home__heroe > * {
+  height: 100%;
 }
 
 .home__rejilla {
@@ -4339,32 +4429,47 @@ button.tarjeta-heroe[aria-pressed='true'] {
   box-shadow: var(--sombra-2);
 }
 
-/* El héroe equipado es lo segundo que se mira: sube de la rejilla de tres a
-   su propia fila, con el retrato a la izquierda. */
+/* El héroe equipado ya no es «lo segundo que se mira»: desde UX-R3.2 vive
+   dentro de la portada, al lado de la acción de jugar. En la ranura, el
+   retrato manda y los datos se apilan debajo — la columna mide 280 px como
+   mínimo, no el ancho de la página, así que el retrato a la izquierda y el
+   texto a la derecha ya no caben cómodos. */
 .home__heroe .tarjeta {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: var(--e-4);
+  display: flex;
+  flex-direction: column;
   align-items: center;
+  gap: var(--e-3);
+  text-align: center;
 }
 
-/* Salvo cuando el bloque no trae héroe y lo que hay es un estado vacío o de
-   error, que ocupa la tarjeta entera. */
-.home__heroe .estado-vista,
-.home__heroe .tarjeta:not(:has(.marco-heroe)) {
-  display: block;
+/* UX-R3.2 — aquí había `display: block` sobre `.estado-vista`.
+
+   La intención era que el estado ocupara la tarjeta entera, y lo conseguía;
+   el efecto secundario era que deshacía el `display: flex` del propio
+   componente y con él su `align-items: center`. El resultado: el icono
+   circular de 56 px pegado al borde izquierdo, y el título y el detalle
+   centrados por el `text-align` heredado. Una pieza descuadrada, en el bloque
+   más visible de la home, en los dos estados en que aparece (sin héroe, y con
+   el inventario caído — que es el estado por omisión en dev).
+
+   `.estado-vista` ya sabe ocupar y centrar: lo que necesitaba era altura, no
+   otro `display`. */
+.home__heroe .estado-vista {
+  height: 100%;
 }
 
 @media (max-width: 767px) {
-  .home__jugar {
+  /* Las dos acciones de la portada ocupan el ancho y se apilan: en 375 px,
+     «Jugar ahora» y «Ver salas abiertas» en la misma fila dejaban la segunda
+     en dos renglones. */
+  .home__acciones > .boton {
     width: 100%;
     justify-content: center;
   }
 
-  .home__heroe .tarjeta {
-    grid-template-columns: 1fr;
-    justify-items: center;
-    text-align: center;
+  .home__jugar {
+    width: 100%;
+    justify-content: center;
   }
 }
 
