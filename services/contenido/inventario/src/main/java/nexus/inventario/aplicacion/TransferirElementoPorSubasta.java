@@ -14,9 +14,19 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>No es un cambio de campo. El inventario esta modelado POR DUENO, asi que
  * transferir es mover el elemento de un agregado a otro: sale del inventario
- * del vendedor y entra en el del comprador. Por eso va en un servicio propio y
- * en una sola transaccion — si se guardara uno y fallara el otro, el elemento
- * existiria dos veces o ninguna.
+ * del vendedor y entra en el del comprador. Son dos escrituras en dos
+ * documentos distintos.
+ *
+ * <p><b>Hoy esas dos escrituras NO son atomicas, aunque el metodo lleve
+ * {@code @Transactional}.</b> Este servicio no declara ningun
+ * {@code MongoTransactionManager} y Spring Boot no lo configura solo, asi que
+ * la anotacion no abre ninguna transaccion. Si el segundo guardado falla
+ * despues del primero, el elemento queda fuera de los dos inventarios, y cada
+ * reintento de ms-subastas recibe 404 porque ya no hay elemento que buscar.
+ * Cerrarlo es una decision del dueno del modulo: transacciones de Mongo
+ * (replica set y {@code MongoTransactionManager}) o un orden de escritura con
+ * recuperacion idempotente. La anotacion se deja para que haga efecto el dia
+ * que exista el gestor; hasta entonces, que nadie la lea como una garantia.
  *
  * <p>Solo transfiere quien bloqueo: se exige que el elemento este bloqueado por
  * ESA subasta. Sin esa comprobacion, cualquier servicio con credencial podria
