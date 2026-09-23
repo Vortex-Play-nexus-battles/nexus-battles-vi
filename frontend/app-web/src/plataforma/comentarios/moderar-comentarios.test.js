@@ -62,7 +62,7 @@ describe('la cola', () => {
     const zona = raiz.querySelector('[data-zona="cola"]');
     expect(zona.querySelector('[data-estado="vacio"]')).not.toBeNull();
     expect(zona.querySelector('[data-estado="error"]')).toBeNull();
-    expect(zona.textContent).toContain('No hay comentarios esperando revision');
+    expect(zona.textContent).toContain('No hay comentarios esperando revisión');
   });
 
   test('un 403 se explica por lo que es: la pantalla no es para esta cuenta', async () => {
@@ -76,7 +76,7 @@ describe('la cola', () => {
     });
     await asentar();
 
-    expect(raiz.querySelector('[data-zona="cola"]').textContent).toContain('solo para moderacion');
+    expect(raiz.querySelector('[data-zona="cola"]').textContent).toContain('solo para moderación');
   });
 
   test('pinta el texto del comentario con textContent, no como marcado', () => {
@@ -156,7 +156,7 @@ describe('el detalle y la decision', () => {
 
   test('el historial vacio se dice; con asientos se listan en orden', () => {
     expect(panelDeDetalle(detalle(), () => {}).textContent).toContain(
-      'Todavia no se ha decidido nada',
+      'Todavía no se ha decidido nada',
     );
 
     const conHistorial = panelDeDetalle(

@@ -175,10 +175,7 @@ test.describe('Moderacion de comentarios: el comentario en revision tiene salida
     const d = await detalle();
     expect(d.reportes).toHaveLength(1);
     expect(d.reportes[0].categoria).toBe('INFORMACION_FALSA');
-    expect(
-      d.historial,
-      'todavia no se ha decidido nada: el historial esta vacio',
-    ).toHaveLength(0);
+    expect(d.historial, 'todavia no se ha decidido nada: el historial esta vacio').toHaveLength(0);
   });
 
   test('6-7: la moderadora oculta, el asiento lleva SU uid y queda en el historial', async () => {
@@ -190,9 +187,7 @@ test.describe('Moderacion de comentarios: el comentario en revision tiene salida
     expect(resuelto.asiento.accion).toBe('OCULTAR');
     expect(resuelto.asiento.estadoAnterior).toBe('EN_REVISION');
     expect(resuelto.asiento.estadoNuevo).toBe('OCULTO');
-    expect(resuelto.asiento.moderadorId, 'quien firma sale del token').toBe(
-      moderadora.claims.uid,
-    );
+    expect(resuelto.asiento.moderadorId, 'quien firma sale del token').toBe(moderadora.claims.uid);
     expect(resuelto.asiento.apodoModerador).toBe(MODERADORA);
     expect(resuelto.asiento.motivo).toBe('Afirmacion no verificable sobre el producto');
 

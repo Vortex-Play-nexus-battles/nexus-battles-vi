@@ -176,7 +176,7 @@ export function panelDeDetalle(detalle, alDecidir) {
       ? h('p', {
           clase: 't-meta',
           datos: { zona: 'historial' },
-          texto: 'Todavia no se ha decidido nada.',
+          texto: 'Todavía no se ha decidido nada.',
         })
       : h('ol', {
           clase: 'pila pila--compacta',
@@ -244,7 +244,7 @@ export function panelDeDetalle(detalle, alDecidir) {
           motivo,
           h('p', {
             clase: 'campo__pista',
-            texto: 'Obligatorio, tambien al aprobar: el autor lo recibe y queda en el asiento.',
+            texto: 'Obligatorio, también al aprobar: el autor lo recibe y queda en el asiento.',
           }),
         ],
       }),
@@ -279,7 +279,7 @@ export function montarModeracion(raiz, { api = null, productoId = null } = {}) {
     const explicacion = EXPLICACION[error?.motivo];
     pintarAviso(zonaAviso, {
       tono: 'error',
-      titulo: explicacion?.titulo ?? error?.titulo ?? 'No se pudo completar la operacion',
+      titulo: explicacion?.titulo ?? error?.titulo ?? 'No se pudo completar la operación',
       detalle: explicacion?.detalle ?? error?.detalle ?? null,
     });
   }
@@ -311,8 +311,8 @@ export function montarModeracion(raiz, { api = null, productoId = null } = {}) {
         pintarEstado(
           zonaCola,
           estadoVacio({
-            titulo: 'No hay comentarios esperando revision',
-            detalle: 'Cuando alguien reporte uno, aparecera aqui.',
+            titulo: 'No hay comentarios esperando revisión',
+            detalle: 'Cuando alguien reporte uno, aparecerá aquí.',
           }),
         );
         return;
@@ -327,7 +327,7 @@ export function montarModeracion(raiz, { api = null, productoId = null } = {}) {
         estadoDeError({
           titulo:
             error?.estado === 403
-              ? 'Esta pantalla es solo para moderacion'
+              ? 'Esta pantalla es solo para moderación'
               : 'No se pudo cargar la cola',
           detalle:
             error?.estado === 403

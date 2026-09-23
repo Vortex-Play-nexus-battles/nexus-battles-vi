@@ -785,7 +785,7 @@ export function montarPublicarComentario(
         pintarAviso(zonaAviso, {
           tono: deApi ? tonoPara(error.estado) : 'error',
           titulo: tituloDelFalloAlReportar(error, deApi),
-          detalle: deApi ? error.detalle : 'Revisa tu conexion e intentalo de nuevo.',
+          detalle: deApi ? error.detalle : 'Revisa tu conexión e inténtalo de nuevo.',
         });
         cerrar();
       }
