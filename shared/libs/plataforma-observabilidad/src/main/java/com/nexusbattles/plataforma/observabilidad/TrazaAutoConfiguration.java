@@ -8,9 +8,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
-import org.springframework.http.client.ClientHttpRequestInterceptor;
-import org.springframework.web.client.RestClient;
 
 /**
  * Enciende la propagacion del identificador de traza en todo el monorepo —
@@ -40,8 +39,10 @@ import org.springframework.web.client.RestClient;
  *       cadena de filtros, antes que seguridad, para que hasta un 401 salga
  *       con traza.</li>
  *   <li><b>Salida:</b> {@link InterceptorDeTraza} lo reenvia en cada llamada
- *       HTTP. Se conecta por {@link RestClient.Builder}, que es de donde
- *       salen los clientes de los veinte servicios.</li>
+ *       HTTP. Donde Spring Boot construye el {@code RestClient.Builder}, se
+ *       engancha solo; donde el servicio se arma el suyo con
+ *       {@code RestClient.builder()}, lo anade el propio servicio (el caso
+ *       de salas-partidas, que habla con seis modulos).</li>
  * </ul>
  *
  * <h2>Lo que esto todavia NO cubre</h2>
@@ -80,39 +81,41 @@ public class TrazaAutoConfiguration {
     }
 
     /**
-     * Engancha el interceptor a TODO {@code RestClient.Builder} del contexto.
+     * Engancha el interceptor a todo {@code RestClient.Builder} que Spring
+     * Boot construya — solo donde ese mecanismo existe.
      *
-     * <p>Se hace por el personalizador y no pidiendole a cada servicio que
-     * anada {@code .requestInterceptor(...)} por la misma razon de siempre:
-     * hay cuarenta clases con cliente HTTP en el monorepo y la que se olvide
-     * rompe la traza sin que nada falle. Un personalizador se aplica a los
-     * cuarenta, incluidos los que se escriban manana.
+     * <h3>Por que esto va en una configuracion anidada y condicionada</h3>
      *
-     * <p>Convive con {@code InterceptorDePortadorDeServicio} (ADR-005): son
-     * dos interceptores distintos sobre el mismo constructor, uno pone
+     * {@code RestClientCustomizer} vive en {@code spring-boot-restclient},
+     * que en Spring Boot 4 es un modulo aparte. Esta biblioteca la reciben
+     * los veinte servicios, y varios de ellos —productos, inventario,
+     * metricas-plataforma— no llaman a nadie por HTTP y no lo tienen en el
+     * classpath.
+     *
+     * <p>La primera version tenia el {@code @Bean} y el personalizador en la
+     * clase de fuera, y esos servicios reventaron al arrancar con
+     * {@code NoClassDefFoundError: RestClientCustomizer}: Spring introspecta
+     * la autoconfiguracion entera —firmas de metodo y clases anidadas
+     * incluidas— antes de evaluar nada, asi que un tipo ausente en una firma
+     * tumba el contexto aunque ese bean no se fuera a crear nunca.
+     *
+     * <p>La condicion se declara por NOMBRE y no con el literal de clase, que
+     * es la unica forma de que la propia anotacion no obligue a cargarlo: las
+     * condiciones se evaluan leyendo el bytecode, sin ClassLoader.
+     *
+     * <p>Donde si existe, convive con {@code InterceptorDePortadorDeServicio}
+     * (ADR-005): son dos interceptores sobre el mismo constructor, uno pone
      * {@code Authorization} y el otro {@code traceparent}.
      */
-    @Bean
-    public RestClientCustomizerDeTraza restClientCustomizerDeTraza(InterceptorDeTraza interceptor) {
-        return new RestClientCustomizerDeTraza(interceptor);
-    }
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = "org.springframework.boot.restclient.RestClientCustomizer")
+    public static class ConClientesRest {
 
-    /**
-     * Personalizador con nombre propio (en vez de una lambda) para que un
-     * servicio que necesite excluirlo pueda declarar el suyo y sustituirlo.
-     */
-    public static final class RestClientCustomizerDeTraza
-            implements org.springframework.boot.restclient.RestClientCustomizer {
-
-        private final ClientHttpRequestInterceptor interceptor;
-
-        RestClientCustomizerDeTraza(ClientHttpRequestInterceptor interceptor) {
-            this.interceptor = interceptor;
-        }
-
-        @Override
-        public void customize(RestClient.Builder constructor) {
-            constructor.requestInterceptor(interceptor);
+        @Bean
+        @ConditionalOnMissingBean(name = "restClientCustomizerDeTraza")
+        public org.springframework.boot.restclient.RestClientCustomizer restClientCustomizerDeTraza(
+                InterceptorDeTraza interceptor) {
+            return constructor -> constructor.requestInterceptor(interceptor);
         }
     }
 }
