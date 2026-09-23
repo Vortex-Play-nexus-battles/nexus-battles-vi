@@ -27,6 +27,26 @@ condición no ahorraba nada y escondía el estado real.
 «¿cuánto cuesta correrlo siempre?».** Si la respuesta son segundos, que corra
 siempre.
 
+## La otra regla: verde no significa desplegado
+
+R14 destapó una familia entera de defectos que **ninguna compuerta veía**,
+porque todas miran el código y ninguna miraba si el código llega a algún sitio:
+
+- `ms-finanzas` y `ms-subastas` llevaban semanas implementados, probados, con
+  el borde enrutándolos — y devolviendo 502 en dev. El detector del CD los
+  perdía por una regex de carpeta.
+- El diagnóstico se hizo **dos veces por separado** (#571 para subastas, #651
+  para finanzas) sin que nadie relacionara los dos casos. Era el mismo defecto.
+- Cuatro servicios de plataforma pedían su credencial a un Keycloak que no
+  existe, y no se notó porque fallan hacia el lado abierto: el síntoma no era
+  un error, era una función que no ocurría.
+
+De ahí la regla que este bloque deja escrita: **`PR fusionado` + `CI verde` no
+es evidencia de que algo esté desplegado, y mucho menos de que funcione.** Un
+guardián que solo mira el repositorio no puede afirmarlo; por eso los tres de
+abajo (servicios invisibles, smoke de comportamiento, E2E) miran la cadena, no
+el archivo.
+
 ## Contratos e integración
 
 | Guardián | Implementación | Dónde corre | Defecto que previene |
@@ -71,6 +91,7 @@ siempre.
 | Guardián | Implementación | Dónde corre | Defecto que previene |
 |---|---|---|---|
 | **Reparto de etiquetas del CD** | `scripts/cd/pruebas/desplegar-etiquetas-contenido.sh` | `ci.yml` · `ci-etiquetas-cd`, **siempre** desde R13 | Que `docker compose up` arrastre un servicio que no cambió con una etiqueta que no existe. Pasó de verdad (corrida 34307790392, 9-sep) y tumbó el despliegue. **La prueba existía desde entonces y nadie la ejecutaba jamás.** |
+| **Servicios invisibles para el CD** | `tests/contratos/servicios-reconocidos-por-el-cd.py` | `ci.yml` · `ci-etiquetas-cd`, **siempre, sin Docker** | Código fusionado y verde que no llega a ningún entorno. Cuatro eslabones que ninguna otra compuerta mira: (a) el CD conoce cada servicio desplegable; (b) su puerto es el mismo en `cd.yml`, en su compose y en su `Dockerfile`; (c) tiene descriptor de ejecución; (d) la ruta de salud que `desplegar.sh` consulta es la que el servicio publica de verdad, **derivada de su `context-path`**, no del comentario que dice cuál debería ser. Más un quinto transversal: que todo override que el despliegue usa viaje de verdad al servidor por SCP. |
 | **Salud tras desplegar y reversión** | healthcheck de `scripts/cd/desplegar.sh` + `scripts/cd/revertir.sh` | `cd.yml` | Que una imagen mala se quede en pie. Reversión medida: 24 s (`SIMULACRO-REVERSION.md`). |
 | **Guardián del propio simulacro** | aserción en `cd.yml` del job de simulacro | `cd.yml`, solo en `workflow_dispatch` | Que el mecanismo de reversión deje de detectar fallos **en silencio**. |
 | **Importación del host de contenido** | condición sobre `vars.IMPORTACION_CONTENIDO_COMPLETADA` en `infra-dev.yml` | `infra-dev.yml` | Que un `apply` con el estado remoto vacío **cree un tercer EC2** y duplique el coste. |

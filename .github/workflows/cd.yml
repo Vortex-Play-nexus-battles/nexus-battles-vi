@@ -137,7 +137,7 @@ jobs:
             ARCHIVOS=""
             for s in $(echo "${{ inputs.servicios }}" | tr ',' ' '); do
               case "$s" in
-                ms-identidad|ms-cumplimiento|ms-ecommerce|ms-finanzas) ARCHIVOS="$ARCHIVOS services/cuentas/$s/a-demanda" ;;
+                ms-identidad|ms-cumplimiento|ms-ecommerce|ms-finanzas|ms-subastas) ARCHIVOS="$ARCHIVOS services/cuentas/$s/a-demanda" ;;
                 heroes|inventario|productos|motor-combate) ARCHIVOS="$ARCHIVOS services/contenido/$s/a-demanda" ;;
                 *) ARCHIVOS="$ARCHIVOS services/plataforma/$s/a-demanda" ;;
               esac
@@ -287,6 +287,31 @@ jobs:
             fi
           fi
 
+          # 6.6) services/cuentas/ms-subastas (Gradle, equipo Cuentas). El
+          #      gemelo exacto de ms-finanzas: mismo lenguaje, misma carpeta,
+          #      mismo par de rendijas. Su 502 se diagnostico por separado en
+          #      el issue #571 y se atribuyo a subastas; era el mismo defecto
+          #      del flujo, no dos. Puerto 8092 (EXPOSE 8092 en su Dockerfile,
+          #      y el que ya espera borde-dev.conf para /subastas y /mis-pujas).
+          #
+          #      Su jar no sale en build/libs sino en build.nosync/libs: su
+          #      build.gradle mueve layout.buildDirectory a proposito y el
+          #      Dockerfile ya copia de ahi (#572). No hay nada que ajustar
+          #      aqui por eso -- bootJar escribe donde el Dockerfile lee --,
+          #      pero conviene saberlo antes de "corregir" una ruta que esta
+          #      bien.
+          if echo "$ARCHIVOS" | grep -q '^services/cuentas/ms-subastas/'; then
+            if [ -f "services/cuentas/ms-subastas/build.gradle" ]; then
+              MATRIZ=$(echo "$MATRIZ" | jq -c \
+                --arg ruta "services/cuentas/ms-subastas" \
+                --arg rutaGradle ":services:cuentas:ms-subastas" \
+                --arg servicio "ms-subastas" \
+                '. + [{ruta:$ruta, rutaGradle:$rutaGradle, servicio:$servicio, puerto:"8092", herramienta:"gradle"}]')
+            else
+              echo "Se omite services/cuentas/ms-subastas: no tiene build.gradle"
+            fi
+          fi
+
           # 7) Lo que NO cabe en el host de dev. El t3.small (1,9 GB) corre 9
           #    servicios + borde con ~330 MB libres y 1,1 GB ya en swap
           #    (diagnostico-dev del 21/sep). Meter otra JVM no "desplegaria un
@@ -306,7 +331,19 @@ jobs:
           #    tumbar lo que ya sostiene el MVP (issue #571, punto 4). Sacarla
           #    de aqui es decision de quien mida la capacidad real del host,
           #    no de este archivo.
-          FUERA_DEL_HOST_DEV="ms-cumplimiento ms-ecommerce ms-finanzas"
+          #    ms-subastas entra aqui por lo mismo, y ahora con medicion en vez de
+          #    estimacion. Diagnostico del host de dev del 23-sep 20:25 UTC
+          #    (corrida 35915851276):
+          #
+          #      Mem:   1910 total   1579 usados   158 disponibles
+          #      Swap:  2047 total   1407 usados    640 libres
+          #
+          #    158 MiB disponibles y el 69 % del swap ya consumido, con catorce
+          #    contenedores en pie. ms-subastas (384 MiB) mas su propia base
+          #    (192 MiB) son 576: no caben, y meterlos tumbaria lo que sostiene
+          #    el MVP. La cifra de "~330 MB libres" que citaban estos
+          #    comentarios era de hace dos dias y se ha quedado corta.
+          FUERA_DEL_HOST_DEV="ms-cumplimiento ms-ecommerce ms-finanzas ms-subastas"
           if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
             for fuera in $FUERA_DEL_HOST_DEV; do
               if echo "$MATRIZ" | jq -e --arg s "$fuera" 'any(.[]; .servicio == $s)' > /dev/null; then
@@ -493,7 +530,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/revertir.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -603,11 +640,21 @@ jobs:
           MS_FINANZAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_FINANZAS }}
           MS_FINANZAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_FINANZAS }}
           MS_FINANZAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_FINANZAS }}
+          # PENDIENTE (TODO_*): los 5 secrets propios de ms-subastas, mismo
+          # patron y mismo motivo del prefijo que los otros cuatro servicios de
+          # Cuentas. Tampoco estan creados todavia en GitHub. Igual que
+          # ms-finanzas, aunque existan, en dev ms-subastas sigue en
+          # FUERA_DEL_HOST_DEV: la medicion del host dice que no cabe.
+          MS_SUBASTAS_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_SUBASTAS }}
+          MS_SUBASTAS_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_SUBASTAS }}
+          MS_SUBASTAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_SUBASTAS }}
+          MS_SUBASTAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_SUBASTAS }}
+          MS_SUBASTAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_SUBASTAS }}
         with:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,SIMULACRO_REVERSION,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,SMTP_PORT,LISTA_NEGRA_VERIFICAR_URL,SALAS_WS_ORIGENES,CHAT_WS_ORIGENES,CHAT_HISTORIAL_TAMANO,NOTIFICACIONES_WS_ORIGENES,COMENTARIOS_FORMATOS_IMAGEN,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,SIMULACRO_REVERSION,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,SMTP_PORT,LISTA_NEGRA_VERIFICAR_URL,SALAS_WS_ORIGENES,CHAT_WS_ORIGENES,CHAT_HISTORIAL_TAMANO,NOTIFICACIONES_WS_ORIGENES,COMENTARIOS_FORMATOS_IMAGEN,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD,MS_SUBASTAS_DB_HOST,MS_SUBASTAS_DB_PORT,MS_SUBASTAS_DB_NAME,MS_SUBASTAS_DB_USER,MS_SUBASTAS_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -834,7 +881,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -896,11 +943,21 @@ jobs:
           MS_FINANZAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_FINANZAS }}
           MS_FINANZAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_FINANZAS }}
           MS_FINANZAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_FINANZAS }}
+          # PENDIENTE (TODO_*): los 5 secrets propios de ms-subastas, mismo
+          # patron y mismo motivo del prefijo que los otros cuatro servicios de
+          # Cuentas. Tampoco estan creados todavia en GitHub. Igual que
+          # ms-finanzas, aunque existan, en dev ms-subastas sigue en
+          # FUERA_DEL_HOST_DEV: la medicion del host dice que no cabe.
+          MS_SUBASTAS_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_SUBASTAS }}
+          MS_SUBASTAS_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_SUBASTAS }}
+          MS_SUBASTAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_SUBASTAS }}
+          MS_SUBASTAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_SUBASTAS }}
+          MS_SUBASTAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_SUBASTAS }}
         with:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD,MS_SUBASTAS_DB_HOST,MS_SUBASTAS_DB_PORT,MS_SUBASTAS_DB_NAME,MS_SUBASTAS_DB_USER,MS_SUBASTAS_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -942,7 +999,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/revertir.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -1014,11 +1071,21 @@ jobs:
           MS_FINANZAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_FINANZAS }}
           MS_FINANZAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_FINANZAS }}
           MS_FINANZAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_FINANZAS }}
+          # PENDIENTE (TODO_*): los 5 secrets propios de ms-subastas, mismo
+          # patron y mismo motivo del prefijo que los otros cuatro servicios de
+          # Cuentas. Tampoco estan creados todavia en GitHub. Igual que
+          # ms-finanzas, aunque existan, en dev ms-subastas sigue en
+          # FUERA_DEL_HOST_DEV: la medicion del host dice que no cabe.
+          MS_SUBASTAS_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_SUBASTAS }}
+          MS_SUBASTAS_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_SUBASTAS }}
+          MS_SUBASTAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_SUBASTAS }}
+          MS_SUBASTAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_SUBASTAS }}
+          MS_SUBASTAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_SUBASTAS }}
         with:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD,MS_SUBASTAS_DB_HOST,MS_SUBASTAS_DB_PORT,MS_SUBASTAS_DB_NAME,MS_SUBASTAS_DB_USER,MS_SUBASTAS_DB_PASSWORD
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh

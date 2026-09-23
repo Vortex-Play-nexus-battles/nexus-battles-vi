@@ -219,13 +219,48 @@ MVP, y se eligió el MVP.
 
 | Servicio | AWS dev | Banco E2E (CI) | Estado y motivo |
 |---|---|---|---|
-| `ms-finanzas` (M07, libro de créditos) | **NO DESPLEGADO** | **SÍ** (`tests/e2e/compose.yml`) | No tiene puerto asignado en `puerto_de()` de `cd.yml`, así que el flujo lo omite explícitamente: no se construye su imagen ni se despliega. En el banco E2E corre de verdad y contra él se ejercitan la apuesta de créditos y la recompensa por partida. |
-| `ms-subastas` (M08) | **NO DESPLEGADO** | **SÍ** (`tests/e2e/compose.yml`) | Mismo caso: sin puerto en `cd.yml`, fuera del flujo automático. En el banco E2E corre con el JWKS real de `ms-identidad`. |
+| `ms-finanzas` (M07, libro de créditos) | **NO DESPLEGADO** (solo a demanda) | **SÍ** (`tests/e2e/compose.yml`) | Desde #651 el CD **sí lo conoce** (bloque propio, Gradle, puerto 8093) y publica su imagen; sigue en `FUERA_DEL_HOST_DEV` por capacidad medida. En el banco E2E corre de verdad y contra él se ejercitan la apuesta de créditos y la recompensa por partida. |
+| `ms-subastas` (M08) | **NO DESPLEGADO** (solo a demanda) | **SÍ** (`tests/e2e/compose.yml`) | Mismo caso desde R14.2 (puerto 8092). En el banco E2E corre con el JWKS real de `ms-identidad`. Aunque se despliegue a demanda, su `INVENTARIO_MODO` se queda en `fake`: la ruta de transferencia de propiedad que necesita **no existe en `inventario`** (ver abajo). |
 | `ms-ecommerce` (M06, tienda y carrito) | **NO DESPLEGADO** (solo a demanda) | NO | Sí tiene bloque de detección y puerto 8090 en `cd.yml`, pero está en `FUERA_DEL_HOST_DEV`: en cualquier disparo que no sea `workflow_dispatch` se le saca de la matriz por capacidad. A demanda sí se intenta — quien lo pide sabe lo que hace. |
 | `ms-cumplimiento` (auditoría y privacidad) | **NO DESPLEGADO** (solo a demanda) | NO | Idéntico, puerto 8091. Su ausencia es la razón de que `AUDITORIA_URL` se deje sin poner: el asiento de auditoría queda en la tabla del propio servicio y en la bitácora JSON, que es el rastro que exige la ficha. |
 
 **Las pruebas y la compuerta de calidad de los cuatro siguen corriendo en
 `ci.yml`.** No estar desplegado no es estar sin verificar.
+
+### La capacidad, medida
+
+Hasta R14 esta decisión se justificaba con «~330 MB libres», una cifra de
+memoria de hace dos días. Medida de verdad en el host de plataforma el
+**23-sep-2026 a las 20:25 UTC** (diagnóstico, corrida 35915851276):
+
+```
+              total  usados  disponibles
+Mem (MiB)      1910    1579          158
+Swap (MiB)     2047    1407          640
+```
+
+158 MiB disponibles y el **69 % del swap ya consumido**, con catorce
+contenedores en pie (nueve servicios, tres bases, Mailpit y el borde) y ningún
+`oom-killer` en el registro del núcleo. Sumar `ms-subastas` (384 MiB) con su
+propia base (192 MiB) son 576 MiB: no es que quepa justo, es que no cabe.
+
+Esa es la razón por la que estos servicios se quedan fuera, y ahora es una
+cifra reproducible en vez de una estimación heredada. **Quien quiera sacarlos
+de `FUERA_DEL_HOST_DEV` tiene que volver a medir, no discutir el comentario.**
+
+### Una ausencia que no es de capacidad
+
+`ms-subastas` necesita `POST /api/v1/inventario/elementos/{id}/transferencias`
+para cambiar de dueño el elemento cuando la subasta se adjudica — el criterio 3
+de HU-SUB-004. Su cliente HTTP la llama; **la ruta no existe**: ni en
+`services/contenido/inventario/src/main`, ni en ningún contrato de
+`contracts/openapi/`. Las otras tres que ese mismo cliente usa (bloqueo,
+consulta y liberación) sí están.
+
+Por eso `INVENTARIO_MODO` se queda en `fake` aunque el servicio se despliegue:
+con `http`, la subasta cobraría la puja y fallaría con 404 justo al transferir
+la propiedad. `inventario` es del equipo Contenido; el alta de esa operación es
+suya, con su contrato primero (regla 1).
 
 ### Qué se ve en DEV cuando se toca uno de ellos
 

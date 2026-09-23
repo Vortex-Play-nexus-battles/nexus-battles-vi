@@ -76,6 +76,11 @@ COMPOSE_MS_ECOMMERCE="$DIRECTORIO/docker-compose.ms-ecommerce.yml"
 # cd.yml (FUERA_DEL_HOST_DEV, issue #571 punto 4): que este override exista
 # no implica que quepa en el host de dev sin medirlo.
 COMPOSE_MS_FINANZAS="$DIRECTORIO/docker-compose.ms-finanzas.yml"
+# Override de ms-subastas (Gradle, equipo Cuentas). El gemelo de ms-finanzas:
+# mismo lenguaje, misma carpeta, mismo defecto de origen (issue #571). Su jar
+# sale en build.nosync/libs porque su build.gradle mueve layout.buildDirectory
+# a proposito (#572); el Dockerfile ya copia de ahi, aqui no cambia nada.
+COMPOSE_MS_SUBASTAS="$DIRECTORIO/docker-compose.ms-subastas.yml"
 # Override de los servicios de services/contenido/* (equipo Contenido):
 # mismo mecanismo que el de cuentas -- se copia siempre, se agrega al
 # comando solo si algun servicio de contenido viene en esta corrida.
@@ -247,6 +252,34 @@ if [ -n "${DIRECTORIO_ACTIVO_URL:-}" ] && [ "${DIRECTORIO_ACTIVO_URL}" != "$EMIS
   echo "  DIRECTORIO_ACTIVO_URL del secret se ignora: bajo ADR-005 el emisor es ms-identidad (no se imprime el valor)"
 fi
 sed -i "s#^DIRECTORIO_ACTIVO_URL=.*#DIRECTORIO_ACTIVO_URL=${EMISOR_ADR_005}#" .env
+# ...y TAMBIEN en el shell, que es la mitad que faltaba.
+#
+# Corregir solo el archivo arreglaba nada mas la mitad de los servicios, y por
+# eso el defecto sobrevivio a la correccion. Compose resuelve el valor de una
+# variable en dos sitios distintos segun como la pida el compose:
+#
+#   env_file: [.env]                  -> lee el ARCHIVO (el sed de arriba)
+#   environment: X: ${X:-por_omision} -> INTERPOLA, y ahi el shell gana al
+#                                        archivo; ademas "environment:" pisa a
+#                                        "env_file:" para esa clave
+#
+# appleboy/ssh-action exporta al shell, via "envs:", el secret tal cual. Los
+# ocho servicios de plataforma declaran env_file, pero cuatro
+# --admin-parametros, comentarios, moderacion-sanciones y torneos-- declaran
+# ademas la variable en "environment:" de docker-compose.deploy.yml. Resultado
+# medido en el host el 23-sep a las 20:25 UTC (diagnostico 35915851276):
+#
+#   srv-correo, srv-metricas-plataforma, srv-notificaciones, srv-salas-partidas
+#       emisor de credenciales: http://srv-ms-identidad:8089/api/v1/auth/token
+#   srv-admin-parametros, srv-comentarios, srv-moderacion-sanciones, srv-torneos
+#       emisor de credenciales: http://keycloak:8180/realms/nexus-battles
+#
+# Esos cuatro pedian su credencial de servicio a un Keycloak que no existe en
+# ningun entorno (ADR-005). No se cayeron: fallan hacia el lado abierto, asi
+# que el sintoma no era un error sino una funcion que no ocurre -- torneos sin
+# reservar los creditos de la inscripcion, comentarios sin consultar sanciones.
+# Por eso paso desapercibido desde a8aa581.
+export DIRECTORIO_ACTIVO_URL="$EMISOR_ADR_005"
 
 echo "== 2) Guardando el tag estable actual de cada servicio, antes de tocarlo =="
 # Si el servicio ya estaba corriendo con algun tag, lo guardamos en un
@@ -314,6 +347,7 @@ INCLUYE_CUENTAS=0
 INCLUYE_MS_CUMPLIMIENTO=0
 INCLUYE_MS_ECOMMERCE=0
 INCLUYE_MS_FINANZAS=0
+INCLUYE_MS_SUBASTAS=0
 INCLUYE_CONTENIDO=0
 for par in $SERVICIOS_PUERTOS; do
   servicio="${par%%:*}"
@@ -329,6 +363,9 @@ for par in $SERVICIOS_PUERTOS; do
   fi
   if [ "$servicio" = "ms-finanzas" ]; then
     INCLUYE_MS_FINANZAS=1
+  fi
+  if [ "$servicio" = "ms-subastas" ]; then
+    INCLUYE_MS_SUBASTAS=1
   fi
   for s in $SERVICIOS_CONTENIDO; do
     if [ "$servicio" = "$s" ]; then
@@ -409,6 +446,24 @@ if [ "$INCLUYE_MS_FINANZAS" -eq 1 ]; then
   fi
 fi
 
+# Mismo patron de "fallo visible" para ms-subastas: application.properties lee
+# ${DB_HOST}/${DB_PORT}/${DB_NAME}/${DB_USER}/${DB_PASSWORD} literalmente, y
+# DB_PASSWORD no trae valor por omision. Sin estos secrets el contenedor
+# arrancaria y moriria al abrir la conexion, con un error de driver que no
+# dice que falta un secret. Preferimos parar aqui y nombrarlos.
+if [ "$INCLUYE_MS_SUBASTAS" -eq 1 ]; then
+  FALTANTES=""
+  [ -n "${MS_SUBASTAS_DB_HOST:-}" ] || FALTANTES="$FALTANTES TODO_DB_HOST_MS_SUBASTAS"
+  [ -n "${MS_SUBASTAS_DB_PORT:-}" ] || FALTANTES="$FALTANTES TODO_DB_PORT_MS_SUBASTAS"
+  [ -n "${MS_SUBASTAS_DB_NAME:-}" ] || FALTANTES="$FALTANTES TODO_DB_NAME_MS_SUBASTAS"
+  [ -n "${MS_SUBASTAS_DB_USER:-}" ] || FALTANTES="$FALTANTES TODO_DB_USER_MS_SUBASTAS"
+  [ -n "${MS_SUBASTAS_DB_PASSWORD:-}" ] || FALTANTES="$FALTANTES TODO_DB_PASSWORD_MS_SUBASTAS"
+  if [ -n "$FALTANTES" ]; then
+    echo "Faltan secrets de GitHub para ms-subastas, crealos en Settings > Environments:$FALTANTES"
+    exit 1
+  fi
+fi
+
 # Siempre el base + el de despliegue de plataforma combinados: el base (de
 # desarrollo local, con "build:") nunca se usa solo. El de despliegue solo
 # agrega "image:", y como aqui no pasamos --build, Compose usa esa imagen ya
@@ -428,6 +483,9 @@ if [ "$INCLUYE_MS_ECOMMERCE" -eq 1 ]; then
 fi
 if [ "$INCLUYE_MS_FINANZAS" -eq 1 ]; then
   ARCHIVOS_COMPOSE+=(-f "$COMPOSE_MS_FINANZAS")
+fi
+if [ "$INCLUYE_MS_SUBASTAS" -eq 1 ]; then
+  ARCHIVOS_COMPOSE+=(-f "$COMPOSE_MS_SUBASTAS")
 fi
 if [ "$INCLUYE_CONTENIDO" -eq 1 ]; then
   ARCHIVOS_COMPOSE+=(-f "$COMPOSE_CONTENIDO")
@@ -504,6 +562,11 @@ ruta_salud_de() {
     # server.servlet.context-path=/api/v1 -- a diferencia de ms-identidad y
     # ms-cumplimiento, que no tienen context-path y viven en la raiz.
     ms-finanzas) echo "/api/v1/actuator/health" ;;
+    # Confirmado igual en application.properties de ms-subastas (linea 2):
+    # server.servlet.context-path=/api/v1. Sin esta linea la sonda habria
+    # preguntado en /actuator/health, recibido 404 y dado por caido un
+    # servicio sano -- el mismo fallo que tuvo ms-ecommerce.
+    ms-subastas) echo "/api/v1/actuator/health" ;;
     *) echo "/actuator/health" ;;
   esac
 }

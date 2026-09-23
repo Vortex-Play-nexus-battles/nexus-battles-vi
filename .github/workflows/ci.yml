@@ -332,6 +332,23 @@ jobs:
         shell: bash
         run: bash scripts/cd/pruebas/desplegar-etiquetas-contenido.sh
 
+      # El defecto que esto corta: codigo fusionado y verde que no llega a
+      # ningun entorno. ms-finanzas y ms-subastas llevaban semanas asi --
+      # implementados, probados, con el borde enrutandolos-- y devolviendo 502
+      # en dev, porque el detector del CD los perdia por una regex de carpeta.
+      # Se diagnostico dos veces por separado (#571, #651) sin que nadie
+      # relacionara los dos casos: era el mismo defecto.
+      #
+      # Comprueba los cuatro eslabones que ninguna otra compuerta mira: que el
+      # CD conozca cada servicio desplegable, que su puerto sea el mismo de
+      # punta a punta, que tenga descriptor de ejecucion y que su ruta de salud
+      # sea la que el servicio publica de verdad (derivada de su context-path,
+      # no del comentario que dice cual deberia ser). Analisis estatico: no
+      # necesita Docker, ni red, ni credenciales. Corre siempre.
+      - name: Comprobar que el CD conoce todos los servicios desplegables
+        shell: bash
+        run: python3 tests/contratos/servicios-reconocidos-por-el-cd.py
+
   ci-secretos-bitacora:
     name: CI - secretos en la bitacora
     runs-on: ubuntu-latest

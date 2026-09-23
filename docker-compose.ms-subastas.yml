@@ -1,0 +1,138 @@
+# HU-CICD-002 (SCRUM-165): override de despliegue para services/cuentas/ms-subastas.
+#
+# El gemelo de docker-compose.ms-finanzas.yml. Mismo patron que los de
+# ms-cumplimiento y ms-ecommerce: solo declara "image:", nunca "build:" -- el
+# jar se compila y la imagen se publica en ghcr.io en el job
+# "construir-y-publicar" de cd.yml, nunca en el servidor. Se combina siempre
+# con docker-compose.yml (nunca solo), y SOLO cuando ms-subastas esta entre los
+# servicios de esa corrida:
+#   docker compose -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.ms-subastas.yml pull|up -d
+#
+# POR QUE NO EXISTIA
+# ------------------
+# ms-subastas es Gradle bajo services/cuentas/. El detector de cd.yml recorria
+# services/(plataforma|contenido)/ por regex y enganchaba a mano solo los de
+# Maven de cuentas, asi que este servicio no aparecia en ninguno de los dos
+# caminos: no se construia su imagen, no se le asignaba etiqueta y nunca
+# entraba a la lista de despliegue. Ni un mensaje de error.
+#
+# El borde, en cambio, SI lo enruta desde hace semanas
+# (/api/v1/subastas y /api/v1/mis-pujas -> srv-ms-subastas:8092). nginx
+# resolvia un nombre de contenedor inexistente y devolvia 502, asi que el
+# defecto se presentaba disfrazado de fallo de red. Queda en la bitacora del
+# host, medido el 23-sep a las 20:11 UTC:
+#
+#   srv-ms-subastas could not be resolved (2: Server failure)
+#     request: "GET /api/v1/subastas"
+#   srv-ms-subastas could not be resolved (2: Server failure)
+#     request: "GET /api/v1/mis-pujas"
+#
+# Es el issue #571, y la misma causa raiz que #651 corrigio para ms-finanzas.
+#
+# Puerto 8092 en el host y en el contenedor (EXPOSE 8092 en su Dockerfile, sin
+# el desfase que tuvo ms-identidad). Su salud vive en /api/v1/actuator/health
+# porque application.properties linea 2 fija server.servlet.context-path=/api/v1
+# -- ver "ruta_salud_de" en scripts/cd/desplegar.sh.
+#
+# NOTA DE CAPACIDAD (medida, no heredada). Diagnostico del host de dev del
+# 23-sep 20:25 UTC (corrida 35915851276):
+#
+#   Mem:   1910 total   1579 usados   158 disponibles
+#   Swap:  2047 total   1407 usados    640 libres
+#
+# Con 158 MiB disponibles y el 69 % del swap ya consumido, este servicio
+# (384 MiB) mas su propia base (192 MiB) no cabe. Por eso cd.yml lo deja en
+# FUERA_DEL_HOST_DEV: la imagen se publica y queda lista, el despliegue
+# automatico no la incluye. Que este archivo exista no significa que quepa.
+
+services:
+  # Base de datos PROPIA de ms-subastas (regla 7: aislamiento de datos). Los
+  # valores por omision son los mismos que usa el banco E2E, que es donde este
+  # servicio si arranca y se prueba entero hoy (tests/e2e/compose.yml).
+  subastas-db:
+    image: postgres:17-alpine
+    container_name: subastas-db
+    restart: unless-stopped
+    mem_limit: 192m
+    environment:
+      POSTGRES_DB: subastas_db
+      POSTGRES_USER: ${MS_SUBASTAS_DB_USER}
+      POSTGRES_PASSWORD: ${MS_SUBASTAS_DB_PASSWORD}
+    volumes:
+      - subastas-db-datos:/var/lib/postgresql/data
+
+  srv-ms-subastas:
+    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-ms-subastas:${TAG}
+    restart: unless-stopped
+    mem_limit: 384m
+    ports:
+      - "8092:8092"
+    depends_on:
+      - subastas-db
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      # El lado IZQUIERDO es el nombre que Spring lee de verdad (confirmado en
+      # application.properties); el DERECHO, con prefijo "MS_SUBASTAS_", es lo
+      # que desplegar.sh deja en el .env del servidor. El prefijo evita chocar
+      # con DB_USER/DB_PASS de plataforma y con el esquema distinto que usa
+      # ms-identidad (DB_URL en vez de DB_HOST/PORT/NAME).
+      DB_HOST: ${MS_SUBASTAS_DB_HOST:-subastas-db}
+      DB_PORT: ${MS_SUBASTAS_DB_PORT:-5432}
+      DB_NAME: ${MS_SUBASTAS_DB_NAME:-subastas_db}
+      DB_USER: ${MS_SUBASTAS_DB_USER}
+      DB_PASSWORD: ${MS_SUBASTAS_DB_PASSWORD}
+      # Clave publica de los tokens de usuario (ADR-002/ADR-005). Desde #572
+      # este servicio verifica contra el JWKS de ms-identidad; el HS256 propio
+      # que tenia antes quedo fuera.
+      IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://srv-ms-identidad:8089/api/v1/auth/jwks}
+      # Credencial de servicio (ADR-001, emisor ADR-005). El secreto lo genera
+      # y persiste desplegar.sh en secretos-servicios.env: ms-subastas ya
+      # figura en su lista CLIENTES_DE_SERVICIO, asi que la variable existe sin
+      # tocar nada. Sin esto, ms-subastas no puede llamar a inventario para
+      # transferir el elemento subastado (#631).
+      DIRECTORIO_ACTIVO_URL: ${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}
+      DIRECTORIO_ACTIVO_CLIENT_ID: ms-subastas
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_MS_SUBASTAS}
+      # Dependencias reales, con los nombres que tienen en ESTE host. inventario
+      # y productos viven en el host de contenido (34.193.90.11), que solo
+      # acepta trafico desde la EIP de plataforma (R9.1-R9.4); los demas estan
+      # en la red de compose de aqui.
+      INVENTARIO_BASE_URL: ${INVENTARIO_BASE_URL:-http://34.193.90.11:8102}
+      CATALOGO_BASE_URL: ${CATALOGO_BASE_URL:-http://34.193.90.11:8103}
+      NOTIFICACIONES_BASE_URL: http://srv-notificaciones:8085/api/v1
+      SANCIONES_BASE_URL: http://srv-moderacion-sanciones:8086
+      FINANZAS_BASE_URL: http://srv-ms-finanzas:8093/api/v1
+      # Creditos: "http", no "fake". El valor por omision del servicio es
+      # "fake", que simula el cobro de una puja sin tocar el libro de creditos:
+      # util en una prueba, una mentira en un entorno desplegado. El banco E2E
+      # ya lo pone en "http" y pasa. Implica que ms-subastas y ms-finanzas se
+      # despliegan JUNTOS -- los dos estan hoy en FUERA_DEL_HOST_DEV, asi que
+      # solo coinciden en un despliegue a demanda.
+      FINANZAS_MODO: ${FINANZAS_MODO:-http}
+      #
+      # Inventario: se queda en "fake", y NO es un olvido.
+      #
+      # InventarioClientHttp llama a cuatro rutas de inventario. Tres existen:
+      #
+      #   PUT    /api/v1/inventario/elementos/{id}/bloqueo-subasta        si
+      #   GET    /api/v1/inventario/elementos/{id}                        si
+      #   DELETE /api/v1/inventario/elementos/{id}/bloqueo-subasta/{sub}  si
+      #   POST   /api/v1/inventario/elementos/{id}/transferencias         NO
+      #
+      # La cuarta no existe: ni en services/contenido/inventario/src/main, ni
+      # en ningun contrato de contracts/openapi/. Es la que cambia de dueno el
+      # elemento cuando la subasta se adjudica -- el criterio 3 de HU-SUB-004 y
+      # el ultimo paso del flujo. Con "http" la subasta cobraria la puja y
+      # despues fallaria con 404 justo al transferir la propiedad: peor que no
+      # desplegarla, porque el dinero si se mueve.
+      #
+      # El fake completa el flujo entero en memoria y avisa de lo que es: su
+      # configuracion arranca con un log.warn explicito. Mientras la ruta no
+      # exista, "fake" es el unico modo que no deja una subasta a medias.
+      #
+      # inventario es del equipo Contenido: el alta de esa ruta es suya, con su
+      # contrato primero (regla 1). Hasta entonces esta linea no se toca.
+      INVENTARIO_MODO: ${INVENTARIO_MODO:-fake}
+
+volumes:
+  subastas-db-datos:
