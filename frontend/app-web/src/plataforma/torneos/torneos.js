@@ -391,14 +391,24 @@ export function montarTorneos(
       zonaListado.replaceChildren(
         estadoDeError({
           titulo: 'Los torneos no están disponibles',
+          // El detalle del servidor solo si trae uno util; si no, el motivo en
+          // el idioma del producto. Sin detalle, la tarjeta quedaba con un
+          // titulo y un boton y ninguna razon (§17).
           detalle:
-            error instanceof ErrorDeTorneos && error.estado < 500
-              ? error.detalle
-              : 'El servicio de torneos no responde ahora mismo.',
+            (error instanceof ErrorDeTorneos && error.estado < 500 && error.detalle) ||
+            'El servicio de torneos no responde ahora mismo. Vuelve a intentarlo en un momento.',
           alReintentar: () => cargarListado(),
         }),
       );
-      avisarError(zonaAviso, error);
+      // UX-R3.6 — y NO se avisa tambien arriba. El aviso flotante es para los
+      // fallos de una accion (inscribir un equipo, abrir un torneo), donde el
+      // contenido sigue siendo valido y hay que decir que fallo lo que se
+      // acaba de pulsar. Cuando lo que falla es la carga del listado, el
+      // propio listado ya lo dice, con su motivo y su boton de reintentar; el
+      // aviso solo anadia una caja amarilla con «No se pudo completar» y nada
+      // mas, encima del mensaje bueno. Dos avisos del mismo fallo, y el peor
+      // primero.
+      console.warn('[torneos] no se pudo cargar el listado:', error);
     }
   }
 

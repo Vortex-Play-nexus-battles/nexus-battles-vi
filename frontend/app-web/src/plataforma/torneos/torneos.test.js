@@ -370,7 +370,20 @@ describe('vista', () => {
     );
     expect(detalle.querySelector('[data-zona="acciones"]').textContent).toMatch(/Inicia sesión/);
 
+    // UX-R3.6 — un rechazo al CARGAR el listado se dice donde iban los
+    // torneos, y solo ahi.
+    //
+    // Antes se decia dos veces: el listado pintaba su estado de error con el
+    // motivo y su boton de reintentar, y ademas saltaba el aviso flotante de
+    // arriba con «No se pudo completar» y nada mas. Dos avisos del mismo
+    // fallo, y el peor primero — una caja amarilla, encima del mensaje bueno,
+    // que no decia que habia pasado ni que se podia hacer.
+    //
+    // El aviso flotante sigue siendo para los fallos de una ACCION (inscribir
+    // un equipo, abrir un torneo), donde el contenido de la pantalla sigue
+    // siendo valido y hay que decir que fallo lo que se acaba de pulsar.
     document.body.innerHTML = VISTA;
+    const avisos = jest.spyOn(console, 'warn').mockImplementation(() => {});
     montarTorneos(document, {
       uid: UID,
       fetchImpl: servicio({
@@ -381,7 +394,13 @@ describe('vista', () => {
       }),
     });
     await asentar();
-    expect(document.querySelector('.aviso--error .aviso__titulo').textContent).toBe('Caido');
+
+    const listado = document.querySelector('[data-zona="listado"]');
+    expect(listado.textContent).toContain('Los torneos no están disponibles');
+    expect(listado.querySelector('[data-accion="reintentar"]')).not.toBeNull();
+    expect(document.querySelector('.aviso--error')).toBeNull();
+    expect(avisos.mock.calls.flat().join(' ')).toContain('torneos');
+    avisos.mockRestore();
   });
 
   test('el administrador crea el torneo desde el formulario, e inicia el torneo abierto', async () => {
