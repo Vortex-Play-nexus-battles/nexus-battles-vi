@@ -191,7 +191,14 @@ export const CONFIG = {
   // calentita: una busqueda indexada (HU-REN-003) se mide recorriendo, no
   // repitiendo la pagina 0.
   paginas: Math.max(1, Math.round(numero('PAGINAS', 3))),
-  criterioBusqueda: texto('CRITERIO_BUSQUEDA', 'a'),
+  // `prueba` y no `a`: `BuscarElementosInventario` exige MINIMO_CARACTERES = 4
+  // y responde 400 con menos. La primera corrida de esta suite contra el banco
+  // E2E real salio con `a` y dio 100 % de error en los 20 433 intentos del
+  // escenario, con los otros tres en verde — que es exactamente para lo que
+  // sirve correrla contra servicios de verdad. Ademas `prueba` casa con lo que
+  // siembra `tests/e2e/sembrar.sh` («Guerrero de prueba»), asi que la busqueda
+  // devuelve filas y mide el camino indexado y no el del resultado vacio.
+  criterioBusqueda: texto('CRITERIO_BUSQUEDA', 'prueba'),
 
   // La sala creada se cancela inmediatamente despues de medirla. Sin esto, una
   // corrida `load` deja miles de salas abiertas en el listado del entorno.
