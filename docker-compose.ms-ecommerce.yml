@@ -22,7 +22,7 @@ services:
     image: postgres:17-alpine
     container_name: ecommerce-db
     restart: unless-stopped
-    mem_limit: 192m
+    mem_limit: 128m
     environment:
       POSTGRES_DB: ${MS_ECOMMERCE_DB_NAME:-ecommerce_db}
       POSTGRES_USER: ${MS_ECOMMERCE_DB_USER}
@@ -39,7 +39,7 @@ services:
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-ms-ecommerce:${TAG}
     container_name: srv-ms-ecommerce
     restart: unless-stopped
-    mem_limit: 384m
+    mem_limit: 256m
     ports:
       - "8090:8090"
     depends_on:

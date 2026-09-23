@@ -24,7 +24,7 @@ services:
     image: postgres:17-alpine
     container_name: cumplimiento-db
     restart: unless-stopped
-    mem_limit: 192m
+    mem_limit: 128m
     environment:
       POSTGRES_DB: ${MS_CUMPLIMIENTO_DB_NAME:-cumplimientodb}
       POSTGRES_USER: ${MS_CUMPLIMIENTO_DB_USER}
@@ -41,7 +41,7 @@ services:
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-ms-cumplimiento:${TAG}
     container_name: srv-ms-cumplimiento
     restart: unless-stopped
-    mem_limit: 384m
+    mem_limit: 256m
     ports:
       - "8091:8091"
     depends_on:

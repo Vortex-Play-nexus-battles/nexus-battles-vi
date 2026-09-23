@@ -27,7 +27,7 @@ services:
     image: postgres:17-alpine
     container_name: finanzas-db
     restart: unless-stopped
-    mem_limit: 192m
+    mem_limit: 128m
     environment:
       POSTGRES_DB: ${MS_FINANZAS_DB_NAME:-finanzas_db}
       POSTGRES_USER: ${MS_FINANZAS_DB_USER}
@@ -44,7 +44,7 @@ services:
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-ms-finanzas:${TAG}
     container_name: srv-ms-finanzas
     restart: unless-stopped
-    mem_limit: 384m
+    mem_limit: 256m
     ports:
       - "8093:8093"
     depends_on:

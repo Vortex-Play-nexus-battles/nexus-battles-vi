@@ -18,7 +18,7 @@ services:
     image: postgres:17-alpine
     container_name: subastas-db
     restart: unless-stopped
-    mem_limit: 192m
+    mem_limit: 128m
     environment:
       POSTGRES_DB: ${MS_SUBASTAS_DB_NAME:-subastas_db}
       POSTGRES_USER: ${MS_SUBASTAS_DB_USER}
@@ -35,7 +35,7 @@ services:
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-ms-subastas:${TAG}
     container_name: srv-ms-subastas
     restart: unless-stopped
-    mem_limit: 384m
+    mem_limit: 256m
     ports:
       - "8092:8092"
     depends_on:

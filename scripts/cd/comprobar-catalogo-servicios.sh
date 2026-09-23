@@ -54,7 +54,7 @@ done
 
 echo
 echo "== 2) Lo que dice el catalogo coincide con el servicio real =="
-while IFS=$'\t' read -r nombre ruta herramienta puertoContenedor rutaSalud composeExtra; do
+while IFS=$'\t' read -r nombre ruta herramienta puertoContenedor rutaSalud composeExtra memLimit; do
   [ -d "$ruta" ] || { fallo "$nombre: la ruta $ruta no existe."; continue; }
 
   # a) herramienta declarada vs la que hay
@@ -86,6 +86,19 @@ while IFS=$'\t' read -r nombre ruta herramienta puertoContenedor rutaSalud compo
       "No copies la ruta de un comentario: miralo en application.properties."
   fi
 
+  # c2) el techo de memoria declarado en el catalogo es el que aplica el
+  #     compose. Si divergen, las decisiones de capacidad se toman con un
+  #     numero y el host ejecuta otro -- y el JVM se dimensiona con el del
+  #     compose (MaxRAMPercentage), no con el del catalogo.
+  if [ "$composeExtra" != "null" ] && [ -n "$composeExtra" ] && [ -f "$composeExtra" ] && [ -n "$memLimit" ] && [ "$memLimit" != "null" ]; then
+    enCompose=$(grep -A4 -E "^ *srv-${nombre}:" "$composeExtra" | grep -oE 'mem_limit: [0-9]+m' | head -1 | grep -oE '[0-9]+')
+    if [ -n "$enCompose" ] && [ "$enCompose" != "$memLimit" ]; then
+      fallo "$nombre: el catalogo dice memLimitMiB=$memLimit y $composeExtra aplica ${enCompose}m." \
+        "La capacidad se decide con el numero del catalogo y el host ejecuta el" \
+        "del compose: tienen que ser el mismo."
+    fi
+  fi
+
   # d) el override de compose existe y define de verdad el contenedor
   if [ "$composeExtra" != "null" ] && [ -n "$composeExtra" ]; then
     if [ ! -f "$composeExtra" ]; then
@@ -99,7 +112,7 @@ while IFS=$'\t' read -r nombre ruta herramienta puertoContenedor rutaSalud compo
       fallo "$nombre: no tiene composeExtra y docker-compose.yml no declara srv-${nombre}."
     fi
   fi
-done < <(jq -r '.servicios[] | [.nombre, .ruta, .herramienta, .puertoContenedor, .rutaSalud, (.composeExtra // "null")] | @tsv' "$CATALOGO")
+done < <(jq -r '.servicios[] | [.nombre, .ruta, .herramienta, .puertoContenedor, .rutaSalud, (.composeExtra // "null"), (.memLimitMiB // "null")] | @tsv' "$CATALOGO")
 
 echo
 echo "== 3) Los puertos de host no chocan entre si =="
