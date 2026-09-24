@@ -76,7 +76,7 @@ echo "== 1) Productos: un heroe y un arma, directos en Mongo =="
 # un numero suelto escrito desde mongosh llega como Int32 y la conversion
 # falla. De ahi `NumberDecimal`.
 $COMPOSE exec -T e2e-contenido-mongo mongosh --quiet productos --eval '
-  db.productos.deleteMany({ _id: { $in: ["p-heroe-e2e", "p-arma-e2e"] } });
+  db.productos.deleteMany({ _id: { $in: ["p-heroe-e2e", "p-arma-e2e", "dddddddd-0000-0000-0000-00000000000a"] } });
   const base = {
     _class: "nexus.dominio.Producto",
     imagen: null, descripcion: "Producto de prueba del E2E",
@@ -101,6 +101,18 @@ $COMPOSE exec -T e2e-contenido-mongo mongosh --quiet productos --eval '
       _id: "p-arma-e2e", nombre: "Espada de prueba", tipo: "ARMA",
       prototipo: null,
       poderDeAtaque: 12, tasaDeCaida: NumberDecimal("50")
+    }),
+    // El tercero tiene un _id con forma de UUID a proposito. Los dos de arriba
+    // no sirven para subastar: PublicarSubastaRequest declara
+    // `@NotNull UUID productoId`, asi que "p-arma-e2e" se rechaza con 400 antes
+    // de llegar al negocio. Sin este producto no se puede probar la subasta de
+    // un objeto real, que es justo lo que subastas.e2e.spec.js decia que le
+    // faltaba (HU-SUB-001 CA de inventario).
+    Object.assign({}, base, {
+      _id: "dddddddd-0000-0000-0000-00000000000a",
+      nombre: "Hacha subastable de prueba", tipo: "ARMA",
+      prototipo: null,
+      poderDeAtaque: 9, tasaDeCaida: NumberDecimal("50")
     })
   ]);
   print("  productos sembrados: " + db.productos.countDocuments({ _id: /e2e/ }));
@@ -109,7 +121,7 @@ $COMPOSE exec -T e2e-contenido-mongo mongosh --quiet productos --eval '
 # Comprobar YA que productos los sirve. Si esto falla, el 500 de
 # /estadisticas viene de aqui y no de inventario, y conviene saberlo antes de
 # perseguirlo en el servicio equivocado.
-for p in p-heroe-e2e p-arma-e2e; do
+for p in p-heroe-e2e p-arma-e2e dddddddd-0000-0000-0000-00000000000a; do
   codigo=$(curl -sS -o /tmp/prod-$p.json -w '%{http_code}' "$BORDE/api/v1/productos/$p")
   echo "  GET /api/v1/productos/$p -> $codigo"
   if [ "$codigo" != "200" ]; then

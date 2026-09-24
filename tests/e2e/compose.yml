@@ -306,6 +306,17 @@ services:
       # recibia nada, con el E2E en verde. La URL de arriba estaba puesta y no
       # se usaba. FINANZAS_MODO ya venia declarado; este faltaba.
       INVENTARIO_MODO: http
+      # Sin esto, publicar una subasta responde 503 «app.subastas.incremento-minimo
+      # no esta configurado»: la propiedad no tiene valor por omision
+      # (application.properties la deja vacia) y el servicio se niega a publicar.
+      # Lo descubrio la prueba de transferencia al intentar publicar de verdad;
+      # hasta entonces ningun E2E llegaba a publicar nada.
+      #
+      # El 1 es una FIJACION DE PRUEBA, no una decision de producto: el README de
+      # ms-subastas registra el valor por defecto del incremento minimo como la
+      # pregunta abierta de RF-SUB-004, y es el mismo valor que ya usa
+      # PublicacionAutoConfigurationTest. Elegirlo aqui no la responde.
+      SUBASTAS_INCREMENTO_MINIMO: "1"
       CATALOGO_BASE_URL: http://srv-productos:8080
       NOTIFICACIONES_BASE_URL: http://srv-notificaciones:8085/api/v1
       SANCIONES_BASE_URL: http://srv-moderacion-sanciones:8086
@@ -315,6 +326,11 @@ services:
       e2e-subastas-db: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }
       srv-ms-finanzas: { condition: service_healthy }
+      # Desde FI-TRANSFER-1 la dependencia es real y no decorativa: con
+      # INVENTARIO_MODO=http, publicar bloquea el elemento y adjudicar lo
+      # transfiere. Declararla evita que subastas arranque antes que inventario
+      # en un levantado parcial.
+      srv-inventario: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8092/api/v1/actuator/health || exit 1"]
       interval: 5s
