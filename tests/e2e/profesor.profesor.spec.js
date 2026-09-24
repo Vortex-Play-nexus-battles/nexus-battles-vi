@@ -413,12 +413,17 @@ test.describe('R17 · la prueba del profesor', () => {
         await heroe.getByRole('button', { name: /^Ver el detalle de / }).click();
         const ficha = page.locator('[role="dialog"].ficha');
         await expect(ficha).toBeVisible();
-        await expect(ficha.locator('.ficha__atributo').first()).toBeVisible();
-        const atributos = await ficha.locator('.ficha__atributo').count();
+        await expect(ficha.locator('.ficha__nombre')).not.toBeEmpty();
+        // Lo que diga el catálogo; las estadísticas con el equipo puesto se
+        // comprueban en el paso 12, en el panel del héroe.
+        const atributos = await ficha.locator('.ficha__atributo').allInnerTexts();
         await capturar(page, testInfo, '09-ficha-del-heroe');
         await page.locator('.ficha__cerrar').click();
         await expect(ficha).toBeHidden();
-        return `1 héroe: «${nombreDelHeroe}»; ficha con ${atributos} atributos`;
+        return (
+          `1 héroe: «${nombreDelHeroe}»; ficha del catálogo` +
+          (atributos.length ? `: ${atributos.join(' · ').replaceAll('\n', ' ')}` : '')
+        );
       });
 
       await paso(10, 'Comprobar el inventario', async () => {
