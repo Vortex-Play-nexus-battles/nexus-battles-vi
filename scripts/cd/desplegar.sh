@@ -534,6 +534,12 @@ if [ "$INCLUYE_CONTENIDO" -eq 0 ] && [ -d "$DIRECTORIO/web/infrastructure/red-ba
   SERVICIOS_COMPOSE="$SERVICIOS_COMPOSE srv-borde"
 fi
 
+# R16.5b: los contenedores que se crean AHORA llevan la hora de su creacion.
+# Su entrypoint (x-arranque-escalonado en docker-compose.deploy.yml) solo
+# espera turno cuando el contenedor es anterior al ultimo arranque del host,
+# es decir, cuando lo levanta Docker al volver del apagado. Lo que despliega
+# esta corrida arranca en el acto, aunque el CD acabe de encender el host.
+export ARRANQUE_CREADO_EN="$(date +%s)"
 docker compose "${ARCHIVOS_COMPOSE[@]}" pull $SERVICIOS_COMPOSE
 docker compose "${ARCHIVOS_COMPOSE[@]}" up -d $SERVICIOS_COMPOSE
 

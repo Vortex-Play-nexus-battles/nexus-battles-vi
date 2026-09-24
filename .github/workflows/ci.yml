@@ -344,6 +344,14 @@ jobs:
         shell: bash
         run: bash scripts/cd/pruebas/desplegar-etiquetas-contenido.sh
 
+      # R16.5b: el entrypoint que reparte por turnos el arranque de las JVM
+      # cuando el host vuelve del apagado. Se prueba el script sacado tal cual
+      # del compose, con /proc y java falsos, en el sh del runner y en el de
+      # Alpine (el de las imagenes). Segundos, sin servicios.
+      - name: Comprobar el arranque escalonado del host de plataforma
+        shell: bash
+        run: bash scripts/cd/pruebas/arranque-escalonado.sh
+
       # Una clave repetida dentro de un mismo mapa hace que Docker Compose se
       # niegue a leer el archivo ENTERO, y al negarse no despliega nada de el.
       # Asi murio la corrida 35931028022 -- la del commit que traia

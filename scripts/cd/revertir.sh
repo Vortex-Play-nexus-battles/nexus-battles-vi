@@ -87,5 +87,9 @@ while IFS=: read -r servicio tag_fallido tag_anterior; do
   else
     docker compose "${ARCHIVOS_COMPOSE[@]}" pull "srv-${servicio}"
   fi
+  # R16.5b: igual que en desplegar.sh. Sin esto el contenedor revertido
+  # quedaria sin hora de creacion y no esperaria su turno en el proximo
+  # arranque del host (el valor por omision no escalona).
+  export ARRANQUE_CREADO_EN="$(date +%s)"
   docker compose "${ARCHIVOS_COMPOSE[@]}" up -d "srv-${servicio}"
 done < "$ARCHIVO_FALLO"
