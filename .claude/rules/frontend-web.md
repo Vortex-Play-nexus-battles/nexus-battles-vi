@@ -19,8 +19,9 @@ las maquetas del proyecto ya están en HTML/CSS plano — reescribirlas no aport
   de estado) — se escriben una vez y se importan, nunca se reimplementan por módulo
 - Los 4 estados obligatorios (carga / error / éxito / vacío) en toda vista que consulte datos
   (RNF-USA-003) — función compartida en `shared/ui-kit/`
-- Consumo de API: `fetch` con el envoltorio común de `src/comun/` (token Keycloak, trace id, formato
-  de error estándar) — no llamar a `fetch` "pelado" en cada módulo
+- Consumo de API: `fetch` con el envoltorio común de `src/comun/` (token de sesión emitido por
+  `ms-identidad` — no hay Keycloak desplegado, ver ADR-005 —, trace id, formato de error estándar)
+  — no llamar a `fetch` "pelado" en cada módulo
 - Verificación de tipos: JSDoc + comprobación del editor (no hay compilador)
 - Calidad: ESLint + Prettier · Pruebas end-to-end: Playwright
 - Tipografías Rajdhani e Inter, autoalojadas — no depender de un CDN externo

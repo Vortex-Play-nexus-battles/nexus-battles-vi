@@ -75,7 +75,25 @@ export async function montarVitrina(
     // El detalle tecnico es para el equipo; al jugador se le habla en su idioma.
     console.error('No se pudo cargar la vitrina del inventario', fallo);
     if (sigueVigente()) {
-      contenedor.replaceChildren(construirError());
+      // UX-R3.5 — §18: el estado de error trae su salida. Antes decia «vuelve
+      // a intentarlo en un momento» y la unica forma de intentarlo era
+      // recargar la pagina entera, que ademas pierde la pagina en la que se
+      // estaba. Esto reintenta la misma consulta.
+      contenedor.replaceChildren(
+        construirError(undefined, undefined, {
+          texto: 'Reintentar',
+          alPulsar: () =>
+            montarVitrina(contenedor, identidad, numeroPagina, {
+              consultar,
+              alEditar,
+              alEquipar,
+              mensajeCarga,
+              mensajeVacio,
+              detalleVacio,
+              sigueVigente,
+            }),
+        }),
+      );
     }
     return null;
   }
@@ -98,7 +116,13 @@ export async function montarVitrina(
       // HU-INV-007: la ficha lee el catalogo por su cuenta; el inventario
       // solo guarda la referencia (RF-ADM-10).
       alAbrirDetalle: (elemento) =>
-        abrirFicha(elemento.productoId, { origen: document.activeElement }),
+        abrirFicha(elemento.productoId, {
+          origen: document.activeElement,
+          // R5: para un heroe, la ficha completa con lo que el jugador tiene de
+          // verdad. Para lo demas sobran y se ignoran.
+          elementoId: elemento.id,
+          identidad,
+        }),
     }),
   );
 
@@ -108,7 +132,7 @@ export async function montarVitrina(
   // solo la mejora cuando el catalogo contesta. No se espera: si tardara o
   // fallara, la vista ya esta usable.
   pintarRetratos(contenedor).catch((fallo) =>
-    console.warn('No se pudieron traer los retratos del catalogo', fallo),
+    console.warn('No se pudieron traer los retratos del catálogo', fallo),
   );
   return pagina;
 }
@@ -346,6 +370,12 @@ export async function montarInventario(
     pintarEquipamiento(vista.equipoLista, {
       equipo: equipoActual,
       elementos: paginaMostrada?.elementos ?? [],
+      // FI-R7 — el selector ya no se queda con los dieciseis elementos de la
+      // pagina que se esta viendo. Antes, un objeto de la pagina 3 no se podia
+      // equipar: no aparecia entre los candidatos y nada decia por que. Con
+      // este puerto el dialogo recorre el inventario en tandas hasta juntar
+      // candidatos, y para cuando los tiene.
+      pedirPagina: (pagina) => consultar(identidad, pagina),
       alEquipar: (ranura, elemento) => cambiarEquipo(true, elemento),
       alDesequipar: (ranura) => cambiarEquipo(false, ranura.elemento),
       alPintarRetratos: (panel) =>
@@ -588,10 +618,13 @@ export async function montarInventario(
       }
     } catch (fallo) {
       console.error('No se pudo guardar el elemento del inventario', fallo);
+      // El servidor ya explica el rechazo en espanol (problem detail): p. ej.
+      // un producto que no existe en el catalogo o un tipo que no coincide.
       const mensaje =
         fallo?.status === 403
           ? 'No tienes permiso para modificar ese inventario.'
-          : 'No pudimos guardar el elemento. Revisa los datos e inténtalo de nuevo.';
+          : (fallo?.detalle ??
+            'No pudimos guardar el elemento. Revisa los datos e inténtalo de nuevo.');
       mostrarMensaje(mensaje, true);
     } finally {
       cambiarDisponibilidad(vista.botonGuardar, true);

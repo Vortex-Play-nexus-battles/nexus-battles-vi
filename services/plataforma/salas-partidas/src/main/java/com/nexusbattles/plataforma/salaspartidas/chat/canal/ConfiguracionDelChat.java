@@ -4,7 +4,7 @@ import com.nexusbattles.plataforma.salaspartidas.chat.EnviarMensaje;
 import com.nexusbattles.plataforma.salaspartidas.chat.FiltroDeContenido;
 import com.nexusbattles.plataforma.salaspartidas.chat.HistorialDeChat;
 import com.nexusbattles.plataforma.salaspartidas.chat.PublicadorDeChat;
-import com.nexusbattles.plataforma.salaspartidas.chat.SancionesDelJugador;
+import com.nexusbattles.plataforma.salaspartidas.sanciones.SancionesDelJugador;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestClient;
@@ -34,8 +34,18 @@ public class ConfiguracionDelChat {
         return new EnviarMensaje(historial, filtro, sanciones, publicador, Clock.systemUTC());
     }
 
+    /**
+     * Cliente del chat hacia lista negra y sanciones.
+     *
+     * <p>Lleva el interceptor de traza (regla 5, R11): sin el, la consulta de
+     * lista negra y la de sancion salen sin `traceparent` y la traza del
+     * mensaje se corta justo donde empieza a ser interesante —cuando el
+     * mensaje NO se publica y hay que averiguar por que.
+     */
     @Bean
     public RestClient restClientChat() {
-        return RestClient.builder().build();
+        return RestClient.builder()
+                .requestInterceptor(new com.nexusbattles.plataforma.observabilidad.InterceptorDeTraza())
+                .build();
     }
 }

@@ -55,20 +55,61 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  * Las de `pujas.js` son la deuda grande y conocida (2.297 líneas, UX-R2.8c):
  * el contenido se arma en cinco generadores que sí interpolan datos de la
  * subasta. Está anotado, no tapado.
+ *
+ * R9.6a — las cuatro líneas de `pujas.js` se corrieron 24 posiciones porque el
+ * canal STOMP pasó a acreditarse y eso añadió código ARRIBA de ellas. Ninguna
+ * asignación cambió: cambió su número de línea. El guardián hizo exactamente
+ * lo que promete («si la línea se mueve, vuelve a fallar»), y revisarlas de
+ * nuevo confirmó que siguen siendo las mismas cuatro, con el mismo
+ * saneamiento. Queda dicho para quien mantenga esto: la clave por número de
+ * línea es deliberadamente incómoda, y el precio es este — una revisión
+ * obligatoria cada vez que alguien toca el archivo por encima.
+ *
+ * FI-R1 — y otras 77 posiciones por lo mismo: sacar los bancos de datos de
+ * ejemplo del camino de produccion añadió comentarios y ramas ARRIBA de las
+ * cuatro asignaciones. Revisadas otra vez una por una: siguen siendo la
+ * plantilla fija de carga, el estado de error con su unico dato por `esc()`,
+ * la plantilla fija del estado vacio y el `contenidoHtml` de los generadores.
+ * Ninguna interpolacion nueva entra por ahí.
+ *
+ * FI-R11 — y otras 186 posiciones: el canal en vivo gano estado visible y
+ * reconexion con espera creciente, todo ARRIBA de `render()`. Revisadas de
+ * nuevo: las mismas cuatro, con el mismo saneamiento.
+ *
+ * FI-R2 — las tres de `tienda.js` se movieron por la misma razon: la tarjeta
+ * ahora pinta imagen, habilidades, precio anterior y distintivo de descuento, y
+ * el carrito formatea sus importes. Revisadas: la plantilla de la tarjeta sigue
+ * siendo fija (todo dato entra despues por `textContent` o por `src` de un
+ * `<img>` creado con `createElement`), la del carrito vacio sigue siendo una
+ * cadena literal, y la de la fila del carrito sigue siendo fija.
+ *
+ * R16 — y otra vez las tres de `tienda.js`, ahora 102, 243 y 243 posiciones
+ * más abajo: la vitrina pasó a `/api/v1/vitrina`, «Añadir» ganó su aviso de
+ * error (los motivos por `type`, la lectura del problem detail y el aviso
+ * mismo) y la carga del carrito comprueba `respuesta.ok`, todo ARRIBA de
+ * ellas. Revisadas una por una: la tarjeta sigue siendo la plantilla fija, el
+ * carrito vacío la misma cadena literal y la fila del carrito la misma
+ * plantilla fija. El aviso nuevo no usa `innerHTML`: lo construye `aviso()`
+ * del kit con `textContent`.
  */
 const REVISADOS = new Map([
   ['contenido/productos/productos.js:159', 'plantilla() devuelve marcado fijo, sin datos'],
   ['cuentas/publicar-subasta.js:68', 'plantilla fija del formulario, sin interpolación'],
   ['cuentas/registro.js:235', 'cadena literal fija, sin interpolación'],
-  ['cuentas/tienda.js:141', 'plantilla fija; el color pasó a data-tipo en UX-R2.8'],
+  ['cuentas/tienda.js:247', 'plantilla fija; el color pasó a data-tipo en UX-R2.8'],
 
-  ['cuentas/tienda.js:226', 'cadena literal fija del carrito vacío'],
-  ['cuentas/tienda.js:236', 'plantilla fija; los datos entran luego por textContent'],
-  ['cuentas/pujas.js:1234', 'plantilla fija del estado de carga'],
-  ['cuentas/pujas.js:1252', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
-  ['cuentas/pujas.js:1268', 'plantilla fija del estado vacío'],
+  ['cuentas/tienda.js:537', 'cadena literal fija del carrito vacío'],
   [
-    'cuentas/pujas.js:1308',
+    'cuentas/tienda.js:557',
+    'plantilla fija; los datos entran luego por textContent. FI-R2 le cambio el ' +
+      'nombre a la variable (fila -> nodo, porque «fila» pasó a ser el modelo ' +
+      'que devuelve el adaptador) y la movio 78 lineas; la plantilla es la misma.',
+  ],
+  ['cuentas/pujas.js:1533', 'plantilla fija del estado de carga'],
+  ['cuentas/pujas.js:1551', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
+  ['cuentas/pujas.js:1567', 'plantilla fija del estado vacío'],
+  [
+    'cuentas/pujas.js:1607',
     'DELIBERADO y SANEADO (UX-R2.8c): las 20 interpolaciones con datos del ' +
       'servidor pasan por esc(); pujas.test.js lo comprueba con cargas reales. ' +
       'La estructura (2.297 líneas de plantilla) se mueve en UX-R2.10.',

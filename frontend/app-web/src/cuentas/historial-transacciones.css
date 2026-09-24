@@ -35,9 +35,8 @@ body {
   font-size: 24px;
 }
 
-.tabla-envoltorio {
-  overflow-x: auto;
-}
+/* .tabla-envoltorio la define ahora el kit (componentes.css): estaba
+   duplicada aqui y en historial-transacciones.css con el mismo cuerpo. */
 
 .tabla-historial {
   width: 100%;
@@ -56,13 +55,13 @@ body {
 .tabla-historial thead th {
   font-family: var(--fuente-titulo);
   font-weight: 600;
-  color: var(--texto-2, #48536a);
-  background: rgba(0, 0, 0, 0.02);
+  color: var(--texto-2);
+  background: var(--superficie-2);
 }
 
 .tabla-historial .celda-fecha {
   white-space: nowrap;
-  color: var(--texto-2, #48536a);
+  color: var(--texto-2);
 }
 
 .tabla-historial .celda-monto {
@@ -81,37 +80,28 @@ body {
 }
 
 .badge--aprobado {
-  color: #086b31;
-  background: #e4f5e9;
+  color: var(--exito);
+  background: var(--exito-insignia);
 }
 
 .badge--rechazado {
-  color: #b81a1a;
-  background: #fbe4e4;
+  color: var(--error);
+  background: var(--error-insignia);
 }
 
 .badge--indeterminado {
-  color: #8a4a00;
-  background: #fbeeed;
+  color: var(--advertencia);
+  background: var(--advertencia-insignia);
 }
 
 /* Estados de la tabla. */
-.estado {
-  margin: 12px 0 0;
-  padding: 10px 12px;
-  border-radius: var(--radio);
-  font-size: 14px;
-}
-
-.estado.carga {
-  background: #ddeef7;
-  color: #095e8c;
-}
-.estado.error {
-  background: #fbe4e4;
-  color: #b81a1a;
-}
-.estado.vacio {
-  background: #f2f4f8;
-  color: var(--texto-2, #48536a);
-}
+/* `.estado` NO se declara aqui.
+ *
+ * UX-R4.1 — esta hoja lo redefinia entero, igual que hacia `mis-cofres.css`
+ * antes de UX-R3.11 y por la misma via: como carga despues de
+ * `tema-cuentas.css`, su version ganaba. Las dos decian lo mismo con colores
+ * distintos -#ddeef7/#095e8c aqui, `--info-insignia`/`--info` alli- asi que el
+ * mismo estado de carga se veia de dos maneras segun la pantalla.
+ *
+ * La version buena es la de `tema-cuentas.css`, que ademas ya tiene `.exito`.
+ */

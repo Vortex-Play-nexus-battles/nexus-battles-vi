@@ -63,19 +63,19 @@ export class ErrorDeSubastas extends Error {
 const MENSAJES = {
   SUBASTA_NO_ACTIVA: 'Esta subasta ya se cerro. Actualiza para ver el resultado.',
   PUJA_PROPIA: 'No puedes pujar en tu propia subasta.',
-  OFERTA_INSUFICIENTE: 'Alguien se te adelanto: la oferta ya subio. Revisa el nuevo minimo.',
+  OFERTA_INSUFICIENTE: 'Alguien se te adelantó: la oferta ya subió. Revisa el nuevo mínimo.',
   INTERVALO_MINIMO_NO_CUMPLIDO: 'Espera unos segundos antes de volver a pujar en esta subasta.',
-  LIMITE_SUBASTAS_ACTIVAS: 'Ya participas en el maximo de subastas a la vez.',
+  LIMITE_SUBASTAS_ACTIVAS: 'Ya participas en el máximo de subastas a la vez.',
   LIMITE_PUJAS_ACTIVAS: 'Tienes demasiadas pujas activas al mismo tiempo.',
-  LIMITE_AUTOMATICO_INALCANZABLE: 'Ese limite no alcanza ni para la siguiente oferta valida.',
-  SALDO_INSUFICIENTE_PARA_LIMITE: 'Tu saldo disponible no cubre el limite que quieres fijar.',
-  SALDO_INSUFICIENTE: 'No tienes creditos suficientes para esta operacion.',
+  LIMITE_AUTOMATICO_INALCANZABLE: 'Ese límite no alcanza ni para la siguiente oferta válida.',
+  SALDO_INSUFICIENTE_PARA_LIMITE: 'Tu saldo disponible no cubre el límite que quieres fijar.',
+  SALDO_INSUFICIENTE: 'No tienes créditos suficientes para esta operación.',
   SIN_COMPRA_INMEDIATA: 'Esta subasta no admite compra inmediata.',
   CONFIRMACION_REQUERIDA: 'Hay que confirmar la compra de forma explicita.',
   // No deberia verlo un jugador: significa que el cliente reutilizo una clave
   // de idempotencia. Se traduce igual, porque un mensaje en blanco seria peor
   // que uno generico si alguna vez pasa.
-  CLAVE_REUTILIZADA: 'Hubo un problema al enviar la operacion. Vuelve a intentarlo.',
+  CLAVE_REUTILIZADA: 'Hubo un problema al enviar la operación. Vuelve a intentarlo.',
 };
 
 /**
@@ -83,7 +83,7 @@ const MENSAJES = {
  * @param {string} porDefecto
  * @returns {string} mensaje para el jugador
  */
-export function mensajePara(motivo, porDefecto = 'No se pudo completar la operacion.') {
+export function mensajePara(motivo, porDefecto = 'No se pudo completar la operación.') {
   return MENSAJES[motivo] || porDefecto;
 }
 
@@ -121,14 +121,27 @@ export function aVistaDeSubasta(resumen, apodoPropio = null) {
     nombre: resumen.nombreProducto || 'Objeto sin nombre',
     tipo: resumen.tipoProducto || '',
     descripcion: resumen.descripcionCorta || '',
-    rareza: (resumen.rareza || 'comun').toLowerCase(),
-    nivel: 0,
+    // FI-R1 — `rareza` esta en `SubastaResumen` pero NO es obligatoria y no
+    // trae enumeracion. Aqui se ponia 'comun' cuando faltaba, y «comun» es un
+    // escalon real del juego: eso es inventarse la rareza de un objeto, no
+    // decir que no se sabe. Null significa que no vino.
+    rareza: typeof resumen.rareza === 'string' ? resumen.rareza.toLowerCase() : null,
+    // FI-R1 — `nivel` NO existe en el contrato de subastas. Era un cero fijo
+    // que alimentaba el veredicto «Nivel insuficiente / Compatible» citando
+    // RN-INV-004: una regla de negocio real aplicada a un dato inventado.
+    // Null es «no se sabe»; el cero decia «no pide nivel», que es distinto.
+    nivel: null,
     vendedor: resumen.vendedorId || '',
     oferta: Number(resumen.ofertaVigente || 0),
     // ?? y no ||: un precio de 0 es un dato, aunque sea raro, y || lo
     // confundiria con "no hay precio de compra inmediata".
     compraInmediata: Number(resumen.precioCompraInmediata ?? 0),
-    mediaMercado: 0,
+    // `miniaturaUrl` si esta en el contrato y hasta ahora no se traia; la
+    // vitrina del listado ya la pinta (`subastas-vitrina.js`).
+    miniaturaUrl: resumen.miniaturaUrl || null,
+    // FI-R1 — tampoco esta en el contrato. Un cero aqui se leia como «este
+    // objeto vale cero de media», que es una afirmacion sobre el mercado.
+    mediaMercado: null,
     segundosRestantes: restantes,
     ganando: false,
     superado: false,
@@ -137,7 +150,9 @@ export function aVistaDeSubasta(resumen, apodoPropio = null) {
     retenido: 0,
     rival: null,
     rivales: Number(resumen.cantidadPujas || 0),
-    aporte: { poder: 0, vida: 0, defensa: 0 },
+    // FI-R1 — el contrato no dice que aporta un objeto a un heroe. Los tres
+    // ceros llenaban la columna «Con <objeto>» y toda la de «Diferencia».
+    aporte: null,
     historial: [],
     esMaestroDeJuego: Boolean(resumen.esMaestroDeJuego),
     apodoPropio,
@@ -145,10 +160,30 @@ export function aVistaDeSubasta(resumen, apodoPropio = null) {
 }
 
 /**
+ * Un 404 no significa lo mismo en un listado que en una subasta concreta.
+ *
+ * UX-R3.11 — antes CUALQUIER 404 se traducia por «Esa subasta ya no existe.»,
+ * un texto escrito para la ficha. Cuando lo que fallaba era el listado
+ * (`/subastas?page=…`, `/mis-pujas/resumen`), la pantalla quedaba diciendo a
+ * la vez «El mercado no responde» y «Esa subasta ya no existe»: dos cosas que
+ * se contradicen, y ninguna de las dos cierta.
+ *
+ * @param {string} ruta la que se pidio
+ * @returns {string}
+ */
+function textoDe404(ruta) {
+  const esFichaDeSubasta = /\/subastas\/[^/?]+/.test(ruta);
+  return esFichaDeSubasta
+    ? 'Esa subasta ya no existe.'
+    : 'El mercado no respondió. Vuelve a intentarlo en un momento.';
+}
+
+/**
  * @param {Response} respuesta
+ * @param {string} [ruta] la ruta pedida, para que el 404 hable del recurso
  * @returns {Promise<never>} siempre lanza
  */
-async function lanzarDesde(respuesta) {
+async function lanzarDesde(respuesta, ruta = '') {
   let motivo = null;
   let detalle = null;
   try {
@@ -161,14 +196,18 @@ async function lanzarDesde(respuesta) {
   }
 
   if (respuesta.status === 401) {
-    throw new ErrorDeSubastas('Tu sesion no es valida. Vuelve a iniciar sesion.', {
+    throw new ErrorDeSubastas('Tu sesión no es válida. Vuelve a iniciar sesión.', {
       estado: 401,
       motivo,
       detalle,
     });
   }
   if (respuesta.status === 404) {
-    throw new ErrorDeSubastas('Esa subasta ya no existe.', { estado: 404, motivo, detalle });
+    throw new ErrorDeSubastas(textoDe404(ruta || respuesta.url || ''), {
+      estado: 404,
+      motivo,
+      detalle,
+    });
   }
   throw new ErrorDeSubastas(mensajePara(motivo), { estado: respuesta.status, motivo, detalle });
 }
@@ -241,7 +280,7 @@ export function crearApiSubastas({
     }
 
     if (!respuesta.ok) {
-      await lanzarDesde(respuesta);
+      await lanzarDesde(respuesta, ruta);
     }
     if (respuesta.status === 204) {
       return null;
@@ -275,7 +314,7 @@ export function crearApiSubastas({
         });
       }
       if (!respuesta.ok) {
-        await lanzarDesde(respuesta);
+        await lanzarDesde(respuesta, `/subastas?page=${page}&size=${size}`);
       }
 
       const pagina = await respuesta.json();

@@ -94,8 +94,8 @@ describe('Cliente de la consulta paginada', () => {
   });
 });
 
-describe('Cliente de busqueda del inventario', () => {
-  test('envia el criterio codificado, la pagina y la identidad', async () => {
+describe('Cliente de búsqueda del inventario', () => {
+  test('envía el criterio codificado, la página y la identidad', async () => {
     const { llamadas, fetchFalso } = espia({ elementos: [], totalElementos: 0 });
 
     await buscarElementos('jugador-A', ' espada larga ', 2, { fetchImpl: fetchFalso });
@@ -220,6 +220,48 @@ describe('Cliente de creacion y modificacion', () => {
         { fetchImpl: fetchFalso },
       ),
     ).rejects.toThrow(/403/);
+  });
+});
+
+describe('Rechazos del servidor al crear', () => {
+  test('conserva el detalle legible del problem detail', async () => {
+    const fetchFalso = async () =>
+      respuesta(
+        {
+          title: 'Producto inexistente',
+          status: 422,
+          detail: 'El producto no existe en el catalogo.',
+        },
+        false,
+        422,
+      );
+
+    await expect(
+      crearElemento(
+        'jugador-A',
+        { productoId: 'espada-corta', tipo: 'ARMA', nombrePropio: 'Espada inventada' },
+        { fetchImpl: fetchFalso },
+      ),
+    ).rejects.toMatchObject({ status: 422, detalle: 'El producto no existe en el catalogo.' });
+  });
+
+  test('sin cuerpo legible conserva el estado y no inventa un detalle', async () => {
+    const fetchFalso = async () => ({
+      ok: false,
+      status: 502,
+      json: async () => {
+        throw new SyntaxError('no es JSON');
+      },
+    });
+
+    const fallo = await crearElemento(
+      'jugador-A',
+      { productoId: 'producto-1', tipo: 'ITEM', nombrePropio: 'Amuleto' },
+      { fetchImpl: fetchFalso },
+    ).catch((error) => error);
+
+    expect(fallo.status).toBe(502);
+    expect(fallo.detalle).toBeUndefined();
   });
 });
 

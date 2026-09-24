@@ -115,8 +115,15 @@
         cargada: no se inventan participantes de ejemplo.
       -->
         <div class="estado-vista" data-zona="sin-partida">
-          <p class="estado-vista__titulo">No hay ninguna partida cargada</p>
-          <p class="t-meta">Esta vista se pinta con los participantes de una partida en curso.</p>
+          <p class="estado-vista__titulo">Aquí no hay ninguna batalla todavía</p>
+          <p class="estado-vista__detalle">
+            Esta pantalla se enciende cuando entras a una sala y empieza el combate. Entra a una que
+            esté esperando gente, o abre la tuya.
+          </p>
+          <div class="fila">
+            <a class="boton boton--primario" href="./batallas.html">Ver salas abiertas</a>
+            <a class="boton boton--secundario" href="./crear-sala.html">Crear sala</a>
+          </div>
         </div>
 
         <!--
@@ -139,6 +146,25 @@
         GET /salas/{id}) y ninguno de los dos cuando la partida ya arranco.
         Cancelar pide confirmacion porque expulsa a los demas; salir no.
       -->
+        <!--
+          FI-R4 · La invitacion de una sala privada. Solo se pinta cuando
+          `GET /salas/{id}` trae `codigoInvitacion`, y eso solo pasa si quien
+          mira es el anfitrion (`SalaResponse.segunQuienPregunta`). Antes el
+          codigo se generaba, se guardaba y no llegaba a ninguna pantalla: una
+          sala privada era una sala a la que no podia entrar nadie.
+        -->
+        <div class="fila fila--invitacion" data-zona="invitacion" hidden>
+          <span class="t-meta">Código para invitar:</span>
+          <code class="codigo-invitacion" data-zona="codigo-invitacion"></code>
+          <button class="boton boton--secundario" type="button" data-accion="copiar-codigo">
+            Copiar código
+          </button>
+          <button class="boton boton--secundario" type="button" data-accion="copiar-enlace">
+            Copiar enlace
+          </button>
+          <span class="t-meta" data-zona="acuse-copia" role="status" aria-live="polite"></span>
+        </div>
+
         <div class="fila" data-zona="espera" hidden>
           <span class="t-meta" data-zona="ocupacion" role="status" aria-live="polite"></span>
           <button class="boton boton--secundario" type="button" data-accion="salir-de-sala" hidden>
@@ -218,21 +244,25 @@
         abandonarSala,
         cancelarSala,
       } from './cliente-salas.js';
-      import { montarSalaDeEspera, salidaAlListado } from './sala-de-espera.js';
+      import { montarSalaDeEspera, montarInvitacion, salidaAlListado } from './sala-de-espera.js';
       import { usuarioIdDeSesion } from '../../comun/identidad.js';
       // Transporte STOMP sobre WebSocket nativo del servicio, el mismo que usan
       // Batallas (HU-SAL-002) y el chat (HU-JUE-015): CONNECT con el JWT en la
       // cabecera Authorization, SUBSCRIBE a /tema/partidas/{id}. No hay un
       // segundo cliente.
       import { conectarChat } from './cliente-chat.js';
-      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+      import { montarCabecera } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
 
       // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
-      if (!exigirSesion()) {
+      if (!exigirAcceso('sala-batalla')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
       // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: 'jugar' });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'sala-batalla',
+        seccionActiva: 'jugar',
+      });
 
       const parametros = new URLSearchParams(globalThis.location.search);
       const idSala = parametros.get('sala');
@@ -352,7 +382,10 @@
       if (!partida && idSala) {
         if (zonaVacia) {
           zonaVacia.textContent =
-            `Estas en la sala ${idSala}. El combate empieza cuando el anfitrion lo inicie; ` +
+            // UX-R4 — antes empezaba por el identificador de la sala, que a quien
+            // juega no le dice nada: es un UUID. Lo que importa es de que esta
+            // esperando y quien lo desbloquea.
+            'Estás en la sala, esperando. El combate empieza cuando el anfitrión lo inicie; ' +
             'entonces esta vista pinta la vida de cada participante.';
         }
         if (zonaArranque && token) {
@@ -373,6 +406,16 @@
                     ? { tono: 'info', titulo: 'Cancelaste la sala.' }
                     : { tono: 'info', titulo: 'Saliste de la sala.' },
                 ),
+            });
+            // FI-R4 · El codigo de invitacion, para quien puede repartirlo. La
+            // respuesta solo lo trae al anfitrion, asi que esto no decide nada
+            // sobre quien lo ve: lo decide el servidor.
+            montarInvitacion(document, {
+              sala,
+              origen: globalThis.location.origin + globalThis.location.pathname,
+              copiar: globalThis.navigator?.clipboard?.writeText?.bind(
+                globalThis.navigator.clipboard,
+              ),
             });
             // Solo el anfitrion puede arrancar: a los demas se les ahorra un
             // boton que el servidor rechazaria con 403.
@@ -468,7 +511,7 @@
                   ? { tono: 'info', titulo: 'Cancelaste la sala.' }
                   : {
                       tono: 'advertencia',
-                      titulo: 'La sala se cerro',
+                      titulo: 'La sala se cerró',
                       detalle: textoDeCancelacion(aviso),
                     },
               ),

@@ -35,6 +35,15 @@ public class SecurityConfig {
     /** Los que pueden ser autores: personas, no servicios. */
     static final String[] ROLES_DE_USUARIO = {"JUGADOR", "MODERADOR", "ADMINISTRADOR", "SUPER_ADMINISTRADOR"};
 
+    /**
+     * Los que pueden moderar — R10.1.
+     *
+     * <p>Un JUGADOR reporta pero no resuelve: eso es justo la separacion que
+     * hace que reportar sirva para algo. Si quien marca pudiera tambien
+     * decidir, el reporte no seria una peticion de revision sino una orden.
+     */
+    static final String[] ROLES_DE_MODERACION = {"MODERADOR", "ADMINISTRADOR", "SUPER_ADMINISTRADOR"};
+
     @Bean
     public ConversorRolesJwt conversorRolesJwt() {
         return new ConversorRolesJwt();
@@ -49,6 +58,17 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/v1/products/*/comments").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/products/*/comments").hasAnyRole(ROLES_DE_USUARIO)
                 .requestMatchers(HttpMethod.DELETE, "/api/v1/products/*/comments/*").hasAnyRole(ROLES_DE_USUARIO)
+                // R10.1 — reportar lo hace cualquier persona autenticada
+                // (RF-COM-006); resolver, solo quien modera (RF-COM-008). El
+                // orden importa: esta linea va ANTES que /moderacion/** porque
+                // vive bajo otro prefijo, pero se deja junta a proposito para
+                // que las dos mitades del flujo se lean de un vistazo.
+                .requestMatchers(HttpMethod.POST, "/api/v1/products/*/comments/*/reportes")
+                    .hasAnyRole(ROLES_DE_USUARIO)
+                // NO es /api/v1/moderacion/**: ese prefijo ya es de
+                // metricas-plataforma y el borde lo enruta alli. Ver el
+                // javadoc de ModeracionController.
+                .requestMatchers("/api/v1/comentarios/moderacion/**").hasAnyRole(ROLES_DE_MODERACION)
                 .anyRequest().authenticated());
 
         return http.build();

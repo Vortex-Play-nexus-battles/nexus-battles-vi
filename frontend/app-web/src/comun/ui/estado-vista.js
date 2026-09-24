@@ -34,8 +34,8 @@ export function estadoVacio({ titulo, detalle = null, icono = null, accion = nul
  * @returns {HTMLElement}
  */
 export function estadoDeError({
-  titulo = 'No pudimos cargar esta seccion',
-  detalle = 'Revisa tu conexion e intentalo de nuevo.',
+  titulo = 'No pudimos cargar esta sección',
+  detalle = 'Revisa tu conexión e inténtalo de nuevo.',
   alReintentar = null,
   textoDeReintento = 'Reintentar',
 } = {}) {

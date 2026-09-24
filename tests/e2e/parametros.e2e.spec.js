@@ -81,7 +81,10 @@ test.describe('Parametros del sistema (HU-ADM-001)', () => {
     expect(porClave[PARAMETRO].maximo).toBe(365);
     expect(porClave['torneos.dias-entre-torneos'].inalterable).toBe(true);
     expect(porClave['torneos.dias-entre-torneos'].valor).toBe('91');
-    expect(porClave['metricas.umbral-sanciones-por-dia'].valor, 'decision del PO sin tomar').toBeNull();
+    expect(
+      porClave['metricas.umbral-sanciones-por-dia'].valor,
+      'decision del PO sin tomar',
+    ).toBeNull();
     const ligero = await api.get(`/api/v1/parametros/${PARAMETRO}/valor`);
     expect(ligero.status()).toBe(200);
     expect((await ligero.json()).tipo).toBe('ENTERO');
@@ -95,7 +98,9 @@ test.describe('Parametros del sistema (HU-ADM-001)', () => {
     expect(jugadoraCambia.status()).toBe(403);
     expect((await jugadoraCambia.json()).motivo).toBe('PERMISO_INSUFICIENTE');
 
-    const sinToken = await api.put(`/api/v1/parametros/${PARAMETRO}`, { data: { valor: '1', motivo: 'x' } });
+    const sinToken = await api.put(`/api/v1/parametros/${PARAMETRO}`, {
+      data: { valor: '1', motivo: 'x' },
+    });
     expect(sinToken.status()).toBe(401);
 
     const inalterable = await api.put('/api/v1/parametros/torneos.cupos', {
@@ -119,7 +124,9 @@ test.describe('Parametros del sistema (HU-ADM-001)', () => {
     expect(sinMotivo.status()).toBe(400);
     expect((await sinMotivo.json()).motivo).toBe('SOLICITUD_INVALIDA');
 
-    const historial = await api.get(`/api/v1/parametros/${PARAMETRO}/historial`, { headers: conToken(jugadora.token) });
+    const historial = await api.get(`/api/v1/parametros/${PARAMETRO}/historial`, {
+      headers: conToken(jugadora.token),
+    });
     expect(historial.status(), 'el historial es de administracion').toBe(403);
   });
 
@@ -134,7 +141,9 @@ test.describe('Parametros del sistema (HU-ADM-001)', () => {
     expect(cambiado.actualizadoPor).toBe(admin.claims.uid);
     expect(cambiado.version).toBeGreaterThanOrEqual(2);
 
-    const historial = await api.get(`/api/v1/parametros/${PARAMETRO}/historial`, { headers: conToken(admin.token) });
+    const historial = await api.get(`/api/v1/parametros/${PARAMETRO}/historial`, {
+      headers: conToken(admin.token),
+    });
     expect(historial.status()).toBe(200);
     const versiones = await historial.json();
     expect(versiones[0].valorNuevo).toBe('2');
@@ -147,7 +156,12 @@ test.describe('Parametros del sistema (HU-ADM-001)', () => {
     await new Promise((resolve) => setTimeout(resolve, 1500));
     const larga = await api.post('/api/v1/sanciones', {
       headers: conToken(moderadora.token),
-      data: { usuarioId: jugadora.claims.uid, tipo: 'SUSPENSION', motivo: 'Prueba de limite', duracionHoras: 72 },
+      data: {
+        usuarioId: jugadora.claims.uid,
+        tipo: 'SUSPENSION',
+        motivo: 'Prueba de limite',
+        duracionHoras: 72,
+      },
     });
     expect(larga.status(), await larga.text()).toBe(400);
     const problema = await larga.json();
@@ -156,7 +170,12 @@ test.describe('Parametros del sistema (HU-ADM-001)', () => {
 
     const corta = await api.post('/api/v1/sanciones', {
       headers: conToken(moderadora.token),
-      data: { usuarioId: jugadora.claims.uid, tipo: 'SUSPENSION', motivo: 'Prueba de limite', duracionHoras: 24 },
+      data: {
+        usuarioId: jugadora.claims.uid,
+        tipo: 'SUSPENSION',
+        motivo: 'Prueba de limite',
+        duracionHoras: 24,
+      },
     });
     expect(corta.status(), await corta.text()).toBe(201);
   });
@@ -176,7 +195,9 @@ test.describe('Parametros del sistema (HU-ADM-001)', () => {
     expect((await ligero.json()).valor).toBe('50');
   });
 
-  test('la vista muestra el catalogo con el inalterable bloqueado y el formulario del administrador', async ({ page }) => {
+  test('la vista muestra el catalogo con el inalterable bloqueado y el formulario del administrador', async ({
+    page,
+  }) => {
     await page.addInitScript(
       ([token, nombre, uid]) => {
         sessionStorage.setItem('nexus.token', token);
@@ -194,10 +215,16 @@ test.describe('Parametros del sistema (HU-ADM-001)', () => {
     // estricto, se niega a elegir. El texto esperado NO cambio: el fallo era del
     // localizador. (La ambiguedad de fondo queda anotada: `data-campo` significa
     // dos cosas distintas desde #596.)
-    await expect(page.locator(`[data-clave="${PARAMETRO}"] p[data-campo="valor"]`)).toContainText('Vigente: 2 dias');
+    await expect(page.locator(`[data-clave="${PARAMETRO}"] p[data-campo="valor"]`)).toContainText(
+      'Vigente: 2 dias',
+    );
     await expect(page.locator(`[data-clave="${PARAMETRO}"] [data-zona="cambio"]`)).toBeVisible();
-    await expect(page.locator('[data-clave="torneos.cupos"] [data-campo="bloqueado"]')).toContainText('Charter');
+    await expect(
+      page.locator('[data-clave="torneos.cupos"] [data-campo="bloqueado"]'),
+    ).toContainText('Charter');
     await expect(page.locator('[data-clave="torneos.cupos"] [data-zona="cambio"]')).toHaveCount(0);
-    await expect(page.locator('[data-clave="chat.historial.tamano"] [data-campo="programado"]')).toContainText('Programado: 100');
+    await expect(
+      page.locator('[data-clave="chat.historial.tamano"] [data-campo="programado"]'),
+    ).toContainText('Programado: 100');
   });
 });

@@ -35,6 +35,8 @@ include 'services:contenido:productos'
 
 // --- Cuentas y economia ---
 include 'services:cuentas:ms-subastas'
+include 'services:cuentas:ms-finanzas'
+include 'services:cuentas:ms-chatbot'
 
 // --- Pendientes de incorporar ---
 //
@@ -43,8 +45,6 @@ include 'services:cuentas:ms-subastas'
 //
 // include 'services:contenido:misiones'
 // include 'services:contenido:progresion-jugador'
-// include 'services:cuentas:ms-chatbot'
-include 'services:cuentas:ms-finanzas'
 //
 // Todavia en Maven (pom.xml). Migrarlos a Gradle y descomentar aqui:
 //

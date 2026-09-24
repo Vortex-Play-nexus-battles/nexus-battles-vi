@@ -20,20 +20,24 @@
     <div id="navbar-container"></div>
 
     <script type="module">
-      import { montarCabecera, exigirSesion } from '../comun/cabecera-app.js';
+      import { montarCabecera } from '../comun/cabecera-app.js';
+      import { exigirAcceso } from '../comun/acceso.js';
 
-      if (!exigirSesion()) {
+      if (!exigirAcceso('tienda')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
       // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
-      montarCabecera(document.getElementById('navbar-container'), { seccionActiva: 'cuenta' });
+      montarCabecera(document.getElementById('navbar-container'), {
+        vista: 'tienda',
+        seccionActiva: 'cuenta',
+      });
     </script>
 
     <main class="main-container">
       <!-- Columna de Productos -->
       <section class="store-section">
         <div class="store-header">
-          <h2>Tienda</h2>
+          <h1>Tienda</h1>
           <p>Paga con moneda local (COP) usando tus métodos registrados.</p>
         </div>
 
@@ -48,6 +52,12 @@
         <div class="cart-card">
           <h3>Tu carro</h3>
 
+          <!-- R16 — el aviso de «Añadir» cuando el servicio rechaza el producto
+               (agotado, suspendido, sin precio en dinero real, catálogo caído).
+               Va aquí, donde el jugador esperaba ver el producto, y fuera de
+               #cart-items, que se repinta entero. Lo rellena tienda.js. -->
+          <div id="aviso-carrito" data-zona="aviso" hidden></div>
+
           <div id="cart-items" class="cart-items-container">
             <!-- JS inyectará los items del carrito aquí -->
             <p class="t-meta">Tu carrito está vacío</p>
@@ -56,11 +66,13 @@
           <div class="cart-summary">
             <div class="summary-row">
               <span>Subtotal</span>
-              <span id="cart-subtotal">0 COP</span>
+              <!-- Sin carrito cargado todavia no se sabe el importe: «—» y no
+                   «0 COP», que afirmaria que el carrito esta vacio. -->
+              <span id="cart-subtotal">—</span>
             </div>
             <div class="summary-row total-row">
               <span>Total a pagar</span>
-              <span id="cart-total" class="total-price">0 COP</span>
+              <span id="cart-total" class="total-price">—</span>
             </div>
           </div>
 
@@ -70,7 +82,19 @@
             carro.
           </div>
 
-          <button id="btn-pagar" class="btn-pagar" disabled>PAGAR</button>
+          <!--
+            FI-R2 — el boton nace deshabilitado y se queda asi, con el motivo
+            escrito al lado. RF-CAR-010 y RF-PAG-001 estan confirmados, pero su
+            implementacion es de Grupo de Santiago y todavia no existe:
+            `CarritoController` no tiene ninguna ruta de pago. Antes el boton se
+            encendia en cuanto el carrito tenia algo y no tenia manejador
+            ninguno — pulsarlo no hacia nada.
+          -->
+          <button id="btn-pagar" class="btn-pagar" disabled>Pagar</button>
+          <p id="aviso-pago-pendiente" class="aviso-pago">
+            El pago todavía no está disponible. Tu carrito queda guardado y podrás terminar la
+            compra cuando se habilite.
+          </p>
         </div>
       </aside>
     </main>

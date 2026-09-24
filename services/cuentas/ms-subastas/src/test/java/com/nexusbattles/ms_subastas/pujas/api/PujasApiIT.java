@@ -124,6 +124,8 @@ class PujasApiIT {
 
     private Subasta subastaActiva(UUID vendedor, String ofertaVigente, String compraInmediata) {
         Subasta subasta = new Subasta();
+        // Desde R10 el id lo pone quien crea la subasta, no la base.
+        subasta.setId(UUID.randomUUID());
         subasta.setProductoId(UUID.randomUUID());
         subasta.setElementoInventarioId("elem-" + UUID.randomUUID());
         subasta.setVendedorId(vendedor);

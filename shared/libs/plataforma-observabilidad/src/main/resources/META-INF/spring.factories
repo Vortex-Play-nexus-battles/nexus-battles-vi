@@ -1,0 +1,9 @@
+# Regla 6 de plataforma: bitacora en JSON hacia stdout en los veinte servicios.
+#
+# Un EnvironmentPostProcessor NO se declara en el archivo de autoconfiguracion
+# (`AutoConfiguration.imports`): se ejecuta antes de que exista el contexto, y
+# su punto de registro sigue siendo spring.factories. Ver el javadoc de la
+# clase para por que el formato de bitacora no se puede encender desde un
+# @Bean.
+org.springframework.boot.env.EnvironmentPostProcessor=\
+com.nexusbattles.plataforma.observabilidad.BitacoraEnJsonPorOmision

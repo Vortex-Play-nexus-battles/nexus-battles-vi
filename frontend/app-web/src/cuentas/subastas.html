@@ -12,9 +12,20 @@
     es src/ (como la sirve `npm run dev`). No habia raiz bajo la cual las tres
     cargaran, asi que la barra de navegacion siempre salia sin estilos.
   -->
-    <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
+    <!--
+      UX-R3.6 — el orden importa y aquí estaba al revés.
+
+      `base.css` dice, en su primera línea: «Depende de tokens.css. Cargar
+      siempre en este orden: tokens.css -> base.css -> componentes.css -> css
+      de la vista». Esta era la única de las 32 vistas que lo incumplía:
+      cargaba `componentes.css` PRIMERO, así que las reglas de `base.css`
+      —que declaran color sobre `h1`, el ancho de `.pagina` y el `[hidden]`
+      con `!important`— le ganaban por orden a las del componente. De ahí el
+      título montado sobre la barra de navegación.
+    -->
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
     <link rel="stylesheet" href="subastas-vitrina.css" />
     <link rel="stylesheet" href="subastas-filtros.css" />
     <link rel="stylesheet" href="subastas-busqueda.css" />

@@ -120,6 +120,18 @@ class CanalDeSalaIT {
     @org.springframework.test.context.bean.override.mockito.MockitoBean
     private com.nexusbattles.plataforma.salaspartidas.aplicacion.HeroeDelJugador heroes;
 
+    /**
+     * Y la puerta de sancion, por la misma razon — R10.2.
+     *
+     * <p>Devuelve {@code false} por omision de Mockito: nadie sancionado. Sin
+     * este doble, crear o entrar a una sala moriria con un 503
+     * `sanciones-no-disponibles` antes de llegar al canal, porque no hay nadie
+     * escuchando en el puerto por omision de moderacion-sanciones. Lo que se
+     * prueba aqui es el canal en tiempo real, no las puertas.
+     */
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private com.nexusbattles.plataforma.salaspartidas.sanciones.SancionesDelJugador sanciones;
+
     @org.junit.jupiter.api.BeforeEach
     void elInventarioDejaPasar() {
         org.mockito.Mockito.when(heroes.consultar(org.mockito.ArgumentMatchers.any()))

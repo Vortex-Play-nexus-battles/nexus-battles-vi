@@ -1,0 +1,539 @@
+openapi: 3.1.0
+
+# =============================================================================
+# Nexus Battles VI — Bitacora de auditoria administrativa (ms-cumplimiento ·
+# equipo de Cuentas y comercio)
+#
+# Regla 1 de plataforma: contrato primero. Este documento NO se acordo antes
+# de implementar: el servicio ya existe y este contrato se escribe A PARTIR de
+# lo que `services/cuentas/ms-cumplimiento` responde hoy, leyendo
+# `AuditLogController`, `AuditLogService`, `AuditLog`, `SeguridadConfig`,
+# `RequireSuperAdmin2FAAspect` y `ManejadorDeErrores`, operacion por operacion
+# y campo por campo. Es el cierre de una brecha, no un acuerdo previo.
+#
+# No se ha inventado ninguna ruta, ningun campo ni ningun codigo de respuesta.
+# Donde el servicio se desvia de las reglas de plataforma, el contrato lo dice
+# en voz alta en lugar de describir lo que deberia pasar (ver los dos avisos
+# de `info.description`).
+#
+# ---------------------------------------------------------------------------
+# QUIEN LLAMA A QUE
+#
+#   GET  /api/v1/admin/auditoria          ->  una persona: SUPER_ADMINISTRADOR
+#   POST /api/v1/admin/auditoria/eventos  ->  un servicio: rol SERVICIO
+#
+# Son dos clases de llamador distintas a proposito. La bitacora la LEE un
+# superadministrador con su token de sesion; la ESCRIBEN otros servicios
+# (hoy ms-identidad) con su credencial de servicio. El `administradorId` del
+# cuerpo es un dato del evento, no quien hace la llamada: por eso un usuario
+# no puede escribir la bitacora ni siquiera poniendo su propio identificador.
+# =============================================================================
+
+info:
+  title: Nexus Battles VI — Bitacora de auditoria (ms-cumplimiento)
+  version: 1.0.0
+  description: |
+    Consulta y registro de la bitacora de acciones administrativas
+    (HU-AUD-001). Cada entrada dice quien hizo que, sobre quien, con que
+    motivo y desde que direccion, y es inmutable: la entidad esta marcada
+    `@Immutable` y todas sus columnas son `updatable = false`, asi que no
+    existe operacion de modificacion ni de borrado en esta API. Lo unico que
+    se puede hacer con una entrada es leerla.
+
+    **Este contrato lo redacto el Equipo 6 a partir del codigo existente para
+    cerrar la regla 1 de plataforma («contrato primero»), que este servicio
+    incumplia por no tener contrato publicado. Queda pendiente de validacion
+    por el dueno del modulo antes de tratarlo como acordado.**
+
+    El servicio escucha en el puerto 8091 y **no tiene context-path**: las
+    rutas que aparecen aqui son absolutas y completas, incluido el `/api/v1`
+    (regla 2). Esto lo diferencia de ms-finanzas o salas-partidas, donde el
+    `/api/v1` lo aporta el context-path del servicio y por eso no aparece en
+    los paths de sus contratos.
+
+    ### Aviso 1 — el `type` de los errores es `about:blank` (desviacion de la regla 4)
+
+    Los tres manejadores de `ManejadorDeErrores` construyen el problem detail
+    con `ProblemDetail.forStatusAndDetail(...)` y **nunca llaman a
+    `setType(...)`**. El resultado es que el campo `type` de toda respuesta de
+    error de este servicio sale con el valor por omision de RFC 7807,
+    `about:blank`, en lugar del identificador estable
+    `https://nexusbattles.upb.edu.co/errors/<slug>` que usan los demas
+    modulos de la plataforma.
+
+    Es una desviacion real de la regla 4 («formato de error estandar,
+    identico en los 20 modulos»), y se documenta tal cual porque un
+    consumidor que filtre por `type` —que es lo que la regla 4 pide hacer, en
+    lugar de filtrar por el texto— no puede distinguir aqui un error de otro.
+    Hoy solo puede distinguirlos por el `status` y por el `title`. El contrato
+    describe `about:blank` porque es lo que el servicio devuelve; corregirlo
+    es trabajo del dueno del modulo, no de este documento.
+
+    ### Aviso 2 — un cuerpo incompleto responde 503, no 400
+
+    En `POST /api/v1/admin/auditoria/eventos` el cuerpo **no lleva `@Valid`**,
+    asi que Bean Validation no se ejecuta: quien impone los campos
+    obligatorios es `AuditLog.Builder.build()`, lanzando
+    `IllegalStateException`. Esa construccion ocurre dentro del `try` de
+    `AuditLogService.registrar(...)`, cuyo `catch (Exception e)` la envuelve
+    en `AuditWriteException` sin distinguirla de un fallo de base de datos.
+
+    Consecuencia: **un cuerpo incompleto hoy se ve como bitacora no
+    disponible** (503 «Bitacora de auditoria no disponible»), no como una
+    peticion invalida (400). Un llamador que reintente los 503 —que es lo
+    razonable ante una indisponibilidad— reintentara para siempre una
+    peticion que nunca va a funcionar. Es un defecto conocido y se documenta
+    en el 503 de esa operacion.
+
+    Errores en formato problem details (regla 4) con la salvedad del aviso 1.
+  license:
+    name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
+
+servers:
+  - url: http://localhost:8091
+    description: Desarrollo local (sin context-path; el /api/v1 va en la ruta)
+  - url: http://srv-ms-cumplimiento:8091
+    description: Red de compose
+
+tags:
+  - name: auditoria
+    description: Bitacora de acciones administrativas (HU-AUD-001)
+
+paths:
+  /api/v1/admin/auditoria:
+    get:
+      tags: [auditoria]
+      operationId: consultarAuditoria
+      summary: Consulta paginada de la bitacora de acciones administrativas
+      description: |
+        Devuelve las entradas de la bitacora que cumplan los filtros, en una
+        pagina de Spring Data.
+
+        **Todos los filtros son opcionales y se combinan con Y logico.** Sin
+        ninguno, devuelve la bitacora entera paginada. `administradorId` en
+        blanco se ignora igual que si no viniera (`isBlank()` en el servicio),
+        asi que mandar el parametro vacio no filtra por administrador vacio.
+        `desde` y `hasta` se pueden usar sueltos: solo `desde` acota por el
+        extremo inferior, solo `hasta` por el superior.
+
+        **Quien puede llamar.** Exige `ROLE_SUPER_ADMINISTRADOR` —el nombre
+        real del rol que emite ms-identidad— por dos sitios distintos: la
+        cadena de seguridad (`SeguridadConfig`) y el aspecto
+        `RequireSuperAdmin2FAAspect`. El aspecto anade ademas la exigencia de
+        segundo factor cuando `cumplimiento.auditoria.exigir-2fa` vale `true`;
+        **por omision vale `false`**, porque ms-identidad todavia no emite
+        ningun claim de segundo factor y exigirlo hoy equivaldria a negar
+        siempre. Cuando se encienda, se comprueba el claim `amr` (RFC 8176)
+        buscando `mfa`, `otp` o `hwk`.
+
+        **Limitacion conocida: `size` no tiene tope en el codigo.** El
+        controlador recibe el `Pageable` que Spring construye y no lo acota,
+        a diferencia de `GET /creditos/{uid}/movimientos` de ms-finanzas, que
+        lo limita a 100. Un llamador puede pedir `size=100000` y obligar al
+        servicio a materializar en memoria toda la bitacora. Se documenta
+        como esta, no como deberia estar.
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - name: administradorId
+          in: query
+          required: false
+          description: |
+            Filtra por el administrador que ejecuto la accion. Un valor en
+            blanco se trata como ausente.
+          schema:
+            type: string
+        - name: tipoAccion
+          in: query
+          required: false
+          description: |
+            Filtra por tipo de accion. Un valor fuera del enumerado responde
+            400: la conversion la hace Spring antes de llegar al servicio.
+          schema:
+            $ref: '#/components/schemas/TipoAccion'
+        - name: desde
+          in: query
+          required: false
+          description: Extremo inferior del rango de `fechaHora`, en ISO-8601.
+          schema:
+            type: string
+            format: date-time
+        - name: hasta
+          in: query
+          required: false
+          description: Extremo superior del rango de `fechaHora`, en ISO-8601.
+          schema:
+            type: string
+            format: date-time
+        - name: page
+          in: query
+          required: false
+          description: Pagina, empezando en cero (parametro de Spring Data).
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          required: false
+          description: |
+            Tamano de pagina (parametro de Spring Data). **Sin tope en el
+            codigo**: ver la limitacion conocida en la descripcion de la
+            operacion.
+          schema:
+            type: integer
+            minimum: 1
+            default: 20
+        - name: sort
+          in: query
+          required: false
+          description: |
+            Ordenacion de Spring Data, con la forma `campo,asc|desc` (por
+            ejemplo `fechaHora,desc`). Se admite repetido para ordenar por
+            varios campos. Sin este parametro el orden lo decide la base de
+            datos: el servicio no impone ninguno por omision.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Pagina de entradas de la bitacora que cumplen los filtros
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaDeAuditoria'
+              example:
+                content:
+                  - id: 4f1c2a7e-3d6b-4b9a-8f0e-1c2d3e4f5a6b
+                    fechaHora: '2026-09-22T14:31:00Z'
+                    administrador: admin-general
+                    tipoAccion: CAMBIO_ROL
+                    afectado: jugador-6f1c
+                    valorAnterior: JUGADOR
+                    valorNuevo: MODERADOR
+                    motivo: Ascenso aprobado en el comite
+                    ipOrigen: 10.0.2.15
+                totalElements: 1
+                totalPages: 1
+                number: 0
+                size: 20
+                first: true
+                last: true
+        '400':
+          description: |
+            `tipoAccion` no esta en el enumerado. Lo produce la conversion de
+            Spring, que lanza un error de tipo antes de entrar al servicio.
+            `type` sale como `about:blank` (aviso 1).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '401':
+          $ref: '#/components/responses/SinCredencial'
+        '403':
+          $ref: '#/components/responses/NoAutorizado'
+
+  /api/v1/admin/auditoria/eventos:
+    post:
+      tags: [auditoria]
+      operationId: registrarEventoDeAuditoria
+      summary: Registra un evento en la bitacora desde otro microservicio
+      description: |
+        Punto de entrada para que otros servicios —hoy ms-identidad— dejen
+        constancia de una accion administrativa por HTTP, sin importar las
+        clases Java internas de ms-cumplimiento.
+
+        **Quien puede llamar.** Solo `ROLE_SERVICIO` (credencial de servicio
+        de ADR-005). Un usuario, por administrador que sea, no escribe la
+        bitacora: el `administradorId` del cuerpo describe el evento, no
+        acredita a quien llama.
+
+        **La validacion no la hace Bean Validation.** El cuerpo llega sin
+        `@Valid`, asi que los campos obligatorios los impone
+        `AuditLog.Builder.build()` en tiempo de construccion. Obligatorios de
+        verdad: `administradorId`, `tipoAccion`, `afectado`, `motivo` e
+        `ipOrigen`. Admiten nulo: `valorAnterior` y `valorNuevo` —un evento
+        como `SECURITY_BYPASS_ATTEMPT` no cambia ningun valor, solo constata
+        el intento—. La consecuencia de que la validacion viva en el
+        constructor y no en la capa web es el 503 del aviso 2.
+
+        `fechaHora` no se acepta en el cuerpo: la fija el servidor con
+        `Instant.now()` al construir la entrada. Quien registra el evento no
+        elige cuando quedo registrado.
+      security:
+        - credencialDeServicio: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrarAuditoriaRequest'
+            example:
+              tipoAccion: SECURITY_BYPASS_ATTEMPT
+              administradorId: desconocido
+              afectado: GESTIONAR_CUENTAS
+              motivo: 'CREDENTIAL_MISSING'
+              ipOrigen: 172.18.0.7
+      responses:
+        '201':
+          description: Entrada registrada; se devuelve tal como quedo guardada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogResponse'
+              example:
+                id: 8a2d3e4f-5a6b-4c7d-9e0f-1a2b3c4d5e6f
+                fechaHora: '2026-09-22T14:35:12Z'
+                administrador: desconocido
+                tipoAccion: SECURITY_BYPASS_ATTEMPT
+                afectado: GESTIONAR_CUENTAS
+                valorAnterior: null
+                valorNuevo: null
+                motivo: CREDENTIAL_MISSING
+                ipOrigen: 172.18.0.7
+        '400':
+          description: |
+            `tipoAccion` no esta en el enumerado. Es el unico 400 que produce
+            esta operacion: `AuditLogService.registrarDesdeSolicitud` traduce
+            el valor a `AuditActionType` y relanza un `IllegalArgumentException`
+            cuyo texto enumera los valores admitidos. `type` sale como
+            `about:blank` (aviso 1).
+
+            Un campo obligatorio que falte NO cae aqui: cae en el 503.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '401':
+          $ref: '#/components/responses/SinCredencial'
+        '403':
+          $ref: '#/components/responses/NoAutorizado'
+        '503':
+          description: |
+            No se pudo escribir la entrada y la accion administrativa se
+            cancela (`AuditWriteException`, titulo «Bitacora de auditoria no
+            disponible»). Cubre el fallo real de la base de datos y, **por un
+            defecto conocido, tambien el cuerpo incompleto**: un cuerpo
+            incompleto hoy se ve como bitacora no disponible, porque el
+            `IllegalStateException` del builder se construye dentro del `try`
+            del servicio y su `catch (Exception e)` lo reenvia como
+            `AuditWriteException`.
+
+            Practicamente: un 503 de esta operacion no distingue «la bitacora
+            esta caida, reintenta» de «tu peticion esta mal, no reintentes».
+            Quien reintente ciegamente los 503 reintentara para siempre una
+            peticion que nunca va a funcionar. `type` sale como `about:blank`
+            (aviso 1).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+components:
+  securitySchemes:
+    tokenDeUsuario:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Token de sesion de una persona, emitido por **ms-identidad**
+        (ADR-002), firmado RS256 y verificado contra su JWKS
+        (`IDENTIDAD_JWKS_URL`, por omision
+        `http://srv-ms-identidad:8089/api/v1/auth/jwks`). El emisor real es
+        ms-identidad, no Keycloak: Keycloak no esta aprovisionado en ningun
+        entorno (ADR-005). El rol viaja en el claim `rol` (string singular) y
+        `ConversorDeRoles` lo convierte en `ROLE_<rol>`; aqui hace falta
+        `ROLE_SUPER_ADMINISTRADOR`.
+    credencialDeServicio:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Token de servicio (ADR-005): `rol=SERVICIO`, obtenido por
+        `client_credentials` en `POST /api/v1/auth/token` de **ms-identidad**
+        y verificado contra su JWKS. Es la credencial de un servicio
+        (ms-identidad al auditar sus propias acciones administrativas), nunca
+        la de una persona.
+
+  responses:
+    SinCredencial:
+      description: |
+        Sin token, token caducado o firmado por otra clave. Lo produce la
+        cadena de seguridad antes de llegar al controlador, asi que no pasa
+        por `ManejadorDeErrores`.
+    NoAutorizado:
+      description: |
+        El token es valido pero no alcanza: en la consulta, no lleva
+        `ROLE_SUPER_ADMINISTRADOR` —o lo lleva pero sin segundo factor cuando
+        `cumplimiento.auditoria.exigir-2fa=true`, que por omision es
+        `false`—; en el registro, no lleva `ROLE_SERVICIO`. Cuando lo produce
+        el aspecto, el cuerpo es un problem detail con titulo «Acceso
+        denegado» y `type` `about:blank` (aviso 1); cuando lo produce la
+        cadena de seguridad, no hay cuerpo.
+
+  schemas:
+    TipoAccion:
+      type: string
+      description: |
+        Tipos de accion administrativa que deben quedar auditados. El
+        enumerado es cerrado: un valor que no este aqui responde 400 tanto en
+        el filtro de la consulta como en el cuerpo del registro.
+
+        `SECURITY_BYPASS_ATTEMPT` es el que emite `SecurityInterceptor` de
+        ms-identidad ante un intento de saltarse un permiso (token invalido,
+        version revocada, cabecera de rol deshabilitada o credencial
+        ausente).
+      enum:
+        - CREACION
+        - ACTUALIZACION
+        - ELIMINACION_LOGICA
+        - SUSPENSION
+        - SANCION
+        - CAMBIO_ROL
+        - APROBACION
+        - RECHAZO
+        - SECURITY_BYPASS_ATTEMPT
+        - OTRO
+
+    RegistrarAuditoriaRequest:
+      type: object
+      description: |
+        Cuerpo de `POST /api/v1/admin/auditoria/eventos`. Todos los campos son
+        cadenas, incluido `tipoAccion`: se manda como texto y el servicio lo
+        traduce al enumerado, para que un servicio llamador no tenga que
+        importar clases Java de ms-cumplimiento.
+
+        `required` recoge lo que impone `AuditLog.Builder.build()`, no Bean
+        Validation —que aqui no corre, porque el cuerpo no lleva `@Valid`—.
+        Incumplirlo responde 503, no 400 (aviso 2).
+      required: [tipoAccion, administradorId, afectado, motivo, ipOrigen]
+      properties:
+        tipoAccion:
+          type: string
+          description: Uno de los valores de `TipoAccion`, como texto.
+        administradorId:
+          type: string
+          description: |
+            Quien ejecuto la accion. Es un dato del evento, no la identidad
+            del llamador: quien llama se acredita con la credencial de
+            servicio.
+        afectado:
+          type: string
+          description: Sobre quien o sobre que recayo la accion.
+        valorAnterior:
+          type: [string, 'null']
+          description: |
+            Valor antes del cambio. Nulo cuando la accion no cambia ningun
+            valor (un intento de salto de permisos, por ejemplo).
+        valorNuevo:
+          type: [string, 'null']
+          description: Valor despues del cambio. Nulo en los mismos casos que `valorAnterior`.
+        motivo:
+          type: string
+          description: Por que se ejecuto la accion. Hasta 500 caracteres en la columna.
+        ipOrigen:
+          type: string
+          description: Direccion desde la que se ejecuto. Hasta 45 caracteres (cabe una IPv6).
+
+    AuditLogResponse:
+      type: object
+      description: |
+        Una entrada de la bitacora, tal como la devuelven las dos operaciones.
+
+        **Atencion al nombre del campo de salida:** el administrador sale como
+        **`administrador`**, no como `administradorId`. La entrada se llama
+        `administradorId` y la columna tambien, pero el DTO de salida lo
+        renombra. Un consumidor que asuma simetria entre lo que manda y lo que
+        recibe leera un nulo.
+      required: [id, fechaHora, administrador, tipoAccion, afectado, motivo, ipOrigen]
+      properties:
+        id:
+          type: string
+          description: |
+            Identificador de la entrada. Es un UUID generado por JPA, pero
+            viaja como cadena: la columna y el campo Java son `String`.
+        fechaHora:
+          type: string
+          format: date-time
+          description: Cuando quedo registrada. La fija el servidor, no el llamador.
+        administrador:
+          type: string
+          description: |
+            Quien ejecuto la accion — corresponde al `administradorId` de la
+            peticion. Ver la advertencia sobre el nombre en la descripcion del
+            esquema.
+        tipoAccion:
+          type: string
+          description: |
+            Uno de los valores de `TipoAccion`, serializado como texto con
+            `.name()`. Se declara `string` y no una referencia al enumerado
+            porque una entrada guardada conserva su valor aunque el enumerado
+            cambie en una version posterior.
+        afectado:
+          type: string
+        valorAnterior:
+          type: [string, 'null']
+        valorNuevo:
+          type: [string, 'null']
+        motivo:
+          type: string
+        ipOrigen:
+          type: string
+
+    PaginaDeAuditoria:
+      type: object
+      description: |
+        Pagina de Spring Data serializada por Jackson. Se describen los campos
+        que el consumidor necesita; la serializacion por omision de `Page`
+        incluye ademas `pageable`, `sort`, `numberOfElements` y `empty`, que no
+        se documentan aqui porque no forman parte de lo acordado y pueden
+        cambiar con la version de Spring.
+      required: [content, totalElements, totalPages, number, size, first, last]
+      properties:
+        content:
+          type: array
+          items: { $ref: '#/components/schemas/AuditLogResponse' }
+        totalElements: { type: integer }
+        totalPages: { type: integer }
+        number:
+          type: integer
+          description: Numero de esta pagina, empezando en cero.
+        size:
+          type: integer
+          description: Tamano de pagina pedido.
+        first: { type: boolean }
+        last: { type: boolean }
+
+    ProblemDetail:
+      type: object
+      description: |
+        Problem details RFC 7807 (regla 4), **con la desviacion del aviso 1**:
+        este servicio nunca fija `type`, asi que sale siempre `about:blank` y
+        no el `https://nexusbattles.upb.edu.co/errors/<slug>` del resto de la
+        plataforma. Mientras eso siga asi, un consumidor solo puede distinguir
+        un error de otro por `status` y por `title`.
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: |
+            Hoy siempre `about:blank`. En los demas modulos es el
+            identificador estable del tipo de error.
+          default: about:blank
+        title:
+          type: string
+          description: |
+            Titulo corto. Los tres que produce este servicio: «Solicitud
+            invalida» (400), «Acceso denegado» (403) y «Bitacora de auditoria
+            no disponible» (503).
+        status:
+          type: integer
+          description: Codigo HTTP.
+        detail:
+          type: string
+          description: |
+            Mensaje de la excepcion. En el 400 enumera los valores admitidos
+            de `tipoAccion`.
+        instance:
+          type: string
+          description: Ruta que produjo el error.

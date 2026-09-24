@@ -45,43 +45,53 @@ Nada más se crea a mano. Todo lo demás sale de esta carpeta por `infra-dev.yml
 | SNS + EventBridge Scheduler | recordatorios de salida 2026-10-30, 2027-01-14, 2027-02-12 | 0 |
 
 Total 24×7 ≈ **20,2 USD/mes**; con el apagado programado (23:00 → 07:00 y fines
-de semana) ≈ **11,5 USD/mes**. El crédito de USD 100 cubre el proyecto completo
-(hasta el 6/nov) incluso 24×7, siempre que este sea el único host de plataforma.
+de semana) ≈ **11,5 USD/mes**. Estas cifras son **solo de este host**: desde el
+8-sep-2026 hay un segundo `t3.small` para el dominio de contenido
+(`../contenido/`), con su propio coste del mismo orden, así que el gasto real de
+dev es aproximadamente el doble. Aun así el crédito de USD 100 cubre el proyecto
+hasta el 6/nov con el apagado programado en los dos hosts.
 
-> Memoria: 2 GiB corren el perfil de la demo (4-5 servicios de plataforma +
-> Postgres + Redis + Mailpit) con `mem_limit` por contenedor. Los 8 servicios
-> a la vez no caben: hace falta un segundo `t3.small` (mismo costo otra vez)
-> o un `c7i-flex.large` (4 GiB, 61 USD/mes 24×7 — solo con apagado estricto).
+> Memoria: 2 GiB corren el perfil de plataforma con `mem_limit` por contenedor,
+> pero no dan para el monorepo entero. La salida fue **un segundo `t3.small`**,
+> `nexus-contenido-dev`, levantado el 8-sep-2026 para el dominio de contenido
+> (mismo costo otra vez, gobernado por `infrastructure/entornos/contenido/`).
+> El mapa completo de qué corre en cada host está en
+> [`docs/arquitectura/README.md`](../../../docs/arquitectura/README.md).
 
-### Limitación conocida de DEV: el combate no se puede probar entero aquí
+### El combate sí se puede probar en DEV — desde el 8-sep-2026
 
 El camino completo de combate —acción → `motor-combate` → vida → STOMP → barra—
-necesita `motor-combate` **y** `heroes`, que son de Contenido y se despliegan a
-su propio host. Ese host no existe bajo la política de USD 0.
+necesita `motor-combate` **y** `heroes`, que son de Contenido. **Se decidió NO
+meterlos en este `t3.small`**, y la razón es la de arriba: ya corre el perfil
+completo de plataforma más el borde y dos bases. Dos servicios Java más
+(~320 MB cada uno) dejan la instancia al límite, y cuando el OOM killer entra no
+elige: puede llevarse por delante `salas-partidas`, que es justo lo que la demo
+necesita en pie.
 
-**Se decidió NO meterlos en este `t3.small`**, y la razón es la de arriba: ya
-corre el perfil completo de plataforma más el borde y dos bases. Dos servicios
-Java más (~320 MB cada uno) dejan la instancia al límite, y cuando el OOM killer
-entra no elige: puede llevarse por delante `salas-partidas`, que es justo lo que
-la demo necesita en pie. Un segundo host resolvería el problema y duplicaría el
-gasto.
+La salida fue la otra: **un segundo host**. `nexus-contenido-dev`
+(`t3.small`, EIP `34.193.90.11`) existe desde el 8 de septiembre de 2026 y corre
+`heroes` (8101), `inventario` (8102), `productos` (8103) y `motor-combate`
+(8104), con su propio MongoDB. El borde de este host enruta hacia allí los
+prefijos de contenido, y `salas-partidas` llama a `inventario` y al motor por la
+IP elástica. El detalle está en
+[`infrastructure/entornos/contenido/README.md`](../contenido/README.md) y el
+mapa de los dos hosts en
+[`docs/arquitectura/README.md`](../../../docs/arquitectura/README.md).
 
-Qué pasa entonces en DEV si alguien juega un turno: `salas-partidas` responde
-**503 `motor-de-combate-no-disponible`** por la cola privada del jugador. Es el
-comportamiento correcto y está probado — no se inventa un daño para disimular—,
-pero no es el camino feliz.
+El 503 `motor-de-combate-no-disponible` por la cola privada del jugador sigue
+siendo el comportamiento correcto cuando el motor no responde —degradación
+controlada, no un daño inventado para disimular—, pero ya no es lo que pasa en
+DEV con el host de contenido encendido.
 
-Dónde SÍ está probado el camino completo:
+Dónde está probado el camino completo, además del entorno:
 
 - `EjecutarAccionTest` — la coordinación entera con el motor como doble.
 - `CombateControllerTest` y `ResolverAtaqueTest` (en `motor-combate`) — el otro
   lado del mismo contrato.
 - `combate.test.js` — la vista: enviar la acción, umbrales, reconexión sin
   duplicados y el final del combate.
-
-Para levantarlo entero cuando haya presupuesto: añadir `srv-motor-combate` y
-`srv-heroes` al compose de plataforma con `mem_limit: 320m`, o desplegar el host
-de contenido.
+- El banco E2E (`tests/e2e/compose.yml`), que juega una partida entera con los
+  servicios de verdad.
 
 ## Operación (todo desde GitHub → Actions → "Infra dev (AWS Free Plan)")
 
@@ -125,10 +135,18 @@ Para una demo fuera de horario: `start` manual; el `stop` nocturno la apaga desp
 ## Pendientes de coordinación
 
 - `infrastructure/entornos/main.tf` declara 3 hosts `t3.micro` (dev/test/prod)
-  con estado local y sin backend: no se aplica en esta cuenta. Propuesta: retirarlo
-  a favor de esta carpeta (HU-CICD-002 / HU-POR-003, Néstor y Santiago G.).
+  con estado local y sin backend: no se aplica en esta cuenta, y su propia
+  cabecera lo marca como SUPERSEDED. Propuesta: retirarlo a favor de esta
+  carpeta y de `../contenido/` (HU-CICD-002 / HU-POR-003, Néstor y Santiago G.).
 - `cd.yml` despliega por `scp`/`ssh`. El perfil SSM ya está en el host para
   migrar a `aws ssm send-command` y cerrar el puerto 22 (`cidr_ssh = []`) sin
   cambiar nada más aquí.
-- `docker-compose.deploy.yml` sin `mem_limit`: con 2 GiB hay que fijarlos
-  (~320 MB por JVM) y desplegar por perfil de dominio, no los 8 a la vez.
+
+## Resuelto
+
+- **`mem_limit` en `docker-compose.deploy.yml`: ya está puesto.** Cada JVM va
+  acotada a 384 MB con `-XX:MaxRAMPercentage=70` (ancla `x-servicio-plataforma`),
+  y las piezas de infra llevan el suyo — Postgres 256 MB, Redis y Mailpit 64 MB,
+  el borde 48 MB (líneas 32, 39, 47, 51 y 65 del archivo).
+- **Desplegar por perfil de dominio: ya se hace.** Contenido tiene su propio
+  host (`../contenido/`) y su propio job en `cd.yml` desde el 8-sep-2026.

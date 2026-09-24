@@ -22,7 +22,12 @@ body {
   min-height: 100vh;
   margin: 0;
   background:
-    radial-gradient(circle at 90% 0%, rgb(88 39 132 / 12%), transparent 30rem), var(--fondo);
+    radial-gradient(
+      circle at 90% 0%,
+      color-mix(in srgb, var(--acento-relleno) 12%, transparent),
+      transparent 30rem
+    ),
+    var(--fondo);
 }
 
 button,
@@ -36,7 +41,10 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 3px solid #7091ff;
+  /* UX-R3.5 â€” era `#7091ff`, un azul que no estÃ¡ en ninguna parte del kit.
+     El foco es uno solo en toda la aplicaciÃ³n (RNF-ACC-002): si aquÃ­ es otro,
+     quien navega con teclado aprende dos veces. */
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
   outline-offset: 2px;
 }
 
@@ -50,28 +58,42 @@ textarea:focus-visible {
   padding: 32px 0 56px;
 }
 
+/* UX-R3.5 â€” esta cabecera escribia sus propios colores (`var(--texto-sobre-color)`, `#2d3767`,
+   `#c8d5ff`, `rgb(255 255 255 / 45%)`), su propia pila tipografica y sus
+   propias medidas en pixeles, al margen del kit. La regla del proyecto es que
+   ningun CSS escribe un color en hexadecimal: para eso estan los tokens.
+
+   Y tenia un defecto que solo se ve mirando: el titulo salia OSCURO sobre el
+   panel oscuro, ilegible. `color: var(--texto-sobre-color)` en el contenedor se hereda, pero
+   `base.css` declara `color: var(--texto)` DIRECTAMENTE sobre `h1`, y una
+   declaracion propia gana siempre a la herencia. Es el mismo fallo que la
+   portada de la home; por eso aqui el `h1` va nombrado. */
 .productos-cabecera {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 22px;
-  padding: 24px 28px;
-  border-radius: 14px;
-  color: #fff;
-  background: linear-gradient(125deg, var(--cromo), #2d3767);
+  gap: var(--e-6);
+  margin-bottom: var(--e-5);
+  padding: var(--e-6) var(--e-8);
+  border-radius: var(--radio);
+  color: var(--texto-sobre-color);
+  background: linear-gradient(125deg, var(--cromo-elevado), var(--cromo));
   box-shadow: var(--sombra-2);
+}
+
+.productos-cabecera :is(h1, p) {
+  color: var(--texto-sobre-color);
 }
 
 .productos-cabecera h1,
 .producto-seccion h2 {
-  font-family: Rajdhani, Inter, system-ui, sans-serif;
+  font-family: var(--t-titulo-familia);
 }
 
 .productos-cabecera h1 {
-  margin: 2px 0 4px;
-  font-size: 1.75rem;
-  line-height: 1.1;
+  margin: var(--e-1) 0;
+  font-size: var(--t-titulo-tam);
+  line-height: var(--t-titulo-alto);
 }
 
 .productos-cabecera p {
@@ -79,19 +101,51 @@ textarea:focus-visible {
 }
 
 .productos-cabecera__marca {
-  font-size: 0.8rem;
-  font-weight: 700;
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-titulo-peso);
   letter-spacing: 0.13em;
-  color: #c8d5ff;
+  color: var(--pista);
 }
 
 .productos-cabecera__insignia {
   flex: 0 0 auto;
-  padding: 7px 12px;
-  border: 1px solid rgb(255 255 255 / 45%);
-  border-radius: 999px;
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid currentcolor;
+  border-radius: var(--radio-pildora);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.productos-cabecera__acciones {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* FI-R15 — el enlace medía 151x38 y el objetivo táctil mínimo son 44 px
+   (`--objetivo-tactil`, WCAG 2.5.5). Era el único hallazgo del barrido de 170
+   combinaciones vista × resolución, y solo se veía a 375 px: en un teléfono es
+   donde un objetivo de 38 px se falla con el pulgar.
+
+   Se resuelve con `min-height` y centrado en vez de subir el relleno: el
+   relleno de arriba y abajo tendría que pasar de 8 a 11 px, y eso descoloca el
+   enlace respecto a la insignia que tiene al lado. */
+.productos-cabecera__enlace {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--objetivo-tactil);
+  padding: 8px 12px;
+  border: 1px solid var(--texto-sobre-color);
+  border-radius: 7px;
+  color: var(--texto-sobre-color);
   font-size: 0.82rem;
-  font-weight: 600;
+  font-weight: 700;
+  text-decoration: none;
+  background: var(--primaria-relleno);
+}
+
+.productos-cabecera__enlace:hover {
+  background: var(--primaria);
 }
 
 .producto-formulario {
@@ -133,12 +187,13 @@ textarea:focus-visible {
 .producto-seccion select,
 .producto-seccion textarea {
   width: 100%;
-  min-height: 42px;
-  padding: 9px 11px;
-  border: 1px solid var(--borde);
-  border-radius: 7px;
+  /* 44 px, no 42: es el objetivo tÃ¡ctil mÃ­nimo del kit (WCAG 2.5.8). */
+  min-height: var(--campo-alto);
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid var(--borde-int);
+  border-radius: var(--radio);
   color: var(--texto);
-  background: #fff;
+  background: var(--superficie);
 }
 
 .producto-seccion textarea {
@@ -160,7 +215,7 @@ textarea:focus-visible {
   display: flex !important;
   align-items: center;
   align-self: center;
-  /* UX-R2.9 — 42 px se quedaban a dos del minimo tactil de 44. */
+  /* UX-R2.9 â€” 42 px se quedaban a dos del minimo tactil de 44. */
   min-height: var(--objetivo-tactil);
 }
 
@@ -210,7 +265,7 @@ textarea:focus-visible {
 
 .boton-primario {
   border: 1px solid var(--primaria-relleno);
-  color: #fff;
+  color: var(--texto-sobre-color);
   background: var(--primaria-relleno);
 }
 

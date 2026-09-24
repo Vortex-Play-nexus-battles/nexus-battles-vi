@@ -43,7 +43,7 @@ export function distintivoDeCreditos(
     clase: clases('distintivo-credito', tam === 'grande' && 'distintivo-credito--grande'),
     datos: { creditos: hayDato ? String(cifra) : '' },
     atributos: {
-      'aria-label': [contexto, hayDato ? `${texto} creditos` : 'sin dato de creditos']
+      'aria-label': [contexto, hayDato ? `${texto} créditos` : 'sin dato de créditos']
         .filter(Boolean)
         .join(': '),
     },

@@ -5,6 +5,7 @@ import com.nexusbattles.plataforma.salaspartidas.dominio.ParametrosDeSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.ParametrosInvalidos;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Sala;
+import com.nexusbattles.plataforma.salaspartidas.sanciones.SancionesDelJugador;
 
 import java.util.Objects;
 import java.util.UUID;
@@ -36,12 +37,14 @@ public class CrearSala {
     private final RepositorioDeSalas repositorio;
     private final CreditosDelJugador creditos;
     private final HeroeDelJugador heroes;
+    private final SancionesDelJugador sanciones;
 
     public CrearSala(RepositorioDeSalas repositorio, CreditosDelJugador creditos,
-                     HeroeDelJugador heroes) {
+                     HeroeDelJugador heroes, SancionesDelJugador sanciones) {
         this.repositorio = Objects.requireNonNull(repositorio, "Hace falta un repositorio de salas.");
         this.creditos = Objects.requireNonNull(creditos, "Hace falta el modulo de creditos.");
         this.heroes = Objects.requireNonNull(heroes, "Sin inventario no se puede abrir la puerta.");
+        this.sanciones = Objects.requireNonNull(sanciones, "Sin sanciones no se sabe quien puede jugar.");
     }
 
     /**
@@ -55,6 +58,12 @@ public class CrearSala {
      */
     public Sala ejecutar(ParametrosDeSala parametros, JugadorAutenticado anfitrion) {
         Objects.requireNonNull(anfitrion, "Solo un jugador identificado puede crear una sala.");
+
+        // El orden importa: la sancion se comprueba ANTES que el heroe y antes
+        // de reservar un solo credito. Preguntarle al inventario por el heroe
+        // de alguien que no puede jugar es trabajo tirado, y una reserva que
+        // luego hay que liberar es una via mas de que algo se quede a medias.
+        PuertaDeSancion.comprobar(sanciones, anfitrion);
 
         // El anfitrion entra a su propia sala en el momento de crearla, asi que
         // pasa la misma puerta que los demas (SCRUM-1074). Va antes de reservar

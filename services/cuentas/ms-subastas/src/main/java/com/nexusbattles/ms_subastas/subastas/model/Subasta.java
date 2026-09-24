@@ -2,11 +2,14 @@ package com.nexusbattles.ms_subastas.subastas.model;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
+import org.springframework.data.domain.Persistable;
 
 /**
  * Borrador de la tabla Subastas pendiente del diseno conjunto del Dia 1
@@ -34,10 +37,26 @@ import java.util.UUID;
 @Table(name = "subastas")
 @Data
 @NoArgsConstructor
-public class Subasta {
+public class Subasta implements Persistable<UUID> {
 
+    /**
+     * Lo asigna la aplicacion, no la base de datos.
+     *
+     * <p>Tiene que ser asi: {@code PublicarSubastaApplicationService} necesita
+     * el identificador ANTES de guardar, porque con el reserva el elemento en
+     * inventario y debita la comision. Si lo generara la base al insertar, no
+     * habria nada con que reservar.
+     *
+     * <p>Hasta R10 esto declaraba ademas {@code @GeneratedValue}, que decia lo
+     * contrario de lo que el codigo hace. Y la mezcla era mortal: con el id ya
+     * puesto y la version primitiva de abajo, Spring Data decidia que la entidad
+     * NO era nueva y mandaba {@code merge} en vez de {@code persist};
+     * Hibernate la trataba como separada, no encontraba la fila y lanzaba
+     * {@code StaleObjectStateException}. Publicar una subasta terminaba en 500
+     * <b>siempre</b> contra una base de datos real. No lo veia nadie porque las
+     * pruebas de publicacion usan un repositorio doble.
+     */
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
     @Column(nullable = false)
@@ -69,6 +88,37 @@ public class Subasta {
 
     @Version
     private long version;
+
+    /**
+     * Si esta instancia todavia no esta en la base — R10.
+     *
+     * <p>Con el id asignado por la aplicacion, Spring Data no puede deducirlo:
+     * {@code JpaMetamodelEntityInformation} mira el id, lo encuentra puesto y
+     * concluye que la entidad ya existe, asi que manda {@code merge} en vez de
+     * {@code persist}. Hibernate la trata entonces como separada, no encuentra
+     * la fila y lanza {@code StaleObjectStateException}: publicar una subasta
+     * terminaba en 500 <b>siempre</b> contra una base real.
+     *
+     * <p>Se dice explicitamente con {@link Persistable} en vez de apoyarse en
+     * que la version sea nula, porque esto no depende de como este declarado
+     * ningun otro campo: una instancia recien construida es nueva, y deja de
+     * serlo cuando Hibernate la carga o la inserta.
+     */
+    @Transient
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    private boolean nueva = true;
+
+    @PostLoad
+    @PostPersist
+    void yaEstaEnLaBase() {
+        this.nueva = false;
+    }
+
+    @Override
+    public boolean isNew() {
+        return nueva;
+    }
 
     // --- Datos del producto, copiados del catalogo al publicar ---
     // No se consultan en vivo: backend-spring.md prohibe leer la BD de otro

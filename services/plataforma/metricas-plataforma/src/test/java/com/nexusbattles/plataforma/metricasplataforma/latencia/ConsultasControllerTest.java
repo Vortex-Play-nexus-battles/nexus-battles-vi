@@ -117,9 +117,9 @@ class ConsultasControllerTest {
     }
 
     @Test
-    void elRegistroDeLentasRespondeAunqueElProductOwnerNoHayaElegidoPercentil() throws Exception {
-        // Marcar una consulta lenta es comparar contra un umbral, no evaluar un
-        // percentil: no tiene por que esperar a la decision del PO.
+    void elRegistroDeLentasNoDependeDelPercentil() throws Exception {
+        // Marcar una consulta lenta es comparar contra un umbral, no evaluar
+        // una distribucion: esta ruta responde con cualquier configuracion.
         propiedades.setPercentil(null);
         medir(LISTA_NEGRA, 900);
 
@@ -129,16 +129,17 @@ class ConsultasControllerTest {
     }
 
     @Test
-    void sinPercentilAprobadoElInformeFallaDeFormaExplicita() throws Exception {
+    void sinPercentilConfiguradoElInformeUsaElDeAdr006() throws Exception {
+        // Antes: 409 permanente esperando una aprobacion que ningun documento
+        // del proyecto pide. ADR-006 fija p95 y el informe sale.
         propiedades.setPercentil(null);
         medir(BANDEJA, 3, 4);
 
         mockMvc.perform(get("/api/v1/consultas/informe"))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.status").value(409))
-                .andExpect(jsonPath("$.variable").value("LATENCIA_PERCENTIL"))
-                .andExpect(jsonPath("$.criterio").value("HU-REN-001 CA-03"))
-                .andExpect(jsonPath("$.muestrasAcumuladas").value(2));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.percentil").value("p95"))
+                .andExpect(jsonPath("$.objetivoMs").value(500))
+                .andExpect(jsonPath("$.muestras").value(2));
     }
 
     @TestConfiguration

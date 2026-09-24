@@ -6,7 +6,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+import com.nexusbattles.plataforma.resiliencia.parametros.LectorDeParametros;
 import com.nexusbattles.plataforma.salaspartidas.chat.Canal;
 import com.nexusbattles.plataforma.salaspartidas.chat.ContenidoBloqueado;
 import com.nexusbattles.plataforma.salaspartidas.chat.EnviarMensaje;
@@ -17,12 +21,18 @@ import com.nexusbattles.plataforma.salaspartidas.chat.MensajeDeChat.LogroCompart
 import com.nexusbattles.plataforma.salaspartidas.chat.MensajeDeChat.Tipo;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.RestClient;
 
 import java.security.Principal;
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -92,5 +102,57 @@ class ChatControllerTest {
         assertEquals("chat.mensaje", respuesta.get(0).tipo());
         assertEquals(SALA, respuesta.get(0).idSala());
         assertEquals("Ana", respuesta.get(0).autor().apodo());
+    }
+
+    /**
+     * D-16 / HU-ADM-001 CA-04: el tamano del historial es una decision de
+     * producto que vive en el catalogo, no una constante del servicio.
+     */
+    @Test
+    @DisplayName("el tamano del historial sale del catalogo de parametros (D-16)")
+    void tamanoDesdeElCatalogo() {
+        RestClient.Builder constructor = RestClient.builder();
+        MockRestServiceServer servidor = MockRestServiceServer.bindTo(constructor).build();
+        servidor.expect(requestTo("http://admin/api/v1/parametros/chat.historial.tamano/valor"))
+                .andRespond(withSuccess("{\"clave\":\"chat.historial.tamano\",\"valor\":\"7\"}",
+                        MediaType.APPLICATION_JSON));
+        ChatController conCatalogo = new ChatController(enviar, historial,
+                LectorDeParametros.sobre(constructor.build(), "http://admin/api/v1", Clock.systemUTC(),
+                        Duration.ofSeconds(30)),
+                50);
+
+        conCatalogo.historialGeneral();
+
+        verify(historial).ultimos(Canal.general(), 7);
+        servidor.verify();
+    }
+
+    @Test
+    @DisplayName("si el catalogo no responde, el chat sigue con el tamano de la variable de entorno")
+    void tamanoDelRespaldoCuandoElCatalogoNoResponde() {
+        RestClient.Builder constructor = RestClient.builder();
+        MockRestServiceServer servidor = MockRestServiceServer.bindTo(constructor).build();
+        servidor.expect(requestTo("http://admin/api/v1/parametros/chat.historial.tamano/valor"))
+                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+        ChatController conCatalogoCaido = new ChatController(enviar, historial,
+                LectorDeParametros.sobre(constructor.build(), "http://admin/api/v1", Clock.systemUTC(),
+                        Duration.ofSeconds(30)),
+                50);
+
+        conCatalogoCaido.historialGeneral();
+
+        verify(historial).ultimos(Canal.general(), 50);
+        servidor.verify();
+    }
+
+    @Test
+    @DisplayName("sin PARAMETROS_URL no se hace ni una peticion: manda la variable de entorno")
+    void sinCatalogoConfigurado() {
+        ChatController sinCatalogo = new ChatController(enviar, historial,
+                LectorDeParametros.soloRespaldo(), 25);
+
+        sinCatalogo.historialGeneral();
+
+        verify(historial).ultimos(Canal.general(), 25);
     }
 }

@@ -17,6 +17,8 @@ import {
   dejarAvisoParaElListado,
   recogerAvisoDelListado,
   salidaAlListado,
+  invitacionDe,
+  montarInvitacion,
   CLAVE_AVISO_DEL_LISTADO,
 } from './sala-de-espera.js';
 
@@ -62,10 +64,10 @@ beforeEach(() => {
 describe('textoDeConfirmacion (CA-05)', () => {
   test('cuenta a los demas, no al anfitrion', () => {
     expect(textoDeConfirmacion({ ocupacion: 3 })).toBe(
-      '¿Cancelar la sala? Se expulsara a 2 participantes.',
+      '¿Cancelar la sala? Se expulsará a 2 participantes.',
     );
     expect(textoDeConfirmacion({ ocupacion: 2 })).toBe(
-      '¿Cancelar la sala? Se expulsara a 1 participante.',
+      '¿Cancelar la sala? Se expulsará a 1 participante.',
     );
   });
 
@@ -213,7 +215,7 @@ describe('montarSalaDeEspera · salir (CA-01)', () => {
 });
 
 describe('montarSalaDeEspera · cancelar (CA-02, CA-05)', () => {
-  test('pulsar «Cancelar» pregunta con el numero de expulsados y, si se acepta, cancela', async () => {
+  test('pulsar «Cancelar» pregunta con el número de expulsados y, si se acepta, cancela', async () => {
     const cancelar = jest.fn().mockResolvedValue(undefined);
     const confirmar = jest.fn(() => true);
     const alSalir = jest.fn();
@@ -229,12 +231,12 @@ describe('montarSalaDeEspera · cancelar (CA-02, CA-05)', () => {
     document.querySelector('[data-accion="cancelar-sala"]').click();
     await tick();
 
-    expect(confirmar).toHaveBeenCalledWith('¿Cancelar la sala? Se expulsara a 2 participantes.');
+    expect(confirmar).toHaveBeenCalledWith('¿Cancelar la sala? Se expulsará a 2 participantes.');
     expect(cancelar).toHaveBeenCalledWith('s1');
     expect(alSalir).toHaveBeenCalledWith({ motivo: 'cancelada' });
   });
 
-  test('la confirmacion usa la ocupacion VIVA, no la de cuando se monto', async () => {
+  test('la confirmación usa la ocupacion VIVA, no la de cuando se monto', async () => {
     const confirmar = jest.fn(() => false);
     const espera = montarSalaDeEspera(document, {
       sala: sala({ ocupacion: 1 }),
@@ -248,7 +250,7 @@ describe('montarSalaDeEspera · cancelar (CA-02, CA-05)', () => {
     document.querySelector('[data-accion="cancelar-sala"]').click();
     await tick();
 
-    expect(confirmar).toHaveBeenCalledWith('¿Cancelar la sala? Se expulsara a 3 participantes.');
+    expect(confirmar).toHaveBeenCalledWith('¿Cancelar la sala? Se expulsará a 3 participantes.');
   });
 
   test('si no se confirma, no se llama al servicio', async () => {
@@ -333,8 +335,145 @@ describe('salidaAlListado · una sola navegacion', () => {
     );
     const volver = salidaAlListado(storage, navegar, '../otro.html');
 
-    volver({ tono: 'advertencia', titulo: 'La sala se cerro' });
+    volver({ tono: 'advertencia', titulo: 'La sala se cerró' });
 
     expect(orden).toEqual([['navegar', '../otro.html', true]]);
+  });
+});
+
+/**
+ * FI-R4 — el anfitrion puede repartir la invitacion.
+ *
+ * `GET /salas/{id}` devuelve `codigoInvitacion` solo al anfitrion
+ * (`SalaResponse.segunQuienPregunta`), y el frontend no lo miraba en ningun
+ * sitio: el codigo se generaba, se guardaba en `codigo_invitacion` y moria
+ * ahi.
+ */
+describe('FI-R4 - la invitacion de una sala privada', () => {
+  const HTML_INVITACION = `
+    <main id="raiz">
+      <div data-zona="invitacion" hidden>
+        <code data-zona="codigo-invitacion"></code>
+        <button type="button" data-accion="copiar-codigo">Copiar código</button>
+        <button type="button" data-accion="copiar-enlace">Copiar enlace</button>
+        <span data-zona="acuse-copia"></span>
+      </div>
+    </main>
+  `;
+
+  const ID = '44444444-4444-4444-4444-444444444444';
+  const ORIGEN = 'https://nexus.example/plataforma/salas-partidas/sala-batalla.html';
+
+  let raiz;
+  beforeEach(() => {
+    document.body.innerHTML = HTML_INVITACION;
+    raiz = document.getElementById('raiz');
+  });
+
+  const zona = () => raiz.querySelector('[data-zona="invitacion"]');
+  const acuse = () => raiz.querySelector('[data-zona="acuse-copia"]').textContent;
+
+  describe('invitacionDe', () => {
+    test('arma el codigo y un enlace que lleva a la sala con el codigo puesto', () => {
+      const invitacion = invitacionDe({ id: ID, codigoInvitacion: 'WXYZ-2345' }, ORIGEN);
+
+      expect(invitacion.codigo).toBe('WXYZ-2345');
+      expect(invitacion.enlace).toBe(
+        `https://nexus.example/plataforma/salas-partidas/batallas.html?sala=${ID}&codigo=WXYZ-2345`,
+      );
+    });
+
+    test('sin codigo no hay invitacion: la sala es publica o quien mira no es el anfitrion', () => {
+      expect(invitacionDe({ id: ID }, ORIGEN)).toBeNull();
+      expect(invitacionDe({ id: ID, codigoInvitacion: null }, ORIGEN)).toBeNull();
+      expect(invitacionDe({ id: ID, codigoInvitacion: '  ' }, ORIGEN)).toBeNull();
+    });
+
+    test('sin sala tampoco, aunque venga el codigo', () => {
+      expect(invitacionDe({ codigoInvitacion: 'WXYZ-2345' }, ORIGEN)).toBeNull();
+    });
+  });
+
+  test('al anfitrion de una sala privada se le ensena el codigo', () => {
+    const pintada = montarInvitacion(raiz, {
+      sala: { id: ID, codigoInvitacion: 'WXYZ-2345' },
+      origen: ORIGEN,
+    });
+
+    expect(pintada).toBe(true);
+    expect(zona().hidden).toBe(false);
+    expect(raiz.querySelector('[data-zona="codigo-invitacion"]').textContent).toBe('WXYZ-2345');
+  });
+
+  test('a quien no es anfitrion no le aparece la zona', () => {
+    // No es que se le oculte un dato: es que el servidor no se lo manda.
+    const pintada = montarInvitacion(raiz, { sala: { id: ID }, origen: ORIGEN });
+
+    expect(pintada).toBe(false);
+    expect(zona().hidden).toBe(true);
+  });
+
+  test('copiar el codigo lo manda al portapapeles y lo dice', async () => {
+    const copiar = jest.fn().mockResolvedValue(undefined);
+    montarInvitacion(raiz, {
+      sala: { id: ID, codigoInvitacion: 'WXYZ-2345' },
+      origen: ORIGEN,
+      copiar,
+    });
+
+    raiz.querySelector('[data-accion="copiar-codigo"]').click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(copiar).toHaveBeenCalledWith('WXYZ-2345');
+    expect(acuse()).toMatch(/copiado/i);
+  });
+
+  test('copiar el enlace manda el enlace entero, no solo el codigo', async () => {
+    const copiar = jest.fn().mockResolvedValue(undefined);
+    montarInvitacion(raiz, {
+      sala: { id: ID, codigoInvitacion: 'WXYZ-2345' },
+      origen: ORIGEN,
+      copiar,
+    });
+
+    raiz.querySelector('[data-accion="copiar-enlace"]').click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(copiar.mock.calls[0][0]).toContain('batallas.html?sala=');
+    expect(copiar.mock.calls[0][0]).toContain('codigo=WXYZ-2345');
+  });
+
+  test('sin portapapeles no se dice «copiado»: se dice que lo copie a mano', () => {
+    montarInvitacion(raiz, {
+      sala: { id: ID, codigoInvitacion: 'WXYZ-2345' },
+      origen: ORIGEN,
+      copiar: undefined,
+    });
+
+    raiz.querySelector('[data-accion="copiar-codigo"]').click();
+
+    expect(acuse()).not.toMatch(/copiado/i);
+    expect(acuse()).toMatch(/a mano/i);
+    // Y el codigo sigue en pantalla para poder seleccionarlo.
+    expect(raiz.querySelector('[data-zona="codigo-invitacion"]').textContent).toBe('WXYZ-2345');
+  });
+
+  test('un portapapeles que falla tampoco dice «copiado»', async () => {
+    const copiar = jest.fn().mockRejectedValue(new Error('permiso denegado'));
+    montarInvitacion(raiz, {
+      sala: { id: ID, codigoInvitacion: 'WXYZ-2345' },
+      origen: ORIGEN,
+      copiar,
+    });
+
+    raiz.querySelector('[data-accion="copiar-codigo"]').click();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(acuse()).not.toMatch(/copiado/i);
+    expect(acuse()).toMatch(/no se pudo copiar/i);
   });
 });

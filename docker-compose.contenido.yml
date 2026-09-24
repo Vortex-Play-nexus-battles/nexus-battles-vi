@@ -36,6 +36,10 @@
 # los diferencia. Entre ellos se hablan por nombre de servicio en la red de
 # Compose (srv-heroes:8080, etc.), nunca por el puerto del host.
 
+# Todos los servicios llevan `restart: unless-stopped`, como los de plataforma en
+# docker-compose.deploy.yml: si uno se cae (por ejemplo, el limite de memoria lo
+# mata) o la instancia se reinicia, vuelve solo. Antes tenian la politica "no" y
+# un contenedor caido se quedaba caido hasta el siguiente despliegue.
 services:
 
   # --- Base de datos documental (regla 7: un esquema por servicio) ---
@@ -44,6 +48,7 @@ services:
   contenido-mongo:
     image: mongo:8.0
     container_name: contenido-mongo
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -64,6 +69,7 @@ services:
       dockerfile: services/contenido/heroes/Dockerfile
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-heroes:${TAG_HEROES:-${TAG:-local}}
     container_name: srv-heroes
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -76,14 +82,17 @@ services:
       MONGODB_URI: mongodb://contenido-mongo:27017/heroes
       # R8.1 — emisor real (ADR-002/ADR-005). Es ms-identidad, que corre en el
       # host de plataforma; su 8089 esta abierto en el Security Group y su IP
-      # es elastica, asi que el valor por omision es estable. El CD ya reparte
-      # esta misma variable (cd.yml:813, vars.IDENTIDAD_JWKS_URL) al job de
-      # contenido, de modo que en un despliegue real manda la variable.
+      # es elastica, asi que el valor por omision es estable.
       #
-      # OJO: srv-inventario y srv-productos, mas abajo, siguen leyendo
-      # KEYCLOAK_JWK_SET_URI, que el CD NO reparte — por eso caen al jwks-dev
-      # de esta red y no al emisor real. Ese renombrado es R9.7 y toca a los
-      # dos a la vez; aqui no se cambia para no mezclar bloques.
+      # R9.7 corrigio dos cosas sobre esta linea. La primera: el comentario que
+      # estaba aqui afirmaba que el CD repartia esta variable al job de
+      # contenido, y era falso — `desplegar-contenido-dev` solo pasaba
+      # GHCR_USER, GHCR_TOKEN, TAG, SERVICIOS_PUERTOS, APP_ENV y LOG_LEVEL.
+      # Heroes y motor-combate funcionaban en AWS por el valor por omision de
+      # abajo, no por la variable: correcto por casualidad. Ya se reparte.
+      # La segunda: inventario y productos leian KEYCLOAK_JWK_SET_URI, que el
+      # CD nunca reparte, y caian al jwks-dev de esta red en vez del emisor
+      # real. Los cuatro servicios de contenido leen ahora la misma variable.
       IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://35.168.124.119:8089/api/v1/auth/jwks}
     depends_on:
       contenido-mongo:
@@ -95,6 +104,7 @@ services:
       dockerfile: services/contenido/inventario/Dockerfile
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-inventario:${TAG_INVENTARIO:-${TAG:-local}}
     container_name: srv-inventario
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -109,8 +119,20 @@ services:
       HEROES_BASE_URL: http://srv-heroes:8080
       PRODUCTOS_BASE_URL: http://srv-productos:8080
       # HU-INV-010: las operaciones internas de subastas llegan con un token de
-      # servicio (azp = ms-subastas) validado contra este JWKS. Mientras cuentas
-      # no publique su Keycloak, el de desarrollo (jwks-dev); se cambia por entorno.
+      # servicio (azp = ms-subastas) que hay que validar contra el emisor que lo
+      # firmo — y ese emisor es **ms-identidad** (ADR-002 / ADR-005), no un
+      # Keycloak que nunca llego.
+      #
+      # R9.7 — hasta aqui este servicio leia solo KEYCLOAK_JWK_SET_URI, que es
+      # justo la unica variable que el CD NO reparte: en el host siempre ganaba
+      # el jwks-dev de esta red. Es decir, inventario validaba con una clave
+      # mientras ms-subastas y salas-partidas firmaban con otra, y sus llamadas
+      # S2S no podian funcionar en AWS. El banco E2E no lo destapaba porque su
+      # compose si fija el emisor correcto.
+      IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://35.168.124.119:8089/api/v1/auth/jwks}
+      # Respaldo heredado: se conserva para quien todavia la inyecte (la
+      # coleccion de Postman de productos firma con la clave de jwks-dev). El
+      # servicio prefiere IDENTIDAD_JWKS_URL cuando existe.
       KEYCLOAK_JWK_SET_URI: ${KEYCLOAK_JWK_SET_URI:-http://jwks-dev/certs.json}
     depends_on:
       contenido-mongo:
@@ -128,6 +150,7 @@ services:
       dockerfile: services/contenido/productos/Dockerfile
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-productos:${TAG_PRODUCTOS:-${TAG:-local}}
     container_name: srv-productos
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -136,14 +159,17 @@ services:
       - "8103:8080"
     environment:
       MONGODB_URI: mongodb://contenido-mongo:27017/productos
-      # Obligatoria (sin valor por defecto en el servicio). El valor de abajo
-      # es el Keycloak local; en despliegue la aporta el entorno del servidor.
-      # El JWKS se consulta solo al validar el primer token, asi que el
-      # contenedor arranca y responde salud aunque la URL no exista aun.
-      # Por defecto apunta al JWKS de desarrollo de esta red (servicio jwks-dev,
-      # mas abajo). Cuando cuentas publique su Keycloak, se cambia con esta
-      # misma variable en el entorno del servidor, sin tocar el archivo.
+      # R9.7 — el emisor es ms-identidad (ADR-002 / ADR-005). El JWKS se consulta
+      # solo al validar el primer token, asi que el contenedor arranca y
+      # responde salud aunque la URL no exista todavia.
+      IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://35.168.124.119:8089/api/v1/auth/jwks}
+      # Respaldo heredado: la coleccion de Postman de productos firma con la
+      # clave de jwks-dev (servicio mas abajo), asi que la variable se conserva
+      # hasta que esa coleccion emita contra ms-identidad. El servicio prefiere
+      # IDENTIDAD_JWKS_URL cuando existe.
       KEYCLOAK_JWK_SET_URI: ${KEYCLOAK_JWK_SET_URI:-http://jwks-dev/certs.json}
+      # Siembra al arrancar los productos de las reglas que falten (nunca pisa los existentes); false la apaga.
+      CATALOGO_SEMILLA: ${CATALOGO_SEMILLA:-true}
     depends_on:
       contenido-mongo:
         condition: service_healthy
@@ -156,6 +182,7 @@ services:
       dockerfile: services/contenido/motor-combate/Dockerfile
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-motor-combate:${TAG_MOTOR_COMBATE:-${TAG:-local}}
     container_name: srv-motor-combate
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -185,6 +212,7 @@ services:
   jwks-dev:
     image: nginx:1.27-alpine
     container_name: jwks-dev
+    restart: unless-stopped
     deploy:
       resources:
         limits:

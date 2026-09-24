@@ -1,0 +1,9 @@
+# Carpeta de trabajo de las corridas locales de k6.
+#
+# El informe de una corrida `smoke` o de una prueba local no es evidencia de
+# nada y versionarlo solo produce ruido en los diffs. El informe que SI vale
+# —una corrida `baseline` contra un entorno de verdad— viaja como artefacto del
+# workflow «Rendimiento (k6)» y se adjunta al acta del Sprint; si el equipo
+# decide ademas versionar alguno, va a un sitio elegido a proposito y no a esta
+# carpeta de borradores.
+resultados/

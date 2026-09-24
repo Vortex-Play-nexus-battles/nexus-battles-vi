@@ -1,0 +1,112 @@
+# Bajar un servicio de un host, con cuidado y sin tocar a los demas.
+#
+# Por que existe: la regla de capacidad dice "si el despliegue degrada el
+# host, revierte el servicio, no el MVP" -- y no habia forma de hacerlo.
+# revertir.sh solo sabe volver a una imagen anterior, y en un PRIMER
+# despliegue no hay ninguna: un servicio que no cabe se queda reiniciandose
+# en bucle, comiendose la memoria del host, hasta que alguien entra por SSH.
+#
+# Paso de verdad con ms-finanzas: el cgroup lo mataba cada 16 segundos
+# (anon-rss 194 MB contra un limite de 192 MiB) y en dos minutos el swap del
+# host paso de 1,4 GB a 2 GB, o sea a cero libre, con el MVP sirviendo al
+# lado.
+#
+# Solo para y elimina los contenedores del servicio pedido. No toca imagenes,
+# ni volumenes, ni ningun otro contenedor, y no despliega nada.
+name: Retirar un servicio de un host
+
+on:
+  workflow_dispatch:
+    inputs:
+      servicio:
+        description: "Servicio a retirar (nombre del catalogo, ej: ms-finanzas)"
+        type: string
+        required: true
+      ambiente:
+        description: "De que host"
+        type: choice
+        required: true
+        default: dev
+        options: [dev, contenido]
+      incluir_base:
+        description: "Parar tambien su base de datos (los datos NO se borran: el volumen se conserva)"
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  retirar:
+    name: Retirar ${{ inputs.servicio }} de ${{ inputs.ambiente }}
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Comprobar que el servicio existe en el catalogo
+        id: catalogo
+        run: |
+          set -euo pipefail
+          CATALOGO="infrastructure/despliegue/servicios.json"
+          if ! jq -e --arg s "${{ inputs.servicio }}" '.servicios[] | select(.nombre == $s)' "$CATALOGO" > /dev/null; then
+            echo "::error::'${{ inputs.servicio }}' no esta en $CATALOGO."
+            jq -r '.servicios[] | "  - " + .nombre' "$CATALOGO"
+            exit 1
+          fi
+          echo "ok=si" >> "$GITHUB_OUTPUT"
+
+      - name: Parar y eliminar sus contenedores
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          SERVICIO: ${{ inputs.servicio }}
+          INCLUIR_BASE: ${{ inputs.incluir_base }}
+        with:
+          host: ${{ inputs.ambiente == 'contenido' && secrets.DEPLOY_HOST_CONTENIDO_DEV || secrets.DEPLOY_HOST_DEV }}
+          username: ${{ inputs.ambiente == 'contenido' && secrets.SSH_USER_CONTENIDO_DEV || secrets.SSH_USER_DEV }}
+          key: ${{ inputs.ambiente == 'contenido' && secrets.SSH_KEY_CONTENIDO_DEV || secrets.SSH_KEY_DEV }}
+          envs: SERVICIO,INCLUIR_BASE
+          command_timeout: 3m
+          script: |
+            set -uo pipefail
+            echo "== Antes =="
+            free -m | sed 's/^/  /'
+            swapon --show 2>/dev/null | sed 's/^/  /' || true
+
+            # El contenedor de la aplicacion siempre se llama srv-<servicio>.
+            # El de su base, <familia>-db (finanzas-db, subastas-db...), que es
+            # como lo declaran los compose de Cuentas.
+            APP="srv-${SERVICIO}"
+            BASE="$(echo "${SERVICIO#ms-}")-db"
+
+            for c in "$APP"; do
+              if sudo docker ps -a --format '{{.Names}}' | grep -qx "$c"; then
+                echo "== Parando $c =="
+                sudo docker stop "$c" >/dev/null 2>&1 || true
+                sudo docker rm "$c" >/dev/null 2>&1 || true
+                echo "  $c retirado"
+              else
+                echo "  $c no estaba corriendo"
+              fi
+            done
+
+            if [ "${INCLUIR_BASE}" = "true" ]; then
+              if sudo docker ps -a --format '{{.Names}}' | grep -qx "$BASE"; then
+                echo "== Parando $BASE (el volumen con los datos se conserva) =="
+                sudo docker stop "$BASE" >/dev/null 2>&1 || true
+                sudo docker rm "$BASE" >/dev/null 2>&1 || true
+                echo "  $BASE retirado"
+              else
+                echo "  $BASE no estaba corriendo"
+              fi
+            fi
+
+            echo
+            echo "== Despues =="
+            free -m | sed 's/^/  /'
+            swapon --show 2>/dev/null | sed 's/^/  /' || true
+            echo
+            echo "== Lo que sigue arriba =="
+            sudo docker ps --format 'table {{.Names}}\t{{.Status}}'

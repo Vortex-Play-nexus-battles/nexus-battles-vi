@@ -124,7 +124,7 @@ describe('cambiarPassword (cliente)', () => {
 });
 
 describe('textoDelRechazo', () => {
-  test('junta titulo y detalle cuando aportan cosas distintas, y no repite cuando son lo mismo', () => {
+  test('junta título y detalle cuando aportan cosas distintas, y no repite cuando son lo mismo', () => {
     expect(
       textoDelRechazo({
         titulo: 'La contraseña nueva no cumple la política.',
@@ -144,7 +144,7 @@ describe('textoDelRechazo', () => {
 });
 
 describe('validarLocalmente', () => {
-  test('exige los campos y que la confirmacion coincida; la politica la decide el servidor', () => {
+  test('exige los campos y que la confirmación coincida; la política la decide el servidor', () => {
     expect(
       validarLocalmente({ passwordActual: '', nuevaPassword: 'x', confirmacion: 'x' }),
     ).toMatch(/actual/);

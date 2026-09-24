@@ -1,10 +1,15 @@
 package nexus.inventario.api;
 
+import nexus.inventario.aplicacion.TransferenciaSinBloqueoException;
+import nexus.inventario.aplicacion.CatalogoNoDisponibleException;
 import nexus.inventario.aplicacion.CriterioBusquedaInvalidoException;
 import nexus.inventario.aplicacion.IdentidadRequeridaException;
 import nexus.inventario.aplicacion.IdentificadorHistoricoException;
 import nexus.inventario.aplicacion.InventarioAjenoException;
+import nexus.inventario.aplicacion.ProductoInexistenteException;
 import nexus.inventario.aplicacion.ProductoNoEncontradoException;
+import nexus.inventario.aplicacion.ProductoSuspendidoException;
+import nexus.inventario.aplicacion.TipoNoCoincideException;
 import nexus.inventario.dominio.ElementoNoEncontradoException;
 import nexus.inventario.dominio.ElementoNoDisponibleException;
 import nexus.inventario.dominio.ElementoNoEquipableException;
@@ -41,6 +46,16 @@ public class ManejadorDeErrores {
         return problema(HttpStatus.CONFLICT, "Inventario pendiente de migracion", error.getMessage());
     }
 
+    /**
+     * 409 y no 403: la peticion viene de quien puede (ms-subastas, por azp), y
+     * lo que falla es el estado del elemento. Distinguir "no tienes permiso" de
+     * "ese elemento no esta en esa subasta" evita reintentar algo que fallara igual.
+     */
+    @ExceptionHandler(TransferenciaSinBloqueoException.class)
+    public ProblemDetail transferenciaSinBloqueo(TransferenciaSinBloqueoException error) {
+        return problema(HttpStatus.CONFLICT, "Transferencia sin bloqueo", error.getMessage());
+    }
+
     @ExceptionHandler(ElementoNoEncontradoException.class)
     public ProblemDetail elementoNoEncontrado(ElementoNoEncontradoException error) {
         return problema(HttpStatus.NOT_FOUND, "Elemento no encontrado", error.getMessage());
@@ -54,6 +69,31 @@ public class ManejadorDeErrores {
     @ExceptionHandler(ProductoNoEncontradoException.class)
     public ProblemDetail productoNoEncontrado(ProductoNoEncontradoException error) {
         return problema(HttpStatus.NOT_FOUND, "Producto no encontrado", error.getMessage());
+    }
+
+    /**
+     * 422 y no 404: la ruta de creacion existe; lo que no existe es el
+     * producto que la peticion nombra. El 404 "Producto no encontrado" de
+     * arriba sigue siendo el de consultar estadisticas de algo ya guardado.
+     */
+    @ExceptionHandler(ProductoInexistenteException.class)
+    public ProblemDetail productoInexistente(ProductoInexistenteException error) {
+        return problema(HttpStatus.UNPROCESSABLE_ENTITY, "Producto inexistente", error.getMessage());
+    }
+
+    @ExceptionHandler(ProductoSuspendidoException.class)
+    public ProblemDetail productoSuspendido(ProductoSuspendidoException error) {
+        return problema(HttpStatus.CONFLICT, "Producto suspendido", error.getMessage());
+    }
+
+    @ExceptionHandler(TipoNoCoincideException.class)
+    public ProblemDetail tipoNoCoincide(TipoNoCoincideException error) {
+        return problema(HttpStatus.BAD_REQUEST, "Tipo no coincide", error.getMessage());
+    }
+
+    @ExceptionHandler(CatalogoNoDisponibleException.class)
+    public ProblemDetail catalogoNoDisponible(CatalogoNoDisponibleException error) {
+        return problema(HttpStatus.SERVICE_UNAVAILABLE, "Catalogo no disponible", error.getMessage());
     }
 
     @ExceptionHandler(LimiteEquipamientoException.class)

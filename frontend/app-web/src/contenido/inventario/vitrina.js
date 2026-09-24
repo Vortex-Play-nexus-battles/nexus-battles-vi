@@ -73,11 +73,11 @@ export const ICONO_DEL_TIPO = Object.freeze({
  */
 export function construirVitrina(pagina, { alEditar, alEquipar, alAbrirDetalle } = {}) {
   if (!pagina || !Array.isArray(pagina.elementos)) {
-    throw new TypeError('La pagina de inventario debe traer una lista de elementos');
+    throw new TypeError('La página de inventario debe traer una lista de elementos');
   }
   if (pagina.elementos.length > PRODUCTOS_POR_PAGINA) {
     throw new RangeError(
-      `La vitrina muestra ${PRODUCTOS_POR_PAGINA} productos por pagina y llegaron ` +
+      `La vitrina muestra ${PRODUCTOS_POR_PAGINA} productos por página y llegaron ` +
         `${pagina.elementos.length} elementos: el servicio rompio su contrato`,
     );
   }

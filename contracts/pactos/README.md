@@ -25,7 +25,9 @@ algo se movió en lo que esperamos del otro servicio.
 
 Un pacto no sirve de nada hasta que su dueño lo verifica contra su
 implementación. Del lado del proveedor se añade `au.com.dius.pact.provider:junit5`
-y se apunta a este directorio con `@PactFolder("contracts/pactos")`. Cada
+(no `junit5spring`, que revienta en Spring Boot 4) y se apunta a este directorio
+con `@PactFolder("../../../contracts/pactos")`: la ruta es relativa al módulo
+de Gradle, no a la raíz del repositorio. Cada
 `given(...)` del pacto es un estado que el proveedor tiene que saber montar
 antes de responder — por ejemplo *"el jugador no tiene saldo disponible
 suficiente"*.
@@ -44,14 +46,37 @@ Los estados que hay que poder montar hoy:
 - el elemento existe
 - el elemento no existe
 - el elemento está bloqueado por esa subasta
-- el elemento está bloqueado por esa subasta y va a adjudicarse ⚠️
-- ese elemento ya se transfirió con esa misma clave de idempotencia ⚠️
+- el elemento está bloqueado por esa subasta y va a adjudicarse
+- ese elemento ya se transfirió con esa misma clave de idempotencia
 
-⚠️ Los dos últimos describen `POST /elementos/{elementoId}/transferencias`, que
-**todavía no existe**. Están en el pacto a propósito: son la especificación
-ejecutable de lo que ms-subastas necesita, para que quien lo implemente pueda
-verificar contra ella en vez de adivinar. Hoy fallan del lado proveedor, y esa
-es justamente la información útil.
+Los dos pactos se verifican:
+
+| Pacto | Verificación | Cómo |
+|---|---|---|
+| ms-finanzas | `ms-finanzas/.../contratos/VerificacionDelPactoDeSubastasTest` | servicio arrancado, `CreditoService` simulado, PostgreSQL de Testcontainers |
+| ms-inventario | `inventario/.../contratos/VerificacionDelPactoDeSubastasTest` | servicio arrancado, **casos de uso reales** sobre un repositorio en memoria, sin Mongo |
+
+`tests/contratos/pactos-verificados.py` vigila en CI que cada `given(...)`
+tenga su `@State`.
+
+La verificación de inventario usa los casos de uso de verdad a propósito, y eso
+destapó dos defectos **del pacto**, no del servicio:
+
+- La transferencia exigía `{"elementoId", "propietarioUid"}` en la respuesta.
+  Inventario devuelve `id` y no dice de quién es el elemento, y ms-subastas no
+  lee ese cuerpo. Se retiró la expectativa, con el mismo criterio que R11.4
+  aplicó al bloqueo y a la liberación.
+- La liberación se grababa **sin** `Idempotency-Key`. ms-subastas sí la manda,
+  e inventario la exige: sin ella responde 400. Con servicios simulados esto
+  habría salido verde.
+
+Los dos se comprobaron reintroduciéndolos en una copia del pacto: la
+verificación se puso roja en esas dos interacciones y en ninguna más.
+
+La transferencia (`POST /elementos/{elementoId}/transferencias`) va en esta
+rama como **propuesta para Nicolay**, que es el dueño de inventario. Si la
+rechaza o la cambia, esta verificación es la que le dice qué tiene que seguir
+cumpliendo.
 
 Lo que el pacto fija de ese endpoint, y por qué:
 
@@ -60,9 +85,11 @@ Lo que el pacto fija de ese endpoint, y por qué:
   identidad: de las tres llamadas que hace ms-subastas, dos las dispara un
   `@Scheduled` sin petición ni token —el cierre por vencimiento—, y la tercera
   transfiere **al vendedor** como compensación, que no es quien pidió nada.
-- **Tiene que ser idempotente por `Idempotency-Key`.** El cierre corre dentro de
-  una transacción y el job reintenta la misma subasta a los 30 s; sin
-  idempotencia, la segunda pasada vuelve a mover el producto.
+- **Tiene que ser idempotente.** El cierre corre dentro de una transacción y el
+  job reintenta la misma subasta a los 30 s; sin idempotencia, la segunda pasada
+  vuelve a mover el producto. La propuesta de inventario la da **por estado**,
+  no guardando la clave: si el elemento ya es del nuevo dueño, termina bien sin
+  moverlo.
 - Un reintento ya aplicado responde **200**, no un error.
 
 ## Por qué esto y no un documento

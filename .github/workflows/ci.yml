@@ -149,7 +149,10 @@ jobs:
   #     generico, con la vista Mis cofres rota y sin issue abierto.
   #
   # Un guardian que no corre no es un guardian. Este job cuesta ~20 s: trece
-  # contenedores de nginx:1.27-alpine y 33 peticiones.
+  # ecos y el borde en nginx:1.27-alpine, y 38 peticiones. Desde R16 un
+  # contenedor mas, `borde-conf`, deriva la configuracion cambiando SOLO el
+  # destino del catalogo por su eco, para que /api/v1/productos se pruebe con
+  # trafico sin salir hacia el host de contenido real.
   # ---------------------------------------------------------------------
   ci-enrutado-borde:
     name: CI - reparto de rutas del borde
@@ -184,25 +187,190 @@ jobs:
             echo "hay=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # Hasta R13 estos cuatro pasos llevaban `if: hay == 'true'`, asi que un PR
+      # que cambiara un controlador y rompiera la correspondencia con el borde
+      # dejaba «CI - reparto de rutas del borde: pass» sin haber levantado nada.
+      # Es el mismo antipatron que R11.6 quito de `ci-contratos`, y la misma
+      # respuesta: levantar el banco cuesta unos segundos y la condicion no
+      # ahorraba nada; solo escondia el estado real. Este guardian es el que
+      # habria evitado #614, asi que menos aun conviene que se salte solo.
       - name: Levantar el banco con el borde-dev.conf REAL
-        if: steps.detectar.outputs.hay == 'true'
         working-directory: infrastructure/red-balanceo/pruebas
         run: docker compose up -d --wait
 
-      - name: Comprobar el reparto de las 33 rutas
-        if: steps.detectar.outputs.hay == 'true'
+      - name: Comprobar el reparto de las 41 rutas
         working-directory: infrastructure/red-balanceo/pruebas
         run: ./comprobar-rutas.sh
 
       - name: Recoger la bitacora del borde si algo fallo
-        if: failure() && steps.detectar.outputs.hay == 'true'
+        if: failure()
         working-directory: infrastructure/red-balanceo/pruebas
         run: docker compose logs borde --tail 80
 
       - name: Desmontar el banco
-        if: always() && steps.detectar.outputs.hay == 'true'
+        if: always()
         working-directory: infrastructure/red-balanceo/pruebas
         run: docker compose down -v
+
+  # ---------------------------------------------------------------------
+  # Job: los contratos se validan (regla 1 de plataforma) — R11.
+  #
+  # La regla 1 dice «contrato primero: OpenAPI/AsyncAPI se publica y se
+  # acuerda antes de implementar». Habia 21 YAML en `contracts/openapi/` y
+  # **nadie los abria nunca**. La unica mencion de `contracts/` en toda la
+  # integracion continua era un filtro de rutas que dispara una compilacion
+  # de Java: tocar un contrato compilaba el monorepo, pero nadie parseaba el
+  # YAML. Un `$ref` colgando, una indentacion rota o un `paths` duplicado
+  # entraban a develop sin que nada fallara, y se descubrian cuando alguien
+  # intentaba generar un cliente.
+  #
+  # Se valida con Redocly, que ademas de comprobar que el documento es
+  # OpenAPI valido avisa de operaciones sin `operationId` y de esquemas sin
+  # usar. Cuesta ~30 s y solo corre cuando cambia `contracts/`.
+  # ---------------------------------------------------------------------
+  ci-contratos:
+    name: CI - contratos OpenAPI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el repositorio con historial completo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detectar si cambiaron los contratos
+        id: detectar
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE=$(git merge-base "origin/${{ github.base_ref }}" "${{ github.sha }}")
+          else
+            BASE="${{ github.event.before }}"
+            ZERO="0000000000000000000000000000000000000000"
+            if [ "$BASE" = "$ZERO" ] || [ -z "$BASE" ]; then
+              BASE=$(git rev-parse "${{ github.sha }}^" 2>/dev/null || echo "4b825dc642cb6eb9a060e54bf8d69288fbee4904")
+            fi
+          fi
+          CAMBIOS=$(git diff --name-only "$BASE" "${{ github.sha }}" \
+            | grep -E '^contracts/' || true)
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+          if [ -n "$CAMBIOS" ]; then
+            echo "Cambios en contratos:"; echo "$CAMBIOS"
+            echo "hay=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Los contratos no cambiaron."
+            echo "hay=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Hasta R11.6 los tres pasos de abajo llevaban `if: hay == 'true'`. El
+      # efecto era que un PR que solo tocaba codigo dejaba este job en verde
+      # sin haber ejecutado nada: «CI - contratos OpenAPI: pass» significaba
+      # literalmente «no se miro». Como validar los veintitantos YAML cuesta
+      # siete segundos, la condicion no ahorraba nada y si escondia el estado
+      # real. Ahora la validacion corre SIEMPRE.
+      #
+      # `detectar` sigue haciendo falta, pero para otra cosa: la comparacion
+      # con la base solo tiene sentido cuando un contrato cambio.
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar el validador de OpenAPI
+        run: pip install --quiet openapi-spec-validator==0.7.1 pyyaml
+
+      - name: Validar todos los contratos
+        shell: bash
+        run: python3 tests/contratos/validar-contratos.py
+
+      # Corre siempre y sin Docker: la verificacion de proveedor de verdad
+      # (VerificacionDelPactoDeSubastasTest) esta anotada
+      # `disabledWithoutDocker = true` y se salta entera en una maquina sin
+      # Docker, dejando la corrida en un verde que no significa nada. Esto no
+      # la sustituye —no habla HTTP con nadie—, vigila que su cableado siga en
+      # su sitio: cada `given(...)` del pacto con su `@State`.
+      - name: Comprobar que los pactos tienen quien los verifique
+        shell: bash
+        run: python3 tests/contratos/pactos-verificados.py
+
+      # La transferencia de propiedad de HU-SUB-004 llego a tener cliente sin
+      # ruta y ruta sin contrato, y todo el repositorio en verde: la subasta se
+      # cobraba y el objeto no cambiaba de dueno. Esto vigila que las cinco
+      # piezas sigan conectadas —contrato, controlador, seguridad, cliente y el
+      # INVENTARIO_MODO de cada compose—, que es lo que se rompio. Sin Docker.
+      - name: Comprobar que la transferencia de subasta sigue conectada
+        shell: bash
+        run: python3 tests/contratos/transferencia-de-subasta.py
+
+      # Regla 2: un cambio incompatible abre version nueva. Compara cada
+      # contrato tocado contra su propia version en la base de la rama, con
+      # `git show`: no consulta ningun broker ni registro externo, asi que no
+      # puede ponerse roja porque se cayera un servicio de terceros.
+      - name: Comprobar la compatibilidad de los contratos que cambiaron
+        if: steps.detectar.outputs.hay == 'true'
+        shell: bash
+        env:
+          BASE: ${{ steps.detectar.outputs.base }}
+        run: python3 tests/contratos/cambios-de-contrato.py "$BASE"
+
+  # ---------------------------------------------------------------------
+  # Job: ninguna linea de bitacora imprime un secreto (R11.2).
+  #
+  # Desde R11 la bitacora sale en JSON en los veinte servicios. Eso es bueno
+  # para diagnosticar y es exactamente lo que convierte un `log.info("token=
+  # {}", token)` descuidado en un incidente: lo que antes se perdia en una
+  # consola ahora va a un agregador, queda indexado y lo lee cualquiera con
+  # acceso al tablero.
+  #
+  # Cuando se escribio, la auditoria encontro CERO fugas. Este job no arregla
+  # nada: fija ese estado para que la primera fuga sea un fallo de CI y no un
+  # hallazgo de auditoria seis semanas despues. Cuesta ~5 s sobre 761 archivos.
+  # ---------------------------------------------------------------------
+  # Prueba de regresion del reparto de etiquetas de imagen del CD. Existia
+  # desde el 9-sep, escrita a raiz de un despliegue que se cayo de verdad
+  # (corrida 34307790392: `docker compose up` arrastro a srv-heroes con una
+  # etiqueta que no existia), y **nadie la ejecutaba nunca**: la unica mencion
+  # en todo el repositorio era su propia cabecera diciendo como correrla a
+  # mano. Una prueba de regresion que no corre no protege de la regresion.
+  #
+  # No necesita Docker —el script se trae su propio `docker` falso— asi que
+  # cuesta segundos y puede correr siempre.
+  ci-etiquetas-cd:
+    name: CI - reparto de etiquetas del CD
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Comprobar la resolucion de etiquetas por servicio de contenido
+        shell: bash
+        run: bash scripts/cd/pruebas/desplegar-etiquetas-contenido.sh
+
+      # Una clave repetida dentro de un mismo mapa hace que Docker Compose se
+      # niegue a leer el archivo ENTERO, y al negarse no despliega nada de el.
+      # Asi murio la corrida 35931028022 -- la del commit que traia
+      # POST /inventario/elementos/{id}/transferencias (#670) --, y el sintoma
+      # solo aparecia dentro de una sesion SSH. Aqui cuesta un segundo.
+      - name: Ningun compose tiene claves duplicadas
+        shell: bash
+        run: python3 tests/contratos/compose-sin-claves-duplicadas.py
+
+      # Un servicio que declara DIRECTORIO_ACTIVO_CLIENT_ID y no la URL del
+      # emisor NO ARRANCA, y el sintoma llega tarde: la imagen se publica, la
+      # base migra, y solo falla el healthcheck. Le paso a ms-finanzas en la
+      # corrida 35939650016.
+      - name: Toda credencial de servicio en compose esta completa
+        shell: bash
+        run: python3 tests/contratos/compose-credencial-de-servicio-completa.py
+
+  ci-secretos-bitacora:
+    name: CI - secretos en la bitacora
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Ninguna linea de bitacora imprime un secreto
+        shell: bash
+        run: python3 tests/contratos/sin-secretos-en-bitacora.py
 
   ci-transversal:
     name: CI - cambios transversales

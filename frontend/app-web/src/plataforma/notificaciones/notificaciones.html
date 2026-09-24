@@ -40,7 +40,7 @@
         <h1>Notificaciones</h1>
         <p class="t-cuerpo">
           Lo que te pasa en el juego, en todas tus sesiones abiertas a la vez. Si pierdes la
-          conexion, esta vista consulta periodicamente y se pone al dia al volver.
+          conexión, esta vista los consulta cada poco y se pone al día sola.
         </p>
       </div>
 
@@ -58,7 +58,10 @@
           >
         </div>
 
-        <p class="t-meta" data-zona="lista-vacia">Todavía no tienes notificaciones.</p>
+        <p class="t-meta" data-zona="lista-vacia">
+          Todavía no tienes notificaciones. Aquí llegan los avisos de tus partidas, tus pujas, tus
+          torneos y tus sanciones.
+        </p>
         <ul class="pila pila--compacta" data-zona="lista" aria-label="Notificaciones"></ul>
       </section>
     </main>
@@ -73,14 +76,18 @@
       import { montarAsistente } from '../../comun/ui/asistente.js';
       import { montarCampana } from './campana.js';
       import { leerSesion, identificadorDeSesion } from './cliente-notificaciones.js';
-      import { montarCabecera, exigirSesion } from '../../comun/cabecera-app.js';
+      import { montarCabecera } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
 
       // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
-      if (!exigirSesion()) {
+      if (!exigirAcceso('notificaciones')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
       // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: null });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'notificaciones',
+        seccionActiva: null,
+      });
       // En esta vista la campana de la cabecera abre el panel de aqui mismo.
       const campana = document.querySelector('[data-cabecera-app] .cabecera__campana');
       campana.dataset.zona = 'boton';

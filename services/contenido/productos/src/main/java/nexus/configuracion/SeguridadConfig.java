@@ -2,10 +2,8 @@ package nexus.configuracion;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Map;
 
+import com.nexusbattles.comun.seguridad.ConversorRolesJwt;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
@@ -15,19 +13,20 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
-import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
 public class SeguridadConfig {
 
         @Bean
+        public ConversorRolesJwt conversorRolesJwt() {
+                return new ConversorRolesJwt();
+        }
+
+        @Bean
         public SecurityFilterChain cadenaDeSeguridad(
                         HttpSecurity http,
-                        JwtAuthenticationConverter convertidorRoles) throws Exception {
+                        ConversorRolesJwt convertidorRoles) throws Exception {
 
                 http
                         // La API usa exclusivamente tokens Bearer en el encabezado y no
@@ -54,7 +53,15 @@ public class SeguridadConfig {
                                 .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
                                 .requestMatchers(HttpMethod.GET, "/api/v1/productos/estadisticas")
                                 .authenticated()
-                                .requestMatchers(HttpMethod.GET, "/api/v1/productos/{id}")
+                                // Lectura publica del catalogo: el detalle por id y, desde
+                                // R16 (contrato 1.2.0), el listado paginado de la coleccion
+                                // que proyecta la vitrina de ms-ecommerce. Solo GET: el POST
+                                // de la misma ruta sigue exigiendo administrador (arriba), y
+                                // /estadisticas va antes para no quedar cubierta por {id}.
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/v1/productos",
+                                        "/api/v1/productos/{id}")
                                 .permitAll()
                                 .anyRequest()
                                 .authenticated())
@@ -84,40 +91,22 @@ public class SeguridadConfig {
                 return http.build();
         }
 
-        @Bean
-        public JwtAuthenticationConverter convertidorRolesKeycloak() {
-                JwtGrantedAuthoritiesConverter convertidorPermisos =
-                        new JwtGrantedAuthoritiesConverter();
-
-                JwtAuthenticationConverter convertidor =
-                        new JwtAuthenticationConverter();
-
-                convertidor.setJwtGrantedAuthoritiesConverter(jwt -> {
-                        Collection<GrantedAuthority> autoridades = new ArrayList<>();
-
-                        Collection<GrantedAuthority> permisos =
-                                convertidorPermisos.convert(jwt);
-
-                        if (permisos != null) {
-                                autoridades.addAll(permisos);
-                        }
-
-                        Map<String, Object> accesoAlReino =
-                                jwt.getClaimAsMap("realm_access");
-
-                        if (accesoAlReino != null
-                                        && accesoAlReino.get("roles") instanceof Collection<?> roles) {
-                                roles.stream()
-                                        .map(Object::toString)
-                                        .map(rol -> new SimpleGrantedAuthority("ROLE_" + rol))
-                                        .forEach(autoridades::add);
-                        }
-
-                        return autoridades;
-                });
-
-                return convertidor;
-        }
+        // R9.7 — aqui vivia `convertidorRolesKeycloak`, que leia los roles
+        // UNICAMENTE de `realm_access.roles`, la forma de Keycloak.
+        //
+        // El emisor real es ms-identidad (ADR-002 / ADR-005) y **no** emite ese
+        // bloque: pone el rol en el claim `rol`, en singular, y el identificador
+        // estable en `uid`. Con el conversor anterior, un token legitimo de
+        // ms-identidad se autenticaba —la firma es valida— pero llegaba con
+        // CERO authorities, asi que `POST /api/v1/productos` habria contestado
+        // 403 a un administrador de verdad. Apuntar al JWKS correcto, por si
+        // solo, no habria arreglado nada: lo habria cambiado de 401 a 403.
+        //
+        // `ConversorRolesJwt` (shared/libs/plataforma-seguridad) entiende las
+        // DOS formas —`rol` de ms-identidad y `realm_access.roles` de
+        // Keycloak—, asi que la coleccion de Postman de jwks-dev, que firma
+        // tokens con forma de Keycloak, sigue funcionando. Ademas fija el
+        // principal en `uid` cuando existe, como manda ADR-002.
 
         private static void escribirProblema(
                         HttpServletRequest solicitud,

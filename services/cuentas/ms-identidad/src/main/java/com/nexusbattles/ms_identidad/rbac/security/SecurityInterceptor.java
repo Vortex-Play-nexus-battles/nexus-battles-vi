@@ -45,21 +45,17 @@ public class SecurityInterceptor implements HandlerInterceptor {
      */
     private final boolean permitirHeaderRol;
 
-    public SecurityInterceptor(RbacAuthorizationService rbacService) {
-        this(rbacService, null, null, null, true);
-    }
-
-    public SecurityInterceptor(RbacAuthorizationService rbacService, AuditoriaEventClient auditoriaClient) {
-        this(rbacService, auditoriaClient, null, null, true);
-    }
-
-    public SecurityInterceptor(RbacAuthorizationService rbacService, AuditoriaEventClient auditoriaClient, JwtService jwtService) {
-        this(rbacService, auditoriaClient, jwtService, null, true);
-    }
-
-    public SecurityInterceptor(RbacAuthorizationService rbacService, AuditoriaEventClient auditoriaClient, JwtService jwtService, UsuarioRepository usuarioRepository) {
-        this(rbacService, auditoriaClient, jwtService, usuarioRepository, true);
-    }
+    // R9.5 — aqui vivian CUATRO constructores de conveniencia. Los cuatro
+    // terminaban en `this(..., true)`: encendian el respaldo por cabecera sin
+    // decirlo. Ninguno tenia uso en produccion —solo los llamaban pruebas—,
+    // pero el efecto era que la forma comoda de construir el interceptor era
+    // tambien la insegura, y cada prueba escrita con ellos afirmaba sobre un
+    // interceptor con la puerta trasera abierta creyendo que probaba el
+    // comportamiento real.
+    //
+    // Ahora hay un solo constructor y el ultimo parametro es obligatorio: una
+    // prueba que quiera el respaldo de desarrollo tiene que pedirlo en voz
+    // alta, y al leerla se ve que esa es la condicion que esta ejercitando.
 
     @Autowired
     public SecurityInterceptor(
@@ -99,6 +95,9 @@ public class SecurityInterceptor implements HandlerInterceptor {
 
             String roleName = null;
             String username = usernameHeader;
+            // uid del token (ADR-002): el identificador que el navegador conoce.
+            // Nunca sale de una cabecera, solo de un token ya validado.
+            String uid = null;
 
             // 1. Intentar validar JWT si viene en header Authorization: Bearer <token>
             if (authHeader != null && authHeader.startsWith("Bearer ") && jwtService != null) {
@@ -107,6 +106,7 @@ public class SecurityInterceptor implements HandlerInterceptor {
                     Claims claims = jwtService.validarYObtenerClaims(token);
                     username = claims.getSubject();
                     roleName = claims.get("rol", String.class);
+                    uid = claims.get("uid", String.class);
 
                     // Verificar que la versión del token coincida con la del
                     // usuario en BD — si el rol cambió después de emitir este
@@ -170,6 +170,9 @@ public class SecurityInterceptor implements HandlerInterceptor {
             // en vez de que cada uno vuelva a leer headers.
             request.setAttribute("usuarioActual", username);
             request.setAttribute("rolActual", roleName);
+            if (uid != null) {
+                request.setAttribute("uidActual", uid);
+            }
         }
 
         return true;

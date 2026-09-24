@@ -200,10 +200,14 @@ export function idsEquipados(equipo) {
  * @param {(ranura: object, elemento: object) => void} opciones.alEquipar
  * @param {(ranura: object) => void} opciones.alDesequipar
  * @param {(raiz: ParentNode) => void} [opciones.alPintarRetratos]
+ * @param {((pagina: number) => Promise<object>)|null} [opciones.pedirPagina] FI-R7 —
+ *   como pedir otra pagina del inventario. Sin este puerto el selector solo
+ *   puede ofrecer `elementos`, que es lo que hacia antes; con el, alcanza todo
+ *   el inventario en tandas.
  */
 export function pintarEquipamiento(
   contenedor,
-  { equipo, elementos, alEquipar, alDesequipar, alPintarRetratos },
+  { equipo, elementos, alEquipar, alDesequipar, alPintarRetratos, pedirPagina = null },
 ) {
   if (!(contenedor instanceof HTMLElement)) {
     throw new TypeError('equipamiento: se esperaba un HTMLElement.');
@@ -233,16 +237,63 @@ export function pintarEquipamiento(
         : null,
       // Una ranura vacia sin nada que meterle se marca como bloqueada CON su
       // motivo, en vez de dejar un boton que no hace nada al pulsarlo.
+      // Una ranura vacia sin nada que meterle se marca como bloqueada CON su
+      // motivo. FI-R7 — pero solo cuando se ha mirado el inventario entero:
+      // con `pedirPagina` el selector recorre todas las paginas, asi que decir
+      // aqui «no tienes ninguna pieza» seria afirmarlo habiendo leido dieciseis
+      // elementos de cincuenta.
       bloqueo:
-        !ocupada && candidatos.length === 0
+        !ocupada && candidatos.length === 0 && !pedirPagina
           ? `No tienes ninguna pieza para ${ranura.etiqueta.toLowerCase()}`
           : null,
       alElegir: () => {
         if (ocupada) {
           alDesequipar(ranura);
-        } else {
-          elegirObjeto(ranura, candidatos, (elemento) => alEquipar(ranura, elemento));
+          return;
         }
+        // FI-R7 — con `pedirPagina`, el selector recorre el inventario desde la
+        // primera pagina en tandas de dieciseis. No se siembra con los
+        // elementos de la pagina que se esta viendo: sembrar y luego recorrer
+        // repetiria las mismas piezas en la lista.
+        //
+        // Sin el puerto se comporta como antes, con lo que haya en `elementos`.
+        // Es el camino de las pruebas unitarias del panel, que no tienen
+        // servicio detras.
+        if (!pedirPagina) {
+          elegirObjeto(ranura, candidatos, (elemento) => alEquipar(ranura, elemento));
+          return;
+        }
+
+        // Las tandas van en cola, no en paralelo: cada una empieza donde acabo
+        // la anterior. La cola se encadena de forma sincrona —nada se escribe
+        // despues de un await— asi que dos pulsaciones seguidas no pueden pedir
+        // la misma pagina ni saltarse una.
+        let cola = Promise.resolve(0);
+        const traerTanda = () => {
+          const tanda = cola.then(async (desde) => {
+            const { candidatos: nuevos, siguientePagina } = await juntarCandidatos(
+              pedirPagina,
+              ranura,
+              puestos,
+              desde,
+            );
+            return {
+              desde: siguientePagina ?? desde,
+              candidatos: nuevos,
+              hayMas: siguientePagina !== null,
+            };
+          });
+          cola = tanda.then(
+            ({ desde }) => desde,
+            // Si una tanda falla, la siguiente reintenta desde el principio:
+            // mejor repetir que dejar un hueco sin mirar.
+            () => 0,
+          );
+          return tanda;
+        };
+        elegirObjeto(ranura, [], (elemento) => alEquipar(ranura, elemento), {
+          alCargar: traerTanda,
+        });
       },
     });
   }
@@ -270,6 +321,74 @@ export function pintarEquipamiento(
 }
 
 /**
+ * Cuantos candidatos se juntan antes de pintar. El mismo dieciseis que el resto
+ * del inventario, para que la lista del dialogo se lea como la vitrina.
+ */
+export const CANDIDATOS_POR_TANDA = 16;
+
+/**
+ * Junta candidatos recorriendo paginas del inventario — FI-R7.
+ *
+ * ## El defecto que esto arregla
+ *
+ * El selector recibia `paginaMostrada.elementos`: los dieciseis elementos de la
+ * pagina que el jugador tenia delante. Un objeto en la pagina 3 **no se podia
+ * equipar**: no aparecia entre los candidatos y nada decia por que. Con un
+ * inventario de cincuenta piezas, dos tercios del inventario estaban fuera del
+ * alcance del panel de equipamiento, y la unica forma de llegar a ellos era
+ * adivinar en que pagina estaban y navegar hasta alli antes de abrir la ranura.
+ *
+ * ## Por que se recorre y no se busca
+ *
+ * `GET /inventario/elementos/busqueda` existe y acepta el tipo como criterio,
+ * pero es una busqueda de texto por subcadena: el criterio «ARMA» trae tambien
+ * las ARMADURA. Con eso, una pagina de resultados puede quedarse en cero
+ * candidatos tras filtrar mientras quedan mas en las siguientes, y el jugador
+ * leeria «no tienes nada» siendo falso.
+ *
+ * ## Por que no se descarga el inventario entero
+ *
+ * Se piden paginas hasta juntar una tanda, y se para. Un inventario grande no
+ * se baja completo para abrir una ranura; lo que quede se ofrece con «Ver mas».
+ *
+ * @param {(pagina: number) => Promise<{elementos?: Array, ultima?: boolean, totalPaginas?: number}>} pedirPagina
+ * @param {object} ranura
+ * @param {Set<string>} yaEquipados
+ * @param {number} desde primera pagina del inventario que hay que mirar
+ * @param {number} [tanda]
+ * @returns {Promise<{candidatos: Array<object>, siguientePagina: number|null}>}
+ */
+export async function juntarCandidatos(
+  pedirPagina,
+  ranura,
+  yaEquipados,
+  desde = 0,
+  tanda = CANDIDATOS_POR_TANDA,
+) {
+  const candidatos = [];
+  let pagina = desde;
+  // Tope duro por si el servicio devolviera paginas sin fin: mas vale ofrecer
+  // menos que colgar el dialogo.
+  const TOPE_DE_PAGINAS = 50;
+
+  for (let vueltas = 0; vueltas < TOPE_DE_PAGINAS; vueltas += 1) {
+    const traida = await pedirPagina(pagina);
+    candidatos.push(...candidatosPara(ranura, traida?.elementos ?? [], yaEquipados));
+
+    const total = Number(traida?.totalPaginas ?? 0);
+    const esUltima = traida?.ultima === true || (total > 0 && pagina >= total - 1);
+    if (esUltima) {
+      return { candidatos, siguientePagina: null };
+    }
+    pagina += 1;
+    if (candidatos.length >= tanda) {
+      return { candidatos, siguientePagina: pagina };
+    }
+  }
+  return { candidatos, siguientePagina: pagina };
+}
+
+/**
  * Dialogo para elegir que meter en una ranura vacia.
  *
  * Se usa el dialogo del kit y no una lista suelta porque atrapa el foco y se
@@ -278,33 +397,96 @@ export function pintarEquipamiento(
  * @param {object} ranura
  * @param {Array<object>} candidatos
  * @param {(elemento: object) => void} alElegir
+ * @param {{alCargar?: (() => Promise<{candidatos: Array<object>, hayMas: boolean}>)|null}} [opciones]
+ *   FI-R7 — con `alCargar`, el dialogo trae sus candidatos del inventario en
+ *   tandas en vez de recibirlos ya resueltos.
  */
-function elegirObjeto(ranura, candidatos, alElegir) {
+function elegirObjeto(ranura, candidatos, alElegir, { alCargar = null } = {}) {
   const lista = h('ul', { clase: 'elegir-objeto' });
+  const cuerpo = h('div', { clase: 'pila pila--compacta', hijos: [lista] });
+  const nota = h('p', { clase: 't-meta', atributos: { role: 'status' } });
 
-  for (const elemento of candidatos) {
-    const disponible = elemento.disponible !== false;
-    const boton = h('button', {
-      clase: clases('elegir-objeto__opcion', !disponible && 'elegir-objeto__opcion--bloqueada'),
-      atributos: {
-        type: 'button',
-        disabled: !disponible,
-        // HU-INV-010: bloqueado por una subasta en curso. Se dice, no se
-        // esconde: el jugador tiene que poder entender por que no puede.
-        title: disponible ? null : 'Está publicado en una subasta',
-      },
-      datos: { elegir: elemento.id },
-      texto: disponible ? elemento.nombrePropio : `${elemento.nombrePropio} · en subasta`,
-    });
-    boton.addEventListener('click', () => {
-      cerrar();
-      alElegir(elemento);
-    });
-    lista.append(h('li', { hijos: [boton] }));
+  function pintarOpciones(elementos) {
+    for (const elemento of elementos) {
+      const disponible = elemento.disponible !== false;
+      const boton = h('button', {
+        clase: clases('elegir-objeto__opcion', !disponible && 'elegir-objeto__opcion--bloqueada'),
+        atributos: {
+          type: 'button',
+          disabled: !disponible,
+          // HU-INV-010: bloqueado por una subasta en curso. Se dice, no se
+          // esconde: el jugador tiene que poder entender por que no puede.
+          title: disponible ? null : 'Está publicado en una subasta',
+        },
+        datos: { elegir: elemento.id },
+        texto: disponible ? elemento.nombrePropio : `${elemento.nombrePropio} · en subasta`,
+      });
+      boton.addEventListener('click', () => {
+        cerrar();
+        alElegir(elemento);
+      });
+      lista.append(h('li', { hijos: [boton] }));
+    }
+  }
+
+  pintarOpciones(candidatos);
+
+  const mas = alCargar
+    ? h('button', {
+        clase: 'boton boton--secundario',
+        atributos: { type: 'button' },
+        datos: { accion: 'ver-mas-candidatos' },
+        texto: 'Ver más del inventario',
+      })
+    : null;
+  if (mas) {
+    mas.addEventListener('click', () => cargarTanda());
+    cuerpo.append(nota, mas);
+  }
+
+  async function cargarTanda() {
+    // Se captura la referencia y se comprueba que siga en el documento en vez
+    // de reasignar una variable capturada: `remove()` la desengancha, y eso ya
+    // es el estado. Una variable escrita despues de un await es una carrera
+    // esperando a pasar.
+    const boton = mas;
+    if (!boton || !boton.isConnected) {
+      return;
+    }
+    boton.disabled = true;
+    boton.textContent = 'Buscando…';
+    nota.textContent = '';
+    try {
+      const { candidatos: nuevos, hayMas } = await alCargar();
+      pintarOpciones(nuevos);
+      if (hayMas) {
+        boton.disabled = false;
+        boton.textContent = 'Ver más del inventario';
+      } else {
+        boton.remove();
+      }
+      if (lista.children.length === 0) {
+        // Aqui si se puede afirmar: se ha mirado hasta donde dice el servicio.
+        nota.textContent = hayMas
+          ? 'Nada de esta tanda entra en esta ranura. Sigue buscando.'
+          : 'No tienes nada en el inventario que entre en esta ranura.';
+      }
+    } catch {
+      boton.disabled = false;
+      boton.textContent = 'Ver más del inventario';
+      nota.textContent = 'No se pudo traer el inventario. Vuelve a intentarlo.';
+    }
   }
 
   const { cerrar } = abrirDialogo({
     titulo: `Elegir para ${ranura.etiqueta}`,
-    cuerpo: lista,
+    cuerpo,
   });
+
+  // La primera tanda se pide al abrir: el dialogo no nace vacio esperando que
+  // alguien pulse un boton para ensenar lo que ya podia ensenar.
+  if (alCargar) {
+    nota.textContent = 'Buscando en tu inventario…';
+    cargarTanda();
+  }
 }

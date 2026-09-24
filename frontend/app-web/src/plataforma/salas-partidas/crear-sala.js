@@ -332,7 +332,7 @@ export function montarCrearSala(
         tono: 'exito',
         titulo: 'Sala creada',
         detalle:
-          `Tu sala esta abierta y esperando jugadores: ${sala.maximoParticipantes} ` +
+          `Tu sala está abierta y esperando jugadores: ${sala.maximoParticipantes} ` +
           `participantes${sala.recompensaCreditos ? `, ${sala.recompensaCreditos} creditos en juego` : ''}.`,
       });
       formulario.reset();
@@ -367,7 +367,7 @@ export function montarCrearSala(
         pintarAviso(zonaAviso, {
           tono: 'error',
           titulo: 'No pudimos contactar con el servicio',
-          detalle: 'Revisa tu conexion e intentalo de nuevo.',
+          detalle: 'Revisa tu conexión e inténtalo de nuevo.',
         });
       }
     } finally {

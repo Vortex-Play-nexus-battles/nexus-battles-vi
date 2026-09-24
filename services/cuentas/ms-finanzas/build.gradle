@@ -25,11 +25,22 @@ dependencies {
     // misma librería y no queden desalineados en un upgrade.
     implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
 
-    // ConfiguracionClientesHttpPagos inyecta RestClient.Builder para llamar
-    // al servicio de correo. En Spring Boot 4 ese bean no viene con el
-    // starter de web: lo publica spring-boot-restclient, aparte (mismo
-    // problema y mismo fix que tuvo comentarios, PR #391).
-    implementation 'org.springframework.boot:spring-boot-restclient'
+    // R11.4 — verificacion del pacto que ms-subastas publica sobre este
+    // servicio. Los pactos existian desde agosto en contracts/pactos/ y nadie
+    // los verificaba: eran la opinion del consumidor, escrita una vez. Con
+    // esto se convierten en compuerta, y el rojo aparece en el repositorio de
+    // quien hace el cambio y no en la integracion de la semana siguiente.
+    //
+    // `junit5` a secas, NO `junit5spring`. El modulo de Spring de pact-jvm
+    // 4.6.x esta compilado contra Spring 5.3.39 y `javax.servlet` 3.1.0 (ver
+    // su build.gradle): su `MockMvcTestTarget` lee las cookies de toda
+    // peticion devolviendo un `javax.servlet.http.Cookie`, clase que no existe
+    // en Spring Boot 4.1, donde todo es `jakarta`. Compila —el simbolo se
+    // resuelve desde el jar— y revienta con NoClassDefFoundError en la primera
+    // interaccion. `junit5` no tiene ni una linea de Spring: habla HTTP con
+    // Apache HttpClient 5, asi que la verificacion corre contra el servicio
+    // arrancado de verdad y no depende de la version de Spring.
+    testImplementation 'au.com.dius.pact.provider:junit5:4.6.17'
 
     compileOnly 'org.projectlombok:lombok'
     implementation 'org.springframework.boot:spring-boot-restclient'

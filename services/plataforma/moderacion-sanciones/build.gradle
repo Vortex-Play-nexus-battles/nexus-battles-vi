@@ -5,6 +5,13 @@ plugins {
 }
 
 dependencies {
+    // HU-ADM-001 (CA-04): los limites de sancion se leen de admin-parametros.
+    // `LectorDeParametros` pone la politica de degradacion —cache corta,
+    // respaldo por variable de entorno y nunca lanzar hacia arriba— en un solo
+    // sitio, para que no haya una por servicio. La biblioteca no se reparte
+    // desde buildSrc a proposito: la declara quien tiene llamadas salientes.
+    implementation project(':shared:libs:plataforma-resiliencia')
+
     // Cache en Redis: propio de este servicio, no de la plataforma.
     // La lista negra se consulta en cada mensaje de chat y en cada comentario,
     // asi que no puede ir a la base de datos cada vez.

@@ -392,10 +392,56 @@ export async function contraste(pagina) {
  * @param {{ancho: number}} pantalla
  * @returns {Promise<Array<{motivo: string, detalle: string}>>}
  */
+/**
+ * La barra de la aplicación va de borde a borde — UX-R3.6.
+ *
+ * ## El defecto que busca
+ *
+ * `inventario` y `subastas` ponían el relleno de la página en el `<body>`
+ * (`padding: 20px`, `padding: var(--e-5)`). La cabecera única se monta DENTRO
+ * del `<body>`, así que heredaba ese relleno: la barra quedaba con aire a
+ * cada lado, flotando sobre el fondo, mientras en las otras treinta vistas va
+ * de borde a borde.
+ *
+ * No desborda, no recorta texto, no falla ningún contraste y todas las
+ * pruebas de DOM pasan. Solo se ve poniendo dos capturas una al lado de otra
+ * — y entonces se ve enseguida, porque es lo primero que mira el ojo en
+ * cualquier pantalla del producto.
+ *
+ * Se mide con 2 px de margen: un borde o un redondeo de subpíxel no es un
+ * defecto.
+ *
+ * @param {import('@playwright/test').Page} pagina
+ * @returns {Promise<Array<{motivo: string, detalle: string}>>}
+ */
+export async function cabeceraDeBordeABorde(pagina) {
+  return pagina.evaluate(() => {
+    const barra = document.querySelector('[data-cabecera-app] .cabecera, .cabecera');
+    if (!barra) {
+      return [];
+    }
+    const caja = barra.getBoundingClientRect();
+    const ancho = document.documentElement.clientWidth;
+    if (caja.left > 2 || caja.right < ancho - 2) {
+      return [
+        {
+          motivo: 'cabecera-con-margen',
+          detalle:
+            `la barra ocupa de ${Math.round(caja.left)}px a ${Math.round(caja.right)}px ` +
+            `en un viewport de ${ancho}px: probablemente el relleno de la página ` +
+            'está en el <body> y la cabecera lo hereda',
+        },
+      ];
+    }
+    return [];
+  });
+}
+
 export async function auditar(pagina, pantalla) {
   const hallazgos = [
     ...(await desbordamientos(pagina)),
     ...(await cabeceraEnFilas(pagina)),
+    ...(await cabeceraDeBordeABorde(pagina)),
     ...(await modalesCortados(pagina)),
     ...(await textoCortado(pagina)),
     ...(await erroresTecnicosVisibles(pagina)),

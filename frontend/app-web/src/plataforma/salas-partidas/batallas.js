@@ -6,7 +6,7 @@
  * La tarjeta no se inventa: el conjunto `Tarjeta de sala` tiene exactamente dos
  * propiedades, la variante de estado y una unica linea de texto que los ocho
  * ejemplos de la pantalla resuelven como
- * «4 de 6 jugadores · 320 creditos · Con heroe de la IA». Ni nombre de sala, ni
+ * «4 de 6 jugadores · 320 creditos · Con héroe de la IA». Ni nombre de sala, ni
  * apodo del anfitrion, ni heroe, ni indicador de preparacion: nada de eso
  * aparece en el diseno ni lo pide RF-JUE-002.
  *
@@ -17,7 +17,7 @@
  * no tenerlo. Quedan los dos filtros con respaldo, modalidad y estado.
  */
 
-import { listarSalas, ingresarASala } from './cliente-salas.js';
+import { listarSalas, ingresarASala, esSalaPrivada, esHeroeNoDisponible } from './cliente-salas.js';
 import { vaciar } from '../../comun/ui/dom.js';
 import { seguirSala, estadoDesdeFicha } from './canal-sala.js';
 import {
@@ -86,7 +86,7 @@ export function mostrarAvisoDeSala(raiz, aviso) {
 export function metaDeLaSala(sala) {
   const base =
     `${sala.ocupacion} de ${sala.maximoParticipantes} jugadores` +
-    ` · ${sala.recompensaCreditos} creditos`;
+    ` · ${sala.recompensaCreditos} créditos`;
   if (!sala.incluirHeroeIA) {
     return base;
   }
@@ -94,8 +94,8 @@ export function metaDeLaSala(sala) {
   // linea exacta del diseno.
   const maquinas = Number(sala.heroesIA) || 1;
   return maquinas > 1
-    ? `${base} · Con ${maquinas} heroes de la IA`
-    : `${base} · Con heroe de la IA`;
+    ? `${base} · Con ${maquinas} héroes de la IA`
+    : `${base} · Con héroe de la IA`;
 }
 
 /**
@@ -192,11 +192,28 @@ export function fichaEnVivo(sala, estado) {
  *        dependencias inyectables; por defecto las del cliente HTTP real y sin canal
  * @returns {{refrescar: Function}}
  */
+/**
+ * A donde se manda a verificar el heroe — FI-R6.
+ *
+ * @param {string} idSala
+ * @param {string|null} [codigo]
+ * @returns {string}
+ */
+export function rutaDeVerificacion(idSala, codigo = null) {
+  const base = `./validacion-heroe.html?sala=${encodeURIComponent(idSala)}`;
+  return codigo ? `${base}&codigo=${encodeURIComponent(codigo)}` : base;
+}
+
 export function montarBatallas(raiz, puertos = {}) {
   const {
     listar = listarSalas,
     ingresar = ingresarASala,
     alEntrar = () => {},
+    // FI-R6 — a donde se va a verificar el heroe. Inyectable para que las
+    // pruebas no naveguen de verdad.
+    irAVerificacion = (destino) => {
+      globalThis.location.assign(destino);
+    },
     conectarCanal = () => Promise.resolve(null),
   } = puertos;
 
@@ -210,6 +227,11 @@ export function montarBatallas(raiz, puertos = {}) {
   // porque el inventario (o el libro de creditos) no responde. Aparte del
   // estado de vista a proposito: el listado sigue siendo util y no se oculta.
   const zonaDegradacion = raiz.querySelector('[data-zona="degradacion"]');
+  // FI-R4: el formulario del codigo de invitacion. No se ensena de entrada:
+  // aparece cuando el servidor dice que esa sala es privada, que es cuando
+  // hace falta. Pedir un codigo antes de saber si la sala lo necesita seria
+  // pedirselo a todo el mundo.
+  const zonaInvitacion = raiz.querySelector('[data-zona="pedir-codigo"]');
   const filtroModalidad = raiz.querySelector('[name="modalidad"]');
   const filtroEstado = raiz.querySelector('[name="estado"]');
 
@@ -265,7 +287,7 @@ export function montarBatallas(raiz, puertos = {}) {
     .then((cliente) => {
       if (!cliente) {
         marcarCanal(
-          'Sin canal en tiempo real: inicia sesion para ver los cambios al instante.',
+          'Sin canal en tiempo real: inicia sesión para ver los cambios al instante.',
           'sin-sesion',
         );
         return;
@@ -284,14 +306,33 @@ export function montarBatallas(raiz, puertos = {}) {
       seguirVisibles();
     })
     .catch((error) => {
+      // UX-R3.4 — el mensaje era «Canal en tiempo real no disponible: No se
+      // pudo abrir el canal..»: el motivo repetía el título, con dos puntos
+      // en medio y dos puntos finales porque el error ya traía el suyo. Y lo
+      // que no decía es lo único que le importa a quien lo lee: que el
+      // listado sigue funcionando, solo que no se actualiza solo.
+      console.warn('[salas] canal en tiempo real no disponible:', error);
       marcarCanal(
-        `Canal en tiempo real no disponible: ${error?.message ?? 'no se pudo conectar'}.`,
+        'Las salas no se actualizan solas ahora mismo. El listado funciona: vuelve a cargarlo para ver los cambios.',
         'error',
       );
     });
 
-  /** Muestra uno de los cuatro estados de RNF-USA-003 y oculta la rejilla. */
-  function mostrarEstado(claseExtra, titulo, detalle) {
+  /**
+   * Muestra uno de los cuatro estados de RNF-USA-003 y oculta la rejilla.
+   *
+   * UX-R3.4 — antes solo pintaba titulo y detalle. Un estado vacio que dice
+   * «crea una sala y espera a que alguien se una» y no trae el boton de crear
+   * sala obliga a leerlo, entenderlo y subir a buscar la accion arriba a la
+   * derecha; y un estado de error sin reintentar obliga a recargar la pagina.
+   * §18: una pantalla vacia explica que pasa Y que puede hacer quien mira.
+   *
+   * @param {string} claseExtra
+   * @param {string} titulo
+   * @param {string} detalle
+   * @param {{texto: string, href?: string, alPulsar?: () => void}|null} [accion]
+   */
+  function mostrarEstado(claseExtra, titulo, detalle, accion = null) {
     zonaSalas.hidden = true;
     zonaPaginacion.hidden = true;
     zonaEstado.hidden = false;
@@ -303,10 +344,24 @@ export function montarBatallas(raiz, puertos = {}) {
     encabezado.textContent = titulo;
 
     const cuerpo = doc.createElement('p');
-    cuerpo.className = 't-cuerpo';
+    cuerpo.className = 'estado-vista__detalle';
     cuerpo.textContent = detalle;
 
     zonaEstado.append(encabezado, cuerpo);
+
+    if (accion) {
+      const control = doc.createElement(accion.href ? 'a' : 'button');
+      control.className = 'boton boton--primario';
+      control.textContent = accion.texto;
+      if (accion.href) {
+        control.href = accion.href;
+      } else {
+        control.type = 'button';
+        control.dataset.accion = 'reintentar';
+        control.addEventListener('click', accion.alPulsar);
+      }
+      zonaEstado.append(control);
+    }
   }
 
   function pintar(pagina) {
@@ -320,7 +375,8 @@ export function montarBatallas(raiz, puertos = {}) {
       mostrarEstado(
         'estado-vista--vacio',
         'No hay batallas abiertas',
-        'Crea una sala y espera a que alguien se una.',
+        'Nadie tiene una sala esperando ahora mismo. Abre la tuya y decide la modalidad, la apuesta y cuántos entran.',
+        { texto: 'Crear sala', href: './crear-sala.html' },
       );
       subtitulo.textContent = subtituloDeSalas(0);
       return;
@@ -373,10 +429,14 @@ export function montarBatallas(raiz, puertos = {}) {
         }),
       );
     } catch (error) {
+      // UX-R3.4 — el subtitulo se quedaba en «Buscando batallas» para siempre:
+      // la pantalla decia a la vez que estaba buscando y que habia fallado.
+      subtitulo.textContent = 'No se pudo consultar el listado';
       mostrarEstado(
         'estado-vista--error',
         error.titulo ?? 'No se pudo cargar el listado',
         error.detalle ?? error.message,
+        { texto: 'Reintentar', alPulsar: () => refrescar() },
       );
     }
   }
@@ -396,11 +456,120 @@ export function montarBatallas(raiz, puertos = {}) {
     await entrarA(tarjeta.dataset.sala);
   });
 
-  /** Entra a una sala; reutilizable por el reintento de la seccion degradada. */
-  async function entrarA(idSala) {
+  /**
+   * Pide el codigo de invitacion de una sala privada — FI-R4.
+   *
+   * Se pinta en su propia zona, sobre el listado, y no oculta las salas:
+   * quien se equivoco de sala tiene que poder elegir otra sin recargar.
+   *
+   * @param {string} idSala
+   * @param {{titulo?: string, detalle?: string}} problema lo que dijo el servicio
+   * @param {string} [codigoPrevio] lo que ya habia escrito, si el codigo fallo
+   */
+  function pedirCodigo(idSala, problema, codigoPrevio = '') {
+    if (!zonaInvitacion) {
+      // Sin la zona en el marcado no se puede pedir nada: al menos se dice
+      // que la sala es privada, en vez de callar.
+      mostrarEstado(
+        'estado-vista--error',
+        problema.titulo ?? 'Esta sala es privada',
+        problema.detalle ?? 'Necesitas un código de invitación.',
+      );
+      return;
+    }
+
+    zonaInvitacion.hidden = false;
+    // `data-sala-invitada` y no `data-sala`: la escucha de las tarjetas esta
+    // delegada en TODA la vista y busca `closest('[data-sala]')`. Con ese
+    // nombre, pulsar «Entrar con el codigo» disparaba **dos** ingresos: el del
+    // formulario, con codigo, y el de la delegacion, sin el. El segundo 403
+    // llegaba despues y reescribia el aviso con el mensaje de la primera vez,
+    // que es lo que CI encontro y lo que dejaba a la persona sin saber si su
+    // codigo se habia enviado. En una sala con apuesta habrian sido dos
+    // intentos de reserva.
+    zonaInvitacion.dataset.salaInvitada = idSala;
+    const campo = zonaInvitacion.querySelector('[name="codigoInvitacion"]');
+    const aviso = zonaInvitacion.querySelector('[data-zona="aviso-codigo"]');
+
+    // Que el codigo ya se intento es una propiedad de la interaccion, no del
+    // parametro que llega por el catch. Lo marca el propio formulario al
+    // enviarse, asi que el mensaje es correcto aunque el rechazo vuelva por un
+    // camino distinto del que lo pidio.
+    const yaIntento = zonaInvitacion.dataset.intentado === 'si';
+    if (aviso) {
+      aviso.textContent = yaIntento
+        ? 'Ese código no vale para esta sala. Compruébalo con quien te invitó.'
+        : (problema.detalle ?? 'Pide el código a quien creó la sala.');
+    }
+    if (campo) {
+      // No se pisa lo que la persona tenga escrito. Un rechazo que llega
+      // mientras alguien teclea no puede borrarle el campo: pasa cuando se
+      // abre un enlace de invitacion, que intenta entrar solo, y su 403 llega
+      // despues de que la persona ya haya empezado a escribir.
+      if (codigoPrevio || !campo.value) {
+        campo.value = codigoPrevio;
+      }
+      campo.focus();
+    }
+  }
+
+  function cerrarPeticionDeCodigo() {
+    if (zonaInvitacion) {
+      zonaInvitacion.hidden = true;
+      delete zonaInvitacion.dataset.salaInvitada;
+      delete zonaInvitacion.dataset.intentado;
+      const campo = zonaInvitacion.querySelector('[name="codigoInvitacion"]');
+      if (campo) {
+        campo.value = '';
+      }
+    }
+  }
+
+  zonaInvitacion?.addEventListener('submit', (evento) => {
+    evento.preventDefault();
+    const idSala = zonaInvitacion.dataset.salaInvitada;
+    const campo = zonaInvitacion.querySelector('[name="codigoInvitacion"]');
+    const codigo = campo?.value?.trim() ?? '';
+    if (!idSala || !codigo) {
+      return;
+    }
+    zonaInvitacion.dataset.intentado = 'si';
+    entrarA(idSala, codigo);
+  });
+
+  zonaInvitacion
+    ?.querySelector('[data-accion="cerrar-codigo"]')
+    ?.addEventListener('click', cerrarPeticionDeCodigo);
+
+  /**
+   * Entra a una sala; reutilizable por el reintento de la seccion degradada y
+   * por el formulario del codigo de invitacion.
+   *
+   * @param {string} idSala
+   * @param {string|null} [codigoInvitacion] solo para salas privadas
+   */
+  async function entrarA(idSala, codigoInvitacion = null) {
     limpiarSeccionDegradada(zonaDegradacion);
+
+    // FI-R6 · RF-JUE-003 — una sala con apuesta se confirma antes de entrar.
+    //
+    // Entrar compromete creditos: `IngresarASala` los reserva antes de meter a
+    // nadie. El dialogo de verificacion existe justamente para ensenar el
+    // heroe con el que vas a jugar y cuanto te va a costar **antes** de que se
+    // reserve nada, y hasta ahora no habia forma de llegar a el: la pantalla
+    // estaba en la matriz de acceso y no la enlazaba nadie.
+    //
+    // En una sala sin apuesta no hay nada que confirmar, asi que no se
+    // interpone un paso: se entra, y si el servidor rechaza por el heroe, el
+    // catch de abajo lleva al mismo dialogo con el veredicto ya hecho.
+    const ficha = fichas.get(idSala);
+    if (Number(ficha?.recompensaCreditos ?? 0) > 0) {
+      irAVerificacion(rutaDeVerificacion(idSala, codigoInvitacion));
+      return;
+    }
+
     try {
-      const dentro = await ingresar(idSala);
+      const dentro = await ingresar(idSala, { codigoInvitacion });
       // Ya se es participante: ahora si se puede seguir la sala aunque sea
       // privada, y la tarjeta refleja la entrada sin esperar al canal.
       if (dentro && dentro.id) {
@@ -411,8 +580,27 @@ export function montarBatallas(raiz, puertos = {}) {
         }
         seguir(dentro);
       }
+      cerrarPeticionDeCodigo();
       alEntrar(dentro);
     } catch (error) {
+      // FI-R4 — el 403 de sala privada no es un callejon sin salida: es una
+      // puerta que pide llave. Antes se pintaba como error final («Esta sala
+      // es privada») y ahi se acababa, porque no habia donde escribir el
+      // codigo ni forma de mandarlo. El backend lo acepta desde la migracion
+      // V5; lo que faltaba estaba aqui.
+      if (esSalaPrivada(error)) {
+        pedirCodigo(idSala, error, codigoInvitacion ?? '');
+        return;
+      }
+      // FI-R6 · RF-JUE-003 — «no tienes heroe equipado» y «tu heroe esta en
+      // otra partida» no son errores del listado: son veredictos sobre tu
+      // inventario, y tienen una pantalla que los explica y lleva a
+      // arreglarlos. Pintarlos aqui como un aviso rojo mas dejaba a la persona
+      // sin saber que hacer.
+      if (esHeroeNoDisponible(error)) {
+        irAVerificacion(rutaDeVerificacion(idSala, codigoInvitacion));
+        return;
+      }
       if (zonaDegradacion && esSeccionDegradada(error?.problema)) {
         // HU-DIS-003: no es que no se pueda entrar, es que quien lo comprueba
         // no responde. El listado se queda; se dice que seccion esta limitada
@@ -441,5 +629,34 @@ export function montarBatallas(raiz, puertos = {}) {
   }
 
   refrescar();
-  return { refrescar };
+  return {
+    refrescar,
+    /**
+     * Entra directamente a una sala — lo que usa el enlace de invitacion
+     * (`?sala=<id>&codigo=<codigo>`) para que quien lo recibe no tenga que
+     * buscar la sala en el listado ni teclear el codigo. Si el codigo no vale,
+     * cae en el formulario como cualquier otro intento: el enlace no es una
+     * llave maestra, es un atajo.
+     *
+     * @param {string} idSala
+     * @param {string|null} [codigoInvitacion]
+     */
+    entrarA: (idSala, codigoInvitacion = null) => entrarA(idSala, codigoInvitacion),
+  };
+}
+
+/**
+ * La invitacion que venga en la URL — FI-R4.
+ *
+ * @param {string} busqueda `location.search`
+ * @returns {{idSala: string, codigo: string|null}|null}
+ */
+export function invitacionDeLaUrl(busqueda) {
+  const parametros = new URLSearchParams(busqueda);
+  const idSala = parametros.get('sala');
+  if (!idSala) {
+    return null;
+  }
+  const codigo = parametros.get('codigo');
+  return { idSala, codigo: codigo && codigo.trim() ? codigo.trim() : null };
 }

@@ -85,6 +85,10 @@ public class ComentariosController {
      * <p>Quien retira es el {@code uid} del token; el cuerpo no manda nada.
      * 204 tambien si ya estaba retirado (idempotente); 403 si es de otro;
      * 404 si no esta en el hilo del producto.
+     *
+     * <p>Reportar un comentario ajeno (RF-COM-006) no esta aqui: su ruta si
+     * cuelga de este recurso, pero la clase vive en {@code moderacion} para
+     * que publicar no dependa de moderar. Ver {@code ReportesController}.
      */
     @DeleteMapping("/{commentId}")
     public ResponseEntity<Void> eliminar(
@@ -134,7 +138,13 @@ public class ComentariosController {
             return desde(comentario, false);
         }
 
-        static ComentarioResponse desde(Comentario comentario, boolean calificacionDescartada) {
+        /**
+         * R10.1 — publico para que la cola de moderacion pinte el comentario
+         * con el MISMO cuerpo que el hilo. Dos representaciones del mismo
+         * comentario acabarian divergiendo, y el moderador veria algo distinto
+         * de lo que ve el jugador justo cuando mas importa que coincidan.
+         */
+        public static ComentarioResponse desde(Comentario comentario, boolean calificacionDescartada) {
             return new ComentarioResponse(
                     comentario.id(),
                     comentario.productoId(),

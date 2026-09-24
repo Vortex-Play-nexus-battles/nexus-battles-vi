@@ -85,11 +85,11 @@ class PuertaDeHeroeTest {
     }
 
     private CrearSala crear(InventarioEnMemoria inventario) {
-        return new CrearSala(salas, creditos, inventario);
+        return new CrearSala(salas, creditos, inventario, new SancionesEnMemoria());
     }
 
     private IngresarASala ingresar(InventarioEnMemoria inventario) {
-        return new IngresarASala(salas, canalDeSala, inventario, creditos);
+        return new IngresarASala(salas, canalDeSala, inventario, creditos, new SancionesEnMemoria());
     }
 
     private IniciarPartida iniciar(InventarioEnMemoria inventario) {

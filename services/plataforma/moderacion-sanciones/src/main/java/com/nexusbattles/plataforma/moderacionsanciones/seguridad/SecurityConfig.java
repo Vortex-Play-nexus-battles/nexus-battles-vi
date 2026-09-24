@@ -11,7 +11,7 @@ import org.springframework.security.web.SecurityFilterChain;
 /**
  * Seguridad del servicio de moderacion y sanciones.
  *
- * <p>El andamiaje —sin CSRF, sin estado y token de Keycloak traducido— viene de
+ * <p>El andamiaje —sin CSRF, sin estado y token de {@code ms-identidad} traducido— viene de
  * {@link CadenaDeSeguridad}, compartido con el resto de la plataforma. Aqui solo
  * quedan las reglas de rutas de este dominio, que son las mismas de antes:
  * CA-03 restringe el panel de lista negra a ADMINISTRADOR y MODERADOR, mientras
@@ -29,7 +29,8 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http, ConversorRolesJwt conversor) throws Exception {
-        // CSRF desactivado, sin estado y JWT de Keycloak traducido: todo eso lo
+        // CSRF desactivado, sin estado y JWT de ms-identidad traducido (el
+        // emisor real, ADR-005; Keycloak nunca se aprovisiono): todo eso lo
         // pone CadenaDeSeguridad, compartida con el resto de la plataforma.
         CadenaDeSeguridad.aplicarBase(http, conversor);
 

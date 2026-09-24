@@ -3,6 +3,7 @@
 // así que aquí no hace falta leer nexus.token manualmente.
 
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
+import { estadoDeError, estadoVacio, pintarEstado } from '../comun/ui/estado-vista.js';
 
 const BASE_API = '/api/v1/transacciones/mi-historial';
 const TAMANO_PAGINA = 20;
@@ -23,7 +24,26 @@ const el = {
   btnSiguiente: document.getElementById('btn-siguiente'),
   paginaActual: document.getElementById('historial-pagina-actual'),
   btnVolver: document.getElementById('btn-volver'),
+  envoltorioTabla: document.querySelector('.tabla-envoltorio'),
+  zonaEstadoVista: document.getElementById('historial-estado-vista'),
+  paginacion: document.querySelector('.paginacion'),
 };
+
+/**
+ * UX-R4.4 — cuando no hay nada que paginar, el control se va entero.
+ *
+ * Apagar los dos botones dejaba el problema a medias. En telefono el kit le da
+ * a `.paginacion__info` el ancho completo para que el control se apile en vez
+ * de desplazarse de lado, asi que la fila del medio existe aunque su texto
+ * este vacio: al fallar la carga quedaban dos botones grises separados por un
+ * hueco en blanco, sin nada que explicara que hacian ahi. Una lista que no
+ * existe no se pagina.
+ */
+function mostrarPaginacion(visible) {
+  if (el.paginacion) {
+    el.paginacion.hidden = !visible;
+  }
+}
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -156,12 +176,14 @@ function actualizarPaginacion(pagina, totalPaginas) {
   estado.pagina = pagina;
   estado.totalPaginas = Math.max(totalPaginas, 1);
   el.paginaActual.textContent = `Página ${estado.pagina + 1} de ${estado.totalPaginas}`;
+  mostrarPaginacion(estado.totalPaginas > 1);
   el.btnAnterior.disabled = estado.pagina <= 0;
   el.btnSiguiente.disabled = estado.pagina >= estado.totalPaginas - 1;
 }
 
 async function cargar() {
-  el.tbody.innerHTML = '';
+  el.tbody.replaceChildren();
+  ocultarTabla(false);
   mostrarEstado('Cargando...', 'carga');
 
   const params = new URLSearchParams({
@@ -176,14 +198,18 @@ async function cargar() {
 
     if (respuesta.status === 403) {
       // El interceptor común ya mostró el toast; aquí solo apagamos los botones.
-      mostrarEstado('Debes iniciar sesión para ver tu historial.', 'error');
-      el.btnAnterior.disabled = true;
-      el.btnSiguiente.disabled = true;
+      interrumpir(
+        estadoVacio({
+          titulo: 'Tu historial es tuyo',
+          detalle: 'Hace falta tu sesión iniciada para verlo.',
+          accion: { texto: 'Iniciar sesión', href: RUTA_LOGIN },
+        }),
+      );
       return;
     }
 
     if (!respuesta.ok) {
-      mostrarEstado('No se pudo cargar el historial.', 'error');
+      fallar();
       return;
     }
 
@@ -193,14 +219,62 @@ async function cargar() {
     const paginaActual = datos.number ?? estado.pagina;
 
     if (registros.length === 0) {
-      mostrarEstado('Aún no tienes transacciones registradas.', 'vacio');
+      ocultarEstado();
+      ocultarTabla(true);
+      pintarEstado(
+        el.zonaEstadoVista,
+        estadoVacio({
+          titulo: 'Aún no tienes transacciones',
+          detalle: 'Aquí aparecerán tus cargas, tus compras y sus reversos, en cuanto haya alguno.',
+        }),
+      );
     } else {
       ocultarEstado();
       renderFilas(registros);
     }
     actualizarPaginacion(paginaActual, totalPaginas);
   } catch {
-    mostrarEstado('Error de red al consultar el historial.', 'error');
+    fallar();
+  }
+}
+
+/**
+ * UX-R3.11 — el fallo era una pildora roja dentro del cuerpo de la tabla, CON
+ * LA CABECERA DE COLUMNAS ENCIMA: seis titulos de columna sobre datos que no
+ * existen. Y la paginacion seguia debajo, con su «Pagina 1», ofreciendo pasar
+ * paginas de una lista que no se pudo cargar.
+ *
+ * Un fallo de la vista entera esconde la tabla, explica que paso y ofrece
+ * reintentar (MAPEO-ERRORES §5.1); la paginacion se apaga.
+ */
+function fallar() {
+  interrumpir(
+    estadoDeError({
+      titulo: 'No pudimos cargar tu historial',
+      detalle: 'El servicio no respondió. Vuelve a intentarlo en un momento.',
+      alReintentar: cargar,
+    }),
+  );
+}
+
+function interrumpir(vista) {
+  ocultarEstado();
+  ocultarTabla(true);
+  pintarEstado(el.zonaEstadoVista, vista);
+  el.btnAnterior.disabled = true;
+  el.btnSiguiente.disabled = true;
+  el.paginaActual.textContent = '';
+  mostrarPaginacion(false);
+}
+
+/** La cabecera de columnas no se queda flotando sobre un hueco. */
+function ocultarTabla(oculta) {
+  if (el.envoltorioTabla) {
+    el.envoltorioTabla.hidden = oculta;
+  }
+  if (!oculta && el.zonaEstadoVista) {
+    el.zonaEstadoVista.replaceChildren();
+    el.zonaEstadoVista.hidden = true;
   }
 }
 

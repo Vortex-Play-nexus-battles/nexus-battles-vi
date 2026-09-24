@@ -114,7 +114,7 @@ test('CA-03: el error de la cola privada se muestra a quien escribio con el tono
     type: 'https://nexusbattles.local/errores/jugador-silenciado',
     title: 'No puedes escribir en el chat',
     status: 403,
-    detail: 'Tienes una sancion activa de silencio.',
+    detail: 'Tienes una sanción activa de silencio.',
   });
 
   const aviso = contenedor.querySelector('[data-zona="aviso"] .aviso');
@@ -135,14 +135,14 @@ test('sin token no se conecta y se pide iniciar sesion', async () => {
   expect(contenedor.querySelector('[data-zona="aviso"]').textContent).toContain('Inicia sesión');
 });
 
-test('si el servidor rechaza la conexion, la vista lo dice y bloquea el envio', async () => {
+test('si el servidor rechaza la conexión, la vista lo dice y bloquea el envio', async () => {
   const contenedor = raiz();
 
   await montarChat(contenedor, {
     canal: {},
     token: 't',
     conectar: async () => {
-      throw new Error('El token de acceso no es valido.');
+      throw new Error('El token de acceso no es válido.');
     },
   });
 

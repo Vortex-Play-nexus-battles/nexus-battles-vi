@@ -31,7 +31,7 @@ async function esperarHasta(condicion) {
     }
     await new Promise((resolver) => setTimeout(resolver, 0));
   }
-  throw new Error('La interfaz no termino la operacion esperada');
+  throw new Error('La interfaz no termino la operación esperada');
 }
 
 let raiz;
@@ -88,7 +88,7 @@ test('un rechazo mantiene la vitrina anterior y muestra un mensaje sin codigo', 
   const consola = jest.spyOn(console, 'error').mockImplementation(() => {});
   const consultar = async () => pagina([elemento()]);
   const modificar = async () => {
-    const fallo = new Error('El servicio de inventario respondio 403');
+    const fallo = new Error('El servicio de inventario respondió 403');
     fallo.status = 403;
     throw fallo;
   };
@@ -106,5 +106,34 @@ test('un rechazo mantiene la vitrina anterior y muestra un mensaje sin codigo', 
   expect(raiz.querySelector('.vitrina__nombre').textContent).toBe('Amuleto de Niebla');
   expect(raiz.querySelector('.inventario__mensaje').textContent).not.toMatch(/403/);
   expect(raiz.querySelector('.inventario__mensaje').textContent).toMatch(/permiso/i);
+  consola.mockRestore();
+});
+
+test('si el servidor rechaza el producto, el formulario muestra su mensaje', async () => {
+  const consola = jest.spyOn(console, 'error').mockImplementation(() => {});
+  const consultar = async () => pagina([]);
+  const crear = async () => {
+    const fallo = new Error('El servicio de inventario respondio 422 al guardar');
+    fallo.status = 422;
+    fallo.detalle = 'El producto no existe en el catalogo.';
+    throw fallo;
+  };
+
+  await montarInventario(raiz, 'jugador-A', 0, { consultar, crear });
+  raiz.querySelector('.inventario__nuevo').click();
+  raiz.querySelector('[name="productoId"]').value = 'espada-corta';
+  raiz.querySelector('[name="tipo"]').value = 'ARMA';
+  raiz.querySelector('[name="nombrePropio"]').value = 'Espada inventada';
+  raiz
+    .querySelector('.inventario-editor__formulario')
+    .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+  await esperarHasta(
+    () => raiz.querySelector('.inventario__mensaje').getAttribute('role') === 'alert',
+  );
+  expect(raiz.querySelector('.inventario__mensaje').textContent).toBe(
+    'El producto no existe en el catalogo.',
+  );
+  expect(raiz.querySelectorAll('.vitrina__producto')).toHaveLength(0);
   consola.mockRestore();
 });

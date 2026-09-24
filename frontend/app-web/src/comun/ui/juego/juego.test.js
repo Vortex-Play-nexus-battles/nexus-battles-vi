@@ -68,7 +68,7 @@ describe('retratoDeHeroe', () => {
     expect(nodo.querySelector('img')).toBeNull();
   });
 
-  test('con imagen, el alt va vacio para que el lector no repita el nombre', () => {
+  test('con imagen, el alt va vacío para que el lector no repita el nombre', () => {
     const nodo = retratoDeHeroe({ nombre: 'Golem', imagen: '/g.png' });
     const img = nodo.querySelector('.marco-heroe__imagen');
     expect(img.getAttribute('alt')).toBe('');
@@ -81,7 +81,7 @@ describe('retratoDeHeroe', () => {
 });
 
 describe('tarjetaDeHeroe', () => {
-  test('sin accion es un article, no un boton falso', () => {
+  test('sin acción es un article, no un botón falso', () => {
     const nodo = tarjetaDeHeroe({ nombre: 'Golem', rareza: 'RARA' });
     expect(nodo.tagName).toBe('ARTICLE');
   });
@@ -300,7 +300,7 @@ describe('panelDeResultado', () => {
     expect(nodo.getAttribute('aria-live')).toBe('polite');
   });
 
-  test('los creditos llevan signo y se marcan para el color', () => {
+  test('los créditos llevan signo y se marcan para el color', () => {
     const gana = panelDeResultado({ victoria: true, creditos: 1250 });
     expect(gana.querySelector('.panel-resultado__creditos').textContent).toBe('+1.250');
     expect(gana.querySelector('.panel-resultado__creditos').dataset.signo).toBe('positivo');
@@ -309,7 +309,7 @@ describe('panelDeResultado', () => {
     expect(pierde.querySelector('.panel-resultado__creditos').textContent).toBe('-350');
   });
 
-  test('sin dato de creditos no se inventa un cero', () => {
+  test('sin dato de créditos no se inventa un cero', () => {
     expect(
       panelDeResultado({ victoria: true }).querySelector('.panel-resultado__creditos'),
     ).toBeNull();
@@ -326,27 +326,27 @@ describe('panelDeResultado', () => {
 });
 
 describe('distintivoDeCreditos', () => {
-  test('la cifra lleva separador de miles y el lector oye «creditos»', () => {
+  test('la cifra lleva separador de miles y el lector oye «créditos»', () => {
     const nodo = distintivoDeCreditos(1250);
     expect(nodo.querySelector('.distintivo-credito__cifra').textContent).toBe('1.250');
-    expect(nodo.getAttribute('aria-label')).toBe('1.250 creditos');
+    expect(nodo.getAttribute('aria-label')).toBe('1.250 créditos');
   });
 
-  test('el icono es decorativo: el color oro es marca, no informacion', () => {
+  test('el icono es decorativo: el color oro es marca, no información', () => {
     const svg = distintivoDeCreditos(10).querySelector('svg');
     expect(svg.getAttribute('aria-hidden')).toBe('true');
   });
 
   test('el contexto entra en el nombre accesible', () => {
     const nodo = distintivoDeCreditos(500, { contexto: 'Apuesta' });
-    expect(nodo.getAttribute('aria-label')).toBe('Apuesta: 500 creditos');
+    expect(nodo.getAttribute('aria-label')).toBe('Apuesta: 500 créditos');
     expect(nodo.textContent).toContain('Apuesta');
   });
 
   test('sin dato dice que no lo hay en vez de ensenar un cero falso', () => {
     const nodo = distintivoDeCreditos(null);
     expect(nodo.querySelector('.distintivo-credito__cifra').textContent).toBe('—');
-    expect(nodo.getAttribute('aria-label')).toBe('sin dato de creditos');
+    expect(nodo.getAttribute('aria-label')).toBe('sin dato de créditos');
   });
 
   test('con signo, solo los positivos lo llevan', () => {

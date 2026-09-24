@@ -36,7 +36,7 @@ function atributos(ficha) {
 }
 
 describe('Ficha de detalle del producto', () => {
-  test('muestra nombre, descripcion e imagen del producto', () => {
+  test('muestra nombre, descripción e imagen del producto', () => {
     const ficha = construirFicha(producto());
 
     expect(textoDe(ficha, '.ficha__nombre')).toBe('Hacha de Vorn');
@@ -161,7 +161,7 @@ describe('Ficha de detalle del producto', () => {
     expect(ficha.querySelector('.ficha__no-disponible')).toBeNull();
   });
 
-  test('un producto unico tampoco lo lleva: unico no es suspendido', () => {
+  test('un producto único tampoco lo lleva: único no es suspendido', () => {
     const ficha = construirFicha(producto({ estado: 'UNICO' }));
 
     expect(ficha.querySelector('.ficha__no-disponible')).toBeNull();

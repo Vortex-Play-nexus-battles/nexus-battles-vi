@@ -8,15 +8,15 @@
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
   </head>
-  <body>
+  <body class="portal">
     <div data-cabecera-app></div>
     <main class="entrada">
       <section class="entrada__identidad">
-        <p class="t-etiqueta">Recuperar el acceso</p>
+        <p class="entrada__sobretitulo">Recuperar el acceso</p>
         <h1 class="entrada__marca">NEXUS <em>BATTLES</em> VI</h1>
         <p class="entrada__lema">
-          El codigo llega por correo, dura poco y solo sirve una vez. Si caduco, pide otro desde
-          «Recuperar contrasena».
+          El código llega por correo, dura poco y solo sirve una vez. Si caducó, pide otro desde
+          «Pedir otro código».
         </p>
       </section>
 
@@ -96,7 +96,10 @@
       import { mejorarContrasena } from '../comun/ui/campo.js';
 
       // Cabecera unica de la aplicacion (HU-UX-001).
-      montarCabecera(document.querySelector('[data-cabecera-app]'), { seccionActiva: null });
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'restablecer-confirmar',
+        seccionActiva: null,
+      });
       mejorarContrasena(document.getElementById('nuevaPassword'));
       mejorarContrasena(document.getElementById('confirmarPassword'));
     </script>

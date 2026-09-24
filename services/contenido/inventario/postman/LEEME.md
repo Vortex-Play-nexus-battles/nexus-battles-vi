@@ -11,7 +11,7 @@ la coleccion **completa y en orden**.
 
 | Archivo | Que es |
 |---|---|
-| `inventario.postman_collection.json` | 52 peticiones agrupadas por historia |
+| `inventario.postman_collection.json` | 54 peticiones agrupadas por historia |
 | `local.postman_environment.json` | Entorno local: `baseUrl` |
 
 ## Requisitos
@@ -22,6 +22,17 @@ la coleccion **completa y en orden**.
 SPRING_DATA_MONGODB_URI=mongodb://localhost:27017/inventario ./gradlew :services:contenido:inventario:bootRun
 ```
 
+- **El catalogo inicial sembrado en productos** (contrato de inventario 1.2.0).
+  Crear un elemento consulta el producto en el servicio de productos y solo
+  acepta ids que existen, no suspendidos y del mismo tipo. La coleccion usa
+  los UUID estables del catalogo inicial (UUID v3 derivado del slug; tabla en
+  `services/contenido/productos/docs/catalogo-inicial-identificadores.md`),
+  por ejemplo `aec4fbd2-9615-352a-9f2b-3fad781e123c` = Guerrero Tanque (HEROE)
+  y `1647b2ea-096d-37e7-b580-0172e4c62313` = Espada de una mano (ARMA). Sin
+  la semilla, cada creacion responde 422 "Producto inexistente" y la coleccion
+  se cae en cascada. Inventario encuentra
+  a productos por `PRODUCTOS_BASE_URL`; si productos no responde, crear
+  responde 503 "Catalogo no disponible".
 - Las rutas del jugador conservan temporalmente `X-User-Name`. La coleccion
   genera dos UUID nuevos para que cada corrida use inventarios independientes.
 - Para las operaciones internas, obtener con OAuth2 `client_credentials` un
@@ -39,7 +50,7 @@ SPRING_DATA_MONGODB_URI=mongodb://localhost:27017/inventario ./gradlew :services
   TA=$(node ../../productos/postman/jwks-dev/emitir-token.mjs ~/.nexus/productos-jwks-dev.pem --rol JUGADOR --usuario $A)
   TB=$(node ../../productos/postman/jwks-dev/emitir-token.mjs ~/.nexus/productos-jwks-dev.pem --rol JUGADOR --usuario $B)
   S2S=$(node ../../productos/postman/jwks-dev/emitir-token.mjs ~/.nexus/productos-jwks-dev.pem --azp ms-subastas)
-  npx --yes newman run inventario.postman_collection.json -e local.postman_environment.json --env-var baseUrl=http://34.193.90.11:8102 --env-var jugadorA=$A --env-var tokenJugadorA=$TA --env-var jugadorB=$B --env-var tokenJugadorB=$TB --env-var s2sAccessToken=$S2S
+  npx --yes newman run inventario.postman_collection.json -e local.postman_environment.json --env-var baseUrl=http://35.168.124.119 --env-var jugadorA=$A --env-var tokenJugadorA=$TA --env-var jugadorB=$B --env-var tokenJugadorB=$TB --env-var s2sAccessToken=$S2S
   ```
 
   **Sin Keycloak (instancia de contenido y local con Compose):** inventario
@@ -49,7 +60,7 @@ SPRING_DATA_MONGODB_URI=mongodb://localhost:27017/inventario ./gradlew :services
 
   ```bash
   S2S=$(node ../../productos/postman/jwks-dev/emitir-token.mjs ~/.nexus/productos-jwks-dev.pem --azp ms-subastas)
-  npx --yes newman run inventario.postman_collection.json -e local.postman_environment.json --env-var baseUrl=http://34.193.90.11:8102 --env-var s2sAccessToken=$S2S
+  npx --yes newman run inventario.postman_collection.json -e local.postman_environment.json --env-var baseUrl=http://35.168.124.119 --env-var s2sAccessToken=$S2S
   ``` El token autentica al servicio y
   `propietarioUid` viaja por separado como dato del negocio.
 
@@ -77,6 +88,7 @@ Contra otro puerto: `--env-var baseUrl=http://localhost:8082`.
 | HU-INV-003 | Crear y modificar quedan persistidos y se ven en la vitrina | Crear heroe (201 + Location), renombrar (200), vitrina en pagina de 16 |
 | HU-INV-003 | Operar sobre el inventario de otro no se permite | A renombra el elemento de B → 403 "Inventario ajeno"; B sigue intacto |
 | HU-INV-003 | Errores legibles | 401 sin identidad, 400 sin nombre, 404 inexistente |
+| HU-INV-003 | Solo productos del catalogo (RG-074) | Producto inventado `espada-corta` → 422 "Producto inexistente"; heroe pedido como ARMA → 400 "Tipo no coincide" |
 | HU-INV-005 | Maximo dos armas | 2 equipan, la tercera → 409 "dos armas"; la misma dos veces → 409 |
 | HU-INV-005 | Seis partes de armadura, una por ranura | CASCO ocupa, segundo CASCO → 409; PECHO cabe |
 | HU-INV-005 | Maximo dos items | 2 equipan, el tercero → 409 |
@@ -91,3 +103,18 @@ Contra otro puerto: `--env-var baseUrl=http://localhost:8082`.
 
 Cuando cambie el contrato (`contracts/openapi/inventario.yaml`), actualizar
 aqui la peticion afectada en el mismo cambio.
+
+> **R9.4 — el `baseUrl` va por el borde, no al puerto del servicio.**
+> Los puertos 8101-8104 del host de contenido dejaron de estar abiertos a todo
+> internet: solo los alcanza el host de plataforma, que es quien de verdad los
+> consume (el borde nginx y salas-partidas). Desde un portatil se entra por el
+> borde, que es ademas el mismo camino que usa la aplicacion real, asi que la
+> coleccion pasa a ejercitar tambien el enrutado.
+>
+> La unica peticion que no sobrevive al cambio es `{{baseUrl}}/actuator/health`:
+> el borde solo enruta `/api/v1/*`. La salud por host la cubre
+> `.github/workflows/diagnostico-dev.yml`.
+>
+> Para depurar contra el puerto directo hay que anadir la IP propia a
+> `cidr_servicios` en `infrastructure/entornos/contenido/main.tf`, a proposito
+> y temporalmente.

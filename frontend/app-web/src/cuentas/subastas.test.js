@@ -67,7 +67,7 @@ afterEach(() => {
 });
 
 describe('cuando el mercado no responde', () => {
-  test('no aparece ningun codigo HTTP en la pantalla', async () => {
+  test('no aparece ningún código HTTP en la pantalla', async () => {
     globalThis.fetch = jest.fn(async () => responder({ detail: null }, 502));
     await montar();
 
@@ -85,7 +85,7 @@ describe('cuando el mercado no responde', () => {
     expect(texto()).toContain('El mercado no responde');
   });
 
-  test('hay un boton de reintentar, y reintenta de verdad', async () => {
+  test('hay un botón de reintentar, y reintenta de verdad', async () => {
     let fallar = true;
     globalThis.fetch = jest.fn(async () =>
       fallar ? responder({ detail: null }, 502) : responder(listado([subasta()])),
@@ -102,7 +102,7 @@ describe('cuando el mercado no responde', () => {
     expect(zona().querySelector('.subastas__producto')).not.toBeNull();
   });
 
-  test('un fallo de red no ensena «Failed to fetch»', async () => {
+  test('un fallo de red no enseña «Failed to fetch»', async () => {
     // Un TypeError de `fetch` no trae `estado`, asi que su mensaje es tecnico
     // y no puede llegar a la pantalla.
     globalThis.fetch = jest.fn(async () => {
@@ -114,7 +114,7 @@ describe('cuando el mercado no responde', () => {
     expect(texto()).toContain('Revisa tu conexión');
   });
 
-  test('si la sesion no alcanza, el titulo no culpa al mercado', async () => {
+  test('si la sesión no alcanza, el título no culpa al mercado', async () => {
     globalThis.fetch = jest.fn(async () => responder({ detail: 'Tu sesión no alcanza.' }, 403));
     await montar();
 
@@ -133,7 +133,7 @@ describe('cuando no hay resultados', () => {
     expect(vacio.querySelector('a[href="./publicar-subasta.html"]')).not.toBeNull();
   });
 
-  test('con busqueda puesta, ofrece quitar los filtros', async () => {
+  test('con búsqueda puesta, ofrece quitar los filtros', async () => {
     await montar();
 
     const campo = document.querySelector('.subastas-busqueda__campo');
@@ -161,7 +161,7 @@ describe('cuando hay subastas', () => {
     expect(contador.getAttribute('aria-label')).toContain('Termina en');
   });
 
-  test('un lote ya vencido dice «Finalizada», no un numero negativo', async () => {
+  test('un lote ya vencido dice «Finalizada», no un número negativo', async () => {
     globalThis.fetch = jest.fn(async () =>
       responder(listado([subasta({ fechaFin: new Date(Date.now() - HORA).toISOString() })])),
     );
@@ -197,7 +197,7 @@ describe('cuando hay subastas', () => {
 });
 
 describe('estructura de la pantalla', () => {
-  test('el titulo y «Publicar subasta» van en el encabezado del kit', async () => {
+  test('el título y «Publicar subasta» van en el encabezado del kit', async () => {
     await montar();
 
     const encabezado = document.querySelector('.encabezado-pagina');
@@ -208,7 +208,7 @@ describe('estructura de la pantalla', () => {
     );
   });
 
-  test('mientras carga se ve la forma de lo que viene, no una pagina en blanco', async () => {
+  test('mientras carga se ve la forma de lo que viene, no una página en blanco', async () => {
     let resolver;
     globalThis.fetch = jest.fn(() => new Promise((r) => (resolver = r)));
     document.body.innerHTML = '<div id="raiz-subastas"></div>';
@@ -218,5 +218,48 @@ describe('estructura de la pantalla', () => {
 
     resolver(responder(listado([])));
     await asentar();
+  });
+});
+
+describe('el panel de filtros no tapa el mercado en telefono — UX-R4.8', () => {
+  const panel = () => document.querySelector('.subastas-filtros__plegable');
+  const resumen = () => document.querySelector('.subastas-filtros__resumen');
+
+  test('los filtros viven dentro de un desplegable, con su resumen delante', async () => {
+    await montar();
+
+    expect(panel()).not.toBeNull();
+    expect(panel().tagName).toBe('DETAILS');
+    // El resumen tiene que ser el PRIMER hijo o el navegador no lo trata como
+    // el control que abre y cierra.
+    expect(panel().firstElementChild).toBe(resumen());
+    expect(resumen().tagName).toBe('SUMMARY');
+    expect(panel().querySelector('.subastas-filtros')).not.toBeNull();
+  });
+
+  test('los resultados van DESPUES del panel, no dentro', async () => {
+    await montar();
+
+    expect(panel().contains(zona())).toBe(false);
+    expect(panel().nextElementSibling).toBe(zona());
+  });
+
+  test('sin filtros puestos el resumen no promete nada', async () => {
+    await montar();
+
+    expect(resumen().textContent).toBe('Filtros');
+  });
+
+  test('con filtros puestos el resumen dice cuantos, aunque este plegado', async () => {
+    await montar();
+
+    const casilla = document.querySelector('input[name="tipoProducto"]');
+    casilla.checked = true;
+    casilla.dispatchEvent(new Event('change', { bubbles: true }));
+    await asentar();
+
+    // Un panel plegado que esconde filtros activos deja a alguien mirando
+    // «ninguna subasta coincide» sin saber por que.
+    expect(resumen().textContent).toBe('Filtros · 1 activos');
   });
 });

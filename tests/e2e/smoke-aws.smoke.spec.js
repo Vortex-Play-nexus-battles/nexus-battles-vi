@@ -172,25 +172,34 @@ test.describe('Smoke del entorno desplegado', () => {
     }
   });
 
-  test('LIMITACION DE DEV: crear sala falla porque inventario no esta desplegado', async () => {
-    // Esta prueba afirma la limitacion a proposito (#435). El dia que se
-    // despliegue `inventario`, se pondra roja y habra que borrarla: es la
-    // forma de que la limitacion no se quede solo escrita en un issue.
+  test('la puerta de heroe CONTESTA: salas-partidas alcanza al inventario del host de contenido', async () => {
+    // Esta prueba sustituye a la que afirmaba la limitacion de #435 ("crear
+    // sala falla porque inventario no esta desplegado"). Aquella se escribio
+    // para ponerse roja el dia que inventario estuviera desplegado, y ese dia
+    // llego con una vuelta de tuerca: inventario llevaba tiempo corriendo y
+    // sano en el host de contenido (34.193.90.11:8102), pero
+    // `docker-compose.deploy.yml` no fijaba INVENTARIO_BASE_URL para
+    // salas-partidas, asi que el servicio se lo preguntaba a si mismo
+    // (`localhost:8080`) y contestaba 503. El 503 no decia "no desplegado":
+    // decia "no configurado", y nadie podia distinguirlo desde fuera.
+    //
+    // Lo que se comprueba ahora es justo esa diferencia: la puerta de heroe
+    // RESPONDE. Un jugador recien registrado no tiene heroe equipado, asi que
+    // la respuesta correcta es 422 `heroe-no-equipado` (RF-JUE-003). Si
+    // volviera el 503 de seccion degradada, la cadena hacia el host de
+    // contenido esta rota otra vez - que es exactamente lo que esta prueba
+    // tiene que gritar.
     const r = await api.post('/api/v1/salas', {
       headers: { Authorization: `Bearer ${jugador.token}`, 'Content-Type': 'application/json' },
       data: { maximoParticipantes: 2, modalidad: 'UNO_CONTRA_UNO', recompensaCreditos: 0 },
     });
 
-    expect(r.status(), 'si esto ya no es 503, inventario esta desplegado: borra esta prueba').toBe(
-      503,
-    );
     const problema = await r.json();
-    expect(problema.detail ?? '').toMatch(/inventario|vitrina/i);
-    // HU-DIS-003: la caida de una dependencia sale como seccion degradada,
-    // con la funcion limitada nombrada, y no como un 503 anonimo.
-    expect(problema.type).toBe('https://nexusbattles.local/errores/seccion-no-disponible');
-    expect(problema.seccion).toBe('Inventario');
-    expect(r.headers()['retry-after']).toBeDefined();
+    expect(
+      r.status(),
+      `si esto es 503, salas-partidas no alcanza al inventario: ${JSON.stringify(problema)}`,
+    ).toBe(422);
+    expect(problema.type).toBe('https://nexusbattles.local/errores/heroe-no-equipado');
   });
 
   // ===================================================================

@@ -1,57 +1,71 @@
-# HU-CICD-002 (SCRUM-165): override de despliegue para services/cuentas/ms-ecommerce.
+# Override de despliegue de services/cuentas/ms-ecommerce.
 #
-# Mismo patron que docker-compose.cuentas.yml y docker-compose.ms-cumplimiento.yml
-# (tambien de Cuentas): solo declara "image:", nunca "build:" -- el jar se
-# compila y la imagen se publica en ghcr.io en el job "construir-y-publicar"
-# de cd.yml, nunca en el servidor. Se combina siempre con docker-compose.yml
-# (nunca solo), y SOLO cuando ms-ecommerce esta entre los servicios
-# modificados de esa corrida:
-#   docker compose -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.ms-ecommerce.yml pull|up -d
+# Mismo hueco que tenia ms-cumplimiento: declaraba el contenedor de la
+# aplicacion y nada mas -- sin base de datos, sin mem_limit, sin restart y sin
+# depends_on. El contenedor que quedo en el host de dev
+# (nexus-srv-ms-ecommerce-1) lleva dias en "Exited (1)" por eso mismo.
 #
-# Archivo separado por la misma razon que los otros dos overrides de
-# Cuentas: cada servicio de otro equipo mantiene el suyo, para que quede
-# claro quien es dueño de que.
+# Ahora sigue el patron de los demas servicios de Cuentas: solo "image:", su
+# propia base (regla 7) y su techo de memoria.
 #
-# Puerto: 8090 tanto en el host como en el contenedor (confirmado en el
-# Dockerfile de ms-ecommerce: EXPOSE 8090).
+# Puerto 8090 en el host y en el contenedor (EXPOSE 8090). OJO con la salud:
+# este servicio SI tiene context-path (/ecommerce), asi que su Actuator vive
+# en /ecommerce/actuator/health. Ya se dio por muerto un despliegue suyo por
+# copiar la ruta de un comentario en vez de mirar application.properties; el
+# catalogo lo declara y el guardian lo comprueba en cada pull request.
 #
-# ${TAG} lo exporta scripts/cd/desplegar.sh antes de invocar "docker compose"
-# (mismo sha corto de esta corrida que usan las demas imagenes).
-#
-# Variables de entorno: el lado IZQUIERDO de cada linea es el nombre que
-# Spring realmente lee (confirmado en application.properties de
-# ms-ecommerce: ${DB_HOST}, ${DB_PORT}, ${DB_NAME}, ${DB_USER},
-# ${DB_PASSWORD}). El lado DERECHO (${MS_ECOMMERCE_...}) es la variable que
-# desplegar.sh deja en el .env del servidor -- con el prefijo
-# "MS_ECOMMERCE_" a proposito, mismo criterio que MS_CUMPLIMIENTO_: no
-# choca con DB_USER/DB_PASS de plataforma ni con el DB_URL de ms-identidad.
-#
-# OJO context-path: application.properties de ms-ecommerce declara
-# server.servlet.context-path=/ecommerce (linea 2) -- a diferencia de
-# ms-identidad y ms-cumplimiento (que no tienen context-path), su
-# /actuator/health real queda en /ecommerce/actuator/health. Esto NO se
-# resuelve aqui (este archivo solo mapea variables de entorno de base de
-# datos): lo maneja scripts/cd/desplegar.sh, que elige la ruta de salud por
-# servicio.
-#
-# Este comentario decia /api/v1 y era falso; desplegar.sh se fio de el y
-# buscaba la salud donde no estaba, de modo que el despliegue habria dado
-# por muerto un servicio sano. Corregido en P3.2 y fijado por
-# ArranqueDeLaAplicacionIT de ms-ecommerce, que comprueba ambas rutas.
-#
-# Todas las variables quedan PENDIENTES por ahora (ver los secrets TODO_*
-# en cd.yml, mismo patron de placeholder que ms-identidad y ms-cumplimiento).
+# CAPACIDAD: servicios.json lo marca desplegableDev segun lo medido; ver
+# infrastructure/despliegue/CAPACIDAD.md.
 
 services:
+  ecommerce-db:
+    image: postgres:17-alpine
+    container_name: ecommerce-db
+    restart: unless-stopped
+    mem_limit: 128m
+    environment:
+      POSTGRES_DB: ${MS_ECOMMERCE_DB_NAME:-ecommerce_db}
+      POSTGRES_USER: ${MS_ECOMMERCE_DB_USER}
+      POSTGRES_PASSWORD: ${MS_ECOMMERCE_DB_PASSWORD}
+    volumes:
+      - ecommerce-db-datos:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MS_ECOMMERCE_DB_USER} -d ${MS_ECOMMERCE_DB_NAME:-ecommerce_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   srv-ms-ecommerce:
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-ms-ecommerce:${TAG}
+    container_name: srv-ms-ecommerce
+    restart: unless-stopped
+    mem_limit: 256m
     ports:
       - "8090:8090"
+    depends_on:
+      # ddl-auto=validate y Flyway con baseline: si la base no esta lista, el
+      # arranque falla en la validacion del esquema, no mas tarde.
+      ecommerce-db:
+        condition: service_healthy
     environment:
-      DB_HOST: ${MS_ECOMMERCE_DB_HOST}
-      DB_PORT: ${MS_ECOMMERCE_DB_PORT}
-      DB_NAME: ${MS_ECOMMERCE_DB_NAME}
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
+      DB_HOST: ${MS_ECOMMERCE_DB_HOST:-ecommerce-db}
+      DB_PORT: ${MS_ECOMMERCE_DB_PORT:-5432}
+      DB_NAME: ${MS_ECOMMERCE_DB_NAME:-ecommerce_db}
       DB_USER: ${MS_ECOMMERCE_DB_USER}
       DB_PASSWORD: ${MS_ECOMMERCE_DB_PASSWORD}
-      # Clave publica de los tokens de acceso (ADR-002), dentro de la red.
       IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://srv-ms-identidad:8089/api/v1/auth/jwks}
+      # R16 — el catalogo maestro que proyectan la vitrina y el carrito
+      # (servicio productos, GET /api/v1/productos y /{id}). No vive en este
+      # host sino en el de contenido, y se le llega por su IP elastica y su
+      # puerto publicado, igual que el borde (ver la seccion «Contenido» de
+      # infrastructure/red-balanceo/borde-dev.conf) y que PRODUCTOS_BASE_URL
+      # de srv-salas-partidas en docker-compose.deploy.yml. Sin la ruta
+      # /api/v1: la pone el servicio. Sobreescribible sin tocar este archivo.
+      PRODUCTOS_URL: ${PRODUCTOS_URL:-http://34.193.90.11:8103}
+      # Origen del borde, desde el que el navegador llama a la tienda (ConfiguracionCors).
+      # Sin el, «Añadir» (un POST con Origin) se rechazaba con 403 aunque el token fuera bueno.
+      CORS_ORIGENES: ${ECOMMERCE_CORS_ORIGENES:-http://35.168.124.119}
+
+volumes:
+  ecommerce-db-datos:

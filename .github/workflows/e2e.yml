@@ -10,10 +10,14 @@
 #
 # ## Por que existe
 #
-# El flujo de sala NO se puede demostrar en el host de dev (#435): la puerta
-# de heroe consulta a `inventario`, que no esta desplegado en AWS, y meterlo
-# en el `t3.small` no cabe (#430). Esto es lo que demuestra que el MVP
-# funciona de punta a punta.
+# Este banco es el unico sitio donde el corte vertical corre ENTERO en una
+# sola red, con la semilla y los servicios de los tres dominios que el flujo
+# necesita. En AWS la sala si funciona —`inventario` esta desplegado en el 8102
+# del host de contenido desde el 8-sep-2026, ver docs/arquitectura/README.md—,
+# pero alli NO esta `ms-finanzas`, que no cabe por capacidad (#430), asi que la
+# apuesta de creditos no se puede demostrar en el entorno desplegado. Aqui si:
+# esto es lo que demuestra que el MVP funciona de punta a punta, con la apuesta
+# liquidada en el libro real.
 name: E2E de aceptacion
 
 on:
@@ -84,6 +88,17 @@ jobs:
         working-directory: services/cuentas/ms-identidad
         run: ./mvnw -B -DskipTests package
 
+      # R16 — la tienda entra al banco (tienda.e2e.spec.js). Su `mvnw` esta en
+      # git SIN bit de ejecucion (100644, a diferencia del de ms-identidad), y
+      # un checkout de Linux lo respeta: sin el chmod el paso muere con
+      # «Permission denied» antes de compilar nada. Mismo arreglo que la rama
+      # Maven de ci.yml.
+      - name: Construir el jar de ms-ecommerce (Maven)
+        working-directory: services/cuentas/ms-ecommerce
+        run: |
+          chmod +x ./mvnw
+          ./mvnw -B -DskipTests package
+
       - name: Levantar el entorno
         run: docker compose -f tests/e2e/compose.yml up -d --build --wait
 
@@ -124,7 +139,7 @@ jobs:
       - name: Logs de los servicios si algo fallo
         if: failure()
         run: |
-          for s in srv-ms-identidad srv-ms-finanzas srv-ms-subastas srv-comentarios srv-heroes srv-productos srv-inventario \
+          for s in srv-ms-identidad srv-ms-finanzas srv-ms-subastas srv-ms-ecommerce srv-comentarios srv-heroes srv-productos srv-inventario \
                    srv-motor-combate srv-moderacion-sanciones srv-notificaciones srv-torneos srv-metricas-plataforma srv-admin-parametros srv-salas-partidas srv-borde; do
             echo "=============== $s ==============="
             # Primero la cabecera de las excepciones: con `--tail` a secas se

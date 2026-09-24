@@ -9,21 +9,21 @@ describe('estado vacio', () => {
   test('dice que falta y ofrece la accion que lo llena', () => {
     const alPulsar = jest.fn();
     const e = estadoVacio({
-      titulo: 'Todavia no hay ningun torneo',
-      detalle: 'Se abre uno cada 91 dias.',
+      titulo: 'Todavía no hay ningún torneo',
+      detalle: 'Se abre uno cada 91 días.',
       accion: { texto: 'Ver el reglamento', nombre: 'reglamento', alPulsar },
     });
 
     expect(e.dataset.estado).toBe('vacio');
     expect(e.getAttribute('role')).toBe('status');
-    expect(e.querySelector('.estado-vista__titulo').textContent).toMatch(/ningun torneo/);
+    expect(e.querySelector('.estado-vista__titulo').textContent).toMatch(/ningún torneo/);
     e.querySelector('[data-accion="reglamento"]').click();
     expect(alPulsar).toHaveBeenCalled();
   });
 
-  test('la accion puede ser un enlace, no siempre un boton', () => {
+  test('la acción puede ser un enlace, no siempre un botón', () => {
     const e = estadoVacio({
-      titulo: 'No tienes heroes',
+      titulo: 'No tienes héroes',
       accion: { texto: 'Ir a la tienda', href: '../cuentas/tienda.html' },
     });
 
@@ -81,7 +81,7 @@ describe('pintarEstado', () => {
     const caja = document.createElement('div');
     caja.append(document.createElement('p'));
 
-    pintarEstado(caja, estadoVacio({ titulo: 'Nada por aqui' }));
+    pintarEstado(caja, estadoVacio({ titulo: 'Nada por aquí' }));
 
     expect(caja.querySelectorAll('p')).toHaveLength(1);
     expect(caja.querySelector('.estado-vista')).not.toBeNull();

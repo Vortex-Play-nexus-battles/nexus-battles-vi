@@ -66,7 +66,7 @@ describe('publicarComentario', () => {
     expect(resultado).toEqual({ comentario, estado: ESTADO.PUBLICADO });
   });
 
-  test('distingue la retencion del filtro (202) de la publicacion', async () => {
+  test('distingue la retencion del filtro (202) de la publicación', async () => {
     const comentario = { id: 'c-2', estado: 'EN_REVISION', ...CUERPO };
     const fetchImpl = jest.fn(async () => respuesta(202, comentario));
 
@@ -75,7 +75,7 @@ describe('publicarComentario', () => {
     expect(resultado.estado).toBe(ESTADO.EN_REVISION);
   });
 
-  test('si el cuerpo no trae estado, lo deduce del codigo HTTP', async () => {
+  test('si el cuerpo no trae estado, lo deduce del código HTTP', async () => {
     const fetchImpl = jest.fn(async () => respuesta(202, { id: 'c-3' }));
 
     const resultado = await publicarComentario('prod-1', CUERPO, { fetchImpl });
@@ -88,7 +88,7 @@ describe('publicarComentario', () => {
       type: 'https://nexusbattles.local/errores/autor-silenciado',
       title: 'No puedes publicar',
       status: 403,
-      detail: 'Tienes una sancion de silencio activa.',
+      detail: 'Tienes una sanción de silencio activa.',
       motivo: 'AUTOR_SILENCIADO',
     };
     const fetchImpl = jest.fn(async () => respuesta(403, problema, 'application/problem+json'));
@@ -98,7 +98,7 @@ describe('publicarComentario', () => {
       estado: 403,
       motivo: MOTIVO.AUTOR_SILENCIADO,
       titulo: 'No puedes publicar',
-      detalle: 'Tienes una sancion de silencio activa.',
+      detalle: 'Tienes una sanción de silencio activa.',
       esDeFormulario: false,
     });
   });

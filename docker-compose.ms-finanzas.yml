@@ -1,0 +1,87 @@
+# Override de despliegue de services/cuentas/ms-finanzas (HU-PAG-002 #536,
+# HU-JUE-012 #470). Nace de #651 y se corrige aqui con lo que se midio despues.
+#
+# Mismo patron que los demas overrides de Cuentas: solo declara "image:", nunca
+# "build:". El jar se compila y la imagen se publica en ghcr.io en el job
+# "construir-y-publicar" de cd.yml, nunca en el servidor. Se combina siempre
+# con docker-compose.yml y docker-compose.deploy.yml, y solo cuando ms-finanzas
+# esta entre los servicios de la corrida (lo decide desplegar.sh leyendo
+# infrastructure/despliegue/servicios.json).
+#
+# Puerto 8093 en el host y en el contenedor (EXPOSE 8093 en su Dockerfile). Es
+# el que ya esperan borde-dev.conf (location ~ ^/api/v1/(creditos|transacciones)
+# y /api/v1/cofres) y las CREDITOS_URL de salas-partidas y torneos en
+# docker-compose.deploy.yml.
+#
+# CAPACIDAD: el 23-sep se dejo fuera de dev por memoria. Desde R16.5 todas las
+# JVM del host llevan el monton acotado y sin C2, y el presupuesto medido deja
+# sitio: servicios.json lo marca desplegableDev:true y mem_limit sube a 256m
+# (con 192m el techo quedaba por debajo de su no-monton mas el monton). Ver
+# infrastructure/despliegue/CAPACIDAD.md.
+
+services:
+  # Base de datos propia (regla 7, aislamiento de datos): no comparte servidor
+  # con plataforma-db ni con la de ningun otro servicio. Sin este bloque,
+  # MS_FINANZAS_DB_HOST no tendria a que apuntar.
+  finanzas-db:
+    image: postgres:17-alpine
+    container_name: finanzas-db
+    restart: unless-stopped
+    mem_limit: 128m
+    environment:
+      POSTGRES_DB: ${MS_FINANZAS_DB_NAME:-finanzas_db}
+      POSTGRES_USER: ${MS_FINANZAS_DB_USER}
+      POSTGRES_PASSWORD: ${MS_FINANZAS_DB_PASSWORD}
+    volumes:
+      - finanzas-db-datos:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MS_FINANZAS_DB_USER} -d ${MS_FINANZAS_DB_NAME:-finanzas_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  srv-ms-finanzas:
+    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-ms-finanzas:${TAG}
+    container_name: srv-ms-finanzas
+    restart: unless-stopped
+    mem_limit: 256m
+    ports:
+      - "8093:8093"
+    depends_on:
+      # Flyway corre en el arranque (spring.flyway.enabled=true, con
+      # create-schemas para el esquema "finanzas"): si Postgres todavia no
+      # acepta conexiones, el servicio no arranca y el healthcheck del
+      # despliegue lo da por muerto. Por eso se espera a que este sano, no
+      # solo a que el contenedor exista.
+      finanzas-db:
+        condition: service_healthy
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
+      # Credencial de servicio (ADR-005). desplegar.sh genera y persiste
+      # SECRETO_SERVICIO_MS_FINANZAS en el host y se la da a ms-identidad en
+      # AUTH_CLIENTES_SERVICIO; sin estas dos lineas el servicio pide el token
+      # con el client_id global, que no esta registrado, y se lo niegan.
+      # El emisor de ADR-005. Sin esta linea el servicio NO ARRANCA: la
+      # autoconfiguracion de credenciales se activa en cuanto
+      # DIRECTORIO_ACTIVO_CLIENT_ID no esta vacio, y entonces exige la URL
+      # ("Falta la URL del emisor (DIRECTORIO_ACTIVO_URL)"). Los servicios de
+      # plataforma la heredan del .env por `env_file:` del compose base; los
+      # de Cuentas NO estan en el compose base, asi que aqui hay que ponerla.
+      DIRECTORIO_ACTIVO_URL: ${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}
+      DIRECTORIO_ACTIVO_CLIENT_ID: ms-finanzas
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_MS_FINANZAS:-}
+      # El lado IZQUIERDO es el nombre que Spring lee de verdad (confirmado en
+      # application.properties de ms-finanzas). El DERECHO lo deja desplegar.sh
+      # en el .env del servidor, con prefijo MS_FINANZAS_ para no pisar ni las
+      # variables de plataforma (DB_USER/DB_PASS, de plataforma-db) ni las de
+      # ms-identidad (que usa DB_URL en vez de DB_HOST/PORT/NAME).
+      DB_HOST: ${MS_FINANZAS_DB_HOST:-finanzas-db}
+      DB_PORT: ${MS_FINANZAS_DB_PORT:-5432}
+      DB_NAME: ${MS_FINANZAS_DB_NAME:-finanzas_db}
+      DB_USER: ${MS_FINANZAS_DB_USER}
+      DB_PASSWORD: ${MS_FINANZAS_DB_PASSWORD}
+      # Clave publica de los tokens (ADR-002/ADR-005), dentro de la red.
+      IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://srv-ms-identidad:8089/api/v1/auth/jwks}
+
+volumes:
+  finanzas-db-datos:
