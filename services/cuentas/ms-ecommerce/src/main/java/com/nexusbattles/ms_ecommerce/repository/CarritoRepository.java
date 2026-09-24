@@ -9,4 +9,6 @@ import java.util.Optional;
 @Repository
 public interface CarritoRepository extends JpaRepository<Carrito, Long> {
     Optional<Carrito> findByUsuarioId(String usuarioId);
+    // Nuevo método requerido por CheckoutService (2 parámetros)
+    Optional<Carrito> findByIdAndUsuarioId(Long id, String usuarioId);
 }
