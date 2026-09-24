@@ -41,9 +41,28 @@ async function escribir(ruta, metodo, identidad, cuerpo, fetchImpl) {
   if (!respuesta.ok) {
     const fallo = new Error(`El servicio de inventario respondio ${respuesta.status} al guardar`);
     fallo.status = respuesta.status;
+    const detalle = await detalleDelProblema(respuesta);
+    if (detalle) {
+      fallo.detalle = detalle;
+    }
     throw fallo;
   }
   return respuesta.json();
+}
+
+/**
+ * El `detail` legible del problem detail (RFC 9457) que manda el servicio,
+ * p. ej. "El producto no existe en el catalogo."; undefined si no hay.
+ */
+async function detalleDelProblema(respuesta) {
+  try {
+    const problema = await respuesta.json();
+    return typeof problema?.detail === 'string' && problema.detail.trim() !== ''
+      ? problema.detail
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
