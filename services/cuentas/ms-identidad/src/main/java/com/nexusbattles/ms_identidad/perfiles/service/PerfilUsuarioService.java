@@ -10,6 +10,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.UUID;
+
 @Service
 public class PerfilUsuarioService {
 
@@ -44,6 +46,13 @@ public class PerfilUsuarioService {
     public PerfilUsuario obtenerPorUsuarioId(Long usuarioId) {
         return perfilUsuarioRepository.findByIdConUsuario(usuarioId)
             .orElseThrow(() -> new IllegalStateException("No existe perfil para el usuario " + usuarioId));
+    }
+
+    // HU-USR-001, por el identificador que conoce el navegador: el uid del token.
+    public PerfilUsuario obtenerPorIdentificadorPublico(UUID identificadorPublico) {
+        return perfilUsuarioRepository.findByIdentificadorPublicoConUsuario(identificadorPublico)
+            .orElseThrow(() -> new IllegalStateException(
+                "No existe perfil para el usuario " + identificadorPublico));
     }
 
     // HU-USR-001: modificar mi propio perfil (y opcionalmente el apodo y el avatar)
