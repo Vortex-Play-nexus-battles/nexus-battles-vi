@@ -586,19 +586,25 @@ jobs:
       # desplegar.sh comprueba si el servicio nuevo contesta, no si al subirlo
       # ha empujado a otro fuera de la RAM. El 24-sep eso costo el entorno
       # entero: ningun healthcheck fallo y aun asi hubo que reiniciar la EC2.
+      # R17.0: recibe la lista de la corrida. Solo los servicios que hoy no
+      # corren suman memoria; un reemplazo o una corrida de solo frontend pasa
+      # (la 35961416881 se quedo sin desplegar el logotipo de #712 por esto).
       - name: Compuerta de capacidad (antes)
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          SERVICIOS_PUERTOS: ${{ steps.lista.outputs.lista }}
         with:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
+          envs: SERVICIOS_PUERTOS
           script: |
             if [ ! -f /opt/nexus/scripts/cd/comprobar-capacidad.sh ]; then
               echo "::warning::comprobar-capacidad.sh todavia no esta en el host; se copia en este despliegue y sirve a partir del siguiente."
               exit 0
             fi
             chmod +x /opt/nexus/scripts/cd/comprobar-capacidad.sh
-            /opt/nexus/scripts/cd/comprobar-capacidad.sh antes
+            SERVICIOS_PUERTOS="$SERVICIOS_PUERTOS" /opt/nexus/scripts/cd/comprobar-capacidad.sh antes
 
       - name: Desplegar en Dev
         id: desplegar
@@ -743,18 +749,24 @@ jobs:
       # Si la compuerta de despues salta, se apaga lo que acaba de subir. Se
       # revierte el servicio nuevo, nunca el MVP: esa es la regla de
       # CAPACIDAD.md, y hasta ahora habia que aplicarla a mano por SSH.
+      # R17.0: "lo que acaba de subir" son solo los servicios que no corrian
+      # antes de esta corrida (los apunta la compuerta de antes en el host).
+      # Antes se apagaba toda la lista de la corrida, asi que un reemplazo de
+      # un servicio del MVP con poco margen lo habria dejado apagado.
       - name: Apagar lo recien desplegado si el host quedo sin margen
-        if: failure() && steps.capacidad_despues.outcome == 'failure' && inputs.servicios != ''
+        if: failure() && steps.capacidad_despues.outcome == 'failure'
         uses: appleboy/ssh-action@v1.0.3
-        env:
-          SERVICIOS_APAGAR: ${{ inputs.servicios }}
         with:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          envs: SERVICIOS_APAGAR
           script: |
-            echo "La compuerta de capacidad salto: se apaga lo que se acaba de desplegar."
+            SERVICIOS_APAGAR="$(cat /opt/nexus/capacidad-nuevos.txt 2>/dev/null || true)"
+            if [ -z "${SERVICIOS_APAGAR// /}" ]; then
+              echo "La corrida no arranco ningun servicio nuevo: no se apaga nada (un reemplazo no se apaga desde aqui)."
+              exit 0
+            fi
+            echo "La compuerta de capacidad salto: se apagan los servicios nuevos de esta corrida: $SERVICIOS_APAGAR"
             chmod +x /opt/nexus/scripts/cd/apagar.sh
             SERVICIOS_APAGAR="$SERVICIOS_APAGAR" /opt/nexus/scripts/cd/apagar.sh
             /opt/nexus/scripts/cd/comprobar-capacidad.sh despues || true
