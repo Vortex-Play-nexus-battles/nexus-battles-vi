@@ -46,10 +46,18 @@ class TokenCredencialServiceTest {
     private TokenCredencialService tokenCredencialService;
 
     private static final int HORAS_EXPIRACION = 24;
+    private static final int MINUTOS_RESTABLECIMIENTO = 30;
 
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(tokenCredencialService, "horasExpiracion", HORAS_EXPIRACION);
+        // R18: el restablecimiento ya no hereda las horas de la activacion.
+        // Un codigo que devuelve el control de una cuenta no puede valer un
+        // dia entero; la activacion si necesita margen y las conserva.
+        ReflectionTestUtils.setField(
+                tokenCredencialService,
+                "minutosExpiracionRestablecimiento",
+                MINUTOS_RESTABLECIMIENTO);
     }
 
     private Usuario usuarioDePrueba() {
@@ -174,7 +182,8 @@ class TokenCredencialServiceTest {
 
         CorreoRecuperacionClaveRequest correo = captor.getValue();
         assertEquals(usuario.getEmail(), correo.getEmail());
-        assertEquals(HORAS_EXPIRACION * 60, correo.getMinutosVigencia());
+        // RESTABLECIMIENTO tiene su propia vigencia desde R18.
+        assertEquals(MINUTOS_RESTABLECIMIENTO, correo.getMinutosVigencia());
     }
 
     // --- solicitarRestablecimiento ---

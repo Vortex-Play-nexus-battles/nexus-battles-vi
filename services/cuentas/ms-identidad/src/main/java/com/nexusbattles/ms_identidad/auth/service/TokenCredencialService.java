@@ -35,6 +35,22 @@ public class TokenCredencialService {
     @Value("${app.seguridad.horas-expiracion-token:24}")
     private int horasExpiracion;
 
+    /**
+     * Cuanto vale un codigo de restablecimiento, en minutos.
+     *
+     * <p>Separado de la activacion a proposito. Los dos usaban las mismas 24
+     * horas, y para un codigo que devuelve el control de una cuenta eso es
+     * mucho: un correo reenviado, una bandeja compartida o un portatil abierto
+     * durante un dia entero bastan. La activacion si necesita margen -- si el
+     * correo tarda, la cuenta no se puede usar -- asi que conserva sus horas.
+     *
+     * <p>RF-AUT-005 pide "vigencia limitada" y no fija cual: el documento lo
+     * deja [POR DEFINIR]. Treinta minutos es un valor PROVISIONAL, puesto
+     * donde el PO pueda cambiarlo sin tocar codigo.
+     */
+    @Value("${app.seguridad.minutos-expiracion-restablecimiento:30}")
+    private int minutosExpiracionRestablecimiento;
+
     @Autowired
     private TokenCredencialRepository tokenCredencialRepository;
 
@@ -70,7 +86,7 @@ public class TokenCredencialService {
     @Transactional
     public void generarYRegistrarToken(Usuario usuario, String tipo) {
         String token = generarCodigoUnico();
-        LocalDateTime expiracion = LocalDateTime.now().plusHours(horasExpiracion);
+        LocalDateTime expiracion = LocalDateTime.now().plusMinutes(minutosDeVigencia(tipo));
 
         tokenCredencialRepository.save(new TokenCredencial(usuario, token, tipo, expiracion));
 
@@ -100,8 +116,15 @@ public class TokenCredencialService {
         return codigo;
     }
 
+    /** El restablecimiento vence antes que la activacion: ver el campo. */
+    private int minutosDeVigencia(String tipo) {
+        return "RESTABLECIMIENTO".equals(tipo)
+                ? minutosExpiracionRestablecimiento
+                : horasExpiracion * 60;
+    }
+
     private void enviarCorreoSegunTipo(Usuario usuario, String tipo, String token) {
-        int minutosVigencia = horasExpiracion * 60;
+        int minutosVigencia = minutosDeVigencia(tipo);
 
         if ("RESTABLECIMIENTO".equals(tipo)) {
             correoClient.enviarRecuperacionClave(new CorreoRecuperacionClaveRequest(
