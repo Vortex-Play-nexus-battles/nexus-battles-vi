@@ -55,6 +55,14 @@ services:
       DB_USER: ${MS_ECOMMERCE_DB_USER}
       DB_PASSWORD: ${MS_ECOMMERCE_DB_PASSWORD}
       IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://srv-ms-identidad:8089/api/v1/auth/jwks}
+      # R16 — el catalogo maestro que proyectan la vitrina y el carrito
+      # (servicio productos, GET /api/v1/productos y /{id}). No vive en este
+      # host sino en el de contenido, y se le llega por su IP elastica y su
+      # puerto publicado, igual que el borde (ver la seccion «Contenido» de
+      # infrastructure/red-balanceo/borde-dev.conf) y que PRODUCTOS_BASE_URL
+      # de srv-salas-partidas en docker-compose.deploy.yml. Sin la ruta
+      # /api/v1: la pone el servicio. Sobreescribible sin tocar este archivo.
+      PRODUCTOS_URL: ${PRODUCTOS_URL:-http://34.193.90.11:8103}
 
 volumes:
   ecommerce-db-datos:
