@@ -279,7 +279,188 @@ function escenarioDeCombate(id, titulo, { partida, mensajes = [], exige }) {
   };
 }
 
+/* ---------------------------------------------------------------------------
+   Torneo — UX-GAME-5. `Torneo`, `Equipo` y `Encuentro` de torneos.yaml: ocho
+   equipos, catorce encuentros (1-6 y 11 ganadores, 7-10, 12 y 13 secundarios,
+   14 final), en curso con la primera ronda jugada.
+   ------------------------------------------------------------------------- */
+const ID_TORNEO = 'fffffff1-1111-4111-8111-111111111111';
+const NOMBRES_DE_EQUIPO = [
+  'Lobos del Alba',
+  'Centinelas',
+  'Brasa Negra',
+  'Hijos del Nexo',
+  'Vanguardia',
+  'Eco de Hierro',
+  'Máquina 7',
+  'Máquina 8',
+];
+const EQUIPOS = NOMBRES_DE_EQUIPO.map((nombre, i) => ({
+  id: `eeeeeee${i + 1}-1111-4111-8111-11111111111${i + 1}`,
+  torneoId: ID_TORNEO,
+  nombre,
+  avatar: 'escudo',
+  ia: i >= 6,
+  capitanUid: i >= 6 ? null : `aaaaaaa${i + 1}-1111-4111-8111-111111111111`,
+  integrantes: i >= 6 ? [] : [`aaaaaaa${i + 1}-1111-4111-8111-111111111111`],
+  inscrito: true,
+  pagadoPor: null,
+  reservaId: null,
+  posicion: i + 1,
+  derrotas: [1, 3, 5, 7].includes(i + 1) ? 0 : 1,
+  eliminado: false,
+}));
+const E = (i) => EQUIPOS[i - 1].id;
+
+function encuentro(numero, llave, ronda, a, b, ganador, estado) {
+  return {
+    numero,
+    llave,
+    ronda,
+    equipoA: a,
+    equipoB: b,
+    ganador,
+    partidaId: ganador
+      ? `dddddd${String(numero).padStart(2, '0')}-1111-4111-8111-111111111111`
+      : null,
+    estado,
+    registradoPor: ganador ? 'salas-partidas' : null,
+    motivo: null,
+  };
+}
+
+export function torneoEnCurso() {
+  return {
+    id: ID_TORNEO,
+    nombre: 'Copa del Nexo',
+    estado: 'EN_CURSO',
+    creadoEn: new Date(Date.now() - 5 * 86_400_000).toISOString(),
+    inscripcionesCierranEn: new Date(Date.now() - 86_400_000).toISOString(),
+    costoInscripcion: 200,
+    equiposInscritos: 8,
+    cupos: 8,
+    campeonEquipoId: null,
+    creadoPor: 'aaaaaaa9-1111-4111-8111-111111111111',
+    iniciadoEn: new Date(Date.now() - 3600_000).toISOString(),
+    finalizadoEn: null,
+    motivoCancelacion: null,
+    equipos: EQUIPOS,
+    encuentros: [
+      encuentro(1, 'GANADORES', 1, E(1), E(2), E(1), 'JUGADO'),
+      encuentro(2, 'GANADORES', 1, E(3), E(4), E(3), 'JUGADO'),
+      encuentro(3, 'GANADORES', 1, E(5), E(6), E(5), 'JUGADO'),
+      encuentro(4, 'GANADORES', 1, E(7), E(8), E(7), 'JUGADO'),
+      encuentro(5, 'GANADORES', 2, E(1), E(3), null, 'LISTO'),
+      encuentro(6, 'GANADORES', 2, E(5), E(7), null, 'LISTO'),
+      encuentro(7, 'SECUNDARIOS', 1, E(2), E(4), null, 'LISTO'),
+      encuentro(8, 'SECUNDARIOS', 1, E(6), E(8), null, 'LISTO'),
+      encuentro(9, 'SECUNDARIOS', 2, null, null, null, 'PENDIENTE'),
+      encuentro(10, 'SECUNDARIOS', 2, null, null, null, 'PENDIENTE'),
+      encuentro(11, 'GANADORES', 3, null, null, null, 'PENDIENTE'),
+      encuentro(12, 'SECUNDARIOS', 3, null, null, null, 'PENDIENTE'),
+      encuentro(13, 'SECUNDARIOS', 4, null, null, null, 'PENDIENTE'),
+      encuentro(14, 'FINAL', 5, null, null, null, 'PENDIENTE'),
+    ],
+  };
+}
+
+function transaccion(i, cambios = {}) {
+  return {
+    id: `11111111-1111-4111-8111-${String(i).padStart(12, '0')}`,
+    refId: `ref-${1000 + i}`,
+    monto: 18500,
+    moneda: 'COP',
+    concepto: 'Compra en tienda · Yelmo del Alba',
+    resultado: 'APROBADO',
+    comprobanteUrl: null,
+    creado: new Date(Date.now() - i * 86_400_000).toISOString(),
+    ...cambios,
+  };
+}
+
 export const ESCENARIOS = [
+  {
+    // UX-GAME-5 — el árbol de doble eliminación con la primera ronda jugada.
+    id: 'torneo-en-curso',
+    titulo: 'torneo en curso con el árbol de doble eliminación',
+    ruta: `plataforma/torneos/torneos.html?torneo=${ID_TORNEO}`,
+    sesion: () => sesionDe('qa_torneo', 'JUGADOR'),
+    rutas: [
+      ['**/api/v1/torneos', json([torneoEnCurso()])],
+      [`**/api/v1/torneos/${ID_TORNEO}`, json(torneoEnCurso())],
+      [`**/api/v1/torneos/${ID_TORNEO}/equipos`, json(EQUIPOS)],
+    ],
+    exige: ['.encuentro', '.encuentro__equipo--ganador', '.encuentro--finalizado'],
+  },
+  {
+    // UX-GAME-5 — finanzas: el historial con aprobadas, rechazada e
+    // indeterminada (`ResumenTransaccion` de transacciones.yaml).
+    id: 'historial-con-movimientos',
+    titulo: 'historial de transacciones con tres resultados',
+    ruta: 'cuentas/historial-transacciones.html',
+    sesion: () => sesionDe('qa_finanzas', 'JUGADOR'),
+    rutas: [
+      [
+        '**/api/v1/transacciones/mi-historial*',
+        json({
+          content: [
+            transaccion(1),
+            transaccion(2, {
+              concepto: 'Compra de créditos · paquete 500',
+              monto: 25000,
+              resultado: 'RECHAZADO',
+            }),
+            transaccion(3, {
+              concepto: 'Compra de créditos · paquete 1000',
+              monto: 45000,
+              resultado: 'INDETERMINADO',
+            }),
+            transaccion(4, { concepto: 'Compra en tienda · Amuleto de Brasa', monto: 16000 }),
+          ],
+          number: 0,
+          totalPages: 3,
+          totalElements: 52,
+        }),
+      ],
+    ],
+    exige: ['.tabla, table', '[data-resultado], .estado-aprobado, .sello-estado, .badge'],
+  },
+  {
+    // UX-GAME-5 — cofres ganados (forma con la que responde hoy ms-finanzas,
+    // `ResumenCofre`; sin contrato publicado, ver creditos.yaml).
+    id: 'cofres-ganados',
+    titulo: 'mis cofres con tres cofres entregados',
+    ruta: 'cuentas/mis-cofres.html',
+    sesion: () => sesionDe('qa_cofres', 'JUGADOR'),
+    rutas: [
+      [
+        '**/api/v1/cofres/mios*',
+        json({
+          content: [
+            {
+              id: '22222222-1111-4111-8111-000000000001',
+              contenido: 'ARMA_RARA',
+              entregadoEn: new Date(Date.now() - 86_400_000).toISOString(),
+            },
+            {
+              id: '22222222-1111-4111-8111-000000000002',
+              contenido: 'CREDITOS_50',
+              entregadoEn: new Date(Date.now() - 3 * 86_400_000).toISOString(),
+            },
+            {
+              id: '22222222-1111-4111-8111-000000000003',
+              contenido: 'ARMADURA_EPICA',
+              entregadoEn: new Date(Date.now() - 9 * 86_400_000).toISOString(),
+            },
+          ],
+          number: 0,
+          totalPages: 1,
+          totalElements: 3,
+        }),
+      ],
+    ],
+    exige: ['.cofre-tarjeta'],
+  },
   {
     // UX-GAME-4 — la sala de espera (lobby) del anfitrion: ocupacion, codigo
     // de invitacion y el boton de arrancar. `Sala` de salas-partidas.yaml.

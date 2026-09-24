@@ -2346,7 +2346,9 @@ button.tarjeta--partida:disabled {
 
 .encuentro__cabecera {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
+  gap: var(--e-1) var(--e-3);
   padding: var(--e-2) var(--e-3);
   background: var(--fondo);
   font-family: var(--t-meta-familia);
@@ -2374,10 +2376,17 @@ button.tarjeta--partida:disabled {
   border-top: 1px solid var(--borde);
 }
 
-/* El ganador no se distingue solo por color: cambia el peso del texto. */
+/* El ganador no se distingue solo por color: cambia el peso del texto y lleva
+   el acento lateral azul (UX-GAME-5), que se ve igual sin color. */
 .encuentro__equipo--ganador {
   font-weight: var(--t-cuerpo-peso-enfasis);
   color: var(--texto);
+  box-shadow: inset 3px 0 0 var(--primaria);
+  background: color-mix(in srgb, var(--primaria) 6%, var(--superficie));
+}
+
+.encuentro--en-curso {
+  box-shadow: var(--sombra-1), var(--brillo-primaria);
 }
 
 .encuentro__equipo--ganador .encuentro__marcador {
@@ -4380,6 +4389,21 @@ button.tarjeta--partida:disabled {
   align-items: flex-start;
   overflow-x: auto;
   padding-bottom: var(--e-2);
+}
+
+/* Los equipos del torneo, en rejilla (UX-GAME-5). */
+.torneo__equipos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--e-3);
+}
+
+.torneo__equipos .tarjeta {
+  padding: var(--e-3) var(--e-4);
+}
+
+.torneo__equipos .tarjeta[data-ia='true'] {
+  border-style: dashed;
 }
 
 .arbol-torneo__ronda {
