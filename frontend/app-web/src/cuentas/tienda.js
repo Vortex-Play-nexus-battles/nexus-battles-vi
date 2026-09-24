@@ -282,7 +282,9 @@ function pasaLuhn(digitos) {
     let d = Number(digitos[i]);
     if (doblar) {
       d *= 2;
-      if (d > 9) d -= 9;
+      if (d > 9) {
+        d -= 9;
+      }
     }
     suma += d;
     doblar = !doblar;
@@ -305,11 +307,15 @@ function leerVencimiento(texto) {
     anio = m[2].length === 2 ? 2000 + Number(m[2]) : Number(m[2]);
   } else {
     m = valor.match(/^(\d{4})-(\d{2})$/);
-    if (!m) return null;
+    if (!m) {
+      return null;
+    }
     anio = Number(m[1]);
     mes = Number(m[2]);
   }
-  if (mes < 1 || mes > 12) return null;
+  if (mes < 1 || mes > 12) {
+    return null;
+  }
   return { mes, anio };
 }
 
@@ -424,8 +430,12 @@ function mostrarResultado(mensaje, resultado, texto) {
  * `{ aprobado: boolean }` o `{ estado: 'APROBADO' | 'RECHAZADO' }`.
  */
 function pagoAprobado(resultado) {
-  if (resultado?.aprobado === false) return false;
-  if (typeof resultado?.estado === 'string' && /RECHAZ/i.test(resultado.estado)) return false;
+  if (resultado?.aprobado === false) {
+    return false;
+  }
+  if (typeof resultado?.estado === 'string' && /RECHAZ/i.test(resultado.estado)) {
+    return false;
+  }
   return true;
 }
 

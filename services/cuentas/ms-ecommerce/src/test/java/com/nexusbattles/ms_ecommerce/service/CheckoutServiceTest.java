@@ -81,7 +81,14 @@ class CheckoutServiceTest {
         return new ArrayList<>(List.of(new Object()));
     }
 
-    /** Respuesta de error de ms-finanzas con el estado HTTP dado (-1 = sin red). */
+    /**
+     * Respuesta de error de ms-finanzas con el estado HTTP dado (-1 = sin red).
+     *
+     * <p>Hay que llamarla ANTES de {@code when(...).thenThrow(...)} y guardar el
+     * resultado en una variable: por dentro hace su propio {@code when}, y
+     * anidar un stub dentro de otro hace que Mockito falle con
+     * {@code UnfinishedStubbingException}.
+     */
     private static FeignException respuestaDeFinanzas(int estado) {
         FeignException error = mock(FeignException.class);
         when(error.status()).thenReturn(estado);
@@ -132,7 +139,8 @@ class CheckoutServiceTest {
     void rechazoNoTocaElCarrito(int estado) {
         List<Object> items = unItem();
         Carrito carrito = carritoCon(items);
-        when(finanzasClient.procesarPago(any())).thenThrow(respuestaDeFinanzas(estado));
+        FeignException rechazo = respuestaDeFinanzas(estado);
+        when(finanzasClient.procesarPago(any())).thenThrow(rechazo);
 
         ResultadoCompra resultado = servicio.ejecutarCompra(UID, request);
 
@@ -148,7 +156,8 @@ class CheckoutServiceTest {
     void pasarelaNoDisponible(int estado) {
         List<Object> items = unItem();
         carritoCon(items);
-        when(finanzasClient.procesarPago(any())).thenThrow(respuestaDeFinanzas(estado));
+        FeignException caida = respuestaDeFinanzas(estado);
+        when(finanzasClient.procesarPago(any())).thenThrow(caida);
 
         assertThatThrownBy(() -> servicio.ejecutarCompra(UID, request))
             .isInstanceOf(PasarelaNoDisponibleException.class)
