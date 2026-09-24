@@ -1,0 +1,105 @@
+# Canarios del jugador (R16): las cinco pantallas que mostraban error en AWS.
+#
+# ## Por que existe
+#
+# El 23-sep-2026 CI, E2E y smoke estaban en verde y, a la vez, «Mi cuenta»,
+# el historial, los cofres, la tienda y el carrito mostraban «el servicio no
+# responde» a un jugador con sesion valida. Ninguna suite abria las pantallas
+# de un jugador contra el entorno desplegado. Esta si.
+#
+# ## Por que no bloquea (todavia)
+#
+# Nace documentando fallos que R16 esta corrigiendo. Si bloqueara, pondria en
+# rojo cada despliegue por algo ya conocido y taparia los fallos nuevos. Corre
+# despues de cada CD y a demanda, deja el informe y un resumen con cada
+# peticion y su estado. Cuando este en verde se une al smoke y pasa a bloquear.
+name: Canarios del jugador
+
+on:
+  workflow_run:
+    workflows: ["CD - Distribucion continua"]
+    types: [completed]
+    branches: [develop]
+  workflow_dispatch:
+
+concurrency:
+  group: canarios-jugador
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  canarios:
+    name: Pantallas del jugador en AWS
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/app-web/package-lock.json
+
+      - name: Instalar dependencias y el navegador
+        working-directory: frontend/app-web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Enlazar node_modules en la raiz para las pruebas de tests/
+        run: ln -sfn frontend/app-web/node_modules node_modules
+
+      - name: Esperar a que el borde responda
+        run: |
+          for i in $(seq 1 40); do
+            if curl -fsS --max-time 5 "http://${{ secrets.DEPLOY_HOST_DEV }}/salud-borde" | grep -q UP; then
+              echo "El borde responde en el intento $i."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::El borde no respondio en 400 s."
+          exit 1
+
+      - name: Canarios
+        id: canarios
+        working-directory: frontend/app-web
+        env:
+          E2E_AWS: http://${{ secrets.DEPLOY_HOST_DEV }}
+        run: |
+          set -o pipefail
+          npx playwright test --config=playwright.canarios.config.js 2>&1 | tee canarios.log
+
+      # La evidencia que pide R16.28: cada peticion de cada pantalla con su
+      # estado, en el resumen de la corrida. Sale siempre, verde o rojo.
+      - name: Resumen de peticiones
+        if: always()
+        working-directory: frontend/app-web
+        run: |
+          {
+            echo "## Canarios del jugador — peticiones /api/v1 por pantalla"
+            echo
+            echo "| Pantalla | Metodo | Ruta | Estado |"
+            echo "|---|---|---|--:|"
+            grep -o 'CANARIO|.*' canarios.log 2>/dev/null | sort -u | \
+              awk -F'|' '{ marca = ($5 >= 500) ? " **✗**" : ""; printf "| %s | %s | `%s` | %s%s |\n", $2, $3, $4, $5, marca }'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Guardar el informe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: informe-canarios-jugador
+          path: |
+            frontend/app-web/playwright-report/**
+            frontend/app-web/test-results/**
+          retention-days: 14
+          if-no-files-found: ignore
