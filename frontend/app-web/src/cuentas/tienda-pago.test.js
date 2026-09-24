@@ -16,7 +16,9 @@ describe('validarTarjeta — HU-CAR-010', () => {
   });
 
   test('rechaza un número que no pasa Luhn', () => {
-    expect(validarTarjeta({ ...VALIDA, numero: '4111 1111 1111 1112' }, HOY)).toHaveProperty('numero');
+    expect(validarTarjeta({ ...VALIDA, numero: '4111 1111 1111 1112' }, HOY)).toHaveProperty(
+      'numero',
+    );
   });
 
   test('rechaza un número con letras o demasiado corto', () => {
@@ -35,7 +37,9 @@ describe('validarTarjeta — HU-CAR-010', () => {
   });
 
   test('rechaza un mes imposible y acepta el formato de input month', () => {
-    expect(validarTarjeta({ ...VALIDA, fechaExpiracion: '13/27' }, HOY)).toHaveProperty('fechaExpiracion');
+    expect(validarTarjeta({ ...VALIDA, fechaExpiracion: '13/27' }, HOY)).toHaveProperty(
+      'fechaExpiracion',
+    );
     expect(validarTarjeta({ ...VALIDA, fechaExpiracion: '2027-01' }, HOY)).toEqual({});
   });
 

@@ -349,9 +349,7 @@ describe('resumen y pago — HU-CAR-010', () => {
   });
 
   test('rechazo con estado HTTP (422) se presenta como rechazo, no como falla de red', async () => {
-    globalThis.fetch.mockRejectedValueOnce(
-      Object.assign(new Error('rechazado'), { estado: 422 }),
-    );
+    globalThis.fetch.mockRejectedValueOnce(Object.assign(new Error('rechazado'), { estado: 422 }));
     const caja = abrir();
 
     await pagarCon(caja);
