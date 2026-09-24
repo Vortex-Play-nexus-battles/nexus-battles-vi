@@ -116,6 +116,14 @@ export const MATRIZ = Object.freeze({
     acceso: ACCESO.PUBLICA,
     armazon: 'publico',
   },
+  // R17 — la pantalla que ve una cuenta recién creada mientras el servidor le
+  // prepara los créditos y el héroe. Pide sesión (es el alta de ESTA cuenta),
+  // pero todavía es portal: aún no hay juego al que navegar.
+  preparando: {
+    ruta: 'cuentas/preparando.html',
+    acceso: ACCESO.SESION,
+    armazon: 'publico',
+  },
 
   // --- Vitrinas que un visitante puede mirar -------------------------------
   // RF-INV-008 da «Visitante» como actor: el listado de subastas y el cuadro

@@ -54,6 +54,7 @@ import {
 } from './acceso.js';
 import { cerrarSesion, leerSesion, resolver, RUTAS } from './sesion.js';
 import { h } from './ui/dom.js';
+import { vigilarSesion } from './vigilante-sesion.js';
 
 const BASE_RUTAS = import.meta.url;
 
@@ -331,10 +332,23 @@ function alternarNavegacion(cabecera, base) {
  * en el registro y en la recuperación, «Iniciar sesión». Ofrecer las dos
  * siempre significa que una de ellas lleva a la pantalla en la que ya estás.
  *
+ * R17 — «Preparando tu cuenta» también es portal (todavía no hay juego que
+ * navegar), pero quien la ve ya entró: lo que se le ofrece es salir.
+ *
  * @param {HTMLElement} raiz
- * @param {{vista?: string, base?: string}} [opciones]
+ * @param {{vista?: string, base?: string, almacen?: Storage, navegar?: (url: string) => void}} [opciones]
  */
-export function montarArmazonPublico(raiz, { vista = 'login', base = BASE_RUTAS } = {}) {
+export function montarArmazonPublico(
+  raiz,
+  {
+    vista = 'login',
+    base = BASE_RUTAS,
+    almacen = globalThis.sessionStorage,
+    navegar = (url) => {
+      globalThis.location.href = url;
+    },
+  } = {},
+) {
   const cabecera = h('header', { clase: 'cabecera cabecera--portal' });
   cabecera.dataset.cabeceraApp = '';
   cabecera.dataset.armazon = 'publico';
@@ -345,7 +359,16 @@ export function montarArmazonPublico(raiz, { vista = 'login', base = BASE_RUTAS 
 
   const acciones = h('div', { clase: 'cabecera__acciones' });
   const zona = h('div', { clase: 'cabecera__sesion', datos: { zona: 'sesion' } });
-  if (vista === 'login') {
+  if (vista === 'preparando') {
+    const salir = h('button', {
+      clase: 'boton boton--secundario boton--pequeno',
+      texto: 'Cerrar sesión',
+      atributos: { type: 'button' },
+      datos: { zona: 'cerrar-sesion' },
+    });
+    salir.addEventListener('click', () => cerrarSesion({ almacen, navegar, base }));
+    zona.append(salir);
+  } else if (vista === 'login') {
     zona.append(
       h('span', { clase: 'cabecera__invitacion', texto: '¿Primera vez en el Nexo?' }),
       enlace(
@@ -664,10 +687,15 @@ export function montarArmazonAdmin(
  * dice, `MATRIZ`. Una vista de trastienda abierta por alguien sin rol no
  * llega hasta aquí: `exigirAcceso` la ha parado antes.
  *
+ * R17 — con sesión, además, deja puesto el vigilante (`vigilante-sesion.js`):
+ * caducidad, rechazo del token, cierre en otra pestaña y la vuelta desde la
+ * caché de páginas. Así ninguna vista tiene que acordarse de hacerlo.
+ *
  * @param {HTMLElement} raiz contenedor; se recomienda `<div data-cabecera-app>`
  * @param {object} [opciones]
  * @param {string|null} [opciones.vista] clave de `MATRIZ` — de dónde sale todo
  * @param {'publico'|'jugador'|'admin'} [opciones.armazon] fuerza uno
+ * @param {(opciones: object) => unknown} [opciones.vigilar] inyectable en pruebas
  * @returns {{elemento: HTMLElement, sesion: object|null}}
  */
 export function montarArmazon(
@@ -684,6 +712,7 @@ export function montarArmazon(
       globalThis.location.href = url;
     },
     documento = globalThis.document,
+    vigilar = vigilarSesion,
   } = {},
 ) {
   // Página interrumpida por una guarda (§17): no se monta nada encima.
@@ -701,8 +730,12 @@ export function montarArmazon(
   const sesion = leerSesion(almacen, ahora);
   const elegido = armazon ?? armazonDeVista(vista) ?? (sesion.autenticado ? 'jugador' : 'publico');
 
+  if (sesion.autenticado) {
+    vigilar({ almacen, ahora, documento });
+  }
+
   if (elegido === 'publico') {
-    return montarArmazonPublico(raiz, { vista: vista ?? 'login', base });
+    return montarArmazonPublico(raiz, { vista: vista ?? 'login', base, almacen, navegar });
   }
   if (elegido === 'admin') {
     return montarArmazonAdmin(raiz, { seccionActiva, sesion, base, almacen, navegar });

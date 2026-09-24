@@ -72,6 +72,10 @@
           <p class="t-meta">Usa el correo con el que creaste tu cuenta.</p>
         </div>
 
+        <!-- Por qué se llega aquí (sesión terminada, cerrada, cuenta recién
+             creada). Lo rellena `login.js` a partir de `?motivo=`. -->
+        <p class="aviso" id="avisoMotivo" hidden role="status"></p>
+
         <!-- Estado global de la operación: cargando, rechazo del servicio. -->
         <p class="estado" id="estadoLogin" hidden role="status"></p>
         <div id="avisoDispositivo" hidden></div>

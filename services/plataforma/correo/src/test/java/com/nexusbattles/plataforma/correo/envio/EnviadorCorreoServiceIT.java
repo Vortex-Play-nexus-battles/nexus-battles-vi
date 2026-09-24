@@ -48,6 +48,9 @@ class EnviadorCorreoServiceIT {
     @Autowired
     private EnviadorCorreoService enviadorCorreoService;
 
+    @Autowired
+    private RegistroDeEnvios registro;
+
     /**
      * Cada prueba parte de una bandeja vacia: la primera cuenta mensajes
      * ("messages_count":1) y no debe depender del orden en que corran.
@@ -119,6 +122,50 @@ class EnviadorCorreoServiceIT {
                 .as("sobre la plantilla corporativa, con el logo incrustado")
                 .contains("THE NEXUS BATTLES VI")
                 .contains("cid:logo-nexus");
+    }
+
+    /**
+     * Las tres cosas que hacen que un proveedor real acepte el mensaje y que
+     * un filtro no lo mande a correo no deseado: remitente explicito, las dos
+     * versiones del cuerpo, y un identificador con el que rastrearlo.
+     *
+     * <p>Hasta R18 no habia ninguna: el mensaje salia sin From (lo ponia el
+     * servidor), solo en HTML, y sin forma de saber que habia pasado con el.
+     */
+    @Test
+    void elCorreoSaleConRemitenteConLasDosVersionesYQuedaRegistrado() throws Exception {
+        enviadorCorreoService.enviar(
+                "rastreo@nexusbattles.test",
+                "Asunto rastreable",
+                "email/plantilla-prueba",
+                Map.of("mensaje", "Texto que tiene que estar tambien en plano"));
+
+        String bandeja = obtener("/api/v1/search?query=" + java.net.URLEncoder.encode(
+                "to:rastreo@nexusbattles.test", java.nio.charset.StandardCharsets.UTF_8));
+        String id = bandeja.split("\"ID\":\"")[1].split("\"")[0];
+        String mensaje = obtener("/api/v1/message/" + id);
+
+        assertThat(mensaje)
+                .as("el From debe ser el configurado, no el que decida el servidor")
+                .contains("no-reply@nexusbattles.local");
+        assertThat(obtener("/api/v1/message/" + id + "/raw"))
+                .as("el mensaje viaja con las dos versiones del cuerpo")
+                .contains("multipart/alternative")
+                .contains("text/plain");
+        assertThat(mensaje)
+                .as("el texto del correo debe leerse tambien sin HTML")
+                .contains("Texto que tiene que estar tambien en plano");
+
+        EnvioRegistrado anotado = registro.ultimos(1).get(0);
+        assertThat(anotado.estado()).isEqualTo(EnvioRegistrado.ACEPTADO);
+        assertThat(anotado.plantilla()).isEqualTo("email/plantilla-prueba");
+        assertThat(anotado.identificador())
+                .as("sin Message-ID no se puede cruzar este envio con el proveedor")
+                .isNotBlank();
+        assertThat(anotado.destinatario())
+                .as("el registro no puede guardar la direccion completa")
+                .doesNotContain("rastreo")
+                .endsWith("@nexusbattles.test");
     }
 
     private static String obtener(String ruta) throws Exception {

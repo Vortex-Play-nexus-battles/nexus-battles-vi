@@ -230,3 +230,41 @@ jobs:
                 | grep -viE 'DEBUG|TRACE' | tail -8 | cut -c1-220 || true)
               if [ -n "$errores" ]; then echo "$errores" | sed 's/^/     /'; else echo "     (sin errores en la ultima hora)"; fi
             done
+
+      # R17 — ms-identidad deja ddl-auto=update y pasa a Flyway + validate. Antes
+      # de desplegarlo hay que saber como es DE VERDAD el esquema que Hibernate
+      # fue creando en DEV, para probar la migracion contra el y no contra lo que
+      # uno supone. Solo estructura: tablas, columnas, tipos y restricciones, y
+      # un recuento de filas por tabla. Ni una fila de datos, ni un valor.
+      - name: Esquema de ms-identidad (solo estructura)
+        if: inputs.ambiente == 'dev'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          command_timeout: 2m
+          script: |
+            echo "============== ESQUEMA DE ms-identidad (sin datos) =========="
+            if ! sudo docker ps --format '{{.Names}}' | grep -qx identidad-db; then
+              echo "  identidad-db no esta en marcha"
+              exit 0
+            fi
+            sudo docker exec identidad-db sh -c 'pg_dump --schema-only --no-owner --no-privileges -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+              | grep -vE '^(--|SET |SELECT pg_catalog)' | cat -s
+            echo
+            echo "  historial de Flyway (vacio antes de R17):"
+            sudo docker exec identidad-db sh -c 'psql -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT version, type, success FROM flyway_schema_history ORDER BY installed_rank"' 2>&1 | sed 's/^/    /'
+            echo "  filas por tabla (solo el recuento):"
+            sudo docker exec identidad-db sh -c 'psql -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT relname, n_live_tup FROM pg_stat_user_tables ORDER BY relname"' 2>&1 | sed 's/^/    /'
+            # R17 — como va el alta de los jugadores nuevos, en agregados: cuantas
+            # altas hay en cada estado y, por paso, cuantos hechos, pendientes o
+            # con error, con la CAUSA del ultimo error (el prefijo que escribe
+            # PasoFallido: SERVICIO_NO_DISPONIBLE, CONFIGURACION_INCOMPLETA...).
+            # Ni un uid, ni un correo, ni un apodo: solo recuentos y causas.
+            if sudo docker exec identidad-db sh -c 'psql -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT to_regclass('"'"'onboarding_jugador'"'"')"' | grep -q onboarding_jugador; then
+              echo "  altas por estado:"
+              sudo docker exec identidad-db sh -c 'psql -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT estado, count(*), max(intentos) FROM onboarding_jugador GROUP BY estado ORDER BY estado"' 2>&1 | sed 's/^/    /'
+              echo "  pasos por estado (con la causa del ultimo error):"
+              sudo docker exec identidad-db sh -c 'psql -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT paso, estado, count(*), coalesce(split_part(max(ultimo_error), '"'"':'"'"', 1), '"'"'-'"'"') FROM onboarding_paso GROUP BY paso, estado ORDER BY paso, estado"' 2>&1 | sed 's/^/    /'
+            fi
