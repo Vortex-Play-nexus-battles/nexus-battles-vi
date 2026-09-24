@@ -19,4 +19,8 @@ public interface VersionBaseConocimientoRepository extends JpaRepository<Version
 
     @Query("select coalesce(max(v.numero), 0) from VersionBaseConocimiento v")
     int buscarNumeroMaximo();
+
+    // HU-CHA-012 (revertir): la retirada que estuvo en produccion justo antes
+    // de la actual es la que entro a produccion mas recientemente.
+    Optional<VersionBaseConocimiento> findFirstByEstadoOrderByFechaDespliegueDesc(EstadoVersion estado);
 }

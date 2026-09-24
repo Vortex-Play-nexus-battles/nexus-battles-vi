@@ -18,6 +18,10 @@ import java.util.UUID;
 // HU-CHA-012 (RF-CHA-014): una version de la base de conocimiento. Es el
 // "modelo" del chatbot: un motor de reglas no se entrena, pero si se
 // versiona, se evalua antes de desplegarse y se puede revertir.
+//
+// Ciclo de vida:
+//   BORRADOR  --ponerEnProduccion-->  PRODUCCION  --retirar-->  RETIRADA
+//   RETIRADA  --ponerEnProduccion-->  PRODUCCION   (revertir)
 @Entity
 @Table(name = "versiones_base_conocimiento")
 @Getter
@@ -41,6 +45,9 @@ public class VersionBaseConocimiento {
     @Column(name = "fecha_creacion", nullable = false)
     private Instant fechaCreacion;
 
+    // Ultima vez que esta version ENTRO a produccion (al desplegarse o al
+    // restaurarse con una reversion). Revertir usa esta fecha para saber cual
+    // retirada estuvo en produccion justo antes de la actual.
     @Column(name = "fecha_despliegue")
     private Instant fechaDespliegue;
 
@@ -53,5 +60,24 @@ public class VersionBaseConocimiento {
         version.descripcion = descripcion;
         version.fechaCreacion = Instant.now();
         return version;
+    }
+
+    // Desplegar una candidata o restaurar una retirada.
+    public void ponerEnProduccion(Instant ahora) {
+        if (estado == EstadoVersion.PRODUCCION) {
+            throw new IllegalStateException("La version " + numero + " ya esta en produccion.");
+        }
+        estado = EstadoVersion.PRODUCCION;
+        fechaDespliegue = ahora;
+    }
+
+    // Sacar de produccion la version vigente. Sus temas se conservan para
+    // poder revertir a ella despues.
+    public void retirar() {
+        if (estado != EstadoVersion.PRODUCCION) {
+            throw new IllegalStateException(
+                "Solo se retira la version en produccion; la " + numero + " esta en " + estado + ".");
+        }
+        estado = EstadoVersion.RETIRADA;
     }
 }
