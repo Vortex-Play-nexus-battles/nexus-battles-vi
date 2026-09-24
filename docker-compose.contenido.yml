@@ -160,6 +160,8 @@ services:
       # hasta que esa coleccion emita contra ms-identidad. El servicio prefiere
       # IDENTIDAD_JWKS_URL cuando existe.
       KEYCLOAK_JWK_SET_URI: ${KEYCLOAK_JWK_SET_URI:-http://jwks-dev/certs.json}
+      # Siembra al arrancar los productos de las reglas que falten (nunca pisa los existentes); false la apaga.
+      CATALOGO_SEMILLA: ${CATALOGO_SEMILLA:-true}
     depends_on:
       contenido-mongo:
         condition: service_healthy
