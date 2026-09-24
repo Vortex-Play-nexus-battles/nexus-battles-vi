@@ -107,7 +107,7 @@ jobs:
               case "$s" in srv-borde) continue ;; srv-*) ;; *) continue ;; esac
               case "$s" in
                 srv-ms-identidad) limite=448m ;;
-                srv-ms-finanzas) limite=192m ;;
+                srv-ms-finanzas) limite=256m ;;
                 srv-ms-subastas) limite=256m ;;
                 *) limite=384m ;;
               esac
