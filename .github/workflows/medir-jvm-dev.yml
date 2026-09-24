@@ -1,28 +1,24 @@
-# Montón real de cada JVM en el host de dev (R16.5).
+# Memoria real de cada contenedor en el host de dev, SWAP incluido (R16.5).
 #
 # ## Por que existe
 #
-# `docker stats` dice cuanta RAM usa cada contenedor, pero no por que. En el
-# host de plataforma las JVM corren con `-XX:MaxRAMPercentage=70` sobre un
-# techo de 384 MiB: el montón puede crecer hasta ~269 MiB y, sin presion, la
-# JVM no tiene motivo para devolver nada. `medir-memoria-servicios.yml` ya lo
-# vio en un runner: el reposo sale IGUAL al techo, sea cual sea el techo.
+# `docker stats` dice cuanta RAM usa cada contenedor y no dice nada del swap.
+# En el host de plataforma hay ~1,4 GB en swap: lo que `docker stats` muestra
+# es solo la parte residente, y esconde cuanto ocupa de verdad cada servicio.
+# Para decidir cuanto se le puede quitar a cada JVM hace falta el total.
 #
-# Para decidir cuanto montón necesita de verdad cada servicio hace falta el
-# dato que ningun diagnostico mide: **cuanto ocupa lo vivo despues de un GC
-# completo**. Este workflow lo mide en el host real, contenedor por
-# contenedor, sin tocar ninguna configuracion:
+# Este workflow lo lee de donde lo lleva el nucleo, sin preguntarle a nadie:
+# el cgroup de cada contenedor (`memory.current` y `memory.swap.current`). Y
+# para las JVM con `jcmd`, el montón comprometido y su techo.
 #
-#   1. RSS del contenedor antes (docker stats);
-#   2. `jcmd GC.run` -> un GC completo (pausa de milisegundos);
-#   3. montón usado/comprometido y metaspace tras el GC (`jcmd GC.heap_info`);
-#   4. techo de montón con el que arranco (`jcmd VM.flags`);
-#   5. RSS del contenedor despues.
+# ## Lo que NO hace, a proposito
 #
-# La diferencia entre (1) y (5) es memoria que la JVM tenia retenida sin
-# necesitarla; (3) es lo que de verdad hay que dejarle.
-#
-# No cambia nada del despliegue. Solo mira.
+# La primera version forzaba un GC completo en cada JVM (`jcmd GC.run`) para
+# medir lo vivo. En un host con 1,4 GB en swap eso obliga al nucleo a traer
+# de vuelta el montón entero de cada servicio, uno detras de otro: la corrida
+# del 24-sep 01:16 UTC se quedo atascada nueve minutos y el borde dejo de
+# responder mientras tanto (coincidio ademas con dos despliegues). Esta
+# version solo LEE: cgroup y `GC.heap_info`, que no recorre el montón.
 name: Medir el montón de las JVM en dev
 
 on:
@@ -33,71 +29,58 @@ permissions:
 
 jobs:
   medir:
-    name: Montón vivo por servicio en el host de plataforma
+    name: Memoria y swap por contenedor en el host de plataforma
     runs-on: ubuntu-latest
     environment: dev
-    timeout-minutes: 10
+    timeout-minutes: 8
     steps:
-      - name: Medir por SSH
+      - name: Medir por SSH (solo lectura)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          command_timeout: 6m
+          command_timeout: 4m
           script: |
             set -u
-            echo "============== MEMORIA DEL HOST ANTES =============="
+            echo "============== MEMORIA DEL HOST =============="
             free -m
-            swapon --show 2>/dev/null || true
             echo
-            printf '%-28s %10s %10s %12s %14s %12s %18s\n' \
-              CONTENEDOR RSS_ANTES RSS_DESPUES HEAP_MAX HEAP_VIVO HEAP_COMPR METASPACE_USO/COMPR
-            for c in $(sudo docker ps --format '{{.Names}}' | grep '^srv-' | sort); do
-              # Solo contenedores con JVM y con jcmd (imagenes JDK). Las JRE no
-              # lo traen: se dice, no se inventa.
-              if ! sudo docker exec "$c" sh -c 'command -v jcmd >/dev/null 2>&1'; then
-                printf '%-28s %s\n' "$c" "(sin jcmd en la imagen: no se puede medir por dentro)"
+            echo "============== POR CONTENEDOR (MiB) =============="
+            echo "RAM y SWAP salen del cgroup del contenedor: son del nucleo, no estimaciones."
+            printf '%-28s %7s %7s %8s %9s %10s %10s\n' CONTENEDOR RAM SWAP TOTAL LIMITE HEAP_COMPR HEAP_MAX
+            total_ram=0; total_swap=0
+            for c in $(sudo docker ps --format '{{.Names}}' | sort); do
+              id=$(sudo docker inspect -f '{{.Id}}' "$c")
+              base=""
+              for d in "/sys/fs/cgroup/system.slice/docker-$id.scope" "/sys/fs/cgroup/docker/$id"; do
+                [ -r "$d/memory.current" ] && base="$d" && break
+              done
+              if [ -z "$base" ]; then
+                printf '%-28s %s\n' "$c" "(no encuentro su cgroup v2)"
                 continue
               fi
-              # jcmd tiene que correr con el mismo usuario que la JVM.
-              uidjvm=$(sudo docker exec "$c" sh -c 'stat -c %u /proc/1 2>/dev/null || echo 0')
-              j() { sudo docker exec -u "$uidjvm" "$c" jcmd 1 "$@" 2>/dev/null; }
+              ram=$(( $(cat "$base/memory.current") / 1048576 ))
+              swap=0; [ -r "$base/memory.swap.current" ] && swap=$(( $(cat "$base/memory.swap.current") / 1048576 ))
+              lim=$(cat "$base/memory.max"); [ "$lim" != "max" ] && lim=$(( lim / 1048576 ))
+              total_ram=$(( total_ram + ram )); total_swap=$(( total_swap + swap ))
 
-              antes=$(sudo docker stats --no-stream --format '{{.MemUsage}}' "$c" | awk '{print $1}')
-              j GC.run >/dev/null
-              sleep 2
-              info=$(j GC.heap_info)
-              flags=$(j VM.flags)
-              despues=$(sudo docker stats --no-stream --format '{{.MemUsage}}' "$c" | awk '{print $1}')
-
-              # Montón: suma de "total" (comprometido) y "used" (vivo) de las
-              # generaciones (Serial/Parallel) o de la línea de G1.
-              heap=$(echo "$info" | awk '
-                /generation|garbage-first heap/ {
-                  for (i = 1; i <= NF; i++) {
-                    if ($i == "total") { t += $(i+1)+0 }
-                    if ($i == "used")  { u += $(i+1)+0 }
-                  }
-                }
-                END { printf "%d %d", u/1024, t/1024 }')
-              vivo=$(echo "$heap" | awk '{print $1}')
-              compr=$(echo "$heap" | awk '{print $2}')
-              meta=$(echo "$info" | awk '/^ *Metaspace/ {
-                for (i = 1; i <= NF; i++) {
-                  if ($i == "used") u = $(i+1)+0
-                  if ($i == "committed,") c = $(i+1)+0
-                  if ($i == "committed") c = $(i+1)+0
-                }
-              } END { printf "%d/%d", u/1024, c/1024 }')
-              max=$(echo "$flags" | tr ' ' '\n' | awk -F= '/MaxHeapSize=/ {printf "%d", $2/1048576}')
-
-              printf '%-28s %10s %10s %10sMi %12sMi %10sMi %16sMi\n' \
-                "$c" "$antes" "$despues" "${max:-?}" "${vivo:-?}" "${compr:-?}" "${meta:-?}"
+              compr="-"; max="-"
+              case "$c" in srv-*)
+                if sudo docker exec "$c" sh -c 'command -v jcmd >/dev/null 2>&1'; then
+                  uidjvm=$(sudo docker exec "$c" sh -c 'stat -c %u /proc/1 2>/dev/null || echo 0')
+                  # GC.heap_info no recorre el montón: solo lee contadores.
+                  info=$(timeout 20 sudo docker exec -u "$uidjvm" "$c" jcmd 1 GC.heap_info 2>/dev/null || true)
+                  flags=$(timeout 20 sudo docker exec -u "$uidjvm" "$c" jcmd 1 VM.flags 2>/dev/null || true)
+                  compr=$(echo "$info" | awk '/generation|garbage-first heap/ { for (i=1;i<=NF;i++) if ($i=="total") t+=$(i+1)+0 } END { if (t) printf "%d", t/1024; else printf "-" }')
+                  max=$(echo "$flags" | tr ' ' '\n' | awk -F= '/MaxHeapSize=/ { printf "%d", $2/1048576 }')
+                fi
+              ;; esac
+              printf '%-28s %7s %7s %8s %9s %10s %10s\n' "$c" "$ram" "$swap" "$(( ram + swap ))" "$lim" "$compr" "${max:--}"
             done
             echo
-            echo "============== MEMORIA DEL HOST DESPUES =============="
-            free -m
+            echo "Suma de contenedores: RAM=${total_ram} MiB  SWAP=${total_swap} MiB  TOTAL=$(( total_ram + total_swap )) MiB"
             echo
-            echo "Lectura: HEAP_VIVO es lo que hay que dejarle a cada servicio (con margen)."
-            echo "La diferencia RSS_ANTES -> RSS_DESPUES es memoria retenida sin necesitarla."
+            echo "Lectura: TOTAL es lo que ocupa de verdad cada servicio. HEAP_COMPR frente a HEAP_MAX"
+            echo "dice cuanto ha crecido el montón respecto a su techo: si esta cerca, el servicio"
+            echo "podria necesitarlo; si esta muy por debajo, el techo sobra."
