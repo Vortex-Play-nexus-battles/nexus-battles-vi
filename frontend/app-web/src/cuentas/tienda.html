@@ -1,104 +1,92 @@
 <!doctype html>
 <html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Nexus Battles VI - Tienda</title>
-    <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
-    <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
-    <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
-    <link rel="stylesheet" href="./tema-cuentas.css" />
-    <link rel="stylesheet" href="tienda.css" />
-  </head>
-  <body>
-    <!-- Barra de navegación compartida. Reemplaza el <header class="navbar"> del
-     mockup Figma con enlaces hardcoded (href="#") por el mismo patrón que
-     usan auditoria, perfil, gestion-usuarios y crear-cuenta-admin: un solo
-     componente vivo con búsqueda, secciones y panel de cuenta, servido desde
-     src/comun/barra-navegacion.js. Cambio pedido por Santiago para unificar
-     la navegación del dominio cuentas en la misma barra que todos usan. -->
-    <div id="navbar-container"></div>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nexus Battles VI - Tienda</title>
+  <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
+  <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
+  <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
+  <link rel="stylesheet" href="./tema-cuentas.css" />
+  <link rel="stylesheet" href="tienda.css" />
+</head>
+<body>
+<!-- Barra de navegación compartida. Reemplaza el <header class="navbar"> del
+ mockup Figma con enlaces hardcoded (href="#") por el mismo patrón que
+ usan auditoria, perfil, gestion-usuarios y crear-cuenta-admin: un solo
+ componente vivo con búsqueda, secciones y panel de cuenta, servido desde
+ src/comun/barra-navegacion.js. Cambio pedido por Santiago para unificar
+ la navegación del dominio cuentas en la misma barra que todos usan. -->
+<div id="navbar-container"></div>
 
-    <script type="module">
-      import { montarCabecera } from '../comun/cabecera-app.js';
-      import { exigirAcceso } from '../comun/acceso.js';
+<script type="module">
+  import { montarCabecera, exigirSesion } from '../comun/cabecera-app.js';
 
-      if (!exigirAcceso('tienda')) {
-        throw new Error('sin sesion: redirigiendo al login');
-      }
-      // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
-      montarCabecera(document.getElementById('navbar-container'), {
-        vista: 'tienda',
-        seccionActiva: 'cuenta',
-      });
-    </script>
+  if (!exigirSesion()) {
+    throw new Error('sin sesion: redirigiendo al login');
+  }
+  // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
+  montarCabecera(document.getElementById('navbar-container'), { seccionActiva: 'cuenta' });
+</script>
 
-    <main class="main-container">
-      <!-- Columna de Productos -->
-      <section class="store-section">
-        <div class="store-header">
-          <h1>Tienda</h1>
-          <p>Paga con moneda local (COP) usando tus métodos registrados.</p>
+<main class="main-container">
+  <!-- Columna de Productos -->
+  <section class="store-section">
+    <div class="store-header">
+      <h2>Tienda</h2>
+      <p>Paga con moneda local (COP) usando tus métodos registrados.</p>
+    </div>
+
+    <!-- El contenedor donde JS inyectará las tarjetas -->
+    <div id="productos-grid" class="products-grid">
+      <!-- Cargando productos... -->
+    </div>
+  </section>
+
+  <!-- Columna del Carrito -->
+  <aside class="cart-section">
+    <div class="cart-card">
+      <h3>Tu carro</h3>
+
+      <div id="cart-items" class="cart-items-container">
+        <!-- JS inyectará los items del carrito aquí -->
+        <p class="t-meta">Tu carrito está vacío</p>
+      </div>
+
+      <div class="cart-summary">
+        <div class="summary-row">
+          <span>Subtotal</span>
+          <span id="cart-subtotal">0 COP</span>
         </div>
-
-        <!-- El contenedor donde JS inyectará las tarjetas -->
-        <div id="productos-grid" class="products-grid">
-          <!-- Cargando productos... -->
+        <div class="summary-row total-row">
+          <span>Total a pagar</span>
+          <span id="cart-total" class="total-price">0 COP</span>
         </div>
-      </section>
+      </div>
 
-      <!-- Columna del Carrito -->
-      <aside class="cart-section">
-        <div class="cart-card">
-          <h3>Tu carro</h3>
+      <!-- Mensaje de advertencia replicado del Figma -->
+      <div id="warning-msg" class="warning-box hidden">
+        No te alcanzan los fondos en tu cuenta principal. Revisa tu billetera o quita algo del
+        carro.
+      </div>
 
-          <div id="cart-items" class="cart-items-container">
-            <!-- JS inyectará los items del carrito aquí -->
-            <p class="t-meta">Tu carrito está vacío</p>
-          </div>
+      <!--
+        HU-CAR-010: abre el diálogo de resumen y pago. El diálogo no está
+        en este HTML: lo construye tienda.js con abrirDialogo() y campo()
+        del kit, así que sus clases y su foco son los del kit y los datos
+        de la tarjeta desaparecen de la página al cerrarlo.
+      -->
+      <button id="btn-pagar" class="btn-pagar" disabled>PAGAR</button>
+    </div>
+  </aside>
+</main>
 
-          <div class="cart-summary">
-            <div class="summary-row">
-              <span>Subtotal</span>
-              <!-- Sin carrito cargado todavia no se sabe el importe: «—» y no
-                   «0 COP», que afirmaria que el carrito esta vacio. -->
-              <span id="cart-subtotal">—</span>
-            </div>
-            <div class="summary-row total-row">
-              <span>Total a pagar</span>
-              <span id="cart-total" class="total-price">—</span>
-            </div>
-          </div>
-
-          <!-- Mensaje de advertencia replicado del Figma -->
-          <div id="warning-msg" class="warning-box hidden">
-            No te alcanzan los fondos en tu cuenta principal. Revisa tu billetera o quita algo del
-            carro.
-          </div>
-
-          <!--
-            FI-R2 — el boton nace deshabilitado y se queda asi, con el motivo
-            escrito al lado. RF-CAR-010 y RF-PAG-001 estan confirmados, pero su
-            implementacion es de Grupo de Santiago y todavia no existe:
-            `CarritoController` no tiene ninguna ruta de pago. Antes el boton se
-            encendia en cuanto el carrito tenia algo y no tenia manejador
-            ninguno — pulsarlo no hacia nada.
-          -->
-          <button id="btn-pagar" class="btn-pagar" disabled>Pagar</button>
-          <p id="aviso-pago-pendiente" class="aviso-pago">
-            El pago todavía no está disponible. Tu carrito queda guardado y podrás terminar la
-            compra cuando se habilite.
-          </p>
-        </div>
-      </aside>
-    </main>
-
-    <!--
-  type="module" desde P3.1: el archivo importa el interceptor
-  compartido, la base de la API y la identidad de la sesion. Los
-  botones ya no usan onclick -no funcionaria en un modulo-: la
-  escucha esta delegada en la rejilla.
+<!--
+type="module" desde P3.1: el archivo importa el interceptor
+compartido, la base de la API y la identidad de la sesion. Los
+botones ya no usan onclick -no funcionaria en un modulo-: la
+escucha esta delegada en la rejilla.
 -->
-    <script type="module" src="tienda.js"></script>
-  </body>
+<script type="module" src="tienda.js"></script>
+</body>
 </html>

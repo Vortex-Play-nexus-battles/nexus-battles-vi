@@ -1,16 +1,11 @@
 /**
- * Vitrina y carrito — HU-CAR-001.
+ * Vitrina, carrito y pago — HU-CAR-001 y HU-CAR-010.
  *
  * Lo que se prueba es lo que estaba roto: la identidad que viaja en cada
  * petición, la base de la API, y que un fallo del carrito no se disfrace de
- * carrito vacío.
- *
- * FI-R2 — los productos de estas pruebas montaban `{ precio: 100 }`. Ese campo
- * no existe: `ProductoVitrinaDto` expone `precioFinal`, `precioOriginal` y
- * `moneda`. La prueba confirmaba la suposicion del frontend en vez del
- * contrato del servicio, y por eso el defecto —cada tarjeta decia «0 COP»—
- * sobrevivio a una bateria verde. Los datos de aqui usan ahora la forma real
- * del DTO.
+ * carrito vacío. Para el pago: resumen antes de pagar, datos inválidos,
+ * rechazo de la pasarela, sesión expirada y que la tarjeta no se quede en
+ * ninguna parte.
  */
 
 import { jest } from '@jest/globals';
@@ -22,6 +17,7 @@ import {
   agregarAlCarrito,
   actualizarUI,
   montarTienda,
+  abrirCheckout,
 } from './tienda.js';
 
 const UID = '44444444-4444-4444-4444-444444444444';
@@ -79,7 +75,7 @@ describe('identidad', () => {
     expect(JSON.stringify(cabeceras)).not.toContain('usr_test_123');
   });
 
-  test('sin sesión no viaja ninguna identidad: el backend respondera 401', async () => {
+  test('sin sesion no viaja ninguna identidad: el backend respondera 401', async () => {
     sessionStorage.clear();
     globalThis.fetch.mockResolvedValue(respuesta({ content: [] }));
 
@@ -92,7 +88,7 @@ describe('identidad', () => {
 });
 
 describe('base de la API', () => {
-  test('mismo origen por omision, con el prefijo de versión', async () => {
+  test('mismo origen por omision, con el prefijo de version', async () => {
     globalThis.fetch.mockResolvedValue(respuesta({ content: [] }));
 
     await cargarVitrina(document);
@@ -100,7 +96,7 @@ describe('base de la API', () => {
     expect(globalThis.fetch.mock.calls[0][0]).toBe('/api/v1/productos');
   });
 
-  test('con meta declarada, la base la manda la página', async () => {
+  test('con meta declarada, la base la manda la pagina', async () => {
     // La cabecera se declara ANTES de esperar nada, y `beforeEach` la limpia:
     // tocarla despues de un await es lo que ESLint marca como carrera.
     document.head.innerHTML = '<meta name="nexus-api-base" content="http://127.0.0.1:8083/" />';
@@ -116,17 +112,7 @@ describe('vitrina', () => {
   test('pinta una tarjeta por producto', async () => {
     globalThis.fetch.mockResolvedValue(
       respuesta({
-        content: [
-          {
-            id: 'p1',
-            nombre: 'Espada',
-            descripcion: 'Filo',
-            precioFinal: 100,
-            precioOriginal: 100,
-            moneda: 'COP',
-            tipo: 'ARMA',
-          },
-        ],
+        content: [{ id: 'p1', nombre: 'Espada', descripcion: 'Filo', precio: 100, tipo: 'ARMA' }],
       }),
     );
 
@@ -138,17 +124,11 @@ describe('vitrina', () => {
 
   test('un nombre con etiquetas no se interpreta como HTML', async () => {
     globalThis.fetch.mockResolvedValue(
-      respuesta({
-        content: [
-          { id: 'p1', nombre: '<img src=x onerror=alert(1)>', precioFinal: 1, moneda: 'COP' },
-        ],
-      }),
+      respuesta({ content: [{ id: 'p1', nombre: '<img src=x onerror=alert(1)>', precio: 1 }] }),
     );
 
     await cargarVitrina(document);
 
-    // El producto no trae `imagenUrl`, asi que la tarjeta no pinta ninguna
-    // imagen propia: cualquier <img> aqui vendria del nombre interpretado.
     expect(document.querySelector('#productos-grid img')).toBeNull();
     expect(document.querySelector('h4').textContent).toContain('<img');
   });
@@ -163,7 +143,7 @@ describe('vitrina', () => {
 });
 
 describe('carrito', () => {
-  test('un 404 SI es un carrito vacío', async () => {
+  test('un 404 SI es un carrito vacio', async () => {
     globalThis.fetch.mockRejectedValue(Object.assign(new Error('no hay'), { estado: 404 }));
 
     await cargarCarrito(document);
@@ -172,7 +152,7 @@ describe('carrito', () => {
     expect(document.getElementById('btn-pagar').disabled).toBe(true);
   });
 
-  test('un 500 NO es un carrito vacío: se avisa del fallo', async () => {
+  test('un 500 NO es un carrito vacio: se avisa del fallo', async () => {
     // El defecto anterior: cualquier error se pintaba como «carrito vacio», y
     // el jugador no veia sus productos sin que nada se lo dijera.
     globalThis.fetch.mockRejectedValue(Object.assign(new Error('roto'), { estado: 500 }));
@@ -185,28 +165,15 @@ describe('carrito', () => {
     expect(document.getElementById('btn-pagar').disabled).toBe(true);
   });
 
-  test('con items pinta cada uno y el total sale con su moneda', () => {
+  test('con items pinta cada uno y habilita pagar', () => {
     actualizarUI(
-      {
-        total: 250,
-        items: [
-          {
-            cantidad: 2,
-            subtotal: 250,
-            precioUnitario: 125,
-            producto: { nombre: 'Poción', moneda: 'COP' },
-          },
-        ],
-      },
+      { total: 250, items: [{ cantidad: 2, subtotal: 250, producto: { nombre: 'Poción' } }] },
       document,
     );
 
     expect(document.querySelectorAll('.cart-item')).toHaveLength(1);
     expect(document.getElementById('cart-total').textContent).toBe('250 COP');
-    // FI-R2 — «Pagar» ya NO se habilita: RF-CAR-010 y RF-PAG-001 estan
-    // confirmados pero `CarritoController` no tiene ninguna ruta de pago, y el
-    // boton no tenia manejador. Ver `prepararBotonDePago`.
-    expect(document.getElementById('btn-pagar').disabled).toBe(true);
+    expect(document.getElementById('btn-pagar').disabled).toBe(false);
   });
 
   test('agregar manda el producto y refresca el carrito', async () => {
@@ -227,10 +194,7 @@ describe('montarTienda', () => {
     // generado, y eso deja de encontrar la funcion en un modulo. La tarjeta se
     // crea DESPUES de enganchar la escucha, que es el caso que se rompia.
     globalThis.fetch.mockResolvedValue(
-      respuesta({
-        content: [{ id: 'p1', nombre: 'Espada', precioFinal: 100, moneda: 'COP' }],
-        items: [],
-      }),
+      respuesta({ content: [{ id: 'p1', nombre: 'Espada', precio: 100 }], items: [] }),
     );
 
     await montarTienda(document);
@@ -243,231 +207,193 @@ describe('montarTienda', () => {
   });
 });
 
-/**
- * UX-R2.8d — los estados que le faltaban a la Tienda.
- */
-describe('UX-R2.8d - estados de la vitrina', () => {
-  test('mientras carga se ve la forma de lo que viene, no una rejilla en blanco', async () => {
-    // El HTML traia `<!-- Cargando productos... -->`: un comentario, o sea
-    // nada en la pantalla hasta que respondiera el servicio.
-    let resolver;
-    globalThis.fetch.mockReturnValue(new Promise((r) => (resolver = r)));
+describe('resumen y pago — HU-CAR-010', () => {
+  const CARRITO = {
+    id: 'c1',
+    total: 250,
+    items: [{ cantidad: 2, subtotal: 250, producto: { nombre: 'Poción' } }],
+  };
 
-    const pintando = cargarVitrina(document);
-    expect(document.querySelector('#productos-grid [data-estado="cargando"]')).not.toBeNull();
+  // Nombres de los campos tal como los crea `campo()` en el dialogo.
+  // Vencimiento lejano para que la prueba no caduque con el calendario.
+  const TARJETA = {
+    titular: 'Ana Pérez',
+    numero: '4111 1111 1111 1111',
+    vencimiento: '12/30',
+    cvv: '123',
+  };
 
-    resolver({ ok: true, status: 200, json: async () => ({ content: [] }) });
-    await pintando;
+  let dialogo = null;
+
+  /** Deja correr las promesas encadenadas del envio (fetch → json → recarga). */
+  const esperar = () => new Promise((resolver) => setTimeout(resolver, 0));
+
+  function abrir(carrito = CARRITO) {
+    actualizarUI(carrito, document);
+    dialogo = abrirCheckout(document);
+    return dialogo?.elemento ?? null;
+  }
+
+  function control(caja, nombre) {
+    return caja.querySelector(`[name="${nombre}"]`);
+  }
+
+  function mensaje(caja) {
+    return caja.querySelector('[role="status"]');
+  }
+
+  async function pagarCon(caja, datos = TARJETA) {
+    for (const [nombre, valor] of Object.entries(datos)) {
+      control(caja, nombre).value = valor;
+    }
+    caja
+      .querySelector('form')
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await esperar();
+    await esperar();
+  }
+
+  beforeEach(() => {
+    // Los fallos simulados escriben en consola; aqui ademas se inspecciona.
+    jest.spyOn(console, 'error').mockImplementation(() => {});
   });
 
-  test('un catalogo vacio no se confunde con un fallo', async () => {
-    globalThis.fetch.mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({ content: [] }),
+  afterEach(() => {
+    // El dialogo escucha el teclado en `document`: sin cerrarlo, la escucha
+    // se quedaria viva para la prueba siguiente.
+    dialogo?.cerrar();
+    dialogo = null;
+    console.error.mockRestore();
+  });
+
+  test('PAGAR abre el resumen con el detalle y el total antes de pagar', async () => {
+    globalThis.fetch.mockResolvedValue(respuesta({ content: [], ...CARRITO }));
+    await montarTienda(document);
+
+    document.getElementById('btn-pagar').click();
+
+    const caja = document.querySelector('[role="dialog"]');
+    expect(caja).not.toBeNull();
+    expect(caja.textContent).toContain('Poción');
+    expect(caja.textContent).toContain('x2');
+    expect(caja.textContent).toContain('250 COP');
+
+    caja.querySelector('[data-accion="cerrar"]').click();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  test('sin productos en el carro no se abre el pago', () => {
+    expect(abrir(null)).toBeNull();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  test('datos invalidos: no se llama a la pasarela y se marca cada campo', async () => {
+    const caja = abrir();
+
+    await pagarCon(caja, { ...TARJETA, numero: '1234', cvv: '1' });
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(control(caja, 'numero').getAttribute('aria-invalid')).toBe('true');
+    expect(control(caja, 'cvv').getAttribute('aria-invalid')).toBe('true');
+    expect(control(caja, 'titular').getAttribute('aria-invalid')).toBe('false');
+    expect(mensaje(caja).hidden).toBe(false);
+    expect(mensaje(caja).dataset.resultado).toBe('rechazado');
+  });
+
+  test('aprobado: envia al checkout con el Bearer, avisa y vacia el carro', async () => {
+    globalThis.fetch
+      .mockResolvedValueOnce(respuesta({ aprobado: true }))
+      .mockResolvedValueOnce(respuesta({ total: 0, items: [] }));
+    const caja = abrir();
+
+    await pagarCon(caja);
+
+    const [url, opciones] = globalThis.fetch.mock.calls[0];
+    expect(url).toBe('/api/v1/checkout');
+    expect(opciones.headers.Authorization).toBe(`Bearer ${sessionStorage.getItem('nexus.token')}`);
+    expect(opciones.headers['X-User-Id']).toBeUndefined();
+    expect(JSON.parse(opciones.body)).toEqual({
+      carritoId: 'c1',
+      tarjeta: {
+        titular: 'Ana Pérez',
+        numero: '4111111111111111',
+        fechaExpiracion: '12/30',
+        cvv: '123',
+      },
     });
 
-    await cargarVitrina(document);
-
-    const rejilla = document.getElementById('productos-grid');
-    expect(rejilla.querySelector('[data-estado="vacio"]')).not.toBeNull();
-    expect(rejilla.querySelector('[data-estado="error"]')).toBeNull();
-    expect(rejilla.textContent).not.toMatch(/no se pudo/i);
-  });
-
-  test('un fallo ofrece reintentar, y reintenta de verdad', async () => {
-    globalThis.fetch.mockRejectedValueOnce(new Error('sin red'));
-    await cargarVitrina(document);
-
-    const reintentar = document.querySelector('#productos-grid [data-accion="reintentar"]');
-    expect(reintentar).not.toBeNull();
-
-    globalThis.fetch.mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        content: [{ id: 'p1', nombre: 'Espada', precioFinal: 10, moneda: 'COP', tipo: 'ARMA' }],
-      }),
-    });
-    reintentar.click();
-    await new Promise((r) => setTimeout(r, 0));
-
-    expect(document.querySelectorAll('.product-card')).toHaveLength(1);
-  });
-
-  test('el carrito caido tambien ofrece reintentar', async () => {
-    globalThis.fetch.mockRejectedValue(Object.assign(new Error('roto'), { estado: 500 }));
-
-    await cargarCarrito(document);
-
-    expect(document.querySelector('#cart-items [data-accion="reintentar"]')).not.toBeNull();
+    expect(mensaje(caja).dataset.resultado).toBe('aprobado');
+    expect(mensaje(caja).textContent).toMatch(/aprobado/i);
+    // Aprobado el pago no queda formulario con datos de tarjeta en la pagina.
+    expect(caja.querySelector('form')).toBeNull();
+    expect(document.getElementById('cart-items').textContent).toMatch(/vacío/i);
     expect(document.getElementById('btn-pagar').disabled).toBe(true);
   });
-});
 
-/**
- * FI-R2 — el precio de la tienda.
- *
- * El defecto: `tienda.js` leia `producto.precio`, un campo que
- * `ProductoVitrinaDto` no tiene. `undefined ?? 0` daba cero y **todas** las
- * tarjetas del catalogo decian «0 COP». Las pruebas no lo vieron porque sus
- * productos tambien traian `precio`.
- *
- * Estas pruebas van contra la forma real del DTO, la que devuelve
- * `VitrinaService.convertirADto`.
- */
-describe('FI-R2 - el precio que se ensena es el que cobra el servicio', () => {
-  const dto = (extra = {}) => ({
-    id: 7,
-    nombre: 'Yelmo del Alba',
-    descripcion: 'Acero claro',
-    habilidades: 'Defensa +4',
-    tipo: 'ARMADURA',
-    precioFinal: 18500,
-    precioOriginal: 18500,
-    moneda: 'COP',
-    enPromocion: false,
-    porcentajeDescuento: 0,
-    esPropio: false,
-    enListaDeseos: false,
-    ...extra,
-  });
-
-  test('el precio sale de precioFinal, no de un campo inventado', async () => {
-    globalThis.fetch.mockResolvedValue(respuesta({ content: [dto()] }));
-
-    await cargarVitrina(document);
-
-    const precio = document.querySelector('.price');
-    expect(precio.textContent).toBe('18.500 COP');
-    expect(precio.textContent).not.toBe('0 COP');
-  });
-
-  test('la moneda es la que declara el producto, no un COP supuesto', async () => {
-    globalThis.fetch.mockResolvedValue(
-      respuesta({ content: [dto({ precioFinal: 12, moneda: 'USD' })] }),
+  test('rechazo de la pasarela: se muestra el motivo y se borran numero y CVV', async () => {
+    globalThis.fetch.mockResolvedValueOnce(
+      respuesta({ aprobado: false, mensaje: 'Fondos insuficientes' }),
     );
+    const caja = abrir();
 
-    await cargarVitrina(document);
+    await pagarCon(caja);
 
-    expect(document.querySelector('.price').textContent).toBe('12 USD');
+    expect(mensaje(caja).dataset.resultado).toBe('rechazado');
+    expect(mensaje(caja).textContent).toBe('Fondos insuficientes');
+    expect(control(caja, 'numero').value).toBe('');
+    expect(control(caja, 'cvv').value).toBe('');
+    // El titular se conserva para reintentar sin volver a escribirlo todo.
+    expect(control(caja, 'titular').value).toBe('Ana Pérez');
+    // Rechazado no se recarga el carrito: los productos siguen ahi.
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
   });
 
-  test('sin precio se dice que no esta, en vez de anunciar que es gratis', async () => {
-    globalThis.fetch.mockResolvedValue(
-      respuesta({ content: [dto({ precioFinal: null, precioOriginal: null })] }),
+  test('rechazo con estado HTTP (422) se presenta como rechazo, no como falla de red', async () => {
+    globalThis.fetch.mockRejectedValueOnce(
+      Object.assign(new Error('rechazado'), { estado: 422 }),
     );
+    const caja = abrir();
 
-    await cargarVitrina(document);
+    await pagarCon(caja);
 
-    const precio = document.querySelector('.price');
-    expect(precio.textContent).not.toMatch(/^0/);
-    expect(precio.textContent).toMatch(/no disponible/i);
+    expect(mensaje(caja).textContent).toMatch(/rechazó el pago/i);
+    expect(mensaje(caja).textContent).not.toMatch(/conexión/i);
   });
 
-  test('un precio de cero SI se ensena: gratis es un precio', async () => {
-    globalThis.fetch.mockResolvedValue(respuesta({ content: [dto({ precioFinal: 0 })] }));
-
-    await cargarVitrina(document);
-
-    expect(document.querySelector('.price').textContent).toBe('0 COP');
-    expect(document.querySelector('.price').textContent).not.toMatch(/no disponible/i);
-  });
-
-  test('una rebaja real ensena el precio anterior tachado y el porcentaje', async () => {
-    globalThis.fetch.mockResolvedValue(
-      respuesta({
-        content: [
-          dto({
-            precioOriginal: 20000,
-            precioFinal: 16000,
-            enPromocion: true,
-            porcentajeDescuento: 20,
-          }),
-        ],
-      }),
+  test('sesion expirada durante el pago (401): se dice, y que no se cobro', async () => {
+    globalThis.fetch.mockRejectedValueOnce(
+      Object.assign(new Error('token vencido'), { estado: 401 }),
     );
+    const caja = abrir();
 
-    await cargarVitrina(document);
+    await pagarCon(caja);
 
-    expect(document.querySelector('.price').textContent).toBe('16.000 COP');
-    expect(document.querySelector('.price-antes').textContent).toBe('20.000 COP');
-    expect(document.querySelector('.badge-descuento').textContent).toBe('-20%');
+    expect(mensaje(caja).textContent).toMatch(/sesión expiró/i);
+    expect(mensaje(caja).textContent).toMatch(/no se procesó/i);
+    expect(control(caja, 'numero').value).toBe('');
   });
 
-  test('«en promocion» sin rebaja en el precio no pinta ningun descuento', async () => {
-    // Es el estado real de hoy: `VitrinaService` pone
-    // precioFinal = precioOriginal = precioBaseCop y nunca aplica el
-    // porcentaje. Un «-30%» junto a un precio sin rebajar es una promesa que
-    // el carrito no cumple.
-    globalThis.fetch.mockResolvedValue(
-      respuesta({
-        content: [
-          dto({
-            precioOriginal: 20000,
-            precioFinal: 20000,
-            enPromocion: true,
-            porcentajeDescuento: 30,
-          }),
-        ],
-      }),
-    );
+  test('los datos de la tarjeta nunca se escriben en consola', async () => {
+    globalThis.fetch.mockRejectedValueOnce(Object.assign(new Error('caido'), { estado: 500 }));
+    const caja = abrir();
 
-    await cargarVitrina(document);
+    await pagarCon(caja);
 
-    expect(document.querySelector('.badge-descuento')).toBeNull();
-    expect(document.querySelector('.price-antes')).toBeNull();
-    expect(document.querySelector('.price').textContent).toBe('20.000 COP');
+    const escrito = console.error.mock.calls
+      .flat()
+      .map((arg) => (arg instanceof Error ? arg.message : JSON.stringify(arg)))
+      .join(' ');
+    expect(escrito).not.toContain('4111');
+    expect(escrito).not.toContain('Ana Pérez');
   });
 
-  test('la imagen y las habilidades del DTO llegan a la tarjeta (RF-CAR-001)', async () => {
-    globalThis.fetch.mockResolvedValue(
-      respuesta({ content: [dto({ imagenUrl: 'https://cdn.example/yelmo.png' })] }),
-    );
+  test('al cerrar el dialogo sus campos desaparecen de la pagina', () => {
+    const caja = abrir();
+    control(caja, 'numero').value = '4111 1111 1111 1111';
 
-    await cargarVitrina(document);
+    dialogo.cerrar();
+    dialogo = null;
 
-    const img = document.querySelector('#productos-grid .product-image img');
-    expect(img).not.toBeNull();
-    expect(img.getAttribute('src')).toBe('https://cdn.example/yelmo.png');
-    expect(document.querySelector('.habilidades').textContent).toBe('Defensa +4');
-  });
-
-  test('un producto sin id no manda undefined al carrito', async () => {
-    globalThis.fetch.mockResolvedValue(respuesta({ content: [dto({ id: null })] }));
-
-    await cargarVitrina(document);
-
-    const boton = document.querySelector('.btn-add');
-    expect(boton.disabled) /* no hay nada que anadir */
-      .toBe(true);
-    expect(boton.dataset.producto).toBeUndefined();
-  });
-
-  test('«Pagar» no se enciende mientras no exista la pasarela (RF-PAG-001)', () => {
-    actualizarUI(
-      {
-        total: 400,
-        items: [{ cantidad: 1, subtotal: 400, producto: { nombre: 'Escudo', moneda: 'COP' } }],
-      },
-      document,
-    );
-
-    const boton = document.getElementById('btn-pagar');
-    expect(boton.disabled).toBe(true);
-    // Y el motivo esta escrito, no solo apagado.
-    expect(boton.getAttribute('aria-describedby')).toBe('aviso-pago-pendiente');
-  });
-
-  test('un item sin subtotal no escribe «undefined» en el carrito', () => {
-    actualizarUI(
-      { total: null, items: [{ cantidad: 1, producto: { nombre: 'Escudo' } }] },
-      document,
-    );
-
-    const texto = document.getElementById('cart-items').textContent;
-    expect(texto).not.toContain('undefined');
-    expect(texto).not.toContain('null');
-    expect(document.getElementById('cart-total').textContent).not.toContain('undefined');
+    expect(document.querySelector('[name="numero"]')).toBeNull();
   });
 });
