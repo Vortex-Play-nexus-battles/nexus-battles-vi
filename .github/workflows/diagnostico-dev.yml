@@ -257,3 +257,14 @@ jobs:
             sudo docker exec identidad-db sh -c 'psql -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT version, type, success FROM flyway_schema_history ORDER BY installed_rank"' 2>&1 | sed 's/^/    /'
             echo "  filas por tabla (solo el recuento):"
             sudo docker exec identidad-db sh -c 'psql -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT relname, n_live_tup FROM pg_stat_user_tables ORDER BY relname"' 2>&1 | sed 's/^/    /'
+            # R17 — como va el alta de los jugadores nuevos, en agregados: cuantas
+            # altas hay en cada estado y, por paso, cuantos hechos, pendientes o
+            # con error, con la CAUSA del ultimo error (el prefijo que escribe
+            # PasoFallido: SERVICIO_NO_DISPONIBLE, CONFIGURACION_INCOMPLETA...).
+            # Ni un uid, ni un correo, ni un apodo: solo recuentos y causas.
+            if sudo docker exec identidad-db sh -c 'psql -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT to_regclass('"'"'onboarding_jugador'"'"')"' | grep -q onboarding_jugador; then
+              echo "  altas por estado:"
+              sudo docker exec identidad-db sh -c 'psql -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT estado, count(*), max(intentos) FROM onboarding_jugador GROUP BY estado ORDER BY estado"' 2>&1 | sed 's/^/    /'
+              echo "  pasos por estado (con la causa del ultimo error):"
+              sudo docker exec identidad-db sh -c 'psql -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT paso, estado, count(*), coalesce(split_part(max(ultimo_error), '"'"':'"'"', 1), '"'"'-'"'"') FROM onboarding_paso GROUP BY paso, estado ORDER BY paso, estado"' 2>&1 | sed 's/^/    /'
+            fi
