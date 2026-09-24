@@ -116,7 +116,13 @@ export async function montarVitrina(
       // HU-INV-007: la ficha lee el catalogo por su cuenta; el inventario
       // solo guarda la referencia (RF-ADM-10).
       alAbrirDetalle: (elemento) =>
-        abrirFicha(elemento.productoId, { origen: document.activeElement }),
+        abrirFicha(elemento.productoId, {
+          origen: document.activeElement,
+          // R5: para un heroe, la ficha completa con lo que el jugador tiene de
+          // verdad. Para lo demas sobran y se ignoran.
+          elementoId: elemento.id,
+          identidad,
+        }),
     }),
   );
 
