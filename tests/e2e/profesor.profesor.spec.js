@@ -151,13 +151,32 @@ async function menuDeCuenta(page, opcion) {
   }
 }
 
-/** Saldo disponible que enseña «Mi cuenta». */
-async function saldoEnMiCuenta(page) {
+/** Una de las cifras del resumen de «Mi cuenta», por su etiqueta. */
+async function cifraDeMiCuenta(page, etiqueta) {
   const tarjeta = page
     .locator('[data-zona="resumen-saldo"] .metrica--cifra')
-    .filter({ hasText: 'Créditos disponibles' });
+    .filter({ hasText: etiqueta });
   await expect(tarjeta).toBeVisible({ timeout: 30_000 });
   return cifra(await tarjeta.locator('.metrica__valor').textContent());
+}
+
+/** Saldo disponible que enseña «Mi cuenta». */
+async function saldoEnMiCuenta(page) {
+  return cifraDeMiCuenta(page, 'Créditos disponibles');
+}
+
+/** Lo que «Mi cuenta» dice que está apartado en apuestas (HU-JUE-014). */
+async function apartadoEnMiCuenta(page) {
+  return cifraDeMiCuenta(page, 'Apartado en apuestas');
+}
+
+/**
+ * FASE 28 de la directiva: si el saldo inicial permite apostar, la primera
+ * partida se juega con una cantidad segura. Diez créditos, o la décima parte
+ * de lo acreditado si el alta diera menos: nunca lo que deje la cuenta a cero.
+ */
+function apuestaSegura(saldoInicial) {
+  return Math.max(0, Math.min(10, Math.floor(saldoInicial / 10)));
 }
 
 /** Los movimientos de la pestaña «Historial» de «Mi cuenta». */
@@ -461,11 +480,15 @@ test.describe('R17 · la prueba del profesor', () => {
         return `«${nombreDelHeroe}» con su equipo: ${estadisticas.join(' · ').replaceAll('\n', ' ')}`;
       });
 
-      await paso(13, 'Crear una sala (contra la IA)', async () => {
+      const apuesta = apuestaSegura(aprendido.saldoInicial);
+      await paso(13, 'Crear una sala (contra la IA, con una apuesta segura)', async () => {
         await page.getByRole('link', { name: 'Crear sala' }).first().click();
         await expect(page).toHaveURL(/crear-sala\.html/);
         await page.locator('#modalidad-ia').check();
         await expect(page.locator('[data-zona="nota-contra-ia"]')).toBeVisible();
+        // «Recompensa en créditos»: lo que se aparta de la cuenta al crear la
+        // sala y se liquida al terminar (HU-JUE-014).
+        await page.locator('#recompensaCreditos').fill(String(apuesta));
         await page.click('#formulario-crear-sala [type="submit"]');
         // Creada la sala, la vista lleva a la anfitriona a su sala de espera.
         await page.waitForURL(EN.sala, { timeout: 30_000 });
@@ -474,7 +497,10 @@ test.describe('R17 · la prueba del profesor', () => {
           timeout: 30_000,
         });
         await capturar(page, testInfo, '13-sala-de-espera');
-        return `sala ${idSala.slice(0, 8)}… contra la IA; la vista lleva a su sala de espera`;
+        return (
+          `sala ${idSala.slice(0, 8)}… contra la IA con ${apuesta} créditos en juego ` +
+          `(de ${aprendido.saldoInicial}); la vista lleva a su sala de espera`
+        );
       });
 
       let desenlace = '';
@@ -559,14 +585,31 @@ test.describe('R17 · la prueba del profesor', () => {
       await paso(16, 'Revisar la cuenta y el historial', async () => {
         await irA(page, 'cuenta');
         await expect(page).toHaveURL(EN.cuenta);
+        // La apuesta se liquida justo detrás del final (HU-JUE-014). Se espera
+        // a que no quede nada apartado, recargando como lo haría una persona:
+        // una reserva que no se suelta es dinero del jugador retenido.
+        await expect
+          .poll(
+            async () => {
+              await page.reload();
+              return apartadoEnMiCuenta(page);
+            },
+            { timeout: 90_000, intervals: [2_000, 5_000], message: 'la apuesta sigue apartada' },
+          )
+          .toBe(0);
         saldoTrasJugar = await saldoEnMiCuenta(page);
-        // Sin apuesta no se pierde nada; la recompensa por jugar (HU-JUE-012)
+        // Contra la IA la apuesta nunca va a otra persona: se devuelve, o se
+        // cobra si la política vigente (D-02, `salas.apuestas.si-gana-la-maquina`)
+        // es CONSUMIR y ganó la máquina. La recompensa por jugar (HU-JUE-012)
         // puede sumar.
-        expect(saldoTrasJugar).toBeGreaterThanOrEqual(aprendido.saldoInicial);
+        expect(saldoTrasJugar).toBeGreaterThanOrEqual(aprendido.saldoInicial - apuesta);
         const movimientos = await movimientosEnMiCuenta(page);
         expect(movimientos.length).toBeGreaterThanOrEqual(movimientosAntes.length);
         await capturar(page, testInfo, '16-historial');
-        return `saldo ${saldoTrasJugar} (antes ${aprendido.saldoInicial}); ${movimientos.length} movimientos`;
+        return (
+          `saldo ${saldoTrasJugar} (antes ${aprendido.saldoInicial}; apuesta de ${apuesta} ` +
+          `liquidada, 0 apartado); ${movimientos.length} movimientos`
+        );
       });
 
       await paso(17, 'Cerrar sesión', async () => {
