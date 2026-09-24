@@ -326,8 +326,13 @@ async function bloqueDeAvisos(uid, fetchImpl, alReintentar) {
       alReintentar,
     });
   }
-  const bandeja = respuesta.datos?.contenido ?? respuesta.datos?.content;
-  const avisos = Array.isArray(bandeja) ? bandeja : [];
+  // `BandejaResponse` (notificaciones.yaml) trae la lista en `avisos`, del
+  // más antiguo al más reciente. Antes se leía `contenido`/`content`, que
+  // ningún contrato publica: con el servicio vivo este bloque decía «Nada
+  // nuevo» siempre (UX-GAME-3). Se conservan los alias por si un entorno
+  // sirve la forma paginada.
+  const bandeja = respuesta.datos?.avisos ?? respuesta.datos?.contenido ?? respuesta.datos?.content;
+  const avisos = Array.isArray(bandeja) ? bandeja.slice(-3).reverse() : [];
   if (avisos.length === 0) {
     return estadoVacio({
       titulo: 'Nada nuevo por ahora',
@@ -335,13 +340,13 @@ async function bloqueDeAvisos(uid, fetchImpl, alReintentar) {
     });
   }
   const lista = h('ul', { clase: 'pila pila--ajustada', datos: { zona: 'avisos' } });
-  for (const aviso of avisos.slice(0, 3)) {
+  for (const aviso of avisos) {
     lista.append(
       h('li', {
         clase: 'tarjeta pila pila--ajustada',
         hijos: [
           h('strong', { texto: aviso.titulo ?? aviso.title ?? 'Aviso' }),
-          h('p', { clase: 't-meta', texto: aviso.mensaje ?? aviso.cuerpo ?? '' }),
+          h('p', { clase: 't-meta', texto: aviso.cuerpo ?? aviso.mensaje ?? '' }),
         ],
       }),
     );

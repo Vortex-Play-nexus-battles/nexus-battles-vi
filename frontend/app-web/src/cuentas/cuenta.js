@@ -445,10 +445,17 @@ export function montarAccionesDeSesion(raiz, { sesion, alCerrarSesion }) {
   vaciar(zona);
   const lista = h('dl', { clase: 'tarjeta__datos' });
   lista.append(
-    h('dt', { clase: 't-meta', texto: 'Identificador' }),
-    h('dd', { texto: sesion.uid ?? '—' }),
-    h('dt', { clase: 't-meta', texto: 'Rol' }),
-    h('dd', { texto: sesion.rol ?? '—' }),
+    h('div', {
+      clase: 'tarjeta__dato',
+      hijos: [
+        h('dt', { clase: 't-meta', texto: 'Identificador' }),
+        h('dd', { texto: sesion.uid ?? '—' }),
+      ],
+    }),
+    h('div', {
+      clase: 'tarjeta__dato',
+      hijos: [h('dt', { clase: 't-meta', texto: 'Rol' }), h('dd', { texto: sesion.rol ?? '—' })],
+    }),
   );
   zona.append(
     lista,
