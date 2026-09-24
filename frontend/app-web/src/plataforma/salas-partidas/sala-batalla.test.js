@@ -105,6 +105,22 @@ describe('montarSalaBatalla', () => {
     expect(conexion().textContent).toMatch(/no conectado/i);
   });
 
+  // R17.4 — la sala de espera sigue la SALA por el canal: todavia no hay
+  // partida a la que suscribirse, pero el canal esta abierto y funciona.
+  test('en la sala de espera, con el canal abierto, dice «conectado» aunque no haya partida', () => {
+    montarSalaBatalla(document, { canalConectado: true });
+
+    expect(sinPartida().hidden).toBe(false);
+    expect(conexion().className).toBe('conexion conexion--estable');
+    expect(conexion().textContent).toMatch(/^Canal en tiempo real conectado$/);
+  });
+
+  test('en la sala de espera, sin canal, sigue diciendo que no hay conexión', () => {
+    montarSalaBatalla(document, { canalConectado: false });
+
+    expect(conexion().className).toBe('conexion conexion--sin-conexion');
+  });
+
   test('con transporte del canal el indicador pasa a estable', () => {
     montarSalaBatalla(document, {
       idPartida: ID_PARTIDA,

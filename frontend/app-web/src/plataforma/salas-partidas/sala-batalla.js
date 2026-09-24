@@ -165,10 +165,23 @@ function explicarVacio(zona, texto) {
  * @param {(alRecibir: (evento: object) => void) => void} [opciones.suscribir]
  *   Transporte del canal de la partida. Se inyecta desde fuera para que el dia
  *   que exista STOMP no haya que rehacer nada de aqui.
+ * @param {boolean} [opciones.canalConectado] si el canal en tiempo real esta
+ *   abierto aunque todavia no haya partida a la que suscribirse (la sala de
+ *   espera sigue la SALA por el canal). Sin el, el indicador se deduce de
+ *   `suscribir`.
  */
 export function montarSalaBatalla(
   raiz,
-  { partida, idPartida, participantes, suscribir, yo, turnoActual = null, presentar = false } = {},
+  {
+    partida,
+    idPartida,
+    participantes,
+    suscribir,
+    yo,
+    turnoActual = null,
+    presentar = false,
+    canalConectado,
+  } = {},
 ) {
   const zonaConexion = raiz.querySelector('[data-zona="conexion"]');
   const zonaSinPartida = raiz.querySelector('[data-zona="sin-partida"]');
@@ -177,7 +190,11 @@ export function montarSalaBatalla(
   const campo = raiz.querySelector('[data-zona="campo"]');
   const zonaPresentacion = raiz.querySelector('[data-zona="presentacion"]');
 
-  pintarConexion(zonaConexion, typeof suscribir === 'function');
+  // R17.4 — en la sala de espera no hay partida a la que suscribirse, pero el
+  // canal SI esta abierto: por el llegan quien entra, quien sale y el arranque.
+  // Deducirlo de `suscribir` pintaba «no conectado» a quien esperaba con el
+  // canal funcionando, que es justo lo que hace creer que algo esta roto.
+  pintarConexion(zonaConexion, canalConectado ?? typeof suscribir === 'function');
 
   const id = partida?.id ?? idPartida;
   const enPantalla = partida ? participantesParaElPanel(partida) : participantes;

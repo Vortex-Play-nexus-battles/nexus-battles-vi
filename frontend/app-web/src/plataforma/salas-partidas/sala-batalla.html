@@ -430,6 +430,14 @@
             if (zonaArranque && !espera.esAnfitrion) {
               zonaArranque.hidden = true;
             }
+            // R17.4 — a quien abrio la sala no se le dice «el combate empieza
+            // cuando el anfitrion lo inicie»: el anfitrion es el. Se le dice
+            // que lo arranca el, y con que boton.
+            if (espera.esAnfitrion && zonaVacia) {
+              zonaVacia.textContent =
+                'Esta sala es tuya. Cuando estén todos, pulsa «Iniciar combate»; ' +
+                'si cambias de idea, puedes cancelarla.';
+            }
           } catch (error) {
             // Sin ficha no hay sala de espera, pero la vista sigue diciendo la
             // verdad: el mensaje del servicio (404, 401...) va donde se ve.
@@ -570,6 +578,9 @@
           yo,
           suscribir:
             canal && estado?.idPartida ? suscripcionDePartida(canal, estado.idPartida) : undefined,
+          // R17.4 — la sala de espera sigue la sala por el canal: si esta
+          // abierto, se dice «conectado» aunque aun no haya partida.
+          canalConectado: Boolean(canal),
         });
       }
 
