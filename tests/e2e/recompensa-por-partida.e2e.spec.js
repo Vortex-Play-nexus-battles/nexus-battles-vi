@@ -140,10 +140,29 @@ test.describe('Recompensa por jugar (HU-JUE-012)', () => {
 
     let golpes = 0;
     while (partida.estado === 'EN_CURSO' && golpes < 30) {
+      // Se espera el turno propio segun el SERVICIO, no segun el boton: entre
+      // que el boton se ve habilitado y el clic, la maquina puede jugar y hasta
+      // terminar la partida, y el clic se quedaba esperando a un boton ya
+      // oculto hasta agotar la prueba (mismo arreglo que torneos.e2e.spec.js).
+      await expect
+        .poll(
+          async () => {
+            partida = await partidaDe(api, anfitriona, partida.id);
+            return (
+              partida.estado !== 'EN_CURSO' ||
+              partida.turnoActual.idJugador === anfitriona.claims.uid
+            );
+          },
+          { timeout: 25000, message: `golpe ${golpes + 1}: la maquina no devuelve el turno` },
+        )
+        .toBe(true);
+      if (partida.estado !== 'EN_CURSO') {
+        break;
+      }
       const boton = page.locator('[data-zona="acciones"] [data-atacar]').first();
       await expect(boton).toBeEnabled({ timeout: 20000 });
       const turnoPrevio = partida.turnoActual.numeroTurno;
-      await boton.click();
+      await boton.click({ timeout: 5000 }).catch(() => {});
       await expect
         .poll(
           async () => {

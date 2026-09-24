@@ -15,6 +15,7 @@ import {
   destinoDePartida,
   suscripcionDePartida,
   participantesParaElPanel,
+  urlConPartida,
 } from './sala-batalla.js';
 
 const ID_PARTIDA = '11111111-1111-1111-1111-111111111111';
@@ -54,6 +55,32 @@ const conexion = () => document.querySelector('[data-zona="conexion"]');
 const sinPartida = () => document.querySelector('[data-zona="sin-partida"]');
 const panel = () => document.querySelector('[data-zona="panel"]');
 
+describe('urlConPartida (R17.4 · un F5 en pleno combate vuelve al combate)', () => {
+  const BASE = 'http://nexus.test/frontend/app-web/src/plataforma/salas-partidas/sala-batalla.html';
+
+  test('anota la partida y conserva la sala', () => {
+    const url = new URL(urlConPartida(`${BASE}?sala=s-1`, ID_PARTIDA));
+    expect(url.searchParams.get('sala')).toBe('s-1');
+    expect(url.searchParams.get('partida')).toBe(ID_PARTIDA);
+    expect(url.pathname).toMatch(/sala-batalla\.html$/);
+  });
+
+  test('no duplica la partida si ya estaba: la sustituye', () => {
+    const url = new URL(urlConPartida(`${BASE}?sala=s-1&partida=vieja`, ID_PARTIDA));
+    expect(url.searchParams.getAll('partida')).toEqual([ID_PARTIDA]);
+  });
+
+  test('conserva el hash', () => {
+    expect(urlConPartida(`${BASE}?sala=s-1#chat`, ID_PARTIDA)).toMatch(/#chat$/);
+  });
+
+  test('el identificador va codificado: no puede colar otro parametro', () => {
+    const url = new URL(urlConPartida(`${BASE}?sala=s-1`, 'x&sala=otra'));
+    expect(url.searchParams.getAll('sala')).toEqual(['s-1']);
+    expect(url.searchParams.get('partida')).toBe('x&sala=otra');
+  });
+});
+
 describe('montarSalaBatalla', () => {
   test('sin partida cargada muestra el estado vacio y no pinta ninguna barra', () => {
     montarSalaBatalla(document);
@@ -76,6 +103,22 @@ describe('montarSalaBatalla', () => {
 
     expect(conexion().className).toBe('conexion conexion--sin-conexion');
     expect(conexion().textContent).toMatch(/no conectado/i);
+  });
+
+  // R17.4 — la sala de espera sigue la SALA por el canal: todavia no hay
+  // partida a la que suscribirse, pero el canal esta abierto y funciona.
+  test('en la sala de espera, con el canal abierto, dice «conectado» aunque no haya partida', () => {
+    montarSalaBatalla(document, { canalConectado: true });
+
+    expect(sinPartida().hidden).toBe(false);
+    expect(conexion().className).toBe('conexion conexion--estable');
+    expect(conexion().textContent).toMatch(/^Canal en tiempo real conectado$/);
+  });
+
+  test('en la sala de espera, sin canal, sigue diciendo que no hay conexión', () => {
+    montarSalaBatalla(document, { canalConectado: false });
+
+    expect(conexion().className).toBe('conexion conexion--sin-conexion');
   });
 
   test('con transporte del canal el indicador pasa a estable', () => {

@@ -154,6 +154,28 @@ describe('registrarYEntrar', () => {
     expect(opciones.headers['Content-Type']).toBeUndefined();
   });
 
+  // R17.4 — con el alta rapida, el login que sigue al registro ya llega con
+  // `onboardingListo: true`. Aun asi la cuenta nueva pasa por la preparacion:
+  // es la pantalla que le dice que creditos y que heroe acaba de recibir.
+  test('aunque el alta ya este lista, una cuenta nueva pasa por la preparación', async () => {
+    const fetchImpl = servidor({
+      registro: () => respuesta(201, { apodo: 'Lyra' }),
+      login: () => respuesta(200, { ...LOGIN_OK, onboardingListo: true }),
+    });
+
+    const resultado = await registrarYEntrar(new FormData(), credenciales, {
+      fetchImpl,
+      almacen: sessionStorage,
+      base: BASE,
+    });
+
+    expect(resultado.resultado).toBe('dentro');
+    const destino = new URL(resultado.destino);
+    expect(destino.pathname).toBe('/frontend/app-web/src/cuentas/preparando.html');
+    expect(destino.searchParams.get('volver')).toBe('/frontend/app-web/src/cuentas/index.html');
+    expect(sessionStorage.getItem(CLAVES.token)).toBe(TOKEN);
+  });
+
   test('un rechazo dice el motivo y el campo a marcar', async () => {
     const fetchImpl = servidor({
       registro: () =>

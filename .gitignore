@@ -60,6 +60,9 @@ htmlcov/
 .nyc_output/
 test-results/
 *.lcov
+# R17 — la prueba del profesor deja su informe aparte (playwright.profesor.config.js).
+test-results-profesor/
+playwright-report-profesor/
 
 
 # --- Wrapper de Gradle: SI se versiona ---

@@ -22,6 +22,7 @@ import {
   desenlaceDe,
   netoDeCreditos,
   mezclarPorJugador,
+  enlacesDeSalida,
   ACCION_RESUELTA,
   TURNO_CAMBIADO,
   PARTIDA_FINALIZADA,
@@ -793,6 +794,75 @@ describe('HU-JUE-017 · presentacion del combate (UX-R2.3)', () => {
     expect(
       document.querySelector('[data-zona="resultado"] .panel-resultado__creditos').textContent,
     ).toBe('+40');
+  });
+});
+
+/**
+ * R17.4 — la prueba del profesor destapó que el panel del desenlace, que ocupa
+ * toda la pantalla (barra del juego incluida), no tenía ninguna salida: quien
+ * acababa de jugar solo podía volver con «Atrás».
+ */
+describe('R17.4 · el desenlace tiene salidas', () => {
+  beforeEach(() => {
+    document.body.innerHTML = VISTA;
+  });
+
+  const SALIDAS = [
+    { id: 'volver-a-jugar', texto: 'Volver a Jugar online', href: 'http://nexus.test/jugar' },
+    { id: 'ver-mi-cuenta', texto: 'Ver mi cuenta', href: 'http://nexus.test/cuenta' },
+  ];
+
+  const terminar = (salidas) => {
+    const controles = montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      turnoDe: ANA,
+      alAtacar: () => {},
+      salidas,
+    });
+    controles.recibir({ tipo: PARTIDA_FINALIZADA, idPartida: PARTIDA, ganadores: [BRUNO] });
+    return document.querySelector('[data-zona="resultado"] .panel-resultado');
+  };
+
+  test('el panel lleva los enlaces que le da la vista, en su orden', () => {
+    const panel = terminar(SALIDAS);
+    const enlaces = [...panel.querySelectorAll('.panel-resultado__acciones a')];
+
+    expect(enlaces.map((a) => a.textContent)).toEqual(['Volver a Jugar online', 'Ver mi cuenta']);
+    expect(enlaces.map((a) => a.getAttribute('href'))).toEqual([
+      'http://nexus.test/jugar',
+      'http://nexus.test/cuenta',
+    ]);
+    expect(enlaces[0].dataset.accion).toBe('volver-a-jugar');
+  });
+
+  test('el primero es el principal y el resto, secundarios', () => {
+    const [primero, segundo] = terminar(SALIDAS).querySelectorAll('.panel-resultado__acciones a');
+
+    expect(primero.className).toBe('boton boton--primario');
+    expect(segundo.className).toBe('boton boton--secundario');
+  });
+
+  test('sin salidas el panel sigue como antes, sin una fila de botones vacía', () => {
+    expect(terminar(undefined).querySelector('.panel-resultado__acciones')).toBeNull();
+  });
+
+  test('una salida sin destino o sin texto no se pinta: un botón que no lleva a nada es peor', () => {
+    expect(
+      enlacesDeSalida([
+        { id: 'a', texto: '', href: '/jugar' },
+        { id: 'b', texto: 'Ver mi cuenta', href: '' },
+        { id: 'c', texto: 'Volver a Jugar online', href: '/jugar' },
+      ]).map((a) => a.textContent),
+    ).toEqual(['Volver a Jugar online']);
+  });
+
+  test('el texto va como texto: un nombre con marcado no se interpreta', () => {
+    const [enlace] = enlacesDeSalida([{ id: 'x', texto: '<img src=x>', href: '/jugar' }]);
+
+    expect(enlace.textContent).toBe('<img src=x>');
+    expect(enlace.querySelector('img')).toBeNull();
   });
 });
 

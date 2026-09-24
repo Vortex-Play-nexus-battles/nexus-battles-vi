@@ -8,6 +8,7 @@ import {
   ESTADOS_ALTA,
   FalloDelAlta,
   consultarAlta,
+  destinoDeCuentaNueva,
   destinoTrasEntrar,
   reintentarAlta,
 } from './alta.js';
@@ -99,5 +100,15 @@ describe('destinoTrasEntrar', () => {
   test('una respuesta sin el campo (servidor anterior a R17) no manda a preparar nada', () => {
     expect(destinoTrasEntrar({}, null, BASE)).toBe(INICIO);
     expect(destinoTrasEntrar(null, null, BASE)).toBe(INICIO);
+  });
+});
+
+describe('destinoDeCuentaNueva (R17.4)', () => {
+  // Con el alta rapida el login que sigue al registro ya llega listo, y la
+  // persona aterrizaba en el inicio sin saber que le habian dado.
+  test('una cuenta recien creada pasa SIEMPRE por la preparacion, que acaba en su inicio', () => {
+    const url = new URL(destinoDeCuentaNueva(BASE));
+    expect(`${url.origin}${url.pathname}`).toBe(PREPARANDO);
+    expect(url.searchParams.get('volver')).toBe('/frontend/app-web/src/cuentas/index.html');
   });
 });

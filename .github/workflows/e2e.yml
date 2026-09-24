@@ -39,6 +39,7 @@ on:
       - "tests/e2e/**"
       - ".github/workflows/e2e.yml"
       - "frontend/app-web/playwright.e2e.config.js"
+      - "frontend/app-web/playwright.profesor.config.js"
   workflow_dispatch:
 
 concurrency:
@@ -52,7 +53,8 @@ jobs:
   corte-vertical:
     name: Sala de batalla de punta a punta
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # R17 — 30 → 40: la prueba del profesor añade unos siete minutos.
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
@@ -134,6 +136,17 @@ jobs:
           E2E_BORDE: http://localhost:8099
         run: npx playwright test --config=playwright.e2e.config.js
 
+      # R17 — la prueba del profesor, en el banco: el mismo recorrido que se
+      # hace contra AWS despues de cada despliegue (prueba-del-profesor.yml),
+      # aqui con todos los servicios, subastas incluidas. Registro por la
+      # interfaz, alta real, partida contra la IA, cierre y vuelta. Si el
+      # banco no lo pasa, AWS tampoco lo va a pasar.
+      - name: La prueba del profesor en el banco
+        working-directory: frontend/app-web
+        env:
+          PROFESOR_URL: http://localhost:8099
+        run: npx playwright test --config=playwright.profesor.config.js
+
       # Cuando esto falla, lo que hace falta es el log del servicio que fallo,
       # no el de Playwright. Sin este paso habria que reproducirlo a mano.
       - name: Logs de los servicios si algo fallo
@@ -160,6 +173,8 @@ jobs:
           path: |
             frontend/app-web/playwright-report/**
             frontend/app-web/test-results/**
+            frontend/app-web/playwright-report-profesor/**
+            frontend/app-web/test-results-profesor/**
           retention-days: 7
           if-no-files-found: ignore
 

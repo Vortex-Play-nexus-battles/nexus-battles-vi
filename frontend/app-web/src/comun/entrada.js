@@ -9,7 +9,7 @@
  * @module comun/entrada
  */
 
-import { destinoTrasEntrar } from './alta.js';
+import { destinoDeCuentaNueva, destinoTrasEntrar } from './alta.js';
 import { rutaDeApi } from './base-api.js';
 import { MOTIVOS, guardarSesion, urlDeLogin } from './sesion.js';
 
@@ -142,8 +142,10 @@ export async function pedirRegistro(datos, fetchImpl = globalThis.fetch) {
  * escribir.
  *
  * Tres finales:
- *   - `dentro`    — cuenta creada y sesión abierta; `destino` es la
- *                   preparación de la cuenta (o el inicio, si ya está lista).
+ *   - `dentro`    — cuenta creada y sesión abierta; `destino` es SIEMPRE la
+ *                   preparación de la cuenta, aunque el alta ya esté lista:
+ *                   es donde se le dice qué le dio el juego
+ *                   (`destinoDeCuentaNueva`).
  *   - `creada`    — la cuenta existe pero no se pudo entrar solo (el login
  *                   falló o no contestó): al login con el correo ya escrito.
  *   - `rechazada` — el servidor no creó la cuenta; `campo` dice cuál marcar.
@@ -174,7 +176,8 @@ export async function registrarYEntrar(
   try {
     const login = await pedirLogin({ email, password }, fetchImpl);
     if (login.respuesta.ok && login.body?.token) {
-      return { resultado: 'dentro', destino: entrarCon(login.body, { almacen, base }) };
+      entrarCon(login.body, { almacen, base });
+      return { resultado: 'dentro', destino: destinoDeCuentaNueva(base) };
     }
   } catch {
     // La cuenta ya existe: queda entrar a mano, con el correo ya escrito.

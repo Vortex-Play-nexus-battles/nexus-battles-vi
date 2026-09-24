@@ -15,7 +15,7 @@ import {
   pintarSeccionDegradada,
   limpiarSeccionDegradada,
 } from '../../comun/degradacion/aviso-degradacion.js';
-import { vaciar } from '../../comun/ui/dom.js';
+import { h, vaciar } from '../../comun/ui/dom.js';
 import { accionDeCombate } from '../../comun/ui/juego/combate.js';
 import { panelDeResultado } from '../../comun/ui/juego/resultado.js';
 
@@ -366,6 +366,29 @@ export function textoDelTurno(idJugador, participantes, yo) {
 }
 
 /**
+ * Los enlaces con los que se sale del panel del desenlace (R17.4).
+ *
+ * Enlaces y no botones: llevan a otra pantalla, y así se pueden abrir en otra
+ * pestaña o copiar. El primero es el principal. Uno sin texto o sin destino se
+ * descarta: un botón que no lleva a ninguna parte es peor que no tenerlo.
+ *
+ * @param {Array<{texto: string, href: string, id: string}>} salidas
+ * @returns {HTMLAnchorElement[]}
+ */
+export function enlacesDeSalida(salidas) {
+  return (salidas ?? [])
+    .filter((salida) => salida?.texto && salida?.href)
+    .map((salida, i) =>
+      h('a', {
+        clase: i === 0 ? 'boton boton--primario' : 'boton boton--secundario',
+        texto: salida.texto,
+        atributos: { href: salida.href },
+        datos: salida.id ? { accion: salida.id } : {},
+      }),
+    );
+}
+
+/**
  * Monta los controles de combate sobre el marcado de la vista.
  *
  * @param {ParentNode} raiz
@@ -382,11 +405,17 @@ export function textoDelTurno(idJugador, participantes, yo) {
  *   y recargar a mitad de partida dejaba al jugador sin poder actuar hasta
  *   que lo hiciera el rival.
  * @param {(accion: object) => void} opciones.alAtacar
+ * @param {Array<{texto: string, href: string, id: string}>} [opciones.salidas]
+ *   Adónde ir cuando termina (R17.4). El panel del desenlace ocupa toda la
+ *   pantalla, barra del juego incluida: sin salidas propias, quien acababa de
+ *   jugar se quedaba mirando «VICTORIA» sin más camino que el botón «Atrás».
+ *   La primera es la principal. Las rutas las pone la vista, que sabe si el
+ *   borde sirve direcciones limpias; este módulo no conoce ninguna.
  * @returns {{recibir: (aviso: object) => void, rechazar: (problema: object) => boolean}}
  */
 export function montarControlesDeCombate(
   raiz,
-  { idPartida, yo, participantes, turnoDe, alAtacar },
+  { idPartida, yo, participantes, turnoDe, alAtacar, salidas = [] },
 ) {
   const zona = raiz.querySelector('[data-zona="acciones"]');
   const aviso = raiz.querySelector('[data-zona="resultado"]');
@@ -598,6 +627,7 @@ export function montarControlesDeCombate(
               // `netoDeCreditos`. Antes quien perdia 350 creditos apostados
               // veia un «+2».
               creditos: netoDeCreditos(desenlaceConocido, yo),
+              acciones: enlacesDeSalida(salidas),
             }),
           );
           aviso.hidden = false;
