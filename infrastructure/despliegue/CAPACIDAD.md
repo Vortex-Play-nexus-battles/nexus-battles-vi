@@ -69,6 +69,13 @@ El entrypoint vive en la definicion del contenedor, asi que solo protege a
 los contenedores creados despues de fusionarlo: hay que redesplegar las doce
 JVM una vez (por olas) y comprobarlo con un stop/start real.
 
+**Comprobado el 24-sep a las 05:19 UTC** (tras redesplegar las 12 en
+`b4d942d`; stop 35959220647, start 35959357347): turno 0 sano a los 36 s,
+turno 2 a los 109 s, **las 12 a los 251 s**. Carga 2,6 y swap 1090 MiB a los
+dos minutos (sin escalonar: 18,7 y 1361 MiB, y ninguna respondia a los
+nueve). En regimen, 3052 MiB entre RAM y swap (35959726825), lo mismo que
+antes de apagar. Canarios 6/6 (35959724531). Detalle en #709.
+
 **Hallazgos de paso, para no perderlos:**
 
 - Los crones de `infra-dev.yml` llegan con ~4,5-5 h de retraso (el `stop` de
