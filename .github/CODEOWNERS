@@ -93,14 +93,17 @@
 /frontend/app-web/src/plataforma/           @Sgonzalez09
 
 # --- grupo-alpha / Grupo de Thomas - Contenido, simulacion y progresion -----
-/services/contenido/                        @Nicolayyy
-/services/contenido/productos/              @Nicolayyy
-/services/contenido/inventario/             @Nicolayyy
-/services/contenido/heroes/                 @Nicolayyy
-/services/contenido/motor-combate/          @Nicolayyy
-/services/contenido/misiones/               @Nicolayyy
-/services/contenido/progresion-jugador/     @Nicolayyy
-/frontend/app-web/src/contenido/            @Nicolayyy
+# Contenido (Grupo 2): Nicolay y el resto del grupo comparten la propiedad, igual
+# que scrum-masters la comparte en cuentas desde #402. Basta la aprobacion de
+# cualquiera de ellos; la revision cruzada sigue siendo obligatoria.
+/services/contenido/                        @Nicolayyy @cesarluna298-code @Melipete12 @Tamadiaz04 @MbappeRonaldo7 @SCC405
+/services/contenido/productos/              @Nicolayyy @cesarluna298-code @Melipete12 @Tamadiaz04 @MbappeRonaldo7 @SCC405
+/services/contenido/inventario/             @Nicolayyy @cesarluna298-code @Melipete12 @Tamadiaz04 @MbappeRonaldo7 @SCC405
+/services/contenido/heroes/                 @Nicolayyy @cesarluna298-code @Melipete12 @Tamadiaz04 @MbappeRonaldo7 @SCC405
+/services/contenido/motor-combate/          @Nicolayyy @cesarluna298-code @Melipete12 @Tamadiaz04 @MbappeRonaldo7 @SCC405
+/services/contenido/misiones/               @Nicolayyy @cesarluna298-code @Melipete12 @Tamadiaz04 @MbappeRonaldo7 @SCC405
+/services/contenido/progresion-jugador/     @Nicolayyy @cesarluna298-code @Melipete12 @Tamadiaz04 @MbappeRonaldo7 @SCC405
+/frontend/app-web/src/contenido/            @Nicolayyy @cesarluna298-code @Melipete12 @Tamadiaz04 @MbappeRonaldo7 @SCC405
 
 # --- grupo-beta / Grupo de Santiago - Cuentas, cumplimiento y economia ------
 /services/cuentas/                          @CristianCamiloChaparro @Vortex-Play-nexus-battles/scrum-masters
