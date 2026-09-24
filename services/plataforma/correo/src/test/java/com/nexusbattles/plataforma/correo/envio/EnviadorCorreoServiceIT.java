@@ -43,6 +43,10 @@ class EnviadorCorreoServiceIT {
     static void configurarSmtp(DynamicPropertyRegistry registry) {
         registry.add("spring.mail.host", mailpit::getHost);
         registry.add("spring.mail.port", () -> mailpit.getMappedPort(1025));
+        // Sincrono en la prueba: si no, habria que esperar a un hilo de fondo
+        // para poder mirar la bandeja, y una espera fija convierte la prueba
+        // en intermitente.
+        registry.add("correo.envio-asincrono", () -> "false");
     }
 
     @Autowired
