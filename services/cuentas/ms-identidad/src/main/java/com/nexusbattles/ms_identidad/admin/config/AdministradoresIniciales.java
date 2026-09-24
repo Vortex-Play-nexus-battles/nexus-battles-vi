@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
@@ -55,6 +56,12 @@ import java.util.List;
  */
 @Component
 @Order(20) // despues de RolSeeder: los roles tienen que existir ya
+// Sin cuentas configuradas, este componente ni siquiera se construye. No es
+// una optimizacion: las rebanadas de prueba que no levantan la cadena de
+// seguridad no tienen PasswordEncoder, y pedirlo ahi rompia el contexto de
+// tests que no tienen nada que ver con administradores. Que el bean exista
+// solo cuando hay algo que sembrar tambien dice mejor lo que hace.
+@ConditionalOnExpression("'${app.admins.iniciales:}' != ''")
 public class AdministradoresIniciales implements CommandLineRunner {
 
     private static final Logger BITACORA = LoggerFactory.getLogger(AdministradoresIniciales.class);
@@ -85,7 +92,6 @@ public class AdministradoresIniciales implements CommandLineRunner {
     public void run(String... args) {
         List<CuentaInicial> cuentas = leer(configuracion);
         if (cuentas.isEmpty()) {
-            BITACORA.info("app.admins.iniciales no define ninguna cuenta: no se crea ningun administrador.");
             return;
         }
 
