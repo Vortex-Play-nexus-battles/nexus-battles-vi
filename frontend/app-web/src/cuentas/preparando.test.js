@@ -151,7 +151,8 @@ describe('pasos del alta', () => {
     expect(zona('empezar').hidden).toBe(false);
     expect(zona('empezar').getAttribute('href')).toBe(DESTINO);
     expect(zona('resumen').textContent).toBe('Todo listo: ya puedes jugar.');
-    expect(document.activeElement.id).toBe('tituloListo');
+    expect(zona('titulo').textContent).toBe('¡Tu cuenta está lista!');
+    expect(document.activeElement.id).toBe('tituloAlta');
     // Terminado: ya no se consulta más.
     expect(reloj.pendientes.size).toBe(0);
   });

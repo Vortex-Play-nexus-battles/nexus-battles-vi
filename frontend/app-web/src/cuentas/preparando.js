@@ -157,6 +157,7 @@ export function montarPreparacion(
 ) {
   const zona = (nombre) => raiz.querySelector(`[data-zona="${nombre}"]`);
   const z = {
+    titulo: zona('titulo'),
     resumen: zona('resumen'),
     valor: zona('valor-progreso'),
     riel: zona('riel-progreso'),
@@ -293,13 +294,14 @@ export function montarPreparacion(
     z.empezar.hidden = false;
     z.reintentar.hidden = true;
     z.continuar.hidden = true;
+    z.titulo.textContent = '¡Tu cuenta está lista!';
     decir('Todo listo: ya puedes jugar.');
     if (documento) {
       documento.title = 'Tu cuenta está lista — NEXUS BATTLES VI';
     }
-    // El foco va al anuncio: quien usa lector de pantalla se entera sin
-    // tener que recorrer la página para buscar qué cambió.
-    z.listo.querySelector('[tabindex="-1"]')?.focus();
+    // El foco va al título, que ahora lo anuncia: quien usa lector de
+    // pantalla se entera sin tener que recorrer la página buscando qué cambió.
+    z.titulo.focus();
   }
 
   /** @returns {'preparando'|'error'|'listo'|'sin-alta'} */
