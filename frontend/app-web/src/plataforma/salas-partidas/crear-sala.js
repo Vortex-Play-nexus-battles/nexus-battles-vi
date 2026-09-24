@@ -129,6 +129,24 @@ export function encuentroDesde(busqueda) {
 }
 
 /**
+ * A donde va quien acaba de crear la sala: a la sala misma.
+ *
+ * R17 — hasta aqui, crear dejaba a la anfitriona en el formulario con un aviso
+ * de «Sala creada» y nada mas. La sala de espera —donde estan «Iniciar
+ * combate» (HU-SAL-004) y «Cancelar sala» (HU-SAL-006)— no tenia ningun
+ * enlace que llevara a ella, y una sala contra la IA nace completa, asi que
+ * tampoco se podia entrar desde el listado: quien no supiera la direccion de
+ * memoria creaba la sala y no podia jugarla. Es el mismo destino al que lleva
+ * entrar desde el listado (`batallas.html`).
+ *
+ * @param {{id: string}} sala la respuesta de `POST /salas`
+ * @returns {string}
+ */
+export function rutaDeLaSala(sala) {
+  return `./sala-batalla.html?sala=${encodeURIComponent(sala.id)}`;
+}
+
+/**
  * Deja el formulario listo para jugar un encuentro de torneo: campos ocultos
  * con el vinculo, nota visible y, como los encuentros son de equipos de dos
  * (D-22), sugiere hasta seis con cuatro jugadores en equipos de 2. Todo queda
@@ -289,6 +307,17 @@ function cargando(boton, activo) {
 }
 
 /**
+ * La sala ya existe y la vista se va a ella: el boton se queda ocupado hasta
+ * que cambie la pagina. Devolverlo a reposo en ese medio segundo invitaria a
+ * pulsarlo otra vez y a crear una segunda sala.
+ */
+function yendoALaSala(boton) {
+  boton.disabled = true;
+  boton.setAttribute('aria-busy', 'true');
+  boton.textContent = 'Entrando a tu sala…';
+}
+
+/**
  * Conecta el formulario con el servicio.
  *
  * @param {HTMLFormElement} formulario
@@ -325,8 +354,11 @@ export function montarCrearSala(
     limpiarSeccionDegradada(zonaDegradacion);
     cargando(boton, true);
 
+    /** La sala creada, si se creo. Se entrega a `alCrear` fuera del `try`. */
+    let creada = null;
     try {
       const sala = await crearSalaImpl(leerFormulario(formulario));
+      creada = sala;
 
       pintarAviso(zonaAviso, {
         tono: 'exito',
@@ -337,9 +369,6 @@ export function montarCrearSala(
       });
       formulario.reset();
       prefijarEncuentro(formulario, encuentro);
-      if (alCrear) {
-        alCrear(sala);
-      }
     } catch (error) {
       if (error instanceof ErrorDeApi && error.esDeFormulario) {
         // El requisito exige senalar el motivo: se marca cada campo, no un
@@ -371,7 +400,23 @@ export function montarCrearSala(
         });
       }
     } finally {
-      cargando(boton, false);
+      if (creada && alCrear) {
+        yendoALaSala(boton);
+      } else {
+        cargando(boton, false);
+      }
+    }
+    // Fuera del `try` de arriba: lo que haga la vista con la sala creada
+    // (irse a ella) no es un fallo al crearla, y no debe pintarse como si lo
+    // fuera. Si falla, la sala sigue existiendo —el aviso lo dice— y el boton
+    // vuelve a reposo en vez de quedarse «entrando» para siempre.
+    if (creada && alCrear) {
+      try {
+        alCrear(creada);
+      } catch (error) {
+        console.error('[crear-sala] no se pudo ir a la sala creada:', error);
+        cargando(boton, false);
+      }
     }
   }
 

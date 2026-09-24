@@ -230,7 +230,13 @@ test.describe('Modalidades de partida (HU-SAL-004)', () => {
     expect(sala.heroesIA).toBe(1);
     expect(sala.estado, 'la maquina ya ocupa el segundo cupo').toBe('LLENA');
     expect(sala.ocupacion).toBe(2);
-    await expect(page.locator('.aviso--exito')).toBeVisible();
+    // R17 — creada la sala, la vista lleva a la anfitriona a su sala, donde
+    // esta «Iniciar combate». Una sala contra la IA nace completa: sin esto
+    // no habia forma de llegar a ella desde la interfaz.
+    await page.waitForURL(new RegExp(`sala-batalla\\.html\\?sala=${sala.id}`), {
+      timeout: 20000,
+    });
+    await expect(page.locator('[data-accion="iniciar-partida"]')).toBeVisible({ timeout: 20000 });
 
     // Un segundo humano no cabe: seria 2 contra la IA.
     const intruso = await api.post(`/api/v1/salas/${sala.id}/participantes`, {

@@ -19,6 +19,7 @@ import {
   limitesDe,
   maximoDeMaquinas,
   ajustarPorModalidad,
+  rutaDeLaSala,
 } from './crear-sala.js';
 import { ErrorDeApi } from './cliente-salas.js';
 
@@ -275,6 +276,16 @@ describe('limites por modalidad (RF-JUE-004)', () => {
   });
 });
 
+describe('rutaDeLaSala (R17)', () => {
+  test('lleva a la sala recien creada, la misma a la que lleva entrar desde el listado', () => {
+    expect(rutaDeLaSala({ id: 'b7c1-9' })).toBe('./sala-batalla.html?sala=b7c1-9');
+  });
+
+  test('el identificador viaja codificado: no se le puede colar otro parametro', () => {
+    expect(rutaDeLaSala({ id: 'x&partida=y' })).toBe('./sala-batalla.html?sala=x%26partida%3Dy');
+  });
+});
+
 describe('tonoPara', () => {
   test('un fallo del sistema es error; lo corregible es advertencia', () => {
     expect(tonoPara(500)).toBe('error');
@@ -301,6 +312,82 @@ describe('montarCrearSala', () => {
     expect(aviso.className).toContain('aviso--exito');
     expect(aviso.textContent).toContain('4 participantes');
     expect(document.querySelector('[data-zona="aviso"]').hidden).toBe(false);
+  });
+
+  // R17 — antes la anfitriona se quedaba en el formulario sin ningun camino
+  // hacia su sala, que es donde esta «Iniciar combate».
+  test('creada la sala, se la entrega a la vista para ir a ella', async () => {
+    const formulario = preparar();
+    const sala = { id: 'a1', maximoParticipantes: 2, recompensaCreditos: 0 };
+    const alCrear = jest.fn();
+    montarCrearSala(formulario, { crearSalaImpl: jest.fn().mockResolvedValue(sala), alCrear });
+
+    formulario.dispatchEvent(new Event('submit'));
+    await asentar();
+
+    expect(alCrear).toHaveBeenCalledTimes(1);
+    expect(alCrear).toHaveBeenCalledWith(sala);
+    // Mientras el navegador cambia de pagina el boton no vuelve a reposo:
+    // pulsarlo otra vez crearia una segunda sala.
+    const boton = formulario.querySelector('[type="submit"]');
+    expect(boton.disabled).toBe(true);
+    expect(boton.getAttribute('aria-busy')).toBe('true');
+    expect(boton.textContent).toBe('Entrando a tu sala…');
+  });
+
+  test('si la vista falla al irse, no se pinta como un fallo al crear la sala', async () => {
+    const formulario = preparar();
+    const consola = jest.spyOn(console, 'error').mockImplementation(() => {});
+    montarCrearSala(formulario, {
+      crearSalaImpl: jest
+        .fn()
+        .mockResolvedValue({ id: 'a1', maximoParticipantes: 2, recompensaCreditos: 0 }),
+      alCrear: () => {
+        throw new Error('navegacion bloqueada');
+      },
+    });
+
+    formulario.dispatchEvent(new Event('submit'));
+    await asentar();
+
+    // La sala SI se creo: el aviso lo sigue diciendo, sin un error encima.
+    expect(document.querySelector('.aviso--exito').textContent).toContain('Sala creada');
+    expect(document.querySelector('.aviso--error')).toBeNull();
+    // Y el boton no se queda «entrando» para siempre; el fallo va a la consola.
+    expect(formulario.querySelector('[type="submit"]').disabled).toBe(false);
+    expect(consola).toHaveBeenCalled();
+    consola.mockRestore();
+  });
+
+  test('sin `alCrear` el formulario vuelve a reposo, como siempre', async () => {
+    const formulario = preparar();
+    montarCrearSala(formulario, {
+      crearSalaImpl: jest
+        .fn()
+        .mockResolvedValue({ id: 'a1', maximoParticipantes: 4, recompensaCreditos: 0 }),
+    });
+
+    formulario.dispatchEvent(new Event('submit'));
+    await asentar();
+
+    const boton = formulario.querySelector('[type="submit"]');
+    expect(boton.disabled).toBe(false);
+    expect(boton.textContent).toBe('CREAR SALA');
+  });
+
+  test('un rechazo no lleva a ninguna sala', async () => {
+    const formulario = preparar();
+    const alCrear = jest.fn();
+    montarCrearSala(formulario, {
+      crearSalaImpl: jest.fn().mockRejectedValue(new TypeError('Failed to fetch')),
+      alCrear,
+    });
+
+    formulario.dispatchEvent(new Event('submit'));
+    await asentar();
+
+    expect(alCrear).not.toHaveBeenCalled();
+    expect(formulario.querySelector('[type="submit"]').disabled).toBe(false);
   });
 
   test('mientras espera, el botón se bloquea y lo dice', async () => {

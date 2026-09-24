@@ -412,6 +412,11 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     });
     const sala = await creada.json();
     expect(sala.modalidad).toBe('CONTRA_IA');
+    // R17 — creada la sala, la vista lleva a su sala. Se espera a que llegue
+    // antes de seguir: si no, esa navegacion podria pisar el `goto` de abajo.
+    await page.waitForURL(new RegExp(`sala-batalla\\.html\\?sala=${sala.id}`), {
+      timeout: 20000,
+    });
 
     const inicio = await api.post(`/api/v1/salas/${sala.id}/partida`, {
       headers: conToken(anfitriona.token),

@@ -195,9 +195,13 @@ test.describe('Guion de demostración del Sprint 2', () => {
     const creacion = await respuesta;
     expect(creacion.status(), await creacion.text()).toBe(201);
     sala = await creacion.json();
-    await expect(page.locator('[data-zona="aviso"]')).toContainText(/Sala creada/i, {
+    // R17 — creada la sala, la vista lleva a la anfitriona a su sala de
+    // espera, que es donde se arranca el combate. Antes se quedaba en el
+    // formulario con un aviso y sin camino hacia la sala.
+    await page.waitForURL(new RegExp(`sala-batalla\\.html\\?sala=${sala.id}`), {
       timeout: 20000,
     });
+    await expect(page.locator('[data-accion="iniciar-partida"]')).toBeVisible({ timeout: 20000 });
     const creada = await capturar(page, 4, 'crear-sala-creada');
     expect(sala.modalidad).toBe('UNO_CONTRA_UNO');
     expect(sala.recompensaCreditos).toBe(APUESTA);

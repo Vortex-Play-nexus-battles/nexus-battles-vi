@@ -228,6 +228,7 @@
         leerEstadoInicial,
         suscripcionDePartida,
         participantesParaElPanel,
+        urlConPartida,
       } from './sala-batalla.js';
       import {
         urlDelCanal,
@@ -473,6 +474,16 @@
         return canal && partida ? suscripcionDePartida(canal, partida.id) : undefined;
       }
 
+      /**
+       * R17 — deja la partida en la direccion en cuanto arranca, para que un
+       * F5 en pleno combate vuelva al combate y no a la sala de espera.
+       */
+      function anotarPartidaEnLaUrl() {
+        if (partida?.id) {
+          history.replaceState(history.state, '', urlConPartida(location.href, partida.id));
+        }
+      }
+
       // Quien espera en la sala se entera por el canal de la SALA: aqui todavia
       // no se conoce el identificador de la partida, asi que no se puede estar
       // suscrito a su tema. Por el mismo canal llegan quien entra, quien sale
@@ -491,6 +502,7 @@
               }
               try {
                 partida = await obtenerPartida(aviso.idPartida);
+                anotarPartidaEnLaUrl();
                 if (zonaArranque) {
                   zonaArranque.hidden = true;
                 }
@@ -537,6 +549,7 @@
         avisoArranque.textContent = 'Arrancando el combate...';
         try {
           partida = await iniciarPartida(idSala);
+          anotarPartidaEnLaUrl();
           zonaArranque.hidden = true;
           espera?.ocultar();
           repintar(suscripcionActual());
