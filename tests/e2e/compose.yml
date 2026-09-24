@@ -300,6 +300,11 @@ services:
       e2e-subastas-db: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }
       srv-ms-finanzas: { condition: service_healthy }
+      # Desde FI-TRANSFER-1 la dependencia es real y no decorativa: con
+      # INVENTARIO_MODO=http, publicar bloquea el elemento y adjudicar lo
+      # transfiere. Declararla evita que subastas arranque antes que inventario
+      # en un levantado parcial.
+      srv-inventario: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8092/api/v1/actuator/health || exit 1"]
       interval: 5s
