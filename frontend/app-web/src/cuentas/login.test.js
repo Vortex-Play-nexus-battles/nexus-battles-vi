@@ -88,3 +88,101 @@ describe('Login - identidad de la sesion (#426, ADR-002)', () => {
     expect(identificadorDeSesion(undefined, undefined)).toBe('');
   });
 });
+
+describe('Login - sesión que ofrece otra pestaña (R18)', () => {
+  /** Almacén de sesión de mentira: lo justo para las dependencias de la función. */
+  function sesionFalsa({ yaHaySesion = false, quedaAutenticada = true } = {}) {
+    const estado = { guardada: null, olvidada: false };
+    return {
+      estado,
+      leer: () => ({ autenticado: yaHaySesion || (estado.guardada !== null && quedaAutenticada) }),
+      guardar: (sesion) => {
+        estado.guardada = sesion;
+      },
+      olvidar: () => {
+        estado.olvidada = true;
+        estado.guardada = null;
+      },
+    };
+  }
+
+  const COMPARTIDA = { token: 'x.y.z', apodo: 'Novato', rol: 'JUGADOR', uid: 'u1' };
+
+  test('la adopta solo si el emisor dice que vale', async () => {
+    const { adoptarSesionCompartida } = await import('./login.js');
+    const falsa = sesionFalsa();
+    const preguntas = [];
+
+    const adoptada = await adoptarSesionCompartida(COMPARTIDA, {
+      ...falsa,
+      comprobar: async (token) => {
+        preguntas.push(token);
+        return 'valida';
+      },
+    });
+
+    expect(adoptada).toBe(true);
+    expect(preguntas).toEqual(['x.y.z']);
+    expect(falsa.estado.guardada).toEqual(COMPARTIDA);
+  });
+
+  test('un token que el emisor ya no acepta no se adopta: era el bucle /login <-> /inicio', async () => {
+    const { adoptarSesionCompartida } = await import('./login.js');
+    const falsa = sesionFalsa();
+
+    const adoptada = await adoptarSesionCompartida(COMPARTIDA, {
+      ...falsa,
+      comprobar: async () => 'invalida',
+    });
+
+    expect(adoptada).toBe(false);
+    expect(falsa.estado.guardada).toBeNull();
+  });
+
+  test('si el emisor no contesta tampoco se adopta: se entra con la contraseña', async () => {
+    const { adoptarSesionCompartida } = await import('./login.js');
+    const falsa = sesionFalsa();
+
+    const adoptada = await adoptarSesionCompartida(COMPARTIDA, {
+      ...falsa,
+      comprobar: async () => 'desconocida',
+    });
+
+    expect(adoptada).toBe(false);
+    expect(falsa.estado.guardada).toBeNull();
+  });
+
+  test('sin nada que adoptar, o con sesión propia, ni siquiera pregunta', async () => {
+    const { adoptarSesionCompartida } = await import('./login.js');
+    let preguntas = 0;
+    const comprobar = async () => {
+      preguntas += 1;
+      return 'valida';
+    };
+
+    expect(await adoptarSesionCompartida(null, { ...sesionFalsa(), comprobar })).toBe(false);
+    expect(await adoptarSesionCompartida({ token: '' }, { ...sesionFalsa(), comprobar })).toBe(
+      false,
+    );
+    expect(
+      await adoptarSesionCompartida(COMPARTIDA, {
+        ...sesionFalsa({ yaHaySesion: true }),
+        comprobar,
+      }),
+    ).toBe(false);
+    expect(preguntas).toBe(0);
+  });
+
+  test('si una vez guardada no queda como sesión válida, se olvida', async () => {
+    const { adoptarSesionCompartida } = await import('./login.js');
+    const falsa = sesionFalsa({ quedaAutenticada: false });
+
+    const adoptada = await adoptarSesionCompartida(COMPARTIDA, {
+      ...falsa,
+      comprobar: async () => 'valida',
+    });
+
+    expect(adoptada).toBe(false);
+    expect(falsa.estado.olvidada).toBe(true);
+  });
+});
