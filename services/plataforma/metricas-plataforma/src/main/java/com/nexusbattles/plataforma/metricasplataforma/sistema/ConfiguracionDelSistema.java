@@ -36,6 +36,9 @@ public record ConfiguracionDelSistema(Map<String, String> servicios) {
     /** Valor reservado: el servicio existe y esta fuera del host a proposito. */
     public static final String NO_DESPLEGADO = "NO_DESPLEGADO";
 
+    /** Valor reservado: esta desplegado en otro host y esta sonda no lo alcanza. */
+    public static final String NO_OBSERVABLE = "NO_OBSERVABLE";
+
     public ConfiguracionDelSistema {
         // LinkedHashMap por la misma razon que en disponibilidad: el orden de
         // la configuracion es el que ve quien lee la pantalla.
