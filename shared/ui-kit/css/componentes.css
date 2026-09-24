@@ -2192,6 +2192,257 @@
   font-size: var(--t-meta-tam);
 }
 
+/* -----------------------------------------------------------------------
+   Ventana del asistente (comun/ui/ventana-chatbot.js)
+   HU-CHA-001: chat para visitantes y jugadores · HU-CHA-011: calificar
+   -----------------------------------------------------------------------
+   Panel flotante NO modal, anclado sobre el botón `.chatbot-flotante`.
+   Sin z-index a propósito: se cuelga al final del <body>, así que queda
+   sobre el contenido de la vista, y el `.velo` de una confirmación (que se
+   cuelga después) queda sobre él.
+   ----------------------------------------------------------------------- */
+
+.chatbot-ventana {
+  position: fixed;
+  right: var(--e-6);
+  bottom: calc(56px + var(--e-6) + var(--e-3));
+  width: min(380px, calc(100vw - var(--e-8)));
+  max-height: min(600px, calc(100vh - 56px - var(--e-16)));
+  display: flex;
+  flex-direction: column;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra-3);
+  overflow: hidden;
+}
+
+.chatbot-ventana__cabecera {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: var(--e-3);
+  padding: var(--e-3) var(--e-4);
+  background: var(--superficie-2);
+  border-bottom: 1px solid var(--borde-tenue);
+}
+
+.chatbot-ventana__titulo {
+  margin: 0;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-cuerpo-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.chatbot-ventana__estado {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.chatbot-ventana__acciones {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  flex: 0 0 auto;
+}
+
+/* Acciones secundarias (borrar, adjuntar): texto, no botón sólido, para
+   no competir con «Enviar». Mantienen el alto táctil mínimo. */
+.chatbot-ventana__accion {
+  min-height: var(--objetivo-tactil);
+  padding: 0 var(--e-1);
+  border: 0;
+  background: transparent;
+  color: var(--primaria);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.chatbot-ventana__accion:disabled {
+  color: var(--texto-3);
+  cursor: not-allowed;
+}
+
+.chatbot-ventana__cerrar {
+  width: var(--objetivo-tactil);
+  height: var(--objetivo-tactil);
+  border: 0;
+  border-radius: var(--radio);
+  background: transparent;
+  color: var(--texto-2);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chatbot-ventana__cerrar:hover {
+  background: var(--superficie-2);
+  color: var(--texto);
+}
+
+.chatbot-ventana__registro {
+  flex: 1 1 auto;
+  min-height: 160px;
+  margin: 0;
+  padding: var(--e-4);
+  list-style: none;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+  background: var(--fondo);
+}
+
+.chatbot-ventana__mensaje {
+  max-width: 85%;
+  padding: var(--e-2) var(--e-3);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra-1);
+}
+
+.chatbot-ventana__mensaje--bot {
+  align-self: flex-start;
+  background: var(--superficie);
+  border: 1px solid var(--borde-tenue);
+}
+
+.chatbot-ventana__mensaje--usuario {
+  align-self: flex-end;
+  background: var(--primaria-relleno);
+  color: var(--texto-sobre-color);
+}
+
+.chatbot-ventana__texto {
+  margin: 0;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.chatbot-ventana__meta {
+  margin: var(--e-1) 0 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+}
+
+.chatbot-ventana__mensaje--usuario .chatbot-ventana__meta,
+.chatbot-ventana__mensaje--usuario .chatbot-ventana__adjunto {
+  color: var(--texto-sobre-color);
+}
+
+.chatbot-ventana__adjunto {
+  display: inline-block;
+  margin-top: var(--e-1);
+  font-size: var(--t-meta-tam);
+  color: var(--primaria);
+}
+
+.chatbot-ventana__escribiendo,
+.chatbot-ventana__cargando {
+  align-self: flex-start;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.chatbot-ventana__aviso {
+  padding: 0 var(--e-4) var(--e-3);
+  background: var(--fondo);
+}
+
+.chatbot-ventana__formulario {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  padding: var(--e-3) var(--e-4);
+  border-top: 1px solid var(--borde-tenue);
+  background: var(--superficie);
+}
+
+.chatbot-ventana__fila {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--e-2);
+}
+
+.chatbot-ventana__entrada {
+  flex: 1 1 auto;
+  min-height: 2.75rem;
+  max-height: 8rem;
+  resize: vertical;
+}
+
+.chatbot-ventana__herramientas {
+  display: flex;
+  gap: var(--e-2);
+}
+
+/* Calificación de cada respuesta del bot (HU-CHA-011) */
+
+.chatbot-calificacion {
+  margin-top: var(--e-2);
+  padding-top: var(--e-2);
+  border-top: 1px solid var(--borde-tenue);
+}
+
+.chatbot-calificacion__pregunta {
+  margin: 0 0 var(--e-1);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.chatbot-calificacion__botones {
+  display: flex;
+  gap: var(--e-2);
+}
+
+.chatbot-calificacion__boton {
+  min-height: 2rem;
+  padding: 0 var(--e-3);
+  border: 1px solid var(--borde-int);
+  border-radius: var(--radio-pildora);
+  background: var(--superficie);
+  color: var(--texto);
+  font-size: var(--t-meta-tam);
+  cursor: pointer;
+}
+
+.chatbot-calificacion__boton:hover {
+  background: var(--superficie-2);
+}
+
+.chatbot-calificacion__boton:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.chatbot-calificacion__comentario {
+  margin-top: var(--e-2);
+}
+
+.chatbot-calificacion__nota,
+.chatbot-calificacion__gracias {
+  margin: var(--e-1) 0 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.chatbot-calificacion__nota:empty {
+  display: none;
+}
+
+/* En el teléfono ocupa el ancho, pero sigue por encima del botón flotante:
+   si lo tapara, no habría cómo cerrarla con un toque sobre el mismo botón. */
+@media (max-width: 480px) {
+  .chatbot-ventana {
+    right: var(--e-2);
+    left: var(--e-2);
+    width: auto;
+  }
+}
+
 /* =======================================================================
    Cabecera — navegación completa
    RF-INV-008: seis destinos y búsqueda de productos

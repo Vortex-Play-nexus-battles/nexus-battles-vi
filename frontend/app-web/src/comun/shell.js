@@ -53,6 +53,7 @@ import {
   VEREDICTO,
 } from './acceso.js';
 import { cerrarSesion, leerSesion, resolver, RUTAS } from './sesion.js';
+import { montarAsistente } from './ui/asistente.js';
 import { h } from './ui/dom.js';
 
 const BASE_RUTAS = import.meta.url;
@@ -95,6 +96,7 @@ export const SECCIONES_CONSOLA = Object.freeze([
   { id: 'parametros', etiqueta: 'Parámetros', vista: 'parametros-admin', icono: 'ajustes' },
   { id: 'metricas', etiqueta: 'Métricas', vista: 'panel-metricas', icono: 'grafico' },
   { id: 'tecnico', etiqueta: 'Técnico', vista: 'tablero-tecnico', icono: 'pulso' },
+  { id: 'chatbot', etiqueta: 'Asistente', vista: 'panel-chatbot', icono: 'chat' },
   { id: 'auditoria', etiqueta: 'Auditoría', vista: 'auditoria', icono: 'lista' },
 ]);
 
@@ -680,6 +682,11 @@ export function montarArmazon(
 
   const sesion = leerSesion(almacen, ahora);
   const elegido = armazon ?? armazonDeVista(vista) ?? (sesion.autenticado ? 'jugador' : 'publico');
+
+  // RF-CHA-001: el asistente está en TODAS las vistas, también para quien no
+  // ha iniciado sesión (HU-CHA-001). Se monta aquí, una vez, en lugar de en
+  // cada HTML. `montarAsistente` es idempotente.
+  montarAsistente(documento);
 
   if (elegido === 'publico') {
     return montarArmazonPublico(raiz, { vista: vista ?? 'login', base });
