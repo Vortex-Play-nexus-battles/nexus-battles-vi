@@ -210,6 +210,16 @@ export const MATRIZ = Object.freeze({
     acceso: ACCESO.MODERACION,
     armazon: 'admin',
   },
+  // La consola de control integral SI consume servicios: directorio de
+  // cuentas, economia, auditoria. El nivel es el de la Tabla 24 para
+  // gestionar usuarios; los paneles que ademas exijan super administrador se
+  // degradan solos con el 403 que devuelve el servicio, porque la autoridad
+  // sobre quien ve que es del backend y no de esta tabla.
+  'control-integral': {
+    ruta: 'plataforma/consola/control-integral.html',
+    acceso: ACCESO.ADMINISTRACION,
+    armazon: 'admin',
+  },
   // El nivel sale de la Tabla 24 (matriz de permisos por rol), no del sitio
   // donde vive el archivo.
   'sanciones-admin': {
