@@ -61,6 +61,13 @@ services:
       # SECRETO_SERVICIO_MS_FINANZAS en el host y se la da a ms-identidad en
       # AUTH_CLIENTES_SERVICIO; sin estas dos lineas el servicio pide el token
       # con el client_id global, que no esta registrado, y se lo niegan.
+      # El emisor de ADR-005. Sin esta linea el servicio NO ARRANCA: la
+      # autoconfiguracion de credenciales se activa en cuanto
+      # DIRECTORIO_ACTIVO_CLIENT_ID no esta vacio, y entonces exige la URL
+      # ("Falta la URL del emisor (DIRECTORIO_ACTIVO_URL)"). Los servicios de
+      # plataforma la heredan del .env por `env_file:` del compose base; los
+      # de Cuentas NO estan en el compose base, asi que aqui hay que ponerla.
+      DIRECTORIO_ACTIVO_URL: ${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}
       DIRECTORIO_ACTIVO_CLIENT_ID: ms-finanzas
       DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_MS_FINANZAS:-}
       # El lado IZQUIERDO es el nombre que Spring lee de verdad (confirmado en
