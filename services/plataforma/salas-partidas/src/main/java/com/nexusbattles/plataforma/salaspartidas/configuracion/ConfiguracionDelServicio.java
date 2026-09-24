@@ -57,8 +57,8 @@ public class ConfiguracionDelServicio {
     }
 
     @Bean
-    public ObtenerSala obtenerSala(RepositorioDeSalas repositorio) {
-        return new ObtenerSala(repositorio);
+    public ObtenerSala obtenerSala(RepositorioDeSalas repositorio, RepositorioDePartidas partidas) {
+        return new ObtenerSala(repositorio, partidas);
     }
 
     @Bean

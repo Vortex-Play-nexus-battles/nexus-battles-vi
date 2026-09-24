@@ -37,6 +37,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -618,6 +619,25 @@ class SalasControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(sala.id().toString()))
                 .andExpect(jsonPath("$.estado").value("ABIERTA"));
+    }
+
+    @Test
+    @DisplayName("R18 · GET de una sala que ya arranco trae su partida; una que no, la trae nula")
+    void laSalaTraeSuPartida() throws Exception {
+        Sala sala = salaDeEjemplo();
+        UUID idPartida = UUID.fromString("88888888-8888-8888-8888-888888888888");
+        when(obtenerSala.ejecutar(ID_SALA)).thenReturn(sala);
+        when(obtenerSala.partidaDe(sala)).thenReturn(Optional.of(idPartida));
+
+        mockMvc.perform(get("/api/v1/salas/{id}", ID_SALA).with(jugador()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.idPartida").value(idPartida.toString()));
+
+        when(obtenerSala.partidaDe(sala)).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/v1/salas/{id}", ID_SALA).with(jugador()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.idPartida").doesNotExist());
     }
 
     @Test

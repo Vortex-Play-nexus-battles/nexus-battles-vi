@@ -1,10 +1,14 @@
 package com.nexusbattles.plataforma.salaspartidas.aplicacion;
 
+import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoSala;
+import com.nexusbattles.plataforma.salaspartidas.dominio.Partida;
+import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDePartidas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Sala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.SalaNoEncontrada;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -23,9 +27,11 @@ import java.util.UUID;
 public class ObtenerSala {
 
     private final RepositorioDeSalas repositorio;
+    private final RepositorioDePartidas partidas;
 
-    public ObtenerSala(RepositorioDeSalas repositorio) {
+    public ObtenerSala(RepositorioDeSalas repositorio, RepositorioDePartidas partidas) {
         this.repositorio = Objects.requireNonNull(repositorio, "Hace falta un repositorio de salas.");
+        this.partidas = Objects.requireNonNull(partidas, "Hace falta un repositorio de partidas.");
     }
 
     /**
@@ -37,5 +43,29 @@ public class ObtenerSala {
         Objects.requireNonNull(idSala, "Hace falta la sala que se quiere consultar.");
         return repositorio.buscarPorId(idSala)
                 .orElseThrow(() -> new SalaNoEncontrada(idSala));
+    }
+
+    /**
+     * La partida de la sala, si ya arranco.
+     *
+     * <p>R18 — el contrato declara {@code idPartida} «nulo hasta que la partida
+     * arranca», pero la respuesta lo mandaba nulo siempre, tambien despues. Sin
+     * el, quien recargaba la pagina a mitad de combate volvia a la sala de
+     * espera, con «Iniciar combate» (que responde 409) y sin forma de volver a
+     * la partida, que seguia corriendo. Medido en dev el 24-sep.
+     *
+     * <p>Solo se busca cuando la sala ya jugo o esta jugando: en las demas no
+     * puede haber partida, y asi la consulta de una sala abierta sigue costando
+     * una sola lectura.
+     *
+     * @param sala la sala ya leida
+     * @return el identificador de su partida, o vacio si no la tiene
+     */
+    public Optional<UUID> partidaDe(Sala sala) {
+        Objects.requireNonNull(sala, "Hace falta la sala.");
+        if (sala.estado() != EstadoSala.EN_JUEGO && sala.estado() != EstadoSala.FINALIZADA) {
+            return Optional.empty();
+        }
+        return partidas.buscarPorSala(sala.id()).map(Partida::id);
     }
 }

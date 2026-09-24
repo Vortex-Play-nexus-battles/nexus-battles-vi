@@ -149,7 +149,11 @@ public class SalasController {
                                 @AuthenticationPrincipal Jwt token) {
 
         UUID idJugador = idDe(token);
-        return SalaResponse.segunQuienPregunta(obtenerSala.ejecutar(idSala), idJugador);
+        Sala sala = obtenerSala.ejecutar(idSala);
+        // R18 — con su partida si ya arranco: sin ella, recargar a mitad de
+        // combate devolvia a la sala de espera y no habia forma de volver.
+        UUID idPartida = obtenerSala.partidaDe(sala).orElse(null);
+        return SalaResponse.segunQuienPregunta(sala, idJugador, idPartida);
     }
 
     /**
