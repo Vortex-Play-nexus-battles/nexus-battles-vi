@@ -1,4 +1,4 @@
-// Registro de auditoría — HU-AUD-002 / HU-AUD-004 (exportar)
+// Registro de auditoría (consulta y exportación a PDF)
 // JS vanilla, siguiendo el patrón .estado[hidden] ya usado en el equipo
 // (visto en tema-cuentas.css: .estado.carga / .estado.error / .estado.vacio).
 
