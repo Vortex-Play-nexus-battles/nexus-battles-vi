@@ -557,7 +557,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh,scripts/cd/revertir.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh,scripts/cd/comprobar-capacidad.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -582,6 +582,24 @@ jobs:
       # que appleboy/ssh-action los reexporte como variables de entorno
       # DENTRO de la sesion SSH remota, para que desplegar.sh los use al
       # generar el .env efimero del servidor.
+      # R16.6 — antes de meter otra JVM, mirar si cabe. El healthcheck de
+      # desplegar.sh comprueba si el servicio nuevo contesta, no si al subirlo
+      # ha empujado a otro fuera de la RAM. El 24-sep eso costo el entorno
+      # entero: ningun healthcheck fallo y aun asi hubo que reiniciar la EC2.
+      - name: Compuerta de capacidad (antes)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          script: |
+            if [ ! -f /opt/nexus/scripts/cd/comprobar-capacidad.sh ]; then
+              echo "::warning::comprobar-capacidad.sh todavia no esta en el host; se copia en este despliegue y sirve a partir del siguiente."
+              exit 0
+            fi
+            chmod +x /opt/nexus/scripts/cd/comprobar-capacidad.sh
+            /opt/nexus/scripts/cd/comprobar-capacidad.sh antes
+
       - name: Desplegar en Dev
         id: desplegar
         # Solo durante un simulacro de reversion el fallo de este step no
@@ -704,6 +722,43 @@ jobs:
       # ejercitar revertir.sh de verdad -- mismo script, mismo step con el
       # mismo nombre, mismo host donde corre el MVP. Los tres steps de abajo
       # solo existen cuando el simulacro esta activo.
+      # El otro lado de la compuerta: el servicio nuevo puede estar sanisimo y
+      # aun asi haber dejado al host sin margen. Se mira la memoria Y que el
+      # nucleo del MVP siga contestando, que es lo que el 24-sep nadie miro.
+      - name: Compuerta de capacidad (despues)
+        id: capacidad_despues
+        if: steps.desplegar.outcome == 'success'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          script: |
+            if [ ! -f /opt/nexus/scripts/cd/comprobar-capacidad.sh ]; then
+              echo "::warning::comprobar-capacidad.sh todavia no esta en el host; sirve a partir del siguiente despliegue."
+              exit 0
+            fi
+            /opt/nexus/scripts/cd/comprobar-capacidad.sh despues
+
+      # Si la compuerta de despues salta, se apaga lo que acaba de subir. Se
+      # revierte el servicio nuevo, nunca el MVP: esa es la regla de
+      # CAPACIDAD.md, y hasta ahora habia que aplicarla a mano por SSH.
+      - name: Apagar lo recien desplegado si el host quedo sin margen
+        if: failure() && steps.capacidad_despues.outcome == 'failure' && inputs.servicios != ''
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          SERVICIOS_APAGAR: ${{ inputs.servicios }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          envs: SERVICIOS_APAGAR
+          script: |
+            echo "La compuerta de capacidad salto: se apaga lo que se acaba de desplegar."
+            chmod +x /opt/nexus/scripts/cd/apagar.sh
+            SERVICIOS_APAGAR="$SERVICIOS_APAGAR" /opt/nexus/scripts/cd/apagar.sh
+            /opt/nexus/scripts/cd/comprobar-capacidad.sh despues || true
+
       - name: Reversion automatica por fallo de salud
         if: github.event_name == 'workflow_dispatch' && inputs.simulacro_reversion != '' && steps.desplegar.outcome == 'failure'
         uses: appleboy/ssh-action@v1.0.3
@@ -844,7 +899,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_CONTENIDO_DEV }}
           username: ${{ secrets.SSH_USER_CONTENIDO_DEV }}
           key: ${{ secrets.SSH_KEY_CONTENIDO_DEV }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh,scripts/cd/comprobar-capacidad.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -914,7 +969,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh,scripts/cd/comprobar-capacidad.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -1038,7 +1093,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh,scripts/cd/revertir.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh,scripts/cd/comprobar-capacidad.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
 
