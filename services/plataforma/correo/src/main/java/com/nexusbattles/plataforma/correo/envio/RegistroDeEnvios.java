@@ -27,7 +27,9 @@ public class RegistroDeEnvios {
     private final int capacidad;
     private final Deque<EnvioRegistrado> recientes = new ArrayDeque<>();
     private long aceptados;
+    private long desviados;
     private long rechazados;
+    private long omitidos;
 
     public RegistroDeEnvios(ConfiguracionDeCorreo configuracion) {
         this.capacidad = configuracion.enviosRecordados();
@@ -38,10 +40,19 @@ public class RegistroDeEnvios {
         while (recientes.size() > capacidad) {
             recientes.removeLast();
         }
-        if (EnvioRegistrado.ACEPTADO.equals(envio.estado())) {
-            aceptados++;
-        } else {
-            rechazados++;
+        switch (envio.estado()) {
+            case EnvioRegistrado.ACEPTADO -> {
+                // Los que acepto el buzon de pruebas se cuentan aparte: sumados
+                // a los del proveedor, "aceptados" diria que salieron correos
+                // que en realidad no iban a ninguna bandeja.
+                if (EnvioRegistrado.BUZON_DE_PRUEBAS.equals(envio.destino())) {
+                    desviados++;
+                } else {
+                    aceptados++;
+                }
+            }
+            case EnvioRegistrado.OMITIDO -> omitidos++;
+            default -> rechazados++;
         }
     }
 
@@ -51,11 +62,22 @@ public class RegistroDeEnvios {
         return copia.subList(0, Math.min(Math.max(cuantos, 0), copia.size()));
     }
 
+    /** Aceptados por el servidor principal (el proveedor, fuera de desarrollo local). */
     public synchronized long aceptados() {
         return aceptados;
     }
 
+    /** Aceptados por el buzon de pruebas: direcciones reservadas, que no llegan a nadie. */
+    public synchronized long desviados() {
+        return desviados;
+    }
+
     public synchronized long rechazados() {
         return rechazados;
+    }
+
+    /** Los que no se enviaron a proposito: direccion reservada sin buzon de pruebas. */
+    public synchronized long omitidos() {
+        return omitidos;
     }
 }

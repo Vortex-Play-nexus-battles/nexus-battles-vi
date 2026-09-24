@@ -47,6 +47,11 @@ class EnviadorCorreoServiceIT {
         // para poder mirar la bandeja, y una espera fija convierte la prueba
         // en intermitente.
         registry.add("correo.envio-asincrono", () -> "false");
+        // Las direcciones de estas pruebas son @nexusbattles.test, reservadas
+        // (RFC 2606): van al buzon de pruebas, que aqui es el mismo Mailpit.
+        // Es la misma forma en que dev manda las de los canarios al suyo.
+        registry.add("correo.buzon-de-pruebas.host", mailpit::getHost);
+        registry.add("correo.buzon-de-pruebas.puerto", () -> mailpit.getMappedPort(1025));
     }
 
     @Autowired
@@ -162,6 +167,9 @@ class EnviadorCorreoServiceIT {
 
         EnvioRegistrado anotado = registro.ultimos(1).get(0);
         assertThat(anotado.estado()).isEqualTo(EnvioRegistrado.ACEPTADO);
+        assertThat(anotado.destino())
+                .as("una direccion reservada no sale por el servidor principal")
+                .isEqualTo(EnvioRegistrado.BUZON_DE_PRUEBAS);
         assertThat(anotado.plantilla()).isEqualTo("email/plantilla-prueba");
         assertThat(anotado.identificador())
                 .as("sin Message-ID no se puede cruzar este envio con el proveedor")
