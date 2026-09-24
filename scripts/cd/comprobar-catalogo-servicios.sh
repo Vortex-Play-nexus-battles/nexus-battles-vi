@@ -166,6 +166,59 @@ else
 fi
 
 echo
+echo "== 6) Quien presenta credencial sabe a quien presentarsela =="
+# Declarar DIRECTORIO_ACTIVO_CLIENT_ID sin DIRECTORIO_ACTIVO_URL no degrada
+# nada: el servicio NO ARRANCA. La biblioteca compartida construye el bean
+# TokenDeServicio en el arranque y explota con "Falta la URL del emisor".
+# Le paso a ms-finanzas en la corrida 35939650016: cinco reinicios, health en
+# rojo durante tres minutos, y el diagnostico decia OOMKilled=false mientras
+# todo el mundo buscaba un problema de memoria.
+for archivo in docker-compose.ms-*.yml; do
+  [ -f "$archivo" ] || continue
+  if grep -q "DIRECTORIO_ACTIVO_CLIENT_ID:" "$archivo" && ! grep -q "DIRECTORIO_ACTIVO_URL:" "$archivo"; then
+    fallo "$archivo declara DIRECTORIO_ACTIVO_CLIENT_ID pero no DIRECTORIO_ACTIVO_URL." \
+      "Sin la URL del emisor el servicio no arranca, no es que funcione peor." \
+      "Agrega:  DIRECTORIO_ACTIVO_URL: \${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}"
+  else
+    grep -q "DIRECTORIO_ACTIVO_CLIENT_ID:" "$archivo" && echo "  ok    $archivo"
+  fi
+done
+
+echo
+echo "== 7) Los compose se combinan sin claves repetidas =="
+# Una clave repetida dentro de un mismo bloque no la ve el ojo en una
+# revision y rompe TODOS los despliegues, no solo el del servicio afectado:
+# "docker compose" no puede ni leer el archivo. Paso en la corrida
+# 35923936097 y dejo el pipeline entero parado.
+if command -v python3 >/dev/null 2>&1; then
+  for archivo in docker-compose*.yml; do
+    [ -f "$archivo" ] || continue
+    python3 - "$archivo" <<'PY' || FALLOS=$((FALLOS + 1))
+import sys, yaml
+class Estricto(yaml.SafeLoader): pass
+def sin_repetidas(loader, node, deep=False):
+    vistas = set()
+    for clave, _ in node.value:
+        k = loader.construct_object(clave, deep=deep)
+        if k in vistas:
+            raise yaml.YAMLError(f"clave repetida: {k!r} (linea {clave.start_mark.line + 1})")
+        vistas.add(k)
+    return yaml.SafeLoader.construct_mapping(loader, node, deep)
+Estricto.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, sin_repetidas)
+# Las anclas de compose (<<: *servicio-plataforma) son legitimas: sin esto el
+# lector estricto las confunde con un tipo desconocido.
+Estricto.add_constructor("tag:yaml.org,2002:merge", lambda l, n: None)
+try:
+    yaml.load(open(sys.argv[1], encoding="utf-8"), Estricto)
+except yaml.YAMLError as e:
+    print(f"::error::{sys.argv[1]}: {e}")
+    sys.exit(1)
+PY
+  done
+  echo "  ok    ningun compose tiene claves repetidas"
+fi
+
+echo
 if [ "$FALLOS" -gt 0 ]; then
   echo "::error::$FALLOS problema(s) en el catalogo de despliegue."
   exit 1
