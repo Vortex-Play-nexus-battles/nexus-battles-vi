@@ -129,24 +129,6 @@ export function encuentroDesde(busqueda) {
 }
 
 /**
- * A donde va quien acaba de crear la sala: a la sala misma.
- *
- * R17 — hasta aqui, crear dejaba a la anfitriona en el formulario con un aviso
- * de «Sala creada» y nada mas. La sala de espera —donde estan «Iniciar
- * combate» (HU-SAL-004) y «Cancelar sala» (HU-SAL-006)— no tenia ningun
- * enlace que llevara a ella, y una sala contra la IA nace completa, asi que
- * tampoco se podia entrar desde el listado: quien no supiera la direccion de
- * memoria creaba la sala y no podia jugarla. Es el mismo destino al que lleva
- * entrar desde el listado (`batallas.html`).
- *
- * @param {{id: string}} sala la respuesta de `POST /salas`
- * @returns {string}
- */
-export function rutaDeLaSala(sala) {
-  return `./sala-batalla.html?sala=${encodeURIComponent(sala.id)}`;
-}
-
-/**
  * Deja el formulario listo para jugar un encuentro de torneo: campos ocultos
  * con el vinculo, nota visible y, como los encuentros son de equipos de dos
  * (D-22), sugiere hasta seis con cuatro jugadores en equipos de 2. Todo queda
@@ -307,26 +289,56 @@ function cargando(boton, activo) {
 }
 
 /**
- * La sala ya existe y la vista se va a ella: el boton se queda ocupado hasta
- * que cambie la pagina. Devolverlo a reposo en ese medio segundo invitaria a
- * pulsarlo otra vez y a crear una segunda sala.
+ * A donde se entra a una sala: su sala de espera, y el combate cuando empiece.
+ *
+ * @param {string} idSala
+ * @returns {string}
  */
-function yendoALaSala(boton) {
-  boton.disabled = true;
-  boton.setAttribute('aria-busy', 'true');
-  boton.textContent = 'Entrando a tu sala…';
+export function rutaDeLaSala(idSala) {
+  return `./sala-batalla.html?sala=${encodeURIComponent(idSala)}`;
+}
+
+/**
+ * Lo que dice el aviso de sala creada, segun quien falte por llegar.
+ *
+ * Contra la IA la sala nace completa: decir «esperando jugadores» mandaba a
+ * esperar a alguien que no iba a venir.
+ *
+ * @param {{modalidad?: string, maximoParticipantes: number, ocupacion?: number,
+ *          recompensaCreditos?: number}} sala
+ * @returns {string}
+ */
+export function textoDeSalaCreada(sala) {
+  const enJuego = sala.recompensaCreditos ? `, ${sala.recompensaCreditos} créditos en juego` : '';
+  const completa =
+    sala.modalidad === 'CONTRA_IA' ||
+    (typeof sala.ocupacion === 'number' && sala.ocupacion >= sala.maximoParticipantes);
+  if (completa) {
+    return `Tu rival ya está en la sala${enJuego}. Entra y arranca el combate.`;
+  }
+  return (
+    `Tu sala está abierta y esperando jugadores: ${sala.maximoParticipantes} ` +
+    `participantes${enJuego}. Entra para esperarlos y arrancar el combate.`
+  );
 }
 
 /**
  * Conecta el formulario con el servicio.
  *
  * @param {HTMLFormElement} formulario
- * @param {{crearSalaImpl?: Function, alCrear?: Function, encuentro?: {torneoId: string, numeroEncuentro: number}|null}} [opciones]
+ * @param {{crearSalaImpl?: Function, alCrear?: Function, irALaSala?: (ruta: string) => void,
+ *          encuentro?: {torneoId: string, numeroEncuentro: number}|null}} [opciones]
  *   `encuentro`: HU-TOR-004, la sala juega ese encuentro de torneo (ver `encuentroDesde`)
+ *   `irALaSala`: como se navega a la sala recien creada; inyectable para las pruebas
  */
 export function montarCrearSala(
   formulario,
-  { crearSalaImpl = crearSala, alCrear, encuentro = null } = {},
+  {
+    crearSalaImpl = crearSala,
+    alCrear,
+    encuentro = null,
+    irALaSala = (ruta) => globalThis.location.assign(ruta),
+  } = {},
 ) {
   const zonaAviso = formulario.querySelector('[data-zona="aviso"]');
   // HU-DIS-003: el hueco donde se pinta `Seccion degradada` cuando el
@@ -354,21 +366,32 @@ export function montarCrearSala(
     limpiarSeccionDegradada(zonaDegradacion);
     cargando(boton, true);
 
-    /** La sala creada, si se creo. Se entrega a `alCrear` fuera del `try`. */
-    let creada = null;
     try {
       const sala = await crearSalaImpl(leerFormulario(formulario));
-      creada = sala;
 
+      // R18 — la sala se creaba y quien la creo se quedaba en este formulario
+      // sin camino a ella: contra la IA nace completa, y en el listado una
+      // sala llena no se puede pulsar. El combate solo se alcanzaba
+      // escribiendo la direccion a mano.
       pintarAviso(zonaAviso, {
         tono: 'exito',
         titulo: 'Sala creada',
-        detalle:
-          `Tu sala está abierta y esperando jugadores: ${sala.maximoParticipantes} ` +
-          `participantes${sala.recompensaCreditos ? `, ${sala.recompensaCreditos} creditos en juego` : ''}.`,
+        detalle: textoDeSalaCreada(sala),
+        accion: {
+          texto: 'Entrar a la sala',
+          nombre: 'entrar-a-la-sala',
+          alPulsar: () => irALaSala(rutaDeLaSala(sala.id)),
+        },
       });
       formulario.reset();
       prefijarEncuentro(formulario, encuentro);
+      // reset() devuelve cada campo a su valor del HTML (4 participantes,
+      // 1 contra 1) sin volver a pasar por la modalidad: quedaban «4» con
+      // «Exactamente 2 jugadores» y la nota de contra la IA a la vista.
+      ajustarPorModalidad(formulario);
+      if (alCrear) {
+        alCrear(sala);
+      }
     } catch (error) {
       if (error instanceof ErrorDeApi && error.esDeFormulario) {
         // El requisito exige senalar el motivo: se marca cada campo, no un
@@ -400,23 +423,7 @@ export function montarCrearSala(
         });
       }
     } finally {
-      if (creada && alCrear) {
-        yendoALaSala(boton);
-      } else {
-        cargando(boton, false);
-      }
-    }
-    // Fuera del `try` de arriba: lo que haga la vista con la sala creada
-    // (irse a ella) no es un fallo al crearla, y no debe pintarse como si lo
-    // fuera. Si falla, la sala sigue existiendo —el aviso lo dice— y el boton
-    // vuelve a reposo en vez de quedarse «entrando» para siempre.
-    if (creada && alCrear) {
-      try {
-        alCrear(creada);
-      } catch (error) {
-        console.error('[crear-sala] no se pudo ir a la sala creada:', error);
-        cargando(boton, false);
-      }
+      cargando(boton, false);
     }
   }
 

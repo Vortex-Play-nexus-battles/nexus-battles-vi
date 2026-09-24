@@ -185,27 +185,19 @@ test.describe('Guion de demostración del Sprint 2', () => {
     await expect(page.locator('[name="maximoParticipantes"]')).toHaveValue('2');
     await page.fill('[name="recompensaCreditos"]', String(APUESTA));
     const formulario = await capturar(page, 4, 'crear-sala-formulario');
-    // La sala la crea la vista de verdad.
+    // La sala la crea la vista de verdad; el id se lee de la respuesta que
+    // recibio el navegador, no de un listado que podria traer salas ajenas.
     const respuesta = page.waitForResponse(
       (r) => r.url().includes('/api/v1/salas') && r.request().method() === 'POST',
       { timeout: 20000 },
     );
     await page.click('#formulario-crear-sala button[type="submit"]');
-    expect((await respuesta).status()).toBe(201);
-    // R17 — creada la sala, la vista lleva a la anfitriona a su sala de
-    // espera, que es donde se arranca el combate (antes se quedaba en el
-    // formulario sin camino hacia ella). Por eso el cuerpo del POST ya no se
-    // puede leer: el navegador lo suelta al cambiar de pagina. El id sale de
-    // la direccion de la sala, y la sala de su ficha, no de un listado que
-    // podria traer salas ajenas.
-    await page.waitForURL(/sala-batalla\.html\?sala=/, { timeout: 20000 });
-    const idSala = new URL(page.url()).searchParams.get('sala');
-    const ficha = await api.get(`/api/v1/salas/${idSala}`, {
-      headers: conToken(anfitriona.token),
+    const creacion = await respuesta;
+    expect(creacion.status(), await creacion.text()).toBe(201);
+    sala = await creacion.json();
+    await expect(page.locator('[data-zona="aviso"]')).toContainText(/Sala creada/i, {
+      timeout: 20000,
     });
-    expect(ficha.status(), await ficha.text()).toBe(200);
-    sala = await ficha.json();
-    await expect(page.locator('[data-accion="iniciar-partida"]')).toBeVisible({ timeout: 20000 });
     const creada = await capturar(page, 4, 'crear-sala-creada');
     expect(sala.modalidad).toBe('UNO_CONTRA_UNO');
     expect(sala.recompensaCreditos).toBe(APUESTA);

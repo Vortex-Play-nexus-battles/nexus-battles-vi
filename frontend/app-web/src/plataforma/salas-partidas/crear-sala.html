@@ -197,7 +197,7 @@
 
     <script type="module">
       import { montarAsistente } from '../../comun/ui/asistente.js';
-      import { montarCrearSala, encuentroDesde, rutaDeLaSala } from './crear-sala.js';
+      import { montarCrearSala, encuentroDesde } from './crear-sala.js';
       import { montarCabecera } from '../../comun/cabecera-app.js';
       import { exigirAcceso } from '../../comun/acceso.js';
 
@@ -213,10 +213,6 @@
 
       montarCrearSala(document.getElementById('formulario-crear-sala'), {
         encuentro: encuentroDesde(window.location.search),
-        // R17 — creada la sala, a la sala: alli se espera a los demas y se
-        // arranca el combate. Antes la anfitriona se quedaba en este
-        // formulario sin ningun camino hacia «Iniciar combate».
-        alCrear: (sala) => window.location.assign(rutaDeLaSala(sala)),
       });
 
       // RF-CHA-001 / HU-CHA-001 CA-03: el icono responde y dice la verdad.

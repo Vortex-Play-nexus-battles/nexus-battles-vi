@@ -223,23 +223,14 @@ test.describe('Modalidades de partida (HU-SAL-004)', () => {
       (r) => r.url().includes('/api/v1/salas') && r.request().method() === 'POST',
     );
     await page.click('[type="submit"]');
-    expect((await respuesta).status()).toBe(201);
-    // R17 — creada la sala, la vista lleva a la anfitriona a su sala, donde
-    // esta «Iniciar combate». Una sala contra la IA nace completa: sin esto
-    // no habia forma de llegar a ella desde la interfaz. El cuerpo del POST ya
-    // no se puede leer (el navegador lo suelta al cambiar de pagina): la sala
-    // se lee de su ficha, con el id de la direccion.
-    await page.waitForURL(/sala-batalla\.html\?sala=/, { timeout: 20000 });
-    const ficha = await api.get(`/api/v1/salas/${new URL(page.url()).searchParams.get('sala')}`, {
-      headers: conToken(anfitriona.token),
-    });
-    expect(ficha.status(), await ficha.text()).toBe(200);
-    const sala = await ficha.json();
+    const creada = await respuesta;
+    expect(creada.status()).toBe(201);
+    const sala = await creada.json();
     expect(sala.modalidad).toBe('CONTRA_IA');
     expect(sala.heroesIA).toBe(1);
     expect(sala.estado, 'la maquina ya ocupa el segundo cupo').toBe('LLENA');
     expect(sala.ocupacion).toBe(2);
-    await expect(page.locator('[data-accion="iniciar-partida"]')).toBeVisible({ timeout: 20000 });
+    await expect(page.locator('.aviso--exito')).toBeVisible();
 
     // Un segundo humano no cabe: seria 2 contra la IA.
     const intruso = await api.post(`/api/v1/salas/${sala.id}/participantes`, {

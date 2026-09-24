@@ -490,7 +490,10 @@ test.describe('R17 · la prueba del profesor', () => {
         // sala y se liquida al terminar (HU-JUE-014).
         await page.locator('#recompensaCreditos').fill(String(apuesta));
         await page.click('#formulario-crear-sala [type="submit"]');
-        // Creada la sala, la vista lleva a la anfitriona a su sala de espera.
+        // Creada la sala, el aviso lo dice y ofrece entrar a ella (R18.6).
+        const aviso = page.locator('#formulario-crear-sala [data-zona="aviso"]');
+        await expect(aviso).toContainText('Sala creada', { timeout: 30_000 });
+        await aviso.locator('[data-accion="entrar-a-la-sala"]').click();
         await page.waitForURL(EN.sala, { timeout: 30_000 });
         const idSala = new URL(page.url()).searchParams.get('sala') ?? '';
         await expect(page.locator('[data-accion="iniciar-partida"]')).toBeVisible({
@@ -499,7 +502,7 @@ test.describe('R17 · la prueba del profesor', () => {
         await capturar(page, testInfo, '13-sala-de-espera');
         return (
           `sala ${idSala.slice(0, 8)}… contra la IA con ${apuesta} créditos en juego ` +
-          `(de ${aprendido.saldoInicial}); la vista lleva a su sala de espera`
+          `(de ${aprendido.saldoInicial}); «Sala creada» → «Entrar a la sala» → sala de espera`
         );
       });
 
@@ -512,8 +515,6 @@ test.describe('R17 · la prueba del profesor', () => {
         await expect(mia.locator('.barra-vida__nombre')).toHaveText(nombreDelHeroe);
         const vida = async (barra) => Number(await barra.getAttribute('aria-valuenow'));
         const alEmpezar = { mia: await vida(mia), rival: await vida(rival) };
-        // La partida queda en la dirección: un F5 vuelve al combate (R17.4).
-        await expect(page).toHaveURL(/[?&]partida=/);
 
         const resultado = page.locator('[data-zona="resultado"]');
         const ataque = page.locator('[data-zona="acciones"] [data-atacar]').first();
@@ -546,11 +547,11 @@ test.describe('R17 · la prueba del profesor', () => {
             golpes += 1;
             if (!recargada) {
               // Un F5 en pleno combate no devuelve a la sala de espera: la
-              // vista vuelve a pintar la partida desde la dirección.
+              // sala sabe cuál es su partida y la vista la vuelve a pintar
+              // (R18.6), sin «Iniciar combate» a la vista.
               await page.waitForTimeout(1_500);
               await page.reload();
               recargada = true;
-              await expect(page).toHaveURL(/[?&]partida=/);
               await expect(page.locator('[data-barra-vida]')).toHaveCount(2, { timeout: 30_000 });
               await expect(page.locator('[data-accion="iniciar-partida"]')).toBeHidden();
             }

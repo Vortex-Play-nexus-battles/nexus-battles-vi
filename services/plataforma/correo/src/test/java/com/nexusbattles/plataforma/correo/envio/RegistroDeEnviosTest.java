@@ -72,6 +72,29 @@ class RegistroDeEnviosTest {
         assertThat(registro.rechazados()).isEqualTo(1);
     }
 
+    /**
+     * R18.4: lo que acepto el buzon de pruebas no cuenta como entregado. Si
+     * se sumara, "aceptados" diria que salieron correos que no iban a
+     * ninguna bandeja, que es exactamente el engano que R18 vino a quitar.
+     */
+    @Test
+    void loDesviadoAlBuzonYLoOmitidoSeCuentanAparte() {
+        RegistroDeEnvios registro = registro(10);
+
+        registro.anotar(EnvioRegistrado.aceptado(AHORA, "real@gmail.com", "email/bienvenida", "<1>"));
+        registro.anotar(EnvioRegistrado.aceptado(
+                AHORA, "canario@nexus.test", "email/bienvenida", "<2>", EnvioRegistrado.BUZON_DE_PRUEBAS));
+        registro.anotar(EnvioRegistrado.omitido(AHORA, "otro@example.com", "email/bienvenida"));
+
+        assertThat(registro.aceptados()).isEqualTo(1);
+        assertThat(registro.desviados()).isEqualTo(1);
+        assertThat(registro.omitidos()).isEqualTo(1);
+        assertThat(registro.rechazados()).isZero();
+        assertThat(registro.ultimos(3))
+                .extracting(EnvioRegistrado::destino)
+                .containsExactly("", EnvioRegistrado.BUZON_DE_PRUEBAS, EnvioRegistrado.PROVEEDOR);
+    }
+
     @Test
     void devuelveElMasRecienteElPrimero() {
         RegistroDeEnvios registro = registro(10);

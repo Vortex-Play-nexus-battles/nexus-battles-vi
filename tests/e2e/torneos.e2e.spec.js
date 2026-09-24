@@ -405,21 +405,12 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     );
     await page.click('[type="submit"]');
     const creada = await respuesta;
-    expect(creada.status()).toBe(201);
+    expect(creada.status(), await creada.text()).toBe(201);
     expect(creada.request().postDataJSON().torneo).toEqual({
       torneoId: torneo.id,
       numeroEncuentro: 5,
     });
-    // R17 — creada la sala, la vista lleva a su sala. Se espera a que llegue
-    // antes de seguir: si no, esa navegacion podria pisar el `goto` de abajo.
-    // El cuerpo del POST ya no se puede leer (el navegador lo suelta al
-    // cambiar de pagina): la sala se lee de su ficha, con el id de la direccion.
-    await page.waitForURL(/sala-batalla\.html\?sala=/, { timeout: 20000 });
-    const ficha = await api.get(`/api/v1/salas/${new URL(page.url()).searchParams.get('sala')}`, {
-      headers: conToken(anfitriona.token),
-    });
-    expect(ficha.status(), await ficha.text()).toBe(200);
-    const sala = await ficha.json();
+    const sala = await creada.json();
     expect(sala.modalidad).toBe('CONTRA_IA');
 
     const inicio = await api.post(`/api/v1/salas/${sala.id}/partida`, {

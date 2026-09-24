@@ -228,7 +228,6 @@
         leerEstadoInicial,
         suscripcionDePartida,
         participantesParaElPanel,
-        urlConPartida,
       } from './sala-batalla.js';
       import {
         urlDelCanal,
@@ -387,6 +386,23 @@
       let espera = null;
       /** La ficha de la sala, si se pudo leer. */
       let sala = null;
+      const zonaInvitacion = document.querySelector('[data-zona="invitacion"]');
+
+      /**
+       * Con el combate en marcha sobra todo lo de la sala de espera: arrancar,
+       * salir o cancelar, y la invitacion. Esta ultima se quedaba a la vista y
+       * caia encima de la barra de acciones, tapando el boton de atacar (R18,
+       * visto en dev con una sala privada contra la IA).
+       */
+      function ocultarLoDeLaEspera() {
+        if (zonaArranque) {
+          zonaArranque.hidden = true;
+        }
+        espera?.ocultar();
+        if (zonaInvitacion) {
+          zonaInvitacion.hidden = true;
+        }
+      }
 
       // Vuelve al listado dejando dicho por que — una sola vez por pagina: al
       // anfitrion que cancela le llega el mismo hecho por su boton y por el
@@ -450,6 +466,13 @@
                 'Esta sala es tuya. Cuando estén todos, pulsa «Iniciar combate»; ' +
                 'si cambias de idea, puedes cancelarla.';
             }
+            // R18 — recargar a mitad de combate devolvia a la sala de espera:
+            // «Iniciar combate» (que el servidor rechaza con 409) y ningun
+            // modo de volver a la partida. La sala ya sabe cual es la suya.
+            if (sala?.idPartida) {
+              partida = await obtenerPartida(sala.idPartida);
+              ocultarLoDeLaEspera();
+            }
           } catch (error) {
             // Sin ficha no hay sala de espera, pero la vista sigue diciendo la
             // verdad: el mensaje del servicio (404, 401...) va donde se ve.
@@ -494,16 +517,6 @@
         return canal && partida ? suscripcionDePartida(canal, partida.id) : undefined;
       }
 
-      /**
-       * R17 — deja la partida en la direccion en cuanto arranca, para que un
-       * F5 en pleno combate vuelva al combate y no a la sala de espera.
-       */
-      function anotarPartidaEnLaUrl() {
-        if (partida?.id) {
-          history.replaceState(history.state, '', urlConPartida(location.href, partida.id));
-        }
-      }
-
       // Quien espera en la sala se entera por el canal de la SALA: aqui todavia
       // no se conoce el identificador de la partida, asi que no se puede estar
       // suscrito a su tema. Por el mismo canal llegan quien entra, quien sale
@@ -529,12 +542,8 @@
                   return;
                 }
                 partida = iniciada;
-                anotarPartidaEnLaUrl();
-                if (zonaArranque) {
-                  zonaArranque.hidden = true;
-                }
                 // CA-03: en curso ya no se sale ni se cancela desde aqui.
-                espera?.ocultar();
+                ocultarLoDeLaEspera();
                 // CA-04 · este es el momento: el aviso trae el orden de
                 // turnos y quien abre, asi que la presentacion sale con
                 // datos reales y sin ningun temporizador.
@@ -576,15 +585,13 @@
         avisoArranque.textContent = 'Arrancando el combate...';
         try {
           const iniciada = await iniciarPartida(idSala);
-          zonaArranque.hidden = true;
-          espera?.ocultar();
+          ocultarLoDeLaEspera();
           // R17.4 — si el aviso del canal llego antes que esta respuesta, la
           // partida ya esta pintada (con su presentacion): no se monta otra
           // vez encima. Antes se pintaba dos veces, y la segunda sacaba la
           // presentacion por encima de unos controles recien montados.
           if (!partida) {
             partida = iniciada;
-            anotarPartidaEnLaUrl();
             // CA-04 · quien pulsa «Iniciar combate» tambien asiste al
             // comienzo: el momento es este, no una recarga a mitad de combate.
             repintar(suscripcionActual(), {

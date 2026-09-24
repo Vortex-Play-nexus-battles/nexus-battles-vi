@@ -45,6 +45,15 @@ services:
       - "8082:8082"
     env_file:
       - .env
+    environment:
+      # Las direcciones reservadas para pruebas (@nexus.test, @example.com...)
+      # van al Mailpit de este mismo compose, sea cual sea el servidor
+      # principal (SMTP_HOST). Con un proveedor real configurado, las cuentas
+      # que crean los canarios en cada despliegue rebotarian en el proveedor;
+      # asi siguen llegando a un buzon que las pruebas pueden leer. Ver
+      # correo.buzon-de-pruebas en el application.yml del servicio.
+      CORREO_BUZON_PRUEBAS_HOST: mailpit
+      CORREO_BUZON_PRUEBAS_PUERTO: "1025"
     depends_on:
       - plataforma-db
       - mailpit

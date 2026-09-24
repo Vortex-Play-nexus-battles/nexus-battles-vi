@@ -26,6 +26,7 @@ import {
   olvidarSesion,
   rutaDeVuelta,
 } from '../comun/sesion.js';
+import { VEREDICTOS, comprobarCredencial } from '../comun/vigilante-sesion.js';
 import { setCurrentRole } from './directives/has-permission.directive.js';
 
 // Se reexporta con su nombre de siempre: lo usan las pruebas de esta vista.
@@ -76,6 +77,47 @@ export function avisoDelMotivo(motivo) {
     default:
       return null;
   }
+}
+
+/**
+ * Adopta la sesión que ofrece otra pestaña, pero solo si el emisor la acepta.
+ *
+ * R18 — antes se adoptaba si el reloj la daba por buena (`exp`), y eso no
+ * basta: otra pestaña puede guardar un token que todavía no ha caducado pero
+ * que el servidor ya no acepta (identidad redesplegada con otra clave, cambio
+ * de contraseña). La vista lo usaba, un servicio lo rechazaba, el vigilante
+ * mandaba al login, y el login volvía a pedirlo a la misma pestaña y volvía a
+ * adoptarlo: un bucle infinito entre /login y /inicio en el que no se podía ni
+ * escribir la contraseña. Medido en dev el 24-sep: 900 peticiones en un minuto.
+ *
+ * Si el emisor no contesta tampoco se adopta: sin saber si vale, lo prudente
+ * es dejar entrar con la contraseña, que es lo que la persona vino a hacer.
+ *
+ * @param {{token: string, apodo?: string, rol?: string, uid?: string}|null} compartida
+ * @param {{comprobar?: Function, guardar?: Function, leer?: Function, olvidar?: Function}} [dependencias]
+ * @returns {Promise<boolean>} true si la sesión quedó adoptada
+ */
+export async function adoptarSesionCompartida(
+  compartida,
+  {
+    comprobar = comprobarCredencial,
+    guardar = guardarSesion,
+    leer = leerSesion,
+    olvidar = olvidarSesion,
+  } = {},
+) {
+  if (!compartida?.token || leer().autenticado) {
+    return false;
+  }
+  if ((await comprobar(compartida.token)) !== VEREDICTOS.VALIDA) {
+    return false;
+  }
+  guardar(compartida);
+  if (leer().autenticado) {
+    return true;
+  }
+  olvidar();
+  return false;
 }
 
 // ---------------------------------------------------------------- la vista
@@ -140,17 +182,13 @@ function iniciarVista(formulario) {
   // ¿Otra pestaña tiene la sesión abierta? Tras un cierre voluntario no se
   // pregunta: esa sesión se acaba de cerrar en todas.
   if (motivo !== MOTIVOS.CERRADA) {
-    pedirSesionAOtraPestana().then((compartida) => {
-      if (!compartida || leerSesion().autenticado) {
-        return;
-      }
-      guardarSesion(compartida);
-      if (leerSesion().autenticado) {
-        globalThis.location.replace(destinoTrasEntrar(null, volver));
-      } else {
-        olvidarSesion();
-      }
-    });
+    pedirSesionAOtraPestana()
+      .then((compartida) => adoptarSesionCompartida(compartida))
+      .then((adoptada) => {
+        if (adoptada) {
+          globalThis.location.replace(destinoTrasEntrar(null, volver));
+        }
+      });
   }
 
   formulario.addEventListener('submit', async (evento) => {

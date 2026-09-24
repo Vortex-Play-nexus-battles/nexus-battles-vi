@@ -275,11 +275,8 @@ test.describe('Degradacion controlada con inyeccion de fallos (HU-DIS-003)', () 
     );
     await degradada.locator('.seccion-degradada__reintentar').click();
     expect((await respuesta).status()).toBe(201);
-    // R17 — creada la sala, la vista lleva a la anfitriona a ella: el
-    // reintento termina donde termina crear a la primera, en la sala de espera.
-    await page.waitForURL(/sala-batalla\.html\?sala=/, { timeout: 20000 });
-    await expect(page.locator('[data-accion="iniciar-partida"]')).toBeVisible({ timeout: 20000 });
-    await expect(page.locator('.seccion-degradada')).toHaveCount(0);
+    await expect(page.locator('.aviso--exito')).toContainText('Sala creada');
+    await expect(page.locator('[data-zona="degradacion"] .seccion-degradada')).toHaveCount(0);
   });
 
   test('motor de combate apagado a mitad de partida: la accion se rechaza con el aviso, los controles siguen, y al encenderlo Reintentar resuelve el golpe', async ({
