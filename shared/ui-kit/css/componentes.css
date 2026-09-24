@@ -762,10 +762,21 @@
 }
 
 .cabecera__marca {
+  gap: var(--e-2);
   font-family: var(--t-titulo-familia);
   font-size: var(--t-subtitulo-tam);
   font-weight: var(--t-titulo-peso);
   letter-spacing: 0.02em;
+}
+
+/* UX-GAME-2 — el emblema compacto del logotipo (ver `marca/`), 32 px de
+   ancho. Lleva un halo azul tenue, el mismo gesto que el logotipo grande del
+   portal con `--sombra-marca`, a la escala de una barra. */
+.cabecera__emblema {
+  width: 32px;
+  height: auto;
+  flex: 0 0 auto;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--primaria) 60%, transparent));
 }
 
 /* =======================================================================
@@ -2579,7 +2590,8 @@
   font-family: var(--t-etiqueta-familia);
   font-size: var(--t-etiqueta-tam);
   font-weight: var(--t-etiqueta-peso);
-  color: var(--credito-oro);
+  /* Sobre el cromo, el oro claro (ver tokens.css). */
+  color: var(--credito-oro-sobre-cromo);
 }
 
 /* -----------------------------------------------------------------------
@@ -3180,12 +3192,18 @@
   cursor: pointer;
 }
 
+.cabecera__cuenta-boton {
+  transition: background-color var(--transicion);
+}
+
 .cabecera__cuenta-boton:hover,
 .cabecera__cuenta-boton[aria-expanded='true'] {
   background: var(--cromo-elevado);
 }
 
-/* El avatar sin imagen muestra la inicial del apodo. */
+/* El avatar sin imagen muestra la inicial del apodo. UX-GAME-2: relleno de
+   energia (azul a violeta) y un anillo fino separado del cromo, que es lo
+   que lo hace leerse como un retrato y no como un punto morado. */
 .cabecera__avatar {
   display: inline-grid;
   place-items: center;
@@ -3193,6 +3211,33 @@
   font-family: var(--t-etiqueta-familia);
   font-weight: var(--t-etiqueta-peso);
   font-size: var(--t-etiqueta-tam);
+  background: var(--energia);
+  box-shadow:
+    0 0 0 2px var(--cromo),
+    0 0 0 3px color-mix(in srgb, var(--primaria) 60%, transparent);
+  transition: box-shadow var(--transicion);
+}
+
+.cabecera__cuenta-boton:hover .cabecera__avatar,
+.cabecera__cuenta-boton[aria-expanded='true'] .cabecera__avatar {
+  box-shadow:
+    0 0 0 2px var(--cromo-elevado),
+    0 0 0 3px var(--enlace-sobre-cromo);
+}
+
+/* La campana es un objetivo con estado propio: relleno al pasar, y el
+   contador con un borde de cromo para que no se funda con el icono. */
+.cabecera__campana {
+  border-radius: var(--radio);
+  transition: background-color var(--transicion);
+}
+
+.cabecera__campana:hover {
+  background: var(--cromo-elevado);
+}
+
+.cabecera__contador {
+  box-shadow: 0 0 0 2px var(--cromo);
 }
 
 .cabecera__menu {
@@ -3202,6 +3247,26 @@
   z-index: 30;
   color: var(--texto);
   text-transform: none;
+  box-shadow: var(--sombra-atmosfera);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* El menu entra como el dialogo: 6 px y opacidad, una sola vez. `hidden`
+     lo saca del arbol, asi que la animacion arranca cada vez que se abre. */
+  .cabecera__menu {
+    animation: entrar-dialogo var(--duracion-rapido) var(--curva-salida) both;
+  }
+}
+
+/* Separador entre las acciones de sesion y la cuenta, solo en escritorio:
+   en la fila de movil no hay sitio y el avatar ya se distingue solo. */
+@media (min-width: 861px) {
+  .cabecera--jugador .cabecera__cuenta,
+  .cabecera--consola .cabecera__cuenta {
+    margin-left: var(--e-1);
+    padding-left: var(--e-4);
+    border-left: 1px solid color-mix(in srgb, var(--pista) 28%, transparent);
+  }
 }
 
 .cabecera__menu .menu__grupo {
@@ -3343,7 +3408,8 @@
     flex-direction: column;
     gap: 0;
     padding: var(--e-2);
-    background: var(--cromo);
+    /* UX-GAME-2: el panel remata con el filo de energia, como la consola. */
+    background: var(--energia) bottom / 100% 2px no-repeat, var(--cromo);
     box-shadow: var(--sombra-3);
   }
 
@@ -3487,6 +3553,13 @@
   grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
   gap: var(--e-2) var(--e-3);
   margin: 0;
+}
+
+/* Un par etiqueta/valor es UNA celda de la rejilla (UX-GAME-3). */
+.tarjeta__dato {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
 
 .tarjeta__datos dt {
@@ -4873,6 +4946,28 @@ button.tarjeta-heroe[aria-pressed='true'] {
   height: 100%;
 }
 
+/* UX-GAME-3 — el retrato del héroe equipado va sobre un escenario oscuro con
+   un halo azul, no sobre el gris de `--fondo`: es la pieza de juego de la
+   portada y se lee como tal. El anillo del retrato recibe el brillo de la
+   primaria; la rareza, cuando la hay, sigue mandando en el color del borde. */
+.home__heroe .tarjeta__medios {
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  padding: var(--e-5) var(--e-4);
+  background:
+    radial-gradient(
+      60% 75% at 50% 45%,
+      color-mix(in srgb, var(--primaria) 45%, transparent),
+      transparent 72%
+    ),
+    var(--cromo);
+}
+
+.home__heroe .marco-heroe__retrato {
+  box-shadow: var(--brillo-primaria);
+}
+
 @media (max-width: 767px) {
   /* Las dos acciones de la portada ocupan el ancho y se apilan: en 375 px,
      «Jugar ahora» y «Ver salas abiertas» en la misma fila dejaban la segunda
@@ -5347,8 +5442,7 @@ button.tarjeta-heroe[aria-pressed='true'] {
     align-items: stretch;
     gap: 0;
     padding: var(--e-2) var(--e-4) var(--e-4);
-    background: var(--cromo);
-    border-bottom: 2px solid var(--acento-relleno);
+    background: var(--energia) bottom / 100% 2px no-repeat, var(--cromo);
     box-shadow: var(--sombra-3);
   }
 
@@ -5396,7 +5490,9 @@ button.tarjeta-heroe[aria-pressed='true'] {
    superior de la tarjeta de entrada: mismo gesto, mismo gradiente, distinto
    sitio. Marca el modo sin gastar un color nuevo. */
 .cabecera--consola {
-  border-bottom: 2px solid var(--acento-relleno);
+  /* UX-GAME-2: el filo es el gradiente de energia, el mismo de las tarjetas
+     y del destino activo; antes era el acento plano. */
+  background: var(--energia) bottom / 100% 2px no-repeat, var(--cromo);
 }
 
 /* La salida al juego es secundaria, pero tiene que existir: un administrador

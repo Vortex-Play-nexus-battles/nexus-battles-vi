@@ -58,6 +58,27 @@
   object-fit: cover;
 }
 
+/* Sin imagen: el hueco es una ranura oscura con el icono del tipo, del
+   mismo tono que el escenario del heroe en la home (UX-GAME-3). */
+.ficha__imagen--ausente {
+  display: grid;
+  place-items: center;
+  height: 140px;
+  background:
+    radial-gradient(
+      60% 80% at 50% 45%,
+      color-mix(in srgb, var(--primaria) 40%, transparent),
+      transparent 72%
+    ),
+    var(--cromo);
+}
+
+.ficha__icono-tipo {
+  width: 48px;
+  height: 48px;
+  color: var(--texto-sobre-color);
+}
+
 .ficha__nombre {
   margin: 0 0 4px;
   font-family: var(--fuente-titulo);

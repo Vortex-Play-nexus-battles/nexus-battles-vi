@@ -278,6 +278,10 @@
   /* La cifra de créditos de la cabecera usa exactamente el oro de legendaria.
      Se declara como alias y no como color nuevo para no duplicar el valor. */
   --credito-oro: var(--rareza-legendaria);
+  /* El mismo oro sobre el cromo de la cabecera no llega a AA (3,2:1 sobre
+     #1C2340, 2,5:1 sobre el cromo elevado): esta es su versión clara para
+     superficies oscuras, 8,4:1 y 6,7:1. UX-GAME-3. */
+  --credito-oro-sobre-cromo: #E8B84A;
 
   /* --- Interacción -------------------------------------------------- */
   --interaccion-foco-anillo:  #2244BF;
@@ -407,5 +411,6 @@
     --texto-2:          #2B3346;
     --texto-3:          #48536A;
     --enlace-sobre-cromo: #D6E0FF;
+  --credito-oro-sobre-cromo: #F5C451;
   }
 }
