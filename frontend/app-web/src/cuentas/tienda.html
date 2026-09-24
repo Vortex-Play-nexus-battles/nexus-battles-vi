@@ -52,6 +52,12 @@
         <div class="cart-card">
           <h3>Tu carro</h3>
 
+          <!-- R16 — el aviso de «Añadir» cuando el servicio rechaza el producto
+               (agotado, suspendido, sin precio en dinero real, catálogo caído).
+               Va aquí, donde el jugador esperaba ver el producto, y fuera de
+               #cart-items, que se repinta entero. Lo rellena tienda.js. -->
+          <div id="aviso-carrito" data-zona="aviso" hidden></div>
+
           <div id="cart-items" class="cart-items-container">
             <!-- JS inyectará los items del carrito aquí -->
             <p class="t-meta">Tu carrito está vacío</p>

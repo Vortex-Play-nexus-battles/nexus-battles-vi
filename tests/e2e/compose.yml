@@ -76,6 +76,21 @@ services:
       timeout: 3s
       retries: 20
 
+  # R16 — base propia de la tienda (regla 7): ms-ecommerce guarda aqui el
+  # carrito y crea su esquema con Flyway al arrancar. El catalogo NO vive
+  # aqui: lo lee de srv-productos por API.
+  e2e-ecommerce-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ecommerce_db
+      POSTGRES_USER: ecom_user
+      POSTGRES_PASSWORD: ecommerce
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ecom_user -d ecommerce_db"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
   # Una sola Mongo para los tres servicios de contenido, con una base por
   # servicio: es como esta en docker-compose.contenido.yml.
   e2e-contenido-mongo:
@@ -302,6 +317,45 @@ services:
       srv-ms-finanzas: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8092/api/v1/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  # R16 — la tienda (Grupo 4): vitrina y carrito sobre el catalogo maestro.
+  # Hasta R16 no estaba en este banco y la tienda solo se veia en AWS, donde
+  # ademas no cabe (desplegableDev: false). Aqui corre entera: el jugador se
+  # identifica con el token real de ms-identidad y la vitrina y el carrito
+  # leen el catalogo de srv-productos por su API (PRODUCTOS_URL), igual que
+  # en dev leen el del host de contenido.
+  #
+  # OJO con la salud: este servicio SI tiene context-path (/ecommerce), asi
+  # que su Actuator vive en /ecommerce/actuator/health (servicios.json).
+  srv-ms-ecommerce:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/cuentas/ms-ecommerce/target/*.jar
+        PUERTO: "8090"
+    environment:
+      DB_HOST: e2e-ecommerce-db
+      DB_PORT: "5432"
+      DB_NAME: ecommerce_db
+      DB_USER: ecom_user
+      DB_PASSWORD: ecommerce
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      # El catalogo maestro, sin /api/v1: el servicio anade la ruta. Es el
+      # mismo contenedor al que el borde manda /api/v1/productos en este
+      # banco (e2e-borde-conf, mas abajo).
+      PRODUCTOS_URL: http://srv-productos:8080
+      # show-sql=true por omision: en la bitacora del fallo taparia la causa.
+      SPRING_JPA_SHOW_SQL: "false"
+    depends_on:
+      e2e-ecommerce-db: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
+      srv-productos: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8090/ecommerce/actuator/health || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 40
@@ -629,9 +683,14 @@ services:
           grep -vn '^[[:space:]]*#' /salida/default.conf | grep '34\.193\.90\.11' >&2
           exit 1
         fi
+        # R16 — la variable del bucle va con dolar doble: con uno solo,
+        # Compose la interpola al leer el fichero, antes de que el shell la
+        # vea, y la dejaba vacia ("The esperado variable is not set"). Un
+        # `grep -q ""` casa con cualquier linea, asi que este bucle aprobaba
+        # siempre sin mirar nada.
         for esperado in srv-heroes:8080 srv-inventario:8080 srv-productos:8080; do
-          grep -q "$esperado" /salida/default.conf || {
-            echo "ADAPTACION INCOMPLETA: no aparece $esperado." >&2; exit 1; }
+          grep -q "$$esperado" /salida/default.conf || {
+            echo "ADAPTACION INCOMPLETA: no aparece $$esperado." >&2; exit 1; }
         done
         echo "Borde adaptado al banco: heroes, inventario y productos son locales."
 
@@ -655,6 +714,8 @@ services:
       srv-heroes: { condition: service_healthy }
       srv-inventario: { condition: service_healthy }
       srv-productos: { condition: service_healthy }
+      # R16: /api/v1/vitrina y /api/v1/carrito (tienda.e2e.spec.js).
+      srv-ms-ecommerce: { condition: service_healthy }
     healthcheck:
       # 127.0.0.1 y no `localhost` a proposito. El entrypoint de la imagen
       # intenta anadir un `listen [::]:80` y no puede, porque la

@@ -44,4 +44,5 @@ docs/
 # HU-ADM-001: parametros del sistema.
 !services/plataforma/admin-parametros/build/libs/*.jar
 
-# ms-identidad es Maven: su jar vive en `target/`, que no esta excluido.
+# ms-identidad y ms-ecommerce (R16) son Maven: su jar vive en `target/`, que
+# no esta excluido.
