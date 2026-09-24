@@ -5,6 +5,32 @@ spring:
   mail:
     host: ${SMTP_HOST:localhost}
     port: ${SMTP_PORT:1025}
+    # Hasta R18 este bloque terminaba aqui. Sin usuario, sin clave y sin TLS,
+    # este servicio SOLO podia hablar con un buzon de pruebas sin
+    # autenticacion: en dev apuntaba a Mailpit (puerto 1025), que recoge los
+    # mensajes y no los reenvia a nadie. Los correos se componian bien, se
+    # entregaban bien y no llegaban a ninguna bandeja, porque no habia
+    # ninguna bandeja al otro lado.
+    #
+    # Vacio por omision = sin autenticacion, que es lo que Mailpit necesita.
+    # Un proveedor real se configura por entorno, sin tocar el codigo.
+    username: ${SMTP_USUARIO:}
+    password: ${SMTP_CLAVE:}
+    properties:
+      mail.smtp.auth: ${SMTP_AUTENTICA:false}
+      # `enable` negocia STARTTLS si el servidor lo ofrece; `required` corta
+      # la conexion si no lo ofrece. Van juntas a proposito: con solo
+      # `enable`, un servidor que no anuncie STARTTLS recibiria la contrasena
+      # en claro sin que nadie se entere.
+      mail.smtp.starttls.enable: ${SMTP_TLS:false}
+      mail.smtp.starttls.required: ${SMTP_TLS:false}
+      # Sin timeout, un proveedor que no responde deja el hilo de la peticion
+      # colgado hasta que el sistema operativo se rinde. Diez segundos es mas
+      # de lo que tarda cualquier SMTP sano y menos de lo que aguanta quien
+      # esta esperando a registrarse.
+      mail.smtp.connectiontimeout: ${SMTP_TIMEOUT_MS:10000}
+      mail.smtp.timeout: ${SMTP_TIMEOUT_MS:10000}
+      mail.smtp.writetimeout: ${SMTP_TIMEOUT_MS:10000}
   mvc:
     problemdetails:
       enabled: true
@@ -35,3 +61,19 @@ management:
     web:
       exposure:
         include: health,info,metrics,prometheus
+
+# Identidad del remitente y enlaces publicos.
+#
+# El remitente NO puede quedar al azar del servidor: un proveedor real
+# rechaza el mensaje si el From no es una direccion que la cuenta tenga
+# autorizada, y ese rechazo es la causa mas comun de "el correo no llega".
+correo:
+  remitente: ${CORREO_REMITENTE:The Nexus Battles VI <no-reply@nexusbattles.local>}
+  responder-a: ${CORREO_RESPONDER_A:}
+  # Base publica de la aplicacion para los enlaces de los correos. Nunca una
+  # IP escrita en el codigo: cuando el entorno cambie de direccion, los
+  # correos ya enviados seguirian apuntando a la anterior.
+  base-publica: ${PUBLIC_BASE_URL:http://localhost:8080}
+  # Cuantos envios recientes se recuerdan para poder demostrar la entrega.
+  # Es memoria, no un historial: se pierde al reiniciar, a proposito.
+  envios-recordados: ${CORREO_ENVIOS_RECORDADOS:200}
