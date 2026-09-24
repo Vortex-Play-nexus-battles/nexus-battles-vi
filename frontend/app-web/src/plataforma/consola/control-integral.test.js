@@ -101,6 +101,9 @@ function apiSimulada(sobrescribir = {}) {
     if (recurso.startsWith('/admin/auditoria')) {
       return conFallo(RESULTADO.SIN_PERMISO, 403, recurso);
     }
+    if (recurso.startsWith('/comentarios/moderacion')) {
+      return conDatos({ entradas: [{ id: 1 }, { id: 2 }], total: 2, pagina: 0, tamano: 20 });
+    }
     if (recurso.startsWith('/transacciones')) {
       return conFallo(RESULTADO.SERVICIO_DEGRADADO, 502, recurso);
     }
@@ -293,6 +296,69 @@ describe('sistema', () => {
     const sellos = [...sistema.querySelectorAll('.tabla .sello-estado')].map((s) => s.textContent);
     expect(sellos).toEqual(['OPERATIVO', 'CAIDO', 'NO DESPLEGADO']);
     expect(sistema.textContent).toContain('12 operativos');
+  });
+});
+
+describe('las consultas son las que el sistema atiende de verdad', () => {
+  test('la auditoria se lee de /admin/auditoria, no de la ruta de escritura', async () => {
+    const consultarApi = apiSimulada();
+    const raiz = pagina();
+
+    montarControlIntegral(raiz, {}, { consultarApi });
+    await asentar();
+
+    const pedidas = consultarApi.mock.calls.map((c) => c[0]);
+    expect(pedidas).toContain('/admin/auditoria?page=0&size=15');
+    // /admin/auditoria/eventos acepta POST; a un GET responde 405.
+    expect(pedidas.some((r) => r.startsWith('/admin/auditoria/eventos'))).toBe(false);
+  });
+
+  test('economia pide el historial consultable, no un libro mayor inexistente', async () => {
+    const consultarApi = apiSimulada();
+    const raiz = pagina();
+
+    montarControlIntegral(raiz, {}, { consultarApi });
+    await asentar();
+
+    const pedidas = consultarApi.mock.calls.map((c) => c[0]);
+    expect(pedidas).toContain('/transacciones/mi-historial');
+    expect(pedidas).not.toContain('/transacciones');
+  });
+
+  test('la cola de moderacion cuenta bien aunque llame a su lista "entradas"', async () => {
+    const raiz = pagina();
+
+    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
+    await asentar();
+
+    expect(raiz.querySelector('[data-panel="comentarios"] .indicador__valor').textContent).toBe(
+      '2',
+    );
+  });
+
+  test('sanciones ensena el recuento que publica el servicio, no una tabla inventada', async () => {
+    const raiz = pagina();
+
+    montarControlIntegral(
+      raiz,
+      {},
+      {
+        consultarApi: apiSimulada({
+          '/sanciones/metricas': conDatos({
+            total: 3,
+            porTipo: { ADVERTENCIA: 2, SUSPENSION: 1, BANEO: 0 },
+            apelaciones: { PENDIENTE: 1 },
+            moderadoresActivos: 2,
+          }),
+        }),
+      },
+    );
+    await asentar();
+
+    const sanciones = raiz.querySelector('[data-panel="sanciones"]');
+    expect(sanciones.textContent).toContain('ADVERTENCIA');
+    expect(sanciones.textContent).toContain('Apelaciones pendiente');
+    expect(sanciones.textContent).toContain('Moderadores activos');
   });
 });
 

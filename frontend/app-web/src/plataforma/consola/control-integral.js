@@ -356,9 +356,14 @@ function panelDeMisiones() {
 function seccionEconomia(consultarApi) {
   const transacciones = panelDeRecurso({
     id: 'transacciones',
-    titulo: 'Transacciones',
-    descripcion: 'Movimientos de créditos registrados en el sistema.',
-    recurso: '/transacciones',
+    titulo: 'Movimientos de tu cuenta',
+    descripcion:
+      'El sistema no publica un libro mayor global: solo el historial de quien consulta.',
+    // No hay un libro mayor global: /transacciones acepta POST para registrar
+    // un movimiento y a un GET responde 405. Lo unico consultable es el
+    // historial de quien pregunta. Se ensena eso, dicho con todas las letras,
+    // en vez de fabricar un agregado que ningun servicio calcula.
+    recurso: '/transacciones/mi-historial',
     consultarApi,
     pintar: (datos) =>
       tabla({
@@ -448,39 +453,53 @@ function seccionModeracion(consultarApi) {
     id: 'auditoria',
     titulo: 'Bitácora de acciones administrativas',
     descripcion: 'Cada acción, con la identidad de quien la hizo.',
-    recurso: '/admin/auditoria/eventos?page=0&size=15',
+    // La ruta de LECTURA es /admin/auditoria. /admin/auditoria/eventos es la
+    // de escritura: acepta POST y a un GET responde 405. Comprobado contra
+    // dev con un token de administrador.
+    recurso: '/admin/auditoria?page=0&size=15',
     consultarApi,
     pintar: (datos) =>
       tabla({
-        columnas: ['Cuándo', 'Quién', 'Acción', 'Sobre'],
+        columnas: ['Cuándo', 'Quién', 'Acción', 'Sobre', 'Motivo'],
         filas: filasDe(datos).map((e) => [
-          formatearFecha(e.ocurrioEn ?? e.fecha ?? e.timestamp),
-          e.actor ?? e.usuario ?? e.autor ?? '--',
-          e.accion ?? e.tipo ?? '--',
-          e.recurso ?? e.objetivo ?? e.entidad ?? '--',
+          formatearFecha(e.fechaHora),
+          e.administrador ?? '--',
+          e.tipoAccion ?? '--',
+          e.afectado ?? '--',
+          e.motivo ?? '--',
         ]),
         resumen: 'Últimos quince eventos registrados',
       }),
   });
 
+  // No hay listado global de sanciones: /sanciones acepta POST para emitir una,
+  // y la consulta es por usuario (/sanciones/usuarios/{id}). Lo unico agregado
+  // que el servicio publica es este recuento, y es lo que se ensena. Inventar
+  // una tabla de sanciones a partir del recuento seria exactamente lo que esta
+  // consola no hace.
   const sanciones = panelDeRecurso({
     id: 'sanciones',
-    titulo: 'Sanciones aplicadas',
-    descripcion: 'Advertencias, suspensiones y baneos vigentes.',
-    recurso: '/sanciones',
+    titulo: 'Sanciones del último mes',
+    descripcion: 'Recuento por tipo y estado de las apelaciones.',
+    recurso: '/sanciones/metricas',
     consultarApi,
-    pintar: (datos) =>
-      tabla({
-        columnas: ['Usuario', 'Tipo', 'Motivo', 'Hasta'],
-        filas: filasDe(datos)
-          .slice(0, 25)
-          .map((s) => [
-            s.usuarioId ?? s.apodo ?? '--',
-            s.tipo ?? '--',
-            s.motivo ?? '--',
-            formatearFecha(s.hasta ?? s.vigenteHasta),
+    pintar: (datos) => {
+      const porTipo = datos?.porTipo ?? {};
+      const apelaciones = datos?.apelaciones ?? {};
+      return tabla({
+        columnas: ['Concepto', 'Cantidad'],
+        filas: [
+          ['Total de sanciones', datos?.total ?? '--'],
+          ...Object.entries(porTipo).map(([tipo, cuantas]) => [tipo, cuantas]),
+          ...Object.entries(apelaciones).map(([estado, cuantas]) => [
+            `Apelaciones ${estado.toLowerCase()}`,
+            cuantas,
           ]),
-      }),
+          ['Moderadores activos', datos?.moderadoresActivos ?? '--'],
+        ],
+        resumen: 'Ventana de treinta días que calcula el servicio',
+      });
+    },
   });
 
   const comentarios = panelDeRecurso({

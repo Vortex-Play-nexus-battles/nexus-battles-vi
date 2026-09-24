@@ -41,6 +41,17 @@ export const RESULTADO = Object.freeze({
   NO_DISPONIBLE: 'NO_DISPONIBLE',
 });
 
+/**
+ * Como se llama la lista dentro de una respuesta paginada.
+ *
+ * Tres nombres porque hay tres convenciones vivas en el sistema: `contenido`
+ * en lo que se escribio en castellano, `content` en lo que expone el `Page` de
+ * Spring tal cual, y `entradas` en la cola de moderacion de comentarios.
+ * Unificarlas es un cambio de contrato en cinco servicios; reconocerlas es una
+ * linea.
+ */
+const CLAVES_DE_FILAS = Object.freeze(['contenido', 'content', 'entradas']);
+
 /** Codigos que significan "el servicio no esta atendiendo", no "dijo que no". */
 const CAIDO = Object.freeze([500, 502, 503, 504]);
 
@@ -179,11 +190,10 @@ export function estaVacio(datos) {
     return datos.length === 0;
   }
   if (typeof datos === 'object') {
-    if (Array.isArray(datos.contenido)) {
-      return datos.contenido.length === 0;
-    }
-    if (Array.isArray(datos.content)) {
-      return datos.content.length === 0;
+    for (const clave of CLAVES_DE_FILAS) {
+      if (Array.isArray(datos[clave])) {
+        return datos[clave].length === 0;
+      }
     }
     return Object.keys(datos).length === 0;
   }
@@ -213,11 +223,10 @@ export function totalDe(datos) {
     if (typeof datos.totalElements === 'number') {
       return datos.totalElements;
     }
-    if (Array.isArray(datos.contenido)) {
-      return datos.contenido.length;
-    }
-    if (Array.isArray(datos.content)) {
-      return datos.content.length;
+    for (const clave of CLAVES_DE_FILAS) {
+      if (Array.isArray(datos[clave])) {
+        return datos[clave].length;
+      }
     }
   }
   return null;
@@ -228,11 +237,10 @@ export function filasDe(datos) {
   if (Array.isArray(datos)) {
     return datos;
   }
-  if (Array.isArray(datos?.contenido)) {
-    return datos.contenido;
-  }
-  if (Array.isArray(datos?.content)) {
-    return datos.content;
+  for (const clave of CLAVES_DE_FILAS) {
+    if (Array.isArray(datos?.[clave])) {
+      return datos[clave];
+    }
   }
   return [];
 }
