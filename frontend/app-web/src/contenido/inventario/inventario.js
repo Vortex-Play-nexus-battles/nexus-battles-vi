@@ -612,10 +612,13 @@ export async function montarInventario(
       }
     } catch (fallo) {
       console.error('No se pudo guardar el elemento del inventario', fallo);
+      // El servidor ya explica el rechazo en espanol (problem detail): p. ej.
+      // un producto que no existe en el catalogo o un tipo que no coincide.
       const mensaje =
         fallo?.status === 403
           ? 'No tienes permiso para modificar ese inventario.'
-          : 'No pudimos guardar el elemento. Revisa los datos e inténtalo de nuevo.';
+          : (fallo?.detalle ??
+            'No pudimos guardar el elemento. Revisa los datos e inténtalo de nuevo.');
       mostrarMensaje(mensaje, true);
     } finally {
       cambiarDisponibilidad(vista.botonGuardar, true);

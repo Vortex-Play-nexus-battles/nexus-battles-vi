@@ -6,7 +6,10 @@ info:
   # el mismo problema que una ruta declarada sin implementar, del reves: el
   # consumidor no puede saber que existe, y el que la llamaba lo hacia contra
   # una API «acordada de palabra». Aditivo, asi que sube la menor.
-  version: 1.2.0
+  # 1.3.0 (Grupo 2, #685): crear un elemento exige que el producto exista y
+  # este activo en el catalogo (422 inexistente, 409 suspendido, 400 tipo que
+  # no coincide, 503 catalogo no disponible). Aditivo: solo agrega respuestas.
+  version: 1.3.0
   description: >
     Consulta paginada de la vitrina para HU-INV-001, y creacion y modificacion
     de elementos propios del jugador para HU-INV-003, y equipamiento de
@@ -24,6 +27,14 @@ info:
     (400 sin ella). Sin token 401. Las operaciones internas acordadas con
     Subastas siguen exigiendo su credencial (azp = ms-subastas). Hasta la
     1.0.0 X-User-Name a secas era la identidad, sin verificar.
+
+    Solo productos del catalogo (1.2.0). Crear un elemento consulta el
+    producto en el servicio de productos (GET /api/v1/productos/{id}): el
+    jugador tiene instancias con nombre propio de productos que existen, no
+    inventa productos (los crea el rol disenador, RG-074 del 29-jul). Un
+    producto inexistente responde 422, uno suspendido 409, un tipo distinto
+    al del producto 400, y si productos no responde 503: nunca se acepta a
+    ciegas. En 1.1.1 cualquier productoId se aceptaba.
 servers:
   - url: http://localhost:8080
     description: Entorno local de desarrollo
@@ -65,6 +76,11 @@ paths:
           $ref: "#/components/responses/IdentidadRequerida"
     post:
       summary: Crea un elemento en el inventario del jugador autenticado
+      description: >
+        El elemento es una instancia de un producto del catalogo. Antes de
+        guardar, el servidor consulta productoId en el servicio de productos
+        y exige que exista, que no este suspendido y que su tipo sea el que
+        trae la peticion.
       operationId: crearElementoPropio
       requestBody:
         required: true
@@ -80,11 +96,30 @@ paths:
               schema:
                 $ref: "#/components/schemas/ElementoInventario"
         "400":
-          $ref: "#/components/responses/SolicitudInvalida"
+          description: >
+            Datos invalidos ("Solicitud invalida") o tipo distinto al del
+            producto del catalogo ("Tipo no coincide": "El tipo no coincide
+            con el producto del catalogo.").
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
         "401":
           $ref: "#/components/responses/IdentidadRequerida"
+        "409":
+          $ref: "#/components/responses/ProductoSuspendido"
+        "422":
+          $ref: "#/components/responses/ProductoInexistente"
         "503":
-          $ref: "#/components/responses/PersistenciaNoDisponible"
+          description: >
+            La escritura no pudo completarse ("Inventario no disponible") o el
+            servicio de productos no respondio y el producto no se pudo
+            verificar ("Catalogo no disponible"). En ambos casos no se guarda
+            nada.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
   /api/v1/inventario/elementos/busqueda:
     get:
       summary: Busca productos en el inventario del jugador autenticado
@@ -453,18 +488,21 @@ components:
       type: object
       additionalProperties: false
       description: >
-        HU-PRD-001 ya publica la creacion y define los mismos tipos y partes de
-        armadura, pero aun no ofrece una consulta de producto por identificador.
-        Cuando ese endpoint este disponible, tipo y parteArmadura se resolveran
-        en servidor desde productoId.
+        productoId debe existir en el catalogo del servicio de productos y no
+        estar suspendido. El tipo lo manda el producto: el campo se conserva
+        por compatibilidad, pero debe coincidir con el tipo del producto o la
+        peticion se rechaza con 400. parteArmadura sigue viniendo de la
+        peticion (obligatoria si el tipo es ARMADURA).
       required: [productoId, tipo, nombrePropio]
       properties:
         productoId:
           type: string
           minLength: 1
+          description: Identificador de un producto existente del catalogo.
         tipo:
           type: string
           enum: [HEROE, HABILIDAD, ARMA, ARMADURA, ITEM, EPICA]
+          description: Debe ser el mismo tipo que tiene el producto en el catalogo.
         nombrePropio:
           type: string
           minLength: 1
@@ -689,6 +727,22 @@ components:
             $ref: "#/components/schemas/DetalleDeProblema"
     PersistenciaNoDisponible:
       description: La escritura atomica no pudo completarse y no se aplicaron cambios parciales
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/DetalleDeProblema"
+    ProductoInexistente:
+      description: >
+        El productoId no existe en el catalogo ("Producto inexistente": "El
+        producto no existe en el catalogo."). No se guarda nada.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/DetalleDeProblema"
+    ProductoSuspendido:
+      description: >
+        El producto existe pero esta suspendido en el catalogo ("Producto
+        suspendido"). No se guarda nada.
       content:
         application/problem+json:
           schema:
