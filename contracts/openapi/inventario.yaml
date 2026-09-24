@@ -1,7 +1,12 @@
 openapi: 3.1.0
 info:
   title: Servicio de inventario
-  version: 1.1.1
+  # 1.2.0 (FI-TRANSFER-1): se declara POST .../transferencias, que ya existia
+  # implementada (#670) y no estaba en el contrato. Un endpoint sin declarar es
+  # el mismo problema que una ruta declarada sin implementar, del reves: el
+  # consumidor no puede saber que existe, y el que la llamaba lo hacia contra
+  # una API «acordada de palabra». Aditivo, asi que sube la menor.
+  version: 1.2.0
   description: >
     Consulta paginada de la vitrina para HU-INV-001, y creacion y modificacion
     de elementos propios del jugador para HU-INV-003, y equipamiento de
@@ -240,6 +245,70 @@ paths:
           $ref: "#/components/responses/ElementoNoDisponible"
         "503":
           $ref: "#/components/responses/PersistenciaNoDisponible"
+  /api/v1/inventario/elementos/{elementoId}/transferencias:
+    post:
+      summary: Cambia de dueno un elemento al concluir una subasta
+      description: >
+        HU-SUB-004. La adjudicacion de una subasta mueve el elemento del
+        inventario del vendedor al del comprador. El inventario esta modelado
+        POR DUENO, asi que no es un cambio de campo: el elemento sale de un
+        agregado y entra en otro.
+
+        **Solo transfiere quien bloqueo.** Se exige que el elemento este
+        bloqueado por ESA subasta (`subastaId`); sin esa comprobacion,
+        cualquier servicio con credencial podria mover un elemento ajeno
+        inventandose un identificador de subasta. El bloqueo se **conserva**
+        tras la transferencia: es lo que permite deshacerla si el cobro falla
+        despues, y lo que impide que el comprador use un objeto que todavia no
+        ha pagado. Lo libera `DELETE .../bloqueo-subasta/{subastaId}` cuando la
+        venta es definitiva.
+
+        Idempotente por estado, no por clave: si el elemento ya pertenece al
+        destino, la operacion termina bien sin volver a moverlo. Hace falta,
+        porque el cierre por vencimiento de ms-subastas reintenta la misma
+        subasta cada 30 s. `Idempotency-Key` se acepta y se registra, pero no
+        se persiste: el estado es la verdad.
+
+        El nuevo dueno viaja en el CUERPO y no en una cabecera de identidad
+        porque de las tres veces que ms-subastas llama a esta operacion, dos
+        las dispara un trabajo programado sin token de jugador —el cierre por
+        vencimiento— y la tercera devuelve el elemento AL VENDEDOR como
+        compensacion cuando el cobro falla, y el vendedor no es quien pidio
+        nada.
+      operationId: transferirElementoPorSubasta
+      security:
+        - BearerInterno: []
+      parameters:
+        - $ref: "#/components/parameters/ElementoId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransferirElemento"
+      responses:
+        "200":
+          description: >
+            Elemento ya en el inventario del nuevo dueno, con su bloqueo
+            intacto. Tambien es la respuesta de un reintento de una
+            transferencia ya aplicada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ElementoInventario"
+        "400":
+          $ref: "#/components/responses/SolicitudInvalida"
+        "401":
+          $ref: "#/components/responses/AutenticacionInternaRequerida"
+        "403":
+          $ref: "#/components/responses/TransferenciaNoAutorizada"
+        "404":
+          $ref: "#/components/responses/ElementoNoEncontrado"
+        "409":
+          $ref: "#/components/responses/TransferenciaSinBloqueo"
+        "503":
+          $ref: "#/components/responses/PersistenciaNoDisponible"
   /api/v1/inventario/elementos/{elementoId}/bloqueo-subasta/{subastaId}:
     delete:
       summary: Libera el producto cuando la subasta se cierra o cancela
@@ -420,6 +489,23 @@ components:
         subastaId:
           type: string
           format: uuid
+    TransferirElemento:
+      type: object
+      additionalProperties: false
+      required: [nuevoPropietarioUid, subastaId]
+      properties:
+        nuevoPropietarioUid:
+          type: string
+          format: uuid
+          description: >
+            Quien pasa a ser el dueno. El ganador de la subasta, o el vendedor
+            cuando se esta deshaciendo una adjudicacion cuyo cobro fallo.
+        subastaId:
+          type: string
+          format: uuid
+          description: >
+            La subasta que mantiene el bloqueo sobre el elemento. Si no
+            coincide, 409 y no se mueve nada.
     ElementoInventario:
       type: object
       required: [id, productoId, tipo, nombrePropio, disponible, subastaId]
@@ -587,6 +673,20 @@ components:
       description: El token no identifica al cliente OAuth2 autorizado de ms-subastas
     BloqueoSubastaNoAutorizado:
       description: El token no identifica a ms-subastas o propietarioUid no es el propietario
+    TransferenciaNoAutorizada:
+      description: >
+        El token no identifica a ms-subastas. Cambiar de dueno un elemento es
+        mas delicado que bloquearlo, asi que no cae en el comodin de
+        «cualquier servicio autenticado»: se comprueba el `azp`.
+    TransferenciaSinBloqueo:
+      description: >
+        El elemento no esta bloqueado por esa subasta. Es 409 y no 403 a
+        proposito: quien pide puede pedirlo, lo que no encaja es el estado del
+        elemento, y reintentarlo va a fallar igual.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/DetalleDeProblema"
     PersistenciaNoDisponible:
       description: La escritura atomica no pudo completarse y no se aplicaron cambios parciales
       content:

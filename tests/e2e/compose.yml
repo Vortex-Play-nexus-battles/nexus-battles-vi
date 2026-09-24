@@ -285,6 +285,12 @@ services:
       FINANZAS_BASE_URL: http://srv-ms-finanzas:8093/api/v1
       FINANZAS_MODO: http
       INVENTARIO_BASE_URL: http://srv-inventario:8080
+      # Sin esta linea, application.properties cae en su valor por omision
+      # (app.inventario.modo=${INVENTARIO_MODO:fake}) y ms-subastas habla con un
+      # doble en memoria: la subasta se cerraba y se cobraba, y el ganador no
+      # recibia nada, con el E2E en verde. La URL de arriba estaba puesta y no
+      # se usaba. FINANZAS_MODO ya venia declarado; este faltaba.
+      INVENTARIO_MODO: http
       CATALOGO_BASE_URL: http://srv-productos:8080
       NOTIFICACIONES_BASE_URL: http://srv-notificaciones:8085/api/v1
       SANCIONES_BASE_URL: http://srv-moderacion-sanciones:8086
