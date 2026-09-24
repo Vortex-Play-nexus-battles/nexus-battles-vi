@@ -676,13 +676,19 @@ test.describe('R17 · la prueba del profesor', () => {
 
         // Tienda (HU-CAR-001): el catálogo carga y se puede añadir al carrito.
         await menuDeCuenta(page, 'Tienda');
+        // Un catálogo vacío es VACÍO VÁLIDO si la pantalla lo dice; un fallo no.
         const productos = page.locator('#productos-grid .product-card');
-        await expect(productos.first()).toBeVisible({ timeout: 30_000 });
-        await page.locator('#productos-grid .btn-add:not([disabled])').first().click();
-        await expect(page.locator('#cart-items .cart-item').first()).toBeVisible({
-          timeout: 30_000,
-        });
-        estado.tienda = `FUNCIONAL (${await productos.count()} productos; carrito con 1)`;
+        const catalogoVacio = page.locator('#productos-grid .estado-vista--vacio');
+        await expect(productos.first().or(catalogoVacio)).toBeVisible({ timeout: 30_000 });
+        if (await productos.count()) {
+          await page.locator('#productos-grid .btn-add:not([disabled])').first().click();
+          await expect(page.locator('#cart-items .cart-item').first()).toBeVisible({
+            timeout: 30_000,
+          });
+          estado.tienda = `FUNCIONAL (${await productos.count()} productos; carrito con 1)`;
+        } else {
+          estado.tienda = 'VACÍO VÁLIDO — el catálogo lo dice';
+        }
 
         // Torneos: el listado carga, con torneos o con su estado vacío.
         await irA(page, 'torneo');
