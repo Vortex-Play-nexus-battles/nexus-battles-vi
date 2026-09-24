@@ -106,6 +106,10 @@ describe('nombreDelConcepto()', () => {
     expect(nombreDelConcepto('recompensa-victoria')).toBe('Recompensa por ganar');
   });
 
+  test('el abono de bienvenida de una cuenta nueva se lee como tal (R17)', () => {
+    expect(nombreDelConcepto('bono-registro')).toBe('Créditos de bienvenida');
+  });
+
   test('un concepto nuevo se muestra tal cual en vez de desaparecer', () => {
     expect(nombreDelConcepto('concepto-que-no-existia')).toBe('concepto-que-no-existia');
   });
