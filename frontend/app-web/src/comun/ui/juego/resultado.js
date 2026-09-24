@@ -52,13 +52,7 @@ const DESENLACES = Object.freeze({
  * @param {Array<HTMLElement>} [opciones.acciones] botones de «que hago ahora»
  * @returns {HTMLElement}
  */
-export function panelDeResultado({
-  victoria,
-  desenlace,
-  detalle,
-  creditos = null,
-  acciones = [],
-}) {
+export function panelDeResultado({ victoria, desenlace, detalle, creditos = null, acciones = [] }) {
   const cual = desenlace ?? (victoria ? 'victoria' : 'derrota');
   const { palabra, icono: nombreDelIcono } = DESENLACES[cual] ?? DESENLACES.derrota;
 
