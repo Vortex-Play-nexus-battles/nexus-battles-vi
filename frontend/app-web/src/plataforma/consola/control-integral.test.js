@@ -77,15 +77,17 @@ function apiSimulada(sobrescribir = {}) {
     }
     if (recurso.startsWith('/admin/sistema/servicios')) {
       return conDatos({
-        total: 17,
+        total: 18,
         operativos: 12,
         caidos: 2,
         noDesplegados: 3,
+        noObservables: 1,
         instante: '2026-09-24T02:00:00Z',
         servicios: [
-          { nombre: 'ms-identidad', estado: 'OPERATIVO', detalle: 'HTTP 200' },
-          { nombre: 'ms-subastas', estado: 'CAIDO', detalle: 'HTTP 502' },
-          { nombre: 'ms-chatbot', estado: 'NO_DESPLEGADO', detalle: 'fuera de dev' },
+          { servicio: 'ms-identidad', estado: 'OPERATIVO', detalle: 'HTTP 200' },
+          { servicio: 'ms-subastas', estado: 'CAIDO', detalle: 'Connection refused' },
+          { servicio: 'ms-chatbot', estado: 'NO_DESPLEGADO', detalle: 'fuera del host' },
+          { servicio: 'heroes', estado: 'NO_OBSERVABLE', detalle: 'en otro host' },
         ],
       });
     }
@@ -286,7 +288,7 @@ describe('directorio de jugadores', () => {
 });
 
 describe('sistema', () => {
-  test('distingue OPERATIVO, CAIDO y NO DESPLEGADO', async () => {
+  test('distingue los cuatro estados con palabras, no solo con color', async () => {
     const raiz = pagina();
 
     montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
@@ -294,8 +296,23 @@ describe('sistema', () => {
 
     const sistema = raiz.querySelector('[data-panel="sistema"]');
     const sellos = [...sistema.querySelectorAll('.tabla .sello-estado')].map((s) => s.textContent);
-    expect(sellos).toEqual(['OPERATIVO', 'CAIDO', 'NO DESPLEGADO']);
+    expect(sellos).toEqual(['OPERATIVO', 'CAIDO', 'NO DESPLEGADO', 'NO OBSERVABLE']);
     expect(sistema.textContent).toContain('12 operativos');
+    expect(sistema.textContent).toContain('de 18 catalogados');
+  });
+
+  /** Un servicio de otro host no puede salir en rojo: no esta roto. */
+  test('lo que vive en otro host no se pinta como caido', async () => {
+    const raiz = pagina();
+
+    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
+    await asentar();
+
+    const sellos = [...raiz.querySelectorAll('[data-panel="sistema"] .tabla .sello-estado')];
+    const caido = sellos.find((s) => s.textContent === 'CAIDO');
+    const otroHost = sellos.find((s) => s.textContent === 'NO OBSERVABLE');
+    expect(caido.dataset.estado).toBe('malo');
+    expect(otroHost.dataset.estado).toBe('neutro');
   });
 });
 

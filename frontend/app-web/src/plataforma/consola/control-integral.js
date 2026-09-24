@@ -150,7 +150,7 @@ function seccionResumen(consultarApi) {
   const servicios = panelDeRecurso({
     id: 'resumen-servicios',
     titulo: 'Servicios en linea',
-    descripcion: 'Sondeo real de los diecisiete servicios del sistema.',
+    descripcion: 'Sondeo real de la salud de cada servicio del catálogo.',
     recurso: '/admin/sistema/servicios',
     consultarApi,
     pintar: (datos) => {
@@ -521,22 +521,30 @@ function seccionModeracion(consultarApi) {
 function seccionSistema(consultarApi) {
   const servicios = panelDeRecurso({
     id: 'sistema',
-    titulo: 'Estado de los diecisiete servicios',
+    titulo: 'Estado de los servicios',
     descripcion:
-      'Sondeo real contra la salud de cada servicio. NO DESPLEGADO no es lo mismo que CAÍDO.',
+      'Sondeo real de la salud de cada servicio. Caído, fuera del host y no observable ' +
+      'son tres cosas distintas.',
     recurso: '/admin/sistema/servicios',
     consultarApi,
     pintar: (datos) => {
+      // `servicio` y no `nombre`: es como se llama el campo en la respuesta.
       const filas = (datos?.servicios ?? []).map((s) => [
-        s.nombre ?? '--',
+        s.servicio ?? '--',
         selloDeServicio(s.estado),
         s.detalle ?? '--',
       ]);
+      const partes = [
+        `${datos?.operativos ?? 0} operativos`,
+        `${datos?.caidos ?? 0} caídos`,
+        `${datos?.noDesplegados ?? 0} fuera del host`,
+      ];
+      if (datos?.noObservables) {
+        partes.push(`${datos.noObservables} en otro host`);
+      }
       const resumen = h('p', {
         clase: 't-meta',
-        texto: `${datos?.operativos ?? 0} operativos, ${datos?.caidos ?? 0} caídos, ${
-          datos?.noDesplegados ?? 0
-        } no desplegados, de ${datos?.total ?? filas.length} catalogados.`,
+        texto: `${partes.join(', ')}, de ${datos?.total ?? filas.length} catalogados.`,
       });
       return [resumen, tabla({ columnas: ['Servicio', 'Estado', 'Detalle'], filas })];
     },
@@ -563,10 +571,17 @@ function seccionSistema(consultarApi) {
 /** @param {string} estado */
 function selloDeServicio(estado) {
   const tono =
-    { OPERATIVO: 'ok', CAIDO: 'malo', NO_DESPLEGADO: 'neutro' }[String(estado)] ?? 'neutro';
+    {
+      OPERATIVO: 'ok',
+      CAIDO: 'malo',
+      NO_DESPLEGADO: 'neutro',
+      // Un servicio de otro host no va en rojo: no esta roto, esta fuera del
+      // alcance de la sonda.
+      NO_OBSERVABLE: 'neutro',
+    }[String(estado)] ?? 'neutro';
   return h('span', {
     clase: 'sello-estado',
-    texto: String(estado ?? '--').replace('_', ' '),
+    texto: String(estado ?? '--').replaceAll('_', ' '),
     datos: { estado: tono },
   });
 }
