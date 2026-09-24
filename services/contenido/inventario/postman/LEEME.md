@@ -25,10 +25,12 @@ SPRING_DATA_MONGODB_URI=mongodb://localhost:27017/inventario ./gradlew :services
 - **El catalogo inicial sembrado en productos** (contrato de inventario 1.2.0).
   Crear un elemento consulta el producto en el servicio de productos y solo
   acepta ids que existen, no suspendidos y del mismo tipo. La coleccion usa
-  ids del catalogo inicial (`heroe-guerrero-tanque`,
-  `arma-guerrero-tanque-espada-de-una-mano`, `armadura-mago-hielo-corona-de-hielo`,
-  `item-medico-benditas`, ...); sin la semilla, cada creacion responde 422
-  "Producto inexistente" y la coleccion se cae en cascada. Inventario encuentra
+  los UUID estables del catalogo inicial (UUID v3 derivado del slug; tabla en
+  `services/contenido/productos/docs/catalogo-inicial-identificadores.md`),
+  por ejemplo `aec4fbd2-9615-352a-9f2b-3fad781e123c` = Guerrero Tanque (HEROE)
+  y `1647b2ea-096d-37e7-b580-0172e4c62313` = Espada de una mano (ARMA). Sin
+  la semilla, cada creacion responde 422 "Producto inexistente" y la coleccion
+  se cae en cascada. Inventario encuentra
   a productos por `PRODUCTOS_BASE_URL`; si productos no responde, crear
   responde 503 "Catalogo no disponible".
 - Las rutas del jugador conservan temporalmente `X-User-Name`. La coleccion

@@ -82,13 +82,13 @@ class GestionarInventarioTest {
     @Test
     @DisplayName("un producto del catalogo se agrega con el tipo que manda el catalogo")
     void crearConProductoDelCatalogo() {
-        catalogo.registrar("arma-guerrero-tanque-espada-de-una-mano", TipoElementoInventario.ARMA);
+        catalogo.registrar("1647b2ea-096d-37e7-b580-0172e4c62313", TipoElementoInventario.ARMA);
 
         ElementoInventario creado = gestion.crear("jugador-A",
-                "arma-guerrero-tanque-espada-de-una-mano", TipoElementoInventario.ARMA, "Mi espada");
+                "1647b2ea-096d-37e7-b580-0172e4c62313", TipoElementoInventario.ARMA, "Mi espada");
 
         assertEquals(TipoElementoInventario.ARMA, creado.tipo());
-        assertEquals("arma-guerrero-tanque-espada-de-una-mano", repositorio.buscarPorPropietario("jugador-A")
+        assertEquals("1647b2ea-096d-37e7-b580-0172e4c62313", repositorio.buscarPorPropietario("jugador-A")
                 .orElseThrow().elementos().getFirst().productoId());
     }
 
@@ -126,10 +126,10 @@ class GestionarInventarioTest {
     @Test
     @DisplayName("si el tipo pedido no es el del producto, se rechaza")
     void rechazarTipoQueNoCoincide() {
-        catalogo.registrar("heroe-guerrero-tanque", TipoElementoInventario.HEROE);
+        catalogo.registrar("aec4fbd2-9615-352a-9f2b-3fad781e123c", TipoElementoInventario.HEROE);
 
         assertThrows(TipoNoCoincideException.class, () -> gestion.crear(
-                "jugador-A", "heroe-guerrero-tanque", TipoElementoInventario.ARMA, "Heroe disfrazado"));
+                "jugador-A", "aec4fbd2-9615-352a-9f2b-3fad781e123c", TipoElementoInventario.ARMA, "Heroe disfrazado"));
 
         assertTrue(repositorio.buscarPorPropietario("jugador-A").isEmpty());
     }
@@ -137,10 +137,10 @@ class GestionarInventarioTest {
     @Test
     @DisplayName("la armadura de catalogo sigue exigiendo su parte")
     void armaduraDeCatalogoConParte() {
-        catalogo.registrar("armadura-guerrero-tanque-defensa-del-enfurecido", TipoElementoInventario.ARMADURA);
+        catalogo.registrar("fbce687b-7496-3526-aef0-500b3fe2135e", TipoElementoInventario.ARMADURA);
 
         ElementoInventario creado = gestion.crear("jugador-A",
-                "armadura-guerrero-tanque-defensa-del-enfurecido", TipoElementoInventario.ARMADURA,
+                "fbce687b-7496-3526-aef0-500b3fe2135e", TipoElementoInventario.ARMADURA,
                 "Peto", ParteArmadura.PECHO);
 
         assertEquals(ParteArmadura.PECHO, creado.parteArmadura());

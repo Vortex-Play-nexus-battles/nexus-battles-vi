@@ -463,13 +463,13 @@ class InventarioApiTest {
     @Test
     @DisplayName("POST con un producto del catalogo crea el elemento con el tipo del producto")
     void crearConProductoDelCatalogo() throws Exception {
-        catalogo.registrar("arma-guerrero-tanque-espada-de-una-mano", TipoElementoInventario.ARMA);
+        catalogo.registrar("1647b2ea-096d-37e7-b580-0172e4c62313", TipoElementoInventario.ARMA);
 
         crearComoJugadorA("""
-                {"productoId":"arma-guerrero-tanque-espada-de-una-mano","tipo":"ARMA","nombrePropio":"Mi espada"}
+                {"productoId":"1647b2ea-096d-37e7-b580-0172e4c62313","tipo":"ARMA","nombrePropio":"Mi espada"}
                 """)
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.productoId").value("arma-guerrero-tanque-espada-de-una-mano"))
+                .andExpect(jsonPath("$.productoId").value("1647b2ea-096d-37e7-b580-0172e4c62313"))
                 .andExpect(jsonPath("$.tipo").value("ARMA"));
     }
 
@@ -505,10 +505,10 @@ class InventarioApiTest {
     @Test
     @DisplayName("POST con un tipo distinto al del producto responde 400 legible")
     void rechazarTipoQueNoCoincide() throws Exception {
-        catalogo.registrar("heroe-guerrero-tanque", TipoElementoInventario.HEROE);
+        catalogo.registrar("aec4fbd2-9615-352a-9f2b-3fad781e123c", TipoElementoInventario.HEROE);
 
         crearComoJugadorA("""
-                {"productoId":"heroe-guerrero-tanque","tipo":"ARMA","nombrePropio":"Heroe disfrazado"}
+                {"productoId":"aec4fbd2-9615-352a-9f2b-3fad781e123c","tipo":"ARMA","nombrePropio":"Heroe disfrazado"}
                 """)
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.title").value("Tipo no coincide"))
