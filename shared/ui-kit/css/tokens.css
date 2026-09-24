@@ -137,6 +137,10 @@
 
   /* --- Texto ------------------------------------------------------- */
   --texto:             #111726;  /* títulos y cuerpo. 13,25:1, nivel AAA */
+  /* Enlace directamente sobre el cromo (UX-GAME-1). `--primaria` está pensada
+     para leerse sobre superficie clara; sobre #1C2340 no llega a 2:1. Este
+     azul claro da 8,6:1 sobre el cromo y 6,9:1 sobre el cromo elevado. */
+  --enlace-sobre-cromo: #A9BDFF;
   --texto-2:           #48536A;  /* descripciones, fechas, apodos. 5,72:1 */
   --texto-3:           #57627A;  /* metadatos. 4,53:1                    */
   --texto-sobre-color: #FFFFFF;  /* texto encima de los rellenos sólidos */
@@ -321,6 +325,14 @@
   --brillo-acento:   0 6px 20px rgba(91, 39, 180, 0.42), 0 0 0 1px rgba(34, 68, 191, 0.45);
   /* Y la sombra que despega el logo del cromo oscuro. */
   --sombra-marca:    0 14px 32px rgba(34, 68, 191, 0.35);
+  /* La sombra de una superficie clara sobre la atmósfera oscura (UX-GAME-1):
+     las de arriba están calibradas para fondo claro y sobre índigo no se ven. */
+  --sombra-atmosfera: 0 12px 32px rgba(6, 9, 24, 0.45), 0 1px 0 rgba(255, 255, 255, 0.06);
+  /* El filo de energía del Nexo: la línea que corona la tarjeta de entrada
+     desde UX-R3 y que UX-GAME-1 lleva a todas las tarjetas. Un degradado no
+     es un color, pero va aquí por lo mismo que los colores: para que exista
+     una sola vez. */
+  --energia: linear-gradient(90deg, var(--primaria), var(--acento-relleno));
 
   /* =====================================================================
      Movimiento
@@ -394,5 +406,6 @@
     --info-insignia:         #FFFFFF;
     --texto-2:          #2B3346;
     --texto-3:          #48536A;
+    --enlace-sobre-cromo: #D6E0FF;
   }
 }

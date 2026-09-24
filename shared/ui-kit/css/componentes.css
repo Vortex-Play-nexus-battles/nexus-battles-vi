@@ -13,12 +13,69 @@
    Tarjeta — base de casi todo
    ======================================================================= */
 
+/* =======================================================================
+   Superficies claras — UX-GAME-1
+   -----------------------------------------------------------------------
+   Todo lo que pinta `--superficie` o `--superficie-2` devuelve la tinta a
+   oscuro (ver «Tinta contextual» en base.css). Va ANTES que cualquier regla
+   de componente, con la misma especificidad, para que un `color` propio del
+   componente siga ganando. Si una superficie nueva no esta en esta lista, su
+   texto sale claro sobre blanco: axe lo canta en el laboratorio visual.
+   ======================================================================= */
+.tarjeta,
+.dialogo,
+.estado-vista,
+.tabla,
+.menu,
+.resultado,
+.transmision,
+.chatbot__tarjeta,
+.metrica,
+.encuentro,
+.panel-resultado,
+.combate__hud,
+.combate__controles,
+.interrupcion__tarjeta,
+.entrada__tarjeta,
+.codigo-invitacion,
+.modalidad__cara,
+.accion-combate,
+.zona-carga--con-archivos,
+.zona-carga--cargando,
+.lista-terminos__fila,
+.campo__control,
+.desplegable__control,
+.campo-numerico__caja,
+.boton--secundario,
+.paginacion__pagina,
+.tecla,
+.elegir-objeto__opcion,
+.casilla--caja,
+.radio__entrada,
+.distintivo--privada,
+.sello-estado[data-estado='neutro'] {
+  --tinta: var(--texto);
+  --tinta-2: var(--texto-2);
+  --tinta-3: var(--texto-3);
+  --tinta-enlace: var(--primaria);
+  --tinta-enlace-hover: var(--primaria-relleno);
+  color: var(--texto);
+}
+
+/* La tarjeta: la superficie base del Nexo. Desde UX-GAME-1 lleva el filo de
+   energia que coronaba la tarjeta de entrada —tres pixeles de `--energia` en
+   el borde superior— y una sombra pensada para la atmosfera oscura; la de
+   capa 1 no se veia sobre indigo. El filo va como capa de fondo y no como
+   pseudoelemento para no reservar `::before` en un contenedor que lo usan
+   muchas vistas. */
 .tarjeta {
-  background: var(--superficie);
+  background:
+    var(--energia) top left / 100% 3px no-repeat,
+    var(--superficie);
   border: 1px solid var(--borde);
   border-radius: var(--radio);
   padding: var(--e-4);
-  box-shadow: var(--sombra-1);
+  box-shadow: var(--sombra-atmosfera);
 }
 
 .tarjeta--hundida {
@@ -44,9 +101,22 @@
     box-shadow var(--transicion);
 }
 
+.tarjeta--pulsable {
+  transition:
+    border-color var(--transicion),
+    box-shadow var(--transicion),
+    transform var(--transicion);
+}
+
 .tarjeta--pulsable:hover {
-  border-color: var(--borde-int);
-  box-shadow: var(--sombra-2);
+  border-color: color-mix(in srgb, var(--primaria) 55%, var(--borde));
+  box-shadow: var(--sombra-atmosfera), var(--brillo-primaria);
+  transform: translateY(-2px);
+}
+
+.tarjeta--pulsable:active {
+  transform: translateY(0);
+  transition-duration: var(--duracion-instantaneo);
 }
 
 /* =======================================================================
@@ -239,10 +309,73 @@
   color: var(--texto-sobre-color);
 }
 
+.boton--exito {
+  background: var(--exito);
+  color: var(--texto-sobre-color);
+}
+.boton--exito:hover {
+  color: var(--texto-sobre-color);
+}
+
+/* Boton de solo icono: cuadrado, con el nombre de la accion en `aria-label`
+   o en un `.solo-lectores` dentro. El area tactil es la del boton mediano. */
+.boton--icono {
+  padding: 0;
+  width: var(--boton-mediano);
+  min-width: var(--boton-mediano);
+  aspect-ratio: 1;
+}
+
 .boton[disabled],
 .boton[aria-disabled='true'] {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Cargando — UX-GAME-1. `aria-busy` es el estado, y lo pone el modulo que
+   lanzo la peticion; esto solo lo pinta. El texto se queda donde estaba, con
+   un indicador delante: cambiar la etiqueta por «Cargando…» hace que el boton
+   salte de ancho y que quien mira pierda de vista que accion pulso. Mientras
+   dure, el boton no responde al cursor. */
+.boton[aria-busy='true'] {
+  pointer-events: none;
+  position: relative;
+  color: transparent;
+}
+
+.boton[aria-busy='true']::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 1.1em;
+  height: 1.1em;
+  border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  /* El color del indicador es el del texto que se oculto: lo toma del
+     modificador (`--primario` blanco, `--secundario` oscuro). */
+  color: var(--texto-sobre-color);
+  animation: giro-de-carga 700ms linear infinite;
+}
+
+.boton--secundario[aria-busy='true']::before,
+.boton--contorno[aria-busy='true']::before {
+  color: var(--texto);
+}
+
+@keyframes giro-de-carga {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Sin giro: el indicador se queda como un arco quieto, que sigue diciendo
+     «esperando» sin moverse. */
+  .boton[aria-busy='true']::before {
+    animation: none;
+  }
 }
 
 /* =======================================================================
@@ -260,7 +393,9 @@
   font-family: var(--t-etiqueta-familia);
   font-size: var(--t-etiqueta-tam);
   font-weight: var(--t-etiqueta-peso);
-  color: var(--texto);
+  /* Tinta y no paleta: los filtros de Batallas van directamente sobre la
+     atmosfera y los de un formulario, dentro de una tarjeta. */
+  color: var(--tinta);
 }
 
 .campo__control {
@@ -272,12 +407,38 @@
   font-family: var(--t-cuerpo-familia);
   font-size: var(--t-cuerpo-tam);
   color: var(--texto);
+  transition:
+    border-color var(--transicion),
+    box-shadow var(--transicion);
+}
+
+/* UX-GAME-1: el campo responde antes de recibir el foco, y al recibirlo el
+   borde se enciende en la primaria ademas del anillo global. Invalido y
+   deshabilitado se dicen con borde y fondo, no solo con color. */
+.campo__control:hover:not(:disabled):not([aria-invalid='true']) {
+  border-color: color-mix(in srgb, var(--primaria) 60%, var(--borde-int));
+}
+
+.campo__control:focus-visible {
+  border-color: var(--primaria);
+}
+
+.campo__control[aria-invalid='true'] {
+  border-color: var(--error);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--error) 22%, transparent);
+}
+
+.campo__control:disabled {
+  background: var(--superficie-2);
+  color: var(--texto-3);
+  cursor: not-allowed;
 }
 
 .campo__pista {
   font-family: var(--t-meta-familia);
   font-size: var(--t-meta-tam);
-  color: var(--texto-3);
+  /* Tinta contextual (UX-GAME-1): una pista puede ir fuera de una tarjeta. */
+  color: var(--tinta-3);
 }
 
 /* Estado inválido. El criterio de aceptación de HU-SAL-001 pide que se
@@ -594,6 +755,10 @@
   padding: 0 var(--e-6);
   background: var(--cromo);
   color: var(--texto-sobre-color);
+  /* UX-GAME-1: sobre la atmosfera, que arranca en el cromo elevado, la barra
+     se fundia con la pagina. Una linea de energia al 45 % la separa sin
+     anadir un borde solido. */
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--primaria) 45%, transparent);
 }
 
 .cabecera__marca {
@@ -819,9 +984,32 @@
   flex-direction: column;
   gap: var(--e-4);
   padding: var(--e-6);
-  background: var(--superficie);
+  background:
+    var(--energia) top left / 100% 3px no-repeat,
+    var(--superficie);
   border-radius: var(--radio);
   box-shadow: var(--sombra-4);
+}
+
+/* UX-GAME-1: el dialogo entra, no aparece. Seis pixeles y un fundido en
+   `--duracion-normal`; sin rebote ni zoom. Bajo movimiento reducido las
+   duraciones ya valen cero por tokens.css y solo queda el fundido, que
+   tambien vale cero. */
+@media (prefers-reduced-motion: no-preference) {
+  .dialogo {
+    animation: entrar-dialogo var(--duracion-normal) var(--curva-salida) both;
+  }
+}
+
+@keyframes entrar-dialogo {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .dialogo__encabezado {
@@ -893,7 +1081,7 @@
 .paginacion__info {
   font-family: var(--t-meta-familia);
   font-size: var(--t-meta-tam);
-  color: var(--texto-3);
+  color: var(--tinta-3);
 }
 
 .paginacion__paginas {
@@ -1044,9 +1232,15 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--texto-2);
+  /* Tinta: en «Mi cuenta» las pestanas van directamente sobre la atmosfera. */
+  color: var(--tinta-2);
   cursor: pointer;
   font: inherit;
+  transition: color var(--transicion);
+}
+
+.pestana:hover {
+  color: var(--tinta);
 }
 
 .pestana__cara {
@@ -1066,7 +1260,7 @@
 }
 
 .pestana[aria-selected='true'] {
-  color: var(--primaria);
+  color: var(--tinta-enlace);
 }
 .pestana[aria-selected='true'] .pestana__linea {
   background: var(--primaria);
@@ -2326,7 +2520,11 @@
 /* El destino en curso se marca aquí, no con una variante de Figma. */
 .cabecera__destino.activo,
 .cabecera__destino[aria-current='page'] {
-  border-bottom-color: var(--texto-sobre-color);
+  /* El destino activo lleva el filo de energia, no una linea blanca: es el
+     mismo gesto que corona las tarjetas. */
+  border-bottom-color: transparent;
+  border-image: var(--energia) 1;
+  border-image-width: 0 0 2px 0;
 }
 
 /* Destino cuya pantalla todavía no existe. Se conserva —RF-INV-008 exige los
@@ -2558,6 +2756,16 @@
 
 .tabla__fila--seleccionada {
   background: var(--info-insignia);
+}
+
+/* UX-GAME-1: la fila responde al cursor. Solo las de datos: el encabezado no
+   es una fila que se pueda elegir. */
+.tabla__fila:not(.tabla__fila--encabezado) {
+  transition: background var(--transicion);
+}
+
+.tabla__fila:not(.tabla__fila--encabezado):not(.tabla__fila--seleccionada):hover {
+  background: var(--interaccion-velo-hover);
 }
 
 .tabla__encabezado--ordenable {
@@ -2929,8 +3137,15 @@
   border-radius: var(--radio);
 }
 
+.cabecera__destino {
+  transition:
+    color var(--transicion),
+    border-color var(--transicion);
+}
+
 .cabecera__destino:hover:not(.cabecera__destino--pendiente) {
-  border-bottom-color: var(--pista);
+  border-bottom-color: var(--enlace-sobre-cromo);
+  color: var(--enlace-sobre-cromo);
 }
 
 /* Sin sesión: dos botones y, si la sesión caducó, la razón. */
@@ -3360,7 +3575,9 @@
   /* Los botones no se desplazan ni se escalan; conservan el cambio de color y
      de sombra, que es lo que dice «esto responde». */
   .boton:hover:not([disabled]):not([aria-disabled='true']),
-  .boton:active:not([disabled]):not([aria-disabled='true']) {
+  .boton:active:not([disabled]):not([aria-disabled='true']),
+  .tarjeta--pulsable:hover,
+  .tarjeta--pulsable:active {
     transform: none;
   }
 }
@@ -3437,21 +3654,8 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  /* Color plano primero: si `color-mix` no está disponible, esto es lo que
-     queda, y sigue siendo correcto. */
-  background: var(--cromo);
-  background-image:
-    radial-gradient(
-      120% 80% at 15% 0%,
-      color-mix(in srgb, var(--acento-relleno) 38%, transparent),
-      transparent 60%
-    ),
-    radial-gradient(
-      90% 70% at 100% 100%,
-      color-mix(in srgb, var(--primaria) 30%, transparent),
-      transparent 55%
-    ),
-    linear-gradient(180deg, var(--cromo-elevado), var(--cromo) 55%);
+  /* El fondo lo pone `body` desde UX-GAME-1: la atmosfera del portal paso a
+     ser la de toda la aplicacion. Aqui queda solo la maquetacion. */
   color: var(--texto-sobre-color);
 }
 
@@ -5240,7 +5444,7 @@ button.tarjeta-heroe[aria-pressed='true'] {
    en caracteres para que no se convierta en una línea de 140. */
 .consola__alcance {
   max-width: 78ch;
-  color: var(--texto-2);
+  color: var(--tinta-2);
   line-height: var(--t-cuerpo-alto);
 }
 

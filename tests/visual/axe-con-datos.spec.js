@@ -39,6 +39,7 @@ import { AxeBuilder } from '@axe-core/playwright';
 import { test, expect } from '@playwright/test';
 
 import { PREFIJO_WEB } from './vistas.js';
+import { textoSinContrasteSobreAtmosfera } from './contraste-atmosfera.js';
 import { inyectarSesion, sesionSintetica } from './identidad.js';
 
 const NORMAS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
@@ -382,6 +383,15 @@ for (const escenario of ESCENARIOS) {
         expect(
           graves.map((v) => `${v.id} (${v.impact}) × ${v.nodes.length}: ${v.help}`),
           `Accesibilidad grave en ${escenario.id} a ${pantalla.nombre}, con datos`,
+        ).toEqual([]);
+
+        // UX-GAME-1 — texto directamente sobre la atmósfera, que axe no mide.
+        const sobreAtmosfera = await textoSinContrasteSobreAtmosfera(pagina);
+        expect(
+          sobreAtmosfera.map(
+            (h) => `${h.selector} ${h.color} ${h.contraste}:1 — «${h.texto}»`,
+          ),
+          `${escenario.id} a ${pantalla.nombre}: texto sin contraste sobre la atmósfera`,
         ).toEqual([]);
       } finally {
         await contexto.close();
