@@ -253,6 +253,73 @@ if [ -f "$BORDE" ]; then
 fi
 
 echo
+echo "== 9) Cada JVM del host de plataforma arranca en su turno (R16.5b) =="
+# Por que existe esta comprobacion:
+#
+# Al volver del apagado nocturno Docker arranca TODOS los contenedores a la
+# vez. Medido el 24-sep con doce JVM: carga 18,7 sobre 2 vCPU y swap 2040 de
+# 2047 MiB a los nueve minutos, sin que ninguna llegara a responder. El
+# entrypoint x-arranque-escalonado (docker-compose.deploy.yml) reparte ese
+# arranque por turnos, pero solo funciona si TODAS las JVM desplegables lo
+# llevan, con el mismo script y con un turno cada una: una que se lo salte
+# arranca en el segundo cero con las demas, y un turno con cuatro JVM es la
+# misma tormenta en pequeno. Un compose nuevo que copie un bloque viejo se lo
+# salta sin que ninguna revision lo vea.
+if command -v python3 >/dev/null 2>&1; then
+  python3 - "$CATALOGO" <<'PY' || FALLOS=$((FALLOS + 1))
+import json, sys, yaml
+catalogo = json.load(open(sys.argv[1], encoding="utf-8"))
+deploy = yaml.safe_load(open("docker-compose.deploy.yml", encoding="utf-8"))
+canonico = deploy.get("x-arranque-escalonado")
+errores, turnos = [], {}
+if not canonico:
+    errores.append("docker-compose.deploy.yml no define x-arranque-escalonado.")
+for s in catalogo["servicios"]:
+    if s.get("claseHost") != "plataforma" or not s.get("desplegableDev"):
+        continue
+    nombre = s["nombre"]
+    archivo = s.get("composeExtra") or "docker-compose.deploy.yml"
+    try:
+        svc = yaml.safe_load(open(archivo, encoding="utf-8"))["services"][f"srv-{nombre}"]
+    except (OSError, KeyError, TypeError):
+        errores.append(f"{nombre}: {archivo} no declara srv-{nombre}.")
+        continue
+    if svc.get("entrypoint") != canonico:
+        errores.append(f"{nombre}: el entrypoint de srv-{nombre} en {archivo} no es el de "
+                       "x-arranque-escalonado (docker-compose.deploy.yml). Copia el mismo script: "
+                       "sin el, esta JVM arranca a la vez que todas al volver del apagado.")
+    entorno = svc.get("environment") or {}
+    if isinstance(entorno, list):
+        entorno = dict(e.split("=", 1) for e in entorno if "=" in e)
+    turno = str(entorno.get("ARRANQUE_TURNO", ""))
+    if not turno.isdigit():
+        errores.append(f"{nombre}: falta ARRANQUE_TURNO (un entero) en el environment de srv-{nombre} en {archivo}.")
+    else:
+        turnos.setdefault(int(turno), []).append(nombre)
+    if entorno.get("ARRANQUE_CREADO_EN") != "${ARRANQUE_CREADO_EN:-9999999999}":
+        errores.append(f"{nombre}: srv-{nombre} en {archivo} debe llevar "
+                       "ARRANQUE_CREADO_EN: ${ARRANQUE_CREADO_EN:-9999999999} "
+                       "(la hora la pone desplegar.sh; sin ella el valor por omision no escalona).")
+for t, quienes in sorted(turnos.items()):
+    if len(quienes) > 2:
+        errores.append(f"El turno {t} tiene {len(quienes)} JVM ({', '.join(quienes)}): maximo dos por turno.")
+    print(f"  turno {t}: {', '.join(quienes)}")
+if "ms-identidad" not in turnos.get(0, []):
+    errores.append("ms-identidad tiene que arrancar en el turno 0: todos los demas le piden token o su JWKS.")
+for e in errores:
+    print(f"::error::{e}")
+sys.exit(1 if errores else 0)
+PY
+  for script in scripts/cd/desplegar.sh scripts/cd/revertir.sh; do
+    if ! grep -qE '^\s*export ARRANQUE_CREADO_EN=' "$script"; then
+      fallo "$script no exporta ARRANQUE_CREADO_EN antes de 'docker compose up'." \
+        "Sin esa hora, lo que despliega se queda con el valor por omision y no" \
+        "espera su turno en el proximo arranque del host."
+    fi
+  done
+fi
+
+echo
 if [ "$FALLOS" -gt 0 ]; then
   echo "::error::$FALLOS problema(s) en el catalogo de despliegue."
   exit 1

@@ -46,10 +46,59 @@
 # Todo se reinicia solo cuando la instancia vuelve del apagado nocturno
 # (restart: unless-stopped; sin esto, tras un stop/start del host los
 # contenedores quedan parados y la demo aparece caida).
+#
+# Arranque escalonado (R16.5b). "Todo se reinicia solo" significa que Docker
+# arranca las doce JVM A LA VEZ en cuanto vuelve el host. Medido el 24-sep
+# (stop/start de 04:08 UTC): carga 18,7 sobre 2 vCPU, swap 2040 de 2047 MiB a
+# los nueve minutos y ninguna respondia; con cuatro JVM retiradas, las otras
+# ocho respondieron en minuto y medio. Una JVM de Spring Boot arrancando toca
+# toda su memoria a la vez (clases, Hibernate, Flyway): doce arranques juntos
+# piden mas RAM de la que hay, y el host se queda intercambiando paginas en
+# vez de trabajar. Ninguna JVM llega al final, asi que nadie libera nada.
+#
+# Por eso cada JVM tiene un turno (ARRANQUE_TURNO, dos por turno, la
+# identidad primero porque todos le piden token) y el entrypoint espera
+# turno x ARRANQUE_PASO_S segundos antes de arrancar java, pero SOLO cuando
+# se cumplen las dos cosas:
+#   - el contenedor se creo ANTES de este arranque del host
+#     (ARRANQUE_CREADO_EN < btime de /proc/stat): lo esta levantando Docker
+#     porque volvio el host, no un despliegue;
+#   - el host lleva encendido menos de ARRANQUE_VENTANA_S (10 min): una JVM
+#     que se cae a media tarde se reinicia en el acto, sin esperar su turno.
+# Un despliegue (desplegar.sh, revertir.sh) exporta ARRANQUE_CREADO_EN con la
+# hora de ese momento, asi que lo que se despliega arranca sin esperar aunque
+# el CD acabe de encender el host. Sin la variable (un "docker compose up" a
+# mano) vale 9999999999 y tampoco espera: escalonar es algo que solo pide el
+# despliegue, nunca algo que se cuela por omision.
+#
+# El script es el mismo en los cinco archivos de compose del host (este y los
+# cuatro de Cuentas): una ancla de YAML no cruza archivos. El guardian
+# scripts/cd/comprobar-catalogo-servicios.sh (seccion 9) falla si alguno
+# difiere, si a una JVM desplegable le falta turno o si un turno tiene mas de
+# dos. La prueba de su logica es scripts/cd/pruebas/arranque-escalonado.sh.
+x-arranque-escalonado: &arranque-escalonado
+  - /bin/sh
+  - -c
+  - |
+    proc="$${ARRANQUE_PROC:-/proc}"
+    creado="$${ARRANQUE_CREADO_EN:-9999999999}"
+    arranque=$$(awk '/^btime/ {print $$2}' "$$proc/stat" 2>/dev/null)
+    encendido=$$(cut -d. -f1 "$$proc/uptime" 2>/dev/null)
+    if [ -n "$$arranque" ] && [ -n "$$encendido" ] \
+       && [ "$$creado" -lt "$$arranque" ] 2>/dev/null \
+       && [ "$$encendido" -lt "$${ARRANQUE_VENTANA_S:-600}" ] 2>/dev/null; then
+      espera=$$(( $${ARRANQUE_TURNO:-0} * $${ARRANQUE_PASO_S:-40} ))
+      echo "arranque escalonado: el host acaba de encender (hace $${encendido}s); turno $${ARRANQUE_TURNO:-0}, espero $${espera}s"
+      trap 'exit 143' TERM INT
+      sleep "$$espera" & wait $$!
+      trap - TERM INT
+    fi
+    exec java -jar app.jar
 
 x-servicio-plataforma: &servicio-plataforma
   restart: unless-stopped
   mem_limit: 384m
+  entrypoint: *arranque-escalonado
   environment:
     JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
 
@@ -94,6 +143,8 @@ services:
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-comentarios:${TAG}
     environment:
       JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
+      ARRANQUE_TURNO: "3"
+      ARRANQUE_CREADO_EN: ${ARRANQUE_CREADO_EN:-9999999999}
       # HU-COM-001 / RF-USR-004: la sancion activa del autor se consulta en
       # moderacion-sanciones, que corre en este host (misma nota que en
       # srv-salas-partidas: sin esto localhost seria el propio contenedor).
@@ -115,12 +166,21 @@ services:
   srv-correo:
     <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-correo:${TAG}
+    environment:
+      # Hasta R16.5b heredaba el environment del ancla tal cual. Necesita su
+      # propio turno, y un bloque environment sustituye entero al del ancla:
+      # por eso se repite JAVA_TOOL_OPTIONS.
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
+      ARRANQUE_TURNO: "4"
+      ARRANQUE_CREADO_EN: ${ARRANQUE_CREADO_EN:-9999999999}
 
   srv-torneos:
     <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-torneos:${TAG}
     environment:
       JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
+      ARRANQUE_TURNO: "3"
+      ARRANQUE_CREADO_EN: ${ARRANQUE_CREADO_EN:-9999999999}
       # M13: lista negra y sanciones en moderacion-sanciones (este host); el
       # libro de creditos (ms-finanzas) corre en dev desde R16.5. Si no esta,
       # una inscripcion con costo > 0 responde 503 libro-no-disponible y un
@@ -137,6 +197,8 @@ services:
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-salas-partidas:${TAG}
     environment:
       JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
+      ARRANQUE_TURNO: "1"
+      ARRANQUE_CREADO_EN: ${ARRANQUE_CREADO_EN:-9999999999}
       # Credencial de servicio propia (ADR-005) para hablar con inventario.
       # El .env es compartido, asi que el client_id va aqui y el secreto
       # sale de la variable por servicio que genera desplegar.sh.
@@ -206,6 +268,8 @@ services:
       # con el. Por eso JAVA_TOOL_OPTIONS se repite aqui: sin esta linea el
       # servicio arrancaria sin el limite de monton del ancla.
       JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
+      ARRANQUE_TURNO: "1"
+      ARRANQUE_CREADO_EN: ${ARRANQUE_CREADO_EN:-9999999999}
       # Credencial de servicio (ADR-005). desplegar.sh genera y persiste
       # SECRETO_SERVICIO_NOTIFICACIONES en el host y se la da a ms-identidad en
       # AUTH_CLIENTES_SERVICIO; sin estas dos lineas el servicio pide el token
@@ -218,6 +282,11 @@ services:
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-moderacion-sanciones:${TAG}
     environment:
       JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
+      # Turno 0 con la identidad: el chat de salas y los comentarios consultan
+      # la sancion activa antes de publicar, y sin moderacion responden
+      # «sanciones no disponibles».
+      ARRANQUE_TURNO: "0"
+      ARRANQUE_CREADO_EN: ${ARRANQUE_CREADO_EN:-9999999999}
       # HU-NOT-005: el aviso de sancion/apelacion va a la bandeja del jugador
       # por /internal/notifications de notificaciones, que corre en este host,
       # con la credencial de servicio propia (ADR-005; secreto de desplegar.sh).
@@ -251,6 +320,8 @@ services:
       # fusiona: sin esta linea el servicio perderia el limite de memoria de la
       # JVM que comparte con los demas.
       JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
+      ARRANQUE_TURNO: "5"
+      ARRANQUE_CREADO_EN: ${ARRANQUE_CREADO_EN:-9999999999}
       SALUD_COMENTARIOS: http://srv-comentarios:8081/actuator/health
       SALUD_CORREO: http://srv-correo:8082/actuator/health
       SALUD_TORNEOS: http://srv-torneos:8083/actuator/health
@@ -269,6 +340,8 @@ services:
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-admin-parametros:${TAG}
     environment:
       JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
+      ARRANQUE_TURNO: "4"
+      ARRANQUE_CREADO_EN: ${ARRANQUE_CREADO_EN:-9999999999}
       # HU-AUD-001: ms-cumplimiento corre en dev desde R16.5; apuntar esta URL
       # a su /admin/auditoria/eventos es el paso siguiente de su vertical. Sin
       # ella cada cambio queda en el historial local y en la bitacora.

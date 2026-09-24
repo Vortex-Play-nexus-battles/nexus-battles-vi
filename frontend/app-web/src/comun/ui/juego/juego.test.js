@@ -323,6 +323,37 @@ describe('panelDeResultado', () => {
     const nodo = panelDeResultado({ victoria: true, acciones: [boton] });
     expect(nodo.querySelector('.panel-resultado__acciones').children).toHaveLength(1);
   });
+
+  /*
+   * R10. Hasta aqui habia dos estados, asi que una partida en la que nadie
+   * quedaba en pie se pintaba con el escudo y la palabra DERROTA mientras el
+   * texto de al lado decia «Combate terminado en empate». Se le decia al
+   * jugador que habia perdido algo que no perdio.
+   */
+  test('el empate tiene su propia palabra, no la de la derrota', () => {
+    const nodo = panelDeResultado({ desenlace: 'empate' });
+
+    expect(nodo.textContent).toContain('EMPATE');
+    expect(nodo.textContent).not.toContain('DERROTA');
+    expect(nodo.className).toContain('panel-resultado--empate');
+    expect(nodo.dataset.resultado).toBe('empate');
+  });
+
+  test('`desenlace` manda sobre `victoria`, que sigue valiendo para lo de antes', () => {
+    // El atajo booleano lo usan las llamadas anteriores a R10 y no se rompe.
+    expect(panelDeResultado({ victoria: true }).dataset.resultado).toBe('victoria');
+    expect(panelDeResultado({ victoria: false }).dataset.resultado).toBe('derrota');
+    // Y si se pasan los dos, gana el explicito.
+    expect(panelDeResultado({ victoria: false, desenlace: 'empate' }).dataset.resultado).toBe(
+      'empate',
+    );
+  });
+
+  test('un desenlace que no existe cae en derrota, no en una pantalla vacia', () => {
+    const nodo = panelDeResultado({ desenlace: 'lo-que-sea' });
+
+    expect(nodo.querySelector('.panel-resultado__palabra').textContent).toBe('DERROTA');
+  });
 });
 
 describe('distintivoDeCreditos', () => {

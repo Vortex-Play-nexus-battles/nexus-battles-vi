@@ -84,6 +84,16 @@ jobs:
         working-directory: services/cuentas/ms-identidad
         run: ./mvnw -B -DskipTests package
 
+      # Desde #697 el banco E2E levanta la tienda (srv-ms-ecommerce), y sin su
+      # jar el build de la imagen falla con «lstat .../ms-ecommerce/target».
+      # Mismo paso que e2e.yml; este flujo se quedo sin el y se ponia rojo en
+      # todo PR que tocara docker-compose.deploy.yml (visto en #709).
+      - name: Construir el jar de ms-ecommerce (Maven)
+        working-directory: services/cuentas/ms-ecommerce
+        run: |
+          chmod +x ./mvnw
+          ./mvnw -B -DskipTests package
+
       - name: Flags y límites de la variante
         id: variante
         run: |
@@ -109,6 +119,7 @@ jobs:
                 srv-ms-identidad) limite=448m ;;
                 srv-ms-finanzas) limite=256m ;;
                 srv-ms-subastas) limite=256m ;;
+                srv-ms-ecommerce) limite=256m ;;
                 *) limite=384m ;;
               esac
               echo "  $s:"
