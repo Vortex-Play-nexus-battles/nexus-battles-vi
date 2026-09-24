@@ -214,6 +214,26 @@ describe('errores', () => {
     expect(mensajeAjeno.noDisponible).toBe(false);
   });
 
+  // Historial y mensajes existen siempre: un 404 ahí es que no respondió el
+  // asistente (p. ej. Live Server sin la base local). Al calificar, un 404 es
+  // «ese mensaje no existe» y NO es no disponible.
+  test('un 404 en historial es no disponible; al calificar no', async () => {
+    const fetch = jest.fn(async () => ({
+      ok: false,
+      status: 404,
+      json: async () => {
+        throw new SyntaxError('HTML');
+      },
+    }));
+    const chat = cliente({ fetch });
+
+    const alCargar = await chat.obtenerHistorial().catch((e) => e);
+    const alCalificar = await chat.calificar('m-1', true).catch((e) => e);
+
+    expect(alCargar.noDisponible).toBe(true);
+    expect(alCalificar.noDisponible).toBe(false);
+  });
+
   test('401 y 403 son falta de permiso', () => {
     expect(new ErrorDelChatbot(null, 401).sinPermiso).toBe(true);
     expect(new ErrorDelChatbot(null, 403).sinPermiso).toBe(true);

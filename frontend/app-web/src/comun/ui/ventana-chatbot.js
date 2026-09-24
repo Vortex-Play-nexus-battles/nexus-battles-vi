@@ -197,6 +197,7 @@ export function crearVentanaChatbot({
     datos: { chatbotVentana: '' },
     hijos: [cabecera, registro, zonaAviso, formulario],
   });
+  ventana.id = `chatbot-ventana-${contador}`;
   raiz.append(ventana);
 
   // ------------------------------------------------------------- mensajes
@@ -445,6 +446,7 @@ export function crearVentanaChatbot({
     } catch (error) {
       vaciar(registro);
       mostrarAviso(error, { alReintentar: cargarHistorial });
+      enfocarDentro();
     }
   }
 
@@ -588,7 +590,20 @@ export function crearVentanaChatbot({
     if (!cargada) {
       cargarHistorial();
     }
-    entrada.focus();
+    enfocarDentro();
+  }
+
+  // El foco tiene que quedar DENTRO de la ventana (si no, Escape no la
+  // cierra): en la caja de texto si se puede escribir; si el asistente no
+  // está, en la primera acción del aviso; y si no, en «Cerrar».
+  function enfocarDentro() {
+    if (ventana.hidden) {
+      return;
+    }
+    const destino = !entrada.disabled
+      ? entrada
+      : (zonaAviso.querySelector('a, button') ?? botonCerrar);
+    destino.focus();
   }
 
   function cerrar() {
@@ -596,6 +611,8 @@ export function crearVentanaChatbot({
       return;
     }
     ventana.hidden = true;
+    // El botón flotante escucha esto para dejar de anunciar «Cerrar».
+    ventana.dispatchEvent(new CustomEvent('chatbot:cerrada', { bubbles: true }));
     if (devolverFocoA instanceof HTMLElement) {
       devolverFocoA.focus();
     }

@@ -101,14 +101,18 @@ export class ErrorDelChatbot extends Error {
   /**
    * @param {{title?: string, detail?: string, type?: string}|null} problema
    * @param {number} estado 0 si no hubo respuesta HTTP
+   * @param {{rutaFija?: boolean}} [opciones] `rutaFija`: la ruta llamada existe
+   *   siempre en el servicio, así que un 404 solo puede venir de un proxy o de
+   *   un servidor que no es el asistente (p. ej. Live Server sin la base local)
    */
-  constructor(problema, estado) {
+  constructor(problema, estado, { rutaFija = false } = {}) {
     super(problema?.detail || problema?.title || 'El asistente no respondió.');
     this.name = 'ErrorDelChatbot';
     this.estado = estado;
     this.titulo = problema?.title ?? null;
     this.detalle = problema?.detail ?? null;
     this.problema = problema ?? null;
+    this.rutaFija = rutaFija;
   }
 
   /**
@@ -122,7 +126,7 @@ export class ErrorDelChatbot extends Error {
       this.estado === 502 ||
       this.estado === 503 ||
       this.estado === 504 ||
-      (this.estado === 404 && this.titulo === TITULO_RUTA_SIN_SERVICIO)
+      (this.estado === 404 && (this.rutaFija || this.titulo === TITULO_RUTA_SIN_SERVICIO))
     );
   }
 
@@ -144,7 +148,7 @@ export function crearClienteChatbot({
   almacenLocal = almacenSeguro('localStorage'),
   sesion = () => leerSesion(),
 } = {}) {
-  async function llamar(metodo, recurso, cuerpo) {
+  async function llamar(metodo, recurso, cuerpo, { rutaFija = false } = {}) {
     const cabeceras = {
       Accept: 'application/json',
       'X-Id-Sesion-Anonima': idDeSesionAnonima(almacen),
@@ -165,11 +169,11 @@ export function crearClienteChatbot({
         body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
       });
     } catch {
-      throw new ErrorDelChatbot(null, 0);
+      throw new ErrorDelChatbot(null, 0, { rutaFija });
     }
 
     if (!respuesta.ok) {
-      throw new ErrorDelChatbot(await leerProblema(respuesta), respuesta.status);
+      throw new ErrorDelChatbot(await leerProblema(respuesta), respuesta.status, { rutaFija });
     }
     if (respuesta.status === 204) {
       return null;
@@ -189,17 +193,17 @@ export function crearClienteChatbot({
       if (adjuntoUrl) {
         cuerpo.adjuntoUrl = adjuntoUrl;
       }
-      return llamar('POST', '/chat/mensajes', cuerpo);
+      return llamar('POST', '/chat/mensajes', cuerpo, { rutaFija: true });
     },
 
     /** @returns {Promise<Array<object>>} del más antiguo al más reciente */
     async obtenerHistorial() {
-      return (await llamar('GET', '/chat/historial')) ?? [];
+      return (await llamar('GET', '/chat/historial', undefined, { rutaFija: true })) ?? [];
     },
 
     /** @returns {Promise<null>} */
     limpiarHistorial() {
-      return llamar('DELETE', '/chat/historial');
+      return llamar('DELETE', '/chat/historial', undefined, { rutaFija: true });
     },
 
     /**
