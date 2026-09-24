@@ -69,3 +69,11 @@
   font-weight: var(--t-etiqueta-peso);
   color: var(--texto-2);
 }
+
+/* El formulario de un tema es largo: se desplaza dentro del diálogo y los
+   botones Guardar/Cancelar quedan siempre a la vista. */
+.panel-chatbot__formulario-tema {
+  max-height: min(60vh, 560px);
+  overflow-y: auto;
+  padding-right: var(--e-2);
+}

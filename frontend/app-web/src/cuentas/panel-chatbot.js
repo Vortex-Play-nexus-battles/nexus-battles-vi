@@ -9,8 +9,8 @@
  * | Base de conocimiento| RF-CHA-013 | `panel-chatbot-base.js`              |
  * | Reentrenamiento     | RF-CHA-014 | `panel-chatbot-reentrenamiento.js`   |
  *
- * Cada pestaña carga sus datos la primera vez que se abre, no al entrar a la
- * vista: quien solo mira analíticas no dispara las consultas de las otras.
+ * Cada pestaña carga sus datos al abrirse, no al entrar a la vista: quien
+ * solo mira analíticas no dispara las consultas de las otras.
  *
  * @module cuentas/panel-chatbot
  */
@@ -20,6 +20,8 @@ import { h } from '../comun/ui/dom.js';
 import { encabezadoDePagina } from '../comun/ui/pagina.js';
 import { crearClientePanelChatbot, descargar } from './cliente-panel-chatbot.js';
 import { montarAnaliticas } from './panel-chatbot-analiticas.js';
+import { montarBaseConocimiento } from './panel-chatbot-base.js';
+import { montarReentrenamiento } from './panel-chatbot-reentrenamiento.js';
 
 /**
  * @param {HTMLElement} raiz
@@ -39,9 +41,12 @@ export function montarPanelChatbot(
   );
 
   const dependencias = { cliente, descargarArchivo };
-  const secciones = [{ id: 'analiticas', etiqueta: 'Analíticas', montar: montarAnaliticas }];
+  const secciones = [
+    { id: 'analiticas', etiqueta: 'Analíticas', montar: montarAnaliticas },
+    { id: 'base', etiqueta: 'Base de conocimiento', montar: montarBaseConocimiento },
+    { id: 'reentrenamiento', etiqueta: 'Reentrenamiento', montar: montarReentrenamiento },
+  ];
 
-  const cargadas = new Set();
   const montadas = new Map();
   const pestanas = secciones.map((seccion) => {
     const panel = h('section', { clase: 'pila pila--amplia panel-chatbot__panel' });
@@ -49,14 +54,14 @@ export function montarPanelChatbot(
     return { id: seccion.id, etiqueta: seccion.etiqueta, panel };
   });
 
+  // Se recarga cada vez que se abre una pestaña, no solo la primera: lo que
+  // se hace en una cambia lo que muestra la otra (crear la candidata en «Base
+  // de conocimiento» habilita el despliegue en «Reentrenamiento», y
+  // desplegar cambia las versiones).
   function alCambiar(id) {
-    if (!cargadas.has(id)) {
-      cargadas.add(id);
-      montadas.get(id)?.cargar();
-    }
+    montadas.get(id)?.cargar();
   }
 
-  const control = montarPestanas(raiz, pestanas, { alCambiar, hash });
-  alCambiar(control.activa());
-  return control;
+  // montarPestanas ya muestra (y por tanto carga) la pestaña inicial.
+  return montarPestanas(raiz, pestanas, { alCambiar, hash });
 }
