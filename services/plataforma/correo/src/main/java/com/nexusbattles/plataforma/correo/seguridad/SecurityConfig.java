@@ -4,6 +4,7 @@ import com.nexusbattles.comun.seguridad.CadenaDeSeguridad;
 import com.nexusbattles.comun.seguridad.ConversorRolesJwt;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.web.SecurityFilterChain;
@@ -41,6 +42,16 @@ public class SecurityConfig {
 
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/**").permitAll()
+                // La evidencia de entrega (RF-COR-001) la consulta una persona
+                // desde la consola, no un servicio. Es de solo lectura, no
+                // devuelve direcciones completas ni el cuerpo de ningun
+                // mensaje, y es lo que permite responder "salio o no salio"
+                // sin abrir la bitacora del contenedor.
+                .requestMatchers(HttpMethod.GET, "/api/v1/correos/envios")
+                .hasAnyRole("SERVICIO", "ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                // Enviar sigue siendo solo entre servicios: quien alcance el
+                // puerto no puede mandar a cualquier direccion un codigo de
+                // recuperacion con la plantilla corporativa.
                 .requestMatchers("/api/v1/correos/**").hasRole("SERVICIO")
                 .anyRequest().authenticated());
 
