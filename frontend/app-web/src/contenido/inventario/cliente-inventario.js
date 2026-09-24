@@ -184,6 +184,37 @@ export function desequiparElemento(
   return solicitarEquipamiento(identidad, heroeId, 'DELETE', elementoId, fetchImpl);
 }
 
+/**
+ * Estadisticas del heroe propio con su equipamiento aplicado — R5.
+ *
+ * Son las del jugador, no las del catalogo: el servicio parte de las del
+ * prototipo y les suma los efectos de lo que este equipado. Por eso la ruta va
+ * por el identificador del ELEMENTO del inventario y no por el nombre del
+ * prototipo.
+ *
+ * Responde tambien sin nada equipado: devuelve las del prototipo sin
+ * modificadores. Un 404 es que ese heroe no existe; un 403, que no es suyo.
+ */
+export async function consultarEstadisticasDelHeroe(
+  identidad,
+  heroeId,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  if (!textoObligatorio(heroeId)) {
+    throw new TypeError('El héroe es obligatorio');
+  }
+  const respuesta = await fetchImpl(
+    `${RUTA_HEROES}/${encodeURIComponent(heroeId.trim())}/estadisticas`,
+    { headers: { 'X-User-Name': identidadNormalizada(identidad) } },
+  );
+  if (!respuesta.ok) {
+    const fallo = new Error(`No se pudieron leer las estadísticas (${respuesta.status})`);
+    fallo.status = respuesta.status;
+    throw fallo;
+  }
+  return respuesta.json();
+}
+
 /** Modifica el nombre de un elemento propio. */
 export async function modificarElemento(
   identidad,
