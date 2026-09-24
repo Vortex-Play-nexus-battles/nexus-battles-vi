@@ -60,7 +60,10 @@ public class TokenCredencialService {
      */
     @Transactional
     public void solicitarRestablecimiento(String email) {
-        usuarioRepository.findByEmail(email)
+        // R17 — mismo criterio que el login: desde R17 el registro guarda el
+        // correo en minusculas, y quien lo teclea con mayusculas tiene que
+        // recibir su codigo igual (antes no llegaba nada y sin decirlo).
+        usuarioRepository.buscarPorCorreo(email)
             .ifPresent(usuario -> generarYRegistrarToken(usuario, "RESTABLECIMIENTO"));
     }
 

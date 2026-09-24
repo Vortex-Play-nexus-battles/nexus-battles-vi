@@ -118,6 +118,25 @@ services:
       CORREO_CAMBIO_CLAVE_URL: ${CORREO_CAMBIO_CLAVE_URL:-http://srv-correo:8082/api/v1/correos/cambio-clave}
       NOTIFICACIONES_URL: ${NOTIFICACIONES_URL:-http://srv-notificaciones:8085/api/v1/internal/notifications}
       AUDITORIA_URL: ${AUDITORIA_URL:-http://srv-ms-cumplimiento:8091/api/v1/admin/auditoria/eventos}
+      # R17 — alta del jugador: ms-identidad la orquesta y cada dueno hace lo
+      # suyo por su API con la credencial de servicio (ADR-005). Mismas
+      # variables y destinos que ya usan salas-partidas y moderacion-sanciones:
+      # ms-finanzas y admin-parametros en este host; inventario y productos en
+      # el host de contenido (8101-8104 solo admiten la EIP de este host, R9.4).
+      CREDITOS_URL: ${CREDITOS_URL:-http://srv-ms-finanzas:8093/api/v1}
+      PARAMETROS_URL: ${PARAMETROS_URL:-http://srv-admin-parametros:8088/api/v1}
+      INVENTARIO_BASE_URL: ${INVENTARIO_BASE_URL:-http://34.193.90.11:8102}
+      PRODUCTOS_BASE_URL: ${PRODUCTOS_BASE_URL:-http://34.193.90.11:8103}
+      # RESPALDO PROVISIONAL DE DEV — no es decision de producto (D-28, D-29).
+      # Solo se aplica mientras `jugador.creditos-iniciales` y
+      # `jugador.kit-inicial` sigan SIN VALOR en admin-parametros; en cuanto un
+      # administrador los fije desde el panel, mandan ellos. 500 creditos: la
+      # misma cifra que el banco E2E usa desde R0. Kit: Guerrero Tanque (heroe
+      # de combate) + Espada de una mano, ids del catalogo real de DEV
+      # (comprobados por GET /api/v1/productos/{id} el 24-sep-2026). Lo minimo
+      # para que HU-SAL-003 deje entrar a una partida: heroe con algo equipado.
+      JUGADOR_CREDITOS_INICIALES: ${JUGADOR_CREDITOS_INICIALES:-500}
+      JUGADOR_KIT_INICIAL: ${JUGADOR_KIT_INICIAL:-aec4fbd2-9615-352a-9f2b-3fad781e123c,1647b2ea-096d-37e7-b580-0172e4c62313}
       SPRING_PROFILES_ACTIVE: ${MS_IDENTIDAD_SPRING_PROFILES_ACTIVE}
       # Cuentas administrativas iniciales (AdministradoresIniciales).
       # Formato apodo|correo|clave, separadas por ";". Idempotente: si la

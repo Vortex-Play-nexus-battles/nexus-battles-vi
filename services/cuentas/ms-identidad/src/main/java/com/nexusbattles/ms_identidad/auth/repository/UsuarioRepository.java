@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 @Repository
@@ -17,6 +18,40 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
     Optional<Usuario> findByEmail(String email);
     Optional<Usuario> findByApodo(String apodo);
     long countByRol(RolEntity rol);
+
+    /**
+     * R17 — el alta rechaza un correo o un apodo que ya existen escritos con
+     * otras mayusculas: «Profe@upb.edu.co» y «profe@upb.edu.co» son la misma
+     * persona, y «Valkiria» y «valkiria» serian dos jugadores indistinguibles
+     * en una sala. Es un recuento, no una busqueda: si una base heredada
+     * tuviera ya dos filas que solo difieren en mayusculas, no revienta.
+     */
+    boolean existsByEmailIgnoreCase(String email);
+
+    boolean existsByApodoIgnoreCase(String apodo);
+
+    /**
+     * El usuario de un correo tal como lo teclea quien inicia sesion.
+     *
+     * <p>Desde R17 el registro guarda el correo en minusculas; las cuentas
+     * anteriores lo tienen como se escribio. Se busca primero exacto (sin
+     * espacios alrededor) —asi una cuenta antigua sigue entrando igual que
+     * antes— y despues en minusculas, que es como estan las nuevas. Sin
+     * consultas «ignore case», que en una base heredada con duplicados por
+     * mayusculas devolverian dos filas.
+     */
+    default Optional<Usuario> buscarPorCorreo(String correo) {
+        if (correo == null || correo.isBlank()) {
+            return Optional.empty();
+        }
+        String limpio = correo.trim();
+        Optional<Usuario> exacto = findByEmail(limpio);
+        if (exacto.isPresent()) {
+            return exacto;
+        }
+        String minusculas = limpio.toLowerCase(Locale.ROOT);
+        return minusculas.equals(limpio) ? Optional.empty() : findByEmail(minusculas);
+    }
 
     /**
      * Usuarios que todavia no tienen identificador publico, porque se crearon

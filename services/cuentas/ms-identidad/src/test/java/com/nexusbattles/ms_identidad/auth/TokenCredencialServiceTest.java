@@ -182,7 +182,7 @@ class TokenCredencialServiceTest {
     @Test
     void solicitarRestablecimientoGeneraTokenSiElCorreoExiste() {
         Usuario usuario = usuarioDePrueba();
-        when(usuarioRepository.findByEmail("cristian@test.com")).thenReturn(Optional.of(usuario));
+        when(usuarioRepository.buscarPorCorreo("cristian@test.com")).thenReturn(Optional.of(usuario));
         when(tokenCredencialRepository.findByToken(anyString())).thenReturn(Optional.empty());
 
         tokenCredencialService.solicitarRestablecimiento("cristian@test.com");
@@ -202,7 +202,7 @@ class TokenCredencialServiceTest {
      */
     @Test
     void solicitarRestablecimientoNoHaceNadaSiElCorreoNoExiste() {
-        when(usuarioRepository.findByEmail("noexiste@test.com")).thenReturn(Optional.empty());
+        when(usuarioRepository.buscarPorCorreo("noexiste@test.com")).thenReturn(Optional.empty());
 
         assertDoesNotThrow(() -> tokenCredencialService.solicitarRestablecimiento("noexiste@test.com"));
 
