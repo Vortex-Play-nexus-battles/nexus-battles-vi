@@ -36,6 +36,10 @@
 # los diferencia. Entre ellos se hablan por nombre de servicio en la red de
 # Compose (srv-heroes:8080, etc.), nunca por el puerto del host.
 
+# Todos los servicios llevan `restart: unless-stopped`, como los de plataforma en
+# docker-compose.deploy.yml: si uno se cae (por ejemplo, el limite de memoria lo
+# mata) o la instancia se reinicia, vuelve solo. Antes tenian la politica "no" y
+# un contenedor caido se quedaba caido hasta el siguiente despliegue.
 services:
 
   # --- Base de datos documental (regla 7: un esquema por servicio) ---
@@ -44,6 +48,7 @@ services:
   contenido-mongo:
     image: mongo:8.0
     container_name: contenido-mongo
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -64,6 +69,7 @@ services:
       dockerfile: services/contenido/heroes/Dockerfile
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-heroes:${TAG_HEROES:-${TAG:-local}}
     container_name: srv-heroes
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -98,6 +104,7 @@ services:
       dockerfile: services/contenido/inventario/Dockerfile
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-inventario:${TAG_INVENTARIO:-${TAG:-local}}
     container_name: srv-inventario
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -143,6 +150,7 @@ services:
       dockerfile: services/contenido/productos/Dockerfile
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-productos:${TAG_PRODUCTOS:-${TAG:-local}}
     container_name: srv-productos
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -174,6 +182,7 @@ services:
       dockerfile: services/contenido/motor-combate/Dockerfile
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-motor-combate:${TAG_MOTOR_COMBATE:-${TAG:-local}}
     container_name: srv-motor-combate
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -203,6 +212,7 @@ services:
   jwks-dev:
     image: nginx:1.27-alpine
     container_name: jwks-dev
+    restart: unless-stopped
     deploy:
       resources:
         limits:
