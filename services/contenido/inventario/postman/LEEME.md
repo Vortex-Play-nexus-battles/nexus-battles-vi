@@ -11,7 +11,7 @@ la coleccion **completa y en orden**.
 
 | Archivo | Que es |
 |---|---|
-| `inventario.postman_collection.json` | 52 peticiones agrupadas por historia |
+| `inventario.postman_collection.json` | 54 peticiones agrupadas por historia |
 | `local.postman_environment.json` | Entorno local: `baseUrl` |
 
 ## Requisitos
@@ -22,6 +22,15 @@ la coleccion **completa y en orden**.
 SPRING_DATA_MONGODB_URI=mongodb://localhost:27017/inventario ./gradlew :services:contenido:inventario:bootRun
 ```
 
+- **El catalogo inicial sembrado en productos** (contrato de inventario 1.2.0).
+  Crear un elemento consulta el producto en el servicio de productos y solo
+  acepta ids que existen, no suspendidos y del mismo tipo. La coleccion usa
+  ids del catalogo inicial (`heroe-guerrero-tanque`,
+  `arma-guerrero-tanque-espada-de-una-mano`, `armadura-mago-hielo-corona-de-hielo`,
+  `item-medico-benditas`, ...); sin la semilla, cada creacion responde 422
+  "Producto inexistente" y la coleccion se cae en cascada. Inventario encuentra
+  a productos por `PRODUCTOS_BASE_URL`; si productos no responde, crear
+  responde 503 "Catalogo no disponible".
 - Las rutas del jugador conservan temporalmente `X-User-Name`. La coleccion
   genera dos UUID nuevos para que cada corrida use inventarios independientes.
 - Para las operaciones internas, obtener con OAuth2 `client_credentials` un
@@ -77,6 +86,7 @@ Contra otro puerto: `--env-var baseUrl=http://localhost:8082`.
 | HU-INV-003 | Crear y modificar quedan persistidos y se ven en la vitrina | Crear heroe (201 + Location), renombrar (200), vitrina en pagina de 16 |
 | HU-INV-003 | Operar sobre el inventario de otro no se permite | A renombra el elemento de B → 403 "Inventario ajeno"; B sigue intacto |
 | HU-INV-003 | Errores legibles | 401 sin identidad, 400 sin nombre, 404 inexistente |
+| HU-INV-003 | Solo productos del catalogo (RG-074) | Producto inventado `espada-corta` → 422 "Producto inexistente"; heroe pedido como ARMA → 400 "Tipo no coincide" |
 | HU-INV-005 | Maximo dos armas | 2 equipan, la tercera → 409 "dos armas"; la misma dos veces → 409 |
 | HU-INV-005 | Seis partes de armadura, una por ranura | CASCO ocupa, segundo CASCO → 409; PECHO cabe |
 | HU-INV-005 | Maximo dos items | 2 equipan, el tercero → 409 |
