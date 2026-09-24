@@ -13,6 +13,47 @@ gh workflow run medir-jvm-dev.yml            # RAM + swap de cada contenedor, so
 gh workflow run experimento-flags-jvm.yml    # A/B de flags en el banco E2E, con la suite como carga
 ```
 
+## 24-sep 03:50 UTC — la prevision de abajo NO se cumplio: el host esta lleno
+
+`medir-jvm-dev.yml`, corrida 35952844520, con 12 JVM en el host (las 9 de
+plataforma + ms-finanzas, ms-cumplimiento y ms-ecommerce; 4 de ellas ya con los
+flags nuevos): **RAM disponible 20 MiB y swap 2047 de 2047 MiB**. La propia
+medicion se corto por tiempo a mitad de la lista.
+
+| Contenedor | RAM | swap | total | flags |
+|---|--:|--:|--:|---|
+| `srv-ms-finanzas` | 122 | 180 | 302 | viejos |
+| `srv-moderacion-sanciones` | 93 | 184 | 277 | nuevos |
+| `srv-comentarios` | 86 | 181 | 267 | viejos |
+| `srv-admin-parametros` | 78 | 187 | 265 | viejos |
+| `srv-ms-cumplimiento` | 72 | 170 | 242 | viejos |
+| `srv-ms-ecommerce` | 145 | 95 | 240 | nuevos |
+| `srv-correo` | 109 | 114 | 223 | viejos |
+| `srv-metricas-plataforma` | 75 | 109 | 184 | viejos |
+| (identidad, notificaciones, salas, torneos: la medicion no llego) | | | | |
+
+**Donde fallo la cuenta.** La prevision (≈2780 MiB con las 14 JVM) salio de
+la foto de las 01:58, tomada 7 minutos despues de un reinicio, con los montones
+recien nacidos. Con horas de uso, una JVM de este host ocupa **240-300 MiB**
+tambien con los flags nuevos: el monton comprometido es 70-85 MiB, y el resto
+es no-monton y la cache de archivos de una imagen JDK. Doce JVM ya llenan el
+host. Los flags nuevos siguen siendo mejores que los viejos (el experimento lo
+repite dos veces), pero **no crean sitio para dos servicios mas**.
+
+**Decision, con esta medicion:**
+
+- `ms-subastas` y `ms-chatbot` vuelven a `desplegableDev: false`. No
+  caben, y desplegarlos tumbaria a los que si estan. Su bloqueo es de
+  capacidad, medido, no de codigo.
+- Se termina de aplicar los flags nuevos a las JVM que aun tienen los viejos,
+  de dos en dos, para bajar la presion.
+- **Salidas que quedan, sin tercer EC2 ni cambiar de tamano:** (a) llevar
+  2-3 servicios al host de contenido, que tiene RAM libre, con acuerdo del
+  grupo 2 (su cuenta, su grupo de seguridad) y resolviendo que esos servicios
+  hablan con los de plataforma por IP publica; (b) consolidar los Postgres
+  (≈200 MiB, ver abajo) y bajar el monton a 96 MiB con medicion; (c) aceptar
+  perfiles para los servicios de administracion. Las tres son decision del
+  equipo o del PO, no de capacidad. Quedan abiertas.
 ## 24-sep — la memoria se va en el no-montón, y el montón crecía sin freno (R16.5)
 
 ### Lo que ocupa hoy el host de plataforma
@@ -100,8 +141,9 @@ montón acotado cada arranque pide menos memoria, pero el experimento no muestra
 un arranque más rápido, y la tormenta sigue existiendo: queda anotada como
 riesgo abierto.
 
-Por eso los perfiles dejan de ser el mecanismo normal. `ms-finanzas`,
-`ms-subastas`, `ms-ecommerce` y `ms-cumplimiento` pasan a `desplegableDev: true`.
+*Corregido a las 03:50 UTC, ver la seccion de arriba: la prevision no se cumplio.*
+Con ella, `ms-finanzas`, `ms-subastas`, `ms-ecommerce` y `ms-cumplimiento` pasaron
+a `desplegableDev: true`; `ms-subastas` ha vuelto a `false`.
 `ms-chatbot` tambien (R16.22): no tenia credenciales de base de datos en el
 entorno `dev` (`MS_CHATBOT_DB_*`), y ahora `desplegar.sh` las genera en el propio
 host, como las credenciales de servicio.

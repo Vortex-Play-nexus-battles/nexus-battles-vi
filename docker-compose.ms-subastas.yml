@@ -9,9 +9,9 @@
 # "build:"; se combina con docker-compose.yml + docker-compose.deploy.yml y
 # solo cuando ms-subastas viene en la corrida.
 #
-# CAPACIDAD: desplegableDev:true desde R16.5, con el monton acotado de todas
-# las JVM del host (medicion y presupuesto en infrastructure/despliegue/
-# CAPACIDAD.md).
+# CAPACIDAD: desplegableDev:false. Con 12 JVM el host de plataforma ya no tiene
+# RAM ni swap libres (medido el 24-sep 03:50 UTC). Opciones en
+# infrastructure/despliegue/CAPACIDAD.md.
 
 services:
   subastas-db:
