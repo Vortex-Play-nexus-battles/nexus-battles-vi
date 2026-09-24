@@ -560,7 +560,15 @@ test.describe('R17 · la prueba del profesor', () => {
           }
         }
         await expect(resultado).toBeVisible({ timeout: 60_000 });
-        desenlace = ((await resultado.textContent()) ?? '').replace(/\s+/g, ' ').trim();
+        desenlace = (
+          await resultado
+            .locator(
+              '.panel-resultado__palabra, .panel-resultado__detalle, .panel-resultado__creditos',
+            )
+            .allInnerTexts()
+        )
+          .map((parte) => parte.replace(/\s+/g, ' ').trim())
+          .join(' · ');
         const alTerminar = { mia: await vida(mia), rival: await vida(rival) };
         // Alguien cayó: al menos una de las dos barras bajó desde el principio.
         expect(
@@ -575,15 +583,19 @@ test.describe('R17 · la prueba del profesor', () => {
       });
 
       await paso(15, 'Ver el resultado', async () => {
-        await expect(page.locator('[data-zona="resultado"]')).toContainText(
-          /has ganado|has perdido|empate/i,
-        );
+        const resultado = page.locator('[data-zona="resultado"]');
+        await expect(resultado).toContainText(/has ganado|has perdido|empate/i);
+        // El desenlace ocupa toda la pantalla, barra incluida: tiene que llevar
+        // sus propias salidas (R17.4) o el profesor se queda sin camino.
+        await expect(resultado.locator('[data-accion="volver-a-jugar"]')).toBeVisible();
+        await expect(resultado.locator('[data-accion="ver-mi-cuenta"]')).toBeVisible();
         await capturar(page, testInfo, '15-resultado');
-        return desenlace.slice(0, 160);
+        return `${desenlace.slice(0, 160)} → salidas «Volver a Jugar online» y «Ver mi cuenta»`;
       });
 
       await paso(16, 'Revisar la cuenta y el historial', async () => {
-        await irA(page, 'cuenta');
+        // Desde el propio panel del desenlace, como lo haría una persona.
+        await page.locator('[data-zona="resultado"] [data-accion="ver-mi-cuenta"]').click();
         await expect(page).toHaveURL(EN.cuenta);
         // La apuesta se liquida justo detrás del final (HU-JUE-014). Se espera
         // a que no quede nada apartado, recargando como lo haría una persona:

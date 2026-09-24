@@ -247,6 +247,7 @@
       } from './cliente-salas.js';
       import { montarSalaDeEspera, montarInvitacion, salidaAlListado } from './sala-de-espera.js';
       import { usuarioIdDeSesion } from '../../comun/identidad.js';
+      import { RUTAS, resolver } from '../../comun/sesion.js';
       // Transporte STOMP sobre WebSocket nativo del servicio, el mismo que usan
       // Batallas (HU-SAL-002) y el chat (HU-JUE-015): CONNECT con el JWT en la
       // cabecera Authorization, SUBSCRIBE a /tema/partidas/{id}. No hay un
@@ -330,6 +331,16 @@
           // no existe todavia: nadie podria dar el primer golpe.
           turnoDe: partida.turnoActual?.idJugador,
           alAtacar: (accion) => enviarAccion(canal, partida.id, accion),
+          // R17.4 — el desenlace tapa la pantalla entera, barra incluida: lleva
+          // sus propias salidas, o quien acaba de jugar no tiene adónde ir.
+          salidas: [
+            {
+              id: 'volver-a-jugar',
+              texto: 'Volver a Jugar online',
+              href: resolver(RUTAS.batallas),
+            },
+            { id: 'ver-mi-cuenta', texto: 'Ver mi cuenta', href: resolver(RUTAS.perfil) },
+          ],
         });
 
         // El panel de vidas ya escucha por su cuenta; esta suscripcion es para
