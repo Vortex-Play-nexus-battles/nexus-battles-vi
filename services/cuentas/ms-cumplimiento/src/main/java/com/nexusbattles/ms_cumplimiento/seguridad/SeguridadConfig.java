@@ -61,8 +61,8 @@ public class SeguridadConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/admin/auditoria/eventos").hasRole("SERVICIO")
                         // El resto de la bitacora nace cerrado: la consulta y cualquier
                         // ruta nueva (la exportacion de HU-AUD-004, por ejemplo).
-                        .requestMatchers("/api/v1/admin/auditoria", "/api/v1/admin/auditoria/**")
-                        .hasRole("SUPER_ADMINISTRADOR")
+                    .requestMatchers("/api/v1/admin/auditoria", "/api/v1/admin/auditoria/**")
+                    .hasRole("SUPER_ADMINISTRADOR")
                         .anyRequest().authenticated());
         return http.build();
     }
