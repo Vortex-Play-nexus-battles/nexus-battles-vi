@@ -71,11 +71,26 @@ public class SemillaDelCatalogo implements ApplicationRunner {
         return JSON.readValue(json, CatalogoInicial.class);
     }
 
+    /**
+     * Punto de entrada del arranque. La semilla es un extra para la demo: si
+     * falla (Mongo caido, JSON ilegible), el servicio debe arrancar igual, asi
+     * que aqui se registra y no se propaga. {@link #sembrar()} si propaga.
+     */
     @Override
     public void run(ApplicationArguments argumentos) {
-        sembrar();
+        try {
+            sembrar();
+        } catch (RuntimeException e) {
+            BITACORA.error("Semilla del catalogo fallida: el servicio arranca sin sembrar", e);
+        }
     }
 
+    /**
+     * Siembra lo que falte y devuelve el resumen.
+     *
+     * @throws RuntimeException si falla la lectura del JSON o el acceso a la
+     *         base (salvo clave duplicada, que cuenta como existente)
+     */
     public ResultadoSemilla sembrar() {
         if (!habilitada) {
             return ResultadoSemilla.deshabilitada();

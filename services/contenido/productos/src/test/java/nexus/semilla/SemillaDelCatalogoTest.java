@@ -1,8 +1,10 @@
 package nexus.semilla;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -36,6 +38,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DuplicateKeyException;
 
 /**
@@ -96,6 +99,40 @@ class SemillaDelCatalogoTest {
         semilla(false, CATALOGO_REAL).run(null);
 
         verifyNoInteractions(repositorio);
+    }
+
+    @Test
+    @DisplayName("si la base falla, run() lo registra y el servicio arranca igual, sin sembrar")
+    void fallaDeLaBaseNoTumbaElArranque() {
+        when(repositorio.existsById(anyString()))
+                .thenThrow(new DataAccessResourceFailureException("Mongo no responde"));
+        SemillaDelCatalogo semilla = semilla(true, CATALOGO_REAL);
+
+        assertDoesNotThrow(() -> semilla.run(null));
+
+        verify(repositorio, never()).insert(any(Producto.class));
+        assertTrue(base.isEmpty());
+    }
+
+    @Test
+    @DisplayName("si el JSON no se puede leer, run() lo registra y el servicio arranca igual")
+    void jsonIlegibleNoTumbaElArranque() {
+        Resource roto = new ByteArrayResource("{ esto no es json".getBytes(StandardCharsets.UTF_8));
+        SemillaDelCatalogo semilla = semilla(true, roto);
+
+        assertDoesNotThrow(() -> semilla.run(null));
+
+        verify(repositorio, never()).insert(any(Producto.class));
+    }
+
+    @Test
+    @DisplayName("sembrar() si propaga la falla, para que se vea en las pruebas")
+    void sembrarPropagaLaFalla() {
+        when(repositorio.existsById(anyString()))
+                .thenThrow(new DataAccessResourceFailureException("Mongo no responde"));
+
+        assertThrows(DataAccessResourceFailureException.class,
+                () -> semilla(true, CATALOGO_REAL).sembrar());
     }
 
     @Test
