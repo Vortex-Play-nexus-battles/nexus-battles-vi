@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_chatbot.chat.motor;
 
+import com.nexusbattles.ms_chatbot.chat.motor.model.EstadoVersion;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TemaConocimiento;
 import com.nexusbattles.ms_chatbot.chat.motor.repository.TemaConocimientoRepository;
 import com.nexusbattles.ms_chatbot.chat.texto.NormalizadorTexto;
@@ -16,6 +17,10 @@ import java.util.Set;
  * intenciones (no en un modelo de lenguaje) que reconoce la intención de un
  * mensaje comparándolo contra las palabras clave de la base de conocimiento,
  * tolerando errores ortográficos mediante distancia de edición (Levenshtein).
+ *
+ * <p>Desde HU-CHA-012 responde con la versión de la base de conocimiento que
+ * está en producción, y {@link #responderCon} permite evaluar cualquier otra
+ * versión (la candidata) con exactamente la misma lógica, sin activarla.
  */
 @Service
 public class MotorRespuestas {
@@ -58,16 +63,28 @@ public class MotorRespuestas {
         this.temaConocimientoRepository = temaConocimientoRepository;
     }
 
+    /** Responde con la versión de la base de conocimiento que está en producción. */
     public ResultadoMotor generarRespuesta(String mensajeUsuario) {
+        return responderCon(mensajeUsuario,
+            temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION));
+    }
+
+    /**
+     * Responde usando exactamente los temas recibidos (HU-CHA-012): así se
+     * evalúa una versión candidata con la misma lógica que la de producción,
+     * sin activarla. Solo se tienen en cuenta los temas activos.
+     */
+    public ResultadoMotor responderCon(String mensajeUsuario, List<TemaConocimiento> temas) {
         String mensajeNormalizado = NormalizadorTexto.normalizar(mensajeUsuario);
         List<String> palabrasMensaje = List.of(mensajeNormalizado.split(" "));
-
-        List<TemaConocimiento> temasActivos = temaConocimientoRepository.findByActivoTrue();
 
         Coincidencia mejor = null;
         List<Coincidencia> todas = new ArrayList<>();
 
-        for (TemaConocimiento tema : temasActivos) {
+        for (TemaConocimiento tema : temas) {
+            if (!tema.isActivo()) {
+                continue;
+            }
             int puntajeEs = puntuar(palabrasMensaje, mensajeNormalizado, tema.getPalabrasClaveEs());
             int puntajeEn = puntuar(palabrasMensaje, mensajeNormalizado, tema.getPalabrasClaveEn());
 
@@ -77,7 +94,7 @@ public class MotorRespuestas {
             if (puntaje > 0) {
                 Coincidencia coincidencia = new Coincidencia(tema, puntaje, esIngles);
                 todas.add(coincidencia);
-                if (mejor == null || puntaje > mejor.puntaje()) {
+                if (esMejor(coincidencia, mejor)) {
                     mejor = coincidencia;
                 }
             }
@@ -89,7 +106,7 @@ public class MotorRespuestas {
             if (texto == null || texto.isBlank()) {
                 texto = tema.getContenidoRespuestaEs();
             }
-            return ResultadoMotor.deTema(texto, tema.getCategoria(), tema.getTipoRespuesta());
+            return ResultadoMotor.deTema(texto, tema.getCategoria(), tema.getTipoRespuesta(), tema.getClave());
         }
 
         List<String> sugerencias = todas.stream()
@@ -104,6 +121,17 @@ public class MotorRespuestas {
             + "mientras tanto, esta pregunta quedó registrada para mejorar mis respuestas.";
 
         return ResultadoMotor.escalado(textoEscalamiento, sugerencias);
+    }
+
+    // HU-CHA-012: a igual puntaje gana el tema de mayor prioridad. Sin esto,
+    // un empate lo decidia el orden en que la base devolvia las filas, que no
+    // esta garantizado y podia cambiar entre una consulta y otra.
+    private static boolean esMejor(Coincidencia candidata, Coincidencia actual) {
+        if (actual == null || candidata.puntaje() > actual.puntaje()) {
+            return true;
+        }
+        return candidata.puntaje() == actual.puntaje()
+            && candidata.tema().getPrioridad() > actual.tema().getPrioridad();
     }
 
     private int puntuar(List<String> palabrasMensaje, String mensajeNormalizado, String palabrasClaveCrudas) {
