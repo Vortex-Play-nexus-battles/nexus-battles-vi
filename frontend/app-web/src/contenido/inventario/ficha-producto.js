@@ -17,6 +17,8 @@
 import { construirCarga, construirError } from './estados-vista.js';
 import { consultarProducto as leerDelCatalogo } from './cliente-productos.js';
 import { construirDetalleDeHeroe } from './detalle-heroe.js';
+import { icono } from '../../comun/ui/icono.js';
+import { ICONO_DEL_TIPO } from './vitrina.js';
 
 /**
  * Atributos visibles de cada tipo, en el orden en que se muestran.
@@ -80,12 +82,27 @@ export function construirFicha(producto) {
   const idNombre = `ficha-nombre-${(secuencia += 1)}`;
   ficha.setAttribute('aria-labelledby', idNombre);
 
-  const imagen = document.createElement('img');
-  imagen.className = 'ficha__imagen';
-  imagen.src = producto.imagen ?? '';
-  // El texto alternativo es el nombre: quien no ve la imagen sigue sabiendo
-  // que producto esta mirando (RNF-ACC-002).
-  imagen.alt = producto.nombre ?? '';
+  let imagen;
+  if (producto.imagen) {
+    imagen = document.createElement('img');
+    imagen.className = 'ficha__imagen';
+    imagen.src = producto.imagen;
+    // El texto alternativo es el nombre: quien no ve la imagen sigue sabiendo
+    // que producto esta mirando (RNF-ACC-002).
+    imagen.alt = producto.nombre ?? '';
+  } else {
+    // UX-GAME-3 — sin imagen en el catalogo no se pinta un `<img src="">`,
+    // que el navegador ensena como icono roto con el nombre al lado. Va el
+    // icono del tipo sobre la misma superficie que ocuparia la imagen.
+    imagen = document.createElement('div');
+    imagen.className = 'ficha__imagen ficha__imagen--ausente';
+    imagen.append(
+      icono(ICONO_DEL_TIPO[producto.tipo] ?? 'estrella', {
+        clase: 'ficha__icono-tipo',
+        etiqueta: null,
+      }),
+    );
+  }
 
   const nombre = document.createElement('h2');
   nombre.className = 'ficha__nombre';

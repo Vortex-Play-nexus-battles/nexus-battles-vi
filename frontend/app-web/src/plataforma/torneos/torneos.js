@@ -536,7 +536,11 @@ export function montarTorneos(
     if (torneo.equipos.length === 0) {
       equipos.appendChild(nodo('p', 't-meta', 'Todavía no hay equipos registrados.'));
     }
-    torneo.equipos.forEach((e) => equipos.appendChild(tarjetaDeEquipo(torneo, e, uid)));
+    // UX-GAME-5 — ocho tarjetas a lo ancho ocupaban una pantalla entera antes
+    // del arbol; en rejilla caben en dos filas.
+    const rejilla = nodo('div', 'torneo__equipos');
+    torneo.equipos.forEach((e) => rejilla.appendChild(tarjetaDeEquipo(torneo, e, uid)));
+    equipos.appendChild(rejilla);
     zonaDetalle.appendChild(equipos);
 
     // Árbol (HU-TOR-004 CA-03).
