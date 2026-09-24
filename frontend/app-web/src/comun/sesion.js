@@ -53,6 +53,7 @@ export const RUTAS = Object.freeze({
   parametros: '../plataforma/admin-parametros/parametros-admin.html',
   misSanciones: '../plataforma/moderacion-sanciones/mis-sanciones.html',
   consola: '../plataforma/consola/consola.html',
+  controlIntegral: '../plataforma/consola/control-integral.html',
   metricas: '../plataforma/metricas-plataforma/panel-metricas.html',
   tableroTecnico: '../plataforma/metricas-plataforma/tablero-tecnico.html',
 });

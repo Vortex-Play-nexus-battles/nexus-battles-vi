@@ -336,12 +336,30 @@ class InventarioClientHttpTest {
         assertEquals(null, metodo.get(), "ninguna puede haber salido a la red");
     }
 
+    /**
+     * Este caso comprobaba que sin clave la cabecera no viajaba. Cambia en
+     * FI-TRANSFER-1: el contrato declara {@code Idempotency-Key} obligatoria y
+     * ahora el controlador la exige de verdad, asi que una llamada sin cabecera
+     * se llevaria un 400 en vez de transferir. La clave no se inventa — se
+     * deriva del identificador de la subasta, que es la misma que usa el cierre
+     * por vencimiento, y por tanto sigue siendo estable entre reintentos.
+     */
     @Test
-    void transferirSinClaveDeIdempotenciaSiSale() {
-        cliente.transferirProducto(ELEMENTO, UUID.randomUUID(), UUID.randomUUID(), null);
+    void transferirSinClaveLaDerivaDeLaSubasta() {
+        UUID subasta = UUID.randomUUID();
+
+        cliente.transferirProducto(ELEMENTO, UUID.randomUUID(), subasta, null);
 
         assertEquals("POST", metodo.get());
-        assertEquals(null, claveIdempotencia.get());
+        assertEquals("cierre-" + subasta, claveIdempotencia.get());
+    }
+
+    @Test
+    void transferirConClavePropiaLaRespeta() {
+        cliente.transferirProducto(ELEMENTO, UUID.randomUUID(), UUID.randomUUID(), "compensar-7");
+
+        assertEquals("compensar-7", claveIdempotencia.get(),
+                "la clave de la llamada manda: es la que comparte con la reserva de credito");
     }
 
     @Test
@@ -674,20 +692,26 @@ class InventarioClientHttpTest {
     }
 
     /**
-     * Un 404 al transferir tiene hoy dos lecturas y la mas probable no es la
-     * obvia: ms-inventario todavia no publica esa ruta. El mensaje tiene que
-     * nombrar las dos, o el siguiente que lo depure se pasa la tarde mirando
-     * la subasta cuando el problema esta en el contrato.
+     * Este caso exigia que el mensaje nombrase dos lecturas posibles del 404,
+     * porque la segunda — «ms-inventario todavia no publica esa ruta» — era
+     * entonces la mas probable. Deja de serlo en FI-TRANSFER-1: la ruta existe
+     * (#670) y esta declarada en {@code contracts/openapi/inventario.yaml}
+     * 1.2.0, asi que un 404 aqui solo puede querer decir una cosa, y decir la
+     * otra mandaria a quien depure a mirar el contrato en vez del inventario.
+     *
+     * <p>Lo que se sigue exigiendo es lo util: que el mensaje nombre el
+     * elemento concreto y diga que no esta en ningun inventario.
      */
     @Test
-    void un404AlTransferirNoCulpaSoloAlElemento() {
+    void un404AlTransferirSenalaAlElemento() {
         codigo.set(404);
 
         InventarioClientException error = assertThrows(InventarioClientException.class,
                 () -> cliente.transferirProducto(ELEMENTO, UUID.randomUUID(), UUID.randomUUID(), "clave"));
 
-        assertTrue(error.getMessage().contains("transferencias"), error.getMessage());
-        assertTrue(error.getMessage().contains("no existe") || error.getMessage().contains("aun no expone"),
-                error.getMessage());
+        assertTrue(error.getMessage().contains(ELEMENTO), error.getMessage());
+        assertTrue(error.getMessage().contains("no existe"), error.getMessage());
+        assertFalse(error.getMessage().contains("aun no expone"),
+                "la ruta ya existe: culpar al contrato manda a depurar al sitio equivocado");
     }
 }

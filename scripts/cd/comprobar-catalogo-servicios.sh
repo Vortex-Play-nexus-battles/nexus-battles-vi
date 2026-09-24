@@ -218,6 +218,40 @@ PY
   echo "  ok    ningun compose tiene claves repetidas"
 fi
 
+echo "== 8) El borde apunta al puerto que el catalogo dice =="
+# Por que existe esta comprobacion:
+#
+# Se agrego al borde la ruta /api/v1/admin/sistema apuntando a
+# srv-metricas-plataforma:8082. El servicio escucha en el 8087. nginx valido
+# la configuracion, recargo sin quejarse y devolvio 502 a todo el que pidiera
+# ese estado -- que es justo la pantalla que se usa para saber si algo esta
+# caido. El numero equivocado no lo puede ver una revision: hay que compararlo
+# con el catalogo, que es donde vive el puerto de verdad.
+BORDE="infrastructure/red-balanceo/borde-dev.conf"
+if [ -f "$BORDE" ]; then
+  while IFS= read -r destino; do
+    contenedor=${destino%%:*}
+    puerto=${destino##*:}
+    nombre=${contenedor#srv-}
+    esperado=$(jq -r --arg n "$nombre" \
+      '.servicios[] | select(.nombre == $n) | .puertoContenedor' "$CATALOGO")
+    if [ -z "$esperado" ] || [ "$esperado" = "null" ]; then
+      # El borde tambien enruta cosas que no son servicios del catalogo
+      # (mailpit, el propio frontend). No se inventa un fallo por eso.
+      continue
+    fi
+    if [ "$puerto" != "$esperado" ]; then
+      fallo "$BORDE manda a $contenedor:$puerto y $nombre escucha en el $esperado." \
+        "nginx no lo puede detectar: 'nginx -t' valida la sintaxis, no que" \
+        "alguien este escuchando al otro lado. Lo unico que se ve es un 502." \
+        "El puerto correcto esta en $CATALOGO (puertoContenedor)."
+    fi
+  done < <(grep -oE 'srv-[a-z0-9-]+:[0-9]+' "$BORDE" | sort -u)
+  if [ "$FALLOS" -eq 0 ]; then
+    echo "  ok    cada destino del borde usa el puerto del catalogo"
+  fi
+fi
+
 echo
 if [ "$FALLOS" -gt 0 ]; then
   echo "::error::$FALLOS problema(s) en el catalogo de despliegue."

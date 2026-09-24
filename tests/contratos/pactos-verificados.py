@@ -28,10 +28,12 @@ ejecutarse.
     silencio dejando que la interaccion se verifique contra un mock vacio.
 
 Un pacto **sin ninguna clase verificadora** no es un fallo: se reporta como
-brecha conocida y se listan sus estados. Hoy es el caso de
-`ms-subastas-ms-inventario.json`, cuyo endpoint de transferencias todavia no
-existe; montar una compuerta roja a proposito termina con alguien
-desactivandola.
+brecha conocida y se listan sus estados; montar una compuerta roja a proposito
+termina con alguien desactivandola. Ese era el caso de
+`ms-subastas-ms-inventario.json` mientras su endpoint de transferencias no
+existia. Desde FI-TRANSFER-1 existe, esta en el contrato y lo verifica
+`VerificacionDelPactoDeSubastasTest` con sus seis estados, asi que hoy no queda
+ninguna brecha de estas.
 
 Uso:
     python3 tests/contratos/pactos-verificados.py
