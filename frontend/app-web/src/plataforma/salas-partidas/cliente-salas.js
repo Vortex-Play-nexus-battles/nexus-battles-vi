@@ -53,10 +53,10 @@ export class ErrorDeApi extends Error {
    * @param {number} estado codigo HTTP real de la respuesta
    */
   constructor(problema, estado) {
-    super(problema?.detail || problema?.title || 'El servicio no pudo completar la operacion.');
+    super(problema?.detail || problema?.title || 'El servicio no pudo completar la operación.');
     this.name = 'ErrorDeApi';
     this.tipo = problema?.type ?? null;
-    this.titulo = problema?.title ?? 'El servicio no pudo completar la operacion';
+    this.titulo = problema?.title ?? 'El servicio no pudo completar la operación';
     this.detalle = this.message;
     this.estado = problema?.status ?? estado;
     /** @type {Array<{campo: string, mensaje: string}>} */
@@ -98,7 +98,7 @@ export async function crearSala(parametros, { fetchImpl = fetchWithHttpErrorInte
     return respuesta.json();
   }
 
-  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'operacion'), respuesta.status);
 }
 
 /**
@@ -130,30 +130,100 @@ export async function listarSalas(
     return respuesta.json();
   }
 
-  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'listado'), respuesta.status);
 }
 
 /**
  * Ingresa a una sala existente — HU-SAL-002, RF-JUE-002.
  *
  * El jugador no viaja en el cuerpo: lo pone el servidor desde el token, igual
- * que el anfitrion al crear.
+ * que el anfitrion al crear. Lo que si viaja —y hasta FI-R4 no viajaba— es el
+ * codigo de invitacion.
+ *
+ * ## El agujero que esto cierra
+ *
+ * Esta funcion hacia `POST` **sin cuerpo**. El servidor lo recibe como `null`
+ * y se lo pasa al agregado, que rechaza con 403 toda sala privada:
+ * `codigoCoincide(null)` siempre es falso. O sea que una sala privada era
+ * inaccesible para todo el mundo salvo su anfitrion, por construccion, y sin
+ * que nada lo dijera. El backend lleva el mecanismo completo desde la
+ * migracion V5 —columna `codigo_invitacion`, generacion con `SecureRandom`,
+ * comparacion normalizada—; lo unico que faltaba era mandarlo.
+ *
+ * El cuerpo se omite cuando no hay codigo, en vez de mandar
+ * `{"codigoInvitacion": null}`: el contrato lo declara opcional justamente
+ * para que a una sala publica se entre sin mandar ruido.
  *
  * @param {string} idSala
- * @param {{fetchImpl?: Function}} [opciones] inyeccion para las pruebas
+ * @param {{codigoInvitacion?: string|null, fetchImpl?: Function}} [opciones]
  * @returns {Promise<object>} la sala con el jugador dentro
- * @throws {ErrorDeApi} 404 no existe · 403 privada · 409 llena o ya empezo
+ * @throws {ErrorDeApi} 404 no existe · 403 privada o codigo que no vale ·
+ *   409 llena o ya empezo
  */
-export async function ingresarASala(idSala, { fetchImpl = fetchWithHttpErrorInterceptor } = {}) {
-  const respuesta = await fetchImpl(ruta(`/${encodeURIComponent(idSala)}/participantes`), {
-    method: 'POST',
-  });
+export async function ingresarASala(
+  idSala,
+  { codigoInvitacion = null, fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const codigo = typeof codigoInvitacion === 'string' ? codigoInvitacion.trim() : '';
+  const peticion = { method: 'POST' };
+  if (codigo) {
+    peticion.headers = { 'Content-Type': 'application/json' };
+    // Se manda tal cual lo escribio la persona: el servidor normaliza
+    // mayusculas, espacios y guiones (`Sala.normalizar`). Limpiarlo aqui
+    // seria una segunda verdad sobre que forma tiene un codigo valido.
+    peticion.body = JSON.stringify({ codigoInvitacion: codigo });
+  }
+
+  const respuesta = await fetchImpl(ruta(`/${encodeURIComponent(idSala)}/participantes`), peticion);
 
   if (respuesta.ok) {
     return respuesta.json();
   }
 
-  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'sala'), respuesta.status);
+}
+
+/**
+ * Si este problema es el rechazo de una sala privada —403 con el tipo que
+ * declara el dominio—, que es el unico que se arregla escribiendo un codigo.
+ *
+ * Se mira el `type`, no el texto: el texto del servicio puede cambiar sin
+ * avisar y el tipo es lo que el contrato fija.
+ *
+ * @param {{estado?: number, tipo?: string|null} | null} error un `ErrorDeApi`
+ * @returns {boolean}
+ */
+export function esSalaPrivada(error) {
+  if (error?.estado !== 403) {
+    return false;
+  }
+  const tipo = error?.tipo ?? '';
+  return typeof tipo === 'string' && tipo.includes('/errores/sala-privada');
+}
+
+/**
+ * Si este rechazo es el de RF-JUE-003 — FI-R6.
+ *
+ * `PuertaDeHeroe.comprobar` corre en `IngresarASala` antes que nada, y lanza
+ * `HeroeNoDisponible` con 422 y uno de dos tipos: `/errores/heroe-no-equipado`
+ * o `/errores/heroe-ocupado`. Son los mismos dos casos que el dialogo de
+ * verificacion sabe explicar, y el unico rechazo del ingreso que se arregla
+ * yendo al inventario.
+ *
+ * Por el tipo y no por el texto, igual que {@link esSalaPrivada}.
+ *
+ * @param {{estado?: number, tipo?: string|null} | null} error un `ErrorDeApi`
+ * @returns {boolean}
+ */
+export function esHeroeNoDisponible(error) {
+  if (error?.estado !== 422) {
+    return false;
+  }
+  const tipo = error?.tipo ?? '';
+  return (
+    typeof tipo === 'string' &&
+    (tipo.includes('/errores/heroe-no-equipado') || tipo.includes('/errores/heroe-ocupado'))
+  );
 }
 
 /**
@@ -175,7 +245,7 @@ export async function obtenerSala(idSala, { fetchImpl = fetchWithHttpErrorInterc
     return respuesta.json();
   }
 
-  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'sala'), respuesta.status);
 }
 
 /**
@@ -199,7 +269,7 @@ export async function abandonarSala(idSala, { fetchImpl = fetchWithHttpErrorInte
     return;
   }
 
-  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'sala'), respuesta.status);
 }
 
 /**
@@ -221,17 +291,18 @@ export async function cancelarSala(idSala, { fetchImpl = fetchWithHttpErrorInter
     return;
   }
 
-  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'sala'), respuesta.status);
 }
 
 /**
  * Verifica el heroe antes de intentar entrar — HU-SAL-003, RF-JUE-003.
  *
- * Habla con `GET /salas/{idSala}/verificacion-heroe`, que ya esta publicado en
- * `contracts/openapi/salas-partidas.yaml`. La ruta existe en el contrato pero
- * **todavia no en el servicio**: depende de que el modulo de contenido publique
- * cual es el heroe activo del jugador. Por eso este cliente se escribe contra
- * el contrato y se inyecta en la vista, que se prueba con datos de ejemplo.
+ * Habla con `GET /salas/{idSala}/verificacion-heroe`, publicado en
+ * `contracts/openapi/salas-partidas.yaml` e **implementado** en
+ * `SalasController`. FI-R0 — aqui ponia que la ruta «todavia no» existia en el
+ * servicio; se comprobo y si existe, con dos pruebas de extremo a extremo que
+ * la ejercitan. Se sigue inyectando en la vista para poder probarla sin
+ * levantar el servicio, no porque el servicio falte.
  *
  * No comprueba ni decide nada: solo trae el veredicto. Quien decide es el
  * servidor, y la vista solo lo pinta.
@@ -248,7 +319,7 @@ export async function verificarHeroe(idSala, { fetchImpl = fetchWithHttpErrorInt
     return respuesta.json();
   }
 
-  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'sala'), respuesta.status);
 }
 
 /**
@@ -275,7 +346,7 @@ export async function iniciarPartida(idSala, { fetchImpl = fetchWithHttpErrorInt
     return respuesta.json();
   }
 
-  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'sala'), respuesta.status);
 }
 
 /**
@@ -304,7 +375,7 @@ export async function obtenerPartida(
     return respuesta.json();
   }
 
-  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'sala'), respuesta.status);
 }
 
 /**
@@ -331,26 +402,39 @@ function sinApiDetras(respuesta) {
 /**
  * Que decirle a quien mira, segun por que fallo. Nunca el codigo.
  *
+ * ## Por que hace falta saber QUE se pidio (UX-R3.4)
+ *
+ * El 404 devolvia siempre «Esa sala ya no existe. Vuelve al listado para ver
+ * las que siguen abiertas», y eso vale cuando se pidio UNA sala. Cuando lo
+ * que fallaba era el LISTADO —que es lo que pasa sin backend detras— el
+ * jugador leia, en la pantalla del listado, que vuelva al listado para ver
+ * una sala que nadie habia abierto. Un mensaje que se contradice con la
+ * pantalla en la que esta enseña a no leer los mensajes.
+ *
  * @param {number} estado
+ * @param {'listado'|'sala'|'operacion'} recurso que se estaba pidiendo
  * @returns {string}
  */
-function detalleDelFallo(estado) {
+function detalleDelFallo(estado, recurso = 'operacion') {
   if (estado === 401) {
-    return 'Vuelve a iniciar sesion para continuar.';
+    return 'Vuelve a iniciar sesión para continuar.';
   }
   if (estado === 403) {
     return 'Tu cuenta no tiene permiso para ver esto.';
   }
   if (estado === 404) {
+    if (recurso === 'listado') {
+      return 'El servicio de batallas no está disponible en este momento.';
+    }
     return 'Esa sala ya no existe. Vuelve al listado para ver las que siguen abiertas.';
   }
   if (estado === 409) {
-    return 'Alguien se te adelanto: el estado de la sala cambio mientras mirabas.';
+    return 'Alguien se te adelantó: el estado de la sala cambió mientras mirabas.';
   }
   if (estado >= 500 || estado === 0) {
     return 'El servicio de batallas no responde ahora mismo. Vuelve a intentarlo en un momento.';
   }
-  return 'No pudimos completar la operacion. Vuelve a intentarlo.';
+  return 'No pudimos completar la operación. Vuelve a intentarlo.';
 }
 
 /**
@@ -363,7 +447,7 @@ function detalleDelFallo(estado) {
  * @param {Response} respuesta
  * @returns {Promise<object>}
  */
-async function cuerpoDelProblema(respuesta) {
+async function cuerpoDelProblema(respuesta, recurso = 'operacion') {
   try {
     const problema = await respuesta.json();
     if (problema && typeof problema === 'object') {
@@ -374,15 +458,25 @@ async function cuerpoDelProblema(respuesta) {
   }
 
   if (sinApiDetras(respuesta)) {
-    // La URL real de la peticion cuando `fetch` la trae; la base como respaldo.
+    // UX-R3.4 — esto se pintaba EN LA PANTALLA: «Estas viendo la vista servida
+    // como HTML estatico: nadie atiende /api/v1/salas. Levanta el servicio de
+    // salas, o declara en la pagina <meta name="nexus-api-base">…».
+    //
+    // Es el mensaje correcto y va a la persona equivocada. A quien programa le
+    // dice exactamente que hacer; a un jugador le enseña una etiqueta HTML y
+    // le pide que levante un servicio. El diagnostico se queda donde lo mira
+    // quien puede actuar sobre el, y la pantalla dice lo que dice siempre que
+    // un servicio no esta.
     const direccion = respuesta.url || ruta();
+    console.warn(
+      `[salas] No hay API detras de ${direccion}: la vista se esta sirviendo como HTML ` +
+        'estatico. Levanta el servicio de salas, o declara <meta name="nexus-api-base"> ' +
+        'apuntando a donde este corriendo.',
+    );
     return {
       status: respuesta.status,
-      title: 'No hay ninguna API detras de esta ruta',
-      detail:
-        `Estas viendo la vista servida como HTML estatico: nadie atiende ${direccion}. ` +
-        'Levanta el servicio de salas, o declara en la pagina ' +
-        '<meta name="nexus-api-base"> apuntando a donde este corriendo.',
+      title: 'Las batallas no están disponibles',
+      detail: 'El servicio de batallas no responde ahora mismo. Vuelve a intentarlo en un momento.',
     };
   }
 
@@ -393,8 +487,7 @@ async function cuerpoDelProblema(respuesta) {
   // quien programa.
   return {
     status: respuesta.status,
-    title:
-      respuesta.status === 401 ? 'Tu sesion no es valida' : 'Las batallas no estan disponibles',
-    detail: detalleDelFallo(respuesta.status),
+    title: respuesta.status === 401 ? 'Tu sesión terminó' : 'Las batallas no están disponibles',
+    detail: detalleDelFallo(respuesta.status, recurso),
   };
 }

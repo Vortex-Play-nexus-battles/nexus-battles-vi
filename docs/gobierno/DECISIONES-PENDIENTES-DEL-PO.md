@@ -38,8 +38,48 @@ interruptor a la vista.
 | D-25 | **Umbral de «alta frecuencia» de sanciones y de reportes (RF-MET-001).** La ficha pide alertas pero ningún documento fija la cifra. | El tablero de moderación publica los conteos por día y **no evalúa ninguna alerta** hasta que se fije `METRICAS_UMBRAL_SANCIONES_POR_DIA` (`alertasConfiguradas: false`). Registro de nuevos usuarios y frecuencia de reportes aparecen en `pendientes` (ms-identidad sin contrato de lectura; HU-COM-006 sin implementar). | `metricas-plataforma`: `metricas.moderacion.umbral-sanciones-por-dia` | #527 |
 | D-26 | **Encuentro de torneo ganado por la máquina (RF-TOR-004 + RF-TOR-005).** Salas-partidas informa el resultado con el `uid` del jugador en pie (`torneos.yaml` 1.1.0, HU-TOR-004 CA-04); el equipo de la máquina no tiene cuenta ni `uid`, y la ficha no dice si ese resultado se registra solo o lo confirma alguien. | Cuando gana la máquina (o hay empate) la sala **anota el fallo en el vínculo** (`ultimo_fallo`) y **no informa nada**; el administrador registra el resultado con motivo (RF-ADM-005). Cuando el PO lo decida, salas mandará al equipo máquina (haría falta que torneos exponga el id del equipo por encuentro a la sala, o un `ganoLaMaquina` en el contrato). | `salas-partidas`: `InformarEncuentroDeTorneo` | #489 |
 
-Cuando el PO decida una, se aplica el cambio en el sitio indicado, se
-actualiza esta tabla y se cierra la entrada en la Sprint Review.
+## Estado al 23 de septiembre de 2026 — qué sigue siendo del PO y qué no
+
+Esta tabla nació mezclando dos cosas distintas, y conviene separarlas antes de
+la Sprint Review: **decisiones de producto** (el PO las tiene que tomar) y
+**convenciones técnicas** (las toma el equipo y el PO puede revisarlas). Poner
+las segundas en una lista titulada «pendientes del PO» las dejaba esperando
+una firma que nadie iba a pedir.
+
+### CERRADAS como decisión técnica del equipo
+
+No vuelven a presentarse al PO. Si quiere cambiar alguna, es configuración.
+
+| # | Valor adoptado | Por qué | Evidencia |
+|---|---|---|---|
+| **D-08** | Solo `dev`. `test` y `prod` quedan condicionados a secretos inexistentes. | Restricción de coste, no de producto: un entorno más es otra factura. Los jobs existen y no se pueden disparar. | `cd.yml` (`vars.HAY_ENTORNO_TEST`, `HAY_ENTORNO_PRODUCCION`); simulacro de reversión ejecutado en dev por eso mismo |
+| **D-09** | 2FA para la bitácora **apagado** por configuración. | ms-identidad no implementa ningún segundo factor: exigirlo encendido dejaría la auditoría inaccesible. Al encenderlo se lee `amr` (RFC 8176). | `AUDITORIA_EXIGIR_2FA`; `RequireSuperAdmin2FAAspect` |
+| **D-11** | Se aceptan las reservas huérfanas; las expira el libro a las 72 h. | La clave de idempotencia (sala, jugador, versión) hace que un reintento reutilice la reserva. Inventar un proceso de barrido sería más código para un caso que el proveedor ya resuelve. | `ClienteCreditos.claveDeIdempotencia` |
+| **D-15** | El turno **no se pierde**: la acción no se aplica y sigue siendo del mismo jugador. | Es la única opción que no castiga al jugador por una caída de infraestructura. Anular la partida le quitaría lo apostado a todos. | HU-DIS-003; `degradacion.e2e.spec.js` apaga el motor de verdad |
+| **D-16** | Historial de chat sin caducidad, últimos 50 al entrar. **Sin límite de ritmo.** | El tamaño es configurable y ya se lee del catálogo. El límite de ritmo no se inventa: no hay cifra en ningún documento y **el código no lo implementa** — está declarado como hueco, no como hecho. | `chat.historial.tamano` en el catálogo; `PARAMETROS-DINAMICOS.md` |
+| **D-17** | Las interrupciones se conservan **para siempre**; nadie las borra. | Una fila por caída, no por sondeo: el crecimiento es mínimo y el informe mensual del Charter necesita al menos el mes en curso y el anterior. Borrar evidencia de disponibilidad para ahorrar kilobytes es mal negocio. | `AlmacenEnPostgres`; esquema `metricas` |
+| **D-25** | Los conteos se publican; **no se evalúa ninguna alerta** hasta que se escriba un umbral. | No poner umbral y no alertar es honesto; poner uno inventado convierte una cifra arbitraria en un aviso que alguien atenderá. La copia visible lo dice con palabras, sin citar el código de la decisión. | `METRICAS_UMBRAL_SANCIONES_POR_DIA`; `metricas-tecnicas.e2e.spec.js` |
+| **LATENCIA_PERCENTIL** | **p95**, convención de medición del equipo. | Ningún documento del proyecto fija el percentil — se buscó en Charter, `CLAUDE.md`, `.claude/rules/`, contratos y catálogo. Los 500 ms sí están en cinco sitios; el percentil en cero. Esperar una aprobación escrita dejaba RNF-REN-001 sin poder evaluarse **en ninguno** de los veinte módulos. | [ADR-006](./ADR-006-percentil-de-evaluacion-de-latencia.md); suite k6 con números reales |
+
+### SIGUEN SIENDO DEL PRODUCT OWNER
+
+Estas dos no las puede decidir el equipo sin inventar producto:
+
+| # | Qué falta decidir | Qué pasa mientras tanto |
+|---|---|---|
+| **D-24** | Monto de la premiación del torneo (RF-TOR-007) y si hay transmisión (RF-TOR-006). | No se acredita ningún premio ni se transmite nada. **HU-TOR-006 (#491) y HU-TOR-007 (#492) quedan bloqueadas**, no parciales. Escalado en #636. |
+| **D-26** | Qué se registra cuando un encuentro de torneo lo gana el equipo de la máquina, que no tiene cuenta ni `uid`. | El resultado se informa con el `uid` del jugador en pie. Escalado en #636. |
+
+### Hueco detectado y registrado hoy
+
+| # | Decisión | Qué hace hoy | Dónde se cambia |
+|---|---|---|---|
+| **D-27** | **Tope de reportes de comentarios por usuario y día (HU-COM-006).** Ninguna ficha da la cifra. | **20 reportes/día**, valor elegido por el equipo y hasta hoy sin registrar en ninguna parte — que es justo lo que el riesgo #6 del Charter prohíbe. Queda anotado para que sea revisable en vez de invisible. | `comentarios.reportes.maximo-por-usuario-por-dia` en `ServicioDeModeracion` |
+
+---
+
+Cuando el PO decida una de las dos que quedan, se aplica el cambio en el sitio
+indicado, se actualiza esta tabla y se cierra la entrada en la Sprint Review.
 
 **Desde HU-ADM-001 (#481, `admin-parametros`)** los valores configurables de
 D-02, D-16, D-20, D-23 y D-25 tienen su parámetro en el catálogo

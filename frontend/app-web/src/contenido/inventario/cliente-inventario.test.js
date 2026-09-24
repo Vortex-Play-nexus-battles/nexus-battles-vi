@@ -94,8 +94,8 @@ describe('Cliente de la consulta paginada', () => {
   });
 });
 
-describe('Cliente de busqueda del inventario', () => {
-  test('envia el criterio codificado, la pagina y la identidad', async () => {
+describe('Cliente de búsqueda del inventario', () => {
+  test('envía el criterio codificado, la página y la identidad', async () => {
     const { llamadas, fetchFalso } = espia({ elementos: [], totalElementos: 0 });
 
     await buscarElementos('jugador-A', ' espada larga ', 2, { fetchImpl: fetchFalso });

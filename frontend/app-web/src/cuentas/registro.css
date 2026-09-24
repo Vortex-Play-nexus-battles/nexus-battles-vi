@@ -55,10 +55,10 @@
   border-radius: 16px;
   padding: 0;
   width: min(360px, 92vw);
-  box-shadow: 0 20px 50px rgba(28, 35, 64, 0.28);
+  box-shadow: 0 20px 50px color-mix(in srgb, var(--cromo) 28%, transparent);
 }
 .dialogo-recorte::backdrop {
-  background: rgba(17, 23, 38, 0.55);
+  background: color-mix(in srgb, var(--texto) 55%, transparent);
 }
 
 .dialogo-recorte-cabecera {
@@ -83,7 +83,7 @@
   margin: 20px auto 0;
   overflow: hidden;
   border-radius: 8px;
-  background: #111726;
+  background: var(--texto);
   cursor: grab;
   touch-action: none;
 }
@@ -103,7 +103,7 @@
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  box-shadow: 0 0 0 9999px rgba(17, 23, 38, 0.6);
+  box-shadow: 0 0 0 9999px color-mix(in srgb, var(--texto) 60%, transparent);
   pointer-events: none;
 }
 

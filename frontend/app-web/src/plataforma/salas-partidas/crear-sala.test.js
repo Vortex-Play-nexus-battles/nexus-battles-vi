@@ -102,7 +102,7 @@ describe('leerFormulario', () => {
     expect(cuerpo.incluirHeroeIA).toBe(false);
   });
 
-  test('contra la IA la maquina va siempre, aunque el campo diga cero', () => {
+  test('contra la IA la máquina va siempre, aunque el campo diga cero', () => {
     const formulario = preparar();
     formulario.querySelector('[value="CONTRA_IA"]').checked = true;
 
@@ -122,7 +122,7 @@ describe('leerFormulario', () => {
     expect(cuerpo.tamanoEquipo).toBe(3);
   });
 
-  test('la casilla antigua de RF-JUE-001 sigue valiendo por una maquina', () => {
+  test('la casilla antigua de RF-JUE-001 sigue valiendo por una máquina', () => {
     document.body.innerHTML = `
       <form id="f">
         <input name="maximoParticipantes" value="4" />
@@ -233,7 +233,7 @@ describe('limites por modalidad (RF-JUE-004)', () => {
     expect(formulario.querySelector('[data-zona="nota-contra-ia"]').hidden).toBe(true);
   });
 
-  test('contra la IA muestra la nota de que la maquina ocupa el segundo cupo', () => {
+  test('contra la IA muestra la nota de que la máquina ocupa el segundo cupo', () => {
     const formulario = preparar();
     montarCrearSala(formulario, { crearSalaImpl: jest.fn() });
 
@@ -303,7 +303,7 @@ describe('montarCrearSala', () => {
     expect(document.querySelector('[data-zona="aviso"]').hidden).toBe(false);
   });
 
-  test('mientras espera, el boton se bloquea y lo dice', async () => {
+  test('mientras espera, el botón se bloquea y lo dice', async () => {
     const formulario = preparar();
     let resolver;
     const crearSalaImpl = jest.fn(() => new Promise((r) => (resolver = r)));
@@ -396,7 +396,7 @@ describe('montarCrearSala', () => {
     expect(formulario.querySelectorAll('.campo--invalido')).toHaveLength(0);
   });
 
-  test('los creditos sin integrar salen como aviso de error, con su motivo', async () => {
+  test('los créditos sin integrar salen como aviso de error, con su motivo', async () => {
     const formulario = preparar();
     const crearSalaImpl = jest.fn().mockRejectedValue(
       new ErrorDeApi(
@@ -421,7 +421,7 @@ describe('montarCrearSala', () => {
     expect(aviso.getAttribute('role')).toBe('alert');
   });
 
-  test('los creditos insuficientes salen como advertencia diciendo cuanto falta', async () => {
+  test('los créditos insuficientes salen como advertencia diciendo cuanto falta', async () => {
     const formulario = preparar();
     const crearSalaImpl = jest.fn().mockRejectedValue(
       new ErrorDeApi(
@@ -429,7 +429,7 @@ describe('montarCrearSala', () => {
           type: 'https://nexusbattles.local/errores/creditos-insuficientes',
           title: 'Creditos insuficientes',
           status: 422,
-          detail: 'Tienes 240 creditos y necesitas 400 para crear esta sala.',
+          detail: 'Tienes 240 créditos y necesitas 400 para crear esta sala.',
         },
         422,
       ),
@@ -455,14 +455,14 @@ describe('montarCrearSala', () => {
 
     const aviso = document.querySelector('.aviso');
     expect(aviso.className).toContain('aviso--error');
-    expect(aviso.textContent).toMatch(/conexion/i);
+    expect(aviso.textContent).toMatch(/conexión/i);
     expect(formulario.querySelector('[type="submit"]').disabled).toBe(false);
   });
 });
 
 // HU-DIS-003 · CA-02: cuando la seccion depende de un servicio caido, el
 // jugador ve QUE funcion esta limitada, que el resto sigue, y puede reintentar.
-describe('montarCrearSala · seccion degradada (HU-DIS-003)', () => {
+describe('montarCrearSala · sección degradada (HU-DIS-003)', () => {
   const inventarioCaido = () =>
     new ErrorDeApi(
       {
@@ -470,7 +470,7 @@ describe('montarCrearSala · seccion degradada (HU-DIS-003)', () => {
         title: 'Inventario no disponible temporalmente',
         status: 503,
         detail:
-          'La seccion de Inventario no esta disponible temporalmente. El resto del juego sigue funcionando.',
+          'La sección de Inventario no esta disponible temporalmente. El resto del juego sigue funcionando.',
         seccion: 'Inventario',
         reintentarEnSegundos: 7,
         dependencia: 'inventario',
@@ -478,7 +478,7 @@ describe('montarCrearSala · seccion degradada (HU-DIS-003)', () => {
       503,
     );
 
-  test('pinta Seccion degradada con la funcion limitada, no un Aviso de error', async () => {
+  test('pinta Sección degradada con la funcion limitada, no un Aviso de error', async () => {
     const formulario = preparar();
     const crearSalaImpl = jest.fn().mockRejectedValue(inventarioCaido());
     montarCrearSala(formulario, { crearSalaImpl });
@@ -523,9 +523,9 @@ describe('montarCrearSala · seccion degradada (HU-DIS-003)', () => {
       new ErrorDeApi(
         {
           type: 'https://nexusbattles.local/errores/creditos-no-disponibles',
-          title: 'El libro de creditos no esta disponible ahora mismo',
+          title: 'El libro de créditos no esta disponible ahora mismo',
           status: 503,
-          detail: 'No se pudieron comprometer los creditos.',
+          detail: 'No se pudieron comprometer los créditos.',
         },
         503,
       ),

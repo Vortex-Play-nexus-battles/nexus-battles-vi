@@ -30,7 +30,7 @@ function montarBarraNavegacion() {
   const contenedor = document.createElement('div');
   contenedor.dataset.cabeceraApp = '';
   document.body.prepend(contenedor);
-  montarCabecera(contenedor, { seccionActiva: 'cuenta' });
+  montarCabecera(contenedor, { vista: 'gestion-usuarios', seccionActiva: 'usuarios' });
 }
 
 async function iniciar() {
@@ -52,6 +52,7 @@ export async function cargarMatrizYVerificarAcceso({
 } = {}) {
   const token = sessionStorage.getItem(CLAVE_TOKEN);
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  let seCargo = false;
 
   try {
     const respuesta = await fetchImpl(MATRIZ_RBAC_API, { headers });
@@ -68,15 +69,22 @@ export async function cargarMatrizYVerificarAcceso({
     }
 
     setPermissionMatrix(matriz);
+    seCargo = true;
   } catch (error) {
     console.error('No fue posible cargar la matriz RBAC:', error);
     setPermissionMatrix({});
   }
 
-  verificarAcceso();
+  verificarAcceso({ matrizDisponible: seCargo });
 }
 
-function configurarEventos() {
+/**
+ * Engancha la pantalla. Exportada para que las pruebas puedan comprobar que el
+ * formulario de busqueda **esta realmente atado** a algo que llama al
+ * servicio: un manejador que existe pero no se registra es indistinguible de
+ * un boton muerto para quien lo pulsa.
+ */
+export function configurarEventos() {
   const formularioBusqueda = document.getElementById('form-buscar-usuario');
 
   const formularioPerfil = document.getElementById('formulario-perfil-admin');
@@ -105,6 +113,15 @@ function configurarEventos() {
 
   if (btnVolver) {
     btnVolver.addEventListener('click', volverInicio);
+  }
+
+  const btnReintentarBloqueo = document.querySelector('[data-zona="reintentar-bloqueo"]');
+  if (btnReintentarBloqueo) {
+    // Volver a pedir la matriz, no recargar la pagina: recargar perdería lo
+    // que el administrador tuviera escrito en el buscador.
+    btnReintentarBloqueo.addEventListener('click', () => {
+      cargarMatrizYVerificarAcceso();
+    });
   }
 
   if (btnVolverAcceso) {
@@ -149,7 +166,29 @@ function configurarSelectorRoles() {
   }
 }
 
-function verificarAcceso() {
+/**
+ * Deja ver la gestión, o dice por qué no — UX-R3.3.
+ *
+ * ## Los dos «no» que antes eran el mismo
+ *
+ * El acceso se decide contra la matriz que publica el servidor
+ * (`/api/v1/rbac/matrix`), y la UI falla cerrada: sin matriz, nadie pasa. Eso
+ * está bien. Lo que estaba mal era **lo que se le decía a la persona**.
+ *
+ * Cuando `ms-identidad` no contestaba —en dev no corre—, un administrador
+ * legítimo leía «No tienes permisos suficientes para gestionar cuentas». Es
+ * falso y además es la clase de mensaje que hace perder una tarde: quien lo
+ * lee va a pedir que le revisen el rol, no a mirar si el servicio está caído.
+ *
+ * Ahora son dos estados distintos, como pide §17:
+ *
+ *   - matriz cargada y el rol no alcanza → «No tienes acceso a esta sección.»
+ *   - matriz sin cargar                  → «Esta función no está disponible
+ *                                           temporalmente.» + Reintentar
+ *
+ * @param {{matrizDisponible?: boolean}} [opciones]
+ */
+function verificarAcceso({ matrizDisponible = true } = {}) {
   const contenedor = document.getElementById('gestion-contenedor');
 
   const accesoDenegado = document.getElementById('acceso-denegado');
@@ -158,12 +197,14 @@ function verificarAcceso() {
     return;
   }
 
-  const tienePermiso = checkPermission(getCurrentRole(), PERMISO_GESTIONAR);
+  const tienePermiso = matrizDisponible && checkPermission(getCurrentRole(), PERMISO_GESTIONAR);
 
   if (!tienePermiso) {
     contenedor.hidden = true;
 
     accesoDenegado.hidden = false;
+
+    pintarMotivoDeBloqueo(accesoDenegado, matrizDisponible);
 
     return;
   }
@@ -173,6 +214,54 @@ function verificarAcceso() {
   accesoDenegado.hidden = true;
 }
 
+/**
+ * @param {HTMLElement} seccion
+ * @param {boolean} matrizDisponible
+ */
+function pintarMotivoDeBloqueo(seccion, matrizDisponible) {
+  const titulo = seccion.querySelector('[data-zona="titulo-bloqueo"]');
+  const detalle = seccion.querySelector('[data-zona="detalle-bloqueo"]');
+  const reintentar = seccion.querySelector('[data-zona="reintentar-bloqueo"]');
+
+  if (titulo) {
+    titulo.textContent = matrizDisponible
+      ? 'No tienes acceso a esta sección.'
+      : 'Esta función no está disponible temporalmente.';
+  }
+  if (detalle) {
+    detalle.textContent = matrizDisponible
+      ? 'Tu cuenta no tiene habilitada la gestión de cuentas.'
+      : 'No pudimos comprobar tus permisos porque el servicio de identidad no responde. No es un problema de tu cuenta.';
+  }
+  if (reintentar) {
+    reintentar.hidden = matrizDisponible;
+  }
+}
+
+/**
+ * Busca de verdad — FI-R3.
+ *
+ * Lo que habia aqui: el boton guardaba el ID en `sessionStorage`, abria el
+ * panel con todos los campos en «-» y escribia «La consulta de sus datos
+ * quedara conectada cuando el backend exponga el endpoint administrativo de
+ * consulta». Ese endpoint **existe desde hace tiempo**:
+ * `AdminGestionUsuarioController` tiene `@GetMapping("/{usuarioId}")` con
+ * `@RequirePermission(Action.GESTIONAR_CUENTAS)`, y devuelve un
+ * `AdminUsuarioResumenResponse` completo. El comentario del codigo decia lo
+ * contrario y nadie volvio a mirarlo.
+ *
+ * Peor que no traer los datos: el panel se abria igual y las acciones de
+ * suspender, banear y restablecer quedaban habilitadas sobre un ID que nadie
+ * habia comprobado que existiera. Un digito de mas en el buscador y el
+ * administrador estaba a un clic de banear a otra persona sin haber visto ni
+ * su apodo.
+ *
+ * Ahora el panel solo se abre si el usuario existe, y cada desenlace se dice
+ * distinto: no existe, no tienes permiso, tu sesion caduco, o el servicio no
+ * responde. Los cuatro se confundian en uno.
+ *
+ * @param {Event} evento
+ */
 async function buscarUsuario(evento) {
   evento.preventDefault();
 
@@ -186,34 +275,112 @@ async function buscarUsuario(evento) {
 
   const usuarioId = input.value.trim();
 
-  if (!usuarioId || Number(usuarioId) <= 0) {
+  if (!usuarioId || !Number.isInteger(Number(usuarioId)) || Number(usuarioId) <= 0) {
     mostrarMensajeBusqueda('Debes ingresar un ID de usuario válido.');
 
     return;
   }
 
-  /*
-   * Actualmente el backend conocido no expone todavía
-   * un GET administrativo confirmado para consultar
-   * la información completa del usuario.
-   *
-   * Por eso esta función deja seleccionado el ID
-   * y prepara la interfaz para el futuro endpoint.
-   */
+  const boton = document.getElementById('btn-buscar');
+  cambiarEstadoBoton(boton, true, 'Buscando...');
 
-  usuarioSeleccionado = {
-    id: Number(usuarioId),
-  };
+  try {
+    const respuesta = await fetchWithHttpErrorInterceptor(`${BASE_API}/${Number(usuarioId)}`);
 
-  sessionStorage.setItem(CLAVE_USUARIO_ID, String(usuarioId));
+    if (!respuesta.ok) {
+      ocultarPanelUsuario();
+      mostrarMensajeBusqueda(await motivoDeBusquedaFallida(respuesta, usuarioId));
+      return;
+    }
 
-  mostrarPanelUsuario();
+    const datos = await respuesta.json();
 
-  limpiarDatosUsuario();
+    usuarioSeleccionado = { id: Number(datos.id ?? usuarioId) };
+    sessionStorage.setItem(CLAVE_USUARIO_ID, String(usuarioSeleccionado.id));
 
-  mostrarMensajeBusqueda(
-    'Usuario seleccionado. La consulta de sus datos quedará conectada cuando el backend exponga el endpoint administrativo de consulta.',
-  );
+    mostrarPanelUsuario();
+    pintarUsuario(datos);
+  } catch (error) {
+    // Aqui solo llega un fallo de red: el interceptor devuelve la respuesta
+    // para cualquier codigo HTTP y solo relanza si `fetch` no llego a
+    // responder. Un servicio caido no es un usuario inexistente.
+    console.error('Error consultando el usuario:', error);
+    ocultarPanelUsuario();
+    mostrarMensajeBusqueda(
+      'No se pudo consultar el usuario: el servicio de identidad no responde. Vuelve a intentarlo.',
+    );
+  } finally {
+    cambiarEstadoBoton(boton, false, 'Buscar');
+  }
+}
+
+/**
+ * Por que fallo la busqueda, dicho de forma que sirva para actuar.
+ *
+ * Un 404 y un 403 llevan a cosas distintas: el primero es «ese usuario no
+ * esta», el segundo es «tu cuenta no puede mirarlo». Juntarlos en «no se pudo
+ * buscar» manda al administrador a revisar lo que no es.
+ *
+ * @param {Response} respuesta
+ * @param {string} usuarioId
+ * @returns {Promise<string>}
+ */
+async function motivoDeBusquedaFallida(respuesta, usuarioId) {
+  if (respuesta.status === 404) {
+    return `No existe ningún usuario con el ID ${usuarioId}.`;
+  }
+  if (respuesta.status === 403) {
+    // El interceptor ya ensena el aviso de RBAC; aqui se explica en el sitio
+    // donde la persona estaba mirando.
+    return 'Tu cuenta no tiene permiso para consultar usuarios.';
+  }
+  if (respuesta.status === 401) {
+    return 'Tu sesión caducó. Vuelve a iniciar sesión para gestionar cuentas.';
+  }
+  return await obtenerMensajeError(respuesta);
+}
+
+/**
+ * Vuelca `AdminUsuarioResumenResponse` en el panel y en el formulario.
+ *
+ * Un campo que el servidor no trae se ensena como «-», no como cadena vacia
+ * ni como «undefined»: el resumen es de solo lectura y «-» ya significa «sin
+ * dato» en esta pantalla.
+ *
+ * @param {object} datos
+ */
+function pintarUsuario(datos) {
+  establecerTexto('usuario-id-mostrado', datos.id ?? '-');
+  establecerTexto('usuario-apodo-mostrado', datos.apodo ?? '-');
+  establecerTexto('usuario-email-mostrado', datos.email ?? '-');
+  establecerTexto('usuario-rol-mostrado', datos.rolNombre ?? '-');
+  establecerTexto('usuario-estado-mostrado', datos.estado ?? '-');
+
+  establecerValor('nombres', datos.nombres ?? '');
+  establecerValor('apellidos', datos.apellidos ?? '');
+  establecerValor('apodo', datos.apodo ?? '');
+  establecerValor('preferencias', datos.preferencias ?? '');
+  // `avatar` es un `<input type="file">`: su valor no se puede fijar desde
+  // JavaScript y ademas el servidor devuelve una ruta, no un archivo.
+  establecerValor('estado', datos.estado ?? 'ACTIVO');
+  establecerValor('suspendido-hasta', '');
+
+  // El selector de rol arranca en el rol que el usuario tiene ahora, no en el
+  // primero de la lista: dejarlo en JUGADOR invitaba a degradar a un
+  // administrador de un solo clic.
+  const rol = typeof datos.rolNombre === 'string' ? datos.rolNombre : null;
+  establecerValor('nuevo-rol', ROLES_DISPONIBLES.includes(rol) ? rol : ROLES_DISPONIBLES[0]);
+
+  limpiarMensajeCambioRol();
+  limpiarMensajePerfil();
+}
+
+function ocultarPanelUsuario() {
+  usuarioSeleccionado = null;
+  const panel = document.getElementById('panel-usuario');
+  if (panel) {
+    panel.hidden = true;
+  }
 }
 
 function mostrarPanelUsuario() {
@@ -224,28 +391,6 @@ function mostrarPanelUsuario() {
   }
 
   panel.hidden = false;
-}
-
-function limpiarDatosUsuario() {
-  establecerTexto('usuario-id-mostrado', usuarioSeleccionado?.id ?? '-');
-
-  establecerTexto('usuario-apodo-mostrado', '-');
-
-  establecerTexto('usuario-email-mostrado', '-');
-
-  establecerTexto('usuario-rol-mostrado', '-');
-
-  establecerTexto('usuario-estado-mostrado', '-');
-
-  establecerValor('nombres', '');
-  establecerValor('apellidos', '');
-  establecerValor('apodo', '');
-  establecerValor('avatar', '');
-  establecerValor('preferencias', '');
-  establecerValor('estado', 'ACTIVO');
-  establecerValor('suspendido-hasta', '');
-  establecerValor('nuevo-rol', ROLES_DISPONIBLES[0]);
-  limpiarMensajeCambioRol();
 }
 
 async function cambiarRolUsuarioSeleccionado() {
@@ -576,6 +721,17 @@ function limpiarMensajeBusqueda() {
 
   elemento.textContent = '';
 
+  elemento.hidden = true;
+}
+
+function limpiarMensajePerfil() {
+  const elemento = document.getElementById('mensaje-perfil');
+
+  if (!elemento) {
+    return;
+  }
+
+  elemento.textContent = '';
   elemento.hidden = true;
 }
 

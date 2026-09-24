@@ -34,10 +34,10 @@ export const CLAVE_AVISO_DEL_LISTADO = 'nexus.avisoDeSala';
 export function textoDeConfirmacion(sala) {
   const otros = Math.max(0, Number(sala?.ocupacion ?? 1) - 1);
   if (otros === 0) {
-    return '¿Cancelar la sala? Todavia no ha entrado nadie mas.';
+    return '¿Cancelar la sala? Todavía no ha entrado nadie mas.';
   }
   const gente = otros === 1 ? '1 participante' : `${otros} participantes`;
-  return `¿Cancelar la sala? Se expulsara a ${gente}.`;
+  return `¿Cancelar la sala? Se expulsará a ${gente}.`;
 }
 
 /**
@@ -116,6 +116,101 @@ export function salidaAlListado(storage, navegar, destino = './batallas.html') {
 }
 
 /**
+ * La invitacion que el anfitrion puede repartir — FI-R4.
+ *
+ * `GET /salas/{id}` devuelve `codigoInvitacion` **solo al anfitrion**
+ * (`SalaResponse.segunQuienPregunta`), y hasta ahora el frontend no lo miraba
+ * en ningun sitio: el codigo se generaba, se guardaba en la columna
+ * `codigo_invitacion` y moria ahi. Una sala privada era, por construccion,
+ * una sala a la que no podia entrar nadie.
+ *
+ * El enlace lleva el codigo en la URL para poder pegarlo en un chat de una
+ * sola pieza. No es un secreto que haya que proteger del historial del
+ * navegador: es una llave de un solo uso practico, para una partida que dura
+ * minutos, y pedirle a alguien que copie ocho caracteres a mano desde una
+ * captura es como se pierde una sala.
+ *
+ * @param {{codigoInvitacion?: string|null, id?: string}} sala
+ * @param {string} [origen] normalmente `location.origin + location.pathname`
+ * @returns {{codigo: string, enlace: string}|null} null si no hay codigo que dar
+ */
+export function invitacionDe(sala, origen = '') {
+  const codigo = typeof sala?.codigoInvitacion === 'string' ? sala.codigoInvitacion.trim() : '';
+  if (!codigo || !sala?.id) {
+    return null;
+  }
+  const base = origen ? origen.replace(/\/[^/]*$/, '') : '';
+  const enlace = `${base}/batallas.html?sala=${encodeURIComponent(sala.id)}&codigo=${encodeURIComponent(codigo)}`;
+  return { codigo, enlace };
+}
+
+/**
+ * Monta el bloque de invitacion sobre `[data-zona="invitacion"]`.
+ *
+ * Solo hace algo cuando la sala trae codigo, o sea cuando quien mira es el
+ * anfitrion de una sala privada. Al resto ni les aparece la zona: no es que
+ * se les oculte un dato, es que el servidor no se lo manda.
+ *
+ * @param {ParentNode} raiz
+ * @param {object} opciones
+ * @param {object} opciones.sala tal como la devolvio `GET /salas/{id}`
+ * @param {string} [opciones.origen]
+ * @param {(texto: string) => Promise<void>} [opciones.copiar] normalmente
+ *   `navigator.clipboard.writeText`
+ * @returns {boolean} true si se pinto la invitacion
+ */
+export function montarInvitacion(raiz, { sala, origen = '', copiar } = {}) {
+  const zona = raiz.querySelector('[data-zona="invitacion"]');
+  if (!zona) {
+    return false;
+  }
+
+  const invitacion = invitacionDe(sala, origen);
+  if (!invitacion) {
+    zona.hidden = true;
+    return false;
+  }
+
+  zona.hidden = false;
+  const salidaCodigo = zona.querySelector('[data-zona="codigo-invitacion"]');
+  const acuse = zona.querySelector('[data-zona="acuse-copia"]');
+  if (salidaCodigo) {
+    salidaCodigo.textContent = invitacion.codigo;
+  }
+
+  const decir = (texto) => {
+    if (acuse) {
+      acuse.textContent = texto;
+    }
+  };
+
+  const copiarTexto = async (texto, etiqueta) => {
+    // Sin portapapeles —navegador viejo, contexto no seguro, permiso
+    // denegado— el codigo sigue en pantalla y se puede seleccionar a mano. Lo
+    // que no puede pasar es que el boton diga «copiado» sin haber copiado.
+    if (typeof copiar !== 'function') {
+      decir('Tu navegador no deja copiar solo. Selecciona el código y cópialo a mano.');
+      return;
+    }
+    try {
+      await copiar(texto);
+      decir(`${etiqueta} copiado.`);
+    } catch {
+      decir('No se pudo copiar. Selecciona el código y cópialo a mano.');
+    }
+  };
+
+  zona
+    .querySelector('[data-accion="copiar-codigo"]')
+    ?.addEventListener('click', () => copiarTexto(invitacion.codigo, 'Código'));
+  zona
+    .querySelector('[data-accion="copiar-enlace"]')
+    ?.addEventListener('click', () => copiarTexto(invitacion.enlace, 'Enlace'));
+
+  return true;
+}
+
+/**
  * Monta la sala de espera sobre `[data-zona="espera"]`.
  *
  * @param {ParentNode} raiz
@@ -187,7 +282,7 @@ export function montarSalaDeEspera(
     } catch (error) {
       // 409 ya empezo · 403 no eres el anfitrion · 404 no existe. El texto lo
       // redacta el servicio, que es quien sabe el motivo.
-      decir(error?.detalle ?? error?.message ?? 'No se pudo completar la operacion.');
+      decir(error?.detalle ?? error?.message ?? 'No se pudo completar la operación.');
       boton.disabled = false;
     }
   };

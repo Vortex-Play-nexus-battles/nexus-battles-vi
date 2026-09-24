@@ -92,8 +92,8 @@ beforeEach(() => {
   document.body.replaceChildren(raiz);
 });
 
-describe('Paginacion con una busqueda activa', () => {
-  test('cambiar de pagina pide la pagina siguiente a la busqueda, con el mismo criterio', async () => {
+describe('Paginacion con una búsqueda activa', () => {
+  test('cambiar de página pide la página siguiente a la búsqueda, con el mismo criterio', async () => {
     const { consultas, busquedas } = await montarConBusqueda(raiz);
 
     await buscarTexto(raiz, 'Espada larga');
@@ -120,7 +120,7 @@ describe('Paginacion con una busqueda activa', () => {
     expect(raiz.querySelector('[aria-current="page"]').textContent).toBe('1');
   });
 
-  test('tras cambiar de pagina el texto buscado y el boton Limpiar siguen a la vista', async () => {
+  test('tras cambiar de página el texto buscado y el botón Limpiar siguen a la vista', async () => {
     await montarConBusqueda(raiz);
 
     await buscarTexto(raiz, 'Espada larga');

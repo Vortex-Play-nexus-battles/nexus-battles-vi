@@ -78,6 +78,12 @@ public class SeguridadConfig {
                 .access(soloSubastas)
                 .requestMatchers(HttpMethod.DELETE, "/api/v1/inventario/elementos/*/bloqueo-subasta/*")
                 .access(soloSubastas)
+                // Transferencia de propiedad al cerrar una subasta (HU-SUB-004).
+                // Mismo criterio que el bloqueo: solo ms-subastas, por azp. Cambiar
+                // de dueno un elemento es mas delicado que bloquearlo, asi que no
+                // puede caer en el comodin de "cualquier servicio autenticado".
+                .requestMatchers(HttpMethod.POST, "/api/v1/inventario/elementos/*/transferencias")
+                .access(soloSubastas)
                 .requestMatchers(HttpMethod.GET, "/api/v1/inventario/elementos/busqueda")
                 .hasAnyRole(ROLES_DEL_INVENTARIO)
                 .requestMatchers(HttpMethod.GET, "/api/v1/inventario/elementos/*")

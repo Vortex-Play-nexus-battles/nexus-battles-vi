@@ -40,11 +40,10 @@ spring:
 # y a los otros diecinueve modulos desde nexus.spring-conventions. Lo unico que
 # vive en el application.yml son los valores.
 #
-# OJO con el percentil: se deja SIN valor por omision a proposito. CA-03 exige
-# que el Product Owner apruebe por escrito si RNF-REN-001 se evalua en p95 o en
-# p99; poner un 95 aqui tomaria esa decision en su lugar. Mientras falte, la
-# medicion sigue corriendo y el endpoint del informe responde 409 diciendo que
-# falta la aprobacion. Ver README.md.
+# El percentil: vacio aqui significa «el de ADR-006», p95, que lo aplica
+# ObjetivoDeLatencia.PERCENTIL_POR_OMISION. No se escribe el 95 en este archivo
+# para que la convencion viva en un solo sitio y los veinte modulos no puedan
+# divergir. Poner LATENCIA_PERCENTIL=99 cambia la medicion sin recompilar.
 latencia:
   objetivo-ms: ${LATENCIA_OBJETIVO_MS:500}
   percentil: ${LATENCIA_PERCENTIL:}
@@ -115,7 +114,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       show-details: always

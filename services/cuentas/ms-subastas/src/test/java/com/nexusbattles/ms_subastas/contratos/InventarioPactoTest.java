@@ -64,7 +64,7 @@ class InventarioPactoTest {
                 .uponReceiving("el bloqueo del elemento al publicar la subasta")
                 .path("/api/v1/inventario/elementos/" + ELEMENTO + "/bloqueo-subasta")
                 .method("PUT")
-                .matchHeader("Idempotency-Key", ".+")
+                .matchHeader("Idempotency-Key", ".+", "clave-de-ejemplo-0001")
                 .headers(Map.of("Content-Type", "application/json"))
                 .body(new PactDslJsonBody()
                         // Lo que este pacto existe para proteger.
@@ -73,7 +73,18 @@ class InventarioPactoTest {
                 .willRespondWith()
                 .status(200)
                 .headers(Map.of("Content-Type", "application/json"))
-                .body(new PactDslJsonBody().stringType("elementoId", ELEMENTO))
+                // Sin cuerpo esperado a proposito — R11.4.
+                //
+                // Este pacto pedia `{"elementoId": ...}`, y el proveedor
+                // devuelve `ElementoInventario`, cuyo primer campo se llama
+                // `id` (inventario.yaml 1.1.1 lo declara asi, y el codigo
+                // coincide con el contrato). Era el CONSUMIDOR el que estaba
+                // equivocado, no el proveedor.
+                //
+                // No se corrige a `id` sino que se retira: `InventarioClientHttp`
+                // no lee el cuerpo de esta respuesta, solo mira el codigo. Un
+                // pacto que exige una forma que nadie usa ata las manos del
+                // proveedor sin proteger a nadie.
                 .toPact();
     }
 
@@ -121,10 +132,28 @@ class InventarioPactoTest {
                 .uponReceiving("la liberacion del bloqueo al cerrar la subasta")
                 .path("/api/v1/inventario/elementos/" + ELEMENTO + "/bloqueo-subasta/" + SUBASTA)
                 .method("DELETE")
+                // `liberarReserva` SI manda la clave (el cierre pasa siempre
+                // "cierre-" + id) e inventario la exige: sin ella responde 400.
+                // No declararla dejaba el pacto grabando una peticion que el
+                // consumidor nunca hace y que el proveedor rechaza, y la
+                // verificacion del lado de inventario fallaba por el pacto,
+                // no por el servicio.
+                .matchHeader("Idempotency-Key", ".+", "clave-de-ejemplo-0001")
                 .willRespondWith()
                 .status(200)
                 .headers(Map.of("Content-Type", "application/json"))
-                .body(new PactDslJsonBody().stringType("elementoId", ELEMENTO))
+                // Sin cuerpo esperado a proposito — R11.4.
+                //
+                // Este pacto pedia `{"elementoId": ...}`, y el proveedor
+                // devuelve `ElementoInventario`, cuyo primer campo se llama
+                // `id` (inventario.yaml 1.1.1 lo declara asi, y el codigo
+                // coincide con el contrato). Era el CONSUMIDOR el que estaba
+                // equivocado, no el proveedor.
+                //
+                // No se corrige a `id` sino que se retira: `InventarioClientHttp`
+                // no lee el cuerpo de esta respuesta, solo mira el codigo. Un
+                // pacto que exige una forma que nadie usa ata las manos del
+                // proveedor sin proteger a nadie.
                 .toPact();
     }
 
@@ -173,7 +202,7 @@ class InventarioPactoTest {
                 .uponReceiving("la transferencia del producto al ganador al cerrar la subasta")
                 .path("/api/v1/inventario/elementos/" + ELEMENTO + "/transferencias")
                 .method("POST")
-                .matchHeader("Idempotency-Key", ".+")
+                .matchHeader("Idempotency-Key", ".+", "clave-de-ejemplo-0001")
                 .headers(Map.of("Content-Type", "application/json"))
                 .body(new PactDslJsonBody()
                         // El nuevo dueno viaja como UUID en el cuerpo, igual que
@@ -186,9 +215,16 @@ class InventarioPactoTest {
                 .willRespondWith()
                 .status(200)
                 .headers(Map.of("Content-Type", "application/json"))
-                .body(new PactDslJsonBody()
-                        .stringType("elementoId", ELEMENTO)
-                        .uuid("propietarioUid", NUEVO_DUENO))
+                // Sin cuerpo esperado a proposito, con el mismo criterio que
+                // R11.4 aplico al bloqueo y a la liberacion. Este pacto pedia
+                // `{"elementoId", "propietarioUid"}`, y el proveedor devuelve
+                // `ElementoInventarioResponse`, cuyo identificador se llama `id`
+                // y que no dice de quien es el elemento. La verificacion del
+                // lado de inventario lo destapo en cuanto el endpoint existio.
+                //
+                // `transferirProducto` no lee esta respuesta: es `void` y solo
+                // mira el codigo. Exigir una forma que nadie usa ata las manos
+                // del proveedor sin proteger a nadie.
                 .toPact();
     }
 
@@ -211,7 +247,7 @@ class InventarioPactoTest {
                 .uponReceiving("el reintento de una transferencia ya aplicada")
                 .path("/api/v1/inventario/elementos/" + ELEMENTO + "/transferencias")
                 .method("POST")
-                .matchHeader("Idempotency-Key", ".+")
+                .matchHeader("Idempotency-Key", ".+", "clave-de-ejemplo-0001")
                 .headers(Map.of("Content-Type", "application/json"))
                 .body(new PactDslJsonBody()
                         .uuid("nuevoPropietarioUid", NUEVO_DUENO)
@@ -219,9 +255,16 @@ class InventarioPactoTest {
                 .willRespondWith()
                 .status(200)
                 .headers(Map.of("Content-Type", "application/json"))
-                .body(new PactDslJsonBody()
-                        .stringType("elementoId", ELEMENTO)
-                        .uuid("propietarioUid", NUEVO_DUENO))
+                // Sin cuerpo esperado a proposito, con el mismo criterio que
+                // R11.4 aplico al bloqueo y a la liberacion. Este pacto pedia
+                // `{"elementoId", "propietarioUid"}`, y el proveedor devuelve
+                // `ElementoInventarioResponse`, cuyo identificador se llama `id`
+                // y que no dice de quien es el elemento. La verificacion del
+                // lado de inventario lo destapo en cuanto el endpoint existio.
+                //
+                // `transferirProducto` no lee esta respuesta: es `void` y solo
+                // mira el codigo. Exigir una forma que nadie usa ata las manos
+                // del proveedor sin proteger a nadie.
                 .toPact();
     }
 

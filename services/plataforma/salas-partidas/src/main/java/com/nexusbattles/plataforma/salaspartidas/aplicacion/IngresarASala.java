@@ -7,6 +7,7 @@ import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Sala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.SalaModificadaConcurrentemente;
 import com.nexusbattles.plataforma.salaspartidas.dominio.SalaNoEncontrada;
+import com.nexusbattles.plataforma.salaspartidas.sanciones.SancionesDelJugador;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,13 +62,15 @@ public class IngresarASala {
     private final CanalDeSala canal;
     private final HeroeDelJugador heroes;
     private final CreditosDelJugador creditos;
+    private final SancionesDelJugador sanciones;
 
     public IngresarASala(RepositorioDeSalas repositorio, CanalDeSala canal, HeroeDelJugador heroes,
-                         CreditosDelJugador creditos) {
+                         CreditosDelJugador creditos, SancionesDelJugador sanciones) {
         this.repositorio = Objects.requireNonNull(repositorio);
         this.canal = Objects.requireNonNull(canal);
         this.heroes = Objects.requireNonNull(heroes, "Sin inventario no se puede abrir la puerta.");
         this.creditos = Objects.requireNonNull(creditos, "Hace falta el libro de creditos.");
+        this.sanciones = Objects.requireNonNull(sanciones, "Sin sanciones no se sabe quien puede jugar.");
     }
 
     /**
@@ -102,6 +105,9 @@ public class IngresarASala {
     public Sala ejecutar(UUID idSala, JugadorAutenticado jugador, String codigo) {
         Objects.requireNonNull(idSala, "Hace falta la sala a la que se quiere entrar.");
         Objects.requireNonNull(jugador, "Hace falta el jugador que quiere entrar.");
+
+        // Antes que el heroe y que la reserva, por lo mismo que en CrearSala.
+        PuertaDeSancion.comprobar(sanciones, jugador);
 
         UUID idJugador = jugador.id();
 

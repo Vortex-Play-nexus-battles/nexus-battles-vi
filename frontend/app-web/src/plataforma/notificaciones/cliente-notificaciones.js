@@ -130,10 +130,10 @@ function rutaDeUsuario(usuarioId, sufijo = '') {
 /** Error de negocio devuelto por el servicio, ya interpretado. */
 export class ErrorDeApi extends Error {
   constructor(problema, estado) {
-    super(problema?.detail || problema?.title || 'El servicio no pudo completar la operacion.');
+    super(problema?.detail || problema?.title || 'El servicio no pudo completar la operación.');
     this.name = 'ErrorDeApi';
     this.tipo = problema?.type ?? null;
-    this.titulo = problema?.title ?? 'El servicio no pudo completar la operacion';
+    this.titulo = problema?.title ?? 'El servicio no pudo completar la operación';
     this.detalle = this.message;
     this.estado = problema?.status ?? estado;
   }

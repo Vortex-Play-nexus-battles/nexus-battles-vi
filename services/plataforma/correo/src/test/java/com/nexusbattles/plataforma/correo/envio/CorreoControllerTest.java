@@ -48,6 +48,7 @@ class CorreoControllerTest {
     private static final String CONFIRMACION = "/api/v1/correos/confirmacion-cuenta";
     private static final String MISION = "/api/v1/correos/mision";
     private static final String SUBASTA = "/api/v1/correos/subasta";
+    private static final String CONFIRMACION_COMPRA = "/api/v1/correos/confirmacion-compra";
 
     private static final EmisorDeTokensDePrueba EMISOR = EmisorDeTokensDePrueba.emisor();
 
@@ -490,6 +491,78 @@ class CorreoControllerTest {
     })
     void rechazaSubastaConDatosInvalidos(String cuerpo) throws Exception {
         mockMvc.perform(comoServicio(SUBASTA).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                .andExpect(status().isBadRequest());
+
+        verify(enviador, never()).enviar(anyString(), anyString(), anyString(), any());
+    }
+
+    // ----- HU-PAG-003: confirmacion de compra (issue #537, consumidor: ms-finanzas) -----
+
+    @Test
+    void aceptaUnaConfirmacionDeCompraYLaDespacha() throws Exception {
+        mockMvc.perform(comoServicio(CONFIRMACION_COMPRA).contentType(MediaType.APPLICATION_JSON).content("""
+                {"email":"jugador@ejemplo.com","apodo":"ElGuerrero",
+                 "monto":50000.00,"moneda":"COP","concepto":"Paquete de créditos x500",
+                 "fechaHora":"2026-09-23T10:15:00-05:00"}
+                """))
+                .andExpect(status().isAccepted());
+
+        verify(enviador).enviar(
+                eq("jugador@ejemplo.com"), anyString(), eq("email/confirmacion-compra"), any());
+    }
+
+    @Test
+    void elCorreoDeConfirmacionDeCompraLlevaElMontoLaMonedaYElConcepto() throws Exception {
+        mockMvc.perform(comoServicio(CONFIRMACION_COMPRA).contentType(MediaType.APPLICATION_JSON).content("""
+                {"email":"jugador@ejemplo.com","apodo":"ElGuerrero",
+                 "monto":50000.00,"moneda":"COP","concepto":"Paquete de créditos x500",
+                 "fechaHora":"2026-09-23T10:15:00-05:00"}
+                """))
+                .andExpect(status().isAccepted());
+
+        @SuppressWarnings("unchecked")
+        Class<Map<String, Object>> tipo = (Class<Map<String, Object>>) (Class<?>) Map.class;
+        org.mockito.ArgumentCaptor<Map<String, Object>> captor = org.mockito.ArgumentCaptor.forClass(tipo);
+        verify(enviador).enviar(anyString(), anyString(), anyString(), captor.capture());
+
+        assertThat(captor.getValue())
+                .containsEntry("apodo", "ElGuerrero")
+                .containsEntry("monto", "50000.00 COP")
+                .containsEntry("concepto", "Paquete de créditos x500")
+                .containsEntry("fechaHora", "23/09/2026 a las 10:15 (GMT-05:00)");
+    }
+
+    @Test
+    void elAsuntoDeConfirmacionDeCompraEstaBienEscritoEnEspanol() throws Exception {
+        mockMvc.perform(comoServicio(CONFIRMACION_COMPRA).contentType(MediaType.APPLICATION_JSON).content("""
+                {"email":"jugador@ejemplo.com","apodo":"ElGuerrero",
+                 "monto":50000.00,"moneda":"COP","concepto":"Paquete de créditos x500",
+                 "fechaHora":"2026-09-23T10:15:00-05:00"}
+                """))
+                .andExpect(status().isAccepted());
+
+        org.mockito.ArgumentCaptor<String> asunto = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(enviador).enviar(anyString(), asunto.capture(), anyString(), any());
+
+        assertThat(asunto.getValue()).isEqualTo("Confirmación de tu compra en The Nexus Battles VI");
+    }
+
+    @ParameterizedTest(name = "confirmacion de compra rechazada: {0}")
+    @ValueSource(strings = {
+            "{\"apodo\":\"ElGuerrero\",\"monto\":50000.00,\"moneda\":\"COP\",\"concepto\":\"x\",\"fechaHora\":\"2026-09-23T10:15:00-05:00\"}",
+            "{\"email\":\"no-es-un-correo\",\"apodo\":\"ElGuerrero\",\"monto\":50000.00,\"moneda\":\"COP\",\"concepto\":\"x\",\"fechaHora\":\"2026-09-23T10:15:00-05:00\"}",
+            "{\"email\":\"jugador@ejemplo.com\",\"monto\":50000.00,\"moneda\":\"COP\",\"concepto\":\"x\",\"fechaHora\":\"2026-09-23T10:15:00-05:00\"}",
+            "{\"email\":\"jugador@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"moneda\":\"COP\",\"concepto\":\"x\",\"fechaHora\":\"2026-09-23T10:15:00-05:00\"}",
+            "{\"email\":\"jugador@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"monto\":0,\"moneda\":\"COP\",\"concepto\":\"x\",\"fechaHora\":\"2026-09-23T10:15:00-05:00\"}",
+            "{\"email\":\"jugador@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"monto\":-1,\"moneda\":\"COP\",\"concepto\":\"x\",\"fechaHora\":\"2026-09-23T10:15:00-05:00\"}",
+            "{\"email\":\"jugador@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"monto\":50000.00,\"concepto\":\"x\",\"fechaHora\":\"2026-09-23T10:15:00-05:00\"}",
+            "{\"email\":\"jugador@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"monto\":50000.00,\"moneda\":\"cop\",\"concepto\":\"x\",\"fechaHora\":\"2026-09-23T10:15:00-05:00\"}",
+            "{\"email\":\"jugador@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"monto\":50000.00,\"moneda\":\"PESOS\",\"concepto\":\"x\",\"fechaHora\":\"2026-09-23T10:15:00-05:00\"}",
+            "{\"email\":\"jugador@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"monto\":50000.00,\"moneda\":\"COP\",\"fechaHora\":\"2026-09-23T10:15:00-05:00\"}",
+            "{\"email\":\"jugador@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"monto\":50000.00,\"moneda\":\"COP\",\"concepto\":\"x\"}",
+    })
+    void rechazaConfirmacionDeCompraConDatosInvalidos(String cuerpo) throws Exception {
+        mockMvc.perform(comoServicio(CONFIRMACION_COMPRA).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
                 .andExpect(status().isBadRequest());
 
         verify(enviador, never()).enviar(anyString(), anyString(), anyString(), any());

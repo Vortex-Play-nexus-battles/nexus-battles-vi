@@ -90,7 +90,7 @@ describe('pintarParticipantes', () => {
     expect(valorDe(BRUNO)).toBe('80/100');
   });
 
-  test('cada barra dice de que equipo es y si la lleva la maquina (HU-SAL-004)', () => {
+  test('cada barra dice de que equipo es y si la lleva la máquina (HU-SAL-004)', () => {
     pintarParticipantes(panel, participantes());
 
     expect(barraDe(ANA).dataset.equipo).toBe('1');

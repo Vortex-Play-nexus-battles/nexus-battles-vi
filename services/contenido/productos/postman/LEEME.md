@@ -22,24 +22,35 @@ publiquen, agregar aqui sus peticiones.
 
 ## Requisitos
 
-- El servicio en ejecucion con MongoDB y con `KEYCLOAK_JWK_SET_URI` apuntando
-  al JWKS del Keycloak de la plataforma:
+- El servicio en ejecucion con MongoDB y con `IDENTIDAD_JWKS_URL` apuntando al
+  JWKS del emisor real, **`ms-identidad`** (ADR-002 / ADR-005). **No hay
+  Keycloak ni realm en ningun entorno**: si una instruccion te manda a buscar
+  uno, esta caduca.
 
 ```bash
-MONGODB_URI=mongodb://localhost:27017/productos KEYCLOAK_JWK_SET_URI=https://<keycloak>/realms/<realm>/protocol/openid-connect/certs ./gradlew :services:contenido:productos:bootRun
+MONGODB_URI=mongodb://localhost:27017/productos IDENTIDAD_JWKS_URL=http://localhost:8089/api/v1/auth/jwks ./gradlew :services:contenido:productos:bootRun
 ```
 
-- Un **token Bearer con rol ADMINISTRADOR o SUPER_ADMINISTRADOR** (claim
-  `realm_access.roles`), pegado en la variable `token` del entorno. Sin
-  Keycloak disponible se usa el **JWKS de desarrollo** (abajo): el servicio
-  solo valida firma y vigencia.
+Contra el entorno desplegado, el JWKS es
+`http://35.168.124.119:8089/api/v1/auth/jwks` (ms-identidad corre en el host de
+plataforma; ver `docs/arquitectura/README.md`). El servicio prefiere
+`IDENTIDAD_JWKS_URL`; la variable `KEYCLOAK_JWK_SET_URI` sigue leyendose solo
+como respaldo del `jwks-dev` de abajo — el nombre es historico, no implica que
+exista un Keycloak.
 
-## JWKS de desarrollo (mientras cuentas no publique su Keycloak)
+- Un **token Bearer con rol ADMINISTRADOR o SUPER_ADMINISTRADOR** (claim
+  `realm_access.roles`), pegado en la variable `token` del entorno. Lo normal es
+  pedirselo a `ms-identidad`. Para trabajar sin levantarlo esta el **JWKS de
+  desarrollo** (abajo), que firma tokens en local: el servicio solo valida firma
+  y vigencia.
+
+## JWKS de desarrollo (firmar tokens en local, sin levantar ms-identidad)
 
 En `docker-compose.contenido.yml` hay un servicio `jwks-dev` (nginx estático,
 sin puerto en el host) que sirve la clave **pública** RSA de desarrollo en
-`http://jwks-dev/certs.json`; productos apunta ahí por defecto con
-`KEYCLOAK_JWK_SET_URI`. La clave **privada** la guarda el PO fuera del
+`http://jwks-dev/certs.json`; productos cae ahí **solo** cuando no recibe
+`IDENTIDAD_JWKS_URL`, por la variable de respaldo `KEYCLOAK_JWK_SET_URI`. La
+clave **privada** la guarda el PO fuera del
 repositorio (nunca se versiona). Herramientas en `jwks-dev/` (Node 20+, sin
 dependencias):
 
@@ -51,16 +62,18 @@ dependencias):
 
 Quien tenga la clave privada es ADMINISTRADOR de productos en el entorno de
 desarrollo: es una herramienta de pruebas con datos de prueba, **no sustituye
-la integración con cuentas**. Cuando exista el Keycloak real, basta con
-cambiar `KEYCLOAK_JWK_SET_URI` en el entorno del servidor y pedir el token
-allá. La prueba `SeguridadConJwksRealTest` fija el formato del JWKS contra el
-decodificador real de Spring.
+la integración con cuentas**. Esa integración **ya existe** (R9.7): en el host
+de contenido el CD reparte `IDENTIDAD_JWKS_URL` apuntando a `ms-identidad`, que
+gana sobre este JWKS local. Para trabajar contra el emisor real basta con fijar
+esa variable y pedirle el token a `ms-identidad`. La prueba
+`SeguridadConJwksRealTest` fija el formato del JWKS contra el decodificador real
+de Spring, y `SeguridadConEmisorRealTest` lo hace contra el emisor de verdad.
 
 Contra la instancia de contenido:
 
 ```bash
 TOKEN=$(node postman/jwks-dev/emitir-token.mjs ~/.nexus/productos-jwks-dev.pem --usuario cesar)
-npx --yes newman run productos.postman_collection.json -e local.postman_environment.json --env-var baseUrl=http://34.193.90.11:8103 --env-var token=$TOKEN
+npx --yes newman run productos.postman_collection.json -e local.postman_environment.json --env-var baseUrl=http://35.168.124.119 --env-var token=$TOKEN
 ```
 
 ## Con la app de Postman
@@ -88,3 +101,18 @@ npx --yes newman run productos.postman_collection.json -e local.postman_environm
 | Premium sin precio real | 400 |
 | Inexistente | 404 con formato de error estandar |
 | Estadisticas | 200 con token (cuenta los creados); 401 sin token |
+
+> **R9.4 — el `baseUrl` va por el borde, no al puerto del servicio.**
+> Los puertos 8101-8104 del host de contenido dejaron de estar abiertos a todo
+> internet: solo los alcanza el host de plataforma, que es quien de verdad los
+> consume (el borde nginx y salas-partidas). Desde un portatil se entra por el
+> borde, que es ademas el mismo camino que usa la aplicacion real, asi que la
+> coleccion pasa a ejercitar tambien el enrutado.
+>
+> La unica peticion que no sobrevive al cambio es `{{baseUrl}}/actuator/health`:
+> el borde solo enruta `/api/v1/*`. La salud por host la cubre
+> `.github/workflows/diagnostico-dev.yml`.
+>
+> Para depurar contra el puerto directo hay que anadir la IP propia a
+> `cidr_servicios` en `infrastructure/entornos/contenido/main.tf`, a proposito
+> y temporalmente.

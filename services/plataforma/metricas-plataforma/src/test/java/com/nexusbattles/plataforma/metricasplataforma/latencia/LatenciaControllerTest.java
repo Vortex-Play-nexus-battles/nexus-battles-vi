@@ -113,26 +113,25 @@ class LatenciaControllerTest {
     }
 
     @Test
-    void sinPercentilAprobadoElInformeFallaDeFormaExplicitaYNoInventaUnValor() throws Exception {
-        // CA-03: mientras el Product Owner no apruebe p95 o p99 por escrito, el
-        // servicio NO elige uno. Falla diciendo que falta la decision, que
-        // variable la configura, y deja constancia de que la medicion sigue viva.
+    void sinPercentilConfiguradoElInformeUsaElDeAdr006YNoFalla() throws Exception {
+        // Antes esto era un 409 permanente: el informe se negaba a salir
+        // mientras nadie «aprobara» el percentil, y nadie iba a aprobarlo
+        // porque ningun documento del proyecto lo pide. ADR-006 fija p95 como
+        // convencion de medicion y el informe vuelve a poder emitirse.
         propiedades.setPercentil(null);
         medir("GET", "/api/v1/salas", 42, 43, 44);
 
         mockMvc.perform(get("/api/v1/latencia/informe"))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.status").value(409))
-                .andExpect(jsonPath("$.title").value("Percentil de evaluacion no acordado"))
-                .andExpect(jsonPath("$.variable").value("LATENCIA_PERCENTIL"))
-                .andExpect(jsonPath("$.criterio").value("HU-REN-001 CA-03"))
-                .andExpect(jsonPath("$.muestrasAcumuladas").value(3));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.percentil").value("p95"))
+                .andExpect(jsonPath("$.objetivoMs").value(500))
+                .andExpect(jsonPath("$.muestras").value(3));
     }
 
     @Test
     void cambiarElPercentilCambiaElInformeSinTocarCodigo() throws Exception {
-        // La prueba de que CA-03 se resuelve con configuracion: el dia que el PO
-        // decida, es cambiar LATENCIA_PERCENTIL y nada mas.
+        // p95 es el valor por omision, no una imposicion: una campana de
+        // medicion que quiera p99 lo consigue con LATENCIA_PERCENTIL.
         for (long ms = 1; ms <= 100; ms++) {
             medir("GET", "/api/v1/salas", ms);
         }

@@ -1,0 +1,80 @@
+# Cuanta memoria pide de VERDAD cada servicio de economia.
+#
+# Por que existe: la decision de que cabe y que no en los hosts de dev se
+# venia tomando con los `mem_limit` declarados en los compose, que son un
+# techo, no un consumo. Un techo de 384 MiB no dice si el servicio usa 60 o
+# 300, y esa diferencia es justo la que decide si cabe otro servicio o si se
+# tumba el MVP.
+#
+# Este flujo levanta cada servicio SOLO, con su propia base, y mide tres
+# cosas distintas que suelen confundirse:
+#
+#   pico de arranque  - lo mas alto que llega mientras Spring, Flyway e
+#                       Hibernate trabajan a la vez. Es el numero que decide
+#                       si el despliegue sobrevive, no el de reposo.
+#   reposo            - lo que ocupa despues, ya quieto. Es el que decide si
+#                       puede convivir con los demas a largo plazo.
+#   base de datos     - su Postgres, que tambien ocupa y suele olvidarse.
+#
+# No toca ningun host: corre entero en el runner de GitHub. No crea
+# infraestructura ni cuesta nada.
+name: Medir memoria de los servicios
+
+on:
+  workflow_dispatch:
+    inputs:
+      servicios:
+        description: "Servicios a medir, separados por coma. Vacio = los cuatro de economia."
+        type: string
+        required: false
+        default: "ms-finanzas,ms-subastas,ms-cumplimiento,ms-ecommerce"
+
+permissions:
+  contents: read
+
+jobs:
+  medir:
+    name: Memoria real por servicio
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Construir los jars que hagan falta
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          LISTA="${{ inputs.servicios }}"
+          [ -n "$LISTA" ] || LISTA="ms-finanzas,ms-subastas,ms-cumplimiento,ms-ecommerce"
+          for s in $(echo "$LISTA" | tr ',' ' '); do
+            ruta=$(jq -r --arg s "$s" '.servicios[] | select(.nombre == $s) | .ruta' infrastructure/despliegue/servicios.json)
+            herramienta=$(jq -r --arg s "$s" '.servicios[] | select(.nombre == $s) | .herramienta' infrastructure/despliegue/servicios.json)
+            if [ -z "$ruta" ]; then
+              echo "::error::'$s' no esta en el catalogo de despliegue."
+              exit 1
+            fi
+            if [ "$herramienta" = "gradle" ]; then
+              ./gradlew --no-daemon -x test ":$(echo "$ruta" | tr '/' ':'):bootJar"
+            else
+              (cd "$ruta" && chmod +x ./mvnw && ./mvnw -B -q -DskipTests package)
+            fi
+          done
+
+      - name: Medir cada servicio, uno a uno
+        run: bash scripts/cd/pruebas/medir-memoria.sh "${{ inputs.servicios }}"
+
+      - name: Guardar la medicion
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: medicion-memoria
+          path: medicion-memoria.md
+          if-no-files-found: warn

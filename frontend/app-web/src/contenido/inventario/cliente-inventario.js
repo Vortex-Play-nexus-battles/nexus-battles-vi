@@ -62,7 +62,7 @@ export async function consultarPagina(
   const propietario = identidadNormalizada(identidad);
   const pagina = numeroPagina ?? 0;
   if (!Number.isInteger(pagina) || pagina < 0) {
-    throw new RangeError('El numero de pagina no puede ser negativo');
+    throw new RangeError('El número de página no puede ser negativo');
   }
 
   // La identidad viaja en la cabecera y nunca en la ruta: asi un jugador no
@@ -99,10 +99,10 @@ export async function buscarElementos(
   const pagina = numeroPagina ?? 0;
 
   if (texto.length < 4) {
-    throw new RangeError('El criterio de busqueda debe tener al menos cuatro caracteres');
+    throw new RangeError('El criterio de búsqueda debe tener al menos cuatro caracteres');
   }
   if (!Number.isInteger(pagina) || pagina < 0) {
-    throw new RangeError('El numero de pagina no puede ser negativo');
+    throw new RangeError('El número de página no puede ser negativo');
   }
 
   const parametros = new URLSearchParams({ criterio: texto, pagina: String(pagina) });
@@ -139,7 +139,7 @@ export async function crearElemento(
 
 function rutaEquipamiento(heroeId, elementoId) {
   if (!textoObligatorio(heroeId)) {
-    throw new TypeError('El heroe es obligatorio');
+    throw new TypeError('El héroe es obligatorio');
   }
   const base = `${RUTA_HEROES}/${encodeURIComponent(heroeId.trim())}/equipamiento`;
   return textoObligatorio(elementoId) ? `${base}/${encodeURIComponent(elementoId.trim())}` : base;

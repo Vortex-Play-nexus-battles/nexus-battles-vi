@@ -36,6 +36,23 @@ comentarios:
     # Consulta de sancion activa del autor (RF-USR-004), en el mismo servicio:
     # contracts/openapi/moderacion-sanciones-consulta.yaml
     url: ${SANCIONES_URL:http://localhost:8086/api/v1}
+  # R10.1 — a donde va el aviso al autor cuando se resuelve la moderacion de
+  # su comentario (RF-COM-008): POST {url}/internal/notifications, que en
+  # notificaciones exige ROLE_SERVICIO (contrato notificaciones 1.1.0). El
+  # RestClient de este servicio ya lleva la credencial de ADR-005.
+  #
+  # Vacio por omision a proposito: sin URL configurada el aviso no se
+  # inventa un destino, deja constancia en la bitacora y la decision de
+  # moderacion sigue adelante (fail-open, HU-DIS-003). Un servicio de avisos
+  # caido no puede impedir que se retire un comentario ofensivo.
+  notificaciones:
+    url: ${NOTIFICACIONES_URL:}
+  # Lo mismo para el evento de auditoria hacia ms-cumplimiento. Sin URL, el
+  # asiento queda igual en la tabla comentario_moderacion de este servicio
+  # —que es el rastro que exige la ficha— y ademas se escribe en stdout en
+  # una linea AUDITORIA_MODERACION (regla 6).
+  auditoria:
+    url: ${AUDITORIA_URL:}
   # Los formatos de imagen admitidos estan pendientes de definir con el
   # Product Owner (issue 34); mientras tanto se configuran por variable de
   # entorno y el valor local por defecto es el que usan las pruebas.

@@ -18,8 +18,14 @@ import {
   generarConsejoTactico,
   calcularEstadoTopesConcurrencia,
   ControladorSubastas,
+  rarezaVisible,
+  nivelRequeridoVisible,
   SUBASTAS_INICIALES,
+  ESTADO_CANAL,
+  TEXTO_CANAL,
+  CANAL_SUBASTAS,
   HEROES_BASE,
+  EVENTOS_CIERRE_DEFAULT,
 } from './pujas.js';
 
 describe('HU-SUB-004 - Reglas de Negocio de Subastas y Pujas', () => {
@@ -153,6 +159,10 @@ describe('ControladorSubastas - Interacción y Flujo DOM', () => {
       contenedor,
       subastas: SUBASTAS_INICIALES,
       heroes: HEROES_BASE,
+      // FI-R1 — los tres bancos se pasan a proposito. Ya no son el valor por
+      // defecto del controlador: la pantalla real arranca sin heroes y sin
+      // desenlaces, y estas pruebas ejercitan la version poblada de las vistas.
+      eventosCierre: EVENTOS_CIERRE_DEFAULT,
     });
     controlador.render();
   });
@@ -736,7 +746,7 @@ describe('Accesibilidad del diálogo de compra (WCAG 2.1 AA)', () => {
  * NADA. El nombre del objeto, su descripcion, el apodo del vendedor y el del
  * pujador salen del servidor y los escribe otra persona, asi que bastaba con
  * publicar una subasta con marcado en el nombre para ejecutar codigo en la
- * pantalla de quien la mirara. En la pantalla que mueve creditos.
+ * pantalla de quien la mirara. En la pantalla que mueve créditos.
  */
 describe('UX-R2.8c - datos del servidor no pueden inyectar marcado', () => {
   const CARGA = '<img src=x onerror="globalThis.__colado = true">';
@@ -835,7 +845,7 @@ describe('UX-R2.8c - datos del servidor no pueden inyectar marcado', () => {
 /**
  * UX-R2.8c — «Reintentar» no reintentaba.
  */
-describe('UX-R2.8c - un servicio caido no se presenta como mercado vacio', () => {
+describe('UX-R2.8c - un servicio caido no se presenta como mercado vacío', () => {
   test('Reintentar vuelve a pedir los datos, no solo repinta', async () => {
     const contenedor = document.createElement('div');
     document.body.appendChild(contenedor);
@@ -862,7 +872,7 @@ describe('UX-R2.8c - un servicio caido no se presenta como mercado vacio', () =>
     contenedor.remove();
   });
 
-  test('el titulo del error habla del servicio, no del catalogo', () => {
+  test('el título del error habla del servicio, no del catálogo', () => {
     const contenedor = document.createElement('div');
     document.body.appendChild(contenedor);
     const controlador = new ControladorSubastas({ contenedor, subastas: [], heroes: HEROES_BASE });
@@ -875,5 +885,515 @@ describe('UX-R2.8c - un servicio caido no se presenta como mercado vacio', () =>
 
     controlador.destruir();
     contenedor.remove();
+  });
+});
+
+/**
+ * FI-R1 — lo que la pantalla NO puede decir cuando no lo sabe.
+ *
+ * Cada prueba de aqui correspondia a algo que la pantalla afirmaba sin tener
+ * el dato: un heroe que no es de nadie, una rareza inventada, un nivel
+ * requerido que el contrato de subastas no trae, un veredicto de
+ * compatibilidad citando RN-INV-004 sobre un cero, y un recuento de cierres
+ * («3 CERRARON») igual para todo el mundo. Son pruebas de conducta: miran lo
+ * que sale en pantalla, no como esta escrito el modulo.
+ */
+describe('FI-R1 - la pantalla no rellena lo que no sabe', () => {
+  const contenedores = [];
+
+  function montar(extra = {}) {
+    const contenedor = document.createElement('div');
+    document.body.appendChild(contenedor);
+    contenedores.push(contenedor);
+    const controlador = new ControladorSubastas({ contenedor, ...extra });
+    controlador.render();
+    return { contenedor, controlador };
+  }
+
+  afterEach(() => {
+    let c = contenedores.pop();
+    while (c) {
+      c.remove();
+      c = contenedores.pop();
+    }
+  });
+
+  test('sin heroes inyectados el controlador no arranca con ninguno', () => {
+    const { controlador } = montar({ subastas: SUBASTAS_INICIALES });
+    expect(controlador.heroes).toEqual([]);
+    expect(controlador.heroeId).toBeNull();
+    expect(controlador.getHeroeActivo()).toBeNull();
+  });
+
+  test('la ficha de subasta sin heroes no afirma compatibilidad ni ensena un selector', () => {
+    const { contenedor, controlador } = montar({ subastas: SUBASTAS_INICIALES });
+    controlador.abrirDetalle(SUBASTAS_INICIALES[0].id);
+
+    expect(contenedor.querySelector('.selector-heroes-botones')).toBeNull();
+    expect(contenedor.querySelector('.tabla-comparacion')).toBeNull();
+    expect(contenedor.textContent).not.toContain('cumple el nivel requerido');
+    expect(contenedor.textContent).not.toContain('undefined');
+    expect(contenedor.querySelector('.aviso-sin-comparativa')).not.toBeNull();
+  });
+
+  test('con heroe y objeto completos la comparativa si aparece', () => {
+    const { contenedor, controlador } = montar({
+      subastas: SUBASTAS_INICIALES,
+      heroes: HEROES_BASE,
+    });
+    controlador.abrirDetalle(SUBASTAS_INICIALES[0].id);
+
+    expect(contenedor.querySelector('.selector-heroes-botones')).not.toBeNull();
+    expect(contenedor.querySelector('.tabla-comparacion')).not.toBeNull();
+    expect(contenedor.querySelector('.aviso-sin-comparativa')).toBeNull();
+  });
+
+  test('un objeto sin nivel ni aporte no se compara aunque haya heroe', () => {
+    const sinDatos = {
+      ...SUBASTAS_INICIALES[0],
+      id: 'sin-datos',
+      nivel: null,
+      aporte: null,
+      rareza: null,
+    };
+    const { contenedor, controlador } = montar({ subastas: [sinDatos], heroes: HEROES_BASE });
+    controlador.abrirDetalle('sin-datos');
+
+    expect(contenedor.querySelector('.tabla-comparacion')).toBeNull();
+    expect(contenedor.textContent).not.toContain('Nivel insuficiente');
+    expect(contenedor.textContent).not.toContain('cumple el nivel requerido');
+    expect(contenedor.querySelector('.aviso-sin-comparativa')).not.toBeNull();
+  });
+
+  test('calcularComparacionHeroe distingue «no se pudo comparar» de «compatible»', () => {
+    const heroe = { nivel: 30, stats: { poder: 100, vida: 500, defensa: 30 } };
+    expect(calcularComparacionHeroe(heroe, { nivel: null, aporte: null }).evaluado).toBe(false);
+    expect(calcularComparacionHeroe(null, { nivel: 5, aporte: { poder: 1 } }).evaluado).toBe(false);
+    expect(
+      calcularComparacionHeroe(heroe, { nivel: 5, aporte: { poder: 1, vida: 0, defensa: 0 } })
+        .evaluado,
+    ).toBe(true);
+  });
+
+  test('una subasta sin rareza no se pinta como «comun»', () => {
+    const sinRareza = { ...SUBASTAS_INICIALES[0], id: 'sin-rareza', rareza: null };
+    const { contenedor } = montar({ subastas: [sinRareza] });
+
+    const tarjeta = contenedor.querySelector('.tarjeta-subasta');
+    expect(tarjeta).not.toBeNull();
+    expect(tarjeta.textContent).not.toContain('COMUN');
+    expect(tarjeta.textContent).not.toContain('COMÚN');
+    expect(tarjeta.querySelector('.badge-comun')).toBeNull();
+    expect(tarjeta.textContent).not.toContain('undefined');
+    expect(tarjeta.textContent).not.toContain('null');
+  });
+
+  test('rarezaVisible no adivina una rareza desconocida', () => {
+    expect(rarezaVisible('epica')).toMatchObject({
+      conocida: true,
+      clase: 'epica',
+      texto: 'EPICA',
+    });
+    expect(rarezaVisible('EPICA').clase).toBe('epica');
+    expect(rarezaVisible(null)).toMatchObject({
+      conocida: false,
+      clase: 'desconocida',
+      texto: null,
+    });
+    expect(rarezaVisible('mitica').conocida).toBe(false);
+    expect(rarezaVisible(undefined).conocida).toBe(false);
+  });
+
+  test('un nivel requerido ausente se dice, no se pinta como nivel 0 ni como null', () => {
+    expect(nivelRequeridoVisible(12)).toBe('Nivel req. 12');
+    expect(nivelRequeridoVisible(null)).not.toContain('null');
+    expect(nivelRequeridoVisible(null)).not.toContain('0');
+    expect(nivelRequeridoVisible(undefined)).toBe(nivelRequeridoVisible(null));
+
+    const sinNivel = { ...SUBASTAS_INICIALES[0], id: 'sin-nivel', nivel: null };
+    const { contenedor } = montar({ subastas: [sinNivel] });
+    const subtitulo = contenedor.querySelector('.tarjeta-subtitulo');
+    expect(subtitulo.textContent).not.toContain('Nivel req. null');
+    expect(subtitulo.textContent).not.toContain('Nivel req. 0');
+  });
+
+  test('sin desenlaces la vista de cierre no dice «0 CERRARON»', () => {
+    const { contenedor, controlador } = montar({ subastas: SUBASTAS_INICIALES });
+    controlador.abrirCierreMultiple();
+
+    expect(contenedor.textContent).not.toContain('CERRARON');
+    expect(contenedor.querySelector('.fila-evento-cierre')).toBeNull();
+    expect(contenedor.textContent).toContain('Todavía no hay resultados de cierre');
+  });
+
+  test('la pestana de cierre no ensena un contador cuando no hay desenlaces', () => {
+    const { contenedor } = montar({ subastas: SUBASTAS_INICIALES });
+    const pestana = contenedor.querySelector('.tab-btn[data-tab="cierre-multiple"]');
+    expect(pestana).not.toBeNull();
+    expect(pestana.querySelector('.badge-tab-neutral')).toBeNull();
+  });
+
+  test('con desenlaces inyectados la vista poblada sigue funcionando', () => {
+    const { contenedor, controlador } = montar({
+      subastas: SUBASTAS_INICIALES,
+      eventosCierre: EVENTOS_CIERRE_DEFAULT,
+    });
+    controlador.abrirCierreMultiple();
+
+    expect(contenedor.textContent).toContain('3 CERRARON');
+    expect(contenedor.querySelectorAll('.fila-evento-cierre').length).toBe(3);
+  });
+});
+
+/**
+ * FI-R11 — el canal en vivo de las subastas dice la verdad sobre si mismo.
+ *
+ * Lo que habia: `abrirCanalEnVivo` devolvia `null` en silencio si el WebSocket
+ * no abria, y no habia reconexion ninguna. La pantalla decia lo mismo con canal
+ * y sin el, y el sondeo de 5 s tapaba el hueco lo justo para que nadie lo
+ * notara — que es peor, porque en una subasta que cierra en diez segundos la
+ * diferencia entre tiempo real y cinco segundos de retraso es la subasta.
+ *
+ * Las tres variantes y las clases son las de la bandeja de notificaciones a
+ * proposito: la persona ya aprendio que significa esa pildora ambar.
+ */
+describe('FI-R11 - estado del canal en vivo', () => {
+  const contenedores = [];
+
+  function apiDeMentira() {
+    return {
+      listar: jest.fn().mockResolvedValue(SUBASTAS_INICIALES),
+      miResumen: jest.fn().mockResolvedValue(null),
+    };
+  }
+
+  function canalDeMentira() {
+    const canal = {
+      suscripciones: new Map(),
+      suscribir: (destino, alRecibir) => canal.suscripciones.set(destino, alRecibir),
+      cerrar: jest.fn(),
+      alCerrar: null,
+    };
+    return canal;
+  }
+
+  function montar({ conectarCanal, urlCanal = 'ws://x/ws-subastas', esperas = [0] } = {}) {
+    const contenedor = document.createElement('div');
+    document.body.appendChild(contenedor);
+    contenedores.push(contenedor);
+    const ctrl = new ControladorSubastas({
+      contenedor,
+      subastas: SUBASTAS_INICIALES,
+      api: apiDeMentira(),
+      urlCanal,
+      conectarCanal,
+      esperas,
+      esperar: () => Promise.resolve(),
+      leerToken: () => 'jwt',
+    });
+    return { contenedor, ctrl };
+  }
+
+  const vaciar = async (vueltas = 12) => {
+    for (let i = 0; i < vueltas; i++) {
+      await Promise.resolve();
+    }
+  };
+
+  const pildora = (contenedor) => contenedor.querySelector('[data-zona="conexion-subastas"]');
+
+  afterEach(() => {
+    let c = contenedores.pop();
+    while (c) {
+      c.remove();
+      c = contenedores.pop();
+    }
+  });
+
+  test('con un JWT valido el canal abre y la pildora lo dice', async () => {
+    const canal = canalDeMentira();
+    const { contenedor, ctrl } = montar({ conectarCanal: jest.fn().mockResolvedValue(canal) });
+
+    await ctrl.iniciar();
+    await vaciar();
+
+    expect(ctrl.estadoCanal).toBe(ESTADO_CANAL.ESTABLE);
+    expect(pildora(contenedor).className).toContain('conexion--estable');
+    expect(pildora(contenedor).textContent).toBe(TEXTO_CANAL[ESTADO_CANAL.ESTABLE]);
+    ctrl.desmontar();
+  });
+
+  test('el CONNECT lleva el token: un canal acreditado, no anonimo', async () => {
+    const conectarCanal = jest.fn().mockResolvedValue(canalDeMentira());
+    const { ctrl } = montar({ conectarCanal });
+
+    await ctrl.iniciar();
+    await vaciar();
+
+    expect(conectarCanal.mock.calls[0][0].cabeceras).toEqual({ Authorization: 'Bearer jwt' });
+    ctrl.desmontar();
+  });
+
+  test('un token invalido NO finge conexion', async () => {
+    // Es la trampa que este bloque persigue: un canal que no abre y una
+    // pantalla que sigue prometiendo tiempo real.
+    const conectarCanal = jest.fn().mockRejectedValue(new Error('CONNECT rechazado'));
+    const { contenedor, ctrl } = montar({ conectarCanal, esperas: [0] });
+
+    await ctrl.iniciar();
+    await vaciar();
+
+    expect(ctrl.estadoCanal).not.toBe(ESTADO_CANAL.ESTABLE);
+    expect(pildora(contenedor).className).not.toContain('conexion--estable');
+    ctrl.desmontar();
+  });
+
+  test('una desconexion degrada la pildora sin tumbar el listado', async () => {
+    const canal = canalDeMentira();
+    const conectarCanal = jest
+      .fn()
+      .mockResolvedValueOnce(canal)
+      .mockRejectedValue(new Error('sigue caido'));
+    const { contenedor, ctrl } = montar({ conectarCanal, esperas: [0] });
+
+    await ctrl.iniciar();
+    await vaciar();
+    expect(ctrl.estadoCanal).toBe(ESTADO_CANAL.ESTABLE);
+
+    // El servidor cierra el socket.
+    canal.alCerrar();
+    await vaciar(30);
+
+    expect(ctrl.estadoCanal).not.toBe(ESTADO_CANAL.ESTABLE);
+    // Y el listado sigue en pie: degradacion controlada, no apagon.
+    expect(contenedor.querySelectorAll('.tarjeta-subasta').length).toBeGreaterThan(0);
+    ctrl.desmontar();
+  });
+
+  test('cuando el servidor vuelve, el canal vuelve y se relee una vez', async () => {
+    const primero = canalDeMentira();
+    const segundo = canalDeMentira();
+    const conectarCanal = jest
+      .fn()
+      .mockResolvedValueOnce(primero)
+      .mockRejectedValueOnce(new Error('todavia no'))
+      .mockResolvedValueOnce(segundo);
+    const { ctrl } = montar({ conectarCanal, esperas: [0] });
+
+    await ctrl.iniciar();
+    await vaciar();
+    const releidasAntes = ctrl.api.listar.mock.calls.length;
+
+    primero.alCerrar();
+    await vaciar(40);
+
+    expect(ctrl.estadoCanal).toBe(ESTADO_CANAL.ESTABLE);
+    expect(ctrl.canal).toBe(segundo);
+    // Mientras no habia canal pudieron cambiar ofertas que el sondeo no trajo.
+    expect(ctrl.api.listar.mock.calls.length).toBeGreaterThan(releidasAntes);
+    ctrl.desmontar();
+  });
+
+  test('el canal recuperado esta suscrito: no vuelve mudo', async () => {
+    // El defecto que la duplicacion de cableado habria producido: un canal
+    // abierto que no escucha nada.
+    const primero = canalDeMentira();
+    const segundo = canalDeMentira();
+    const conectarCanal = jest.fn().mockResolvedValueOnce(primero).mockResolvedValueOnce(segundo);
+    const { ctrl } = montar({ conectarCanal, esperas: [0] });
+
+    await ctrl.iniciar();
+    await vaciar();
+    primero.alCerrar();
+    await vaciar(40);
+
+    expect(segundo.suscripciones.has(CANAL_SUBASTAS)).toBe(true);
+    ctrl.desmontar();
+  });
+
+  test('no se acumulan ciclos de reconexion', async () => {
+    const canal = canalDeMentira();
+    const conectarCanal = jest
+      .fn()
+      .mockResolvedValueOnce(canal)
+      .mockRejectedValue(new Error('caido'));
+    const { ctrl } = montar({ conectarCanal, esperas: [0] });
+
+    await ctrl.iniciar();
+    await vaciar();
+
+    const primerCiclo = ctrl.reconectar();
+    expect(ctrl.reconectar()).toBe(primerCiclo);
+    ctrl.desmontar();
+    await vaciar();
+  });
+
+  test('desmontar para la reconexion; destruir no, porque lo llama cada recarga', async () => {
+    const conectarCanal = jest.fn().mockRejectedValue(new Error('caido'));
+    const { ctrl } = montar({ conectarCanal, esperas: [0] });
+
+    await ctrl.iniciar();
+    await vaciar();
+
+    // `destruir()` no apaga la reconexion. Y `iniciarTemporizador` ya no lo
+    // llama: llamaba, y eso cerraba el canal en cada recarga.
+    ctrl.destruir();
+    expect(ctrl.vivo).toBe(true);
+
+    ctrl.desmontar();
+    expect(ctrl.vivo).toBe(false);
+    await vaciar(20);
+    const intentosTrasDesmontar = conectarCanal.mock.calls.length;
+    await vaciar(20);
+    expect(conectarCanal.mock.calls.length).toBe(intentosTrasDesmontar);
+  });
+
+  test('sin canal pedido no hay pildora: la pantalla no se disculpa por lo que no ofrece', async () => {
+    const { contenedor, ctrl } = montar({ conectarCanal: jest.fn(), urlCanal: null });
+
+    await ctrl.iniciar();
+    await vaciar();
+
+    expect(pildora(contenedor).hidden).toBe(true);
+    expect(pildora(contenedor).textContent).toBe('');
+    ctrl.desmontar();
+  });
+
+  test('la espera crece entre intentos, no aporrea al servidor', async () => {
+    const esperados = [];
+    const contenedor = document.createElement('div');
+    document.body.appendChild(contenedor);
+    contenedores.push(contenedor);
+    const ctrl = new ControladorSubastas({
+      contenedor,
+      subastas: SUBASTAS_INICIALES,
+      api: apiDeMentira(),
+      urlCanal: 'ws://x/ws-subastas',
+      conectarCanal: jest.fn().mockRejectedValue(new Error('caido')),
+      esperas: [10, 20, 40],
+      esperar: (ms) => {
+        esperados.push(ms);
+        // Se corta a los cuatro intentos para que la prueba termine.
+        if (esperados.length >= 4) {
+          ctrl.vivo = false;
+        }
+        return Promise.resolve();
+      },
+      leerToken: () => 'jwt',
+    });
+
+    await ctrl.iniciar();
+    await vaciar(40);
+
+    expect(esperados.slice(0, 3)).toEqual([10, 20, 40]);
+    // Y se queda en el ultimo escalon, no sigue creciendo.
+    expect(esperados[3]).toBe(40);
+    ctrl.desmontar();
+  });
+});
+
+/**
+ * FI-R11 — el canal sobrevive a la recarga.
+ *
+ * Esto salio al escribir las pruebas de reconexion: `iniciarTemporizador()`
+ * llamaba a `destruir()`, que cierra el canal, y `recargar()` termina llamando
+ * a `iniciarTemporizador()`. La secuencia real de cada carga era: abrir el
+ * canal, pedir el listado, cerrar el canal que se acababa de abrir.
+ *
+ * El tiempo real de las subastas estaba apagado en la practica, y no se noto
+ * porque el sondeo de 5 s tapaba el hueco: el sintoma era que las pujas
+ * tardaban unos segundos en aparecer, que es lo que uno espera de un sondeo.
+ */
+describe('FI-R11 - el canal sobrevive a lo que la pantalla hace normalmente', () => {
+  const contenedores = [];
+
+  afterEach(() => {
+    let c = contenedores.pop();
+    while (c) {
+      c.remove();
+      c = contenedores.pop();
+    }
+  });
+
+  function montar(canal) {
+    const contenedor = document.createElement('div');
+    document.body.appendChild(contenedor);
+    contenedores.push(contenedor);
+    const ctrl = new ControladorSubastas({
+      contenedor,
+      subastas: SUBASTAS_INICIALES,
+      api: {
+        listar: jest.fn().mockResolvedValue(SUBASTAS_INICIALES),
+        miResumen: jest.fn().mockResolvedValue(null),
+      },
+      urlCanal: 'ws://x/ws-subastas',
+      conectarCanal: jest.fn().mockResolvedValue(canal),
+      esperas: [0],
+      esperar: () => Promise.resolve(),
+      leerToken: () => 'jwt',
+    });
+    return { contenedor, ctrl };
+  }
+
+  const vaciar = async (vueltas = 15) => {
+    for (let i = 0; i < vueltas; i++) {
+      await Promise.resolve();
+    }
+  };
+
+  test('tras iniciar, el canal sigue abierto', async () => {
+    const canal = {
+      suscripciones: new Map(),
+      suscribir: (d, f) => canal.suscripciones.set(d, f),
+      cerrar: jest.fn(),
+      alCerrar: null,
+    };
+    const { ctrl } = montar(canal);
+
+    await ctrl.iniciar();
+    await vaciar();
+
+    expect(canal.cerrar).not.toHaveBeenCalled();
+    expect(ctrl.canal).toBe(canal);
+    ctrl.desmontar();
+  });
+
+  test('tras recargar, el canal sigue abierto', async () => {
+    // `recargar()` se llama despues de cada operacion que cambia algo: pujar,
+    // comprar, configurar la automatica. Cada una cerraba el canal.
+    const canal = {
+      suscripciones: new Map(),
+      suscribir: (d, f) => canal.suscripciones.set(d, f),
+      cerrar: jest.fn(),
+      alCerrar: null,
+    };
+    const { ctrl } = montar(canal);
+
+    await ctrl.iniciar();
+    await vaciar();
+    await ctrl.recargar();
+    await vaciar();
+
+    expect(canal.cerrar).not.toHaveBeenCalled();
+    expect(ctrl.canal).toBe(canal);
+    expect(ctrl.estadoCanal).toBe(ESTADO_CANAL.ESTABLE);
+    ctrl.desmontar();
+  });
+
+  test('desmontar si lo cierra', async () => {
+    const canal = {
+      suscripciones: new Map(),
+      suscribir: (d, f) => canal.suscripciones.set(d, f),
+      cerrar: jest.fn(),
+      alCerrar: null,
+    };
+    const { ctrl } = montar(canal);
+
+    await ctrl.iniciar();
+    await vaciar();
+    ctrl.desmontar();
+
+    expect(canal.cerrar).toHaveBeenCalledTimes(1);
+    expect(ctrl.canal).toBeNull();
   });
 });

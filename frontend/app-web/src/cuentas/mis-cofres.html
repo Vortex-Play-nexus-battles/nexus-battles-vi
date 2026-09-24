@@ -18,12 +18,14 @@
         <div class="encabezado-pagina__contenido">
           <div>
             <h1 class="titulo">Mis cofres</h1>
-            <p class="ayuda">
+            <p class="t-meta">
               Los cofres que has ganado acumulando créditos en tus partidas. Cada 20 créditos
               ganados en una semana entrega un cofre — con un máximo de 2 cofres por semana.
             </p>
           </div>
-          <button id="btn-volver" type="button" class="btn-contorno">Volver</button>
+          <div class="fila fila--acciones">
+            <button id="btn-volver" type="button" class="boton boton--secundario">Volver</button>
+          </div>
         </div>
       </header>
 
@@ -35,20 +37,28 @@
       </section>
 
       <nav class="paginacion" aria-label="Paginación">
-        <button type="button" id="btn-anterior" class="btn-contorno" disabled>Anterior</button>
-        <span id="cofres-pagina-actual" class="ayuda">Página 1</span>
-        <button type="button" id="btn-siguiente" class="btn-contorno" disabled>Siguiente</button>
+        <button type="button" id="btn-anterior" class="boton boton--secundario" disabled>
+          Anterior
+        </button>
+        <span id="cofres-pagina-actual" class="paginacion__info">Página 1</span>
+        <button type="button" id="btn-siguiente" class="boton boton--secundario" disabled>
+          Siguiente
+        </button>
       </nav>
     </div>
 
     <script type="module">
-      import { montarCabecera, exigirSesion } from '../comun/cabecera-app.js';
+      import { montarCabecera } from '../comun/cabecera-app.js';
+      import { exigirAcceso } from '../comun/acceso.js';
 
-      if (!exigirSesion()) {
+      if (!exigirAcceso('mis-cofres')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
       // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
-      montarCabecera(document.getElementById('navbar-container'), { seccionActiva: 'cuenta' });
+      montarCabecera(document.getElementById('navbar-container'), {
+        vista: 'mis-cofres',
+        seccionActiva: 'cuenta',
+      });
     </script>
 
     <script type="module" src="./mis-cofres.js"></script>

@@ -1,0 +1,52 @@
+plugins {
+    id 'nexus.spring-conventions'
+    id 'nexus.persistencia-conventions'
+}
+
+layout.buildDirectory.set(file("build.nosync"))
+
+group = 'nexus'
+version = '0.0.1-SNAPSHOT'
+
+// Web MVC, Actuator, Java 21, JUnit 5 y JaCoCo provienen de nexus.spring-conventions.
+// JPA, Flyway y PostgreSQL provienen de nexus.persistencia-conventions.
+// Aquí solo van las dependencias propias del Chatbot.
+dependencies {
+    // Validación de JWT vía Spring Security OAuth2 Resource Server, contra el
+    // JWKS que publica ms-identidad — mismo patrón que ms-finanzas (más nuevo
+    // y correcto que el jjwt manual de ms-subastas, que sigue pendiente de
+    // migrar). ConversorRolesJwt, en plataforma-seguridad, traduce los roles
+    // del token (rol/uid de ms-identidad) a autoridades de Spring.
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
+    implementation project(':shared:libs:plataforma-seguridad')
+
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    testCompileOnly 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+
+    runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'org.testcontainers:testcontainers-postgresql'
+    testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+
+    // Falla el build si el servicio importa clases internas de otro dominio.
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.3.0'
+
+    // Para probar endpoints protegidos por el resource server sin levantar
+    // un ms-identidad real (mockear el JWT decodificado).
+    testImplementation 'org.springframework.security:spring-security-test'
+}
+
+// Este servicio sí va a tener pruebas desde el primer commit, así que activa
+// ya la compuerta corporativa del 80 % declarada en nexus.spring-conventions.
+tasks.named('jacocoTestCoverageVerification') {
+    dependsOn tasks.named('test')
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('jacocoTestCoverageVerification')
+}

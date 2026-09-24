@@ -64,7 +64,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Libro de creditos
-  version: 1.3.0
+  version: 1.4.0
   description: |
     Saldo, reservas y movimientos de creditos de los jugadores.
 
@@ -80,6 +80,21 @@ info:
 
     Errores en formato problem details (regla 4) con `type` estable bajo
     `https://nexusbattles.upb.edu.co/errors/`.
+
+    **Debito y credito directos (1.4.0).** Ademas de las reservas, el libro
+    admite mover saldo sin apartarlo antes: `debitar`, `reversar` y
+    `acreditar`, mas la consulta de una operacion por su `refId`. Existian en
+    `CreditoController` desde antes y no estaban en ningun contrato; se
+    documentan ahora tal como responden hoy. Las tres escrituras comparten la
+    misma tabla que las reservas, y por eso `refId` es a la vez la referencia
+    del llamador y la clave de idempotencia.
+
+    **Brecha conocida, fuera de este contrato:** `GET /api/v1/cofres/mios` de
+    ms-finanzas (HU-JUE-013) no esta en ningun contrato publicado. Queda
+    anotada aqui para que conste, pero no se documenta en este archivo porque
+    pertenece al dominio de cofres, no al libro de creditos: mezclarla
+    obligaria a este contrato a versionarse cada vez que cambie algo de
+    cofres.
   license:
     name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
 
@@ -359,6 +374,266 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemaDeCreditos'
 
+  /creditos/debitar:
+    post:
+      tags: [creditos]
+      operationId: debitarCreditos
+      summary: Descuenta creditos del saldo del jugador, sin reserva previa
+      description: |
+        Baja el monto del saldo bruto en una sola operacion. Es el camino
+        directo, para cuando no hay nada que apartar y luego cobrar: una
+        comision, un cargo que ya esta decidido.
+
+        **Idempotente por `refId`.** Si ya existe una operacion registrada con
+        ese `refId`, no se vuelve a descontar: se devuelve 200 con el **mismo
+        `transaccionId`** que el registro previo (`TX-DEB-` seguido de los
+        ocho primeros caracteres del identificador de aquella fila, que no
+        cambia). Asi un reintento de red del llamador no cobra dos veces, y
+        puede comparar el `transaccionId` para saber que esta viendo la
+        respuesta de la operacion original.
+
+        A diferencia de `reservar`, la clave de idempotencia **no** va en la
+        cabecera `Idempotency-Key`: es el propio `refId` del cuerpo. Un
+        llamador que reutilice un `refId` para un cargo distinto no cobrara el
+        segundo y recibira la respuesta del primero.
+
+        La cuenta se crea sola en la primera operacion del jugador; no hace
+        falta darla de alta antes.
+      responses:
+        '401':
+          $ref: '#/components/responses/SinCredencial'
+        '403':
+          $ref: '#/components/responses/NoAutorizado'
+        '200':
+          description: Debito aplicado, o respuesta del debito previo con ese `refId`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Debito'
+              example:
+                transaccionId: TX-DEB-9C1E4B7A
+                refId: comision-subasta-4b7a
+                estado: EXITOSO
+                montoDebitado: 15
+                nuevoSaldoDisponible: 365
+        '422':
+          description: |
+            Saldo disponible insuficiente para el debito. `type` =
+            `https://nexusbattles.upb.edu.co/errors/saldo-insuficiente`. Se
+            comprueba contra el **disponible**, no contra el bruto: lo que
+            otra reserva ya tiene apartado no se puede debitar.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemaDeCreditos'
+        '400':
+          description: |
+            Cuerpo invalido (`argumento-invalido`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemaDeCreditos'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DebitarCreditos'
+            example:
+              uid: 6f1c2a7e-3d6b-4b9a-8f0e-1c2d3e4f5a6b
+              monto: 15
+              refId: comision-subasta-4b7a
+              concepto: comision-subasta
+
+  /creditos/reversar:
+    post:
+      tags: [creditos]
+      operationId: reversarDebito
+      summary: Compensa un debito anterior devolviendo el monto al jugador
+      description: |
+        Devuelve al saldo bruto el monto de un debito ya aplicado, y marca
+        aquella operacion como `LIBERADA`. El jugador al que se le devuelve no
+        se indica: se toma del debito original, para que no se pueda devolver
+        el dinero de uno a la cuenta de otro.
+
+        **Idempotente:** reversar algo ya reversado responde 200 con
+        `estado = YA_REVERSADO` y no vuelve a sumar. La primera vez responde
+        `REVERSADO`. Los dos estados son exito; el llamador no tiene que
+        distinguirlos salvo para su propia bitacora.
+
+        **Solo compensa operaciones de tipo DEBITO.** Reservas y creditos
+        quedan fuera a proposito: antes esta busqueda no miraba el tipo de
+        operacion, asi que un `refId` que coincidiera con una reserva `ACTIVA`
+        o con un credito ya otorgado se «reversaba» igual —sumaba al saldo
+        bruto sin tocar el reservado, creando saldo de la nada, y dejaba
+        aquella reserva inconsumible para siempre—. Para deshacer una reserva
+        lo que corresponde es `liberar`, no esto.
+      responses:
+        '401':
+          $ref: '#/components/responses/SinCredencial'
+        '403':
+          $ref: '#/components/responses/NoAutorizado'
+        '200':
+          description: Debito compensado, o ya lo estaba
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reverso'
+              example:
+                refId: comision-subasta-4b7a
+                estado: REVERSADO
+                montoReversado: 15
+                motivo: Subasta anulada por el administrador
+        '404':
+          description: |
+            No hay un debito reversable con ese `refId`. `type` =
+            `https://nexusbattles.upb.edu.co/errors/reserva-no-encontrada`.
+
+            **Este 404 cubre dos situaciones distintas y no las distingue:**
+            que el `refId` no exista, y que exista pero corresponda a una
+            operacion que no es de tipo `DEBITO` (una reserva o un credito).
+            Un llamador que vea este 404 no puede concluir que el `refId` sea
+            desconocido; para saberlo tiene que consultarlo con
+            `GET /creditos/operaciones/{refId}`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemaDeCreditos'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReversarDebito'
+            example:
+              refId: comision-subasta-4b7a
+              motivo: Subasta anulada por el administrador
+
+  /creditos/operaciones/{refId}:
+    get:
+      tags: [creditos]
+      operationId: consultarOperacion
+      summary: Consulta una operacion del libro por la referencia del llamador
+      description: |
+        Devuelve la operacion registrada con ese `refId`, sea una reserva, un
+        debito o un credito: las tres comparten tabla y el `refId` es su clave
+        de idempotencia.
+
+        Es la forma de que un llamador reconcilie su propio estado tras una
+        respuesta perdida: en vez de reintentar la escritura a ciegas,
+        pregunta si aquel `refId` llego a registrarse y en que quedo. Tambien
+        es lo que permite desambiguar el 404 de `reversar`, que confunde
+        «no existe» con «existe pero no es un debito».
+
+        A diferencia del saldo y de los movimientos, esta consulta **es solo
+        para servicios**: cae en el matcher `/creditos/**` y no tiene la
+        excepcion del propio dueno, porque el `refId` es un identificador del
+        llamador y el servicio no puede saber de quien es sin leer la fila.
+      parameters:
+        - name: refId
+          in: path
+          required: true
+          description: |
+            Referencia que eligio el llamador al crear la operacion; es la
+            misma que uso como clave de idempotencia.
+          schema:
+            type: string
+      responses:
+        '401':
+          $ref: '#/components/responses/SinCredencial'
+        '403':
+          $ref: '#/components/responses/NoAutorizado'
+        '200':
+          description: Operacion encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operacion'
+              example:
+                refId: comision-subasta-4b7a
+                uid: 6f1c2a7e-3d6b-4b9a-8f0e-1c2d3e4f5a6b
+                monto: 15
+                concepto: comision-subasta
+                estado: CONSUMIDA
+                fecha: '2026-09-22T02:31:00Z'
+        '404':
+          description: |
+            No hay ninguna operacion con ese `refId`. `type` =
+            `https://nexusbattles.upb.edu.co/errors/reserva-no-encontrada`.
+            Aqui el 404 si significa exactamente eso, sin la ambiguedad del de
+            `reversar`: esta consulta no filtra por tipo de operacion.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemaDeCreditos'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+
+  /creditos/acreditar:
+    post:
+      tags: [creditos]
+      operationId: acreditarCreditos
+      summary: Suma creditos al saldo del jugador
+      description: |
+        Sube el monto al saldo bruto del jugador. Es el simetrico de
+        `debitar`: la recompensa de una partida, la devolucion de una
+        inscripcion, un ajuste a favor.
+
+        **Idempotente por `refId`**, con la misma mecanica que `debitar`: si
+        ya hay una operacion con ese `refId`, se devuelve 200 con el mismo
+        `transaccionId` (`TX-ACR-` seguido de los ocho primeros caracteres del
+        identificador de aquella fila) y no se vuelve a sumar. Sin esto, un
+        reintento de red del llamador duplicaria los creditos otorgados por el
+        mismo resultado de partida.
+
+        **Esta operacion no puede responder 422.** A diferencia de `debitar` y
+        de `reservar`, no comprueba ningun saldo: sumar nunca deja la cuenta
+        corta. Un llamador que trate el 422 como caso posible aqui esta
+        escribiendo una rama muerta.
+
+        La cuenta se crea sola si el jugador no la tenia.
+      responses:
+        '401':
+          $ref: '#/components/responses/SinCredencial'
+        '403':
+          $ref: '#/components/responses/NoAutorizado'
+        '200':
+          description: Credito aplicado, o respuesta del credito previo con ese `refId`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credito'
+              example:
+                transaccionId: TX-ACR-3F2A1B0C
+                refId: recompensa-partida-9c1e
+                estado: APLICADO
+                montoAcreditado: 4
+                nuevoSaldoDisponible: 384
+        '400':
+          description: |
+            Cuerpo invalido (`argumento-invalido`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemaDeCreditos'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcreditarCreditos'
+            example:
+              uid: 6f1c2a7e-3d6b-4b9a-8f0e-1c2d3e4f5a6b
+              monto: 4
+              refId: recompensa-partida-9c1e
+              concepto: recompensa-victoria
+
   /partidas/resultado:
     post:
       tags: [partidas]
@@ -450,6 +725,25 @@ components:
       description: |
         El token es valido pero no puede hacer esto: un usuario intentando
         mover saldo, o consultando el saldo de otro.
+    ErrorInterno:
+      description: |
+        Fallo no controlado del servicio. `type` =
+        `https://nexusbattles.upb.edu.co/errors/error-interno`. El `detail` es
+        deliberadamente generico —no filtra detalles de implementacion— pero
+        el cuerpo trae la propiedad extra **`excepcion`** con el nombre simple
+        de la clase, para que un llamador pueda distinguir «excepcion X no
+        mapeada» de «excepcion Y no mapeada» sin depender del texto libre ni
+        tener que leer los registros del servidor.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemaInternoDeCreditos'
+          example:
+            type: https://nexusbattles.upb.edu.co/errors/error-interno
+            title: Error interno del servidor
+            status: 500
+            detail: Ocurrió un error inesperado. Inténtalo de nuevo más tarde.
+            excepcion: DataIntegrityViolationException
 
   parameters:
     Uid:
@@ -624,6 +918,148 @@ components:
           type: array
           items: { type: string }
 
+    DebitarCreditos:
+      type: object
+      description: Cuerpo de `POST /creditos/debitar` (1.4.0).
+      required: [uid, monto, refId]
+      properties:
+        uid:
+          type: string
+          description: Identificador estable del jugador (ADR-002). La cuenta se crea sola si no existe.
+        monto: { type: number }
+        refId:
+          type: string
+          description: |
+            Referencia del llamador y, a la vez, **clave de idempotencia**:
+            repetir el mismo `refId` no vuelve a descontar. No va en la
+            cabecera `Idempotency-Key`, a diferencia de `reservar`.
+        concepto:
+          type: [string, 'null']
+          description: Para que se debita. Ausente o nulo, se registra como `DEBITO-DIRECTO`.
+
+    Debito:
+      type: object
+      description: Respuesta de `POST /creditos/debitar` (1.4.0).
+      required: [transaccionId, refId, estado, montoDebitado, nuevoSaldoDisponible]
+      properties:
+        transaccionId:
+          type: string
+          description: |
+            `TX-DEB-` seguido de ocho caracteres hexadecimales en mayusculas.
+            En un debito nuevo es aleatorio; en una repeticion del mismo
+            `refId` deriva del identificador de la fila ya registrada, asi que
+            es **el mismo en todas las repeticiones**.
+          pattern: '^TX-DEB-[0-9A-F]{8}$'
+        refId: { type: string }
+        estado:
+          type: string
+          enum: [EXITOSO]
+          description: Unico valor posible; un debito que no se aplica sale por un codigo de error.
+        montoDebitado: { type: number }
+        nuevoSaldoDisponible:
+          type: number
+          description: Saldo disponible del jugador despues del debito.
+
+    ReversarDebito:
+      type: object
+      description: Cuerpo de `POST /creditos/reversar` (1.4.0).
+      required: [refId]
+      properties:
+        refId:
+          type: string
+          description: |
+            Referencia del debito que se quiere compensar. El jugador no se
+            indica: se toma del debito original.
+        motivo:
+          type: [string, 'null']
+          description: Por que se compensa. Se devuelve tal cual, sin interpretarse.
+
+    Reverso:
+      type: object
+      description: Respuesta de `POST /creditos/reversar` (1.4.0).
+      required: [refId, estado, montoReversado]
+      properties:
+        refId: { type: string }
+        estado:
+          type: string
+          enum: [REVERSADO, YA_REVERSADO]
+          description: |
+            `REVERSADO`: se devolvio ahora. `YA_REVERSADO`: ya estaba
+            compensado y no se movio nada. Los dos son exito.
+        montoReversado:
+          type: number
+          description: Monto del debito original, tanto si se devolvio ahora como si ya lo estaba.
+        motivo:
+          type: [string, 'null']
+          description: El mismo `motivo` que se envio.
+
+    Operacion:
+      type: object
+      description: |
+        Una operacion del libro vista por su `refId` (1.4.0). Cubre los tres
+        tipos —reserva, debito y credito— porque los tres comparten la misma
+        tabla; el tipo no se devuelve, solo el estado.
+      required: [refId, uid, monto, estado, fecha]
+      properties:
+        refId: { type: string }
+        uid:
+          type: string
+          description: Jugador al que pertenece la operacion.
+        monto: { type: number }
+        concepto:
+          type: [string, 'null']
+        estado:
+          type: string
+          enum: [ACTIVA, LIBERADA, CONSUMIDA]
+          description: |
+            Mismo enumerado que en las reservas. Un debito o un credito ya
+            aplicados se registran como `CONSUMIDA`; un debito compensado
+            queda `LIBERADA`.
+        fecha:
+          type: string
+          format: date-time
+          description: |
+            Cuando se registro. Si la fila no tiene fecha guardada, el
+            servicio devuelve el instante de la consulta en lugar de un nulo.
+
+    AcreditarCreditos:
+      type: object
+      description: Cuerpo de `POST /creditos/acreditar` (1.4.0).
+      required: [uid, monto, refId]
+      properties:
+        uid:
+          type: string
+          description: Identificador estable del jugador (ADR-002). La cuenta se crea sola si no existe.
+        monto: { type: number }
+        refId:
+          type: string
+          description: Referencia del llamador y clave de idempotencia; repetirla no vuelve a sumar.
+        concepto:
+          type: [string, 'null']
+          description: Por que se acredita. Ausente o nulo, se registra como `CREDITO-PARTIDA`.
+
+    Credito:
+      type: object
+      description: Respuesta de `POST /creditos/acreditar` (1.4.0).
+      required: [transaccionId, refId, estado, montoAcreditado, nuevoSaldoDisponible]
+      properties:
+        transaccionId:
+          type: string
+          description: |
+            `TX-ACR-` seguido de ocho caracteres hexadecimales en mayusculas.
+            Como en `debitar`, una repeticion del mismo `refId` devuelve
+            siempre el mismo valor.
+          pattern: '^TX-ACR-[0-9A-F]{8}$'
+        refId: { type: string }
+        estado:
+          type: string
+          enum: [APLICADO]
+          description: Unico valor posible.
+        montoAcreditado: { type: number }
+        nuevoSaldoDisponible:
+          type: number
+          description: Saldo disponible del jugador despues del credito.
+
     ProblemaDeCreditos:
       type: object
       description: RFC 7807 con `type` estable bajo https://nexusbattles.upb.edu.co/errors/
@@ -633,3 +1069,19 @@ components:
         title: { type: string }
         status: { type: integer }
         detail: { type: string }
+
+    ProblemaInternoDeCreditos:
+      description: |
+        El problem detail de un fallo no controlado (500), que ademas de los
+        campos comunes trae `excepcion` (1.4.0).
+      allOf:
+        - $ref: '#/components/schemas/ProblemaDeCreditos'
+        - type: object
+          required: [excepcion]
+          properties:
+            excepcion:
+              type: string
+              description: |
+                Nombre simple de la clase de la excepcion que fallo. Es lo
+                unico especifico que sale del servidor: el `detail` es
+                generico a proposito.

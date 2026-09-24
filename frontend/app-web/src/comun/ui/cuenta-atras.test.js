@@ -35,7 +35,7 @@ describe('textoDe', () => {
     expect(textoDe(9 * SEGUNDO)).toBe('00:09');
   });
 
-  test('una subasta vencida dice «Finalizada», no un numero negativo', () => {
+  test('una subasta vencida dice «Finalizada», no un número negativo', () => {
     expect(textoDe(-1)).toBe('Finalizada');
     expect(textoDe(0)).toBe('Finalizada');
   });
@@ -195,7 +195,7 @@ describe('vigilarCuentasAtras', () => {
     };
   }
 
-  test('un solo temporizador para toda la pagina, no uno por tarjeta', () => {
+  test('un solo temporizador para toda la página, no uno por tarjeta', () => {
     const raiz = document.createElement('div');
     for (let i = 0; i < 16; i++) {
       raiz.append(cuentaAtras(dentroDe(2 * HORA)));

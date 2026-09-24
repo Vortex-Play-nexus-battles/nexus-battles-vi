@@ -1,6 +1,7 @@
 package com.nexusbattles.plataforma.salaspartidas.integracion;
 
 import com.nexusbattles.comun.seguridad.pruebas.EmisorDeTokensDePrueba;
+import com.nexusbattles.plataforma.salaspartidas.sanciones.SancionesDelJugador;
 import com.nexusbattles.plataforma.resiliencia.ErroresDeDegradacion;
 import com.nexusbattles.plataforma.resiliencia.RegistroDeDegradacion;
 import com.nexusbattles.plataforma.salaspartidas.configuracion.ConfiguracionDeResiliencia;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -77,6 +79,25 @@ class DegradacionDeInventarioIT {
         EmisorDeTokensDePrueba.registrarJwks(registro);
         registro.add("salas.inventario.url", () -> "http://localhost:" + PUERTO_INVENTARIO);
     }
+
+    /**
+     * Sanciones, sano y callado — R10.2.
+     *
+     * <p>Esta prueba afirma que la caida del inventario degrada SOLO su
+     * seccion, asi que todo lo demas tiene que estar en pie. Desde que las
+     * puertas de sala comprueban la sancion (HU-USR-005/006), sin este doble
+     * la peticion ni siquiera llegaba al inventario: moria antes con un 503
+     * `sanciones-no-disponibles`, porque no hay nadie escuchando en el puerto
+     * por omision de sanciones. El fallo era real y util —lo destapo CI—,
+     * pero medir «la primera dependencia sin doble» no es lo que esta prueba
+     * dice medir.
+     *
+     * <p>El simulacro devuelve {@code false} por omision de Mockito: sin
+     * sancion, que es justo lo que hace falta para que la peticion llegue al
+     * inventario.
+     */
+    @MockitoBean
+    private SancionesDelJugador sanciones;
 
     @LocalServerPort
     private int puerto;

@@ -94,6 +94,7 @@ paths:
         - $ref: '#/components/parameters/SancionId'
       responses:
         '200':
+          description: La sancion con su estado actual y su apelacion, si la tiene.
           content: { application/json: { schema: { $ref: '#/components/schemas/Sancion' } } }
         '403':
           description: No es tuya y no moderas
@@ -139,6 +140,7 @@ paths:
           description: "`true`: las del propio usuario, con su estado. `false` (por omision): las pendientes, solo para quien modera."
       responses:
         '200':
+          description: Apelaciones pendientes de resolver, de la mas antigua a la mas reciente.
           content:
             application/json:
               schema:

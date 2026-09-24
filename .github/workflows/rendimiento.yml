@@ -1,0 +1,296 @@
+# Pruebas de rendimiento (k6) — RNF-REN-001, HU-REN-001, HU-REN-003.
+#
+# ## Dos trabajos, y solo uno es automático
+#
+#  - `smoke-en-el-banco` corre solo, contra el banco E2E efímero que levanta
+#    este mismo runner. No toca nada de nadie: nace y muere con el job.
+#  - `medicion-a-demanda` corre SOLO por disparo manual, contra la URL que
+#    escriba quien lo dispara.
+#
+# ## ESTE WORKFLOW NUNCA APUNTA SOLO A AWS DEV
+#
+# Y no es un descuido: es la decisión. El **host de plataforma** en DEV es un
+# `t3.small` del plan gratuito que corre nueve servicios y es el entorno donde
+# se hace la demo; toda URL medible pasa por su borde, y detrás de él está
+# además el host de contenido, igual de pequeño (ver docs/arquitectura/README.md).
+# Una prueba de carga automática contra ellos es una forma elaborada de tumbar
+# la sustentación. Medir AWS exige que una persona abra Actions, elija el
+# perfil, escriba la URL y —para `load`— confirme por escrito.
+#
+# Ninguna URL de AWS está escrita en este archivo, para que tampoco se pueda
+# disparar «por inercia» dándole a Run workflow sin mirar.
+#
+# ## Por qué el smoke automático no se dispara con cada cambio de servicio
+#
+# `e2e.yml` ya levanta el banco entero en cada fusión a `develop` y juega una
+# partida de verdad: eso es lo que vigila los servicios. Un smoke de 1 VU no
+# añade nada a esa señal y sí quince minutos más de runner. Lo que este job
+# vigila es EL ARNÉS: que la suite siga corriendo, que los umbrales se
+# evalúen y que el informe se escriba. Por eso se dispara cuando cambia
+# `tests/rendimiento/`.
+#
+# Medir de verdad es `baseline` a demanda, y su resultado se adjunta al acta
+# del Sprint.
+name: Rendimiento (k6)
+
+on:
+  workflow_dispatch:
+    inputs:
+      perfil:
+        description: "Perfil de carga"
+        required: true
+        default: smoke
+        type: choice
+        options: [smoke, baseline, load]
+      base_url:
+        description: "URL base del BORDE, sin barra final (ej. http://1.2.3.4)"
+        required: true
+        type: string
+      confirmacion:
+        description: "Para el perfil `load`: escribir `entiendo-el-riesgo`"
+        required: false
+        default: ""
+        type: string
+      objetivo_ms:
+        description: "Umbral de latencia en ms (RNF-REN-001)"
+        required: false
+        default: "500"
+        type: string
+      percentil:
+        description: "Percentil de evaluación (ADR-006)"
+        required: false
+        default: "95"
+        type: string
+
+  pull_request:
+    branches: [develop]
+    paths:
+      - "tests/rendimiento/**"
+      - ".github/workflows/rendimiento.yml"
+  push:
+    branches: [develop]
+    paths:
+      - "tests/rendimiento/**"
+      - ".github/workflows/rendimiento.yml"
+
+concurrency:
+  group: rendimiento-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Versión fija a propósito: comparar el p95 de dos corridas hechas con dos
+  # versiones distintas de k6 mete un confundidor gratuito en la evidencia.
+  K6_VERSION: v1.1.0
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # AUTOMÁTICO — banco efímero, nace y muere aquí. Nunca un entorno de nadie.
+  # ---------------------------------------------------------------------------
+  smoke-en-el-banco:
+    name: Smoke contra el banco E2E
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      # Mismos pasos que `e2e.yml`: los jars se construyen una vez y las
+      # imágenes solo los copian.
+      - name: Construir los jars de los servicios Gradle
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon -x test \
+            :services:contenido:heroes:bootJar \
+            :services:contenido:productos:bootJar \
+            :services:contenido:inventario:bootJar \
+            :services:contenido:motor-combate:bootJar \
+            :services:cuentas:ms-finanzas:bootJar \
+            :services:cuentas:ms-subastas:bootJar \
+            :services:plataforma:moderacion-sanciones:bootJar \
+            :services:plataforma:notificaciones:bootJar \
+            :services:plataforma:torneos:bootJar \
+            :services:plataforma:metricas-plataforma:bootJar \
+            :services:plataforma:admin-parametros:bootJar \
+            :services:plataforma:comentarios:bootJar \
+            :services:plataforma:salas-partidas:bootJar
+
+      - name: Construir el jar de ms-identidad (Maven)
+        working-directory: services/cuentas/ms-identidad
+        run: ./mvnw -B -DskipTests package
+
+      - name: Levantar el banco
+        run: docker compose -f tests/e2e/compose.yml up -d --build --wait
+
+      # `crear_sala` pasa por la puerta de héroe: sin sembrar, las cuentas no
+      # tienen héroe equipado y ese escenario mediría 422 en cada iteración.
+      - name: Sembrar el inventario
+        run: |
+          chmod +x tests/e2e/sembrar.sh
+          ./tests/e2e/sembrar.sh
+
+      - name: Instalar k6 ${{ env.K6_VERSION }}
+        run: |
+          curl -fsSL "https://github.com/grafana/k6/releases/download/${K6_VERSION}/k6-${K6_VERSION}-linux-amd64.tar.gz" \
+            | sudo tar xz --strip-components=1 -C /usr/local/bin "k6-${K6_VERSION}-linux-amd64/k6"
+          k6 version
+
+      # `mkdir` + `working-directory`: k6 NO crea los directorios de los
+      # archivos de `handleSummary`. Si la carpeta no existe, no escribe el
+      # informe y no avisa.
+      - name: Preparar la carpeta de resultados
+        run: mkdir -p tests/rendimiento/resultados
+
+      - name: Correr el perfil smoke
+        working-directory: tests/rendimiento/resultados
+        env:
+          BASE_URL: http://localhost:8099
+          USUARIO: anfitriona_e2e@nexus.test
+          # Cuenta sembrada del banco efímero, no una credencial: está en claro
+          # en `tests/e2e/sembrar.sh`. Contra cualquier otro entorno, la clave
+          # entra por secreto (ver el trabajo `medicion-a-demanda`).
+          CLAVE: Contrasena-E2E-2026
+          PERFIL: smoke
+        run: k6 run ../k6/rendimiento.js
+
+      - name: Logs de los servicios si algo falló
+        if: failure()
+        run: |
+          for s in srv-ms-identidad srv-inventario srv-salas-partidas srv-borde; do
+            echo "=============== $s ==============="
+            docker compose -f tests/e2e/compose.yml logs "$s" 2>&1 \
+              | grep -E "ERROR|WARN|Exception|Caused by" | tail -25 || true
+            docker compose -f tests/e2e/compose.yml logs --tail 40 "$s" || true
+          done
+          docker compose -f tests/e2e/compose.yml ps
+
+      - name: Guardar el informe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendimiento-smoke-banco
+          path: tests/rendimiento/resultados/**
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Desmontar
+        if: always()
+        run: docker compose -f tests/e2e/compose.yml down -v --remove-orphans
+
+  # ---------------------------------------------------------------------------
+  # MANUAL — la única vía por la que esta suite toca un entorno desplegado.
+  # ---------------------------------------------------------------------------
+  medicion-a-demanda:
+    name: "Medición a demanda (${{ inputs.perfil }})"
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # `load` contra un entorno desplegado se confirma por escrito, igual que
+      # `apply` y `destroy` en `infra-dev.yml`. Darle a Run workflow sin leer
+      # es demasiado fácil.
+      # Lo que escribe la persona entra por `env`, nunca interpolado con
+      # `${{ }}` dentro del script: un `${{ inputs.X }}` en un `run` se pega
+      # tal cual en el shell, y un campo de texto libre es entrada de fuera.
+      - name: Confirmar el perfil load
+        if: inputs.perfil == 'load'
+        env:
+          CONFIRMACION: ${{ inputs.confirmacion }}
+        run: |
+          if [ "$CONFIRMACION" != "entiendo-el-riesgo" ]; then
+            echo "::error::El perfil 'load' exige escribir 'entiendo-el-riesgo' en el campo de confirmacion."
+            echo "El host de plataforma en DEV es un t3.small con nueve servicios y es el entorno de la demo."
+            echo "Ver tests/rendimiento/README.md, seccion «El techo de carga»."
+            exit 1
+          fi
+
+      - name: Comprobar que hay credenciales configuradas
+        env:
+          USUARIO: ${{ secrets.RENDIMIENTO_USUARIO }}
+          CLAVE: ${{ secrets.RENDIMIENTO_CLAVE }}
+        run: |
+          faltan=""
+          [ -n "$USUARIO" ] || faltan="$faltan RENDIMIENTO_USUARIO"
+          [ -n "$CLAVE" ]   || faltan="$faltan RENDIMIENTO_CLAVE"
+          if [ -n "$faltan" ]; then
+            echo "::error::Faltan secretos del repositorio:$faltan"
+            echo "Son la cuenta de pruebas del entorno que se va a medir. Tiene que tener"
+            echo "un heroe equipado, o el escenario crear_sala medira 422 en cada iteracion."
+            exit 1
+          fi
+
+      - name: Instalar k6 ${{ env.K6_VERSION }}
+        run: |
+          curl -fsSL "https://github.com/grafana/k6/releases/download/${K6_VERSION}/k6-${K6_VERSION}-linux-amd64.tar.gz" \
+            | sudo tar xz --strip-components=1 -C /usr/local/bin "k6-${K6_VERSION}-linux-amd64/k6"
+          k6 version
+
+      - name: Anunciar contra qué se va a disparar
+        env:
+          PERFIL: ${{ inputs.perfil }}
+          BASE_URL: ${{ inputs.base_url }}
+          PERCENTIL: ${{ inputs.percentil }}
+          OBJETIVO_MS: ${{ inputs.objetivo_ms }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          {
+            echo "### Medición de rendimiento"
+            echo ""
+            echo "| Campo | Valor |"
+            echo "|---|---|"
+            echo "| Perfil | $PERFIL |"
+            echo "| Entorno | $BASE_URL |"
+            echo "| Objetivo | p$PERCENTIL <= $OBJETIVO_MS ms |"
+            echo "| Disparado por | @$ACTOR |"
+            echo ""
+            echo "La medición corre desde un runner de GitHub: el número incluye la red"
+            echo "entre el runner y el entorno. No es comparable con una corrida local."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Preparar la carpeta de resultados
+        run: mkdir -p tests/rendimiento/resultados
+
+      - name: Correr la medición
+        working-directory: tests/rendimiento/resultados
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          USUARIO: ${{ secrets.RENDIMIENTO_USUARIO }}
+          CLAVE: ${{ secrets.RENDIMIENTO_CLAVE }}
+          PERFIL: ${{ inputs.perfil }}
+          OBJETIVO_MS: ${{ inputs.objetivo_ms }}
+          PERCENTIL: ${{ inputs.percentil }}
+        run: k6 run ../k6/rendimiento.js
+
+      # `always()`: cuando el umbral se rompe, k6 sale con 99 y el informe es
+      # justo lo que hace falta leer. Perderlo por el fallo seria absurdo.
+      - name: Publicar el informe en el resumen del job
+        if: always()
+        run: |
+          if [ -f tests/rendimiento/resultados/resumen.txt ]; then
+            {
+              echo ""
+              echo '```'
+              cat tests/rendimiento/resultados/resumen.txt
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Guardar el informe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendimiento-${{ inputs.perfil }}-${{ github.run_number }}
+          path: tests/rendimiento/resultados/**
+          retention-days: 90
+          if-no-files-found: warn

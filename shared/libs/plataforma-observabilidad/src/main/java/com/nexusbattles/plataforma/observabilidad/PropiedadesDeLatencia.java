@@ -1,7 +1,5 @@
 package com.nexusbattles.plataforma.observabilidad;
 
-import java.util.Optional;
-
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -17,7 +15,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *   latencia.servicio     ->  LATENCIA_SERVICIO
  * </pre>
  *
- * <p><b>El percentil se deja deliberadamente sin valor por omision.</b> Ver
+ * <p>El percentil de evaluacion es <b>p95</b> por omision (ADR-006). Ver
  * {@link #objetivo()}.
  */
 @ConfigurationProperties(prefix = "latencia")
@@ -31,11 +29,11 @@ public class PropiedadesDeLatencia {
     private long objetivoMs = ObjetivoDeLatencia.OBJETIVO_POR_OMISION_MS;
 
     /**
-     * Percentil de evaluacion. Nulo mientras el Product Owner no lo apruebe.
+     * Percentil de evaluacion. Nulo aqui significa «el de ADR-006», p95.
      *
-     * <p>No es un descuido: CA-03 exige aprobacion <i>por escrito</i> de p95 o
-     * p99. Escribir aqui un 95 tomaria esa decision en su lugar y nadie
-     * volveria a mirarla.
+     * <p>Se deja como objeto y no como {@code double} a proposito: asi
+     * {@code LATENCIA_PERCENTIL=} (vacio) vuelve al valor por omision en vez
+     * de reventar el arranque al intentar convertir una cadena vacia.
      */
     private Double percentil;
 
@@ -135,19 +133,20 @@ public class PropiedadesDeLatencia {
     }
 
     /**
-     * El objetivo vigente, o vacio si el Product Owner aun no aprobo el percentil.
+     * El objetivo vigente: el objetivo de RNF-REN-001 y el percentil de
+     * ADR-006, salvo que la configuracion diga otra cosa.
      *
-     * <p>Devolver {@code Optional} y no lanzar al arrancar es intencional: la
-     * <b>medicion</b> no depende de ninguna decision pendiente y debe estar
-     * activa desde el Sprint 1 en los veinte modulos. Lo que si depende del
-     * Product Owner es la <b>evaluacion</b> —decir «cumple» o «no cumple»—, y eso
-     * falla de forma explicita y localizada en el endpoint del informe, en vez de
-     * impedir que arranquen servicios de los tres equipos.
+     * <p>Hasta septiembre de 2026 esto devolvia {@code Optional} y quedaba
+     * vacio mientras nadie aprobara el percentil, lo que hacia que
+     * {@code /latencia/informe} respondiera 409 de forma permanente: la
+     * medicion corria en los veinte modulos y el requisito no se podia
+     * evaluar. ADR-006 cierra esa espera fijando p95 como convencion de
+     * ingenieria, asi que ya no hay un caso «sin objetivo» que representar.
      */
-    public Optional<ObjetivoDeLatencia> objetivo() {
-        return percentil == null
-                ? Optional.empty()
-                : Optional.of(new ObjetivoDeLatencia(objetivoMs, percentil));
+    public ObjetivoDeLatencia objetivo() {
+        return new ObjetivoDeLatencia(
+                objetivoMs,
+                percentil != null ? percentil : ObjetivoDeLatencia.PERCENTIL_POR_OMISION);
     }
 
     public long getObjetivoMs() {

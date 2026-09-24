@@ -1,7 +1,10 @@
 openapi: 3.1.0
 info:
-  title: Nexus Battles VI - Tienda (ms-ecommerce): carrito y vitrina
-  version: 1.0.0
+  title: 'Nexus Battles VI - Tienda (ms-ecommerce): carrito y vitrina'
+  # 1.1.0 (FI-R2): se declara la forma de la respuesta de la vitrina, que hasta
+  # ahora era solo una frase. Es aditivo -no se quita ni se estrecha nada-, asi
+  # que sube la menor, no la mayor.
+  version: 1.1.0
   description: >
     Contrato de lo que ms-ecommerce publica hoy (bloque de identidad/seguridad,
     #441): la vitrina paginada del catalogo y el carrito del jugador. No existia
@@ -41,6 +44,10 @@ paths:
       responses:
         "200":
           description: Pagina de Spring Data con los productos de la vitrina
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginaDeVitrina"
   /carrito:
     get:
       summary: Carrito del jugador autenticado (se crea vacio si no existe)
@@ -116,6 +123,77 @@ components:
         del claim `uid` (o del sujeto con Keycloak). Roles de usuario:
         JUGADOR, MODERADOR, ADMINISTRADOR, SUPER_ADMINISTRADOR.
   schemas:
+    PaginaDeVitrina:
+      description: >
+        El Page de Spring Data tal cual lo serializa el controlador. Se declara
+        porque no estaba: la respuesta decia solo "Pagina de Spring Data con los
+        productos de la vitrina", sin forma, y el frontend acabo leyendo un
+        campo `precio` que no existe en ningun sitio — todas las tarjetas de la
+        tienda ensenaban «0 COP». Un contrato que no dice la forma no impide
+        nada.
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductoVitrina"
+        number: { type: integer, description: Pagina actual, base cero }
+        size: { type: integer }
+        totalElements: { type: integer, format: int64 }
+        totalPages: { type: integer }
+        last: { type: boolean }
+    ProductoVitrina:
+      description: >
+        Un producto de la vitrina. Es lo que devuelve
+        `VitrinaService.convertirADto`; los campos opcionales lo son de verdad,
+        y ausente significa "no se sabe", nunca cero.
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        nombre: { type: string }
+        imagenUrl:
+          type: string
+          nullable: true
+          description: Imagen del producto (RF-CAR-001).
+        descripcion: { type: string }
+        habilidades:
+          type: string
+          nullable: true
+          description: Habilidades del producto (RF-CAR-001).
+        tipo: { type: string }
+        precioFinal:
+          type: number
+          nullable: true
+          description: >
+            Lo que se cobra. **No se llama `precio`.** Ausente significa que el
+            catalogo no lo trae; cero significa gratis, que es distinto.
+        precioOriginal:
+          type: number
+          nullable: true
+          description: >
+            Precio antes de la promocion. Hoy `VitrinaService` lo iguala a
+            `precioFinal` (los dos salen de `precioBaseCop`), asi que el
+            porcentaje de descuento no llega al precio. Mientras eso siga asi,
+            no hay rebaja que ensenar.
+        moneda:
+          type: string
+          nullable: true
+          description: >
+            COP, USD o EUR segun la ubicacion (enunciado §7.5). El cliente no
+            debe suponer COP.
+        enPromocion: { type: boolean, nullable: true }
+        porcentajeDescuento: { type: integer, nullable: true }
+        esPropio:
+          type: boolean
+          nullable: true
+          description: >
+            RF-CAR-005. Hoy el servicio lo escribe siempre en `false`: no lo
+            calcula contra el inventario del jugador.
+        enListaDeseos:
+          type: boolean
+          nullable: true
+          description: >
+            RF-CAR-005. Hoy el servicio lo escribe siempre en `false`.
     Carrito:
       type: object
       properties:

@@ -50,7 +50,7 @@ describe('Apertura y cierre de la ficha', () => {
     expect(document.querySelector('.ficha__nombre').textContent).toBe('Hacha de Vorn');
   });
 
-  test('si el catalogo falla, el jugador ve un aviso sin codigo de estado', async () => {
+  test('si el catálogo falla, el jugador ve un aviso sin código de estado', async () => {
     const consola = jest.spyOn(console, 'error').mockImplementation(() => {});
 
     await abrirFicha('p-1', {

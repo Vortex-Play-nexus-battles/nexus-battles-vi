@@ -48,6 +48,7 @@ public class PlantillaCorreoService {
             "email/cambio-clave",
             "email/mision",
             "email/subasta",
+            "email/confirmacion-compra",
             "email/plantilla-prueba");
 
     public String renderizar(String nombrePlantilla, Map<String, Object> variables) {

@@ -31,7 +31,7 @@ async function esperarHasta(condicion) {
     }
     await new Promise((resolver) => setTimeout(resolver, 0));
   }
-  throw new Error('La interfaz no termino la operacion esperada');
+  throw new Error('La interfaz no termino la operación esperada');
 }
 
 function enviar(formulario) {
@@ -111,7 +111,7 @@ test('un fallo de busqueda se informa sin dejar el estado de carga', async () =>
   await montarInventario(raiz, 'jugador-A', 0, {
     consultar: async () => pagina([elemento()]),
     buscar: async () => {
-      throw new Error('El servicio respondio 503');
+      throw new Error('El servicio respondió 503');
     },
   });
 

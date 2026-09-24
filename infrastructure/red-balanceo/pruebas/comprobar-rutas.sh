@@ -122,7 +122,14 @@ comprobar GET  /api/v1/products/p-1/comments \
 comprobar GET  /api/v1/latencia            "metricas GET /api/v1/latencia"
 comprobar GET  /api/v1/disponibilidad      "metricas GET /api/v1/disponibilidad"
 comprobar GET  /api/v1/tecnicas            "metricas GET /api/v1/tecnicas"
+# Las dos lineas siguientes son el par que importa, y por eso van juntas:
+# /api/v1/moderacion es de metricas (sus agregados, HU-MET) y
+# /api/v1/comentarios/moderacion es la cola de comentarios de R10.1. Se
+# parecen a proposito: si alguien colgara la cola de /api/v1/moderacion, este
+# guion lo detectaria porque la primera linea empezaria a irse a comentarios.
 comprobar GET  /api/v1/moderacion          "metricas GET /api/v1/moderacion"
+comprobar GET  /api/v1/comentarios/moderacion \
+                                           "comentarios GET /api/v1/comentarios/moderacion"
 
 echo
 echo "Lo que el borde contesta el mismo"
@@ -138,6 +145,41 @@ echo "Contenido — no se puede suplantar una IP, se comprueba el fichero"
 enConfiguracion "heroes va al host de contenido"     'heroes.*\n?.*34\.193\.90\.11:8101|34\.193\.90\.11:8101'
 enConfiguracion "inventario va al host de contenido" '34\.193\.90\.11:8102'
 enConfiguracion "productos va al host de contenido"  '34\.193\.90\.11:8103'
+
+echo
+echo "Que promete el borde que dev hoy no puede dar (inventario de 502)"
+# Este bloque no comprueba el reparto: comprueba la OTRA mitad del problema.
+#
+# Todo lo de arriba pasa contra servidores de eco, asi que una ruta puede
+# estar perfectamente repartida y devolver 502 en dev igualmente, porque
+# detras no hay nadie. Fue el caso de /api/v1/(creditos|transacciones|cofres)
+# y /api/v1/(subastas|mis-pujas) durante semanas: el reparto correcto, el
+# guardian en verde, y la vista rota (#571).
+#
+# Se cruza el borde con el catalogo de despliegue: un upstream cuyo servicio
+# esta marcado desplegableDev:false dara 502 en dev, y eso no es un defecto
+# -- es una decision de capacidad medida -- pero tiene que estar a la vista y
+# no descubrirse el dia de la demo. Un upstream que no existe en el catalogo
+# si es un fallo: nadie lo va a desplegar nunca.
+CATALOGO="${CATALOGO:-$(dirname "$0")/../../despliegue/servicios.json}"
+if [ -f "$CATALOGO" ] && command -v jq >/dev/null 2>&1; then
+    for servicio in $(grep -oE 'srv-[a-z-]+:[0-9]+' "$CONF" | sed 's/^srv-//;s/:[0-9]*$//' | sort -u); do
+        entrada=$(jq -r --arg s "$servicio" '.servicios[] | select(.nombre == $s) | "\(.desplegableDev)"' "$CATALOGO")
+        prefijos=$(grep -B4 "srv-${servicio}:" "$CONF" | grep -oE 'location [^{]+' | sed 's/location //' | tr -d ' ' | tr '\n' ' ')
+        if [ -z "$entrada" ]; then
+            printf '  FALLA %-22s el borde lo enruta y NO esta en el catalogo de despliegue\n' "$servicio"
+            printf '        rutas afectadas: %s\n' "${prefijos:-(no identificadas)}"
+            fallos=$((fallos + 1))
+        elif [ "$entrada" = "false" ]; then
+            printf '  502   %-22s fuera del host de dev por capacidad -> sus rutas dan 502\n' "$servicio"
+            printf '        rutas afectadas: %s\n' "${prefijos:-(no identificadas)}"
+        else
+            printf '  ok    %-22s desplegable en dev\n' "$servicio"
+        fi
+    done
+else
+    echo "  (se omite: no se encontro $CATALOGO o falta jq)"
+fi
 
 echo
 if [ "$fallos" -eq 0 ]; then

@@ -62,7 +62,7 @@ export async function montarPublicacion(
 ) {
   const cabecera = document.querySelector('[data-cabecera-app]');
   if (cabecera) {
-    montarCabecera(cabecera, { seccionActiva: 'subasta' });
+    montarCabecera(cabecera, { vista: 'publicar-subasta', seccionActiva: 'subasta' });
   }
   // Solo marcado estático. Nombres de inventario y respuestas se asignan con textContent.
   raiz.innerHTML = `
@@ -179,6 +179,9 @@ export async function montarPublicacion(
     }
     return { seleccionado, duracion, errores };
   }
+  /** Se pone al primer envio: hasta entonces no se pinta ningun error de campo. */
+  let intentado = false;
+
   function actualizar() {
     const { seleccionado, duracion, errores } = datos();
     const solicitud = retenido ? intento.solicitud : null;
@@ -208,7 +211,11 @@ export async function montarPublicacion(
     $('[data-resumen-inicial]').textContent = precioInicial;
     $('[data-resumen-inmediata]').textContent = precioCompra;
     for (const campo of ['producto', 'duracion', 'inicial', 'inmediata']) {
-      $(`#error-${campo}`).textContent = retenido ? '' : (errores[campo] ?? '');
+      // UX-R3.11 — «Selecciona un producto disponible de tu inventario» salia
+      // en rojo nada mas abrir la pantalla, antes de que nadie tocara nada: un
+      // error de validacion sobre un formulario intacto. Los errores aparecen
+      // cuando ya se ha intentado enviar.
+      $(`#error-${campo}`).textContent = retenido || !intentado ? '' : (errores[campo] ?? '');
       if (campo !== 'duracion') {
         $(`#${campo}`).setAttribute('aria-invalid', String(!retenido && Boolean(errores[campo])));
       }
@@ -301,12 +308,20 @@ export async function montarPublicacion(
         : 'No hay productos en esta página de tu inventario.';
       $('[data-pagina]').textContent = `Página ${totalPaginas ? pagina + 1 : 0} de ${totalPaginas}`;
     } catch (error) {
-      $('[data-inventario]').textContent = 'No se pudo cargar el inventario. Puedes reintentar.';
+      // UX-R3.11 — antes esta pantalla anunciaba el MISMO fallo dos veces y casi
+      // con las mismas palabras: un banner rojo arriba («No se pudo cargar el
+      // inventario. Inténtalo de nuevo más tarde.») y, dentro del paso 01, «No
+      // se pudo cargar el inventario. Puedes reintentar.». Con el mensaje de
+      // validación del campo debajo eran tres avisos en una sola tarjeta.
+      // El fallo se cuenta donde esta el hueco que no se lleno, y la salida es
+      // el boton -no hace falta que el texto diga que se puede reintentar al
+      // lado de un boton que dice «Reintentar carga».
+      $('[data-inventario]').textContent = 'No pudimos cargar tu inventario.';
       $('[data-recargar]').hidden = false;
       if (error.status === 401) {
         pedirSesion();
       } else {
-        avisar('No se pudo cargar el inventario. Inténtalo de nuevo más tarde.', true);
+        avisar('');
       }
     } finally {
       // El guard de carga/envío impide peticiones simultáneas; controles bloqueados.
@@ -337,6 +352,7 @@ export async function montarPublicacion(
       return;
     }
     const { seleccionado, duracion, errores } = datos();
+    intentado = true;
     if (!retenido && (cargando || !aceptar.checked || Object.keys(errores).length)) {
       actualizar();
       return;

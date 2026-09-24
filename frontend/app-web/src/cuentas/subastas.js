@@ -88,7 +88,7 @@ export function inicializar() {
     cabecera.dataset.cabeceraApp = '';
     raiz.appendChild(cabecera);
   }
-  montarCabecera(cabecera, { seccionActiva: 'subasta' });
+  montarCabecera(cabecera, { vista: 'subastas', seccionActiva: 'subasta' });
 
   // El titulo y «Publicar subasta» iban sueltos, uno debajo del otro, con el
   // boton primario flotando a la izquierda como si fuera un parrafo mas. El
@@ -122,14 +122,51 @@ export function inicializar() {
       // borre al no conocerlo.
       estado.filtros = { ...nuevosFiltros, q: estado.filtros.q };
       estado.pagina = 0;
+      rotularFiltros();
       cargarYRenderizar();
     },
   });
 
+  // UX-R4.8 — En pantalla ancha el panel es una columna fija a la izquierda y
+  // no estorba. A 375 px la rejilla pasa a una sola columna y el panel se
+  // apila ENCIMA de los resultados: veinticuatro controles, unos 1.400 px de
+  // filtros antes de la primera subasta. Quien entra al mercado publico —y
+  // puede entrar sin sesion— ve una pared de casillas, no un objeto.
+  //
+  // Se pliega con `<details>`, que trae el teclado y el lector de pantalla
+  // hechos. En ancho se abre y su resumen se esconde, asi que ahi no cambia
+  // nada de lo que ya habia.
+  const panelFiltros = document.createElement('details');
+  panelFiltros.className = 'subastas-filtros__plegable';
+  const resumenFiltros = document.createElement('summary');
+  resumenFiltros.className = 'subastas-filtros__resumen';
+
+  /**
+   * Un panel plegado no puede esconder que hay filtros puestos: quien no vea
+   * ni el panel ni la causa se queda mirando «ninguna subasta coincide» sin
+   * saber por que. El resumen dice cuantos hay.
+   */
+  function rotularFiltros() {
+    const puestos = Object.keys(estado.filtros).filter((clave) => clave !== 'q').length;
+    resumenFiltros.textContent = puestos === 0 ? 'Filtros' : `Filtros · ${puestos} activos`;
+  }
+  rotularFiltros();
+
+  panelFiltros.append(resumenFiltros, filtros);
+
+  // El estado abierto lo decide la anchura, no el usuario: en ancho el
+  // resumen ni se ve, asi que dejarlo cerrado escondería el panel entero.
+  const esAncho = globalThis.matchMedia?.('(min-width: 900px)');
+  const ajustarPliegue = () => {
+    panelFiltros.open = esAncho ? esAncho.matches : true;
+  };
+  ajustarPliegue();
+  esAncho?.addEventListener?.('change', ajustarPliegue);
+
   const zonaResultados = document.createElement('div');
   zonaResultados.id = 'subastas-resultados';
 
-  contenido.append(filtros, zonaResultados);
+  contenido.append(panelFiltros, zonaResultados);
   raiz.appendChild(contenido);
 
   cargarYRenderizar();

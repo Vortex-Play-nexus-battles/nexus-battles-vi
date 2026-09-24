@@ -57,7 +57,7 @@ export function esSeccionDegradada(problema) {
  * @param {string} [respaldo] nombre a usar si el backend no lo mando
  * @returns {string}
  */
-export function seccionDe(problema, respaldo = 'Esta seccion') {
+export function seccionDe(problema, respaldo = 'Esta sección') {
   const seccion = problema && typeof problema.seccion === 'string' ? problema.seccion.trim() : '';
   return seccion || respaldo;
 }

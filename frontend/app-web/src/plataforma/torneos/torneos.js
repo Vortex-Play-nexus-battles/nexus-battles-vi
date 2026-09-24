@@ -96,7 +96,7 @@ export const ESTADOS = Object.freeze({
 export function resumenDe(torneo) {
   const estado = ESTADOS[torneo.estado] ?? torneo.estado;
   const cupos = `${torneo.equiposInscritos} de ${torneo.cupos} equipos`;
-  const costo = torneo.costoInscripcion > 0 ? `${torneo.costoInscripcion} creditos` : 'gratuito';
+  const costo = torneo.costoInscripcion > 0 ? `${torneo.costoInscripcion} créditos` : 'gratuito';
   return `${estado} · ${cupos} · ${costo}`;
 }
 
@@ -115,7 +115,7 @@ export function accionesDe(torneo, uid) {
     return { crearEquipo: false, inscribir: false, motivo: 'Inicia sesión para inscribirte.' };
   }
   if (torneo.estado !== 'INSCRIPCIONES_ABIERTAS') {
-    return { crearEquipo: false, inscribir: false, motivo: 'Las inscripciones estan cerradas.' };
+    return { crearEquipo: false, inscribir: false, motivo: 'Las inscripciones están cerradas.' };
   }
   const equipo = miEquipo(torneo, uid);
   if (!equipo) {
@@ -128,7 +128,7 @@ export function accionesDe(torneo, uid) {
     return {
       crearEquipo: false,
       inscribir: false,
-      motivo: `Ya estas inscrito con «${equipo.nombre}» (posicion ${equipo.posicion}).`,
+      motivo: `Ya estás inscrito con «${equipo.nombre}» (posición ${equipo.posicion}).`,
     };
   }
   return {
@@ -156,7 +156,7 @@ export function encuentrosDe(torneo, llave) {
 
 function avisarError(zona, error) {
   const deNegocio = error instanceof ErrorDeTorneos;
-  let detalle = deNegocio ? error.detalle : 'Revisa tu conexion e intentalo de nuevo.';
+  let detalle = deNegocio ? error.detalle : 'Revisa tu conexión e inténtalo de nuevo.';
   if (deNegocio && error.proximaFechaPosible) {
     detalle += ` Proxima fecha posible: ${new Date(error.proximaFechaPosible).toLocaleDateString('es-CO')}.`;
   }
@@ -206,9 +206,9 @@ export function tarjetaDeEquipo(torneo, equipo, uid) {
   tarjeta.appendChild(titulo);
   let estado = 'Registrado, sin inscribir';
   if (equipo.ia) {
-    estado = 'Equipo de la maquina';
+    estado = 'Equipo de la máquina';
   } else if (equipo.inscrito) {
-    estado = `Inscrito · posicion ${equipo.posicion}`;
+    estado = `Inscrito · posición ${equipo.posicion}`;
   }
   tarjeta.appendChild(nodo('p', 't-meta', estado));
   if (torneo.estado !== 'INSCRIPCIONES_ABIERTAS') {
@@ -391,14 +391,24 @@ export function montarTorneos(
       zonaListado.replaceChildren(
         estadoDeError({
           titulo: 'Los torneos no están disponibles',
+          // El detalle del servidor solo si trae uno util; si no, el motivo en
+          // el idioma del producto. Sin detalle, la tarjeta quedaba con un
+          // titulo y un boton y ninguna razon (§17).
           detalle:
-            error instanceof ErrorDeTorneos && error.estado < 500
-              ? error.detalle
-              : 'El servicio de torneos no responde ahora mismo.',
+            (error instanceof ErrorDeTorneos && error.estado < 500 && error.detalle) ||
+            'El servicio de torneos no responde ahora mismo. Vuelve a intentarlo en un momento.',
           alReintentar: () => cargarListado(),
         }),
       );
-      avisarError(zonaAviso, error);
+      // UX-R3.6 — y NO se avisa tambien arriba. El aviso flotante es para los
+      // fallos de una accion (inscribir un equipo, abrir un torneo), donde el
+      // contenido sigue siendo valido y hay que decir que fallo lo que se
+      // acaba de pulsar. Cuando lo que falla es la carga del listado, el
+      // propio listado ya lo dice, con su motivo y su boton de reintentar; el
+      // aviso solo anadia una caja amarilla con «No se pudo completar» y nada
+      // mas, encima del mensaje bueno. Dos avisos del mismo fallo, y el peor
+      // primero.
+      console.warn('[torneos] no se pudo cargar el listado:', error);
     }
   }
 
@@ -422,7 +432,7 @@ export function montarTorneos(
       const campeon = nodo(
         'p',
         'aviso aviso--exito',
-        `Campeon: ${nombreDe(torneo, torneo.campeonEquipoId)}`,
+        `Campeón: ${nombreDe(torneo, torneo.campeonEquipoId)}`,
       );
       campeon.dataset.zona = 'campeon';
       zonaDetalle.appendChild(campeon);
@@ -445,7 +455,7 @@ export function montarTorneos(
         'button',
         'boton boton--primario',
         torneo.costoInscripcion > 0
-          ? `Inscribir «${equipo.nombre}» por ${torneo.costoInscripcion} creditos`
+          ? `Inscribir «${equipo.nombre}» por ${torneo.costoInscripcion} créditos`
           : `Inscribir «${equipo.nombre}»`,
       );
       boton.type = 'button';
@@ -456,8 +466,8 @@ export function montarTorneos(
           const inscrito = await api.inscribir(torneo.id, equipo.id, fetchImpl);
           pintarAviso(zonaAviso, {
             tono: 'exito',
-            titulo: 'Inscripcion confirmada',
-            detalle: `Tu equipo ocupa la posicion ${inscrito.posicion} del arbol.`,
+            titulo: 'Inscripción confirmada',
+            detalle: `Tu equipo ocupa la posición ${inscrito.posicion} del árbol.`,
           });
           await abrir(torneo.id);
           await cargarListado();
@@ -484,7 +494,7 @@ export function montarTorneos(
           pintarAviso(zonaAviso, {
             tono: 'exito',
             titulo: 'Torneo iniciado',
-            detalle: 'Las posiciones vacias se completaron con la maquina y el arbol esta listo.',
+            detalle: 'Las posiciones vacías se completaron con la máquina y el árbol está listo.',
           });
           await abrir(torneo.id);
           await cargarListado();
@@ -524,7 +534,7 @@ export function montarTorneos(
     equipos.dataset.zona = 'equipos';
     equipos.appendChild(nodo('h3', undefined, `Equipos (${torneo.equipos.length})`));
     if (torneo.equipos.length === 0) {
-      equipos.appendChild(nodo('p', 't-meta', 'Todavia no hay equipos registrados.'));
+      equipos.appendChild(nodo('p', 't-meta', 'Todavía no hay equipos registrados.'));
     }
     torneo.equipos.forEach((e) => equipos.appendChild(tarjetaDeEquipo(torneo, e, uid)));
     zonaDetalle.appendChild(equipos);
@@ -534,7 +544,7 @@ export function montarTorneos(
     arbol.dataset.zona = 'arbol';
     arbol.appendChild(nodo('h3', undefined, 'Arbol del torneo'));
     if (torneo.encuentros.length === 0) {
-      arbol.appendChild(nodo('p', 't-meta', 'El arbol se genera al cerrar las inscripciones.'));
+      arbol.appendChild(nodo('p', 't-meta', 'El árbol se genera al cerrar las inscripciones.'));
     }
     LLAVES.forEach(([llave, titulo]) => {
       const lista = encuentrosDe(torneo, llave);
@@ -578,11 +588,11 @@ export function montarTorneos(
         etiqueta: 'Avatar del equipo',
         requerido: true,
         atributos: { maxlength: 300 },
-        pista: 'Identificador o direccion de la imagen.',
+        pista: 'Identificador o dirección de la imagen.',
       }),
       campo({
         nombre: 'companeroUid',
-        etiqueta: 'Identificador de tu companero',
+        etiqueta: 'Identificador de tu compañero',
         requerido: true,
         pista: 'Cada quien ve el suyo en Mi Cuenta, pestana Seguridad.',
       }),
@@ -610,7 +620,7 @@ export function montarTorneos(
         pintarAviso(zonaAviso, {
           tono: 'exito',
           titulo: 'Equipo registrado',
-          detalle: 'Ahora inscribelo para ocupar su posicion en el arbol.',
+          detalle: 'Ahora inscríbelo para ocupar su posición en el árbol.',
         });
         await abrir(torneo.id);
       } catch (error) {
