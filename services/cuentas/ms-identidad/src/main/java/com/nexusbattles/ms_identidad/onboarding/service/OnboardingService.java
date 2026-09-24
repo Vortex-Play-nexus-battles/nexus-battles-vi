@@ -87,6 +87,15 @@ public class OnboardingService {
 
     @Transactional(readOnly = true)
     public OnboardingResponse estadoDe(UUID uid) {
+        return leerEstado(uid);
+    }
+
+    /**
+     * Sin anotacion de transaccion a proposito: la llaman {@link #estadoDe}
+     * (dentro de su transaccion de lectura) y {@link #solicitarReintento} (sin
+     * ninguna); cada consulta del repositorio abre la suya si hace falta.
+     */
+    private OnboardingResponse leerEstado(UUID uid) {
         if (uid == null) {
             return OnboardingResponse.noAplica();
         }
@@ -112,7 +121,7 @@ public class OnboardingService {
         jugadores.findById(uid)
                 .filter(alta -> admiteIntento(alta, PAUSA_MANUAL))
                 .ifPresent(alta -> lanzador.lanzar(uid));
-        return estadoDe(uid);
+        return leerEstado(uid);
     }
 
     /**

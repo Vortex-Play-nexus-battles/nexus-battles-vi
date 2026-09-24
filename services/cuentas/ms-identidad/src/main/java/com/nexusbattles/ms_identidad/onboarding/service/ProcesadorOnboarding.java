@@ -32,6 +32,7 @@ import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -135,13 +136,16 @@ public class ProcesadorOnboarding {
         LocalDateTime ahora = ahora();
         Integer tomado = enTransaccionPropia.execute(estado ->
                 jugadores.reclamar(uid, EstadoOnboarding.EN_PROCESO, RECLAMABLES, ahora, ahora.plus(TURNO)));
-        if (tomado == null || tomado == 0) {
+        if (!Integer.valueOf(1).equals(tomado)) {
             return Resultado.NO_TOMADO;
         }
-        OnboardingJugador alta = enTransaccionPropia.execute(estado -> jugadores.findById(uid).orElse(null));
-        if (alta == null) {
+        Optional<OnboardingJugador> leida = Optional
+                .ofNullable(enTransaccionPropia.execute(estado -> jugadores.findById(uid)))
+                .flatMap(encontrada -> encontrada);
+        if (leida.isEmpty()) {
             return Resultado.NO_TOMADO;
         }
+        OnboardingJugador alta = leida.get();
         Traza.abrir(alta.getTraza());
         try {
             Map<PasoOnboarding, OnboardingPaso> porPaso = pasosDe(uid);

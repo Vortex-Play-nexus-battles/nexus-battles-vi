@@ -23,7 +23,6 @@ import com.nexusbattles.ms_identidad.rbac.model.Action;
 import com.nexusbattles.ms_identidad.rbac.security.RequirePermission;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -41,20 +40,25 @@ public class AuthController {
 
     static final String TIPOS = "https://nexusbattles.upb.edu.co/errors/";
 
-    @Autowired
-    private RegistroService registroService;
+    private final RegistroService registroService;
+    private final LoginService loginService;
+    private final TokenCredencialService tokenCredencialService;
+    private final UsuarioRepository usuarioRepository;
+    private final AuditoriaDeCuenta auditoriaDeCuenta;
 
-    @Autowired
-    private LoginService loginService;
-
-    @Autowired
-    private TokenCredencialService tokenCredencialService;
-
-    @Autowired
-    private UsuarioRepository usuarioRepository;
-
-    @Autowired
-    private AuditoriaDeCuenta auditoriaDeCuenta;
+    // R17 — inyeccion por constructor (Sonar S6813): antes eran campos
+    // @Autowired, y cada dependencia nueva sumaba un aviso.
+    public AuthController(RegistroService registroService,
+                          LoginService loginService,
+                          TokenCredencialService tokenCredencialService,
+                          UsuarioRepository usuarioRepository,
+                          AuditoriaDeCuenta auditoriaDeCuenta) {
+        this.registroService = registroService;
+        this.loginService = loginService;
+        this.tokenCredencialService = tokenCredencialService;
+        this.usuarioRepository = usuarioRepository;
+        this.auditoriaDeCuenta = auditoriaDeCuenta;
+    }
 
     // Cambió de @RequestBody (JSON puro) a @ModelAttribute, porque ahora el
     // registro incluye un archivo (la foto de avatar), no solo texto.

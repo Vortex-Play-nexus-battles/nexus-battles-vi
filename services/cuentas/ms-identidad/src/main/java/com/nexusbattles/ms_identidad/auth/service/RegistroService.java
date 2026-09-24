@@ -13,7 +13,6 @@ import com.nexusbattles.ms_identidad.onboarding.service.OnboardingService;
 import com.nexusbattles.ms_identidad.onboarding.traza.Traza;
 import com.nexusbattles.ms_identidad.perfiles.service.PerfilUsuarioService;
 import com.nexusbattles.ms_identidad.rbac.service.RolService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,31 +27,36 @@ public class RegistroService {
     static final int MAX_EMAIL = 100;
     static final int MAX_NOMBRE = 255;
 
-    @Autowired
-    private UsuarioRepository usuarioRepository;
-
-    @Autowired
-    private ApodoBlacklistValidator apodoBlacklistValidator;
-
-    @Autowired
-    private PasswordPolicyValidator passwordPolicyValidator;
-
-    @Autowired
-    private RolService rolService;
-
-    @Autowired
-    private PerfilUsuarioService perfilUsuarioService;
-
-    @Autowired
-    private CorreoClient correoClient;
-
-    @Autowired
-    private AvatarStorageService avatarStorageService;
-
-    @Autowired
-    private OnboardingService onboardingService;
+    private final UsuarioRepository usuarioRepository;
+    private final ApodoBlacklistValidator apodoBlacklistValidator;
+    private final PasswordPolicyValidator passwordPolicyValidator;
+    private final RolService rolService;
+    private final PerfilUsuarioService perfilUsuarioService;
+    private final CorreoClient correoClient;
+    private final AvatarStorageService avatarStorageService;
+    private final OnboardingService onboardingService;
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
+    // R17 — inyeccion por constructor (Sonar S6813): antes eran campos
+    // @Autowired, y cada dependencia nueva sumaba un aviso.
+    public RegistroService(UsuarioRepository usuarioRepository,
+                           ApodoBlacklistValidator apodoBlacklistValidator,
+                           PasswordPolicyValidator passwordPolicyValidator,
+                           RolService rolService,
+                           PerfilUsuarioService perfilUsuarioService,
+                           CorreoClient correoClient,
+                           AvatarStorageService avatarStorageService,
+                           OnboardingService onboardingService) {
+        this.usuarioRepository = usuarioRepository;
+        this.apodoBlacklistValidator = apodoBlacklistValidator;
+        this.passwordPolicyValidator = passwordPolicyValidator;
+        this.rolService = rolService;
+        this.perfilUsuarioService = perfilUsuarioService;
+        this.correoClient = correoClient;
+        this.avatarStorageService = avatarStorageService;
+        this.onboardingService = onboardingService;
+    }
 
     @Transactional
     public Usuario registrarUsuario(RegistroRequest datos) {

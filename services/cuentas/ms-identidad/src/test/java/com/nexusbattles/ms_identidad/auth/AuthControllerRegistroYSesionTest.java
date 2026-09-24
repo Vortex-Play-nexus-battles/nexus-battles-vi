@@ -75,12 +75,8 @@ class AuthControllerRegistroYSesionTest {
         usuarioRepository = mock(UsuarioRepository.class);
         auditoria = mock(AuditoriaDeCuenta.class);
 
-        AuthController controlador = new AuthController();
-        ReflectionTestUtils.setField(controlador, "registroService", registroService);
-        ReflectionTestUtils.setField(controlador, "loginService", loginService);
-        ReflectionTestUtils.setField(controlador, "tokenCredencialService", mock(TokenCredencialService.class));
-        ReflectionTestUtils.setField(controlador, "usuarioRepository", usuarioRepository);
-        ReflectionTestUtils.setField(controlador, "auditoriaDeCuenta", auditoria);
+        AuthController controlador = new AuthController(registroService, loginService,
+                mock(TokenCredencialService.class), usuarioRepository, auditoria);
 
         jwtService = new JwtService(new ClavesDeFirma(""));
         ReflectionTestUtils.setField(jwtService, "horasExpiracion", 24);

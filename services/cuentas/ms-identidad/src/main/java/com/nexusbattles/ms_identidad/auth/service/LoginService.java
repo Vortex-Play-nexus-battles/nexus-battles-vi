@@ -17,7 +17,6 @@ import com.nexusbattles.ms_identidad.onboarding.auditoria.AuditoriaDeCuenta;
 import com.nexusbattles.ms_identidad.onboarding.service.OnboardingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,31 +37,36 @@ public class LoginService {
     // publique su contrato. Por ahora queda registrado localmente.
     private static final Logger auditLog = LoggerFactory.getLogger("AUDITORIA_LOGIN");
 
-    @Autowired
-    private UsuarioRepository usuarioRepository;
-
-    @Autowired
-    private DispositivoConocidoRepository dispositivoConocidoRepository;
-
-    @Autowired
-    private IntentosFallidosService intentosFallidosService;
-
-    @Autowired
-    private CorreoClient correoClient;
-
-    @Autowired
-    private JwtService jwtService;
-
-    @Autowired
-    private AuditoriaLoginClient auditoriaLoginClient;
-
-    @Autowired
-    private AuditoriaDeCuenta auditoriaDeCuenta;
-
-    @Autowired
-    private OnboardingService onboardingService;
+    private final UsuarioRepository usuarioRepository;
+    private final DispositivoConocidoRepository dispositivoConocidoRepository;
+    private final IntentosFallidosService intentosFallidosService;
+    private final CorreoClient correoClient;
+    private final JwtService jwtService;
+    private final AuditoriaLoginClient auditoriaLoginClient;
+    private final AuditoriaDeCuenta auditoriaDeCuenta;
+    private final OnboardingService onboardingService;
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
+    // R17 — inyeccion por constructor (Sonar S6813): antes eran campos
+    // @Autowired, y cada dependencia nueva sumaba un aviso.
+    public LoginService(UsuarioRepository usuarioRepository,
+                        DispositivoConocidoRepository dispositivoConocidoRepository,
+                        IntentosFallidosService intentosFallidosService,
+                        CorreoClient correoClient,
+                        JwtService jwtService,
+                        AuditoriaLoginClient auditoriaLoginClient,
+                        AuditoriaDeCuenta auditoriaDeCuenta,
+                        OnboardingService onboardingService) {
+        this.usuarioRepository = usuarioRepository;
+        this.dispositivoConocidoRepository = dispositivoConocidoRepository;
+        this.intentosFallidosService = intentosFallidosService;
+        this.correoClient = correoClient;
+        this.jwtService = jwtService;
+        this.auditoriaLoginClient = auditoriaLoginClient;
+        this.auditoriaDeCuenta = auditoriaDeCuenta;
+        this.onboardingService = onboardingService;
+    }
 
     @Transactional
     public LoginResponse iniciarSesion(LoginRequest datos, String direccionIp, String userAgent) {
