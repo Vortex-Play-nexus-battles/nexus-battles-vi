@@ -1,12 +1,19 @@
 openapi: 3.1.0
 info:
   title: Servicio de productos
-  version: 1.1.0
+  version: 1.2.0
   description: >
     Creación de productos del catálogo de THE NEXUS BATTLES VI
     (HU-PRD-001), reserva de tiraje (HU-PRD-002) y suspensión lógica
     con reactivación (HU-PRD-004). Contrato publicado antes de la
     implementación, conforme a la regla de plataforma "contrato primero".
+
+    1.2.0 (R16): se añade GET /api/v1/productos, el listado público y
+    paginado del catálogo. Existe porque la vitrina de ms-ecommerce leía
+    una tabla propia que nace vacía y no refleja este catálogo maestro; la
+    decisión de arquitectura es que la vitrina proyecte este catálogo, y
+    este listado es lo que consume para hacerlo. Cambio aditivo, por eso
+    sube la versión menor y no la mayor.
 
 servers:
   - url: /
@@ -34,6 +41,73 @@ paths:
               schema:
                 $ref: "#/components/schemas/DetalleDeProblema"
   /api/v1/productos:
+    get:
+      summary: Lista el catálogo de productos por páginas
+      operationId: listarProductosDelCatalogo
+      description: >
+        Endpoint público, sin autenticación, igual que la consulta por
+        identificador: cada elemento es el mismo detalle que devuelve
+        GET /api/v1/productos/{id}. Lo consume ms-ecommerce para que su
+        vitrina proyecte este catálogo maestro (R16).
+
+        Por omisión solo se listan los productos que se pueden mostrar y
+        comprar, en estado ACTIVO o UNICO; un producto SUSPENDIDO nunca
+        aparece por omisión y solo se obtiene pidiéndolo de forma explícita
+        con estado=SUSPENDIDO. El orden es estable entre páginas: fecha de
+        creación ascendente y, a igualdad, identificador ascendente, de modo
+        que un producto nuevo se añade al final y no desplaza las páginas
+        ya leídas.
+
+        Enrutamiento: en el borde de desarrollo el GET exacto de esta ruta
+        se reparte hoy a la vitrina de ms-ecommerce (issue #421), así que
+        este listado se consume llamando directamente al servicio.
+      parameters:
+        - name: page
+          in: query
+          required: false
+          description: Número de página, empezando en 0.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          required: false
+          description: Cantidad de productos por página, entre 1 y 50.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: tipo
+          in: query
+          required: false
+          description: Si se envía, solo se listan productos de ese tipo.
+          schema:
+            $ref: "#/components/schemas/TipoProducto"
+        - name: estado
+          in: query
+          required: false
+          description: >
+            Si se envía, solo se listan productos en ese estado, incluido
+            SUSPENDIDO. Si se omite, se listan los estados ACTIVO y UNICO.
+          schema:
+            $ref: "#/components/schemas/EstadoProducto"
+      responses:
+        "200":
+          description: Página del catálogo con sus metadatos de paginación
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginaDeProductos"
+        "400":
+          description: >
+            Parámetros inválidos: page negativo, size fuera de 1..50, o un
+            tipo o estado que no pertenece a su enumeración.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
     post:
       summary: Crea un producto en el catálogo
       operationId: crearProducto
@@ -600,6 +674,43 @@ components:
             modificadoEn:
               type: string
               format: date-time
+
+    PaginaDeProductos:
+      type: object
+      description: >
+        Una página del listado del catálogo (GET /api/v1/productos). Cada
+        elemento de content tiene la misma forma que la respuesta de
+        GET /api/v1/productos/{id}.
+      required:
+        - content
+        - page
+        - size
+        - totalElements
+        - totalPages
+      properties:
+        content:
+          type: array
+          description: Productos de la página, en el orden estable del listado.
+          items:
+            $ref: "#/components/schemas/ProductoCreado"
+        page:
+          type: integer
+          minimum: 0
+          description: Número de la página devuelta, empezando en 0.
+        size:
+          type: integer
+          minimum: 1
+          maximum: 50
+          description: Tamaño de página aplicado.
+        totalElements:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Total de productos que cumplen el filtro, sumando todas las páginas.
+        totalPages:
+          type: integer
+          minimum: 0
+          description: Total de páginas para ese tamaño; vale 0 si no hay productos.
 
     DetalleDeProblema:
       type: object
