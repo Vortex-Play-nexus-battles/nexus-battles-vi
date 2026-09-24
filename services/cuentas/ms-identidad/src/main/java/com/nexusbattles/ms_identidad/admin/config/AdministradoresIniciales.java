@@ -7,10 +7,12 @@ import com.nexusbattles.ms_identidad.rbac.service.RolService;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.core.annotation.Order;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -74,8 +76,32 @@ public class AdministradoresIniciales implements CommandLineRunner {
     private final PerfilUsuarioService perfilUsuarioService;
     private final PasswordEncoder passwordEncoder;
 
+    /**
+     * El que usa Spring.
+     *
+     * El cifrador se construye aqui, no se inyecta. Este servicio NO publica
+     * un bean de {@code PasswordEncoder}: RegistroService, LoginService y
+     * TokenCredencialService crean cada uno el suyo con
+     * {@code new BCryptPasswordEncoder()}. Pedirlo por constructor compilaba,
+     * pasaba CI -- porque sin {@code ADMINS_INICIALES} este componente ni se
+     * construye -- y tumbaba el arranque en el primer entorno que SI define
+     * la variable, dejando la autenticacion del producto entero sin servicio.
+     * Se sigue la convencion del servicio en vez de introducir un bean global
+     * que cambiaria como se resuelve el cifrado para todo lo demas.
+     */
+    @Autowired
     public AdministradoresIniciales(
             @Value("${app.admins.iniciales:}") String configuracion,
+            UsuarioRepository usuarioRepository,
+            RolService rolService,
+            PerfilUsuarioService perfilUsuarioService) {
+        this(configuracion, usuarioRepository, rolService, perfilUsuarioService,
+                new BCryptPasswordEncoder());
+    }
+
+    /** Con cifrador explicito: lo usan las pruebas para no cifrar de verdad. */
+    AdministradoresIniciales(
+            String configuracion,
             UsuarioRepository usuarioRepository,
             RolService rolService,
             PerfilUsuarioService perfilUsuarioService,
