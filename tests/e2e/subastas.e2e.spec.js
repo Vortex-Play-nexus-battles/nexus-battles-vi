@@ -214,6 +214,11 @@ test.describe('Transferencia de propiedad al ganar una subasta (HU-SUB-004)', ()
     const servicio = await tokenDeServicio(api);
     // Idempotente por refId: repetir la corrida no duplica saldo.
     await acreditar(api, servicio, compradora, 500, `semilla-subasta-${COMPRADORA}`);
+    // La vendedora tambien necesita saldo: publicar cobra comision
+    // (CalculadorComisionPublicacion: 1 credito a 24H, 3 a 48H, 0 para el
+    // maestro de juego). Sin esto la publicacion falla al debitarla, y el fallo
+    // no diria nada sobre la transferencia.
+    await acreditar(api, servicio, vendedora, 100, `semilla-subasta-${VENDEDORA}`);
   });
 
   test.afterAll(async () => {
