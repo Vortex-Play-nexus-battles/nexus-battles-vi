@@ -90,6 +90,9 @@ export function nombreDelConcepto(concepto) {
     'recompensa-victoria': 'Recompensa por ganar',
     'recompensa-participacion': 'Recompensa por jugar',
     'inscripcion-torneo': 'Inscripción a un torneo',
+    // R17 — el abono con el que empieza toda cuenta nueva (ms-identidad lo
+    // pide a finanzas con este concepto al completar el alta).
+    'bono-registro': 'Créditos de bienvenida',
     'DEBITO-DIRECTO': 'Cobro',
     'CREDITO-PARTIDA': 'Créditos de una partida',
   };

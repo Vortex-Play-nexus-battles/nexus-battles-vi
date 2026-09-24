@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Preparando tu cuenta — NEXUS BATTLES VI</title>
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
+    <!-- Solo la lista vertical de pasos: lo demás sale del kit. -->
+    <link rel="stylesheet" href="./preparando.css" />
+  </head>
+  <body class="portal" data-vista="preparando">
+    <div data-cabecera-app></div>
+
+    <!-- R17 — lo que ve una cuenta recién creada mientras el servidor le da
+         sus créditos de bienvenida y su héroe inicial. Cada paso se pinta con
+         lo que el servidor dice que ya está hecho (`GET /auth/onboarding`):
+         aquí no se inventa ningún estado. -->
+    <main class="entrada">
+      <section class="entrada__identidad">
+        <h1 class="entrada__marca">
+          <picture>
+            <source
+              srcset="../../../../shared/ui-kit/marca/nexus-battles-vi.webp"
+              type="image/webp"
+            />
+            <img
+              class="entrada__logo"
+              src="../../../../shared/ui-kit/marca/nexus-battles-vi.png"
+              alt="Nexus Battles VI — Return of the Warriors"
+              width="1200"
+              height="600"
+              decoding="async"
+            />
+          </picture>
+        </h1>
+        <p class="entrada__lema">
+          Tu cuenta ya existe. Mientras la dejamos lista para jugar, esto es lo que recibes al
+          empezar.
+        </p>
+        <ul class="entrada__puntos">
+          <li class="entrada__punto">
+            <svg class="icono" aria-hidden="true">
+              <use href="../../../../shared/ui-kit/iconos/sprite.svg#moneda" />
+            </svg>
+            <span>Créditos de bienvenida para tus primeras batallas</span>
+          </li>
+          <li class="entrada__punto">
+            <svg class="icono" aria-hidden="true">
+              <use href="../../../../shared/ui-kit/iconos/sprite.svg#escudo" />
+            </svg>
+            <span>Un héroe inicial, ya equipado para entrar a una sala</span>
+          </li>
+          <li class="entrada__punto">
+            <svg class="icono" aria-hidden="true">
+              <use href="../../../../shared/ui-kit/iconos/sprite.svg#reloj" />
+            </svg>
+            <span>Si algo tarda, lo reintentamos por ti: no tienes que hacer nada</span>
+          </li>
+        </ul>
+      </section>
+
+      <section class="entrada__tarjeta" aria-labelledby="tituloAlta">
+        <div class="pila pila--ajustada">
+          <h2 class="entrada__titulo" id="tituloAlta" tabindex="-1" data-zona="titulo">
+            Preparando tu cuenta
+          </h2>
+          <p class="t-meta" role="status" data-zona="resumen">
+            Consultando el estado de tu cuenta…
+          </p>
+        </div>
+
+        <div class="progreso" data-zona="progreso">
+          <div class="progreso__cabecera">
+            <span class="progreso__etiqueta" id="etiquetaProgreso">Pasos listos</span>
+            <span class="progreso__valor" data-zona="valor-progreso">0 de 4</span>
+          </div>
+          <div
+            class="progreso__riel"
+            role="progressbar"
+            aria-labelledby="etiquetaProgreso"
+            aria-valuemin="0"
+            aria-valuemax="4"
+            aria-valuenow="0"
+            data-zona="riel-progreso"
+          >
+            <div class="progreso__relleno" data-zona="relleno-progreso"></div>
+          </div>
+        </div>
+
+        <ol class="alta-pasos" aria-label="Pasos de la preparación" data-zona="pasos"></ol>
+
+        <div class="aviso aviso--advertencia" hidden data-zona="aviso">
+          <div class="aviso__cuerpo">
+            <p class="aviso__titulo" data-zona="aviso-titulo"></p>
+            <p class="aviso__detalle" data-zona="aviso-detalle"></p>
+          </div>
+        </div>
+
+        <section class="alta-lista" hidden aria-labelledby="tituloListo" data-zona="listo">
+          <h3 class="t-subtitulo alta-lista__titulo" id="tituloListo" tabindex="-1">
+            ¡Tu cuenta está lista!
+          </h3>
+          <dl class="alta-lista__resumen" data-zona="resumen-listo"></dl>
+        </section>
+
+        <div class="acciones">
+          <a class="boton boton--primario boton--grande" hidden data-zona="empezar">
+            Empezar a jugar
+          </a>
+          <button type="button" class="boton boton--primario" hidden data-zona="reintentar">
+            Reintentar ahora
+          </button>
+          <a class="boton boton--secundario" hidden data-zona="continuar">
+            Entrar de todas formas
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./preparando.js"></script>
+  </body>
+</html>
