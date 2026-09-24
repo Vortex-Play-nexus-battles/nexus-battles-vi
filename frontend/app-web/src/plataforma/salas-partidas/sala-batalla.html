@@ -228,6 +228,7 @@
         leerEstadoInicial,
         suscripcionDePartida,
         participantesParaElPanel,
+        urlConPartida,
       } from './sala-batalla.js';
       import {
         urlDelCanal,
@@ -404,6 +405,17 @@
         }
       }
 
+      /**
+       * R17.4 — deja la partida en la direccion en cuanto se conoce, para que
+       * un F5 en pleno combate vuelva al combate. La ficha de la sala no basta:
+       * `GET /salas/{id}` devuelve hoy `idPartida` siempre nulo.
+       */
+      function anotarPartidaEnLaUrl() {
+        if (partida?.id) {
+          history.replaceState(history.state, '', urlConPartida(location.href, partida.id));
+        }
+      }
+
       // Vuelve al listado dejando dicho por que — una sola vez por pagina: al
       // anfitrion que cancela le llega el mismo hecho por su boton y por el
       // canal, y navegar dos veces aborta la primera navegacion.
@@ -471,6 +483,7 @@
             // modo de volver a la partida. La sala ya sabe cual es la suya.
             if (sala?.idPartida) {
               partida = await obtenerPartida(sala.idPartida);
+              anotarPartidaEnLaUrl();
               ocultarLoDeLaEspera();
             }
           } catch (error) {
@@ -542,6 +555,7 @@
                   return;
                 }
                 partida = iniciada;
+                anotarPartidaEnLaUrl();
                 // CA-03: en curso ya no se sale ni se cancela desde aqui.
                 ocultarLoDeLaEspera();
                 // CA-04 · este es el momento: el aviso trae el orden de
@@ -592,6 +606,7 @@
           // presentacion por encima de unos controles recien montados.
           if (!partida) {
             partida = iniciada;
+            anotarPartidaEnLaUrl();
             // CA-04 · quien pulsa «Iniciar combate» tambien asiste al
             // comienzo: el momento es este, no una recarga a mitad de combate.
             repintar(suscripcionActual(), {

@@ -47,6 +47,31 @@ export function suscripcionDePartida(cliente, idPartida) {
 }
 
 /**
+ * La direccion de esta misma vista con la partida anotada (`?partida=<id>`).
+ *
+ * R17.4 — la vista ya sabia recuperarse de una recarga en pleno combate si la
+ * URL traia `partida`, pero nadie la ponia: quien arrancaba el combate seguia
+ * en `?sala=<id>`, y un F5 le devolvia a la sala de espera con un «Iniciar
+ * combate» que el servidor ya rechaza (409). R18.6 intento lo mismo leyendo
+ * `idPartida` de la ficha de la sala, pero `GET /salas/{id}` lo devuelve
+ * siempre nulo (`SalaResponse.construir`): la prueba del profesor lo destapo.
+ * Se anota con `history.replaceState`, sin entrada nueva en el historial:
+ * «Atras» sigue llevando a donde estaba.
+ *
+ * Conserva el resto de la direccion (la sala, el hash) y no duplica la
+ * partida si ya estaba.
+ *
+ * @param {string} href direccion actual, absoluta
+ * @param {string} idPartida
+ * @returns {string} direccion absoluta con `partida`
+ */
+export function urlConPartida(href, idPartida) {
+  const url = new URL(href);
+  url.searchParams.set('partida', idPartida);
+  return url.href;
+}
+
+/**
  * Lee el estado que el servidor haya incrustado en la pagina.
  *
  * Este es el punto por el que entrara la partida cuando exista el endpoint:

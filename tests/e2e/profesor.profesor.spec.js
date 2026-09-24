@@ -515,6 +515,8 @@ test.describe('R17 · la prueba del profesor', () => {
         await expect(mia.locator('.barra-vida__nombre')).toHaveText(nombreDelHeroe);
         const vida = async (barra) => Number(await barra.getAttribute('aria-valuenow'));
         const alEmpezar = { mia: await vida(mia), rival: await vida(rival) };
+        // La partida queda en la dirección: un F5 vuelve al combate (R17.4).
+        await expect(page).toHaveURL(/[?&]partida=/);
 
         const resultado = page.locator('[data-zona="resultado"]');
         const ataque = page.locator('[data-zona="acciones"] [data-atacar]').first();
@@ -547,11 +549,12 @@ test.describe('R17 · la prueba del profesor', () => {
             golpes += 1;
             if (!recargada) {
               // Un F5 en pleno combate no devuelve a la sala de espera: la
-              // sala sabe cuál es su partida y la vista la vuelve a pintar
-              // (R18.6), sin «Iniciar combate» a la vista.
+              // vista vuelve a pintar la partida desde la dirección, sin
+              // «Iniciar combate» a la vista.
               await page.waitForTimeout(1_500);
               await page.reload();
               recargada = true;
+              await expect(page).toHaveURL(/[?&]partida=/);
               await expect(page.locator('[data-barra-vida]')).toHaveCount(2, { timeout: 30_000 });
               await expect(page.locator('[data-accion="iniciar-partida"]')).toBeHidden();
             }
