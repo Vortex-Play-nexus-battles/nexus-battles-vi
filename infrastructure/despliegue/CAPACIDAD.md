@@ -102,8 +102,9 @@ riesgo abierto.
 
 Por eso los perfiles dejan de ser el mecanismo normal. `ms-finanzas`,
 `ms-subastas`, `ms-ecommerce` y `ms-cumplimiento` pasan a `desplegableDev: true`.
-`ms-chatbot` no, pero ya no por memoria: no tiene credenciales de base de datos
-en el entorno `dev` (`MS_CHATBOT_DB_*`).
+`ms-chatbot` tambien (R16.22): no tenia credenciales de base de datos en el
+entorno `dev` (`MS_CHATBOT_DB_*`), y ahora `desplegar.sh` las genera en el propio
+host, como las credenciales de servicio.
 
 **Regla al desplegar, la misma que antes:** medir con `medir-jvm-dev.yml` antes
 y después. Si la RAM disponible baja de ~80 MiB y el swap crece deprisa, o un
