@@ -9,9 +9,9 @@
 # "build:"; se combina con docker-compose.yml + docker-compose.deploy.yml y
 # solo cuando ms-subastas viene en la corrida.
 #
-# CAPACIDAD: igual que ms-finanzas, servicios.json lo marca
-# desplegableDev:false mientras el host de plataforma siga con 135 MiB libres.
-# Ver infrastructure/despliegue/CAPACIDAD.md.
+# CAPACIDAD: desplegableDev:true desde R16.5, con el monton acotado de todas
+# las JVM del host (medicion y presupuesto en infrastructure/despliegue/
+# CAPACIDAD.md).
 
 services:
   subastas-db:

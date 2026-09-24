@@ -106,8 +106,9 @@ services:
       DIRECTORIO_ACTIVO_URL: ${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}
       DIRECTORIO_ACTIVO_CLIENT_ID: comentarios
       DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_COMENTARIOS:-}
-      # AUDITORIA_URL se queda sin poner: ms-cumplimiento no corre en el host
-      # de dev por capacidad (ver srv-salas-partidas). El asiento queda en la
+      # AUDITORIA_URL todavia sin poner: ms-cumplimiento corre en dev desde
+      # R16.5 (CAPACIDAD.md), y conectarle la auditoria es el paso siguiente
+      # de su vertical, con la credencial de servicio. El asiento queda en la
       # tabla comentario_moderacion, que es el rastro que exige la ficha, y
       # ademas en la bitacora como AUDITORIA_MODERACION.
 
@@ -121,9 +122,9 @@ services:
     environment:
       JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
       # M13: lista negra y sanciones en moderacion-sanciones (este host); el
-      # libro de creditos NO corre en dev (ver srv-salas-partidas): una
-      # inscripcion con costo > 0 responde 503 libro-no-disponible y un torneo
-      # gratuito (costo 0) funciona completo. Credencial propia (ADR-005).
+      # libro de creditos (ms-finanzas) corre en dev desde R16.5. Si no esta,
+      # una inscripcion con costo > 0 responde 503 libro-no-disponible y un
+      # torneo gratuito (costo 0) funciona completo. Credencial propia (ADR-005).
       LISTA_NEGRA_VERIFICAR_URL: ${LISTA_NEGRA_VERIFICAR_URL:-http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar}
       SANCIONES_URL: ${SANCIONES_URL:-http://srv-moderacion-sanciones:8086/api/v1}
       CREDITOS_URL: ${CREDITOS_URL:-http://srv-ms-finanzas:8093/api/v1}
@@ -141,11 +142,10 @@ services:
       # sale de la variable por servicio que genera desplegar.sh.
       DIRECTORIO_ACTIVO_CLIENT_ID: salas-partidas
       DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_SALAS_PARTIDAS:-}
-      # HU-JUE-014: el libro de creditos. ms-finanzas NO corre en el host de
-      # dev (no cabe en el t3.small sin sacrificar el MVP), asi que en dev
-      # toda sala con recompensa > 0 responde 503 creditos-no-disponibles y
-      # nada queda reservado; las salas sin recompensa no pasan por aqui. El
-      # dia que se despliegue, esta URL ya apunta a donde estara.
+      # HU-JUE-014: el libro de creditos. ms-finanzas corre en dev desde R16.5
+      # (montones acotados, ver CAPACIDAD.md). Si no responde, una sala con
+      # recompensa > 0 responde 503 creditos-no-disponibles y nada queda
+      # reservado; las salas sin recompensa no pasan por aqui.
       CREDITOS_URL: ${CREDITOS_URL:-http://srv-ms-finanzas:8093/api/v1}
       # HU-TOR-004 CA-04: la sala que es un encuentro de torneo informa el
       # ganador a torneos al terminar, con la credencial de arriba.
@@ -269,9 +269,9 @@ services:
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-admin-parametros:${TAG}
     environment:
       JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
-      # HU-AUD-001: ms-cumplimiento NO corre en el host de dev (capacidad);
-      # sin AUDITORIA_URL cada cambio queda en el historial local y en la
-      # bitacora. Cuando corra, apuntar aqui a su /admin/auditoria/eventos.
+      # HU-AUD-001: ms-cumplimiento corre en dev desde R16.5; apuntar esta URL
+      # a su /admin/auditoria/eventos es el paso siguiente de su vertical. Sin
+      # ella cada cambio queda en el historial local y en la bitacora.
       AUDITORIA_URL: ${AUDITORIA_URL:-}
       DIRECTORIO_ACTIVO_URL: ${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}
       DIRECTORIO_ACTIVO_CLIENT_ID: admin-parametros

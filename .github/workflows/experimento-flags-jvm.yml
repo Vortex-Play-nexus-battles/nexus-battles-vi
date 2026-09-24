@@ -197,8 +197,11 @@ jobs:
         if: always()
         run: docker compose -f tests/e2e/compose.yml -f tests/e2e/compose.variante.yml down -v --remove-orphans
 
-      - name: La suite E2E tiene que pasar con estos flags
-        if: steps.e2e.outcome != 'success'
+      # Solo los flags que se van a desplegar son compuerta. La linea base es
+      # la referencia: si su suite falla, es informacion para la tabla, no un
+      # motivo para frenar este cambio.
+      - name: La suite E2E tiene que pasar con los flags desplegados
+        if: steps.e2e.outcome != 'success' && matrix.variante == 'desplegados'
         run: |
           echo "::error::La suite E2E falló con los flags '${{ steps.variante.outputs.flags }}'."
           exit 1
