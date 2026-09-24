@@ -12,10 +12,14 @@ import org.springframework.stereotype.Service;
 @Service
 public class GestionarInventario {
 
-    private final RepositorioDeInventarios repositorio;
+    private static final String ESTADO_SUSPENDIDO = "SUSPENDIDO";
 
-    public GestionarInventario(RepositorioDeInventarios repositorio) {
+    private final RepositorioDeInventarios repositorio;
+    private final ResolutorDeProducto productos;
+
+    public GestionarInventario(RepositorioDeInventarios repositorio, ResolutorDeProducto productos) {
         this.repositorio = repositorio;
+        this.productos = productos;
     }
 
     public ElementoInventario crear(
@@ -36,6 +40,7 @@ public class GestionarInventario {
         if (tipo == TipoElementoInventario.ARMADURA && parteArmadura == null) {
             throw new IllegalArgumentException("La armadura debe declarar su parte");
         }
+        exigirProductoDelCatalogo(productoId, tipo);
         Inventario inventario = repositorio.buscarPorPropietario(propietarioId)
                 .orElseGet(() -> Inventario.vacio(propietarioId));
         ElementoInventario nuevo = new ElementoInventario(
@@ -66,6 +71,34 @@ public class GestionarInventario {
             throw new InventarioAjenoException();
         }
         repositorio.guardar(inventario.eliminarElemento(elementoId));
+    }
+
+    /**
+     * Un jugador solo tiene instancias de productos que existen en el
+     * catalogo: los productos los crea el rol disenador (RG-074, 29-jul) y el
+     * tipo lo manda el producto, no el formulario. Si productos no responde se
+     * rechaza: aceptar a ciegas es justo lo que dejo entrar "espada-corta".
+     */
+    private void exigirProductoDelCatalogo(String productoId, TipoElementoInventario tipo) {
+        ResolutorDeProducto.DetalleProducto producto;
+        try {
+            producto = productos.resolver(productoId);
+        } catch (ProductoNoEncontradoException e) {
+            throw new ProductoInexistenteException();
+        } catch (ResolutorDeProductoException e) {
+            throw new CatalogoNoDisponibleException(e);
+        }
+        // Una respuesta 200 sin tipo no describe un producto (p. ej. otra ruta
+        // del servicio de productos alcanzada con un id raro).
+        if (producto == null || producto.tipo() == null) {
+            throw new ProductoInexistenteException();
+        }
+        if (ESTADO_SUSPENDIDO.equals(producto.estado())) {
+            throw new ProductoSuspendidoException();
+        }
+        if (!tipo.name().equals(producto.tipo())) {
+            throw new TipoNoCoincideException();
+        }
     }
 
     private String exigirIdentidad(String identidad) {

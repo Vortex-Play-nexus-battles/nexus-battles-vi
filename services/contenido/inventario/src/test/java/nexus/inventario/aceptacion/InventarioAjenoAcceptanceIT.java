@@ -1,6 +1,8 @@
 package nexus.inventario.aceptacion;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -13,8 +15,10 @@ import java.util.Map;
 import java.util.HashMap;
 import com.nexusbattles.comun.seguridad.pruebas.EmisorDeTokensDePrueba;
 import nexus.inventario.api.ComoLlamador;
+import nexus.inventario.aplicacion.ResolutorDeProducto;
 import nexus.inventario.dominio.Inventario;
 import nexus.inventario.dominio.RepositorioDeInventarios;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +28,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.testcontainers.containers.MongoDBContainer;
@@ -50,6 +55,20 @@ class InventarioAjenoAcceptanceIT {
 
     @Autowired
     private RepositorioDeInventarios repositorio;
+
+    /**
+     * El inventario ahora verifica cada producto en el catalogo. Aqui el
+     * catalogo es un doble que dice que los productos de la prueba existen
+     * como ITEM activo: lo que se verifica es la propiedad, no el catalogo.
+     */
+    @MockitoBean
+    private ResolutorDeProducto productos;
+
+    @BeforeEach
+    void catalogoConLosProductosDeLaPrueba() {
+        when(productos.resolver(anyString()))
+                .thenReturn(new ResolutorDeProducto.DetalleProducto("Elemento", "ITEM", null, "ACTIVO"));
+    }
 
     @Test
     @DisplayName("crear siempre persiste en el inventario del jugador autenticado")

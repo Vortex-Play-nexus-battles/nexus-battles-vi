@@ -2,10 +2,12 @@ package nexus.inventario.aplicacion;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import nexus.inventario.dominio.ElementoInventario;
 import nexus.inventario.dominio.ElementoNoEncontradoException;
 import nexus.inventario.dominio.Inventario;
+import nexus.inventario.dominio.ParteArmadura;
 import nexus.inventario.dominio.TipoElementoInventario;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -15,11 +17,14 @@ class GestionarInventarioTest {
 
     private RepositorioInventariosEnMemoria repositorio;
     private GestionarInventario gestion;
+    private CatalogoDeProductosEnMemoria catalogo;
 
     @BeforeEach
     void preparar() {
         repositorio = new RepositorioInventariosEnMemoria();
-        gestion = new GestionarInventario(repositorio);
+        catalogo = new CatalogoDeProductosEnMemoria()
+                .registrar("producto-1", TipoElementoInventario.ITEM);
+        gestion = new GestionarInventario(repositorio, catalogo);
     }
 
     @Test
@@ -70,5 +75,96 @@ class GestionarInventarioTest {
     void elementoInexistente() {
         assertThrows(ElementoNoEncontradoException.class,
                 () -> gestion.modificarNombre("jugador-A", "elemento-inexistente", "Daga"));
+    }
+
+    // --- Solo productos del catalogo (RG-074: los items los crea el disenador) ---
+
+    @Test
+    @DisplayName("un producto del catalogo se agrega con el tipo que manda el catalogo")
+    void crearConProductoDelCatalogo() {
+        catalogo.registrar("arma-guerrero-tanque-espada-de-una-mano", TipoElementoInventario.ARMA);
+
+        ElementoInventario creado = gestion.crear("jugador-A",
+                "arma-guerrero-tanque-espada-de-una-mano", TipoElementoInventario.ARMA, "Mi espada");
+
+        assertEquals(TipoElementoInventario.ARMA, creado.tipo());
+        assertEquals("arma-guerrero-tanque-espada-de-una-mano", repositorio.buscarPorPropietario("jugador-A")
+                .orElseThrow().elementos().getFirst().productoId());
+    }
+
+    @Test
+    @DisplayName("un producto que no existe en el catalogo se rechaza y no se guarda nada")
+    void rechazarProductoInexistente() {
+        assertThrows(ProductoInexistenteException.class, () -> gestion.crear(
+                "jugador-A", "espada-corta", TipoElementoInventario.ARMA, "Espada inventada"));
+
+        assertTrue(repositorio.buscarPorPropietario("jugador-A").isEmpty());
+    }
+
+    @Test
+    @DisplayName("un producto suspendido en el catalogo no se puede agregar")
+    void rechazarProductoSuspendido() {
+        catalogo.registrar("item-retirado", TipoElementoInventario.ITEM, "SUSPENDIDO");
+
+        assertThrows(ProductoSuspendidoException.class, () -> gestion.crear(
+                "jugador-A", "item-retirado", TipoElementoInventario.ITEM, "Reliquia"));
+
+        assertTrue(repositorio.buscarPorPropietario("jugador-A").isEmpty());
+    }
+
+    @Test
+    @DisplayName("un producto unico del catalogo si se puede agregar")
+    void aceptarProductoUnico() {
+        catalogo.registrar("epica-unica", TipoElementoInventario.EPICA, "UNICO");
+
+        ElementoInventario creado = gestion.crear(
+                "jugador-A", "epica-unica", TipoElementoInventario.EPICA, "Golpe");
+
+        assertEquals(TipoElementoInventario.EPICA, creado.tipo());
+    }
+
+    @Test
+    @DisplayName("si el tipo pedido no es el del producto, se rechaza")
+    void rechazarTipoQueNoCoincide() {
+        catalogo.registrar("heroe-guerrero-tanque", TipoElementoInventario.HEROE);
+
+        assertThrows(TipoNoCoincideException.class, () -> gestion.crear(
+                "jugador-A", "heroe-guerrero-tanque", TipoElementoInventario.ARMA, "Heroe disfrazado"));
+
+        assertTrue(repositorio.buscarPorPropietario("jugador-A").isEmpty());
+    }
+
+    @Test
+    @DisplayName("la armadura de catalogo sigue exigiendo su parte")
+    void armaduraDeCatalogoConParte() {
+        catalogo.registrar("armadura-guerrero-tanque-defensa-del-enfurecido", TipoElementoInventario.ARMADURA);
+
+        ElementoInventario creado = gestion.crear("jugador-A",
+                "armadura-guerrero-tanque-defensa-del-enfurecido", TipoElementoInventario.ARMADURA,
+                "Peto", ParteArmadura.PECHO);
+
+        assertEquals(ParteArmadura.PECHO, creado.parteArmadura());
+    }
+
+    @Test
+    @DisplayName("si el servicio de productos no responde, no se acepta a ciegas")
+    void rechazarSiProductosNoResponde() {
+        catalogo.caer();
+
+        assertThrows(CatalogoNoDisponibleException.class, () -> gestion.crear(
+                "jugador-A", "producto-1", TipoElementoInventario.ITEM, "Amuleto"));
+
+        assertTrue(repositorio.buscarPorPropietario("jugador-A").isEmpty());
+    }
+
+    @Test
+    @DisplayName("una respuesta de productos sin tipo no es un producto: se trata como inexistente")
+    void respuestaSinTipoEsProductoInexistente() {
+        ResolutorDeProducto sinTipo = productoId ->
+                new ResolutorDeProducto.DetalleProducto(null, null, null, null);
+        GestionarInventario conRespuestaRara = new GestionarInventario(repositorio, sinTipo);
+
+        assertThrows(ProductoInexistenteException.class, () -> conRespuestaRara.crear(
+                "jugador-A", "estadisticas", TipoElementoInventario.ITEM, "Resumen"));
     }
 }

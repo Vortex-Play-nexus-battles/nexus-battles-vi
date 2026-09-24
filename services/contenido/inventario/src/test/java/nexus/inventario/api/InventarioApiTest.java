@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.util.UUID;
 import nexus.inventario.configuracion.IdentidadDelLlamador;
 import nexus.inventario.aplicacion.BuscarElementosInventario;
+import nexus.inventario.aplicacion.CatalogoDeProductosEnMemoria;
 import nexus.inventario.aplicacion.ConsultarElementoInventario;
 import nexus.inventario.aplicacion.ConsultarInventarioPaginado;
 import nexus.inventario.aplicacion.GestionarInventario;
@@ -31,13 +32,25 @@ class InventarioApiTest {
 
     private RepositorioInventariosEnMemoria repositorio;
     private GestionarInventario gestion;
+    private CatalogoDeProductosEnMemoria catalogo;
     private GestionarBloqueoSubasta gestionBloqueo;
     private MockMvc mvc;
 
     @BeforeEach
     void preparar() {
         repositorio = new RepositorioInventariosEnMemoria();
-        gestion = new GestionarInventario(repositorio);
+        // Los ids arbitrarios de estas pruebas existen en el catalogo de prueba
+        // con el tipo que cada una ya declaraba: lo que verifican no cambia.
+        catalogo = new CatalogoDeProductosEnMemoria()
+                .registrar("113609ca-3c15-42f5-b427-d452ce06f9a8", TipoElementoInventario.ITEM)
+                .registrar("producto-1", TipoElementoInventario.ITEM)
+                .registrar("producto-2", TipoElementoInventario.HEROE)
+                .registrar("producto-casco", TipoElementoInventario.ARMADURA)
+                .registrar("producto-armadura", TipoElementoInventario.ARMADURA)
+                .registrar("producto-bruma", TipoElementoInventario.ITEM)
+                .registrar("producto-solar", TipoElementoInventario.ARMA)
+                .registrar("producto-ajeno", TipoElementoInventario.ITEM);
+        gestion = new GestionarInventario(repositorio, catalogo);
         gestionBloqueo = new GestionarBloqueoSubasta(repositorio);
         mvc = MockMvcBuilders.standaloneSetup(
                         new InventarioController(
@@ -356,6 +369,7 @@ class InventarioApiTest {
     @DisplayName("GET entrega la vitrina en paginas de dieciseis del inventario propio")
     void consultarPaginaDeLaVitrina() throws Exception {
         for (int i = 0; i < 20; i++) {
+            catalogo.registrar("producto-" + i, TipoElementoInventario.ARMA);
             gestion.crear("jugador-A", "producto-" + i,
                     TipoElementoInventario.ARMA, "Espada " + i);
         }
@@ -435,5 +449,103 @@ class InventarioApiTest {
         mvc.perform(get("/api/v1/inventario/elementos/busqueda")
                         .param("criterio", "bruma"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    // --- Solo productos del catalogo (RG-074: los items los crea el disenador) ---
+
+    private org.springframework.test.web.servlet.ResultActions crearComoJugadorA(String cuerpo) throws Exception {
+        return mvc.perform(post("/api/v1/inventario/elementos")
+                .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(cuerpo));
+    }
+
+    @Test
+    @DisplayName("POST con un producto del catalogo crea el elemento con el tipo del producto")
+    void crearConProductoDelCatalogo() throws Exception {
+        catalogo.registrar("arma-guerrero-tanque-espada-de-una-mano", TipoElementoInventario.ARMA);
+
+        crearComoJugadorA("""
+                {"productoId":"arma-guerrero-tanque-espada-de-una-mano","tipo":"ARMA","nombrePropio":"Mi espada"}
+                """)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.productoId").value("arma-guerrero-tanque-espada-de-una-mano"))
+                .andExpect(jsonPath("$.tipo").value("ARMA"));
+    }
+
+    @Test
+    @DisplayName("POST con un producto que no esta en el catalogo responde 422 legible y no guarda nada")
+    void rechazarProductoInexistente() throws Exception {
+        crearComoJugadorA("""
+                {"productoId":"espada-corta","tipo":"ARMA","nombrePropio":"Espada inventada"}
+                """)
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.title").value("Producto inexistente"))
+                .andExpect(jsonPath("$.detail").value("El producto no existe en el catalogo."));
+
+        assertEquals(0, repositorio.buscarPorPropietario("jugador-A").stream().count());
+    }
+
+    @Test
+    @DisplayName("POST con un producto suspendido responde 409 con mensaje propio")
+    void rechazarProductoSuspendido() throws Exception {
+        catalogo.registrar("item-retirado", TipoElementoInventario.ITEM, "SUSPENDIDO");
+
+        crearComoJugadorA("""
+                {"productoId":"item-retirado","tipo":"ITEM","nombrePropio":"Reliquia"}
+                """)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Producto suspendido"))
+                .andExpect(jsonPath("$.detail").value(
+                        "El producto esta suspendido en el catalogo y no se puede agregar al inventario."));
+
+        assertEquals(0, repositorio.buscarPorPropietario("jugador-A").stream().count());
+    }
+
+    @Test
+    @DisplayName("POST con un tipo distinto al del producto responde 400 legible")
+    void rechazarTipoQueNoCoincide() throws Exception {
+        catalogo.registrar("heroe-guerrero-tanque", TipoElementoInventario.HEROE);
+
+        crearComoJugadorA("""
+                {"productoId":"heroe-guerrero-tanque","tipo":"ARMA","nombrePropio":"Heroe disfrazado"}
+                """)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Tipo no coincide"))
+                .andExpect(jsonPath("$.detail").value("El tipo no coincide con el producto del catalogo."));
+
+        assertEquals(0, repositorio.buscarPorPropietario("jugador-A").stream().count());
+    }
+
+    @Test
+    @DisplayName("POST con el servicio de productos caido responde 503 legible y no acepta a ciegas")
+    void rechazarSiProductosNoResponde() throws Exception {
+        catalogo.caer();
+
+        crearComoJugadorA("""
+                {"productoId":"producto-1","tipo":"ITEM","nombrePropio":"Amuleto"}
+                """)
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.title").value("Catalogo no disponible"))
+                .andExpect(jsonPath("$.detail").value(
+                        "No fue posible verificar el producto en el catalogo. Intenta nuevamente."));
+
+        assertEquals(0, repositorio.buscarPorPropietario("jugador-A").stream().count());
+    }
+
+    @Test
+    @DisplayName("PATCH no cambia el producto de un elemento aunque la peticion lo traiga")
+    void modificarNoCambiaElProducto() throws Exception {
+        ElementoInventario creado = gestion.crear(
+                "jugador-A", "producto-1", TipoElementoInventario.ITEM, "Amuleto");
+
+        mvc.perform(patch("/api/v1/inventario/elementos/{elementoId}", creado.id())
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"nombrePropio":"Amuleto nuevo","productoId":"espada-corta"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.productoId").value("producto-1"));
     }
 }
