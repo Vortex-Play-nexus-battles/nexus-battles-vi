@@ -6,6 +6,7 @@ import com.nexusbattles.ms_chatbot.chat.motor.model.CasoEvaluacion;
 import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import com.nexusbattles.ms_chatbot.chat.motor.model.EstadoVersion;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TemaConocimiento;
+import com.nexusbattles.ms_chatbot.chat.motor.model.EvaluacionVersion;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TipoRespuesta;
 import com.nexusbattles.ms_chatbot.chat.motor.model.VersionBaseConocimiento;
 import com.nexusbattles.ms_chatbot.chat.motor.repository.CasoEvaluacionRepository;
@@ -217,6 +218,53 @@ class EvaluacionBaseConocimientoServiceTest {
         verify(versionRepository, never()).saveAndFlush(any());
     }
 
+    // ------------------------------------------------------------- vigilar
+
+    // Produccion perdio el tema de contrasena respecto a su evaluacion
+    // anterior (3 de 3): ahora acierta 2 de 3 -> degradada.
+    @Test
+    void vigilarProduccion_conTasaMenorQueLaAnterior_laMarcaDegradada() {
+        when(versionRepository.findByEstado(EstadoVersion.PRODUCCION)).thenReturn(Optional.of(produccion));
+        when(casoRepository.findByActivoTrue()).thenReturn(casosDePrueba());
+        when(evaluacionRepository.findFirstByVersionIdOrderByFechaDesc(produccion.getId()))
+            .thenReturn(Optional.of(EvaluacionVersion.registrar(produccion, 3, 3, ANTES)));
+        when(temaRepository.findByVersionIdOrderByTituloAsc(produccion.getId()))
+            .thenReturn(List.of(temasDeProduccion.get(0)));
+
+        Optional<VigilanciaProduccion> vigilancia = servicio.vigilarProduccion();
+
+        assertThat(vigilancia).isPresent();
+        assertThat(vigilancia.get().degradada()).isTrue();
+        assertThat(vigilancia.get().tasaAnterior()).isEqualTo(1.0);
+        assertThat(vigilancia.get().evaluacion().aciertos()).isEqualTo(2);
+        verify(evaluacionRepository).save(any());
+    }
+
+    @Test
+    void vigilarProduccion_sinEvaluacionAnterior_noEsDegradada() {
+        when(versionRepository.findByEstado(EstadoVersion.PRODUCCION)).thenReturn(Optional.of(produccion));
+        when(casoRepository.findByActivoTrue()).thenReturn(casosDePrueba());
+        when(evaluacionRepository.findFirstByVersionIdOrderByFechaDesc(produccion.getId()))
+            .thenReturn(Optional.empty());
+        when(temaRepository.findByVersionIdOrderByTituloAsc(produccion.getId())).thenReturn(temasDeProduccion);
+
+        Optional<VigilanciaProduccion> vigilancia = servicio.vigilarProduccion();
+
+        assertThat(vigilancia).isPresent();
+        assertThat(vigilancia.get().degradada()).isFalse();
+        assertThat(vigilancia.get().tasaAnterior()).isNull();
+        assertThat(vigilancia.get().evaluacion().aciertos()).isEqualTo(3);
+    }
+
+    @Test
+    void vigilarProduccion_sinCasosActivos_noEvaluaNada() {
+        when(versionRepository.findByEstado(EstadoVersion.PRODUCCION)).thenReturn(Optional.of(produccion));
+        when(casoRepository.findByActivoTrue()).thenReturn(List.of());
+
+        assertThat(servicio.vigilarProduccion()).isEmpty();
+        verify(evaluacionRepository, never()).save(any());
+    }
+
     // -------------------------------------------------------------- ayudas
 
     // Casos: dos preguntas que la base sabe responder y una que debe escalar.
@@ -229,6 +277,13 @@ class EvaluacionBaseConocimientoServiceTest {
             conId(CasoEvaluacion.nuevo(PREGUNTA_FUERA_DE_ALCANCE, null))));
         when(temaRepository.findByVersionIdOrderByTituloAsc(produccion.getId())).thenReturn(temasDeProduccion);
         when(temaRepository.findByVersionIdOrderByTituloAsc(candidata.getId())).thenReturn(temasDeCandidata);
+    }
+
+    private static List<CasoEvaluacion> casosDePrueba() {
+        return List.of(
+            conId(CasoEvaluacion.nuevo(PREGUNTA_PUJAS, "clave-pujas")),
+            conId(CasoEvaluacion.nuevo(PREGUNTA_CONTRASENA, "clave-contrasena")),
+            conId(CasoEvaluacion.nuevo(PREGUNTA_FUERA_DE_ALCANCE, null)));
     }
 
     private List<TemaConocimiento> copiasEnCandidata(List<TemaConocimiento> temas) {

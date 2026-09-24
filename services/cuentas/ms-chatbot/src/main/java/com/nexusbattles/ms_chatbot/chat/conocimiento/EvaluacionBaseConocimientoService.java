@@ -20,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 // HU-CHA-012 (RF-CHA-014): el "reentrenamiento" del chatbot.
 //
@@ -30,6 +31,8 @@ import java.util.List;
 //                 produccion y retira la vigente.
 //   revertir   -> vuelve a poner en produccion la version que estuvo justo
 //                 antes de la actual.
+//   vigilar    -> evaluacion periodica de produccion para detectar desempeno
+//                 degradado (VigilanciaBaseConocimientoTarea).
 //
 // El motor lee la version en produccion en cada mensaje, asi que un
 // despliegue o una reversion rigen desde el mensaje siguiente.
@@ -92,6 +95,26 @@ public class EvaluacionBaseConocimientoService {
 
         cambiarProduccion(actual, anterior, Instant.now());
         return anterior;
+    }
+
+    // Evalua la version en produccion y la compara con su evaluacion
+    // anterior. La version no cambia sola, pero su desempeno si puede bajar:
+    // al agregarse casos con preguntas reales, o al cambiar el codigo del
+    // motor. Vacio si no hay casos activos (no hay nada que medir).
+    @Transactional
+    public Optional<VigilanciaProduccion> vigilarProduccion() {
+        VersionBaseConocimiento produccion = requerirProduccion();
+        List<CasoEvaluacion> casos = casoRepository.findByActivoTrue();
+        if (casos.isEmpty()) {
+            return Optional.empty();
+        }
+
+        // Se lee ANTES de evaluar: despues, la mas reciente seria la nueva.
+        Double tasaAnterior = evaluacionRepository.findFirstByVersionIdOrderByFechaDesc(produccion.getId())
+            .map(EvaluacionVersion::tasaAcierto)
+            .orElse(null);
+
+        return Optional.of(VigilanciaProduccion.de(evaluar(produccion, casos, Instant.now()), tasaAnterior));
     }
 
     // Un caso se acierta si el motor responde con el tema esperado o, si se
