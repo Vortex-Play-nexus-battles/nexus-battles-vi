@@ -56,20 +56,31 @@ public class SistemaController {
                 .map(entrada -> estadoDe(entrada, ahora))
                 .toList();
 
-        long operativos = estados.stream().filter(e -> EstadoDeServicio.OPERATIVO.equals(e.estado())).count();
-        long caidos = estados.stream().filter(e -> EstadoDeServicio.CAIDO.equals(e.estado())).count();
-        long fuera = estados.stream().filter(e -> EstadoDeServicio.NO_DESPLEGADO.equals(e.estado())).count();
-
-        return new RespuestaDelSistema(estados, (int) operativos, (int) caidos, (int) fuera, ahora);
+        return new RespuestaDelSistema(
+                estados,
+                estados.size(),
+                cuantos(estados, EstadoDeServicio.OPERATIVO),
+                cuantos(estados, EstadoDeServicio.CAIDO),
+                cuantos(estados, EstadoDeServicio.NO_DESPLEGADO),
+                cuantos(estados, EstadoDeServicio.NO_OBSERVABLE),
+                ahora);
     }
 
     private EstadoDeServicio estadoDe(Map.Entry<String, String> entrada, Instant ahora) {
         String servicio = entrada.getKey();
         String url = entrada.getValue();
 
-        if (url == null || url.isBlank() || ConfiguracionDelSistema.NO_DESPLEGADO.equalsIgnoreCase(url.trim())) {
+        String valor = url == null ? "" : url.trim();
+
+        if (valor.isEmpty() || ConfiguracionDelSistema.NO_DESPLEGADO.equalsIgnoreCase(valor)) {
             return new EstadoDeServicio(servicio, EstadoDeServicio.NO_DESPLEGADO,
                     "Fuera del host por capacidad medida; su imagen se publica y se despliega a demanda.",
+                    ahora);
+        }
+
+        if (ConfiguracionDelSistema.NO_OBSERVABLE.equalsIgnoreCase(valor)) {
+            return new EstadoDeServicio(servicio, EstadoDeServicio.NO_OBSERVABLE,
+                    "Desplegado en otro host, sin camino privado desde aqui. Responde por el borde.",
                     ahora);
         }
 
@@ -81,17 +92,27 @@ public class SistemaController {
                 comprobacion.instante());
     }
 
+    private static int cuantos(List<EstadoDeServicio> estados, String estado) {
+        return (int) estados.stream().filter(e -> estado.equals(e.estado())).count();
+    }
+
     /**
-     * @param servicios     uno por servicio, en el orden de la configuracion
-     * @param operativos    cuantos responden
-     * @param caidos        cuantos deberian responder y no lo hacen
-     * @param noDesplegados cuantos estan fuera a proposito
-     * @param instante      cuando se hizo esta ronda
+     * @param servicios      uno por servicio, en el orden de la configuracion
+     * @param total          cuantos hay en el catalogo; la consola lo ensena y
+     *                       sin el tendria que sumarlo por su cuenta, que es
+     *                       como acaban dos pantallas dando cifras distintas
+     * @param operativos     cuantos responden
+     * @param caidos         cuantos deberian responder y no lo hacen
+     * @param noDesplegados  cuantos estan fuera del host a proposito
+     * @param noObservables  cuantos viven en otro host y no se alcanzan
+     * @param instante       cuando se hizo esta ronda
      */
     public record RespuestaDelSistema(
             List<EstadoDeServicio> servicios,
+            int total,
             int operativos,
             int caidos,
             int noDesplegados,
+            int noObservables,
             Instant instante) { }
 }
