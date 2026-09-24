@@ -51,17 +51,21 @@ nada: es el «reposo mayor que el pico» que se anotó el 23-sep.
 
 ### El experimento: mismos servicios, mismo `mem_limit`, flags distintos
 
-`experimento-flags-jvm.yml`, corrida 35946114614. Levanta el banco E2E dos
+`experimento-flags-jvm.yml`, corridas 35946114614 y 35949136685. Levanta el banco E2E dos
 veces, con el `mem_limit` de dev en las dos, y pasa la suite E2E entera como
 carga. Mide la memoria anónima del cgroup, que es la que no se puede soltar y
 acaba en swap.
 
-| | línea base `-XX:MaxRAMPercentage=70 -XX:+UseSerialGC` | desplegados (`docker-compose.deploy.yml`) |
-|---|--:|--:|
-| memoria anónima en reposo, 21 contenedores | 3510 MiB | **3067 MiB (−443, −12,6 %)** |
-| memoria anónima tras la suite E2E | 4014 MiB | **3289 MiB (−725, −18 %)** |
-| arranque del banco entero | 135 s | 112 s |
-| suite E2E | 100/101 (falla `recompensa-por-partida` por tiempo, también en el reintento) | **101/101** |
+| Corrida | | línea base `-XX:MaxRAMPercentage=70 -XX:+UseSerialGC` | desplegados (`docker-compose.deploy.yml`) |
+|---|---|--:|--:|
+| 1 | memoria anónima en reposo, 21 contenedores | 3510 MiB | **3067 MiB (−443, −12,6 %)** |
+| 1 | memoria anónima tras la suite E2E | 4014 MiB | **3289 MiB (−725, −18 %)** |
+| 1 | arranque del banco entero · suite E2E | 135 s · 100/101 (`recompensa-por-partida` por tiempo) | 112 s · 101/101 |
+| 2 | memoria anónima en reposo | 3568 MiB | **3134 MiB (−434, −12,2 %)** |
+| 2 | memoria anónima tras la suite E2E | 3881 MiB | **3347 MiB (−534, −13,8 %)** |
+| 2 | arranque del banco entero · suite E2E | 118 s · 101/101 | 120 s · 101/101 |
+
+Lo que se repite en las dos corridas es la memoria: −12 % en reposo y entre −14 % y −18 % tras la carga. El tiempo de arranque **no** cambia de forma apreciable (135→112 s en una, 118→120 s en la otra: ruido del runner), y el fallo de la línea base en la primera corrida fue de tiempo en una partida contra la IA, que en la segunda pasó.
 
 Flags desplegados: `-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1
 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError`.
@@ -91,9 +95,10 @@ Cabe entero, con un swap parecido al de hoy (≈ 1,1 GiB) y **tres servicios
 más**. El swap no es el problema mientras lo que está en uso quepa en RAM, y con
 el montón acotado y sin C2 lo que una JVM ociosa toca es poco. Lo que sí tumbó
 el host el 24-sep fue el **arranque simultáneo** tras un reinicio: Docker
-levanta todos los contenedores a la vez, sin respetar `depends_on`. Con C1 el
-arranque pide menos CPU y menos memoria (−17 % de tiempo en el banco), pero la
-tormenta sigue existiendo: queda anotada como riesgo abierto.
+levanta todos los contenedores a la vez, sin respetar `depends_on`. Con el
+montón acotado cada arranque pide menos memoria, pero el experimento no muestra
+un arranque más rápido, y la tormenta sigue existiendo: queda anotada como
+riesgo abierto.
 
 Por eso los perfiles dejan de ser el mecanismo normal. `ms-finanzas`,
 `ms-subastas`, `ms-ecommerce` y `ms-cumplimiento` pasan a `desplegableDev: true`.
