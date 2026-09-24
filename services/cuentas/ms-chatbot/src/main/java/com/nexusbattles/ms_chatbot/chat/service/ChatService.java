@@ -37,6 +37,10 @@ public class ChatService {
     @Transactional
     public Mensaje enviarMensaje(String identificadorSesion, boolean autenticado, String contenido,
                                  String adjuntoUrl, String tokenBearer) {
+        // HU-CHA-012: el "tiempo de respuesta" de las analiticas se mide desde
+        // que llega la pregunta hasta que la respuesta esta lista para guardar.
+        long inicio = System.nanoTime();
+
         Conversacion conversacion = obtenerOCrearConversacion(identificadorSesion, autenticado);
         conversacion.registrarActividad();
         Mensaje mensajeUsuario = new Mensaje(conversacion, Remitente.USUARIO, contenido, adjuntoUrl);
@@ -49,6 +53,8 @@ public class ChatService {
         String textoRespuesta = construirTextoRespuesta(resultado);
 
         Mensaje respuestaBot = new Mensaje(conversacion, Remitente.BOT, textoRespuesta, null);
+        respuestaBot.registrarDatosDeRespuesta(resultado.temaClave(), resultado.categoria(),
+            resultado.requiereEscalamiento(), milisegundosDesde(inicio));
         mensajeRepository.save(respuestaBot);
         return respuestaBot;
     }
@@ -89,6 +95,11 @@ public class ChatService {
             + " Preguntas relacionadas que podrían ayudarte: "
             + String.join(" | ", resultado.temasSugeridos())
             + ".";
+    }
+
+    private static int milisegundosDesde(long inicioNanos) {
+        long milisegundos = (System.nanoTime() - inicioNanos) / 1_000_000;
+        return (int) Math.min(milisegundos, Integer.MAX_VALUE);
     }
 
     @Transactional(readOnly = true)

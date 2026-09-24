@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_chatbot.chat.model;
 
+import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -49,11 +50,37 @@ public class Mensaje {
     @Column(name = "fecha_envio", nullable = false)
     private Instant fechaEnvio;
 
+    // HU-CHA-012 (analiticas, V4). Solo los llenan las respuestas del BOT;
+    // quedan en null en los mensajes del usuario y en los anteriores a V4.
+    @Column(name = "tema_clave", length = 80)
+    private String temaClave;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 40)
+    private Categoria categoria;
+
+    @Column
+    private Boolean escalado;
+
+    @Column(name = "tiempo_respuesta_ms")
+    private Integer tiempoRespuestaMs;
+
     public Mensaje(Conversacion conversacion, Remitente remitente, String contenido, String adjuntoUrl) {
         this.conversacion = conversacion;
         this.remitente = remitente;
         this.contenido = contenido;
         this.adjuntoUrl = adjuntoUrl;
         this.fechaEnvio = Instant.now();
+    }
+
+    // HU-CHA-012: lo que las analiticas necesitan saber de una respuesta del
+    // bot: que tema la respondio (null si se escalo o fue una consulta
+    // asistida), si se escalo y cuanto tardo en generarse.
+    public void registrarDatosDeRespuesta(String temaClave, Categoria categoria, boolean escalado,
+                                          int tiempoRespuestaMs) {
+        this.temaClave = temaClave;
+        this.categoria = categoria;
+        this.escalado = escalado;
+        this.tiempoRespuestaMs = tiempoRespuestaMs;
     }
 }
