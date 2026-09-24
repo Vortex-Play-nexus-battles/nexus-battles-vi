@@ -198,7 +198,7 @@ jobs:
         working-directory: infrastructure/red-balanceo/pruebas
         run: docker compose up -d --wait
 
-      - name: Comprobar el reparto de las 38 rutas
+      - name: Comprobar el reparto de las 41 rutas
         working-directory: infrastructure/red-balanceo/pruebas
         run: ./comprobar-rutas.sh
 

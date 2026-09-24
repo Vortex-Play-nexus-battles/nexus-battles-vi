@@ -100,6 +100,10 @@ comprobar GET  /api/v1/transacciones       "finanzas GET /api/v1/transacciones"
 comprobar GET  /api/v1/cofres/mios         "finanzas GET /api/v1/cofres/mios"
 comprobar GET  /api/v1/subastas            "subastas GET /api/v1/subastas"
 comprobar GET  /api/v1/mis-pujas           "subastas GET /api/v1/mis-pujas"
+# R16.22 — ms-chatbot no tenia location: caia en el 404 generico.
+comprobar GET  /api/v1/chat/historial      "chatbot GET /api/v1/chat/historial"
+comprobar POST /api/v1/chat/mensajes       "chatbot POST /api/v1/chat/mensajes"
+comprobar GET  /api/v1/chatbot/admin/analiticas "chatbot GET /api/v1/chatbot/admin/analiticas"
 
 echo
 echo "Carrito — ms-ecommerce vive bajo /ecommerce, el navegador no se entera"

@@ -327,6 +327,47 @@ sed -i "s#^DIRECTORIO_ACTIVO_URL=.*#DIRECTORIO_ACTIVO_URL=${EMISOR_ADR_005}#" .e
 # viaja en "envs:". Comprobado cruzando las tres listas.
 export DIRECTORIO_ACTIVO_URL="$EMISOR_ADR_005"
 
+# Credencial de las bases que viven en ESTE host y que no tienen secret en
+# GitHub (R16.22). Hoy solo la de ms-chatbot: su Postgres (chatbot-db) nace en
+# este mismo host, dentro de la red de Compose, y nadie de fuera la usa. Su
+# contrasena no es algo que solo una persona pueda aportar: se puede generar,
+# igual que las credenciales de servicio de arriba. Se genera UNA vez, se
+# guarda en secretos-bases.env (600, fuera del .env efimero) y cada despliegue
+# reparte el mismo valor a la base y al servicio. Nunca se imprime.
+#
+# Un secret o una variable de GitHub con el mismo nombre, si algun dia existe,
+# manda sobre lo generado. Rotar = borrar la linea Y el volumen de la base:
+# Postgres solo toma POSTGRES_PASSWORD al inicializar el volumen.
+SECRETOS_BASES="$DIRECTORIO/secretos-bases.env"
+touch "$SECRETOS_BASES"
+chmod 600 "$SECRETOS_BASES"
+asegurar_credencial_de_base() {
+  # $1 prefijo (MS_CHATBOT)  $2 host  $3 puerto  $4 base  $5 usuario
+  local prefijo="$1" clave valor
+  for par_valor in "HOST=$2" "PORT=$3" "NAME=$4" "USER=$5" "PASSWORD="; do
+    clave="${prefijo}_DB_${par_valor%%=*}"
+    valor=$(eval "printf '%s' \"\${$clave:-}\"")
+    if [ -z "$valor" ]; then
+      valor=$(grep "^${clave}=" "$SECRETOS_BASES" | head -n1 | cut -d= -f2- || true)
+    fi
+    if [ -z "$valor" ]; then
+      valor="${par_valor#*=}"
+      if [ -z "$valor" ]; then
+        if command -v openssl >/dev/null 2>&1; then
+          valor=$(openssl rand -hex 24)
+        else
+          valor=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
+        fi
+        echo "  credencial de base generada para ${prefijo} (no se imprime)"
+      fi
+      echo "${clave}=${valor}" >> "$SECRETOS_BASES"
+    fi
+    export "${clave}=${valor}"
+    echo "${clave}=${valor}" >> .env
+  done
+}
+asegurar_credencial_de_base MS_CHATBOT chatbot-db 5432 chatbot_db chatbot
+
 echo "== 2) Guardando el tag estable actual de cada servicio, antes de tocarlo =="
 # Si el servicio ya estaba corriendo con algun tag, lo guardamos en un
 # archivo simple ANTES de sobreescribirlo. Si el servicio nunca se ha
