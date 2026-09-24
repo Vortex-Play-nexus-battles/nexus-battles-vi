@@ -1,12 +1,13 @@
 # Banco de pruebas del borde (M16A, red y balanceo).
 #
-# NO forma parte del despliegue. Levanta el `borde-dev.conf` REAL contra
-# servicios de mentira que se llaman igual que los de verdad, para poder
-# comprobar a que servicio y con que ruta llega cada peticion, sin desplegar
-# nada en la nube y sin gastar un centavo.
+# NO forma parte del despliegue. Levanta el `borde-dev.conf` REAL —con un solo
+# destino cambiado, el del catalogo, ver `borde-conf`— contra servicios de
+# mentira que se llaman igual que los de verdad, para poder comprobar a que
+# servicio y con que ruta llega cada peticion, sin desplegar nada en la nube y
+# sin gastar un centavo.
 #
 #   cd infrastructure/red-balanceo/pruebas
-#   docker compose up -d
+#   docker compose up -d --wait
 #   ./comprobar-rutas.sh          # o comprobar-rutas.ps1 en Windows
 #   docker compose down -v
 #
@@ -19,11 +20,16 @@
 # una regex) vivio dos semanas justamente porque su ruta no estaba aqui. Ahora
 # estan los once servicios que el borde enruta por nombre de contenedor.
 #
-# Lo que este banco NO puede cubrir: `heroes`, `inventario` y el catalogo de
-# `productos` por id, que desde el PR #611 apuntan al host de contenido por IP
-# (`34.193.90.11`). Una IP no se puede suplantar con un nombre de servicio de
-# Compose. Para esos tres hay un guardian aparte en `comprobar-rutas.sh` que
-# comprueba el fichero, no el trafico.
+# Lo que este banco NO puede cubrir: `heroes` e `inventario`, que desde el PR
+# #611 apuntan al host de contenido por IP (`34.193.90.11`). Una IP no se
+# puede suplantar con un nombre de servicio de Compose. Para esos dos hay un
+# guardian aparte en `comprobar-rutas.sh` que comprueba el fichero, no el
+# trafico.
+#
+# `productos` SI se prueba con trafico desde R16, gracias a `borde-conf` (mas
+# abajo): es la ruta que acaba de cambiar de dueno (#421) y un `grep` no dice
+# si una `location =` o una regex se la sigue quitando al catalogo. Solo lo
+# dice una peticion.
 services:
   srv-comentarios:
     image: nginx:1.27-alpine
@@ -103,30 +109,77 @@ services:
     volumes: [./eco.conf:/etc/nginx/conf.d/default.conf:ro]
     networks: [borde]
 
+  # R16 — adaptador del borde para el banco, el mismo mecanismo que
+  # `e2e-borde-conf` en tests/e2e/compose.yml (R8.2, #614).
+  #
+  # Hasta R16 el borde montaba el `borde-dev.conf` tal cual, y por eso el
+  # catalogo de productos no se podia probar con trafico: su destino es
+  # `34.193.90.11:8103`, y una peticion del banco salia de esta maquina hacia
+  # el host de contenido REAL. Mientras la ruta exacta la tenia ms-ecommerce
+  # daba igual. Ahora no: `GET /api/v1/productos` acaba de cambiar de dueno
+  # (#421) y es justo lo que hay que ver llegar.
+  #
+  # Este contenedor copia el fichero de verdad cambiando SOLO ese destino por
+  # el eco `srv-productos`, que escucha en 8080 (eco.conf). Todo lo demas —
+  # cada `location`, cada regex, su orden— es el fichero de despliegue sin
+  # tocar, y la comprobacion de que el fichero de verdad sigue apuntando a la
+  # IP la hace `comprobar-rutas.sh` contra el original, no contra esta copia.
+  #
+  # Falla cerrado: si la sustitucion no aplica (cambio la IP, cambio el
+  # puerto), el contenedor sale con error y el borde no arranca. Mejor un
+  # banco que no levanta que uno que habla con AWS.
+  borde-conf:
+    image: nginx:1.27-alpine
+    volumes:
+      - ../borde-dev.conf:/origen/borde-dev.conf:ro
+      - conf-del-borde:/salida
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        sed -e 's|34\.193\.90\.11:8103|srv-productos:8080|g' \
+            /origen/borde-dev.conf > /salida/default.conf
+        # Solo lineas efectivas: el fichero nombra la IP en sus comentarios.
+        if grep -v '^[[:space:]]*#' /salida/default.conf | grep -q '34\.193\.90\.11:8103'; then
+          echo "ADAPTACION INCOMPLETA: el catalogo sigue apuntando al host de contenido." >&2
+          exit 1
+        fi
+        grep -q 'srv-productos:8080' /salida/default.conf || {
+          echo "ADAPTACION INCOMPLETA: no aparece srv-productos:8080." >&2; exit 1; }
+        echo "Borde adaptado al banco: el catalogo de productos es el eco local."
+
   borde:
     image: nginx:1.27-alpine
     volumes:
-      # El fichero de verdad, sin copias ni recortes: si se edita, la
-      # siguiente corrida prueba lo editado.
-      - ../borde-dev.conf:/etc/nginx/conf.d/default.conf:ro
+      # La configuracion DERIVADA de `borde-conf`: el fichero de verdad con el
+      # destino del catalogo cambiado por el eco. Si se edita el original, la
+      # siguiente corrida lo vuelve a derivar y prueba lo editado.
+      - conf-del-borde:/etc/nginx/conf.d:ro
     ports:
       - '8099:80'
     networks: [borde]
     depends_on:
-      - srv-comentarios
-      - srv-torneos
-      - srv-salas-partidas
-      - srv-notificaciones
-      - srv-moderacion-sanciones
-      - srv-metricas-plataforma
-      - srv-admin-parametros
-      - srv-ms-identidad
-      - srv-ms-cumplimiento
-      - srv-ms-finanzas
-      - srv-ms-subastas
-      - srv-ms-ecommerce
-      - srv-productos
+      borde-conf: { condition: service_completed_successfully }
+      srv-comentarios: { condition: service_started }
+      srv-torneos: { condition: service_started }
+      srv-salas-partidas: { condition: service_started }
+      srv-notificaciones: { condition: service_started }
+      srv-moderacion-sanciones: { condition: service_started }
+      srv-metricas-plataforma: { condition: service_started }
+      srv-admin-parametros: { condition: service_started }
+      srv-ms-identidad: { condition: service_started }
+      srv-ms-cumplimiento: { condition: service_started }
+      srv-ms-finanzas: { condition: service_started }
+      srv-ms-subastas: { condition: service_started }
+      srv-ms-ecommerce: { condition: service_started }
+      srv-productos: { condition: service_started }
 
 networks:
   borde:
     driver: bridge
+
+# Efimero: `docker compose down -v` lo borra y la siguiente corrida deriva la
+# configuracion otra vez del `borde-dev.conf` actual.
+volumes:
+  conf-del-borde:
