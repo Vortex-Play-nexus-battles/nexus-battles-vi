@@ -95,6 +95,7 @@ export const SECCIONES_CONSOLA = Object.freeze([
   { id: 'parametros', etiqueta: 'Parámetros', vista: 'parametros-admin', icono: 'ajustes' },
   { id: 'metricas', etiqueta: 'Métricas', vista: 'panel-metricas', icono: 'grafico' },
   { id: 'tecnico', etiqueta: 'Técnico', vista: 'tablero-tecnico', icono: 'pulso' },
+  { id: 'chatbot', etiqueta: 'Asistente', vista: 'panel-chatbot', icono: 'chat' },
   { id: 'auditoria', etiqueta: 'Auditoría', vista: 'auditoria', icono: 'lista' },
 ]);
 

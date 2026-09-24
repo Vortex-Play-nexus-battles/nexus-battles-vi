@@ -1,0 +1,71 @@
+/* Panel de administración del asistente (HU-CHA-012). Solo lo propio de esta
+   vista; tarjetas, pestañas, campos y botones vienen del kit. */
+
+.panel-chatbot__filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--e-3);
+}
+
+.panel-chatbot__nota:empty {
+  display: none;
+}
+
+.panel-chatbot__cifras {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--e-4);
+}
+
+.panel-chatbot__grafica {
+  padding: var(--e-4);
+  background: var(--superficie);
+  border: 1px solid var(--borde-tenue);
+  border-radius: var(--radio);
+}
+
+.panel-chatbot__eje {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--e-2);
+}
+
+.grafica-tendencia {
+  display: block;
+  width: 100%;
+  height: 160px;
+}
+
+.grafica-tendencia__barra {
+  fill: var(--primaria-relleno);
+}
+
+.grafica-tendencia__barra:hover {
+  fill: var(--acento-relleno);
+}
+
+.grafica-tendencia__base {
+  stroke: var(--borde);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.tabla-panel {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--superficie);
+}
+
+.tabla-panel th,
+.tabla-panel td {
+  padding: var(--e-2) var(--e-3);
+  border-bottom: 1px solid var(--borde-tenue);
+  text-align: left;
+}
+
+.tabla-panel th {
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--texto-2);
+}

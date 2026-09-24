@@ -40,6 +40,7 @@ const DESCRIPCION = Object.freeze({
   parametros: 'Valores de juego y de plataforma en caliente.',
   metricas: 'Indicadores de uso y de negocio del Nexo.',
   tecnico: 'Salud de los servicios, latencia y errores.',
+  chatbot: 'Analíticas, base de conocimiento y versiones del asistente.',
   auditoria: 'Registro de toda acción administrativa.',
 });
 

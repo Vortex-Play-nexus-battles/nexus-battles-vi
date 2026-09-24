@@ -251,6 +251,14 @@ export const MATRIZ = Object.freeze({
     acceso: ACCESO.ADMINISTRACION,
     armazon: 'admin',
   },
+  // HU-CHA-012: panel del asistente (analíticas, base de conocimiento y
+  // reentrenamiento). Mismo nivel que exige el servicio en
+  // /api/v1/chatbot/admin/** (ADMINISTRADOR o SUPER_ADMINISTRADOR).
+  'panel-chatbot': {
+    ruta: 'cuentas/panel-chatbot.html',
+    acceso: ACCESO.ADMINISTRACION,
+    armazon: 'admin',
+  },
   // RF-RBAC-003: «exclusivamente al Super Administrador».
   'crear-cuenta-admin': {
     ruta: 'cuentas/crear-cuenta-admin.html',
