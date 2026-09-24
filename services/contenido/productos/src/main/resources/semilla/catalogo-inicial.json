@@ -1,0 +1,648 @@
+{
+  "descripcion": "Catalogo inicial de productos extraido literalmente de las reglas del curso. Precios: NO estan en el documento del curso (RF-ADM-03 dice que los fija el administrador); los de `preciosDemostracion` son decision del PO para la demo.",
+  "heroes": [
+    {
+      "tipo": "HEROE",
+      "nombre": "Guerrero Tanque",
+      "prototipo": "Guerrero Tanque",
+      "id": "heroe-guerrero-tanque",
+      "estadisticasNivel1": {
+        "poder": "10",
+        "vida": "44",
+        "defensa": "11",
+        "ataque": "10 + 1d6",
+        "daño": "1d4",
+        "sanar": "-"
+      },
+      "fuente": "Boveda/02-producto/reglas/heroes.md, Tabla 6"
+    },
+    {
+      "tipo": "HEROE",
+      "nombre": "Guerrero Armas",
+      "prototipo": "Guerrero Armas",
+      "id": "heroe-guerrero-armas",
+      "estadisticasNivel1": {
+        "poder": "8",
+        "vida": "44",
+        "defensa": "11",
+        "ataque": "10 + 1d6",
+        "daño": "1d6",
+        "sanar": "-"
+      },
+      "fuente": "Boveda/02-producto/reglas/heroes.md, Tabla 6"
+    },
+    {
+      "tipo": "HEROE",
+      "nombre": "Mago Fuego",
+      "prototipo": "Mago Fuego",
+      "id": "heroe-mago-fuego",
+      "estadisticasNivel1": {
+        "poder": "8",
+        "vida": "40",
+        "defensa": "10",
+        "ataque": "10 + 1d8",
+        "daño": "1d8",
+        "sanar": "-"
+      },
+      "fuente": "Boveda/02-producto/reglas/heroes.md, Tabla 6"
+    },
+    {
+      "tipo": "HEROE",
+      "nombre": "Mago Hielo",
+      "prototipo": "Mago Hielo",
+      "id": "heroe-mago-hielo",
+      "estadisticasNivel1": {
+        "poder": "10",
+        "vida": "40",
+        "defensa": "10",
+        "ataque": "10 + 1d8",
+        "daño": "1d6",
+        "sanar": "-"
+      },
+      "fuente": "Boveda/02-producto/reglas/heroes.md, Tabla 6"
+    },
+    {
+      "tipo": "HEROE",
+      "nombre": "Pícaro Veneno",
+      "prototipo": "Pícaro Veneno",
+      "id": "heroe-picaro-veneno",
+      "estadisticasNivel1": {
+        "poder": "8",
+        "vida": "36",
+        "defensa": "8",
+        "ataque": "10 + 1d10",
+        "daño": "1d6",
+        "sanar": "-"
+      },
+      "fuente": "Boveda/02-producto/reglas/heroes.md, Tabla 6"
+    },
+    {
+      "tipo": "HEROE",
+      "nombre": "Pícaro Machete",
+      "prototipo": "Pícaro Machete",
+      "id": "heroe-picaro-machete",
+      "estadisticasNivel1": {
+        "poder": "8",
+        "vida": "36",
+        "defensa": "8",
+        "ataque": "10 + 1d10",
+        "daño": "1d8",
+        "sanar": "-"
+      },
+      "fuente": "Boveda/02-producto/reglas/heroes.md, Tabla 6"
+    },
+    {
+      "tipo": "HEROE",
+      "nombre": "Chamán",
+      "prototipo": "Chamán",
+      "id": "heroe-chaman",
+      "estadisticasNivel1": {
+        "poder": "10",
+        "vida": "28",
+        "defensa": "4",
+        "ataque": "-",
+        "daño": "-",
+        "sanar": "6 + 1d6"
+      },
+      "fuente": "Boveda/02-producto/reglas/heroes.md, Tabla 6"
+    },
+    {
+      "tipo": "HEROE",
+      "nombre": "Médico",
+      "prototipo": "Médico",
+      "id": "heroe-medico",
+      "estadisticasNivel1": {
+        "poder": "10",
+        "vida": "28",
+        "defensa": "4",
+        "ataque": "-",
+        "daño": "-",
+        "sanar": "4 + 1d8"
+      },
+      "fuente": "Boveda/02-producto/reglas/heroes.md, Tabla 6"
+    }
+  ],
+  "armas": [
+    {
+      "tipo": "ARMA",
+      "nombre": "Espada de una mano",
+      "heroe": "Guerrero Tanque",
+      "grupo": "SET 1",
+      "efectos": "+1 al ataque, +1% de crítico al ataque",
+      "probabilidadCaida": "3%",
+      "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 8",
+      "id": "arma-guerrero-tanque-espada-de-una-mano"
+    },
+    {
+      "tipo": "ARMA",
+      "nombre": "Espada de dos manos",
+      "heroe": "Guerrero Armas",
+      "grupo": "SET 1",
+      "efectos": "+1 al ataque, +3% de crítico al ataque",
+      "probabilidadCaida": "1%",
+      "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 8",
+      "id": "arma-guerrero-armas-espada-de-dos-manos"
+    },
+    {
+      "tipo": "ARMA",
+      "nombre": "Escudo de dragón",
+      "heroe": "Guerrero Tanque",
+      "grupo": "SET 2",
+      "efectos": "+1 a la defensa",
+      "probabilidadCaida": "5%",
+      "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 8",
+      "id": "arma-guerrero-tanque-escudo-de-dragon"
+    },
+    {
+      "tipo": "ARMA",
+      "nombre": "Piedra de afilar",
+      "heroe": "Guerrero Armas",
+      "grupo": "SET 2",
+      "efectos": "+2 al daño",
+      "probabilidadCaida": "2%",
+      "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 8",
+      "id": "arma-guerrero-armas-piedra-de-afilar"
+    },
+    {
+      "tipo": "ARMA",
+      "nombre": "Orbe de manos ardientes",
+      "heroe": "Mago Fuego",
+      "grupo": "SET 1",
+      "efectos": "+1 al daño, +3% de crítico al ataque",
+      "probabilidadCaida": "1%",
+      "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 9",
+      "id": "arma-mago-fuego-orbe-de-manos-ardientes"
+    },
+    {
+      "tipo": "ARMA",
+      "nombre": "Báculo de Permafrost",
+      "heroe": "Mago Hielo",
+      "grupo": "SET 1",
+      "efectos": "-1 al daño del oponente, -2% de crítico al ataque del oponente",
+      "probabilidadCaida": "2%",
+      "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 9",
+      "id": "arma-mago-hielo-baculo-de-permafrost"
+    },
+    {
+      "tipo": "ARMA",
+      "nombre": "Fuego fatuo",
+      "heroe": "Mago Fuego",
+      "grupo": "SET 2",
+      "efectos": "+1 al ataque",
+      "probabilidadCaida": "3%",
+      "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 9",
+      "id": "arma-mago-fuego-fuego-fatuo"
+    },
+    {
+      "tipo": "ARMA",
+      "nombre": "Venas heladas",
+      "heroe": "Mago Hielo",
+      "grupo": "SET 2",
+      "efectos": "+1 al daño",
+      "probabilidadCaida": "5%",
+      "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 9",
+      "id": "arma-mago-hielo-venas-heladas"
+    },
+    {
+      "tipo": "ARMA",
+      "nombre": "Daga purulenta",
+      "heroe": "Pícaro Veneno",
+      "grupo": "SET 1",
+      "efectos": "+1 al daño por dos turnos, +3% de crítico al ataque",
+      "probabilidadCaida": "1%",
+      "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 10",
+      "id": "arma-picaro-veneno-daga-purulenta"
+    },
+    {
+      "tipo": "ARMA",
+      "nombre": "Machete vendito",
+      "heroe": "Pícaro Machete",
+      "grupo": "SET 1",
+      "efectos": "+2 al daño, +2% de crítico al ataque",
+      "probabilidadCaida": "1%",
+      "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 10",
+      "id": "arma-picaro-machete-machete-vendito"
+    },
+    {
+      "tipo": "ARMA",
+      "nombre": "Visión borrosa",
+      "heroe": "Pícaro Veneno",
+      "grupo": "SET 2",
+      "efectos": "-1 al ataque del oponente",
+      "probabilidadCaida": "4%",
+      "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 10",
+      "id": "arma-picaro-veneno-vision-borrosa"
+    },
+    {
+      "tipo": "ARMA",
+      "nombre": "Cierra sangrienta",
+      "heroe": "Pícaro Machete",
+      "grupo": "SET 2",
+      "efectos": "+2 al daño por dos turnos",
+      "probabilidadCaida": "1%",
+      "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 10",
+      "id": "arma-picaro-machete-cierra-sangrienta"
+    },
+    {
+      "tipo": "ARMA",
+      "nombre": "Raíz china",
+      "heroe": "Chamán",
+      "grupo": "SET 1",
+      "efectos": "+(2d4) de sanación",
+      "probabilidadCaida": "3%",
+      "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 11",
+      "id": "arma-chaman-raiz-china"
+    },
+    {
+      "tipo": "ARMA",
+      "nombre": "Kit de urgencias",
+      "heroe": "Médico",
+      "grupo": "SET 1",
+      "efectos": "+(2d6) de sanación",
+      "probabilidadCaida": "3%",
+      "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 11",
+      "id": "arma-medico-kit-de-urgencias"
+    },
+    {
+      "tipo": "ARMA",
+      "nombre": "Yerbabuena",
+      "heroe": "Chamán",
+      "grupo": "SET 2",
+      "efectos": "+2 de sanación por dos turnos",
+      "probabilidadCaida": "2%",
+      "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 11",
+      "id": "arma-chaman-yerbabuena"
+    },
+    {
+      "tipo": "ARMA",
+      "nombre": "Reanimador",
+      "heroe": "Médico",
+      "grupo": "SET 2",
+      "efectos": "+(4d6) de sanación",
+      "probabilidadCaida": "2%",
+      "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 11",
+      "id": "arma-medico-reanimador"
+    }
+  ],
+  "armaduras": [
+    {
+      "tipo": "ARMADURA",
+      "nombre": "Defensa del enfurecido",
+      "heroe": "Guerrero Tanque",
+      "grupo": "GEAR 1",
+      "efectos": "+2 a la defensa, +2 de vida",
+      "probabilidadCaida": "5%",
+      "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 12",
+      "parte": "Pecho",
+      "id": "armadura-guerrero-tanque-defensa-del-enfurecido"
+    },
+    {
+      "tipo": "ARMADURA",
+      "nombre": "Puño lúcido",
+      "heroe": "Guerrero Armas",
+      "grupo": "GEAR 1",
+      "efectos": "+2 a la defensa, +1 de vida",
+      "probabilidadCaida": "2%",
+      "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 12",
+      "parte": "Guantes",
+      "id": "armadura-guerrero-armas-puno-lucido"
+    },
+    {
+      "tipo": "ARMADURA",
+      "nombre": "Magma Ardiente",
+      "heroe": "Guerrero Tanque",
+      "grupo": "GEAR 2",
+      "efectos": "+2 a la defensa, +1 de vida",
+      "probabilidadCaida": "5%",
+      "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 12",
+      "parte": "Casco",
+      "id": "armadura-guerrero-tanque-magma-ardiente"
+    },
+    {
+      "tipo": "ARMADURA",
+      "nombre": "Puños en llamas",
+      "heroe": "Guerrero Armas",
+      "grupo": "GEAR 2",
+      "efectos": "+1 a la defensa, +1 de vida",
+      "probabilidadCaida": "2%",
+      "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 12",
+      "parte": "Brazaletes",
+      "id": "armadura-guerrero-armas-punos-en-llamas"
+    },
+    {
+      "tipo": "ARMADURA",
+      "nombre": "Túnica arcana",
+      "heroe": "Mago Fuego",
+      "grupo": "GEAR 1",
+      "efectos": "+1 a la defensa, +2 de vida",
+      "probabilidadCaida": "3%",
+      "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 13",
+      "parte": "Pecho",
+      "id": "armadura-mago-fuego-tunica-arcana"
+    },
+    {
+      "tipo": "ARMADURA",
+      "nombre": "Corona de hielo",
+      "heroe": "Mago Hielo",
+      "grupo": "GEAR 1",
+      "efectos": "+1 a la defensa, +1 de vida",
+      "probabilidadCaida": "5%",
+      "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 13",
+      "parte": "Casco",
+      "id": "armadura-mago-hielo-corona-de-hielo"
+    },
+    {
+      "tipo": "ARMADURA",
+      "nombre": "Caída de fuego",
+      "heroe": "Mago Fuego",
+      "grupo": "GEAR 2",
+      "efectos": "+1 a la defensa, +1 de vida",
+      "probabilidadCaida": "3%",
+      "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 13",
+      "parte": "Pantalón",
+      "id": "armadura-mago-fuego-caida-de-fuego"
+    },
+    {
+      "tipo": "ARMADURA",
+      "nombre": "Ventisca",
+      "heroe": "Mago Hielo",
+      "grupo": "GEAR 2",
+      "efectos": "+1 a la defensa, +2 de vida",
+      "probabilidadCaida": "5%",
+      "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 13",
+      "parte": "Pecho",
+      "id": "armadura-mago-hielo-ventisca"
+    },
+    {
+      "tipo": "ARMADURA",
+      "nombre": "Mano del desterrado",
+      "heroe": "Pícaro Veneno",
+      "grupo": "GEAR 1",
+      "efectos": "+2 a la defensa, +1 de vida",
+      "probabilidadCaida": "4%",
+      "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 14",
+      "parte": "Guantes",
+      "id": "armadura-picaro-veneno-mano-del-desterrado"
+    },
+    {
+      "tipo": "ARMADURA",
+      "nombre": "Pie de atleta",
+      "heroe": "Pícaro Machete",
+      "grupo": "GEAR 1",
+      "efectos": "+2 a la defensa, +1 de vida",
+      "probabilidadCaida": "1%",
+      "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 14",
+      "parte": "Zapatos",
+      "id": "armadura-picaro-machete-pie-de-atleta"
+    },
+    {
+      "tipo": "ARMADURA",
+      "nombre": "Atadura carmesí",
+      "heroe": "Pícaro Veneno",
+      "grupo": "GEAR 2",
+      "efectos": "+1 a la defensa, +2 de vida",
+      "probabilidadCaida": "3%",
+      "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 14",
+      "parte": "Pecho",
+      "id": "armadura-picaro-veneno-atadura-carmesi"
+    },
+    {
+      "tipo": "ARMADURA",
+      "nombre": "Sangre cruel",
+      "heroe": "Pícaro Machete",
+      "grupo": "GEAR 2",
+      "efectos": "+1 a la defensa, +1 de vida",
+      "probabilidadCaida": "5%",
+      "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 14",
+      "parte": "Brazaletes",
+      "id": "armadura-picaro-machete-sangre-cruel"
+    },
+    {
+      "tipo": "ARMADURA",
+      "nombre": "Piel de Caminante del Bosque",
+      "heroe": "Chamán",
+      "grupo": "GEAR 1",
+      "efectos": "+1 a la defensa, +2 de vida",
+      "probabilidadCaida": "4%",
+      "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 15",
+      "parte": "Pecho",
+      "id": "armadura-chaman-piel-de-caminante-del-bosque"
+    },
+    {
+      "tipo": "ARMADURA",
+      "nombre": "Bata de Cirujano",
+      "heroe": "Médico",
+      "grupo": "GEAR 1",
+      "efectos": "+1 a la defensa, +2 de vida",
+      "probabilidadCaida": "4%",
+      "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 15",
+      "parte": "Pecho",
+      "id": "armadura-medico-bata-de-cirujano"
+    },
+    {
+      "tipo": "ARMADURA",
+      "nombre": "Casco de Ecos Ancestrales",
+      "heroe": "Chamán",
+      "grupo": "GEAR 2",
+      "efectos": "+1 a la defensa, +2 de vida",
+      "probabilidadCaida": "2%",
+      "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 15",
+      "parte": "Casco",
+      "id": "armadura-chaman-casco-de-ecos-ancestrales"
+    },
+    {
+      "tipo": "ARMADURA",
+      "nombre": "Pantalón de Expedición Médica",
+      "heroe": "Médico",
+      "grupo": "GEAR 2",
+      "efectos": "+1 a la defensa, +2 de vida",
+      "probabilidadCaida": "2%",
+      "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 15",
+      "parte": "Pantalón",
+      "id": "armadura-medico-pantalon-de-expedicion-medica"
+    }
+  ],
+  "items": [
+    {
+      "tipo": "ITEM",
+      "nombre": "Pinchos de escudo",
+      "heroe": "Guerrero Tanque",
+      "grupo": "EQUIPMENT 1",
+      "efectos": "Si el ataque del oponente es menor que la defensa del guerrero, el oponente recibe +1 de daño.",
+      "probabilidadCaida": "20%",
+      "fuente": "Boveda/02-producto/reglas/items.md, Tabla 16",
+      "id": "item-guerrero-tanque-pinchos-de-escudo"
+    },
+    {
+      "tipo": "ITEM",
+      "nombre": "Empuñadura de Furia",
+      "heroe": "Guerrero Armas",
+      "grupo": "EQUIPMENT 1",
+      "efectos": "+1 de daño por dos turnos. Esto causa que el guerrero pierda -1 de vida en los mismos turnos.",
+      "probabilidadCaida": "10%",
+      "fuente": "Boveda/02-producto/reglas/items.md, Tabla 16",
+      "id": "item-guerrero-armas-empunadura-de-furia"
+    },
+    {
+      "tipo": "ITEM",
+      "nombre": "Anillo para Piro-explosión",
+      "heroe": "Mago Fuego",
+      "grupo": "EQUIPMENT 1",
+      "efectos": "+3 de daño",
+      "probabilidadCaida": "7%",
+      "fuente": "Boveda/02-producto/reglas/items.md, Tabla 17",
+      "id": "item-mago-fuego-anillo-para-piro-explosion"
+    },
+    {
+      "tipo": "ITEM",
+      "nombre": "Libro de la ventisca helada",
+      "heroe": "Mago Hielo",
+      "grupo": "EQUIPMENT 1",
+      "efectos": "+2 de daño",
+      "probabilidadCaida": "10%",
+      "fuente": "Boveda/02-producto/reglas/items.md, Tabla 17",
+      "id": "item-mago-hielo-libro-de-la-ventisca-helada"
+    },
+    {
+      "tipo": "ITEM",
+      "nombre": "Veneno lacerante",
+      "heroe": "Pícaro Veneno",
+      "grupo": "EQUIPMENT 1",
+      "efectos": "-1 al poder del oponente. Solo aplica cada dos turnos.",
+      "probabilidadCaida": "9%",
+      "fuente": "Boveda/02-producto/reglas/items.md, Tabla 18",
+      "id": "item-picaro-veneno-veneno-lacerante"
+    },
+    {
+      "tipo": "ITEM",
+      "nombre": "Mancuerna yugular",
+      "heroe": "Pícaro Machete",
+      "grupo": "EQUIPMENT 1",
+      "efectos": "Explota por 2 el valor en turno causado por la cierra sangrienta en el oponente.",
+      "probabilidadCaida": "8%",
+      "fuente": "Boveda/02-producto/reglas/items.md, Tabla 18",
+      "id": "item-picaro-machete-mancuerna-yugular"
+    },
+    {
+      "tipo": "ITEM",
+      "nombre": "Pluma sanadora",
+      "heroe": "Chamán",
+      "grupo": "EQUIPMENT 1",
+      "efectos": "Mejora la sanación multiplicando x2",
+      "probabilidadCaida": "10%",
+      "fuente": "Boveda/02-producto/reglas/items.md, Tabla 19",
+      "id": "item-chaman-pluma-sanadora"
+    },
+    {
+      "tipo": "ITEM",
+      "nombre": "Benditas",
+      "heroe": "Médico",
+      "grupo": "EQUIPMENT 1",
+      "efectos": "Sana las heridas por tres turnos o cura +1 por tres turnos",
+      "probabilidadCaida": "10%",
+      "fuente": "Boveda/02-producto/reglas/items.md, Tabla 19",
+      "id": "item-medico-benditas"
+    }
+  ],
+  "epicas": [
+    {
+      "tipo": "EPICA",
+      "nombre": "Golpe de defensa",
+      "heroe": "Guerrero Tanque",
+      "id": "epica-guerrero-tanque-golpe-de-defensa",
+      "efectoGeneral": "+1 al ataque",
+      "efectoPotenciado": "+4 al daño, +2% de crítico",
+      "probabilidadMaster": "0.04%",
+      "fuente": "Boveda/02-producto/reglas/epicas.md, Tabla 20: Habilidades Épicas de los Héroes"
+    },
+    {
+      "tipo": "EPICA",
+      "nombre": "Segundo impulso",
+      "heroe": "Guerrero Armas",
+      "id": "epica-guerrero-armas-segundo-impulso",
+      "efectoGeneral": "Recupera 1d4 de vida",
+      "efectoPotenciado": "+3 a la vida, +5% de crítico",
+      "probabilidadMaster": "0.01%",
+      "fuente": "Boveda/02-producto/reglas/epicas.md, Tabla 20: Habilidades Épicas de los Héroes"
+    },
+    {
+      "tipo": "EPICA",
+      "nombre": "Luz cegadora",
+      "heroe": "Mago Fuego",
+      "id": "epica-mago-fuego-luz-cegadora",
+      "efectoGeneral": "+1 a la vida",
+      "efectoPotenciado": "+2 al daño, +1% de crítico",
+      "probabilidadMaster": "0.03%",
+      "fuente": "Boveda/02-producto/reglas/epicas.md, Tabla 20: Habilidades Épicas de los Héroes"
+    },
+    {
+      "tipo": "EPICA",
+      "nombre": "Frio concentrado",
+      "heroe": "Mago Hielo",
+      "id": "epica-mago-hielo-frio-concentrado",
+      "efectoGeneral": "-1 de poder al oponente",
+      "efectoPotenciado": "No recibe ningún daño en el siguiente turno",
+      "probabilidadMaster": "0.05%",
+      "fuente": "Boveda/02-producto/reglas/epicas.md, Tabla 20: Habilidades Épicas de los Héroes"
+    },
+    {
+      "tipo": "EPICA",
+      "nombre": "Toma y lleva",
+      "heroe": "Pícaro Veneno",
+      "id": "epica-picaro-veneno-toma-y-lleva",
+      "efectoGeneral": "+1 al ataque",
+      "efectoPotenciado": "Disminuye a la mitad del daño causado por el oponente y se lo retorna",
+      "probabilidadMaster": "0.02%",
+      "fuente": "Boveda/02-producto/reglas/epicas.md, Tabla 20: Habilidades Épicas de los Héroes"
+    },
+    {
+      "tipo": "EPICA",
+      "nombre": "Intimidación sangrienta",
+      "heroe": "Pícaro Machete",
+      "id": "epica-picaro-machete-intimidacion-sangrienta",
+      "efectoGeneral": "+1 al daño",
+      "efectoPotenciado": "+2 a la vida, +2% de crítico",
+      "probabilidadMaster": "0.01%",
+      "fuente": "Boveda/02-producto/reglas/epicas.md, Tabla 20: Habilidades Épicas de los Héroes"
+    },
+    {
+      "tipo": "EPICA",
+      "nombre": "Té changua",
+      "heroe": "Chamán",
+      "id": "epica-chaman-te-changua",
+      "efectoGeneral": "No aplica",
+      "efectoPotenciado": "Sana a todos +(4d8)",
+      "probabilidadMaster": "0.1%",
+      "fuente": "Boveda/02-producto/reglas/epicas.md, Tabla 20: Habilidades Épicas de los Héroes"
+    },
+    {
+      "tipo": "EPICA",
+      "nombre": "Reanimador 3000",
+      "heroe": "Médico",
+      "id": "epica-medico-reanimador-3000",
+      "efectoGeneral": "No aplica",
+      "efectoPotenciado": "Se asocia con un compañero. Si este último fallece, se reanima con el 20% de su salud.",
+      "probabilidadMaster": "0.1%",
+      "fuente": "Boveda/02-producto/reglas/epicas.md, Tabla 20: Habilidades Épicas de los Héroes"
+    }
+  ],
+  "preciosDemostracion": {
+    "nota": "Decision del PO (Cesar Luna) del 23-sep-2026 para la demo del 24-sep; el curso no fija precios (RF-ADM-03: los fija el administrador). Editables despues por RF-ADM-09 / HU-PRD-003.",
+    "creditos": {
+      "HEROE": 1000,
+      "EPICA": 500,
+      "ARMA": 300,
+      "ARMADURA": 250,
+      "ITEM": 150
+    },
+    "cop": {
+      "HEROE": 20000,
+      "EPICA": 10000,
+      "ARMA": 6000,
+      "ARMADURA": 5000,
+      "ITEM": 3000
+    },
+    "tiraje": -1,
+    "premium": false
+  }
+}
