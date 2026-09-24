@@ -35,6 +35,15 @@ on:
         type: string
         required: false
         default: ""
+      # El perfil solo sabe encender. En un host donde cabe UN servicio de
+      # economia a la vez, sin esto la unica forma de probar el segundo era
+      # dejar los dos peleandose por la memoria (24-sep: swap al 100 % y
+      # ms-finanzas en 502 sin que ningun healthcheck fallara).
+      apagar:
+        description: "Servicios a APAGAR en dev ANTES de desplegar, separados por coma (ej: ms-ecommerce). Libera memoria. Conserva el volumen de datos."
+        type: string
+        required: false
+        default: ""
       # HU-CICD-002 CA-02: simulacro de reversion en dev. El servicio indicado
       # (uno de `servicios`) se despliega con la imagen buena pero con
       # SERVER_PORT movido a un puerto que nadie publica (ver desplegar.sh):
@@ -487,13 +496,35 @@ jobs:
         with:
           nombre-instancia: nexus-plataforma-dev
 
+      # Se apaga ANTES de copiar y desplegar: el sentido es hacerle sitio en
+      # memoria a lo que viene detras, no limpiar despues. El script viaja en
+      # el scp de abajo; si todavia no esta en el host, el paso avisa y sigue,
+      # que es preferible a abortar un despliegue por esto.
+      - name: Apagar servicios para hacer sitio
+        if: inputs.apagar != ''
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          SERVICIOS_APAGAR: ${{ inputs.apagar }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          envs: SERVICIOS_APAGAR
+          script: |
+            if [ ! -f /opt/nexus/scripts/cd/apagar.sh ]; then
+              echo "::warning::/opt/nexus/scripts/cd/apagar.sh todavia no esta en el host; se copia en este despliegue y sirve a partir del siguiente."
+              exit 0
+            fi
+            chmod +x /opt/nexus/scripts/cd/apagar.sh
+            SERVICIOS_APAGAR="$SERVICIOS_APAGAR" /opt/nexus/scripts/cd/apagar.sh
+
       - name: Copiar docker-compose.yml, docker-compose.deploy.yml y el script de despliegue
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/revertir.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -779,7 +810,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_CONTENIDO_DEV }}
           username: ${{ secrets.SSH_USER_CONTENIDO_DEV }}
           key: ${{ secrets.SSH_KEY_CONTENIDO_DEV }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -849,7 +880,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -972,7 +1003,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/revertir.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
 
