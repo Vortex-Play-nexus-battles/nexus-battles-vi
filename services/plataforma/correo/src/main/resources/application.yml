@@ -14,8 +14,8 @@ spring:
     #
     # Vacio por omision = sin autenticacion, que es lo que Mailpit necesita.
     # Un proveedor real se configura por entorno, sin tocar el codigo.
-    username: ${SMTP_USUARIO:}
-    password: ${SMTP_CLAVE:}
+    username: ${SMTP_USER:}
+    password: ${SMTP_PASSWORD:}
     properties:
       mail.smtp.auth: ${SMTP_AUTENTICA:false}
       # `enable` negocia STARTTLS si el servidor lo ofrece; `required` corta
