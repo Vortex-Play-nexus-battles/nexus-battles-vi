@@ -70,6 +70,20 @@ enConfiguracion() {
     fi
 }
 
+# fueraDeConfiguracion <descripcion> <patron grep -E>
+# Lo contrario: lo que NO puede volver a aparecer en las lineas efectivas del
+# fichero. Los comentarios no cuentan: el fichero explica, a proposito, lo que
+# hubo y por que se quito.
+fueraDeConfiguracion() {
+    local descripcion="$1" patron="$2"
+    if grep -v '^[[:space:]]*#' "$CONF" | grep -Eq "$patron"; then
+        printf '  FALLA %s\n        aparece en %s: %s\n' "$descripcion" "$CONF" "$patron"
+        fallos=$((fallos + 1))
+    else
+        printf '  ok    %s\n' "$descripcion"
+    fi
+}
+
 echo "Cuentas — identidad, cumplimiento, finanzas y subastas"
 comprobar POST /api/v1/auth/login          "identidad POST /api/v1/auth/login"
 comprobar GET  /api/v1/perfiles/yo         "identidad GET /api/v1/perfiles/yo"
@@ -86,6 +100,10 @@ comprobar GET  /api/v1/transacciones       "finanzas GET /api/v1/transacciones"
 comprobar GET  /api/v1/cofres/mios         "finanzas GET /api/v1/cofres/mios"
 comprobar GET  /api/v1/subastas            "subastas GET /api/v1/subastas"
 comprobar GET  /api/v1/mis-pujas           "subastas GET /api/v1/mis-pujas"
+# R16.22 — ms-chatbot no tenia location: caia en el 404 generico.
+comprobar GET  /api/v1/chat/historial      "chatbot GET /api/v1/chat/historial"
+comprobar POST /api/v1/chat/mensajes       "chatbot POST /api/v1/chat/mensajes"
+comprobar GET  /api/v1/chatbot/admin/analiticas "chatbot GET /api/v1/chatbot/admin/analiticas"
 
 echo
 echo "Carrito — ms-ecommerce vive bajo /ecommerce, el navegador no se entera"
@@ -96,14 +114,33 @@ comprobar POST /api/v1/carrito/items       "ecommerce POST /ecommerce/api/v1/car
 comprobar DELETE /api/v1/carrito/items/x   "ecommerce DELETE /ecommerce/api/v1/carrito/items/x"
 
 echo
-echo "Productos — prefijo compartido por dos servicios, repartido por metodo (#421)"
-comprobar GET  /api/v1/productos           "ecommerce GET /ecommerce/api/v1/productos"
-# El POST NO se prueba con trafico, a proposito: el `map $destino_productos`
-# lo manda a 34.193.90.11:8103, o sea al host de contenido REAL. Se comprobo al
-# escribir este guardian — la peticion salio de esta maquina y volvio con el
-# 401 de ms-productos en AWS, no con el eco. Es exactamente el mecanismo de
-# #614: el banco monta el `borde-dev.conf` de despliegue, con sus IP y todo.
-# Se comprueba en el fichero, mas abajo.
+echo "Productos — un prefijo, un dueno: el catalogo, para todos los metodos (#421)"
+# Hasta R16 el GET EXACTO de esta ruta se lo llevaba la vitrina de ms-ecommerce:
+# el borde repartia por metodo, con dos `map $request_method` y una
+# `location =`. productos.yaml 1.2.0 (#687) publica ahi el listado del
+# catalogo, asi que el prefijo es entero de contenido/productos. La primera
+# linea es la que cambio de dueno; si alguien devuelve el reparto por metodo,
+# se pone roja.
+#
+# Antes el POST no se podia probar con trafico: su destino es 34.193.90.11:8103
+# y la peticion salia hacia el host de contenido REAL (el mecanismo de #614).
+# Ahora el banco sustituye ESE destino por el eco `srv-productos` (ver
+# `borde-conf` en docker-compose.yml) y las cuatro van al eco. Que el fichero de
+# despliegue siga apuntando a la IP se comprueba aparte, mas abajo.
+comprobar GET  /api/v1/productos           "productos GET /api/v1/productos"
+comprobar POST /api/v1/productos           "productos POST /api/v1/productos"
+comprobar GET  /api/v1/productos/p-1       "productos GET /api/v1/productos/p-1"
+comprobar GET  "/api/v1/productos?page=0&size=20" \
+                                           "productos GET /api/v1/productos?page=0&size=20"
+
+echo
+echo "Vitrina — ms-ecommerce con prefijo propio; la consulta llega entera (R16)"
+# Misma reescritura que el carrito. La pagina, el tamano y el tipo viajan en
+# la consulta: si el borde la perdiera, la tienda ensenaria siempre la primera
+# pagina, y sin error ninguno que lo delatara.
+comprobar GET  "/api/v1/vitrina?page=0"    "ecommerce GET /ecommerce/api/v1/vitrina?page=0"
+comprobar GET  "/api/v1/vitrina?page=1&size=16&tipo=ARMA" \
+                                           "ecommerce GET /ecommerce/api/v1/vitrina?page=1&size=16&tipo=ARMA"
 
 echo
 echo "Plataforma — los ocho servicios del bloque"
@@ -145,6 +182,14 @@ echo "Contenido — no se puede suplantar una IP, se comprueba el fichero"
 enConfiguracion "heroes va al host de contenido"     'heroes.*\n?.*34\.193\.90\.11:8101|34\.193\.90\.11:8101'
 enConfiguracion "inventario va al host de contenido" '34\.193\.90\.11:8102'
 enConfiguracion "productos va al host de contenido"  '34\.193\.90\.11:8103'
+
+echo
+echo "Quien atiende una ruta lo dice su contrato, no el metodo (#421)"
+# La capa de adaptacion de #421 repartia /api/v1/productos por metodo. Se quito
+# en R16 por decision de los duenos del prefijo: que nginx no decida la
+# semantica de una ruta. Si vuelve a aparecer un reparto por metodo, es que
+# alguien reabrio la colision sin pasar por un contrato.
+fueraDeConfiguracion "ninguna ruta se reparte por metodo" '\$request_method'
 
 echo
 echo "Que promete el borde que dev hoy no puede dar (inventario de 502)"

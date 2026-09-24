@@ -18,7 +18,8 @@
   font-family: Inter, 'Segoe UI', system-ui, sans-serif;
   font-weight: 700;
   font-size: 24px;
-  color: var(--texto);
+  /* UX-GAME-1: el titulo va sobre la atmosfera, lee la tinta contextual. */
+  color: var(--tinta);
   margin: 0 0 6px;
 }
 
@@ -59,9 +60,8 @@
 
 /* Tabla */
 
-.tabla-envoltorio {
-  overflow-x: auto;
-}
+/* .tabla-envoltorio la define ahora el kit (componentes.css): estaba
+   duplicada aqui y en historial-transacciones.css con el mismo cuerpo. */
 
 .tabla-auditoria {
   width: 100%;

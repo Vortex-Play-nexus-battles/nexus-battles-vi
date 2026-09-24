@@ -17,13 +17,13 @@
  *
  * ## Lo que este modulo NO hace
  *
- * No calcula descuentos. `VitrinaService` pone hoy
- * `precioFinal = precioOriginal = precioBaseCop`: el porcentaje de promocion
- * del producto nunca llega al precio. Aplicarlo aqui seria calcular en el
- * navegador lo que cobra el servidor, que es peor que no ensenarlo. Por eso el
- * distintivo de promocion solo sale cuando los dos precios **de verdad**
- * difieren: un «-20%» junto a un precio sin descuento es una promesa que el
- * carrito no va a cumplir.
+ * No calcula descuentos. La vitrina pone hoy `precioFinal = precioOriginal`
+ * (desde R16 los dos salen del `precioMonedaReal` del catalogo maestro, que no
+ * publica promociones), asi que el porcentaje nunca llega al precio. Aplicarlo
+ * aqui seria calcular en el navegador lo que cobra el servidor, que es peor que
+ * no ensenarlo. Por eso el distintivo de promocion solo sale cuando los dos
+ * precios **de verdad** difieren: un «-20%» junto a un precio sin descuento es
+ * una promesa que el carrito no va a cumplir.
  *
  * @module tienda-adaptador
  */
@@ -67,11 +67,16 @@ export function textoDePrecio(importe, moneda) {
 }
 
 /**
- * `ProductoVitrinaDto` -> modelo de la tarjeta.
+ * `ProductoDeVitrina` -> modelo de la tarjeta.
  *
- * @param {object} dto  tal cual lo devuelve GET /api/v1/productos
+ * R16 — el `id` es el UUID del catalogo maestro, en texto, y se devuelve tal
+ * cual: es lo que `tienda.js` manda a `POST /carrito/items`. Convertirlo en
+ * numero lo romperia (`Number('3f2a…')` es `NaN`).
+ *
+ * @param {object} dto  tal cual lo devuelve GET /api/v1/vitrina
+ *   (`ProductoDeVitrina` en ecommerce-carrito.yaml 1.2.0)
  * @returns {{
- *   id: (number|string|null),
+ *   id: (string|number|null),
  *   nombre: string,
  *   descripcion: string,
  *   habilidades: string|null,

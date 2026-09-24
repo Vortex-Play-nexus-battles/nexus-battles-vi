@@ -327,6 +327,47 @@ sed -i "s#^DIRECTORIO_ACTIVO_URL=.*#DIRECTORIO_ACTIVO_URL=${EMISOR_ADR_005}#" .e
 # viaja en "envs:". Comprobado cruzando las tres listas.
 export DIRECTORIO_ACTIVO_URL="$EMISOR_ADR_005"
 
+# Credencial de las bases que viven en ESTE host y que no tienen secret en
+# GitHub (R16.22). Hoy solo la de ms-chatbot: su Postgres (chatbot-db) nace en
+# este mismo host, dentro de la red de Compose, y nadie de fuera la usa. Su
+# contrasena no es algo que solo una persona pueda aportar: se puede generar,
+# igual que las credenciales de servicio de arriba. Se genera UNA vez, se
+# guarda en secretos-bases.env (600, fuera del .env efimero) y cada despliegue
+# reparte el mismo valor a la base y al servicio. Nunca se imprime.
+#
+# Un secret o una variable de GitHub con el mismo nombre, si algun dia existe,
+# manda sobre lo generado. Rotar = borrar la linea Y el volumen de la base:
+# Postgres solo toma POSTGRES_PASSWORD al inicializar el volumen.
+SECRETOS_BASES="$DIRECTORIO/secretos-bases.env"
+touch "$SECRETOS_BASES"
+chmod 600 "$SECRETOS_BASES"
+asegurar_credencial_de_base() {
+  # $1 prefijo (MS_CHATBOT)  $2 host  $3 puerto  $4 base  $5 usuario
+  local prefijo="$1" clave valor
+  for par_valor in "HOST=$2" "PORT=$3" "NAME=$4" "USER=$5" "PASSWORD="; do
+    clave="${prefijo}_DB_${par_valor%%=*}"
+    valor=$(eval "printf '%s' \"\${$clave:-}\"")
+    if [ -z "$valor" ]; then
+      valor=$(grep "^${clave}=" "$SECRETOS_BASES" | head -n1 | cut -d= -f2- || true)
+    fi
+    if [ -z "$valor" ]; then
+      valor="${par_valor#*=}"
+      if [ -z "$valor" ]; then
+        if command -v openssl >/dev/null 2>&1; then
+          valor=$(openssl rand -hex 24)
+        else
+          valor=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
+        fi
+        echo "  credencial de base generada para ${prefijo} (no se imprime)"
+      fi
+      echo "${clave}=${valor}" >> "$SECRETOS_BASES"
+    fi
+    export "${clave}=${valor}"
+    echo "${clave}=${valor}" >> .env
+  done
+}
+asegurar_credencial_de_base MS_CHATBOT chatbot-db 5432 chatbot_db chatbot
+
 echo "== 2) Guardando el tag estable actual de cada servicio, antes de tocarlo =="
 # Si el servicio ya estaba corriendo con algun tag, lo guardamos en un
 # archivo simple ANTES de sobreescribirlo. Si el servicio nunca se ha
@@ -493,6 +534,12 @@ if [ "$INCLUYE_CONTENIDO" -eq 0 ] && [ -d "$DIRECTORIO/web/infrastructure/red-ba
   SERVICIOS_COMPOSE="$SERVICIOS_COMPOSE srv-borde"
 fi
 
+# R16.5b: los contenedores que se crean AHORA llevan la hora de su creacion.
+# Su entrypoint (x-arranque-escalonado en docker-compose.deploy.yml) solo
+# espera turno cuando el contenedor es anterior al ultimo arranque del host,
+# es decir, cuando lo levanta Docker al volver del apagado. Lo que despliega
+# esta corrida arranca en el acto, aunque el CD acabe de encender el host.
+export ARRANQUE_CREADO_EN="$(date +%s)"
 docker compose "${ARCHIVOS_COMPOSE[@]}" pull $SERVICIOS_COMPOSE
 docker compose "${ARCHIVOS_COMPOSE[@]}" up -d $SERVICIOS_COMPOSE
 
@@ -578,6 +625,53 @@ done
 if [ "$HUBO_FALLO" -eq 1 ]; then
   echo "Uno o mas servicios no pasaron /actuator/health. Detalle en $DIRECTORIO/ultimo-fallo.txt"
   exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# 4b) ¿Y desde fuera? Un contenedor sano no es una API accesible.
+#
+# Un servicio puede responder 200 en su /actuator/health de localhost y aun asi
+# dar 502 por el borde: puerto mal publicado, nombre de contenedor que nginx no
+# resuelve, o una ruta que apunta a otro sitio. Con solo el paso 4, el CD
+# declaraba "success" mientras la vista seguia rota -- que es lo que ocurrio
+# durante semanas con creditos y subastas, y nadie lo vio desde el pipeline.
+#
+# La ruta de comprobacion de cada servicio sale del catalogo (pruebaBorde). No
+# se comprueba el codigo exacto, porque depende de la credencial: 401, 403 o
+# 404 significan "hay alguien ahi detras", que es justo lo que se quiere
+# saber. Solo el 502 (y el 000, sin respuesta) son fallo.
+#
+# Se salta entero en el host de contenido, que no tiene borde.
+if [ "$INCLUYE_BORDE" -eq 1 ]; then
+  echo "== 4b) Comprobando que el borde llega de verdad a lo desplegado =="
+  FALLO_BORDE=0
+  for par in $SERVICIOS_PUERTOS; do
+    servicio="${par%%:*}"
+    ruta=$(campo_de "$servicio" pruebaBorde)
+    if [ -z "$ruta" ] || [ "$ruta" = "null" ]; then
+      echo "  $servicio: sin ruta publica en el borde (servicio entre servicios); no aplica"
+      continue
+    fi
+    codigo=""
+    for intento in 1 2 3 4 5 6; do
+      codigo=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://localhost${ruta}" || echo "000")
+      case "$codigo" in
+        502|000) sleep 5 ;;
+        *) break ;;
+      esac
+    done
+    if [ "$codigo" = "502" ] || [ "$codigo" = "000" ]; then
+      echo "  $servicio: el borde responde $codigo en $ruta -- el contenedor esta sano pero no se llega a el"
+      FALLO_BORDE=1
+    else
+      echo "  $servicio: el borde responde $codigo en $ruta (hay alguien detras)"
+    fi
+  done
+  if [ "$FALLO_BORDE" -eq 1 ]; then
+    echo "El contenedor esta arriba pero el borde no llega. Revisa el puerto publicado,"
+    echo "el nombre del contenedor y su 'location' en infrastructure/red-balanceo/borde-dev.conf."
+    exit 1
+  fi
 fi
 
 # ---------------------------------------------------------------------------

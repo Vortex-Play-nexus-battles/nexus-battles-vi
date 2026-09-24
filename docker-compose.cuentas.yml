@@ -74,8 +74,33 @@ services:
       - "8089:8089"
     depends_on:
       - identidad-db
+    # Arranque escalonado del host (R16.5b): mismo script que el ancla
+    # x-arranque-escalonado de docker-compose.deploy.yml, donde esta explicado.
+    # Una ancla no cruza archivos, asi que se repite; el guardian
+    # scripts/cd/comprobar-catalogo-servicios.sh exige que sea identico.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        proc="$${ARRANQUE_PROC:-/proc}"
+        creado="$${ARRANQUE_CREADO_EN:-9999999999}"
+        arranque=$$(awk '/^btime/ {print $$2}' "$$proc/stat" 2>/dev/null)
+        encendido=$$(cut -d. -f1 "$$proc/uptime" 2>/dev/null)
+        if [ -n "$$arranque" ] && [ -n "$$encendido" ] \
+           && [ "$$creado" -lt "$$arranque" ] 2>/dev/null \
+           && [ "$$encendido" -lt "$${ARRANQUE_VENTANA_S:-600}" ] 2>/dev/null; then
+          espera=$$(( $${ARRANQUE_TURNO:-0} * $${ARRANQUE_PASO_S:-40} ))
+          echo "arranque escalonado: el host acaba de encender (hace $${encendido}s); turno $${ARRANQUE_TURNO:-0}, espero $${espera}s"
+          trap 'exit 143' TERM INT
+          sleep "$$espera" & wait $$!
+          trap - TERM INT
+        fi
+        exec java -jar app.jar
     environment:
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
+      # Turno 0: todos los demas le piden token o su JWKS.
+      ARRANQUE_TURNO: "0"
+      ARRANQUE_CREADO_EN: ${ARRANQUE_CREADO_EN:-9999999999}
       DB_URL: ${MS_IDENTIDAD_DB_URL}
       DB_USER: ${MS_IDENTIDAD_DB_USER}
       DB_PASSWORD: ${MS_IDENTIDAD_DB_PASSWORD}
@@ -94,6 +119,15 @@ services:
       NOTIFICACIONES_URL: ${NOTIFICACIONES_URL:-http://srv-notificaciones:8085/api/v1/internal/notifications}
       AUDITORIA_URL: ${AUDITORIA_URL:-http://srv-ms-cumplimiento:8091/api/v1/admin/auditoria/eventos}
       SPRING_PROFILES_ACTIVE: ${MS_IDENTIDAD_SPRING_PROFILES_ACTIVE}
+      # Cuentas administrativas iniciales (AdministradoresIniciales).
+      # Formato apodo|correo|clave, separadas por ";". Idempotente: si la
+      # cuenta ya existe no se toca, asi que volver a desplegar no reescribe
+      # una clave que alguien haya cambiado. Vacio = no se crea ninguna.
+      #
+      # Tres responsables con el MISMO rol y credenciales DISTINTAS: si los
+      # tres entraran con la misma cuenta, la auditoria diria que "admin"
+      # suspendio a alguien, que es tanto como no decir nada.
+      ADMINS_INICIALES: ${ADMINS_INICIALES:-}
       # Emisor transitorio de credenciales de servicio (ADR-005): los
       # clientes y sus secretos los genera desplegar.sh en el host.
       AUTH_CLIENTES_SERVICIO: ${AUTH_CLIENTES_SERVICIO:-}

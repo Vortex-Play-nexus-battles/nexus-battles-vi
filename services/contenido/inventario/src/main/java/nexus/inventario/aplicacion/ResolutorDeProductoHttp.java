@@ -22,8 +22,9 @@ import org.springframework.stereotype.Component;
  * deserializacion con un record privado
  * {@code @JsonIgnoreProperties(ignoreUnknown = true)} que ignora el resto
  * del esquema {@code ProductoCreado} (id, imagen, descripcion, tiraje,
- * premium, estado, version, fechas y los campos propios de cada tipo) —
- * este resolutor solo necesita tipo, nombre y prototipo.
+ * premium, version, fechas y los campos propios de cada tipo) —
+ * este resolutor solo necesita tipo, nombre, prototipo y estado (el estado
+ * sirve para no agregar al inventario un producto SUSPENDIDO).
  */
 @Component
 public class ResolutorDeProductoHttp implements ResolutorDeProducto {
@@ -94,7 +95,7 @@ public class ResolutorDeProductoHttp implements ResolutorDeProducto {
     private DetalleProducto parsearProducto(String cuerpoJson) {
         try {
             ProductoJson producto = objectMapper.readValue(cuerpoJson, ProductoJson.class);
-            return new DetalleProducto(producto.nombre(), producto.tipo(), producto.prototipo());
+            return new DetalleProducto(producto.nombre(), producto.tipo(), producto.prototipo(), producto.estado());
         } catch (IOException e) {
             throw new ResolutorDeProductoException("Respuesta de productos no se pudo interpretar: " + e.getMessage(), e);
         }
@@ -110,7 +111,7 @@ public class ResolutorDeProductoHttp implements ResolutorDeProducto {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record ProductoJson(String nombre, String tipo, String prototipo) {
+    private record ProductoJson(String nombre, String tipo, String prototipo, String estado) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

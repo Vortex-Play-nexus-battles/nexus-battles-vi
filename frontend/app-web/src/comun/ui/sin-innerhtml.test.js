@@ -82,16 +82,25 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  * siendo fija (todo dato entra despues por `textContent` o por `src` de un
  * `<img>` creado con `createElement`), la del carrito vacio sigue siendo una
  * cadena literal, y la de la fila del carrito sigue siendo fija.
+ *
+ * R16 — y otra vez las tres de `tienda.js`, ahora 102, 243 y 243 posiciones
+ * más abajo: la vitrina pasó a `/api/v1/vitrina`, «Añadir» ganó su aviso de
+ * error (los motivos por `type`, la lectura del problem detail y el aviso
+ * mismo) y la carga del carrito comprueba `respuesta.ok`, todo ARRIBA de
+ * ellas. Revisadas una por una: la tarjeta sigue siendo la plantilla fija, el
+ * carrito vacío la misma cadena literal y la fila del carrito la misma
+ * plantilla fija. El aviso nuevo no usa `innerHTML`: lo construye `aviso()`
+ * del kit con `textContent`.
  */
 const REVISADOS = new Map([
   ['contenido/productos/productos.js:159', 'plantilla() devuelve marcado fijo, sin datos'],
   ['cuentas/publicar-subasta.js:68', 'plantilla fija del formulario, sin interpolación'],
   ['cuentas/registro.js:235', 'cadena literal fija, sin interpolación'],
-  ['cuentas/tienda.js:145', 'plantilla fija; el color pasó a data-tipo en UX-R2.8'],
+  ['cuentas/tienda.js:247', 'plantilla fija; el color pasó a data-tipo en UX-R2.8'],
 
-  ['cuentas/tienda.js:294', 'cadena literal fija del carrito vacío'],
+  ['cuentas/tienda.js:537', 'cadena literal fija del carrito vacío'],
   [
-    'cuentas/tienda.js:314',
+    'cuentas/tienda.js:557',
     'plantilla fija; los datos entran luego por textContent. FI-R2 le cambio el ' +
       'nombre a la variable (fila -> nodo, porque «fila» pasó a ser el modelo ' +
       'que devuelve el adaptador) y la movio 78 lineas; la plantilla es la misma.',

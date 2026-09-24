@@ -186,14 +186,21 @@ class InventarioPactoTest {
         assertTrue(clienteContra(servidor).buscar(ELEMENTO).isEmpty());
     }
 
-    // --- transferencia de propiedad: LA UNICA QUE FALTA POR PUBLICAR --------
+    // --- transferencia de propiedad ------------------------------------------
     //
-    // Estas interacciones describen un endpoint que ms-inventario todavia no
-    // expone. Estan aqui a proposito y no cuando exista: son la especificacion
-    // ejecutable de lo que este servicio necesita, para que quien lo implemente
-    // pueda verificar contra ella en vez de adivinar por un mensaje de chat.
-    // El pacto se genera igual; lo que hoy falla si se verifica es el lado del
-    // proveedor, y eso es informacion util, no un fallo nuestro.
+    // Estas interacciones se escribieron cuando ms-inventario todavia no exponia
+    // el endpoint, como especificacion ejecutable de lo que este servicio
+    // necesita. Ya no es el caso: la ruta existe (#670) y desde FI-TRANSFER-1
+    // esta declarada en contracts/openapi/inventario.yaml 1.2.0, y el proveedor
+    // la verifica en VerificacionDelPactoDeSubastasTest. Sirvio para lo que
+    // tenia que servir.
+    //
+    // Lo que el pacto NO afirma, y a proposito: el estado en que llega el
+    // elemento. La transferencia conserva el bloqueo de la subasta —lo suelta
+    // despues el cierre, cuando la venta ya es definitiva— pero eso lo guardan
+    // la prueba de inventario y el contrato, no este pacto: transferirProducto
+    // es void y solo mira el codigo de respuesta, asi que exigir aqui una forma
+    // que nadie lee ataria al proveedor sin proteger a nadie.
 
     @Pact(consumer = CONSUMIDOR)
     public RequestResponsePact transferenciaAlGanador(PactDslWithProvider constructor) {

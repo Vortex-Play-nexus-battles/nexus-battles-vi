@@ -1,0 +1,1249 @@
+openapi: 3.1.0
+
+# =============================================================================
+# Nexus Battles VI — Chatbot de soporte (ms-chatbot · equipo de Cuentas y
+# comercio, Grupo 4)
+#
+# Regla 1 de plataforma: contrato primero. Este documento se escribe A PARTIR
+# de lo que `services/cuentas/ms-chatbot` YA implementa y tiene probado
+# (`ChatController`, `ChatService`, `CalificacionService`), historia por
+# historia:
+#
+#   HU-CHA-001  chat 24/7 para visitantes y usuarios autenticados
+#   HU-CHA-004  motor de respuestas basado en reglas con escalamiento
+#   HU-CHA-008  consultas y acciones asistidas para usuarios autenticados
+#   HU-CHA-011  calificacion de respuestas y brechas de conocimiento
+#   HU-CHA-012  panel de administracion: analiticas, base de conocimiento y
+#               "reentrenamiento" (versiones evaluadas antes de desplegarse)
+#
+# Dueno del contrato: Grupo 4 (ms-chatbot).
+#
+# ---------------------------------------------------------------------------
+# QUIEN LO LLAMA
+#
+# Solo el frontend (`frontend/app-web`): la ventana de chat (`/chat/**`) y el
+# panel administrativo (`/chatbot/admin/**`). Ningun otro servicio llama a
+# ms-chatbot.
+#
+# ---------------------------------------------------------------------------
+# PANEL ADMINISTRATIVO (`/chatbot/admin/**`, HU-CHA-012)
+#
+# Exige token valido con claim `rol` ADMINISTRADOR o SUPER_ADMINISTRADOR:
+# sin token, 401; con otro rol, 403. A diferencia del chat, aqui un token
+# invalido NO degrada a visitante.
+#
+# El prefijo es `/chatbot/admin` y no `/admin/chatbot` porque el borde
+# (`infrastructure/red-balanceo`) envia todo `/api/v1/admin...` a
+# ms-identidad.
+#
+# Sobre el "reentrenamiento" (RF-CHA-014): el chatbot es un motor de reglas,
+# no un modelo entrenable. El "modelo" es una VERSION de la base de
+# conocimiento: se edita una candidata (`borrador`), se evalua contra la de
+# produccion con los casos de evaluacion, y solo se despliega si no acierta
+# menos. Interpretacion pendiente de confirmar con el cliente.
+#
+# ---------------------------------------------------------------------------
+# IDENTIDAD EN EL CHAT: VISITANTE O USUARIO AUTENTICADO
+#
+# Todas las rutas de `/chat/**` aceptan las dos formas, porque el chat debe
+# funcionar para visitantes sin cuenta (criterio de HU-CHA-001):
+#
+#   * Usuario autenticado: `Authorization: Bearer <JWT de ms-identidad>`. La
+#     conversacion se identifica por el claim `uid` (ADR-002).
+#   * Visitante: sin token, con la cabecera `X-Id-Sesion-Anonima`, un
+#     identificador que genera y conserva el propio frontend.
+#
+# Sin token valido y sin esa cabecera, la respuesta es 400.
+#
+# Un JWT invalido o vencido NO produce 401 en estas rutas: la peticion se
+# atiende como la de un visitante (HU-CHA-008). Asi, a un jugador cuya sesion
+# vence a mitad de conversacion no se le corta el chat; solo pierde las
+# consultas asistidas, que exigen token valido.
+#
+# ---------------------------------------------------------------------------
+# DEPENDENCIAS SALIENTES (HU-CHA-008)
+#
+# Con un usuario autenticado, `POST /chat/mensajes` puede consultar
+# inventario (`inventario.yaml`), subastas (`ms-subastas-pujas.yaml`) y
+# notificaciones (`notificaciones.yaml`), reenviando el MISMO token del
+# jugador (nunca una credencial de servicio): esos servicios derivan el dueno
+# del claim `uid`. Si alguno no responde, el chatbot contesta igual, con un
+# aviso de "servicio no disponible" solo para esa parte.
+# =============================================================================
+
+info:
+  title: Nexus Battles VI — Chatbot de soporte
+  version: 1.1.0
+  description: |
+    Chat de soporte 24/7 para visitantes y jugadores: respuestas desde una
+    base de conocimiento, consultas en vivo sobre la propia cuenta,
+    historial de conversacion y calificacion de respuestas. Incluye el panel
+    administrativo del chatbot: analiticas, gestion de la base de
+    conocimiento y despliegue evaluado de sus versiones.
+
+    Errores en formato problem details (regla 4), con el `ProblemDetail`
+    estandar de Spring.
+  license:
+    name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
+
+servers:
+  - url: http://localhost:8094/api/v1
+    description: Desarrollo local (context-path /api/v1 del propio servicio)
+
+tags:
+  - name: chat
+    description: Conversacion con el chatbot e historial (HU-CHA-001, HU-CHA-004, HU-CHA-008)
+  - name: calificaciones
+    description: Calificacion de respuestas del chatbot (HU-CHA-011)
+  - name: admin-analiticas
+    description: Tablero de analiticas del chatbot (HU-CHA-012, RF-CHA-012)
+  - name: admin-base-conocimiento
+    description: Versiones y temas de la base de conocimiento (HU-CHA-012, RF-CHA-013)
+  - name: admin-reentrenamiento
+    description: Casos de evaluacion, despliegue evaluado y reversion (HU-CHA-012, RF-CHA-014)
+
+paths:
+  /chat/mensajes:
+    post:
+      tags: [chat]
+      operationId: enviarMensajeAlChatbot
+      summary: Envia un mensaje al chatbot y devuelve su respuesta
+      description: |
+        Guarda el mensaje del usuario en su conversacion (la crea si es el
+        primero de esa sesion) y devuelve la respuesta del bot, que tambien
+        queda guardada.
+
+        Como se genera la respuesta:
+
+        1. Solo con usuario autenticado: si el mensaje pide datos de la
+           propia cuenta (inventario, subastas, notificaciones), ir a una
+           seccion del sitio o un informe de actividad, se responde con
+           datos en vivo (HU-CHA-008). Misiones y torneos responden, por
+           ahora, que estan en construccion.
+        2. Si no, se busca en la base de conocimiento (HU-CHA-004).
+        3. Si la pregunta no se entiende, se escala: la respuesta ofrece
+           soporte humano y temas relacionados, y la pregunta se registra
+           como brecha de conocimiento (HU-CHA-011).
+
+        Nunca ejecuta operaciones economicas (pujas, compras): solo consulta.
+      security:
+        - {}
+        - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/IdSesionAnonima'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnviarMensaje'
+            example:
+              contenido: como subo de nivel a mi heroe
+      responses:
+        '200':
+          description: Respuesta del bot, ya guardada en el historial.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Mensaje'
+              example:
+                id: 0148c91d-1436-4a7c-8dbc-f339f8f634ce
+                remitente: BOT
+                contenido: Puedes revisar tu inventario en la seccion de Inventario del menu principal.
+                adjuntoUrl: null
+                fechaEnvio: '2026-09-23T18:09:10.326633Z'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+
+  /chat/historial:
+    get:
+      tags: [chat]
+      operationId: obtenerHistorialDelChatbot
+      summary: Historial de la conversacion de la sesion
+      description: |
+        Todos los mensajes (del usuario y del bot) de la conversacion de esta
+        sesion, del mas antiguo al mas reciente. Lista vacia si la sesion
+        todavia no ha escrito.
+      security:
+        - {}
+        - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/IdSesionAnonima'
+      responses:
+        '200':
+          description: Mensajes de la conversacion, en orden cronologico.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Mensaje'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+
+    delete:
+      tags: [chat]
+      operationId: limpiarHistorialDelChatbot
+      summary: Borra el historial de la conversacion de la sesion
+      description: |
+        Borra todos los mensajes de la conversacion y, con ellos, sus
+        calificaciones. Las brechas de conocimiento ya registradas NO se
+        borran: son un agregado anonimo, sin vinculo con la sesion.
+        Idempotente: sin conversacion previa, responde igual.
+      security:
+        - {}
+        - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/IdSesionAnonima'
+      responses:
+        '204':
+          description: Historial borrado (o no habia nada que borrar).
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+
+  /chat/mensajes/{mensajeId}/calificacion:
+    post:
+      tags: [calificaciones]
+      operationId: calificarRespuestaDelChatbot
+      summary: Califica una respuesta del bot como util o no util (HU-CHA-011)
+      description: |
+        Una sola calificacion por respuesta. Solo se califican mensajes del
+        bot, y solo los de la propia conversacion: un mensaje de otra sesion
+        responde 404, igual que uno inexistente, para no revelar que existe.
+
+        Una calificacion "no util" registra como brecha de conocimiento la
+        pregunta del usuario que origino esa respuesta.
+      security:
+        - {}
+        - tokenDeUsuario: []
+      parameters:
+        - name: mensajeId
+          in: path
+          required: true
+          description: '`id` de un mensaje del bot, tal como lo devolvio `POST /chat/mensajes`.'
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdSesionAnonima'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CalificarRespuesta'
+            example:
+              util: false
+              comentario: No respondio lo que pregunte
+      responses:
+        '201':
+          description: Calificacion registrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Calificacion'
+        '400':
+          description: |
+            Cuerpo invalido (falta `util`, comentario de mas de 1000
+            caracteres), `mensajeId` que no es un UUID, falta de identidad, o
+            el mensaje es del usuario y no del bot.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '404':
+          description: No existe un mensaje con ese `id` en la conversacion de quien llama.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: Esa respuesta ya fue calificada.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  # ===========================================================================
+  # PANEL ADMINISTRATIVO (HU-CHA-012)
+  # ===========================================================================
+
+  /chatbot/admin/analiticas:
+    get:
+      tags: [admin-analiticas]
+      operationId: consultarAnaliticasDelChatbot
+      summary: Tablero de analiticas del chatbot para un periodo
+      description: |
+        Indicadores del periodo, temas mas consultados (hasta 10) y tendencia
+        diaria con todos los dias del periodo (tambien los que no tuvieron
+        actividad).
+
+        Definiciones:
+
+        * `conversaciones`: conversaciones distintas con al menos una
+          pregunta en el periodo.
+        * `tasaResolucion`: proporcion de respuestas del bot que NO se
+          escalaron.
+        * `satisfaccion`: proporcion de calificaciones "util".
+        * `tiempoRespuestaPromedioMs`: tiempo de procesamiento del bot.
+
+        Las tasas son proporciones entre 0 y 1, y `null` cuando no hay datos
+        para calcularlas (no es lo mismo que 0). Solo cuentan los mensajes
+        posteriores a la migracion V4, que es cuando se empezaron a medir.
+      security:
+        - tokenDeAdministrador: []
+      parameters:
+        - $ref: '#/components/parameters/Desde'
+        - $ref: '#/components/parameters/Hasta'
+      responses:
+        '200':
+          description: Tablero del periodo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnaliticaChatbot'
+        '400':
+          $ref: '#/components/responses/PeriodoInvalido'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+
+  /chatbot/admin/analiticas/exportacion:
+    get:
+      tags: [admin-analiticas]
+      operationId: exportarAnaliticasDelChatbot
+      summary: Descarga el tablero de analiticas como CSV
+      description: |
+        Mismo contenido que `GET /chatbot/admin/analiticas`, en tres bloques
+        separados por una linea en blanco: resumen, temas frecuentes y
+        tendencia diaria. Pensado para abrirse directo en Excel en espanol:
+        separador `;`, UTF-8 con BOM y lineas CRLF. Las tasas van en
+        porcentaje.
+      security:
+        - tokenDeAdministrador: []
+      parameters:
+        - $ref: '#/components/parameters/Desde'
+        - $ref: '#/components/parameters/Hasta'
+      responses:
+        '200':
+          description: Archivo CSV, con `Content-Disposition` de descarga (`analiticas-chatbot-<desde>-a-<hasta>.csv`).
+          content:
+            text/csv:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/PeriodoInvalido'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+
+  /chatbot/admin/base-conocimiento/versiones:
+    get:
+      tags: [admin-base-conocimiento]
+      operationId: listarVersionesDeLaBaseDeConocimiento
+      summary: Todas las versiones de la base de conocimiento
+      description: De la mas reciente a la mas antigua. Hay exactamente una en `PRODUCCION` y como mucho una en `BORRADOR`.
+      security:
+        - tokenDeAdministrador: []
+      responses:
+        '200':
+          description: Versiones.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VersionBaseConocimiento'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+
+  /chatbot/admin/base-conocimiento/versiones/{versionId}/exportacion:
+    get:
+      tags: [admin-base-conocimiento]
+      operationId: exportarVersionDeLaBaseDeConocimiento
+      summary: Descarga una version completa como JSON
+      description: |
+        Cualquier version, en cualquier estado. El archivo se puede volver a
+        subir tal cual con `PUT /chatbot/admin/base-conocimiento/borrador/importacion`.
+      security:
+        - tokenDeAdministrador: []
+      parameters:
+        - name: versionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Archivo JSON, con `Content-Disposition` de descarga (`base-conocimiento-v<numero>.json`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportacionBaseConocimiento'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+
+  /chatbot/admin/base-conocimiento/borrador:
+    post:
+      tags: [admin-base-conocimiento]
+      operationId: crearVersionCandidataDeLaBaseDeConocimiento
+      summary: Crea la version candidata como copia de produccion
+      description: |
+        La candidata (`BORRADOR`) es la unica version que se edita. Nace con
+        todos los temas de produccion, que conservan su `clave`. El cuerpo es
+        opcional.
+      security:
+        - tokenDeAdministrador: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrearCandidata'
+      responses:
+        '201':
+          description: Candidata creada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionBaseConocimiento'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '409':
+          $ref: '#/components/responses/ConflictoDeVersion'
+    delete:
+      tags: [admin-base-conocimiento]
+      operationId: descartarVersionCandidataDeLaBaseDeConocimiento
+      summary: Descarta la version candidata y sus temas
+      security:
+        - tokenDeAdministrador: []
+      responses:
+        '204':
+          description: Candidata descartada.
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '409':
+          $ref: '#/components/responses/ConflictoDeVersion'
+
+  /chatbot/admin/base-conocimiento/borrador/temas:
+    get:
+      tags: [admin-base-conocimiento]
+      operationId: listarTemasDeLaVersionCandidata
+      summary: Temas de la version candidata, activos o no
+      security:
+        - tokenDeAdministrador: []
+      responses:
+        '200':
+          description: Temas, ordenados por titulo.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Tema'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '409':
+          $ref: '#/components/responses/ConflictoDeVersion'
+    post:
+      tags: [admin-base-conocimiento]
+      operationId: agregarTemaALaVersionCandidata
+      summary: Agrega un tema a la version candidata
+      description: El tema recibe una `clave` nueva.
+      security:
+        - tokenDeAdministrador: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatosDeTema'
+      responses:
+        '201':
+          description: Tema creado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tema'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '409':
+          $ref: '#/components/responses/ConflictoDeVersion'
+
+  /chatbot/admin/base-conocimiento/borrador/temas/{temaId}:
+    parameters:
+      - name: temaId
+        in: path
+        required: true
+        description: '`id` del tema dentro de la candidata (no su `clave`).'
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags: [admin-base-conocimiento]
+      operationId: editarTemaDeLaVersionCandidata
+      summary: Edita un tema de la version candidata
+      description: La `clave` no cambia. Un tema de otra version responde 404.
+      security:
+        - tokenDeAdministrador: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatosDeTema'
+      responses:
+        '200':
+          description: Tema actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tema'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/ConflictoDeVersion'
+    delete:
+      tags: [admin-base-conocimiento]
+      operationId: eliminarTemaDeLaVersionCandidata
+      summary: Elimina un tema de la version candidata
+      security:
+        - tokenDeAdministrador: []
+      responses:
+        '204':
+          description: Tema eliminado.
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          $ref: '#/components/responses/ConflictoDeVersion'
+
+  /chatbot/admin/base-conocimiento/borrador/importacion:
+    put:
+      tags: [admin-base-conocimiento]
+      operationId: importarTemasEnLaVersionCandidata
+      summary: Reemplaza todo el contenido de la candidata por el de un archivo
+      description: |
+        Acepta el archivo de `.../exportacion` tal cual: de el solo se lee
+        `temas`. Un tema con `clave` la conserva (asi sigue contando como el
+        mismo tema en las analiticas); sin `clave`, se trata como nuevo. Una
+        `clave` repetida en el archivo responde 400.
+      security:
+        - tokenDeAdministrador: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportacionBaseConocimiento'
+      responses:
+        '200':
+          description: Temas de la candidata despues de importar.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Tema'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '409':
+          $ref: '#/components/responses/ConflictoDeVersion'
+
+  /chatbot/admin/base-conocimiento/borrador/evaluacion:
+    post:
+      tags: [admin-reentrenamiento]
+      operationId: evaluarVersionCandidataDelChatbot
+      summary: Compara la candidata con produccion, sin desplegar
+      description: |
+        Corre los casos de evaluacion activos contra las dos versiones, con
+        la misma logica con la que el chatbot responde, y guarda las dos
+        evaluaciones. `candidataApta` dice si un despliegue pasaria.
+      security:
+        - tokenDeAdministrador: []
+      responses:
+        '200':
+          description: Resultado de las dos versiones.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComparacionEvaluacion'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '409':
+          $ref: '#/components/responses/ConflictoDeVersion'
+
+  /chatbot/admin/base-conocimiento/borrador/despliegue:
+    post:
+      tags: [admin-reentrenamiento]
+      operationId: desplegarVersionCandidataDelChatbot
+      summary: Despliega la candidata si no rinde peor que produccion
+      description: |
+        Evalua como `.../borrador/evaluacion`. Si la candidata acierta al
+        menos tantos casos como produccion, pasa a `PRODUCCION` y la
+        anterior a `RETIRADA`; rige desde el siguiente mensaje del chat. Si
+        acierta menos, nada cambia y responde 409 con los dos resultados.
+      security:
+        - tokenDeAdministrador: []
+      responses:
+        '200':
+          description: La candidata, ya en produccion.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionBaseConocimiento'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '409':
+          description: |
+            La candidata rinde peor (cuerpo `DespliegueRechazado`), o no hay
+            candidata, o no hay casos de evaluacion activos (problem details
+            simple).
+          content:
+            application/problem+json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/DespliegueRechazado'
+                  - $ref: '#/components/schemas/ProblemDetail'
+
+  /chatbot/admin/base-conocimiento/produccion/reversion:
+    post:
+      tags: [admin-reentrenamiento]
+      operationId: revertirVersionEnProduccionDelChatbot
+      summary: Vuelve a la version que estuvo en produccion justo antes
+      description: |
+        La version en produccion pasa a `RETIRADA` y la retirada que entro a
+        produccion mas recientemente vuelve a `PRODUCCION`. Revertir dos
+        veces seguidas vuelve a la version de partida.
+      security:
+        - tokenDeAdministrador: []
+      responses:
+        '200':
+          description: La version restaurada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionBaseConocimiento'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '409':
+          $ref: '#/components/responses/ConflictoDeVersion'
+
+  /chatbot/admin/base-conocimiento/casos-evaluacion:
+    get:
+      tags: [admin-reentrenamiento]
+      operationId: listarCasosDeEvaluacionDelChatbot
+      summary: Casos de evaluacion, los mas nuevos primero
+      security:
+        - tokenDeAdministrador: []
+      responses:
+        '200':
+          description: Casos.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CasoEvaluacion'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+    post:
+      tags: [admin-reentrenamiento]
+      operationId: crearCasoDeEvaluacionDelChatbot
+      summary: Crea un caso de evaluacion
+      security:
+        - tokenDeAdministrador: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatosDeCasoEvaluacion'
+      responses:
+        '201':
+          description: Caso creado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CasoEvaluacion'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+
+  /chatbot/admin/base-conocimiento/casos-evaluacion/{casoId}:
+    parameters:
+      - name: casoId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags: [admin-reentrenamiento]
+      operationId: editarCasoDeEvaluacionDelChatbot
+      summary: Edita un caso de evaluacion
+      security:
+        - tokenDeAdministrador: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatosDeCasoEvaluacion'
+      responses:
+        '200':
+          description: Caso actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CasoEvaluacion'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+    delete:
+      tags: [admin-reentrenamiento]
+      operationId: eliminarCasoDeEvaluacionDelChatbot
+      summary: Elimina un caso de evaluacion
+      security:
+        - tokenDeAdministrador: []
+      responses:
+        '204':
+          description: Caso eliminado.
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+
+components:
+  securitySchemes:
+    tokenDeUsuario:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Token de sesion de un usuario (ADR-002), firmado por ms-identidad y
+        verificado contra su JWKS, con claim `uid`. Opcional en todas las
+        rutas de `/chat/**`: sin el, la peticion es de un visitante.
+    tokenDeAdministrador:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Mismo token de ms-identidad, con claim `rol` igual a ADMINISTRADOR o
+        SUPER_ADMINISTRADOR. Obligatorio en `/chatbot/admin/**`.
+
+  parameters:
+    IdSesionAnonima:
+      name: X-Id-Sesion-Anonima
+      in: header
+      required: false
+      description: |
+        Identificador de la sesion de un visitante, generado y conservado por
+        el frontend. Obligatorio si no hay token valido; se ignora si lo hay.
+      schema:
+        type: string
+        maxLength: 255
+    Desde:
+      name: desde
+      in: query
+      required: false
+      description: Primer dia del periodo, inclusive, en hora de Colombia. Por omision, 29 dias antes de `hasta`.
+      schema:
+        type: string
+        format: date
+      example: '2026-09-01'
+    Hasta:
+      name: hasta
+      in: query
+      required: false
+      description: Ultimo dia del periodo, inclusive, en hora de Colombia. Por omision, hoy. El periodo no puede superar 366 dias.
+      schema:
+        type: string
+        format: date
+      example: '2026-09-30'
+
+  responses:
+    PeticionInvalida:
+      description: Cuerpo invalido, o ni token valido ni `X-Id-Sesion-Anonima`.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    PeriodoInvalido:
+      description: Fecha mal escrita, `hasta` anterior a `desde`, o periodo de mas de 366 dias.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    NoAutenticado:
+      description: Sin token, o token invalido o vencido.
+    SinPermiso:
+      description: El token no tiene rol ADMINISTRADOR ni SUPER_ADMINISTRADOR.
+    NoEncontrado:
+      description: No existe ese recurso (o el tema no es de la version candidata).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    ConflictoDeVersion:
+      description: |
+        El estado de las versiones no lo permite: no hay candidata, ya hay
+        una, no hay version anterior a la cual revertir, o no hay casos de
+        evaluacion activos.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+
+  schemas:
+    EnviarMensaje:
+      type: object
+      required: [contenido]
+      properties:
+        contenido:
+          type: string
+          minLength: 1
+          maxLength: 4000
+          description: Texto del mensaje; no puede ser solo espacios.
+        adjuntoUrl:
+          type: [string, 'null']
+          maxLength: 500
+          description: |
+            URL de una captura ya subida a otro lado (HU-CHA-001). El chatbot
+            solo guarda la URL; el tamano maximo del adjunto sigue pendiente
+            con el cliente (RF-CHA-002).
+
+    Mensaje:
+      type: object
+      required: [id, remitente, contenido, fechaEnvio]
+      properties:
+        id:
+          type: string
+          format: uuid
+        remitente:
+          type: string
+          enum: [USUARIO, BOT]
+        contenido:
+          type: string
+        adjuntoUrl:
+          type: [string, 'null']
+        fechaEnvio:
+          type: string
+          format: date-time
+
+    CalificarRespuesta:
+      type: object
+      required: [util]
+      properties:
+        util:
+          type: boolean
+          description: Obligatorio. Un cuerpo sin este campo responde 400, nunca se asume "no util".
+        comentario:
+          type: [string, 'null']
+          maxLength: 1000
+          description: Comentario libre opcional. Vacio o solo espacios se guarda como sin comentario.
+
+    Calificacion:
+      type: object
+      required: [id, mensajeId, util, fechaCalificacion]
+      properties:
+        id:
+          type: string
+          format: uuid
+        mensajeId:
+          type: string
+          format: uuid
+        util:
+          type: boolean
+        comentario:
+          type: [string, 'null']
+        fechaCalificacion:
+          type: string
+          format: date-time
+
+    ProblemDetail:
+      type: object
+      description: Formato estandar de error (RFC 9457, regla 4 de plataforma).
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+
+    # ---------------------------------------------------------------------
+    # Panel administrativo (HU-CHA-012)
+    # ---------------------------------------------------------------------
+
+    AnaliticaChatbot:
+      type: object
+      required: [desde, hasta, zonaHoraria, conversaciones, preguntas, respuestasMedidas, escalamientos,
+                 calificaciones, calificacionesUtiles, temasFrecuentes, tendencia]
+      properties:
+        desde:
+          type: string
+          format: date-time
+          description: Inicio del periodo (medianoche de `desde` en `zonaHoraria`), inclusive.
+        hasta:
+          type: string
+          format: date-time
+          description: Fin del periodo (medianoche del dia siguiente a `hasta`), exclusivo.
+        zonaHoraria:
+          type: string
+          example: America/Bogota
+        conversaciones:
+          type: integer
+          format: int64
+        preguntas:
+          type: integer
+          format: int64
+        respuestasMedidas:
+          type: integer
+          format: int64
+          description: Respuestas del bot con datos de analitica (posteriores a V4).
+        escalamientos:
+          type: integer
+          format: int64
+        tasaResolucion:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 1
+        tiempoRespuestaPromedioMs:
+          type: [number, 'null']
+        calificaciones:
+          type: integer
+          format: int64
+        calificacionesUtiles:
+          type: integer
+          format: int64
+        satisfaccion:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 1
+        temasFrecuentes:
+          type: array
+          maxItems: 10
+          items:
+            type: object
+            required: [clave, titulo, respuestas]
+            properties:
+              clave:
+                type: string
+              titulo:
+                type: string
+              respuestas:
+                type: integer
+                format: int64
+        tendencia:
+          type: array
+          items:
+            type: object
+            required: [dia, conversaciones, preguntas, respuestas, escalamientos]
+            properties:
+              dia:
+                type: string
+                format: date
+              conversaciones:
+                type: integer
+                format: int64
+              preguntas:
+                type: integer
+                format: int64
+              respuestas:
+                type: integer
+                format: int64
+              escalamientos:
+                type: integer
+                format: int64
+
+    VersionBaseConocimiento:
+      type: object
+      required: [id, numero, estado, fechaCreacion]
+      properties:
+        id:
+          type: string
+          format: uuid
+        numero:
+          type: integer
+        estado:
+          $ref: '#/components/schemas/EstadoVersion'
+        descripcion:
+          type: [string, 'null']
+        fechaCreacion:
+          type: string
+          format: date-time
+        fechaDespliegue:
+          type: [string, 'null']
+          format: date-time
+          description: Ultima vez que la version entro a produccion (al desplegarse o al restaurarse).
+
+    EstadoVersion:
+      type: string
+      enum: [BORRADOR, PRODUCCION, RETIRADA]
+      description: |
+        BORRADOR = candidata en edicion; PRODUCCION = la que responde a los
+        jugadores; RETIRADA = estuvo en produccion y se puede restaurar.
+
+    CrearCandidata:
+      type: object
+      properties:
+        descripcion:
+          type: [string, 'null']
+          maxLength: 500
+
+    Categoria:
+      type: string
+      description: La "intencion" que atiende el tema.
+      enum: [PRODUCTO, MECANICA_JUEGO, MODALIDAD_JUEGO, CUENTA_Y_REGISTRO, SUBASTA_Y_COMERCIO,
+             SOPORTE_TECNICO, POLITICAS_Y_TERMINOS, FAQ_GENERAL]
+
+    TipoRespuesta:
+      type: string
+      enum: [DIRECTA, PASO_A_PASO, SUGERENCIA_PROACTIVA, CONTEXTUAL]
+
+    Variantes:
+      type: array
+      description: |
+        Frases con las que un usuario haria la pregunta. Ninguna puede
+        contener `,` (400): el motor las guarda separadas por coma.
+      items:
+        type: string
+        minLength: 1
+        maxLength: 200
+
+    DatosDeTema:
+      type: object
+      required: [categoria, tipoRespuesta, titulo, variantesEs, respuestaEs]
+      properties:
+        categoria:
+          $ref: '#/components/schemas/Categoria'
+        tipoRespuesta:
+          $ref: '#/components/schemas/TipoRespuesta'
+        titulo:
+          type: string
+          minLength: 1
+          maxLength: 150
+        variantesEs:
+          allOf:
+            - $ref: '#/components/schemas/Variantes'
+          minItems: 1
+        variantesEn:
+          $ref: '#/components/schemas/Variantes'
+        respuestaEs:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        respuestaEn:
+          type: [string, 'null']
+          maxLength: 4000
+        prioridad:
+          type: integer
+          minimum: 0
+          default: 0
+          description: Desempate cuando dos temas coinciden con el mismo puntaje; gana el mayor.
+        activo:
+          type: [boolean, 'null']
+          default: true
+          description: Sin valor se toma como `true`.
+
+    Tema:
+      allOf:
+        - $ref: '#/components/schemas/DatosDeTema'
+        - type: object
+          required: [id, clave, prioridad, activo]
+          properties:
+            id:
+              type: string
+              format: uuid
+            clave:
+              type: string
+              description: Identifica al mismo tema en todas las versiones; no cambia al editarlo.
+            activo:
+              type: boolean
+
+    TemaIntercambio:
+      allOf:
+        - $ref: '#/components/schemas/DatosDeTema'
+        - type: object
+          properties:
+            clave:
+              type: [string, 'null']
+              maxLength: 80
+              description: Siempre viene al exportar; opcional al importar (sin clave, el tema es nuevo).
+
+    ExportacionBaseConocimiento:
+      type: object
+      required: [version, estado, fechaExportacion, temas]
+      properties:
+        version:
+          type: integer
+        estado:
+          $ref: '#/components/schemas/EstadoVersion'
+        fechaExportacion:
+          type: string
+          format: date-time
+        temas:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemaIntercambio'
+
+    ImportacionBaseConocimiento:
+      type: object
+      required: [temas]
+      description: Mismo formato que `ExportacionBaseConocimiento`; los demas campos se ignoran.
+      properties:
+        temas:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/TemaIntercambio'
+
+    DatosDeCasoEvaluacion:
+      type: object
+      required: [pregunta]
+      properties:
+        pregunta:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        temaClaveEsperada:
+          type: [string, 'null']
+          maxLength: 80
+          description: |
+            `clave` del tema que deberia responder. Vacia o sin valor = el
+            chatbot deberia ESCALAR esa pregunta. Una clave que no existe en
+            ningun tema responde 400.
+        activo:
+          type: [boolean, 'null']
+          default: true
+
+    CasoEvaluacion:
+      type: object
+      required: [id, pregunta, activo, fechaCreacion]
+      properties:
+        id:
+          type: string
+          format: uuid
+        pregunta:
+          type: string
+        temaClaveEsperada:
+          type: [string, 'null']
+        activo:
+          type: boolean
+        fechaCreacion:
+          type: string
+          format: date-time
+
+    ResultadoEvaluacion:
+      type: object
+      required: [versionId, numero, casosEvaluados, aciertos, fallos]
+      properties:
+        versionId:
+          type: string
+          format: uuid
+        numero:
+          type: integer
+        casosEvaluados:
+          type: integer
+        aciertos:
+          type: integer
+        tasaAcierto:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 1
+        fallos:
+          type: array
+          items:
+            type: object
+            required: [casoId, pregunta]
+            properties:
+              casoId:
+                type: string
+                format: uuid
+              pregunta:
+                type: string
+              temaClaveEsperada:
+                type: [string, 'null']
+                description: Sin valor = se esperaba que escalara.
+              temaClaveObtenido:
+                type: [string, 'null']
+                description: Sin valor = el chatbot escalo.
+
+    ComparacionEvaluacion:
+      type: object
+      required: [candidata, produccion, candidataApta]
+      properties:
+        candidata:
+          $ref: '#/components/schemas/ResultadoEvaluacion'
+        produccion:
+          $ref: '#/components/schemas/ResultadoEvaluacion'
+        candidataApta:
+          type: boolean
+          description: true si la candidata acierta al menos tantos casos como produccion.
+
+    DespliegueRechazado:
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetail'
+        - type: object
+          required: [candidata, produccion]
+          properties:
+            candidata:
+              $ref: '#/components/schemas/ResultadoEvaluacion'
+            produccion:
+              $ref: '#/components/schemas/ResultadoEvaluacion'

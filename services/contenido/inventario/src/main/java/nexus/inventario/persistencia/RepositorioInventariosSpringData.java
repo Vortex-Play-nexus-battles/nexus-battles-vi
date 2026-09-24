@@ -1,5 +1,6 @@
 package nexus.inventario.persistencia;
 
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
@@ -8,4 +9,6 @@ interface RepositorioInventariosSpringData extends MongoRepository<InventarioDoc
     Optional<InventarioDocumento> findByPropietarioId(String propietarioId);
 
     Optional<InventarioDocumento> findByElementosId(String elementoId);
+
+    List<InventarioDocumento> findAllByElementosId(String elementoId);
 }

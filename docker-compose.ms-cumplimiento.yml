@@ -1,47 +1,87 @@
-# HU-CICD-002 (SCRUM-165): override de despliegue para services/cuentas/ms-cumplimiento.
+# Override de despliegue de services/cuentas/ms-cumplimiento.
 #
-# Mismo patron que docker-compose.cuentas.yml (ms-identidad, tambien de
-# Cuentas): solo declara "image:", nunca "build:" -- el jar se compila y la
-# imagen se publica en ghcr.io en el job "construir-y-publicar" de cd.yml,
-# nunca en el servidor. Se combina siempre con docker-compose.yml (nunca
-# solo), y SOLO cuando ms-cumplimiento esta entre los servicios modificados
-# de esa corrida:
-#   docker compose -f docker-compose.yml -f docker-compose.deploy.yml -f docker-compose.ms-cumplimiento.yml pull|up -d
+# Hasta hoy este archivo declaraba el contenedor de la aplicacion y nada mas:
+# sin base de datos, sin mem_limit, sin restart y sin depends_on. Con
+# DB_HOST apuntando a un servidor que este compose no levanta, el contenedor
+# arranca y muere en el primer intento de conexion -- y sin mem_limit, en un
+# host de 1910 MiB, un servicio sin techo puede llevarse por delante a los que
+# sostienen el MVP. Los cinco secrets que le faltan tampoco se habian echado
+# en falta, porque el servicio nunca llego a intentar desplegarse de verdad.
 #
-# Archivo separado de docker-compose.cuentas.yml (no se agrega ahi) por la
-# misma razon que ese archivo esta separado de docker-compose.deploy.yml:
-# cada servicio de otro equipo mantiene su propio override, para que quede
-# claro quien es dueño de que.
+# Ahora sigue el mismo patron que ms-identidad, ms-finanzas y ms-subastas:
+# solo "image:" (la construye y publica cd.yml, nunca el servidor), su propia
+# base (regla 7: aislamiento de datos), y su techo de memoria.
 #
-# Puerto: 8091 tanto en el host como en el contenedor (confirmado en el
-# Dockerfile de ms-cumplimiento: EXPOSE 8091, sin el desfase host/contenedor
-# que tuvo ms-identidad).
+# Puerto 8091 en el host y en el contenedor (EXPOSE 8091). Salud en
+# /actuator/health: no tiene context-path (confirmado en su
+# application.properties, y el guardian del catalogo lo comprueba).
 #
-# ${TAG} lo exporta scripts/cd/desplegar.sh antes de invocar "docker compose"
-# (mismo sha corto de esta corrida que usan las demas imagenes).
-#
-# Variables de entorno: el lado IZQUIERDO de cada linea es el nombre que
-# Spring realmente lee (confirmado en application.properties de
-# ms-cumplimiento: ${DB_HOST}, ${DB_PORT}, ${DB_NAME}, ${DB_USER},
-# ${DB_PASSWORD}). El lado DERECHO (${MS_CUMPLIMIENTO_...}) es la variable
-# que desplegar.sh deja en el .env del servidor -- con el prefijo
-# "MS_CUMPLIMIENTO_" a proposito, para no chocar ni con las variables de
-# plataforma (DB_USER/DB_PASS, que usa plataforma-db) ni con las de
-# ms-identidad (que usa otro esquema: DB_URL en vez de DB_HOST/PORT/NAME).
-#
-# Todas las variables quedan PENDIENTES por ahora (ver los secrets TODO_*
-# en cd.yml, mismo patron de placeholder que ms-identidad).
+# CAPACIDAD: servicios.json lo marca desplegableDev segun lo medido; ver
+# infrastructure/despliegue/CAPACIDAD.md.
 
 services:
+  cumplimiento-db:
+    image: postgres:17-alpine
+    container_name: cumplimiento-db
+    restart: unless-stopped
+    mem_limit: 128m
+    environment:
+      POSTGRES_DB: ${MS_CUMPLIMIENTO_DB_NAME:-cumplimientodb}
+      POSTGRES_USER: ${MS_CUMPLIMIENTO_DB_USER}
+      POSTGRES_PASSWORD: ${MS_CUMPLIMIENTO_DB_PASSWORD}
+    volumes:
+      - cumplimiento-db-datos:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MS_CUMPLIMIENTO_DB_USER} -d ${MS_CUMPLIMIENTO_DB_NAME:-cumplimientodb}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   srv-ms-cumplimiento:
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-ms-cumplimiento:${TAG}
+    container_name: srv-ms-cumplimiento
+    restart: unless-stopped
+    mem_limit: 256m
     ports:
       - "8091:8091"
+    depends_on:
+      # Corre Flyway al arrancar: con la base a medias el contenedor no
+      # levanta y el healthcheck del despliegue lo da por muerto.
+      cumplimiento-db:
+        condition: service_healthy
+    # Arranque escalonado del host (R16.5b): mismo script que el ancla
+    # x-arranque-escalonado de docker-compose.deploy.yml, donde esta explicado.
+    # Una ancla no cruza archivos, asi que se repite; el guardian
+    # scripts/cd/comprobar-catalogo-servicios.sh exige que sea identico.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        proc="$${ARRANQUE_PROC:-/proc}"
+        creado="$${ARRANQUE_CREADO_EN:-9999999999}"
+        arranque=$$(awk '/^btime/ {print $$2}' "$$proc/stat" 2>/dev/null)
+        encendido=$$(cut -d. -f1 "$$proc/uptime" 2>/dev/null)
+        if [ -n "$$arranque" ] && [ -n "$$encendido" ] \
+           && [ "$$creado" -lt "$$arranque" ] 2>/dev/null \
+           && [ "$$encendido" -lt "$${ARRANQUE_VENTANA_S:-600}" ] 2>/dev/null; then
+          espera=$$(( $${ARRANQUE_TURNO:-0} * $${ARRANQUE_PASO_S:-40} ))
+          echo "arranque escalonado: el host acaba de encender (hace $${encendido}s); turno $${ARRANQUE_TURNO:-0}, espero $${espera}s"
+          trap 'exit 143' TERM INT
+          sleep "$$espera" & wait $$!
+          trap - TERM INT
+        fi
+        exec java -jar app.jar
     environment:
-      DB_HOST: ${MS_CUMPLIMIENTO_DB_HOST}
-      DB_PORT: ${MS_CUMPLIMIENTO_DB_PORT}
-      DB_NAME: ${MS_CUMPLIMIENTO_DB_NAME}
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
+      # Auditoria de administracion: ultimo turno, nadie la necesita para jugar.
+      ARRANQUE_TURNO: "5"
+      ARRANQUE_CREADO_EN: ${ARRANQUE_CREADO_EN:-9999999999}
+      DB_HOST: ${MS_CUMPLIMIENTO_DB_HOST:-cumplimiento-db}
+      DB_PORT: ${MS_CUMPLIMIENTO_DB_PORT:-5432}
+      DB_NAME: ${MS_CUMPLIMIENTO_DB_NAME:-cumplimientodb}
       DB_USER: ${MS_CUMPLIMIENTO_DB_USER}
       DB_PASSWORD: ${MS_CUMPLIMIENTO_DB_PASSWORD}
-      # Clave publica de los tokens (ADR-002/ADR-005), dentro de la red.
       IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://srv-ms-identidad:8089/api/v1/auth/jwks}
+
+volumes:
+  cumplimiento-db-datos:

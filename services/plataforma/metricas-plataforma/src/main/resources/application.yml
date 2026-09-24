@@ -118,3 +118,55 @@ management:
   endpoint:
     health:
       show-details: always
+
+# Pantalla «Sistema» de la consola administrativa: que esta encendido AHORA.
+#
+# Lista aparte de `disponibilidad.servicios` a proposito. Aquella alimenta la
+# cifra de HU-DIS-001 y DEC-01 excluye de ella a los equipos socios; meter
+# aqui los diecisiete cambiaria ese numero sin que nadie lo hubiera decidido.
+# Son dos preguntas distintas: «¿cumplimos el acuerdo?» y «¿que hay arriba?».
+#
+# Los nombres son los del catalogo de despliegue
+# (infrastructure/despliegue/servicios.json). El valor es la URL de salud, o
+# la palabra NO_DESPLEGADO para los que ese catalogo marca fuera del host por
+# capacidad: eso no es un fallo y la consola lo dice con esas palabras en vez
+# de pintar un rojo que no corresponde.
+#
+# En el host, SISTEMA_SALUD_* llega con el nombre del contenedor en la red de
+# compose. Los de contenido viven en otra maquina y se sondean por su IP
+# publica, que es como los alcanza el borde.
+sistema:
+  servicios:
+    # Los valores por defecto son los nombres de la red de despliegue, NO
+    # localhost. Dentro de un contenedor, localhost es el propio servicio:
+    # con los valores anteriores esta pantalla reportaba los diecisiete
+    # servicios como CAIDO con "Connection refused" -- comprobado contra dev
+    # el 2026-09-24. A diferencia de `disponibilidad`, que el host sobrescribe
+    # con SALUD_*, aqui el valor correcto viene de serie y la variable de
+    # entorno queda solo para un entorno distinto.
+    #
+    # Puertos y rutas de salud: infrastructure/despliegue/servicios.json.
+    comentarios: ${SISTEMA_SALUD_COMENTARIOS:http://srv-comentarios:8081/actuator/health}
+    correo: ${SISTEMA_SALUD_CORREO:http://srv-correo:8082/actuator/health}
+    torneos: ${SISTEMA_SALUD_TORNEOS:http://srv-torneos:8083/actuator/health}
+    salas-partidas: ${SISTEMA_SALUD_SALAS_PARTIDAS:http://srv-salas-partidas:8084/actuator/health}
+    notificaciones: ${SISTEMA_SALUD_NOTIFICACIONES:http://srv-notificaciones:8085/actuator/health}
+    moderacion-sanciones: ${SISTEMA_SALUD_MODERACION:http://srv-moderacion-sanciones:8086/actuator/health}
+    metricas-plataforma: ${SISTEMA_SALUD_METRICAS:http://localhost:8087/actuator/health}
+    admin-parametros: ${SISTEMA_SALUD_ADMIN_PARAMETROS:http://srv-admin-parametros:8088/actuator/health}
+    ms-identidad: ${SISTEMA_SALUD_MS_IDENTIDAD:http://srv-ms-identidad:8089/actuator/health}
+    ms-ecommerce: ${SISTEMA_SALUD_MS_ECOMMERCE:http://srv-ms-ecommerce:8090/ecommerce/actuator/health}
+    ms-cumplimiento: ${SISTEMA_SALUD_MS_CUMPLIMIENTO:http://srv-ms-cumplimiento:8091/actuator/health}
+    # Los cuatro de economia y subastas se despliegan a demanda por capacidad
+    # medida. Se sondean igual: si estan, salen OPERATIVO; si no, CAIDO, que es
+    # la verdad y no "no existe".
+    ms-subastas: ${SISTEMA_SALUD_MS_SUBASTAS:http://srv-ms-subastas:8092/api/v1/actuator/health}
+    ms-finanzas: ${SISTEMA_SALUD_MS_FINANZAS:http://srv-ms-finanzas:8093/api/v1/actuator/health}
+    ms-chatbot: ${SISTEMA_SALUD_MS_CHATBOT:NO_DESPLEGADO}
+    # Contenido vive en otra cuenta de AWS y otra VPC, sin camino privado desde
+    # este host (infrastructure/despliegue/CAPACIDAD.md). Esta sonda no los
+    # alcanza; responden por el borde. Decir CAIDO seria mentir.
+    heroes: ${SISTEMA_SALUD_HEROES:NO_OBSERVABLE}
+    inventario: ${SISTEMA_SALUD_INVENTARIO:NO_OBSERVABLE}
+    productos: ${SISTEMA_SALUD_PRODUCTOS:NO_OBSERVABLE}
+    motor-combate: ${SISTEMA_SALUD_MOTOR_COMBATE:NO_OBSERVABLE}

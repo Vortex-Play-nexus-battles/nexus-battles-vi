@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Control integral — NEXUS BATTLES VI</title>
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
+  </head>
+  <body>
+    <div data-cabecera-app></div>
+
+    <main class="pagina consola-integral">
+      <div data-zona="encabezado"></div>
+
+      <!-- Nota permanente, no decorativa: quien mire esta pantalla tiene que
+           saber que lo que no se ve es porque no se pudo preguntar, no porque
+           valga cero. -->
+      <p class="consola-integral__contrato t-meta">
+        Cada panel consulta el servicio dueño del dato por HTTP, con tu sesión y bajo los mismos
+        permisos del resto del producto. Donde el servicio no responde verás
+        <strong>SERVICIO DEGRADADO</strong>; donde no existe el módulo,
+        <strong>NO IMPLEMENTADO</strong>. Ningún número de esta pantalla es de ejemplo.
+      </p>
+
+      <div data-zona="secciones"></div>
+    </main>
+
+    <script type="module">
+      import { exigirAcceso } from '../../comun/acceso.js';
+      import { montarCabecera } from '../../comun/cabecera-app.js';
+      import { montarControlIntegral } from './control-integral.js';
+
+      const sesion = exigirAcceso('control-integral');
+      if (sesion) {
+        montarCabecera(document.querySelector('[data-cabecera-app]'), {
+          vista: 'control-integral',
+          seccionActiva: 'control',
+        });
+        montarControlIntegral(document, sesion);
+      }
+    </script>
+  </body>
+</html>

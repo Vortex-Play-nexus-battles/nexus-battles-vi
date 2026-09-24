@@ -95,6 +95,9 @@ public class SecurityInterceptor implements HandlerInterceptor {
 
             String roleName = null;
             String username = usernameHeader;
+            // uid del token (ADR-002): el identificador que el navegador conoce.
+            // Nunca sale de una cabecera, solo de un token ya validado.
+            String uid = null;
 
             // 1. Intentar validar JWT si viene en header Authorization: Bearer <token>
             if (authHeader != null && authHeader.startsWith("Bearer ") && jwtService != null) {
@@ -103,6 +106,7 @@ public class SecurityInterceptor implements HandlerInterceptor {
                     Claims claims = jwtService.validarYObtenerClaims(token);
                     username = claims.getSubject();
                     roleName = claims.get("rol", String.class);
+                    uid = claims.get("uid", String.class);
 
                     // Verificar que la versión del token coincida con la del
                     // usuario en BD — si el rol cambió después de emitir este
@@ -166,6 +170,9 @@ public class SecurityInterceptor implements HandlerInterceptor {
             // en vez de que cada uno vuelva a leer headers.
             request.setAttribute("usuarioActual", username);
             request.setAttribute("rolActual", roleName);
+            if (uid != null) {
+                request.setAttribute("uidActual", uid);
+            }
         }
 
         return true;

@@ -50,7 +50,9 @@ function aspectoDe(tarjeta) {
   return tarjeta.evaluate((el) => {
     const e = getComputedStyle(el);
     return {
-      borde: e.borderColor,
+      // El borde superior: el lateral izquierdo lleva el acento del tipo
+      // (UX-GAME-3) y no cambia al senalar.
+      borde: e.borderTopColor,
       fondo: e.backgroundColor,
       sombra: e.boxShadow,
       anchoBorde: e.borderTopWidth,
@@ -250,14 +252,16 @@ test.describe('Resaltado del producto al senalar', () => {
    * pero con el color equivocado. Ver #581 y el PR #381, cerrado.
    *
    * Por eso estas dos fijan el valor contra el token del sistema de diseno.
+   * Desde UX-GAME-1 el realce interactivo del sistema es `--primaria` (el
+   * mismo par que `.tarjeta--pulsable:hover`), no `--borde-int`.
    */
 
-  test('El realce usa el borde interactivo del sistema de diseno', async ({ page }) => {
+  test('El realce usa la primaria del sistema de diseno', async ({ page }) => {
     await conInventarioDe(page, 16);
     await abrirVitrina(page);
 
-    const token = await colorDelToken(page, '--borde-int');
-    expect(token, 'el token --borde-int tiene que estar definido').not.toBeNull();
+    const token = await colorDelToken(page, '--primaria');
+    expect(token, 'el token --primaria tiene que estar definido').not.toBeNull();
 
     const tarjeta = page.locator('.vitrina__producto').first();
     await tarjeta.hover();
@@ -271,7 +275,7 @@ test.describe('Resaltado del producto al senalar', () => {
     await conInventarioDe(page, 16);
     await abrirVitrina(page);
 
-    const token = await colorDelToken(page, '--borde-int');
+    const token = await colorDelToken(page, '--primaria');
 
     // La tarjeta es un <li>: quien recibe el foco es un control de dentro.
     const tarjeta = page.locator('.vitrina__producto').first();

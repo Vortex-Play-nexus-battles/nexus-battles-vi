@@ -24,8 +24,23 @@ on:
   # de ese commit y las imagenes se construyen desde el, igual que en push.
   workflow_dispatch:
     inputs:
+      perfil:
+        description: "Perfil de despliegue (infrastructure/despliegue/servicios.json). Agrega sus servicios a los que ya corren; no apaga nada. 'ninguno' = usar solo la lista de abajo."
+        type: choice
+        required: false
+        default: ninguno
+        options: [ninguno, base, finanzas, auditoria, subastas, tienda]
       servicios:
-        description: "Servicios a desplegar, separados por coma (ej: salas-partidas,notificaciones,ms-identidad). Vacio = solo frontend y borde."
+        description: "Servicios a desplegar, separados por coma (ej: salas-partidas,notificaciones,ms-identidad). Se suma al perfil. Vacio y sin perfil = solo frontend y borde."
+        type: string
+        required: false
+        default: ""
+      # El perfil solo sabe encender. En un host donde cabe UN servicio de
+      # economia a la vez, sin esto la unica forma de probar el segundo era
+      # dejar los dos peleandose por la memoria (24-sep: swap al 100 % y
+      # ms-finanzas en 502 sin que ningun healthcheck fallara).
+      apagar:
+        description: "Servicios a APAGAR en dev ANTES de desplegar, separados por coma (ej: ms-ecommerce). Libera memoria. Conserva el volumen de datos."
         type: string
         required: false
         default: ""
@@ -46,6 +61,9 @@ on:
 permissions:
   contents: read
   packages: write
+  # Para leer que push se desplego con exito por ultima vez (base del rango,
+  # ver "Calcular servicios modificados").
+  actions: read
   # Para encender el host si esta apagado, por OIDC y sin claves guardadas.
   # Ver el paso "Asegurar que el host esta encendido" del job de dev.
   id-token: write
@@ -105,6 +123,8 @@ jobs:
       - name: Calcular servicios modificados, su puerto y el tag de esta corrida
         id: detectar
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
@@ -119,6 +139,34 @@ jobs:
               BASE=$(git rev-parse "$HEAD^")
             else
               BASE="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+            fi
+          fi
+
+          # R16 — la base es lo ultimo DESPLEGADO, no el commit anterior.
+          #
+          # La concurrencia de este flujo (cd-...-develop) deja una corrida en
+          # marcha y UNA pendiente; cuando llega otro push, GitHub cancela la
+          # pendiente. Con BASE = event.before, lo que traia el push cancelado
+          # no se despliega nunca: el siguiente push solo compara contra su
+          # propio commit anterior. El 24-sep se perdieron asi, en una hora, la
+          # semilla del catalogo (#682) y la validacion del inventario (#685),
+          # con todo en verde.
+          #
+          # Ahora, en un push, la base es el ultimo push de develop cuyo CD
+          # termino con exito (si es antepasado de HEAD): el rango cubre los
+          # pushes cancelados en medio. Los despliegues a demanda no cuentan:
+          # solo levantan los servicios pedidos. Si la consulta falla, se queda
+          # el comportamiento de antes.
+          if [ "${{ github.event_name }}" = "push" ]; then
+            ULTIMO_OK=$(gh run list --repo "${{ github.repository }}" --workflow cd.yml --branch develop \
+              --status success --limit 30 --json headSha,event \
+              --jq '[.[] | select(.event == "push")][0].headSha // empty' 2>/dev/null || true)
+            if [ -n "$ULTIMO_OK" ] && [ "$ULTIMO_OK" != "$HEAD" ] \
+              && git merge-base --is-ancestor "$ULTIMO_OK" "$HEAD" 2>/dev/null; then
+              if [ "$ULTIMO_OK" != "$BASE" ]; then
+                echo "Base = ultimo push desplegado con exito ($ULTIMO_OK), no el commit anterior ($BASE): hubo pushes sin desplegar en medio."
+              fi
+              BASE="$ULTIMO_OK"
             fi
           fi
 
@@ -148,17 +196,42 @@ jobs:
             # services/plataforma/ms-subastas/a-demanda, que no existe, y el
             # servicio se omitia en silencio (issue #571). Un nombre que no
             # este en el catalogo ahora se avisa en voz alta.
+            PEDIDOS="${{ inputs.servicios }}"
+            PERFIL="${{ inputs.perfil }}"
+            if [ -n "$PERFIL" ] && [ "$PERFIL" != "ninguno" ]; then
+              if ! jq -e --arg p "$PERFIL" '.perfiles | has($p)' "$CATALOGO" > /dev/null; then
+                echo "::error::El perfil '$PERFIL' no existe en $CATALOGO."
+                exit 1
+              fi
+              DEL_PERFIL=$(jq -r --arg p "$PERFIL" '.perfiles[$p] | join(",")' "$CATALOGO")
+              echo "Perfil '$PERFIL' -> ${DEL_PERFIL:-(solo frontend y borde)}"
+              PEDIDOS=$(echo "$PEDIDOS,$DEL_PERFIL" | tr ',' '\n' | sed '/^$/d' | sort -u | tr '\n' ',')
+            fi
+
             ARCHIVOS=""
-            for s in $(echo "${{ inputs.servicios }}" | tr ',' ' '); do
+            DESCONOCIDOS=""
+            for s in $(echo "$PEDIDOS" | tr ',' ' '); do
               ruta_s=$(jq -r --arg s "$s" '.servicios[] | select(.nombre == $s) | .ruta' "$CATALOGO")
               if [ -z "$ruta_s" ]; then
-                echo "::warning::'$s' no esta en $CATALOGO; no se puede desplegar a demanda. Agregalo al catalogo."
+                # Antes esto era un aviso y se seguia adelante. Un aviso en un
+                # log de 900 lineas no lo lee nadie, y quien pidio el servicio
+                # se queda creyendo que se desplego: es el mismo silencio que
+                # tuvo a ms-subastas invisible durante semanas (#571).
+                DESCONOCIDOS="$DESCONOCIDOS $s"
                 continue
               fi
               ARCHIVOS="$ARCHIVOS $ruta_s/a-demanda"
             done
+            if [ -n "$DESCONOCIDOS" ]; then
+              echo "::error::No estan en $CATALOGO:$DESCONOCIDOS"
+              echo "Servicios que si se pueden pedir:"
+              jq -r '.servicios[] | "  - " + .nombre' "$CATALOGO"
+              echo "Perfiles disponibles:"
+              jq -r '.perfiles | keys[] | "  - " + .' "$CATALOGO"
+              exit 1
+            fi
             ARCHIVOS=$(echo "$ARCHIVOS" | tr ' ' '\n' | sed '/^$/d')
-            echo "Despliegue a demanda de: ${{ inputs.servicios }}"
+            echo "Despliegue a demanda de: ${PEDIDOS:-(nada; solo frontend y borde)}"
           else
             ARCHIVOS=$(git diff --name-only "$BASE" "$HEAD")
           fi
@@ -456,13 +529,35 @@ jobs:
         with:
           nombre-instancia: nexus-plataforma-dev
 
+      # Se apaga ANTES de copiar y desplegar: el sentido es hacerle sitio en
+      # memoria a lo que viene detras, no limpiar despues. El script viaja en
+      # el scp de abajo; si todavia no esta en el host, el paso avisa y sigue,
+      # que es preferible a abortar un despliegue por esto.
+      - name: Apagar servicios para hacer sitio
+        if: inputs.apagar != ''
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          SERVICIOS_APAGAR: ${{ inputs.apagar }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          envs: SERVICIOS_APAGAR
+          script: |
+            if [ ! -f /opt/nexus/scripts/cd/apagar.sh ]; then
+              echo "::warning::/opt/nexus/scripts/cd/apagar.sh todavia no esta en el host; se copia en este despliegue y sirve a partir del siguiente."
+              exit 0
+            fi
+            chmod +x /opt/nexus/scripts/cd/apagar.sh
+            SERVICIOS_APAGAR="$SERVICIOS_APAGAR" /opt/nexus/scripts/cd/apagar.sh
+
       - name: Copiar docker-compose.yml, docker-compose.deploy.yml y el script de despliegue
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/revertir.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh,scripts/cd/comprobar-capacidad.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -487,6 +582,30 @@ jobs:
       # que appleboy/ssh-action los reexporte como variables de entorno
       # DENTRO de la sesion SSH remota, para que desplegar.sh los use al
       # generar el .env efimero del servidor.
+      # R16.6 — antes de meter otra JVM, mirar si cabe. El healthcheck de
+      # desplegar.sh comprueba si el servicio nuevo contesta, no si al subirlo
+      # ha empujado a otro fuera de la RAM. El 24-sep eso costo el entorno
+      # entero: ningun healthcheck fallo y aun asi hubo que reiniciar la EC2.
+      # R17.0: recibe la lista de la corrida. Solo los servicios que hoy no
+      # corren suman memoria; un reemplazo o una corrida de solo frontend pasa
+      # (la 35961416881 se quedo sin desplegar el logotipo de #712 por esto).
+      - name: Compuerta de capacidad (antes)
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          SERVICIOS_PUERTOS: ${{ steps.lista.outputs.lista }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          envs: SERVICIOS_PUERTOS
+          script: |
+            if [ ! -f /opt/nexus/scripts/cd/comprobar-capacidad.sh ]; then
+              echo "::warning::comprobar-capacidad.sh todavia no esta en el host; se copia en este despliegue y sirve a partir del siguiente."
+              exit 0
+            fi
+            chmod +x /opt/nexus/scripts/cd/comprobar-capacidad.sh
+            SERVICIOS_PUERTOS="$SERVICIOS_PUERTOS" /opt/nexus/scripts/cd/comprobar-capacidad.sh antes
+
       - name: Desplegar en Dev
         id: desplegar
         # Solo durante un simulacro de reversion el fallo de este step no
@@ -542,43 +661,46 @@ jobs:
           MS_IDENTIDAD_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_IDENTIDAD }}
           LISTA_NEGRA_URL: ${{ secrets.TODO_LISTA_NEGRA_URL }}
           MS_IDENTIDAD_SPRING_PROFILES_ACTIVE: "dev"
+          ADMINS_INICIALES: ${{ secrets.ADMINS_INICIALES }}
           # PENDIENTE (TODO_*): mismo patron de placeholder que ms-identidad
           # -- 5 secrets propios de ms-cumplimiento (equipo Cuentas),
           # todavia no creados en GitHub. Prefijo "MS_CUMPLIMIENTO_" para no
           # chocar con DB_USER/DB_PASS de plataforma ni con el esquema
           # DB_URL de ms-identidad (ver docker-compose.ms-cumplimiento.yml).
-          MS_CUMPLIMIENTO_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_CUMPLIMIENTO }}
-          MS_CUMPLIMIENTO_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_CUMPLIMIENTO }}
-          MS_CUMPLIMIENTO_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_CUMPLIMIENTO }}
-          MS_CUMPLIMIENTO_DB_USER: ${{ secrets.TODO_DB_USER_MS_CUMPLIMIENTO }}
-          MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_HOST: ${{ vars.MS_CUMPLIMIENTO_DB_HOST }}
+          MS_CUMPLIMIENTO_DB_PORT: ${{ vars.MS_CUMPLIMIENTO_DB_PORT }}
+          MS_CUMPLIMIENTO_DB_NAME: ${{ vars.MS_CUMPLIMIENTO_DB_NAME }}
+          MS_CUMPLIMIENTO_DB_USER: ${{ secrets.MS_CUMPLIMIENTO_DB_USER }}
+          MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.MS_CUMPLIMIENTO_DB_PASSWORD }}
           # PENDIENTE (TODO_*): mismo patron de placeholder que los otros dos
           # servicios de Cuentas -- 5 secrets propios de ms-ecommerce,
           # todavia no creados en GitHub. Prefijo "MS_ECOMMERCE_" para no
           # chocar con ningun otro esquema (ver docker-compose.ms-ecommerce.yml).
-          MS_ECOMMERCE_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_ECOMMERCE }}
-          MS_ECOMMERCE_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_ECOMMERCE }}
-          MS_ECOMMERCE_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_ECOMMERCE }}
-          MS_ECOMMERCE_DB_USER: ${{ secrets.TODO_DB_USER_MS_ECOMMERCE }}
-          MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_ECOMMERCE }}
-          # PENDIENTE (TODO_*): mismo patron de marcador que los otros
-          # servicios de Cuentas. Los nombres exactos que hay que crear en
-          # GitHub estan en infrastructure/despliegue/servicios.json
-          # (secretsRequeridos) y en infrastructure/despliegue/CAPACIDAD.md.
-          # Que existan no despliega nada por si solo: ms-finanzas y
-          # ms-subastas siguen con desplegableDev:false mientras el host de
-          # plataforma no tenga RAM. Prefijo propio por servicio a proposito,
-          # para no pisar DB_USER/DB_PASS de plataforma-db.
-          MS_FINANZAS_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_FINANZAS }}
-          MS_FINANZAS_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_FINANZAS }}
-          MS_FINANZAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_FINANZAS }}
-          MS_FINANZAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_FINANZAS }}
-          MS_FINANZAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_FINANZAS }}
-          MS_SUBASTAS_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_SUBASTAS }}
-          MS_SUBASTAS_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_SUBASTAS }}
-          MS_SUBASTAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_SUBASTAS }}
-          MS_SUBASTAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_SUBASTAS }}
-          MS_SUBASTAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_SUBASTAS }}
+          # Los cuatro servicios de economia usan nombres definitivos, no
+          # marcadores "TODO_": el host, el puerto y el nombre de la base no
+          # son secretos -- son el nombre de un contenedor de la propia red de
+          # despliegue -- y meterlos en "secrets" solo servia para que nadie
+          # pudiera comprobarlos sin permisos de administracion. Credencial
+          # (usuario y clave) en secrets; el resto en variables.
+          #
+          # ms-identidad sigue con sus TODO_*: esta desplegado y funcionando
+          # con esos valores, y migrarlo exige conocerlos. Queda anotado en
+          # infrastructure/despliegue/CAPACIDAD.md.
+          MS_ECOMMERCE_DB_HOST: ${{ vars.MS_ECOMMERCE_DB_HOST }}
+          MS_ECOMMERCE_DB_PORT: ${{ vars.MS_ECOMMERCE_DB_PORT }}
+          MS_ECOMMERCE_DB_NAME: ${{ vars.MS_ECOMMERCE_DB_NAME }}
+          MS_ECOMMERCE_DB_USER: ${{ secrets.MS_ECOMMERCE_DB_USER }}
+          MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.MS_ECOMMERCE_DB_PASSWORD }}
+          MS_FINANZAS_DB_HOST: ${{ vars.MS_FINANZAS_DB_HOST }}
+          MS_FINANZAS_DB_PORT: ${{ vars.MS_FINANZAS_DB_PORT }}
+          MS_FINANZAS_DB_NAME: ${{ vars.MS_FINANZAS_DB_NAME }}
+          MS_FINANZAS_DB_USER: ${{ secrets.MS_FINANZAS_DB_USER }}
+          MS_FINANZAS_DB_PASSWORD: ${{ secrets.MS_FINANZAS_DB_PASSWORD }}
+          MS_SUBASTAS_DB_HOST: ${{ vars.MS_SUBASTAS_DB_HOST }}
+          MS_SUBASTAS_DB_PORT: ${{ vars.MS_SUBASTAS_DB_PORT }}
+          MS_SUBASTAS_DB_NAME: ${{ vars.MS_SUBASTAS_DB_NAME }}
+          MS_SUBASTAS_DB_USER: ${{ secrets.MS_SUBASTAS_DB_USER }}
+          MS_SUBASTAS_DB_PASSWORD: ${{ secrets.MS_SUBASTAS_DB_PASSWORD }}
           # Origenes permitidos del canal STOMP de subastas. NO es un secreto
           # (es la URL publica del borde) pero va por el mismo camino que
           # SALAS_WS_ORIGENES. Vacio = no se acepta ningun origen: el panel de
@@ -589,7 +711,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,SIMULACRO_REVERSION,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,SMTP_PORT,LISTA_NEGRA_VERIFICAR_URL,SALAS_WS_ORIGENES,CHAT_WS_ORIGENES,CHAT_HISTORIAL_TAMANO,NOTIFICACIONES_WS_ORIGENES,COMENTARIOS_FORMATOS_IMAGEN,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD,MS_SUBASTAS_DB_HOST,MS_SUBASTAS_DB_PORT,MS_SUBASTAS_DB_NAME,MS_SUBASTAS_DB_USER,MS_SUBASTAS_DB_PASSWORD,SUBASTAS_WS_ORIGENES,SUBASTAS_CORS_ORIGENES
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,SIMULACRO_REVERSION,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,SMTP_PORT,LISTA_NEGRA_VERIFICAR_URL,SALAS_WS_ORIGENES,CHAT_WS_ORIGENES,CHAT_HISTORIAL_TAMANO,NOTIFICACIONES_WS_ORIGENES,COMENTARIOS_FORMATOS_IMAGEN,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD,MS_SUBASTAS_DB_HOST,MS_SUBASTAS_DB_PORT,MS_SUBASTAS_DB_NAME,MS_SUBASTAS_DB_USER,MS_SUBASTAS_DB_PASSWORD,SUBASTAS_WS_ORIGENES,SUBASTAS_CORS_ORIGENES,ADMINS_INICIALES
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -606,6 +728,49 @@ jobs:
       # ejercitar revertir.sh de verdad -- mismo script, mismo step con el
       # mismo nombre, mismo host donde corre el MVP. Los tres steps de abajo
       # solo existen cuando el simulacro esta activo.
+      # El otro lado de la compuerta: el servicio nuevo puede estar sanisimo y
+      # aun asi haber dejado al host sin margen. Se mira la memoria Y que el
+      # nucleo del MVP siga contestando, que es lo que el 24-sep nadie miro.
+      - name: Compuerta de capacidad (despues)
+        id: capacidad_despues
+        if: steps.desplegar.outcome == 'success'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          script: |
+            if [ ! -f /opt/nexus/scripts/cd/comprobar-capacidad.sh ]; then
+              echo "::warning::comprobar-capacidad.sh todavia no esta en el host; sirve a partir del siguiente despliegue."
+              exit 0
+            fi
+            /opt/nexus/scripts/cd/comprobar-capacidad.sh despues
+
+      # Si la compuerta de despues salta, se apaga lo que acaba de subir. Se
+      # revierte el servicio nuevo, nunca el MVP: esa es la regla de
+      # CAPACIDAD.md, y hasta ahora habia que aplicarla a mano por SSH.
+      # R17.0: "lo que acaba de subir" son solo los servicios que no corrian
+      # antes de esta corrida (los apunta la compuerta de antes en el host).
+      # Antes se apagaba toda la lista de la corrida, asi que un reemplazo de
+      # un servicio del MVP con poco margen lo habria dejado apagado.
+      - name: Apagar lo recien desplegado si el host quedo sin margen
+        if: failure() && steps.capacidad_despues.outcome == 'failure'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          script: |
+            SERVICIOS_APAGAR="$(cat /opt/nexus/capacidad-nuevos.txt 2>/dev/null || true)"
+            if [ -z "${SERVICIOS_APAGAR// /}" ]; then
+              echo "La corrida no arranco ningun servicio nuevo: no se apaga nada (un reemplazo no se apaga desde aqui)."
+              exit 0
+            fi
+            echo "La compuerta de capacidad salto: se apagan los servicios nuevos de esta corrida: $SERVICIOS_APAGAR"
+            chmod +x /opt/nexus/scripts/cd/apagar.sh
+            SERVICIOS_APAGAR="$SERVICIOS_APAGAR" /opt/nexus/scripts/cd/apagar.sh
+            /opt/nexus/scripts/cd/comprobar-capacidad.sh despues || true
+
       - name: Reversion automatica por fallo de salud
         if: github.event_name == 'workflow_dispatch' && inputs.simulacro_reversion != '' && steps.desplegar.outcome == 'failure'
         uses: appleboy/ssh-action@v1.0.3
@@ -746,7 +911,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_CONTENIDO_DEV }}
           username: ${{ secrets.SSH_USER_CONTENIDO_DEV }}
           key: ${{ secrets.SSH_KEY_CONTENIDO_DEV }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh,scripts/cd/comprobar-capacidad.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -816,7 +981,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh,scripts/cd/comprobar-capacidad.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -853,38 +1018,41 @@ jobs:
           MS_IDENTIDAD_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_IDENTIDAD }}
           LISTA_NEGRA_URL: ${{ secrets.TODO_LISTA_NEGRA_URL }}
           MS_IDENTIDAD_SPRING_PROFILES_ACTIVE: "dev"
+          ADMINS_INICIALES: ${{ secrets.ADMINS_INICIALES }}
           # PENDIENTE (TODO_*): ver el mismo comentario en el job "Desplegar
           # en Dev" -- misma logica para los 5 secrets de ms-cumplimiento.
-          MS_CUMPLIMIENTO_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_CUMPLIMIENTO }}
-          MS_CUMPLIMIENTO_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_CUMPLIMIENTO }}
-          MS_CUMPLIMIENTO_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_CUMPLIMIENTO }}
-          MS_CUMPLIMIENTO_DB_USER: ${{ secrets.TODO_DB_USER_MS_CUMPLIMIENTO }}
-          MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_HOST: ${{ vars.MS_CUMPLIMIENTO_DB_HOST }}
+          MS_CUMPLIMIENTO_DB_PORT: ${{ vars.MS_CUMPLIMIENTO_DB_PORT }}
+          MS_CUMPLIMIENTO_DB_NAME: ${{ vars.MS_CUMPLIMIENTO_DB_NAME }}
+          MS_CUMPLIMIENTO_DB_USER: ${{ secrets.MS_CUMPLIMIENTO_DB_USER }}
+          MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.MS_CUMPLIMIENTO_DB_PASSWORD }}
           # PENDIENTE (TODO_*): ver el mismo comentario en el job "Desplegar
           # en Dev" -- misma logica para los 5 secrets de ms-ecommerce.
-          MS_ECOMMERCE_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_ECOMMERCE }}
-          MS_ECOMMERCE_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_ECOMMERCE }}
-          MS_ECOMMERCE_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_ECOMMERCE }}
-          MS_ECOMMERCE_DB_USER: ${{ secrets.TODO_DB_USER_MS_ECOMMERCE }}
-          MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_ECOMMERCE }}
-          # PENDIENTE (TODO_*): mismo patron de marcador que los otros
-          # servicios de Cuentas. Los nombres exactos que hay que crear en
-          # GitHub estan en infrastructure/despliegue/servicios.json
-          # (secretsRequeridos) y en infrastructure/despliegue/CAPACIDAD.md.
-          # Que existan no despliega nada por si solo: ms-finanzas y
-          # ms-subastas siguen con desplegableDev:false mientras el host de
-          # plataforma no tenga RAM. Prefijo propio por servicio a proposito,
-          # para no pisar DB_USER/DB_PASS de plataforma-db.
-          MS_FINANZAS_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_FINANZAS }}
-          MS_FINANZAS_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_FINANZAS }}
-          MS_FINANZAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_FINANZAS }}
-          MS_FINANZAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_FINANZAS }}
-          MS_FINANZAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_FINANZAS }}
-          MS_SUBASTAS_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_SUBASTAS }}
-          MS_SUBASTAS_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_SUBASTAS }}
-          MS_SUBASTAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_SUBASTAS }}
-          MS_SUBASTAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_SUBASTAS }}
-          MS_SUBASTAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_SUBASTAS }}
+          # Los cuatro servicios de economia usan nombres definitivos, no
+          # marcadores "TODO_": el host, el puerto y el nombre de la base no
+          # son secretos -- son el nombre de un contenedor de la propia red de
+          # despliegue -- y meterlos en "secrets" solo servia para que nadie
+          # pudiera comprobarlos sin permisos de administracion. Credencial
+          # (usuario y clave) en secrets; el resto en variables.
+          #
+          # ms-identidad sigue con sus TODO_*: esta desplegado y funcionando
+          # con esos valores, y migrarlo exige conocerlos. Queda anotado en
+          # infrastructure/despliegue/CAPACIDAD.md.
+          MS_ECOMMERCE_DB_HOST: ${{ vars.MS_ECOMMERCE_DB_HOST }}
+          MS_ECOMMERCE_DB_PORT: ${{ vars.MS_ECOMMERCE_DB_PORT }}
+          MS_ECOMMERCE_DB_NAME: ${{ vars.MS_ECOMMERCE_DB_NAME }}
+          MS_ECOMMERCE_DB_USER: ${{ secrets.MS_ECOMMERCE_DB_USER }}
+          MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.MS_ECOMMERCE_DB_PASSWORD }}
+          MS_FINANZAS_DB_HOST: ${{ vars.MS_FINANZAS_DB_HOST }}
+          MS_FINANZAS_DB_PORT: ${{ vars.MS_FINANZAS_DB_PORT }}
+          MS_FINANZAS_DB_NAME: ${{ vars.MS_FINANZAS_DB_NAME }}
+          MS_FINANZAS_DB_USER: ${{ secrets.MS_FINANZAS_DB_USER }}
+          MS_FINANZAS_DB_PASSWORD: ${{ secrets.MS_FINANZAS_DB_PASSWORD }}
+          MS_SUBASTAS_DB_HOST: ${{ vars.MS_SUBASTAS_DB_HOST }}
+          MS_SUBASTAS_DB_PORT: ${{ vars.MS_SUBASTAS_DB_PORT }}
+          MS_SUBASTAS_DB_NAME: ${{ vars.MS_SUBASTAS_DB_NAME }}
+          MS_SUBASTAS_DB_USER: ${{ secrets.MS_SUBASTAS_DB_USER }}
+          MS_SUBASTAS_DB_PASSWORD: ${{ secrets.MS_SUBASTAS_DB_PASSWORD }}
           # Origenes permitidos del canal STOMP de subastas. NO es un secreto
           # (es la URL publica del borde) pero va por el mismo camino que
           # SALAS_WS_ORIGENES. Vacio = no se acepta ningun origen: el panel de
@@ -895,7 +1063,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD,MS_SUBASTAS_DB_HOST,MS_SUBASTAS_DB_PORT,MS_SUBASTAS_DB_NAME,MS_SUBASTAS_DB_USER,MS_SUBASTAS_DB_PASSWORD,SUBASTAS_WS_ORIGENES,SUBASTAS_CORS_ORIGENES
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD,MS_SUBASTAS_DB_HOST,MS_SUBASTAS_DB_PORT,MS_SUBASTAS_DB_NAME,MS_SUBASTAS_DB_USER,MS_SUBASTAS_DB_PASSWORD,SUBASTAS_WS_ORIGENES,SUBASTAS_CORS_ORIGENES,ADMINS_INICIALES
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -937,7 +1105,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/revertir.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh,scripts/cd/comprobar-capacidad.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -985,37 +1153,39 @@ jobs:
           # PENDIENTE (TODO_*): mismos 5 secrets de ms-cumplimiento que en
           # dev/test -- este servicio no tiene perfiles Spring (un solo
           # application.properties), asi que no hace falta forzar ninguno.
-          MS_CUMPLIMIENTO_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_CUMPLIMIENTO }}
-          MS_CUMPLIMIENTO_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_CUMPLIMIENTO }}
-          MS_CUMPLIMIENTO_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_CUMPLIMIENTO }}
-          MS_CUMPLIMIENTO_DB_USER: ${{ secrets.TODO_DB_USER_MS_CUMPLIMIENTO }}
-          MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_CUMPLIMIENTO }}
+          MS_CUMPLIMIENTO_DB_HOST: ${{ vars.MS_CUMPLIMIENTO_DB_HOST }}
+          MS_CUMPLIMIENTO_DB_PORT: ${{ vars.MS_CUMPLIMIENTO_DB_PORT }}
+          MS_CUMPLIMIENTO_DB_NAME: ${{ vars.MS_CUMPLIMIENTO_DB_NAME }}
+          MS_CUMPLIMIENTO_DB_USER: ${{ secrets.MS_CUMPLIMIENTO_DB_USER }}
+          MS_CUMPLIMIENTO_DB_PASSWORD: ${{ secrets.MS_CUMPLIMIENTO_DB_PASSWORD }}
           # PENDIENTE (TODO_*): mismos 5 secrets de ms-ecommerce que en
           # dev/test -- tampoco tiene perfiles Spring, no hace falta forzar
           # ninguno.
-          MS_ECOMMERCE_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_ECOMMERCE }}
-          MS_ECOMMERCE_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_ECOMMERCE }}
-          MS_ECOMMERCE_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_ECOMMERCE }}
-          MS_ECOMMERCE_DB_USER: ${{ secrets.TODO_DB_USER_MS_ECOMMERCE }}
-          MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_ECOMMERCE }}
-          # PENDIENTE (TODO_*): mismo patron de marcador que los otros
-          # servicios de Cuentas. Los nombres exactos que hay que crear en
-          # GitHub estan en infrastructure/despliegue/servicios.json
-          # (secretsRequeridos) y en infrastructure/despliegue/CAPACIDAD.md.
-          # Que existan no despliega nada por si solo: ms-finanzas y
-          # ms-subastas siguen con desplegableDev:false mientras el host de
-          # plataforma no tenga RAM. Prefijo propio por servicio a proposito,
-          # para no pisar DB_USER/DB_PASS de plataforma-db.
-          MS_FINANZAS_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_FINANZAS }}
-          MS_FINANZAS_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_FINANZAS }}
-          MS_FINANZAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_FINANZAS }}
-          MS_FINANZAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_FINANZAS }}
-          MS_FINANZAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_FINANZAS }}
-          MS_SUBASTAS_DB_HOST: ${{ secrets.TODO_DB_HOST_MS_SUBASTAS }}
-          MS_SUBASTAS_DB_PORT: ${{ secrets.TODO_DB_PORT_MS_SUBASTAS }}
-          MS_SUBASTAS_DB_NAME: ${{ secrets.TODO_DB_NAME_MS_SUBASTAS }}
-          MS_SUBASTAS_DB_USER: ${{ secrets.TODO_DB_USER_MS_SUBASTAS }}
-          MS_SUBASTAS_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_SUBASTAS }}
+          # Los cuatro servicios de economia usan nombres definitivos, no
+          # marcadores "TODO_": el host, el puerto y el nombre de la base no
+          # son secretos -- son el nombre de un contenedor de la propia red de
+          # despliegue -- y meterlos en "secrets" solo servia para que nadie
+          # pudiera comprobarlos sin permisos de administracion. Credencial
+          # (usuario y clave) en secrets; el resto en variables.
+          #
+          # ms-identidad sigue con sus TODO_*: esta desplegado y funcionando
+          # con esos valores, y migrarlo exige conocerlos. Queda anotado en
+          # infrastructure/despliegue/CAPACIDAD.md.
+          MS_ECOMMERCE_DB_HOST: ${{ vars.MS_ECOMMERCE_DB_HOST }}
+          MS_ECOMMERCE_DB_PORT: ${{ vars.MS_ECOMMERCE_DB_PORT }}
+          MS_ECOMMERCE_DB_NAME: ${{ vars.MS_ECOMMERCE_DB_NAME }}
+          MS_ECOMMERCE_DB_USER: ${{ secrets.MS_ECOMMERCE_DB_USER }}
+          MS_ECOMMERCE_DB_PASSWORD: ${{ secrets.MS_ECOMMERCE_DB_PASSWORD }}
+          MS_FINANZAS_DB_HOST: ${{ vars.MS_FINANZAS_DB_HOST }}
+          MS_FINANZAS_DB_PORT: ${{ vars.MS_FINANZAS_DB_PORT }}
+          MS_FINANZAS_DB_NAME: ${{ vars.MS_FINANZAS_DB_NAME }}
+          MS_FINANZAS_DB_USER: ${{ secrets.MS_FINANZAS_DB_USER }}
+          MS_FINANZAS_DB_PASSWORD: ${{ secrets.MS_FINANZAS_DB_PASSWORD }}
+          MS_SUBASTAS_DB_HOST: ${{ vars.MS_SUBASTAS_DB_HOST }}
+          MS_SUBASTAS_DB_PORT: ${{ vars.MS_SUBASTAS_DB_PORT }}
+          MS_SUBASTAS_DB_NAME: ${{ vars.MS_SUBASTAS_DB_NAME }}
+          MS_SUBASTAS_DB_USER: ${{ secrets.MS_SUBASTAS_DB_USER }}
+          MS_SUBASTAS_DB_PASSWORD: ${{ secrets.MS_SUBASTAS_DB_PASSWORD }}
           # Origenes permitidos del canal STOMP de subastas. NO es un secreto
           # (es la URL publica del borde) pero va por el mismo camino que
           # SALAS_WS_ORIGENES. Vacio = no se acepta ningun origen: el panel de
@@ -1026,7 +1196,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD,MS_SUBASTAS_DB_HOST,MS_SUBASTAS_DB_PORT,MS_SUBASTAS_DB_NAME,MS_SUBASTAS_DB_USER,MS_SUBASTAS_DB_PASSWORD,SUBASTAS_WS_ORIGENES,SUBASTAS_CORS_ORIGENES
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD,MS_SUBASTAS_DB_HOST,MS_SUBASTAS_DB_PORT,MS_SUBASTAS_DB_NAME,MS_SUBASTAS_DB_USER,MS_SUBASTAS_DB_PASSWORD,SUBASTAS_WS_ORIGENES,SUBASTAS_CORS_ORIGENES,ADMINS_INICIALES
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh

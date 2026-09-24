@@ -1,6 +1,7 @@
 package nexus.api;
 
 import java.net.URI;
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -14,6 +15,8 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 
 @RestControllerAdvice
@@ -56,6 +59,59 @@ public class ManejadorDeErrores {
                         HttpStatus.BAD_REQUEST,
                         "Solicitud inválida",
                         "El cuerpo JSON está incompleto, mal formado o contiene un valor no permitido",
+                        "urn:nexus:problema:solicitud-invalida",
+                        solicitud);
+        }
+
+        // R16 — parametros de consulta del listado (GET /api/v1/productos).
+        //
+        // Sin estos dos manejadores, un `size=51` o un `tipo=POCION` caian en
+        // el `Exception.class` de abajo y respondian 500, cuando el contrato
+        // 1.2.0 promete 400 con Problem Details. El primero recoge la
+        // validacion de Bean Validation sobre los @RequestParam (page >= 0,
+        // size entre 1 y 50); el segundo, un valor que ni siquiera se puede
+        // convertir al tipo del parametro (un numero mal escrito o un valor
+        // fuera de la enumeracion).
+        @ExceptionHandler(HandlerMethodValidationException.class)
+        ResponseEntity<ProblemDetail> manejarParametrosInvalidos(
+                        HandlerMethodValidationException excepcion,
+                        HttpServletRequest solicitud) {
+
+                String detalle = excepcion.getAllErrors()
+                        .stream()
+                        .map(error -> Objects.requireNonNullElse(
+                                error.getDefaultMessage(),
+                                "Valor inválido"))
+                        .distinct()
+                        .collect(Collectors.joining("; "));
+
+                return respuesta(
+                        HttpStatus.BAD_REQUEST,
+                        "Solicitud inválida",
+                        detalle,
+                        "urn:nexus:problema:solicitud-invalida",
+                        solicitud);
+        }
+
+        @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+        ResponseEntity<ProblemDetail> manejarParametroConFormatoInvalido(
+                        MethodArgumentTypeMismatchException excepcion,
+                        HttpServletRequest solicitud) {
+
+                // No se repite el valor recibido: se nombra el parametro y, si es
+                // una enumeracion, los valores que si admite.
+                Class<?> tipoEsperado = excepcion.getRequiredType();
+                String detalle = tipoEsperado != null && tipoEsperado.isEnum()
+                        ? excepcion.getName() + ": valor no permitido; se admite "
+                                + Arrays.stream(tipoEsperado.getEnumConstants())
+                                        .map(Object::toString)
+                                        .collect(Collectors.joining(", "))
+                        : excepcion.getName() + ": valor con formato inválido";
+
+                return respuesta(
+                        HttpStatus.BAD_REQUEST,
+                        "Solicitud inválida",
+                        detalle,
                         "urn:nexus:problema:solicitud-invalida",
                         solicitud);
         }

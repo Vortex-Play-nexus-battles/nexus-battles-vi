@@ -54,7 +54,7 @@ done
 
 echo
 echo "== 2) Lo que dice el catalogo coincide con el servicio real =="
-while IFS=$'\t' read -r nombre ruta herramienta puertoContenedor rutaSalud composeExtra; do
+while IFS=$'\t' read -r nombre ruta herramienta puertoContenedor rutaSalud composeExtra memLimit; do
   [ -d "$ruta" ] || { fallo "$nombre: la ruta $ruta no existe."; continue; }
 
   # a) herramienta declarada vs la que hay
@@ -86,6 +86,19 @@ while IFS=$'\t' read -r nombre ruta herramienta puertoContenedor rutaSalud compo
       "No copies la ruta de un comentario: miralo en application.properties."
   fi
 
+  # c2) el techo de memoria declarado en el catalogo es el que aplica el
+  #     compose. Si divergen, las decisiones de capacidad se toman con un
+  #     numero y el host ejecuta otro -- y el JVM se dimensiona con el del
+  #     compose (MaxRAMPercentage), no con el del catalogo.
+  if [ "$composeExtra" != "null" ] && [ -n "$composeExtra" ] && [ -f "$composeExtra" ] && [ -n "$memLimit" ] && [ "$memLimit" != "null" ]; then
+    enCompose=$(grep -A4 -E "^ *srv-${nombre}:" "$composeExtra" | grep -oE 'mem_limit: [0-9]+m' | head -1 | grep -oE '[0-9]+')
+    if [ -n "$enCompose" ] && [ "$enCompose" != "$memLimit" ]; then
+      fallo "$nombre: el catalogo dice memLimitMiB=$memLimit y $composeExtra aplica ${enCompose}m." \
+        "La capacidad se decide con el numero del catalogo y el host ejecuta el" \
+        "del compose: tienen que ser el mismo."
+    fi
+  fi
+
   # d) el override de compose existe y define de verdad el contenedor
   if [ "$composeExtra" != "null" ] && [ -n "$composeExtra" ]; then
     if [ ! -f "$composeExtra" ]; then
@@ -99,7 +112,7 @@ while IFS=$'\t' read -r nombre ruta herramienta puertoContenedor rutaSalud compo
       fallo "$nombre: no tiene composeExtra y docker-compose.yml no declara srv-${nombre}."
     fi
   fi
-done < <(jq -r '.servicios[] | [.nombre, .ruta, .herramienta, .puertoContenedor, .rutaSalud, (.composeExtra // "null")] | @tsv' "$CATALOGO")
+done < <(jq -r '.servicios[] | [.nombre, .ruta, .herramienta, .puertoContenedor, .rutaSalud, (.composeExtra // "null"), (.memLimitMiB // "null")] | @tsv' "$CATALOGO")
 
 echo
 echo "== 3) Los puertos de host no chocan entre si =="
@@ -126,6 +139,185 @@ for script in scripts/cd/desplegar.sh scripts/cd/revertir.sh; do
       "sin su base de datos, justo cuando algo ya fallo."
   fi
 done
+
+echo
+echo "== 5) Todo cliente de servicio recibe su propia credencial =="
+# desplegar.sh registra en el emisor (AUTH_CLIENTES_SERVICIO) una credencial
+# por cada nombre de CLIENTES_DE_SERVICIO. Si el compose de ese servicio no le
+# pasa DIRECTORIO_ACTIVO_CLIENT_ID/SECRET, el servicio pide su token con el
+# client_id global, que no esta registrado, y se lo niegan -- en silencio,
+# porque la llamada fallida se ve como un timeout aguas abajo y no como un
+# problema de credenciales. Le pasaba a notificaciones, ms-finanzas y
+# ms-subastas a la vez.
+CLIENTES=$(grep -E '^CLIENTES_DE_SERVICIO=' scripts/cd/desplegar.sh | head -1 | cut -d'"' -f2)
+if [ -z "$CLIENTES" ]; then
+  fallo "No se pudo leer CLIENTES_DE_SERVICIO de scripts/cd/desplegar.sh."
+else
+  for cliente in $CLIENTES; do
+    if grep -qhE "DIRECTORIO_ACTIVO_CLIENT_ID: ${cliente}\$" docker-compose*.yml 2>/dev/null; then
+      echo "  ok    $cliente"
+    else
+      fallo "$cliente esta registrado como cliente de servicio pero ningun compose le pasa su credencial." \
+        "Agrega a su bloque environment:" \
+        "  DIRECTORIO_ACTIVO_CLIENT_ID: $cliente" \
+        "  DIRECTORIO_ACTIVO_CLIENT_SECRET: \${SECRETO_SERVICIO_$(echo "$cliente" | tr 'a-z-' 'A-Z_'):-}"
+    fi
+  done
+fi
+
+echo
+echo "== 6) Quien presenta credencial sabe a quien presentarsela =="
+# Declarar DIRECTORIO_ACTIVO_CLIENT_ID sin DIRECTORIO_ACTIVO_URL no degrada
+# nada: el servicio NO ARRANCA. La biblioteca compartida construye el bean
+# TokenDeServicio en el arranque y explota con "Falta la URL del emisor".
+# Le paso a ms-finanzas en la corrida 35939650016: cinco reinicios, health en
+# rojo durante tres minutos, y el diagnostico decia OOMKilled=false mientras
+# todo el mundo buscaba un problema de memoria.
+for archivo in docker-compose.ms-*.yml; do
+  [ -f "$archivo" ] || continue
+  if grep -q "DIRECTORIO_ACTIVO_CLIENT_ID:" "$archivo" && ! grep -q "DIRECTORIO_ACTIVO_URL:" "$archivo"; then
+    fallo "$archivo declara DIRECTORIO_ACTIVO_CLIENT_ID pero no DIRECTORIO_ACTIVO_URL." \
+      "Sin la URL del emisor el servicio no arranca, no es que funcione peor." \
+      "Agrega:  DIRECTORIO_ACTIVO_URL: \${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}"
+  else
+    grep -q "DIRECTORIO_ACTIVO_CLIENT_ID:" "$archivo" && echo "  ok    $archivo"
+  fi
+done
+
+echo
+echo "== 7) Los compose se combinan sin claves repetidas =="
+# Una clave repetida dentro de un mismo bloque no la ve el ojo en una
+# revision y rompe TODOS los despliegues, no solo el del servicio afectado:
+# "docker compose" no puede ni leer el archivo. Paso en la corrida
+# 35923936097 y dejo el pipeline entero parado.
+if command -v python3 >/dev/null 2>&1; then
+  for archivo in docker-compose*.yml; do
+    [ -f "$archivo" ] || continue
+    python3 - "$archivo" <<'PY' || FALLOS=$((FALLOS + 1))
+import sys, yaml
+class Estricto(yaml.SafeLoader): pass
+def sin_repetidas(loader, node, deep=False):
+    vistas = set()
+    for clave, _ in node.value:
+        k = loader.construct_object(clave, deep=deep)
+        if k in vistas:
+            raise yaml.YAMLError(f"clave repetida: {k!r} (linea {clave.start_mark.line + 1})")
+        vistas.add(k)
+    return yaml.SafeLoader.construct_mapping(loader, node, deep)
+Estricto.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, sin_repetidas)
+# Las anclas de compose (<<: *servicio-plataforma) son legitimas: sin esto el
+# lector estricto las confunde con un tipo desconocido.
+Estricto.add_constructor("tag:yaml.org,2002:merge", lambda l, n: None)
+try:
+    yaml.load(open(sys.argv[1], encoding="utf-8"), Estricto)
+except yaml.YAMLError as e:
+    print(f"::error::{sys.argv[1]}: {e}")
+    sys.exit(1)
+PY
+  done
+  echo "  ok    ningun compose tiene claves repetidas"
+fi
+
+echo "== 8) El borde apunta al puerto que el catalogo dice =="
+# Por que existe esta comprobacion:
+#
+# Se agrego al borde la ruta /api/v1/admin/sistema apuntando a
+# srv-metricas-plataforma:8082. El servicio escucha en el 8087. nginx valido
+# la configuracion, recargo sin quejarse y devolvio 502 a todo el que pidiera
+# ese estado -- que es justo la pantalla que se usa para saber si algo esta
+# caido. El numero equivocado no lo puede ver una revision: hay que compararlo
+# con el catalogo, que es donde vive el puerto de verdad.
+BORDE="infrastructure/red-balanceo/borde-dev.conf"
+if [ -f "$BORDE" ]; then
+  while IFS= read -r destino; do
+    contenedor=${destino%%:*}
+    puerto=${destino##*:}
+    nombre=${contenedor#srv-}
+    esperado=$(jq -r --arg n "$nombre" \
+      '.servicios[] | select(.nombre == $n) | .puertoContenedor' "$CATALOGO")
+    if [ -z "$esperado" ] || [ "$esperado" = "null" ]; then
+      # El borde tambien enruta cosas que no son servicios del catalogo
+      # (mailpit, el propio frontend). No se inventa un fallo por eso.
+      continue
+    fi
+    if [ "$puerto" != "$esperado" ]; then
+      fallo "$BORDE manda a $contenedor:$puerto y $nombre escucha en el $esperado." \
+        "nginx no lo puede detectar: 'nginx -t' valida la sintaxis, no que" \
+        "alguien este escuchando al otro lado. Lo unico que se ve es un 502." \
+        "El puerto correcto esta en $CATALOGO (puertoContenedor)."
+    fi
+  done < <(grep -oE 'srv-[a-z0-9-]+:[0-9]+' "$BORDE" | sort -u)
+  if [ "$FALLOS" -eq 0 ]; then
+    echo "  ok    cada destino del borde usa el puerto del catalogo"
+  fi
+fi
+
+echo
+echo "== 9) Cada JVM del host de plataforma arranca en su turno (R16.5b) =="
+# Por que existe esta comprobacion:
+#
+# Al volver del apagado nocturno Docker arranca TODOS los contenedores a la
+# vez. Medido el 24-sep con doce JVM: carga 18,7 sobre 2 vCPU y swap 2040 de
+# 2047 MiB a los nueve minutos, sin que ninguna llegara a responder. El
+# entrypoint x-arranque-escalonado (docker-compose.deploy.yml) reparte ese
+# arranque por turnos, pero solo funciona si TODAS las JVM desplegables lo
+# llevan, con el mismo script y con un turno cada una: una que se lo salte
+# arranca en el segundo cero con las demas, y un turno con cuatro JVM es la
+# misma tormenta en pequeno. Un compose nuevo que copie un bloque viejo se lo
+# salta sin que ninguna revision lo vea.
+if command -v python3 >/dev/null 2>&1; then
+  python3 - "$CATALOGO" <<'PY' || FALLOS=$((FALLOS + 1))
+import json, sys, yaml
+catalogo = json.load(open(sys.argv[1], encoding="utf-8"))
+deploy = yaml.safe_load(open("docker-compose.deploy.yml", encoding="utf-8"))
+canonico = deploy.get("x-arranque-escalonado")
+errores, turnos = [], {}
+if not canonico:
+    errores.append("docker-compose.deploy.yml no define x-arranque-escalonado.")
+for s in catalogo["servicios"]:
+    if s.get("claseHost") != "plataforma" or not s.get("desplegableDev"):
+        continue
+    nombre = s["nombre"]
+    archivo = s.get("composeExtra") or "docker-compose.deploy.yml"
+    try:
+        svc = yaml.safe_load(open(archivo, encoding="utf-8"))["services"][f"srv-{nombre}"]
+    except (OSError, KeyError, TypeError):
+        errores.append(f"{nombre}: {archivo} no declara srv-{nombre}.")
+        continue
+    if svc.get("entrypoint") != canonico:
+        errores.append(f"{nombre}: el entrypoint de srv-{nombre} en {archivo} no es el de "
+                       "x-arranque-escalonado (docker-compose.deploy.yml). Copia el mismo script: "
+                       "sin el, esta JVM arranca a la vez que todas al volver del apagado.")
+    entorno = svc.get("environment") or {}
+    if isinstance(entorno, list):
+        entorno = dict(e.split("=", 1) for e in entorno if "=" in e)
+    turno = str(entorno.get("ARRANQUE_TURNO", ""))
+    if not turno.isdigit():
+        errores.append(f"{nombre}: falta ARRANQUE_TURNO (un entero) en el environment de srv-{nombre} en {archivo}.")
+    else:
+        turnos.setdefault(int(turno), []).append(nombre)
+    if entorno.get("ARRANQUE_CREADO_EN") != "${ARRANQUE_CREADO_EN:-9999999999}":
+        errores.append(f"{nombre}: srv-{nombre} en {archivo} debe llevar "
+                       "ARRANQUE_CREADO_EN: ${ARRANQUE_CREADO_EN:-9999999999} "
+                       "(la hora la pone desplegar.sh; sin ella el valor por omision no escalona).")
+for t, quienes in sorted(turnos.items()):
+    if len(quienes) > 2:
+        errores.append(f"El turno {t} tiene {len(quienes)} JVM ({', '.join(quienes)}): maximo dos por turno.")
+    print(f"  turno {t}: {', '.join(quienes)}")
+if "ms-identidad" not in turnos.get(0, []):
+    errores.append("ms-identidad tiene que arrancar en el turno 0: todos los demas le piden token o su JWKS.")
+for e in errores:
+    print(f"::error::{e}")
+sys.exit(1 if errores else 0)
+PY
+  for script in scripts/cd/desplegar.sh scripts/cd/revertir.sh; do
+    if ! grep -qE '^\s*export ARRANQUE_CREADO_EN=' "$script"; then
+      fallo "$script no exporta ARRANQUE_CREADO_EN antes de 'docker compose up'." \
+        "Sin esa hora, lo que despliega se queda con el valor por omision y no" \
+        "espera su turno en el proximo arranque del host."
+    fi
+  done
+fi
 
 echo
 if [ "$FALLOS" -gt 0 ]; then

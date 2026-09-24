@@ -11,9 +11,12 @@ import {
   crearElemento,
   modificarElemento,
   consultarEquipamiento,
+  consultarEstadisticasDelHeroe,
   equiparElemento,
   desequiparElemento,
 } from './cliente-inventario.js';
+import { retratoDeHeroe } from '../../comun/ui/juego/heroe.js';
+import { formulaLegible } from './detalle-heroe.js';
 import { construirVitrina, PRODUCTOS_POR_PAGINA } from './vitrina.js';
 import { pintarRetratos } from './retratos.js';
 import { motivoDelRechazo, pintarEquipamiento } from './equipamiento.js';
@@ -116,7 +119,13 @@ export async function montarVitrina(
       // HU-INV-007: la ficha lee el catalogo por su cuenta; el inventario
       // solo guarda la referencia (RF-ADM-10).
       alAbrirDetalle: (elemento) =>
-        abrirFicha(elemento.productoId, { origen: document.activeElement }),
+        abrirFicha(elemento.productoId, {
+          origen: document.activeElement,
+          // R5: para un heroe, la ficha completa con lo que el jugador tiene de
+          // verdad. Para lo demas sobran y se ignoran.
+          elementoId: elemento.id,
+          identidad,
+        }),
     }),
   );
 
@@ -224,11 +233,17 @@ function construirGestion() {
   const equipoCerrar = elementoHtml('button', 'inventario-equipo__cerrar', 'Cerrar');
   equipoCerrar.type = 'button';
   equipoCabecera.append(equipoTitulo, equipoCerrar);
+  // UX-GAME-3 — el heroe manda en el panel: su retrato, su nombre y sus
+  // estadisticas CON lo que lleva puesto (`/inventario/heroes/{id}/estadisticas`,
+  // las mismas que la ficha). Se repintan al equipar o desequipar, que es
+  // cuando cambian. Si el servicio no responde, el bloque no se pinta: no se
+  // inventa un cero.
+  const equipoHeroe = elementoHtml('div', 'inventario-equipo__heroe');
   const equipoResumen = elementoHtml('p', 'inventario-equipo__resumen');
   // UX-R2.5 — era un <ul> de filas; ahora contiene los tres grupos de
   // ranuras (`<section>`), y una lista no puede tener secciones dentro.
   const equipoLista = elementoHtml('div', 'inventario-equipo__lista');
-  equipo.append(equipoCabecera, equipoResumen, equipoLista);
+  equipo.append(equipoCabecera, equipoHeroe, equipoResumen, equipoLista);
 
   const mensaje = elementoHtml('p', 'inventario__mensaje');
   mensaje.id = 'nexus-rbac-forbidden';
@@ -263,6 +278,7 @@ function construirGestion() {
     equipoCerrar,
     equipoResumen,
     equipoLista,
+    equipoHeroe,
     mensaje,
     contenido,
     paginacion,
@@ -283,6 +299,7 @@ export async function montarInventario(
     crear = crearElemento,
     modificar = modificarElemento,
     consultarEquipo = consultarEquipamiento,
+    consultarEstadisticas = consultarEstadisticasDelHeroe,
     equipar = equiparElemento,
     desequipar = desequiparElemento,
   } = {},
@@ -424,6 +441,8 @@ export async function montarInventario(
         ? await equipar(identidad, heroeSeleccionado.id, elemento.id)
         : await desequipar(identidad, heroeSeleccionado.id, elemento.id);
       pintarEquipo();
+      // Las cifras dependen de lo que lleva puesto: se vuelven a pedir.
+      pintarHeroeDelEquipo(heroeSeleccionado);
       mostrarMensaje(equipando ? 'Elemento equipado.' : 'Elemento desequipado.');
 
       // UX-R2.10 — la ranura acusa lo que acaba de recibir.
@@ -442,6 +461,53 @@ export async function montarInventario(
     }
   }
 
+  /**
+   * UX-GAME-3 — la cabecera del panel: retrato, nombre y estadisticas del
+   * heroe con su equipo puesto. Se pinta primero sin cifras (el retrato y el
+   * nombre ya se saben) y se completa cuando responden las estadisticas; si
+   * no responden, se queda sin cifras y no dice nada falso.
+   */
+  async function pintarHeroeDelEquipo(heroe) {
+    const retrato = retratoDeHeroe({ nombre: heroe.nombrePropio }, { conNombre: false });
+    const nombre = elementoHtml('p', 'inventario-equipo__nombre-heroe', heroe.nombrePropio);
+    const identidadHeroe = elementoHtml('div', 'inventario-equipo__identidad');
+    identidadHeroe.append(nombre, elementoHtml('p', 'inventario-equipo__rol-heroe', 'Héroe'));
+    vista.equipoHeroe.replaceChildren(retrato, identidadHeroe);
+
+    let estadisticas;
+    try {
+      estadisticas = await consultarEstadisticas(identidad, heroe.id);
+    } catch (fallo) {
+      console.warn('No se pudieron traer las estadísticas del héroe', fallo);
+      return;
+    }
+    if (heroeSeleccionado?.id !== heroe.id) {
+      return;
+    }
+    const pares = [
+      ['Poder', estadisticas?.poder],
+      ['Vida', estadisticas?.vida],
+      ['Defensa', estadisticas?.defensa],
+      ['Ataque', formulaLegible(estadisticas?.ataque)],
+      ['Daño', formulaLegible(estadisticas?.dano)],
+      ['Sanación', formulaLegible(estadisticas?.sanar)],
+    ].filter(([, valor]) => Number.isFinite(valor) || (typeof valor === 'string' && valor));
+    if (pares.length === 0) {
+      return;
+    }
+    const lista = elementoHtml('dl', 'inventario-equipo__estadisticas');
+    for (const [etiqueta, valor] of pares) {
+      const par = elementoHtml('div', 'inventario-equipo__estadistica');
+      par.append(
+        elementoHtml('dt', 'inventario-equipo__etiqueta', etiqueta),
+        elementoHtml('dd', 'inventario-equipo__cifra', String(valor)),
+      );
+      lista.append(par);
+    }
+    vista.equipoHeroe.querySelector('.inventario-equipo__estadisticas')?.remove();
+    vista.equipoHeroe.append(lista);
+  }
+
   async function abrirEquipamiento(heroe) {
     heroeSeleccionado = heroe;
     vista.equipoTitulo.textContent = `Equipamiento de ${heroe.nombrePropio}`;
@@ -450,6 +516,7 @@ export async function montarInventario(
       equipoActual = await consultarEquipo(identidad, heroe.id);
       vista.equipo.hidden = false;
       pintarEquipo();
+      pintarHeroeDelEquipo(heroe);
       mostrarMensaje('');
     } catch (fallo) {
       console.error('No se pudo consultar el equipamiento', fallo);
@@ -612,10 +679,13 @@ export async function montarInventario(
       }
     } catch (fallo) {
       console.error('No se pudo guardar el elemento del inventario', fallo);
+      // El servidor ya explica el rechazo en espanol (problem detail): p. ej.
+      // un producto que no existe en el catalogo o un tipo que no coincide.
       const mensaje =
         fallo?.status === 403
           ? 'No tienes permiso para modificar ese inventario.'
-          : 'No pudimos guardar el elemento. Revisa los datos e inténtalo de nuevo.';
+          : (fallo?.detalle ??
+            'No pudimos guardar el elemento. Revisa los datos e inténtalo de nuevo.');
       mostrarMensaje(mensaje, true);
     } finally {
       cambiarDisponibilidad(vista.botonGuardar, true);

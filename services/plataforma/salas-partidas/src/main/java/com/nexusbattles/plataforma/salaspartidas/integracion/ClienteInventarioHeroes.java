@@ -172,9 +172,34 @@ class ClienteInventarioHeroes implements HeroeDelJugador {
         int vida = estadisticas == null || estadisticas.vida() == null || estadisticas.vida() < 1
                 ? 1
                 : estadisticas.vida();
-        String prototipo = prototipoDe(heroe);
+        // Un solo viaje a productos para las dos cosas que salen de ahi: el
+        // prototipo y el retrato. Antes se pedia la misma ficha y se tiraba la
+        // imagen, y el resultado era que todos los heroes se veian iguales.
+        Producto producto = productoDe(heroe);
+        String prototipo = producto == null ? null : producto.prototipo();
         return HeroeDeCombate.aPleno(heroe.id(), heroe.nombrePropio(),
-                prototipo, vida, defensaDe(prototipo));
+                prototipo, vida, defensaDe(prototipo), retratoDe(producto));
+    }
+
+    /**
+     * El retrato del heroe: {@code imagen} del producto del catalogo (R8).
+     *
+     * <p>Es la misma referencia que la vitrina del inventario ya le pone a un
+     * {@code <img src>} en el navegador, asi que aqui se pasa tal cual y no se
+     * intenta normalizar a URL absoluta: reescribirla obligaria a este servicio
+     * a saber donde vive el almacenamiento de imagenes, que es una decision de
+     * la plataforma y no suya ({@code productos.yaml}: «su mecanismo de
+     * almacenamiento sera definido por la plataforma»).
+     *
+     * <p>En blanco cuenta como ausente: el contrato declara {@code retratoUrl}
+     * anulable, y una cadena vacia en un {@code src} pide la pagina actual como
+     * si fuera una imagen.
+     */
+    private static String retratoDe(Producto producto) {
+        if (producto == null || producto.imagen() == null || producto.imagen().isBlank()) {
+            return null;
+        }
+        return producto.imagen();
     }
 
     /**
@@ -215,9 +240,13 @@ class ClienteInventarioHeroes implements HeroeDelJugador {
     }
 
     /**
-     * Prototipo del catalogo del que sale este heroe.
+     * La ficha del producto: de ahi salen el prototipo y el retrato.
      *
-     * <p><b>Por que hace falta.</b> El motor de combate busca al atacante en el
+     * <p>Devuelve el producto entero y no solo el prototipo desde R8, porque la
+     * {@code imagen} que hace de retrato viene en la misma respuesta. Pedirla
+     * aparte serian dos viajes para una sola ficha.
+     *
+     * <p><b>Por que hace falta el prototipo.</b> El motor de combate busca al atacante en el
      * catalogo de heroes, que indexa por prototipo («Guerrero Tanque»). Hasta
      * ahora se le mandaba el {@code nombrePropio} —el que le puso su dueno,
      * «Aquiles»— y el catalogo respondia 404: <b>ningun ataque se resolvia</b>,
@@ -236,17 +265,16 @@ class ClienteInventarioHeroes implements HeroeDelJugador {
      * pudiendo decir «si» y la barra de vida sigue teniendo sus dos cifras.
      * Fallar aqui dejaria sin jugar a quien solo queria entrar.
      */
-    private String prototipoDe(ElementoInventario heroe) {
+    private Producto productoDe(ElementoInventario heroe) {
         if (heroe.productoId() == null || heroe.productoId().isBlank()) {
             return null;
         }
         try {
-            Producto producto = restClient.get()
+            return restClient.get()
                     .uri(urlProductos + "/api/v1/productos/" + heroe.productoId())
                     .header("Accept", "application/json")
                     .retrieve()
                     .body(Producto.class);
-            return producto == null ? null : producto.prototipo();
         } catch (RestClientException productoNoDisponible) {
             return null;
         }
@@ -288,9 +316,16 @@ class ClienteInventarioHeroes implements HeroeDelJugador {
     record ElementoInventario(String id, String tipo, String nombrePropio,
                               String productoId, boolean disponible, String subastaId) { }
 
-    /** Solo el prototipo: de la ficha del producto no hace falta nada mas. */
+    /**
+     * Del producto hacen falta dos campos, no uno.
+     *
+     * <p>Hasta R8 este record declaraba solo {@code prototipo} y la {@code
+     * imagen} se descartaba al deserializar. El efecto se veia en la vista:
+     * {@code retratoUrl} llegaba nulo siempre y todos los heroes se pintaban
+     * con el mismo circulo con una inicial.
+     */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record Producto(String prototipo) { }
+    record Producto(String prototipo, String imagen) { }
 
     /** Del catalogo de heroes solo interesa la defensa del nivel 1. */
     @JsonIgnoreProperties(ignoreUnknown = true)

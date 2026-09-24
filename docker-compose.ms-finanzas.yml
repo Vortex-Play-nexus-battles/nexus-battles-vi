@@ -13,11 +13,11 @@
 # y /api/v1/cofres) y las CREDITOS_URL de salas-partidas y torneos en
 # docker-compose.deploy.yml.
 #
-# CAPACIDAD (medido el 23-sep, no heredado de un comentario): el host de
-# plataforma tenia 135 MiB de RAM disponible y 1364 de 2047 MiB de swap ya en
-# uso. Por eso servicios.json marca ms-finanzas como desplegableDev:false -- la
-# imagen se construye y se publica en cada push, pero el despliegue automatico
-# no la levanta. Ver infrastructure/despliegue/CAPACIDAD.md.
+# CAPACIDAD: el 23-sep se dejo fuera de dev por memoria. Desde R16.5 todas las
+# JVM del host llevan el monton acotado y sin C2, y el presupuesto medido deja
+# sitio: servicios.json lo marca desplegableDev:true y mem_limit sube a 256m
+# (con 192m el techo quedaba por debajo de su no-monton mas el monton). Ver
+# infrastructure/despliegue/CAPACIDAD.md.
 
 services:
   # Base de datos propia (regla 7, aislamiento de datos): no comparte servidor
@@ -27,7 +27,7 @@ services:
     image: postgres:17-alpine
     container_name: finanzas-db
     restart: unless-stopped
-    mem_limit: 192m
+    mem_limit: 128m
     environment:
       POSTGRES_DB: ${MS_FINANZAS_DB_NAME:-finanzas_db}
       POSTGRES_USER: ${MS_FINANZAS_DB_USER}
@@ -44,7 +44,7 @@ services:
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-ms-finanzas:${TAG}
     container_name: srv-ms-finanzas
     restart: unless-stopped
-    mem_limit: 384m
+    mem_limit: 256m
     ports:
       - "8093:8093"
     depends_on:
@@ -55,8 +55,45 @@ services:
       # solo a que el contenedor exista.
       finanzas-db:
         condition: service_healthy
+    # Arranque escalonado del host (R16.5b): mismo script que el ancla
+    # x-arranque-escalonado de docker-compose.deploy.yml, donde esta explicado.
+    # Una ancla no cruza archivos, asi que se repite; el guardian
+    # scripts/cd/comprobar-catalogo-servicios.sh exige que sea identico.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        proc="$${ARRANQUE_PROC:-/proc}"
+        creado="$${ARRANQUE_CREADO_EN:-9999999999}"
+        arranque=$$(awk '/^btime/ {print $$2}' "$$proc/stat" 2>/dev/null)
+        encendido=$$(cut -d. -f1 "$$proc/uptime" 2>/dev/null)
+        if [ -n "$$arranque" ] && [ -n "$$encendido" ] \
+           && [ "$$creado" -lt "$$arranque" ] 2>/dev/null \
+           && [ "$$encendido" -lt "$${ARRANQUE_VENTANA_S:-600}" ] 2>/dev/null; then
+          espera=$$(( $${ARRANQUE_TURNO:-0} * $${ARRANQUE_PASO_S:-40} ))
+          echo "arranque escalonado: el host acaba de encender (hace $${encendido}s); turno $${ARRANQUE_TURNO:-0}, espero $${espera}s"
+          trap 'exit 143' TERM INT
+          sleep "$$espera" & wait $$!
+          trap - TERM INT
+        fi
+        exec java -jar app.jar
     environment:
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
+      ARRANQUE_TURNO: "2"
+      ARRANQUE_CREADO_EN: ${ARRANQUE_CREADO_EN:-9999999999}
+      # Credencial de servicio (ADR-005). desplegar.sh genera y persiste
+      # SECRETO_SERVICIO_MS_FINANZAS en el host y se la da a ms-identidad en
+      # AUTH_CLIENTES_SERVICIO; sin estas dos lineas el servicio pide el token
+      # con el client_id global, que no esta registrado, y se lo niegan.
+      # El emisor de ADR-005. Sin esta linea el servicio NO ARRANCA: la
+      # autoconfiguracion de credenciales se activa en cuanto
+      # DIRECTORIO_ACTIVO_CLIENT_ID no esta vacio, y entonces exige la URL
+      # ("Falta la URL del emisor (DIRECTORIO_ACTIVO_URL)"). Los servicios de
+      # plataforma la heredan del .env por `env_file:` del compose base; los
+      # de Cuentas NO estan en el compose base, asi que aqui hay que ponerla.
+      DIRECTORIO_ACTIVO_URL: ${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}
+      DIRECTORIO_ACTIVO_CLIENT_ID: ms-finanzas
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_MS_FINANZAS:-}
       # El lado IZQUIERDO es el nombre que Spring lee de verdad (confirmado en
       # application.properties de ms-finanzas). El DERECHO lo deja desplegar.sh
       # en el .env del servidor, con prefijo MS_FINANZAS_ para no pisar ni las

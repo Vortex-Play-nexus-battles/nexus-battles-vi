@@ -419,11 +419,19 @@ class MotorPujasServiceTest {
         assertThrows(RuntimeException.class, () ->
                 motorTest.comprarAhora(subasta, null, comprador, clave));
 
-        // Verifica que se transfirió inicialmente al comprador
+        // Se transfirio primero al comprador.
         verify(inventarioClient).transferirProducto("elem-compra-fail-debito", comprador, subasta.getId(), clave);
-        // Verifica que ante el fallo de consumo se compensó: se revirtió al vendedor y se re-reservó
+        // Y ante el fallo del cobro se devolvio al vendedor.
         verify(inventarioClient).transferirProducto("elem-compra-fail-debito", VENDEDOR, subasta.getId(), "compensar-" + clave);
-        verify(inventarioClient).reservar("elem-compra-fail-debito", VENDEDOR, subasta.getId(), "compensar-reserva-" + clave);
+        // Ya NO se vuelve a reservar. Esa segunda llamada estaba aqui y en el
+        // codigo, y contra el inventario real no podia funcionar nunca:
+        // reservar() acaba en bloquear(), que exige que el propietarioUid
+        // declarado sea el dueno actual del elemento, y en ese momento el dueno
+        // es el comprador, no el vendedor. Devolvia InventarioAjenoException.
+        // Pasaba solo porque aqui inventarioClient es un mock. FI-TRANSFER-1
+        // conserva el bloqueo a traves de la transferencia, asi que la vuelta
+        // ya no necesita re-bloquear nada.
+        verify(inventarioClient, never()).reservar(eq("elem-compra-fail-debito"), any(), any(), any());
         // Verifica que se liberó la reserva de crédito
         verify(creditoMock).liberar(reserva.id());
     }
@@ -462,8 +470,12 @@ class MotorPujasServiceTest {
         verify(inventarioClient).transferirProducto("elem-cierre-fail-debito", ganador, subasta.getId(), claveCierre);
         verify(inventarioClient).transferirProducto("elem-cierre-fail-debito", VENDEDOR, subasta.getId(),
                 "compensar-" + claveCierre);
-        verify(inventarioClient).reservar("elem-cierre-fail-debito", VENDEDOR, subasta.getId(),
-                "compensar-reserva-" + claveCierre);
+        // Sin re-reserva, por la misma razon que en comprarAhora: el bloqueo ya
+        // viaja con el elemento, y re-bloquear a nombre del vendedor cuando el
+        // dueno es el ganador siempre daba InventarioAjenoException.
+        verify(inventarioClient, never()).reservar(eq("elem-cierre-fail-debito"), any(), any(), any());
+        // Y el bloqueo NO se suelta: la venta no llego a ser definitiva.
+        verify(inventarioClient, never()).liberarReserva(eq("elem-cierre-fail-debito"), any(), any());
     }
 
     /**
@@ -485,8 +497,42 @@ class MotorPujasServiceTest {
         verify(inventarioClient).transferirProducto("elem-cierre-ok", ganador, subasta.getId(),
                 "cierre-" + subasta.getId());
         verify(inventarioClient, never()).transferirProducto(eq("elem-cierre-ok"), eq(VENDEDOR), any(), any());
+        // Y la venta es definitiva, asi que el bloqueo se suelta: sin esto el
+        // ganador tendria el objeto pagado y no podria equiparlo ni revenderlo.
+        verify(inventarioClient).liberarReserva("elem-cierre-ok", subasta.getId(),
+                "liberar-cierre-" + subasta.getId());
         assertEquals(EstadoSubasta.ADJUDICADA, subasta.getEstado());
         assertEquals(EstadoPuja.GANADORA, pujaVigente.getEstado());
+    }
+
+    /**
+     * El bloqueo se suelta DESPUES de dar la subasta por adjudicada, y su fallo
+     * no puede tumbar el cierre — FI-TRANSFER-1.
+     *
+     * <p>En ese punto el cobro ya entro. Entre «objeto bloqueado de mas» y
+     * «objeto pagado y devuelto al vendedor», lo primero es un defecto
+     * reparable con una llamada y lo segundo es un robo. Asi que si inventario
+     * no responde, se registra y se sigue.
+     */
+    @Test
+    void siFallaSoltarElBloqueoLaSubastaSigueAdjudicada() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+        subasta.setElementoInventarioId("elem-cierre-bloqueo-fail");
+        UUID ganador = UUID.randomUUID();
+        creditoClient.acreditar(ganador, new BigDecimal("1000"));
+        ReservaCredito reserva = creditoClient.reservar(ganador, new BigDecimal("110"), subasta.getId(), claveUnica());
+        Puja pujaVigente = new Puja(UUID.randomUUID(), subasta.getId(), ganador, new BigDecimal("110"),
+                TipoPuja.MANUAL, EstadoPuja.ACTIVA, clock.instant().minusSeconds(30), reserva.id().toString());
+        doThrow(new InventarioClientException("inventario no responde"))
+                .when(inventarioClient).liberarReserva(eq("elem-cierre-bloqueo-fail"), any(), any());
+
+        motorConInventario.cerrarPorVencimiento(subasta, pujaVigente);
+
+        assertEquals(EstadoSubasta.ADJUDICADA, subasta.getEstado());
+        assertEquals(EstadoPuja.GANADORA, pujaVigente.getEstado());
+        // Y sobre todo: no se devolvio el objeto a un vendedor que ya cobro.
+        verify(inventarioClient, never())
+                .transferirProducto(eq("elem-cierre-bloqueo-fail"), eq(VENDEDOR), any(), any());
     }
 
     @Test

@@ -25,18 +25,82 @@
 # compose (docker-compose.contenido.yml). Este archivo solo gobierna lo que
 # vive en plataforma; el mapa completo esta en docs/arquitectura/README.md y
 # el detalle de la instancia en
-# infrastructure/entornos/plataforma/README.md. Cada JVM queda acotada a
-# 384 MB (MaxRAMPercentage=70 sobre el limite del contenedor) para que un
-# arranque no se coma la memoria de los demas, y todo se reinicia solo
-# cuando la instancia vuelve del apagado nocturno (restart: unless-stopped;
-# sin esto, tras un stop/start del host los contenedores quedan parados y
-# la demo aparece caida).
+# infrastructure/entornos/plataforma/README.md.
+#
+# Flags de la JVM (R16.5). Medido en este host el 24-sep: cada servicio tiene
+# ~50 MiB de monton comprometido y 165-235 MiB en total; lo que pesa es el
+# no-monton (metaspace, code cache del compilador C2, hilos). Con
+# MaxRAMPercentage=70 el monton podia crecer hasta 270 MiB sin que nada lo
+# frenara, y catorce JVM asi no caben en 1910 MiB. Ahora:
+#   -Xmx128m                  monton acotado, igual en todos
+#   -XX:TieredStopAtLevel=1   solo C1: menos code cache y sin la memoria del
+#                             compilador C2 (12-30 MiB menos de no-monton)
+#   -XX:ReservedCodeCacheSize=48m
+#   -XX:+ExitOnOutOfMemoryError  si una JVM se queda sin monton sale y Docker
+#                             la reinicia, en vez de seguir viva y rota
+# El experimento A/B que los respalda, con la suite E2E completa como carga,
+# es .github/workflows/experimento-flags-jvm.yml; el presupuesto por host
+# esta en infrastructure/despliegue/CAPACIDAD.md. mem_limit sigue siendo un
+# techo, no una reserva.
+#
+# Todo se reinicia solo cuando la instancia vuelve del apagado nocturno
+# (restart: unless-stopped; sin esto, tras un stop/start del host los
+# contenedores quedan parados y la demo aparece caida).
+#
+# Arranque escalonado (R16.5b). "Todo se reinicia solo" significa que Docker
+# arranca las doce JVM A LA VEZ en cuanto vuelve el host. Medido el 24-sep
+# (stop/start de 04:08 UTC): carga 18,7 sobre 2 vCPU, swap 2040 de 2047 MiB a
+# los nueve minutos y ninguna respondia; con cuatro JVM retiradas, las otras
+# ocho respondieron en minuto y medio. Una JVM de Spring Boot arrancando toca
+# toda su memoria a la vez (clases, Hibernate, Flyway): doce arranques juntos
+# piden mas RAM de la que hay, y el host se queda intercambiando paginas en
+# vez de trabajar. Ninguna JVM llega al final, asi que nadie libera nada.
+#
+# Por eso cada JVM tiene un turno (ARRANQUE_TURNO, dos por turno, la
+# identidad primero porque todos le piden token) y el entrypoint espera
+# turno x ARRANQUE_PASO_S segundos antes de arrancar java, pero SOLO cuando
+# se cumplen las dos cosas:
+#   - el contenedor se creo ANTES de este arranque del host
+#     (ARRANQUE_CREADO_EN < btime de /proc/stat): lo esta levantando Docker
+#     porque volvio el host, no un despliegue;
+#   - el host lleva encendido menos de ARRANQUE_VENTANA_S (10 min): una JVM
+#     que se cae a media tarde se reinicia en el acto, sin esperar su turno.
+# Un despliegue (desplegar.sh, revertir.sh) exporta ARRANQUE_CREADO_EN con la
+# hora de ese momento, asi que lo que se despliega arranca sin esperar aunque
+# el CD acabe de encender el host. Sin la variable (un "docker compose up" a
+# mano) vale 9999999999 y tampoco espera: escalonar es algo que solo pide el
+# despliegue, nunca algo que se cuela por omision.
+#
+# El script es el mismo en los cinco archivos de compose del host (este y los
+# cuatro de Cuentas): una ancla de YAML no cruza archivos. El guardian
+# scripts/cd/comprobar-catalogo-servicios.sh (seccion 9) falla si alguno
+# difiere, si a una JVM desplegable le falta turno o si un turno tiene mas de
+# dos. La prueba de su logica es scripts/cd/pruebas/arranque-escalonado.sh.
+x-arranque-escalonado: &arranque-escalonado
+  - /bin/sh
+  - -c
+  - |
+    proc="$${ARRANQUE_PROC:-/proc}"
+    creado="$${ARRANQUE_CREADO_EN:-9999999999}"
+    arranque=$$(awk '/^btime/ {print $$2}' "$$proc/stat" 2>/dev/null)
+    encendido=$$(cut -d. -f1 "$$proc/uptime" 2>/dev/null)
+    if [ -n "$$arranque" ] && [ -n "$$encendido" ] \
+       && [ "$$creado" -lt "$$arranque" ] 2>/dev/null \
+       && [ "$$encendido" -lt "$${ARRANQUE_VENTANA_S:-600}" ] 2>/dev/null; then
+      espera=$$(( $${ARRANQUE_TURNO:-0} * $${ARRANQUE_PASO_S:-40} ))
+      echo "arranque escalonado: el host acaba de encender (hace $${encendido}s); turno $${ARRANQUE_TURNO:-0}, espero $${espera}s"
+      trap 'exit 143' TERM INT
+      sleep "$$espera" & wait $$!
+      trap - TERM INT
+    fi
+    exec java -jar app.jar
 
 x-servicio-plataforma: &servicio-plataforma
   restart: unless-stopped
   mem_limit: 384m
+  entrypoint: *arranque-escalonado
   environment:
-    JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+    JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
 
 services:
   plataforma-db:
@@ -78,7 +142,9 @@ services:
     <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-comentarios:${TAG}
     environment:
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
+      ARRANQUE_TURNO: "3"
+      ARRANQUE_CREADO_EN: ${ARRANQUE_CREADO_EN:-9999999999}
       # HU-COM-001 / RF-USR-004: la sancion activa del autor se consulta en
       # moderacion-sanciones, que corre en este host (misma nota que en
       # srv-salas-partidas: sin esto localhost seria el propio contenedor).
@@ -91,24 +157,34 @@ services:
       DIRECTORIO_ACTIVO_URL: ${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}
       DIRECTORIO_ACTIVO_CLIENT_ID: comentarios
       DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_COMENTARIOS:-}
-      # AUDITORIA_URL se queda sin poner: ms-cumplimiento no corre en el host
-      # de dev por capacidad (ver srv-salas-partidas). El asiento queda en la
+      # AUDITORIA_URL todavia sin poner: ms-cumplimiento corre en dev desde
+      # R16.5 (CAPACIDAD.md), y conectarle la auditoria es el paso siguiente
+      # de su vertical, con la credencial de servicio. El asiento queda en la
       # tabla comentario_moderacion, que es el rastro que exige la ficha, y
       # ademas en la bitacora como AUDITORIA_MODERACION.
 
   srv-correo:
     <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-correo:${TAG}
+    environment:
+      # Hasta R16.5b heredaba el environment del ancla tal cual. Necesita su
+      # propio turno, y un bloque environment sustituye entero al del ancla:
+      # por eso se repite JAVA_TOOL_OPTIONS.
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
+      ARRANQUE_TURNO: "4"
+      ARRANQUE_CREADO_EN: ${ARRANQUE_CREADO_EN:-9999999999}
 
   srv-torneos:
     <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-torneos:${TAG}
     environment:
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
+      ARRANQUE_TURNO: "3"
+      ARRANQUE_CREADO_EN: ${ARRANQUE_CREADO_EN:-9999999999}
       # M13: lista negra y sanciones en moderacion-sanciones (este host); el
-      # libro de creditos NO corre en dev (ver srv-salas-partidas): una
-      # inscripcion con costo > 0 responde 503 libro-no-disponible y un torneo
-      # gratuito (costo 0) funciona completo. Credencial propia (ADR-005).
+      # libro de creditos (ms-finanzas) corre en dev desde R16.5. Si no esta,
+      # una inscripcion con costo > 0 responde 503 libro-no-disponible y un
+      # torneo gratuito (costo 0) funciona completo. Credencial propia (ADR-005).
       LISTA_NEGRA_VERIFICAR_URL: ${LISTA_NEGRA_VERIFICAR_URL:-http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar}
       SANCIONES_URL: ${SANCIONES_URL:-http://srv-moderacion-sanciones:8086/api/v1}
       CREDITOS_URL: ${CREDITOS_URL:-http://srv-ms-finanzas:8093/api/v1}
@@ -120,17 +196,18 @@ services:
     <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-salas-partidas:${TAG}
     environment:
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
+      ARRANQUE_TURNO: "1"
+      ARRANQUE_CREADO_EN: ${ARRANQUE_CREADO_EN:-9999999999}
       # Credencial de servicio propia (ADR-005) para hablar con inventario.
       # El .env es compartido, asi que el client_id va aqui y el secreto
       # sale de la variable por servicio que genera desplegar.sh.
       DIRECTORIO_ACTIVO_CLIENT_ID: salas-partidas
       DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_SALAS_PARTIDAS:-}
-      # HU-JUE-014: el libro de creditos. ms-finanzas NO corre en el host de
-      # dev (no cabe en el t3.small sin sacrificar el MVP), asi que en dev
-      # toda sala con recompensa > 0 responde 503 creditos-no-disponibles y
-      # nada queda reservado; las salas sin recompensa no pasan por aqui. El
-      # dia que se despliegue, esta URL ya apunta a donde estara.
+      # HU-JUE-014: el libro de creditos. ms-finanzas corre en dev desde R16.5
+      # (montones acotados, ver CAPACIDAD.md). Si no responde, una sala con
+      # recompensa > 0 responde 503 creditos-no-disponibles y nada queda
+      # reservado; las salas sin recompensa no pasan por aqui.
       CREDITOS_URL: ${CREDITOS_URL:-http://srv-ms-finanzas:8093/api/v1}
       # HU-TOR-004 CA-04: la sala que es un encuentro de torneo informa el
       # ganador a torneos al terminar, con la credencial de arriba.
@@ -186,12 +263,30 @@ services:
   srv-notificaciones:
     <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-notificaciones:${TAG}
+    environment:
+      # Un bloque `environment:` SUSTITUYE entero al del ancla, no se fusiona
+      # con el. Por eso JAVA_TOOL_OPTIONS se repite aqui: sin esta linea el
+      # servicio arrancaria sin el limite de monton del ancla.
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
+      ARRANQUE_TURNO: "1"
+      ARRANQUE_CREADO_EN: ${ARRANQUE_CREADO_EN:-9999999999}
+      # Credencial de servicio (ADR-005). desplegar.sh genera y persiste
+      # SECRETO_SERVICIO_NOTIFICACIONES en el host y se la da a ms-identidad en
+      # AUTH_CLIENTES_SERVICIO; sin estas dos lineas el servicio pide el token
+      # con el client_id global, que no esta registrado, y se lo niegan.
+      DIRECTORIO_ACTIVO_CLIENT_ID: notificaciones
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_NOTIFICACIONES:-}
 
   srv-moderacion-sanciones:
     <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-moderacion-sanciones:${TAG}
     environment:
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
+      # Turno 0 con la identidad: el chat de salas y los comentarios consultan
+      # la sancion activa antes de publicar, y sin moderacion responden
+      # «sanciones no disponibles».
+      ARRANQUE_TURNO: "0"
+      ARRANQUE_CREADO_EN: ${ARRANQUE_CREADO_EN:-9999999999}
       # HU-NOT-005: el aviso de sancion/apelacion va a la bandeja del jugador
       # por /internal/notifications de notificaciones, que corre en este host,
       # con la credencial de servicio propia (ADR-005; secreto de desplegar.sh).
@@ -224,7 +319,9 @@ services:
       # Se repite porque el merge de YAML (<<) reemplaza el mapa entero, no lo
       # fusiona: sin esta linea el servicio perderia el limite de memoria de la
       # JVM que comparte con los demas.
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
+      ARRANQUE_TURNO: "5"
+      ARRANQUE_CREADO_EN: ${ARRANQUE_CREADO_EN:-9999999999}
       SALUD_COMENTARIOS: http://srv-comentarios:8081/actuator/health
       SALUD_CORREO: http://srv-correo:8082/actuator/health
       SALUD_TORNEOS: http://srv-torneos:8083/actuator/health
@@ -242,10 +339,12 @@ services:
     <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-admin-parametros:${TAG}
     environment:
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
-      # HU-AUD-001: ms-cumplimiento NO corre en el host de dev (capacidad);
-      # sin AUDITORIA_URL cada cambio queda en el historial local y en la
-      # bitacora. Cuando corra, apuntar aqui a su /admin/auditoria/eventos.
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
+      ARRANQUE_TURNO: "4"
+      ARRANQUE_CREADO_EN: ${ARRANQUE_CREADO_EN:-9999999999}
+      # HU-AUD-001: ms-cumplimiento corre en dev desde R16.5; apuntar esta URL
+      # a su /admin/auditoria/eventos es el paso siguiente de su vertical. Sin
+      # ella cada cambio queda en el historial local y en la bitacora.
       AUDITORIA_URL: ${AUDITORIA_URL:-}
       DIRECTORIO_ACTIVO_URL: ${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}
       DIRECTORIO_ACTIVO_CLIENT_ID: admin-parametros

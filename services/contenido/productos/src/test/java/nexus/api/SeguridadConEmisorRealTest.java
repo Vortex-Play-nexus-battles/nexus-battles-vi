@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -23,6 +24,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -242,6 +245,19 @@ class SeguridadConEmisorRealTest {
             // 404 y no 401: la ruta es publica y el token no hace falta.
             mvc.perform(get("/api/v1/productos/{id}", "p-1"))
                     .andExpect(status().isNotFound());
+        }
+
+        @Test
+        @DisplayName("el listado del catalogo tambien es publico (contrato 1.2.0, R16)")
+        void listadoPublico() throws Exception {
+            when(repositorio.findByEstadoIn(any(), any()))
+                    .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+            // 200 y no 401: GET de la coleccion se abrio junto a GET /{id}; el
+            // POST de la misma ruta sigue en 401/403 (ver sinToken y jugadorNoCrea).
+            mvc.perform(get("/api/v1/productos"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.totalElements").value(0));
         }
     }
 }

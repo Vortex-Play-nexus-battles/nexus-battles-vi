@@ -85,6 +85,30 @@ class PerfilUsuarioServiceTest {
         assertTrue(ex.getMessage().contains("No existe perfil"));
     }
 
+    // ---------- obtenerPorIdentificadorPublico (el uid del token) ----------
+
+    @Test
+    void obtenerPorIdentificadorPublico_devuelvePerfilCuandoExiste() {
+        java.util.UUID uid = java.util.UUID.randomUUID();
+        PerfilUsuario perfil = perfilConApodo("Santi");
+        when(perfilUsuarioRepository.findByIdentificadorPublicoConUsuario(uid)).thenReturn(Optional.of(perfil));
+
+        PerfilUsuario resultado = service.obtenerPorIdentificadorPublico(uid);
+
+        assertEquals(perfil, resultado);
+        verify(perfilUsuarioRepository, never()).findByIdConUsuario(any());
+    }
+
+    @Test
+    void obtenerPorIdentificadorPublico_lanzaExcepcionCuandoNoExiste() {
+        java.util.UUID uid = java.util.UUID.randomUUID();
+        when(perfilUsuarioRepository.findByIdentificadorPublicoConUsuario(uid)).thenReturn(Optional.empty());
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> service.obtenerPorIdentificadorPublico(uid));
+        assertTrue(ex.getMessage().contains("No existe perfil"));
+    }
+
     // ---------- actualizarPerfilPropio ----------
 
     @Test

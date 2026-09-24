@@ -45,6 +45,13 @@ public class RepositorioInventariosMongo implements RepositorioDeInventarios {
     }
 
     @Override
+    public List<Inventario> buscarTodosPorElementoId(String elementoId) {
+        return documentos.findAllByElementosId(elementoId).stream()
+                .map(InventarioDocumento::aDominio)
+                .toList();
+    }
+
+    @Override
     public List<ElementoInventario> buscarElementos(String propietarioId, String criterio) {
         TextCriteria texto = TextCriteria.forDefaultLanguage()
                 .matching(criterio)

@@ -87,6 +87,7 @@ export const SECCIONES = Object.freeze([
  */
 export const SECCIONES_CONSOLA = Object.freeze([
   { id: 'resumen', etiqueta: 'Resumen', vista: 'consola', icono: 'panel' },
+  { id: 'control', etiqueta: 'Control integral', vista: 'control-integral', icono: 'pulso' },
   { id: 'usuarios', etiqueta: 'Usuarios', vista: 'gestion-usuarios', icono: 'usuarios' },
   { id: 'productos', etiqueta: 'Productos', vista: 'productos', icono: 'mochila' },
   { id: 'sanciones', etiqueta: 'Sanciones', vista: 'sanciones-admin', icono: 'escudo' },
@@ -135,13 +136,23 @@ function enlace(texto, href, clase) {
  *
  * @param {{destino: string, sufijo?: string|null}} opciones
  */
-function marca({ destino, sufijo = null }) {
+function marca({ destino, sufijo = null, base = import.meta.url }) {
   const a = h('a', {
     clase: 'cabecera__marca',
     atributos: { 'aria-label': 'Nexus Battles VI — inicio' },
   });
   a.href = destino;
+  // UX-GAME-2 — el emblema del logotipo (el cristal que lo corona) acompaña
+  // al nombre en todas las barras. Es decorativo: `alt` vacío, el nombre
+  // accesible sigue siendo el `aria-label` del enlace. El logotipo completo
+  // solo va en el portal de entrada (login); aquí la versión compacta.
+  const emblema = h('img', {
+    clase: 'cabecera__emblema',
+    atributos: { alt: '', 'aria-hidden': 'true', width: '32', height: '30', decoding: 'async' },
+  });
+  emblema.src = resolver('../../../../shared/ui-kit/marca/emblema.webp', base);
   a.append(
+    emblema,
     h('span', { clase: 'cabecera__marca-larga', texto: 'NEXUS BATTLES VI' }),
     h('span', {
       clase: 'cabecera__marca-corta',
@@ -329,7 +340,7 @@ export function montarArmazonPublico(raiz, { vista = 'login', base = BASE_RUTAS 
   cabecera.dataset.armazon = 'publico';
 
   const grupoMarca = h('div', { clase: 'cabecera__grupo-marca' });
-  grupoMarca.append(marca({ destino: resolver(RUTAS.login, base) }));
+  grupoMarca.append(marca({ destino: resolver(RUTAS.login, base), base }));
   cabecera.append(grupoMarca);
 
   const acciones = h('div', { clase: 'cabecera__acciones' });
@@ -390,7 +401,7 @@ export function montarArmazonJugador(
 
   const grupoMarca = h('div', { clase: 'cabecera__grupo-marca' });
   grupoMarca.append(
-    marca({ destino: resolver(sesion.autenticado ? RUTAS.inicio : RUTAS.login, base) }),
+    marca({ destino: resolver(sesion.autenticado ? RUTAS.inicio : RUTAS.login, base), base }),
     alternarNavegacion(cabecera, base),
   );
 
@@ -590,7 +601,7 @@ export function montarArmazonAdmin(
 
   const grupoMarca = h('div', { clase: 'cabecera__grupo-marca' });
   grupoMarca.append(
-    marca({ destino: resolver(RUTAS.consola, base), sufijo: 'Control' }),
+    marca({ destino: resolver(RUTAS.consola, base), sufijo: 'Control', base }),
     alternarNavegacion(cabecera, base),
   );
 
@@ -624,7 +635,17 @@ export function montarArmazonAdmin(
       resolver(RUTAS.inicio, base),
       'boton boton--secundario boton--pequeno cabecera__salida',
     ),
-    menuDeCuenta({ sesion, base, almacen, navegar }),
+    // UX-GAME-6 — la salida al juego tambien en el menu de cuenta: en la banda
+    // de portatil (<=1440) el boton de la barra se pliega para que los diez
+    // destinos del super administrador quepan en una fila, y la salida tiene
+    // que seguir a un toque.
+    menuDeCuenta({
+      sesion,
+      base,
+      almacen,
+      navegar,
+      opcionesExtra: [['Volver al juego', RUTAS.inicio, null]],
+    }),
   );
   cabecera.append(acciones);
 

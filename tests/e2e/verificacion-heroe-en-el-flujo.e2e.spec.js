@@ -144,6 +144,46 @@ test.describe('La verificacion de heroe esta en el flujo (RF-JUE-003)', () => {
     await expect(dialogo.locator('[data-accion="confirmar"]')).toHaveText(/Entrar a la sala/i);
   });
 
+  /**
+   * El retrato del heroe llega y se pinta — R8.
+   *
+   * Hasta R8 `HeroeDeCombate` se construia con `retratoUrl` en null porque el
+   * record con el que salas-partidas deserializaba la ficha del producto
+   * declaraba solo `prototipo` y descartaba la imagen. La vista lo notaba: sin
+   * retrato pinta la inicial del nombre, asi que todos los heroes se veian
+   * iguales. El campo estaba en el contrato desde que se escribio.
+   *
+   * Se afirma tambien que la imagen CARGA, no solo que el atributo esta: una
+   * referencia que el borde no sirve daria un `src` roto, que en la practica es
+   * lo mismo que no tener retrato.
+   */
+  test('el retrato del heroe se pinta, no la inicial de su nombre', async ({ page }) => {
+    const sala = salaCompartida;
+
+    await conSesion(page, invitado, INVITADO);
+    await page.goto(`${VERIFICACION}?sala=${sala.id}`);
+
+    const dialogo = page.locator('#validacion-heroe');
+    await expect(dialogo).toHaveAttribute('data-resultado', 'DISPONIBLE', { timeout: 20_000 });
+
+    const retrato = dialogo.locator('.marco-heroe__imagen');
+    await expect(retrato).toHaveCount(1);
+    await expect(dialogo.locator('.marco-heroe__inicial')).toHaveCount(0);
+
+    // Y que el navegador la haya cargado de verdad: naturalWidth es 0 en una
+    // imagen rota.
+    await expect
+      .poll(() => retrato.evaluate((img) => img.complete && img.naturalWidth > 0), {
+        timeout: 15_000,
+      })
+      .toBe(true);
+
+    // El nivel NO se pinta: no existe como estado persistido en ningun
+    // servicio, y la vista solo dibuja el distintivo cuando llega un numero.
+    // Si algun dia apareciera un 1 aqui, seria inventado.
+    await expect(dialogo.locator('.marco-heroe__nivel')).toHaveCount(0);
+  });
+
   test('Confirmar entra de verdad a la sala', async ({ page }) => {
     // Es lo que este boton no hacia: escribia en la consola. UX-R4.5 lo
     // conecto y #648 lo borro sin querer; FI-R0 lo devolvio. Aqui queda
