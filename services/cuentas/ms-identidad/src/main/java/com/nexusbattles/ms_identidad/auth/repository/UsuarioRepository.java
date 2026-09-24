@@ -40,8 +40,19 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
      * correo dice que no puede entrar» -- y nunca por contrasena ni por
      * ningun campo que la tabla no muestre.
      */
-    @Query("SELECT u FROM Usuario u WHERE :filtro IS NULL"
-            + " OR LOWER(u.apodo) LIKE LOWER(CONCAT('%', :filtro, '%'))"
+    /**
+     * Sin filtro se pasa cadena vacia, NUNCA null.
+     *
+     * La primera version decia {@code WHERE :filtro IS NULL OR ...}. Compila,
+     * arranca, y en H2 hasta funciona; contra PostgreSQL el controlador manda
+     * un null sin tipo y el servidor no puede deducir de que tipo es el
+     * parametro: la consulta sin filtro -- o sea, la primera pantalla que ve
+     * quien abre el directorio -- devolvia 500. Con cadena vacia,
+     * {@code LIKE '%%'} acepta cualquier valor y hay un solo camino de codigo
+     * en vez de dos.
+     */
+    @Query("SELECT u FROM Usuario u"
+            + " WHERE LOWER(u.apodo) LIKE LOWER(CONCAT('%', :filtro, '%'))"
             + " OR LOWER(u.email) LIKE LOWER(CONCAT('%', :filtro, '%'))")
     Page<Usuario> buscarParaDirectorio(@Param("filtro") String filtro, Pageable pagina);
 }

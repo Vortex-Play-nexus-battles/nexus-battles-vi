@@ -29,7 +29,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -45,6 +44,9 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 class AdminDirectorioControllerTest {
+
+    /** Sin filtro es cadena vacia, nunca null: un null sin tipo rompe la consulta. */
+    private static final String SIN_FILTRO = "";
 
     @Mock
     private UsuarioRepository usuarioRepository;
@@ -79,7 +81,7 @@ class AdminDirectorioControllerTest {
 
         PaginaAdminResponse<AdminUsuarioDirectorioResponse> respuesta = controlador.listar(null, 0, 20);
 
-        verify(usuarioRepository).buscarParaDirectorio(isNull(), any(Pageable.class));
+        verify(usuarioRepository).buscarParaDirectorio(eq(SIN_FILTRO), any(Pageable.class));
         Pageable usado = pageableUsado();
         assertEquals(0, usado.getPageNumber());
         assertEquals(20, usado.getPageSize());
@@ -96,7 +98,7 @@ class AdminDirectorioControllerTest {
 
         controlador.listar("   ", 0, 20);
 
-        verify(usuarioRepository).buscarParaDirectorio(isNull(), any(Pageable.class));
+        verify(usuarioRepository).buscarParaDirectorio(eq(SIN_FILTRO), any(Pageable.class));
     }
 
     @Test
