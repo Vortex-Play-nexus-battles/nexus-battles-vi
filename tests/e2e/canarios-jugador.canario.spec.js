@@ -119,6 +119,19 @@ test.describe('Canarios del jugador (R16)', () => {
     }
   });
 
+  // Informativo, no falla: cuánto hay en el catálogo maestro (servicio
+  // `productos`) frente a lo que muestra la vitrina (ms-ecommerce). Si el
+  // maestro tiene productos y la vitrina sale vacía, la tienda está
+  // desconectada del catálogo real, que es justo lo que pide revisar R16.13.
+  test('catálogo maestro frente a vitrina (informativo)', async ({ request }) => {
+    const cabeceras = { Authorization: `Bearer ${sesion.token}` };
+    const maestro = await request.get(`${AWS}/api/v1/productos/estadisticas`, { headers: cabeceras });
+    const vitrina = await request.get(`${AWS}/api/v1/productos?page=0&size=16&moneda=COP`, { headers: cabeceras });
+    const resumen = async (r) => `${r.status()} ${(await r.text()).slice(0, 300).replace(/\s+/g, ' ')}`;
+    console.log(`CANARIO-INFO|catalogo-maestro|${await resumen(maestro)}`);
+    console.log(`CANARIO-INFO|vitrina|${await resumen(vitrina)}`);
+  });
+
   for (const pantalla of PANTALLAS) {
     test(`${pantalla.nombre}: sin errores de servicio`, async ({ page }) => {
       const peticiones = [];
