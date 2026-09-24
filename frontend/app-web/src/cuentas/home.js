@@ -59,7 +59,10 @@ export const ACCESOS = Object.freeze([
     destino: '../plataforma/torneos/torneos.html',
   },
   { id: 'subastas', titulo: 'Subastas', detalle: 'Pujas en vivo', destino: './subastas.html' },
-  { id: 'tienda', titulo: 'Tienda', detalle: 'Compra con créditos', destino: './tienda.html' },
+  // R18 — decia «Compra con créditos», y la tienda cobra en dinero real: los
+  // créditos solo se ganan en batalla y solo circulan en las subastas
+  // (Proyecto Integrador II, §7.7.3). La propia tienda dice «Paga con moneda local».
+  { id: 'tienda', titulo: 'Tienda', detalle: 'Paga en tu moneda', destino: './tienda.html' },
   {
     id: 'comentarios',
     titulo: 'Comunidad',

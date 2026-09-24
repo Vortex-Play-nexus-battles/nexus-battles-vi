@@ -19,6 +19,8 @@ import {
   limitesDe,
   maximoDeMaquinas,
   ajustarPorModalidad,
+  rutaDeLaSala,
+  textoDeSalaCreada,
 } from './crear-sala.js';
 import { ErrorDeApi } from './cliente-salas.js';
 
@@ -303,6 +305,67 @@ describe('montarCrearSala', () => {
     expect(document.querySelector('[data-zona="aviso"]').hidden).toBe(false);
   });
 
+  test('R18 · al crear la sala ofrece entrar a ella, y entrar lleva a su sala', async () => {
+    const formulario = preparar();
+    const irALaSala = jest.fn();
+    const crearSalaImpl = jest
+      .fn()
+      .mockResolvedValue({ id: 'sala 7', maximoParticipantes: 2, recompensaCreditos: 0 });
+    montarCrearSala(formulario, { crearSalaImpl, irALaSala });
+
+    formulario.dispatchEvent(new Event('submit'));
+    await asentar();
+
+    const entrar = document.querySelector('.aviso [data-accion="entrar-a-la-sala"]');
+    expect(entrar).not.toBeNull();
+    expect(entrar.textContent).toBe('Entrar a la sala');
+    expect(irALaSala).not.toHaveBeenCalled();
+
+    entrar.click();
+    expect(irALaSala).toHaveBeenCalledWith('./sala-batalla.html?sala=sala%207');
+  });
+
+  test('R18 · contra la IA no manda a esperar a nadie: el rival ya esta dentro', async () => {
+    const formulario = preparar();
+    const crearSalaImpl = jest.fn().mockResolvedValue({
+      id: 'ia1',
+      modalidad: 'CONTRA_IA',
+      maximoParticipantes: 2,
+      ocupacion: 2,
+      recompensaCreditos: 0,
+    });
+    montarCrearSala(formulario, { crearSalaImpl, irALaSala: jest.fn() });
+
+    formulario.dispatchEvent(new Event('submit'));
+    await asentar();
+
+    const aviso = document.querySelector('.aviso');
+    expect(aviso.textContent).toContain('Tu rival ya está en la sala');
+    expect(aviso.textContent).not.toContain('esperando jugadores');
+  });
+
+  test('R18 · tras crear, el formulario vuelve entero a su modalidad por omision', async () => {
+    const formulario = preparar();
+    const crearSalaImpl = jest
+      .fn()
+      .mockResolvedValue({ id: 'x', maximoParticipantes: 2, recompensaCreditos: 0 });
+    montarCrearSala(formulario, { crearSalaImpl, irALaSala: jest.fn() });
+    elegir(formulario, 'CONTRA_IA');
+    expect(formulario.querySelector('[data-zona="nota-contra-ia"]').hidden).toBe(false);
+
+    formulario.dispatchEvent(new Event('submit'));
+    await asentar();
+
+    // El HTML de la prueba trae «hasta seis» y 4 como valores iniciales: el
+    // reset vuelve a ellos, y la nota y la pista tienen que acompanarlos.
+    expect(formulario.querySelector('[value="HASTA_SEIS"]').checked).toBe(true);
+    expect(formulario.querySelector('[name="maximoParticipantes"]').value).toBe('4');
+    expect(formulario.querySelector('[data-zona="nota-contra-ia"]').hidden).toBe(true);
+    expect(formulario.querySelector('[data-zona="pista-participantes"]').textContent).toMatch(
+      /^Entre \d y \d jugadores\.$/,
+    );
+  });
+
   test('mientras espera, el botón se bloquea y lo dice', async () => {
     const formulario = preparar();
     let resolver;
@@ -537,5 +600,21 @@ describe('montarCrearSala · sección degradada (HU-DIS-003)', () => {
 
     expect(formulario.querySelector('.seccion-degradada')).toBeNull();
     expect(document.querySelector('.aviso--error')).not.toBeNull();
+  });
+});
+
+describe('R18 - rutaDeLaSala y textoDeSalaCreada', () => {
+  test('la ruta lleva a la sala de espera de esa sala, con el id escapado', () => {
+    expect(rutaDeLaSala('abc')).toBe('./sala-batalla.html?sala=abc');
+    expect(rutaDeLaSala('a/b?c')).toBe('./sala-batalla.html?sala=a%2Fb%3Fc');
+  });
+
+  test('una sala que ya esta completa no espera a nadie, con o sin modalidad', () => {
+    expect(
+      textoDeSalaCreada({ maximoParticipantes: 2, ocupacion: 2, recompensaCreditos: 10 }),
+    ).toBe('Tu rival ya está en la sala, 10 créditos en juego. Entra y arranca el combate.');
+    expect(textoDeSalaCreada({ maximoParticipantes: 4, ocupacion: 1 })).toContain(
+      'esperando jugadores: 4 participantes',
+    );
   });
 });
