@@ -24,6 +24,12 @@ import org.springframework.security.web.SecurityFilterChain;
  *       ({@code ROLE_SERVICIO}, ADR-001/ADR-005). Un usuario no escribe la
  *       bitacora: el {@code administradorId} del cuerpo es un dato del
  *       evento, no quien llama.</li>
+ *   <li>Cualquier otra ruta bajo {@code /api/v1/admin/auditoria}, con
+ *       cualquier metodo: solo {@code SUPER_ADMINISTRADOR} (RF-AUD-003). Una
+ *       ruta nueva, como la exportacion de HU-AUD-004, nace cerrada y no
+ *       depende de que alguien recuerde {@code @RequireSuperAdmin2FA} para no
+ *       quedar abierta a cualquier autenticado. Si alguna tiene que admitir
+ *       otro rol, se declara expresamente ANTES de esa regla.</li>
  * </ul>
  *
  * <p>Actuator queda abierto para la sonda de salud (regla 3). Sin CSRF, sin
@@ -53,7 +59,10 @@ public class SeguridadConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/admin/auditoria/eventos").hasRole("SERVICIO")
-                        .requestMatchers(HttpMethod.GET, "/api/v1/admin/auditoria").hasRole("SUPER_ADMINISTRADOR")
+                        // El resto de la bitacora nace cerrado: la consulta y cualquier
+                        // ruta nueva (la exportacion de HU-AUD-004, por ejemplo).
+                        .requestMatchers("/api/v1/admin/auditoria", "/api/v1/admin/auditoria/**")
+                        .hasRole("SUPER_ADMINISTRADOR")
                         .anyRequest().authenticated());
         return http.build();
     }

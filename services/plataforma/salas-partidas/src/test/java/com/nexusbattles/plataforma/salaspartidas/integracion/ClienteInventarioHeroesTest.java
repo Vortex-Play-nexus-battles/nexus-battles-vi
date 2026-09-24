@@ -97,8 +97,14 @@ class ClienteInventarioHeroesTest {
      * prototipo, no por el nombre propio que le puso su dueno.
      */
     private void esperarProducto(String prototipo) {
+        esperarProducto(prototipo, null);
+    }
+
+    /** La misma ficha, con la imagen que hace de retrato (R8). */
+    private void esperarProducto(String prototipo, String imagen) {
         servidor.expect(requestTo(PRODUCTO_DEL_HEROE)).andRespond(withSuccess(
                 "{\"id\":\"p-1\",\"nombre\":\"Guerrero de catalogo\",\"tipo\":\"HEROE\","
+                        + "\"imagen\":" + (imagen == null ? "null" : "\"" + imagen + "\"") + ","
                         + "\"prototipo\":\"" + prototipo + "\"}",
                 MediaType.APPLICATION_JSON));
     }
@@ -152,7 +158,70 @@ class ClienteInventarioHeroesTest {
                 // podia superarla nunca y ningun golpe acertaba.
                 () -> assertEquals(11, estado.heroe().defensa()),
                 () -> assertEquals(140, estado.heroe().vidaMaxima()),
-                () -> assertEquals(140, estado.heroe().vidaActual()));
+                () -> assertEquals(140, estado.heroe().vidaActual()),
+                // Y el nivel sigue nulo: ningun servicio lo persiste, asi que
+                // no hay de donde sacarlo. Este assert esta para que rellenarlo
+                // con un 1 inventado rompa una prueba en vez de pasar
+                // desapercibido.
+                () -> assertNull(estado.heroe().nivel()));
+        servidor.verify();
+    }
+
+    /**
+     * El retrato del heroe llega desde el producto — R8.
+     *
+     * <p>Antes de R8 este campo era nulo siempre: el record con el que se
+     * deserializaba la ficha del producto declaraba solo {@code prototipo} y la
+     * imagen se descartaba. La vista lo notaba —pinta la inicial del nombre
+     * cuando no hay retrato— asi que todos los heroes se veian iguales.
+     *
+     * <p>Y no cuesta una peticion mas: sale de la MISMA llamada a productos que
+     * ya se hacia para el prototipo. El navegador no pide nada.
+     */
+    @Test
+    @DisplayName("el retrato del heroe sale del producto, sin una peticion de mas")
+    void elRetratoLlegaDesdeElProducto() {
+        esperarVitrina(vitrinaCon(heroe("h-1", "Sombra de Vael", true, null)));
+        servidor.expect(requestTo(EQUIPAMIENTO)).andRespond(withSuccess(
+                "{\"heroeId\":\"h-1\",\"armas\":[\"a-1\"],\"armaduras\":{},\"items\":[]}",
+                MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo(ESTADISTICAS)).andRespond(withSuccess(
+                "{\"heroeId\":\"h-1\",\"poder\":10,\"vida\":140,\"defensa\":4}",
+                MediaType.APPLICATION_JSON));
+        esperarProducto("Guerrero Tanque", "/imagenes/guerrero-tanque.jpg");
+        esperarFichaDePrototipo(11);
+
+        EstadoDelHeroe estado = cliente.consultar(JUGADOR);
+
+        assertEquals("/imagenes/guerrero-tanque.jpg", estado.heroe().retratoUrl());
+        // Se pasa tal cual: normalizarla obligaria a este servicio a saber
+        // donde vive el almacenamiento de imagenes, que no es su decision.
+        servidor.verify();
+    }
+
+    /**
+     * Un producto sin imagen no produce un retrato vacio.
+     *
+     * <p>Una cadena vacia en un {@code src} hace que el navegador pida la
+     * pagina actual como si fuera una imagen. El contrato declara
+     * {@code retratoUrl} anulable justamente para poder decir «no hay».
+     */
+    @Test
+    @DisplayName("un producto con la imagen en blanco deja el retrato nulo, no vacio")
+    void laImagenEnBlancoNoSeConvierteEnRetrato() {
+        esperarVitrina(vitrinaCon(heroe("h-1", "Sombra de Vael", true, null)));
+        servidor.expect(requestTo(EQUIPAMIENTO)).andRespond(withSuccess(
+                "{\"heroeId\":\"h-1\",\"armas\":[\"a-1\"],\"armaduras\":{},\"items\":[]}",
+                MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo(ESTADISTICAS)).andRespond(withSuccess(
+                "{\"heroeId\":\"h-1\",\"poder\":10,\"vida\":140,\"defensa\":4}",
+                MediaType.APPLICATION_JSON));
+        esperarProducto("Guerrero Tanque", "   ");
+        esperarFichaDePrototipo(11);
+
+        EstadoDelHeroe estado = cliente.consultar(JUGADOR);
+
+        assertNull(estado.heroe().retratoUrl());
         servidor.verify();
     }
 

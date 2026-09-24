@@ -155,25 +155,116 @@ const ESCENARIOS = [
     exige: ['[data-sala]', '.distintivo--llena', '.distintivo--privada'],
   },
   {
+    // R16.1 sobre la superficie que R5 estreno: la ficha de un heroe con sus
+    // estadisticas reales y las acciones de su prototipo. Es marcado nuevo
+    // —dos secciones, un titulo y una lista— dentro de un dialogo modal, que
+    // es donde se concentran los `role` mal puestos y los contrastes de texto
+    // secundario.
+    id: 'inventario-con-ficha-de-heroe',
+    titulo: 'ficha de un heroe con sus estadisticas y las acciones del prototipo',
+    ruta: 'contenido/inventario/inventario.html',
+    sesion: () => sesionSintetica({ apodo: 'qa_heroes', rol: 'JUGADOR' }),
+    rutas: [
+      [
+        '**/api/v1/inventario/elementos?*',
+        json({
+          elementos: [
+            {
+              id: 'ddddddd1-1111-4111-8111-111111111111',
+              productoId: 'aaaaaaa1-0000-4000-8000-000000000009',
+              tipo: 'HEROE',
+              nombrePropio: 'Aquiles de la Ceniza',
+              parteArmadura: null,
+              disponible: true,
+              subastaId: null,
+            },
+          ],
+          numero: 0,
+          tamanio: 16,
+          totalElementos: 1,
+          totalPaginas: 1,
+          ultima: true,
+        }),
+      ],
+      [
+        '**/api/v1/productos/aaaaaaa1-0000-4000-8000-000000000009',
+        json({
+          id: 'aaaaaaa1-0000-4000-8000-000000000009',
+          nombre: 'Guerrero Tanque',
+          tipo: 'HEROE',
+          prototipo: 'Guerrero Tanque',
+          descripcion: 'Aguanta lo que otros no.',
+          imagen: null,
+          estado: 'ACTIVO',
+          tiraje: -1,
+        }),
+      ],
+      // Las estadisticas del heroe DEL JUGADOR, con su equipamiento aplicado.
+      [
+        '**/api/v1/inventario/heroes/*/estadisticas',
+        json({
+          heroeId: 'ddddddd1-1111-4111-8111-111111111111',
+          poder: 10,
+          vida: 52,
+          defensa: 13,
+          ataque: { base: 10, cantidadDados: 1, caras: 6 },
+          dano: null,
+          sanar: null,
+        }),
+      ],
+      // Y las acciones DEL PROTOTIPO, del catalogo de heroes.
+      [
+        '**/api/v1/heroes/Guerrero%20Tanque',
+        json({
+          nombre: 'Guerrero Tanque',
+          tipo: 'TANQUE',
+          descripcion: 'Aguanta lo que otros no.',
+          esSanador: false,
+          acciones: [
+            { nombre: 'Golpe de escudo', costo: '2 puntos de poder', efecto: 'Dano directo.' },
+            { nombre: 'Muro', costo: '3 puntos de poder', efecto: 'Sube la defensa un turno.' },
+            { nombre: 'Embate', costo: '5 puntos de poder', efecto: 'Dano en area.' },
+          ],
+        }),
+      ],
+      ['**/api/v1/inventario/heroes/*/equipamiento', json({ heroeId: 'ddddddd1-1111-4111-8111-111111111111', armas: [], armaduras: {}, items: [] })],
+    ],
+    // La ficha es un dialogo: hay que abrirlo para auditarlo.
+    interaccion: async (pagina) => {
+      await pagina.locator('.vitrina__detalle').first().click();
+    },
+    exige: ['.ficha', '.ficha__seccion', '.ficha__acciones', '.ficha__seccion-nota'],
+  },
+  {
     id: 'tienda-con-catalogo',
     titulo: 'tienda con precios, rebaja y carrito con importes',
     ruta: 'cuentas/tienda.html',
     sesion: () => sesionSintetica({ apodo: 'qa_tienda', rol: 'JUGADOR' }),
     rutas: [
       [
-        '**/api/v1/productos*',
+        // R16 — la vitrina se mudó a /api/v1/vitrina (ecommerce-carrito.yaml
+        // 1.2.0) y sus ids son los UUID del catálogo maestro. Con la ruta vieja
+        // la vista no pintaba nada y el escenario se ponía rojo en `exige`, que
+        // es justo para lo que está. La rebaja y el precio ausente ya no los
+        // manda la vitrina 1.2.0, pero la tarjeta los sigue sabiendo pintar y
+        // su accesibilidad se sigue auditando.
+        '**/api/v1/vitrina*',
         json({
           content: [
-            producto({ id: 1, nombre: 'Yelmo del Alba' }),
+            producto({ id: 'aaaaaaa1-0000-4000-8000-000000000001', nombre: 'Yelmo del Alba' }),
             producto({
-              id: 2,
+              id: 'aaaaaaa1-0000-4000-8000-000000000002',
               nombre: 'Amuleto de Brasa',
               precioOriginal: 20000,
               precioFinal: 16000,
               enPromocion: true,
               porcentajeDescuento: 20,
             }),
-            producto({ id: 3, nombre: 'Pocion sin precio', precioFinal: null }),
+            producto({
+              id: 'aaaaaaa1-0000-4000-8000-000000000003',
+              nombre: 'Pocion sin precio',
+              precioFinal: null,
+            }),
           ],
         }),
       ],
@@ -222,7 +313,7 @@ function sala(cambios = {}) {
 
 function producto(cambios = {}) {
   return {
-    id: 1,
+    id: 'aaaaaaa1-0000-4000-8000-000000000001',
     nombre: 'Yelmo del Alba',
     imagenUrl: null,
     descripcion: 'Acero claro, forjado al amanecer.',
@@ -263,6 +354,14 @@ for (const escenario of ESCENARIOS) {
         await pagina.goto(`/${PREFIJO_WEB}/${escenario.ruta}`, {
           waitUntil: 'domcontentloaded',
         });
+
+        // Algunos estados solo existen tras un gesto: un dialogo que se abre,
+        // una pestana que se cambia. Se hace ANTES de exigir el marcado, para
+        // que la exigencia siga siendo la que decide si la prueba significa
+        // algo.
+        if (escenario.interaccion) {
+          await escenario.interaccion(pagina);
+        }
 
         // Primero: que el banco haya pintado de verdad. Un escenario que no
         // llega a pintar sus datos pasaria axe por no tener nada que revisar, y

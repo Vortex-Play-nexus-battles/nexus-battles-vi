@@ -104,6 +104,11 @@ public class LoginService {
         // --- Login exitoso: resetear contadores ---
         usuario.setIntentosFallidos(0);
         usuario.setBloqueadoHasta(null);
+        // Sello de ultima entrada: solo en un acceso correcto, nunca en uno
+        // fallido. Es lo que la consola administrativa muestra como «ultima
+        // entrada»; sin esto la unica alternativa era deducirla de la
+        // auditoria o mostrar una fecha que nadie habia escrito.
+        usuario.setUltimoAcceso(LocalDateTime.now());
         usuarioRepository.save(usuario);
 
         // --- Huella de dispositivo/ubicación (RF-AUT-010) ---

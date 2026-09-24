@@ -149,7 +149,10 @@ jobs:
   #     generico, con la vista Mis cofres rota y sin issue abierto.
   #
   # Un guardian que no corre no es un guardian. Este job cuesta ~20 s: trece
-  # contenedores de nginx:1.27-alpine y 33 peticiones.
+  # ecos y el borde en nginx:1.27-alpine, y 38 peticiones. Desde R16 un
+  # contenedor mas, `borde-conf`, deriva la configuracion cambiando SOLO el
+  # destino del catalogo por su eco, para que /api/v1/productos se pruebe con
+  # trafico sin salir hacia el host de contenido real.
   # ---------------------------------------------------------------------
   ci-enrutado-borde:
     name: CI - reparto de rutas del borde
@@ -195,7 +198,7 @@ jobs:
         working-directory: infrastructure/red-balanceo/pruebas
         run: docker compose up -d --wait
 
-      - name: Comprobar el reparto de las 33 rutas
+      - name: Comprobar el reparto de las 41 rutas
         working-directory: infrastructure/red-balanceo/pruebas
         run: ./comprobar-rutas.sh
 
@@ -289,6 +292,15 @@ jobs:
       - name: Comprobar que los pactos tienen quien los verifique
         shell: bash
         run: python3 tests/contratos/pactos-verificados.py
+
+      # La transferencia de propiedad de HU-SUB-004 llego a tener cliente sin
+      # ruta y ruta sin contrato, y todo el repositorio en verde: la subasta se
+      # cobraba y el objeto no cambiaba de dueno. Esto vigila que las cinco
+      # piezas sigan conectadas —contrato, controlador, seguridad, cliente y el
+      # INVENTARIO_MODO de cada compose—, que es lo que se rompio. Sin Docker.
+      - name: Comprobar que la transferencia de subasta sigue conectada
+        shell: bash
+        run: python3 tests/contratos/transferencia-de-subasta.py
 
       # Regla 2: un cambio incompatible abre version nueva. Compara cada
       # contrato tocado contra su propia version en la base de la rama, con

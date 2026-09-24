@@ -1,0 +1,208 @@
+openapi: 3.1.0
+
+# =============================================================================
+# Nexus Battles VI — Perfil del jugador (ms-identidad · equipo de Cuentas)
+#
+# Regla 1 de plataforma: contrato primero. Estas dos rutas llevaban semanas en
+# produccion SIN contrato publicado —`ms-identidad-auth.yaml` cubre solo
+# `/api/v1/auth` y lo dice en su nota de alcance—, y esa ausencia es
+# exactamente lo que dejo pasar el defecto que este documento cierra:
+#
+#   * `cuenta.js` pide el perfil por el `uid` del token (un UUID);
+#   * el controlador declaraba el segmento como `Long usuarioId`, el id
+#     autonumerico de la tabla, que el navegador no conoce en ningun sitio.
+#
+# Spring no podia convertir un UUID a Long y la peticion moria con un 4xx
+# antes de llegar al controlador. La pantalla «Mi cuenta» mostraba «No
+# pudimos cargar tu perfil» a TODOS los jugadores (R16, 24-sep-2026). Con un
+# contrato que dijera de que tipo es `{usuario}`, el desacuerdo entre los dos
+# lados se habria visto en la revision y no en AWS.
+#
+# Se escribe a partir de `PerfilController`, `PerfilUsuarioResponse`,
+# `ActualizarPerfilRequest` y `SecurityInterceptor`. Queda pendiente de
+# validacion por el dueno del modulo antes de tratarlo como acordado.
+# =============================================================================
+
+info:
+  title: Nexus Battles VI — Perfil del jugador (ms-identidad)
+  version: 1.0.0
+  description: |
+    Consulta y edicion del perfil propio (HU-USR-001).
+
+    El servicio escucha en el puerto 8089 y **no tiene context-path**: las
+    rutas son absolutas e incluyen el `/api/v1` (regla 2), igual que en
+    `ms-identidad-auth.yaml`.
+
+    ### Que identificador va en la ruta
+
+    **El `uid` del token**, el UUID publico que ADR-002 pone en el claim
+    `uid` y que el frontend guarda en su sesion. Es el unico identificador de
+    una persona que conoce el navegador.
+
+    Se sigue aceptando el id numerico interno por compatibilidad, pero
+    **ningun consumidor debe depender de el**: es la clave primaria de una
+    tabla y no sale en ningun token ni respuesta publica.
+
+    ### Quien puede leer un perfil
+
+    Solo su dueno. Se compara el `uid` del token con el del perfil; el apodo
+    (`sub`) queda como respaldo para tokens emitidos antes de que existiera
+    el `uid`. Comparar solo por apodo fallaba justo despues de que el
+    jugador cambiara de apodo desde este mismo formulario: su token seguia
+    diciendo el apodo viejo y la siguiente lectura daba 403.
+
+servers:
+  - url: http://localhost:8089
+    description: Desarrollo local (sin context-path; el /api/v1 va en la ruta)
+  - url: http://srv-ms-identidad:8089
+    description: Red de compose
+
+tags:
+  - name: perfil
+    description: Perfil propio del jugador (HU-USR-001)
+
+paths:
+  /api/v1/perfiles/{usuario}:
+    parameters:
+      - name: usuario
+        in: path
+        required: true
+        description: |
+          `uid` del token (UUID). Por compatibilidad tambien se acepta el id
+          numerico interno; cualquier otro valor responde 404.
+        schema:
+          oneOf:
+            - type: string
+              format: uuid
+            - type: string
+              pattern: '^[0-9]{1,18}$'
+    get:
+      tags: [perfil]
+      operationId: obtenerPerfilPropio
+      summary: Perfil del jugador autenticado
+      security:
+        - tokenDeUsuario: []
+      responses:
+        '200':
+          description: El perfil del dueno del token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerfilUsuario'
+        '403':
+          description: |
+            Sin token valido, sin permiso `MODIFICAR_PERFIL_PROPIO`, o el
+            perfil es de otra persona. Lo responde el interceptor (con problem
+            details) o el propio controlador.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '404':
+          description: No existe perfil para ese identificador.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+    put:
+      tags: [perfil]
+      operationId: actualizarPerfilPropio
+      summary: Edita el perfil propio (y opcionalmente apodo y avatar)
+      security:
+        - tokenDeUsuario: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ActualizarPerfil'
+      responses:
+        '200':
+          description: El perfil ya actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerfilUsuario'
+        '400':
+          description: Apodo en uso o en la lista negra; el cuerpo es el motivo en texto.
+          content:
+            text/plain:
+              schema:
+                type: string
+        '403':
+          description: Sin token valido, sin permiso, o el perfil es de otra persona.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '404':
+          description: No existe perfil para ese identificador.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+components:
+  securitySchemes:
+    tokenDeUsuario:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Token de sesion emitido por `POST /api/v1/auth/login` (ADR-002). Lleva
+        `sub` = apodo, `rol` y `uid` = UUID publico estable.
+
+  schemas:
+    PerfilUsuario:
+      type: object
+      required: [id, apodo]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Id interno del perfil. No identifica a la persona fuera de este servicio.
+        apodo:
+          type: string
+        nombres:
+          type: [string, 'null']
+        apellidos:
+          type: [string, 'null']
+        avatar:
+          type: [string, 'null']
+          description: URL del avatar guardado, si lo hay.
+        preferencias:
+          type: [string, 'null']
+
+    ActualizarPerfil:
+      type: object
+      properties:
+        nombres:
+          type: string
+        apellidos:
+          type: string
+        avatar:
+          type: string
+          format: binary
+          description: Archivo de imagen. Si no llega, se conserva el anterior.
+        preferencias:
+          type: string
+        apodo:
+          type: string
+          description: Nuevo apodo. Se valida contra la lista negra y la unicidad.
+
+    ProblemDetail:
+      type: object
+      description: Problem details RFC 7807 (regla 4).
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string

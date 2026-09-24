@@ -772,7 +772,6 @@
   gap: var(--e-1);
 }
 
-
 /* El botón destructivo va a la derecha; cancelar nunca es el prominente. */
 .dialogo__acciones {
   display: flex;
@@ -4558,8 +4557,7 @@ button.tarjeta-heroe[aria-pressed='true'] {
      El campo es el unico sitio de la aplicacion donde hay superficie grande
      vacia, y plana se veria como un error de carga. */
   background:
-    radial-gradient(circle at 50% 40%, var(--superficie) 0%, var(--fondo) 70%),
-    var(--fondo);
+    radial-gradient(circle at 50% 40%, var(--superficie) 0%, var(--fondo) 70%), var(--fondo);
   overflow: hidden;
 }
 
@@ -4692,7 +4690,6 @@ button.tarjeta-heroe[aria-pressed='true'] {
     padding: 0;
   }
 }
-
 
 /* =======================================================================
    Elegir que va en una ranura — HU-INV-005 (UX-R2.5)
@@ -5306,7 +5303,6 @@ button.tarjeta-heroe[aria-pressed='true'] {
   }
 }
 
-
 /* El filo de acento recorre toda la barra. Es la versión a lo ancho del filo
    superior de la tarjeta de entrada: mismo gesto, mismo gradiente, distinto
    sitio. Marca el modo sin gastar un color nuevo. */
@@ -5535,4 +5531,170 @@ button.tarjeta-heroe[aria-pressed='true'] {
    mide su texto, que es lo que hace un botón. */
 .fila--acciones > * {
   flex: 0 0 auto;
+}
+
+/* =========================================================================
+   Consola de control integral
+   =========================================================================
+   Ocho secciones, cada una con sus paneles. El sello de estado de cada panel
+   es la pieza clave del componente: dice, de un vistazo, si lo que hay
+   debajo es un dato real, un hueco o un servicio caido. Sin el, un panel
+   vacio y un panel que no pudo preguntar se ven igual -- que es justo la
+   confusion que esta pantalla existe para evitar.
+   ========================================================================= */
+
+.consola-integral {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+}
+
+.consola-integral__contrato {
+  border-left: 3px solid var(--primaria);
+  padding-left: var(--e-3);
+  max-width: 78ch;
+}
+
+.consola-integral__seccion {
+  margin-block-start: var(--e-6, 1.5rem);
+}
+
+.consola-integral__rejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: var(--e-3);
+  margin-block-start: var(--e-2);
+}
+
+/* Un panel con tabla necesita el ancho entero; uno con una cifra, no. */
+.panel-admin {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  min-width: 0;
+}
+
+.panel-admin:has(.tabla-envoltorio) {
+  grid-column: 1 / -1;
+}
+
+.panel-admin__encabezado {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--e-2);
+}
+
+.panel-admin__textos {
+  min-width: 0;
+}
+
+.panel-admin__cuerpo {
+  min-width: 0;
+}
+
+.panel-admin__fuente {
+  color: var(--texto-3);
+  font-variant-numeric: var(--cifras-tabulares);
+  margin-block-start: auto;
+  overflow-wrap: anywhere;
+}
+
+/* --- El sello de estado -------------------------------------------------- */
+
+.sello-estado {
+  flex: 0 0 auto;
+  border-radius: var(--radio-pildora);
+  padding: 0.125rem var(--e-2);
+  font-family: var(--t-etiqueta-familia);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  /* El color NO es la unica senal: el texto dice el estado con palabras.
+     Quien no distingue rojo de verde lee EN LINEA o SERVICIO DEGRADADO. */
+  background: var(--pista);
+  color: var(--texto-2);
+}
+
+.sello-estado[data-estado='ok'] {
+  background: var(--exito-insignia);
+  color: var(--exito);
+}
+
+.sello-estado[data-estado='malo'] {
+  background: var(--error-insignia);
+  color: var(--error);
+}
+
+.sello-estado[data-estado='aviso'] {
+  background: var(--advertencia-insignia);
+  color: var(--advertencia);
+}
+
+.sello-estado[data-estado='neutro'] {
+  background: var(--superficie-2);
+  color: var(--texto-3);
+}
+
+/* --- Indicadores --------------------------------------------------------- */
+
+.indicador {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-1);
+}
+
+.indicador__valor {
+  font-family: var(--fuente-titulo);
+  font-size: 2.25rem;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: var(--cifras-tabulares);
+  color: var(--texto);
+}
+
+.indicador__etiqueta {
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--texto-2);
+}
+
+.indicador__nota {
+  color: var(--texto-3);
+}
+
+/* --- Tablas dentro de un panel ------------------------------------------- */
+
+.tabla-envoltorio {
+  /* Una tabla de seis columnas no cabe en un telefono. Se desplaza dentro de
+     su panel en vez de estirar la pagina entera. */
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.tabla-envoltorio .tabla {
+  width: 100%;
+  min-width: 38rem;
+}
+
+/* --- Buscador y paginacion del directorio -------------------------------- */
+
+.consola-integral__buscador {
+  display: flex;
+  gap: var(--e-2);
+  flex-wrap: wrap;
+}
+
+.consola-integral__buscador .campo__entrada {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.consola-integral__paginacion {
+  display: flex;
+  gap: var(--e-2);
+  margin-block-start: var(--e-2);
 }

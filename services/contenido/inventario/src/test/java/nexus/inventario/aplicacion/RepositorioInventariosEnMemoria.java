@@ -43,10 +43,15 @@ public class RepositorioInventariosEnMemoria implements RepositorioDeInventarios
 
     @Override
     public Optional<Inventario> buscarPorElementoId(String elementoId) {
+        return buscarTodosPorElementoId(elementoId).stream().findFirst();
+    }
+
+    @Override
+    public List<Inventario> buscarTodosPorElementoId(String elementoId) {
         return inventarios.values().stream()
                 .filter(inventario -> inventario.elementos().stream()
                         .anyMatch(elemento -> elemento.id().equals(elementoId)))
-                .findFirst();
+                .toList();
     }
 
     @Override

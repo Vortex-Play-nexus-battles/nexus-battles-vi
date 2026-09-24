@@ -1,0 +1,86 @@
+# Memoria real de cada contenedor en el host de dev, SWAP incluido (R16.5).
+#
+# ## Por que existe
+#
+# `docker stats` dice cuanta RAM usa cada contenedor y no dice nada del swap.
+# En el host de plataforma hay ~1,4 GB en swap: lo que `docker stats` muestra
+# es solo la parte residente, y esconde cuanto ocupa de verdad cada servicio.
+# Para decidir cuanto se le puede quitar a cada JVM hace falta el total.
+#
+# Este workflow lo lee de donde lo lleva el nucleo, sin preguntarle a nadie:
+# el cgroup de cada contenedor (`memory.current` y `memory.swap.current`). Y
+# para las JVM con `jcmd`, el montón comprometido y su techo.
+#
+# ## Lo que NO hace, a proposito
+#
+# La primera version forzaba un GC completo en cada JVM (`jcmd GC.run`) para
+# medir lo vivo. En un host con 1,4 GB en swap eso obliga al nucleo a traer
+# de vuelta el montón entero de cada servicio, uno detras de otro: la corrida
+# del 24-sep 01:16 UTC se quedo atascada nueve minutos y el borde dejo de
+# responder mientras tanto (coincidio ademas con dos despliegues). Esta
+# version solo LEE: cgroup y `GC.heap_info`, que no recorre el montón.
+name: Medir el montón de las JVM en dev
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  medir:
+    name: Memoria y swap por contenedor en el host de plataforma
+    runs-on: ubuntu-latest
+    environment: dev
+    timeout-minutes: 8
+    steps:
+      - name: Medir por SSH (solo lectura)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          command_timeout: 4m
+          script: |
+            set -u
+            echo "============== MEMORIA DEL HOST =============="
+            free -m
+            echo
+            echo "============== POR CONTENEDOR (MiB) =============="
+            echo "RAM y SWAP salen del cgroup del contenedor: son del nucleo, no estimaciones."
+            printf '%-28s %7s %7s %8s %9s %10s %10s\n' CONTENEDOR RAM SWAP TOTAL LIMITE HEAP_COMPR HEAP_MAX
+            total_ram=0; total_swap=0
+            for c in $(sudo docker ps --format '{{.Names}}' | sort); do
+              id=$(sudo docker inspect -f '{{.Id}}' "$c")
+              base=""
+              for d in "/sys/fs/cgroup/system.slice/docker-$id.scope" "/sys/fs/cgroup/docker/$id"; do
+                [ -r "$d/memory.current" ] && base="$d" && break
+              done
+              if [ -z "$base" ]; then
+                printf '%-28s %s\n' "$c" "(no encuentro su cgroup v2)"
+                continue
+              fi
+              ram=$(( $(cat "$base/memory.current") / 1048576 ))
+              swap=0; [ -r "$base/memory.swap.current" ] && swap=$(( $(cat "$base/memory.swap.current") / 1048576 ))
+              lim=$(cat "$base/memory.max"); [ "$lim" != "max" ] && lim=$(( lim / 1048576 ))
+              total_ram=$(( total_ram + ram )); total_swap=$(( total_swap + swap ))
+
+              compr="-"; max="-"
+              case "$c" in srv-*)
+                if sudo docker exec "$c" sh -c 'command -v jcmd >/dev/null 2>&1'; then
+                  uidjvm=$(sudo docker exec "$c" sh -c 'stat -c %u /proc/1 2>/dev/null || echo 0')
+                  # GC.heap_info no recorre el montón: solo lee contadores.
+                  info=$(timeout 20 sudo docker exec -u "$uidjvm" "$c" jcmd 1 GC.heap_info 2>/dev/null || true)
+                  flags=$(timeout 20 sudo docker exec -u "$uidjvm" "$c" jcmd 1 VM.flags 2>/dev/null || true)
+                  compr=$(echo "$info" | awk '/generation|garbage-first heap/ { for (i=1;i<=NF;i++) if ($i=="total") t+=$(i+1)+0 } END { if (t) printf "%d", t/1024; else printf "-" }')
+                  max=$(echo "$flags" | tr ' ' '\n' | awk -F= '/MaxHeapSize=/ { printf "%d", $2/1048576 }')
+                fi
+              ;; esac
+              printf '%-28s %7s %7s %8s %9s %10s %10s\n' "$c" "$ram" "$swap" "$(( ram + swap ))" "$lim" "$compr" "${max:--}"
+            done
+            echo
+            echo "Suma de contenedores: RAM=${total_ram} MiB  SWAP=${total_swap} MiB  TOTAL=$(( total_ram + total_swap )) MiB"
+            echo
+            echo "Lectura: TOTAL es lo que ocupa de verdad cada servicio. HEAP_COMPR frente a HEAP_MAX"
+            echo "dice cuanto ha crecido el montón respecto a su techo: si esta cerca, el servicio"
+            echo "podria necesitarlo; si esta muy por debajo, el techo sobra."

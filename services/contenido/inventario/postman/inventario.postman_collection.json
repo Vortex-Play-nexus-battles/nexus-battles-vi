@@ -40,7 +40,7 @@
 						"url": "{{baseUrl}}/api/v1/inventario/elementos",
 						"body": {
 							"mode": "raw",
-							"raw": "{\"productoId\":\"prototipo-guerrero-tanque\",\"tipo\":\"HEROE\",\"nombrePropio\":\"Sin dueno\"}"
+							"raw": "{\"productoId\":\"aec4fbd2-9615-352a-9f2b-3fad781e123c\",\"tipo\":\"HEROE\",\"nombrePropio\":\"Sin dueno\"}"
 						}
 					},
 					"event": [
@@ -79,7 +79,7 @@
 						"url": "{{baseUrl}}/api/v1/inventario/elementos",
 						"body": {
 							"mode": "raw",
-							"raw": "{\"productoId\":\"prototipo-guerrero-tanque\",\"tipo\":\"HEROE\",\"nombrePropio\":\"Mi tanque\"}"
+							"raw": "{\"productoId\":\"aec4fbd2-9615-352a-9f2b-3fad781e123c\",\"tipo\":\"HEROE\",\"nombrePropio\":\"Mi tanque\"}"
 						}
 					},
 					"event": [
@@ -93,7 +93,7 @@
 									"pm.test('Location apunta al elemento creado', () => pm.expect(pm.response.headers.get('Location')).to.include('/api/v1/inventario/elementos/' + e.id));",
 									"pm.test('el elemento queda con id, producto, tipo y nombre', () => {",
 									"  pm.expect(e.id).to.be.a('string').that.is.not.empty;",
-									"  pm.expect(e.productoId).to.eql('prototipo-guerrero-tanque');",
+									"  pm.expect(e.productoId).to.eql('aec4fbd2-9615-352a-9f2b-3fad781e123c');",
 									"  pm.expect(e.tipo).to.eql('HEROE');",
 									"  pm.expect(e.nombrePropio).to.eql('Mi tanque');",
 									"});",
@@ -198,7 +198,7 @@
 						"url": "{{baseUrl}}/api/v1/inventario/elementos",
 						"body": {
 							"mode": "raw",
-							"raw": "{\"productoId\":\"espada-corta\",\"tipo\":\"ARMA\"}"
+							"raw": "{\"productoId\":\"1647b2ea-096d-37e7-b580-0172e4c62313\",\"tipo\":\"ARMA\"}"
 						}
 					},
 					"event": [
@@ -209,6 +209,82 @@
 								"exec": [
 									"pm.test('responde 400', () => pm.response.to.have.status(400));",
 									"pm.test('detalle legible, sin codigos', () => { const p = pm.response.json(); pm.expect(p.title).to.eql('Solicitud invalida'); pm.expect(p.detail).to.not.match(/400|500/); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Un producto que no existe en el catalogo se rechaza (422)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{tokenJugadorA}}",
+								"description": "Contrato 1.1.0 (#451): el propietario sale del JWT; X-User-Name se conserva para servicios con credencial"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-User-Name",
+								"value": "{{jugadorA}}"
+							}
+						],
+						"url": "{{baseUrl}}/api/v1/inventario/elementos",
+						"body": {
+							"mode": "raw",
+							"raw": "{\"productoId\":\"espada-corta\",\"tipo\":\"ARMA\",\"nombrePropio\":\"Espada inventada\"}"
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('responde 422: el jugador no inventa productos (RG-074)', () => pm.response.to.have.status(422));",
+									"pm.test('detalle legible, sin codigos', () => { const p = pm.response.json(); pm.expect(p.title).to.eql('Producto inexistente'); pm.expect(p.detail).to.eql('El producto no existe en el catalogo.'); });"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Un tipo distinto al del producto se rechaza (400)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{tokenJugadorA}}",
+								"description": "Contrato 1.1.0 (#451): el propietario sale del JWT; X-User-Name se conserva para servicios con credencial"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-User-Name",
+								"value": "{{jugadorA}}"
+							}
+						],
+						"url": "{{baseUrl}}/api/v1/inventario/elementos",
+						"body": {
+							"mode": "raw",
+							"raw": "{\"productoId\":\"aec4fbd2-9615-352a-9f2b-3fad781e123c\",\"tipo\":\"ARMA\",\"nombrePropio\":\"Heroe disfrazado de arma\"}"
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('responde 400: el tipo lo manda el producto', () => pm.response.to.have.status(400));",
+									"pm.test('detalle legible, sin codigos', () => { const p = pm.response.json(); pm.expect(p.title).to.eql('Tipo no coincide'); pm.expect(p.detail).to.eql('El tipo no coincide con el producto del catalogo.'); });"
 								]
 							}
 						}
@@ -236,7 +312,7 @@
 						"url": "{{baseUrl}}/api/v1/inventario/elementos",
 						"body": {
 							"mode": "raw",
-							"raw": "{\"productoId\":\"espada-corta\",\"tipo\":\"ARMA\",\"nombrePropio\":\"Espada de B\"}"
+							"raw": "{\"productoId\":\"1647b2ea-096d-37e7-b580-0172e4c62313\",\"tipo\":\"ARMA\",\"nombrePropio\":\"Espada de B\"}"
 						}
 					},
 					"event": [
@@ -388,7 +464,7 @@
 						"url": "{{baseUrl}}/api/v1/inventario/elementos",
 						"body": {
 							"mode": "raw",
-							"raw": "{\"productoId\":\"espada-una-mano\",\"tipo\":\"ARMA\",\"nombrePropio\":\"Arma 1\"}"
+							"raw": "{\"productoId\":\"37154b84-2ea0-3076-ae7b-656f7b4ebf11\",\"tipo\":\"ARMA\",\"nombrePropio\":\"Arma 1\"}"
 						}
 					},
 					"event": [
@@ -426,7 +502,7 @@
 						"url": "{{baseUrl}}/api/v1/inventario/elementos",
 						"body": {
 							"mode": "raw",
-							"raw": "{\"productoId\":\"escudo\",\"tipo\":\"ARMA\",\"nombrePropio\":\"Arma 2\"}"
+							"raw": "{\"productoId\":\"bcccae4f-a74b-30b2-b89b-5d1882b609d5\",\"tipo\":\"ARMA\",\"nombrePropio\":\"Arma 2\"}"
 						}
 					},
 					"event": [
@@ -464,7 +540,7 @@
 						"url": "{{baseUrl}}/api/v1/inventario/elementos",
 						"body": {
 							"mode": "raw",
-							"raw": "{\"productoId\":\"daga\",\"tipo\":\"ARMA\",\"nombrePropio\":\"Arma 3\"}"
+							"raw": "{\"productoId\":\"77d90598-f504-33cb-9b68-080f0c89493d\",\"tipo\":\"ARMA\",\"nombrePropio\":\"Arma 3\"}"
 						}
 					},
 					"event": [
@@ -622,7 +698,7 @@
 						"url": "{{baseUrl}}/api/v1/inventario/elementos",
 						"body": {
 							"mode": "raw",
-							"raw": "{\"productoId\":\"casco-hierro\",\"tipo\":\"ARMADURA\",\"nombrePropio\":\"Casco 1\",\"parteArmadura\":\"CASCO\"}"
+							"raw": "{\"productoId\":\"fa5a4825-585e-3b01-9daf-7869f7fa202f\",\"tipo\":\"ARMADURA\",\"nombrePropio\":\"Casco 1\",\"parteArmadura\":\"CASCO\"}"
 						}
 					},
 					"event": [
@@ -661,7 +737,7 @@
 						"url": "{{baseUrl}}/api/v1/inventario/elementos",
 						"body": {
 							"mode": "raw",
-							"raw": "{\"productoId\":\"casco-acero\",\"tipo\":\"ARMADURA\",\"nombrePropio\":\"Casco 2\",\"parteArmadura\":\"CASCO\"}"
+							"raw": "{\"productoId\":\"0a1cab7c-87ac-3f17-8540-143f37a595da\",\"tipo\":\"ARMADURA\",\"nombrePropio\":\"Casco 2\",\"parteArmadura\":\"CASCO\"}"
 						}
 					},
 					"event": [
@@ -699,7 +775,7 @@
 						"url": "{{baseUrl}}/api/v1/inventario/elementos",
 						"body": {
 							"mode": "raw",
-							"raw": "{\"productoId\":\"peto-cuero\",\"tipo\":\"ARMADURA\",\"nombrePropio\":\"Pecho 1\",\"parteArmadura\":\"PECHO\"}"
+							"raw": "{\"productoId\":\"824c1e0c-6c2d-3e12-b62e-345e1338e649\",\"tipo\":\"ARMADURA\",\"nombrePropio\":\"Pecho 1\",\"parteArmadura\":\"PECHO\"}"
 						}
 					},
 					"event": [
@@ -737,7 +813,7 @@
 						"url": "{{baseUrl}}/api/v1/inventario/elementos",
 						"body": {
 							"mode": "raw",
-							"raw": "{\"productoId\":\"guantes\",\"tipo\":\"ARMADURA\",\"nombrePropio\":\"Sin parte\"}"
+							"raw": "{\"productoId\":\"ab5febe7-a919-3c66-895a-965362820dde\",\"tipo\":\"ARMADURA\",\"nombrePropio\":\"Sin parte\"}"
 						}
 					},
 					"event": [
@@ -864,7 +940,7 @@
 						"url": "{{baseUrl}}/api/v1/inventario/elementos",
 						"body": {
 							"mode": "raw",
-							"raw": "{\"productoId\":\"pocion-vida\",\"tipo\":\"ITEM\",\"nombrePropio\":\"Item 1\"}"
+							"raw": "{\"productoId\":\"ad5a6a53-b398-3741-93c8-59efe4f6578f\",\"tipo\":\"ITEM\",\"nombrePropio\":\"Item 1\"}"
 						}
 					},
 					"event": [
@@ -902,7 +978,7 @@
 						"url": "{{baseUrl}}/api/v1/inventario/elementos",
 						"body": {
 							"mode": "raw",
-							"raw": "{\"productoId\":\"anillo-dano\",\"tipo\":\"ITEM\",\"nombrePropio\":\"Item 2\"}"
+							"raw": "{\"productoId\":\"d7369838-a2a4-3810-9dd6-5b6c0ba97089\",\"tipo\":\"ITEM\",\"nombrePropio\":\"Item 2\"}"
 						}
 					},
 					"event": [
@@ -940,7 +1016,7 @@
 						"url": "{{baseUrl}}/api/v1/inventario/elementos",
 						"body": {
 							"mode": "raw",
-							"raw": "{\"productoId\":\"amuleto\",\"tipo\":\"ITEM\",\"nombrePropio\":\"Item 3\"}"
+							"raw": "{\"productoId\":\"70e6ad6c-ff34-30ab-a57c-be975c17bffb\",\"tipo\":\"ITEM\",\"nombrePropio\":\"Item 3\"}"
 						}
 					},
 					"event": [
@@ -1367,7 +1443,7 @@
 						"url": "{{baseUrl}}/api/v1/inventario/elementos",
 						"body": {
 							"mode": "raw",
-							"raw": "{\"productoId\":\"113609ca-3c15-42f5-b427-d452ce06f9a8\",\"tipo\":\"ITEM\",\"nombrePropio\":\"Reliquia para subasta\"}"
+							"raw": "{\"productoId\":\"52d9af58-8cc1-3ba4-9e59-573cb7b69e79\",\"tipo\":\"ITEM\",\"nombrePropio\":\"Reliquia para subasta\"}"
 						}
 					},
 					"event": [

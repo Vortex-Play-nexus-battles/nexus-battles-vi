@@ -88,6 +88,7 @@ export const SECCIONES = Object.freeze([
  */
 export const SECCIONES_CONSOLA = Object.freeze([
   { id: 'resumen', etiqueta: 'Resumen', vista: 'consola', icono: 'panel' },
+  { id: 'control', etiqueta: 'Control integral', vista: 'control-integral', icono: 'pulso' },
   { id: 'usuarios', etiqueta: 'Usuarios', vista: 'gestion-usuarios', icono: 'usuarios' },
   { id: 'productos', etiqueta: 'Productos', vista: 'productos', icono: 'mochila' },
   { id: 'sanciones', etiqueta: 'Sanciones', vista: 'sanciones-admin', icono: 'escudo' },

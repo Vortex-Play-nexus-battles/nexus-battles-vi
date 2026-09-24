@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.UUID;
 import nexus.inventario.dominio.ElementoInventario;
 import nexus.inventario.dominio.ElementoNoEncontradoException;
+import nexus.inventario.dominio.FalloPersistenciaInventarioException;
 import nexus.inventario.dominio.Inventario;
 import nexus.inventario.dominio.TipoElementoInventario;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,16 +51,71 @@ class TransferirElementoPorSubastaTest {
         assertTrue(delVendedor.elementos().isEmpty());
     }
 
+    /**
+     * Este caso afirmaba lo contrario: que el bloqueo se soltaba dentro de la
+     * transferencia para ahorrarle a ms-subastas una segunda llamada. Se invierte
+     * a proposito, y por dos razones que solo se ven mirando el orden real de
+     * {@code MotorPujasService}.
+     *
+     * <p>Primera: ahi la transferencia ocurre ANTES del cobro
+     * ({@code transferirProducto} y despues {@code creditoClient.consumir}). En
+     * el instante en que este metodo termina, el ganador tiene el objeto y no lo
+     * ha pagado todavia. Si llegara libre podria equiparlo o revenderlo en esa
+     * ventana, y entonces la compensacion no encontraria que devolver.
+     *
+     * <p>Segunda: cuando el cobro falla, ms-subastas compensa devolviendo el
+     * elemento al vendedor con esta misma operacion, que exige bloqueo de esa
+     * subasta. Soltarlo aqui hacia que la compensacion muriera siempre con 409 —
+     * estaba escrita y no podia funcionar nunca.
+     *
+     * <p>La segunda llamada no desaparece, se mueve: ms-subastas suelta el
+     * bloqueo despues de confirmar la venta, y esa operacion es idempotente y no
+     * mira quien es el dueno, asi que se puede reintentar sola.
+     */
     @Test
-    @DisplayName("el elemento llega libre: el bloqueo de la subasta se suelta en la misma operacion")
-    void elElementoLlegaDisponible() {
+    @DisplayName("el bloqueo viaja con el elemento: el ganador aun no ha pagado")
+    void elBloqueoViajaConElElemento() {
         ElementoInventario transferido = transferencias.transferir(
                 "elemento-1", COMPRADOR, SUBASTA, "cierre-1");
 
-        // Si llegara bloqueado, el comprador tendria el objeto sin poder usarlo
-        // y ms-subastas necesitaria una segunda llamada para soltarlo, con la
-        // ventana de quedarse a medias entre las dos.
-        assertTrue(transferido.disponible());
+        assertFalse(transferido.disponible());
+        assertEquals(SUBASTA.toString(), transferido.subastaId());
+    }
+
+    /**
+     * El segundo paso del diseno de dos llamadas. Si esto no funcionara, el
+     * ganador se quedaria con un objeto pagado que no puede usar: peor que el
+     * problema que se arregla conservando el bloqueo.
+     */
+    @Test
+    @DisplayName("soltar el bloqueo despues de la venta no exige ser el propietario original")
+    void laVentaDefinitivaDejaElElementoUsable() {
+        transferencias.transferir("elemento-1", COMPRADOR, SUBASTA, "cierre-1");
+
+        ElementoInventario libre = bloqueos.liberar("elemento-1", SUBASTA, "liberar-cierre-1");
+
+        assertTrue(libre.disponible());
+        assertTrue(repositorio.buscarPorPropietario(COMPRADOR.toString()).orElseThrow()
+                .elemento("elemento-1").disponible());
+    }
+
+    /**
+     * La compensacion de {@code MotorPujasService} cuando el cobro falla despues
+     * de haber transferido: la misma operacion, con el vendedor como destino.
+     * Antes terminaba en 409 porque el elemento llegaba sin bloqueo.
+     */
+    @Test
+    @DisplayName("se puede devolver el elemento al vendedor si el cobro falla")
+    void laCompensacionDevuelveElElementoAlVendedor() {
+        transferencias.transferir("elemento-1", COMPRADOR, SUBASTA, "cierre-1");
+
+        transferencias.transferir("elemento-1", VENDEDOR, SUBASTA, "devolver-cierre-1");
+
+        assertEquals(VENDEDOR.toString(),
+                repositorio.buscarPorElementoId("elemento-1").orElseThrow().propietarioId());
+        assertEquals(1, repositorio.buscarTodosPorElementoId("elemento-1").size());
+        assertTrue(repositorio.buscarPorPropietario(COMPRADOR.toString()).orElseThrow()
+                .elementos().isEmpty());
     }
 
     /**
@@ -77,6 +133,55 @@ class TransferirElementoPorSubastaTest {
         assertEquals("elemento-1", segunda.id());
         assertEquals(1, repositorio.buscarPorPropietario(COMPRADOR.toString())
                 .orElseThrow().elementos().size());
+    }
+
+    /**
+     * El inventario esta modelado por dueno y este servicio no tiene
+     * transacciones de Mongo, asi que la transferencia son dos escrituras que
+     * pueden quedarse a medias. Se escribe primero el destino, asi que la
+     * interrupcion duplica el elemento en vez de perderlo — y el reintento tiene
+     * que terminar el trabajo, no devolver «ya esta» y dejar la copia de sobra
+     * para siempre.
+     */
+    @Test
+    @DisplayName("el reintento repara una transferencia interrumpida a medias")
+    void convergeDesdeElEstadoDuplicado() {
+        repositorio.guardar(Inventario.vacio(COMPRADOR.toString()).agregar(new ElementoInventario(
+                "elemento-1", "producto-1", TipoElementoInventario.ITEM, "Amuleto",
+                null, SUBASTA.toString())));
+        assertEquals(2, repositorio.buscarTodosPorElementoId("elemento-1").size());
+
+        ElementoInventario reparado = transferencias.transferir(
+                "elemento-1", COMPRADOR, SUBASTA, "cierre-1");
+
+        assertEquals("elemento-1", reparado.id());
+        assertEquals(1, repositorio.buscarTodosPorElementoId("elemento-1").size());
+        assertEquals(COMPRADOR.toString(),
+                repositorio.buscarPorElementoId("elemento-1").orElseThrow().propietarioId());
+        assertTrue(repositorio.buscarPorPropietario(VENDEDOR.toString()).orElseThrow()
+                .elementos().isEmpty());
+    }
+
+    /**
+     * La razon por la que el destino se escribe primero: si la escritura que
+     * falla es la primera, el elemento no se ha movido de sitio y el reintento
+     * encuentra exactamente el estado inicial. Con el orden contrario, un fallo
+     * en la segunda dejaba el elemento fuera de los dos inventarios y todos los
+     * reintentos recibian 404.
+     */
+    @Test
+    @DisplayName("si falla la primera escritura el elemento sigue entero con el vendedor")
+    void unFalloAlPrincipioNoPierdeElElemento() {
+        repositorio.fallarSiguienteGuardado();
+
+        assertThrows(FalloPersistenciaInventarioException.class,
+                () -> transferencias.transferir("elemento-1", COMPRADOR, SUBASTA, "cierre-1"));
+
+        assertEquals(1, repositorio.buscarTodosPorElementoId("elemento-1").size());
+        assertEquals(VENDEDOR.toString(),
+                repositorio.buscarPorElementoId("elemento-1").orElseThrow().propietarioId());
+        assertEquals(SUBASTA.toString(), repositorio.buscarPorElementoId("elemento-1")
+                .orElseThrow().elemento("elemento-1").subastaId());
     }
 
     /**

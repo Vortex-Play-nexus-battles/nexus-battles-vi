@@ -33,6 +33,7 @@ import { h } from '../../comun/ui/dom.js';
 
 /** Qué hace cada herramienta, en una línea. Es lo que decide si se pulsa. */
 const DESCRIPCION = Object.freeze({
+  control: 'Los ocho paneles del Nexo en una sola pantalla, con datos reales.',
   usuarios: 'Perfiles, roles y estado de las cuentas.',
   productos: 'Alta de héroes, armas, armaduras e ítems del catálogo.',
   sanciones: 'Advertencias, suspensiones y apelaciones.',

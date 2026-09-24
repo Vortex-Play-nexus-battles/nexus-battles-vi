@@ -1,8 +1,28 @@
 /**
  * Vitrina y carrito — HU-CAR-001.
  *
- * Habla con `ms-ecommerce`: `GET /api/v1/productos`, `GET /api/v1/carrito` y
- * `POST /api/v1/carrito/items`.
+ * Habla con `ms-ecommerce`: `GET /api/v1/vitrina`, `GET /api/v1/carrito` y
+ * `POST /api/v1/carrito/items` (`contracts/openapi/ecommerce-carrito.yaml`).
+ *
+ * ## Qué cambió en R16
+ *
+ * 1. **La vitrina tiene prefijo propio.** Antes pedía `GET /api/v1/productos`,
+ *    que el borde repartía por método para que llegara a ms-ecommerce (#421).
+ *    Ese prefijo es ahora del catálogo maestro entero, y la vitrina vive en
+ *    `/api/v1/vitrina` (contrato 1.2.0): proyecta ese catálogo, así que por fin
+ *    enseña los productos que existen, en vez de una tabla propia vacía.
+ * 2. **Los identificadores son UUID en texto.** Salen del catálogo y viajan
+ *    tal cual hasta `POST /carrito/items`; nada los convierte en número.
+ * 3. **«Añadir» ya no falla en silencio.** Un producto agotado, suspendido,
+ *    sin precio en dinero real o un catálogo caído llegan como problem details
+ *    (409, 422, 503), y el jugador ve un aviso corto con una salida. Antes solo
+ *    quedaba un `console.error`, y ni eso: el interceptor compartido no lanza
+ *    ante un 4xx o un 5xx, así que el rechazo se tomaba por un éxito.
+ * 4. **Por la misma razón, la vitrina y el carrito comprueban `ok`.** Un 503
+ *    del catálogo se pintaba como «la tienda no tiene productos» y un 500 del
+ *    carrito como «tu carrito está vacío»: las dos cosas que sus propios
+ *    comentarios decían evitar, y que sus pruebas solo simulaban con un
+ *    `fetch` que lanza.
  *
  * ## Qué se corrigió aquí (P3.1)
  *
@@ -28,8 +48,80 @@
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
 import { rutaDeApi } from '../comun/base-api.js';
 import { usuarioIdDeSesion } from '../comun/identidad.js';
+import { exigirSesion } from '../comun/acceso.js';
+import { olvidarSesion } from '../comun/sesion.js';
+import { limpiarAviso, pintarAviso, tonoPorEstado } from '../comun/ui/aviso.js';
 import { estadoDeCarga, estadoDeError, estadoVacio } from '../comun/ui/estado-vista.js';
 import { aProductoDeVitrina, aFilaDeCarrito, textoDePrecio, aImporte } from './tienda-adaptador.js';
+
+/** `type` del problem detail cuando el catálogo maestro no responde (contrato 1.2.0). */
+const TIPO_CATALOGO_NO_DISPONIBLE = 'urn:nexus:problema:catalogo-no-disponible';
+
+/**
+ * Lo que se le dice al jugador cuando «Añadir» falla por un motivo conocido.
+ *
+ * La clave es el `type` del problem detail: la interfaz decide por él y nunca
+ * por el texto del servidor, que puede cambiar de redacción sin aviso
+ * (`shared/ui-kit/MAPEO-ERRORES.md` §2). Los cinco son los que declara
+ * `POST /carrito/items` en `ecommerce-carrito.yaml` 1.2.0.
+ */
+const MOTIVOS_DEL_CARRITO = Object.freeze({
+  'urn:nexus:problema:producto-inexistente': {
+    titulo: 'Ese producto ya no está en el catálogo',
+    detalle: 'Actualiza la tienda para ver lo que sí está a la venta.',
+  },
+  'urn:nexus:problema:producto-no-disponible': {
+    titulo: 'Ese producto no está a la venta ahora mismo',
+    detalle: 'Actualiza la tienda para ver lo que sí está a la venta.',
+  },
+  'urn:nexus:problema:producto-agotado': {
+    titulo: 'Ese producto se agotó',
+    detalle: 'Ya no quedan unidades. Actualiza la tienda para ver lo que sí está a la venta.',
+  },
+  'urn:nexus:problema:producto-sin-precio-en-moneda-real': {
+    titulo: 'Ese producto no se vende con dinero real',
+    detalle: 'En la tienda solo se compra lo que tiene precio en dinero real.',
+  },
+  [TIPO_CATALOGO_NO_DISPONIBLE]: {
+    titulo: 'La tienda no puede consultar el catálogo ahora mismo',
+    detalle: 'Tu carrito no cambió. Inténtalo de nuevo en unos segundos.',
+  },
+});
+
+/**
+ * El problem detail de una respuesta que no fue bien, o `null` si no trae
+ * uno legible (un 502 del borde, por ejemplo, es HTML).
+ *
+ * @param {Response} respuesta
+ * @returns {Promise<object|null>}
+ */
+async function leerProblema(respuesta) {
+  try {
+    const cuerpo = await respuesta.json();
+    return cuerpo && typeof cuerpo === 'object' ? cuerpo : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Una respuesta que no es 2xx, convertida en un `Error` con su `estado` y su
+ * problem detail.
+ *
+ * Hace falta porque `fetchWithHttpErrorInterceptor` devuelve la respuesta tal
+ * cual —solo anuncia el 403—: sin esto, el 503 de una vitrina sin catálogo se
+ * leía como un cuerpo sin `content`, y la tienda decía «no tiene productos»
+ * cuando lo que pasaba era que no podía preguntarlo.
+ *
+ * @param {Response} respuesta
+ * @returns {Promise<Error & {estado: number, problema: object|null}>}
+ */
+async function errorDeRespuesta(respuesta) {
+  const error = new Error(`HTTP ${respuesta.status}`);
+  error.estado = respuesta.status;
+  error.problema = await leerProblema(respuesta);
+  return error;
+}
 
 /**
  * Cabeceras de cada petición.
@@ -60,10 +152,14 @@ export async function cargarVitrina(doc = document) {
   pintarEn(rejilla, estadoDeCarga({ filas: 4, etiqueta: 'Cargando la tienda…' }));
 
   try {
-    const respuesta = await fetchWithHttpErrorInterceptor(rutaDeApi('/productos'), {
+    // R16 — `/vitrina` y no `/productos`: ese prefijo es del catálogo maestro.
+    const respuesta = await fetchWithHttpErrorInterceptor(rutaDeApi('/vitrina'), {
       method: 'GET',
       headers: cabeceras(),
     });
+    if (!respuesta.ok) {
+      throw await errorDeRespuesta(respuesta);
+    }
 
     const datos = await respuesta.json();
     const productos = datos.content ?? [];
@@ -93,11 +189,17 @@ export async function cargarVitrina(doc = document) {
     //
     // UX-R2.8d — y ademas era un callejon sin salida: el mensaje no ofrecia
     // volver a intentarlo, asi que la unica salida era recargar la pagina.
+    //
+    // R16 — si lo que falta es el catalogo maestro (503 del contrato 1.2.0),
+    // se dice eso, y que el carrito sigue: es otra seccion y no depende de el.
+    const sinCatalogo = error?.problema?.type === TIPO_CATALOGO_NO_DISPONIBLE;
     pintarEn(
       rejilla,
       estadoDeError({
         titulo: 'No se pudo cargar la tienda',
-        detalle: 'Vuelve a intentarlo en unos momentos.',
+        detalle: sinCatalogo
+          ? 'El catálogo no responde en este momento. Tu carrito sigue disponible.'
+          : 'Vuelve a intentarlo en unos momentos.',
         alReintentar: () => cargarVitrina(doc),
       }),
     );
@@ -214,6 +316,10 @@ function tarjetaDeProducto(dto, doc) {
 
   // Sin id no hay nada que anadir al carrito: el boton se deshabilita en vez
   // de mandar `undefined` al servicio.
+  //
+  // R16 — el id es el UUID del catalogo maestro, en texto. `dataset` guarda
+  // texto y `agregarAlCarrito` lo manda tal cual: ni `Number()` ni `parseInt`,
+  // que convertirian un UUID en `NaN` y el producto en «inexistente».
   const boton = tarjeta.querySelector('.btn-add');
   if (producto.id === null) {
     boton.disabled = true;
@@ -227,18 +333,149 @@ function tarjetaDeProducto(dto, doc) {
 
 // --- CARRITO ---
 
+/**
+ * «Añadir» — `POST /api/v1/carrito/items`.
+ *
+ * Si el servicio lo rechaza, el jugador lo lee en un aviso dentro del
+ * carrito, que es donde esperaba ver el producto (MAPEO-ERRORES §5.2: el fallo
+ * de una acción es un `Aviso`, la vista sigue en pie). El carrito no se
+ * recarga: no cambió.
+ *
+ * @param {string} productoId UUID del catálogo maestro, tal cual lo dio la vitrina
+ * @param {Document} [doc]
+ */
 export async function agregarAlCarrito(productoId, doc = document) {
+  const zona = zonaDeAvisoDelCarrito(doc);
+  // Cada intento empieza limpio: el aviso del anterior no se queda en
+  // pantalla ni se apila con el nuevo (MAPEO-ERRORES §9).
+  limpiarAviso(zona);
+
+  let respuesta;
   try {
-    await fetchWithHttpErrorInterceptor(rutaDeApi('/carrito/items'), {
+    respuesta = await fetchWithHttpErrorInterceptor(rutaDeApi('/carrito/items'), {
       method: 'POST',
       headers: cabeceras(),
       body: JSON.stringify({ productoId, cantidad: 1 }),
     });
-
-    await cargarCarrito(doc);
   } catch (error) {
+    // Ni siquiera hubo respuesta: la red o el borde no contestaron.
+    avisarFalloAlAnadir(zona, { estado: 0, problema: null, productoId, doc });
     console.error('Error al agregar item:', error);
+    return;
   }
+
+  if (!respuesta.ok) {
+    const problema = await leerProblema(respuesta);
+    avisarFalloAlAnadir(zona, { estado: respuesta.status, problema, productoId, doc });
+    console.error('El carrito rechazó el producto:', respuesta.status, problema?.type);
+    return;
+  }
+
+  await cargarCarrito(doc);
+}
+
+/**
+ * El hueco del aviso de «Añadir», encima de las líneas del carrito.
+ *
+ * `tienda.html` lo declara; si una vista lo perdiera, se crea aquí antes que
+ * volver a fallar en silencio.
+ *
+ * @param {Document} doc
+ * @returns {HTMLElement}
+ */
+function zonaDeAvisoDelCarrito(doc) {
+  const existente = doc.getElementById('aviso-carrito');
+  if (existente) {
+    return existente;
+  }
+  const zona = doc.createElement('div');
+  zona.id = 'aviso-carrito';
+  zona.dataset.zona = 'aviso';
+  zona.hidden = true;
+  const lineas = doc.getElementById('cart-items');
+  if (lineas?.parentNode) {
+    lineas.parentNode.insertBefore(zona, lineas);
+  } else {
+    doc.body.append(zona);
+  }
+  return zona;
+}
+
+/**
+ * Pinta el aviso de un «Añadir» que no entró.
+ *
+ * - El `type` decide el mensaje (`MOTIVOS_DEL_CARRITO`); el `status`, el tono
+ *   (MAPEO-ERRORES §4: 4xx advertencia, 5xx error).
+ * - Siempre hay una salida (§9): «Reintentar» cuando el fallo es del sistema
+ *   y puede pasar solo; «Actualizar la tienda» cuando el producto cambió
+ *   —agotado, suspendido, retirado— y lo que hay que ver es la vitrina nueva.
+ * - El texto va por `textContent` (`aviso()` construye nodos): ni el
+ *   `detail` del servidor ni nada de lo que traiga puede meter marcado.
+ *
+ * @param {HTMLElement} zona
+ * @param {{estado: number, problema: object|null, productoId: string, doc: Document}} fallo
+ */
+function avisarFalloAlAnadir(zona, { estado, problema, productoId, doc }) {
+  if (estado === 403) {
+    // El interceptor compartido ya anuncia el rechazo de permiso con su aviso
+    // flotante (HU-RBAC-004). Un segundo aviso por el mismo fallo seria
+    // apilarlos.
+    return;
+  }
+
+  const delSistema = estado === 0 || estado >= 500;
+  const reintentar = {
+    texto: 'Reintentar',
+    nombre: 'reintentar',
+    alPulsar: () => agregarAlCarrito(productoId, doc),
+  };
+  const actualizar = {
+    texto: 'Actualizar la tienda',
+    nombre: 'actualizar-tienda',
+    alPulsar: () => {
+      limpiarAviso(zona);
+      cargarVitrina(doc);
+    },
+  };
+
+  const conocido = MOTIVOS_DEL_CARRITO[problema?.type] ?? null;
+  let mensaje;
+  if (conocido) {
+    mensaje = { ...conocido, accion: delSistema ? reintentar : actualizar };
+  } else if (estado === 401) {
+    // Un token que el servicio ya no acepta: se vuelve a iniciar sesion y el
+    // login devuelve a la tienda (MAPEO-ERRORES §8).
+    mensaje = {
+      titulo: 'Tu sesión ya no es válida',
+      detalle: 'Vuelve a iniciar sesión para usar el carrito.',
+      accion: { texto: 'Iniciar sesión', nombre: 'iniciar-sesion', alPulsar: volverAIniciarSesion },
+    };
+  } else {
+    // Un rechazo que el contrato no declara. El `detail`, si llega, esta
+    // escrito para el jugador (MAPEO-ERRORES §3); si no, una pauta propia.
+    const delServidor =
+      typeof problema?.detail === 'string' && problema.detail.trim() ? problema.detail : null;
+    mensaje = {
+      titulo: 'No se pudo añadir el producto al carrito',
+      detalle:
+        delServidor ??
+        (delSistema
+          ? 'Inténtalo de nuevo en unos segundos.'
+          : 'Actualiza la tienda e inténtalo otra vez.'),
+      accion: delSistema ? reintentar : actualizar,
+    };
+  }
+
+  const caja = pintarAviso(zona, { tono: tonoPorEstado(estado), ...mensaje });
+  // En pantalla estrecha el carrito queda debajo de la vitrina: sin esto, el
+  // aviso existiria pero fuera de la vista de quien acaba de pulsar «Añadir».
+  caja.scrollIntoView?.({ block: 'nearest' });
+}
+
+/** Borra la sesión que el servicio rechazó y lleva al login con vuelta a la tienda. */
+function volverAIniciarSesion() {
+  olvidarSesion();
+  exigirSesion();
 }
 
 export async function cargarCarrito(doc = document) {
@@ -247,6 +484,12 @@ export async function cargarCarrito(doc = document) {
       method: 'GET',
       headers: cabeceras(),
     });
+    // R16 — el interceptor no lanza ante un 4xx o un 5xx: sin esto, el
+    // problem detail de un 500 se pintaba como un carrito sin `items`, o sea
+    // «vacío», que es justo lo que el `catch` de abajo dice evitar.
+    if (!respuesta.ok) {
+      throw await errorDeRespuesta(respuesta);
+    }
 
     actualizarUI(await respuesta.json(), doc);
   } catch (error) {

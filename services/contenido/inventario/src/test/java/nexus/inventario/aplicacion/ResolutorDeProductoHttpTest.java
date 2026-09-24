@@ -215,4 +215,38 @@ class ResolutorDeProductoHttpTest {
 
         assertThat(ultimaRutaRecibida.get()).isEqualTo("/api/v1/productos/" + id);
     }
+
+    @Test
+    void mapeaElEstadoDelProductoParaRechazarLosSuspendidos() {
+        estadoRespuesta = 200;
+        cuerpoRespuesta = """
+                {
+                  "id": "item-retirado",
+                  "nombre": "Pinchos de escudo",
+                  "tipo": "ITEM",
+                  "estado": "SUSPENDIDO",
+                  "version": 2
+                }
+                """;
+
+        ResolutorDeProducto.DetalleProducto resultado = resolutor().resolver("item-retirado");
+
+        assertThat(resultado.tipo()).isEqualTo("ITEM");
+        assertThat(resultado.estado()).isEqualTo("SUSPENDIDO");
+    }
+
+    @Test
+    void servicioDeProductosApagadoLanzaExcepcionPropia() throws IOException {
+        int puerto;
+        try (java.net.ServerSocket libre = new java.net.ServerSocket(0)) {
+            puerto = libre.getLocalPort();
+        }
+        ResolutorDeProductoHttp apagado = new ResolutorDeProductoHttp(
+                URI.create("http://localhost:" + puerto),
+                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(1)).build());
+
+        assertThatThrownBy(() -> apagado.resolver("producto-1"))
+                .isInstanceOf(ResolutorDeProductoException.class)
+                .isNotInstanceOf(ProductoNoEncontradoException.class);
+    }
 }

@@ -35,6 +35,15 @@ on:
         type: string
         required: false
         default: ""
+      # El perfil solo sabe encender. En un host donde cabe UN servicio de
+      # economia a la vez, sin esto la unica forma de probar el segundo era
+      # dejar los dos peleandose por la memoria (24-sep: swap al 100 % y
+      # ms-finanzas en 502 sin que ningun healthcheck fallara).
+      apagar:
+        description: "Servicios a APAGAR en dev ANTES de desplegar, separados por coma (ej: ms-ecommerce). Libera memoria. Conserva el volumen de datos."
+        type: string
+        required: false
+        default: ""
       # HU-CICD-002 CA-02: simulacro de reversion en dev. El servicio indicado
       # (uno de `servicios`) se despliega con la imagen buena pero con
       # SERVER_PORT movido a un puerto que nadie publica (ver desplegar.sh):
@@ -52,6 +61,9 @@ on:
 permissions:
   contents: read
   packages: write
+  # Para leer que push se desplego con exito por ultima vez (base del rango,
+  # ver "Calcular servicios modificados").
+  actions: read
   # Para encender el host si esta apagado, por OIDC y sin claves guardadas.
   # Ver el paso "Asegurar que el host esta encendido" del job de dev.
   id-token: write
@@ -111,6 +123,8 @@ jobs:
       - name: Calcular servicios modificados, su puerto y el tag de esta corrida
         id: detectar
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
@@ -125,6 +139,34 @@ jobs:
               BASE=$(git rev-parse "$HEAD^")
             else
               BASE="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+            fi
+          fi
+
+          # R16 — la base es lo ultimo DESPLEGADO, no el commit anterior.
+          #
+          # La concurrencia de este flujo (cd-...-develop) deja una corrida en
+          # marcha y UNA pendiente; cuando llega otro push, GitHub cancela la
+          # pendiente. Con BASE = event.before, lo que traia el push cancelado
+          # no se despliega nunca: el siguiente push solo compara contra su
+          # propio commit anterior. El 24-sep se perdieron asi, en una hora, la
+          # semilla del catalogo (#682) y la validacion del inventario (#685),
+          # con todo en verde.
+          #
+          # Ahora, en un push, la base es el ultimo push de develop cuyo CD
+          # termino con exito (si es antepasado de HEAD): el rango cubre los
+          # pushes cancelados en medio. Los despliegues a demanda no cuentan:
+          # solo levantan los servicios pedidos. Si la consulta falla, se queda
+          # el comportamiento de antes.
+          if [ "${{ github.event_name }}" = "push" ]; then
+            ULTIMO_OK=$(gh run list --repo "${{ github.repository }}" --workflow cd.yml --branch develop \
+              --status success --limit 30 --json headSha,event \
+              --jq '[.[] | select(.event == "push")][0].headSha // empty' 2>/dev/null || true)
+            if [ -n "$ULTIMO_OK" ] && [ "$ULTIMO_OK" != "$HEAD" ] \
+              && git merge-base --is-ancestor "$ULTIMO_OK" "$HEAD" 2>/dev/null; then
+              if [ "$ULTIMO_OK" != "$BASE" ]; then
+                echo "Base = ultimo push desplegado con exito ($ULTIMO_OK), no el commit anterior ($BASE): hubo pushes sin desplegar en medio."
+              fi
+              BASE="$ULTIMO_OK"
             fi
           fi
 
@@ -487,13 +529,35 @@ jobs:
         with:
           nombre-instancia: nexus-plataforma-dev
 
+      # Se apaga ANTES de copiar y desplegar: el sentido es hacerle sitio en
+      # memoria a lo que viene detras, no limpiar despues. El script viaja en
+      # el scp de abajo; si todavia no esta en el host, el paso avisa y sigue,
+      # que es preferible a abortar un despliegue por esto.
+      - name: Apagar servicios para hacer sitio
+        if: inputs.apagar != ''
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          SERVICIOS_APAGAR: ${{ inputs.apagar }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          envs: SERVICIOS_APAGAR
+          script: |
+            if [ ! -f /opt/nexus/scripts/cd/apagar.sh ]; then
+              echo "::warning::/opt/nexus/scripts/cd/apagar.sh todavia no esta en el host; se copia en este despliegue y sirve a partir del siguiente."
+              exit 0
+            fi
+            chmod +x /opt/nexus/scripts/cd/apagar.sh
+            SERVICIOS_APAGAR="$SERVICIOS_APAGAR" /opt/nexus/scripts/cd/apagar.sh
+
       - name: Copiar docker-compose.yml, docker-compose.deploy.yml y el script de despliegue
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/revertir.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -573,6 +637,7 @@ jobs:
           MS_IDENTIDAD_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_IDENTIDAD }}
           LISTA_NEGRA_URL: ${{ secrets.TODO_LISTA_NEGRA_URL }}
           MS_IDENTIDAD_SPRING_PROFILES_ACTIVE: "dev"
+          ADMINS_INICIALES: ${{ secrets.ADMINS_INICIALES }}
           # PENDIENTE (TODO_*): mismo patron de placeholder que ms-identidad
           # -- 5 secrets propios de ms-cumplimiento (equipo Cuentas),
           # todavia no creados en GitHub. Prefijo "MS_CUMPLIMIENTO_" para no
@@ -622,7 +687,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,SIMULACRO_REVERSION,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,SMTP_PORT,LISTA_NEGRA_VERIFICAR_URL,SALAS_WS_ORIGENES,CHAT_WS_ORIGENES,CHAT_HISTORIAL_TAMANO,NOTIFICACIONES_WS_ORIGENES,COMENTARIOS_FORMATOS_IMAGEN,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD,MS_SUBASTAS_DB_HOST,MS_SUBASTAS_DB_PORT,MS_SUBASTAS_DB_NAME,MS_SUBASTAS_DB_USER,MS_SUBASTAS_DB_PASSWORD,SUBASTAS_WS_ORIGENES,SUBASTAS_CORS_ORIGENES
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,SIMULACRO_REVERSION,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,SMTP_PORT,LISTA_NEGRA_VERIFICAR_URL,SALAS_WS_ORIGENES,CHAT_WS_ORIGENES,CHAT_HISTORIAL_TAMANO,NOTIFICACIONES_WS_ORIGENES,COMENTARIOS_FORMATOS_IMAGEN,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD,MS_SUBASTAS_DB_HOST,MS_SUBASTAS_DB_PORT,MS_SUBASTAS_DB_NAME,MS_SUBASTAS_DB_USER,MS_SUBASTAS_DB_PASSWORD,SUBASTAS_WS_ORIGENES,SUBASTAS_CORS_ORIGENES,ADMINS_INICIALES
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -779,7 +844,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_CONTENIDO_DEV }}
           username: ${{ secrets.SSH_USER_CONTENIDO_DEV }}
           key: ${{ secrets.SSH_KEY_CONTENIDO_DEV }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -849,7 +914,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -886,6 +951,7 @@ jobs:
           MS_IDENTIDAD_DB_PASSWORD: ${{ secrets.TODO_DB_PASSWORD_MS_IDENTIDAD }}
           LISTA_NEGRA_URL: ${{ secrets.TODO_LISTA_NEGRA_URL }}
           MS_IDENTIDAD_SPRING_PROFILES_ACTIVE: "dev"
+          ADMINS_INICIALES: ${{ secrets.ADMINS_INICIALES }}
           # PENDIENTE (TODO_*): ver el mismo comentario en el job "Desplegar
           # en Dev" -- misma logica para los 5 secrets de ms-cumplimiento.
           MS_CUMPLIMIENTO_DB_HOST: ${{ vars.MS_CUMPLIMIENTO_DB_HOST }}
@@ -930,7 +996,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD,MS_SUBASTAS_DB_HOST,MS_SUBASTAS_DB_PORT,MS_SUBASTAS_DB_NAME,MS_SUBASTAS_DB_USER,MS_SUBASTAS_DB_PASSWORD,SUBASTAS_WS_ORIGENES,SUBASTAS_CORS_ORIGENES
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD,MS_SUBASTAS_DB_HOST,MS_SUBASTAS_DB_PORT,MS_SUBASTAS_DB_NAME,MS_SUBASTAS_DB_USER,MS_SUBASTAS_DB_PASSWORD,SUBASTAS_WS_ORIGENES,SUBASTAS_CORS_ORIGENES,ADMINS_INICIALES
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -972,7 +1038,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/revertir.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -1063,7 +1129,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD,MS_SUBASTAS_DB_HOST,MS_SUBASTAS_DB_PORT,MS_SUBASTAS_DB_NAME,MS_SUBASTAS_DB_USER,MS_SUBASTAS_DB_PASSWORD,SUBASTAS_WS_ORIGENES,SUBASTAS_CORS_ORIGENES
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD,MS_SUBASTAS_DB_HOST,MS_SUBASTAS_DB_PORT,MS_SUBASTAS_DB_NAME,MS_SUBASTAS_DB_USER,MS_SUBASTAS_DB_PASSWORD,SUBASTAS_WS_ORIGENES,SUBASTAS_CORS_ORIGENES,ADMINS_INICIALES
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
