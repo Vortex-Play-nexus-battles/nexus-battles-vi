@@ -263,7 +263,9 @@ test.describe('Modalidades de partida (HU-SAL-004)', () => {
       const boton = page.locator('[data-zona="acciones"] [data-atacar]').first();
       await expect(boton).toBeEnabled({ timeout: 20000 });
       const turnoPrevio = partida.turnoActual.numeroTurno;
-      await boton.click();
+      // Si justo en este instante la partida cambia, el clic no entra y lo ve
+      // el sondeo de abajo (mismo patron que torneos.e2e.spec.js).
+      await boton.click({ timeout: 5000 }).catch(() => {});
       await expect
         .poll(
           async () => {
@@ -274,10 +276,21 @@ test.describe('Modalidades de partida (HU-SAL-004)', () => {
         )
         .toBe(true);
       // Tras el golpe humano y la respuesta de la maquina, vuelve a tocar a la
-      // anfitriona: la maquina nunca deja el turno colgado.
-      if (partida.estado === 'EN_CURSO') {
-        expect(partida.turnoActual.idJugador).toBe(anfitriona.claims.uid);
-      }
+      // anfitriona: la maquina nunca deja el turno colgado. Se espera a que lo
+      // devuelva: antes se comprobaba en el mismo instante en que el turno
+      // pasaba a la maquina, que todavia no habia jugado (rojo intermitente).
+      await expect
+        .poll(
+          async () => {
+            partida = await partidaDe(api, anfitriona, partida.id);
+            return (
+              partida.estado !== 'EN_CURSO' ||
+              partida.turnoActual.idJugador === anfitriona.claims.uid
+            );
+          },
+          { timeout: 25000, message: `golpe ${golpes + 1}: la maquina no devuelve el turno` },
+        )
+        .toBe(true);
       golpes += 1;
     }
 
