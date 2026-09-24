@@ -53,7 +53,15 @@ public class SeguridadConfig {
                                 .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
                                 .requestMatchers(HttpMethod.GET, "/api/v1/productos/estadisticas")
                                 .authenticated()
-                                .requestMatchers(HttpMethod.GET, "/api/v1/productos/{id}")
+                                // Lectura publica del catalogo: el detalle por id y, desde
+                                // R16 (contrato 1.2.0), el listado paginado de la coleccion
+                                // que proyecta la vitrina de ms-ecommerce. Solo GET: el POST
+                                // de la misma ruta sigue exigiendo administrador (arriba), y
+                                // /estadisticas va antes para no quedar cubierta por {id}.
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/v1/productos",
+                                        "/api/v1/productos/{id}")
                                 .permitAll()
                                 .anyRequest()
                                 .authenticated())
