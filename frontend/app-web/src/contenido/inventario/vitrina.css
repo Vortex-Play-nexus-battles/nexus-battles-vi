@@ -480,7 +480,10 @@
  */
 .vitrina__producto:hover,
 .vitrina__producto:focus-within {
-  border-color: color-mix(in srgb, var(--primaria) 55%, var(--borde));
+  /* UX-GAME-1/3: el realce del sistema es la primaria con brillo, el mismo
+     par que `.tarjeta--pulsable:hover`; sigue siendo un token, no un color
+     suelto (lo fija la prueba de aceptacion de HU-INV-013). */
+  border-color: var(--primaria);
   border-left-color: var(--vitrina-acento, var(--borde-int));
   box-shadow: var(--sombra-2), var(--brillo-primaria);
 }

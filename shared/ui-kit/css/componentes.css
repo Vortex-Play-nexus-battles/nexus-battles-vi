@@ -108,7 +108,7 @@
 }
 
 .tarjeta--pulsable:hover {
-  border-color: color-mix(in srgb, var(--primaria) 55%, var(--borde));
+  border-color: var(--primaria);
   box-shadow: var(--sombra-atmosfera), var(--brillo-primaria);
   transform: translateY(-2px);
 }
@@ -2734,12 +2734,13 @@ button.tarjeta--partida:disabled {
 
   /* UX-GAME-2: con el emblema, la marca larga ya no cabe junto a los seis
      destinos y las acciones a 1024; va la corta (el nombre accesible es el
-     mismo). */
-  .cabecera__marca-larga {
+     mismo). Con `.cabecera` delante para ganar a la regla base, que va mas
+     abajo en esta hoja y la dejaba sin texto. */
+  .cabecera .cabecera__marca-larga {
     display: none;
   }
 
-  .cabecera__marca-corta {
+  .cabecera .cabecera__marca-corta {
     display: inline;
   }
   .cabecera__buscador {
@@ -3732,7 +3733,9 @@ button.tarjeta--partida:disabled {
   .boton:hover:not([disabled]):not([aria-disabled='true']),
   .boton:active:not([disabled]):not([aria-disabled='true']),
   .tarjeta--pulsable:hover,
-  .tarjeta--pulsable:active {
+  .tarjeta--pulsable:active,
+  .accion-combate:hover:not(:disabled),
+  .accion-combate:active:not(:disabled) {
     transform: none;
   }
 }
@@ -6129,8 +6132,12 @@ button.tarjeta-heroe[aria-pressed='true'] {
   max-width: 100%;
 }
 
-.tabla-envoltorio .tabla {
+.tabla-envoltorio .tabla,
+.tabla-envoltorio table {
   width: 100%;
+  /* Tambien las tablas `<table>` de las vistas (historial, auditoria): sin
+     ancho minimo se apretaban a 375 px hasta partir cada palabra en una
+     linea, en vez de desplazarse (UX-GAME-7). */
   min-width: 38rem;
 }
 
