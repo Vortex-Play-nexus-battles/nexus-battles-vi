@@ -27,7 +27,7 @@ class RegistroDeEnviosTest {
 
     @ParameterizedTest
     @CsvSource({
-        "simon.perez@gmail.com, s**********z@gmail.com",
+        "simon.perez@gmail.com, s*********z@gmail.com",
         "ana@nexus.test, a*a@nexus.test",
         "ab@nexus.test, **@nexus.test",
         "a@nexus.test, *@nexus.test",
