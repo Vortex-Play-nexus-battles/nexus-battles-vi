@@ -20,7 +20,8 @@ import org.springframework.web.client.RestClient;
  * probar.
  */
 @Configuration
-@EnableConfigurationProperties(ConfiguracionDeDisponibilidad.class)
+@EnableConfigurationProperties({ConfiguracionDeDisponibilidad.class,
+        com.nexusbattles.plataforma.metricasplataforma.sistema.ConfiguracionDelSistema.class})
 @EnableScheduling
 public class ConfiguracionDelMonitor {
 
