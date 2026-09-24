@@ -312,6 +312,16 @@
   --sombra-3: 0 8px 24px rgba(17, 23, 38, 0.20);  /* emergente */
   --sombra-4: 0 10px 30px rgba(17, 23, 38, 0.25); /* modal     */
 
+  /* Brillo de energía de los botones sólidos al pasar el cursor: azul de la
+     primaria con un borde violeta del acento. Es la única luz de color del
+     sistema y va aquí, no en componentes, para que la paleta siga viviendo en
+     un solo sitio. Sobre botones claros (secundario, contorno) no se usa: ahí
+     la elevación la da `--sombra-2`. */
+  --brillo-primaria: 0 6px 20px rgba(34, 68, 191, 0.38), 0 0 0 1px rgba(91, 39, 180, 0.45);
+  --brillo-acento:   0 6px 20px rgba(91, 39, 180, 0.42), 0 0 0 1px rgba(34, 68, 191, 0.45);
+  /* Y la sombra que despega el logo del cromo oscuro. */
+  --sombra-marca:    0 14px 32px rgba(34, 68, 191, 0.35);
+
   /* =====================================================================
      Movimiento
      La sensación de juego se construye en el feedback de cada pulsación.

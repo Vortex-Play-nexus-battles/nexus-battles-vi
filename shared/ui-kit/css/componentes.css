@@ -73,9 +73,38 @@
      Crear sala) no debe heredar el subrayado ni el azul de `a` en base.css. */
   text-decoration: none;
   cursor: pointer;
+  /* La luz del borde del primario es un pseudoelemento que vive dentro del
+     boton; `isolation` evita que su capa se mezcle con lo de fuera. */
+  position: relative;
+  isolation: isolate;
   transition:
     background var(--transicion),
-    border-color var(--transicion);
+    border-color var(--transicion),
+    color var(--transicion),
+    transform var(--transicion),
+    box-shadow var(--transicion);
+}
+
+/* Respuesta de videojuego: el boton se acerca un poco al pasar el cursor, se
+   hunde al pulsarlo y vuelve. Son dos por ciento y un pixel: se sienten sin
+   verse. Los deshabilitados no responden a nada, que es lo que significan.
+   Bajo `prefers-reduced-motion` los desplazamientos se quitan mas abajo; el
+   cambio de color y de sombra se queda, porque comunica estado y no se mueve. */
+.boton:hover:not([disabled]):not([aria-disabled='true']) {
+  transform: translateY(-1px) scale(1.02);
+  box-shadow: var(--sombra-2);
+}
+
+.boton:active:not([disabled]):not([aria-disabled='true']) {
+  transform: translateY(0) scale(0.98);
+  box-shadow: var(--sombra-1);
+  transition-duration: var(--duracion-instantaneo);
+}
+
+/* El anillo de foco global de base.css sigue mandando; aqui solo se separa un
+   pixel mas para que no se pise con el brillo del hover. */
+.boton:focus-visible {
+  outline-offset: 3px;
 }
 
 /* Atacar, Confirmar, Pagar */
@@ -100,12 +129,80 @@
   color: var(--texto-sobre-color);
 }
 
+.boton--primario:hover:not([disabled]):not([aria-disabled='true']) {
+  box-shadow: var(--brillo-primaria);
+}
+
+/* La luz que recorre el borde del boton principal — una vez, al entrar el
+   cursor, y se apaga. Es un anillo de un pixel pintado con un gradiente conico
+   y recortado con una mascara para que solo quede el contorno; el angulo del
+   gradiente es lo que se anima. Sin `@property` el angulo no interpola y el
+   anillo simplemente no aparece: el boton sigue siendo el mismo boton. */
+@property --angulo-luz {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.boton--primario::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--angulo-luz),
+    transparent 0deg,
+    transparent 250deg,
+    color-mix(in srgb, var(--texto-sobre-color) 85%, var(--primaria)) 300deg,
+    transparent 360deg
+  );
+  -webkit-mask:
+    linear-gradient(var(--texto-sobre-color) 0 0) content-box,
+    linear-gradient(var(--texto-sobre-color) 0 0);
+  mask:
+    linear-gradient(var(--texto-sobre-color) 0 0) content-box,
+    linear-gradient(var(--texto-sobre-color) 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .boton--primario:hover:not([disabled]):not([aria-disabled='true'])::after {
+    animation: luz-del-borde 900ms var(--curva-salida) 1;
+  }
+}
+
+@keyframes luz-del-borde {
+  0% {
+    opacity: 0;
+    --angulo-luz: 0deg;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    --angulo-luz: 360deg;
+  }
+}
+
 .boton--acento {
   background: var(--acento-relleno);
   color: var(--texto-sobre-color);
 }
 .boton--acento:hover {
   color: var(--texto-sobre-color);
+}
+
+.boton--acento:hover:not([disabled]):not([aria-disabled='true']) {
+  box-shadow: var(--brillo-acento);
 }
 
 .boton--secundario {
@@ -3259,6 +3356,13 @@
   .esqueleto {
     animation: none;
   }
+
+  /* Los botones no se desplazan ni se escalan; conservan el cambio de color y
+     de sombra, que es lo que dice «esto responde». */
+  .boton:hover:not([disabled]):not([aria-disabled='true']),
+  .boton:active:not([disabled]):not([aria-disabled='true']) {
+    transform: none;
+  }
 }
 
 /* =======================================================================
@@ -3440,6 +3544,25 @@
   line-height: 1.02;
   letter-spacing: 0.01em;
   color: var(--texto-sobre-color);
+}
+
+/* El logotipo oficial dentro del h1 de la entrada. Sustituye al texto grande
+   solo donde la vista lo pone; las vistas que siguen con `NEXUS <em>BATTLES</em>
+   VI` no cambian. Ancho acotado para que no compita con el formulario: en
+   escritorio ocupa la columna de identidad hasta 520 px; en movil, donde la
+   identidad va debajo del formulario, se queda en 320. `height: auto` con el
+   `width`/`height` del marcado evita el salto de maqueta mientras carga. */
+.entrada__logo {
+  display: block;
+  width: min(100%, 520px);
+  height: auto;
+  filter: drop-shadow(var(--sombra-marca));
+}
+
+@media (max-width: 899px) {
+  .entrada__logo {
+    width: min(100%, 320px);
+  }
 }
 
 /* El acento es del Nexo: una sola palabra, no toda la marca.
