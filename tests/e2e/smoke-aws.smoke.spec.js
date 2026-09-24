@@ -185,22 +185,43 @@ test.describe('Smoke del entorno desplegado', () => {
     // decia "no configurado", y nadie podia distinguirlo desde fuera.
     //
     // Lo que se comprueba ahora es justo esa diferencia: la puerta de heroe
-    // RESPONDE. Un jugador recien registrado no tiene heroe equipado, asi que
-    // la respuesta correcta es 422 `heroe-no-equipado` (RF-JUE-003). Si
-    // volviera el 503 de seccion degradada, la cadena hacia el host de
-    // contenido esta rota otra vez - que es exactamente lo que esta prueba
-    // tiene que gritar.
+    // RESPONDE. Si volviera el 503 de seccion degradada, la cadena hacia el
+    // host de contenido esta rota otra vez - que es exactamente lo que esta
+    // prueba tiene que gritar.
+    //
+    // R17 — hasta R17 un jugador recien registrado NO tenia heroe, y la
+    // respuesta correcta era 422 `heroe-no-equipado`. Desde R17.1 el alta le
+    // da un heroe inicial equipado, asi que esa afirmacion se volvio una
+    // carrera: 422 si la sala se pedia antes de que el alta terminara, 201 si
+    // despues. Ahora se espera a que el alta termine y la respuesta correcta es
+    // 201: la puerta leyo el inventario del host de contenido y dejo pasar. Es
+    // la misma cadena, comprobada por el camino que recorre un jugador.
+    await expect
+      .poll(
+        async () => {
+          const alta = await api.get('/api/v1/auth/onboarding', {
+            headers: { Authorization: `Bearer ${jugador.token}` },
+          });
+          return alta.ok() ? (await alta.json()).estado : `HTTP ${alta.status()}`;
+        },
+        { timeout: 60_000, message: 'el alta del jugador nuevo no termino en 60 s' },
+      )
+      .toMatch(/^(COMPLETO|NO_APLICA)$/);
+
     const r = await api.post('/api/v1/salas', {
       headers: { Authorization: `Bearer ${jugador.token}`, 'Content-Type': 'application/json' },
       data: { maximoParticipantes: 2, modalidad: 'UNO_CONTRA_UNO', recompensaCreditos: 0 },
     });
 
-    const problema = await r.json();
+    const cuerpo = await r.json();
     expect(
       r.status(),
-      `si esto es 503, salas-partidas no alcanza al inventario: ${JSON.stringify(problema)}`,
-    ).toBe(422);
-    expect(problema.type).toBe('https://nexusbattles.local/errores/heroe-no-equipado');
+      `si esto es 503, salas-partidas no alcanza al inventario: ${JSON.stringify(cuerpo)}`,
+    ).toBe(201);
+    // La sala no se queda abierta en el listado de DEV.
+    await api.delete(`/api/v1/salas/${cuerpo.id}`, {
+      headers: { Authorization: `Bearer ${jugador.token}` },
+    });
   });
 
   // ===================================================================
