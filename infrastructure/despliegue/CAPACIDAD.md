@@ -1,4 +1,4 @@
-# Capacidad de los hosts de DEV — medición del 23 de septiembre de 2026
+# Capacidad de los hosts de DEV — mediciones del 23 y 24 de septiembre de 2026
 
 Este archivo existe porque durante semanas la decisión de «qué se despliega en
 dev» se apoyó en una frase heredada de comentario en comentario —
@@ -9,12 +9,139 @@ medición real, con fecha, y cómo reproducirla.
 gh workflow run diagnostico-dev.yml -f ambiente=dev
 gh workflow run diagnostico-dev.yml -f ambiente=contenido
 gh workflow run medir-memoria-servicios.yml
+gh workflow run medir-jvm-dev.yml            # RAM + swap de cada contenedor, solo lectura
+gh workflow run experimento-flags-jvm.yml    # A/B de flags en el banco E2E, con la suite como carga
 ```
+
+## 24-sep — la memoria se va en el no-montón, y el montón crecía sin freno (R16.5)
+
+### Lo que ocupa hoy el host de plataforma
+
+`medir-jvm-dev.yml`, corrida 35945219416, 7 minutos después de un reinicio. RAM
+y swap salen del cgroup de cada contenedor: son del núcleo, no estimaciones.
+`docker stats` no ve el swap, y por eso las cifras del 23-sep eran la mitad de
+la verdad.
+
+| Contenedor | RAM | swap | total | montón comprometido | techo del montón |
+|---|--:|--:|--:|--:|--:|
+| `srv-ms-cumplimiento` | 182 | 53 | 235 | 50 | 180 |
+| `srv-salas-partidas` | 152 | 83 | 235 | — | 270 |
+| `srv-moderacion-sanciones` | 175 | 56 | 231 | 54 | 270 |
+| `srv-ms-ecommerce` | 170 | 61 | 231 | 53 | 180 |
+| `srv-notificaciones` | 166 | 52 | 218 | 51 | 270 |
+| `srv-admin-parametros` | 138 | 56 | 194 | 52 | 270 |
+| `srv-comentarios` | 115 | 59 | 174 | 52 | 270 |
+| `srv-metricas-plataforma` | 25 | 143 | 168 | 55 | 270 |
+| `srv-torneos` | 81 | 86 | 167 | 53 | 270 |
+| `srv-ms-identidad` | 60 | 106 | 166 | 55 | 314 |
+| `srv-correo` | 45 | 119 | 164 | 36 | 270 |
+| `plataforma-db` | 33 | 85 | 118 | | |
+| `cumplimiento-db` | 19 | 28 | 47 | | |
+| `ecommerce-db` | 8 | 27 | 35 | | |
+| `mailpit` · `identidad-db` · `plataforma-cache` · `srv-borde` | 40 | 26 | 59 | | |
+| **suma** | **1402** | **1040** | **2442** | | |
+
+Host: 1910 MiB de RAM (127 disponibles) y 1021 de 2047 MiB de swap en uso. No
+corrían `ms-finanzas`, `ms-subastas` ni `ms-chatbot`.
+
+Lo que dice la tabla: cada JVM tiene **~50 MiB de montón comprometido** y ocupa
+**165-235 MiB**. El resto es no-montón: metaspace, la code cache del compilador
+C2 y los hilos. Y el techo del montón (70 % del `mem_limit`, 270 MiB) no frena
+nada: es el «reposo mayor que el pico» que se anotó el 23-sep.
+
+### El experimento: mismos servicios, mismo `mem_limit`, flags distintos
+
+`experimento-flags-jvm.yml`, corridas 35946114614 y 35949136685. Levanta el banco E2E dos
+veces, con el `mem_limit` de dev en las dos, y pasa la suite E2E entera como
+carga. Mide la memoria anónima del cgroup, que es la que no se puede soltar y
+acaba en swap.
+
+| Corrida | | línea base `-XX:MaxRAMPercentage=70 -XX:+UseSerialGC` | desplegados (`docker-compose.deploy.yml`) |
+|---|---|--:|--:|
+| 1 | memoria anónima en reposo, 21 contenedores | 3510 MiB | **3067 MiB (−443, −12,6 %)** |
+| 1 | memoria anónima tras la suite E2E | 4014 MiB | **3289 MiB (−725, −18 %)** |
+| 1 | arranque del banco entero · suite E2E | 135 s · 100/101 (`recompensa-por-partida` por tiempo) | 112 s · 101/101 |
+| 2 | memoria anónima en reposo | 3568 MiB | **3134 MiB (−434, −12,2 %)** |
+| 2 | memoria anónima tras la suite E2E | 3881 MiB | **3347 MiB (−534, −13,8 %)** |
+| 2 | arranque del banco entero · suite E2E | 118 s · 101/101 | 120 s · 101/101 |
+
+Lo que se repite en las dos corridas es la memoria: −12 % en reposo y entre −14 % y −18 % tras la carga. El tiempo de arranque **no** cambia de forma apreciable (135→112 s en una, 118→120 s en la otra: ruido del runner), y el fallo de la línea base en la primera corrida fue de tiempo en una partida contra la IA, que en la segunda pasó.
+
+Flags desplegados: `-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1
+-XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError`.
+
+- El montón **usado** tras la carga no pasa de 66 MiB en ningún servicio, con
+  ninguno de los dos juegos de flags. `-Xmx128m` deja el doble de margen.
+- El no-montón baja de 12 a 30 MiB por JVM al quitar el C2.
+- `ms-finanzas` y `ms-subastas` casi no cambian: sus techos (192m y 256m) ya
+  los frenaban. Por eso `ms-finanzas` sube a `mem_limit: 256m`: con 192m el
+  techo quedaba por debajo de su no-montón más el montón.
+
+Las cifras absolutas del banco (imágenes JRE sobre glibc) son más altas que las
+de dev (JDK sobre musl, Alpine). Lo que se traslada es la proporción.
+
+### Presupuesto del host de plataforma con todo encendido
+
+| Partida | MiB |
+|---|--:|
+| Hoy, medido: 11 JVM + 4 Postgres + auxiliares, flags viejos | 2442 |
+| Flags nuevos sobre las 11 JVM (−12,6 % de 2183, lo medido en reposo) | −275 |
+| `ms-finanzas` + `ms-subastas` + `ms-chatbot` con flags nuevos (banco × 0,78, la proporción dev/banco medida en reposo) | +480 |
+| Sus tres Postgres (lo que miden `cumplimiento-db` y `ecommerce-db`) | +135 |
+| **Previsto** | **≈ 2780** |
+| RAM + swap del host | 3957 |
+
+Cabe entero, con un swap parecido al de hoy (≈ 1,1 GiB) y **tres servicios
+más**. El swap no es el problema mientras lo que está en uso quepa en RAM, y con
+el montón acotado y sin C2 lo que una JVM ociosa toca es poco. Lo que sí tumbó
+el host el 24-sep fue el **arranque simultáneo** tras un reinicio: Docker
+levanta todos los contenedores a la vez, sin respetar `depends_on`. Con el
+montón acotado cada arranque pide menos memoria, pero el experimento no muestra
+un arranque más rápido, y la tormenta sigue existiendo: queda anotada como
+riesgo abierto.
+
+Por eso los perfiles dejan de ser el mecanismo normal. `ms-finanzas`,
+`ms-subastas`, `ms-ecommerce` y `ms-cumplimiento` pasan a `desplegableDev: true`.
+`ms-chatbot` no, pero ya no por memoria: no tiene credenciales de base de datos
+en el entorno `dev` (`MS_CHATBOT_DB_*`).
+
+**Regla al desplegar, la misma que antes:** medir con `medir-jvm-dev.yml` antes
+y después. Si la RAM disponible baja de ~80 MiB y el swap crece deprisa, o un
+servicio del MVP degrada, se revierte el último servicio añadido, no el MVP. Y
+este archivo se actualiza con la medición real después del despliegue: lo de
+arriba es una previsión.
+
+### Consolidar Postgres: evaluado, no ejecutado
+
+Con todo encendido habría **7 procesos Postgres** en el host: `plataforma-db`
+(118 MiB, 7 esquemas), `identidad-db` (23) y uno por cada servicio de economía
+(35-47 cada uno). En total, ≈ 360 MiB. Un solo proceso Postgres 17 con una base
+y un usuario por servicio (sin esquemas ni tablas compartidas, regla 7)
+rondaría los 150 MiB: **≈ 200 MiB menos**.
+
+No se hace ahora, y no por falta de beneficio:
+
+- Hay que migrar los datos de cada volumen con volcado y restauración, el libro
+  de créditos incluido, sin pérdida. `plataforma-db` además es Postgres 15.
+- La V1 de `ms-cumplimiento` usa `dblink`, que pide superusuario o permiso para
+  crear la extensión. Un usuario por servicio sin privilegios no lo tiene.
+- La suma de los pools de Hikari (10 por servicio) supera `max_connections=100`.
+  Hay que acotarlos antes.
+
+Si la medición tras el despliegue muestra presión de swap con todo encendido,
+este es el siguiente paso, con su propio plan de migración y su prueba de
+restauración.
 
 Si los números cambian, **actualiza este archivo con la fecha nueva** en vez de
 dejar que la cifra vieja siga circulando por los comentarios del código. Esa es
 exactamente la falla que este archivo viene a cerrar. No lo conviertas en
 configuración: nada en el pipeline lee estos números.
+
+---
+
+*Lo que sigue es la medición del 23-sep y la decisión que se tomó con ella. Se
+conserva como historia: la decisión de los perfiles la sustituye la sección de
+arriba.*
 
 ## Los dos hosts NO están en la misma cuenta de AWS
 
