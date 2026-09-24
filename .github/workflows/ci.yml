@@ -352,6 +352,20 @@ jobs:
         shell: bash
         run: bash scripts/cd/pruebas/arranque-escalonado.sh
 
+      # R17.0: la compuerta de capacidad solo frena y apaga lo que suma
+      # memoria. Con free/docker/curl falsos; segundos.
+      - name: Comprobar la compuerta de capacidad del CD
+        shell: bash
+        run: bash scripts/cd/pruebas/comprobar-capacidad.sh
+
+      # R18.5: la clave de firma de ms-identidad se genera una vez en el host
+      # y se reutiliza; sin ella cada despliegue suyo cerraba todas las
+      # sesiones y dejaba 15 min de 401 entre servicios. Con openssl y java
+      # del runner; segundos.
+      - name: Comprobar la clave de firma estable de ms-identidad
+        shell: bash
+        run: bash scripts/cd/pruebas/clave-de-firma.sh
+
       # Una clave repetida dentro de un mismo mapa hace que Docker Compose se
       # niegue a leer el archivo ENTERO, y al negarse no despliega nada de el.
       # Asi murio la corrida 35931028022 -- la del commit que traia

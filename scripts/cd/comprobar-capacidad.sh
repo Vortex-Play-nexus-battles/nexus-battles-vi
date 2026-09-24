@@ -39,6 +39,25 @@
 # El umbral de 80 MiB de DESPUES es el que ya documentaba CAPACIDAD.md; lo
 # nuevo es mirarlo tambien ANTES, y mirar el swap, que es el que se agoto
 # primero las dos veces.
+#
+# ## Solo cuenta lo que SUMA memoria (R17.0)
+#
+# Los umbrales responden a una pregunta: "¿cabe una JVM mas?". Un despliegue
+# que solo REEMPLAZA contenedores que ya corren (una version nueva de
+# ms-identidad, por ejemplo) no suma ninguna: Compose para el contenedor viejo
+# antes de arrancar el nuevo. Y una corrida que solo trae frontend y borde no
+# toca ninguna JVM. Aplicarles los umbrales tenia dos efectos, los dos malos:
+#
+#   - ANTES bloqueaba cualquier despliegue en cuanto el swap libre bajaba de
+#     150 MiB, que es justo el regimen normal del host con sus 12 JVM
+#     (medido: 129-225 MiB). La corrida 35961416881 (#712, solo frontend) se
+#     quedo sin desplegar por eso.
+#   - DESPUES, si saltaba, el paso "apagar" apagaba lo recien desplegado: un
+#     servicio del MVP que ya estaba en marcha antes, con el mismo margen.
+#
+# Por eso ANTES apunta en ESTADO_NUEVOS que servicios de la corrida no tenian
+# contenedor en marcha. Los umbrales solo se aplican si hay alguno, y el paso
+# "apagar" de cd.yml solo apaga esos. Un reemplazo nunca se apaga desde aqui.
 set -euo pipefail
 
 MODO="${1:-antes}"
@@ -47,6 +66,34 @@ MIN_DISP_ANTES="${MIN_DISP_ANTES:-150}"
 MIN_SWAP_ANTES="${MIN_SWAP_ANTES:-150}"
 MIN_DISP_DESPUES="${MIN_DISP_DESPUES:-80}"
 MIN_SWAP_DESPUES="${MIN_SWAP_DESPUES:-50}"
+
+# "servicio:puerto servicio:puerto ..." -- la misma lista que recibe
+# desplegar.sh. Vacia = la corrida solo trae frontend y borde.
+SERVICIOS_PUERTOS="${SERVICIOS_PUERTOS:-}"
+ESTADO_NUEVOS="${ESTADO_NUEVOS:-/opt/nexus/capacidad-nuevos.txt}"
+
+contenedores_en_marcha() {
+  docker ps --format '{{.Names}}' 2>/dev/null \
+    || sudo -n docker ps --format '{{.Names}}' 2>/dev/null \
+    || true
+}
+
+# Servicios de la corrida que no tienen hoy su contenedor srv-<servicio> en
+# marcha: son los unicos que van a ocupar memoria que hoy no esta ocupada.
+nuevos_de_la_corrida() {
+  local en_marcha par servicio
+  en_marcha=$(contenedores_en_marcha)
+  for par in $SERVICIOS_PUERTOS; do
+    servicio="${par%%:*}"
+    [ -n "$servicio" ] || continue
+    # Here-string y no tuberia: con pipefail, un `printf | grep -q` puede
+    # salir con SIGPIPE cuando grep encuentra pronto, y el servicio se
+    # contaria como nuevo sin serlo.
+    if ! grep -qx "srv-${servicio}" <<< "$en_marcha"; then
+      printf '%s ' "$servicio"
+    fi
+  done
+}
 
 disponible=$(free -m | awk '/^Mem:/{print $7}')
 swap_total=$(free -m | awk '/^Swap:/{print $2}')
@@ -67,8 +114,21 @@ fi
 
 case "$MODO" in
   antes)
+    nuevos=$(nuevos_de_la_corrida)
+    nuevos="${nuevos% }"
+    # Se apunta SIEMPRE, tambien vacio: DESPUES y el paso "apagar" leen esto
+    # y no deben heredar la lista de una corrida anterior.
+    if ! printf '%s\n' "$nuevos" > "$ESTADO_NUEVOS" 2>/dev/null; then
+      echo "::warning::No se pudo escribir $ESTADO_NUEVOS; DESPUES aplicara los umbrales por prudencia."
+    fi
+    if [ -z "$nuevos" ]; then
+      echo "  Esta corrida no suma memoria: solo reemplaza contenedores que ya corren"
+      echo "  (${SERVICIOS_PUERTOS:-ninguno; solo frontend y borde}). Los umbrales no aplican."
+      exit 0
+    fi
+    echo "  Servicios que hoy no corren y esta corrida arranca: $nuevos"
     if [ "$disponible" -lt "$MIN_DISP_ANTES" ] || [ "$swap_libre" -lt "$MIN_SWAP_ANTES" ]; then
-      echo "::error::El host no tiene sitio para un servicio mas: hacen falta ${MIN_DISP_ANTES} MiB disponibles y ${MIN_SWAP_ANTES} MiB de swap libre. Apaga algo primero (entrada 'apagar' de cd.yml) o reparte carga al otro host."
+      echo "::error::El host no tiene sitio para un servicio mas ($nuevos): hacen falta ${MIN_DISP_ANTES} MiB disponibles y ${MIN_SWAP_ANTES} MiB de swap libre. Apaga algo primero (entrada 'apagar' de cd.yml) o reparte carga al otro host."
       echo "No se despliega. Esto NO es un fallo del servicio: es que no cabe."
       exit 1
     fi
@@ -77,8 +137,19 @@ case "$MODO" in
 
   despues)
     fallo=0
-    if [ "$disponible" -lt "$MIN_DISP_DESPUES" ] || [ "$swap_libre" -lt "$MIN_SWAP_DESPUES" ]; then
-      echo "::error::Despues del despliegue el host quedo por debajo del minimo (${MIN_DISP_DESPUES} MiB disponibles / ${MIN_SWAP_DESPUES} MiB de swap)."
+    if [ -f "$ESTADO_NUEVOS" ]; then
+      nuevos=$(tr -d '\n' < "$ESTADO_NUEVOS")
+      conocido=1
+    else
+      nuevos=""
+      conocido=0
+    fi
+    if [ "$conocido" -eq 1 ] && [ -z "${nuevos// /}" ]; then
+      # Solo reemplazos: el margen es el mismo que antes del despliegue. Se
+      # informa, pero no es motivo para apagar un servicio que ya corria.
+      echo "  Corrida sin servicios nuevos: el margen se informa, no se exige."
+    elif [ "$disponible" -lt "$MIN_DISP_DESPUES" ] || [ "$swap_libre" -lt "$MIN_SWAP_DESPUES" ]; then
+      echo "::error::Despues del despliegue el host quedo por debajo del minimo (${MIN_DISP_DESPUES} MiB disponibles / ${MIN_SWAP_DESPUES} MiB de swap). Servicios nuevos de esta corrida: ${nuevos:-desconocidos}."
       fallo=1
     fi
 
@@ -94,10 +165,10 @@ case "$MODO" in
     done
 
     if [ "$fallo" -ne 0 ]; then
-      echo "::error::Revertir el servicio recien desplegado, no el MVP."
+      echo "::error::Apagar solo lo que esta corrida arranco de nuevo (${nuevos:-nada}), nunca un servicio que ya corria."
       exit 1
     fi
-    echo "  El MVP sigue en pie y queda margen."
+    echo "  El MVP sigue en pie."
     ;;
 
   *)

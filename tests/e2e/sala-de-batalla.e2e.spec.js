@@ -81,6 +81,47 @@ function conToken(token) {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 }
 
+/**
+ * R17: todo jugador nuevo recibe al registrarse un heroe con un arma equipada
+ * (el alta de ms-identidad, contra ms-finanzas e inventario). Los casos «sin
+ * heroe equipado» necesitan a alguien sin equipo, asi que esperan a que su alta
+ * termine y le quitan lo que se le equipo: el mismo estado en que queda quien
+ * desequipa a mano desde su inventario. Por la API del inventario y con su
+ * propio token, nunca tocando una base de datos.
+ */
+async function dejarSinEquipo(api, jugador) {
+  await expect
+    .poll(
+      async () => {
+        const r = await api.get('/api/v1/auth/onboarding', { headers: conToken(jugador.token) });
+        return r.ok() ? (await r.json()).estado : `HTTP ${r.status()}`;
+      },
+      { timeout: 30_000, message: 'el alta del jugador nuevo no termino' },
+    )
+    .toBe('COMPLETO');
+  const vitrina = await api.get('/api/v1/inventario/elementos?pagina=0', {
+    headers: conToken(jugador.token),
+  });
+  const heroes = ((await vitrina.json()).elementos ?? []).filter((e) => e.tipo === 'HEROE');
+  for (const heroe of heroes) {
+    const r = await api.get(`/api/v1/inventario/heroes/${heroe.id}/equipamiento`, {
+      headers: conToken(jugador.token),
+    });
+    const equipo = await r.json();
+    const puestos = [
+      ...(equipo.armas ?? []),
+      ...(equipo.items ?? []),
+      ...Object.values(equipo.armaduras ?? {}),
+    ];
+    for (const elemento of puestos) {
+      const quitar = await api.delete(
+        `/api/v1/inventario/heroes/${heroe.id}/equipamiento/${elemento}`,
+        { headers: conToken(jugador.token) },
+      );
+      expect(quitar.status(), `desequipar ${elemento}: ${await quitar.text()}`).toBe(200);
+    }
+  }
+}
 /** Saldo del jugador en ms-finanzas: bruto, reservado y disponible. */
 async function saldoDe(api, quien) {
   // Desde #455 el saldo es del propio jugador: se consulta con SU token.
@@ -209,8 +250,10 @@ test.describe('Sala de batalla de punta a punta', () => {
   });
 
   test('sin héroe equipado no se entra, y el error lo explica', async () => {
-    // Jugador nuevo, sin sembrar inventario: la puerta tiene que cerrarse.
+    // Jugador nuevo al que se le quita el equipo que le dio el alta (R17): la
+    // puerta tiene que cerrarse igual que con un inventario vacio.
     const sinHeroe = await sesionDe(api, `sin_heroe_${Date.now()}`);
+    await dejarSinEquipo(api, sinHeroe);
 
     const r = await api.post(`/api/v1/salas/${sala.id}/participantes`, {
       headers: conToken(sinHeroe.token),

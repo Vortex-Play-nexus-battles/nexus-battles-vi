@@ -56,7 +56,7 @@ class CorreoControllerTest {
     private MockMvc mockMvc;
 
     @MockitoBean
-    private EnviadorCorreoService enviador;
+    private EntregaEnSegundoPlano enviador;
 
     /** Una peticion tal como la hace ms-identidad: con su credencial de servicio. */
     private static MockHttpServletRequestBuilder comoServicio(String ruta) {
@@ -78,7 +78,7 @@ class CorreoControllerTest {
             mockMvc.perform(post(BIENVENIDA).contentType(MediaType.APPLICATION_JSON).content(CUERPO))
                     .andExpect(status().isUnauthorized());
 
-            verify(enviador, never()).enviar(anyString(), anyString(), anyString(), any());
+            verify(enviador, never()).entregar(anyString(), anyString(), anyString(), any());
         }
 
         @Test
@@ -93,7 +93,7 @@ class CorreoControllerTest {
                             .contentType(MediaType.APPLICATION_JSON).content(CUERPO))
                     .andExpect(status().isForbidden());
 
-            verify(enviador, never()).enviar(anyString(), anyString(), anyString(), any());
+            verify(enviador, never()).entregar(anyString(), anyString(), anyString(), any());
         }
 
         @Test
@@ -108,7 +108,7 @@ class CorreoControllerTest {
                             .contentType(MediaType.APPLICATION_JSON).content(CUERPO))
                     .andExpect(status().isUnauthorized());
 
-            verify(enviador, never()).enviar(anyString(), anyString(), anyString(), any());
+            verify(enviador, never()).entregar(anyString(), anyString(), anyString(), any());
         }
 
         @Test
@@ -128,7 +128,7 @@ class CorreoControllerTest {
                 """))
                 .andExpect(status().isAccepted());
 
-        verify(enviador).enviar(eq("jugador@ejemplo.com"), anyString(), eq("email/bienvenida"), any());
+        verify(enviador).entregar(eq("jugador@ejemplo.com"), anyString(), eq("email/bienvenida"), any());
     }
 
     @Test
@@ -139,7 +139,7 @@ class CorreoControllerTest {
                 """))
                 .andExpect(status().isAccepted());
 
-        verify(enviador).enviar(eq("jugador@ejemplo.com"), anyString(), eq("email/aviso-acceso"), any());
+        verify(enviador).entregar(eq("jugador@ejemplo.com"), anyString(), eq("email/aviso-acceso"), any());
     }
 
     // HU-AUT-006 CA-01: aviso de cambio de contraseña, sobre la plantilla corporativa.
@@ -154,7 +154,7 @@ class CorreoControllerTest {
 
         org.mockito.ArgumentCaptor<java.util.Map<String, Object>> modelo =
                 org.mockito.ArgumentCaptor.forClass(java.util.Map.class);
-        verify(enviador).enviar(eq("jugador@ejemplo.com"), eq("Tu contraseña de The Nexus Battles VI cambió"),
+        verify(enviador).entregar(eq("jugador@ejemplo.com"), eq("Tu contraseña de The Nexus Battles VI cambió"),
                 eq("email/cambio-clave"), modelo.capture());
         org.assertj.core.api.Assertions.assertThat(modelo.getValue())
                 .containsEntry("apodo", "ElGuerrero")
@@ -173,7 +173,7 @@ class CorreoControllerTest {
         mockMvc.perform(comoServicio(CAMBIO_CLAVE).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
                 .andExpect(status().isBadRequest());
 
-        verify(enviador, never()).enviar(anyString(), anyString(), anyString(), any());
+        verify(enviador, never()).entregar(anyString(), anyString(), anyString(), any());
     }
 
     @ParameterizedTest(name = "bienvenida rechazada: {0}")
@@ -187,7 +187,7 @@ class CorreoControllerTest {
         mockMvc.perform(comoServicio(BIENVENIDA).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
                 .andExpect(status().isBadRequest());
 
-        verify(enviador, never()).enviar(anyString(), anyString(), anyString(), any());
+        verify(enviador, never()).entregar(anyString(), anyString(), anyString(), any());
     }
 
     @ParameterizedTest(name = "aviso rechazado: {0}")
@@ -199,7 +199,7 @@ class CorreoControllerTest {
         mockMvc.perform(comoServicio(AVISO_ACCESO).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
                 .andExpect(status().isBadRequest());
 
-        verify(enviador, never()).enviar(anyString(), anyString(), anyString(), any());
+        verify(enviador, never()).entregar(anyString(), anyString(), anyString(), any());
     }
 
     @Test
@@ -227,7 +227,7 @@ class CorreoControllerTest {
         @SuppressWarnings("unchecked")
         Class<Map<String, Object>> tipo = (Class<Map<String, Object>>) (Class<?>) Map.class;
         org.mockito.ArgumentCaptor<Map<String, Object>> captor = org.mockito.ArgumentCaptor.forClass(tipo);
-        verify(enviador).enviar(anyString(), anyString(), anyString(), captor.capture());
+        verify(enviador).entregar(anyString(), anyString(), anyString(), captor.capture());
         assertThat(captor.getValue()).doesNotContainKey("html");
     }
 
@@ -245,7 +245,7 @@ class CorreoControllerTest {
         @SuppressWarnings("unchecked")
         Class<Map<String, Object>> tipo = (Class<Map<String, Object>>) (Class<?>) Map.class;
         org.mockito.ArgumentCaptor<Map<String, Object>> captor = org.mockito.ArgumentCaptor.forClass(tipo);
-        verify(enviador).enviar(anyString(), anyString(), anyString(), captor.capture());
+        verify(enviador).entregar(anyString(), anyString(), anyString(), captor.capture());
 
         assertThat(captor.getValue().get("fechaHora").toString())
                 .as("debe conservar la hora y el huso originales, no pasarlos a UTC")
@@ -261,7 +261,7 @@ class CorreoControllerTest {
                 """))
                 .andExpect(status().isAccepted());
 
-        verify(enviador).enviar(
+        verify(enviador).entregar(
                 eq("jugador@ejemplo.com"), anyString(), eq("email/recuperacion-clave"), any());
     }
 
@@ -276,7 +276,7 @@ class CorreoControllerTest {
         @SuppressWarnings("unchecked")
         Class<Map<String, Object>> tipo = (Class<Map<String, Object>>) (Class<?>) Map.class;
         org.mockito.ArgumentCaptor<Map<String, Object>> captor = org.mockito.ArgumentCaptor.forClass(tipo);
-        verify(enviador).enviar(anyString(), anyString(), anyString(), captor.capture());
+        verify(enviador).entregar(anyString(), anyString(), anyString(), captor.capture());
 
         assertThat(captor.getValue())
                 .containsEntry("codigo", "482915")
@@ -295,7 +295,7 @@ class CorreoControllerTest {
         mockMvc.perform(comoServicio(RECUPERACION).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
                 .andExpect(status().isBadRequest());
 
-        verify(enviador, never()).enviar(anyString(), anyString(), anyString(), any());
+        verify(enviador, never()).entregar(anyString(), anyString(), anyString(), any());
     }
 
     @Test
@@ -309,7 +309,7 @@ class CorreoControllerTest {
                 .andExpect(status().isAccepted());
 
         org.mockito.ArgumentCaptor<String> asunto = org.mockito.ArgumentCaptor.forClass(String.class);
-        verify(enviador).enviar(anyString(), asunto.capture(), anyString(), any());
+        verify(enviador).entregar(anyString(), asunto.capture(), anyString(), any());
 
         assertThat(asunto.getValue()).isEqualTo("Recupera tu contraseña de The Nexus Battles VI");
     }
@@ -327,7 +327,7 @@ class CorreoControllerTest {
                 """))
                 .andExpect(status().isAccepted());
 
-        verify(enviador).enviar(
+        verify(enviador).entregar(
                 eq("nuevo@ejemplo.com"), anyString(), eq("email/confirmacion-cuenta"), any());
     }
 
@@ -344,7 +344,7 @@ class CorreoControllerTest {
         @SuppressWarnings("unchecked")
         Class<Map<String, Object>> tipo = (Class<Map<String, Object>>) (Class<?>) Map.class;
         org.mockito.ArgumentCaptor<Map<String, Object>> captor = org.mockito.ArgumentCaptor.forClass(tipo);
-        verify(enviador).enviar(anyString(), anyString(), anyString(), captor.capture());
+        verify(enviador).entregar(anyString(), anyString(), anyString(), captor.capture());
 
         assertThat(captor.getValue())
                 .containsEntry("apodo", "ElGuerrero")
@@ -361,7 +361,7 @@ class CorreoControllerTest {
                 .andExpect(status().isAccepted());
 
         org.mockito.ArgumentCaptor<String> asunto = org.mockito.ArgumentCaptor.forClass(String.class);
-        verify(enviador).enviar(anyString(), asunto.capture(), anyString(), any());
+        verify(enviador).entregar(anyString(), asunto.capture(), anyString(), any());
 
         assertThat(asunto.getValue()).isEqualTo("Confirma tu cuenta de The Nexus Battles VI");
     }
@@ -381,7 +381,7 @@ class CorreoControllerTest {
         mockMvc.perform(comoServicio(CONFIRMACION).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
                 .andExpect(status().isBadRequest());
 
-        verify(enviador, never()).enviar(anyString(), anyString(), anyString(), any());
+        verify(enviador, never()).entregar(anyString(), anyString(), anyString(), any());
     }
 
     @Test
@@ -406,7 +406,7 @@ class CorreoControllerTest {
                 """))
                 .andExpect(status().isAccepted());
 
-        verify(enviador).enviar(eq("jugador@ejemplo.com"), eq("Nueva misión disponible"), eq("email/mision"), any());
+        verify(enviador).entregar(eq("jugador@ejemplo.com"), eq("Nueva misión disponible"), eq("email/mision"), any());
     }
 
     @Test
@@ -420,7 +420,7 @@ class CorreoControllerTest {
                 """))
                 .andExpect(status().isAccepted());
 
-        verify(enviador, never()).enviar(anyString(), anyString(), anyString(), any());
+        verify(enviador, never()).entregar(anyString(), anyString(), anyString(), any());
     }
 
     @Test
@@ -437,7 +437,7 @@ class CorreoControllerTest {
         @SuppressWarnings("unchecked")
         Class<Map<String, Object>> tipo = (Class<Map<String, Object>>) (Class<?>) Map.class;
         org.mockito.ArgumentCaptor<Map<String, Object>> captor = org.mockito.ArgumentCaptor.forClass(tipo);
-        verify(enviador).enviar(anyString(), anyString(), anyString(), captor.capture());
+        verify(enviador).entregar(anyString(), anyString(), anyString(), captor.capture());
 
         assertThat(captor.getValue())
                 .containsEntry("apodo", "ElGuerrero")
@@ -457,7 +457,7 @@ class CorreoControllerTest {
         mockMvc.perform(comoServicio(MISION).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
                 .andExpect(status().isBadRequest());
 
-        verify(enviador, never()).enviar(anyString(), anyString(), anyString(), any());
+        verify(enviador, never()).entregar(anyString(), anyString(), anyString(), any());
     }
 
     @Test
@@ -469,7 +469,7 @@ class CorreoControllerTest {
                 """))
                 .andExpect(status().isAccepted());
 
-        verify(enviador).enviar(eq("jugador@ejemplo.com"), eq("Ganaste la subasta"), eq("email/subasta"), any());
+        verify(enviador).entregar(eq("jugador@ejemplo.com"), eq("Ganaste la subasta"), eq("email/subasta"), any());
     }
 
     @Test
@@ -481,7 +481,7 @@ class CorreoControllerTest {
                 """))
                 .andExpect(status().isAccepted());
 
-        verify(enviador, never()).enviar(anyString(), anyString(), anyString(), any());
+        verify(enviador, never()).entregar(anyString(), anyString(), anyString(), any());
     }
 
     @ParameterizedTest(name = "subasta rechazada: {0}")
@@ -493,7 +493,7 @@ class CorreoControllerTest {
         mockMvc.perform(comoServicio(SUBASTA).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
                 .andExpect(status().isBadRequest());
 
-        verify(enviador, never()).enviar(anyString(), anyString(), anyString(), any());
+        verify(enviador, never()).entregar(anyString(), anyString(), anyString(), any());
     }
 
     // ----- HU-PAG-003: confirmacion de compra (issue #537, consumidor: ms-finanzas) -----
@@ -507,7 +507,7 @@ class CorreoControllerTest {
                 """))
                 .andExpect(status().isAccepted());
 
-        verify(enviador).enviar(
+        verify(enviador).entregar(
                 eq("jugador@ejemplo.com"), anyString(), eq("email/confirmacion-compra"), any());
     }
 
@@ -523,7 +523,7 @@ class CorreoControllerTest {
         @SuppressWarnings("unchecked")
         Class<Map<String, Object>> tipo = (Class<Map<String, Object>>) (Class<?>) Map.class;
         org.mockito.ArgumentCaptor<Map<String, Object>> captor = org.mockito.ArgumentCaptor.forClass(tipo);
-        verify(enviador).enviar(anyString(), anyString(), anyString(), captor.capture());
+        verify(enviador).entregar(anyString(), anyString(), anyString(), captor.capture());
 
         assertThat(captor.getValue())
                 .containsEntry("apodo", "ElGuerrero")
@@ -542,7 +542,7 @@ class CorreoControllerTest {
                 .andExpect(status().isAccepted());
 
         org.mockito.ArgumentCaptor<String> asunto = org.mockito.ArgumentCaptor.forClass(String.class);
-        verify(enviador).enviar(anyString(), asunto.capture(), anyString(), any());
+        verify(enviador).entregar(anyString(), asunto.capture(), anyString(), any());
 
         assertThat(asunto.getValue()).isEqualTo("Confirmación de tu compra en The Nexus Battles VI");
     }
@@ -565,6 +565,6 @@ class CorreoControllerTest {
         mockMvc.perform(comoServicio(CONFIRMACION_COMPRA).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
                 .andExpect(status().isBadRequest());
 
-        verify(enviador, never()).enviar(anyString(), anyString(), anyString(), any());
+        verify(enviador, never()).entregar(anyString(), anyString(), anyString(), any());
     }
 }

@@ -70,6 +70,9 @@ export function retratoDeHeroe(heroe, { conNombre = true } = {}) {
     clase: claseDeMarco(rareza),
     datos: etiquetaRareza ? { rareza: etiquetaRareza } : {},
     atributos: {
+      // Un `div` sin rol no admite `aria-label` (axe: aria-prohibited-attr,
+      // serio). El marco es una imagen compuesta: retrato, anillo y nivel.
+      role: 'img',
       // El nombre accesible lo dice todo de una vez, para que el lector no
       // tenga que juntar tres nodos sueltos.
       'aria-label': [

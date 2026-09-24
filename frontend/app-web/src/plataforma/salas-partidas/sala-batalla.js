@@ -118,7 +118,10 @@ function pintarConexion(zona, hayCanal) {
  * @param {string} texto
  */
 function explicarVacio(zona, texto) {
-  const detalle = zona?.querySelector('.t-meta');
+  // El detalle del estado vacio es `.estado-vista__detalle` desde UX-R3.5;
+  // `.t-meta` se conserva por las vistas y pruebas que aun lo usan. Con solo
+  // `.t-meta` el texto no se actualizaba nunca (UX-GAME-4).
+  const detalle = zona?.querySelector('.estado-vista__detalle, .t-meta');
   if (detalle) {
     detalle.textContent = texto;
   }

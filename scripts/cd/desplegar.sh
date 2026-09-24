@@ -172,6 +172,57 @@ resolver_etiquetas_contenido() {
   done
 }
 
+# Clave de firma de ms-identidad (ADR-002): la misma en cada despliegue.
+#
+# Sin JWT_CLAVE_PRIVADA, ms-identidad genera un par RSA al arrancar, y cada
+# despliegue suyo invalidaba dos cosas a la vez (medido el 24-sep):
+#   - todas las sesiones abiertas: cada jugador tenia que volver a entrar;
+#   - las credenciales de servicio que los demas guardan hasta 15 min:
+#     salas-partidas seguia presentando a inventario un token firmado con la
+#     clave anterior, inventario respondia 401 y crear una sala daba 503
+#     («inventario rechazo la consulta con 401») hasta que caducaba. El smoke
+#     de dev fallo asi tres veces, siempre justo despues de desplegar
+#     ms-identidad (corridas 36012789308, 36012976814, 36020046567).
+#
+# Mismo patron que las credenciales de servicio: se genera UNA vez en el host,
+# se guarda en $1 (600) y cada despliegue reparte la misma. Un secret de
+# GitHub JWT_CLAVE_PRIVADA, si existe, manda, y el archivo se alinea con el
+# para que revertir.sh levante ms-identidad con la misma clave.
+#
+# NUNCA va al .env: ese archivo lo cargan con env_file los ocho servicios de
+# plataforma, y quien tiene la clave privada puede fabricar el token de
+# cualquier usuario, administradores incluidos -- justo lo que la firma RSA de
+# ADR-002 existe para impedir. Solo se exporta al shell, y Compose la
+# interpola unicamente en el environment de srv-ms-identidad
+# (docker-compose.cuentas.yml). Nunca se imprime.
+#   $1 = archivo donde se guarda.
+asegurar_clave_de_firma() {
+  local archivo="$1" clave="${JWT_CLAVE_PRIVADA:-}"
+  (umask 077 && touch "$archivo")
+  chmod 600 "$archivo"
+  if [ -z "$clave" ]; then
+    clave=$(grep '^JWT_CLAVE_PRIVADA=' "$archivo" | head -n1 | cut -d= -f2- || true)
+  fi
+  if [ -z "$clave" ] && command -v openssl >/dev/null 2>&1; then
+    # ClavesDeFirma lee PKCS#8 (PKCS8EncodedKeySpec). genpkey lo escribe
+    # en PEM, pero con -outform DER escribe PKCS#1, que Java rechaza y que
+    # tumbaria a ms-identidad al arrancar (comprobado con OpenSSL 3.0): de
+    # ahi el paso por pkcs8 -topk8. Base64 de una sola linea para que quepa
+    # en una variable.
+    clave=$(openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 2>/dev/null \
+      | openssl pkcs8 -topk8 -nocrypt -outform DER 2>/dev/null | base64 -w0 || true)
+    if [ -n "$clave" ]; then
+      echo "  clave de firma de ms-identidad generada y guardada en el host (no se imprime)"
+    fi
+  fi
+  if [ -z "$clave" ]; then
+    echo "  AVISO: sin secret JWT_CLAVE_PRIVADA ni openssl en el host: ms-identidad firmara con una clave efimera y cada despliegue suyo cerrara las sesiones"
+    return 0
+  fi
+  printf 'JWT_CLAVE_PRIVADA=%s\n' "$clave" > "$archivo"
+  export JWT_CLAVE_PRIVADA="$clave"
+}
+
 # Las pruebas de scripts/cd/pruebas/ cargan este archivo solo por sus
 # funciones; con esta variable no se toca el servidor.
 if [ "${DESPLEGAR_SOLO_FUNCIONES:-0}" = "1" ]; then
@@ -216,6 +267,8 @@ DIRECTORIO_ACTIVO_URL=${DIRECTORIO_ACTIVO_URL:-}
 DIRECTORIO_ACTIVO_CLIENT_ID=${DIRECTORIO_ACTIVO_CLIENT_ID:-}
 DIRECTORIO_ACTIVO_CLIENT_SECRET=${DIRECTORIO_ACTIVO_CLIENT_SECRET:-}
 SMTP_HOST=${SMTP_HOST:-}
+SMTP_USER=${SMTP_USER:-}
+SMTP_PASSWORD=${SMTP_PASSWORD:-}
 DB_USER=${DB_USER:-}
 DB_PASS=${DB_PASS:-}
 MS_IDENTIDAD_DB_URL=${MS_IDENTIDAD_DB_URL:-}
@@ -239,7 +292,11 @@ EOF
 # linea "VARIABLE=" vacia en el .env llega a Spring como cadena vacia y
 # ANULA el valor por defecto de ${VARIABLE:defecto} en application.yml;
 # omitirla conserva ese valor por defecto.
-for variable in SMTP_PORT LISTA_NEGRA_VERIFICAR_URL SALAS_WS_ORIGENES CHAT_WS_ORIGENES IDENTIDAD_JWKS_URL JWT_CLAVE_PRIVADA \
+#
+# JWT_CLAVE_PRIVADA no esta en la lista a proposito: ver
+# asegurar_clave_de_firma, que la exporta solo para ms-identidad.
+for variable in SMTP_PORT SMTP_TLS SMTP_AUTENTICA CORREO_REMITENTE CORREO_RESPONDER_A PUBLIC_BASE_URL \
+    LISTA_NEGRA_VERIFICAR_URL SALAS_WS_ORIGENES CHAT_WS_ORIGENES IDENTIDAD_JWKS_URL \
     CHAT_HISTORIAL_TAMANO NOTIFICACIONES_WS_ORIGENES COMENTARIOS_FORMATOS_IMAGEN \
     IDENTIDAD_CORS_ORIGENES; do
   valor="${!variable:-}"
@@ -496,6 +553,15 @@ done
 if [ -f "$COMPOSE_SIMULACRO" ]; then
   ARCHIVOS_COMPOSE+=(-f "$COMPOSE_SIMULACRO")
 fi
+
+# Solo cuando esta corrida levanta ms-identidad (su override es el unico que
+# interpola la clave). Ver asegurar_clave_de_firma.
+case " $OVERRIDES " in
+  *" docker-compose.cuentas.yml "*)
+    echo "== 3.0) Clave de firma de ms-identidad =="
+    asegurar_clave_de_firma "$DIRECTORIO/secretos-firma.env"
+    ;;
+esac
 
 # ¿Viene algun servicio de contenido en esta corrida? Se usa para resolver sus
 # etiquetas de imagen y para saber si hay que levantar el borde.

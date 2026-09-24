@@ -678,7 +678,13 @@ describe('indicador de turno en la vista', () => {
 
     controles.recibir({ tipo: PARTIDA_FINALIZADA, idPartida: PARTIDA, ganadores: [ANA] });
 
-    expect(document.querySelector('[data-zona="turno"]').hidden).toBe(true);
+    // UX-GAME-4: el indicador no desaparece, pasa al tercer estado. Ya no
+    // es el turno de nadie: ni es «mio» ni hay barra marcada.
+    const turno = document.querySelector('[data-zona="turno"]');
+    expect(turno.hidden).toBe(false);
+    expect(turno.textContent).toBe('Combate finalizado');
+    expect(turno.dataset.mio).toBe('false');
+    expect(turno.dataset.fin).toBe('si');
     expect(document.querySelector(`[data-jugador="${ANA}"]`).dataset.turno).toBeUndefined();
   });
 

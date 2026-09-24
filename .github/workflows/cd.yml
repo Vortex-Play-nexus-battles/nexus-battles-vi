@@ -586,19 +586,25 @@ jobs:
       # desplegar.sh comprueba si el servicio nuevo contesta, no si al subirlo
       # ha empujado a otro fuera de la RAM. El 24-sep eso costo el entorno
       # entero: ningun healthcheck fallo y aun asi hubo que reiniciar la EC2.
+      # R17.0: recibe la lista de la corrida. Solo los servicios que hoy no
+      # corren suman memoria; un reemplazo o una corrida de solo frontend pasa
+      # (la 35961416881 se quedo sin desplegar el logotipo de #712 por esto).
       - name: Compuerta de capacidad (antes)
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          SERVICIOS_PUERTOS: ${{ steps.lista.outputs.lista }}
         with:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
+          envs: SERVICIOS_PUERTOS
           script: |
             if [ ! -f /opt/nexus/scripts/cd/comprobar-capacidad.sh ]; then
               echo "::warning::comprobar-capacidad.sh todavia no esta en el host; se copia en este despliegue y sirve a partir del siguiente."
               exit 0
             fi
             chmod +x /opt/nexus/scripts/cd/comprobar-capacidad.sh
-            /opt/nexus/scripts/cd/comprobar-capacidad.sh antes
+            SERVICIOS_PUERTOS="$SERVICIOS_PUERTOS" /opt/nexus/scripts/cd/comprobar-capacidad.sh antes
 
       - name: Desplegar en Dev
         id: desplegar
@@ -629,6 +635,11 @@ jobs:
           DIRECTORIO_ACTIVO_CLIENT_ID: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_ID }}
           DIRECTORIO_ACTIVO_CLIENT_SECRET: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_SECRET }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          # R18: sin usuario ni clave, este servicio solo puede hablar con un
+          # buzon de pruebas sin autenticacion. Vacios = comportamiento
+          # anterior; con valor, entrega por un proveedor real.
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASS: ${{ secrets.DB_PASS }}
           # Configuracion NO secreta de los servicios de plataforma (nombres
@@ -637,6 +648,11 @@ jobs:
           # escribe en el .env si llegan con valor, para que un servicio sin
           # variable conserve el valor por defecto de su application.yml.
           SMTP_PORT: ${{ vars.SMTP_PORT }}
+          SMTP_TLS: ${{ vars.SMTP_TLS }}
+          SMTP_AUTENTICA: ${{ vars.SMTP_AUTENTICA }}
+          CORREO_REMITENTE: ${{ vars.CORREO_REMITENTE }}
+          CORREO_RESPONDER_A: ${{ vars.CORREO_RESPONDER_A }}
+          PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
           LISTA_NEGRA_VERIFICAR_URL: ${{ vars.LISTA_NEGRA_VERIFICAR_URL }}
           SALAS_WS_ORIGENES: ${{ vars.SALAS_WS_ORIGENES }}
           CHAT_WS_ORIGENES: ${{ vars.CHAT_WS_ORIGENES }}
@@ -705,7 +721,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,SIMULACRO_REVERSION,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,SMTP_PORT,LISTA_NEGRA_VERIFICAR_URL,SALAS_WS_ORIGENES,CHAT_WS_ORIGENES,CHAT_HISTORIAL_TAMANO,NOTIFICACIONES_WS_ORIGENES,COMENTARIOS_FORMATOS_IMAGEN,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD,MS_SUBASTAS_DB_HOST,MS_SUBASTAS_DB_PORT,MS_SUBASTAS_DB_NAME,MS_SUBASTAS_DB_USER,MS_SUBASTAS_DB_PASSWORD,SUBASTAS_WS_ORIGENES,SUBASTAS_CORS_ORIGENES,ADMINS_INICIALES
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,SIMULACRO_REVERSION,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,DB_USER,DB_PASS,SMTP_PORT,SMTP_TLS,SMTP_AUTENTICA,CORREO_REMITENTE,CORREO_RESPONDER_A,PUBLIC_BASE_URL,LISTA_NEGRA_VERIFICAR_URL,SALAS_WS_ORIGENES,CHAT_WS_ORIGENES,CHAT_HISTORIAL_TAMANO,NOTIFICACIONES_WS_ORIGENES,COMENTARIOS_FORMATOS_IMAGEN,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD,MS_SUBASTAS_DB_HOST,MS_SUBASTAS_DB_PORT,MS_SUBASTAS_DB_NAME,MS_SUBASTAS_DB_USER,MS_SUBASTAS_DB_PASSWORD,SUBASTAS_WS_ORIGENES,SUBASTAS_CORS_ORIGENES,ADMINS_INICIALES
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -743,18 +759,24 @@ jobs:
       # Si la compuerta de despues salta, se apaga lo que acaba de subir. Se
       # revierte el servicio nuevo, nunca el MVP: esa es la regla de
       # CAPACIDAD.md, y hasta ahora habia que aplicarla a mano por SSH.
+      # R17.0: "lo que acaba de subir" son solo los servicios que no corrian
+      # antes de esta corrida (los apunta la compuerta de antes en el host).
+      # Antes se apagaba toda la lista de la corrida, asi que un reemplazo de
+      # un servicio del MVP con poco margen lo habria dejado apagado.
       - name: Apagar lo recien desplegado si el host quedo sin margen
-        if: failure() && steps.capacidad_despues.outcome == 'failure' && inputs.servicios != ''
+        if: failure() && steps.capacidad_despues.outcome == 'failure'
         uses: appleboy/ssh-action@v1.0.3
-        env:
-          SERVICIOS_APAGAR: ${{ inputs.servicios }}
         with:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          envs: SERVICIOS_APAGAR
           script: |
-            echo "La compuerta de capacidad salto: se apaga lo que se acaba de desplegar."
+            SERVICIOS_APAGAR="$(cat /opt/nexus/capacidad-nuevos.txt 2>/dev/null || true)"
+            if [ -z "${SERVICIOS_APAGAR// /}" ]; then
+              echo "La corrida no arranco ningun servicio nuevo: no se apaga nada (un reemplazo no se apaga desde aqui)."
+              exit 0
+            fi
+            echo "La compuerta de capacidad salto: se apagan los servicios nuevos de esta corrida: $SERVICIOS_APAGAR"
             chmod +x /opt/nexus/scripts/cd/apagar.sh
             SERVICIOS_APAGAR="$SERVICIOS_APAGAR" /opt/nexus/scripts/cd/apagar.sh
             /opt/nexus/scripts/cd/comprobar-capacidad.sh despues || true
@@ -996,6 +1018,11 @@ jobs:
           DIRECTORIO_ACTIVO_CLIENT_ID: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_ID }}
           DIRECTORIO_ACTIVO_CLIENT_SECRET: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_SECRET }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          # R18: sin usuario ni clave, este servicio solo puede hablar con un
+          # buzon de pruebas sin autenticacion. Vacios = comportamiento
+          # anterior; con valor, entrega por un proveedor real.
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASS: ${{ secrets.DB_PASS }}
           # PENDIENTE (TODO_*): ver el mismo comentario en el job "Desplegar
@@ -1051,7 +1078,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD,MS_SUBASTAS_DB_HOST,MS_SUBASTAS_DB_PORT,MS_SUBASTAS_DB_NAME,MS_SUBASTAS_DB_USER,MS_SUBASTAS_DB_PASSWORD,SUBASTAS_WS_ORIGENES,SUBASTAS_CORS_ORIGENES,ADMINS_INICIALES
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,DB_USER,DB_PASS,SMTP_TLS,SMTP_AUTENTICA,CORREO_REMITENTE,CORREO_RESPONDER_A,PUBLIC_BASE_URL,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD,MS_SUBASTAS_DB_HOST,MS_SUBASTAS_DB_PORT,MS_SUBASTAS_DB_NAME,MS_SUBASTAS_DB_USER,MS_SUBASTAS_DB_PASSWORD,SUBASTAS_WS_ORIGENES,SUBASTAS_CORS_ORIGENES,ADMINS_INICIALES
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh
@@ -1123,6 +1150,11 @@ jobs:
           DIRECTORIO_ACTIVO_CLIENT_ID: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_ID }}
           DIRECTORIO_ACTIVO_CLIENT_SECRET: ${{ secrets.DIRECTORIO_ACTIVO_CLIENT_SECRET }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          # R18: sin usuario ni clave, este servicio solo puede hablar con un
+          # buzon de pruebas sin autenticacion. Vacios = comportamiento
+          # anterior; con valor, entrega por un proveedor real.
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASS: ${{ secrets.DB_PASS }}
           # PENDIENTE (TODO_*): mismos 3 secrets de ms-identidad que en
@@ -1184,7 +1216,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,DB_USER,DB_PASS,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD,MS_SUBASTAS_DB_HOST,MS_SUBASTAS_DB_PORT,MS_SUBASTAS_DB_NAME,MS_SUBASTAS_DB_USER,MS_SUBASTAS_DB_PASSWORD,SUBASTAS_WS_ORIGENES,SUBASTAS_CORS_ORIGENES,ADMINS_INICIALES
+          envs: GHCR_USER,GHCR_TOKEN,TAG,SERVICIOS_PUERTOS,APP_ENV,LOG_LEVEL,DB_RELACIONAL_URL,DB_MEMORIA_URL,DIRECTORIO_ACTIVO_URL,IDENTIDAD_JWKS_URL,JWT_CLAVE_PRIVADA,DIRECTORIO_ACTIVO_CLIENT_ID,DIRECTORIO_ACTIVO_CLIENT_SECRET,SMTP_HOST,SMTP_USER,SMTP_PASSWORD,DB_USER,DB_PASS,SMTP_TLS,SMTP_AUTENTICA,CORREO_REMITENTE,CORREO_RESPONDER_A,PUBLIC_BASE_URL,MS_IDENTIDAD_DB_URL,MS_IDENTIDAD_DB_USER,MS_IDENTIDAD_DB_PASSWORD,LISTA_NEGRA_URL,MS_IDENTIDAD_SPRING_PROFILES_ACTIVE,MS_CUMPLIMIENTO_DB_HOST,MS_CUMPLIMIENTO_DB_PORT,MS_CUMPLIMIENTO_DB_NAME,MS_CUMPLIMIENTO_DB_USER,MS_CUMPLIMIENTO_DB_PASSWORD,MS_ECOMMERCE_DB_HOST,MS_ECOMMERCE_DB_PORT,MS_ECOMMERCE_DB_NAME,MS_ECOMMERCE_DB_USER,MS_ECOMMERCE_DB_PASSWORD,MS_FINANZAS_DB_HOST,MS_FINANZAS_DB_PORT,MS_FINANZAS_DB_NAME,MS_FINANZAS_DB_USER,MS_FINANZAS_DB_PASSWORD,MS_SUBASTAS_DB_HOST,MS_SUBASTAS_DB_PORT,MS_SUBASTAS_DB_NAME,MS_SUBASTAS_DB_USER,MS_SUBASTAS_DB_PASSWORD,SUBASTAS_WS_ORIGENES,SUBASTAS_CORS_ORIGENES,ADMINS_INICIALES
           script: |
             chmod +x /opt/nexus/scripts/cd/desplegar.sh
             /opt/nexus/scripts/cd/desplegar.sh

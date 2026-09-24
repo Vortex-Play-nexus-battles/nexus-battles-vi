@@ -562,6 +562,15 @@ export function montarControlesDeCombate(
         // Se acabo: ya no es el turno de nadie. Dejar la marca puesta haria
         // creer que la partida sigue.
         marcarTurno(null);
+        // UX-GAME-4 — el indicador no se vacia: dice que el combate termino.
+        // Es el tercer estado del turno (tuyo / del rival / finalizado), y el
+        // panel de resultado puede quedar tapado o fuera de la pantalla.
+        if (zonaTurno) {
+          zonaTurno.textContent = 'Combate finalizado';
+          zonaTurno.hidden = false;
+          zonaTurno.dataset.mio = 'false';
+          zonaTurno.dataset.fin = 'si';
+        }
         if (zona) {
           zona.hidden = true;
         }

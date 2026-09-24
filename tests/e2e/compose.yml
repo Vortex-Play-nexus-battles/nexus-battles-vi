@@ -114,7 +114,26 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://e2e-identidad-db:5432/identidaddb
       SPRING_DATASOURCE_USERNAME: identidad
       SPRING_DATASOURCE_PASSWORD: identidad
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      # R17 — sin SPRING_JPA_HIBERNATE_DDL_AUTO=update: el esquema lo crea Flyway
+      # (V1 + V2) sobre la base vacia del banco y Hibernate solo valida, igual
+      # que en DEV. Asi el banco prueba las migraciones que se despliegan.
+      #
+      # R17 — alta del jugador: ms-identidad la orquesta y cada dueno hace lo
+      # suyo por su API (creditos en ms-finanzas, heroe y equipo en inventario,
+      # tipo de cada producto en el catalogo, cuanto y cual en admin-parametros).
+      CREDITOS_URL: http://srv-ms-finanzas:8093/api/v1
+      INVENTARIO_BASE_URL: http://srv-inventario:8080
+      PRODUCTOS_BASE_URL: http://srv-productos:8080
+      PARAMETROS_URL: http://srv-admin-parametros:8088/api/v1
+      # Valores del BANCO DE PRUEBAS, no de ningun entorno: los mismos 500
+      # creditos que sembrar.sh acreditaba a mano antes de R17, y el heroe y el
+      # arma de prueba que sembrar.sh inserta en Mongo antes de registrar a
+      # nadie. En admin-parametros los dos parametros nacen sin valor (decision
+      # del PO pendiente), asi que se aplican estos.
+      JUGADOR_CREDITOS_INICIALES: "500"
+      JUGADOR_KIT_INICIAL: p-heroe-e2e,p-arma-e2e
+      # Reintento programado mas agil que en DEV (30 s): el banco no espera.
+      ONBOARDING_INTERVALO_REINTENTOS_MS: "5000"
       # El registro avisa por correo, pero es fail-open (Resilience4j): sin
       # servicio de correo la cuenta se crea igual. Por eso correo y mailpit
       # no estan en este compose.

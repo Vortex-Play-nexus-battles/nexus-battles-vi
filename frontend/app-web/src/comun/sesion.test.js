@@ -10,12 +10,18 @@ import { jest } from '@jest/globals';
 
 import {
   CLAVES,
+  MOTIVOS,
   RUTAS,
+  avisarCierreAlServidor,
   cerrarSesion,
+  guardarSesion,
+  hayRutasLimpias,
   leerSesion,
   olvidarSesion,
   resolver,
   rutaDeVuelta,
+  rutaSegura,
+  urlDeLogin,
 } from './sesion.js';
 
 const BASE = 'http://localhost:8099/frontend/app-web/src/comun/sesion.js';
@@ -93,11 +99,92 @@ describe('cerrar y olvidar', () => {
   test('cerrarSesion funciona desde cualquier vista, sin cabecera montada', () => {
     conSesion();
     const navegar = jest.fn();
-    cerrarSesion({ almacen: sessionStorage, navegar, base: BASE });
+    cerrarSesion({
+      almacen: sessionStorage,
+      navegar,
+      base: BASE,
+      avisar: jest.fn(),
+      difundir: jest.fn(),
+    });
     expect(sessionStorage.getItem(CLAVES.token)).toBeNull();
+    // R17 — el login dice por qué se llega: «Cerraste sesión».
     expect(navegar).toHaveBeenCalledWith(
+      'http://localhost:8099/frontend/app-web/src/cuentas/login.html?motivo=cerrada',
+    );
+  });
+
+  test('cerrarSesion avisa al servidor con el token que había y a las demás pestañas', () => {
+    conSesion();
+    const token = sessionStorage.getItem(CLAVES.token);
+    const avisar = jest.fn();
+    const difundir = jest.fn();
+    cerrarSesion({ almacen: sessionStorage, navegar: jest.fn(), base: BASE, avisar, difundir });
+    expect(avisar).toHaveBeenCalledWith(token);
+    expect(difundir).toHaveBeenCalledTimes(1);
+  });
+
+  test('cerrarSesion sin sesión no avisa con un token vacío, pero sí navega', () => {
+    const avisar = jest.fn();
+    const navegar = jest.fn();
+    cerrarSesion({ almacen: sessionStorage, navegar, base: BASE, avisar, difundir: jest.fn() });
+    expect(avisar).toHaveBeenCalledWith(null);
+    expect(navegar).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('guardarSesion (R17)', () => {
+  test('escribe las cuatro claves que lee leerSesion', () => {
+    const token = tokenCon({ uid: UID, sub: 'Ana', exp: Math.floor(Date.now() / 1000) + 60 });
+    guardarSesion({ token, apodo: 'Ana', rol: 'JUGADOR', uid: UID }, sessionStorage);
+    expect(sessionStorage.getItem(CLAVES.token)).toBe(token);
+    expect(sessionStorage.getItem(CLAVES.apodo)).toBe('Ana');
+    expect(sessionStorage.getItem(CLAVES.rol)).toBe('JUGADOR');
+    expect(sessionStorage.getItem(CLAVES.usuarioId)).toBe(UID);
+    expect(leerSesion(sessionStorage).autenticado).toBe(true);
+  });
+
+  test('una clave sin valor se borra en vez de guardarse vacía', () => {
+    sessionStorage.setItem(CLAVES.apodo, 'de-otra-sesion');
+    guardarSesion({ token: 'x.e30.y', apodo: '', rol: null }, sessionStorage);
+    expect(sessionStorage.getItem(CLAVES.apodo)).toBeNull();
+    expect(sessionStorage.getItem(CLAVES.rol)).toBeNull();
+    expect(sessionStorage.getItem(CLAVES.usuarioId)).toBeNull();
+  });
+});
+
+describe('avisarCierreAlServidor (R17)', () => {
+  test('manda un POST con el token que sobrevive a la navegación', () => {
+    const fetchImpl = jest.fn(() => Promise.resolve({ ok: true, status: 204 }));
+    avisarCierreAlServidor('el-token', fetchImpl);
+    expect(fetchImpl).toHaveBeenCalledWith('/api/v1/auth/logout', {
+      method: 'POST',
+      keepalive: true,
+      headers: { Authorization: 'Bearer el-token' },
+    });
+  });
+
+  test('nunca falla: sin token, sin fetch, o con la red caída', async () => {
+    expect(() => avisarCierreAlServidor(null, jest.fn())).not.toThrow();
+    expect(() => avisarCierreAlServidor('t', undefined)).not.toThrow();
+    expect(() =>
+      avisarCierreAlServidor('t', () => {
+        throw new Error('sin red');
+      }),
+    ).not.toThrow();
+    const rechazo = Promise.reject(new Error('sin red'));
+    avisarCierreAlServidor('t', () => rechazo);
+    await expect(rechazo).rejects.toThrow('sin red');
+  });
+});
+
+describe('urlDeLogin (R17)', () => {
+  test('lleva la vuelta y el motivo, y nada si no hay', () => {
+    expect(urlDeLogin({}, BASE)).toBe(
       'http://localhost:8099/frontend/app-web/src/cuentas/login.html',
     );
+    const url = new URL(urlDeLogin({ volver: '/x.html?a=1', motivo: MOTIVOS.CADUCADA }, BASE));
+    expect(url.searchParams.get('volver')).toBe('/x.html?a=1');
+    expect(url.searchParams.get('motivo')).toBe('caducada');
   });
 });
 
@@ -113,6 +200,40 @@ describe('rutaDeVuelta', () => {
     expect(rutaDeVuelta('?volver=%2F%2Fmalo.example')).toBeNull();
     expect(rutaDeVuelta('')).toBeNull();
   });
+
+  test('conserva la búsqueda y el fragmento de la ruta de vuelta', () => {
+    expect(rutaDeVuelta('?volver=%2Fsala.html%3Fid%3D7%23chat')).toBe('/sala.html?id=7#chat');
+  });
+
+  test.each([
+    // R17.A — los que la comprobación anterior dejaba pasar porque empiezan
+    // por `/`, y que el navegador lee como `//malo.example` (otro origen).
+    ['barra invertida', '/\\malo.example'],
+    ['barra invertida doble', '/\\/malo.example'],
+    ['tabulador', '/\t/malo.example'],
+    ['salto de línea', '/\n/malo.example'],
+    ['retorno de carro', '/\r/malo.example'],
+    // Compuesta a trozos: escrita entera, `no-script-url` la toma por código.
+    ['esquema javascript', ['javascript', 'alert(1)'].join(':')],
+    ['esquema data', 'data:text/html,hola'],
+    ['relativa sin barra', 'malo.example/x'],
+  ])('rechaza la redirección abierta por %s', (_caso, volver) => {
+    expect(rutaSegura(volver, 'http://localhost:8099')).toBeNull();
+    expect(rutaDeVuelta(`?volver=${encodeURIComponent(volver)}`)).toBeNull();
+  });
+
+  test('no vuelve a una pantalla de entrada: sería un bucle', () => {
+    for (const puerta of [
+      '/frontend/app-web/src/cuentas/login.html',
+      '/frontend/app-web/src/cuentas/registro.html?x=1',
+      '/frontend/app-web/src/cuentas/preparando.html',
+      '/login',
+      '/registro',
+    ]) {
+      expect(rutaSegura(puerta, 'http://localhost:8099')).toBeNull();
+    }
+    expect(rutaSegura('/inventario', 'http://localhost:8099')).toBe('/inventario');
+  });
 });
 
 describe('RUTAS', () => {
@@ -120,6 +241,74 @@ describe('RUTAS', () => {
     for (const ruta of Object.values(RUTAS)) {
       expect(ruta.startsWith('../')).toBe(true);
       expect(resolver(ruta, BASE)).toMatch(/^http:\/\/localhost:8099\/frontend\/app-web\/src\//);
+    }
+  });
+});
+
+describe('direcciones limpias (R17.3)', () => {
+  function documentoCon(meta) {
+    const doc = document.implementation.createHTMLDocument('x');
+    if (meta) {
+      const marca = doc.createElement('meta');
+      marca.name = 'nexus-rutas';
+      marca.content = meta;
+      doc.head.append(marca);
+    }
+    return doc;
+  }
+
+  test('sin la marca del borde, las rutas de siempre (npm run dev, laboratorio visual)', () => {
+    const doc = documentoCon(null);
+    expect(hayRutasLimpias(doc)).toBe(false);
+    expect(resolver(RUTAS.batallas, BASE, doc)).toBe(
+      'http://localhost:8099/frontend/app-web/src/plataforma/salas-partidas/batallas.html',
+    );
+  });
+
+  test('con la marca, las nueve vistas enlazan en limpio', () => {
+    const doc = documentoCon('limpias');
+    expect(hayRutasLimpias(doc)).toBe(true);
+    const esperadas = {
+      login: '/login',
+      registro: '/registro',
+      preparando: '/preparando',
+      inicio: '/inicio',
+      perfil: '/cuenta',
+      inventario: '/inventario',
+      batallas: '/jugar',
+      torneos: '/torneos',
+      subastas: '/subastas',
+    };
+    for (const [clave, limpia] of Object.entries(esperadas)) {
+      expect(resolver(RUTAS[clave], BASE, doc)).toBe(`http://localhost:8099${limpia}`);
+    }
+  });
+
+  test('una vista sin dirección limpia sigue en su ruta, con marca o sin ella', () => {
+    const doc = documentoCon('limpias');
+    expect(resolver(RUTAS.crearSala, BASE, doc)).toBe(
+      'http://localhost:8099/frontend/app-web/src/plataforma/salas-partidas/crear-sala.html',
+    );
+    // Y lo que no es una vista (el sprite, el kit) no se toca.
+    expect(resolver('../../../../shared/ui-kit/iconos/sprite.svg', BASE, doc)).toBe(
+      'http://localhost:8099/shared/ui-kit/iconos/sprite.svg',
+    );
+  });
+
+  test('una marca con otro valor no activa nada', () => {
+    expect(hayRutasLimpias(documentoCon('antiguas'))).toBe(false);
+  });
+
+  test('el login y la vuelta usan la dirección limpia', () => {
+    const doc = documentoCon('limpias');
+    document.head.append(doc.querySelector('meta').cloneNode());
+    try {
+      const url = new URL(urlDeLogin({ volver: '/jugar', motivo: MOTIVOS.CADUCADA }, BASE));
+      expect(url.pathname).toBe('/login');
+      expect(url.searchParams.get('volver')).toBe('/jugar');
+      expect(rutaSegura('/jugar', 'http://localhost:8099')).toBe('/jugar');
+    } finally {
+      document.head.querySelector('meta[name="nexus-rutas"]')?.remove();
     }
   });
 });

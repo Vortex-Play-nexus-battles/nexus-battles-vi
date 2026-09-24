@@ -25,16 +25,16 @@ import java.util.Map;
 @RequestMapping("/api/v1/correos")
 public class CorreoController {
 
-    private final EnviadorCorreoService enviador;
+    private final EntregaEnSegundoPlano enviador;
 
-    public CorreoController(EnviadorCorreoService enviador) {
+    public CorreoController(EntregaEnSegundoPlano enviador) {
         this.enviador = enviador;
     }
 
     @PostMapping("/bienvenida")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public void enviarBienvenida(@Valid @RequestBody CorreoBienvenidaRequest solicitud) {
-        enviador.enviar(
+        enviador.entregar(
                 solicitud.email(),
                 "Bienvenido a The Nexus Battles VI",
                 "email/bienvenida",
@@ -44,7 +44,7 @@ public class CorreoController {
     @PostMapping("/aviso-acceso")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public void enviarAvisoAcceso(@Valid @RequestBody CorreoAvisoAccesoRequest solicitud) {
-        enviador.enviar(
+        enviador.entregar(
                 solicitud.email(),
                 "Acceso desde un dispositivo no reconocido",
                 "email/aviso-acceso",
@@ -60,7 +60,7 @@ public class CorreoController {
         // HU-AUT-006 CA-01. Mismo caracter que el aviso de acceso: informa
         // de algo que YA paso para que quien no lo hizo reaccione. Nunca
         // lleva la contraseña, ni entra en bitacora nada mas que el destino.
-        enviador.enviar(
+        enviador.entregar(
                 solicitud.email(),
                 "Tu contraseña de The Nexus Battles VI cambió",
                 "email/cambio-clave",
@@ -76,7 +76,7 @@ public class CorreoController {
         // HU-COR-002. Igual que en recuperacion-clave: el codigo no se registra
         // en bitacora en ningun punto. Un codigo de activacion en los logs es
         // una cuenta activable por quien lea los logs.
-        enviador.enviar(
+        enviador.entregar(
                 solicitud.email(),
                 "Confirma tu cuenta de The Nexus Battles VI",
                 "email/confirmacion-cuenta",
@@ -91,7 +91,7 @@ public class CorreoController {
     public void enviarRecuperacionClave(@Valid @RequestBody CorreoRecuperacionClaveRequest solicitud) {
         // El codigo no se registra en bitacora en ningun punto: un OTP en los
         // logs es un OTP filtrado.
-        enviador.enviar(
+        enviador.entregar(
                 solicitud.email(),
                 "Recupera tu contraseña de The Nexus Battles VI",
                 "email/recuperacion-clave",
@@ -111,7 +111,7 @@ public class CorreoController {
         if (!solicitud.debeEnviarCorreo()) {
             return;
         }
-        enviador.enviar(
+        enviador.entregar(
                 solicitud.email(),
                 solicitud.asunto(),
                 "email/mision",
@@ -129,7 +129,7 @@ public class CorreoController {
         if (!solicitud.debeEnviarCorreo()) {
             return;
         }
-        enviador.enviar(
+        enviador.entregar(
                 solicitud.email(),
                 solicitud.asunto(),
                 "email/subasta",
@@ -145,7 +145,7 @@ public class CorreoController {
         // HU-PAG-003 (issue #537). ms-finanzas ya aprobo el pago antes de
         // llamar aqui: este servicio no valida el monto ni la transaccion,
         // solo la transcribe al correo.
-        enviador.enviar(
+        enviador.entregar(
                 solicitud.email(),
                 "Confirmación de tu compra en The Nexus Battles VI",
                 "email/confirmacion-compra",

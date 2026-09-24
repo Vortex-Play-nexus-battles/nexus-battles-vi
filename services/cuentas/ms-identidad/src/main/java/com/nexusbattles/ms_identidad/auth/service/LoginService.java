@@ -13,9 +13,10 @@ import com.nexusbattles.ms_identidad.auth.model.DispositivoConocido;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.repository.DispositivoConocidoRepository;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
+import com.nexusbattles.ms_identidad.onboarding.auditoria.AuditoriaDeCuenta;
+import com.nexusbattles.ms_identidad.onboarding.service.OnboardingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,30 +37,44 @@ public class LoginService {
     // publique su contrato. Por ahora queda registrado localmente.
     private static final Logger auditLog = LoggerFactory.getLogger("AUDITORIA_LOGIN");
 
-    @Autowired
-    private UsuarioRepository usuarioRepository;
-
-    @Autowired
-    private DispositivoConocidoRepository dispositivoConocidoRepository;
-
-    @Autowired
-    private IntentosFallidosService intentosFallidosService;
-
-    @Autowired
-    private CorreoClient correoClient;
-
-    @Autowired
-    private JwtService jwtService;
-
-    @Autowired
-    private AuditoriaLoginClient auditoriaLoginClient;
+    private final UsuarioRepository usuarioRepository;
+    private final DispositivoConocidoRepository dispositivoConocidoRepository;
+    private final IntentosFallidosService intentosFallidosService;
+    private final CorreoClient correoClient;
+    private final JwtService jwtService;
+    private final AuditoriaLoginClient auditoriaLoginClient;
+    private final AuditoriaDeCuenta auditoriaDeCuenta;
+    private final OnboardingService onboardingService;
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
+    // R17 — inyeccion por constructor (Sonar S6813): antes eran campos
+    // @Autowired, y cada dependencia nueva sumaba un aviso.
+    public LoginService(UsuarioRepository usuarioRepository,
+                        DispositivoConocidoRepository dispositivoConocidoRepository,
+                        IntentosFallidosService intentosFallidosService,
+                        CorreoClient correoClient,
+                        JwtService jwtService,
+                        AuditoriaLoginClient auditoriaLoginClient,
+                        AuditoriaDeCuenta auditoriaDeCuenta,
+                        OnboardingService onboardingService) {
+        this.usuarioRepository = usuarioRepository;
+        this.dispositivoConocidoRepository = dispositivoConocidoRepository;
+        this.intentosFallidosService = intentosFallidosService;
+        this.correoClient = correoClient;
+        this.jwtService = jwtService;
+        this.auditoriaLoginClient = auditoriaLoginClient;
+        this.auditoriaDeCuenta = auditoriaDeCuenta;
+        this.onboardingService = onboardingService;
+    }
 
     @Transactional
     public LoginResponse iniciarSesion(LoginRequest datos, String direccionIp, String userAgent) {
 
-        Usuario usuario = usuarioRepository.findByEmail(datos.getEmail())
+        // R17 — mismo identificador que el registro: el correo, sin espacios
+        // y sin importar las mayusculas con las que se teclee (el registro lo
+        // guarda en minusculas; las cuentas anteriores se encuentran igual).
+        Usuario usuario = usuarioRepository.buscarPorCorreo(datos.getEmail())
             .orElseThrow(() -> credencialesInvalidas(datos.getEmail(), direccionIp));
 
         // --- Estado de la cuenta ---
@@ -102,6 +117,7 @@ public class LoginService {
         }
 
         // --- Login exitoso: resetear contadores ---
+        boolean primerAcceso = usuario.getUltimoAcceso() == null;
         usuario.setIntentosFallidos(0);
         usuario.setBloqueadoHasta(null);
         // Sello de ultima entrada: solo en un acceso correcto, nunca en uno
@@ -139,13 +155,23 @@ public class LoginService {
             usuario.getApodo(), usuario.getRol().getNombre(), usuario.getVersionToken(),
             usuario.getPublicId());
 
+        // R17 — primer acceso a la auditoria, y si el alta del jugador quedo a
+        // medias (un servicio caido cuando se registro), se relanza ahora sin
+        // esperar al reintento programado. Ninguna de las dos retrasa el login.
+        if (primerAcceso) {
+            auditoriaDeCuenta.primerAcceso(usuario.getPublicId(), direccionIp);
+        }
+        onboardingService.reanudarSiHaceFalta(usuario.getPublicId());
+
         return new LoginResponse(
             usuario.getId(),
             usuario.getApodo(),
             usuario.getEmail(),
             usuario.getRol().getNombre(),
             dispositivoNuevo,
-            token
+            token,
+            usuario.getPublicId() == null ? null : usuario.getPublicId().toString(),
+            onboardingService.listo(usuario.getPublicId())
         );
     }
 

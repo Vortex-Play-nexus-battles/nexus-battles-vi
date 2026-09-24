@@ -45,8 +45,8 @@
      de borde a borde. Se ve en cuanto se pone una captura al lado de otra.
      El relleno baja al contenido, que es de quien era. */
   padding: 0;
-  background: var(--fondo);
-  color: var(--texto);
+  /* UX-GAME-1: el fondo y el color de la pagina los pone el kit (base.css):
+     la atmosfera del Nexo es una sola para las 35 vistas. */
   font-family: var(--fuente-texto);
 }
 
@@ -67,6 +67,8 @@
   font-size: 1.25rem;
   font-weight: 600;
   letter-spacing: 0.01em;
+  /* Va directamente sobre la atmosfera: tinta, no paleta. */
+  color: var(--tinta);
 }
 
 .inventario-cabecera {
@@ -245,11 +247,109 @@
   color: var(--texto-2);
 }
 
+/* UX-GAME-3 — el panel de equipamiento es una superficie OSCURA elevada, no
+   una franja entre dos lineas: heroe a la izquierda, las diez ranuras a la
+   derecha, filo de energia arriba. La tinta sigue clara (es la atmosfera),
+   pero con fondo propio para que las ranuras y sus etiquetas no floten. */
 .inventario-equipo {
   margin-bottom: var(--vitrina-separacion);
-  padding: 16px 0;
-  border-top: 1px solid var(--borde);
-  border-bottom: 1px solid var(--borde);
+  padding: 16px 20px 20px;
+  border: 1px solid color-mix(in srgb, var(--primaria) 35%, transparent);
+  border-radius: var(--radio);
+  background:
+    var(--energia) top left / 100% 3px no-repeat,
+    linear-gradient(
+      180deg,
+      var(--cromo-elevado),
+      color-mix(in srgb, var(--cromo-elevado) 60%, var(--cromo))
+    );
+  box-shadow: var(--sombra-atmosfera);
+}
+
+/* Heroe → ranuras: dos columnas en escritorio, apiladas en tableta y movil. */
+.inventario-equipo__heroe {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  padding: 12px 0 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--pista) 22%, transparent);
+  margin-bottom: 12px;
+}
+
+.inventario-equipo__heroe:empty {
+  display: none;
+}
+
+.inventario-equipo__heroe .marco-heroe {
+  width: auto;
+}
+
+.inventario-equipo__heroe .marco-heroe__retrato {
+  width: 80px;
+  height: 80px;
+  box-shadow: var(--brillo-primaria);
+}
+
+.inventario-equipo__identidad {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.inventario-equipo__nombre-heroe {
+  margin: 0;
+  font-family: var(--fuente-titulo);
+  font-size: 1.25rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.inventario-equipo__rol-heroe {
+  margin: 0;
+  font-family: var(--fuente-titulo);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tinta-3);
+}
+
+/* Las cifras, en fila, con el mismo peso que en la ficha del heroe. */
+.inventario-equipo__estadisticas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: 0 0 0 auto;
+}
+
+.inventario-equipo__estadistica {
+  display: grid;
+  gap: 2px;
+  min-width: 56px;
+}
+
+.inventario-equipo__etiqueta {
+  font-size: 0.75rem;
+  color: var(--tinta-3);
+}
+
+.inventario-equipo__cifra {
+  margin: 0;
+  font-family: var(--fuente-titulo);
+  font-size: 1.2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sobre el panel oscuro, la etiqueta de cada ranura lee la tinta clara del
+   contexto; en el kit va en `--texto-2`, que aqui se pierde. */
+.inventario-equipo .ranura__etiqueta,
+.inventario-equipo .grupo-ranuras__titulo {
+  color: var(--tinta-2);
+}
+
+.inventario-equipo .ranura--bloqueada .ranura__etiqueta {
+  color: var(--tinta-3);
 }
 
 .inventario-equipo__cabecera,
@@ -272,7 +372,8 @@
 
 .inventario-equipo__resumen {
   padding: 12px 0;
-  color: var(--texto-2);
+  /* Tinta: el resumen del equipo va sobre la atmosfera (UX-GAME-1). */
+  color: var(--tinta-2);
   font-size: 0.85rem;
 }
 
@@ -312,10 +413,16 @@
 
 .vitrina__producto {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: 4px;
+  /* UX-GAME-3 — la tarjeta es una ficha de inventario: retrato a la
+     izquierda, nombre y tipo a su derecha, acciones abajo a la derecha. Antes
+     las acciones flotaban en la esquina y tapaban el retrato. La rejilla no
+     cambia de alto: las cuatro filas siguen cabiendo en 1360 x 768. */
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  column-gap: 12px;
+  row-gap: 2px;
+  align-items: start;
   min-width: 0;
   /* Las cuatro filas mas la barra, el titulo y el control de paginacion
      tienen que caber en 768 px: el criterio 1 pide que la vitrina "se vea
@@ -325,13 +432,35 @@
      eso la fila bajo de 132 a 124: cuatro filas devuelven los 32 px que
      ocupa el control. El contenido de la tarjeta no cambia. */
   min-height: 124px;
-  padding: 14px 16px;
+  padding: 12px 14px 12px 12px;
   border: 1px solid var(--borde);
+  /* El acento lateral dice el tipo de un vistazo; el texto lo confirma. */
+  border-left: 3px solid var(--vitrina-acento, var(--borde-int));
   border-radius: 10px;
   background: var(--superficie);
+  box-shadow: var(--sombra-1);
   transition:
     border-color var(--transicion),
     box-shadow var(--transicion);
+}
+
+.vitrina__producto[data-tipo='HEROE'] {
+  --vitrina-acento: var(--acento-relleno);
+}
+.vitrina__producto[data-tipo='ARMA'] {
+  --vitrina-acento: var(--primaria);
+}
+.vitrina__producto[data-tipo='ARMADURA'] {
+  --vitrina-acento: var(--info);
+}
+.vitrina__producto[data-tipo='ITEM'] {
+  --vitrina-acento: var(--exito);
+}
+.vitrina__producto[data-tipo='HABILIDAD'] {
+  --vitrina-acento: var(--advertencia);
+}
+.vitrina__producto[data-tipo='EPICA'] {
+  --vitrina-acento: var(--rareza-epica);
 }
 
 /*
@@ -351,8 +480,12 @@
  */
 .vitrina__producto:hover,
 .vitrina__producto:focus-within {
-  border-color: var(--borde-int);
-  box-shadow: var(--sombra-2);
+  /* UX-GAME-1/3: el realce del sistema es la primaria con brillo, el mismo
+     par que `.tarjeta--pulsable:hover`; sigue siendo un token, no un color
+     suelto (lo fija la prueba de aceptacion de HU-INV-013). */
+  border-color: var(--primaria);
+  border-left-color: var(--vitrina-acento, var(--borde-int));
+  box-shadow: var(--sombra-2), var(--brillo-primaria);
 }
 
 .vitrina__producto--no-disponible {
@@ -361,8 +494,9 @@
 }
 
 .vitrina__disponibilidad {
+  grid-column: 2;
   align-self: flex-start;
-  margin-top: 8px;
+  margin-top: 4px;
   color: var(--advertencia);
   font-size: 0.8rem;
   font-weight: 700;
@@ -375,11 +509,14 @@
 }
 
 .vitrina__acciones {
-  position: absolute;
-  top: 10px;
-  right: 10px;
+  grid-column: 2;
+  align-self: end;
+  justify-self: end;
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
+  padding-top: 6px;
 }
 
 .vitrina__editar,
@@ -390,6 +527,7 @@
 }
 
 .vitrina__nombre {
+  grid-column: 2;
   margin: 0;
   font-size: 0.95rem;
   font-weight: 600;
@@ -399,6 +537,7 @@
 }
 
 .vitrina__tipo {
+  grid-column: 2;
   margin: 0;
   font-family: var(--fuente-titulo);
   font-size: 0.75rem;
@@ -568,12 +707,21 @@
    ======================================================================= */
 
 .vitrina__marco {
+  grid-row: 1 / span 3;
   width: auto;
 }
 
 .vitrina__marco .marco-heroe__retrato {
   width: 72px;
   height: 72px;
+  /* UX-GAME-3: el hueco del retrato es una ranura con fondo, no un circulo
+     plano; el icono del tipo se lee encima. */
+  background: radial-gradient(
+    circle at 50% 38%,
+    var(--superficie),
+    var(--rareza-comun-insignia) 78%
+  );
+  box-shadow: inset 0 0 0 1px var(--superficie);
 }
 
 .vitrina__marco .marco-heroe__imagen {
@@ -599,8 +747,26 @@
 .inventario-equipo__lista {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  align-items: start;
   gap: 20px;
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+/* =======================================================================
+   Superficies claras de esta vista — UX-GAME-1
+   Devuelven la tinta a oscuro sobre la atmosfera del Nexo (ver «Tinta
+   contextual» en base.css). Son variables de contexto que apuntan a tokens,
+   no una copia de la paleta: componen con el alto contraste.
+   ======================================================================= */
+.inventario-editor,
+.vitrina__producto,
+.estado {
+  --tinta: var(--texto);
+  --tinta-2: var(--texto-2);
+  --tinta-3: var(--texto-3);
+  --tinta-enlace: var(--primaria);
+  --tinta-enlace-hover: var(--primaria-relleno);
+  color: var(--texto);
 }
