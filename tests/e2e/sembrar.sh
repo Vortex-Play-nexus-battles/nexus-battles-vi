@@ -95,6 +95,15 @@ $COMPOSE exec -T e2e-contenido-mongo mongosh --quiet productos --eval '
     Object.assign({}, base, {
       _id: "p-heroe-e2e", nombre: "Guerrero de prueba", tipo: "HEROE",
       prototipo: "Guerrero Tanque",
+      // Con imagen, a diferencia de los otros dos. El retrato del heroe de
+      // combate sale de aqui (R8: producto.imagen -> HeroeDeCombate.retratoUrl),
+      // asi que con `imagen: null` el campo llegaria nulo y la prueba no podria
+      // distinguir "se propaga" de "no habia nada que propagar".
+      //
+      // La ruta la sirve el propio borde: monta ../../frontend en
+      // /srv/nexus/frontend, y el fichero existe en el repositorio. O sea que
+      // ademas de no ser nula, se puede cargar.
+      imagen: "/frontend/app-web/src/cuentas/avatares/guerrero-tanque.jpg",
       poderDeAtaque: null, tasaDeCaida: NumberDecimal("0")
     }),
     Object.assign({}, base, {
