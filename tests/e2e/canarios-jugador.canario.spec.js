@@ -123,11 +123,21 @@ test.describe('Canarios del jugador (R16)', () => {
   // `productos`) frente a lo que muestra la vitrina (ms-ecommerce). Si el
   // maestro tiene productos y la vitrina sale vacía, la tienda está
   // desconectada del catálogo real, que es justo lo que pide revisar R16.13.
+  //
+  // R16 — la vitrina ya no es `GET /api/v1/productos`: ese prefijo es entero
+  // del catálogo maestro (#421) y la vitrina vive en `/api/v1/vitrina`
+  // (ecommerce-carrito.yaml 1.2.0). Con la ruta vieja, esta línea imprimiría
+  // el listado del catálogo con la etiqueta «vitrina».
   test('catálogo maestro frente a vitrina (informativo)', async ({ request }) => {
     const cabeceras = { Authorization: `Bearer ${sesion.token}` };
-    const maestro = await request.get(`${AWS}/api/v1/productos/estadisticas`, { headers: cabeceras });
-    const vitrina = await request.get(`${AWS}/api/v1/productos?page=0&size=16&moneda=COP`, { headers: cabeceras });
-    const resumen = async (r) => `${r.status()} ${(await r.text()).slice(0, 300).replace(/\s+/g, ' ')}`;
+    const maestro = await request.get(`${AWS}/api/v1/productos/estadisticas`, {
+      headers: cabeceras,
+    });
+    const vitrina = await request.get(`${AWS}/api/v1/vitrina?page=0&size=16`, {
+      headers: cabeceras,
+    });
+    const resumen = async (r) =>
+      `${r.status()} ${(await r.text()).slice(0, 300).replace(/\s+/g, ' ')}`;
     console.log(`CANARIO-INFO|catalogo-maestro|${await resumen(maestro)}`);
     console.log(`CANARIO-INFO|vitrina|${await resumen(vitrina)}`);
   });

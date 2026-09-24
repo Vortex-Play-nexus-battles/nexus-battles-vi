@@ -161,19 +161,29 @@ const ESCENARIOS = [
     sesion: () => sesionSintetica({ apodo: 'qa_tienda', rol: 'JUGADOR' }),
     rutas: [
       [
-        '**/api/v1/productos*',
+        // R16 — la vitrina se mudó a /api/v1/vitrina (ecommerce-carrito.yaml
+        // 1.2.0) y sus ids son los UUID del catálogo maestro. Con la ruta vieja
+        // la vista no pintaba nada y el escenario se ponía rojo en `exige`, que
+        // es justo para lo que está. La rebaja y el precio ausente ya no los
+        // manda la vitrina 1.2.0, pero la tarjeta los sigue sabiendo pintar y
+        // su accesibilidad se sigue auditando.
+        '**/api/v1/vitrina*',
         json({
           content: [
-            producto({ id: 1, nombre: 'Yelmo del Alba' }),
+            producto({ id: 'aaaaaaa1-0000-4000-8000-000000000001', nombre: 'Yelmo del Alba' }),
             producto({
-              id: 2,
+              id: 'aaaaaaa1-0000-4000-8000-000000000002',
               nombre: 'Amuleto de Brasa',
               precioOriginal: 20000,
               precioFinal: 16000,
               enPromocion: true,
               porcentajeDescuento: 20,
             }),
-            producto({ id: 3, nombre: 'Pocion sin precio', precioFinal: null }),
+            producto({
+              id: 'aaaaaaa1-0000-4000-8000-000000000003',
+              nombre: 'Pocion sin precio',
+              precioFinal: null,
+            }),
           ],
         }),
       ],
@@ -222,7 +232,7 @@ function sala(cambios = {}) {
 
 function producto(cambios = {}) {
   return {
-    id: 1,
+    id: 'aaaaaaa1-0000-4000-8000-000000000001',
     nombre: 'Yelmo del Alba',
     imagenUrl: null,
     descripcion: 'Acero claro, forjado al amanecer.',

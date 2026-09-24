@@ -88,6 +88,17 @@ jobs:
         working-directory: services/cuentas/ms-identidad
         run: ./mvnw -B -DskipTests package
 
+      # R16 — la tienda entra al banco (tienda.e2e.spec.js). Su `mvnw` esta en
+      # git SIN bit de ejecucion (100644, a diferencia del de ms-identidad), y
+      # un checkout de Linux lo respeta: sin el chmod el paso muere con
+      # «Permission denied» antes de compilar nada. Mismo arreglo que la rama
+      # Maven de ci.yml.
+      - name: Construir el jar de ms-ecommerce (Maven)
+        working-directory: services/cuentas/ms-ecommerce
+        run: |
+          chmod +x ./mvnw
+          ./mvnw -B -DskipTests package
+
       - name: Levantar el entorno
         run: docker compose -f tests/e2e/compose.yml up -d --build --wait
 
@@ -128,7 +139,7 @@ jobs:
       - name: Logs de los servicios si algo fallo
         if: failure()
         run: |
-          for s in srv-ms-identidad srv-ms-finanzas srv-ms-subastas srv-comentarios srv-heroes srv-productos srv-inventario \
+          for s in srv-ms-identidad srv-ms-finanzas srv-ms-subastas srv-ms-ecommerce srv-comentarios srv-heroes srv-productos srv-inventario \
                    srv-motor-combate srv-moderacion-sanciones srv-notificaciones srv-torneos srv-metricas-plataforma srv-admin-parametros srv-salas-partidas srv-borde; do
             echo "=============== $s ==============="
             # Primero la cabecera de las excepciones: con `--tail` a secas se

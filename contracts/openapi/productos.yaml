@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Servicio de productos
-  version: 1.2.0
+  version: 1.2.1
   description: >
     Creación de productos del catálogo de THE NEXUS BATTLES VI
     (HU-PRD-001), reserva de tiraje (HU-PRD-002) y suspensión lógica
@@ -14,6 +14,9 @@ info:
     decisión de arquitectura es que la vitrina proyecte este catálogo, y
     este listado es lo que consume para hacerlo. Cambio aditivo, por eso
     sube la versión menor y no la mayor.
+
+    1.2.1 (R16): solo documentación. El borde deja de repartir la ruta
+    exacta por método (#421): todo /api/v1/productos llega a este servicio.
 
 servers:
   - url: /
@@ -58,9 +61,10 @@ paths:
         que un producto nuevo se añade al final y no desplaza las páginas
         ya leídas.
 
-        Enrutamiento: en el borde de desarrollo el GET exacto de esta ruta
-        se reparte hoy a la vitrina de ms-ecommerce (issue #421), así que
-        este listado se consume llamando directamente al servicio.
+        Enrutamiento: el borde manda todo /api/v1/productos, con cualquier
+        método, a este servicio. Hasta R16 el GET exacto se desviaba a la
+        vitrina de ms-ecommerce (issue #421), que ahora vive en
+        /api/v1/vitrina.
       parameters:
         - name: page
           in: query

@@ -23,8 +23,8 @@ de entrada público del host de plataforma en AWS: `http://<ip-del-host>/`.
 | **`/api/v1/cofres`** | **`srv-ms-finanzas:8093`** — añadido en R8.4, no existía |
 | `/api/v1/{subastas,mis-pujas}` | `srv-ms-subastas:8092` |
 | `/api/v1/carrito…` | `srv-ms-ecommerce:8090`, reescrito a `/ecommerce/api/v1/carrito…` |
-| `GET /api/v1/productos` (exacto) | `srv-ms-ecommerce:8090` → `/ecommerce/api/v1/productos` (vitrina) |
-| `/api/v1/productos…` (resto) | **`34.193.90.11:8103`** (host de contenido, desde el PR #611) |
+| **`/api/v1/vitrina…`** | **`srv-ms-ecommerce:8090`**, reescrito a `/ecommerce/api/v1/vitrina…` (consulta intacta) — R16 |
+| `/api/v1/productos…` (todos los métodos) | **`34.193.90.11:8103`** (host de contenido, desde el PR #611) — un solo dueño desde R16 (#421) |
 | `/api/v1/{heroes,equipos,estrategias,progresion}` | **`34.193.90.11:8101`** (host de contenido) |
 | `/api/v1/inventario` | **`34.193.90.11:8102`** (host de contenido) |
 | `/ws/notificaciones` | `srv-notificaciones:8085` |
@@ -50,11 +50,15 @@ el resto de la ruta: manda la URI escrita, tal cual. Por eso
 y añadir al carrito nunca funcionó a través del borde.
 
 `pruebas/` levanta este mismo `borde-dev.conf` contra servicios de mentira que
-responden con la ruta exacta que reciben:
+responden con la ruta exacta que reciben. Un solo destino se cambia al
+levantarlo: el del catálogo (`34.193.90.11:8103`), que pasa a ser el eco
+`srv-productos` para que ninguna petición del banco salga hacia el host de
+contenido real (lo hace el contenedor `borde-conf`, que falla cerrado si la
+sustitución no aplica):
 
 ```bash
 cd infrastructure/red-balanceo/pruebas
-docker compose up -d && sleep 5
+docker compose up -d --wait
 ./comprobar-rutas.sh      # devuelve 0 si cada ruta va donde debe
 docker compose down -v
 ```
@@ -82,13 +86,25 @@ septiembre, dándose por arreglada.
 Esto lo fija `pruebas/comprobar-rutas.sh`, que desde R8.4 corre en integración
 continua en cada cambio de esta carpeta.
 
-### Colisión conocida: `/api/v1/productos`
+### Colisión resuelta: `/api/v1/productos` (#421)
 
-`contenido/productos` y `cuentas/ms-ecommerce` declaran los dos ese prefijo.
-No se pisan de hecho —contenido no publica un `GET` sin sufijo—, así que el
-borde reparte por método y solo en la ruta exacta. Es una **capa de adaptación**
-mientras sus dueños deciden de quién es el prefijo (#421), no una decisión de
-contrato tomada aquí. `comprobar-rutas.sh` falla en cuanto ese reparto cambie.
+Hasta R16 `contenido/productos` y `cuentas/ms-ecommerce` declaraban los dos ese
+prefijo, y el borde los separaba por método en la ruta exacta (dos
+`map $request_method` y una `location =`): el `GET` sin sufijo era la vitrina de
+la tienda y el resto, el catálogo. Era una **capa de adaptación**, no una
+decisión de contrato, y nginx decidía la semántica de una ruta por su método.
+
+La decisión la tomaron los dueños del prefijo, en sus contratos:
+
+- `productos.yaml` 1.2.0 (#687) publica `GET /api/v1/productos`, el listado del
+  catálogo maestro: todo el prefijo es de `contenido/productos`.
+- `ecommerce-carrito.yaml` 1.2.0 muda la vitrina a `GET /api/v1/vitrina`, que
+  proyecta ese catálogo. El antiguo `GET /productos` de ms-ecommerce queda
+  deprecado dentro del servicio y el borde ya no lo publica.
+
+`comprobar-rutas.sh` lo fija con tráfico (`GET` y `POST` exactos y `/{id}` al
+catálogo, la vitrina a ms-ecommerce con su consulta) y falla si vuelve a
+aparecer un reparto por `$request_method`.
 
 **Cómo llega al host:** `cd.yml` (job *Desplegar en Dev*) copia
 `frontend/app-web/src`, `shared/ui-kit` y este archivo a `/opt/nexus/web/`;

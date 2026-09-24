@@ -26,8 +26,12 @@ import {
 
 const UID = '44444444-4444-4444-4444-444444444444';
 
+/** Un identificador del catálogo maestro, con la forma que devuelve la vitrina 1.2.0. */
+const UUID = '3fa85f64-5717-4562-b3fc-2c963f66afa6';
+
 const VISTA = `
   <div id="productos-grid"><p>Cargando…</p></div>
+  <div id="aviso-carrito" data-zona="aviso" hidden></div>
   <div id="cart-items"></div>
   <span id="cart-subtotal"></span>
   <span id="cart-total"></span>
@@ -43,6 +47,16 @@ function token(cuerpo) {
 
 function respuesta(cuerpo, ok = true, status = 200) {
   return { ok, status, json: async () => cuerpo, headers: { get: () => 'application/json' } };
+}
+
+/** Un rechazo con problem details (regla 4), como los declara ecommerce-carrito.yaml 1.2.0. */
+function problema(status, type, extra = {}) {
+  return {
+    ok: false,
+    status,
+    json: async () => ({ type, title: 'Rechazo', status, ...extra }),
+    headers: { get: () => 'application/problem+json' },
+  };
 }
 
 beforeEach(() => {
@@ -97,7 +111,10 @@ describe('base de la API', () => {
 
     await cargarVitrina(document);
 
-    expect(globalThis.fetch.mock.calls[0][0]).toBe('/api/v1/productos');
+    // R16 — la vitrina tiene prefijo propio. `/api/v1/productos` es del
+    // catálogo maestro entero desde que el borde dejó de repartirlo por
+    // método (#421): pedirlo ahí sería pedirle la vitrina a otro servicio.
+    expect(globalThis.fetch.mock.calls[0][0]).toBe('/api/v1/vitrina');
   });
 
   test('con meta declarada, la base la manda la página', async () => {
@@ -108,7 +125,7 @@ describe('base de la API', () => {
 
     await cargarVitrina(document);
 
-    expect(globalThis.fetch.mock.calls[0][0]).toBe('http://127.0.0.1:8083/api/v1/productos');
+    expect(globalThis.fetch.mock.calls[0][0]).toBe('http://127.0.0.1:8083/api/v1/vitrina');
   });
 });
 
@@ -469,5 +486,244 @@ describe('FI-R2 - el precio que se ensena es el que cobra el servicio', () => {
     expect(texto).not.toContain('undefined');
     expect(texto).not.toContain('null');
     expect(document.getElementById('cart-total').textContent).not.toContain('undefined');
+  });
+});
+
+/**
+ * R16 — la vitrina proyecta el catálogo maestro (ecommerce-carrito.yaml 1.2.0).
+ *
+ * Tres cosas nuevas que se fijan aquí: el identificador es un UUID en texto de
+ * punta a punta; un catálogo caído (503) no se disfraza de tienda vacía; y un
+ * «Añadir» rechazado se le dice al jugador en vez de perderse en la consola.
+ */
+describe('R16 - la vitrina del catálogo maestro', () => {
+  test('el UUID del catálogo viaja tal cual, en texto, hasta POST /carrito/items', async () => {
+    globalThis.fetch.mockResolvedValue(
+      respuesta({
+        content: [{ id: UUID, nombre: 'Espada', precioFinal: 45000, moneda: 'COP', tipo: 'ARMA' }],
+        items: [],
+      }),
+    );
+
+    await montarTienda(document);
+    globalThis.fetch.mockClear();
+    document.querySelector('[data-producto]').click();
+    await new Promise((r) => setTimeout(r, 0));
+
+    const [url, opciones] = globalThis.fetch.mock.calls[0];
+    expect(url).toBe('/api/v1/carrito/items');
+    const cuerpo = JSON.parse(opciones.body);
+    // Ni `Number()` ni `parseInt()` por el camino: un UUID convertido en
+    // número es `NaN`, y el servicio respondería «producto inexistente».
+    expect(cuerpo.productoId).toBe(UUID);
+    expect(typeof cuerpo.productoId).toBe('string');
+    expect(cuerpo.cantidad).toBe(1);
+  });
+
+  test('un catálogo caído (503) no se confunde con una tienda sin productos', async () => {
+    // El interceptor compartido no lanza ante un 503: devuelve la respuesta.
+    // Antes, su cuerpo sin `content` se leía como «la tienda no tiene
+    // productos», que es exactamente lo que el contrato quiere evitar.
+    globalThis.fetch.mockResolvedValue(problema(503, 'urn:nexus:problema:catalogo-no-disponible'));
+
+    await cargarVitrina(document);
+
+    const rejilla = document.getElementById('productos-grid');
+    expect(rejilla.querySelector('[data-estado="vacio"]')).toBeNull();
+    expect(rejilla.querySelector('[data-estado="error"]')).not.toBeNull();
+    expect(rejilla.textContent).toMatch(/no se pudo cargar la tienda/i);
+    expect(rejilla.textContent).toMatch(/catálogo no responde/i);
+    expect(rejilla.textContent).toMatch(/carrito sigue disponible/i);
+    expect(rejilla.querySelector('[data-accion="reintentar"]')).not.toBeNull();
+  });
+
+  test('un 500 del carrito que llega como respuesta, no como excepción, tampoco es «vacío»', async () => {
+    // Las pruebas de más arriba simulan el fallo con un `fetch` que lanza; el
+    // interceptor real devuelve la respuesta. Esta es la forma real.
+    globalThis.fetch.mockResolvedValue(
+      respuesta({ type: 'about:blank', title: 'Error', status: 500 }, false, 500),
+    );
+
+    await cargarCarrito(document);
+
+    const texto = document.getElementById('cart-items').textContent;
+    expect(texto).toMatch(/no se pudo cargar/i);
+    expect(texto).not.toMatch(/vacío/i);
+    expect(document.querySelector('#cart-items [data-accion="reintentar"]')).not.toBeNull();
+  });
+
+  test('un 404 del carrito que llega como respuesta sigue siendo un carrito vacío', async () => {
+    globalThis.fetch.mockResolvedValue(respuesta({}, false, 404));
+
+    await cargarCarrito(document);
+
+    expect(document.getElementById('cart-items').textContent).toMatch(/vacío/i);
+    expect(document.getElementById('btn-pagar').disabled).toBe(true);
+  });
+
+  test('cualquier otro rechazo de la vitrina tampoco se pinta como tienda vacía', async () => {
+    globalThis.fetch.mockResolvedValue(respuesta({ content: [] }, false, 500));
+
+    await cargarVitrina(document);
+
+    const rejilla = document.getElementById('productos-grid');
+    expect(rejilla.querySelector('[data-estado="vacio"]')).toBeNull();
+    expect(rejilla.textContent).toMatch(/no se pudo cargar la tienda/i);
+    expect(rejilla.textContent).not.toMatch(/catálogo no responde/i);
+  });
+});
+
+/**
+ * R16 — «Añadir» rechazado: un aviso corto, con salida, en vez de silencio.
+ *
+ * Los cinco `type` son los que declara `POST /carrito/items` en el contrato
+ * 1.2.0. El mensaje se decide por el `type` y el tono por el `status`
+ * (MAPEO-ERRORES §2 y §4), nunca por el texto del servidor.
+ */
+describe('R16 - un «Añadir» rechazado se le dice al jugador', () => {
+  const zona = () => document.getElementById('aviso-carrito');
+
+  test.each([
+    [409, 'urn:nexus:problema:producto-agotado', /se agotó/i],
+    [409, 'urn:nexus:problema:producto-no-disponible', /no está a la venta/i],
+    [422, 'urn:nexus:problema:producto-inexistente', /ya no está en el catálogo/i],
+    [422, 'urn:nexus:problema:producto-sin-precio-en-moneda-real', /no se vende con dinero real/i],
+  ])(
+    '%i %s: aviso de advertencia que lleva a actualizar la tienda',
+    async (estado, tipo, texto) => {
+      globalThis.fetch.mockResolvedValue(problema(estado, tipo));
+
+      await agregarAlCarrito(UUID, document);
+
+      expect(zona().hidden).toBe(false);
+      const aviso = zona().querySelector('.aviso');
+      expect(aviso.classList.contains('aviso--advertencia')).toBe(true);
+      // Un rechazo interrumpe: el lector de pantalla lo anuncia al momento.
+      expect(aviso.getAttribute('role')).toBe('alert');
+      expect(aviso.textContent).toMatch(texto);
+      expect(aviso.querySelector('[data-accion="actualizar-tienda"]')).not.toBeNull();
+      // Ni el código ni el identificador interno del error llegan a la pantalla.
+      expect(aviso.textContent).not.toContain(String(estado));
+      expect(aviso.textContent).not.toContain('urn:');
+      // El carrito no cambió, así que no se vuelve a pedir.
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  test('503 catálogo caído: aviso de error con «Reintentar», que reintenta el mismo producto', async () => {
+    globalThis.fetch.mockResolvedValueOnce(
+      problema(503, 'urn:nexus:problema:catalogo-no-disponible'),
+    );
+
+    await agregarAlCarrito(UUID, document);
+
+    const aviso = zona().querySelector('.aviso');
+    expect(aviso.classList.contains('aviso--error')).toBe(true);
+    expect(aviso.textContent).toMatch(/no puede consultar el catálogo/i);
+
+    globalThis.fetch.mockResolvedValue(respuesta({ total: 0, items: [] }));
+    aviso.querySelector('[data-accion="reintentar"]').click();
+    await new Promise((r) => setTimeout(r, 0));
+
+    const [url, opciones] = globalThis.fetch.mock.calls[1];
+    expect(url).toBe('/api/v1/carrito/items');
+    expect(JSON.parse(opciones.body).productoId).toBe(UUID);
+    // El reintento entró: el aviso del intento anterior ya no está.
+    expect(zona().hidden).toBe(true);
+    expect(zona().querySelector('.aviso')).toBeNull();
+  });
+
+  test('sin respuesta (la red no contesta) también se dice, con «Reintentar»', async () => {
+    globalThis.fetch.mockRejectedValue(new Error('sin red'));
+
+    await agregarAlCarrito(UUID, document);
+
+    const aviso = zona().querySelector('.aviso');
+    expect(aviso.classList.contains('aviso--error')).toBe(true);
+    expect(aviso.textContent).toMatch(/no se pudo añadir el producto al carrito/i);
+    expect(aviso.querySelector('[data-accion="reintentar"]')).not.toBeNull();
+  });
+
+  test('el texto del servidor se pinta como TEXTO, nunca como marcado', async () => {
+    // Un rechazo que el contrato no declara trae su `detail` para el jugador
+    // (MAPEO-ERRORES §3). Va por `textContent`: con marcado dentro no ejecuta
+    // nada, que es la clase de agujero que ya hubo en el interceptor (PR-UX-8).
+    globalThis.fetch.mockResolvedValue(
+      problema(400, 'urn:nexus:problema:otra-cosa', {
+        detail: '<img src=x onerror=alert(1)> no se pudo',
+      }),
+    );
+
+    await agregarAlCarrito(UUID, document);
+
+    const aviso = zona().querySelector('.aviso');
+    expect(aviso.querySelector('img')).toBeNull();
+    expect(aviso.textContent).toContain('<img');
+    expect(aviso.querySelector('[data-accion="actualizar-tienda"]')).not.toBeNull();
+  });
+
+  test('«Actualizar la tienda» vuelve a pedir la vitrina y retira el aviso', async () => {
+    globalThis.fetch.mockResolvedValueOnce(problema(409, 'urn:nexus:problema:producto-agotado'));
+    await agregarAlCarrito(UUID, document);
+
+    globalThis.fetch.mockResolvedValue(respuesta({ content: [] }));
+    zona().querySelector('[data-accion="actualizar-tienda"]').click();
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(globalThis.fetch.mock.calls[1][0]).toBe('/api/v1/vitrina');
+    expect(zona().hidden).toBe(true);
+  });
+
+  test('un intento nuevo que entra no deja en pantalla el aviso del anterior', async () => {
+    globalThis.fetch.mockResolvedValueOnce(problema(409, 'urn:nexus:problema:producto-agotado'));
+    await agregarAlCarrito(UUID, document);
+    expect(zona().hidden).toBe(false);
+
+    globalThis.fetch.mockResolvedValue(respuesta({ total: 0, items: [] }));
+    await agregarAlCarrito('11111111-2222-4333-8444-555555555555', document);
+
+    expect(zona().hidden).toBe(true);
+    expect(zona().textContent).toBe('');
+  });
+
+  test('401: la sesión ya no vale, y el aviso lleva a iniciarla otra vez', async () => {
+    globalThis.fetch.mockResolvedValue(respuesta({}, false, 401));
+
+    await agregarAlCarrito(UUID, document);
+
+    const aviso = zona().querySelector('.aviso');
+    expect(aviso.textContent).toMatch(/tu sesión ya no es válida/i);
+    expect(aviso.querySelector('[data-accion="iniciar-sesion"]')).not.toBeNull();
+  });
+
+  test('403: no se apila un segundo aviso; ya lo anuncia el interceptor compartido', async () => {
+    // Relojes falsos: el aviso flotante del interceptor se retira solo a los
+    // 4,5 s y no se quiere dejar ese temporizador vivo al acabar la prueba.
+    jest.useFakeTimers();
+    try {
+      globalThis.fetch.mockResolvedValue(
+        problema(403, 'urn:nexus:problema:acceso-denegado', { detail: 'No tienes permiso.' }),
+      );
+
+      await agregarAlCarrito(UUID, document);
+
+      expect(zona().hidden).toBe(true);
+      expect(document.getElementById('nexus-rbac-toast')).not.toBeNull();
+    } finally {
+      jest.clearAllTimers();
+      jest.useRealTimers();
+    }
+  });
+
+  test('si la vista perdió el hueco del aviso, se crea antes que fallar en silencio', async () => {
+    zona().remove();
+    globalThis.fetch.mockResolvedValue(problema(409, 'urn:nexus:problema:producto-agotado'));
+
+    await agregarAlCarrito(UUID, document);
+
+    const creado = document.getElementById('aviso-carrito');
+    expect(creado).not.toBeNull();
+    expect(creado.nextElementSibling.id).toBe('cart-items');
+    expect(creado.textContent).toMatch(/se agotó/i);
   });
 });

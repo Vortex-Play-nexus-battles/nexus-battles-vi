@@ -91,6 +91,15 @@ describe('aProductoDeVitrina', () => {
     expect(vm.moneda).toBeNull();
   });
 
+  test('R16: el id UUID del catálogo se conserva tal cual, en texto', () => {
+    // Es lo que `tienda.js` manda a POST /carrito/items. Un `Number()` por el
+    // camino lo convertiría en NaN y el producto en «inexistente».
+    const uuid = '3fa85f64-5717-4562-b3fc-2c963f66afa6';
+    const vm = aProductoDeVitrina({ ...base, id: uuid });
+    expect(vm.id).toBe(uuid);
+    expect(typeof vm.id).toBe('string');
+  });
+
   test('esPropio y enListaDeseos solo son ciertos si el servicio dice true', () => {
     const vm = aProductoDeVitrina(base);
     expect(vm.esPropio).toBe(false);
