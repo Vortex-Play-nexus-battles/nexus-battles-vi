@@ -34,6 +34,16 @@ class PerfilControllerTest {
         return perfilDe(apodo, null);
     }
 
+    /**
+     * Token emitido antes de que existiera el claim {@code uid}: el controlador
+     * pregunta primero por {@code uidActual} y, al no encontrarlo, cae al apodo.
+     * Se declara explícitamente porque Mockito, en modo estricto, trata una
+     * llamada a {@code getAttribute} con otro argumento como un posible error.
+     */
+    private void sinUidEnElToken() {
+        when(request.getAttribute("uidActual")).thenReturn(null);
+    }
+
     private PerfilUsuario perfilDe(String apodo, UUID uid) {
         Usuario usuario = new Usuario();
         usuario.setId(1L);
@@ -123,6 +133,7 @@ class PerfilControllerTest {
     void obtenerMiPerfil_devuelveOkCuandoEsElDueno() {
         PerfilController controller = new PerfilController(perfilUsuarioService);
         when(perfilUsuarioService.obtenerPorUsuarioId(1L)).thenReturn(perfilDe("Santi"));
+        sinUidEnElToken();
         when(request.getAttribute("usuarioActual")).thenReturn("Santi");
 
         ResponseEntity<?> response = controller.obtenerMiPerfil("1", request);
@@ -134,6 +145,7 @@ class PerfilControllerTest {
     void obtenerMiPerfil_aceptaDuenoSinImportarMayusculas() {
         PerfilController controller = new PerfilController(perfilUsuarioService);
         when(perfilUsuarioService.obtenerPorUsuarioId(1L)).thenReturn(perfilDe("Santi"));
+        sinUidEnElToken();
         when(request.getAttribute("usuarioActual")).thenReturn("SANTI");
 
         ResponseEntity<?> response = controller.obtenerMiPerfil("1", request);
@@ -156,6 +168,7 @@ class PerfilControllerTest {
     void obtenerMiPerfil_lanza403CuandoNoEsElDueno() {
         PerfilController controller = new PerfilController(perfilUsuarioService);
         when(perfilUsuarioService.obtenerPorUsuarioId(1L)).thenReturn(perfilDe("Santi"));
+        sinUidEnElToken();
         when(request.getAttribute("usuarioActual")).thenReturn("Otro");
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
@@ -167,6 +180,7 @@ class PerfilControllerTest {
     void obtenerMiPerfil_lanza403CuandoNoHaySolicitante() {
         PerfilController controller = new PerfilController(perfilUsuarioService);
         when(perfilUsuarioService.obtenerPorUsuarioId(1L)).thenReturn(perfilDe("Santi"));
+        sinUidEnElToken();
         when(request.getAttribute("usuarioActual")).thenReturn(null);
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
@@ -198,6 +212,7 @@ class PerfilControllerTest {
     void actualizarMiPerfil_devuelveOkCuandoTodoValido() {
         PerfilController controller = new PerfilController(perfilUsuarioService);
         when(perfilUsuarioService.obtenerPorUsuarioId(1L)).thenReturn(perfilDe("Santi"));
+        sinUidEnElToken();
         when(request.getAttribute("usuarioActual")).thenReturn("Santi");
 
         ActualizarPerfilRequest datos = new ActualizarPerfilRequest();
@@ -218,6 +233,7 @@ class PerfilControllerTest {
     void actualizarMiPerfil_devuelveBadRequestCuandoApodoInvalido() {
         PerfilController controller = new PerfilController(perfilUsuarioService);
         when(perfilUsuarioService.obtenerPorUsuarioId(1L)).thenReturn(perfilDe("Santi"));
+        sinUidEnElToken();
         when(request.getAttribute("usuarioActual")).thenReturn("Santi");
 
         ActualizarPerfilRequest datos = new ActualizarPerfilRequest();
@@ -238,6 +254,7 @@ class PerfilControllerTest {
     void actualizarMiPerfil_lanza403CuandoNoEsElDueno() {
         PerfilController controller = new PerfilController(perfilUsuarioService);
         when(perfilUsuarioService.obtenerPorUsuarioId(1L)).thenReturn(perfilDe("Santi"));
+        sinUidEnElToken();
         when(request.getAttribute("usuarioActual")).thenReturn("Intruso");
 
         ActualizarPerfilRequest datos = new ActualizarPerfilRequest();
