@@ -2,14 +2,21 @@ package com.nexusbattles.ms_chatbot.config;
 
 import com.nexusbattles.comun.seguridad.CadenaDeSeguridad;
 import com.nexusbattles.comun.seguridad.ConversorRolesJwt;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
 
 // HU-CHA-001: el chat debe funcionar 24/7 para visitantes SIN autenticarse
 // (criterio de aceptacion), asi que /chat/** queda en permitAll. Aun asi, si
@@ -31,6 +38,12 @@ import org.springframework.security.web.SecurityFilterChain;
 // Por que /chatbot/admin y no /admin/chatbot: el borde (borde-dev.conf) envia
 // todo /api/v1/admin... a ms-identidad; con ese prefijo, en el despliegue las
 // peticiones del panel nunca llegarian a este servicio.
+//
+// CORS: solo importa en desarrollo local, cuando las vistas se sirven desde
+// Live Server (5500) o `npm run dev` (8080) y llaman directo a este servicio
+// (8094), que es otro origen. Detras del borde todo es mismo origen. Lista
+// explicita de origenes (nunca "*"), igual que ms-subastas, configurable con
+// la variable CORS_ORIGENES (regla 10).
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
@@ -44,12 +57,32 @@ public class SecurityConfig {
     }
 
     @Bean
+    public CorsConfigurationSource corsConfigurationSource(
+        @Value("${app.cors.origenes-permitidos}") List<String> origenesPermitidos) {
+
+        CorsConfiguration configuracion = new CorsConfiguration();
+        configuracion.setAllowedOrigins(origenesPermitidos);
+        configuracion.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuracion.setAllowedHeaders(List.of(
+            "Authorization", "Content-Type", "Accept", "X-Id-Sesion-Anonima", "traceparent"));
+        // El panel descarga la exportacion (CSV y JSON) y necesita leer el
+        // nombre del archivo; sin esto el navegador le oculta la cabecera.
+        configuracion.setExposedHeaders(List.of("Content-Disposition"));
+        configuracion.setMaxAge(3600L);
+
+        UrlBasedCorsConfigurationSource fuente = new UrlBasedCorsConfigurationSource();
+        fuente.registerCorsConfiguration("/**", configuracion);
+        return fuente;
+    }
+
+    @Bean
     @Order(1)
     public SecurityFilterChain filterChainChat(HttpSecurity http, JwtDecoder jwtDecoder,
                                                ConversorRolesJwt conversor) throws Exception {
         http.securityMatcher("/chat/**");
         CadenaDeSeguridad.aplicarBase(http, conversor);
         http
+            .cors(Customizer.withDefaults())
             .addFilterBefore(new JwtInvalidoComoVisitanteFilter(jwtDecoder), BearerTokenAuthenticationFilter.class)
             .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
 
@@ -60,12 +93,14 @@ public class SecurityConfig {
     @Order(2)
     public SecurityFilterChain filterChainPorDefecto(HttpSecurity http, ConversorRolesJwt conversor) throws Exception {
         CadenaDeSeguridad.aplicarBase(http, conversor);
-        http.authorizeHttpRequests(auth -> auth
-            // Regla 3 de plataforma: actuator abierto para la sonda de salud.
-            .requestMatchers("/actuator/**").permitAll()
-            .requestMatchers("/chatbot/admin/**").hasAnyRole(ROL_ADMINISTRADOR, ROL_SUPER_ADMINISTRADOR)
-            .anyRequest().authenticated()
-        );
+        http
+            .cors(Customizer.withDefaults())
+            .authorizeHttpRequests(auth -> auth
+                // Regla 3 de plataforma: actuator abierto para la sonda de salud.
+                .requestMatchers("/actuator/**").permitAll()
+                .requestMatchers("/chatbot/admin/**").hasAnyRole(ROL_ADMINISTRADOR, ROL_SUPER_ADMINISTRADOR)
+                .anyRequest().authenticated()
+            );
 
         return http.build();
     }
