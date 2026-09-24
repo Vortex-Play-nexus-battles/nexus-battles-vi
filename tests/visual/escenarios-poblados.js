@@ -200,7 +200,176 @@ function rutasDeInventario(equipamiento) {
   ];
 }
 
+/* ---------------------------------------------------------------------------
+   Combate — UX-GAME-4. La partida sale de `GET /partidas/{id}` (Partida de
+   salas-partidas.yaml; `jugador` viaja como uid, tal como lo emite el
+   servicio) y los avisos por el canal simulado (`canal-simulado.js`).
+   ------------------------------------------------------------------------- */
+
+/** La misma sesión para los tres escenarios de combate: el uid tiene que
+    coincidir con el participante «yo» de la partida. */
+const SESION_COMBATE = sesionDe('qa_combate', 'JUGADOR');
+const ID_PARTIDA = 'cccccc01-1111-4111-8111-111111111111';
+const RIVAL_IA = 'cccccc02-2222-4222-8222-222222222222';
+
+function partidaEnCurso({ turnoDe = SESION_COMBATE.uid, vidaMia = 41, vidaRival = 23 } = {}) {
+  return {
+    id: ID_PARTIDA,
+    idSala: 'bbbbbbb1-1111-4111-8111-111111111111',
+    estado: 'EN_CURSO',
+    participantes: [
+      {
+        jugador: SESION_COMBATE.uid,
+        heroe: {
+          id: 'ddddddd1-1111-4111-8111-111111111111',
+          nombre: 'Aquiles de la Ceniza',
+          retratoUrl: null,
+          nivel: null,
+          vidaActual: vidaMia,
+          vidaMaxima: 52,
+          efectosActivos: [],
+        },
+        esIA: false,
+        listo: true,
+        equipo: null,
+        creditosApostados: 120,
+      },
+      {
+        jugador: RIVAL_IA,
+        heroe: {
+          id: 'ia-guerrero-1',
+          nombre: 'Centinela de Hierro',
+          retratoUrl: null,
+          nivel: null,
+          vidaActual: vidaRival,
+          vidaMaxima: 60,
+          efectosActivos: [],
+        },
+        esIA: true,
+        listo: true,
+        equipo: null,
+        creditosApostados: 0,
+      },
+    ],
+    turnoActual: { idJugador: turnoDe, numeroTurno: 7, segundosRestantes: 42 },
+    recompensaEnJuego: 120,
+    iniciadaEn: new Date(Date.now() - 300_000).toISOString(),
+  };
+}
+
+function finalizada({ ganadores, reparto, recompensa }) {
+  return {
+    tipo: 'partida.finalizada',
+    idPartida: ID_PARTIDA,
+    ganadores,
+    reparto,
+    recompensa,
+  };
+}
+
+function escenarioDeCombate(id, titulo, { partida, mensajes = [], exige }) {
+  return {
+    id,
+    titulo,
+    ruta: `plataforma/salas-partidas/sala-batalla.html?partida=${ID_PARTIDA}`,
+    sesion: () => SESION_COMBATE,
+    rutas: [[`**/api/v1/partidas/${ID_PARTIDA}`, json(partida)]],
+    canal: { mensajes: { [`/tema/partidas/${ID_PARTIDA}`]: mensajes } },
+    exige,
+  };
+}
+
 export const ESCENARIOS = [
+  {
+    // UX-GAME-4 — la sala de espera (lobby) del anfitrion: ocupacion, codigo
+    // de invitacion y el boton de arrancar. `Sala` de salas-partidas.yaml.
+    id: 'sala-en-espera',
+    titulo: 'sala de espera del anfitrión con código de invitación',
+    ruta: 'plataforma/salas-partidas/sala-batalla.html?sala=bbbbbbb1-1111-4111-8111-111111111111',
+    sesion: () => SESION_COMBATE,
+    rutas: [
+      [
+        '**/api/v1/salas/bbbbbbb1-1111-4111-8111-111111111111',
+        json({
+          id: 'bbbbbbb1-1111-4111-8111-111111111111',
+          estado: 'ABIERTA',
+          modalidad: 'HASTA_SEIS',
+          maximoParticipantes: 6,
+          ocupacion: 3,
+          recompensaCreditos: 320,
+          incluirHeroeIA: true,
+          heroesIA: 1,
+          privada: true,
+          tamanoEquipo: null,
+          idAnfitrion: SESION_COMBATE.uid,
+          participantes: [SESION_COMBATE.uid, 'cccccc03-3333-4333-8333-333333333333'],
+          idPartida: null,
+          creadaEn: new Date(Date.now() - 120_000).toISOString(),
+          codigoInvitacion: 'NEXO-7K2Q',
+        }),
+      ],
+    ],
+    canal: { mensajes: {} },
+    exige: [
+      '[data-zona="espera"]:not([hidden])',
+      '[data-zona="invitacion"]:not([hidden])',
+      '[data-accion="iniciar-partida"]',
+    ],
+  },
+  escenarioDeCombate('combate-mi-turno', 'combate 1 contra la máquina, en mi turno', {
+    partida: partidaEnCurso(),
+    exige: ['.combate__vidas .barra-vida', '[data-atacar]:not(:disabled)', '[data-zona="turno"]'],
+  }),
+  escenarioDeCombate('combate-turno-rival', 'combate 1 contra la máquina, turno del rival', {
+    partida: partidaEnCurso({ turnoDe: RIVAL_IA }),
+    exige: [
+      '.combate__vidas .barra-vida',
+      '[data-atacar]:disabled',
+      '.accion-combate--fuera-de-turno',
+    ],
+  }),
+  escenarioDeCombate('combate-victoria', 'resultado: victoria con apuesta y recompensa', {
+    partida: partidaEnCurso({ vidaRival: 0 }),
+    mensajes: [
+      finalizada({
+        ganadores: [SESION_COMBATE.uid],
+        reparto: [
+          { idJugador: SESION_COMBATE.uid, creditos: 120, experiencia: null, cofre: null },
+          { idJugador: RIVAL_IA, creditos: -120, experiencia: null, cofre: null },
+        ],
+        recompensa: [{ idJugador: SESION_COMBATE.uid, creditos: 2, ganador: true, cofre: null }],
+      }),
+    ],
+    exige: ['.panel-resultado', '[data-zona="resultado"]:not([hidden])'],
+  }),
+  escenarioDeCombate('combate-derrota', 'resultado: derrota con la apuesta perdida', {
+    partida: partidaEnCurso({ vidaMia: 0 }),
+    mensajes: [
+      finalizada({
+        ganadores: [RIVAL_IA],
+        reparto: [
+          { idJugador: SESION_COMBATE.uid, creditos: -120, experiencia: null, cofre: null },
+          { idJugador: RIVAL_IA, creditos: 120, experiencia: null, cofre: null },
+        ],
+        recompensa: [{ idJugador: SESION_COMBATE.uid, creditos: 1, ganador: false, cofre: null }],
+      }),
+    ],
+    exige: ['.panel-resultado', '[data-zona="resultado"]:not([hidden])'],
+  }),
+  escenarioDeCombate('combate-empate', 'resultado: empate, nadie quedó en pie', {
+    partida: partidaEnCurso({ vidaMia: 0, vidaRival: 0 }),
+    mensajes: [
+      finalizada({
+        ganadores: [],
+        reparto: [
+          { idJugador: SESION_COMBATE.uid, creditos: 0, experiencia: null, cofre: null },
+          { idJugador: RIVAL_IA, creditos: 0, experiencia: null, cofre: null },
+        ],
+        recompensa: [{ idJugador: SESION_COMBATE.uid, creditos: 1, ganador: false, cofre: null }],
+      }),
+    ],
+    exige: ['.panel-resultado', '[data-zona="resultado"]:not([hidden])'],
+  }),
   {
     // UX-GAME-3 — la vitrina con los cinco tipos, un objeto bloqueado por
     // subasta y el acento lateral por tipo.

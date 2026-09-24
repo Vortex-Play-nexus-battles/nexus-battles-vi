@@ -33,7 +33,6 @@
 .metrica,
 .encuentro,
 .panel-resultado,
-.combate__hud,
 .combate__controles,
 .interrupcion__tarjeta,
 .entrada__tarjeta,
@@ -698,6 +697,7 @@
   height: 12px;
   background: var(--pista);
   border: 1px solid var(--borde);
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--cromo) 18%, transparent);
   border-radius: var(--radio-chico);
   overflow: hidden;
 }
@@ -728,14 +728,15 @@
   font-size: var(--t-etiqueta-tam);
   font-weight: var(--t-etiqueta-peso);
   font-variant-numeric: var(--cifras-tabulares);
-  color: var(--texto-2);
+  /* Tinta contextual: la barra vive en el HUD oscuro y en tarjetas claras. */
+  color: var(--tinta-2);
 }
 
 .barra-vida__nombre {
   font-family: var(--t-subtitulo-familia);
   font-size: var(--t-subtitulo-tam);
   font-weight: var(--t-subtitulo-peso);
-  color: var(--texto);
+  color: var(--tinta);
 }
 
 /* =======================================================================
@@ -1879,6 +1880,39 @@
   pointer-events: none;
 }
 
+/* Tarjeta de partida/sala (UX-GAME-4): es un boton, asi que hereda estilos
+   de agente de usuario que hay que apagar; el texto va a la izquierda y el
+   titulo lleva la modalidad. La sala en la que se puede entrar lleva el
+   acento lateral azul; la llena, ninguno. */
+button.tarjeta--partida {
+  width: 100%;
+  font: inherit;
+  color: var(--texto);
+  text-align: left;
+  cursor: pointer;
+  border-left: 3px solid var(--primaria);
+}
+
+button.tarjeta--partida:disabled {
+  cursor: not-allowed;
+  border-left-color: var(--borde);
+}
+
+.tarjeta--partida[data-estado='PRIVADA'] {
+  border-left-color: var(--acento-relleno);
+}
+
+.tarjeta--partida .tarjeta__cabecera {
+  width: 100%;
+  align-items: center;
+}
+
+.tarjeta--partida .tarjeta__titulo {
+  font-size: var(--t-etiqueta-tam);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 /* =======================================================================
    Panel de métrica
    RF-PRD-001 · RF-MET-001 · RF-MET-002 · RF-MET-003 · RF-MET-004 · RF-CHA-012
@@ -2870,8 +2904,13 @@
   flex-direction: column;
   align-items: center;
   gap: var(--e-1);
-  width: var(--boton-grande);
-  padding: var(--e-2);
+  /* UX-GAME-4: una accion de combate es un objetivo de juego, no un boton
+     de formulario. Minimo 96 px de ancho, y la etiqueta cabe en dos lineas
+     sin salirse de la caja. */
+  min-width: 96px;
+  max-width: 160px;
+  min-height: var(--objetivo-tactil);
+  padding: var(--e-2) var(--e-3);
   background: var(--superficie);
   border: 1px solid var(--borde-int);
   border-radius: var(--radio);
@@ -2880,11 +2919,25 @@
   cursor: pointer;
   transition:
     border-color var(--transicion),
-    background var(--transicion);
+    background var(--transicion),
+    box-shadow var(--transicion),
+    transform var(--transicion);
 }
 
-.accion-combate:hover {
+.accion-combate:not(:disabled):not(.accion-combate--fuera-de-turno):not(.accion-combate--sin-poder) {
+  border-color: color-mix(in srgb, var(--primaria) 55%, var(--borde-int));
+  box-shadow: var(--sombra-1);
+}
+
+.accion-combate:hover:not(:disabled) {
   background: var(--interaccion-velo-hover);
+  box-shadow: var(--sombra-2), var(--brillo-primaria);
+  transform: translateY(-1px);
+}
+
+.accion-combate:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+  transition-duration: var(--duracion-instantaneo);
 }
 
 .accion-combate:focus-visible {
@@ -2898,8 +2951,13 @@
 }
 
 .accion-combate__etiqueta {
-  font-family: var(--t-meta-familia);
+  font-family: var(--t-etiqueta-familia);
   font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  line-height: 1.25;
+  text-align: center;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .accion-combate--secundaria {
@@ -4231,11 +4289,11 @@
   align-items: center;
   gap: var(--e-2);
   padding: var(--e-1) var(--e-3);
-  border: 1px solid var(--borde);
+  border: 1px solid color-mix(in srgb, var(--pista) 40%, transparent);
   border-radius: var(--radio-pildora);
   font-family: var(--t-etiqueta-familia);
   font-size: var(--t-etiqueta-tam);
-  color: var(--texto-2);
+  color: var(--tinta-2);
   white-space: nowrap;
 }
 
@@ -4243,9 +4301,31 @@
    llamada a la accion. Relleno solido con texto claro: el mismo par que usa
    `.boton--acento`, para no inventar una combinacion sin contraste medido. */
 .turno-actual[data-mio='true'] {
-  border-color: var(--acento-relleno);
-  background: var(--acento-relleno);
+  border-color: transparent;
+  background: var(--energia);
   color: var(--texto-sobre-color);
+  box-shadow: var(--brillo-primaria);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Combate finalizado: el tercer estado. Sobrio, sin brillo, sin punto. */
+.turno-actual[data-fin='si'] {
+  border-color: color-mix(in srgb, var(--pista) 40%, transparent);
+  color: var(--tinta);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.turno-actual[data-fin='si']::before {
+  background: var(--tinta-3);
+}
+
+/* Cambio de turno: el indicador entra con un pulso corto, una sola vez. */
+@media (prefers-reduced-motion: no-preference) {
+  .turno-actual[data-mio='true'] {
+    animation: entrar-dialogo var(--duracion-normal) var(--curva-salida) both;
+  }
 }
 
 .turno-actual::before {
@@ -4253,7 +4333,7 @@
   width: var(--icono-menudo);
   height: var(--icono-menudo);
   border-radius: 50%;
-  background: var(--texto-3);
+  background: var(--tinta-3);
   flex-shrink: 0;
 }
 
@@ -4264,7 +4344,7 @@
 /* La barra de quien juega, destacada. El borde y el desplazamiento no tapan
    el color de vida, que sigue diciendo lo suyo. */
 .barra-vida[data-turno='si'] {
-  border-left: 3px solid var(--acento-relleno);
+  border-left: 3px solid var(--enlace-sobre-cromo);
   padding-left: var(--e-2);
 }
 
@@ -4543,6 +4623,25 @@ button.tarjeta-heroe[aria-pressed='true'] {
   text-align: center;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  /* El desenlace entra una vez, en 320 ms: es el unico momento de la
+     pantalla que se merece algo mas que un hover. */
+  .panel-resultado {
+    animation: entrar-desenlace var(--duracion-pausado) var(--curva-salida) both;
+  }
+
+  @keyframes entrar-desenlace {
+    from {
+      opacity: 0;
+      transform: translateY(12px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
 .panel-resultado__icono {
   width: 48px;
   height: 48px;
@@ -4559,13 +4658,34 @@ button.tarjeta-heroe[aria-pressed='true'] {
 
 /* Ganar y perder no son el mismo panel con otro color: cambian la palabra, el
    icono y el borde. Quien no distinga verde de rojo lee «VICTORIA» igual. */
+/* UX-GAME-4 — la victoria es azul/violeta luminosa, la identidad del Nexo, no
+   el verde de «guardado». El filo superior lleva el gradiente de energia y el
+   panel un brillo; la palabra va en la primaria (8,5:1 sobre blanco) y el
+   detalle de creditos ganados sigue en exito, que es el color del saldo. */
 .panel-resultado--victoria {
-  border-top: 4px solid var(--exito);
+  border-top: 4px solid transparent;
+  border-image: var(--energia) 1;
+  border-image-width: 4px 0 0 0;
+  box-shadow: var(--sombra-3), var(--brillo-primaria);
 }
 
-.panel-resultado--victoria .panel-resultado__palabra,
+.panel-resultado--victoria .panel-resultado__palabra {
+  background: var(--energia);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: var(--primaria-relleno);
+  -webkit-text-fill-color: transparent;
+}
+
 .panel-resultado--victoria .panel-resultado__icono {
-  color: var(--exito);
+  color: var(--primaria);
+}
+
+@media (prefers-contrast: more) {
+  .panel-resultado--victoria .panel-resultado__palabra {
+    background: none;
+    -webkit-text-fill-color: currentcolor;
+  }
 }
 
 .panel-resultado--derrota {
@@ -4681,10 +4801,20 @@ button.tarjeta-heroe[aria-pressed='true'] {
   display: grid;
   gap: var(--e-2);
   padding: var(--e-3) var(--e-4);
-  background: var(--superficie);
-  border: 1px solid var(--borde);
+  /* UX-GAME-4 — el HUD es la «cabecera de combate», el otro sitio donde la
+     paleta permite el cromo (frontend-web.md). Oscuro, con filo de energia,
+     y las barras de vida encima: verde, ambar y rojo se ven mejor sobre el
+     cromo que sobre blanco. */
+  background:
+    var(--energia) top left / 100% 2px no-repeat,
+    linear-gradient(180deg, var(--cromo-elevado), color-mix(in srgb, var(--cromo-elevado) 70%, var(--cromo)));
+  border: 1px solid color-mix(in srgb, var(--primaria) 35%, transparent);
   border-radius: var(--radio);
-  box-shadow: var(--sombra-1);
+  box-shadow: var(--sombra-atmosfera);
+  --tinta: var(--texto-sobre-color);
+  --tinta-2: var(--pista);
+  --tinta-3: var(--pista);
+  color: var(--tinta);
   /* Tope duro: el HUD no puede comerse el campo por muchos participantes que
      haya. A partir de ahi, las barras se desplazan dentro. */
   max-height: 22vh;
@@ -4714,13 +4844,36 @@ button.tarjeta-heroe[aria-pressed='true'] {
      sin ella el contenido impone su alto y el campo desborda la ventana. */
   min-height: 0;
   border-radius: var(--radio);
-  border: 1px solid var(--borde);
-  /* Dos tonos del fondo ya existente: da profundidad sin inventar un color.
-     El campo es el unico sitio de la aplicacion donde hay superficie grande
-     vacia, y plana se veria como un error de carga. */
+  border: 1px solid color-mix(in srgb, var(--primaria) 35%, transparent);
+  /* UX-GAME-4 — la arena es OSCURA: el lado propio con halo azul, el rival
+     con halo violeta, y una linea de energia en el centro que separa los dos
+     bandos. Solo degradados: nada de imagenes ni de canvas. Antes era un
+     gris claro que, entre el HUD y los controles blancos, se leia como una
+     pantalla vacia. */
   background:
-    radial-gradient(circle at 50% 40%, var(--superficie) 0%, var(--fondo) 70%), var(--fondo);
+    radial-gradient(
+      55% 70% at 18% 62%,
+      color-mix(in srgb, var(--primaria) 42%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      55% 70% at 82% 38%,
+      color-mix(in srgb, var(--acento-relleno) 42%, transparent),
+      transparent 70%
+    ),
+    linear-gradient(
+      90deg,
+      transparent calc(50% - 1px),
+      color-mix(in srgb, var(--enlace-sobre-cromo) 25%, transparent) calc(50% - 1px),
+      color-mix(in srgb, var(--enlace-sobre-cromo) 25%, transparent) calc(50% + 1px),
+      transparent calc(50% + 1px)
+    ),
+    linear-gradient(180deg, var(--cromo-elevado), var(--cromo));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--texto-sobre-color) 6%, transparent);
   overflow: hidden;
+  --tinta: var(--texto-sobre-color);
+  --tinta-2: var(--pista);
+  --tinta-3: var(--pista);
 }
 
 .campo__puesto {
@@ -4734,12 +4887,24 @@ button.tarjeta-heroe[aria-pressed='true'] {
 }
 
 .campo__nombre {
-  font-family: var(--t-meta-familia);
-  font-size: var(--t-meta-tam);
-  color: var(--texto-2);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--tinta);
   text-align: center;
   max-width: 120px;
   overflow-wrap: break-word;
+  text-shadow: 0 1px 2px color-mix(in srgb, var(--cromo) 80%, transparent);
+}
+
+/* Sobre la arena el retrato lleva su brillo: azul el propio, violeta el
+   rival. El anillo de rareza sigue siendo el borde. */
+.combate__campo .marco-heroe__retrato {
+  box-shadow: var(--brillo-primaria);
+}
+
+.campo__puesto--rival .marco-heroe__retrato {
+  box-shadow: var(--brillo-acento);
 }
 
 /* Los rivales miran hacia el jugador. Es el truco de siempre en un juego 2D y
@@ -4751,7 +4916,9 @@ button.tarjeta-heroe[aria-pressed='true'] {
 /* A quien le toca, destacado. Igual que en la barra de vida: el anillo
    acompana al texto del indicador de turno, no lo sustituye. */
 .campo__puesto[data-turno='si'] .marco-heroe__retrato {
-  box-shadow: 0 0 0 4px var(--acento-relleno);
+  box-shadow:
+    0 0 0 4px var(--enlace-sobre-cromo),
+    var(--brillo-primaria);
 }
 
 .campo__puesto--caido {
@@ -4773,6 +4940,19 @@ button.tarjeta-heroe[aria-pressed='true'] {
 
 .combate__sala > * {
   pointer-events: auto;
+}
+
+/* UX-GAME-4 — el lobby (arranque, invitacion, ocupacion) va sobre un velo
+   oscuro al pie de la arena, no suelto sobre el degradado: es un panel de
+   sala, y sus botones y el codigo de invitacion necesitan un fondo comun. */
+.combate[data-sin-partida='si'] .combate__sala {
+  padding-top: var(--e-5);
+  background: linear-gradient(
+    180deg,
+    transparent,
+    color-mix(in srgb, var(--cromo) 78%, transparent) 30%,
+    color-mix(in srgb, var(--cromo) 92%, transparent)
+  );
 }
 
 /* --- Controles, abajo (CA-01) ------------------------------------------ */
@@ -5180,7 +5360,19 @@ button.tarjeta-heroe[aria-pressed='true'] {
   justify-content: center;
   gap: var(--e-6);
   padding: var(--e-6);
-  background: var(--cromo);
+  /* UX-GAME-4: la misma arena que el campo, con los dos halos. */
+  background:
+    radial-gradient(
+      50% 70% at 20% 55%,
+      color-mix(in srgb, var(--primaria) 45%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      50% 70% at 80% 45%,
+      color-mix(in srgb, var(--acento-relleno) 45%, transparent),
+      transparent 70%
+    ),
+    var(--cromo);
   color: var(--texto-sobre-color);
   text-align: center;
   animation: presentacion-entrar var(--duracion-pausado) var(--curva-salida);
@@ -5221,9 +5413,22 @@ button.tarjeta-heroe[aria-pressed='true'] {
 
 .presentacion__versus {
   font-family: var(--fuente-titulo);
-  font-size: var(--t-titulo-tam);
+  font-size: var(--t-display-tam);
   font-weight: 700;
-  color: var(--acento-relleno);
+  /* Sobre el cromo el acento oscuro no se veia; el «VS» es energia. */
+  background: var(--energia);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: var(--enlace-sobre-cromo);
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--primaria) 60%, transparent));
+}
+
+@media (prefers-contrast: more) {
+  .presentacion__versus {
+    background: none;
+    -webkit-text-fill-color: currentcolor;
+  }
 }
 
 .presentacion__heroe {
@@ -5237,7 +5442,8 @@ button.tarjeta-heroe[aria-pressed='true'] {
 /* Quien abre el combate se marca con un anillo, no solo con el texto de
    abajo: es lo primero que alguien quiere saber al entrar. */
 .presentacion__heroe--abre .marco-heroe {
-  box-shadow: 0 0 0 3px var(--acento-relleno);
+  border-radius: var(--radio);
+  box-shadow: 0 0 0 3px var(--enlace-sobre-cromo);
 }
 
 .presentacion__nombre {

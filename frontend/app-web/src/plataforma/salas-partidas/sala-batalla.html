@@ -275,7 +275,10 @@
         enlaceChat.hidden = false;
       }
 
-      const zonaVacia = document.querySelector('[data-zona="sin-partida"] .t-meta');
+      const zonaVacia = document.querySelector(
+        '[data-zona="sin-partida"] .estado-vista__detalle, [data-zona="sin-partida"] .t-meta',
+      );
+      const tituloVacio = document.querySelector('[data-zona="sin-partida"] .estado-vista__titulo');
       const zonaArranque = document.querySelector('[data-zona="arranque"]');
       const avisoArranque = document.querySelector('[data-zona="aviso-arranque"]');
       const botonIniciar = document.querySelector('[data-accion="iniciar-partida"]');
@@ -380,6 +383,10 @@
       });
 
       if (!partida && idSala) {
+        if (tituloVacio) {
+          // En la sala ya no es «no hay batalla»: es que todavia no empezo.
+          tituloVacio.textContent = 'La batalla todavía no empieza';
+        }
         if (zonaVacia) {
           zonaVacia.textContent =
             // UX-R4 — antes empezaba por el identificador de la sala, que a quien

@@ -40,6 +40,7 @@ import { test, expect } from '@playwright/test';
 
 import { PREFIJO_WEB } from './vistas.js';
 import { textoSinContrasteSobreAtmosfera } from './contraste-atmosfera.js';
+import { simularCanal } from './canal-simulado.js';
 import { ESCENARIOS } from './escenarios-poblados.js';
 import { inyectarSesion } from './identidad.js';
 
@@ -73,9 +74,14 @@ for (const escenario of ESCENARIOS) {
             ruta.fulfill(typeof respuesta === 'function' ? respuesta(ruta) : respuesta),
           );
         }
-        // El canal en vivo no se simula: la vista tiene que funcionar sin el, y
-        // su estado degradado tambien entra en la auditoria.
+        // El canal en vivo de las subastas no se simula: la vista tiene que
+        // funcionar sin el, y su estado degradado tambien entra en la
+        // auditoria. El del combate si (UX-GAME-4): sin canal no hay turno,
+        // ni botones de ataque, ni resultado que auditar.
         await pagina.route('**/ws-subastas/**', (ruta) => ruta.abort());
+        if (escenario.canal) {
+          await simularCanal(pagina, escenario.canal);
+        }
 
         await pagina.goto(`/${PREFIJO_WEB}/${escenario.ruta}`, {
           waitUntil: 'domcontentloaded',
