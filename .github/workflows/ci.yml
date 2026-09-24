@@ -290,6 +290,15 @@ jobs:
         shell: bash
         run: python3 tests/contratos/pactos-verificados.py
 
+      # La transferencia de propiedad de HU-SUB-004 llego a tener cliente sin
+      # ruta y ruta sin contrato, y todo el repositorio en verde: la subasta se
+      # cobraba y el objeto no cambiaba de dueno. Esto vigila que las cinco
+      # piezas sigan conectadas —contrato, controlador, seguridad, cliente y el
+      # INVENTARIO_MODO de cada compose—, que es lo que se rompio. Sin Docker.
+      - name: Comprobar que la transferencia de subasta sigue conectada
+        shell: bash
+        run: python3 tests/contratos/transferencia-de-subasta.py
+
       # Regla 2: un cambio incompatible abre version nueva. Compara cada
       # contrato tocado contra su propia version en la base de la rama, con
       # `git show`: no consulta ningun broker ni registro externo, asi que no

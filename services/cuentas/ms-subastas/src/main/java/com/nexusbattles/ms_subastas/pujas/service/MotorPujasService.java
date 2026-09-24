@@ -157,6 +157,11 @@ public class MotorPujasService {
         subasta.setCantidadPujas(subasta.getCantidadPujas() + 1);
         subasta.setEstado(EstadoSubasta.ADJUDICADA);
 
+        // El dinero ya cambio de manos: desde aqui no se compensa nunca. Lo
+        // ultimo que queda es soltarle el bloqueo al objeto para que el
+        // comprador pueda usarlo.
+        soltarBloqueoDelComprador(subasta, idempotencyKey);
+
         Puja ganadora = new Puja(null, subasta.getId(), jugadorId, precio, TipoPuja.MANUAL,
                 EstadoPuja.GANADORA, clock.instant(), reserva.id().toString());
         ganadora.setIdempotencyKey(idempotencyKey);
@@ -208,6 +213,42 @@ public class MotorPujasService {
 
         pujaVigente.setEstado(EstadoPuja.GANADORA);
         subasta.setEstado(EstadoSubasta.ADJUDICADA);
+
+        // Igual que en la compra inmediata: el cobro ya entro, asi que esto va
+        // DESPUES del estado y su fallo no revierte nada.
+        soltarBloqueoDelComprador(subasta, claveCierre);
+    }
+
+    /**
+     * Suelta el bloqueo de subasta del objeto ya vendido — FI-TRANSFER-1.
+     *
+     * <p>La transferencia conserva el bloqueo a proposito: es lo que permite
+     * deshacerla si el cobro falla, y lo que impide que el comprador equipe o
+     * revenda algo que todavia no ha pagado. Cuando la venta es definitiva, ese
+     * bloqueo ya no protege nada y hay que soltarlo o el objeto queda inservible
+     * en manos de su dueno nuevo.
+     *
+     * <p>Va DESPUES de fijar el estado y su fallo no propaga. Si propagara, el
+     * reintento del cierre volveria a intentar cobrar una reserva ya consumida,
+     * fallaria, y la compensacion devolveria al vendedor un objeto que el
+     * comprador ya pago. Entre «objeto bloqueado de mas» y «objeto pagado y
+     * devuelto», lo primero es un defecto reparable y lo segundo es un robo.
+     *
+     * <p>Queda en el registro con el identificador de la subasta. Es deuda
+     * conocida: sin un mecanismo de reconciliacion no se arregla solo, y montar
+     * uno es una decision del dueno del modulo.
+     */
+    private void soltarBloqueoDelComprador(Subasta subasta, String claveOriginal) {
+        if (!tieneInventario(subasta)) {
+            return;
+        }
+        try {
+            inventarioClient.liberarReserva(subasta.getElementoInventarioId(), subasta.getId(),
+                    "liberar-" + claveOriginal);
+        } catch (RuntimeException fallo) {
+            log.error("Subasta {} adjudicada y cobrada, pero el elemento {} sigue bloqueado: {}",
+                    subasta.getId(), subasta.getElementoInventarioId(), fallo.getMessage(), fallo);
+        }
     }
 
     /** Hay un elemento de inventario que mover. */
@@ -217,21 +258,33 @@ public class MotorPujasService {
     }
 
     /**
-     * Deshace una transferencia ya hecha: devuelve el producto al vendedor y lo
-     * vuelve a dejar reservado para la subasta, que es el estado en el que
-     * estaba antes de intentar adjudicarla.
+     * Deshace una transferencia ya hecha: devuelve el producto al vendedor, que
+     * es el estado en el que estaba antes de intentar adjudicarla.
      *
-     * <p>Es el mejor esfuerzo posible. Si la compensacion tambien falla no se
-     * puede hacer nada mas automaticamente, asi que queda en el log con el
-     * identificador de la subasta para poder repararlo a mano: tragarsela en
-     * silencio dejaria un producto en manos de quien no lo pago sin rastro.
+     * <p><b>Esta compensacion no podia funcionar hasta FI-TRANSFER-1.</b> La
+     * transferencia soltaba el bloqueo de subasta al mover el elemento, y la
+     * operacion de inventario exige que el elemento este bloqueado por ESA
+     * subasta para aceptar un cambio de dueno: la llamada de vuelta se rechazaba
+     * siempre con 409. La segunda llamada, la de volver a reservar, tampoco
+     * podia funcionar: bloquear exige ser el dueno, y en ese momento el dueno
+     * era el comprador, no el vendedor. Las dos fallaban, el {@code catch} las
+     * escribia en el registro, y el ganador se quedaba un objeto que no habia
+     * pagado. La compensacion existia, estaba escrita, y era decorativa.
+     *
+     * <p>Ahora la transferencia conserva el bloqueo, asi que la vuelta cumple la
+     * precondicion y el elemento aterriza en el vendedor <b>ya reservado para la
+     * subasta</b> — exactamente el estado previo. La segunda llamada se quita
+     * porque sobra y porque no podia hacer nada.
+     *
+     * <p>Sigue siendo el mejor esfuerzo posible: si esto tambien falla no hay
+     * nada mas que hacer automaticamente, y queda en el registro con el
+     * identificador de la subasta. Tragarselo en silencio dejaria un producto en
+     * manos de quien no lo pago y sin rastro.
      */
     private void devolverProductoAlVendedor(Subasta subasta, String claveOriginal) {
         try {
             inventarioClient.transferirProducto(subasta.getElementoInventarioId(), subasta.getVendedorId(),
                     subasta.getId(), "compensar-" + claveOriginal);
-            inventarioClient.reservar(subasta.getElementoInventarioId(), subasta.getVendedorId(),
-                    subasta.getId(), "compensar-reserva-" + claveOriginal);
         } catch (RuntimeException falloCompensando) {
             log.error("Fallo al compensar transferencia de inventario para subasta {}: {}",
                     subasta.getId(), falloCompensando.getMessage(), falloCompensando);

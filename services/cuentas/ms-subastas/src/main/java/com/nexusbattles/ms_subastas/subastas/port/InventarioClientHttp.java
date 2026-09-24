@@ -239,9 +239,16 @@ public class InventarioClientHttp implements InventarioClient, InventarioPublica
     }
 
     /**
-     * Transfiere formalmente la propiedad de un elemento de inventario al ganador de la subasta.
-     * Operacion acordada con Nicolay (ms-inventario):
-     * {@code POST /api/v1/inventario/elementos/{elementoId}/transferencias}.
+     * Transfiere formalmente la propiedad de un elemento de inventario al ganador
+     * de la subasta: {@code POST /api/v1/inventario/elementos/{elementoId}/transferencias},
+     * declarada en {@code contracts/openapi/inventario.yaml} desde 1.2.0.
+     *
+     * <p>El elemento llega al nuevo dueno <b>con su bloqueo de subasta puesto</b>.
+     * Eso es deliberado y lo necesita la compensacion: si el cobro falla despues,
+     * esta misma operacion lo devuelve al vendedor, y la precondicion de
+     * inventario es que el elemento siga bloqueado por esa subasta. Soltar el
+     * bloqueo es un paso aparte, y lo da el motor de pujas cuando la venta ya es
+     * definitiva.
      */
     @Override
     public void transferirProducto(String elementoInventarioId, UUID nuevoPropietarioId,
@@ -256,10 +263,14 @@ public class InventarioClientHttp implements InventarioClient, InventarioPublica
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
                 .timeout(timeout)
-                .POST(HttpRequest.BodyPublishers.ofString(cuerpoDeTransferencia(nuevoPropietarioId, subastaId)));
-        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-            constructor.header("Idempotency-Key", idempotencyKey);
-        }
+                .POST(HttpRequest.BodyPublishers.ofString(cuerpoDeTransferencia(nuevoPropietarioId, subastaId)))
+                // La cabecera deja de ser condicional: el contrato la declara
+                // obligatoria y desde FI-TRANSFER-1 el controlador la exige de
+                // verdad. Cuando la llamada no trae clave se reutiliza la de la
+                // subasta, que es la que usa el cierre por vencimiento; no se
+                // inventa ninguna nueva, porque una clave aleatoria haria que
+                // cada reintento pareciese una operacion distinta.
+                .header("Idempotency-Key", claveDeTransferencia(idempotencyKey, subastaId));
 
         HttpResponse<String> respuesta = enviar(constructor.build());
         int estado = respuesta.statusCode();
@@ -267,18 +278,17 @@ public class InventarioClientHttp implements InventarioClient, InventarioPublica
             return;
         }
         if (estado == 404) {
-            // Dos cosas distintas con el mismo numero, y hoy la segunda es la
-            // probable: ms-inventario todavia NO publica esta ruta —solo el
-            // bloqueo, su liberacion y la consulta por id—, asi que un 404 aqui
-            // seguramente no dice "ese elemento no existe" sino "esa operacion
-            // no existe". Culpar al elemento mandaria a quien lo depure a mirar
-            // la subasta en vez del contrato. Cuando Nicolay la publique, este
-            // mensaje se puede recortar a la primera mitad.
+            // Este comentario decia hasta FI-TRANSFER-1 que «ms-inventario
+            // todavia NO publica esta ruta», y que por eso un 404 aqui
+            // probablemente significaba «esa operacion no existe». Dejo de ser
+            // cierto con #670: la ruta existe, esta declarada en
+            // `contracts/openapi/inventario.yaml` 1.2.0 y la verifica un pacto.
+            // Mantener el aviso mandaria a quien depure un 404 real a revisar el
+            // contrato en vez del elemento, que es justo el error que el
+            // comentario queria evitar, del reves.
             throw new InventarioClientException(
                     "Inventario respondio 404 al transferir el elemento " + elementoInventarioId
-                            + ". O el elemento no existe, o —mas probable hoy— ms-inventario aun no expone "
-                            + "POST /api/v1/inventario/elementos/{elementoId}/transferencias. "
-                            + "Comprobar el contrato antes que el dato.");
+                            + ": ese elemento no existe en ningun inventario.");
         }
         if (estado == 409) {
             throw new InventarioClientException(
@@ -300,6 +310,21 @@ public class InventarioClientHttp implements InventarioClient, InventarioPublica
         } catch (IOException e) {
             throw new InventarioClientException("Error al serializar el cuerpo para inventario", e);
         }
+    }
+
+    /**
+     * La clave con la que se identifica esta transferencia.
+     *
+     * <p>Se prefiere la que trae la llamada, porque es la que comparte con la
+     * reserva de credito y permite seguir la operacion entera. Si no viene, se
+     * deriva del identificador de la subasta: sigue siendo estable entre
+     * reintentos, que es lo unico que se le pide a una clave de idempotencia.
+     */
+    private String claveDeTransferencia(String idempotencyKey, UUID subastaId) {
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            return idempotencyKey;
+        }
+        return "cierre-" + subastaId;
     }
 
     private String cuerpoDeTransferencia(UUID nuevoPropietarioId, UUID subastaId) {
