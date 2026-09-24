@@ -254,8 +254,9 @@ export function montarSalaBatalla(
 
   // HU-JUE-017 CA-04 · la presentacion de los heroes.
   //
-  // `presentar` solo es true cuando se llega AQUI desde el aviso
-  // `sala.partida.iniciada`, no al recargar una partida que ya estaba en
+  // `presentar` solo es true cuando la partida empieza de verdad: el aviso
+  // `sala.partida.iniciada` o, para quien la arranca, la respuesta de su
+  // «Iniciar combate» (R17.4); nunca al recargar una partida que ya estaba en
   // curso: entrar a mitad de combate y que te presenten a los heroes como si
   // empezara ahora seria mentir sobre el momento.
   //

@@ -308,10 +308,11 @@
       function repintar(suscribir, { presentar = false, turnoActual = null } = {}) {
         // `yo` deja al campo saber que lado es el propio (HU-JUE-017 CA-03).
         //
-        // CA-04 · `presentar` SOLO viene true desde `alIniciarPartida`, es
-        // decir desde el aviso `sala.partida.iniciada`. Al recargar una
-        // partida que ya estaba en curso no se presenta nada: presentar a
-        // los heroes a mitad de combate mentiria sobre el momento.
+        // CA-04 · `presentar` SOLO viene true cuando la partida empieza de
+        // verdad: el aviso `sala.partida.iniciada` o la respuesta del propio
+        // «Iniciar combate» (R17.4). Al recargar una partida que ya estaba en
+        // curso no se presenta nada: presentar a los heroes a mitad de
+        // combate mentiria sobre el momento.
         montarSalaBatalla(document, { partida, suscribir, yo, presentar, turnoActual });
 
         if (!partida || !canal) {
@@ -509,7 +510,14 @@
                 return;
               }
               try {
-                partida = await obtenerPartida(aviso.idPartida);
+                const iniciada = await obtenerPartida(aviso.idPartida);
+                // R17.4 — mientras se leia, la respuesta de «Iniciar combate»
+                // pudo pintarla ya. Montarla otra vez encima reconstruia los
+                // controles bajo el dedo de quien iba a atacar.
+                if (partida) {
+                  return;
+                }
+                partida = iniciada;
                 anotarPartidaEnLaUrl();
                 if (zonaArranque) {
                   zonaArranque.hidden = true;
@@ -556,11 +564,23 @@
         botonIniciar.disabled = true;
         avisoArranque.textContent = 'Arrancando el combate...';
         try {
-          partida = await iniciarPartida(idSala);
-          anotarPartidaEnLaUrl();
+          const iniciada = await iniciarPartida(idSala);
           zonaArranque.hidden = true;
           espera?.ocultar();
-          repintar(suscripcionActual());
+          // R17.4 — si el aviso del canal llego antes que esta respuesta, la
+          // partida ya esta pintada (con su presentacion): no se monta otra
+          // vez encima. Antes se pintaba dos veces, y la segunda sacaba la
+          // presentacion por encima de unos controles recien montados.
+          if (!partida) {
+            partida = iniciada;
+            anotarPartidaEnLaUrl();
+            // CA-04 · quien pulsa «Iniciar combate» tambien asiste al
+            // comienzo: el momento es este, no una recarga a mitad de combate.
+            repintar(suscripcionActual(), {
+              presentar: true,
+              turnoActual: iniciada?.turnoActual ?? null,
+            });
+          }
         } catch (error) {
           // 403 no eres el anfitrion · 409 la sala no puede empezar todavia.
           // El texto lo redacta el servicio, que es quien sabe el motivo.

@@ -502,10 +502,21 @@ test.describe('R17 · la prueba del profesor', () => {
         while (Date.now() < limite && !(await resultado.isVisible())) {
           if (await entrar.isVisible()) {
             presentacion = true;
-            await entrar.click({ timeout: 15_000 });
+            // El primer aviso del canal también la cierra: si se adelanta al
+            // clic, no pasa nada.
+            await entrar.click({ timeout: 5_000 }).catch(() => {});
             await expect(entrar).toBeHidden();
           } else if ((await ataque.isVisible()) && (await ataque.isEnabled())) {
-            await ataque.click({ timeout: 15_000 });
+            // Entre verlo habilitado y pulsarlo, la IA puede jugar o la partida
+            // terminar: el clic se intenta un rato corto y el bucle vuelve a
+            // mirar (mismo patrón que torneos.e2e.spec.js).
+            const golpeo = await ataque
+              .click({ timeout: 5_000 })
+              .then(() => true)
+              .catch(() => false);
+            if (!golpeo) {
+              continue;
+            }
             golpes += 1;
             if (!recargada) {
               // Un F5 en pleno combate no devuelve a la sala de espera: la
