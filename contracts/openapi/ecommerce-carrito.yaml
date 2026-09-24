@@ -4,7 +4,12 @@ info:
   # 1.1.0 (FI-R2): se declara la forma de la respuesta de la vitrina, que hasta
   # ahora era solo una frase. Es aditivo -no se quita ni se estrecha nada-, asi
   # que sube la menor, no la mayor.
-  version: 1.1.0
+  # 1.2.0 (R16, #421): la vitrina se muda a GET /vitrina y proyecta el catalogo
+  # maestro de contenido/productos (productos.yaml 1.2.0, #687); GET /productos
+  # queda deprecado, sin quitarlo. `productoId` acepta el UUID del catalogo sin
+  # dejar de aceptar el entero, el carrito declara sus errores y la forma de sus
+  # lineas. Todo aditivo: sube la menor.
+  version: 1.2.0
   description: >
     Contrato de lo que ms-ecommerce publica hoy (bloque de identidad/seguridad,
     #441): la vitrina paginada del catalogo y el carrito del jugador. No existia
@@ -17,18 +22,83 @@ info:
     token que no es de usuario (por ejemplo, de servicio) 403. La vitrina es
     publica.
 
+    Catalogo (1.2.0, R16). La tienda ya no tiene catalogo propio: GET /vitrina
+    y POST /carrito/items leen el catalogo maestro de contenido/productos por
+    su API (productos.yaml 1.2.0), nunca su base de datos (regla 7). Si ese
+    servicio no responde, las dos contestan 503
+    `urn:nexus:problema:catalogo-no-disponible` con `Retry-After`, nunca una
+    vitrina vacia: un catalogo sin productos y un catalogo caido son dos cosas
+    distintas y la tienda tiene que poder decir cual es.
+
     Este servicio declara el context-path `/ecommerce`; el borde reescribe
-    `/api/v1/carrito` y `GET /api/v1/productos` hacia el (ver
-    infrastructure/red-balanceo/borde-dev.conf y el issue #421 sobre la
-    colision de prefijo con contenido/productos).
+    `/api/v1/carrito` y `/api/v1/vitrina` hacia el (ver
+    infrastructure/red-balanceo/borde-dev.conf). Desde R16 `/api/v1/productos`
+    es de contenido/productos para todos los metodos (issue #421): el
+    GET /productos de este servicio sigue existiendo, deprecado, pero el borde
+    ya no lo publica.
 servers:
   - url: http://localhost:8090/ecommerce/api/v1
     description: Entorno local de desarrollo
 paths:
+  /vitrina:
+    get:
+      summary: Vitrina paginada del catalogo maestro, lo que se vende en dinero real
+      operationId: vitrinaDelCatalogo
+      description: >
+        R16. Proyecta el catalogo maestro de contenido/productos: cada producto
+        es el del catalogo, con su identificador (UUID) y sus precios. Solo
+        aparecen los que se pueden comprar con dinero real: estado ACTIVO o
+        UNICO, `precioMonedaReal` presente y tiraje distinto de cero (-1 es
+        ilimitado). Un producto que solo tiene precio en creditos no se vende
+        aqui, y uno suspendido o agotado tampoco.
+
+        Publica, sin token, como la vitrina anterior. Sustituye a
+        GET /productos, que leia una tabla propia de ms-ecommerce que nacia
+        vacia: por eso la tienda no ensenaba ningun producto.
+      security: []
+      parameters:
+        - name: page
+          in: query
+          description: Numero de pagina, empezando en 0.
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: size
+          in: query
+          description: Productos por pagina, entre 1 y 50. Dieciseis por norma de la vista de referencia.
+          schema: { type: integer, minimum: 1, maximum: 50, default: 16 }
+        - name: tipo
+          in: query
+          description: >
+            Si se envia, solo productos de ese tipo del catalogo (HEROE,
+            HABILIDAD, ARMA, ARMADURA, ITEM, EPICA).
+          schema: { type: string }
+      responses:
+        "200":
+          description: Una pagina de la vitrina
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginaDeVitrinaDelCatalogo"
+        "400":
+          description: >
+            Parametros fuera de rango: `page` negativo o `size` fuera de 1..50.
+            El catalogo ni se consulta.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "503":
+          $ref: "#/components/responses/CatalogoNoDisponible"
   /productos:
     get:
-      summary: Vitrina paginada del catalogo
+      summary: Vitrina paginada de la tabla propia (deprecada, usar GET /vitrina)
       operationId: vitrina
+      deprecated: true
+      description: >
+        Deprecada desde 1.2.0 (R16, issue #421). Lee la tabla propia de
+        ms-ecommerce, que no refleja el catalogo maestro; la sustituye
+        GET /vitrina. El borde ya no la publica: /api/v1/productos es de
+        contenido/productos para todos los metodos. Se conserva dentro del
+        servicio para no romper a quien la llame directamente.
       security: []
       parameters:
         - name: page
@@ -67,6 +137,12 @@ paths:
     post:
       summary: Agregar un producto al carrito del jugador autenticado
       operationId: agregarItem
+      description: >
+        Desde 1.2.0 el producto se busca en el catalogo maestro
+        (contenido/productos) en el momento de agregarlo. Solo entra si se
+        vende en dinero real, y la linea guarda su `precioMonedaReal` como
+        precio unitario y su moneda (COP). Los rechazos son problem details
+        (regla 4) y se distinguen por `type`, nunca por el texto.
       requestBody:
         required: true
         content:
@@ -75,7 +151,21 @@ paths:
               type: object
               required: [productoId, cantidad]
               properties:
-                productoId: { type: integer, format: int64 }
+                productoId:
+                  description: >
+                    Identificador del producto en el catalogo maestro: el UUID
+                    que devuelve GET /vitrina. Hasta 1.1.0 era un entero de la
+                    tabla propia de ms-ecommerce; el entero se sigue aceptando
+                    para no romper a ningun cliente, pero ya no corresponde a
+                    ningun producto y se responde 422 producto-inexistente.
+                  oneOf:
+                    - type: string
+                      format: uuid
+                    - type: integer
+                      format: int64
+                      description: >
+                        Heredado de 1.1.0 (tabla propia). Se acepta y se
+                        responde 422 `urn:nexus:problema:producto-inexistente`.
                 cantidad: { type: integer, minimum: 1 }
       responses:
         "200":
@@ -90,6 +180,29 @@ paths:
           description: Sin token de acceso
         "403":
           description: El token no es de un usuario
+        "409":
+          description: >
+            El producto existe en el catalogo, pero ahora no se puede vender.
+            Por `type`: `urn:nexus:problema:producto-no-disponible` (suspendido)
+            o `urn:nexus:problema:producto-agotado` (tiraje 0). El carrito no
+            cambia.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "422":
+          description: >
+            El producto no se puede agregar tal como se pidio. Por `type`:
+            `urn:nexus:problema:producto-inexistente` (el catalogo no lo tiene,
+            o llego el entero heredado de 1.1.0) o
+            `urn:nexus:problema:producto-sin-precio-en-moneda-real` (solo se
+            vende en creditos). El carrito no cambia.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "503":
+          $ref: "#/components/responses/CatalogoNoDisponible"
   /carrito/items/{itemId}:
     delete:
       summary: Quitar un item del carrito del jugador autenticado
@@ -122,7 +235,117 @@ components:
         Token de acceso emitido por ms-identidad (RS256, JWKS). El carrito es
         del claim `uid` (o del sujeto con Keycloak). Roles de usuario:
         JUGADOR, MODERADOR, ADMINISTRADOR, SUPER_ADMINISTRADOR.
+  responses:
+    CatalogoNoDisponible:
+      description: >
+        El catalogo maestro (contenido/productos) no respondio. `type`
+        `urn:nexus:problema:catalogo-no-disponible`. Nada cambio -ni la vitrina
+        se da por vacia ni el carrito por actualizado- y se puede reintentar
+        pasado `Retry-After`.
+      headers:
+        Retry-After:
+          description: Segundos tras los que conviene reintentar (30).
+          schema: { type: integer, minimum: 1 }
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetail"
   schemas:
+    ProblemDetail:
+      type: object
+      description: >
+        Problem details (RFC 9457), el formato de error comun a los 20 modulos
+        (regla 4). La interfaz decide por `type` y `status`, nunca por el
+        texto (shared/ui-kit/MAPEO-ERRORES.md).
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: >
+            Identificador estable del error, por ejemplo
+            urn:nexus:problema:producto-agotado.
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+    PaginaDeVitrinaDelCatalogo:
+      description: >
+        Una pagina de GET /vitrina. Misma forma de pagina que la vitrina
+        anterior (content, number, size, totalElements, totalPages, last), para
+        que la tienda no cambie de lector: lo que cambia es de donde salen los
+        productos.
+      type: object
+      required: [content, number, size, totalElements, totalPages, last]
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductoDeVitrina"
+        number: { type: integer, minimum: 0, description: Pagina actual, base cero }
+        size: { type: integer, minimum: 1, maximum: 50 }
+        totalElements: { type: integer, format: int64, minimum: 0 }
+        totalPages: { type: integer, minimum: 0 }
+        last: { type: boolean }
+    ProductoDeVitrina:
+      description: >
+        Un producto del catalogo maestro que se vende en dinero real, tal como
+        lo pinta la tienda. Mismos nombres de campo que ProductoVitrina (1.1.0),
+        salvo `id`, que ahora es el UUID del catalogo.
+      type: object
+      required: [id, nombre, precioFinal, precioOriginal, moneda]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: >
+            Identificador del producto en el catalogo maestro. Es el que se
+            manda como `productoId` a POST /carrito/items.
+        nombre: { type: string }
+        imagenUrl:
+          type: [string, 'null']
+          description: La imagen del producto en el catalogo (RF-CAR-001).
+        descripcion: { type: string }
+        habilidades:
+          type: [string, 'null']
+          description: Habilidades del producto (RF-CAR-001); null si el catalogo no las trae.
+        tipo:
+          type: string
+          description: HEROE, HABILIDAD, ARMA, ARMADURA, ITEM o EPICA, como en el catalogo.
+        precioFinal:
+          type: number
+          minimum: 0
+          description: >
+            Lo que se cobra: el `precioMonedaReal` del catalogo. **No se llama
+            `precio`.** Siempre presente: un producto sin precio en dinero real
+            no entra en la vitrina.
+        precioOriginal:
+          type: number
+          minimum: 0
+          description: >
+            Igual a `precioFinal`: el catalogo maestro no publica promociones,
+            asi que no hay rebaja que ensenar.
+        moneda:
+          type: string
+          description: >
+            Hoy siempre COP: el catalogo guarda `precioMonedaReal` en pesos. El
+            cliente la lee, no la supone.
+        enPromocion: { type: boolean, description: Hoy siempre false. }
+        porcentajeDescuento:
+          type: [integer, 'null']
+          description: Hoy siempre null.
+        esPropio:
+          type: boolean
+          description: >
+            RF-CAR-005. Hoy siempre false: no se cruza con el inventario del
+            jugador.
+        enListaDeseos:
+          type: boolean
+          description: RF-CAR-005. Hoy siempre false.
     PaginaDeVitrina:
       description: >
         El Page de Spring Data tal cual lo serializa el controlador. Se declara
@@ -204,6 +427,42 @@ components:
         items:
           type: array
           items:
-            type: object
+            $ref: "#/components/schemas/LineaDeCarrito"
         total:
           type: number
+        moneda:
+          type: [string, 'null']
+          description: >
+            Moneda del carrito (COP). null mientras el carrito esta vacio: sin
+            lineas no hay moneda que afirmar.
+    LineaDeCarrito:
+      description: >
+        Una linea del carrito (1.2.0). Hasta 1.1.0 se declaraba solo como
+        `type: object`.
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Identificador de la linea; es el `itemId` de DELETE /carrito/items/{itemId}.
+        producto:
+          $ref: "#/components/schemas/ProductoDeLinea"
+        cantidad: { type: integer, minimum: 1 }
+        precioUnitario:
+          type: number
+          description: El `precioMonedaReal` del producto en el momento de agregarlo.
+        subtotal:
+          type: number
+          description: precioUnitario por cantidad.
+    ProductoDeLinea:
+      description: El producto de una linea, lo justo para pintarla.
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identificador del producto en el catalogo maestro.
+        nombre: { type: string }
+        moneda:
+          type: string
+          description: Hoy siempre COP.

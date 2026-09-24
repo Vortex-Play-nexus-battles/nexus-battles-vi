@@ -19,10 +19,12 @@ import org.springframework.security.web.SecurityFilterChain;
  * (ADR-002): el carrito es del {@code uid} del token, verificado contra el
  * JWKS de ms-identidad.
  *
- * <p>La vitrina ({@code GET /api/v1/productos}) sigue publica: es el catalogo
- * que ve cualquiera que entre a la tienda. Actuator queda abierto para la
- * sonda de salud (regla 3). Las rutas son relativas al context-path
- * {@code /ecommerce} del servicio.
+ * <p>La vitrina sigue publica: es el catalogo que ve cualquiera que entre a la
+ * tienda. Lo es la nueva ({@code GET /api/v1/vitrina}, sobre el catalogo
+ * maestro) y lo sigue siendo la legada ({@code GET /api/v1/productos}), que se
+ * conserva sin cambios. Actuator queda abierto para la sonda de salud
+ * (regla 3). Las rutas son relativas al context-path {@code /ecommerce} del
+ * servicio.
  *
  * <p>Mismo andamiaje que {@code CadenaDeSeguridad} de plataforma-seguridad
  * (sin CSRF, sin estado, JWT traducido con {@link ConversorDeRoles}); se
@@ -52,6 +54,7 @@ public class SeguridadConfig {
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(new ConversorDeRoles())))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/vitrina", "/api/v1/vitrina/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/productos", "/api/v1/productos/**").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/api/v1/carrito/**").hasAnyRole(ROLES_DE_USUARIO)

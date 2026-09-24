@@ -55,6 +55,7 @@ class ArranqueDeLaAplicacionIT {
     private int puerto;
 
     @Autowired
+    @SuppressWarnings("deprecation") // la vitrina legada se conserva sin cambios (regla 2)
     private VitrinaController vitrina;
 
     private RestClient cliente() {

@@ -29,6 +29,8 @@ if [ "${1:-}" != "--solo-levantar" ]; then
     :services:plataforma:salas-partidas:bootJar
 
   (cd services/cuentas/ms-identidad && ./mvnw -B -DskipTests package)
+  # R16 — la tienda. Su mvnw no tiene bit de ejecucion en git (ver e2e.yml).
+  (cd services/cuentas/ms-ecommerce && chmod +x ./mvnw && ./mvnw -B -DskipTests package)
 fi
 
 echo "== Levantando el entorno =="
