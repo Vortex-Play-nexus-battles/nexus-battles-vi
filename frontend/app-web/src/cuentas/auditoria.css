@@ -59,9 +59,8 @@
 
 /* Tabla */
 
-.tabla-envoltorio {
-  overflow-x: auto;
-}
+/* .tabla-envoltorio la define ahora el kit (componentes.css): estaba
+   duplicada aqui y en historial-transacciones.css con el mismo cuerpo. */
 
 .tabla-auditoria {
   width: 100%;
