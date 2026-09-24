@@ -97,4 +97,23 @@ public class Usuario {
     // coincide con esta, se rechaza aunque la firma siga siendo válida.
     @Column(nullable = false)
     private int versionToken = 0;
+
+    /**
+     * Cuando se creo la cuenta y cuando entro por ultima vez.
+     *
+     * La consola administrativa necesita las dos para responder «¿quien es
+     * este jugador y sigue activo?». Antes no existian, y la alternativa era
+     * deducir la ultima entrada de los eventos de auditoria o, peor, mostrar
+     * una fecha inventada. Son datos del dominio de identidad: aqui es donde
+     * viven.
+     *
+     * {@code ultimoAcceso} lo escribe LoginService en cada acceso correcto,
+     * nunca en uno fallido. Nulo significa «nunca ha entrado», que es una
+     * respuesta legitima y se muestra tal cual.
+     */
+    @Column
+    private LocalDateTime creadoEn = LocalDateTime.now();
+
+    @Column
+    private LocalDateTime ultimoAcceso;
 }

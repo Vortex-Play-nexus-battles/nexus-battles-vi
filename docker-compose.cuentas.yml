@@ -94,6 +94,15 @@ services:
       NOTIFICACIONES_URL: ${NOTIFICACIONES_URL:-http://srv-notificaciones:8085/api/v1/internal/notifications}
       AUDITORIA_URL: ${AUDITORIA_URL:-http://srv-ms-cumplimiento:8091/api/v1/admin/auditoria/eventos}
       SPRING_PROFILES_ACTIVE: ${MS_IDENTIDAD_SPRING_PROFILES_ACTIVE}
+      # Cuentas administrativas iniciales (AdministradoresIniciales).
+      # Formato apodo|correo|clave, separadas por ";". Idempotente: si la
+      # cuenta ya existe no se toca, asi que volver a desplegar no reescribe
+      # una clave que alguien haya cambiado. Vacio = no se crea ninguna.
+      #
+      # Tres responsables con el MISMO rol y credenciales DISTINTAS: si los
+      # tres entraran con la misma cuenta, la auditoria diria que "admin"
+      # suspendio a alguien, que es tanto como no decir nada.
+      ADMINS_INICIALES: ${ADMINS_INICIALES:-}
       # Emisor transitorio de credenciales de servicio (ADR-005): los
       # clientes y sus secretos los genera desplegar.sh en el host.
       AUTH_CLIENTES_SERVICIO: ${AUTH_CLIENTES_SERVICIO:-}
