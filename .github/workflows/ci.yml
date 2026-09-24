@@ -341,6 +341,14 @@ jobs:
         shell: bash
         run: python3 tests/contratos/compose-sin-claves-duplicadas.py
 
+      # Un servicio que declara DIRECTORIO_ACTIVO_CLIENT_ID y no la URL del
+      # emisor NO ARRANCA, y el sintoma llega tarde: la imagen se publica, la
+      # base migra, y solo falla el healthcheck. Le paso a ms-finanzas en la
+      # corrida 35939650016.
+      - name: Toda credencial de servicio en compose esta completa
+        shell: bash
+        run: python3 tests/contratos/compose-credencial-de-servicio-completa.py
+
   ci-secretos-bitacora:
     name: CI - secretos en la bitacora
     runs-on: ubuntu-latest
