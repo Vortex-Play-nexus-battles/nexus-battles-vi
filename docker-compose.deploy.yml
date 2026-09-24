@@ -33,8 +33,8 @@
 # MaxRAMPercentage=70 el monton podia crecer hasta 270 MiB sin que nada lo
 # frenara, y catorce JVM asi no caben en 1910 MiB. Ahora:
 #   -Xmx128m                  monton acotado, igual en todos
-#   -XX:TieredStopAtLevel=1   solo C1: menos code cache, sin la memoria del
-#                             compilador C2 y arranque con menos CPU
+#   -XX:TieredStopAtLevel=1   solo C1: menos code cache y sin la memoria del
+#                             compilador C2 (12-30 MiB menos de no-monton)
 #   -XX:ReservedCodeCacheSize=48m
 #   -XX:+ExitOnOutOfMemoryError  si una JVM se queda sin monton sale y Docker
 #                             la reinicia, en vez de seguir viva y rota
