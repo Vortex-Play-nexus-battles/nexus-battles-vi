@@ -4177,6 +4177,19 @@ button.tarjeta-heroe[aria-pressed='true'] {
   color: var(--texto-2);
 }
 
+/* El empate es su propio desenlace y no una derrota con otra frase (R10).
+   Antes solo habia dos modificadores, asi que una partida en la que nadie
+   quedaba en pie se pintaba de derrota mientras el texto decia «empate». El
+   borde va en el color de advertencia y no en el de error: no se perdio nada. */
+.panel-resultado--empate {
+  border-top: 4px solid var(--advertencia);
+}
+
+.panel-resultado--empate .panel-resultado__palabra,
+.panel-resultado--empate .panel-resultado__icono {
+  color: var(--texto-2);
+}
+
 .panel-resultado__detalle {
   margin: 0;
   color: var(--texto-2);
