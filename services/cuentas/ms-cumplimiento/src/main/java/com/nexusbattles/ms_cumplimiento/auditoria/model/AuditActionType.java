@@ -19,5 +19,9 @@ public enum AuditActionType {
     APROBACION,
     RECHAZO,
     SECURITY_BYPASS_ATTEMPT,
+    // HU-AUD-004: cada exportación del propio registro de auditoría queda
+    // registrada con su propio tipo, para poder distinguirla de otros
+    // accesos administrativos genéricos (OTRO).
+    EXPORTACION,
     OTRO
 }

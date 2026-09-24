@@ -25,7 +25,14 @@ dependencies {
     // misma librería y no queden desalineados en un upgrade.
     implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
 
+    // ConfiguracionClientesHttpPagos inyecta RestClient.Builder para llamar
+    // al servicio de correo. En Spring Boot 4 ese bean no viene con el
+    // starter de web: lo publica spring-boot-restclient, aparte (mismo
+    // problema y mismo fix que tuvo comentarios, PR #391).
+    implementation 'org.springframework.boot:spring-boot-restclient'
+
     compileOnly 'org.projectlombok:lombok'
+    implementation 'org.springframework.boot:spring-boot-restclient'
     annotationProcessor 'org.projectlombok:lombok'
     testCompileOnly 'org.projectlombok:lombok'
     testAnnotationProcessor 'org.projectlombok:lombok'
