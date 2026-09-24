@@ -378,7 +378,129 @@ function transaccion(i, cambios = {}) {
   };
 }
 
+/* ---------------------------------------------------------------------------
+   Consola — UX-GAME-6. Tablas y colas con filas: auditoría
+   (`AuditLogResponse`/`PaginaDeAuditoria` de ms-cumplimiento-auditoria.yaml),
+   lista negra (lista de cadenas, moderacion-lista-negra.yaml) y cola de
+   moderación (`ColaDeModeracionResponse` de comentarios.yaml).
+   ------------------------------------------------------------------------- */
+function registroDeAuditoria(i, cambios = {}) {
+  return {
+    id: `33333333-1111-4111-8111-${String(i).padStart(12, '0')}`,
+    fechaHora: new Date(Date.now() - i * 5_400_000).toISOString(),
+    administrador: 'qa_superadministrador',
+    tipoAccion: 'ACTUALIZACION',
+    afectado: 'jugador_42',
+    valorAnterior: 'JUGADOR',
+    valorNuevo: 'MODERADOR',
+    motivo: 'Refuerzo del equipo de moderación para el torneo.',
+    ipOrigen: '10.20.30.40',
+    ...cambios,
+  };
+}
+
+function comentarioReportado(i, cambios = {}) {
+  return {
+    comentario: {
+      id: `44444444-1111-4111-8111-${String(i).padStart(12, '0')}`,
+      productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
+      autorId: `55555555-1111-4111-8111-${String(i).padStart(12, '0')}`,
+      apodoAutor: ['thar_vex', 'lumen_9', 'kira_del_sur'][i % 3],
+      texto: [
+        'El yelmo llegó con la defensa que promete; lo recomiendo para tanques.',
+        'Precio abusivo para lo que da. No lo compren.',
+        'Buen objeto, aunque la descripción exagera el bono de defensa.',
+      ][i % 3],
+      imagenes: [],
+      estrellas: [5, 1, 3][i % 3],
+      fechaPublicacion: new Date(Date.now() - i * 7_200_000).toISOString(),
+      estado: 'EN_REVISION',
+      calificacionDescartada: false,
+    },
+    reportes: [3, 7, 1][i % 3],
+    porCategoria: { OFENSIVO: [1, 5, 0][i % 3], SPAM: [2, 2, 1][i % 3] },
+    primerReporte: new Date(Date.now() - i * 7_000_000).toISOString(),
+    ...cambios,
+  };
+}
+
 export const ESCENARIOS = [
+  {
+    id: 'auditoria-con-registros',
+    titulo: 'registro de auditoría con cinco entradas y paginación',
+    ruta: 'cuentas/auditoria.html',
+    sesion: () => sesionDe('qa_superadministrador', 'SUPER_ADMINISTRADOR'),
+    rutas: [
+      [
+        '**/api/v1/admin/auditoria*',
+        json({
+          content: [
+            registroDeAuditoria(1, { tipoAccion: 'CAMBIO_ROL' }),
+            registroDeAuditoria(2, {
+              tipoAccion: 'SANCION',
+              afectado: 'thar_vex',
+              valorAnterior: null,
+              valorNuevo: 'SUSPENSION_7_DIAS',
+              motivo: 'Lenguaje ofensivo reiterado en el chat de sala.',
+            }),
+            registroDeAuditoria(3, {
+              tipoAccion: 'CREACION',
+              afectado: 'Yelmo del Alba',
+              valorAnterior: null,
+              valorNuevo: 'ACTIVO',
+              motivo: 'Alta de producto del catálogo.',
+            }),
+            registroDeAuditoria(4, {
+              tipoAccion: 'ELIMINACION_LOGICA',
+              afectado: 'Poción caducada',
+              valorAnterior: 'ACTIVO',
+              valorNuevo: 'SUSPENDIDO',
+              motivo: 'Producto retirado del catálogo.',
+            }),
+            registroDeAuditoria(5, { tipoAccion: 'APROBACION', afectado: 'comentario 44444444' }),
+          ],
+          totalElements: 128,
+          totalPages: 13,
+          number: 0,
+          size: 10,
+          first: true,
+          last: false,
+        }),
+      ],
+    ],
+    exige: ['table tbody tr, .tabla__fila'],
+  },
+  {
+    id: 'lista-negra-con-terminos',
+    titulo: 'lista negra con términos vetados',
+    ruta: 'plataforma/moderacion-sanciones/lista-negra-admin.html',
+    sesion: () => sesionDe('qa_moderador', 'MODERADOR'),
+    rutas: [
+      [
+        '**/api/v1/lista-negra/terminos',
+        json(['admin', 'moderador', 'nexus_oficial', 'soporte', 'staff', 'sistema']),
+      ],
+    ],
+    exige: ['.lista-terminos__fila, li'],
+  },
+  {
+    id: 'moderacion-con-cola',
+    titulo: 'cola de moderación con tres comentarios reportados',
+    ruta: 'plataforma/comentarios/moderar-comentarios.html',
+    sesion: () => sesionDe('qa_moderador', 'MODERADOR'),
+    rutas: [
+      [
+        '**/api/v1/comentarios/moderacion*',
+        json({
+          entradas: [comentarioReportado(1), comentarioReportado(2), comentarioReportado(3)],
+          total: 3,
+          pagina: 0,
+          tamano: 16,
+        }),
+      ],
+    ],
+    exige: ['[data-comentario], .cola__entrada, article'],
+  },
   {
     // UX-GAME-5 — el árbol de doble eliminación con la primera ronda jugada.
     id: 'torneo-en-curso',

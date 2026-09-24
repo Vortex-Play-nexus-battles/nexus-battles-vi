@@ -635,7 +635,17 @@ export function montarArmazonAdmin(
       resolver(RUTAS.inicio, base),
       'boton boton--secundario boton--pequeno cabecera__salida',
     ),
-    menuDeCuenta({ sesion, base, almacen, navegar }),
+    // UX-GAME-6 — la salida al juego tambien en el menu de cuenta: en la banda
+    // de portatil (<=1440) el boton de la barra se pliega para que los diez
+    // destinos del super administrador quepan en una fila, y la salida tiene
+    // que seguir a un toque.
+    menuDeCuenta({
+      sesion,
+      base,
+      almacen,
+      navegar,
+      opcionesExtra: [['Volver al juego', RUTAS.inicio, null]],
+    }),
   );
   cabecera.append(acciones);
 

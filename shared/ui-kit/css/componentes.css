@@ -546,6 +546,10 @@
   font-size: var(--t-meta-tam);
   font-weight: 600;
   white-space: nowrap;
+  /* Dentro de una rejilla, el distintivo mide lo que su texto: estirado a la
+     celda parecia una barra (cola de moderacion, salas). UX-GAME-6. */
+  justify-self: start;
+  width: fit-content;
 }
 
 .distintivo--abierta {
@@ -2727,6 +2731,17 @@ button.tarjeta--partida:disabled {
   .cabecera__nav {
     gap: var(--e-4);
   }
+
+  /* UX-GAME-2: con el emblema, la marca larga ya no cabe junto a los seis
+     destinos y las acciones a 1024; va la corta (el nombre accesible es el
+     mismo). */
+  .cabecera__marca-larga {
+    display: none;
+  }
+
+  .cabecera__marca-corta {
+    display: inline;
+  }
   .cabecera__buscador {
     flex: 0 0 auto;
     width: 32px;
@@ -3327,7 +3342,7 @@ button.tarjeta--partida:disabled {
 
 /* Separador entre las acciones de sesion y la cuenta, solo en escritorio:
    en la fila de movil no hay sitio y el avatar ya se distingue solo. */
-@media (min-width: 861px) {
+@media (min-width: 901px) {
   .cabecera--jugador .cabecera__cuenta,
   .cabecera--consola .cabecera__cuenta {
     margin-left: var(--e-1);
@@ -3430,7 +3445,7 @@ button.tarjeta--partida:disabled {
   justify-content: center;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 900px) {
   .cabecera {
     /* Sin `wrap`: es justo lo que producia las tres filas. */
     flex-wrap: nowrap;
@@ -5627,7 +5642,7 @@ button.tarjeta-heroe[aria-pressed='true'] {
    navegación —es su diferencia de densidad respecto al jugador— sin tocar el
    objetivo táctil, que sigue en 44 px de alto.
 
-   Y se pliega antes. El armazón de jugador se pliega a los 860 px porque sus
+   Y se pliega antes. El armazón de jugador se pliega a los 900 px (860 hasta UX-GAME-6) porque sus
    seis destinos caben de sobra en 1024; los nueve de la consola no: el
    laboratorio los midió en **tres filas, 166 px de cabecera**, en las siete
    vistas de trastienda a 1024×768 — que es la resolución de una pantalla de
@@ -5710,6 +5725,28 @@ button.tarjeta-heroe[aria-pressed='true'] {
     gap: var(--e-3);
   }
 
+  /* UX-GAME-2 sumo el emblema a la marca (32 px + separacion) y los diez
+     destinos del super administrador volvian a partirse en dos filas a
+     1440. En esta banda la consola lleva la marca corta: emblema, «NB VI»
+     y «Control». El nombre accesible no cambia (`aria-label`). */
+  .cabecera--consola .cabecera__marca-larga {
+    display: none;
+  }
+
+  .cabecera--consola .cabecera__marca-corta {
+    display: inline;
+  }
+
+  /* Y las separaciones bajan un escalon: con los diez destinos del super
+     administrador (Auditoria incluida) la fila sobraba por 16 px a 1440. */
+  .cabecera--consola .cabecera__grupo-marca {
+    gap: var(--e-4);
+  }
+
+  .cabecera--consola .cabecera__nav--consola {
+    gap: var(--e-2);
+  }
+
   .cabecera--consola .cabecera__destino {
     text-transform: none;
     letter-spacing: normal;
@@ -5731,8 +5768,10 @@ button.tarjeta-heroe[aria-pressed='true'] {
   white-space: nowrap;
 }
 
-@media (max-width: 860px) {
-  /* En móvil la salida entra en el panel plegable, no en la fila. */
+@media (max-width: 1440px) {
+  /* Hasta la banda de portatil la salida va en el menu de cuenta, no en la
+     fila: con ella, los diez destinos del super administrador se partian en
+     dos filas a 1440 y 1366 (UX-GAME-6). */
   .cabecera__salida {
     display: none;
   }
