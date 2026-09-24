@@ -162,6 +162,11 @@ services:
       # destino del catalogo cambiado por el eco. Si se edita el original, la
       # siguiente corrida lo vuelve a derivar y prueba lo editado.
       - conf-del-borde:/etc/nginx/conf.d:ro
+      # R17 — las vistas y el kit, donde los deja el despliegue (/srv/nexus).
+      # Sin ellos no se pueden probar con trafico las direcciones limpias, el
+      # <base>, el nonce ni la redireccion de las rutas antiguas.
+      - ../../../frontend:/srv/nexus/frontend:ro
+      - ../../../shared:/srv/nexus/shared:ro
     ports:
       - '8099:80'
     networks: [borde]

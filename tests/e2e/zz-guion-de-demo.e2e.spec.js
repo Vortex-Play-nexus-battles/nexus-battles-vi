@@ -159,7 +159,8 @@ test.describe('Guion de demostración del Sprint 2', () => {
     await page.fill('#password', CLAVE);
     const captura = await capturar(page, 2, 'login');
     await page.click('#botonEnviar');
-    await page.waitForURL(/index\.html/, { timeout: 20000 });
+    // R17.3 — tras entrar, el inicio vive en /inicio detrás del borde.
+    await page.waitForURL(/\/inicio(?:[?#]|$)|index\.html/, { timeout: 20000 });
     const token = await page.evaluate(() => sessionStorage.getItem('nexus.token'));
     expect(token, 'login.js guarda el token de sesion').toBeTruthy();
     expect(cuerpoDelToken(token).uid).toBe(anfitriona.claims.uid);

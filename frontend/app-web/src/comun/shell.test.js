@@ -45,7 +45,9 @@ function conSesion({
 function montar(opciones = {}) {
   const raiz = document.createElement('div');
   document.body.appendChild(raiz);
-  return montarArmazon(raiz, { base: BASE, navegar: jest.fn(), ...opciones });
+  // `vigilar` falso: el vigilante real deja temporizadores y oyentes en la
+  // página, y aquí se prueba el armazón, no el vigilante (tiene sus pruebas).
+  return montarArmazon(raiz, { base: BASE, navegar: jest.fn(), vigilar: jest.fn(), ...opciones });
 }
 
 function etiquetas(elemento) {
@@ -268,9 +270,39 @@ describe('armazón de jugador', () => {
     for (const clave of Object.values(CLAVES)) {
       expect(sessionStorage.getItem(clave)).toBeNull();
     }
+    // R17 — el login dice «Cerraste sesión» en vez de aparecer sin más.
     expect(navegar).toHaveBeenCalledWith(
-      'http://localhost:8099/frontend/app-web/src/cuentas/login.html',
+      'http://localhost:8099/frontend/app-web/src/cuentas/login.html?motivo=cerrada',
     );
+  });
+});
+
+describe('sesión vigilada y preparación de la cuenta (R17)', () => {
+  test('con sesión, el armazón deja puesto el vigilante; sin sesión, no', () => {
+    const vigilar = jest.fn();
+    montar({ vista: 'login', vigilar });
+    expect(vigilar).not.toHaveBeenCalled();
+
+    conSesion();
+    document.body.innerHTML = '';
+    montar({ vista: 'home', vigilar });
+    expect(vigilar).toHaveBeenCalledTimes(1);
+    expect(vigilar).toHaveBeenCalledWith(expect.objectContaining({ almacen: sessionStorage }));
+  });
+
+  test('«Preparando tu cuenta» es portal (sin navegación), pero ofrece salir', () => {
+    conSesion();
+    const navegar = jest.fn();
+    const { elemento } = montar({ vista: 'preparando', navegar });
+
+    expect(elemento.dataset.armazon).toBe('publico');
+    expect(elemento.querySelector('.cabecera__nav')).toBeNull();
+    expect(elemento.textContent).not.toContain('Crear cuenta');
+    expect(elemento.textContent).not.toContain('Iniciar sesión');
+
+    elemento.querySelector('[data-zona="cerrar-sesion"]').click();
+    expect(sessionStorage.getItem(CLAVES.token)).toBeNull();
+    expect(new URL(navegar.mock.calls[0][0]).searchParams.get('motivo')).toBe('cerrada');
   });
 });
 

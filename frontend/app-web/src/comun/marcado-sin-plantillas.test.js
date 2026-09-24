@@ -55,7 +55,8 @@ const PENDIENTES = Object.freeze({
   // adelgaza no es una lista de pendientes.
   'cuentas/publicar-subasta.js': 'grupo-4, ademas protegido por HU-SUB-001',
   'cuentas/pujas.js': 'grupo-4',
-  'cuentas/registro.js': 'grupo-4',
+  // R17 — `registro.js` sale de la lista: el alta del jugador reescribió su
+  // envío y, de paso, la vista previa del avatar pasó a nodos.
   'cuentas/tienda.js': 'grupo-4',
 });
 

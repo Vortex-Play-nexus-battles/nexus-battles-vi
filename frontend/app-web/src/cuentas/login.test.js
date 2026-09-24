@@ -55,6 +55,21 @@ describe('Login - aislamiento de credenciales por ambiente', () => {
   });
 });
 
+describe('Login - por qué se llega aquí (R17)', () => {
+  test('cada motivo tiene su aviso, y uno desconocido no pinta nada', async () => {
+    const { avisoDelMotivo } = await import('./login.js');
+
+    expect(avisoDelMotivo('caducada')).toEqual({
+      tipo: 'advertencia',
+      texto: 'Tu sesión terminó. Vuelve a entrar y te llevamos a donde estabas.',
+    });
+    expect(avisoDelMotivo('cerrada').texto).toContain('Cerraste sesión');
+    expect(avisoDelMotivo('registrada').tipo).toBe('exito');
+    expect(avisoDelMotivo('<script>')).toBeNull();
+    expect(avisoDelMotivo(null)).toBeNull();
+  });
+});
+
 describe('Login - identidad de la sesion (#426, ADR-002)', () => {
   const token = (claims) =>
     `x.${btoa(JSON.stringify(claims)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}.y`;

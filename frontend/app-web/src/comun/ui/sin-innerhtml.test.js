@@ -95,7 +95,6 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const REVISADOS = new Map([
   ['contenido/productos/productos.js:159', 'plantilla() devuelve marcado fijo, sin datos'],
   ['cuentas/publicar-subasta.js:68', 'plantilla fija del formulario, sin interpolación'],
-  ['cuentas/registro.js:235', 'cadena literal fija, sin interpolación'],
   ['cuentas/tienda.js:247', 'plantilla fija; el color pasó a data-tipo en UX-R2.8'],
 
   ['cuentas/tienda.js:537', 'cadena literal fija del carrito vacío'],
@@ -114,10 +113,9 @@ const REVISADOS = new Map([
       'servidor pasan por esc(); pujas.test.js lo comprueba con cargas reales. ' +
       'La estructura (2.297 líneas de plantilla) se mueve en UX-R2.10.',
   ],
-  [
-    'cuentas/registro.js:222',
-    'DEUDA CONOCIDA: interpola una URL de objeto local del selector de archivos',
-  ],
+  // R17 — las dos de `registro.js` (la vista previa del avatar y su hueco
+  // vacío) salen de aquí: ahora se construyen con nodos (`h()`), y la URL de
+  // objeto entra como atributo, no por el analizador de HTML.
 ]);
 
 /** Todos los `.js` de producción (las pruebas montan HTML a propósito). */

@@ -43,10 +43,22 @@ class EnviadorCorreoServiceIT {
     static void configurarSmtp(DynamicPropertyRegistry registry) {
         registry.add("spring.mail.host", mailpit::getHost);
         registry.add("spring.mail.port", () -> mailpit.getMappedPort(1025));
+        // Sincrono en la prueba: si no, habria que esperar a un hilo de fondo
+        // para poder mirar la bandeja, y una espera fija convierte la prueba
+        // en intermitente.
+        registry.add("correo.envio-asincrono", () -> "false");
+        // Las direcciones de estas pruebas son @nexusbattles.test, reservadas
+        // (RFC 2606): van al buzon de pruebas, que aqui es el mismo Mailpit.
+        // Es la misma forma en que dev manda las de los canarios al suyo.
+        registry.add("correo.buzon-de-pruebas.host", mailpit::getHost);
+        registry.add("correo.buzon-de-pruebas.puerto", () -> mailpit.getMappedPort(1025));
     }
 
     @Autowired
     private EnviadorCorreoService enviadorCorreoService;
+
+    @Autowired
+    private RegistroDeEnvios registro;
 
     /**
      * Cada prueba parte de una bandeja vacia: la primera cuenta mensajes
@@ -119,6 +131,53 @@ class EnviadorCorreoServiceIT {
                 .as("sobre la plantilla corporativa, con el logo incrustado")
                 .contains("THE NEXUS BATTLES VI")
                 .contains("cid:logo-nexus");
+    }
+
+    /**
+     * Las tres cosas que hacen que un proveedor real acepte el mensaje y que
+     * un filtro no lo mande a correo no deseado: remitente explicito, las dos
+     * versiones del cuerpo, y un identificador con el que rastrearlo.
+     *
+     * <p>Hasta R18 no habia ninguna: el mensaje salia sin From (lo ponia el
+     * servidor), solo en HTML, y sin forma de saber que habia pasado con el.
+     */
+    @Test
+    void elCorreoSaleConRemitenteConLasDosVersionesYQuedaRegistrado() throws Exception {
+        enviadorCorreoService.enviar(
+                "rastreo@nexusbattles.test",
+                "Asunto rastreable",
+                "email/plantilla-prueba",
+                Map.of("mensaje", "Texto que tiene que estar tambien en plano"));
+
+        String bandeja = obtener("/api/v1/search?query=" + java.net.URLEncoder.encode(
+                "to:rastreo@nexusbattles.test", java.nio.charset.StandardCharsets.UTF_8));
+        String id = bandeja.split("\"ID\":\"")[1].split("\"")[0];
+        String mensaje = obtener("/api/v1/message/" + id);
+
+        assertThat(mensaje)
+                .as("el From debe ser el configurado, no el que decida el servidor")
+                .contains("no-reply@nexusbattles.local");
+        assertThat(obtener("/api/v1/message/" + id + "/raw"))
+                .as("el mensaje viaja con las dos versiones del cuerpo")
+                .contains("multipart/alternative")
+                .contains("text/plain");
+        assertThat(mensaje)
+                .as("el texto del correo debe leerse tambien sin HTML")
+                .contains("Texto que tiene que estar tambien en plano");
+
+        EnvioRegistrado anotado = registro.ultimos(1).get(0);
+        assertThat(anotado.estado()).isEqualTo(EnvioRegistrado.ACEPTADO);
+        assertThat(anotado.destino())
+                .as("una direccion reservada no sale por el servidor principal")
+                .isEqualTo(EnvioRegistrado.BUZON_DE_PRUEBAS);
+        assertThat(anotado.plantilla()).isEqualTo("email/plantilla-prueba");
+        assertThat(anotado.identificador())
+                .as("sin Message-ID no se puede cruzar este envio con el proveedor")
+                .isNotBlank();
+        assertThat(anotado.destinatario())
+                .as("el registro no puede guardar la direccion completa")
+                .doesNotContain("rastreo")
+                .endsWith("@nexusbattles.test");
     }
 
     private static String obtener(String ruta) throws Exception {
