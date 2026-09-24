@@ -31,7 +31,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Bitacora de auditoria (ms-cumplimiento)
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Consulta y registro de la bitacora de acciones administrativas
     (HU-AUD-001). Cada entrada dice quien hizo que, sobre quien, con que
