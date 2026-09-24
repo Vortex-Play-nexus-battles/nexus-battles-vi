@@ -130,6 +130,58 @@ class OnboardingServiceTest {
     }
 
     @Test
+    @DisplayName("una cuenta anterior al alta recibe la suya la primera vez que entra")
+    void cuentaAnteriorRecibeAltaAlEntrar() {
+        // El defecto: las cuentas creadas antes de R17.1 no tienen fila de
+        // alta, asi que `reanudarSiHaceFalta` no encontraba nada y se iba en
+        // silencio. Resultado: cero creditos, sin heroe y el inventario vacio,
+        // para siempre. Es lo que se veia en dev en todas las cuentas de
+        // prueba del equipo.
+        when(jugadores.findById(UID)).thenReturn(Optional.empty());
+        when(jugadores.existsById(UID)).thenReturn(false);
+
+        servicio.reanudarSiHaceFalta(UID);
+
+        ArgumentCaptor<OnboardingJugador> creada = ArgumentCaptor.forClass(OnboardingJugador.class);
+        verify(jugadores).save(creada.capture());
+        assertThat(creada.getValue().getUsuarioUid()).isEqualTo(UID);
+        assertThat(creada.getValue().getVersionBootstrap())
+                .isEqualTo(OnboardingService.VERSION_BOOTSTRAP);
+
+        ArgumentCaptor<OnboardingPaso> guardados = ArgumentCaptor.forClass(OnboardingPaso.class);
+        verify(pasos, times(4)).save(guardados.capture());
+        assertThat(guardados.getAllValues())
+                .extracting(OnboardingPaso::getPaso)
+                .containsExactly(
+                        PasoOnboarding.PERFIL,
+                        PasoOnboarding.CREDITOS,
+                        PasoOnboarding.HEROE,
+                        PasoOnboarding.EQUIPO);
+        // El perfil ya existe desde hace tiempo: no hay que volver a crearlo.
+        assertThat(guardados.getAllValues().get(0).getEstado()).isEqualTo(EstadoPaso.HECHO);
+        assertThat(guardados.getAllValues().get(1).getEstado()).isEqualTo(EstadoPaso.PENDIENTE);
+
+        verify(lanzador).lanzar(UID);
+    }
+
+    @Test
+    @DisplayName("si el alta ya existe, entrar no la vuelve a crear")
+    void entrarDosVecesNoRecreaElAlta() {
+        // La segunda entrada NO puede devolver los pasos a PENDIENTE: el bono
+        // y el heroe son idempotentes, pero reiniciar el estado haria trabajar
+        // al procesador para nada en cada inicio de sesion.
+        when(jugadores.findById(UID))
+                .thenReturn(Optional.of(alta(EstadoOnboarding.COMPLETO, HOY, null)));
+
+        servicio.reanudarSiHaceFalta(UID);
+
+        verify(jugadores, never()).save(any());
+        verify(pasos, never()).save(any());
+        verify(lanzador, never()).lanzar(any());
+    }
+
+
+    @Test
     @DisplayName("completa no se relanza; pendiente si; en proceso solo si el turno caduco")
     void admiteIntento() {
         when(jugadores.findById(UID)).thenReturn(Optional.of(alta(EstadoOnboarding.COMPLETO, HOY, null)));

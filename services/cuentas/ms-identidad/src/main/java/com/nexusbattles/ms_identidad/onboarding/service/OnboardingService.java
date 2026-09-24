@@ -133,9 +133,46 @@ public class OnboardingService {
         if (uid == null) {
             return;
         }
-        jugadores.findById(uid)
-                .filter(alta -> admiteIntento(alta, Duration.ZERO))
-                .ifPresent(alta -> lanzador.lanzar(uid));
+        Optional<OnboardingJugador> alta = jugadores.findById(uid);
+        if (alta.isEmpty()) {
+            // Cuenta anterior al alta automatica: nunca tuvo fila, asi que
+            // nunca recibio creditos, ni heroe, ni equipo. Entrar es la
+            // ocasion natural para darselos, y es idempotente por
+            // construccion -- el bono va con su refId y el inventario se mira
+            // antes de crear -- asi que no puede duplicar nada.
+            crearAltaDeCuentaAnterior(uid);
+            lanzador.lanzar(uid);
+            return;
+        }
+        alta.filter(encontrada -> admiteIntento(encontrada, Duration.ZERO))
+                .ifPresent(encontrada -> lanzador.lanzar(uid));
+    }
+
+    /**
+     * Da de alta a una cuenta que existia antes de que el alta existiera.
+     *
+     * <p>Se separa de {@link #iniciar} porque alli el perfil nace hecho dentro
+     * de la transaccion del registro. Aqui la cuenta ya tiene perfil desde
+     * hace tiempo: el paso nace hecho igual, pero no hay evento de registro
+     * que publicar ni transaccion de la que colgarse.
+     *
+     * <p>Sin transaccion propia a proposito. Las dos tablas tienen clave
+     * asignada -- el uid, y (uid, paso) -- asi que guardar es reescribir la
+     * misma fila: dos sesiones que entren a la vez escriben lo mismo y ninguna
+     * duplica nada. Envolverlo en REQUIRES_NEW desde este mismo objeto ademas
+     * no haria nada, porque una llamada interna no pasa por el proxy de Spring.
+     */
+    void crearAltaDeCuentaAnterior(UUID uid) {
+        if (jugadores.existsById(uid)) {
+            return;
+        }
+        LocalDateTime ahora = ahora();
+        jugadores.save(new OnboardingJugador(uid, VERSION_BOOTSTRAP, "alta-diferida", ahora));
+        pasos.save(new OnboardingPaso(uid, PasoOnboarding.PERFIL, EstadoPaso.HECHO,
+                "perfil anterior al alta automatica", ahora));
+        for (PasoOnboarding paso : PASOS_REMOTOS) {
+            pasos.save(new OnboardingPaso(uid, paso, EstadoPaso.PENDIENTE, null, ahora));
+        }
     }
 
     private boolean admiteIntento(OnboardingJugador alta, Duration pausa) {
@@ -149,7 +186,13 @@ public class OnboardingService {
         };
     }
 
-    /** Si el alta de este jugador ya termino (o no la tiene: cuenta anterior). */
+    /**
+     * Si el alta de este jugador ya termino.
+     *
+     * <p>Sin fila responde {@code true} a proposito: es una cuenta anterior
+     * que todavia no ha entrado, y bloquearla seria peor que dejarla pasar. En
+     * cuanto entre, {@link #reanudarSiHaceFalta} le crea el alta y la lanza.
+     */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public boolean listo(UUID uid) {
         return uid == null || jugadores.findById(uid)
