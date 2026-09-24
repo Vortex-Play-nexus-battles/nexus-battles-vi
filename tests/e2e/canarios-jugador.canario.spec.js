@@ -181,9 +181,9 @@ test.describe('Canarios del jugador (R16)', () => {
       }
 
       // R17.3 — el login es /login detrás del borde; login.html redirige allí.
-    expect(page.url(), 'la sesión no sirvió y la vista mandó al login').not.toMatch(
-      /\/login(?:\.html)?(?:[?#]|$)/,
-    );
+      expect(page.url(), 'la sesión no sirvió y la vista mandó al login').not.toMatch(
+        /\/login(?:\.html)?(?:[?#]|$)/,
+      );
 
       const conFallo = peticiones.filter((p) => p.estado >= 500);
       expect(conFallo, 'peticiones /api/v1 que respondieron 5xx').toEqual([]);
