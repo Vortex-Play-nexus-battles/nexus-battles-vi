@@ -58,6 +58,47 @@ function conToken(token) {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 }
 
+/**
+ * R17: todo jugador nuevo recibe al registrarse un heroe con un arma equipada
+ * (el alta de ms-identidad, contra ms-finanzas e inventario). Los casos «sin
+ * heroe equipado» necesitan a alguien sin equipo, asi que esperan a que su alta
+ * termine y le quitan lo que se le equipo: el mismo estado en que queda quien
+ * desequipa a mano desde su inventario. Por la API del inventario y con su
+ * propio token, nunca tocando una base de datos.
+ */
+async function dejarSinEquipo(api, jugador) {
+  await expect
+    .poll(
+      async () => {
+        const r = await api.get('/api/v1/auth/onboarding', { headers: conToken(jugador.token) });
+        return r.ok() ? (await r.json()).estado : `HTTP ${r.status()}`;
+      },
+      { timeout: 30_000, message: 'el alta del jugador nuevo no termino' },
+    )
+    .toBe('COMPLETO');
+  const vitrina = await api.get('/api/v1/inventario/elementos?pagina=0', {
+    headers: conToken(jugador.token),
+  });
+  const heroes = ((await vitrina.json()).elementos ?? []).filter((e) => e.tipo === 'HEROE');
+  for (const heroe of heroes) {
+    const r = await api.get(`/api/v1/inventario/heroes/${heroe.id}/equipamiento`, {
+      headers: conToken(jugador.token),
+    });
+    const equipo = await r.json();
+    const puestos = [
+      ...(equipo.armas ?? []),
+      ...(equipo.items ?? []),
+      ...Object.values(equipo.armaduras ?? {}),
+    ];
+    for (const elemento of puestos) {
+      const quitar = await api.delete(
+        `/api/v1/inventario/heroes/${heroe.id}/equipamiento/${elemento}`,
+        { headers: conToken(jugador.token) },
+      );
+      expect(quitar.status(), `desequipar ${elemento}: ${await quitar.text()}`).toBe(200);
+    }
+  }
+}
 async function conSesion(page, jugador, apodo) {
   await page.addInitScript(
     ([token, nombre]) => {
@@ -211,10 +252,11 @@ test.describe('La verificacion de heroe esta en el flujo (RF-JUE-003)', () => {
   test('sin heroe equipado el listado lleva al dialogo, que dice como arreglarlo', async ({
     page,
   }) => {
-    // Jugador nuevo: `sembrar.sh` no le puso inventario, asi que
-    // `PuertaDeHeroe` va a cerrarse. Sala sin apuesta, para que el camino
-    // probado sea el del 422 y no el de la confirmacion.
+    // Jugador nuevo sin equipo: el alta (R17) le da un heroe equipado y aqui se
+    // le quita, asi que `PuertaDeHeroe` va a cerrarse. Sala sin apuesta, para
+    // que el camino probado sea el del 422 y no el de la confirmacion.
     const sinHeroe = await sesionDe(api, `sin_heroe_r6_${Date.now()}`);
+    await dejarSinEquipo(api, sinHeroe);
     const creada = await api.post('/api/v1/salas', {
       headers: conToken(anfitriona.token),
       data: {

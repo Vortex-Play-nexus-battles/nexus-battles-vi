@@ -5,10 +5,13 @@
 # el navegador. Si algo falla aqui, el diagnostico es mucho mas claro que un
 # "elemento no encontrado" a los treinta segundos de prueba.
 #
-# Se siembra a traves de la API de inventario, no insertando en Mongo: asi la
-# prueba usa el mismo camino que usaria un jugador y, de paso, comprueba que
-# ese camino funciona. La unica excepcion es la coleccion `productos`, cuya
-# alta exige rol de administrador; ahi se inserta directo.
+# Desde R17 el heroe, su equipo y los creditos iniciales de cada jugador no
+# los siembra este script: los pone el alta del jugador al registrarse, por las
+# APIs de ms-finanzas e inventario, igual que en DEV. Este script registra a
+# los jugadores por el camino normal y espera a que su alta termine, de modo
+# que cada corrida del banco prueba tambien el alta. La unica insercion directa
+# es la coleccion `productos` (su alta exige rol de administrador): el kit del
+# banco apunta a esos productos.
 #
 #   ./tests/e2e/sembrar.sh              # usa el compose de tests/e2e
 #
@@ -146,49 +149,39 @@ echo "  prototipos que publica heroes:"
 curl -sS "$BORDE/api/v1/heroes" | jq -r '.[]?.nombre // .[]?.prototipo // empty' 2>/dev/null \
   | head -8 | sed 's/^/    /' || echo "    (no se pudo leer el catalogo)"
 
-# Con jq y no con sed: la primera version sacaba el `id` con una expresion
-# regular y cogia el del ARMA cuando buscaba el del HEROE, porque el orden de
-# los campos del JSON no es el que uno supone. Un JSON se lee con un lector de
-# JSON.
-crear_elemento() {
-  local apodo="$1" producto="$2" tipo="$3" nombre="$4"
-  curl -sS -X POST "$BORDE/api/v1/inventario/elementos" \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer $(token_de "$apodo")" \
-    -d "{\"productoId\":\"$producto\",\"tipo\":\"$tipo\",\"nombrePropio\":\"$nombre\"}" \
-    | jq -r '.id // empty'
-}
-
-sembrar_jugador() {
-  local apodo="$1"
-  echo "== 2) Inventario de $apodo: un heroe con un arma equipada =="
-
-  local heroe arma
-  heroe=$(crear_elemento "$apodo" p-heroe-e2e HEROE "Aquiles de $apodo")
-  arma=$(crear_elemento "$apodo" p-arma-e2e ARMA "Espada de $apodo")
-
-  if [ -z "$heroe" ] || [ -z "$arma" ]; then
-    echo "::error::No se pudieron crear los elementos de $apodo. Respuesta de inventario:"
-    curl -sS -X POST "$BORDE/api/v1/inventario/elementos" \
-      -H "Content-Type: application/json" -H "Authorization: Bearer $(token_de "$apodo")" \
-      -d '{"productoId":"p-heroe-e2e","tipo":"HEROE","nombrePropio":"diagnostico"}'
+# R17 — el heroe, su arma equipada y los creditos iniciales ya NO los pone esta
+# semilla: los pone el alta del jugador (ms-identidad la orquesta contra
+# ms-finanzas, inventario y productos en cuanto se registra). Lo que hace aqui
+# la semilla es registrar a cada jugador por el camino normal y ESPERAR a que
+# su alta termine. Si no termina, el banco se pone rojo aqui, con el estado
+# del alta y la bitacora delante, y no a los treinta segundos de una prueba.
+#
+# Por eso los productos (paso 1) se siembran ANTES de registrar a nadie: el
+# kit del banco (JUGADOR_KIT_INICIAL en compose.yml) apunta a p-heroe-e2e y
+# p-arma-e2e, y el alta los busca en el catalogo.
+esperar_alta() {
+  local apodo="$1" estado="" cuerpo=""
+  echo "== 2) Alta de $apodo: creditos, heroe y equipo los pone ms-identidad =="
+  for _ in $(seq 1 60); do
+    cuerpo=$(curl -sS "$BORDE/api/v1/auth/onboarding" -H "Authorization: Bearer $(token_de "$apodo")")
+    estado=$(echo "$cuerpo" | jq -r '.estado // empty')
+    [ "$estado" = "COMPLETO" ] && break
+    sleep 1
+  done
+  if [ "$estado" != "COMPLETO" ]; then
+    echo "::error::El alta de $apodo no termino en 60 s (estado=${estado:-sin respuesta}):"
+    echo "$cuerpo" | jq . 2>/dev/null || echo "$cuerpo"
+    echo "Bitacora del alta en ms-identidad:"
+    $COMPOSE logs --tail 120 srv-ms-identidad 2>/dev/null | grep -E 'ONBOARDING|AUDITORIA_CUENTA|ERROR' | tail -40 || true
     exit 1
   fi
-
-  # Equipar es lo que hace que `estaEquipado` sea cierto. Sin esto, la puerta
-  # de heroe responde SIN_HEROE_EQUIPADO y no se puede crear una sala.
-  curl -sS -o /dev/null -w '  equipar -> %{http_code}\n' \
-    -X PUT "$BORDE/api/v1/inventario/heroes/$heroe/equipamiento/$arma" \
-    -H "Authorization: Bearer $(token_de "$apodo")"
-
-  echo "  heroe=$heroe arma=$arma"
+  echo "  $apodo: alta COMPLETA creditos=$(echo "$cuerpo" | jq -r '.creditosIniciales') heroe=$(echo "$cuerpo" | jq -r '.heroeInicial')"
 }
 
-sembrar_jugador "$ANFITRION"
-sembrar_jugador "$INVITADO"
-sembrar_jugador "$CURIOSO"
-sembrar_jugador "$POBRE"
-
+esperar_alta "$ANFITRION"
+esperar_alta "$INVITADO"
+esperar_alta "$CURIOSO"
+esperar_alta "$POBRE"
 echo "== 3) Comprobando el camino completo de la verificacion =="
 # Las mismas tres llamadas que hace ClienteInventarioHeroes, en el mismo
 # orden. Si alguna de las tres falla, la puerta de heroe responde 503 y no se
@@ -257,26 +250,40 @@ uid_de() {
   printf '%s' "$cuerpo" | base64 -d 2>/dev/null | jq -r '.uid // empty'
 }
 
-# El curioso tambien: su intento con codigo equivocado reserva antes de que
+# R17 — el saldo inicial ya no lo acredita esta semilla: lo acredito el alta de
+# cada jugador (concepto `bono-registro`, JUGADOR_CREDITOS_INICIALES=500 en el
+# banco, los mismos 500 que se sembraban antes a mano). Aqui se COMPRUEBA.
+#
+# El curioso lo necesita: su intento con codigo equivocado reserva antes de que
 # la sala lo rechace, y sin saldo recibiria 422 en vez del 409 que se prueba.
-# El pobre, a proposito, se queda sin nada.
 for apodo in "$ANFITRION" "$INVITADO" "$CURIOSO"; do
   uid=$(uid_de "$apodo")
   [ -n "$uid" ] || { echo "::error::el token de $apodo no trae uid"; exit 1; }
-  codigo=$(curl -sS -o /tmp/acreditar-$apodo.json -w '%{http_code}' \
-    -X POST "$FINANZAS/creditos/acreditar" \
-    -H "Authorization: Bearer $TOKEN_BANCO" \
-    -H "Content-Type: application/json" \
-    -d "{\"uid\":\"$uid\",\"monto\":$SALDO_INICIAL,\"refId\":\"semilla-e2e-$apodo\",\"concepto\":\"semilla-e2e\"}")
-  if [ "$codigo" != "200" ]; then
-    echo "::error::ms-finanzas no acredito a $apodo ($codigo):"; cat "/tmp/acreditar-$apodo.json"; echo; exit 1
-  fi
   # El saldo lo consulta el propio jugador: es el unico caso en que un
   # usuario (no un servicio) puede leer /creditos/{uid}/saldo, y solo el suyo.
   disponible=$(curl -sS -H "Authorization: Bearer $(token_de "$apodo")" "$FINANZAS/creditos/$uid/saldo" | jq -r '.saldoDisponible // empty')
-  echo "  $apodo: uid=$uid disponible=$disponible"
+  if [ "$(printf '%.0f' "${disponible:-0}")" -lt "$SALDO_INICIAL" ]; then
+    echo "::error::el alta de $apodo no dejo sus $SALDO_INICIAL creditos (disponible=${disponible:-?})"; exit 1
+  fi
+  echo "  $apodo: uid=$uid disponible=$disponible (bono de registro)"
 done
 
+# El pobre, a proposito, se queda sin nada: es el que prueba el 422 de
+# creditos insuficientes. Desde R17 tambien recibe su bono al registrarse, asi
+# que se le debita entero, como si lo hubiera gastado. Por el libro y con la
+# credencial del banco, no tocando la base de ms-finanzas; refId fijo, asi que
+# repetir la semilla no debita dos veces.
+uid_pobre=$(uid_de "$POBRE")
+disponible_pobre=$(curl -sS -H "Authorization: Bearer $(token_de "$POBRE")" "$FINANZAS/creditos/$uid_pobre/saldo" | jq -r '.saldoDisponible // 0')
+if [ "$(printf '%.0f' "$disponible_pobre")" -gt 0 ]; then
+  codigo=$(curl -sS -o /tmp/debitar-pobre.json -w '%{http_code}' -X POST "$FINANZAS/creditos/debitar" \
+    -H "Authorization: Bearer $TOKEN_BANCO" -H "Content-Type: application/json" \
+    -d "{\"uid\":\"$uid_pobre\",\"monto\":$disponible_pobre,\"refId\":\"semilla-e2e-vaciar-$POBRE\",\"concepto\":\"semilla-e2e\"}")
+  [ "$codigo" = "200" ] || { echo "::error::ms-finanzas no debito al pobre ($codigo):"; cat /tmp/debitar-pobre.json; echo; exit 1; }
+fi
+disponible_pobre=$(curl -sS -H "Authorization: Bearer $(token_de "$POBRE")" "$FINANZAS/creditos/$uid_pobre/saldo" | jq -r '.saldoDisponible // empty')
+[ "$(printf '%.0f' "${disponible_pobre:-1}")" -eq 0 ] || { echo "::error::el pobre sigue con saldo ($disponible_pobre)"; exit 1; }
+echo "  $POBRE: uid=$uid_pobre disponible=$disponible_pobre (bono gastado a proposito)"
 echo "== 5) Moderacion (HU-USR-004..007): una moderadora y un administrador ==="
 # ms-identidad registra a todo el mundo como JUGADOR y el unico camino para
 # crear MODERADOR/ADMINISTRADOR es el endpoint de admin, que exige... un
