@@ -1,0 +1,20 @@
+services:
+  db-chatbot:
+    image: postgres:17-alpine
+    container_name: postgres-chatbot
+    environment:
+      POSTGRES_DB: chatbot_db
+      POSTGRES_USER: chatbot_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-chatbot_password}
+    ports:
+      - "5437:5432"
+    volumes:
+      - pgdata_chatbot:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chatbot_user -d chatbot_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata_chatbot:
