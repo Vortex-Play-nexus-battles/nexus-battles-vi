@@ -332,6 +332,15 @@ jobs:
         shell: bash
         run: bash scripts/cd/pruebas/desplegar-etiquetas-contenido.sh
 
+      # Una clave repetida dentro de un mismo mapa hace que Docker Compose se
+      # niegue a leer el archivo ENTERO, y al negarse no despliega nada de el.
+      # Asi murio la corrida 35931028022 -- la del commit que traia
+      # POST /inventario/elementos/{id}/transferencias (#670) --, y el sintoma
+      # solo aparecia dentro de una sesion SSH. Aqui cuesta un segundo.
+      - name: Ningun compose tiene claves duplicadas
+        shell: bash
+        run: python3 tests/contratos/compose-sin-claves-duplicadas.py
+
   ci-secretos-bitacora:
     name: CI - secretos en la bitacora
     runs-on: ubuntu-latest
