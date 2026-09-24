@@ -1,9 +1,11 @@
 /**
- * Vitrina y carrito — HU-CAR-001.
+ * Vitrina, carrito y pago — HU-CAR-001 y HU-CAR-010.
  *
  * Lo que se prueba es lo que estaba roto: la identidad que viaja en cada
  * petición, la base de la API, y que un fallo del carrito no se disfrace de
- * carrito vacío.
+ * carrito vacío. Para el pago: resumen antes de pagar, datos inválidos,
+ * rechazo de la pasarela, sesión expirada y que la tarjeta no se quede en
+ * ninguna parte.
  */
 
 import { jest } from '@jest/globals';
@@ -15,6 +17,7 @@ import {
   agregarAlCarrito,
   actualizarUI,
   montarTienda,
+  abrirCheckout,
 } from './tienda.js';
 
 const UID = '44444444-4444-4444-4444-444444444444';
@@ -201,5 +204,196 @@ describe('montarTienda', () => {
 
     expect(globalThis.fetch.mock.calls[0][0]).toBe('/api/v1/carrito/items');
     expect(JSON.parse(globalThis.fetch.mock.calls[0][1].body).productoId).toBe('p1');
+  });
+});
+
+describe('resumen y pago — HU-CAR-010', () => {
+  const CARRITO = {
+    id: 'c1',
+    total: 250,
+    items: [{ cantidad: 2, subtotal: 250, producto: { nombre: 'Poción' } }],
+  };
+
+  // Nombres de los campos tal como los crea `campo()` en el dialogo.
+  // Vencimiento lejano para que la prueba no caduque con el calendario.
+  const TARJETA = {
+    titular: 'Ana Pérez',
+    numero: '4111 1111 1111 1111',
+    vencimiento: '12/30',
+    cvv: '123',
+  };
+
+  let dialogo = null;
+
+  /** Deja correr las promesas encadenadas del envio (fetch → json → recarga). */
+  const esperar = () => new Promise((resolver) => setTimeout(resolver, 0));
+
+  function abrir(carrito = CARRITO) {
+    actualizarUI(carrito, document);
+    dialogo = abrirCheckout(document);
+    return dialogo?.elemento ?? null;
+  }
+
+  function control(caja, nombre) {
+    return caja.querySelector(`[name="${nombre}"]`);
+  }
+
+  function mensaje(caja) {
+    return caja.querySelector('[role="status"]');
+  }
+
+  async function pagarCon(caja, datos = TARJETA) {
+    for (const [nombre, valor] of Object.entries(datos)) {
+      control(caja, nombre).value = valor;
+    }
+    caja
+      .querySelector('form')
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await esperar();
+    await esperar();
+  }
+
+  beforeEach(() => {
+    // Los fallos simulados escriben en consola; aqui ademas se inspecciona.
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    // El dialogo escucha el teclado en `document`: sin cerrarlo, la escucha
+    // se quedaria viva para la prueba siguiente.
+    dialogo?.cerrar();
+    dialogo = null;
+    console.error.mockRestore();
+  });
+
+  test('PAGAR abre el resumen con el detalle y el total antes de pagar', async () => {
+    globalThis.fetch.mockResolvedValue(respuesta({ content: [], ...CARRITO }));
+    await montarTienda(document);
+
+    document.getElementById('btn-pagar').click();
+
+    const caja = document.querySelector('[role="dialog"]');
+    expect(caja).not.toBeNull();
+    expect(caja.textContent).toContain('Poción');
+    expect(caja.textContent).toContain('x2');
+    expect(caja.textContent).toContain('250 COP');
+
+    caja.querySelector('[data-accion="cerrar"]').click();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  test('sin productos en el carro no se abre el pago', () => {
+    expect(abrir(null)).toBeNull();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  test('datos invalidos: no se llama a la pasarela y se marca cada campo', async () => {
+    const caja = abrir();
+
+    await pagarCon(caja, { ...TARJETA, numero: '1234', cvv: '1' });
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(control(caja, 'numero').getAttribute('aria-invalid')).toBe('true');
+    expect(control(caja, 'cvv').getAttribute('aria-invalid')).toBe('true');
+    expect(control(caja, 'titular').getAttribute('aria-invalid')).toBe('false');
+    expect(mensaje(caja).hidden).toBe(false);
+    expect(mensaje(caja).dataset.resultado).toBe('rechazado');
+  });
+
+  test('aprobado: envia al checkout con el Bearer, avisa y vacia el carro', async () => {
+    globalThis.fetch
+      .mockResolvedValueOnce(respuesta({ aprobado: true }))
+      .mockResolvedValueOnce(respuesta({ total: 0, items: [] }));
+    const caja = abrir();
+
+    await pagarCon(caja);
+
+    const [url, opciones] = globalThis.fetch.mock.calls[0];
+    expect(url).toBe('/api/v1/checkout');
+    expect(opciones.headers.Authorization).toBe(`Bearer ${sessionStorage.getItem('nexus.token')}`);
+    expect(opciones.headers['X-User-Id']).toBeUndefined();
+    expect(JSON.parse(opciones.body)).toEqual({
+      carritoId: 'c1',
+      tarjeta: {
+        titular: 'Ana Pérez',
+        numero: '4111111111111111',
+        fechaExpiracion: '12/30',
+        cvv: '123',
+      },
+    });
+
+    expect(mensaje(caja).dataset.resultado).toBe('aprobado');
+    expect(mensaje(caja).textContent).toMatch(/aprobado/i);
+    // Aprobado el pago no queda formulario con datos de tarjeta en la pagina.
+    expect(caja.querySelector('form')).toBeNull();
+    expect(document.getElementById('cart-items').textContent).toMatch(/vacío/i);
+    expect(document.getElementById('btn-pagar').disabled).toBe(true);
+  });
+
+  test('rechazo de la pasarela: se muestra el motivo y se borran numero y CVV', async () => {
+    globalThis.fetch.mockResolvedValueOnce(
+      respuesta({ aprobado: false, mensaje: 'Fondos insuficientes' }),
+    );
+    const caja = abrir();
+
+    await pagarCon(caja);
+
+    expect(mensaje(caja).dataset.resultado).toBe('rechazado');
+    expect(mensaje(caja).textContent).toBe('Fondos insuficientes');
+    expect(control(caja, 'numero').value).toBe('');
+    expect(control(caja, 'cvv').value).toBe('');
+    // El titular se conserva para reintentar sin volver a escribirlo todo.
+    expect(control(caja, 'titular').value).toBe('Ana Pérez');
+    // Rechazado no se recarga el carrito: los productos siguen ahi.
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test('rechazo con estado HTTP (422) se presenta como rechazo, no como falla de red', async () => {
+    globalThis.fetch.mockRejectedValueOnce(
+      Object.assign(new Error('rechazado'), { estado: 422 }),
+    );
+    const caja = abrir();
+
+    await pagarCon(caja);
+
+    expect(mensaje(caja).textContent).toMatch(/rechazó el pago/i);
+    expect(mensaje(caja).textContent).not.toMatch(/conexión/i);
+  });
+
+  test('sesion expirada durante el pago (401): se dice, y que no se cobro', async () => {
+    globalThis.fetch.mockRejectedValueOnce(
+      Object.assign(new Error('token vencido'), { estado: 401 }),
+    );
+    const caja = abrir();
+
+    await pagarCon(caja);
+
+    expect(mensaje(caja).textContent).toMatch(/sesión expiró/i);
+    expect(mensaje(caja).textContent).toMatch(/no se procesó/i);
+    expect(control(caja, 'numero').value).toBe('');
+  });
+
+  test('los datos de la tarjeta nunca se escriben en consola', async () => {
+    globalThis.fetch.mockRejectedValueOnce(Object.assign(new Error('caido'), { estado: 500 }));
+    const caja = abrir();
+
+    await pagarCon(caja);
+
+    const escrito = console.error.mock.calls
+      .flat()
+      .map((arg) => (arg instanceof Error ? arg.message : JSON.stringify(arg)))
+      .join(' ');
+    expect(escrito).not.toContain('4111');
+    expect(escrito).not.toContain('Ana Pérez');
+  });
+
+  test('al cerrar el dialogo sus campos desaparecen de la pagina', () => {
+    const caja = abrir();
+    control(caja, 'numero').value = '4111 1111 1111 1111';
+
+    dialogo.cerrar();
+    dialogo = null;
+
+    expect(document.querySelector('[name="numero"]')).toBeNull();
   });
 });

@@ -1,122 +1,92 @@
 <!doctype html>
 <html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Nexus Battles VI - Tienda</title>
-    <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
-    <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
-    <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
-    <link rel="stylesheet" href="./tema-cuentas.css" />
-    <link rel="stylesheet" href="tienda.css" />
-  </head>
-  <body>
-    <!-- Barra de navegación compartida. Reemplaza el <header class="navbar"> del
-     mockup Figma con enlaces hardcoded (href="#") por el mismo patrón que
-     usan auditoria, perfil, gestion-usuarios y crear-cuenta-admin: un solo
-     componente vivo con búsqueda, secciones y panel de cuenta, servido desde
-     src/comun/barra-navegacion.js. Cambio pedido por Santiago para unificar
-     la navegación del dominio cuentas en la misma barra que todos usan. -->
-    <div id="navbar-container"></div>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nexus Battles VI - Tienda</title>
+  <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
+  <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
+  <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
+  <link rel="stylesheet" href="./tema-cuentas.css" />
+  <link rel="stylesheet" href="tienda.css" />
+</head>
+<body>
+<!-- Barra de navegación compartida. Reemplaza el <header class="navbar"> del
+ mockup Figma con enlaces hardcoded (href="#") por el mismo patrón que
+ usan auditoria, perfil, gestion-usuarios y crear-cuenta-admin: un solo
+ componente vivo con búsqueda, secciones y panel de cuenta, servido desde
+ src/comun/barra-navegacion.js. Cambio pedido por Santiago para unificar
+ la navegación del dominio cuentas en la misma barra que todos usan. -->
+<div id="navbar-container"></div>
 
-    <script type="module">
-      import { montarCabecera, exigirSesion } from '../comun/cabecera-app.js';
+<script type="module">
+  import { montarCabecera, exigirSesion } from '../comun/cabecera-app.js';
 
-      if (!exigirSesion()) {
-        throw new Error('sin sesion: redirigiendo al login');
-      }
-      // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
-      montarCabecera(document.getElementById('navbar-container'), { seccionActiva: 'cuenta' });
-    </script>
+  if (!exigirSesion()) {
+    throw new Error('sin sesion: redirigiendo al login');
+  }
+  // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
+  montarCabecera(document.getElementById('navbar-container'), { seccionActiva: 'cuenta' });
+</script>
 
-    <main class="main-container">
-      <!-- Columna de Productos -->
-      <section class="store-section">
-        <div class="store-header">
-          <h2>Tienda</h2>
-          <p>Paga con moneda local (COP) usando tus métodos registrados.</p>
-        </div>
-
-        <!-- El contenedor donde JS inyectará las tarjetas -->
-        <div id="productos-grid" class="products-grid">
-          <!-- Cargando productos... -->
-        </div>
-      </section>
-
-      <!-- Columna del Carrito -->
-      <aside class="cart-section">
-        <div class="cart-card">
-          <h3>Tu carro</h3>
-
-          <div id="cart-items" class="cart-items-container">
-            <!-- JS inyectará los items del carrito aquí -->
-            <p class="t-meta">Tu carrito está vacío</p>
-          </div>
-
-          <div class="cart-summary">
-            <div class="summary-row">
-              <span>Subtotal</span>
-              <span id="cart-subtotal">0 COP</span>
-            </div>
-            <div class="summary-row total-row">
-              <span>Total a pagar</span>
-              <span id="cart-total" class="total-price">0 COP</span>
-            </div>
-          </div>
-
-          <!-- Mensaje de advertencia replicado del Figma -->
-          <div id="warning-msg" class="warning-box hidden">
-            No te alcanzan los fondos en tu cuenta principal. Revisa tu billetera o quita algo del
-            carro.
-          </div>
-
-          <button id="btn-pagar" class="btn-pagar" disabled>PAGAR</button>
-        </div>
-      </aside>
-    </main>
-
-    <!--
-  type="module" desde P3.1: el archivo importa el interceptor
-  compartido, la base de la API y la identidad de la sesion. Los
-  botones ya no usan onclick -no funcionaria en un modulo-: la
-  escucha esta delegada en la rejilla.
--->
-    <script type="module" src="tienda.js"></script>
-
-    <!-- Modal de Checkout y Pago -->
-    <div id="checkout-modal" class="modal hidden">
-      <div class="modal-content">
-        <span id="close-modal" class="close-btn">&times;</span>
-        <h2>Resumen de Compra</h2>
-        <div id="checkout-summary" class="checkout-summary">
-          <!-- Se llena con JS -->
-        </div>
-
-        <h3>Datos de Pago</h3>
-        <form id="payment-form">
-          <div class="form-group">
-            <label for="card-name">Nombre del Titular</label>
-            <input type="text" id="card-name" required pattern="[a-zA-Z\s]+" title="Solo letras y espacios">
-          </div>
-          <div class="form-group">
-            <label for="card-number">Número de Tarjeta</label>
-            <input type="text" id="card-number" required maxlength="16" pattern="\d{16}" title="Debe contener 16 dígitos">
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="card-expiry">Vencimiento (MM/YY)</label>
-              <input type="text" id="card-expiry" required pattern="(0[1-9]|1[0-2])\/([0-9]{2})" placeholder="MM/YY">
-            </div>
-            <div class="form-group">
-              <label for="card-cvv">CVV</label>
-              <input type="password" id="card-cvv" required maxlength="4" pattern="\d{3,4}" title="3 o 4 dígitos">
-            </div>
-          </div>
-          <button type="submit" id="btn-confirm-payment" class="btn-pagar">Confirmar Pago</button>
-        </form>
-        <div id="payment-message" class="hidden"></div>
-      </div>
+<main class="main-container">
+  <!-- Columna de Productos -->
+  <section class="store-section">
+    <div class="store-header">
+      <h2>Tienda</h2>
+      <p>Paga con moneda local (COP) usando tus métodos registrados.</p>
     </div>
 
-  </body>
+    <!-- El contenedor donde JS inyectará las tarjetas -->
+    <div id="productos-grid" class="products-grid">
+      <!-- Cargando productos... -->
+    </div>
+  </section>
+
+  <!-- Columna del Carrito -->
+  <aside class="cart-section">
+    <div class="cart-card">
+      <h3>Tu carro</h3>
+
+      <div id="cart-items" class="cart-items-container">
+        <!-- JS inyectará los items del carrito aquí -->
+        <p class="t-meta">Tu carrito está vacío</p>
+      </div>
+
+      <div class="cart-summary">
+        <div class="summary-row">
+          <span>Subtotal</span>
+          <span id="cart-subtotal">0 COP</span>
+        </div>
+        <div class="summary-row total-row">
+          <span>Total a pagar</span>
+          <span id="cart-total" class="total-price">0 COP</span>
+        </div>
+      </div>
+
+      <!-- Mensaje de advertencia replicado del Figma -->
+      <div id="warning-msg" class="warning-box hidden">
+        No te alcanzan los fondos en tu cuenta principal. Revisa tu billetera o quita algo del
+        carro.
+      </div>
+
+      <!--
+        HU-CAR-010: abre el diálogo de resumen y pago. El diálogo no está
+        en este HTML: lo construye tienda.js con abrirDialogo() y campo()
+        del kit, así que sus clases y su foco son los del kit y los datos
+        de la tarjeta desaparecen de la página al cerrarlo.
+      -->
+      <button id="btn-pagar" class="btn-pagar" disabled>PAGAR</button>
+    </div>
+  </aside>
+</main>
+
+<!--
+type="module" desde P3.1: el archivo importa el interceptor
+compartido, la base de la API y la identidad de la sesion. Los
+botones ya no usan onclick -no funcionaria en un modulo-: la
+escucha esta delegada en la rejilla.
+-->
+<script type="module" src="tienda.js"></script>
+</body>
 </html>
