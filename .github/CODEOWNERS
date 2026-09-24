@@ -93,17 +93,19 @@
 /frontend/app-web/src/plataforma/           @Sgonzalez09
 
 # --- grupo-alpha / Grupo de Thomas - Contenido, simulacion y progresion -----
-# Contenido (Grupo 2): Nicolay y el resto del grupo comparten la propiedad, igual
-# que scrum-masters la comparte en cuentas desde #402. Basta la aprobacion de
-# cualquiera de ellos; la revision cruzada sigue siendo obligatoria.
-/services/contenido/                        @Nicolayyy @cesarluna298-code @Melipete12 @Tamadiaz04 @MbappeRonaldo7 @SCC405
-/services/contenido/productos/              @Nicolayyy @cesarluna298-code @Melipete12 @Tamadiaz04 @MbappeRonaldo7 @SCC405
-/services/contenido/inventario/             @Nicolayyy @cesarluna298-code @Melipete12 @Tamadiaz04 @MbappeRonaldo7 @SCC405
-/services/contenido/heroes/                 @Nicolayyy @cesarluna298-code @Melipete12 @Tamadiaz04 @MbappeRonaldo7 @SCC405
-/services/contenido/motor-combate/          @Nicolayyy @cesarluna298-code @Melipete12 @Tamadiaz04 @MbappeRonaldo7 @SCC405
-/services/contenido/misiones/               @Nicolayyy @cesarluna298-code @Melipete12 @Tamadiaz04 @MbappeRonaldo7 @SCC405
-/services/contenido/progresion-jugador/     @Nicolayyy @cesarluna298-code @Melipete12 @Tamadiaz04 @MbappeRonaldo7 @SCC405
-/frontend/app-web/src/contenido/            @Nicolayyy @cesarluna298-code @Melipete12 @Tamadiaz04 @MbappeRonaldo7 @SCC405
+# Contenido (Grupo 2): Nicolay, el resto del grupo y el equipo de scrum-masters
+# comparten la propiedad, como en cuentas desde #402. Basta la aprobacion de
+# cualquiera de ellos; la revision cruzada sigue siendo obligatoria. Los
+# scrum-masters se agregaron el 23-sep para destrabar la demo del 24-sep con el
+# grupo inactivo; el Grupo 2 decide despues si se mantienen.
+/services/contenido/                        @Nicolayyy @cesarluna298-code @Melipete12 @Tamadiaz04 @MbappeRonaldo7 @SCC405 @Vortex-Play-nexus-battles/scrum-masters
+/services/contenido/productos/              @Nicolayyy @cesarluna298-code @Melipete12 @Tamadiaz04 @MbappeRonaldo7 @SCC405 @Vortex-Play-nexus-battles/scrum-masters
+/services/contenido/inventario/             @Nicolayyy @cesarluna298-code @Melipete12 @Tamadiaz04 @MbappeRonaldo7 @SCC405 @Vortex-Play-nexus-battles/scrum-masters
+/services/contenido/heroes/                 @Nicolayyy @cesarluna298-code @Melipete12 @Tamadiaz04 @MbappeRonaldo7 @SCC405 @Vortex-Play-nexus-battles/scrum-masters
+/services/contenido/motor-combate/          @Nicolayyy @cesarluna298-code @Melipete12 @Tamadiaz04 @MbappeRonaldo7 @SCC405 @Vortex-Play-nexus-battles/scrum-masters
+/services/contenido/misiones/               @Nicolayyy @cesarluna298-code @Melipete12 @Tamadiaz04 @MbappeRonaldo7 @SCC405 @Vortex-Play-nexus-battles/scrum-masters
+/services/contenido/progresion-jugador/     @Nicolayyy @cesarluna298-code @Melipete12 @Tamadiaz04 @MbappeRonaldo7 @SCC405 @Vortex-Play-nexus-battles/scrum-masters
+/frontend/app-web/src/contenido/            @Nicolayyy @cesarluna298-code @Melipete12 @Tamadiaz04 @MbappeRonaldo7 @SCC405 @Vortex-Play-nexus-battles/scrum-masters
 
 # --- grupo-beta / Grupo de Santiago - Cuentas, cumplimiento y economia ------
 /services/cuentas/                          @CristianCamiloChaparro @Vortex-Play-nexus-battles/scrum-masters
