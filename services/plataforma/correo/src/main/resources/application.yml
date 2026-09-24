@@ -77,3 +77,16 @@ correo:
   # Cuantos envios recientes se recuerdan para poder demostrar la entrega.
   # Es memoria, no un historial: se pierde al reiniciar, a proposito.
   envios-recordados: ${CORREO_ENVIOS_RECORDADOS:200}
+  # A donde van las direcciones reservadas para pruebas (RFC 2606: .test,
+  # .example, .invalid, .localhost, y .local por RFC 6762). Con un proveedor
+  # real no pueden ir alli: las aceptaria, no podria entregarlas y las
+  # devolveria rebotadas a la bandeja del remitente, gastando cuota y
+  # reputacion. Las cuentas @nexus.test que crean los canarios en cada
+  # despliegue iban todas por ese camino.
+  #
+  # Vacio = no hay buzon propio. Entonces van al servidor principal solo si
+  # este ya es un buzon de pruebas (Mailpit en local); si es un proveedor
+  # real, no salen y el registro de envios las anota como OMITIDO.
+  buzon-de-pruebas:
+    host: ${CORREO_BUZON_PRUEBAS_HOST:}
+    puerto: ${CORREO_BUZON_PRUEBAS_PUERTO:1025}

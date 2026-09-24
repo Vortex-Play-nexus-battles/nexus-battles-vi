@@ -26,11 +26,9 @@ import java.util.List;
 @RequestMapping("/api/v1/correos/envios")
 public class EnviosController {
 
-    /** Puertos de los recogedores de correo de desarrollo (Mailpit, MailHog). */
-    private static final List<Integer> PUERTOS_DE_BUZON_DE_PRUEBAS = List.of(1025, 1026, 8025);
-
     private final RegistroDeEnvios registro;
     private final ConfiguracionDeCorreo configuracion;
+    private final BuzonDePruebas buzon;
     private final String servidor;
     private final int puerto;
     private final boolean autentica;
@@ -39,16 +37,26 @@ public class EnviosController {
     public EnviosController(
             RegistroDeEnvios registro,
             ConfiguracionDeCorreo configuracion,
+            BuzonDePruebas buzon,
+            // Como texto y no como int/boolean: una variable vacia en el .env
+            // (SMTP_PORT=, SMTP_TLS=, tal como vienen en .env.example) llega
+            // como cadena vacia y, en un int o boolean de @Value, impide que el
+            // servicio arranque. Ver BuzonDePruebas#puertoDe.
             @Value("${spring.mail.host:}") String servidor,
-            @Value("${spring.mail.port:0}") int puerto,
-            @Value("${spring.mail.properties.mail.smtp.auth:false}") boolean autentica,
-            @Value("${spring.mail.properties.mail.smtp.starttls.enable:false}") boolean tls) {
+            @Value("${spring.mail.port:}") String puerto,
+            @Value("${spring.mail.properties.mail.smtp.auth:}") String autentica,
+            @Value("${spring.mail.properties.mail.smtp.starttls.enable:}") String tls) {
         this.registro = registro;
         this.configuracion = configuracion;
-        this.servidor = servidor;
-        this.puerto = puerto;
-        this.autentica = autentica;
-        this.tls = tls;
+        this.buzon = buzon;
+        this.servidor = servidor == null ? "" : servidor;
+        this.puerto = BuzonDePruebas.puertoDe(puerto, 0);
+        this.autentica = activado(autentica);
+        this.tls = activado(tls);
+    }
+
+    private static boolean activado(String texto) {
+        return texto != null && Boolean.parseBoolean(texto.trim());
     }
 
     @GetMapping
@@ -58,24 +66,31 @@ public class EnviosController {
                 puerto,
                 autentica,
                 tls,
-                PUERTOS_DE_BUZON_DE_PRUEBAS.contains(puerto),
+                BuzonDePruebas.esPuertoDeBuzon(puerto),
+                buzon.descripcion(),
                 configuracion.remitente(),
                 registro.aceptados(),
+                registro.desviados(),
                 registro.rechazados(),
+                registro.omitidos(),
                 registro.ultimos(Math.min(ultimos, 100)));
     }
 
     /**
-     * @param servidor       a donde se envia
-     * @param puerto         por que puerto
-     * @param autentica      si se autentica contra el servidor
-     * @param tls            si la conexion se cifra con STARTTLS
-     * @param buzonDePruebas true cuando el destino es un recogedor local que
-     *                       NO reenvia a ninguna bandeja real
-     * @param remitente      cabecera From configurada
-     * @param aceptados      cuantos mensajes acepto el servidor
-     * @param rechazados     cuantos rechazo
-     * @param recientes      los ultimos, del mas nuevo al mas viejo
+     * @param servidor        a donde se envia
+     * @param puerto          por que puerto
+     * @param autentica       si se autentica contra el servidor
+     * @param tls             si la conexion se cifra con STARTTLS
+     * @param buzonDePruebas  true cuando el servidor principal es un recogedor
+     *                        local que NO reenvia a ninguna bandeja real
+     * @param desvioDePruebas a donde van las direcciones reservadas para
+     *                        pruebas (RFC 2606); vacio si no salen
+     * @param remitente       cabecera From configurada
+     * @param aceptados       cuantos mensajes acepto el servidor principal
+     * @param desviados       cuantos acepto el buzon de pruebas
+     * @param rechazados      cuantos se rechazaron
+     * @param omitidos        cuantos no salieron a proposito
+     * @param recientes       los ultimos, del mas nuevo al mas viejo
      */
     public record EstadoDeEntrega(
             String servidor,
@@ -83,8 +98,11 @@ public class EnviosController {
             boolean autentica,
             boolean tls,
             boolean buzonDePruebas,
+            String desvioDePruebas,
             String remitente,
             long aceptados,
+            long desviados,
             long rechazados,
+            long omitidos,
             List<EnvioRegistrado> recientes) {}
 }
