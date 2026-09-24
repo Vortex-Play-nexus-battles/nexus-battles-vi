@@ -121,17 +121,22 @@ export function avisoDeEstado(desenlace, alReintentar = null) {
     datos: { estado: desenlace.resultado },
     atributos: { role: 'status' },
   });
-  caja.append(
+  // `.aviso` es una fila: [cuerpo][accion]. El titulo, el motivo y el detalle
+  // van DENTRO de `.aviso__cuerpo`, que es el que se estira. Colgarlos como
+  // hermanos sueltos los convierte en cuatro columnas estrujadas -- que es
+  // exactamente como se vio en dev la primera vez.
+  const cuerpo = h('div', { clase: 'aviso__cuerpo' });
+  cuerpo.append(
     h('p', {
       clase: 'aviso__titulo',
       texto: ETIQUETA[desenlace.resultado] ?? 'NO DISPONIBLE',
     }),
   );
   if (desenlace.motivo) {
-    caja.append(h('p', { clase: 'aviso__cuerpo', texto: desenlace.motivo }));
+    cuerpo.append(h('p', { texto: desenlace.motivo }));
   }
   if (desenlace.recurso) {
-    caja.append(
+    cuerpo.append(
       h('p', {
         clase: 'aviso__detalle',
         texto: `Consulta: GET /api/v1${desenlace.recurso}${
@@ -140,6 +145,8 @@ export function avisoDeEstado(desenlace, alReintentar = null) {
       }),
     );
   }
+  caja.append(cuerpo);
+
   if (alReintentar && desenlace.resultado !== RESULTADO.SIN_PERMISO) {
     // Un 401 o un 403 no se arregla reintentando: no se ofrece el boton.
     const boton = h('button', {
@@ -168,10 +175,9 @@ export function moduloNoImplementado({ titulo = 'Módulo no implementado', razon
     datos: { estado: RESULTADO.NO_IMPLEMENTADO },
     atributos: { role: 'status' },
   });
-  caja.append(
-    h('p', { clase: 'aviso__titulo', texto: titulo }),
-    h('p', { clase: 'aviso__cuerpo', texto: razon }),
-  );
+  const cuerpo = h('div', { clase: 'aviso__cuerpo' });
+  cuerpo.append(h('p', { clase: 'aviso__titulo', texto: titulo }), h('p', { texto: razon }));
+  caja.append(cuerpo);
   return caja;
 }
 
