@@ -205,6 +205,35 @@ describe('vistaDeRuta y urlDeVista', () => {
     expect(vistaDeRuta('/otra/cosa.html')).toBeNull();
   });
 
+  test('R17.3 — reconoce también la dirección limpia, que no dice qué fichero es', () => {
+    expect(vistaDeRuta('/login')).toBe('login');
+    expect(vistaDeRuta('/jugar')).toBe('batallas');
+    expect(vistaDeRuta('/cuenta?x=1')).toBe('perfil');
+    expect(vistaDeRuta('/inicio#avisos')).toBe('home');
+    expect(vistaDeRuta('/jugar/')).toBe('batallas');
+    // Un prefijo parecido no es la vista.
+    expect(vistaDeRuta('/jugarx')).toBeNull();
+  });
+
+  test('R17.3 — nueve direcciones limpias, únicas, y cada una de una vista del jugador o del portal', () => {
+    const limpias = Object.entries(MATRIZ).filter(([, v]) => v.limpia);
+    expect(limpias.map(([, v]) => v.limpia).sort()).toEqual([
+      '/cuenta',
+      '/inicio',
+      '/inventario',
+      '/jugar',
+      '/login',
+      '/preparando',
+      '/registro',
+      '/subastas',
+      '/torneos',
+    ]);
+    for (const [, entrada] of limpias) {
+      expect(['publico', 'jugador']).toContain(entrada.armazon);
+      expect(entrada.limpia).toMatch(/^\/[a-z]+$/);
+    }
+  });
+
   test('la URL de una vista sale igual desde cualquier base servida', () => {
     expect(urlDeVista('batallas', BASE)).toBe(
       'http://localhost:8099/frontend/app-web/src/plataforma/salas-partidas/batallas.html',

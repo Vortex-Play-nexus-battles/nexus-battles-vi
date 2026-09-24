@@ -78,7 +78,8 @@ test.describe('Smoke del entorno desplegado', () => {
   test('la raíz lleva al login', async () => {
     const r = await api.get('/', { maxRedirects: 0 });
     expect([301, 302]).toContain(r.status());
-    expect(r.headers().location).toContain('login.html');
+    // R17.3 — la raíz lleva a la dirección limpia del login.
+    expect(r.headers().location).toMatch(/\/login(?:\.html)?$/);
   });
 
   // ===================================================================

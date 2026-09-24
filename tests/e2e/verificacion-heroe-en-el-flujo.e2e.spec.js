@@ -299,7 +299,8 @@ test.describe('La verificacion de heroe esta en el flujo (RF-JUE-003)', () => {
 
     // Vuelve atras en el historial, no a un listado recien cargado: quien
     // tenia filtros puestos los conserva.
-    await page.waitForURL(/batallas\.html/, { timeout: 20_000 });
+    // R17.3 — el listado vive en /jugar detrás del borde (la ruta antigua redirige).
+    await page.waitForURL(/\/jugar(?:[?#]|$)|batallas\.html/, { timeout: 20_000 });
     await expect(page.locator(`[data-sala="${sala.id}"]`)).toBeVisible();
   });
 
