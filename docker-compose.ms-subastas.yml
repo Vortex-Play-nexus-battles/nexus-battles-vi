@@ -73,11 +73,16 @@ services:
       IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://srv-ms-identidad:8089/api/v1/auth/jwks}
       # Integraciones reales dentro de la red de despliegue. En local estos
       # apuntan a localhost y "modo: fake"; aqui se apunta a los contenedores.
-      # FINANZAS_MODO=real solo tiene sentido si ms-finanzas esta desplegado:
-      # mientras siga fuera del host, se deja en "fake" a proposito para que
-      # subastas no quede inservible por una dependencia ausente.
+      # Creditos REALES (R16.19). Hasta R16 esto valia "fake": ms-finanzas no
+      # corria en dev y subastas usaba un doble EN MEMORIA de creditos, o sea,
+      # pujas y compras que no tocaban el libro. Desde R16.5 ms-finanzas es
+      # desplegableDev:true (infrastructure/despliegue/CAPACIDAD.md), y logica
+      # falsa en un entorno real no se admite. OJO con el valor: el cliente real
+      # se activa con "http" (CreditoClientConfig), no con "real" como decia
+      # este comentario; con "real" no se crearia ningun cliente y el servicio
+      # no arrancaria. Es el mismo valor que usa el banco E2E.
       FINANZAS_BASE_URL: ${FINANZAS_BASE_URL:-http://srv-ms-finanzas:8093/api/v1}
-      FINANZAS_MODO: ${FINANZAS_MODO:-fake}
+      FINANZAS_MODO: ${FINANZAS_MODO:-http}
       # Inventario (HU-SUB-004, FI-TRANSFER-1). Ninguna de estas dos estaba
       # declarada, y la omision no era neutra: application.properties trae
       # app.inventario.modo=${INVENTARIO_MODO:fake}, asi que el servicio
@@ -97,6 +102,12 @@ services:
       # sin entregar, lo segundo es lo que no se puede permitir.
       INVENTARIO_BASE_URL: ${INVENTARIO_BASE_URL:-http://34.193.90.11:8102}
       INVENTARIO_MODO: ${INVENTARIO_MODO:-http}
+      # Catalogo maestro (productos, host de contenido) para validar el producto
+      # al publicar una subasta: CatalogoProductosClientHttp pide
+      # GET /api/v1/productos/{id}. Sin esta linea valia http://localhost:8080,
+      # el propio contenedor, y publicar fallaba con «No se pudo contactar al
+      # catalogo». Mismo destino que el borde (borde-dev.conf) y que el banco E2E.
+      CATALOGO_BASE_URL: ${CATALOGO_BASE_URL:-http://34.193.90.11:8103}
       NOTIFICACIONES_BASE_URL: ${NOTIFICACIONES_BASE_URL:-http://srv-notificaciones:8085/api/v1}
       SANCIONES_BASE_URL: ${SANCIONES_BASE_URL:-http://srv-moderacion-sanciones:8086}
 
