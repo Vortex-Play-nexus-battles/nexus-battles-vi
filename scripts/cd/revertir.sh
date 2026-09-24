@@ -87,6 +87,14 @@ while IFS=: read -r servicio tag_fallido tag_anterior; do
   else
     docker compose "${ARCHIVOS_COMPOSE[@]}" pull "srv-${servicio}"
   fi
+  # La clave de firma de ms-identidad no va en el .env (asegurar_clave_de_firma
+  # en desplegar.sh). Sin esto, revertir ms-identidad lo levantaria con una
+  # clave efimera y cerraria todas las sesiones justo cuando algo ya fallo.
+  if [ "$extra" = "docker-compose.cuentas.yml" ] && [ -z "${JWT_CLAVE_PRIVADA:-}" ] \
+     && [ -s "$DIRECTORIO/secretos-firma.env" ]; then
+    JWT_CLAVE_PRIVADA=$(grep '^JWT_CLAVE_PRIVADA=' "$DIRECTORIO/secretos-firma.env" | head -n1 | cut -d= -f2- || true)
+    export JWT_CLAVE_PRIVADA
+  fi
   # R16.5b: igual que en desplegar.sh. Sin esto el contenedor revertido
   # quedaria sin hora de creacion y no esperaria su turno en el proximo
   # arranque del host (el valor por omision no escalona).
