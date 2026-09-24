@@ -1,5 +1,6 @@
 package nexus.semilla;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -47,10 +48,11 @@ public record CatalogoInicial(
             String fuente) {
     }
 
-    /** Precios en creditos por tipo, tiraje y modalidad de compra. */
+    /** Precios en creditos y en pesos (COP) por tipo, tiraje y modalidad de compra. */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record PreciosDemostracion(
             Map<String, Integer> creditos,
+            Map<String, BigDecimal> cop,
             int tiraje,
             boolean premium) {
     }

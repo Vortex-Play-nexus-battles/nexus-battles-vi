@@ -91,7 +91,15 @@ class MapeadorDelCatalogoTest {
 
     private static final PreciosDemostracion PRECIOS = new PreciosDemostracion(
             Map.of("HEROE", 1000, "EPICA", 500, "ARMA", 300, "ARMADURA", 250, "ITEM", 150),
+            Map.of("HEROE", new BigDecimal("20000"), "EPICA", new BigDecimal("10000"),
+                    "ARMA", new BigDecimal("6000"), "ARMADURA", new BigDecimal("5000"),
+                    "ITEM", new BigDecimal("3000")),
             -1, false);
+
+    private static void assertPesos(String esperado, BigDecimal real) {
+        assertTrue(real != null && new BigDecimal(esperado).compareTo(real) == 0,
+                () -> "precioMonedaReal esperado " + esperado + " y fue " + real);
+    }
 
     private static final CatalogoInicial CATALOGO = new CatalogoInicial(
             List.of(HEROE), List.of(ARMA_CON_ATAQUE, ARMA_SIN_ATAQUE), List.of(ARMADURA),
@@ -144,7 +152,7 @@ class MapeadorDelCatalogoTest {
         assertEquals(1000, s.precioCreditos());
         assertEquals(-1, s.tiraje());
         assertFalse(s.premium());
-        assertNull(s.precioMonedaReal());
+        assertPesos("20000", s.precioMonedaReal());
         assertTrue(s.descripcion().contains("poder 10"), s.descripcion());
         assertTrue(s.descripcion().contains("ataque 10 + 1d6"), s.descripcion());
         assertFalse(s.descripcion().contains("sanar"), "los valores '-' no se escriben");
@@ -161,6 +169,7 @@ class MapeadorDelCatalogoTest {
         assertEquals(1, s.poderDeAtaque());
         assertEquals(new BigDecimal("3"), s.tasaDeCaida());
         assertEquals(300, s.precioCreditos());
+        assertPesos("6000", s.precioMonedaReal());
         assertNull(s.heroe(), "el alta de un ARMA no admite heroe");
         assertTrue(s.descripcion().contains("+1 al ataque, +1% de crítico al ataque"), s.descripcion());
         assertTrue(s.descripcion().contains("Guerrero Tanque"), s.descripcion());
@@ -186,6 +195,7 @@ class MapeadorDelCatalogoTest {
         assertEquals(ParteArmadura.PANTALON, s.parte());
         assertEquals(new BigDecimal("3"), s.tasaDeCaida());
         assertEquals(250, s.precioCreditos());
+        assertPesos("5000", s.precioMonedaReal());
         assertTrue(s.descripcion().contains("+1 a la defensa, +1 de vida"), s.descripcion());
     }
 
@@ -198,6 +208,7 @@ class MapeadorDelCatalogoTest {
         assertEquals(ITEM.efectos(), s.efecto());
         assertEquals(new BigDecimal("20"), s.tasaDeCaida());
         assertEquals(150, s.precioCreditos());
+        assertPesos("3000", s.precioMonedaReal());
     }
 
     @Test
@@ -211,7 +222,23 @@ class MapeadorDelCatalogoTest {
         assertEquals(2, s.turnosRecarga());
         assertEquals(MapeadorDelCatalogo.identificador("heroe-guerrero-tanque"), s.heroe());
         assertEquals(500, s.precioCreditos());
+        assertPesos("10000", s.precioMonedaReal());
+        assertFalse(s.premium(), "con precio en pesos sigue sin ser premium");
         assertTrue(s.descripcion().contains("0.04%"), s.descripcion());
+    }
+
+    @Test
+    @DisplayName("si el JSON no trae precio en pesos para el tipo, queda vacio: no se inventa")
+    void sinPrecioEnPesosParaElTipo() {
+        PreciosDemostracion soloCreditos = new PreciosDemostracion(
+                PRECIOS.creditos(), Map.of(), -1, false);
+        CatalogoInicial catalogo = new CatalogoInicial(
+                List.of(HEROE), List.of(), List.of(), List.of(), List.of(), soloCreditos);
+
+        SolicitudCrearProducto s = mapeador.aSolicitud(HEROE, catalogo);
+
+        assertNull(s.precioMonedaReal());
+        assertTrue(validador.validate(s).isEmpty(), "sigue siendo valido con solo creditos");
     }
 
     @Test
@@ -242,6 +269,7 @@ class MapeadorDelCatalogoTest {
         assertEquals(TipoProducto.ARMADURA, p.tipo());
         assertEquals(-1, p.tiraje());
         assertEquals(250, p.precioCreditos());
+        assertPesos("5000", p.precioMonedaReal());
         assertFalse(p.premium());
         assertEquals(1, p.defensa());
         assertEquals(ParteArmadura.PANTALON, p.parte());
@@ -268,6 +296,11 @@ class MapeadorDelCatalogoTest {
                 .peek(s -> {
                     var violaciones = validador.validate(s);
                     assertTrue(violaciones.isEmpty(), () -> s.nombre() + ": " + violaciones);
+                    assertTrue(s.precioCreditos() != null && s.precioCreditos() > 0, s.nombre());
+                    assertTrue(s.precioMonedaReal() != null
+                            && s.precioMonedaReal().signum() > 0,
+                            () -> s.nombre() + " sin precio en pesos: la tienda no lo mostraria");
+                    assertFalse(s.premium(), s.nombre());
                 })
                 .collect(Collectors.groupingBy(SolicitudCrearProducto::tipo, Collectors.counting()));
 

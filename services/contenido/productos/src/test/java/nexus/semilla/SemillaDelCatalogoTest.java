@@ -145,6 +145,9 @@ class SemillaDelCatalogoTest {
         assertTrue(resultado.rechazados().isEmpty(), resultado.rechazados().toString());
         assertEquals(56, base.size());
         assertTrue(base.values().stream().allMatch(p -> p.estado() == EstadoProducto.ACTIVO));
+        // La tienda solo proyecta productos con precio en pesos mayor que cero.
+        assertTrue(base.values().stream().allMatch(
+                p -> p.precioMonedaReal() != null && p.precioMonedaReal().signum() > 0));
 
         Producto tanque = base.get(MapeadorDelCatalogo.identificador("heroe-guerrero-tanque"));
         assertEquals("Guerrero Tanque", tanque.nombre());
@@ -241,6 +244,8 @@ class SemillaDelCatalogoTest {
         assertEquals("Pícaro Veneno", catalogo.heroes().get(4).prototipo());
         assertEquals("1d4", catalogo.heroes().get(0).estadisticasNivel1().get("daño"));
         assertEquals(300, catalogo.preciosDemostracion().creditos().get("ARMA"));
+        assertEquals(0, new java.math.BigDecimal("6000")
+                .compareTo(catalogo.preciosDemostracion().cop().get("ARMA")));
         assertEquals(-1, catalogo.preciosDemostracion().tiraje());
     }
 

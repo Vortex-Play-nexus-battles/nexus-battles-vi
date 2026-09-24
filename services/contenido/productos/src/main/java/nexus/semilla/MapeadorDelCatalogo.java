@@ -1,5 +1,6 @@
 package nexus.semilla;
 
+import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
@@ -37,6 +38,9 @@ import org.springframework.stereotype.Component;
  *       turnos de recarga").</li>
  *   <li>Imagen: una figura SVG embebida por tipo, hasta que el administrador
  *       cargue la real.</li>
+ *   <li>Precios: creditos y pesos (COP) de {@code preciosDemostracion},
+ *       decision del PO para la demo; si falta el precio en pesos de un tipo,
+ *       queda vacio (el alta lo admite con premium false).</li>
  * </ul>
  */
 @Component
@@ -78,18 +82,24 @@ public class MapeadorDelCatalogo {
     public SolicitudCrearProducto aSolicitud(EntradaCatalogo entrada, CatalogoInicial catalogo) {
         TipoProducto tipo = tipoDe(entrada);
         Integer precio = catalogo.preciosDemostracion().creditos().get(tipo.name());
+        // RF-ADM-03: precio en creditos y en moneda real. Con premium false el
+        // alta solo exige creditos; el precio en pesos va tambien porque la
+        // tienda solo muestra productos con precioMonedaReal mayor que cero.
+        BigDecimal pesos = catalogo.preciosDemostracion().cop() == null
+                ? null
+                : catalogo.preciosDemostracion().cop().get(tipo.name());
         int tiraje = catalogo.preciosDemostracion().tiraje();
         boolean premium = catalogo.preciosDemostracion().premium();
 
         return switch (tipo) {
             case HEROE -> new SolicitudCrearProducto(
                     entrada.nombre(), imagen(tipo), descripcionHeroe(entrada), tipo,
-                    tiraje, precio, null, premium,
+                    tiraje, precio, pesos, premium,
                     entrada.prototipo(), null, null, null, null, null, null, null,
                     null, null, null, null, null);
             case ARMA -> new SolicitudCrearProducto(
                     entrada.nombre(), imagen(tipo), descripcionEquipo(entrada, tipo), tipo,
-                    tiraje, precio, null, premium,
+                    tiraje, precio, pesos, premium,
                     null, null, null, null, null, null, null, null,
                     null, null, null,
                     NumerosDeLaRegla.bonificacionAlAtaque(entrada.efectos())
@@ -97,20 +107,20 @@ public class MapeadorDelCatalogo {
                     NumerosDeLaRegla.porcentaje(entrada.probabilidadCaida()));
             case ARMADURA -> new SolicitudCrearProducto(
                     entrada.nombre(), imagen(tipo), descripcionEquipo(entrada, tipo), tipo,
-                    tiraje, precio, null, premium,
+                    tiraje, precio, pesos, premium,
                     null, null, null, null, null, null, null, null,
                     NumerosDeLaRegla.bonificacionALaDefensa(entrada.efectos()).orElse(null),
                     parteDe(entrada.parte()), null, null,
                     NumerosDeLaRegla.porcentaje(entrada.probabilidadCaida()));
             case ITEM -> new SolicitudCrearProducto(
                     entrada.nombre(), imagen(tipo), descripcionEquipo(entrada, tipo), tipo,
-                    tiraje, precio, null, premium,
+                    tiraje, precio, pesos, premium,
                     null, null, null, null, null, null, null, null,
                     null, null, entrada.efectos(), null,
                     NumerosDeLaRegla.porcentaje(entrada.probabilidadCaida()));
             case EPICA -> new SolicitudCrearProducto(
                     entrada.nombre(), imagen(tipo), descripcionEpica(entrada), tipo,
-                    tiraje, precio, null, premium,
+                    tiraje, precio, pesos, premium,
                     null, heroeDeLaEpica(entrada, catalogo), null, null, null,
                     TURNOS_RECARGA_EPICA, entrada.efectoGeneral(), entrada.efectoPotenciado(),
                     null, null, null, null, null);
