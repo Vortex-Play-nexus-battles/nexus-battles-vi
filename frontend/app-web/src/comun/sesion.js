@@ -27,6 +27,7 @@
 import { rutaDeApi } from './base-api.js';
 import { difundirCierre } from './canal-sesion.js';
 import { cuerpoDelToken } from './identidad.js';
+import { LIMPIAS_POR_RUTA } from './matriz-acceso.js';
 
 /** Claves que deja `login.js` en `sessionStorage`. Un solo sitio las nombra. */
 export const CLAVES = Object.freeze({
@@ -72,8 +73,35 @@ export const RUTAS = Object.freeze({
   tableroTecnico: '../plataforma/metricas-plataforma/tablero-tecnico.html',
 });
 
-/** URL real de una ruta relativa a este módulo. */
-export function resolver(ruta, base = import.meta.url) {
+/**
+ * ¿Sirve el borde las direcciones limpias (`/login`, `/jugar`…)?
+ *
+ * Lo dice la propia página: el borde inyecta
+ * `<meta name="nexus-rutas" content="limpias">` en todo HTML que sirve. Sin
+ * esa marca (`npm run dev`, el laboratorio visual, un servidor estático) las
+ * direcciones limpias no existen y se usan las rutas de siempre. Así el mismo
+ * código funciona en los dos sitios sin configurar nada.
+ *
+ * @param {ParentNode} [documento]
+ * @returns {boolean}
+ */
+export function hayRutasLimpias(documento = globalThis.document) {
+  return documento?.querySelector?.('meta[name="nexus-rutas"]')?.content === 'limpias';
+}
+
+/**
+ * URL real de una ruta relativa a este módulo.
+ *
+ * R17 — si la ruta es la de una vista con dirección limpia y el borde las
+ * sirve, devuelve la limpia (`/jugar` en vez de
+ * `/frontend/app-web/src/plataforma/salas-partidas/batallas.html`). Quien
+ * llama no cambia: todos los enlaces de la aplicación pasan por aquí.
+ */
+export function resolver(ruta, base = import.meta.url, documento = globalThis.document) {
+  const limpia = LIMPIAS_POR_RUTA[ruta];
+  if (limpia && hayRutasLimpias(documento)) {
+    return new URL(limpia, base).href;
+  }
   return new URL(ruta, base).href;
 }
 

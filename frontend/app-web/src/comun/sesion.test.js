@@ -15,6 +15,7 @@ import {
   avisarCierreAlServidor,
   cerrarSesion,
   guardarSesion,
+  hayRutasLimpias,
   leerSesion,
   olvidarSesion,
   resolver,
@@ -240,6 +241,74 @@ describe('RUTAS', () => {
     for (const ruta of Object.values(RUTAS)) {
       expect(ruta.startsWith('../')).toBe(true);
       expect(resolver(ruta, BASE)).toMatch(/^http:\/\/localhost:8099\/frontend\/app-web\/src\//);
+    }
+  });
+});
+
+describe('direcciones limpias (R17.3)', () => {
+  function documentoCon(meta) {
+    const doc = document.implementation.createHTMLDocument('x');
+    if (meta) {
+      const marca = doc.createElement('meta');
+      marca.name = 'nexus-rutas';
+      marca.content = meta;
+      doc.head.append(marca);
+    }
+    return doc;
+  }
+
+  test('sin la marca del borde, las rutas de siempre (npm run dev, laboratorio visual)', () => {
+    const doc = documentoCon(null);
+    expect(hayRutasLimpias(doc)).toBe(false);
+    expect(resolver(RUTAS.batallas, BASE, doc)).toBe(
+      'http://localhost:8099/frontend/app-web/src/plataforma/salas-partidas/batallas.html',
+    );
+  });
+
+  test('con la marca, las nueve vistas enlazan en limpio', () => {
+    const doc = documentoCon('limpias');
+    expect(hayRutasLimpias(doc)).toBe(true);
+    const esperadas = {
+      login: '/login',
+      registro: '/registro',
+      preparando: '/preparando',
+      inicio: '/inicio',
+      perfil: '/cuenta',
+      inventario: '/inventario',
+      batallas: '/jugar',
+      torneos: '/torneos',
+      subastas: '/subastas',
+    };
+    for (const [clave, limpia] of Object.entries(esperadas)) {
+      expect(resolver(RUTAS[clave], BASE, doc)).toBe(`http://localhost:8099${limpia}`);
+    }
+  });
+
+  test('una vista sin dirección limpia sigue en su ruta, con marca o sin ella', () => {
+    const doc = documentoCon('limpias');
+    expect(resolver(RUTAS.crearSala, BASE, doc)).toBe(
+      'http://localhost:8099/frontend/app-web/src/plataforma/salas-partidas/crear-sala.html',
+    );
+    // Y lo que no es una vista (el sprite, el kit) no se toca.
+    expect(resolver('../../../../shared/ui-kit/iconos/sprite.svg', BASE, doc)).toBe(
+      'http://localhost:8099/shared/ui-kit/iconos/sprite.svg',
+    );
+  });
+
+  test('una marca con otro valor no activa nada', () => {
+    expect(hayRutasLimpias(documentoCon('antiguas'))).toBe(false);
+  });
+
+  test('el login y la vuelta usan la dirección limpia', () => {
+    const doc = documentoCon('limpias');
+    document.head.append(doc.querySelector('meta').cloneNode());
+    try {
+      const url = new URL(urlDeLogin({ volver: '/jugar', motivo: MOTIVOS.CADUCADA }, BASE));
+      expect(url.pathname).toBe('/login');
+      expect(url.searchParams.get('volver')).toBe('/jugar');
+      expect(rutaSegura('/jugar', 'http://localhost:8099')).toBe('/jugar');
+    } finally {
+      document.head.querySelector('meta[name="nexus-rutas"]')?.remove();
     }
   });
 });
