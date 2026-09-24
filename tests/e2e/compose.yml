@@ -348,6 +348,8 @@ services:
       # mismo contenedor al que el borde manda /api/v1/productos en este
       # banco (e2e-borde-conf, mas abajo).
       PRODUCTOS_URL: http://srv-productos:8080
+      # El navegador llama desde el borde del banco: su origen (ConfiguracionCors).
+      CORS_ORIGENES: http://localhost:8099,http://127.0.0.1:8099
       # show-sql=true por omision: en la bitacora del fallo taparia la causa.
       SPRING_JPA_SHOW_SQL: "false"
     depends_on:

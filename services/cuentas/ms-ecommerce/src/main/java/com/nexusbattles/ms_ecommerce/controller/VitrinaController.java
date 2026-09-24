@@ -36,7 +36,6 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/productos")
 @RequiredArgsConstructor
-@CrossOrigin(origins = {"http://localhost:8080", "http://127.0.0.1:8080"})
 public class VitrinaController {
 
     private final VitrinaService vitrinaService;

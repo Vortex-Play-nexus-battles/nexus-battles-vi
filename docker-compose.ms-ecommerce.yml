@@ -63,6 +63,9 @@ services:
       # de srv-salas-partidas en docker-compose.deploy.yml. Sin la ruta
       # /api/v1: la pone el servicio. Sobreescribible sin tocar este archivo.
       PRODUCTOS_URL: ${PRODUCTOS_URL:-http://34.193.90.11:8103}
+      # Origen del borde, desde el que el navegador llama a la tienda (ConfiguracionCors).
+      # Sin el, «Añadir» (un POST con Origin) se rechazaba con 403 aunque el token fuera bueno.
+      CORS_ORIGENES: ${ECOMMERCE_CORS_ORIGENES:-http://35.168.124.119}
 
 volumes:
   ecommerce-db-datos:
