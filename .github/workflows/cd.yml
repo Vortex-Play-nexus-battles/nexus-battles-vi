@@ -61,6 +61,9 @@ on:
 permissions:
   contents: read
   packages: write
+  # Para leer que push se desplego con exito por ultima vez (base del rango,
+  # ver "Calcular servicios modificados").
+  actions: read
   # Para encender el host si esta apagado, por OIDC y sin claves guardadas.
   # Ver el paso "Asegurar que el host esta encendido" del job de dev.
   id-token: write
@@ -120,6 +123,8 @@ jobs:
       - name: Calcular servicios modificados, su puerto y el tag de esta corrida
         id: detectar
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
@@ -134,6 +139,34 @@ jobs:
               BASE=$(git rev-parse "$HEAD^")
             else
               BASE="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+            fi
+          fi
+
+          # R16 — la base es lo ultimo DESPLEGADO, no el commit anterior.
+          #
+          # La concurrencia de este flujo (cd-...-develop) deja una corrida en
+          # marcha y UNA pendiente; cuando llega otro push, GitHub cancela la
+          # pendiente. Con BASE = event.before, lo que traia el push cancelado
+          # no se despliega nunca: el siguiente push solo compara contra su
+          # propio commit anterior. El 24-sep se perdieron asi, en una hora, la
+          # semilla del catalogo (#682) y la validacion del inventario (#685),
+          # con todo en verde.
+          #
+          # Ahora, en un push, la base es el ultimo push de develop cuyo CD
+          # termino con exito (si es antepasado de HEAD): el rango cubre los
+          # pushes cancelados en medio. Los despliegues a demanda no cuentan:
+          # solo levantan los servicios pedidos. Si la consulta falla, se queda
+          # el comportamiento de antes.
+          if [ "${{ github.event_name }}" = "push" ]; then
+            ULTIMO_OK=$(gh run list --repo "${{ github.repository }}" --workflow cd.yml --branch develop \
+              --status success --limit 30 --json headSha,event \
+              --jq '[.[] | select(.event == "push")][0].headSha // empty' 2>/dev/null || true)
+            if [ -n "$ULTIMO_OK" ] && [ "$ULTIMO_OK" != "$HEAD" ] \
+              && git merge-base --is-ancestor "$ULTIMO_OK" "$HEAD" 2>/dev/null; then
+              if [ "$ULTIMO_OK" != "$BASE" ]; then
+                echo "Base = ultimo push desplegado con exito ($ULTIMO_OK), no el commit anterior ($BASE): hubo pushes sin desplegar en medio."
+              fi
+              BASE="$ULTIMO_OK"
             fi
           fi
 
