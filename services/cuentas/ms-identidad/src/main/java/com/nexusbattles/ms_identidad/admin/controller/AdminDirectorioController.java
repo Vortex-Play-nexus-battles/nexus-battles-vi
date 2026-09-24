@@ -62,7 +62,10 @@ public class AdminDirectorioController {
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size) {
 
-        String filtro = (buscar == null || buscar.isBlank()) ? null : buscar.trim();
+        // Cadena vacia y no null: un null sin tipo en la consulta hace que
+        // PostgreSQL no pueda deducir el tipo del parametro y devuelva 500
+        // justo en la consulta sin filtro, que es la primera que se hace.
+        String filtro = (buscar == null || buscar.isBlank()) ? "" : buscar.trim();
         int pagina = Math.max(page, 0);
         int tamano = Math.min(Math.max(size, 1), TAMANO_MAXIMO);
 
