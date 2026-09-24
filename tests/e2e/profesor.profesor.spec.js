@@ -491,12 +491,21 @@ test.describe('R17 · la prueba del profesor', () => {
 
         const resultado = page.locator('[data-zona="resultado"]');
         const ataque = page.locator('[data-zona="acciones"] [data-atacar]').first();
+        // HU-JUE-017 CA-04: al arrancar, la presentación de los héroes cubre el
+        // campo hasta que se entra al combate (o hasta el primer aviso del
+        // canal, si abre el rival). Una persona pulsa «Entrar al combate».
+        const entrar = page.locator('[data-accion="entrar-al-combate"]');
         const limite = Date.now() + 5 * 60_000;
         let golpes = 0;
         let recargada = false;
+        let presentacion = false;
         while (Date.now() < limite && !(await resultado.isVisible())) {
-          if ((await ataque.isVisible()) && (await ataque.isEnabled())) {
-            await ataque.click();
+          if (await entrar.isVisible()) {
+            presentacion = true;
+            await entrar.click({ timeout: 15_000 });
+            await expect(entrar).toBeHidden();
+          } else if ((await ataque.isVisible()) && (await ataque.isEnabled())) {
+            await ataque.click({ timeout: 15_000 });
             golpes += 1;
             if (!recargada) {
               // Un F5 en pleno combate no devuelve a la sala de espera: la
@@ -522,6 +531,7 @@ test.describe('R17 · la prueba del profesor', () => {
           'las barras de vida se movieron',
         ).toBe(true);
         return (
+          `${presentacion ? 'presentación de los héroes → «Entrar al combate»; ' : ''}` +
           `${golpes} golpes; vida propia ${alEmpezar.mia}→${alTerminar.mia}, ` +
           `rival ${alEmpezar.rival}→${alTerminar.rival}; un F5 a mitad volvió al combate`
         );

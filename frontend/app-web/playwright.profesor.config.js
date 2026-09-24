@@ -34,6 +34,10 @@ export default defineConfig({
     baseURL: process.env.PROFESOR_URL ?? process.env.E2E_AWS ?? 'http://localhost:8099',
     locale: 'es-CO',
     timezoneId: 'America/Bogota',
+    // Un clic que no puede darse (algo lo tapa) falla en 20 s con el motivo,
+    // en vez de agotar los doce minutos de la prueba esperando.
+    actionTimeout: 20_000,
+    navigationTimeout: 45_000,
     // Sin traza ni vídeo: guardarían la contraseña que se escribe en el
     // registro y en el login. Las capturas no la enseñan (el campo la tapa).
     trace: 'off',
