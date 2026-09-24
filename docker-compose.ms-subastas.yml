@@ -47,6 +47,13 @@ services:
       # SECRETO_SERVICIO_MS_SUBASTAS en el host y se la da a ms-identidad en
       # AUTH_CLIENTES_SERVICIO; sin estas dos lineas el servicio pide el token
       # con el client_id global, que no esta registrado, y se lo niegan.
+      # El emisor de la credencial. Los servicios declarados en
+      # docker-compose.yml lo heredan de ahi; estos dos solo existen en su
+      # propio override, asi que si no se pone aqui llegan vacios y el
+      # arranque falla en seco: "Falta la URL del emisor
+      # (DIRECTORIO_ACTIVO_URL): sin eso el servicio no puede
+      # identificarse". Paso exactamente eso en la corrida 35939650016.
+      DIRECTORIO_ACTIVO_URL: ${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}
       DIRECTORIO_ACTIVO_CLIENT_ID: ms-subastas
       DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_MS_SUBASTAS:-}
       DB_HOST: ${MS_SUBASTAS_DB_HOST:-subastas-db}
