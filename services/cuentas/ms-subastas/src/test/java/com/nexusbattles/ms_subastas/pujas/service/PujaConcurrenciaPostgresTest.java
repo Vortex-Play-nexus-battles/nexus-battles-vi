@@ -103,7 +103,10 @@ class PujaConcurrenciaPostgresTest {
         pujaRepository.deleteAll();
         subastaRepository.deleteAll();
 
-        Subasta nueva = new Subasta(null, UUID.randomUUID(), UUID.randomUUID(), new BigDecimal("100.00"),
+        // El id lo asigna la aplicacion desde R10: la entidad dejo de declarar
+        // @GeneratedValue, porque publicar necesita el identificador ANTES de
+        // guardar para reservar el elemento en inventario con el.
+        Subasta nueva = new Subasta(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), new BigDecimal("100.00"),
                 new BigDecimal("10.00"), new BigDecimal("100000.00"), null, EstadoSubasta.ACTIVA,
                 Instant.now().plusSeconds(86400), 0L);
         nueva.setElementoInventarioId("elemento-" + UUID.randomUUID());
