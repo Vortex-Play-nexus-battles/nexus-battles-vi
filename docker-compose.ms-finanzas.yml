@@ -44,7 +44,7 @@ services:
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-ms-finanzas:${TAG}
     container_name: srv-ms-finanzas
     restart: unless-stopped
-    mem_limit: 192m
+    mem_limit: 256m
     ports:
       - "8093:8093"
     depends_on:
@@ -56,7 +56,7 @@ services:
       finanzas-db:
         condition: service_healthy
     environment:
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
       # Credencial de servicio (ADR-005). desplegar.sh genera y persiste
       # SECRETO_SERVICIO_MS_FINANZAS en el host y se la da a ms-identidad en
       # AUTH_CLIENTES_SERVICIO; sin estas dos lineas el servicio pide el token

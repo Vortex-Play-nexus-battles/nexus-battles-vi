@@ -25,18 +25,33 @@
 # compose (docker-compose.contenido.yml). Este archivo solo gobierna lo que
 # vive en plataforma; el mapa completo esta en docs/arquitectura/README.md y
 # el detalle de la instancia en
-# infrastructure/entornos/plataforma/README.md. Cada JVM queda acotada a
-# 384 MB (MaxRAMPercentage=70 sobre el limite del contenedor) para que un
-# arranque no se coma la memoria de los demas, y todo se reinicia solo
-# cuando la instancia vuelve del apagado nocturno (restart: unless-stopped;
-# sin esto, tras un stop/start del host los contenedores quedan parados y
-# la demo aparece caida).
+# infrastructure/entornos/plataforma/README.md.
+#
+# Flags de la JVM (R16.5). Medido en este host el 24-sep: cada servicio tiene
+# ~50 MiB de monton comprometido y 165-235 MiB en total; lo que pesa es el
+# no-monton (metaspace, code cache del compilador C2, hilos). Con
+# MaxRAMPercentage=70 el monton podia crecer hasta 270 MiB sin que nada lo
+# frenara, y catorce JVM asi no caben en 1910 MiB. Ahora:
+#   -Xmx128m                  monton acotado, igual en todos
+#   -XX:TieredStopAtLevel=1   solo C1: menos code cache, sin la memoria del
+#                             compilador C2 y arranque con menos CPU
+#   -XX:ReservedCodeCacheSize=48m
+#   -XX:+ExitOnOutOfMemoryError  si una JVM se queda sin monton sale y Docker
+#                             la reinicia, en vez de seguir viva y rota
+# El experimento A/B que los respalda, con la suite E2E completa como carga,
+# es .github/workflows/experimento-flags-jvm.yml; el presupuesto por host
+# esta en infrastructure/despliegue/CAPACIDAD.md. mem_limit sigue siendo un
+# techo, no una reserva.
+#
+# Todo se reinicia solo cuando la instancia vuelve del apagado nocturno
+# (restart: unless-stopped; sin esto, tras un stop/start del host los
+# contenedores quedan parados y la demo aparece caida).
 
 x-servicio-plataforma: &servicio-plataforma
   restart: unless-stopped
   mem_limit: 384m
   environment:
-    JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+    JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
 
 services:
   plataforma-db:
@@ -78,7 +93,7 @@ services:
     <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-comentarios:${TAG}
     environment:
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
       # HU-COM-001 / RF-USR-004: la sancion activa del autor se consulta en
       # moderacion-sanciones, que corre en este host (misma nota que en
       # srv-salas-partidas: sin esto localhost seria el propio contenedor).
@@ -104,7 +119,7 @@ services:
     <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-torneos:${TAG}
     environment:
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
       # M13: lista negra y sanciones en moderacion-sanciones (este host); el
       # libro de creditos NO corre en dev (ver srv-salas-partidas): una
       # inscripcion con costo > 0 responde 503 libro-no-disponible y un torneo
@@ -120,7 +135,7 @@ services:
     <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-salas-partidas:${TAG}
     environment:
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
       # Credencial de servicio propia (ADR-005) para hablar con inventario.
       # El .env es compartido, asi que el client_id va aqui y el secreto
       # sale de la variable por servicio que genera desplegar.sh.
@@ -190,7 +205,7 @@ services:
       # Un bloque `environment:` SUSTITUYE entero al del ancla, no se fusiona
       # con el. Por eso JAVA_TOOL_OPTIONS se repite aqui: sin esta linea el
       # servicio arrancaria sin el limite de monton del ancla.
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
       # Credencial de servicio (ADR-005). desplegar.sh genera y persiste
       # SECRETO_SERVICIO_NOTIFICACIONES en el host y se la da a ms-identidad en
       # AUTH_CLIENTES_SERVICIO; sin estas dos lineas el servicio pide el token
@@ -202,7 +217,7 @@ services:
     <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-moderacion-sanciones:${TAG}
     environment:
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
       # HU-NOT-005: el aviso de sancion/apelacion va a la bandeja del jugador
       # por /internal/notifications de notificaciones, que corre en este host,
       # con la credencial de servicio propia (ADR-005; secreto de desplegar.sh).
@@ -235,7 +250,7 @@ services:
       # Se repite porque el merge de YAML (<<) reemplaza el mapa entero, no lo
       # fusiona: sin esta linea el servicio perderia el limite de memoria de la
       # JVM que comparte con los demas.
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
       SALUD_COMENTARIOS: http://srv-comentarios:8081/actuator/health
       SALUD_CORREO: http://srv-correo:8082/actuator/health
       SALUD_TORNEOS: http://srv-torneos:8083/actuator/health
@@ -253,7 +268,7 @@ services:
     <<: *servicio-plataforma
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-admin-parametros:${TAG}
     environment:
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
       # HU-AUD-001: ms-cumplimiento NO corre en el host de dev (capacidad);
       # sin AUDITORIA_URL cada cambio queda en el historial local y en la
       # bitacora. Cuando corra, apuntar aqui a su /admin/auditoria/eventos.

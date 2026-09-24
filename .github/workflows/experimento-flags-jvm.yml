@@ -1,0 +1,274 @@
+# Experimento A/B de los flags de la JVM sobre el banco E2E (R16.5).
+#
+# ## Por qué existe
+#
+# El host de plataforma (t3.small, 1910 MiB) no deja convivir a los servicios
+# del jugador: se turnan por perfiles y el host se queda sin responder cuando
+# arrancan todos. La medición del 24-sep (medir-jvm-dev.yml) dice dónde se va
+# la memoria: cada JVM tiene ~50 MiB de montón comprometido y 165-235 MiB en
+# total. El resto es no-montón (metaspace, code cache del compilador C2,
+# hilos), y el montón puede crecer hasta el 70 % del límite del contenedor
+# (270 MiB con 384m) sin que nada lo frene.
+#
+# Cambiar los flags de catorce servicios a ciegas sería repetir el error de
+# decidir con el `mem_limit`. Este flujo lo prueba antes, con números:
+#
+#   linea-base   los flags que corrían en dev hasta R16
+#   desplegados  los que declara hoy docker-compose.deploy.yml, o sea, lo que
+#                este cambio va a desplegar
+#
+# Las dos variantes levantan el MISMO banco E2E (los mismos servicios reales,
+# con sus bases y el mismo borde), con el mismo `mem_limit` que en dev, y
+# pasan la MISMA suite E2E. Se mide en reposo tras arrancar y otra vez
+# después de la suite, que hace de carga. Si con los flags nuevos la suite se
+# pone roja, el flujo falla: ahorrar memoria rompiendo el juego no sirve.
+#
+# No toca ningún host ni crea infraestructura: corre entero en runners de
+# GitHub.
+name: Experimento - flags de la JVM
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - ".github/workflows/experimento-flags-jvm.yml"
+      - "tests/e2e/medir-memoria.sh"
+      - "docker-compose.deploy.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: experimento-jvm-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  medir:
+    name: Banco E2E - flags ${{ matrix.variante }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        variante: [linea-base, desplegados]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Construir los jars de los servicios Gradle
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon -x test \
+            :services:contenido:heroes:bootJar \
+            :services:contenido:productos:bootJar \
+            :services:contenido:inventario:bootJar \
+            :services:contenido:motor-combate:bootJar \
+            :services:cuentas:ms-finanzas:bootJar \
+            :services:cuentas:ms-subastas:bootJar \
+            :services:plataforma:moderacion-sanciones:bootJar \
+            :services:plataforma:notificaciones:bootJar \
+            :services:plataforma:torneos:bootJar \
+            :services:plataforma:metricas-plataforma:bootJar \
+            :services:plataforma:admin-parametros:bootJar \
+            :services:plataforma:comentarios:bootJar \
+            :services:plataforma:salas-partidas:bootJar
+
+      - name: Construir el jar de ms-identidad (Maven)
+        working-directory: services/cuentas/ms-identidad
+        run: ./mvnw -B -DskipTests package
+
+      - name: Flags y límites de la variante
+        id: variante
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.variante }}" = "linea-base" ]; then
+            flags='-XX:MaxRAMPercentage=70 -XX:+UseSerialGC'
+          else
+            # Se leen del ancla x-servicio-plataforma: el experimento mide lo
+            # que el compose de despliegue declara, no una copia a mano.
+            flags=$(sed -n 's/^ *JAVA_TOOL_OPTIONS: *"\(.*\)" *$/\1/p' docker-compose.deploy.yml | head -1)
+          fi
+          [ -n "$flags" ] || { echo "::error::no encuentro JAVA_TOOL_OPTIONS en docker-compose.deploy.yml"; exit 1; }
+          echo "flags=$flags" >> "$GITHUB_OUTPUT"
+          echo "Variante ${{ matrix.variante }}: $flags"
+
+          # Mismo mem_limit que cada servicio tiene en dev, en las dos
+          # variantes: lo único que cambia entre ellas son los flags.
+          {
+            echo "services:"
+            for s in $(docker compose -f tests/e2e/compose.yml config --services); do
+              case "$s" in srv-borde) continue ;; srv-*) ;; *) continue ;; esac
+              case "$s" in
+                srv-ms-identidad) limite=448m ;;
+                srv-ms-finanzas) limite=192m ;;
+                srv-ms-subastas) limite=256m ;;
+                *) limite=384m ;;
+              esac
+              echo "  $s:"
+              echo "    mem_limit: $limite"
+              echo "    environment:"
+              echo "      JAVA_TOOL_OPTIONS: \"$flags\""
+            done
+          } > tests/e2e/compose.variante.yml
+          cat tests/e2e/compose.variante.yml
+
+      - name: Levantar el banco
+        id: arranque
+        run: |
+          inicio=$(date +%s)
+          docker compose -f tests/e2e/compose.yml -f tests/e2e/compose.variante.yml up -d --build --wait
+          echo "segundos=$(( $(date +%s) - inicio ))" >> "$GITHUB_OUTPUT"
+
+      - name: Medir en reposo
+        run: |
+          chmod +x tests/e2e/medir-memoria.sh
+          # Un minuto para que terminen las tareas de arranque (Flyway,
+          # cachés, primeras conexiones) y la foto sea de reposo de verdad.
+          sleep 60
+          ./tests/e2e/medir-memoria.sh reposo "medicion-${{ matrix.variante }}.tsv"
+          column -t -s $'\t' "medicion-${{ matrix.variante }}.tsv"
+
+      - name: Sembrar el inventario
+        run: |
+          chmod +x tests/e2e/sembrar.sh
+          ./tests/e2e/sembrar.sh
+
+      - name: Configurar Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/app-web/package-lock.json
+
+      - name: Instalar dependencias y el navegador
+        working-directory: frontend/app-web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Enlazar node_modules en la raiz para las pruebas de tests/
+        run: ln -sfn frontend/app-web/node_modules node_modules
+
+      # La suite E2E completa hace de carga, y además es la prueba de que los
+      # flags no rompen nada. No corta el flujo aquí para poder medir después.
+      - name: Suite E2E como carga
+        id: e2e
+        continue-on-error: true
+        working-directory: frontend/app-web
+        env:
+          E2E_BORDE: http://localhost:8099
+        run: |
+          inicio=$(date +%s)
+          npx playwright test --config=playwright.e2e.config.js --reporter=line
+          echo "segundos=$(( $(date +%s) - inicio ))" >> "$GITHUB_OUTPUT"
+
+      - name: Medir después de la suite
+        if: always()
+        run: |
+          ./tests/e2e/medir-memoria.sh tras-e2e "tras-${{ matrix.variante }}.tsv"
+          tail -n +2 "tras-${{ matrix.variante }}.tsv" >> "medicion-${{ matrix.variante }}.tsv"
+          column -t -s $'\t' "tras-${{ matrix.variante }}.tsv"
+          {
+            echo "variante=${{ matrix.variante }}"
+            echo "flags=${{ steps.variante.outputs.flags }}"
+            echo "arranque_segundos=${{ steps.arranque.outputs.segundos }}"
+            echo "e2e=${{ steps.e2e.outcome }}"
+          } > "resumen-${{ matrix.variante }}.txt"
+          cat "resumen-${{ matrix.variante }}.txt"
+
+      - name: Guardar la medición
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: medicion-${{ matrix.variante }}
+          path: |
+            medicion-${{ matrix.variante }}.tsv
+            resumen-${{ matrix.variante }}.txt
+          retention-days: 30
+
+      - name: Desmontar
+        if: always()
+        run: docker compose -f tests/e2e/compose.yml -f tests/e2e/compose.variante.yml down -v --remove-orphans
+
+      - name: La suite E2E tiene que pasar con estos flags
+        if: steps.e2e.outcome != 'success'
+        run: |
+          echo "::error::La suite E2E falló con los flags '${{ steps.variante.outputs.flags }}'."
+          exit 1
+
+  comparar:
+    name: Comparar las dos variantes
+    needs: medir
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: medicion-*
+          merge-multiple: true
+
+      - name: Tabla comparada
+        run: |
+          python3 - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
+          import csv, os
+
+          def leer(variante):
+              filas = {}
+              ruta = f"medicion-{variante}.tsv"
+              if not os.path.exists(ruta):
+                  return filas
+              with open(ruta, newline="") as f:
+                  for fila in csv.DictReader(f, delimiter="\t"):
+                      # El nombre lleva el sufijo de réplica de compose (-1).
+                      nombre = fila["contenedor"].removeprefix("nexus-e2e-").removesuffix("-1")
+                      filas[(fila["etiqueta"], nombre)] = fila
+              return filas
+
+          def resumen(variante):
+              datos = {}
+              ruta = f"resumen-{variante}.txt"
+              if os.path.exists(ruta):
+                  for linea in open(ruta):
+                      clave, _, valor = linea.strip().partition("=")
+                      datos[clave] = valor
+              return datos
+
+          def num(valor):
+              try:
+                  return int(valor)
+              except (TypeError, ValueError):
+                  return None
+
+          base, nuevo = leer("linea-base"), leer("desplegados")
+          rb, rn = resumen("linea-base"), resumen("desplegados")
+          print("## Flags de la JVM: línea base frente a desplegados\n")
+          print(f"- **Línea base:** `{rb.get('flags', '?')}` · arranque {rb.get('arranque_segundos', '?')} s · E2E **{rb.get('e2e', '?')}**")
+          print(f"- **Desplegados:** `{rn.get('flags', '?')}` · arranque {rn.get('arranque_segundos', '?')} s · E2E **{rn.get('e2e', '?')}**\n")
+          print("Memoria anónima del cgroup (lo que no se puede soltar y acaba en swap), en MiB.\n")
+
+          for etiqueta in ("reposo", "tras-e2e"):
+              claves = sorted({n for (e, n) in list(base) + list(nuevo) if e == etiqueta})
+              print(f"### {etiqueta}\n")
+              print("| contenedor | anon base | anon nuevo | Δ | pico base | pico nuevo | montón usado (base → nuevo) | montón máx (base → nuevo) | no-montón (base → nuevo) |")
+              print("|---|--:|--:|--:|--:|--:|--|--|--|")
+              total_b = total_n = 0
+              for n in claves:
+                  b, v = base.get((etiqueta, n), {}), nuevo.get((etiqueta, n), {})
+                  ab, an = num(b.get("anon_mib")), num(v.get("anon_mib"))
+                  total_b += ab or 0
+                  total_n += an or 0
+                  delta = f"{an - ab:+d}" if ab is not None and an is not None else "-"
+                  print(f"| {n} | {ab if ab is not None else '-'} | {an if an is not None else '-'} | {delta} "
+                        f"| {b.get('pico_mib', '-')} | {v.get('pico_mib', '-')} "
+                        f"| {b.get('heap_usado_mib', '-')} → {v.get('heap_usado_mib', '-')} "
+                        f"| {b.get('heap_max_mib', '-')} → {v.get('heap_max_mib', '-')} "
+                        f"| {b.get('noheap_comprometido_mib', '-')} → {v.get('noheap_comprometido_mib', '-')} |")
+              print(f"| **total** | **{total_b}** | **{total_n}** | **{total_n - total_b:+d}** | | | | | |\n")
+          PY
