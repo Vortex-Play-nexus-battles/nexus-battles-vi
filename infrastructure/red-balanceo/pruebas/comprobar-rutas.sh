@@ -134,6 +134,21 @@ comprobar GET  "/api/v1/productos?page=0&size=20" \
                                            "productos GET /api/v1/productos?page=0&size=20"
 
 echo
+echo "Misiones — un prefijo, un dueno; la consulta y los sufijos llegan enteros (B9)"
+# El destino real es 34.193.90.11:8105; el banco lo sustituye por el eco
+# `srv-misiones` (ver `borde-conf` en docker-compose.yml). El tablon lleva la
+# categoria en la consulta y la matricula un sufijo: si alguno se perdiera,
+# la interfaz pediria otra cosa sin error ninguno que lo delatara.
+comprobar GET  "/api/v1/misiones?categoria=HISTORIA&pagina=0" \
+                                           "misiones GET /api/v1/misiones?categoria=HISTORIA&pagina=0"
+comprobar GET  /api/v1/misiones/templo-olvidado \
+                                           "misiones GET /api/v1/misiones/templo-olvidado"
+comprobar POST /api/v1/misiones/templo-olvidado/ejecuciones \
+                                           "misiones POST /api/v1/misiones/templo-olvidado/ejecuciones"
+comprobar PUT  /api/v1/misiones/estrategias/h-1 \
+                                           "misiones PUT /api/v1/misiones/estrategias/h-1"
+
+echo
 echo "Vitrina — ms-ecommerce con prefijo propio; la consulta llega entera (R16)"
 # Misma reescritura que el carrito. La pagina, el tamano y el tipo viajan en
 # la consulta: si el borde la perdiera, la tienda ensenaria siempre la primera
@@ -302,6 +317,7 @@ echo "Contenido — no se puede suplantar una IP, se comprueba el fichero"
 enConfiguracion "heroes va al host de contenido"     'heroes.*\n?.*34\.193\.90\.11:8101|34\.193\.90\.11:8101'
 enConfiguracion "inventario va al host de contenido" '34\.193\.90\.11:8102'
 enConfiguracion "productos va al host de contenido"  '34\.193\.90\.11:8103'
+enConfiguracion "misiones va al host de contenido"   '34\.193\.90\.11:8105'
 
 echo
 echo "Quien atiende una ruta lo dice su contrato, no el metodo (#421)"

@@ -143,7 +143,9 @@ services:
       # pruebas, no de ningun entorno real.
       # e2e-banco: credencial con la que sembrar.sh acredita el saldo inicial en
       # ms-finanzas, que desde #455 solo atiende a servicios (ROLE_SERVICIO).
-      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion;torneos=e2e-secreto-de-torneos;comentarios=e2e-secreto-de-comentarios
+      # B9: misiones bloquea y libera al heroe en inventario, pide la IA de cada
+      # turno a heroes, los golpes al motor y los creditos a ms-finanzas.
+      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion;torneos=e2e-secreto-de-torneos;comentarios=e2e-secreto-de-comentarios;misiones=e2e-secreto-de-misiones
     depends_on:
       e2e-identidad-db: { condition: service_healthy }
     healthcheck:
@@ -254,6 +256,50 @@ services:
       IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
     depends_on:
       srv-heroes: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  # B9 — misiones (seccion 7.8): matricula el heroe (bloqueo en inventario),
+  # simula en segundo plano con el motor y la IA de heroes, y liquida
+  # experiencia (inventario) y creditos (ms-finanzas). En AWS va con
+  # desplegableDev: false; aqui corre entero, con la semilla PROVISIONAL DE DEV
+  # (una mision tecnica de dos combates) y el reloj acelerado: una hora de
+  # mision dura dos segundos. Sin correo en este banco: va apagado.
+  srv-misiones:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/contenido/misiones/build/libs/*.jar
+    environment:
+      MONGODB_URI: mongodb://e2e-contenido-mongo:27017/misiones
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
+      DIRECTORIO_ACTIVO_CLIENT_ID: misiones
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-misiones
+      HEROES_BASE_URL: http://srv-heroes:8080
+      INVENTARIO_BASE_URL: http://srv-inventario:8080
+      PRODUCTOS_BASE_URL: http://srv-productos:8080
+      MOTOR_COMBATE_URL: http://srv-motor-combate:8080
+      CREDITOS_URL: http://srv-ms-finanzas:8093/api/v1
+      IDENTIDAD_URL: http://srv-ms-identidad:8089
+      MISIONES_CORREO_ACTIVO: "false"
+      MISIONES_SEMILLA_PROVISIONAL: "true"
+      MISIONES_SEMILLA_DE_PRUEBAS: "7"
+      MISIONES_SEGUNDOS_POR_HORA: "2"
+      MISIONES_INTERVALO_MS: "1000"
+      MISIONES_REINTENTO_SEGUNDOS: "1"
+    depends_on:
+      e2e-contenido-mongo: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
+      srv-inventario: { condition: service_healthy }
+      srv-heroes: { condition: service_healthy }
+      srv-productos: { condition: service_healthy }
+      srv-motor-combate: { condition: service_healthy }
+      srv-ms-finanzas: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
       interval: 5s
@@ -711,6 +757,7 @@ services:
         sed -e 's|34\.193\.90\.11:8101|srv-heroes:8080|g' \
             -e 's|34\.193\.90\.11:8102|srv-inventario:8080|g' \
             -e 's|34\.193\.90\.11:8103|srv-productos:8080|g' \
+            -e 's|34\.193\.90\.11:8105|srv-misiones:8080|g' \
             /origen/borde-dev.conf > /salida/default.conf
         # Solo lineas efectivas: `borde-dev.conf` menciona la IP en sus
         # comentarios a proposito, para explicar de donde sale, y un guardian
@@ -725,11 +772,11 @@ services:
         # vea, y la dejaba vacia ("The esperado variable is not set"). Un
         # `grep -q ""` casa con cualquier linea, asi que este bucle aprobaba
         # siempre sin mirar nada.
-        for esperado in srv-heroes:8080 srv-inventario:8080 srv-productos:8080; do
+        for esperado in srv-heroes:8080 srv-inventario:8080 srv-productos:8080 srv-misiones:8080; do
           grep -q "$$esperado" /salida/default.conf || {
             echo "ADAPTACION INCOMPLETA: no aparece $$esperado." >&2; exit 1; }
         done
-        echo "Borde adaptado al banco: heroes, inventario y productos son locales."
+        echo "Borde adaptado al banco: heroes, inventario, productos y misiones son locales."
 
   srv-borde:
     image: nginx:1.27-alpine
@@ -753,6 +800,8 @@ services:
       srv-productos: { condition: service_healthy }
       # R16: /api/v1/vitrina y /api/v1/carrito (tienda.e2e.spec.js).
       srv-ms-ecommerce: { condition: service_healthy }
+      # B9: /api/v1/misiones (misiones.e2e.spec.js).
+      srv-misiones: { condition: service_healthy }
     healthcheck:
       # 127.0.0.1 y no `localhost` a proposito. El entrypoint de la imagen
       # intenta anadir un `listen [::]:80` y no puede, porque la

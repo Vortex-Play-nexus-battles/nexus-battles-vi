@@ -73,6 +73,23 @@ El resto de variables está en [`.env.example`](.env.example) y explicado en `sr
 - `GET /api/v1/internal/usuarios/{uid}/contacto` de ms-identidad es de la fase B2: sin él, el correo de la misión queda como no enviado y lo demás se entrega igual.
 - Las notificaciones dentro de la aplicación (HU-NOT-004) no se integran en esta fase.
 
+## Despliegue
+
+Va al host de contenido (`nexus-contenido-dev`, IP elástica 34.193.90.11), puerto **8105** del host y 8080 dentro del contenedor, con su base `misiones` en la Mongo de contenido (`docker-compose.contenido.yml`, bloque `srv-misiones`). El borde publica `/api/v1/misiones` hacia `34.193.90.11:8105` (`infrastructure/red-balanceo/borde-dev.conf`). Su imagen la construye y publica `cd.yml` como la de sus vecinos: el catálogo (`infrastructure/despliegue/servicios.json`) es lo único que hace falta para que el flujo lo conozca.
+
+En el catálogo va con **`desplegableDev: false`**: el despliegue automático a dev no lo levanta todavía. No porque falle, sino porque en ese host le faltan tres cosas que no se arreglan desde el código. Pasos exactos para encenderlo:
+
+1. **Credencial de servicio.** `scripts/cd/desplegar.sh` genera las credenciales en *cada* host (`/opt/nexus/secretos-servicios.env`) y el emisor, ms-identidad, vive en el de plataforma.
+   - Añadir `misiones` a `CLIENTES_DE_SERVICIO` en `desplegar.sh` y desplegar plataforma: ms-identidad registra el cliente y el host de plataforma guarda `SECRETO_SERVICIO_MISIONES`.
+   - Copiar ese valor a un secreto de GitHub del entorno `dev` (por ejemplo `SECRETO_SERVICIO_MISIONES`) y pasarlo en el job `desplegar-contenido-dev` de `cd.yml` como `DIRECTORIO_ACTIVO_CLIENT_SECRET_MISIONES`, junto con `DIRECTORIO_ACTIVO_CLIENT_ID_MISIONES=misiones` (añadirlos también a `envs:`).
+   - Con `misiones` en `CLIENTES_DE_SERVICIO`, el guardián de catálogo exige `DIRECTORIO_ACTIVO_CLIENT_ID: misiones` literal en el compose: cambiar la línea del bloque `srv-misiones` en ese mismo PR.
+2. **Red.** Desde el host de contenido hay que alcanzar ms-identidad (8089, ya abierto) y ms-finanzas (**8093**, abrirlo en el Security Group del host de plataforma solo para `34.193.90.11/32`). Correo (8082) no se publica fuera de su host: el correo de misiones queda apagado (`MISIONES_CORREO_ACTIVO=false`) hasta que se decida publicarlo.
+3. **Capacidad.** El host de contenido suma unos 1,7 GB de límites con cuatro JVM y Mongo; esta sería la quinta (320 MiB). Medir con `medir-jvm-dev.yml` antes de encenderla, como se hizo con el host de plataforma (`infrastructure/despliegue/CAPACIDAD.md`).
+4. Inventario tiene que estar desplegado con el bloqueo por misión (inventario.yaml 1.6.0); sin él, matricular responde 503.
+5. Poner `desplegableDev: true` en el catálogo.
+
+En el banco E2E (`tests/e2e/compose.yml`) corre entero: credencial propia, reloj acelerado (una hora de misión = 2 s) y la semilla provisional de desarrollo.
+
 ## Cómo correr
 
 ```
