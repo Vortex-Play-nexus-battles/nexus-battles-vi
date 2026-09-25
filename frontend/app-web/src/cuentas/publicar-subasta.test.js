@@ -89,7 +89,9 @@ test('usa cliente real de inventario, elementos y Authorization', async () => {
       headers: { 'X-User-Name': 'Guerrero', Authorization: expect.stringMatching(/^Bearer /) },
     }),
   );
-  expect($('#producto').options[1].textContent).toBe('Espada de luz · ARMA · unidad-1');
+  // UXC-8 — el tipo en palabras y sin el identificador interno del elemento.
+  expect($('#producto').options[1].textContent).toBe('Espada de luz · Arma');
+  expect($('#producto').options[1].value).toBe('unidad-1');
   expect($('.cabecera')).not.toBeNull();
 });
 
@@ -161,8 +163,11 @@ test('publica solo tras aceptación, envía contrato y muestra éxito con vuelta
     },
     'clave-estable',
   );
-  expect($('#nexus-rbac-forbidden').textContent).toMatch(
-    /publicada correctamente.*Comisión cobrada: 1/,
+  expect($('#nexus-rbac-forbidden').textContent).toMatch(/Subasta publicada.*Comisión cobrada: 1/);
+  // UXC-9 — sin el identificador en el texto; en su lugar, el camino a verla.
+  expect($('#nexus-rbac-forbidden').textContent).not.toContain('subasta-creada');
+  expect($('[data-accion="ver-publicada"]').getAttribute('href')).toBe(
+    './pujas.html?id=subasta-creada',
   );
   expect($('#raiz a').getAttribute('href')).toBe('./subastas.html');
   expect($('form').hidden).toBe(true);
@@ -262,7 +267,11 @@ test('inventario vacío y fallo de carga tienen estados claros', async () => {
   await montar({
     consultar: jest.fn().mockResolvedValue({ ...pagina, elementos: [], totalPaginas: 0 }),
   });
-  expect($('[data-inventario]').textContent).toMatch(/No hay productos/);
+  // UXC-9 — qué pasa y adónde ir, sin «Página 0 de 0».
+  expect($('[data-inventario]').textContent).toMatch(/Tu inventario está vacío/);
+  expect($('[data-sin-inventario]').hidden).toBe(false);
+  expect($('[data-sin-inventario] a').getAttribute('href')).toBe('./tienda.html');
+  expect($('.publicacion__paginacion').hidden).toBe(true);
   await montar({ consultar: jest.fn().mockRejectedValue(new Error('interno')) });
   expect($('[data-recargar]').hidden).toBe(false);
   expect($('#nexus-rbac-forbidden').textContent).not.toContain('interno');

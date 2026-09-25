@@ -28,7 +28,7 @@ import { distintivo } from '../../comun/ui/distintivo.js';
 import { limpiarAviso, pintarAviso, tonoPorEstado } from '../../comun/ui/aviso.js';
 import { conCarga } from '../../comun/ui/boton.js';
 import { construirPaginacion } from '../../comun/paginacion.js';
-import { creditos, fechaHora } from '../../comun/ui/formato.js';
+import { NOMBRE_DEL_TIPO, creditos, fechaHora } from '../../comun/ui/formato.js';
 import {
   estadoDeCarga,
   estadoDeError,
@@ -46,14 +46,7 @@ import {
 /** RNF-USA-001: dieciséis por página. */
 export const PRODUCTOS_POR_PAGINA = 16;
 
-export const ETIQUETA_DE_TIPO = Object.freeze({
-  HEROE: 'Héroe',
-  HABILIDAD: 'Habilidad',
-  ARMA: 'Arma',
-  ARMADURA: 'Armadura',
-  ITEM: 'Ítem',
-  EPICA: 'Épica',
-});
+export const ETIQUETA_DE_TIPO = NOMBRE_DEL_TIPO;
 
 export const ETIQUETA_DE_ESTADO = Object.freeze({
   ACTIVO: 'Activo',

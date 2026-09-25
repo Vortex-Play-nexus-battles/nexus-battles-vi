@@ -23,6 +23,7 @@ import { iconoHtml } from '../comun/ui/icono.js';
 // va con saneamiento EXPLICITO en cada interpolacion que lleve datos.
 // `sin-innerhtml.test.js` lo tiene anotado; la estructura se mueve en R2.10.
 import { esc } from '../comun/ui/escapar.js';
+import { nombreDelTipo } from '../comun/ui/formato.js';
 import { urlDeLogin } from '../comun/sesion.js';
 import { acusar } from '../comun/ui/acuse.js';
 
@@ -369,19 +370,13 @@ export function formatearCreditos(n) {
   return Number(n).toLocaleString('es-CO');
 }
 
-/** UXC-8 — el tipo del producto en palabras, no la constante del contrato. */
-export const TIPO_DE_OBJETO = Object.freeze({
-  HEROE: 'Héroe',
-  HABILIDAD: 'Habilidad',
-  ARMA: 'Arma',
-  ARMADURA: 'Armadura',
-  ITEM: 'Ítem',
-  EPICA: 'Épica',
-});
-
-/** @param {string|null|undefined} tipo */
+/**
+ * UXC-8 — el tipo del producto en palabras, no la constante del contrato.
+ *
+ * @param {string|null|undefined} tipo
+ */
 export function tipoLegible(tipo) {
-  return TIPO_DE_OBJETO[tipo] ?? (tipo ? String(tipo) : 'Objeto');
+  return nombreDelTipo(tipo);
 }
 
 /**
@@ -1240,7 +1235,9 @@ export class ControladorSubastas {
 
   generarHtmlAlerta() {
     const hayError = Boolean(this.mensajeError);
-    return `<div id="alerta-pujas" class="alerta alerta-error alerta-pujas" role="alert" ${hayError ? '' : 'hidden style="display: none;"'}>${hayError ? this.mensajeError : ''}</div>`;
+    // UXC-8 — escapado: el mensaje puede traer texto del servidor, y esta
+    // alerta ahora también va en el vacío del mercado.
+    return `<div id="alerta-pujas" class="alerta alerta-error alerta-pujas" role="alert" ${hayError ? '' : 'hidden style="display: none;"'}>${hayError ? esc(this.mensajeError) : ''}</div>`;
   }
 
   /**
