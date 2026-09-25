@@ -70,6 +70,10 @@ torneos:
     espera-maxima-s: ${TORNEOS_OPERACIONES_ESPERA_MAXIMA_S:1800}
     intentos-maximos: ${TORNEOS_OPERACIONES_INTENTOS_MAXIMOS:12}
     plazo-bloqueo-s: ${TORNEOS_OPERACIONES_PLAZO_BLOQUEO_S:120}
+    # Cuanto espera la propia peticion (iniciar, cancelar, la final) a sus
+    # operaciones antes de dejarle el resto a la tarea: con los proveedores
+    # sanos todo cabe; con uno lento, la peticion no se queda colgada.
+    presupuesto-sincrono-ms: ${TORNEOS_OPERACIONES_PRESUPUESTO_SINCRONO_MS:3000}
   # RF-TOR-007 — premio del equipo campeon, POR INTEGRANTE humano.
   #
   # VALORES PROVISIONALES (D-24, docs/gobierno/DECISIONES-PENDIENTES-DEL-PO.md):

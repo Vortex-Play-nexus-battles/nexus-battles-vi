@@ -46,7 +46,11 @@ import static org.mockito.Mockito.when;
  * hicieron: lo que no puede pasar es que alguien pague dos veces.
  */
 @Testcontainers
-@SpringBootTest(properties = {"spring.jpa.hibernate.ddl-auto=validate", "torneos.operaciones.tarea-activa=false"})
+// Presupuesto amplio: aqui se afirma lo que deja la propia peticion, y una
+// maquina lenta no debe mandarlo a la tarea (el recorte se prueba en
+// ProcesadorDeOperacionesTest).
+@SpringBootTest(properties = {"spring.jpa.hibernate.ddl-auto=validate", "torneos.operaciones.tarea-activa=false",
+        "torneos.operaciones.presupuesto-sincrono-ms=60000"})
 @Import(Dobles.Configuracion.class)
 @DisplayName("Torneos · cobro, devolucion y premio idempotentes (B10)")
 class CobroIdempotenteIT {

@@ -2,12 +2,14 @@ package com.nexusbattles.plataforma.torneos.torneo;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.EnumSet;
 import java.util.List;
@@ -56,11 +58,13 @@ public class ProcesadorDeOperaciones {
     private final PoliticaDeReintentos politica;
     private final TransactionTemplate transaccion;
     private final Clock reloj;
+    private final Duration presupuestoSincrono;
 
     public ProcesadorDeOperaciones(OperacionRepository operaciones, TorneoRepository torneos, EquipoRepository equipos,
                                    LibroDeCreditos libro, EntregaDeInventario inventario, AvisosAlJugador canales,
                                    ConsultaDeSanciones sanciones, Hitos hitos, PoliticaDeReintentos politica,
-                                   TransactionTemplate transaccion, Clock reloj) {
+                                   TransactionTemplate transaccion, Clock reloj,
+                                   @Value("${torneos.operaciones.presupuesto-sincrono-ms:3000}") long presupuestoMs) {
         this.operaciones = operaciones;
         this.torneos = torneos;
         this.equipos = equipos;
@@ -72,16 +76,32 @@ public class ProcesadorDeOperaciones {
         this.politica = politica;
         this.transaccion = transaccion;
         this.reloj = reloj;
+        this.presupuestoSincrono = Duration.ofMillis(presupuestoMs);
     }
 
     /**
      * Las operaciones de un torneo, de los tipos dados, que ya toca intentar.
      * La llama el caso de uso justo despues de confirmar su transaccion.
+     *
+     * <p>Con presupuesto de tiempo ({@code torneos.operaciones.presupuesto-sincrono-ms}):
+     * con los proveedores sanos todo se hace dentro de la peticion (el cobro
+     * o el premio se ven al instante), pero si uno tarda, la peticion no lo
+     * espera operacion tras operacion: lo que falte queda para la tarea
+     * programada. Importa sobre todo en la final, que puede informarla
+     * salas-partidas y no debe quedarse esperando al premio.
      */
     public void procesarDelTorneo(UUID torneoId, Set<Operacion.Tipo> tipos) {
         List<UUID> ids = operaciones.porAtenderDelTorneo(torneoId, tipos, POR_ATENDER, Operacion.Estado.EN_CURSO,
                 ahora(), PageRequest.of(0, LOTE));
-        ids.forEach(this::procesar);
+        long limite = System.nanoTime() + presupuestoSincrono.toNanos();
+        for (UUID id : ids) {
+            if (System.nanoTime() > limite) {
+                BITACORA.info("Presupuesto de tiempo agotado en torneo={}: lo pendiente lo hace la tarea programada",
+                        torneoId);
+                return;
+            }
+            procesar(id);
+        }
     }
 
     /**

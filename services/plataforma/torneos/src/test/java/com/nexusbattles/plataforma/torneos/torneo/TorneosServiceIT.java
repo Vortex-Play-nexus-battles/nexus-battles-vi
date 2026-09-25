@@ -36,7 +36,8 @@ import static org.mockito.Mockito.when;
  * las sanciones simulados en el borde del servicio.
  */
 @Testcontainers
-@SpringBootTest(properties = {"spring.jpa.hibernate.ddl-auto=validate", "torneos.operaciones.tarea-activa=false"})
+@SpringBootTest(properties = {"spring.jpa.hibernate.ddl-auto=validate", "torneos.operaciones.tarea-activa=false",
+        "torneos.operaciones.presupuesto-sincrono-ms=60000"})
 @DisplayName("Torneos · casos de uso (HU-TOR-001..005, HU-ADM-005)")
 class TorneosServiceIT {
 

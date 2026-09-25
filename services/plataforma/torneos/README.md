@@ -47,6 +47,10 @@ consumidas sin devolver nada. Ahora:
    retoma: como la llamada es idempotente, no se cobra ni se entrega dos veces. Tras
    `…_INTENTOS_MAXIMOS` (o si el proveedor la rechaza) queda FALLIDA; el administrador la
    reabre con `POST /torneos/{id}/operaciones/reintento`.
+   La propia petición (iniciar, cancelar, la final) intenta sus operaciones en el acto, pero
+   solo durante `TORNEOS_OPERACIONES_PRESUPUESTO_SINCRONO_MS` (3000): con un proveedor lento no
+   se queda colgada —importa en la final, que la puede informar salas-partidas— y lo que falte
+   lo hace la tarea.
 6. **Devolución de una reserva ya cobrada** (lo que dejaba la versión anterior): liberar
    responde CONSUMIDA y la devolución acredita el monto con la clave `…-devolucion` como `refId`.
 
