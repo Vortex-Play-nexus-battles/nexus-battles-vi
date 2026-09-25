@@ -137,6 +137,16 @@ services:
       # El registro avisa por correo, pero es fail-open (Resilience4j): sin
       # servicio de correo la cuenta se crea igual. Por eso correo y mailpit
       # no estan en este compose.
+      # B1 (BACKEND-02): la cuenta nace PENDIENTE_VERIFICACION y el codigo solo
+      # viaja por correo; sin correo en el banco, quien siembre cuentas tiene
+      # que confirmarlas por otro camino (ver el resumen de BACKEND-02).
+      #
+      # B2 (BACKEND-02): la lista negra es fail-closed. Sin esta URL el
+      # servicio caia a localhost:8086 (su defecto de desarrollo), no llegaba a
+      # nadie y, desde B2, el registro responderia 503. Y el panel delega las
+      # sanciones en moderacion-sanciones.
+      LISTA_NEGRA_URL: http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar
+      SANCIONES_URL: http://srv-moderacion-sanciones:8086/api/v1
       SERVER_PORT: "8089"
       # Emisor transitorio de credenciales de servicio (ADR-005): la que usa
       # salas-partidas para hablarle a inventario. Secreto de banco de
