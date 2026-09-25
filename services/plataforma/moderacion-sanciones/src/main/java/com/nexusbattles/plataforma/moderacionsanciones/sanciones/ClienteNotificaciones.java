@@ -7,16 +7,16 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * Adaptador de {@link EmisorDeAvisos} contra {@code POST /internal/notifications}
- * del modulo de notificaciones ({@code contracts/openapi/notificaciones.yaml}
- * 1.1.0). El {@link RestClient} llega con la credencial de servicio
- * (ADR-005): esa ruta es {@code ROLE_SERVICIO}.
+ * Destino del canal AVISO: {@code POST /internal/notifications} del modulo de
+ * notificaciones ({@code contracts/openapi/notificaciones.yaml} 1.1.0). El
+ * {@link RestClient} llega con la credencial de servicio (ADR-005): esa ruta
+ * es {@code ROLE_SERVICIO}.
  *
  * <p>201 y 409 son «entregado»: el 409 dice que el modulo ya tenia ese id
  * (un reintento anterior si llego). Cualquier otro 4xx es un rechazo; lo que
  * no responde se propaga para reintentar.
  */
-public class ClienteNotificaciones implements EmisorDeAvisos {
+public class ClienteNotificaciones implements DestinoDeSalidas {
 
     private final RestClient http;
     private final String base;
@@ -27,7 +27,12 @@ public class ClienteNotificaciones implements EmisorDeAvisos {
     }
 
     @Override
-    public Resultado entregar(AvisoPendiente aviso) {
+    public CanalDeSalida canal() {
+        return CanalDeSalida.AVISO;
+    }
+
+    @Override
+    public Resultado entregar(SalidaPendiente aviso) {
         try {
             http.post()
                     .uri(base + "/internal/notifications")

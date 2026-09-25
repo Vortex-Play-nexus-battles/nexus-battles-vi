@@ -1,6 +1,10 @@
 package com.nexusbattles.plataforma.moderacionsanciones.sanciones;
 
+import com.nexusbattles.comun.seguridad.IdentidadDelToken;
+import com.nexusbattles.plataforma.moderacionsanciones.seguridad.JerarquiaDeRoles;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -13,7 +17,7 @@ import java.util.UUID;
 
 /**
  * {@code GET /sanciones/usuarios/{uid}/activa}, {@code GET /sanciones/metricas}
- * y {@code GET /sanciones/limites} — moderacion-sanciones-consulta.yaml 1.3.0.
+ * y {@code GET /sanciones/limites} — moderacion-sanciones-consulta.yaml 1.4.0.
  */
 @RestController
 @RequestMapping("/api/v1/sanciones")
@@ -73,15 +77,35 @@ public class SancionesConsultaController {
                 vigentes.plazoDeApelacion().toDays());
     }
 
+    /**
+     * 1.4.0: exige token. Un jugador solo la suya (403 si pide la de otro);
+     * un servicio o quien modera, la de cualquiera. La regla la aplica
+     * {@link ConsultaSancionActivaService}; aqui solo se lee el token.
+     */
     @GetMapping("/usuarios/{usuarioId}/activa")
-    public SancionActivaResponse consultarActiva(@PathVariable UUID usuarioId) {
-        var resultado = service.consultar(usuarioId);
+    public SancionActivaResponse consultarActiva(Authentication autenticacion, @PathVariable UUID usuarioId) {
+        var resultado = service.consultar(consultanteDe(autenticacion), usuarioId);
         return new SancionActivaResponse(resultado.sancionActiva(), resultado.motivo(), resultado.vigenteHasta(),
-                resultado.tipo());
+                resultado.tipo(), resultado.sancionId());
+    }
+
+    /** El {@code uid} solo si es un UUID: un token de servicio no lo lleva y su sujeto es el client_id. */
+    static ConsultaSancionActivaService.Consultante consultanteDe(Authentication autenticacion) {
+        UUID uid = null;
+        if (autenticacion instanceof JwtAuthenticationToken jwt) {
+            try {
+                uid = IdentidadDelToken.idDe(jwt.getToken());
+            } catch (IllegalArgumentException | NullPointerException sinUid) {
+                uid = null;
+            }
+        }
+        return new ConsultaSancionActivaService.Consultante(uid,
+                JerarquiaDeRoles.alcanza(autenticacion, JerarquiaDeRoles.SERVICIO),
+                JerarquiaDeRoles.alcanza(autenticacion, JerarquiaDeRoles.MODERADOR));
     }
 
     public record SancionActivaResponse(boolean sancionActiva, String motivo, OffsetDateTime vigenteHasta,
-                                        String tipo) {
+                                        String tipo, UUID sancionId) {
     }
 
     /**

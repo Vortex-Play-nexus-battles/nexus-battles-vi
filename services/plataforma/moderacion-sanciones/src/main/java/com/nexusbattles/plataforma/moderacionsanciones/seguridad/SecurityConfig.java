@@ -33,8 +33,9 @@ import java.nio.charset.StandardCharsets;
  *   <li>{@code /lista-negra/terminos}: MODERADOR o superior. Con la
  *       {@link JerarquiaDeRoles jerarquia} de la Tabla 24 un Super
  *       Administrador ya no recibe 403.</li>
- *   <li>{@code GET /sanciones/usuarios/{uid}/activa}: la llaman otros
- *       servicios antes de dejar actuar a un jugador.</li>
+ *   <li>{@code GET /sanciones/usuarios/{uid}/activa}: exige token
+ *       (consulta 1.4.0). Servicio, jugador (solo la suya: lo comprueba
+ *       {@code ConsultaSancionActivaService}) o quien modera.</li>
  *   <li>{@code GET /sanciones/metricas}: publica, solo cuentas sin
  *       identificadores (HU-MET-001).</li>
  *   <li>el resto de {@code /sanciones} y {@code /apelaciones}: cualquier
@@ -92,7 +93,8 @@ public class SecurityConfig {
                 .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/lista-negra/verificar").permitAll()
                 .requestMatchers("/api/v1/lista-negra/terminos/**").hasRole(JerarquiaDeRoles.MODERADOR)
-                .requestMatchers("/api/v1/sanciones/usuarios/*/activa").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/sanciones/usuarios/*/activa")
+                .hasAnyRole(JerarquiaDeRoles.SERVICIO, JerarquiaDeRoles.JUGADOR, JerarquiaDeRoles.MODERADOR)
                 // Agregados de moderacion (HU-MET-001): solo cuentas, sin
                 // identificadores; los lee metricas-plataforma, que no lleva
                 // credencial de servicio.

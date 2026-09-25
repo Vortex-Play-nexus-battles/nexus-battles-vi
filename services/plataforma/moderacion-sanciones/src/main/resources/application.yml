@@ -63,9 +63,24 @@ sanciones:
     # Bandeja del jugador (contracts/openapi/notificaciones.yaml, /internal
     # exige la credencial de servicio de ADR-005: DIRECTORIO_ACTIVO_*).
     url: ${NOTIFICACIONES_URL:http://localhost:8085/api/v1}
+  identidad:
+    # 7.3.2 (B2): proyeccion del estado de la cuenta y contacto para el correo
+    # (ms-identidad-admin.yaml, /api/v1/internal/usuarios/**; token de servicio).
+    # Sin /api/v1: la ruta ya lo lleva.
+    url: ${IDENTIDAD_URL:http://localhost:8089}
+  correo:
+    # 7.3.2 (B2): correo de la sancion (correo.yaml, POST /api/v1/correos/sancion).
+    # Sin /api/v1: la ruta ya lo lleva.
+    url: ${CORREO_URL:http://localhost:8082}
   avisos:
-    # Cada cuanto se reintentan los avisos que no entraron (CA-04 de HU-NOT-005).
+    # Cada cuanto se intentan las salidas pendientes (avisos, proyecciones y
+    # correos; CA-04 de HU-NOT-005). Es tambien la primera espera tras un fallo.
     reintento-ms: ${SANCIONES_AVISOS_REINTENTO_MS:15000}
+  salidas:
+    # La espera entre reintentos se duplica con cada fallo hasta este tope.
+    espera-maxima-ms: ${SANCIONES_SALIDAS_ESPERA_MAXIMA_MS:900000}
+    timeout-conexion-ms: ${SANCIONES_SALIDAS_TIMEOUT_CONEXION_MS:2000}
+    timeout-lectura-ms: ${SANCIONES_SALIDAS_TIMEOUT_LECTURA_MS:5000}
 
 # --- Lista negra (HU-ADM-002; moderacion-lista-negra.yaml 2.0.x) ------------
 lista-negra:
@@ -84,8 +99,8 @@ lista-negra:
     generico: ${LISTA_NEGRA_ACCION_GENERICO:RECHAZAR}
 
 # Credencial de servicio (ADR-005) con la que este servicio habla a
-# notificaciones. Sin client-id no se crea ninguna: en local los avisos
-# quedan pendientes y en la bitacora.
+# notificaciones, ms-identidad y correo. Sin client-id no se crea ninguna: las
+# salidas quedan pendientes y en la bitacora.
 seguridad:
   servicio:
     url: ${DIRECTORIO_ACTIVO_URL:}
