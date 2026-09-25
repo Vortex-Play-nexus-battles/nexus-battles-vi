@@ -603,158 +603,210 @@ components:
         origen:
           $ref: "#/components/schemas/Origen"
     Mision:
-      description: El detalle (§7.8.3 y §7.8.9).
-      allOf:
-        - $ref: "#/components/schemas/ResumenMision"
-        - type: object
-          required: [narrativa, objetivos, enemigos, recompensas]
+      type: object
+      description: >
+        El detalle (§7.8.3 y §7.8.9): todos los campos de ResumenMision más los
+        del detalle. Se escribe plano, sin allOf, para que el esquema diga
+        exactamente qué lleva y un validador estricto no vea como «de más» los
+        campos de una mitad al validar la otra.
+      required:
+        [id, nombre, categoria, descripcionBreve, dificultad, duracionHoras, estado, narrativa, objetivos,
+         enemigos, recompensas]
+      properties:
+        id:
+          type: string
+        nombre:
+          type: string
+        categoria:
+          $ref: "#/components/schemas/Categoria"
+        descripcionBreve:
+          type: string
+        imagen:
+          type: [string, "null"]
+          description: URL de la imagen representativa; nula si no hay.
+        dificultad:
+          $ref: "#/components/schemas/Dificultad"
+        duracionHoras:
+          type: number
+          exclusiveMinimum: 0
+        nivelRecomendado:
+          type: [integer, "null"]
+          description: >
+            Sugerencia (§7.8.3), no requisito. El ejemplo del documento dice 15
+            aunque los héroes llegan al 8 (§6.1.1): se publica tal cual.
+        recompensasDestacadas:
+          type: array
+          items:
+            type: string
+        estado:
+          $ref: "#/components/schemas/EstadoMision"
+        motivoBloqueo:
+          type: [string, "null"]
+          description: Por qué está bloqueada, dicho para el jugador.
+        progreso:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+          description: Tiempo transcurrido sobre la duración, si está en progreso.
+        ultimaEjecucionId:
+          type: [string, "null"]
+          description: La última ejecución con reporte (Completada o Fallida).
+        destacada:
+          type: boolean
+        nueva:
+          type: boolean
+          description: El jugador todavía no la ha empezado nunca.
+        disponibleHasta:
+          type: [string, "null"]
+          format: date-time
+          description: Si es de tiempo limitado, hasta cuándo.
+        favorita:
+          type: boolean
+        origen:
+          $ref: "#/components/schemas/Origen"
+        narrativa:
+          type: string
+        escenario:
+          type: [string, "null"]
+        objetivos:
+          type: object
+          required: [principales, secundarios]
           properties:
-            narrativa:
-              type: string
-            escenario:
-              type: [string, "null"]
-            objetivos:
-              type: object
-              required: [principales, secundarios]
-              properties:
-                principales:
-                  type: array
-                  items:
-                    type: string
-                secundarios:
-                  type: array
-                  items:
-                    type: string
-            requisitosPrevios:
+            principales:
               type: array
-              description: Nombres de las misiones que hay que completar antes.
               items:
                 type: string
-            encuentros:
+            secundarios:
+              type: array
+              items:
+                type: string
+        requisitosPrevios:
+          type: array
+          description: Nombres de las misiones que hay que completar antes.
+          items:
+            type: string
+        encuentros:
+          type: [integer, "null"]
+          description: Combates de la misión sin contar un Máster que aparezca.
+        escalon:
+          $ref: "#/components/schemas/Escalon"
+        escalones:
+          type: array
+          description: Los escalones de §7.8.11 y si el jugador los tiene desbloqueados.
+          items:
+            type: object
+            required: [id, desbloqueado]
+            properties:
+              id:
+                $ref: "#/components/schemas/Escalon"
+              desbloqueado:
+                type: boolean
+              multiplicadorDeEstadisticas:
+                type: [number, "null"]
+        enemigos:
+          type: array
+          items:
+            type: object
+            required: [nombre]
+            properties:
+              nombre:
+                type: string
+              cantidad:
+                type: [integer, "null"]
+              descripcion:
+                type: [string, "null"]
+        jefe:
+          type: [object, "null"]
+          description: El jefe final; ausente o nulo si la misión no tiene.
+          required: [nombre]
+          properties:
+            nombre:
+              type: string
+            prototipo:
+              type: [string, "null"]
+            vida:
               type: [integer, "null"]
-              description: Combates de la misión sin contar un Máster que aparezca.
-            escalon:
-              $ref: "#/components/schemas/Escalon"
-            escalones:
+            descripcion:
+              type: [string, "null"]
+        probabilidadMaster:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+          description: Probabilidad de que aparezca el Máster propio de la misión, como proporción.
+        masters:
+          type: array
+          description: Máster propios de la misión con su épica (§7.8.4).
+          items:
+            $ref: "#/components/schemas/MasterVista"
+        mastersPorTipoDeHeroe:
+          type: array
+          description: >
+            Tabla 20: cada tipo de héroe tiene un Máster afín con su épica y
+            su probabilidad por misión. Aparece el del tipo del héroe que
+            se envíe.
+          items:
+            $ref: "#/components/schemas/MasterVista"
+        recompensas:
+          type: object
+          required: [garantizadas, potenciales]
+          properties:
+            garantizadas:
               type: array
-              description: Los escalones de §7.8.11 y si el jugador los tiene desbloqueados.
+              items:
+                type: string
+            potenciales:
+              type: array
               items:
                 type: object
-                required: [id, desbloqueado]
-                properties:
-                  id:
-                    $ref: "#/components/schemas/Escalon"
-                  desbloqueado:
-                    type: boolean
-                  multiplicadorDeEstadisticas:
-                    type: [number, "null"]
-            enemigos:
-              type: array
-              items:
-                type: object
-                required: [nombre]
+                required: [nombre, probabilidad]
                 properties:
                   nombre:
                     type: string
-                  cantidad:
-                    type: [integer, "null"]
-                  descripcion:
+                  probabilidad:
+                    type: number
+                    minimum: 0
+                    maximum: 1
+                  detalle:
                     type: [string, "null"]
-            jefe:
-              oneOf:
-                - type: "null"
-                - type: object
-                  required: [nombre]
-                  properties:
-                    nombre:
-                      type: string
-                    prototipo:
-                      type: [string, "null"]
-                    vida:
-                      type: [integer, "null"]
-                    descripcion:
-                      type: [string, "null"]
-            probabilidadMaster:
-              type: [number, "null"]
+            porObjetivos:
+              type: array
+              items:
+                type: object
+                required: [objetivo, recompensa]
+                properties:
+                  objetivo:
+                    type: string
+                  recompensa:
+                    type: string
+            primeraVez:
+              type: array
+              items:
+                type: string
+        experiencia:
+          type: object
+          description: La experiencia que se puede obtener (HU-MIS-006).
+          required: [porEnemigo]
+          properties:
+            porEnemigo:
+              type: string
+              example: 10 × 1,2^(1d8) por cada enemigo derrotado
+            porCompletar:
+              type: number
               minimum: 0
-              maximum: 1
-              description: Probabilidad de que aparezca el Máster propio de la misión, como proporción.
-            masters:
-              type: array
-              description: Máster propios de la misión con su épica (§7.8.4).
-              items:
-                $ref: "#/components/schemas/MasterVista"
-            mastersPorTipoDeHeroe:
-              type: array
-              description: >
-                Tabla 20: cada tipo de héroe tiene un Máster afín con su épica y
-                su probabilidad por misión. Aparece el del tipo del héroe que
-                se envíe.
-              items:
-                $ref: "#/components/schemas/MasterVista"
-            recompensas:
-              type: object
-              required: [garantizadas, potenciales]
-              properties:
-                garantizadas:
-                  type: array
-                  items:
-                    type: string
-                potenciales:
-                  type: array
-                  items:
-                    type: object
-                    required: [nombre, probabilidad]
-                    properties:
-                      nombre:
-                        type: string
-                      probabilidad:
-                        type: number
-                        minimum: 0
-                        maximum: 1
-                      detalle:
-                        type: [string, "null"]
-                porObjetivos:
-                  type: array
-                  items:
-                    type: object
-                    required: [objetivo, recompensa]
-                    properties:
-                      objetivo:
-                        type: string
-                      recompensa:
-                        type: string
-                primeraVez:
-                  type: array
-                  items:
-                    type: string
-            experiencia:
-              type: object
-              description: La experiencia que se puede obtener (HU-MIS-006).
-              required: [porEnemigo]
-              properties:
-                porEnemigo:
-                  type: string
-                  example: 10 × 1,2^(1d8) por cada enemigo derrotado
-                porCompletar:
-                  type: number
-                  minimum: 0
-            intentos:
-              oneOf:
-                - type: "null"
-                - type: object
-                  description: Solo en desafíos (§7.8.2).
-                  required: [maximo, periodo, restantes]
-                  properties:
-                    maximo:
-                      type: integer
-                      minimum: 1
-                    periodo:
-                      type: string
-                      enum: [DIARIO, SEMANAL]
-                    restantes:
-                      type: integer
-                      minimum: 0
+        intentos:
+          type: [object, "null"]
+          description: Solo en desafíos (§7.8.2); ausente o nulo en las demás.
+          required: [maximo, periodo, restantes]
+          properties:
+            maximo:
+              type: integer
+              minimum: 1
+            periodo:
+              type: string
+              enum: [DIARIO, SEMANAL]
+            restantes:
+              type: integer
+              minimum: 0
     MasterVista:
       type: object
       required: [nombre, epica]
@@ -1170,3 +1222,14 @@ components:
           description: En una estrategia inválida, lo que el héroe sí puede usar en su nivel.
           items:
             type: string
+        seccion:
+          type: string
+          description: >
+            En un 503 de sección degradada (HU-DIS-003), la función que queda
+            limitada, dicha para el jugador («Inventario»).
+        reintentarEnSegundos:
+          type: integer
+          description: En un 503, lo mismo que la cabecera Retry-After.
+        dependencia:
+          type: string
+          description: En un 503, el nombre interno del servicio que no responde (bitácora y panel).
