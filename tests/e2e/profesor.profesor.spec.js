@@ -108,8 +108,14 @@ function rutaDe(url) {
 async function sinBarrerasGraves(page, donde) {
   const resultado = await new AxeBuilder({ page }).withTags(NORMAS).analyze();
   const graves = resultado.violations.filter((v) => GRAVES.has(v.impact));
+  // Con el elemento: «1× aria-prohibited-attr» sin decir cuál no se puede
+  // arreglar sin volver a correr la prueba.
   expect(
-    graves.map((v) => `${v.id} [${v.impact}] ${v.nodes.length}× — ${v.help}`),
+    graves.map(
+      (v) =>
+        `${v.id} [${v.impact}] ${v.nodes.length}× — ${v.help} — ` +
+        v.nodes.map((n) => `${n.target.join(' ')} ${n.html.slice(0, 160)}`).join(' | '),
+    ),
     `axe en ${donde}`,
   ).toEqual([]);
   return resultado.violations.length;
