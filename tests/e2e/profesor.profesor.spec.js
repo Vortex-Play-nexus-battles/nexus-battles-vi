@@ -14,7 +14,10 @@
  *   - **Solo la interfaz.** Todo lo que hace el profesor lo hace con clics y
  *     teclado: no hay SQL, ni semillas, ni `curl` administrativo, ni tokens
  *     editados. Lo único que se lee por fuera de la pantalla son los avisos del
- *     navegador (errores de página y respuestas 5xx), para el informe.
+ *     navegador (errores de página y respuestas 5xx), para el informe, y —desde
+ *     B1— su correo: la cuenta nace pendiente de verificar y el código llega al
+ *     buzón, como a cualquiera. Se lee del buzón de pruebas del entorno
+ *     (`ayudantes/correo.js`), que es donde van las direcciones `@nexus.test`.
  *   - **Una cuenta nueva en cada corrida y en cada anchura**, desechable y
  *     reconocible como de QA (`qa_prof_…@nexus.test`). Su estado inicial sale
  *     solo del alta del jugador (R17.1).
@@ -36,12 +39,15 @@ import { randomBytes } from 'node:crypto';
 import { AxeBuilder } from '@axe-core/playwright';
 import { test, expect } from '@playwright/test';
 
+import { verificarDesdeLaVista } from './ayudantes/cuentas.js';
+
 // ------------------------------------------------------------------ rutas
 
 /** Direcciones limpias del borde (R17.3). La prueba no acepta las antiguas. */
 const EN = {
   login: /\/login(?:[?#]|$)/,
   registro: /\/registro(?:[?#]|$)/,
+  verificar: /\/verificar(?:[?#]|$)/,
   preparando: /\/preparando(?:[?#]|$)/,
   inicio: /\/inicio(?:[?#]|$)/,
   cuenta: /\/cuenta(?:[?#]|$)/,
@@ -341,11 +347,32 @@ async function entrarPorPrimeraVez(page, testInfo, { paso }, cuenta, clave) {
     return `apodo ${cuenta.apodo}; la débil se rechazó en pantalla («${pista}»)`;
   });
 
-  await paso(4, 'Iniciar sesión (entra sola al crear la cuenta)', async () => {
+  await paso(4, 'Confirmar el correo con el código e iniciar sesión', async () => {
+    // B1 (identidad 2.0.0) — la cuenta nace pendiente de verificar el correo:
+    // el registro lleva a «Confirma tu correo», el profesor abre su buzón,
+    // copia el código y lo pega. El código no va al informe.
+    await page.waitForURL(EN.verificar, { timeout: 30_000 });
+    expect(new URL(page.url()).pathname, 'la dirección es la limpia').toBe('/verificar');
+    // El correo viaja en la pestaña, nunca en la dirección.
+    expect(page.url()).not.toContain(cuenta.email);
+    await expect(page.locator('#email')).toHaveValue(cuenta.email);
+    await sinBarrerasGraves(page, 'confirma tu correo');
+    await capturar(page, testInfo, '04-verificar');
+    await verificarDesdeLaVista(page, {
+      email: cuenta.email,
+      base: new URL(page.url()).origin,
+    });
+
+    // Al login, que dice que el correo quedó verificado y ya lo trae escrito.
+    await expect(page).toHaveURL(EN.login);
+    await expect(page.locator('#avisoMotivo')).toContainText('Tu correo quedó verificado');
+    await expect(page.locator('#email')).toHaveValue(cuenta.email);
+    await escribirSecreto(page.locator('#password'), clave);
+    await page.click('#botonEnviar');
     await page.waitForURL(EN.preparando, { timeout: 30_000 });
     const conSesion = await page.evaluate(() => Boolean(sessionStorage.getItem('nexus.token')));
-    expect(conSesion, 'la sesión quedó abierta sin volver a escribir la contraseña').toBe(true);
-    return 'registro → /preparando con la sesión abierta';
+    expect(conSesion, 'la sesión quedó abierta').toBe(true);
+    return '/verificar → código del buzón → /login?motivo=verificada con el correo escrito → /preparando';
   });
 
   await paso(5, 'Esperar el alta real («Preparando tu cuenta»)', async () => {

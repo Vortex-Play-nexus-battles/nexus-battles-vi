@@ -22,6 +22,8 @@
 
 import { test, expect, request as apiRequest } from '@playwright/test';
 
+import { sesionDe } from './ayudantes/cuentas.js';
+
 const AWS = process.env.E2E_AWS ?? 'http://35.168.124.119';
 const CLAVE = 'Contrasena-Smoke-2026';
 
@@ -86,25 +88,12 @@ test.describe('Smoke del entorno desplegado', () => {
   // Identidad — ms-identidad
   // ===================================================================
 
-  test('registrarse y entrar devuelve un token con la identidad de ADR-002', async () => {
-    const email = `${apodo}@nexus.test`;
-
-    const registro = await api.post('/api/v1/auth/registro', {
-      multipart: {
-        nombres: 'Smoke',
-        apellidos: 'De Prueba',
-        email,
-        password: CLAVE,
-        apodo,
-      },
-    });
-    expect([200, 201], `registro: ${await registro.text()}`).toContain(registro.status());
-
-    const login = await api.post('/api/v1/auth/login', {
-      data: { email, password: CLAVE },
-    });
-    expect(login.status(), `login: ${await login.text()}`).toBe(200);
-    jugador = await login.json();
+  test('registrarse, confirmar el correo y entrar devuelve un token con la identidad de ADR-002', async () => {
+    // B1 (identidad 2.0.0) — la cuenta nace pendiente de verificar su correo y
+    // el login la rechaza hasta entonces. El ayudante hace lo que haria el
+    // jugador: lee el codigo en el buzon de pruebas de DEV (MAILPIT_URL, o
+    // /mailpit en este mismo host), lo confirma y entra.
+    jugador = await sesionDe(api, apodo, { clave: CLAVE, nombres: 'Smoke', base: AWS });
 
     // ADR-002: el apodo va en `sub` y el identificador estable en `uid`.
     // `JwtService` emite subject(apodo) + los claims `uid`, `rol` y `ver`.

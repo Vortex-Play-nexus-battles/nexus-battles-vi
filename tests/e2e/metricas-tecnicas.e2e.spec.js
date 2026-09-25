@@ -5,7 +5,11 @@
  *
  *   1. /tecnicas recolecta cpu, memoria y peticiones de los servicios que SI
  *      corren aqui (torneos, salas, moderacion, comentarios, notificaciones)
- *      y senala como BRECHA a los que no (correo): CA-03
+ *      y senala como BRECHA a los que no puede observar (correo): CA-03.
+ *      Desde B1 correo SI corre en el banco (los codigos de verificacion
+ *      viajan por correo), pero a metricas se le da a proposito una direccion
+ *      de salud que no responde (compose.yml, SALUD_CORREO): la brecha sigue
+ *      siendo real para metricas.
  *   2. /tecnicas/informe/texto exporta el mismo tablero (CA-02)
  *   3. /moderacion agrega lo que moderacion-sanciones publica: se emite una
  *      advertencia y el total del dia sube; sin umbral del PO no hay alertas
@@ -17,6 +21,8 @@
  */
 
 import { test, expect, request as apiRequest } from '@playwright/test';
+
+import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
 
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const MODERADORA = process.env.E2E_MODERADORA ?? 'moderadora_e2e';
@@ -34,21 +40,13 @@ const EN_EL_BANCO = [
 ];
 const FUERA_DEL_BANCO = ['correo'];
 
-function cuerpoDelToken(jwt) {
-  const base64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-  return JSON.parse(Buffer.from(base64, 'base64').toString('utf8'));
-}
-
-async function sesionDe(api, apodo) {
-  const email = `${apodo}@nexus.test`;
-  const registro = await api.post('/api/v1/auth/registro', {
-    multipart: { nombres: 'Jugadora', apellidos: 'De Prueba', email, password: CLAVE, apodo },
-  });
-  expect([200, 201, 400, 409]).toContain(registro.status());
-  const login = await api.post('/api/v1/auth/login', { data: { email, password: CLAVE } });
-  expect(login.status(), `login de ${apodo}: ${await login.text()}`).toBe(200);
-  const cuerpo = await login.json();
-  return { ...cuerpo, apodo, claims: cuerpoDelToken(cuerpo.token) };
+/**
+ * B1 — la cuenta nace pendiente de verificar su correo. Registrar, leer el
+ * codigo del buzon, confirmarlo y entrar viven en un solo sitio
+ * (`ayudantes/cuentas.js`); aqui solo se fija la contrasena de este spec.
+ */
+function sesionDe(api, apodo) {
+  return sesionDelBanco(api, apodo, { clave: CLAVE, base: BORDE });
 }
 
 test.describe('Metricas tecnicas y de moderacion (HU-MET-004 / HU-MET-001)', () => {
