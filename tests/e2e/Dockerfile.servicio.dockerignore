@@ -43,6 +43,8 @@ docs/
 !services/plataforma/metricas-plataforma/build/libs/*.jar
 # HU-ADM-001: parametros del sistema.
 !services/plataforma/admin-parametros/build/libs/*.jar
+# B1: correo durable (perfil `correo` de compose.yml).
+!services/plataforma/correo/build/libs/*.jar
 
 # ms-identidad y ms-ecommerce (R16) son Maven: su jar vive en `target/`, que
 # no esta excluido.

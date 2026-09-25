@@ -7,8 +7,11 @@ import org.thymeleaf.context.Context;
 import org.thymeleaf.templatemode.TemplateMode;
 import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver;
 
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 public class PlantillaCorreoService {
@@ -37,25 +40,20 @@ public class PlantillaCorreoService {
      * metodo es publico y nada lo impedia.
      *
      * <p>
-     * Al anadir una plantilla nueva hay que declararla aqui; si no, falla al
-     * primer intento con un mensaje claro.
+     * Salen de {@link Plantilla}, el catalogo de lo que la API sabe enviar,
+     * mas la plantilla de prueba de la integracion (HU-COR-001). Una plantilla
+     * nueva se declara alli; si no, falla al primer intento con un mensaje claro.
      */
-    private static final Set<String> PLANTILLAS_PERMITIDAS = Set.of(
-            "email/bienvenida",
-            "email/aviso-acceso",
-            "email/confirmacion-cuenta",
-            "email/recuperacion-clave",
-            "email/cambio-clave",
-            "email/mision",
-            "email/subasta",
-            "email/confirmacion-compra",
-            "email/plantilla-prueba");
+    private static final Set<String> PLANTILLAS_PERMITIDAS = Stream.concat(
+                    Arrays.stream(Plantilla.values()).map(Plantilla::ruta),
+                    Stream.of("email/plantilla-prueba"))
+            .collect(Collectors.toUnmodifiableSet());
 
     public String renderizar(String nombrePlantilla, Map<String, Object> variables) {
         if (!PLANTILLAS_PERMITIDAS.contains(nombrePlantilla)) {
             throw new IllegalArgumentException(
                     "Plantilla no registrada: '" + nombrePlantilla + "'. "
-                            + "Declarala en PLANTILLAS_PERMITIDAS. Disponibles: " + PLANTILLAS_PERMITIDAS);
+                            + "Declarala en Plantilla. Disponibles: " + PLANTILLAS_PERMITIDAS);
         }
 
         Context context = new Context();
