@@ -34,9 +34,22 @@ asyncapi: 3.0.0
 
 info:
   title: Nexus Battles VI — Canal de salas y partidas
-  version: 1.4.0
+  version: 1.5.0
   description: |
     Canal WebSocket + STOMP del modulo `salas-partidas`.
+
+    **1.5.0 (B7, BACKEND-09) — combate contractual. Aditivo.** El combate usa
+    el heroe real y las reglas de la seccion 6: `codigoAccion` admite las
+    acciones de la Tabla 7 y las epicas de la Tabla 20 por su nombre, y el
+    servidor valida poder, carga y objetivo (un rechazo llega por la cola
+    privada como `errorDeCanal` con `type` `accion-no-permitida`). Los mensajes
+    del combate ganan campos opcionales: poder, cargas, acciones disponibles y
+    efectos activos (`turnoCambiado`, `accionResuelta`, `partidaIniciada`),
+    el detalle auditable de la tirada (`accionResuelta.accion.ataque`) y el
+    `resultado` formal del final. El orden de turnos se sortea al empezar.
+    Los efectos que actuan al empezar un turno (sangrados, sanaciones por
+    turno) se anuncian como `accionResuelta` con `accion.codigo`
+    `EFECTO_POR_TURNO`.
 
     Convenciones:
       - Prefijo de suscripcion (servidor → cliente): `/tema`
@@ -367,13 +380,19 @@ components:
         migracion V7. Se dice con null en vez de inventar una vida: una barra a
         100/100 falsa es peor que una barra que no se pinta.
 
-        La IA SI trae heroe: el del anfitrion a plena vida. No se le inventa uno
-        -con que heroe juega la maquina no lo fija ninguna HU- sino que se usa
-        el unico dato de combate que la partida ya conoce, y de paso la pelea
-        queda pareja.
+        La IA SI trae heroe. Desde 1.5.0 es un HEROE ALEATORIO del catalogo
+        (§7.6: «si se incluye un heroe aleatorio controlado por la IA»), sin
+        sanadores, en el nivel del heroe del anfitrion y sin equipamiento
+        (D-B7-11); si el catalogo no responde al empezar, combate con una copia
+        del heroe del anfitrion, como antes.
 
-        `posicionEnCampo` sigue sin emitirse: RF-JUE-017 la quiere aleatoria y
-        quien la decide es el motor de combate, fuera de este bloque.
+        `ordenDeTurnos` (1.5.0) es un SORTEO entre todos los participantes al
+        empezar (§6.1.3: «El orden de los turnos para la primera ronda se
+        determina aleatoriamente entre todos los participantes y se mantiene
+        invariable hasta la conclusion del combate»), con una semilla que la
+        partida guarda. Ya no abre siempre el anfitrion.
+
+        `posicionEnCampo` sigue sin emitirse (D-B7-19).
       payload:
         type: object
         required: [tipo, idSala, idPartida, ordenDeTurnos, turnoActual, participantes]
@@ -402,6 +421,11 @@ components:
     TurnoCambiado:
       name: turnoCambiado
       title: Cambio el turno
+      description: |
+        Desde 1.5.0 trae el estado de quien juega ahora YA con lo que ocurre al
+        empezar su turno (+2 de poder, efectos por turno): su poder, sus
+        cargas, sus efectos y las acciones que puede jugar, calculadas por el
+        motor de combate.
       payload:
         type: object
         required: [tipo, idPartida, idJugador, numeroTurno]
@@ -412,7 +436,25 @@ components:
           numeroTurno: { type: integer, minimum: 1 }
           segundosParaJugar:
             type: [integer, 'null']
-            description: Cuenta atras del turno, si la modalidad la impone.
+            description: |
+              Cuenta atras del turno. Nula mientras el Product Owner no fije
+              `salas.partidas.segundos-por-turno` (D-B7-14).
+          motivo:
+            type: [string, 'null']
+            enum: [ACCION, TIEMPO_AGOTADO, TURNO_PERDIDO, null]
+            description: (1.5.0) Por que paso el turno. `TIEMPO_AGOTADO` si se acabo el tiempo sin accion.
+          poderActual: { type: [integer, 'null'], minimum: 0 }
+          poderMaximo: { type: [integer, 'null'], minimum: 0 }
+          recargas:
+            type: object
+            additionalProperties: { type: integer, minimum: 1 }
+          efectosActivos:
+            type: array
+            items: { $ref: '#/components/schemas/Efecto' }
+          acciones:
+            type: array
+            description: (1.5.0) Lo que puede jugar quien tiene el turno, y por que no lo demas.
+            items: { $ref: '#/components/schemas/EstadoDeAccion' }
 
     AccionResuelta:
       name: accionResuelta
@@ -437,22 +479,48 @@ components:
               codigo:
                 type: string
                 description: |
-                  La accion que pidio el jugador (`EjecutarAccion.codigoAccion`),
-                  o `ATAQUE_BASICO` si no pidio ninguna.
+                  La accion que SE JUGO: la que pidio el jugador
+                  (`EjecutarAccion.codigoAccion`) o `ATAQUE_BASICO` si no pidio
+                  ninguna. Desde 1.5.0 puede ser distinta de la pedida
+                  (`accionPedida`) cuando falto poder y el turno se jugo con
+                  el valor base (§6.1.1). `EFECTO_POR_TURNO` cuando no es una
+                  accion sino un efecto que actuo al empezar un turno
+                  (sangrado, sanacion por turno); entonces `idEjecutor` es
+                  quien lo causo y `nombre` el efecto.
               nombre:
                 type: string
                 description: |
-                  Aclaracion de 1.4.x, sin cambio de forma: mientras el motor de
-                  combate resuelva solo el ataque basico, salas-partidas pone
-                  aqui la categoria que sorteo el motor (`CategoriaEfecto` de
-                  motor-combate.yaml: CAUSAR_DANO, CAUSAR_DANO_CRITICO,
-                  EVADIR_EL_GOLPE, RESISTIR_EL_GOLPE, ESCAPAR_AL_GOLPE,
-                  SIN_EFECTO). La interfaz la reconoce por su valor y la narra
-                  (UXC-2); cualquier otro valor lo muestra como nombre de la
-                  accion.
+                  En un ataque, la categoria que sorteo el motor
+                  (`CategoriaEfecto` de motor-combate.yaml: CAUSAR_DANO,
+                  CAUSAR_DANO_CRITICO, EVADIR_EL_GOLPE, RESISTIR_EL_GOLPE,
+                  ESCAPAR_AL_GOLPE, SIN_EFECTO). La interfaz la reconoce por su
+                  valor y la narra (UXC-2). En una defensa, una sanacion o un
+                  efecto por turno, el nombre de la accion o del efecto.
               icono:
                 type: [string, 'null']
                 description: Todos los efectos y controles se representan con icono (RF-JUE-017).
+              accionPedida:
+                type: [string, 'null']
+                description: (1.5.0) La que pidio el jugador, si no es la que se jugo.
+              enValorBase:
+                type: boolean
+                description: '(1.5.0) Falto poder, la accion no se ejecuto y el ataque se redujo a su valor base (§6.1.1).'
+              tipo:
+                type: [string, 'null']
+                enum: [ATAQUE, DEFENSA, SANACION, SANACION_GRUPAL, REANIMACION, APOYO, EFECTO, null]
+              esEpica: { type: boolean }
+              potenciada:
+                type: boolean
+                description: (1.5.0) Epica jugada por su tipo de heroe afin (efecto epico de la Tabla 20).
+              ataque:
+                type: [object, 'null']
+                description: (1.5.0) La tirada, para que el combate sea auditable.
+                properties:
+                  ataqueResuelto: { type: integer }
+                  defensaObjetivo: { type: integer }
+                  acierta: { type: boolean }
+                  indiceTabla: { type: [integer, 'null'] }
+                  porcentajeDano: { type: [integer, 'null'] }
           afectados:
             type: array
             items:
@@ -468,6 +536,15 @@ components:
                 efectosActivos:
                   type: array
                   items: { $ref: '#/components/schemas/Efecto' }
+                poderActual:
+                  type: [integer, 'null']
+                  minimum: 0
+                  description: (1.5.0) Poder tras la accion (el ejecutor gasta; algunas epicas y objetos quitan poder).
+                poderMaximo: { type: [integer, 'null'], minimum: 0 }
+                recargas:
+                  type: object
+                  additionalProperties: { type: integer, minimum: 1 }
+                  description: (1.5.0) Acciones en carga y turnos propios que les faltan.
 
     PartidaFinalizada:
       name: partidaFinalizada
@@ -506,10 +583,15 @@ components:
           ganadores:
             type: array
             description: |
-              Quienes quedaron en pie: uno, o —en el modo cooperativo de
-              RF-JUE-004 (HU-SAL-004, 1.2.0)— todos los del equipo ganador.
-              Vacio si nadie quedo en pie (empate; el desempate es del PO).
+              Quien gano: el heroe en pie o —en el modo cooperativo de
+              RF-JUE-004 (HU-SAL-004, 1.2.0)— todos los del equipo ganador,
+              desde 1.5.0 tambien los que cayeron (gana el equipo, D-B7-15).
+              Vacio si nadie quedo en pie (empate).
             items: { type: string, format: uuid }
+          resultado:
+            type: string
+            enum: [GANADOR, EMPATE]
+            description: (1.5.0) El final formal de la partida.
           equipoGanador:
             type: integer
             minimum: 1
@@ -560,11 +642,26 @@ components:
     EjecutarAccion:
       name: ejecutarAccion
       title: El jugador ejecuta su accion
+      description: |
+        El cliente solo elige accion y objetivo; el servidor valida todo lo
+        demas (1.5.0): que sea su turno, que la accion sea de su heroe y este
+        desbloqueada en su nivel, que no este en carga, que el objetivo valga
+        (nunca un companero en un ataque) y que un sanador no ataque. Sin poder
+        suficiente la accion no se ejecuta y el turno se juega con el valor
+        base (§6.1.1). Un rechazo vuelve por la cola privada con `type`
+        `accion-no-permitida` y el turno sigue siendo del jugador. Dos acciones
+        simultaneas del mismo turno aplican una sola: la otra recibe `type`
+        `partida-modificada` (bloqueo optimista).
       payload:
         type: object
         required: [codigoAccion]
         properties:
-          codigoAccion: { type: string }
+          codigoAccion:
+            type: string
+            description: |
+              `ATAQUE_BASICO`, `SANACION_BASICA` (sanadores), el nombre de una
+              accion de la Tabla 7 o de una epica de la Tabla 20, tal como
+              aparece en `acciones` del heroe.
           idObjetivo:
             type: [string, 'null']
             format: uuid
@@ -685,6 +782,25 @@ components:
         nombre: { type: string }
         icono: { type: [string, 'null'] }
         turnosRestantes: { type: [integer, 'null'] }
+        tipo:
+          type: [string, 'null']
+          description: (1.5.0) Tipo de efecto del motor de combate (BONO_DEFENSA, DANO_POR_TURNO...).
+        valor: { type: [integer, 'null'] }
+
+    EstadoDeAccion:
+      type: object
+      description: (1.5.0) Una accion jugable y su disponibilidad, calculada por el motor de combate.
+      required: [codigo, nombre, disponible]
+      properties:
+        codigo: { type: string, description: Lo que se manda como codigoAccion }
+        nombre: { type: string }
+        tipo: { type: [string, 'null'] }
+        esEpica: { type: boolean }
+        costoPoder: { type: [integer, 'null'], description: Nulo si cuesta todo el poder }
+        turnosDeCarga: { type: [integer, 'null'] }
+        nivelRequerido: { type: [integer, 'null'] }
+        disponible: { type: boolean }
+        motivo: { type: [string, 'null'] }
 
     Participante:
       type: object
@@ -707,6 +823,15 @@ components:
             efectosActivos:
               type: array
               items: { $ref: '#/components/schemas/Efecto' }
+            prototipo:
+              type: [string, 'null']
+              description: (1.5.0) Tipo de heroe del catalogo («Mago Hielo»).
+            poderActual: { type: [integer, 'null'], minimum: 0 }
+            poderMaximo: { type: [integer, 'null'], minimum: 0 }
+            acciones:
+              type: array
+              description: (1.5.0) Acciones jugables y su disponibilidad al empezar.
+              items: { $ref: '#/components/schemas/EstadoDeAccion' }
         esIA: { type: boolean }
         equipo: { type: [integer, 'null'] }
         posicionEnCampo:
