@@ -381,9 +381,25 @@ function transaccion(i, cambios = {}) {
 /* ---------------------------------------------------------------------------
    Consola — UX-GAME-6. Tablas y colas con filas: auditoría
    (`AuditLogResponse`/`PaginaDeAuditoria` de ms-cumplimiento-auditoria.yaml),
-   lista negra (lista de cadenas, moderacion-lista-negra.yaml) y cola de
-   moderación (`ColaDeModeracionResponse` de comentarios.yaml).
+   lista negra (`PaginaDeTerminos` de moderacion-lista-negra.yaml 2.0.x: desde
+   B2 ya no es una lista de cadenas) y cola de moderación
+   (`ColaDeModeracionResponse` de comentarios.yaml).
    ------------------------------------------------------------------------- */
+function terminoVetado(i, termino, categoria, modo, cambios = {}) {
+  return {
+    id: i,
+    termino,
+    normalizado: termino.toLowerCase().replace(/[^a-z0-9]/g, ''),
+    categoria,
+    modo,
+    activo: true,
+    creadoPor: i < 4 ? 'semilla' : 'qa_moderador',
+    creadoEn: new Date(Date.now() - i * 86_400_000).toISOString(),
+    actualizadoEn: null,
+    ...cambios,
+  };
+}
+
 function registroDeAuditoria(i, cambios = {}) {
   return {
     id: `33333333-1111-4111-8111-${String(i).padStart(12, '0')}`,
@@ -477,8 +493,20 @@ export const ESCENARIOS = [
     sesion: () => sesionDe('qa_moderador', 'MODERADOR'),
     rutas: [
       [
-        '**/api/v1/lista-negra/terminos',
-        json(['admin', 'moderador', 'nexus_oficial', 'soporte', 'staff', 'sistema']),
+        '**/api/v1/lista-negra/terminos*',
+        json({
+          contenido: [
+            terminoVetado(1, 'spiderman', 'MARCA', 'SUBCADENA'),
+            terminoVetado(2, 'hitler', 'DIRIGENTE', 'SUBCADENA'),
+            terminoVetado(3, 'messi', 'CELEBRIDAD', 'PALABRA'),
+            terminoVetado(4, 'mussolini', 'POLITICO', 'SUBCADENA'),
+            terminoVetado(5, 'culo', 'OFENSIVO', 'PALABRA', { activo: false }),
+            terminoVetado(6, 'nexus_oficial', 'OTRO', 'SUBCADENA'),
+          ],
+          pagina: 0,
+          tamano: 16,
+          total: 6,
+        }),
       ],
     ],
     exige: ['.lista-terminos__fila, li'],
