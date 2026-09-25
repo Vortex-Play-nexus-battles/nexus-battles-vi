@@ -89,6 +89,7 @@ import {
   textoDeUnidades,
   unidadesDelCarrito,
 } from './tienda-carrito.js';
+import { textoDelServidor } from '../comun/ui/texto-de-fallo.js';
 
 /** `type` del problem detail cuando el catálogo maestro no responde (contrato 1.2.0). */
 const TIPO_CATALOGO_NO_DISPONIBLE = 'urn:nexus:problema:catalogo-no-disponible';
@@ -269,8 +270,11 @@ export function pintarCatalogo(doc = document) {
       rejilla,
       estadoVacio({
         titulo: 'La tienda no tiene productos ahora mismo',
-        detalle: 'Vuelve más tarde: el catálogo lo publica la administración.',
+        detalle:
+          'El catálogo lo publica la administración y todavía no hay nada a la venta. Mientras tanto, puedes jugar y ganar créditos.',
         icono: '◇',
+        // UXC-9 — un vacío con salida.
+        accion: { texto: 'Jugar una batalla', href: '../plataforma/salas-partidas/batallas.html' },
       }),
     );
     pintarResultado(doc, '');
@@ -819,8 +823,7 @@ function avisarFalloAlAnadir(zona, { estado, problema, productoId, doc }) {
   } else {
     // Un rechazo que el contrato no declara. El `detail`, si llega, esta
     // escrito para el jugador (MAPEO-ERRORES §3); si no, una pauta propia.
-    const delServidor =
-      typeof problema?.detail === 'string' && problema.detail.trim() ? problema.detail : null;
+    const delServidor = textoDelServidor(problema, estado, '') || null;
     mensaje = {
       titulo: 'No se pudo añadir el producto al carrito',
       detalle:

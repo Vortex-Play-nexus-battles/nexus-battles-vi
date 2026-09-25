@@ -13,6 +13,7 @@
  */
 
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
+import { textoDelServidor, tituloDelServidor } from '../../comun/ui/texto-de-fallo.js';
 
 /** El `type` que devuelve el backend cuando el PO no ha acordado el percentil. */
 export const TIPO_PERCENTIL_NO_ACORDADO =
@@ -43,10 +44,10 @@ export class ErrorDeMetricas extends Error {
     // latencia»). Esta clase la comparten el panel de latencia y el tablero
     // tecnico, asi que la tarjeta de «Usuarios y moderacion» anunciaba un
     // fallo de latencia. El respaldo no nombra informe: lo nombra quien pinta.
-    super(problema?.detail || problema?.title || 'El servicio de métricas no respondió.');
+    super(textoDelServidor(problema, estado, 'Las métricas no respondieron.'));
     this.name = 'ErrorDeMetricas';
     this.tipo = problema?.type ?? null;
-    this.titulo = problema?.title ?? 'No se pudo obtener el informe';
+    this.titulo = tituloDelServidor(problema, 'No se pudo obtener el informe');
     this.estado = estado;
     this.variable = problema?.variable ?? null;
     this.criterio = problema?.criterio ?? null;

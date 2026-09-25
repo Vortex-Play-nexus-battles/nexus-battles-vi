@@ -297,6 +297,7 @@
         cancelarSala,
       } from './cliente-salas.js';
       import { montarSalaDeEspera, montarInvitacion, salidaAlListado } from './sala-de-espera.js';
+      import { confirmar as confirmarDialogo } from '../../comun/ui/dialogo.js';
       import { usuarioIdDeSesion } from '../../comun/identidad.js';
       import { RUTAS, resolver } from '../../comun/sesion.js';
       // Transporte STOMP sobre WebSocket nativo del servicio, el mismo que usan
@@ -521,7 +522,13 @@
               yo,
               abandonar: abandonarSala,
               cancelar: cancelarSala,
-              confirmar: (texto) => globalThis.confirm(texto),
+              // UXC-9 — el diálogo del kit, no el confirm() del navegador.
+              confirmar: (texto) =>
+                confirmarDialogo({
+                  titulo: texto,
+                  textoConfirmar: 'Cancelar la sala',
+                  textoCancelar: 'Seguir en la sala',
+                }),
               alSalir: ({ motivo }) =>
                 volverAlListado(
                   motivo === 'cancelada'

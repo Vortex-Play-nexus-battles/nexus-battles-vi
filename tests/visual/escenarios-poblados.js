@@ -23,8 +23,8 @@ import { sesionSintetica } from './identidad.js';
  * `sessionStorage`, y sin ellos la cabecera pintaba «undefined» en todas las
  * capturas con datos (UX-GAME-3).
  */
-export function sesionDe(apodo, rol = 'JUGADOR') {
-  return { ...sesionSintetica({ apodo, rol }), apodo, rol };
+export function sesionDe(apodo, rol = 'JUGADOR', uid = undefined) {
+  return { ...sesionSintetica({ apodo, rol, ...(uid ? { uid } : {}) }), apodo, rol };
 }
 
 export const json = (cuerpo) => ({
@@ -976,11 +976,19 @@ const TABLA_7 = {
   'Mago Fuego': [
     ['Misiles de magma', 2, '+1 al ataque, +2 de daño'],
     ['Vulcano', 6, '+3 al ataque, +(3d9) al daño'],
-    ['Pare de fuego', 4, '+1 al ataque y retorna el (0dx) daño causado por el oponente en el turno anterior'],
+    [
+      'Pare de fuego',
+      4,
+      '+1 al ataque y retorna el (0dx) daño causado por el oponente en el turno anterior',
+    ],
   ],
   'Mago Hielo': [
     ['Lluvia de hielo', 2, '+2 al ataque, +2 de daño'],
-    ['Cono de hielo', 6, '+2 al daño y afecta el ataque del enemigo en un (1d3) durante los dos turnos siguientes'],
+    [
+      'Cono de hielo',
+      6,
+      '+2 al daño y afecta el ataque del enemigo en un (1d3) durante los dos turnos siguientes',
+    ],
     ['Bola de hielo', 4, '+2 al ataque y afecta en (0d4) al daño causado por el oponente'],
   ],
   'Pícaro Veneno': [
@@ -1024,7 +1032,12 @@ function accionesEnNivel(prototipo, nivel) {
 function veredictoDeEstrategia(ruta) {
   const { heroe, nivel = 1, rotaciones = [] } = ruta.request().postDataJSON() ?? {};
   const validas = [...accionesEnNivel(heroe, nivel).map(([nombre]) => nombre), 'Ataque básico'];
-  const base = { heroe, nivel, habilidadesValidas: validas, comportamientoPorDefecto: 'Ataque básico' };
+  const base = {
+    heroe,
+    nivel,
+    habilidadesValidas: validas,
+    comportamientoPorDefecto: 'Ataque básico',
+  };
   for (const [indice, rotacion] of rotaciones.entries()) {
     const ajena = (rotacion.pasos ?? []).find((paso) => !validas.includes(paso));
     if (ajena) {
@@ -1040,7 +1053,10 @@ function veredictoDeEstrategia(ruta) {
     ...base,
     valida: true,
     porDefecto: rotaciones.length === 0,
-    rotaciones: rotaciones.map((r, i) => ({ prioridad: ['Alta', 'Media', 'Baja'][i], pasos: r.pasos })),
+    rotaciones: rotaciones.map((r, i) => ({
+      prioridad: ['Alta', 'Media', 'Baja'][i],
+      pasos: r.pasos,
+    })),
   });
 }
 
@@ -1052,7 +1068,8 @@ function vistaDeHeroeEnNivel(ruta) {
   const nombre = decodeURIComponent(partes.pop());
   const heroe = OCHO_HEROES.find((h) => h.prototipo === nombre);
   const cifras = heroe?.estadisticas ?? {};
-  const formula = (x) => (x ? `${x.base ? `${x.base} + ` : ''}${x.cantidadDados}d${x.caras}` : null);
+  const formula = (x) =>
+    x ? `${x.base ? `${x.base} + ` : ''}${x.cantidadDados}d${x.caras}` : null;
   return json({
     nombre,
     tipo: nombre.split(' ')[0],
@@ -1098,7 +1115,6 @@ async function prepararEstrategia(pagina) {
   await pagina.locator('[data-accion="comprobar-estrategia"]').click();
   await pagina.locator('.estrategia__veredicto .aviso--exito').waitFor({ timeout: 15_000 });
 }
-
 
 /* ---------------------------------------------------------------------------
    UXC-6 — chat y mensajes privados. DATOS DE LABORATORIO: apodos y textos
@@ -1206,7 +1222,6 @@ function abrirConversacion(apodo = 'Bruma') {
     await pagina.waitForTimeout(400);
   };
 }
-
 
 /* ---------------------------------------------------------------------------
    UXC-7 — consola y cuenta. DATOS DE LABORATORIO con la forma exacta de
@@ -2178,10 +2193,7 @@ export const ESCENARIOS = [
     interaccion: async (pagina) => {
       await pagina.locator('[data-pestana="categoria-exploracion"]').click();
     },
-    exige: [
-      '.mision-card[data-estado="completada"]',
-      '.mision-card[data-estado="abandonada"]',
-    ],
+    exige: ['.mision-card[data-estado="completada"]', '.mision-card[data-estado="abandonada"]'],
   },
   {
     id: 'misiones-detalle',
@@ -2389,7 +2401,9 @@ export const ESCENARIOS = [
     canal: canalDelChatGeneral(),
     interaccion: async (pagina) => {
       await abrirConversacion('Bruma')(pagina);
-      await pagina.locator('.mensajes-privados__hilo .mensaje--sistema').waitFor({ timeout: 10_000 });
+      await pagina
+        .locator('.mensajes-privados__hilo .mensaje--sistema')
+        .waitFor({ timeout: 10_000 });
     },
     exige: [
       '[data-zona="conexion-privados"][data-estado-canal="reconectando"]',
@@ -2404,7 +2418,10 @@ export const ESCENARIOS = [
     rutas: [MENSAJES_DE_LABORATORIO],
     canal: canalDelChatGeneral(),
     interaccion: abrirConversacion('Nyra'),
-    exige: ['[data-zona="bloqueo"]:not([hidden])', '[data-zona="bloqueo"] [data-accion="desbloquear"]'],
+    exige: [
+      '[data-zona="bloqueo"]:not([hidden])',
+      '[data-zona="bloqueo"] [data-accion="desbloquear"]',
+    ],
   },
   {
     // UXC-7 — el catálogo en la consola: cifras, lista y la acción de cada fila.
@@ -2455,7 +2472,11 @@ export const ESCENARIOS = [
       await buscar.locator('[type="submit"]').click();
       await pagina.locator('.linea-tiempo__hecho').first().waitFor({ timeout: 10_000 });
     },
-    exige: ['[data-estado-cuenta="suspendida"]', '.linea-tiempo__hecho--futuro', '.linea-tiempo__hecho--exito'],
+    exige: [
+      '[data-estado-cuenta="suspendida"]',
+      '.linea-tiempo__hecho--futuro',
+      '.linea-tiempo__hecho--exito',
+    ],
   },
   {
     id: 'perfil-estado-de-cuenta',
@@ -2465,7 +2486,12 @@ export const ESCENARIOS = [
     rutas: [
       [
         '**/api/v1/perfiles/*',
-        json({ apodo: 'qa_sancionado', email: 'qa@nexus.test', nombres: 'Quinn', apellidos: 'Arias' }),
+        json({
+          apodo: 'qa_sancionado',
+          email: 'qa@nexus.test',
+          nombres: 'Quinn',
+          apellidos: 'Arias',
+        }),
       ],
       ['**/api/v1/sanciones/usuarios/*', json(historialDeSanciones())],
       ['**/api/v1/creditos/*/saldo', json({ saldoDisponible: 1250, saldoReservado: 100 })],
@@ -2514,10 +2540,12 @@ export const ESCENARIOS = [
       await pagina.locator('#btn-banear').click();
       await pagina.locator('.confirmacion-critica').waitFor({ timeout: 10_000 });
     },
-    exige: ['.confirmacion-critica__consecuencias', '[role="dialog"] [data-accion="confirmar"][disabled]'],
+    exige: [
+      '.confirmacion-critica__consecuencias',
+      '[role="dialog"] [data-accion="confirmar"][disabled]',
+    ],
   },
 ];
-
 
 function sala(cambios = {}) {
   return {
@@ -2557,3 +2585,141 @@ function producto(cambios = {}) {
     ...cambios,
   };
 }
+
+/* ---------------------------------------------------------------------------
+   UXC-8 / UXC-9 — lo tuyo en subastas y torneos, y el aviso de red.
+   ------------------------------------------------------------------------- */
+const UID_POSTOR = 'bbbbbbb9-9999-4999-8999-999999999999';
+const ID_SUBASTA_PROPIA = 'aaaaaaa4-4444-4444-8444-444444444444';
+
+function subastasConLoTuyo() {
+  return json({
+    contenido: [
+      subastaUrgente(),
+      subastaTranquila(),
+      { ...subastaSinRareza(), precioCompraInmediata: null },
+      {
+        ...subastaTranquila(),
+        id: ID_SUBASTA_PROPIA,
+        nombreProducto: 'Yelmo del Vigía',
+        rareza: 'comun',
+        vendedorId: UID_POSTOR,
+        cantidadPujas: 2,
+        fechaFin: new Date(Date.now() + 7_200_000).toISOString(),
+      },
+    ],
+    pagina: 0,
+    tamano: 16,
+    totalElementos: 4,
+    totalPaginas: 1,
+  });
+}
+
+/** `MiParticipacion` según la subasta: ganando en la urgente, superado en la tranquila. */
+function participacionDe(ruta) {
+  const url = ruta.request().url();
+  if (url.includes(subastaUrgente().id)) {
+    return json({
+      vasGanando: true,
+      teSuperaron: false,
+      tuOfertaVigente: '1350',
+      creditosRetenidos: '1350',
+      limiteAutomatico: '2000',
+      automaticaActiva: true,
+      segundosParaVolverAPujar: 0,
+    });
+  }
+  if (url.includes(subastaTranquila().id)) {
+    return json({
+      vasGanando: false,
+      teSuperaron: true,
+      tuOfertaVigente: null,
+      creditosRetenidos: '0',
+      limiteAutomatico: null,
+      automaticaActiva: false,
+      segundosParaVolverAPujar: 0,
+    });
+  }
+  return json({
+    vasGanando: false,
+    teSuperaron: false,
+    tuOfertaVigente: null,
+    creditosRetenidos: '0',
+    limiteAutomatico: null,
+    automaticaActiva: false,
+    segundosParaVolverAPujar: 0,
+  });
+}
+
+const RUTAS_DE_LO_TUYO = [
+  [/\/api\/v1\/subastas\?/, () => subastasConLoTuyo()],
+  [/\/api\/v1\/subastas\/[^/?]+\/mi-participacion/, (ruta) => participacionDe(ruta)],
+  [/\/api\/v1\/subastas\/[^/?]+\/pujas/, json([])],
+  [
+    '**/api/v1/mis-pujas/resumen',
+    json({ creditosRetenidos: '1350', saldoDisponible: '4200', subastasGanando: 1 }),
+  ],
+];
+
+/** El capitán de «Lobos del Alba» (el primer equipo del árbol). */
+const UID_CAPITAN = 'aaaaaaa1-1111-4111-8111-111111111111';
+
+export const ESCENARIOS_UXC8 = [
+  {
+    id: 'mis-subastas-con-lo-tuyo',
+    titulo: 'mis subastas: ganando, superada y una publicación propia, con saldo',
+    ruta: 'cuentas/pujas.html',
+    sesion: () => sesionDe('qa_postor', 'JUGADOR', UID_POSTOR),
+    rutas: RUTAS_DE_LO_TUYO,
+    interaccion: async (pagina) => {
+      await pagina.locator('.tab-btn[data-tab="mis-subastas"]').click();
+      await pagina.locator('.fila-mi-subasta.borde-ganando').waitFor({ timeout: 10_000 });
+    },
+    exige: [
+      '.fila-mi-subasta.borde-ganando',
+      '.fila-mi-subasta.borde-superada',
+      '.fila-publicacion',
+      '.barra-segmentada-tramos',
+    ],
+  },
+  {
+    id: 'subasta-propia',
+    titulo: 'el detalle de una subasta propia: sin pujar y con el motivo',
+    ruta: `cuentas/pujas.html?id=${ID_SUBASTA_PROPIA}`,
+    sesion: () => sesionDe('qa_postor', 'JUGADOR', UID_POSTOR),
+    rutas: RUTAS_DE_LO_TUYO,
+    exige: ['.aviso-subasta-propia', '.badge-propia', '#btn-pujar-manual[disabled]'],
+  },
+  {
+    id: 'torneo-mi-equipo',
+    titulo: 'torneo en curso visto por un capitán: tu torneo, tu encuentro y la transmisión',
+    ruta: `plataforma/torneos/torneos.html?torneo=${ID_TORNEO}`,
+    sesion: () => sesionDe('qa_capitan', 'JUGADOR', UID_CAPITAN),
+    rutas: [
+      ['**/api/v1/torneos', json([torneoEnCurso()])],
+      [`**/api/v1/torneos/${ID_TORNEO}`, json(torneoEnCurso())],
+    ],
+    exige: [
+      '[data-zona="mi-torneo"]',
+      '[data-accion="jugar-mi-encuentro"]',
+      '.encuentro--mio',
+      '[data-zona="transmision"]',
+    ],
+  },
+  {
+    id: 'aviso-de-red',
+    titulo: 'sin conexión: el aviso de red transversal',
+    ruta: 'plataforma/torneos/torneos.html',
+    sesion: () => sesionDe('qa_red', 'JUGADOR'),
+    rutas: [['**/api/v1/torneos', json([torneoEnCurso()])]],
+    interaccion: async (pagina) => {
+      await pagina.locator('[data-torneo-id]').first().waitFor({ timeout: 10_000 });
+      await pagina.evaluate(() => globalThis.dispatchEvent(new Event('offline')));
+    },
+    exige: ['.aviso-red--sin-red'],
+  },
+];
+
+// Los escenarios de arriba usan ayudantes definidos después del arreglo
+// principal; se suman al final, cuando ya existen.
+ESCENARIOS.push(...ESCENARIOS_UXC8);

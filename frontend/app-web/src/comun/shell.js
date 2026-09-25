@@ -55,6 +55,7 @@ import {
 import { cerrarSesion, leerSesion, resolver, RUTAS } from './sesion.js';
 import { h } from './ui/dom.js';
 import { vigilarSesion } from './vigilante-sesion.js';
+import { vigilarRed } from './ui/aviso-de-red.js';
 
 const BASE_RUTAS = import.meta.url;
 
@@ -730,6 +731,8 @@ export function montarArmazon(
   if (sesion.autenticado) {
     vigilar({ almacen, ahora, documento });
   }
+  // UXC-9 — el aviso de red transversal: en todas las vistas, una vez.
+  vigilarRed({ documento });
 
   if (elegido === 'publico') {
     return montarArmazonPublico(raiz, { vista: vista ?? 'login', base, almacen, navegar });

@@ -152,16 +152,15 @@ test.describe('Salir y cancelar una sala (HU-SAL-006)', () => {
     await expect(paginaAnfitriona.locator('[data-accion="salir-de-sala"]')).toBeHidden();
     await expect(paginaAnfitriona.locator('[data-accion="iniciar-partida"]')).toBeVisible();
 
-    // CA-05: se pregunta, y el texto dice a cuantos se expulsa.
-    let pregunta = null;
-    paginaAnfitriona.once('dialog', async (dialogo) => {
-      pregunta = dialogo.message();
-      await dialogo.accept();
-    });
+    // CA-05: se pregunta, y el texto dice a cuantos se expulsa. UXC-9 — con
+    // el diálogo del kit (foco gestionado, estilo del juego), no con el
+    // confirm() del navegador.
     await cancelar.click();
+    const dialogo = paginaAnfitriona.locator('[role="dialog"]');
+    await expect(dialogo).toContainText('¿Cancelar la sala? Se expulsará a 1 participante.');
+    await dialogo.locator('[data-accion="confirmar"]').click();
 
     await paginaAnfitriona.waitForURL(EN_EL_LISTADO, { timeout: 20000 });
-    expect(pregunta).toBe('¿Cancelar la sala? Se expulsará a 1 participante.');
     await expect(paginaAnfitriona.locator('[data-zona="aviso-sala-titulo"]')).toHaveText(
       'Cancelaste la sala.',
     );
@@ -188,8 +187,11 @@ test.describe('Salir y cancelar una sala (HU-SAL-006)', () => {
     const cancelar = page.locator('[data-accion="cancelar-sala"]');
     await expect(cancelar).toBeVisible({ timeout: 20000 });
 
-    page.once('dialog', (dialogo) => dialogo.dismiss());
     await cancelar.click();
+    const dialogo = page.locator('[role="dialog"]');
+    await expect(dialogo).toBeVisible();
+    await dialogo.locator('[data-accion="cancelar"]').click();
+    await expect(dialogo).toBeHidden();
 
     await expect(cancelar).toBeEnabled();
     expect(page.url()).toContain('sala-batalla.html');

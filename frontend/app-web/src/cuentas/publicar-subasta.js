@@ -3,6 +3,7 @@ import { cuerpoDelToken } from '../comun/identidad.js';
 import { baseDeApi } from '../comun/base-api.js';
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
 import { consultarPagina } from '../contenido/inventario/cliente-inventario.js';
+import { nombreDelTipo } from '../comun/ui/formato.js';
 import {
   publicarSubasta,
   crearClavePublicacion,
@@ -86,6 +87,7 @@ export async function montarPublicacion(
                 <small id="error-producto" class="campo__error"></small>
               </div>
               <p data-inventario role="status" aria-live="polite"></p>
+              <p data-sin-inventario class="publicacion__ayuda" hidden><a href="./tienda.html">Ir a la tienda</a></p>
               <nav class="publicacion__paginacion" aria-label="Páginas del inventario">
                 <button type="button" data-anterior class="boton boton--secundario">Anterior</button>
                 <span data-pagina></span>
@@ -236,8 +238,10 @@ export async function montarPublicacion(
     $('[data-anterior]').disabled = cargando || pagina <= 0;
     $('[data-siguiente]').disabled = cargando || pagina + 1 >= totalPaginas;
     $('[data-referencia]').hidden = !retenido;
+    // UXC-9 — sin la clave de idempotencia a la vista: es un identificador
+    // interno. Lo que importa es que reintentar repite ESTA publicación.
     $('[data-referencia]').textContent = retenido
-      ? `Referencia del intento: ${intento.clave}. Se conservan el producto, los precios y la comisión confirmados.`
+      ? 'Guardamos este intento: al reintentar se repite la misma publicación, con el producto, los precios y la comisión que confirmaste, sin crear otra.'
       : '';
   }
   if (!sesion) {
@@ -294,19 +298,37 @@ export async function montarPublicacion(
       pagina = respuesta.numero;
       totalPaginas = respuesta.totalPaginas;
       producto.replaceChildren(new Option('Selecciona un producto', ''));
+      // UXC-8 — la opción decía «Espada de luz · ARMA · 3f2a…»: la constante
+      // del tipo y el identificador interno del elemento. Ahora el tipo en
+      // palabras y, si hay dos iguales, cuál es cuál («copia 2»).
+      const vistos = new Map();
       for (const elemento of elementos) {
+        const copia = (vistos.get(elemento.nombrePropio) ?? 0) + 1;
+        vistos.set(elemento.nombrePropio, copia);
+        const repetido =
+          elementos.filter((e) => e.nombrePropio === elemento.nombrePropio).length > 1;
         const opcion = new Option(
-          `${elemento.nombrePropio} · ${elemento.tipo} · ${elemento.id}${elemento.disponible === false ? ' · No disponible' : ''}`,
+          `${elemento.nombrePropio} · ${nombreDelTipo(elemento.tipo)}${repetido ? ` · copia ${copia}` : ''}${elemento.disponible === false ? ' · No disponible' : ''}`,
           elemento.id,
         );
         opcion.disabled = elemento.disponible === false || !UUID.test(elemento.productoId ?? '');
         producto.appendChild(opcion);
       }
       aceptar.checked = false;
-      $('[data-inventario]').textContent = elementos.length
-        ? 'Selecciona un elemento para continuar.'
-        : 'No hay productos en esta página de tu inventario.';
-      $('[data-pagina]').textContent = `Página ${totalPaginas ? pagina + 1 : 0} de ${totalPaginas}`;
+      // UXC-9 — un inventario vacío decía «Página 0 de 0» y nada más. Ahora
+      // dice qué pasa y adónde ir; la paginación solo sale si hay páginas.
+      const vacio = totalPaginas === 0 || (elementos.length === 0 && pagina === 0);
+      let textoInventario = 'Selecciona un elemento para continuar.';
+      if (vacio) {
+        textoInventario =
+          'Tu inventario está vacío: todavía no tienes nada que poner a la venta. Consigue objetos en la tienda o en las misiones.';
+      } else if (elementos.length === 0) {
+        textoInventario = 'No hay productos en esta página de tu inventario.';
+      }
+      $('[data-inventario]').textContent = textoInventario;
+      $('[data-sin-inventario]').hidden = !vacio;
+      $('.publicacion__paginacion').hidden = vacio;
+      $('[data-pagina]').textContent = vacio ? '' : `Página ${pagina + 1} de ${totalPaginas}`;
     } catch (error) {
       // UX-R3.11 — antes esta pantalla anunciaba el MISMO fallo dos veces y casi
       // con las mismas palabras: un banner rojo arriba («No se pudo cargar el
@@ -396,8 +418,17 @@ export async function montarPublicacion(
       almacenamiento.removeItem(claveAlmacen);
       form.hidden = true;
       avisar(
-        `Subasta publicada correctamente. Comisión cobrada: ${resultado.comisionCobrado} créditos. Identificador: ${resultado.id}. Ya puedes volver a Subastas.`,
+        `Subasta publicada. Comisión cobrada: ${resultado.comisionCobrado} créditos. Ya está en el mercado para recibir pujas.`,
       );
+      // UXC-9 — en vez del identificador, el camino: ver la subasta publicada.
+      if (resultado.id) {
+        const ver = document.createElement('a');
+        ver.href = `./pujas.html?id=${encodeURIComponent(resultado.id)}`;
+        ver.className = 'boton boton--primario';
+        ver.dataset.accion = 'ver-publicada';
+        ver.textContent = 'Ver tu subasta';
+        mensaje.after(ver);
+      }
     } catch (error) {
       // Un fallo no tipado también puede ocurrir después de que el servidor publique.
       // El guard de carga/envío impide peticiones simultáneas; controles bloqueados.

@@ -91,10 +91,22 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  * carrito vacío la misma cadena literal y la fila del carrito la misma
  * plantilla fija. El aviso nuevo no usa `innerHTML`: lo construye `aviso()`
  * del kit con `textContent`.
+ *
+ * UXC-8 — y otras ~350 posiciones las cuatro de `pujas.js`: la participación
+ * por subasta, el sondeo sin canal, la compra que se queda a la vista y «Mis
+ * subastas» con lo tuyo, todo ARRIBA de `render()`. Revisadas: carga y error
+ * siguen iguales; el vacío lleva delante `generarHtmlAlerta()`, que ahora
+ * escapa el mensaje; y `contenidoHtml` sigue saliendo de los generadores,
+ * cuyas interpolaciones con datos pasan por `esc()` (las nuevas —rival,
+ * vendedor, publicaciones— también).
  */
 const REVISADOS = new Map([
   ['contenido/productos/productos.js:159', 'plantilla() devuelve marcado fijo, sin datos'],
-  ['cuentas/publicar-subasta.js:68', 'plantilla fija del formulario, sin interpolación'],
+  [
+    'cuentas/publicar-subasta.js:69',
+    'plantilla fija del formulario, sin interpolación. UXC-8 añadió el enlace fijo ' +
+      'a la tienda para el inventario vacío y la movió una línea.',
+  ],
   ['cuentas/tienda.js:247', 'plantilla fija; el color pasó a data-tipo en UX-R2.8'],
 
   ['cuentas/tienda.js:537', 'cadena literal fija del carrito vacío'],
@@ -104,11 +116,15 @@ const REVISADOS = new Map([
       'nombre a la variable (fila -> nodo, porque «fila» pasó a ser el modelo ' +
       'que devuelve el adaptador) y la movio 78 lineas; la plantilla es la misma.',
   ],
-  ['cuentas/pujas.js:1533', 'plantilla fija del estado de carga'],
-  ['cuentas/pujas.js:1551', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
-  ['cuentas/pujas.js:1567', 'plantilla fija del estado vacío'],
+  ['cuentas/pujas.js:1907', 'plantilla fija del estado de carga'],
+  ['cuentas/pujas.js:1925', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
   [
-    'cuentas/pujas.js:1607',
+    'cuentas/pujas.js:1948',
+    'plantilla fija del estado vacío; UXC-8 le puso delante la alerta, cuyo ' +
+      'mensaje ahora también pasa por esc()',
+  ],
+  [
+    'cuentas/pujas.js:1988',
     'DELIBERADO y SANEADO (UX-R2.8c): las 20 interpolaciones con datos del ' +
       'servidor pasan por esc(); pujas.test.js lo comprueba con cargas reales. ' +
       'La estructura (2.297 líneas de plantilla) se mueve en UX-R2.10.',

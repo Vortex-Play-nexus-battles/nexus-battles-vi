@@ -233,9 +233,32 @@ describe('listado', () => {
   });
 
   test('una subasta sin compra inmediata no inventa un precio', () => {
+    // UXC-8 — antes quedaba en 0, y la tarjeta ofrecía «Comprar ya: 0 cr» en
+    // una subasta que no admite compra inmediata (el contrato la declara
+    // nullable). Null es «no tiene»; la vista entonces no la ofrece.
     const vista = aVistaDeSubasta({ id: 'x', precioCompraInmediata: null, fechaFin: null });
+    const sinCampo = aVistaDeSubasta({ id: 'y', fechaFin: null });
 
-    expect(vista.compraInmediata).toBe(0);
+    expect(vista.compraInmediata).toBeNull();
+    expect(sinCampo.compraInmediata).toBeNull();
+    // Un 0 que sí manda el servidor es un dato y se respeta.
+    expect(aVistaDeSubasta({ id: 'z', precioCompraInmediata: 0 }).compraInmediata).toBe(0);
+  });
+
+  test('el vendedor no se pinta como identificador; la subasta propia se reconoce', () => {
+    const ajena = aVistaDeSubasta(
+      { id: 'x', vendedorId: '7d1c0000-0000-4000-8000-000000000001' },
+      'andres_nv',
+      'uid-mio',
+    );
+    const propia = aVistaDeSubasta({ id: 'y', vendedorId: 'uid-mio' }, 'andres_nv', 'uid-mio');
+
+    expect(ajena.vendedor).toBeNull();
+    expect(ajena.esPropia).toBe(false);
+    expect(JSON.stringify(ajena)).not.toContain('7d1c0000');
+    expect(propia.esPropia).toBe(true);
+    // Sin sesión no hay «propia» que valga.
+    expect(aVistaDeSubasta({ id: 'z', vendedorId: 'uid-mio' }).esPropia).toBe(false);
   });
 
   test('el tiempo restante sale de fechaFin y nunca es negativo', () => {

@@ -8585,3 +8585,177 @@ body:not([data-modo='combate']) .registro-combate {
   font-family: var(--t-meta-familia);
   font-size: var(--t-meta-tam);
 }
+
+/* =======================================================================
+   UXC-8 — El torneo del jugador
+   -----------------------------------------------------------------------
+   «Tu torneo» (Mi equipo, Próximo encuentro, Mi camino), el encuentro de tu
+   equipo marcado en el árbol —con texto, «Tu equipo», además del borde— y la
+   transmisión en su variante sin señal: el marco del kit, sin prometer vídeo.
+   ======================================================================= */
+
+.torneo__tarjeta-cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-2) var(--e-3);
+}
+
+.torneo-mio {
+  border-left: 4px solid var(--acento-relleno);
+}
+
+.torneo-mio__rejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--e-4);
+}
+
+.torneo-mio__bloque {
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+}
+
+.torneo-mio__equipo {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  margin: 0;
+}
+
+.torneo-mio__inicial {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--acento-relleno);
+  color: var(--texto-sobre-color);
+  font-family: var(--t-titulo-familia);
+  font-weight: 700;
+}
+
+.torneo-mio__camino {
+  display: grid;
+  gap: var(--e-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.torneo-mio__paso {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-1) var(--e-2);
+}
+
+.torneo-mio__paso--victoria .icono {
+  color: var(--exito);
+}
+
+.torneo-mio__paso--derrota .icono {
+  color: var(--error);
+}
+
+.encuentro--mio {
+  border-color: var(--acento-relleno);
+  box-shadow: var(--sombra-1), inset 0 0 0 1px var(--acento-relleno);
+}
+
+.encuentro__tuyo {
+  margin-left: auto;
+  padding: 0 var(--e-2);
+  border-radius: var(--radio-pildora);
+  background: var(--rareza-epica-insignia);
+  color: var(--acento-relleno);
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: 600;
+}
+
+.transmision--sin-senal .transmision__lienzo {
+  aspect-ratio: auto;
+  min-height: 140px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e-3);
+  color: var(--texto-sobre-color);
+}
+
+.transmision--sin-senal .transmision__etiqueta {
+  align-self: center;
+  /* La etiqueta base (pista sobre pista) no llega a 4,5:1; sin señal se lee
+     en superficie clara, con el texto de la paleta. */
+  background: var(--superficie);
+  color: var(--texto);
+}
+
+.transmision__simbolo {
+  width: 40px;
+  height: 40px;
+}
+
+/* =======================================================================
+   UXC-9 — Aviso de red transversal y hueco del asistente
+   -----------------------------------------------------------------------
+   `.aviso-red`: «Sin conexión» / «Conexión recuperada», arriba y centrado,
+   sin tapar la cabecera; icono y texto además del color.
+   El botón flotante del asistente (56 px, a 24 px del borde) tapaba lo
+   último de cada página: con el botón montado, el contenido principal deja
+   ese hueco al final. El combate queda fuera: es pantalla completa.
+   ======================================================================= */
+
+.aviso-red {
+  position: fixed;
+  /* Debajo de la cabecera, para no taparla; centrado sin `transform`, que
+     con `left: 50%` dejaba al aviso media pantalla de ancho en el móvil. */
+  top: calc(64px + var(--e-2));
+  left: 0;
+  right: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  width: fit-content;
+  max-width: min(560px, calc(100vw - 2 * var(--e-4)));
+  margin-inline: auto;
+  padding: var(--e-2) var(--e-4);
+  border: 1px solid currentColor;
+  border-radius: var(--radio);
+  box-shadow: var(--sombra-2);
+  font-family: var(--t-cuerpo-familia, inherit);
+  font-size: var(--t-meta-tam);
+}
+
+.aviso-red[hidden] {
+  display: none;
+}
+
+.aviso-red--sin-red {
+  background: var(--advertencia-insignia);
+  color: var(--advertencia);
+}
+
+.aviso-red--recuperada {
+  background: var(--exito-insignia);
+  color: var(--exito);
+}
+
+.aviso-red__icono {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+}
+
+.aviso-red__detalle {
+  color: var(--texto);
+}
+
+body:has(.chatbot-flotante) main:not(.combate) {
+  padding-bottom: calc(var(--e-6) + 56px + var(--e-4));
+}

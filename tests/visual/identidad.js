@@ -72,11 +72,12 @@ function base64url(objeto) {
  * JWT sin firma válida, solo para que el guard del navegador deje pintar la
  * vista cuando no hay backend. No autentica contra nada.
  *
- * @param {{apodo: string, rol?: string, horas?: number}} opciones
+ * @param {{apodo: string, rol?: string, horas?: number, uid?: string}} opciones
+ *   `uid` fijo cuando el escenario necesita que la sesión sea de alguien
+ *   concreto (el capitán de un equipo, el vendedor de una subasta).
  * @returns {{token: string, uid: string}}
  */
-export function sesionSintetica({ apodo, rol = 'JUGADOR', horas = 8 }) {
-  const uid = randomUUID();
+export function sesionSintetica({ apodo, rol = 'JUGADOR', horas = 8, uid = randomUUID() }) {
   const cuerpo = {
     sub: apodo,
     preferred_username: apodo,

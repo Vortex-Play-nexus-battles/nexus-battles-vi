@@ -13,6 +13,7 @@
 // cliente -- el backend nunca recibe la confirmacion, solo nuevaPassword.
 
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
+import { textoDeError, textoDelServidor } from '../comun/ui/texto-de-fallo.js';
 
 const URL_CONFIRMAR = '/api/v1/auth/restablecer/confirmar';
 
@@ -54,8 +55,9 @@ export async function confirmarRestablecimiento(
   const { body } = await cuerpoDe(respuesta);
 
   if (!respuesta.ok) {
-    const mensajeServidor = typeof body === 'string' ? body : body?.detail;
-    throw new Error(mensajeServidor || 'No se pudo restablecer la contraseña.');
+    throw new Error(
+      textoDelServidor(body, respuesta.status, 'No se pudo restablecer la contraseña.'),
+    );
   }
 
   return typeof body === 'string'
@@ -121,7 +123,7 @@ form?.addEventListener('submit', async (evento) => {
       window.location.href = './login.html';
     }, 2500);
   } catch (error) {
-    setEstado(error.message, 'error');
+    setEstado(textoDeError(error, 'No se pudo restablecer la contraseña.'), 'error');
   } finally {
     botonEnviar.disabled = false;
   }

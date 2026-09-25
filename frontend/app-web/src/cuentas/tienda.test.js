@@ -665,7 +665,11 @@ describe('R16 - un «Añadir» rechazado se le dice al jugador', () => {
 
     const aviso = zona().querySelector('.aviso');
     expect(aviso.querySelector('img')).toBeNull();
-    expect(aviso.textContent).toContain('<img');
+    // UXC-9 — un `detail` con marcado ya ni siquiera se lee como texto: es
+    // señal de que no lo escribió el servicio para el jugador. Se dice la
+    // pauta propia, que sí sirve.
+    expect(aviso.textContent).not.toContain('<img');
+    expect(aviso.textContent).toContain('Actualiza la tienda e inténtalo otra vez.');
     expect(aviso.querySelector('[data-accion="actualizar-tienda"]')).not.toBeNull();
   });
 

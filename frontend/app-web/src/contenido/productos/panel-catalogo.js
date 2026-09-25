@@ -2,6 +2,7 @@
 import { consultarEstadisticasCatalogo } from './cliente-productos.js';
 import { montarCatalogoAdmin } from './catalogo-admin.js';
 import { h, vaciar } from '../../comun/ui/dom.js';
+import { textoDeError } from '../../comun/ui/texto-de-fallo.js';
 
 const TIPOS = [
   ['HEROE', 'Héroes'],
@@ -190,7 +191,7 @@ function mensajeDeError(fallo) {
     return 'No tienes permiso para consultar el estado del catálogo.';
   }
 
-  return fallo?.message || 'No se pudieron cargar las cifras del catálogo.';
+  return textoDeError(fallo, 'No se pudieron cargar las cifras del catálogo.');
 }
 
 /**

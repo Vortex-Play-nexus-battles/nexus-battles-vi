@@ -1721,3 +1721,92 @@ body {
   --tinta-enlace-hover: var(--primaria-relleno);
   color: var(--texto);
 }
+
+/* =======================================================================
+   UXC-8 — lo tuyo, dicho con lo que el servidor sabe
+   -----------------------------------------------------------------------
+   «Tu subasta» lleva borde e icono además del color, para no confundirse con
+   una rareza (la «rara» también es azul). Las notas de alcance y de saldo
+   explican por qué falta un dato; el vacío compacto va dentro de una sección
+   y no necesita los 64 px del vacío de página entera.
+   ======================================================================= */
+
+.badge-propia {
+  gap: 4px;
+  border: 1px solid var(--primaria);
+  background: var(--superficie);
+  color: var(--primaria);
+}
+
+.nota-alcance,
+.nota-saldo,
+.nota-publicaciones {
+  margin: 0 0 var(--e-3);
+}
+
+.nota-saldo {
+  margin-top: var(--e-3);
+}
+
+.estado-vacio--compacto {
+  padding: var(--e-5) var(--e-4);
+}
+
+.acciones-vacio {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--e-3);
+  margin-top: var(--e-4);
+}
+
+.aviso-subasta-propia {
+  margin: var(--e-3) 0 0;
+}
+
+.fila-publicacion {
+  grid-template-columns: 56px minmax(0, 1fr) 150px 150px;
+}
+
+.seccion-mis-subastas + .seccion-mis-subastas {
+  margin-top: var(--e-6);
+}
+
+@media (max-width: 900px) {
+  .fila-publicacion {
+    grid-template-columns: 1fr;
+  }
+  .encabezado-mis-subastas {
+    flex-wrap: wrap;
+  }
+}
+
+/* UXC-8 — lo que va directamente sobre la atmósfera lee la tinta, no la
+   paleta: el título de «Mis subastas» (`.titulo-grande` de tema-cuentas es
+   oscuro) y la barra de volver del detalle («← Volver…», lo retenido). El
+   laboratorio no cubría estas dos pantallas y los dos quedaban por debajo de
+   2:1 sobre el cromo. */
+.mis-subastas-cabecera .titulo-grande {
+  color: var(--tinta);
+  text-align: left;
+}
+
+.barra-volver .btn-texto {
+  color: var(--tinta-enlace);
+}
+
+.barra-volver .btn-texto:hover {
+  color: var(--tinta-enlace-hover);
+}
+
+.barra-volver .separador-pipe {
+  color: var(--tinta-3);
+}
+
+.barra-volver .saldo-contextual {
+  color: var(--tinta-2);
+}
+
+.barra-volver .saldo-contextual strong {
+  color: var(--tinta);
+}

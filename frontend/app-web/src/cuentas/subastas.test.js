@@ -11,7 +11,7 @@
 
 import { jest } from '@jest/globals';
 
-import { inicializar } from './subastas.js';
+import { inicializar, rutaDePujas } from './subastas.js';
 
 const asentar = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -170,6 +170,27 @@ describe('cuando hay subastas', () => {
     const contador = document.querySelector('.subastas__contador');
     expect(contador.textContent).toBe('Finalizada');
     expect(contador.textContent).not.toMatch(/-\d/);
+  });
+
+  test('«Comprar ahora» sale solo si la subasta lo admite, y lleva a confirmarlo', async () => {
+    // UXC-8 — la vitrina sabía pintar el botón, pero la pantalla no le pasaba
+    // el manejador: nunca aparecía. Ahora lleva a la sala de pujas con la
+    // confirmación abierta, que es donde se ve precio, saldo y objeto.
+    globalThis.fetch = jest.fn(async () =>
+      responder(
+        listado([
+          subasta({ id: 'con', precioCompraInmediata: 2800 }),
+          subasta({ id: 'sin', precioCompraInmediata: null }),
+        ]),
+      ),
+    );
+    await montar();
+
+    const botones = [...document.querySelectorAll('.subastas__comprar-ahora')];
+    expect(botones).toHaveLength(1);
+    expect(botones[0].textContent).toContain('Comprar ahora');
+    expect(rutaDePujas('con', { comprar: true })).toBe('./pujas.html?id=con&accion=comprar');
+    expect(rutaDePujas('sin')).toBe('./pujas.html?id=sin');
   });
 
   test('la paginacion usa el componente del kit, no una copia local', async () => {
