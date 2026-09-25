@@ -26,7 +26,20 @@
     paginaActual: document.getElementById('auditoria-pagina-actual'),
   };
 
-  const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  const MESES = [
+    'ene',
+    'feb',
+    'mar',
+    'abr',
+    'may',
+    'jun',
+    'jul',
+    'ago',
+    'sep',
+    'oct',
+    'nov',
+    'dic',
+  ];
 
   function formatearFecha(isoString) {
     if (!isoString) {
@@ -168,14 +181,20 @@
       });
 
       if (respuesta.status === 401) {
-        mostrarEstado('Inicia sesión como Super Administrador para consultar este registro.', 'error');
+        mostrarEstado(
+          'Inicia sesión como Super Administrador para consultar este registro.',
+          'error',
+        );
         el.btnAnterior.disabled = true;
         el.btnSiguiente.disabled = true;
         return;
       }
 
       if (respuesta.status === 403) {
-        mostrarEstado('No tienes permisos de Super Administrador para consultar este registro.', 'error');
+        mostrarEstado(
+          'No tienes permisos de Super Administrador para consultar este registro.',
+          'error',
+        );
         el.btnAnterior.disabled = true;
         el.btnSiguiente.disabled = true;
         return;
@@ -238,7 +257,8 @@
       }
 
       if (respuesta.status === 422) {
-        let detalle = 'El filtro actual tiene demasiados registros para exportar. Acota el rango de fechas.';
+        let detalle =
+          'El filtro actual tiene demasiados registros para exportar. Acota el rango de fechas.';
         try {
           const problema = await respuesta.json();
           if (problema && problema.detail) {
