@@ -41,39 +41,61 @@
         (HU-SAL-005 #31) y el turno actual, siempre visibles.
       -->
       <header class="combate__hud">
+        <!--
+          UXC-2 — con la partida en marcha el combate ocupa la pantalla entera
+          (§7.6: area de juego > 80 %), sin la barra de la aplicacion. Esta es
+          la salida: vuelve a «Jugar online» y la partida sigue en curso. Solo
+          se ve en ese modo (ver `body[data-modo='combate']` en el kit).
+        -->
+        <a
+          class="combate__salir"
+          data-zona="salir"
+          href="./batallas.html"
+          title="Volver a Jugar online (la partida sigue en curso)"
+        >
+          <svg class="icono" aria-hidden="true" focusable="false">
+            <use href="../../../../../shared/ui-kit/iconos/sprite.svg#salir"></use>
+          </svg>
+          <span>Jugar online</span>
+        </a>
         <div class="combate__hud-titulo">
-          <h1 class="t-subtitulo">Sala en batalla</h1>
+          <h1 class="combate__titulo t-subtitulo">Sala en batalla</h1>
           <!--
-            Dice lo que hay de verdad. Mientras no exista el transporte del
-            canal, esta vista NO aparenta estar conectada: lo pinta el script
-            segun reciba o no una funcion de suscripcion.
+            De quien es el turno (y cual es). Hasta PR-UX-3 esto SOLO se notaba
+            en que los botones de atacar estaban grises: invisible para un
+            lector de pantalla. Region viva, asi que se anuncia solo.
+          -->
+          <p class="turno-actual" data-zona="turno" role="status" aria-live="polite" hidden></p>
+        </div>
+
+        <!--
+          CA-02 · Barra superior: vida de todos los participantes con sus
+          colores (HU-SAL-005 #31), siempre visible. `panel-vidas.js` las pinta.
+        -->
+        <div class="combate__vidas" data-zona="vidas"></div>
+
+        <div class="combate__hud-estado">
+          <!--
+            Dice lo que hay de verdad: conectado, reconectando (con el intento)
+            o sin conexion con «Reintentar» (UXC-2, `comun/ui/reconexion.js`).
           -->
           <span class="conexion conexion--sin-conexion" data-zona="conexion" role="status">
             Canal en tiempo real no conectado
           </span>
           <!--
-          HU-JUE-015: el chat de ESTA sala. Solo aparece cuando se llego con
-          `?sala=`: el script pone el enlace con el identificador. Antes la
-          vista del chat existia sin que ninguna pantalla llevara a ella.
-        -->
-          <a class="boton boton--secundario" data-zona="enlace-chat-sala" href="./chat.html" hidden
-            >Chat de la sala</a
+            HU-JUE-015: el chat de ESTA sala, en otra pestana para no dejar el
+            combate. Solo aparece cuando se llego con `?sala=`.
+          -->
+          <a
+            class="boton boton--secundario boton--pequeno combate__chat"
+            data-zona="enlace-chat-sala"
+            href="./chat.html"
+            target="_blank"
+            rel="noopener"
+            hidden
+            >Chat de la sala<span class="solo-lectores"> (se abre en otra pestaña)</span></a
           >
         </div>
-
-        <!--
-          Las barras de vida, en la franja superior. `panel-vidas.js` las pinta
-          aqui igual que antes: solo cambia donde vive la zona.
-        -->
-        <div class="combate__vidas" data-zona="vidas"></div>
-
-        <!--
-          De quien es el turno. Hasta PR-UX-3 esto SOLO se notaba en que los
-          botones de atacar estaban grises: invisible para un lector de
-          pantalla, e inutil para saber a quien se esta esperando o si la
-          maquina esta jugando. Region viva, asi que se anuncia solo.
-        -->
-        <p class="turno-actual" data-zona="turno" role="status" aria-live="polite" hidden></p>
       </header>
 
       <!--
@@ -185,18 +207,47 @@
       -->
       <footer class="combate__controles" data-zona="panel" hidden>
         <!--
-          HU-SAL-005 / RF-JUE-017 CA-03: jugar el turno, con iconos. Los
-          botones nacen deshabilitados y solo se abren cuando el canal dice que
-          el turno es tuyo: habilitarlos por defecto invitaria a mandar
-          acciones que el servidor va a rechazar. Cuando estan cerrados dicen
-          por que, que es lo que faltaba.
+          UXC-2 · la barra de mando (§7.6: menus abajo, todo control con icono).
+          Tres grupos: el ataque basico (un boton por rival: nacen cerrados y
+          se abren cuando el canal dice que el turno es tuyo), las tres acciones
+          especiales del heroe con su coste y su carga (§6.1.2) y el poder.
+          Las especiales se ensenan deshabilitadas CON su motivo mientras el
+          motor no las resuelva: un boton que parece funcionar y no lo hace
+          seria peor que no tenerlo.
         -->
-        <div
-          class="combate__acciones"
-          data-zona="acciones"
-          role="group"
-          aria-label="Acciones de combate"
-        ></div>
+        <div class="combate__mando">
+          <section class="combate__grupo" aria-labelledby="titulo-ataque">
+            <h2 class="combate__grupo-titulo" id="titulo-ataque">Ataque básico</h2>
+            <div
+              class="combate__acciones"
+              data-zona="acciones"
+              role="group"
+              aria-label="Ataque básico: elige a quién atacas"
+            ></div>
+          </section>
+          <section
+            class="combate__grupo combate__grupo--especiales"
+            aria-labelledby="titulo-especiales"
+          >
+            <div class="combate__grupo-cabeza">
+              <h2 class="combate__grupo-titulo" id="titulo-especiales">Acciones especiales</h2>
+              <p class="combate__motivo" id="motivo-especiales" data-zona="motivo-especiales">
+                Cargando las acciones de tu héroe…
+              </p>
+            </div>
+            <div
+              class="combate__acciones combate__acciones--especiales"
+              data-zona="especiales"
+              role="group"
+              aria-labelledby="titulo-especiales"
+            ></div>
+          </section>
+          <div class="combate__poder" data-zona="poder" hidden></div>
+        </div>
+        <section class="combate__registro" aria-labelledby="titulo-registro">
+          <h2 class="combate__grupo-titulo" id="titulo-registro">Lo que ha pasado</h2>
+          <div class="combate__registro-cuerpo" data-zona="registro"></div>
+        </section>
         <!--
           HU-DIS-003: si el motor de combate no responde al jugar, aqui se pinta
           «Seccion degradada» (los botones se quedan: la accion no se aplico y
@@ -255,6 +306,12 @@
       import { conectarChat } from './cliente-chat.js';
       import { montarCabecera } from '../../comun/cabecera-app.js';
       import { exigirAcceso } from '../../comun/acceso.js';
+      // UXC-2 — el canal se reconecta solo y la pildora dice en que punto esta.
+      import { canalReconectable } from '../../comun/canal-reconectable.js';
+      import { pintarEstadoDelCanal } from '../../comun/ui/reconexion.js';
+      // UXC-2 — las tres acciones del heroe propio y su poder (§6.1.2).
+      import { cargarHeroePropio } from '../../comun/heroe-propio.js';
+      import { pintarParticipantes } from './panel-vidas.js';
 
       // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
       if (!exigirAcceso('sala-batalla')) {
@@ -300,6 +357,16 @@
       /** Descarta lo repetido al reconectar, antes de tocar las barras. */
       const registro = registroDeAvisos();
 
+      // UXC-2 — la salida del combate a pantalla completa, con la direccion
+      // limpia si el borde la sirve.
+      const salir = document.querySelector('[data-zona="salir"]');
+      if (salir) {
+        salir.href = resolver(RUTAS.batallas);
+      }
+
+      /** Las acciones del heroe propio: se piden una vez por partida. */
+      let heroePropio = null;
+
       /**
        * Pinta la vista con lo que haya ahora mismo y engancha los controles de
        * combate. Se llama tres veces como mucho: al cargar, al arrancar el
@@ -330,6 +397,7 @@
           // botones esperarian un `partida.turno.cambiado` que en el turno 1
           // no existe todavia: nadie podria dar el primer golpe.
           turnoDe: partida.turnoActual?.idJugador,
+          numeroTurno: partida.turnoActual?.numeroTurno ?? null,
           alAtacar: (accion) => enviarAccion(canal, partida.id, accion),
           // R17.4 — el desenlace tapa la pantalla entera, barra incluida: lleva
           // sus propias salidas, o quien acaba de jugar no tiene adónde ir.
@@ -342,6 +410,12 @@
             { id: 'ver-mi-cuenta', texto: 'Ver mi cuenta', href: resolver(RUTAS.perfil) },
           ],
         });
+
+        // UXC-2 — las acciones especiales y el poder del heroe propio. No se
+        // espera por ellas: el ataque basico ya funciona sin ellas.
+        const miHeroe = partida.participantes?.find((p) => p.jugador === yo)?.heroe;
+        heroePropio ??= cargarHeroePropio({ heroeId: miHeroe?.id ?? null });
+        heroePropio.then((heroe) => controles.mostrarHeroe(heroe));
 
         // El panel de vidas ya escucha por su cuenta; esta suscripcion es para
         // los turnos y el final. El registro evita que una reconexion vuelva a
@@ -497,29 +571,47 @@
       }
 
       if (token) {
+        const zonaConexion = document.querySelector('[data-zona="conexion"]');
         try {
-          canal = await conectarChat({ url: urlDelCanal({ base: baseDeApi() }), token });
-
-          // Un canal que se muere en silencio es peor que uno que no abre: la
-          // vista sigue diciendo «conectado», los botones siguen puestos y
-          // cada acción se va a un socket cerrado sin que nadie se entere. El
-          // Project Charter lo pide explícitamente (riesgo #7): nunca fallar
-          // en silencio.
-          const perdido = (motivo) => {
-            console.warn('Canal de la partida perdido:', motivo);
-            const zona = document.querySelector('[data-zona="conexion"]');
-            if (zona) {
-              zona.className = 'conexion conexion--sin-conexion';
-              zona.textContent = 'Canal en tiempo real no conectado. Recarga la página.';
-            }
-            // Sin canal no se puede jugar el turno: dejar los botones vivos
-            // invita a mandar acciones que no llegan a ningún sitio.
-            for (const boton of document.querySelectorAll('[data-atacar]')) {
-              boton.disabled = true;
-            }
-          };
-          canal.alError = (error) => perdido(error?.message ?? 'error del canal');
-          canal.alCerrar = () => perdido('la conexión se cerró');
+          // UXC-2 / riesgo #7 — un canal que se muere en silencio es peor que
+          // uno que no abre. Antes se decia «Recarga la página» y el jugador
+          // hacia de reconector; ahora se reintenta solo (1, 2, 4, 8 y 15 s),
+          // la pildora dice en que punto va y, al volver, la partida se relee
+          // del servidor para no quedarse con barras o turnos viejos.
+          canal = await canalReconectable({
+            conectar: () => conectarChat({ url: urlDelCanal({ base: baseDeApi() }), token }),
+            alEstado: (estado) => {
+              pintarEstadoDelCanal(zonaConexion, {
+                ...estado,
+                alReintentar: () => canal?.reintentar(),
+              });
+              if (estado.estado === 'reconectando' || estado.estado === 'sin-conexion') {
+                // Sin canal no se puede jugar el turno: dejar los botones
+                // vivos invita a mandar acciones que no llegan a ningun sitio.
+                controlesActuales?.bloquear();
+                for (const boton of document.querySelectorAll('[data-atacar]')) {
+                  boton.disabled = true;
+                }
+              }
+            },
+            alReconectar: async () => {
+              if (!partida) {
+                return;
+              }
+              try {
+                partida = await obtenerPartida(partida.id);
+                const vidas = document.querySelector('[data-zona="vidas"]');
+                if (vidas) {
+                  pintarParticipantes(vidas, participantesParaElPanel(partida), {
+                    idPartida: partida.id,
+                  });
+                }
+                controlesActuales?.sincronizar(partida);
+              } catch (error) {
+                console.warn('No se pudo releer la partida tras reconectar:', error?.message);
+              }
+            },
+          });
         } catch (error) {
           console.warn('Canal no disponible:', error?.message);
         }

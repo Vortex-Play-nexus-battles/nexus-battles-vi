@@ -102,7 +102,7 @@ describe('montarSalaBatalla', () => {
     montarSalaBatalla(document, { idPartida: ID_PARTIDA, participantes: participantes() });
 
     expect(conexion().className).toBe('conexion conexion--sin-conexion');
-    expect(conexion().textContent).toMatch(/no conectado/i);
+    expect(conexion().textContent).toMatch(/sin conexión/i);
   });
 
   // R17.4 — la sala de espera sigue la SALA por el canal: todavia no hay
@@ -112,7 +112,7 @@ describe('montarSalaBatalla', () => {
 
     expect(sinPartida().hidden).toBe(false);
     expect(conexion().className).toBe('conexion conexion--estable');
-    expect(conexion().textContent).toMatch(/^Canal en tiempo real conectado$/);
+    expect(conexion().textContent).toMatch(/^Canal en tiempo real: Conectado$/);
   });
 
   test('en la sala de espera, sin canal, sigue diciendo que no hay conexión', () => {
