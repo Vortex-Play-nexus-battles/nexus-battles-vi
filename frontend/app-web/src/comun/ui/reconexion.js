@@ -17,6 +17,9 @@ import { h } from './dom.js';
 
 /** Texto y variante del kit de cada estado. */
 const PRESENTACION = Object.freeze({
+  // UXC-6 — el primer intento, antes de saber nada: el chat lo pinta mientras
+  // abre el canal por primera vez.
+  conectando: { clase: 'reconectando', texto: 'Conectando…' },
   conectado: { clase: 'estable', texto: 'Conectado' },
   reconectado: { clase: 'estable', texto: 'Conexión recuperada' },
   reconectando: { clase: 'reconectando', texto: 'Reconectando…' },
