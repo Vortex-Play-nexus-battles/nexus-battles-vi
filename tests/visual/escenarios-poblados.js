@@ -197,8 +197,20 @@ function rutasDeInventario(equipamiento) {
       }),
     ],
     ['**/api/v1/inventario/heroes/*/equipamiento', json(equipamiento)],
+    // UXC-3 — la ficha trae las opiniones del producto: un hilo vacío, que es
+    // el estado normal de un producto que nadie ha comentado.
+    ['**/api/v1/products/*/comments', json(HILO_VACIO)],
   ];
 }
+
+/** Un producto sin opiniones (comentarios.yaml: 200 con la lista vacía). */
+const HILO_VACIO = {
+  productoId: 'sin-opiniones',
+  comentarios: [],
+  total: 0,
+  totalCalificaciones: 0,
+  calificacionPromedio: null,
+};
 
 /* ---------------------------------------------------------------------------
    UXC-1 — los ocho prototipos de la Tabla 6 en «Mi inventario». DATOS DE
@@ -208,17 +220,64 @@ function rutasDeInventario(equipamiento) {
    equipo (no puede combatir), uno bloqueado por subasta.
    ------------------------------------------------------------------------- */
 const f = (base, cantidadDados, caras) =>
-  base === null ? null : { base, cantidadDados, caras, formula: `${base ? `${base} + ` : ''}${cantidadDados}d${caras}` };
+  base === null
+    ? null
+    : {
+        base,
+        cantidadDados,
+        caras,
+        formula: `${base ? `${base} + ` : ''}${cantidadDados}d${caras}`,
+      };
 
 const OCHO_HEROES = [
-  ['Aquiles de la Ceniza', 'Guerrero Tanque', { poder: 10, vida: 44, defensa: 11, ataque: f(10, 1, 6), dano: f(0, 1, 4), sanar: null }, 4],
-  ['Vorn el Filo', 'Guerrero Armas', { poder: 8, vida: 44, defensa: 11, ataque: f(10, 1, 6), dano: f(0, 1, 6), sanar: null }, 2],
-  ['Ignis', 'Mago Fuego', { poder: 8, vida: 40, defensa: 10, ataque: f(10, 1, 8), dano: f(0, 1, 8), sanar: null }, 0],
-  ['Nieve de Arel', 'Mago Hielo', { poder: 10, vida: 40, defensa: 10, ataque: f(10, 1, 8), dano: f(0, 1, 6), sanar: null }, 1],
-  ['Sombra Verde', 'Pícaro Veneno', { poder: 8, vida: 36, defensa: 8, ataque: f(10, 1, 10), dano: f(0, 1, 6), sanar: null }, 2],
-  ['Kael', 'Pícaro Machete', { poder: 8, vida: 36, defensa: 8, ataque: f(10, 1, 10), dano: f(0, 1, 8), sanar: null }, 3],
-  ['Oyá', 'Chamán', { poder: 10, vida: 28, defensa: 4, ataque: null, dano: null, sanar: f(6, 1, 6) }, 2],
-  ['Doctora Lumen', 'Médico', { poder: 10, vida: 28, defensa: 4, ataque: null, dano: null, sanar: f(4, 1, 8) }, 1],
+  [
+    'Aquiles de la Ceniza',
+    'Guerrero Tanque',
+    { poder: 10, vida: 44, defensa: 11, ataque: f(10, 1, 6), dano: f(0, 1, 4), sanar: null },
+    4,
+  ],
+  [
+    'Vorn el Filo',
+    'Guerrero Armas',
+    { poder: 8, vida: 44, defensa: 11, ataque: f(10, 1, 6), dano: f(0, 1, 6), sanar: null },
+    2,
+  ],
+  [
+    'Ignis',
+    'Mago Fuego',
+    { poder: 8, vida: 40, defensa: 10, ataque: f(10, 1, 8), dano: f(0, 1, 8), sanar: null },
+    0,
+  ],
+  [
+    'Nieve de Arel',
+    'Mago Hielo',
+    { poder: 10, vida: 40, defensa: 10, ataque: f(10, 1, 8), dano: f(0, 1, 6), sanar: null },
+    1,
+  ],
+  [
+    'Sombra Verde',
+    'Pícaro Veneno',
+    { poder: 8, vida: 36, defensa: 8, ataque: f(10, 1, 10), dano: f(0, 1, 6), sanar: null },
+    2,
+  ],
+  [
+    'Kael',
+    'Pícaro Machete',
+    { poder: 8, vida: 36, defensa: 8, ataque: f(10, 1, 10), dano: f(0, 1, 8), sanar: null },
+    3,
+  ],
+  [
+    'Oyá',
+    'Chamán',
+    { poder: 10, vida: 28, defensa: 4, ataque: null, dano: null, sanar: f(6, 1, 6) },
+    2,
+  ],
+  [
+    'Doctora Lumen',
+    'Médico',
+    { poder: 10, vida: 28, defensa: 4, ataque: null, dano: null, sanar: f(4, 1, 8) },
+    1,
+  ],
 ].map(([nombrePropio, prototipo, estadisticas, ranuras], i) => ({
   elemento: {
     id: `he00000${i + 1}-1111-4111-8111-111111111111`,
@@ -350,6 +409,8 @@ function rutasDeOchoHeroes() {
         });
       },
     ],
+    // UXC-3 — la ficha trae las opiniones del producto (aquí, ninguna).
+    ['**/api/v1/products/*/comments', json(HILO_VACIO)],
   ];
 }
 
@@ -485,13 +546,20 @@ const RUTAS_DEL_HEROE_EN_COMBATE = [
   ],
 ];
 
-function escenarioDeCombate(id, titulo, { partida, mensajes = [], exige, canal = {}, interaccion }) {
+function escenarioDeCombate(
+  id,
+  titulo,
+  { partida, mensajes = [], exige, canal = {}, interaccion },
+) {
   return {
     id,
     titulo,
     ruta: `plataforma/salas-partidas/sala-batalla.html?partida=${ID_PARTIDA}`,
     sesion: () => SESION_COMBATE,
-    rutas: [[`**/api/v1/partidas/${partida.id ?? ID_PARTIDA}`, json(partida)], ...RUTAS_DEL_HEROE_EN_COMBATE],
+    rutas: [
+      [`**/api/v1/partidas/${partida.id ?? ID_PARTIDA}`, json(partida)],
+      ...RUTAS_DEL_HEROE_EN_COMBATE,
+    ],
     canal: { mensajes: { [`/tema/partidas/${ID_PARTIDA}`]: mensajes }, ...canal },
     ...(interaccion ? { interaccion } : {}),
     exige,
@@ -519,7 +587,15 @@ function partidaDeSeis() {
     ['cccccc06-6666-4666-8666-666666666666', 'Kael', 36, 36, 2, true],
   ].map(([jugador, nombre, vidaActual, vidaMaxima, equipo, esIA]) => ({
     jugador,
-    heroe: { id: `h-${jugador}`, nombre, retratoUrl: null, nivel: null, vidaActual, vidaMaxima, efectosActivos: [] },
+    heroe: {
+      id: `h-${jugador}`,
+      nombre,
+      retratoUrl: null,
+      nivel: null,
+      vidaActual,
+      vidaMaxima,
+      efectosActivos: [],
+    },
     esIA,
     listo: true,
     equipo,
@@ -674,6 +750,178 @@ function comentarioReportado(i, cambios = {}) {
     primerReporte: new Date(Date.now() - i * 7_000_000).toISOString(),
     ...cambios,
   };
+}
+
+/* ---------------------------------------------------------------------------
+   UXC-3/UXC-4 — la tienda, su detalle con opiniones y la portada. DATOS DE
+   LABORATORIO: nombres, textos, precios y opiniones inventados para la
+   captura, con la forma exacta de ecommerce-carrito.yaml 1.2.0 y
+   comentarios.yaml 1.3.0. En produccion todo sale de la vitrina, del
+   catalogo y del servicio de comentarios.
+   ------------------------------------------------------------------------- */
+const SESION_TIENDA = sesionDe('qa_tienda', 'JUGADOR');
+
+const PRODUCTOS_DE_TIENDA = [
+  producto({ id: 'aaaaaaa1-0000-4000-8000-000000000001', nombre: 'Yelmo del Alba' }),
+  producto({
+    id: 'aaaaaaa1-0000-4000-8000-000000000002',
+    nombre: 'Amuleto de Brasa',
+    tipo: 'ITEM',
+    habilidades: 'Fuego +2 durante tres turnos',
+    precioOriginal: 20000,
+    precioFinal: 16000,
+    enPromocion: true,
+    porcentajeDescuento: 20,
+  }),
+  producto({
+    id: 'aaaaaaa1-0000-4000-8000-000000000003',
+    nombre: 'Pocion sin precio',
+    tipo: 'ITEM',
+    precioFinal: null,
+  }),
+  producto({
+    id: 'aaaaaaa1-0000-4000-8000-000000000004',
+    nombre: 'Guerrero de Obsidiana',
+    tipo: 'HEROE',
+    imagenUrl: '/frontend/app-web/src/cuentas/avatares/guerrero-tanque.jpg',
+    descripcion: 'Un tanque que aguanta la primera oleada.',
+    habilidades: null,
+    precioFinal: 45000,
+    precioOriginal: 45000,
+  }),
+  producto({
+    id: 'aaaaaaa1-0000-4000-8000-000000000005',
+    nombre: 'Espada de Vorn',
+    tipo: 'ARMA',
+    descripcion: 'Filo largo, templado en la niebla.',
+    habilidades: 'Ataque +6',
+    precioFinal: 32000,
+    precioOriginal: 32000,
+  }),
+];
+
+/** El hilo de un producto: tres opiniones, una con imagen y una propia. */
+function hiloDeLaboratorio({ propio = null } = {}) {
+  const comentarios = [
+    {
+      id: 'c0000000-0000-4000-8000-000000000001',
+      productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
+      autorId: 'c1111111-0000-4000-8000-000000000001',
+      apodoAutor: 'thar_vex',
+      texto: 'Llegó con la defensa que promete. Para un tanque, de lo mejor que hay.',
+      imagenes: ['yelmo-en-combate.png'],
+      estrellas: 5,
+      fechaPublicacion: '2026-09-18T20:15:00Z',
+      estado: 'PUBLICADO',
+    },
+    {
+      id: 'c0000000-0000-4000-8000-000000000002',
+      productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
+      autorId: 'c1111111-0000-4000-8000-000000000002',
+      apodoAutor: 'kira_del_sur',
+      texto: 'Buen objeto, aunque la descripción exagera un poco.\nA mí me sirvió en duelos.',
+      imagenes: [],
+      estrellas: 3,
+      fechaPublicacion: '2026-09-20T11:40:00Z',
+      estado: 'PUBLICADO',
+    },
+    {
+      id: 'c0000000-0000-4000-8000-000000000003',
+      productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
+      autorId: propio ?? 'c1111111-0000-4000-8000-000000000003',
+      apodoAutor: propio ? 'qa_tienda' : 'lumen_9',
+      texto: 'Segunda opinión sin estrellas: después de diez partidas sigo contento.',
+      imagenes: [],
+      fechaPublicacion: '2026-09-22T08:05:00Z',
+      estado: 'PUBLICADO',
+    },
+  ];
+  return {
+    productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
+    comentarios,
+    total: comentarios.length,
+    totalCalificaciones: 2,
+    calificacionPromedio: 4,
+  };
+}
+
+/** El detalle del catalogo de cualquier producto de la tienda de laboratorio. */
+function detalleDelCatalogo(peticion) {
+  const id = new URL(peticion.request().url()).pathname.split('/').pop();
+  const deVitrina = PRODUCTOS_DE_TIENDA.find((p) => p.id === id) ?? PRODUCTOS_DE_TIENDA[0];
+  return json({
+    id,
+    nombre: deVitrina.nombre,
+    tipo: deVitrina.tipo,
+    descripcion: deVitrina.descripcion,
+    imagen: deVitrina.imagenUrl,
+    prototipo: deVitrina.tipo === 'HEROE' ? 'Guerrero Tanque' : null,
+    defensa: deVitrina.tipo === 'ARMADURA' ? 4 : null,
+    parte: deVitrina.tipo === 'ARMADURA' ? 'CASCO' : null,
+    tasaDeCaida: deVitrina.tipo === 'HEROE' ? null : 12,
+    estado: 'ACTIVO',
+    tiraje: -1,
+  });
+}
+
+const CARRITO_DE_LABORATORIO = {
+  id: 9,
+  usuarioId: 'qa',
+  total: 52000,
+  moneda: 'COP',
+  items: [
+    {
+      id: 1,
+      cantidad: 2,
+      precioUnitario: 18000,
+      subtotal: 36000,
+      producto: {
+        id: 'aaaaaaa1-0000-4000-8000-000000000001',
+        nombre: 'Yelmo del Alba',
+        moneda: 'COP',
+      },
+    },
+    {
+      id: 2,
+      cantidad: 1,
+      precioUnitario: 16000,
+      subtotal: 16000,
+      producto: {
+        id: 'aaaaaaa1-0000-4000-8000-000000000002',
+        nombre: 'Amuleto de Brasa',
+        moneda: 'COP',
+      },
+    },
+  ],
+};
+
+function rutasDeTienda({ hilo = hiloDeLaboratorio() } = {}) {
+  return [
+    // R16 — la vitrina se mudó a /api/v1/vitrina y sus ids son UUID del
+    // catálogo maestro. UXC-4 — se pide entera (`?size=50`).
+    ['**/api/v1/vitrina*', json({ content: PRODUCTOS_DE_TIENDA, last: true, totalPages: 1 })],
+    ['**/api/v1/carrito', json(CARRITO_DE_LABORATORIO)],
+    // Lo que ya tiene el jugador: un yelmo (la tarjeta dice «Ya lo tienes»).
+    [
+      '**/api/v1/inventario/elementos?*',
+      json({
+        elementos: [
+          {
+            id: 'e0000000-0000-4000-8000-000000000001',
+            productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
+            tipo: 'ARMADURA',
+            nombrePropio: 'Yelmo del Alba',
+            disponible: true,
+          },
+        ],
+        numero: 0,
+        totalPaginas: 1,
+        ultima: true,
+      }),
+    ],
+    ['**/api/v1/productos/*', detalleDelCatalogo],
+    ['**/api/v1/products/*/comments', json(hilo)],
+  ];
 }
 
 export const ESCENARIOS = [
@@ -1322,57 +1570,129 @@ export const ESCENARIOS = [
   },
   {
     id: 'tienda-con-catalogo',
-    titulo: 'tienda con precios, rebaja y carrito con importes',
+    titulo: 'tienda con precios, rebaja, lo que ya tienes y carrito con importes',
     ruta: 'cuentas/tienda.html',
-    sesion: () => sesionDe('qa_tienda', 'JUGADOR'),
-    rutas: [
-      [
-        // R16 — la vitrina se mudó a /api/v1/vitrina (ecommerce-carrito.yaml
-        // 1.2.0) y sus ids son los UUID del catálogo maestro. Con la ruta vieja
-        // la vista no pintaba nada y el escenario se ponía rojo en `exige`, que
-        // es justo para lo que está. La rebaja y el precio ausente ya no los
-        // manda la vitrina 1.2.0, pero la tarjeta los sigue sabiendo pintar y
-        // su accesibilidad se sigue auditando.
-        '**/api/v1/vitrina*',
-        json({
-          content: [
-            producto({ id: 'aaaaaaa1-0000-4000-8000-000000000001', nombre: 'Yelmo del Alba' }),
-            producto({
-              id: 'aaaaaaa1-0000-4000-8000-000000000002',
-              nombre: 'Amuleto de Brasa',
-              precioOriginal: 20000,
-              precioFinal: 16000,
-              enPromocion: true,
-              porcentajeDescuento: 20,
-            }),
-            producto({
-              id: 'aaaaaaa1-0000-4000-8000-000000000003',
-              nombre: 'Pocion sin precio',
-              precioFinal: null,
-            }),
-          ],
-        }),
-      ],
-      [
-        '**/api/v1/carrito',
-        json({
-          id: 9,
-          usuarioId: 'qa',
-          total: 36000,
-          items: [
-            {
-              id: 1,
-              cantidad: 2,
-              precioUnitario: 18000,
-              subtotal: 36000,
-              producto: { nombre: 'Yelmo del Alba', moneda: 'COP' },
-            },
-          ],
-        }),
-      ],
+    sesion: () => SESION_TIENDA,
+    rutas: rutasDeTienda(),
+    // El descuento y el precio ausente son los dos estados que FI-R2 anadio;
+    // UXC-4 anade la marca de «propio», la insignia del carrito y los filtros.
+    exige: [
+      '.product-card',
+      '.badge-descuento',
+      '.precio-ausente',
+      '.cart-item',
+      '.producto-propio',
+      '.insignia-carrito__cuenta',
+      '.filtros-tienda',
     ],
-    // El descuento y el precio ausente son los dos estados que FI-R2 anadio.
-    exige: ['.product-card', '.badge-descuento', '.precio-ausente', '.cart-item'],
+  },
+  {
+    // UXC-3/UXC-4 — el detalle del producto desde la tienda: ficha del
+    // catalogo, compra y opiniones (promedio, hilo con imagen y una propia).
+    id: 'tienda-detalle-con-opiniones',
+    titulo: 'detalle de producto con compra, calificación promedio e hilo de opiniones',
+    ruta: 'cuentas/tienda.html',
+    sesion: () => SESION_TIENDA,
+    rutas: rutasDeTienda({ hilo: hiloDeLaboratorio({ propio: SESION_TIENDA.uid }) }),
+    interaccion: async (pagina) => {
+      await pagina.locator('[data-ver-producto]').first().click();
+      await pagina.locator('.hilo-comentarios .comentario').first().waitFor();
+    },
+    exige: [
+      '.ficha',
+      '.ficha__valoracion',
+      '.compra-producto',
+      '.deseos[aria-disabled="true"]',
+      '.hilo-comentarios .comentario',
+      '.comentario__adjunto',
+      '.comentario--propio',
+      '.redactor-comentario',
+      '.selector-estrellas',
+    ],
+  },
+  {
+    // UXC-4 — buscar algo que no hay: se dice y se ofrece limpiar.
+    id: 'tienda-sin-coincidencias',
+    titulo: 'búsqueda sin resultados, con «Limpiar filtros»',
+    ruta: 'cuentas/tienda.html',
+    sesion: () => SESION_TIENDA,
+    rutas: rutasDeTienda(),
+    interaccion: async (pagina) => {
+      await pagina.locator('.product-card').first().waitFor();
+      await pagina.locator('#busqueda-tienda').fill('dragón de cristal');
+      await pagina.locator('[data-accion="limpiar-filtros"]').waitFor();
+    },
+    exige: ['#productos-grid [data-estado="vacio"]', '[data-accion="limpiar-filtros"]'],
+  },
+  {
+    // UXC-4 — el carrito minimizado: la vitrina a todo el ancho y la
+    // insignia con las unidades.
+    id: 'tienda-carrito-minimizado',
+    titulo: 'carrito minimizado: vitrina a todo el ancho e insignia con unidades',
+    ruta: 'cuentas/tienda.html',
+    sesion: () => SESION_TIENDA,
+    rutas: rutasDeTienda(),
+    interaccion: async (pagina) => {
+      await pagina.locator('.cart-item').first().waitFor();
+      await pagina.locator('#minimizar-carrito').click();
+    },
+    exige: ['.main-container[data-carrito="minimizado"]', '.insignia-carrito__cuenta'],
+  },
+  {
+    // UXC-4 (retroalimentacion del profesor) — la portada con la tienda: sin
+    // sesion, productos reales a la vista.
+    id: 'portada-con-tienda',
+    titulo: 'portada pública con la tienda: productos, rebaja e imagen',
+    ruta: 'cuentas/login.html',
+    sesion: () => null,
+    rutas: rutasDeTienda(),
+    exige: ['.vitrina-publica .product-card', '.vitrina-publica .badge-descuento'],
+  },
+  {
+    // UXC-3/UXC-4 — el detalle desde la portada: se leen las opiniones; para
+    // comprar u opinar, entrar.
+    id: 'portada-detalle-publico',
+    titulo: 'detalle público: opiniones de solo lectura y «Entra para comprar»',
+    ruta: 'cuentas/login.html',
+    sesion: () => null,
+    rutas: rutasDeTienda(),
+    interaccion: async (pagina) => {
+      await pagina.locator('.vitrina-publica [data-ver-producto]').first().click();
+      await pagina.locator('.hilo-comentarios .comentario').first().waitFor();
+    },
+    exige: [
+      '.ficha',
+      '[data-accion="entrar-para-comprar"]',
+      '.hilo-comentarios .comentario',
+      '[data-accion="entrar-para-opinar"]',
+    ],
+  },
+  {
+    // UXC-3 — la ficha de un objeto del inventario con sus opiniones.
+    id: 'inventario-ficha-con-opiniones',
+    titulo: 'ficha de un objeto del inventario con valoración e hilo',
+    ruta: 'contenido/inventario/inventario.html#objetos',
+    sesion: () => sesionDe('qa_opiniones', 'JUGADOR'),
+    rutas: [
+      ...rutasDeInventario({
+        heroeId: 'ddddddd1-1111-4111-8111-111111111111',
+        armas: ['ddddddd2-2222-4222-8222-222222222222'],
+        armaduras: {},
+        items: [],
+      }),
+      ['**/api/v1/products/*/comments', json(hiloDeLaboratorio())],
+    ],
+    interaccion: async (pagina) => {
+      await pagina.locator('#pestana-objetos').click();
+      await pagina.locator('.vitrina__detalle').first().click();
+      await pagina.locator('.hilo-comentarios .comentario').first().waitFor();
+    },
+    exige: [
+      '.ficha',
+      '.ficha__valoracion',
+      '.hilo-comentarios .comentario',
+      '.redactor-comentario',
+    ],
   },
 ];
 
