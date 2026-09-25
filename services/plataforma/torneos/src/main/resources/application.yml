@@ -1,4 +1,4 @@
-# Torneos — M13 (HU-TOR-001..005, HU-ADM-005). Contrato: contracts/openapi/torneos.yaml.
+# Torneos — M13 (HU-TOR-001..005, HU-TOR-007, HU-ADM-005). Contrato: contracts/openapi/torneos.yaml.
 #
 # Regla 10: ningun valor real vive aqui; todo baja de variable de entorno y lo
 # que hay detras de los dos puntos es el valor de desarrollo local.
@@ -39,9 +39,56 @@ torneos:
     url: ${LISTA_NEGRA_VERIFICAR_URL:http://localhost:8086/api/v1/lista-negra/verificar}
   sanciones:
     url: ${SANCIONES_URL:http://localhost:8086/api/v1}
+  # RF-TOR-007: la epica del premio se entrega por inventario.yaml 1.4.0
+  # (POST /api/v1/inventario/entregas). Base sin /api/v1, mismo nombre que
+  # salas-partidas y ms-subastas usan contra el mismo proveedor.
+  inventario:
+    url: ${INVENTARIO_BASE_URL:http://localhost:8102}
+  # Avisos de los hitos en la bandeja (notificaciones.yaml, /internal/notifications).
+  notificaciones:
+    url: ${NOTIFICACIONES_URL:http://localhost:8085/api/v1}
+  # Correo de los hitos (correo.yaml 1.5.0, POST /correos/torneo) con el
+  # contacto de ms-identidad por uid. VACIOS = sin correo: torneos no crea
+  # operaciones de correo y los avisos siguen llegando a la bandeja. Se llenan
+  # cuando correo implemente /correos/torneo (hoy pendiente en su contrato).
+  identidad:
+    url: ${TORNEOS_IDENTIDAD_URL:}
+  correo:
+    url: ${TORNEOS_CORREO_URL:}
+  # Tiempos de espera de toda llamada saliente: sin ellos un proveedor colgado
+  # retenia el hilo sin limite.
+  http:
+    timeout-conexion-ms: ${TORNEOS_HTTP_TIMEOUT_CONEXION_MS:2000}
+    timeout-lectura-ms: ${TORNEOS_HTTP_TIMEOUT_LECTURA_MS:5000}
+  # B10: cobros, devoluciones, premios y avisos pendientes. La tarea los
+  # reintenta con espera exponencial (base, 2*base... hasta la maxima) y, tras
+  # los intentos maximos, los deja FALLIDA para revision (POST .../reintento).
+  operaciones:
+    tarea-activa: ${TORNEOS_OPERACIONES_TAREA_ACTIVA:true}
+    intervalo-ms: ${TORNEOS_OPERACIONES_INTERVALO_MS:15000}
+    espera-base-s: ${TORNEOS_OPERACIONES_ESPERA_BASE_S:15}
+    espera-maxima-s: ${TORNEOS_OPERACIONES_ESPERA_MAXIMA_S:1800}
+    intentos-maximos: ${TORNEOS_OPERACIONES_INTENTOS_MAXIMOS:12}
+    plazo-bloqueo-s: ${TORNEOS_OPERACIONES_PLAZO_BLOQUEO_S:120}
+  # RF-TOR-007 — premio del equipo campeon, POR INTEGRANTE humano.
+  #
+  # VALORES PROVISIONALES (D-24, docs/gobierno/DECISIONES-PENDIENTES-DEL-PO.md):
+  # el documento del curso dice «creditos y una recompensa epica unica para su
+  # heroe» y no fija ni el monto ni la epica. Hasta que el PO los fije:
+  #   * 100 creditos: cifra de demostracion SIN respaldo documental.
+  #   * la epica «Golpe de defensa» (Tabla 20), la del Guerrero Tanque, que es
+  #     el heroe del kit inicial provisional (D-29): para quien juega con el
+  #     kit, es literalmente «la epica de su heroe». Id del catalogo sembrado
+  #     (services/contenido/productos/docs/catalogo-inicial-identificadores.md).
+  # 0 creditos y epica vacia = sin premio. Cada torneo copia estos valores al
+  # crearse, asi que cambiarlos no altera el premio de un torneo ya anunciado.
+  premio:
+    creditos-por-integrante: ${TORNEOS_PREMIO_CREDITOS_POR_INTEGRANTE:100}
+    epica-producto-id: ${TORNEOS_PREMIO_EPICA_PRODUCTO_ID:81af272d-74fb-3dc1-b6ff-01fdc99a1c1d}
 
-# Credencial de servicio (ADR-005) con la que este servicio reserva y cobra en
-# el libro de creditos y consulta sanciones. Sin client-id no se crea ninguna.
+# Credencial de servicio (ADR-005) con la que este servicio reserva, cobra y
+# acredita en el libro de creditos, consulta sanciones, entrega el premio en
+# inventario y deja avisos. Sin client-id no se crea ninguna.
 seguridad:
   servicio:
     url: ${DIRECTORIO_ACTIVO_URL:}
