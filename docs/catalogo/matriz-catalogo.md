@@ -49,7 +49,9 @@ La actualización es condicional (solo si nadie lo editó entre la lectura y la
 escritura), así que dos réplicas que arrancan a la vez no se pisan. La semilla
 está activa por omisión en todos los entornos; se apaga con
 `CATALOGO_SEMILLA=false`. Las pruebas con repositorio simulado la apagan en
-`src/test/resources/config/application.properties`.
+`src/test/resources/config/application.properties`, y el banco E2E en
+`tests/e2e/compose.yml`: tiene su propio catálogo (`sembrar.sh`), y la tienda
+solo pinta la primera página de la vitrina.
 
 Los prototipos de héroes siguen el mismo criterio (`PrototiposIniciales.VERSION`,
 `origen`, `semillaVersion`, `modificadoPor` en `prototipos`) cuando el

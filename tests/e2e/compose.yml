@@ -198,6 +198,15 @@ services:
       # servicio vuelve a preferir KEYCLOAK_JWK_SET_URI, aqui no hay ningun
       # JWKS que servir y el banco se pone rojo en vez de pasar por suerte.
       KEYCLOAK_JWK_SET_URI: http://emisor-que-no-existe:9/jwks
+      # B4 — la semilla del catalogo oficial esta encendida por omision en
+      # todos los entornos. Aqui se apaga a proposito: el banco tiene su propio
+      # catalogo determinista (sembrar.sh), y la vista de la tienda pinta solo
+      # la primera pagina de la vitrina (16, por fecha de alta). Los 80
+      # productos oficiales, con los precios en COP de la demo, dejarian fuera
+      # de esa pagina el producto que crea tienda.e2e.spec.js. La semilla la
+      # prueba CatalogoContraMongoIT (productos) contra un Mongo real. Cuando
+      # la tienda pagine, esta linea puede irse.
+      CATALOGO_SEMILLA: "false"
     depends_on:
       e2e-contenido-mongo: { condition: service_healthy }
     healthcheck:
