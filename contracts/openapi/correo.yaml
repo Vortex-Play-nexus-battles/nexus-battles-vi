@@ -28,13 +28,22 @@ info:
     evento segun preferencia del jugador), y desde la 1.3.0 ms-finanzas
     (confirmacion de compra tras aprobar un pago, HU-PAG-003).
 
+    **1.5.0 (B10) — correo de torneo, PENDIENTE de implementar en este
+    servicio.** `POST /correos/torneo` se declara primero (regla 1) porque
+    torneos ya lo consume: inscripcion confirmada, inicio, cancelacion con
+    devolucion y premio entregado (HU-TOR-001 CA-04, HU-TOR-002 CA-01,
+    HU-TOR-007 CA-04). Mismo cuerpo que el correo de subasta (asunto y
+    mensaje decididos por quien llama) sobre la plantilla corporativa. Hasta
+    que correo lo implemente, torneos deja esos correos sin enviar (sus avisos
+    si llegan a la bandeja de notificaciones) y lo registra.
+
     Desde la 1.1.0 toda ruta exige una credencial de servicio (ADR-001 via el
     emisor transitorio de ADR-005): `Authorization: Bearer` con un token de
     `rol=SERVICIO`. Sin credencial responde 401; con un token de usuario, 403:
     correo es un servicio entre servicios y nunca lo llama un navegador. Por
     eso el borde tampoco expone `/api/v1/correos`. Es version menor porque
     rutas y cuerpos no cambian.
-  version: 1.4.0
+  version: 1.5.0
 servers:
   - url: http://localhost:8082/api/v1
     description: Entorno local de desarrollo
@@ -209,6 +218,32 @@ paths:
           description: >
             Correo aceptado y entregado al servidor SMTP, o suprimido a
             proposito porque debeEnviarCorreo era false.
+        '400':
+          $ref: '#/components/responses/SolicitudInvalida'
+
+  /correos/torneo:
+    post:
+      summary: Enviar el correo de un hito de torneo (inscripcion, inicio, cancelacion, premio)
+      description: >
+        1.5.0 (B10). Lo dispara torneos con su credencial de servicio y con el
+        contacto que le da ms-identidad por `uid` (torneos no guarda correos).
+        Asunto y mensaje los decide torneos; este servicio solo los pone sobre
+        la plantilla corporativa, igual que /correos/subasta.
+      operationId: enviarCorreoTorneo
+      x-implementacion: pendiente
+      x-fase: B10
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CorreoTorneoRequest'
+      responses:
+        '202':
+          description: Correo guardado en la cola persistente.
         '400':
           $ref: '#/components/responses/SolicitudInvalida'
 
@@ -547,6 +582,35 @@ components:
         debeEnviarCorreo:
           type: boolean
           description: Mismo criterio que en CorreoMisionRequest.
+
+    CorreoTorneoRequest:
+      type: object
+      description: 1.5.0 (B10). Misma forma que CorreoSubastaRequest, sin preferencia (el hito siempre se comunica).
+      required:
+        - email
+        - apodo
+        - asunto
+        - mensaje
+      properties:
+        email:
+          type: string
+          format: email
+        apodo:
+          type: string
+          minLength: 1
+        asunto:
+          type: string
+          minLength: 1
+          maxLength: 200
+          examples: ['Tu equipo quedo inscrito en la Copa de Otono']
+        mensaje:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        torneoId:
+          type: [string, 'null']
+          format: uuid
+          description: Torneo al que se refiere el correo, para la referencia del envio.
 
     CorreoConfirmacionCompraRequest:
       type: object
