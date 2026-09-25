@@ -39,6 +39,9 @@
       // existe. Cambiar ese destino por ./pujas.html?id={id} conecta las dos
       // pantallas, pero es una linea en el archivo de Cristian y la decide el.
       const subastaId = parametros.get('id');
+      // UXC-8 — ?accion=comprar llega del botón «Comprar ahora» de la vitrina:
+      // abre la confirmación de la compra inmediata (que sigue haciendo falta).
+      const accion = parametros.get('accion');
 
       // Siempre contra el servicio real. No hay modo de demostracion: una
       // pantalla que se pinta con datos inventados cuando el backend no
@@ -51,6 +54,7 @@
         api: crearApiSubastas(),
         urlCanal: urlDelCanal(),
         ...(subastaId ? { subastaInicialId: subastaId } : {}),
+        ...(subastaId && accion === 'comprar' ? { accionInicial: 'comprar' } : {}),
       });
 
       // FI-R11 — al irse de la pagina se suelta el ciclo de reconexion. Sin

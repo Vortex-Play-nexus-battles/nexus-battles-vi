@@ -17,6 +17,7 @@ import {
   calcularBalanceNetoCierre,
   generarConsejoTactico,
   calcularEstadoTopesConcurrencia,
+  pujasEn,
   ControladorSubastas,
   rarezaVisible,
   nivelRequeridoVisible,
@@ -328,6 +329,14 @@ describe('ControladorSubastas - Interacción y Flujo DOM', () => {
 
   describe('Vista «Mis Subastas» - Finanzas y Concurrencia', () => {
     beforeEach(() => {
+      // UXC-8 — el saldo lo da el servidor (`MiResumen`). Sin él, el panel ya
+      // no dibuja una barra de «libre» sobre un total que no se sabe: estas
+      // pruebas ejercitan la versión con saldo, 6200 cr en total.
+      controlador.resumen = {
+        creditosRetenidos: '3750',
+        saldoDisponible: '2450',
+        subastasGanando: 2,
+      };
       controlador.abrirMisSubastas();
     });
 
@@ -359,8 +368,11 @@ describe('ControladorSubastas - Interacción y Flujo DOM', () => {
     });
 
     test('ordena las subastas por proximidad de vencimiento y asigna bordes de estado', () => {
+      // UXC-8 — solo donde pujas: la daga no tiene puja, ni retenido, ni
+      // automática tuya. Antes salía aquí como «tuya» por estar en el mercado.
       const filas = contenedor.querySelectorAll('.fila-mi-subasta');
-      expect(filas.length).toBe(SUBASTAS_INICIALES.length);
+      expect(filas.length).toBe(SUBASTAS_INICIALES.filter(pujasEn).length);
+      expect(contenedor.querySelector('.fila-mi-subasta[data-id="daga-hueso"]')).toBeNull();
 
       // La primera debe ser la que tiene menor tiempo restante
       const tiempoPrimero = filas[0].querySelector('.reloj-fila');
@@ -672,7 +684,12 @@ describe('Accesibilidad del diálogo de compra (WCAG 2.1 AA)', () => {
   beforeEach(() => {
     contenedorA11y = document.createElement('div');
     document.body.appendChild(contenedorA11y);
-    ctrlA11y = new ControladorSubastas({ contenedor: contenedorA11y });
+    // UXC-8 — el controlador ya no arranca con datos de ejemplo por omisión
+    // (la pantalla real no debe tenerlos nunca): el banco se pide aquí.
+    ctrlA11y = new ControladorSubastas({
+      contenedor: contenedorA11y,
+      subastas: SUBASTAS_INICIALES,
+    });
     ctrlA11y.iniciar();
     ctrlA11y.abrirDetalle('hacha-obsidiana');
   });

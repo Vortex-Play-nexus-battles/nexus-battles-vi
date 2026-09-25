@@ -329,13 +329,35 @@ async function cargarYRenderizar() {
 
   const vitrina = construirVitrinaSubastas(pagina, {
     alAbrirDetalle: (subasta) => {
-      // La vista de detalle todavia no existe (ver pendientes de HU-SUB-011).
-      globalThis.location.href = `./pujas.html?id=${subasta.id}`;
+      globalThis.location.href = rutaDePujas(subasta.id);
+    },
+    // UXC-8 — el botón «Comprar ahora» de la vitrina existía pero nadie le
+    // pasaba el manejador, así que no se pintaba nunca. Lleva a la subasta con
+    // la confirmación abierta: comprar exige confirmarlo (el contrato rechaza
+    // `confirmado: false`), y ahí se ve el precio, el saldo y el objeto.
+    alComprarAhora: (subasta) => {
+      globalThis.location.href = rutaDePujas(subasta.id, { comprar: true });
     },
   });
 
   zona.replaceChildren(vitrina, construirPaginacion(pagina));
   ponerEnHoraLosContadores(zona, pagina.contenido);
+}
+
+/**
+ * La sala de pujas de una subasta (`pujas.html`), y con `comprar` la
+ * confirmación de la compra inmediata ya abierta.
+ *
+ * @param {string} id
+ * @param {{comprar?: boolean}} [opciones]
+ * @returns {string}
+ */
+export function rutaDePujas(id, { comprar = false } = {}) {
+  const parametros = new URLSearchParams({ id: String(id) });
+  if (comprar) {
+    parametros.set('accion', 'comprar');
+  }
+  return `./pujas.html?${parametros}`;
 }
 
 /**

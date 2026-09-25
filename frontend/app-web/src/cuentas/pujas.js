@@ -23,6 +23,7 @@ import { iconoHtml } from '../comun/ui/icono.js';
 // va con saneamiento EXPLICITO en cada interpolacion que lleve datos.
 // `sin-innerhtml.test.js` lo tiene anotado; la estructura se mueve en R2.10.
 import { esc } from '../comun/ui/escapar.js';
+import { urlDeLogin } from '../comun/sesion.js';
 import { acusar } from '../comun/ui/acuse.js';
 
 /** Canal que publica ms-subastas en cada cambio (SubastaRealtimePublisher). */
@@ -108,9 +109,9 @@ export const ICONO_RAREZA = Object.freeze({
  * @returns {{conocida: boolean, clase: string, texto: string|null, simbolo: string}}
  */
 export function nivelRequeridoVisible(nivel) {
-  return typeof nivel === 'number' && Number.isFinite(nivel)
-    ? `Nivel req. ${nivel}`
-    : 'Nivel requerido: sin dato';
+  // UXC-8 — el contrato de subastas no trae nivel: escribir «sin dato» en
+  // cada tarjeta era ruido. Sin nivel no se dice nada.
+  return typeof nivel === 'number' && Number.isFinite(nivel) ? `Nivel req. ${nivel}` : '';
 }
 
 export function rarezaVisible(rareza) {
@@ -360,7 +361,45 @@ export const EVENTOS_CIERRE_DEFAULT = [
 // =========================================================================
 
 export function formatearCreditos(n) {
-  return Number(n || 0).toLocaleString('es-CO');
+  // UXC-8 — «no se sabe» no es cero: un saldo o un precio que no vino se
+  // pinta como raya, nunca como «0 cr» (que se lee «no tienes nada»).
+  if (n === null || n === undefined || Number.isNaN(Number(n))) {
+    return '—';
+  }
+  return Number(n).toLocaleString('es-CO');
+}
+
+/** UXC-8 — el tipo del producto en palabras, no la constante del contrato. */
+export const TIPO_DE_OBJETO = Object.freeze({
+  HEROE: 'Héroe',
+  HABILIDAD: 'Habilidad',
+  ARMA: 'Arma',
+  ARMADURA: 'Armadura',
+  ITEM: 'Ítem',
+  EPICA: 'Épica',
+});
+
+/** @param {string|null|undefined} tipo */
+export function tipoLegible(tipo) {
+  return TIPO_DE_OBJETO[tipo] ?? (tipo ? String(tipo) : 'Objeto');
+}
+
+/**
+ * UXC-8 — un momento del historial como se lee: «hoy, 10:02» o «22 sept, 10:02».
+ *
+ * @param {string} iso
+ */
+export function momentoLegible(iso) {
+  const fecha = new Date(iso);
+  if (Number.isNaN(fecha.getTime())) {
+    return '';
+  }
+  const hoy = new Date();
+  const mismoDia = fecha.toDateString() === hoy.toDateString();
+  const hora = fecha.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+  return mismoDia
+    ? `hoy, ${hora}`
+    : `${fecha.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}, ${hora}`;
 }
 
 export function formatearTiempo(seg) {
@@ -505,7 +544,10 @@ export function calcularSumaTopesAuto(subastas = []) {
 
 export function verificarSobreCompromiso(total, subastas = []) {
   const sumaTopes = calcularSumaTopesAuto(subastas);
-  const sobreCompromiso = sumaTopes > total;
+  // UXC-8 — sin saldo no se sabe: `sumaTopes > null` es `sumaTopes > 0`, y
+  // la alarma «tus automáticas prometen más de lo que tienes» saltaba con
+  // cualquier automática puesta cuando el saldo no había llegado.
+  const sobreCompromiso = total !== null && total !== undefined && sumaTopes > total;
   const faltante = sobreCompromiso ? sumaTopes - total : 0;
   return { sobreCompromiso, sumaTopes, total, faltante };
 }
@@ -609,12 +651,39 @@ export function segunDelta(delta, positivo, negativo, cero) {
   return cero;
 }
 
-export function calcularEstadoTopesConcurrencia(subastas = [], config = CONFIG_REGLAS) {
+/**
+ * UXC-8 — ¿pujas en esta subasta? Solo por lo que dijo el servidor de tu
+ * participación (`MiParticipacion`): estar en el listado del mercado no es
+ * participar. La pestaña «Mis subastas» contaba el mercado entero como tuyo
+ * y avisaba «Has llegado al tope» a quien no había pujado nunca.
+ *
+ * @param {object} sub
+ * @returns {boolean}
+ */
+export function pujasEn(sub) {
+  return Boolean(
+    sub && (sub.ganando || sub.superado || (sub.retenido || 0) > 0 || (sub.autoLimite || 0) > 0),
+  );
+}
+
+/**
+ * @param {Array<object>} subastas las subastas EN LAS QUE PARTICIPAS
+ * @param {object} [config]
+ * @param {{ganando?: number|null}} [conocido] lo que el servidor ya contó
+ *   (`MiResumen.subastasGanando`), que manda sobre lo que hay cargado
+ */
+export function calcularEstadoTopesConcurrencia(
+  subastas = [],
+  config = CONFIG_REGLAS,
+  { ganando = null } = {},
+) {
   const maxSubastas = config.maxSubastasSimultaneas || 10;
   const maxPujas = config.maxPujasActivas || 50;
 
   const nSubastas = subastas.length;
-  const nPujasGanando = subastas.filter((s) => s.ganando).length;
+  const nPujasGanando = Number.isInteger(ganando)
+    ? ganando
+    : subastas.filter((s) => s.ganando).length;
 
   const ratioSubastas = nSubastas / maxSubastas;
   const ratioPujas = nPujasGanando / maxPujas;
@@ -652,6 +721,25 @@ export function calcularEstadoTopesConcurrencia(subastas = [], config = CONFIG_R
   };
 }
 
+/**
+ * UXC-8 — de lo guardado de una participación a los campos que pinta la
+ * vista. La espera se recalcula con el reloj: guardada en segundos se
+ * quedaría congelada en la cifra de cuando se preguntó.
+ *
+ * @param {{ganando: boolean, superado: boolean, retenido: number, autoLimite: number, esperaHasta: number}} conocida
+ * @param {number} [ahora]
+ */
+export function vistaDeParticipacion(conocida, ahora = Date.now()) {
+  return {
+    ganando: conocida.ganando,
+    superado: conocida.superado,
+    retenido: conocida.retenido,
+    autoLimite: conocida.autoLimite,
+    esperaSegundos: Math.max(0, Math.ceil((conocida.esperaHasta - ahora) / 1000)),
+    participacionCargada: true,
+  };
+}
+
 // =========================================================================
 // Controlador y renderizador interactivo DOM
 // =========================================================================
@@ -659,12 +747,18 @@ export function calcularEstadoTopesConcurrencia(subastas = [], config = CONFIG_R
 export class ControladorSubastas {
   constructor({
     contenedor,
-    subastas = SUBASTAS_INICIALES,
+    // UXC-8 — sin datos de ejemplo por omisión: el banco de pruebas lo pide
+    // quien lo necesita (pujas.test.js), nunca la pantalla.
+    subastas = [],
     heroes = [],
     config = CONFIG_REGLAS,
     eventosCierre = [],
     api = null,
     subastaInicialId = null,
+    // UXC-8 — `?accion=comprar`: llegar desde la vitrina con la compra
+    // inmediata ya pedida. Abre la confirmación; comprar sigue exigiendo
+    // confirmarla (el contrato rechaza `confirmado: false`).
+    accionInicial = null,
     urlCanal = null,
     conectarCanal = conectarStomp,
     // R9.6 — de donde sale el JWT que acredita el CONNECT del canal. Misma
@@ -675,11 +769,28 @@ export class ControladorSubastas {
     // verdad ni dependan de temporizadores reales.
     esperas = ESPERAS_DE_RECONEXION,
     esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    // UXC-9 — la consulta periódica que prometía la píldora («las pujas
+    // pueden tardar unos segundos») y que no existía: sin canal, el listado
+    // no se movía hasta que el jugador hacía algo. Null la apaga.
+    sondeoMs = 5000,
   } = {}) {
     // Subasta que hay que abrir en detalle nada mas cargar. Viene de ?id= en la
     // URL: es la forma de que el listado de HU-SUB-011 entregue una subasta
     // concreta a esta pantalla sin que las dos compartan estado.
     this.subastaInicialId = subastaInicialId;
+    this.accionInicial = accionInicial;
+    // UXC-8 — lo que el servidor dijo de tu participación, por subasta. El
+    // listado se relee entero con cada cambio y sin esto «Mis subastas»
+    // olvidaría dónde pujas a la primera recarga.
+    this.participaciones = new Map();
+    this.participacionesRevisadas = false;
+    this.consultandoParticipaciones = false;
+    // UXC-8 — la subasta que acabas de comprar: sale del listado de abiertas
+    // en cuanto se adjudica, y sin guardarla el «¡Es tuya!» no tenía dónde
+    // pintarse (la compra salía bien y la pantalla volvía al listado muda).
+    this.subastaCerrada = null;
+    this.sondeoMs = sondeoMs;
+    this.sondeoId = null;
     // Sin api, el controlador funciona con los datos de ejemplo: es como lo
     // ejercitan las pruebas unitarias, que no deben depender de que haya un
     // servidor levantado. Con api, manda el servidor.
@@ -747,7 +858,8 @@ export class ControladorSubastas {
           this.reconectar();
         }
       });
-      return this.recargar();
+      this.iniciarSondeo();
+      return this.recargar().then(() => this.consultarParticipaciones());
     }
     this.iniciarTemporizador();
     this.render();
@@ -772,23 +884,41 @@ export class ControladorSubastas {
       ]);
       this.subastas = subastas;
       this.resumen = resumen;
+      this.reaplicarParticipaciones();
       this.estadoDatos = subastas.length ? 'exito' : 'vacio';
       this.mensajeError = null;
 
       if (this.subastaInicialId) {
-        const pedida = subastas.find((s) => s.id === this.subastaInicialId);
+        // UXC-8 — el contrato no publica GET /subastas/{id}: se busca en las
+        // páginas del listado (16 por página) hasta dar con ella o agotarlas.
+        const pedida =
+          subastas.find((s) => s.id === this.subastaInicialId) ??
+          (await this.buscarEnOtrasPaginas(this.subastaInicialId));
         this.subastaInicialId = null;
         if (pedida) {
+          if (!this.subastas.some((s) => s.id === pedida.id)) {
+            this.subastas = [...this.subastas, pedida];
+            this.estadoDatos = 'exito';
+          }
           this.origenVista = 'explorar';
           this.subastaActivaId = pedida.id;
           this.vista = 'detalle';
         } else {
           // Llego un enlace a una subasta que ya no esta en el listado: se
           // cerro o se adjudico. Mejor decirlo que abrir un detalle vacio.
-          this.mensajeError = 'Esa subasta ya no está disponible.';
+          this.accionInicial = null;
+          this.mensajeError =
+            'Esa subasta ya no está disponible: puede que haya terminado o que alguien la comprara. Aquí tienes las que siguen en curso.';
         }
       }
-      if (this.subastaActivaId && !subastas.some((s) => s.id === this.subastaActivaId)) {
+      // UXC-8 — `this.subastas` y no `subastas`: una subasta abierta desde un
+      // enlace puede venir de otra página del listado, y comparar con la
+      // primera la sacaba del detalle en la misma recarga que la abría.
+      if (
+        this.subastaActivaId &&
+        !this.subastas.some((s) => s.id === this.subastaActivaId) &&
+        this.subastaCerrada?.id !== this.subastaActivaId
+      ) {
         // La subasta que se estaba mirando se cerro o se adjudico mientras
         // tanto: volver a la lista es mejor que dejar una pantalla de detalle
         // sobre algo que ya no existe.
@@ -808,6 +938,27 @@ export class ControladorSubastas {
     // ahi: llegar con ?id= desde el listado, y refrescar despues de pujar.
     if (this.vista === 'detalle' && this.subastaActivaId) {
       await this.cargarDetalle(this.subastaActivaId);
+      this.atenderAccionInicial();
+    }
+  }
+
+  /**
+   * UXC-8 — `?accion=comprar`: se abre la confirmación de la compra
+   * inmediata, una sola vez y solo si la subasta la admite y no es tuya.
+   */
+  atenderAccionInicial() {
+    const accion = this.accionInicial;
+    this.accionInicial = null;
+    const sub = this.getSubastaActiva();
+    if (
+      accion === 'comprar' &&
+      sub &&
+      sub.compraInmediata !== null &&
+      sub.compraInmediata !== undefined &&
+      !sub.esPropia &&
+      sub.segundosRestantes > 0
+    ) {
+      this.solicitarCompraInmediata();
     }
   }
 
@@ -845,7 +996,7 @@ export class ControladorSubastas {
 
     if (historial) {
       sub.historial = historial.map((p) => ({
-        apodo: p.esTuya ? 'Tu' : 'Otro jugador',
+        apodo: p.esTuya ? 'Tú' : 'Otro jugador',
         monto: Number(p.monto),
         tipo: p.tipo === 'AUTOMATICA' ? 'Automática' : 'Manual',
         cuando: p.creadaEn,
@@ -855,17 +1006,168 @@ export class ControladorSubastas {
     }
 
     if (participacion) {
-      sub.ganando = participacion.vasGanando;
-      sub.superado = participacion.teSuperaron;
-      sub.retenido = Number(participacion.retenidoAqui || 0);
-      sub.autoLimite = participacion.automaticaActiva
-        ? Number(participacion.limiteAutomatico || 0)
-        : 0;
-      sub.esperaSegundos = Number(participacion.segundosParaVolverAPujar || 0);
-      sub.participacionCargada = true;
+      this.aplicarParticipacion(id, participacion);
     }
 
     this.render();
+  }
+
+  /**
+   * UXC-8 — guarda lo que dijo el servidor de tu participación en una
+   * subasta y lo pinta en la subasta que haya ahora en el listado (puede ser
+   * otro objeto si hubo una recarga mientras tanto).
+   *
+   * Si ibas ganando y ahora te superaron, y no la estás mirando, sale el aviso
+   * cruzado: hasta ahora solo existía en el camino de las pruebas.
+   *
+   * @param {string} id
+   * @param {object} participacion `MiParticipacion` del contrato
+   */
+  aplicarParticipacion(id, participacion) {
+    const antes = this.participaciones.get(id);
+    const espera = Number(participacion.segundosParaVolverAPujar || 0);
+    const conocida = {
+      ganando: Boolean(participacion.vasGanando),
+      superado: Boolean(participacion.teSuperaron),
+      // `creditosRetenidos` es el nombre del contrato (MiParticipacion);
+      // `retenidoAqui` lo mandaba una versión anterior del servicio.
+      retenido: Number(participacion.creditosRetenidos ?? participacion.retenidoAqui ?? 0),
+      autoLimite: participacion.automaticaActiva ? Number(participacion.limiteAutomatico || 0) : 0,
+      // La espera corre: se guarda cuándo termina, no cuántos segundos faltaban.
+      esperaHasta: espera > 0 ? Date.now() + espera * 1000 : 0,
+    };
+    this.participaciones.set(id, conocida);
+    const sub = this.subastas.find((s) => s.id === id);
+    if (sub) {
+      Object.assign(sub, vistaDeParticipacion(conocida));
+    }
+    const laEstoyMirando = this.vista === 'detalle' && this.subastaActivaId === id;
+    if (sub && antes?.ganando && conocida.superado && !laEstoyMirando) {
+      this.avisoCruzado = {
+        id,
+        nombre: sub.nombre,
+        oferta: sub.oferta,
+        rival: sub.rival || 'otro jugador',
+        segundosRestantes: sub.segundosRestantes,
+      };
+    }
+    return conocida;
+  }
+
+  /** Vuelve a poner lo que se sabía de tu participación tras releer el listado. */
+  reaplicarParticipaciones() {
+    for (const sub of this.subastas) {
+      const conocida = this.participaciones.get(sub.id);
+      if (conocida) {
+        Object.assign(sub, vistaDeParticipacion(conocida));
+      }
+    }
+  }
+
+  /**
+   * UXC-8 — pregunta tu participación en las subastas abiertas cargadas que
+   * todavía no se sabe. El contrato no publica «dónde pujo» como lista, así
+   * que es la única forma de que «Mis subastas» diga la verdad. Cuatro
+   * consultas a la vez como mucho y solo con sesión.
+   *
+   * @param {{tambienGanando?: boolean}} [opciones] volver a preguntar también
+   *   por las que ibas ganando (el sondeo, para enterarse de que te superaron)
+   */
+  async consultarParticipaciones({ tambienGanando = false } = {}) {
+    if (!this.api || !this.leerToken?.() || this.consultandoParticipaciones) {
+      return;
+    }
+    const cola = this.subastas
+      .filter((s) => {
+        const conocida = this.participaciones.get(s.id);
+        return !conocida || (tambienGanando && conocida.ganando);
+      })
+      .map((s) => s.id);
+    if (cola.length === 0) {
+      this.marcarParticipaciones({ consultando: false, revisadas: true });
+      return;
+    }
+    this.marcarParticipaciones({ consultando: true, revisadas: this.participacionesRevisadas });
+    if (this.vista === 'mis-subastas') {
+      this.render();
+    }
+    const trabajador = async () => {
+      while (cola.length > 0) {
+        const id = cola.shift();
+        const participacion = await this.intentar(() => this.api.miParticipacion(id));
+        if (participacion) {
+          this.aplicarParticipacion(id, participacion);
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, cola.length) }, trabajador));
+    this.marcarParticipaciones({ consultando: false, revisadas: true });
+    this.render();
+  }
+
+  /** Un solo sitio para las dos marcas (ESLint: require-atomic-updates). */
+  marcarParticipaciones({ consultando, revisadas }) {
+    this.consultandoParticipaciones = consultando;
+    this.participacionesRevisadas = revisadas;
+  }
+
+  /**
+   * UXC-9 — degradación controlada (riesgo #7): sin canal en vivo se relee
+   * el mercado cada `sondeoMs`. No con la pestaña oculta, ni a mitad de una
+   * operación, ni con la confirmación de compra abierta.
+   */
+  iniciarSondeo() {
+    if (!this.sondeoMs || this.sondeoId) {
+      return;
+    }
+    this.sondeoId = setInterval(() => this.sondear(), this.sondeoMs);
+  }
+
+  pararSondeo() {
+    if (this.sondeoId) {
+      clearInterval(this.sondeoId);
+      this.sondeoId = null;
+    }
+  }
+
+  sondear() {
+    const oculta = globalThis.document?.visibilityState === 'hidden';
+    if (
+      !this.vivo ||
+      !this.api ||
+      this.enviando ||
+      this.confirmandoCompra ||
+      oculta ||
+      this.estadoCanal === ESTADO_CANAL.ESTABLE
+    ) {
+      return null;
+    }
+    return this.recargar().then(() => this.consultarParticipaciones({ tambienGanando: true }));
+  }
+
+  /**
+   * UXC-8 — busca una subasta por su id en las páginas siguientes del
+   * listado (la primera ya está cargada). Se para al primer hueco o al tope.
+   *
+   * @param {string} id
+   * @param {{paginasMaximas?: number}} [opciones]
+   * @returns {Promise<object|null>}
+   */
+  async buscarEnOtrasPaginas(id, { paginasMaximas = 8 } = {}) {
+    for (let pagina = 1; pagina < paginasMaximas; pagina += 1) {
+      const lote = await this.intentar(() => this.api.listar({ page: pagina }));
+      if (!Array.isArray(lote) || lote.length === 0) {
+        return null;
+      }
+      const encontrada = lote.find((s) => s.id === id);
+      if (encontrada) {
+        return encontrada;
+      }
+      if (lote.length < 16) {
+        return null;
+      }
+    }
+    return null;
   }
 
   /**
@@ -1098,7 +1400,20 @@ export class ControladorSubastas {
       return false;
     }
 
-    this.recargar();
+    // UXC-8 — si ibas ganando esa, te pueden haber superado: se pregunta tu
+    // participación después de releer (el mensaje del canal no lo dice).
+    const ibaGanando = this.participaciones.get(actualizada.id)?.ganando;
+    this.recargar().then(() => {
+      if (ibaGanando && !esLaQueMiro) {
+        return this.intentar(() => this.api?.miParticipacion(actualizada.id)).then((p) => {
+          if (p) {
+            this.aplicarParticipacion(actualizada.id, p);
+            this.render();
+          }
+        });
+      }
+      return undefined;
+    });
     return true;
   }
 
@@ -1125,6 +1440,7 @@ export class ControladorSubastas {
   /** El reloj y el canal. Sigue existiendo porque lo llaman desde fuera. */
   destruir() {
     this.pararTemporizador();
+    this.pararSondeo();
     this.cerrarCanalEnVivo();
   }
 
@@ -1221,7 +1537,11 @@ export class ControladorSubastas {
   }
 
   getSubastaActiva() {
-    return this.subastas.find((s) => s.id === this.subastaActivaId) || this.subastas[0];
+    return (
+      this.subastas.find((s) => s.id === this.subastaActivaId) ||
+      (this.subastaCerrada?.id === this.subastaActivaId ? this.subastaCerrada : null) ||
+      this.subastas[0]
+    );
   }
 
   getHeroeActivo() {
@@ -1237,6 +1557,8 @@ export class ControladorSubastas {
   abrirExplorar() {
     this.limpiarError();
     this.vista = 'explorar';
+    this.subastaCerrada = null;
+    this.resultadoCierre = null;
     this.render();
   }
 
@@ -1244,6 +1566,8 @@ export class ControladorSubastas {
     this.limpiarError();
     this.vista = 'mis-subastas';
     this.render();
+    // Sin await: la pestaña se pinta ya y se completa al llegar las respuestas.
+    return this.consultarParticipaciones();
   }
 
   abrirCierreMultiple() {
@@ -1466,10 +1790,20 @@ export class ControladorSubastas {
 
     if (this.api) {
       this.confirmandoCompra = false;
+      // UXC-8 — la subasta comprada se adjudica y sale del listado en la
+      // recarga que sigue a la compra. Se guarda antes para poder enseñar el
+      // «¡Es tuya!» con su nombre y su precio; si la compra falla, se suelta.
+      this.subastaCerrada = { ...sub, segundosRestantes: 0 };
+      this.subastaActivaId = sub.id;
       return this.ejecutarContraElServidor(() => this.api.comprarAhora(sub.id)).then((exito) => {
         if (exito) {
+          this.vista = 'detalle';
+          this.subastaActivaId = sub.id;
           this.resultadoCierre = 'comprada';
           this.render();
+          this.contenedor?.querySelector('.cierre-victoria')?.focus?.();
+        } else {
+          this.soltarSubastaCerrada();
         }
         return exito;
       });
@@ -1501,6 +1835,20 @@ export class ControladorSubastas {
     this.resultadoCierre = 'comprada';
     this.render();
     return true;
+  }
+
+  /**
+   * Una compra que no salió: la subasta vuelve a ser la del listado (o, si ya
+   * no está, se vuelve a la lista con el motivo del rechazo a la vista).
+   */
+  soltarSubastaCerrada() {
+    const id = this.subastaCerrada?.id;
+    this.subastaCerrada = null;
+    if (id && !this.subastas.some((s) => s.id === id) && this.vista === 'detalle') {
+      this.vista = this.origenVista || 'explorar';
+      this.subastaActivaId = null;
+      this.render();
+    }
   }
 
   actualizarTiemposEnDOM() {
@@ -1563,11 +1911,20 @@ export class ControladorSubastas {
       return;
     }
 
-    if (this.estadoDatos === 'vacio' || this.subastas.length === 0) {
+    // UXC-8 — el mercado vacío solo tapa las vistas del mercado. Tu compra
+    // recién hecha (que ya no está entre las abiertas), «Mis subastas» y los
+    // cierres se siguen enseñando aunque no quede ninguna abierta.
+    const miraLaComprada =
+      this.vista === 'detalle' && this.subastaCerrada?.id === this.subastaActivaId;
+    const vistaPropia = this.vista === 'mis-subastas' || this.vista === 'cierre-multiple';
+    const mercadoVacio = this.estadoDatos === 'vacio' || this.subastas.length === 0;
+    if (mercadoVacio && !miraLaComprada && !vistaPropia) {
       this.contenedor.innerHTML = `
+        ${this.generarHtmlAlerta()}
         <div class="estado-contenedor estado-vacio">
           <h3 class="titulo-mediano">No hay subastas en curso</h3>
-          <p>Cuando los jugadores publiquen objetos en venta, aparecerán aquí para pujar.</p>
+          <p>Cuando los jugadores publiquen objetos en venta, aparecerán aquí para pujar. También puedes poner a la venta algo tuyo.</p>
+          <a class="btn btn-primario" href="./publicar-subasta.html">Publicar una subasta</a>
         </div>
       `;
       return;
@@ -1578,19 +1935,12 @@ export class ControladorSubastas {
     const total = this.getSaldoTotal();
     const retenido = this.getSaldoRetenido();
     const libre = this.getSaldoLibre();
-    const subastasGanando = this.subastas.filter((s) => s.ganando).length;
     const superadas = this.subastas.filter((s) => s.superado).length;
 
     let contenidoHtml = '';
 
     if (this.vista === 'mis-subastas') {
-      contenidoHtml = this.generarHtmlMisSubastas({
-        total,
-        retenido,
-        libre,
-        subastasGanando,
-        superadas,
-      });
+      contenidoHtml = this.generarHtmlMisSubastas({ total, libre, superadas });
     } else if (this.vista === 'cierre-multiple') {
       contenidoHtml = this.generarHtmlCierreMultiple({ total, libre });
     } else if (this.vista === 'detalle') {
@@ -1604,9 +1954,21 @@ export class ControladorSubastas {
       contenidoHtml += this.generarHtmlToastCruzado();
     }
 
+    // UXC-8 — el sondeo y el canal repintan: quien estaba escribiendo un
+    // monto no puede perder el foco cada cinco segundos.
+    const activo = globalThis.document?.activeElement;
+    const idConFoco = activo && this.contenedor.contains(activo) && activo.id ? activo.id : null;
+
     this.contenedor.innerHTML = contenidoHtml;
     this.conectarEventos();
     this.prepararModal();
+
+    if (idConFoco && !this.confirmandoCompra) {
+      const mismo = globalThis.document.getElementById(idConFoco);
+      if (mismo && this.contenedor.contains(mismo) && !mismo.disabled) {
+        mismo.focus({ preventScroll: true });
+      }
+    }
   }
 
   /**
@@ -1689,8 +2051,8 @@ export class ControladorSubastas {
           Explorar subastas
         </button>
         <button type="button" role="tab" class="tab-btn ${esMisSubastas ? 'tab-btn--activo' : ''}" data-tab="mis-subastas" aria-selected="${esMisSubastas}">
-          Mis subastas activas
-          ${superadas > 0 ? `<span class="badge-tab-aviso" title="Te superaron en ${superadas}">${superadas}</span>` : `<span class="badge-tab-neutral">${this.subastas.length}</span>`}
+          Mis subastas
+          ${this.insigniaDeMisSubastas(superadas)}
         </button>
         <button type="button" role="tab" class="tab-btn ${esCierre ? 'tab-btn--activo' : ''}" data-tab="cierre-multiple" aria-selected="${esCierre}">
           Cierre múltiple
@@ -1701,6 +2063,31 @@ export class ControladorSubastas {
         </button>
       </nav>
     `;
+  }
+
+  /**
+   * UXC-8 — la cifra de la pestaña: dónde te superaron si hay alguna; si no,
+   * en cuántas pujas. Nunca el tamaño del mercado, y nada mientras no se sepa.
+   */
+  insigniaDeMisSubastas(superadas) {
+    if (superadas > 0) {
+      return `<span class="badge-tab-aviso" title="Te superaron en ${superadas}">${superadas}</span>`;
+    }
+    if (!this.participacionConocida()) {
+      return '';
+    }
+    const cuantas = this.subastas.filter(pujasEn).length;
+    return cuantas > 0 ? `<span class="badge-tab-neutral">${cuantas}</span>` : '';
+  }
+
+  /** Sin servidor (pruebas) se sabe; con servidor, cuando ya se preguntó. */
+  participacionConocida() {
+    return !this.api || this.participacionesRevisadas;
+  }
+
+  /** Con servidor y sin sesión no hay «tus» subastas que enseñar. */
+  sinSesion() {
+    return Boolean(this.api) && !this.leerToken?.();
   }
 
   generarHtmlExplorar({ superadas }) {
@@ -1732,9 +2119,13 @@ export class ControladorSubastas {
                 ? ''
                 : `<div class="chip-info"><span>Vas ganando en: <strong>${this.getSubastasGanando()}</strong></span></div>`
             }
-            <div class="chip-info">
-              <span>Límite activo: <strong>${this.subastas.length} de ${this.config.maxSubastasSimultaneas} subastas</strong></span>
-            </div>
+            ${
+              this.participacionConocida() && !this.sinSesion()
+                ? `<div class="chip-info">
+              <span>Participas en: <strong>${this.subastas.filter(pujasEn).length} de ${this.config.maxSubastasSimultaneas} subastas</strong></span>
+            </div>`
+                : ''
+            }
           </div>
         </header>
 
@@ -1746,7 +2137,10 @@ export class ControladorSubastas {
           </div>
 
           <div class="grid-subastas">
-            ${this.subastas.map((sub) => this.generarTarjetaSubasta(sub)).join('')}
+            ${[...this.subastas]
+              .sort((a, b) => (a.segundosRestantes || 0) - (b.segundosRestantes || 0))
+              .map((sub) => this.generarTarjetaSubasta(sub))
+              .join('')}
           </div>
         </section>
       </div>
@@ -1761,7 +2155,21 @@ export class ControladorSubastas {
     let textoBoton = 'Ver subasta';
     let claseBoton = 'btn-contorno';
 
+    // UXC-8 — quién va delante, con lo que se sabe: el contrato del listado
+    // trae cuántas pujas hay, no quién las hizo.
+    let textoPostor = 'Sin pujas todavía';
     if (sub.ganando) {
+      textoPostor = 'Tu puja lidera';
+    } else if (sub.rival) {
+      textoPostor = `Mejor postor: ${esc(sub.rival)}`;
+    } else if (sub.rivales > 0) {
+      textoPostor = `${sub.rivales} ${sub.rivales === 1 ? 'puja' : 'pujas'}`;
+    }
+
+    if (sub.esPropia) {
+      badgeEstado = `<span class="badge badge-propia">${iconoHtml('usuario', { clase: 'icono icono--menudo' })} Tu subasta</span>`;
+      claseBorde = 'borde-sin-puja';
+    } else if (sub.ganando) {
       badgeEstado = '<span class="badge badge-exito">Vas ganando</span>';
       claseBorde = 'tarjeta-ganando borde-ganando';
     } else if (sub.superado) {
@@ -1791,7 +2199,7 @@ export class ControladorSubastas {
 
         <div class="tarjeta-cuerpo">
           <h3 class="tarjeta-titulo">${esc(sub.nombre)}</h3>
-          <p class="tarjeta-subtitulo">${esc(sub.tipo)} · ${nivelRequeridoVisible(sub.nivel)}</p>
+          <p class="tarjeta-subtitulo">${esc(tipoLegible(sub.tipo))}${nivelRequeridoVisible(sub.nivel) ? ` · ${nivelRequeridoVisible(sub.nivel)}` : ''}</p>
           <p class="tarjeta-desc">${esc(sub.descripcion)}</p>
         </div>
 
@@ -1800,7 +2208,7 @@ export class ControladorSubastas {
             <span class="etiqueta-sm">Oferta actual</span>
             <span class="monto-destacado cifra">${formatearCreditos(sub.oferta)} cr</span>
             <span class="postor-texto ${sub.ganando ? 'texto-exito' : ''}">
-              ${sub.ganando ? 'Tu puja lidera' : `Mejor postor: ${sub.rival || 'rival'}`}
+              ${textoPostor}
             </span>
           </div>
           <div class="columna-tiempo">
@@ -1808,7 +2216,7 @@ export class ControladorSubastas {
             <span class="tiempo-cifra cifra ${urgente ? 'tiempo-urgente animacion-latido' : ''}" data-tiempo-subasta="${sub.id}">
               ${formatearTiempo(sub.segundosRestantes)}
             </span>
-            <span class="compra-ya-texto">Comprar ya: ${formatearCreditos(sub.compraInmediata)} cr</span>
+            ${sub.compraInmediata === null || sub.compraInmediata === undefined ? '' : `<span class="compra-ya-texto">Comprar ya: ${formatearCreditos(sub.compraInmediata)} cr</span>`}
           </div>
         </div>
 
@@ -1821,69 +2229,149 @@ export class ControladorSubastas {
     `;
   }
 
-  generarHtmlMisSubastas({ total, retenido, libre, superadas }) {
-    const sobreCompromiso = verificarSobreCompromiso(total, this.subastas);
-    const estadoTopes = calcularEstadoTopesConcurrencia(this.subastas, this.config);
-    const porUrgencia = [...this.subastas].sort(
-      (a, b) => a.segundosRestantes - b.segundosRestantes,
-    );
-
-    // Segmentos para la barra interactiva
-    const conRetencion = this.subastas.filter((s) => (s.retenido || 0) > 0);
-    // El tramo i-esimo de la barra de credito comprometido. Aqui habia seis
-    // dorados escritos a mano —#C89A1E, #B37D14, #D48806, #E6A23C— de los que
-    // solo dos existian en el kit; los otros cuatro eran color inventado, y
-    // ademas tan parecidos entre si que dos tramos contiguos casi no se
-    // distinguian. Ahora la rampa sale del oro del producto oscureciendose
-    // contra el cromo: es monotona, se nota el orden y no entra ningun color
-    // nuevo. El color no lleva informacion por si solo — cada tramo tiene su
-    // `title` y su entrada en la leyenda con el nombre.
-    const tramoColor = (i) =>
-      `color-mix(in srgb, var(--credito-oro) ${100 - (i % 6) * 15}%, var(--cromo))`;
-    const tramos = conRetencion.map((sub, i) => {
-      const ancho = total > 0 ? ((sub.retenido / total) * 100).toFixed(1) : '0';
-      const color = tramoColor(i);
-      return {
-        id: sub.id,
-        nombre: sub.nombre,
-        ancho: `${ancho}%`,
-        color,
-        titulo: `${sub.nombre}: ${formatearCreditos(sub.retenido)} cr`,
-      };
-    });
-    const libreAncho = total > 0 ? ((libre / total) * 100).toFixed(1) : '100';
-    tramos.push({
-      id: 'libre',
-      nombre: 'Libre para pujar',
-      ancho: `${libreAncho}%`,
-      color: 'var(--exito)',
-      titulo: `Libre: ${formatearCreditos(libre)} cr`,
-    });
-
-    const leyenda = conRetencion
-      .map((sub, i) => ({
-        color: tramoColor(i),
-        texto: `${sub.nombre.split(' ')[0]} · ${formatearCreditos(sub.retenido)} cr`,
-      }))
-      .concat([
-        {
-          color: 'var(--exito)',
-          texto: `Libre · ${formatearCreditos(libre)} cr`,
-        },
-      ]);
-
-    return `
-      <div class="subastas-app vista-mis-subastas">
+  /**
+   * «Mis subastas» — UXC-8.
+   *
+   * Hasta aquí esta pestaña pintaba el MERCADO ENTERO como si fuera tuyo: las
+   * dieciséis subastas del listado aparecían «en curso» a tu nombre, el medidor
+   * decía «16 de 10 · Has llegado al tope» a quien no había pujado nunca y el
+   * saldo, sin respuesta del servidor, salía como una barra verde de «libre».
+   *
+   * Ahora enseña lo que el servidor dijo: dónde pujas (vas ganando o te
+   * superaron, con lo retenido y tu automática) y lo que publicaste tú, entre
+   * las subastas abiertas. El contrato no tiene una lista de «mis subastas»,
+   * así que se pregunta subasta por subasta y se dice cuántas se revisaron.
+   */
+  generarHtmlMisSubastas({ total, libre, superadas }) {
+    const cabecera = `
         ${this.generarHtmlPestanas({ superadas })}
         ${this.generarHtmlAlerta()}
 
         <div class="mis-subastas-cabecera">
           <h1 class="titulo-grande">Mis subastas</h1>
-          <p class="texto-pista">Dónde estás participando ahora mismo y cuánto tienes comprometido en cada subasta.</p>
-        </div>
+          <p class="texto-pista">Dónde estás pujando, cuánto tienes retenido y lo que tienes a la venta.</p>
+        </div>`;
 
-        <!-- Panel de Créditos con Barra Segmentada -->
-        <section class="panel-creditos-segmentada" aria-label="Desglose financiero de créditos">
+    if (this.sinSesion()) {
+      return `
+      <div class="subastas-app vista-mis-subastas">
+        ${cabecera}
+        <div class="estado-contenedor estado-vacio" data-estado="sin-sesion">
+          <h2 class="titulo-mediano">Entra para ver tus pujas</h2>
+          <p>Tus pujas y tus publicaciones van con tu cuenta. El mercado lo puedes mirar sin entrar.</p>
+          <a class="btn btn-primario" href="${esc(urlDeLogin({ volver: globalThis.location?.href ?? null }))}">Entrar</a>
+        </div>
+      </div>`;
+    }
+
+    const participando = this.subastas.filter(pujasEn);
+    const publicadas = this.subastas.filter((s) => s.esPropia);
+    const retenidoReal = this.getRetenidoReal();
+    const sobreCompromiso = verificarSobreCompromiso(total, participando);
+    const estadoTopes = calcularEstadoTopesConcurrencia(participando, this.config, {
+      ganando: this.getSubastasGanando(),
+    });
+    const porUrgencia = [...participando].sort((a, b) => a.segundosRestantes - b.segundosRestantes);
+    const revisando = this.consultandoParticipaciones && !this.participacionesRevisadas;
+
+    return `
+      <div class="subastas-app vista-mis-subastas">
+        ${cabecera}
+
+        ${this.generarHtmlPanelCreditos({ total, libre, retenidoReal, participando, sobreCompromiso })}
+
+        <!-- Medidores de los topes de concurrencia: solo lo tuyo -->
+        <section class="grid-topes-concurrencia" aria-label="Topes de subastas y pujas a la vez">
+          ${this.generarHtmlTope({
+            nombre: 'Subastas en las que participas',
+            estado: estadoTopes.subastas,
+          })}
+          ${this.generarHtmlTope({
+            nombre: 'Pujas tuyas que van ganando',
+            estado: estadoTopes.pujas,
+          })}
+        </section>
+
+        <!-- Donde pujas, por lo que se acaba antes -->
+        <section class="seccion-mis-subastas" aria-label="Subastas en las que pujas" aria-busy="${revisando}">
+          <div class="encabezado-mis-subastas">
+            <h2 class="titulo-seccion">Donde pujas</h2>
+            <span class="contador-mis-subastas">${porUrgencia.length} ${porUrgencia.length === 1 ? 'subasta' : 'subastas'}</span>
+            <div style="flex-grow: 1;"></div>
+            <span class="texto-pista">Ordenadas por lo que se acaba antes</span>
+          </div>
+          ${this.generarHtmlAlcance()}
+          ${
+            porUrgencia.length > 0
+              ? `<div class="lista-mis-subastas">
+            ${porUrgencia.map((sub) => this.generarFilaMiSubasta(sub)).join('')}
+          </div>`
+              : this.generarHtmlSinPujas(revisando)
+          }
+        </section>
+
+        <!-- Lo que tienes a la venta -->
+        <section class="seccion-mis-subastas" aria-label="Tus publicaciones">
+          <div class="encabezado-mis-subastas">
+            <h2 class="titulo-seccion">Tus publicaciones</h2>
+            <span class="contador-mis-subastas">${publicadas.length} ${publicadas.length === 1 ? 'abierta' : 'abiertas'}</span>
+            <div style="flex-grow: 1;"></div>
+            <a class="btn btn-contorno btn-sm" href="./publicar-subasta.html">Publicar una subasta</a>
+          </div>
+          ${
+            publicadas.length > 0
+              ? `<div class="lista-mis-subastas">
+            ${publicadas.map((sub) => this.generarFilaPublicacion(sub)).join('')}
+          </div>`
+              : `<p class="texto-pista nota-publicaciones">No tienes nada a la venta entre las subastas abiertas. Publica un objeto de tu inventario y aparecerá aquí mientras siga abierto.</p>`
+          }
+        </section>
+      </div>
+    `;
+  }
+
+  /**
+   * El saldo, lo retenido y lo libre. Sin saldo del servidor no se dibuja la
+   * barra: repartir un total que no se sabe es inventarlo.
+   */
+  generarHtmlPanelCreditos({ total, libre, retenidoReal, participando, sobreCompromiso }) {
+    const saldoConocido = total !== null && total !== undefined;
+    const conRetencion = participando.filter((s) => (s.retenido || 0) > 0);
+    // El tramo i-esimo de la barra de credito comprometido. La rampa sale del
+    // oro del producto oscureciendose contra el cromo: es monotona, se nota el
+    // orden y no entra ningun color nuevo. El color no lleva informacion por
+    // si solo — cada tramo tiene su `title` y su entrada en la leyenda.
+    const tramoColor = (i) =>
+      `color-mix(in srgb, var(--credito-oro) ${100 - (i % 6) * 15}%, var(--cromo))`;
+    const ancho = (monto) => `${total > 0 ? ((monto / total) * 100).toFixed(1) : '0'}%`;
+    const tramos = conRetencion.map((sub, i) => ({
+      ancho: ancho(sub.retenido),
+      color: tramoColor(i),
+      titulo: `${sub.nombre}: ${formatearCreditos(sub.retenido)} cr`,
+      leyenda: `${sub.nombre.split(' ')[0]} · ${formatearCreditos(sub.retenido)} cr`,
+    }));
+    // Lo que el servidor dice retenido y no está en las subastas cargadas.
+    const sumado = conRetencion.reduce((acc, s) => acc + (s.retenido || 0), 0);
+    const enOtras = Math.max(0, (retenidoReal || 0) - sumado);
+    if (enOtras > 0) {
+      tramos.push({
+        ancho: ancho(enOtras),
+        color: 'var(--texto-3)',
+        titulo: `En otras subastas: ${formatearCreditos(enOtras)} cr`,
+        leyenda: `Otras subastas · ${formatearCreditos(enOtras)} cr`,
+      });
+    }
+    if (saldoConocido) {
+      tramos.push({
+        ancho: ancho(libre),
+        color: 'var(--exito)',
+        titulo: `Libre: ${formatearCreditos(libre)} cr`,
+        leyenda: `Libre · ${formatearCreditos(libre)} cr`,
+      });
+    }
+
+    return `
+        <section class="panel-creditos-segmentada" aria-label="Tus créditos en las subastas">
           <h2 class="titulo-mediano">Tus créditos</h2>
 
           <div class="creditos-tarjetas-grid">
@@ -1893,20 +2381,19 @@ export class ControladorSubastas {
             </div>
             <div class="tarjeta-credito tarjeta-credito-retenido">
               <div class="tarjeta-credito-etiqueta">Retenido en subastas</div>
-              <div class="tarjeta-credito-valor tarjeta-credito-valor--retenido cifra">${formatearCreditos(retenido)} cr</div>
+              <div class="tarjeta-credito-valor tarjeta-credito-valor--retenido cifra">${formatearCreditos(retenidoReal)} cr</div>
             </div>
-            <div class="tarjeta-credito ${libre < 500 ? 'tarjeta-credito-libre--baja' : 'tarjeta-credito-libre'}">
+            <div class="tarjeta-credito ${saldoConocido && libre < 500 ? 'tarjeta-credito-libre--baja' : 'tarjeta-credito-libre'}">
               <div class="tarjeta-credito-etiqueta">Libre para pujar</div>
-              <div class="tarjeta-credito-valor ${libre < 500 ? 'tarjeta-credito-valor--libre-baja' : 'tarjeta-credito-valor--libre'} cifra">${formatearCreditos(libre)} cr</div>
+              <div class="tarjeta-credito-valor ${saldoConocido && libre < 500 ? 'tarjeta-credito-valor--libre-baja' : 'tarjeta-credito-valor--libre'} cifra">${formatearCreditos(libre)} cr</div>
             </div>
           </div>
 
-          <!-- Barra segmentada interactiva -->
-          <div class="barra-segmentada-tramos" role="progressbar"
-               aria-label="Créditos retenidos en subastas"
-               aria-valuemin="0" aria-valuemax="${Math.round(total || 0)}"
-               aria-valuenow="${Math.round(retenido || 0)}"
-               aria-valuetext="${formatearCreditos(retenido)} cr retenidos${total ? ` de ${formatearCreditos(total)} cr` : ''}">
+          ${
+            saldoConocido
+              ? `
+          <div class="barra-segmentada-tramos" role="img"
+               aria-label="${esc(`${formatearCreditos(retenidoReal)} cr retenidos de ${formatearCreditos(total)} cr`)}">
             ${tramos
               .map(
                 (t) => `
@@ -1916,21 +2403,24 @@ export class ControladorSubastas {
               .join('')}
           </div>
 
-          <!-- Leyenda de tramos -->
           <div class="leyenda-tramos">
-            ${leyenda
+            ${tramos
               .map(
-                (l) => `
+                (t) => `
               <span class="item-leyenda">
-                <span class="leyenda-punto" style="background: ${l.color};"></span>
-                <span>${esc(l.texto)}</span>
+                <span class="leyenda-punto" style="background: ${t.color};"></span>
+                <span>${esc(t.leyenda)}</span>
               </span>
             `,
               )
               .join('')}
-          </div>
+          </div>`
+              : `
+          <p class="texto-pista nota-saldo" data-zona="saldo-desconocido">
+            Tu saldo no llegó ahora mismo, así que no podemos repartirlo. Puedes pujar igual: al hacerlo, el mercado comprueba si te alcanza.
+          </p>`
+          }
 
-          <!-- Alerta de Sobre-compromiso -->
           ${
             sobreCompromiso.sobreCompromiso
               ? `
@@ -1947,57 +2437,80 @@ export class ControladorSubastas {
           `
               : ''
           }
-        </section>
+        </section>`;
+  }
 
-        <!-- Medidores Visuales de Topes de Concurrencia -->
-        <section class="grid-topes-concurrencia" aria-label="Topes reglamentarios de concurrencia">
-          <!-- Tope 1: Subastas Simultáneas -->
-          <div class="tarjeta-tope ${segunTope(estadoTopes.subastas, 'tarjeta-tope--critico', 'tarjeta-tope--alerta', '')}">
+  /** Un medidor de tope; el color siempre va con la cifra y el texto. */
+  generarHtmlTope({ nombre, estado }) {
+    const color = segunTope(estado, 'var(--error)', 'var(--advertencia)', 'var(--exito)');
+    return `
+          <div class="tarjeta-tope ${segunTope(estado, 'tarjeta-tope--critico', 'tarjeta-tope--alerta', '')}">
             <div class="tope-cabecera">
-              <span class="tope-nombre">Subastas en las que participas</span>
-              <span class="tope-cifra cifra" style="color: ${segunTope(estadoTopes.subastas, 'var(--error)', 'var(--advertencia)', 'var(--exito)')}">
-                ${estadoTopes.subastas.actual} de ${estadoTopes.subastas.max}
+              <span class="tope-nombre">${nombre}</span>
+              <span class="tope-cifra cifra" style="color: ${color}">
+                ${estado.actual} de ${estado.max}
               </span>
             </div>
             <div class="tope-barra-fondo">
-              <div class="tope-barra-progreso" style="width: ${Math.min(100, estadoTopes.subastas.ratio * 100)}%; background: ${segunTope(estadoTopes.subastas, 'var(--error)', 'var(--advertencia)', 'var(--exito)')};"></div>
+              <div class="tope-barra-progreso" style="width: ${Math.min(100, estado.ratio * 100)}%; background: ${color};"></div>
             </div>
-            <div class="tope-alerta-texto" style="color: ${segunTope(estadoTopes.subastas, 'var(--error)', 'var(--advertencia)', 'var(--texto-3)')}">
-              ${estadoTopes.subastas.pista}
+            <div class="tope-alerta-texto" style="color: ${segunTope(estado, 'var(--error)', 'var(--advertencia)', 'var(--texto-3)')}">
+              ${estado.pista}
             </div>
-          </div>
+          </div>`;
+  }
 
-          <!-- Tope 2: Pujas Activas Ganando -->
-          <div class="tarjeta-tope ${segunTope(estadoTopes.pujas, 'tarjeta-tope--critico', 'tarjeta-tope--alerta', '')}">
-            <div class="tope-cabecera">
-              <span class="tope-nombre">Pujas tuyas que van ganando</span>
-              <span class="tope-cifra cifra" style="color: ${segunTope(estadoTopes.pujas, 'var(--error)', 'var(--advertencia)', 'var(--exito)')}">
-                ${estadoTopes.pujas.actual} de ${estadoTopes.pujas.max}
-              </span>
-            </div>
-            <div class="tope-barra-fondo">
-              <div class="tope-barra-progreso" style="width: ${Math.min(100, estadoTopes.pujas.ratio * 100)}%; background: ${segunTope(estadoTopes.pujas, 'var(--error)', 'var(--advertencia)', 'var(--exito)')};"></div>
-            </div>
-            <div class="tope-alerta-texto" style="color: ${segunTope(estadoTopes.pujas, 'var(--error)', 'var(--advertencia)', 'var(--texto-3)')}">
-              ${estadoTopes.pujas.pista}
-            </div>
-          </div>
-        </section>
+  /** Con servidor, cuántas subastas abiertas se revisaron (el alcance real). */
+  generarHtmlAlcance() {
+    if (!this.api) {
+      return '';
+    }
+    if (this.consultandoParticipaciones && !this.participacionesRevisadas) {
+      return `<p class="texto-pista nota-alcance" role="status">Revisando tus pujas en las ${this.subastas.length} subastas abiertas…</p>`;
+    }
+    return `<p class="texto-pista nota-alcance">Revisamos tus pujas en las ${this.subastas.length} subastas abiertas del mercado.</p>`;
+  }
 
-        <!-- Listado ordenado por urgencia de vencimiento -->
-        <section class="seccion-mis-subastas" aria-label="Listado de mis subastas activas">
-          <div class="encabezado-mis-subastas">
-            <h2 class="titulo-seccion">En curso</h2>
-            <span class="contador-mis-subastas">${porUrgencia.length} subastas</span>
-            <div style="flex-grow: 1;"></div>
-            <span class="texto-pista">Ordenadas por lo que se acaba antes</span>
-          </div>
+  /** Vacío con salida: qué pasa, por qué y qué hacer. */
+  generarHtmlSinPujas(revisando) {
+    if (revisando) {
+      return '';
+    }
+    return `
+          <div class="estado-contenedor estado-vacio estado-vacio--compacto" data-estado="sin-pujas">
+            <h3 class="titulo-mediano">No estás pujando en ninguna subasta abierta</h3>
+            <p>Cuando pujes o dejes una puja automática, la subasta aparecerá aquí con lo que tienes retenido.</p>
+            <button type="button" class="btn btn-primario" id="btn-mis-a-explorar">Explorar subastas</button>
+          </div>`;
+  }
 
-          <div class="lista-mis-subastas">
-            ${porUrgencia.map((sub) => this.generarFilaMiSubasta(sub)).join('')}
+  /** Una subasta tuya a la venta: cómo va, sin botones de pujar. */
+  generarFilaPublicacion(sub) {
+    const urgente = sub.segundosRestantes <= 10 && sub.segundosRestantes > 0;
+    const rz = rarezaVisible(sub.rareza);
+    const pujas = Number(sub.rivales) || 0;
+    return `
+      <article class="fila-mi-subasta fila-publicacion borde-sin-puja ${urgente ? 'urgente' : ''}" data-id="${esc(sub.id)}">
+        <div class="ficha-rareza ficha-rareza--grande ficha-rareza--${rz.clase}">
+          ${iconoHtml(rz.simbolo)}
+        </div>
+        <div class="fila-info-principal">
+          <h3 class="fila-nombre">${esc(sub.nombre)}</h3>
+          <div class="fila-badges">
+            ${rz.conocida ? `<span class="badge badge-${rz.clase}">${rz.texto}</span>` : ''}
+            <span class="badge badge-propia">${iconoHtml('usuario', { clase: 'icono icono--menudo' })} Tu subasta</span>
           </div>
-        </section>
-      </div>
+        </div>
+        <div class="fila-oferta">
+          <div class="etiqueta-sm">Oferta vigente</div>
+          <div class="fila-oferta-monto cifra">${formatearCreditos(sub.oferta)} cr</div>
+          <div class="postor-texto">${pujas > 0 ? `${pujas} ${pujas === 1 ? 'puja' : 'pujas'}` : 'Sin pujas todavía'}</div>
+        </div>
+        <div class="fila-acciones-tiempo">
+          <div class="reloj-fila ${urgente ? 'animacion-latido' : ''}" data-tiempo-subasta="${esc(sub.id)}">${formatearTiempo(sub.segundosRestantes)}</div>
+          <button type="button" class="btn btn-contorno btn-ver-subasta">Ver subasta</button>
+        </div>
+      </article>
     `;
   }
 
@@ -2056,7 +2569,7 @@ export class ControladorSubastas {
           <div class="etiqueta-sm">Oferta vigente</div>
           <div class="fila-oferta-monto cifra" style="color: var(--advertencia);">${formatearCreditos(sub.oferta)} cr</div>
           <div class="postor-texto ${sub.ganando ? 'texto-exito' : ''}">
-            ${sub.ganando ? 'Tu puja' : `de ${sub.rival || 'rival'}`}
+            ${this.textoDeLaFila(sub)}
           </div>
         </div>
 
@@ -2095,10 +2608,14 @@ export class ControladorSubastas {
         <div class="estado-contenedor estado-vacio">
           <h1 class="titulo-mediano">Todavía no hay resultados de cierre</h1>
           <p>
-            El servicio de subastas no publica por ahora el desenlace de las subastas
-            en las que participaste. Cuando una termine, el resultado llegará por tus
-            notificaciones y el saldo se verá reflejado en «Mis subastas activas».
+            El mercado no guarda todavía cómo terminaron las subastas en las que pujaste.
+            Si alguien compra de inmediato una en la que pujabas, o tu puja automática se
+            detiene, te llega un aviso a tus notificaciones.
           </p>
+          <div class="acciones-vacio">
+            <a class="btn btn-primario" href="../plataforma/notificaciones/notificaciones.html">Ver mis notificaciones</a>
+            <button type="button" class="btn btn-contorno" id="btn-cierre-a-mis-subastas">Ver mis subastas</button>
+          </div>
         </div>
       </div>
     `;
@@ -2207,13 +2724,28 @@ export class ControladorSubastas {
     const comp = calcularComparacionHeroe(hero, sub);
     const rz = rarezaVisible(sub.rareza);
     const minPuja = calcularMinimoPuja(sub.oferta, this.config.incrementoMinimo);
-    const disponibleAqui = libre + (sub.retenido || 0);
+    // Null si no se sabe el saldo: entonces decide el servidor al pujar.
+    const disponibleAqui =
+      libre === null || libre === undefined ? null : libre + (sub.retenido || 0);
+    const faltaParaComprar =
+      disponibleAqui !== null &&
+      sub.compraInmediata !== null &&
+      sub.compraInmediata !== undefined &&
+      disponibleAqui < sub.compraInmediata;
     const cerrada = sub.segundosRestantes <= 0 || this.resultadoCierre !== null;
     const urgente = sub.segundosRestantes <= 10 && !cerrada;
+    // UXC-8 — en tu propia subasta no se puja (el servidor lo rechaza con
+    // PUJA_PROPIA): se dice antes, en vez de dejar pulsar y rechazar.
+    const bloqueada = cerrada || Boolean(sub.esPropia);
+    const hayCompraInmediata = sub.compraInmediata !== null && sub.compraInmediata !== undefined;
 
     const subastasOtras = this.subastas.filter((s) => s.id !== sub.id);
     const otrasConRetenido = subastasOtras.filter((s) => (s.retenido || 0) > 0).length;
-    const retenidoEnOtras = subastasOtras.reduce((acc, s) => acc + (s.retenido || 0), 0);
+    // Con resumen del servidor, lo retenido en otras sale de ahí (cubre las
+    // que no están cargadas); sin él, de lo que se sabe.
+    const retenidoEnOtras = this.resumen
+      ? Math.max(0, this.getRetenidoReal() - (sub.retenido || 0))
+      : subastasOtras.reduce((acc, s) => acc + (s.retenido || 0), 0);
 
     const textoVolver = destinoDeVuelta(this.origenVista).texto;
 
@@ -2235,7 +2767,7 @@ export class ControladorSubastas {
         ${
           this.resultadoCierre === 'comprada' || this.resultadoCierre === 'adjudicada'
             ? `
-          <div class="alerta cierre-victoria" role="alert">
+          <div class="alerta cierre-victoria" role="alert" tabindex="-1">
             <h2 class="titulo-grande cierre-victoria__titulo">¡ES TUYA!</h2>
             <p class="cierre-victoria__texto">
               ${this.resultadoCierre === 'comprada' ? '¡Has comprado este objeto de inmediato!' : 'La subasta cerró exitosamente y el objeto ha sido adjudicado a tu inventario.'}
@@ -2245,10 +2777,14 @@ export class ControladorSubastas {
                 <span class="cierre-victoria__etiqueta">Monto pagado:</span>
                 <strong class="cifra cierre-victoria__monto">${formatearCreditos(this.resultadoCierre === 'comprada' ? sub.compraInmediata : sub.oferta)} cr</strong>
               </div>
-              <div class="cierre-victoria__dato">
+              ${
+                libre === null || libre === undefined
+                  ? ''
+                  : `<div class="cierre-victoria__dato">
                 <span class="cierre-victoria__etiqueta">Saldo libre resultante:</span>
                 <strong class="cifra cierre-victoria__monto">${formatearCreditos(libre)} cr</strong>
-              </div>
+              </div>`
+              }
             </div>
             <div class="cierre-victoria__acciones">
               <button type="button" class="btn btn-primario" id="btn-resultado-mis-subastas">Ver mis subastas</button>
@@ -2265,7 +2801,7 @@ export class ControladorSubastas {
             <div class="panel-objeto">
               <div class="objeto-badges">
                 ${rz.conocida ? `<span class="badge badge-${rz.clase}">${rz.texto}</span>` : ''}
-                <span class="badge badge-neutral">Vendedor: ${esc(sub.vendedor)}</span>
+                ${this.insigniaDeVendedor(sub)}
                 ${
                   Number.isFinite(sub.nivel)
                     ? `<span class="badge ${comp.nivelInsuficiente ? 'badge-error' : 'badge-exito'}">
@@ -2276,7 +2812,7 @@ export class ControladorSubastas {
               </div>
 
               <h1 class="titulo-grande titulo-objeto">${esc(sub.nombre)}</h1>
-              <p class="objeto-tipo">${sub.tipo}</p>
+              <p class="objeto-tipo">${esc(tipoLegible(sub.tipo))}</p>
               <p class="objeto-descripcion">${esc(sub.descripcion)}</p>
 
               <!-- Comparativa con el héroe. FI-R1 — este bloque entero depende de
@@ -2349,9 +2885,8 @@ export class ControladorSubastas {
                   : `
               <div class="alerta alerta-informativa aviso-sin-comparativa" role="note">
                 <strong>${iconoHtml('alerta', { clase: 'icono icono--menudo' })} Sin comparativa de héroe.</strong>
-                El servicio de subastas no publica el nivel requerido ni lo que aporta este objeto,
-                y esta pantalla todavía no consulta tus héroes. Revisa el objeto en tu inventario
-                antes de pujar.
+                La subasta no dice qué nivel pide ni qué aporta este objeto a un héroe.
+                Revisa el objeto en tu inventario antes de pujar.
               </div>`
               }
             </div>
@@ -2364,9 +2899,9 @@ export class ControladorSubastas {
                   .map(
                     (p) => `
                   <li class="item-historial ${p.esTu ? 'historial-propio' : ''}">
-                    <span class="historial-postor ${p.esTu ? 'postor-tu' : ''}">${p.esTu ? `Tú (${esc(p.apodo)})` : esc(p.apodo)}</span>
-                    <span class="historial-tipo">${p.tipo}</span>
-                    <span class="historial-cuando">${p.cuando}</span>
+                    <span class="historial-postor ${p.esTu ? 'postor-tu' : ''}">${p.esTu ? 'Tú' : esc(p.apodo)}</span>
+                    <span class="historial-tipo">${esc(p.tipo)}</span>
+                    <time class="historial-cuando" datetime="${esc(p.cuando)}">${esc(momentoLegible(p.cuando) || p.cuando)}</time>
                     <span class="historial-monto cifra"><strong>${formatearCreditos(p.monto)} cr</strong></span>
                   </li>
                 `,
@@ -2384,7 +2919,7 @@ export class ControladorSubastas {
                   <span class="etiqueta-sm">Oferta actual</span>
                   <div class="precio-actual cifra">${formatearCreditos(sub.oferta)} cr</div>
                   <span class="postor-actual ${sub.ganando ? 'texto-exito' : ''}">
-                    ${sub.ganando ? 'Vas ganando tú' : `Mejor postor: ${sub.rival || 'otro jugador'}`}
+                    ${this.textoDelPostor(sub)}
                   </span>
                 </div>
                 <div class="reloj-cierre">
@@ -2395,17 +2930,25 @@ export class ControladorSubastas {
                 </div>
               </div>
 
+              ${
+                sub.esPropia
+                  ? `<p class="alerta alerta-informativa aviso-subasta-propia" role="note">
+                <strong>Es tu subasta.</strong> Aquí ves cómo va; no puedes pujar en ella ni comprarla.
+              </p>`
+                  : ''
+              }
+
               <!-- Atajos de Puja Rápida -->
               <div class="seccion-bloque">
                 <span class="etiqueta-sm">Atajos de puja en un toque (+incremento):</span>
                 <div class="atajos-grid">
-                  <button type="button" class="btn btn-contorno btn-atajo" data-monto="${minPuja}" ${cerrada ? 'disabled' : ''}>
+                  <button type="button" class="btn btn-contorno btn-atajo" data-monto="${minPuja}" ${bloqueada ? 'disabled' : ''}>
                     Pujar ${formatearCreditos(minPuja)} cr (+50)
                   </button>
-                  <button type="button" class="btn btn-contorno btn-atajo" data-monto="${sub.oferta + 100}" ${cerrada ? 'disabled' : ''}>
+                  <button type="button" class="btn btn-contorno btn-atajo" data-monto="${sub.oferta + 100}" ${bloqueada ? 'disabled' : ''}>
                     Pujar ${formatearCreditos(sub.oferta + 100)} cr (+100)
                   </button>
-                  <button type="button" class="btn btn-contorno btn-atajo" data-monto="${sub.oferta + 200}" ${cerrada ? 'disabled' : ''}>
+                  <button type="button" class="btn btn-contorno btn-atajo" data-monto="${sub.oferta + 200}" ${bloqueada ? 'disabled' : ''}>
                     Pujar ${formatearCreditos(sub.oferta + 200)} cr (+200)
                   </button>
                 </div>
@@ -2415,26 +2958,31 @@ export class ControladorSubastas {
               <div class="seccion-bloque">
                 <label for="input-monto-puja" class="etiqueta-sm">Oferta manual (mínimo ${formatearCreditos(minPuja)} cr):</label>
                 <div class="campo-con-boton">
-                  <input type="number" id="input-monto-puja" class="input-estandar" min="${minPuja}" step="10" value="${this.montoPersonalizado || minPuja}" ${cerrada ? 'disabled' : ''}>
-                  <button type="button" id="btn-pujar-manual" class="btn btn-primario" ${cerrada ? 'disabled' : ''}>
+                  <input type="number" id="input-monto-puja" class="input-estandar" min="${minPuja}" step="10" value="${this.montoPersonalizado || minPuja}" ${bloqueada ? 'disabled' : ''}>
+                  <button type="button" id="btn-pujar-manual" class="btn btn-primario" ${bloqueada ? 'disabled' : ''}>
                     ${sub.esperaSegundos > 0 ? `Espera ${sub.esperaSegundos} s` : 'Pujar'}
                   </button>
                 </div>
                 <span class="texto-pista">Intervalo regulado de 5 s entre pujas del mismo jugador en esta subasta.</span>
               </div>
 
-              <!-- Compra Inmediata -->
+              <!-- Compra Inmediata: solo si la subasta la admite -->
+              ${
+                hayCompraInmediata
+                  ? `
               <div class="seccion-bloque bloque-compra-inmediata">
                 <div class="fila-compra">
                   <div>
                     <span class="etiqueta-sm">Compra directa</span>
                     <div class="precio-compra cifra">${formatearCreditos(sub.compraInmediata)} cr</div>
                   </div>
-                  <button type="button" id="btn-solicitar-compra" class="btn btn-acento" ${cerrada || disponibleAqui < sub.compraInmediata ? 'disabled' : ''}>
-                    ${disponibleAqui < sub.compraInmediata ? `Faltan ${formatearCreditos(sub.compraInmediata - disponibleAqui)} cr` : 'Comprarla ya'}
+                  <button type="button" id="btn-solicitar-compra" class="btn btn-acento" ${bloqueada || faltaParaComprar ? 'disabled' : ''}>
+                    ${faltaParaComprar ? `Faltan ${formatearCreditos(sub.compraInmediata - disponibleAqui)} cr` : 'Comprarla ya'}
                   </button>
                 </div>
-              </div>
+              </div>`
+                  : ''
+              }
 
               <!-- Puja Automática -->
               <div class="seccion-bloque bloque-automatica">
@@ -2451,8 +2999,8 @@ export class ControladorSubastas {
                     : `
                   <div class="campo-con-boton">
                     <label for="input-limite-auto" class="etiqueta-sm">Tope de puja automática (mínimo ${formatearCreditos(minPuja)} cr):</label>
-                    <input type="number" id="input-limite-auto" class="input-estandar" placeholder="Ej. ${formatearCreditos(minPuja + 400)}" min="${minPuja}" step="50" ${cerrada ? 'disabled' : ''}>
-                    <button type="button" id="btn-activar-auto" class="btn btn-contorno" ${cerrada ? 'disabled' : ''}>
+                    <input type="number" id="input-limite-auto" class="input-estandar" placeholder="Ej. ${formatearCreditos(minPuja + 400)}" min="${minPuja}" step="50" ${bloqueada ? 'disabled' : ''}>
+                    <button type="button" id="btn-activar-auto" class="btn btn-contorno" ${bloqueada ? 'disabled' : ''}>
                       Activar
                     </button>
                   </div>
@@ -2505,6 +3053,38 @@ export class ControladorSubastas {
     `;
   }
 
+  /** De quién es la subasta: tuya, de un vendedor con nombre o nada. */
+  insigniaDeVendedor(sub) {
+    if (sub.esPropia) {
+      return `<span class="badge badge-propia">${iconoHtml('usuario', { clase: 'icono icono--menudo' })} Tu subasta</span>`;
+    }
+    return sub.vendedor
+      ? `<span class="badge badge-neutral">Vendedor: ${esc(sub.vendedor)}</span>`
+      : '';
+  }
+
+  /** Quién va delante en una fila de «Donde pujas». */
+  textoDeLaFila(sub) {
+    if (sub.ganando) {
+      return 'Tu puja';
+    }
+    return sub.rival ? `de ${esc(sub.rival)}` : 'de otro jugador';
+  }
+
+  /** Quién va delante en el detalle, con lo que se sabe. */
+  textoDelPostor(sub) {
+    if (sub.ganando) {
+      return 'Vas ganando tú';
+    }
+    if (sub.rival) {
+      return `Mejor postor: ${esc(sub.rival)}`;
+    }
+    const pujas = Number(sub.rivales) || 0;
+    return pujas > 0
+      ? `${pujas} ${pujas === 1 ? 'puja' : 'pujas'} hasta ahora`
+      : 'Nadie ha pujado todavía';
+  }
+
   generarHtmlToastCruzado() {
     if (!this.avisoCruzado) {
       return '';
@@ -2552,6 +3132,11 @@ export class ControladorSubastas {
       this.abrirMisSubastas();
     });
     this.contenedor.querySelector('#btn-resultado-explorar')?.addEventListener('click', () => {
+      this.abrirExplorar();
+    });
+
+    // UXC-8 — el vacío de «Donde pujas» lleva al mercado.
+    this.contenedor.querySelector('#btn-mis-a-explorar')?.addEventListener('click', () => {
       this.abrirExplorar();
     });
 

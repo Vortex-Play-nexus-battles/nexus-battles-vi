@@ -9,6 +9,8 @@
  * @module subastas-api
  */
 
+import { leerSesion } from '../comun/sesion.js';
+
 const CLAVE_TOKEN = 'nexus.token';
 const CLAVE_APODO = 'nexus.apodoActual';
 
@@ -111,8 +113,15 @@ function claveDeIdempotencia() {
  *
  * @param {object} resumen  SubastaResumen de ms-subastas-listado.yaml
  * @param {string|null} apodoPropio
+ * @param {string|null} [uidPropio] el `uid` de quien mira (ADR-002), para
+ *   reconocer sus propias subastas por `vendedorId`
  */
-export function aVistaDeSubasta(resumen, apodoPropio = null) {
+export function aVistaDeSubasta(resumen, apodoPropio = null, uidPropio = null) {
+  // UXC-8 — `vendedorId` es un identificador interno: pintarlo era enseñar
+  // un UUID como «Vendedor». Solo se usa para saber si la subasta es tuya.
+  const esPropia = Boolean(
+    uidPropio && resumen.vendedorId && String(resumen.vendedorId) === String(uidPropio),
+  );
   const finMs = resumen.fechaFin ? new Date(resumen.fechaFin).getTime() : 0;
   const restantes = finMs ? Math.max(0, Math.round((finMs - Date.now()) / 1000)) : 0;
 
@@ -131,11 +140,18 @@ export function aVistaDeSubasta(resumen, apodoPropio = null) {
     // RN-INV-004: una regla de negocio real aplicada a un dato inventado.
     // Null es «no se sabe»; el cero decia «no pide nivel», que es distinto.
     nivel: null,
-    vendedor: resumen.vendedorId || '',
+    // El contrato no trae el apodo del vendedor: sin nombre no se escribe.
+    vendedor: null,
+    esPropia,
     oferta: Number(resumen.ofertaVigente || 0),
-    // ?? y no ||: un precio de 0 es un dato, aunque sea raro, y || lo
-    // confundiria con "no hay precio de compra inmediata".
-    compraInmediata: Number(resumen.precioCompraInmediata ?? 0),
+    // UXC-8 — `precioCompraInmediata` es nullable en el contrato: null es
+    // «esta subasta no admite compra inmediata». Convertirlo en 0 pintaba
+    // «Comprar ya: 0 cr» y un botón de comprar que el servidor rechazaba
+    // (SIN_COMPRA_INMEDIATA). Un 0 que sí venga se respeta: es un dato.
+    compraInmediata:
+      resumen.precioCompraInmediata === null || resumen.precioCompraInmediata === undefined
+        ? null
+        : Number(resumen.precioCompraInmediata),
     // `miniaturaUrl` si esta en el contrato y hasta ahora no se traia; la
     // vitrina del listado ya la pinta (`subastas-vitrina.js`).
     miniaturaUrl: resumen.miniaturaUrl || null,
@@ -223,6 +239,12 @@ export function crearApiSubastas({
   fetch: hacerPeticion = globalThis.fetch?.bind(globalThis),
   leerToken = () => globalThis.sessionStorage?.getItem(CLAVE_TOKEN) || null,
   leerApodo = () => globalThis.sessionStorage?.getItem(CLAVE_APODO) || null,
+  // UXC-8 — el uid de la sesion (claim `uid` del token; si no, el guardado
+  // por el login), para reconocer las subastas propias.
+  leerUid = () => {
+    const sesion = leerSesion();
+    return sesion.autenticado ? sesion.uid : null;
+  },
 } = {}) {
   async function pedir(
     ruta,
@@ -319,10 +341,11 @@ export function crearApiSubastas({
 
       const pagina = await respuesta.json();
       const apodo = leerApodo();
+      const uid = leerUid();
       // 'contenido' es el nombre exacto del contrato de listado: ese envoltorio
       // se escribio a mano justamente para no serializar el Page de Spring
       // Data, cuyo JSON usa 'content' y no coincidiria.
-      return (pagina.contenido || []).map((resumen) => aVistaDeSubasta(resumen, apodo));
+      return (pagina.contenido || []).map((resumen) => aVistaDeSubasta(resumen, apodo, uid));
     },
 
     /**
