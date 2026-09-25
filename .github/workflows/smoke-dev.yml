@@ -76,10 +76,18 @@ jobs:
           echo "::error::El borde no respondio en 400 s. ¿Esta encendido el host?"
           exit 1
 
+      # B1 — las cuentas nuevas nacen pendientes de verificar su correo: el
+      # smoke lee el codigo en el buzon de pruebas de DEV (Mailpit, detras del
+      # borde en /mailpit/), adonde van las direcciones @nexus.test. Usuario y
+      # clave solo cuando el borde proteja /mailpit/ (B12): salen de secretos
+      # del entorno `dev`, nunca del repositorio; sin ellos, sin autenticacion.
       - name: Smoke
         working-directory: frontend/app-web
         env:
           E2E_AWS: http://${{ secrets.DEPLOY_HOST_DEV }}
+          MAILPIT_URL: http://${{ secrets.DEPLOY_HOST_DEV }}/mailpit
+          MAILPIT_USUARIO: ${{ secrets.MAILPIT_USUARIO }}
+          MAILPIT_CLAVE: ${{ secrets.MAILPIT_CLAVE }}
         run: npx playwright test --config=playwright.smoke.config.js
 
       - name: Guardar el informe
