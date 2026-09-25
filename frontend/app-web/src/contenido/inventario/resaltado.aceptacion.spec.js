@@ -13,7 +13,8 @@ import { colorDelToken, prepararPagina } from './entorno-de-prueba.js';
 const JUGADOR = 'jugador-de-prueba';
 
 function elemento(indice) {
-  const tipos = ['HEROE', 'ARMA', 'ARMADURA', 'ITEM', 'EPICA', 'HABILIDAD'];
+  // UXC-1 — la vitrina de «Objetos» no lleva héroes (tienen su pestaña).
+  const tipos = ['ARMA', 'ARMADURA', 'ITEM', 'EPICA', 'HABILIDAD'];
   return {
     id: `elemento-${indice}`,
     productoId: `producto-${indice}`,
@@ -41,7 +42,7 @@ async function conInventarioDe(page, total) {
 
 async function abrirVitrina(page) {
   await prepararPagina(page);
-  await page.goto(`/contenido/inventario/inventario.html?jugador=${JUGADOR}`);
+  await page.goto(`/contenido/inventario/inventario.html?jugador=${JUGADOR}#objetos`);
   await page.waitForFunction(() => !document.querySelector('.estado-carga'));
 }
 

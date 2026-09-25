@@ -46,6 +46,14 @@ export const ACCESOS = Object.freeze([
     detalle: 'Salas abiertas ahora',
     destino: '../plataforma/salas-partidas/batallas.html',
   },
+  // UXC-5 — el recorrido del jugador pasa por las misiones (§7.8). La vista
+  // dice si hay misiones abiertas; lo que funciona ya es la estrategia.
+  {
+    id: 'misiones',
+    titulo: 'Misiones',
+    detalle: 'Estrategia de tu héroe',
+    destino: '../contenido/misiones/misiones.html',
+  },
   {
     id: 'inventario',
     titulo: 'Inventario',

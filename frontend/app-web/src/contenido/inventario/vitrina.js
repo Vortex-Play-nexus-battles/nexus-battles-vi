@@ -71,7 +71,7 @@ export const ICONO_DEL_TIPO = Object.freeze({
  * @param {{alEditar?: Function, alEquipar?: Function, alAbrirDetalle?: Function}} opciones
  * @returns {HTMLUListElement} rejilla lista para insertar en el documento.
  */
-export function construirVitrina(pagina, { alEditar, alEquipar, alAbrirDetalle } = {}) {
+export function construirVitrina(pagina, { alEditar, alEquipar, alAbrirDetalle, estadoDe } = {}) {
   if (!pagina || !Array.isArray(pagina.elementos)) {
     throw new TypeError('La página de inventario debe traer una lista de elementos');
   }
@@ -85,7 +85,7 @@ export function construirVitrina(pagina, { alEditar, alEquipar, alAbrirDetalle }
   const vitrina = document.createElement('ul');
   vitrina.className = 'vitrina';
   for (const elemento of pagina.elementos) {
-    vitrina.appendChild(construirTarjeta(elemento, alEditar, alEquipar, alAbrirDetalle));
+    vitrina.appendChild(construirTarjeta(elemento, alEditar, alEquipar, alAbrirDetalle, estadoDe));
   }
   return vitrina;
 }
@@ -128,7 +128,7 @@ function construirRetrato(elemento) {
  * Una tarjeta de producto. El nombre propio lo escribe el jugador, asi que
  * entra por textContent y nunca por innerHTML.
  */
-function construirTarjeta(elemento, alEditar, alEquipar, alAbrirDetalle) {
+function construirTarjeta(elemento, alEditar, alEquipar, alAbrirDetalle, estadoDe) {
   const tarjeta = document.createElement('li');
   tarjeta.className = 'vitrina__producto';
   tarjeta.dataset.elementoId = elemento.id;
@@ -155,7 +155,14 @@ function construirTarjeta(elemento, alEditar, alEquipar, alAbrirDetalle) {
 
   tarjeta.append(construirRetrato(elemento), nombre, tipo);
 
-  if (!disponible) {
+  // UXC-1 — con `estadoDe` la tarjeta dice su estado completo (equipado en
+  // quien, bloqueado por subasta, disponible) con icono y texto. Sin el, se
+  // queda el aviso de siempre para lo no disponible.
+  const sello = typeof estadoDe === 'function' ? estadoDe(elemento) : null;
+  if (sello) {
+    sello.classList.add('vitrina__estado');
+    tarjeta.appendChild(sello);
+  } else if (!disponible) {
     const estado = document.createElement('span');
     estado.className = 'vitrina__disponibilidad';
     estado.textContent = 'No disponible';

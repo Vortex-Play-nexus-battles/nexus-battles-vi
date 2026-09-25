@@ -101,8 +101,12 @@ test('explica cuando una busqueda valida no tiene coincidencias', async () => {
   raiz.querySelector('[name="criterio"]').value = 'escudo';
   enviar(raiz.querySelector('.inventario-busqueda'));
 
-  await esperarHasta(() => raiz.querySelector('.estado-vacio'));
-  expect(raiz.querySelector('.estado-vacio').textContent).toMatch(/no encontramos productos/i);
+  // UXC-1 — la vitrina de la busqueda vive en la pestana «Objetos»; la de
+  // «Heroes» tiene su propio estado vacio.
+  await esperarHasta(() => raiz.querySelector('.inventario__contenido .estado-vacio'));
+  expect(raiz.querySelector('.inventario__contenido .estado-vacio').textContent).toMatch(
+    /no encontramos productos/i,
+  );
   expect(raiz.querySelector('.inventario__mensaje').textContent).toMatch(/0 resultados/);
 });
 
@@ -146,7 +150,9 @@ test('limpiar restaura el inventario completo', async () => {
   await esperarHasta(() =>
     raiz.querySelector('.vitrina__nombre')?.textContent.includes('completo'),
   );
-  expect(consultasCompletas).toBe(2);
+  // UXC-1 — el inventario completo se reunio al montar; limpiar vuelve a el
+  // sin pedirlo otra vez.
+  expect(consultasCompletas).toBe(1);
   expect(raiz.querySelector('[name="criterio"]').value).toBe('');
   expect(raiz.querySelector('.inventario-busqueda__limpiar').hidden).toBe(true);
 });

@@ -228,7 +228,11 @@ function iniciarVista(formulario) {
 
       // HU-UX-001: si se llegó al login desde una vista privada, se vuelve a
       // ella; una cuenta recién creada pasa antes por «Preparando tu cuenta».
-      globalThis.location.href = entrarCon(body, { volver });
+      // UXC-4 — la vuelta se lee AHORA y no al cargar: «Entra para comprar»,
+      // en la tienda de la portada, la escribe en la dirección sin recargar.
+      globalThis.location.href = entrarCon(body, {
+        volver: rutaDeVuelta(globalThis.location?.search ?? '') ?? volver,
+      });
     } catch {
       setEstado(
         'No pudimos conectar con el servidor. Inténtalo de nuevo en unos segundos.',

@@ -20,7 +20,10 @@ let contador = 0;
 
 /**
  * @param {{titulo: string, cuerpo: Node|string, acciones?: Array<Node>,
- *          peligro?: boolean, cerrableFuera?: boolean, raiz?: HTMLElement}} opciones
+ *          peligro?: boolean, cerrableFuera?: boolean, raiz?: HTMLElement,
+ *          alCerrar?: (() => void)|null}} opciones
+ *   `alCerrar` se llama una sola vez, cierre quien cierre: un botón, Escape,
+ *   la equis o el velo.
  * @returns {{elemento: HTMLElement, cerrar: () => void}}
  */
 export function abrirDialogo({
@@ -30,6 +33,7 @@ export function abrirDialogo({
   peligro = false,
   cerrableFuera = true,
   raiz = document.body,
+  alCerrar = null,
 }) {
   contador += 1;
   const idTitulo = `dialogo-titulo-${contador}`;
@@ -46,12 +50,18 @@ export function abrirDialogo({
   caja.append(encabezado);
   caja.append(typeof cuerpo === 'string' ? h('p', { texto: cuerpo }) : cuerpo);
 
+  let cerrado = false;
   const cerrar = () => {
+    if (cerrado) {
+      return;
+    }
+    cerrado = true;
     velo.remove();
     document.removeEventListener('keydown', alTeclado);
     if (devolverFocoA instanceof HTMLElement) {
       devolverFocoA.focus();
     }
+    alCerrar?.();
   };
 
   const botonCerrar = h('button', {
@@ -119,18 +129,32 @@ export function abrirDialogo({
  * Confirmacion de una accion que no se puede deshacer (cancelar una sala,
  * banear una cuenta, borrar un comentario).
  *
- * @param {{titulo: string, mensaje: string, textoConfirmar?: string,
+ * UXC-5 — antes, cerrar con Escape, con la equis o con el velo dejaba la
+ * promesa sin resolver: quien esperaba la respuesta se quedaba esperando para
+ * siempre. Cerrar sin decidir es decir que no.
+ *
+ * @param {{titulo: string, mensaje?: string, cuerpo?: Node|null, textoConfirmar?: string,
  *          textoCancelar?: string, peligro?: boolean}} opciones
+ *   `cuerpo` sustituye a `mensaje` cuando hace falta mas que una frase (un
+ *   resumen, una lista de consecuencias).
  * @returns {Promise<boolean>} true si se confirmo
  */
 export function confirmar({
   titulo,
-  mensaje,
+  mensaje = '',
+  cuerpo = null,
   textoConfirmar = 'Confirmar',
   textoCancelar = 'Cancelar',
   peligro = true,
 }) {
-  return new Promise((resolver) => {
+  return new Promise((resolverPromesa) => {
+    let decidido = false;
+    const resolver = (valor) => {
+      if (!decidido) {
+        decidido = true;
+        resolverPromesa(valor);
+      }
+    };
     const cancelar = h('button', {
       clase: 'boton boton--secundario',
       texto: textoCancelar,
@@ -146,18 +170,19 @@ export function confirmar({
 
     const { cerrar } = abrirDialogo({
       titulo,
-      cuerpo: mensaje,
+      cuerpo: cuerpo ?? mensaje,
       acciones: [cancelar, aceptar],
       peligro,
+      alCerrar: () => resolver(false),
     });
 
     cancelar.addEventListener('click', () => {
-      cerrar();
       resolver(false);
+      cerrar();
     });
     aceptar.addEventListener('click', () => {
-      cerrar();
       resolver(true);
+      cerrar();
     });
   });
 }
