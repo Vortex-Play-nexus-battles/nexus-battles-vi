@@ -280,7 +280,9 @@ test.describe('Smoke del entorno desplegado', () => {
     const hilo = await lectura.json();
     expect(hilo.productoId).toBe('smoke-inexistente');
     expect(Array.isArray(hilo.comentarios)).toBe(true);
-    expect(hilo.total).toBe(hilo.comentarios.length);
+    // Desde comentarios 1.5.0 (B3) el hilo se pagina y `total` cuenta todas
+    // las paginas: nunca menos que lo que trae esta.
+    expect(hilo.total).toBeGreaterThanOrEqual(hilo.comentarios.length);
     expect(typeof hilo.totalCalificaciones).toBe('number');
     // Sin calificaciones el promedio es nulo, nunca un cero que parezca nota.
     if (hilo.totalCalificaciones === 0) {
