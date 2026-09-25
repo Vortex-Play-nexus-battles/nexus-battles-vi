@@ -1080,6 +1080,28 @@
   gap: var(--e-3);
 }
 
+/* UXC-7 — ConfirmCritical (§7.3.9): lo que va a pasar, en una lista, y la
+   palabra que hay que escribir para poder confirmar. */
+.confirmacion-critica {
+  display: grid;
+  gap: var(--e-3);
+}
+
+.confirmacion-critica p {
+  margin: 0;
+}
+
+.confirmacion-critica__consecuencias {
+  display: grid;
+  gap: var(--e-1);
+  margin: 0;
+  padding: var(--e-3) var(--e-3) var(--e-3) var(--e-6);
+  border-left: 3px solid var(--error);
+  border-radius: var(--radio-chico);
+  background: var(--error-insignia);
+  color: var(--texto);
+}
+
 /* =======================================================================
    Paginación — RNF-USA-001, dieciséis por página
    ======================================================================= */

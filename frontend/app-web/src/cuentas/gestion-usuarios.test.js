@@ -348,3 +348,120 @@ describe('FI-R3 - la busqueda de usuario consulta al servicio', () => {
     expect(document.body.textContent).not.toMatch(/cuando el backend exponga/i);
   });
 });
+
+describe('UXC-7 — acciones sobre la cuenta con los diálogos del kit, no con window.confirm', () => {
+  const USUARIO = { id: 15, apodo: 'nyx_valiente', estado: 'ACTIVO', rolNombre: 'JUGADOR' };
+
+  function dom() {
+    document.body.innerHTML = `
+      <form id="form-buscar-usuario">
+        <input id="usuario-id" type="number" />
+        <button type="submit" id="btn-buscar">Buscar</button>
+      </form>
+      <div id="mensaje-busqueda" hidden></div>
+      <div id="panel-usuario" hidden>
+        <dd id="usuario-estado-mostrado">-</dd>
+        <form id="formulario-perfil-admin">
+          <input id="estado" /><input id="suspendido-hasta" />
+          <select id="nuevo-rol"><option value="JUGADOR">JUGADOR</option></select>
+        </form>
+        <button type="button" id="btn-suspender">Suspender</button>
+        <button type="button" id="btn-reactivar">Reactivar</button>
+        <button type="button" id="btn-banear">Banear</button>
+        <div id="mensaje-perfil" hidden></div>
+        <div id="mensaje-cambio-rol" hidden></div>
+      </div>
+    `;
+  }
+
+  const esperar = async () => {
+    for (let i = 0; i < 8; i++) {
+      await Promise.resolve();
+    }
+  };
+
+  async function elegirUsuario() {
+    globalThis.fetch.mockResolvedValueOnce({ ok: true, status: 200, json: async () => USUARIO });
+    document.getElementById('usuario-id').value = '15';
+    document
+      .getElementById('form-buscar-usuario')
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await esperar();
+  }
+
+  const dialogo = () => document.querySelector('[role="dialog"]');
+
+  beforeEach(async () => {
+    sessionStorage.clear();
+    setCurrentRole('SUPER_ADMINISTRADOR');
+    setPermissionMatrix({
+      SUPER_ADMINISTRADOR: {
+        GESTIONAR_CUENTAS: 'GRANTED',
+        SUSPENDER_USUARIOS: 'GRANTED',
+        BANEAR_DEFINITIVAMENTE: 'GRANTED',
+      },
+    });
+    dom();
+    configurarEventos();
+    globalThis.fetch = jest.fn();
+    window.confirm = jest.fn(() => {
+      throw new Error('window.confirm no se usa');
+    });
+    await elegirUsuario();
+  });
+
+  test('suspender pregunta en un diálogo con el apodo y la fecha, y manda la fecha fin', async () => {
+    document.getElementById('suspendido-hasta').value = '2026-10-01T10:00';
+    document.getElementById('btn-suspender').click();
+    await esperar();
+
+    expect(dialogo().querySelector('h2').textContent).toBe('¿Suspender a nyx_valiente?');
+    expect(dialogo().textContent).toMatch(/No podrá entrar al juego hasta el 1 de octubre/);
+    globalThis.fetch.mockResolvedValueOnce({ ok: true, status: 204 });
+    dialogo().querySelector('[data-accion="confirmar"]').click();
+    await esperar();
+
+    const [ruta, opciones] = globalThis.fetch.mock.calls.at(-1);
+    expect(ruta).toBe('/api/v1/admin/usuarios/15/suspender');
+    expect(opciones.method).toBe('PUT');
+    expect(JSON.parse(opciones.body)).toEqual({ suspendidoHasta: '2026-10-01T10:00' });
+    expect(window.confirm).not.toHaveBeenCalled();
+  });
+
+  test('cancelar (o cerrar) no toca la cuenta', async () => {
+    const llamadas = globalThis.fetch.mock.calls.length;
+    document.getElementById('btn-reactivar').click();
+    await esperar();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await esperar();
+    expect(globalThis.fetch.mock.calls.length).toBe(llamadas);
+  });
+
+  test('banear es crítico: no se confirma hasta escribir el apodo de la cuenta', async () => {
+    document.getElementById('btn-banear').click();
+    await esperar();
+
+    const caja = dialogo();
+    expect(caja.querySelector('h2').textContent).toBe('Banear definitivamente a nyx_valiente');
+    expect(caja.querySelector('.confirmacion-critica__consecuencias').textContent).toContain(
+      'No podrá volver a entrar con esta cuenta.',
+    );
+    const campo = caja.querySelector('input');
+    const boton = caja.querySelector('[data-accion="confirmar"]');
+    expect(document.activeElement).toBe(campo);
+    expect(boton.disabled).toBe(true);
+
+    campo.value = 'nyx';
+    campo.dispatchEvent(new Event('input'));
+    expect(boton.disabled).toBe(true);
+
+    campo.value = 'nyx_valiente';
+    campo.dispatchEvent(new Event('input'));
+    expect(boton.disabled).toBe(false);
+    globalThis.fetch.mockResolvedValueOnce({ ok: true, status: 204 });
+    boton.click();
+    await esperar();
+
+    expect(globalThis.fetch.mock.calls.at(-1)[0]).toBe('/api/v1/admin/usuarios/15/banear');
+  });
+});
