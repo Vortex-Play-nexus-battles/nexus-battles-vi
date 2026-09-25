@@ -16,7 +16,7 @@ asyncapi: 3.0.0
 
 info:
   title: Nexus Battles VI — Mensajes privados (salas-partidas)
-  version: 1.0.0
+  version: 1.0.1
   description: |
     Mensajes privados 1 a 1 por WebSocket + STOMP, con historial por REST
     (`contracts/openapi/salas-partidas.yaml`, `/mensajes-directos/**`).
@@ -34,6 +34,17 @@ info:
       suspendido o baneado no escribe). Limite de frecuencia por remitente.
     - **No se puede SEND a `/tema/**` ni a `/cola/**`**: el servidor solo
       acepta envios a destinos `/app/**` (en todo el broker, no solo aqui).
+
+    1.0.1 (B6): implementado `enviarMensajeDirecto` (sin cambio de forma).
+    Aclaraciones: el `idCliente` de `MensajeEntregado` solo viaja en el eco a
+    su autor (al destinatario le llega nulo); `EnvioRechazado` vuelve solo a
+    la sesion que escribio; `MODERACION_NO_DISPONIBLE` cubre cualquier
+    comprobacion previa a la entrega que no responde (lista negra, sancion del
+    remitente o directorio de cuentas de ms-identidad): fallo cerrado, D-14;
+    el limite de frecuencia por remitente es provisional (5 cada 10 s,
+    configurable) a la espera del PO; y el aviso en la bandeja de quien no
+    esta escuchando su cola sale con el primer no leido de cada remitente y
+    no lleva el texto.
   license:
     name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
 
@@ -47,8 +58,6 @@ servers:
 channels:
   enviarMensajeDirecto:
     address: '/app/mensajes-directos/{uidDestino}'
-    x-implementacion: pendiente
-    x-fase: B6
     parameters:
       uidDestino:
         description: '`uid` del jugador que recibe. No puede ser el propio.'
