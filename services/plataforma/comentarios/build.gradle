@@ -25,4 +25,16 @@ dependencies {
     testImplementation platform('org.testcontainers:testcontainers-bom:1.21.4')
     testImplementation 'org.testcontainers:junit-jupiter'
     testImplementation 'org.testcontainers:postgresql'
+
+    // B3 — pacto de consumidor con el catalogo de productos (Pact JVM, pila
+    // aprobada en CLAUDE.md; misma version que ms-subastas). Solo el
+    // consumidor: la verificacion la hace productos contra su implementacion.
+    testImplementation 'au.com.dius.pact.consumer:junit5:4.6.17'
+}
+
+// El pacto generado se versiona: es un artefacto de contrato, no de build. Su
+// sitio es contracts/pactos/, que es donde el proveedor lo va a buscar (mismo
+// criterio que ms-subastas).
+tasks.named('test') {
+    systemProperty 'pact.rootDir', rootProject.file('contracts/pactos').absolutePath
 }
