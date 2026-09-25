@@ -17,9 +17,11 @@
  */
 
 import { conectarChat, ErrorDeCanal } from './cliente-chat.js';
+import { esUid, urlDeMensajesCon } from './cliente-mensajes.js';
 import { vaciar } from '../../comun/ui/dom.js';
 import { pintarAviso } from '../../comun/ui/aviso.js';
 import { estadoVacio, pintarEstado } from '../../comun/ui/estado-vista.js';
+import { cuerpoDelToken } from '../../comun/identidad.js';
 
 export const CLAVE_TOKEN = 'nexus.token';
 export const COLA_DE_ERRORES = '/usuario/cola/salas';
@@ -57,8 +59,36 @@ export function tonoPara(estado) {
   return 'advertencia';
 }
 
-/** Un mensaje del contrato (mensajeDeChat) como elemento de la lista. */
-export function pintarMensaje(mensaje) {
+/**
+ * B6 — «Mensaje privado» junto al apodo de quien escribió (feedback del
+ * profesor). Solo para los demás: a uno mismo no se le escribe. Lleva a la
+ * vista de mensajes con `?con=<uid>`; el uid del autor ya viaja en el mensaje
+ * del chat, no es un dato nuevo.
+ *
+ * @param {{id?: string, apodo?: string}|undefined} autor
+ * @param {string|null} yo
+ * @returns {HTMLAnchorElement|null}
+ */
+export function enlaceAMensajePrivado(autor, yo) {
+  if (!esUid(autor?.id) || autor.id === yo) {
+    return null;
+  }
+  const enlace = document.createElement('a');
+  enlace.className = 'boton boton--secundario boton--pequeno';
+  enlace.href = urlDeMensajesCon(autor.id);
+  enlace.dataset.accion = 'mensaje-privado';
+  enlace.textContent = 'Mensaje privado';
+  enlace.setAttribute('aria-label', `Enviar un mensaje privado a ${autor.apodo ?? 'este jugador'}`);
+  return enlace;
+}
+
+/**
+ * Un mensaje del contrato (mensajeDeChat) como elemento de la lista.
+ *
+ * @param {object} mensaje
+ * @param {{yo?: string|null}} [opciones] uid de quien mira, para no ofrecerle escribirse
+ */
+export function pintarMensaje(mensaje, { yo = null } = {}) {
   const item = document.createElement('li');
   item.className = 'chat__mensaje';
   item.dataset.tipo = mensaje.tipo;
@@ -67,6 +97,11 @@ export function pintarMensaje(mensaje) {
   autor.className = 't-etiqueta';
   autor.textContent = mensaje.autor?.apodo ?? 'Jugador';
   item.appendChild(autor);
+
+  const privado = enlaceAMensajePrivado(mensaje.autor, yo);
+  if (privado) {
+    item.appendChild(privado);
+  }
 
   const texto = document.createElement('p');
   texto.className = 't-cuerpo';
@@ -187,8 +222,12 @@ export async function montarChat(
   }
   marcarConexion(indicador, 'estable');
 
+  // Quien mira, del claim `uid` del token: a uno mismo no se le ofrece un
+  // mensaje privado.
+  const yo = cuerpoDelToken(token)?.uid ?? null;
+
   const agregar = (mensaje) => {
-    lista.appendChild(pintarMensaje(mensaje));
+    lista.appendChild(pintarMensaje(mensaje, { yo }));
     lista.scrollTop = lista.scrollHeight;
     repasarSilencio();
   };

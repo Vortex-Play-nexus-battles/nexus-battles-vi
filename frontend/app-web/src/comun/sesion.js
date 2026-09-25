@@ -58,6 +58,9 @@ export const RUTAS = Object.freeze({
   publicarSubasta: '../cuentas/publicar-subasta.html',
   batallas: '../plataforma/salas-partidas/batallas.html',
   crearSala: '../plataforma/salas-partidas/crear-sala.html',
+  // B6 — mensajes privados (feedback del profesor): el enlace de la cabecera y
+  // el botón «Mensaje privado» del chat y de la sala de espera.
+  mensajes: '../plataforma/salas-partidas/mensajes.html',
   torneos: '../plataforma/torneos/torneos.html',
   notificaciones: '../plataforma/notificaciones/notificaciones.html',
   gestionUsuarios: '../cuentas/gestion-usuarios.html',

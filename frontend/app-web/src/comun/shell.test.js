@@ -12,12 +12,14 @@
 import { jest } from '@jest/globals';
 
 import {
+  CLAVE_MENSAJES_SIN_LEER,
   SECCIONES,
   SECCIONES_CONSOLA,
   montarArmazon,
   montarArmazonAdmin,
   montarArmazonJugador,
   montarArmazonPublico,
+  pintarContadorDeMensajes,
 } from './shell.js';
 import { CLAVES, leerSesion } from './sesion.js';
 
@@ -206,6 +208,44 @@ describe('armazón de jugador', () => {
     expect(conCuenta.querySelector('[data-zona="apodo"]').textContent).toBe('valkiria');
     expect(conCuenta.querySelector('.cabecera__avatar').textContent).toBe('V');
     expect(conCuenta.querySelector('.cabecera__campana').href).toMatch(/notificaciones\.html$/);
+  });
+
+  test('B6 — mensajes privados en el HUD, detrás de la campana y no como séptimo destino', () => {
+    conSesion();
+    const { elemento } = montar({ vista: 'home' });
+    const mensajes = elemento.querySelector('[data-zona="mensajes"]');
+    expect(mensajes.href).toMatch(/plataforma\/salas-partidas\/mensajes\.html$/);
+    expect(mensajes.getAttribute('aria-label')).toBe('Mensajes privados');
+    expect(mensajes.querySelector('[data-zona="contador-mensajes"]').hidden).toBe(true);
+    // La campana sigue siendo la primera `.cabecera__campana` que se encuentra.
+    expect(elemento.querySelector('.cabecera__campana').href).toMatch(/notificaciones\.html$/);
+    expect(etiquetas(elemento)).toHaveLength(6);
+  });
+
+  test('B6 — el contador sale de lo último que contó la vista de mensajes, y se puede poner al día', () => {
+    conSesion();
+    sessionStorage.setItem(CLAVE_MENSAJES_SIN_LEER, '3');
+    const { elemento } = montar({ vista: 'home' });
+    const contador = elemento.querySelector('[data-zona="contador-mensajes"]');
+    expect(contador.hidden).toBe(false);
+    expect(contador.textContent).toBe('3');
+    expect(elemento.querySelector('[data-zona="mensajes"]').getAttribute('aria-label')).toBe(
+      'Mensajes privados: 3 sin leer',
+    );
+
+    pintarContadorDeMensajes(document, 120);
+    expect(contador.textContent).toBe('99+');
+    expect(sessionStorage.getItem(CLAVE_MENSAJES_SIN_LEER)).toBe('120');
+
+    pintarContadorDeMensajes(document, 0);
+    expect(contador.hidden).toBe(true);
+    expect(sessionStorage.getItem(CLAVE_MENSAJES_SIN_LEER)).toBe('0');
+  });
+
+  test('B6 — sin cabecera montada, poner el contador solo lo recuerda', () => {
+    document.body.innerHTML = '';
+    expect(() => pintarContadorDeMensajes(document, 2)).not.toThrow();
+    expect(sessionStorage.getItem(CLAVE_MENSAJES_SIN_LEER)).toBe('2');
   });
 
   test('el saldo se reserva pero no se inventa', () => {

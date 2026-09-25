@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mensajes privados · The Nexus Battles VI</title>
+
+    <!--
+      B6 — Mensajes privados entre jugadores. FEEDBACK DEL PROFESOR, no
+      requisito del documento (el 7.6 pide chat en las salas y en la vista
+      general). Van sobre el mismo chat: mismo servicio (salas-partidas) y el
+      mismo canal STOMP.
+
+      Ejecucion ESTATICA para revision visual: para apuntar la vista a un
+      salas-partidas que corra en otro sitio, descomenta y ajusta (la URL del
+      canal ws:// se deriva de esta misma base):
+      <meta name="nexus-api-base" content="http://127.0.0.1:8084" />
+    -->
+
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
+    <link rel="stylesheet" href="./mensajes.css" />
+  </head>
+
+  <body>
+    <div data-cabecera-app></div>
+
+    <main id="mensajes" class="pagina pila">
+      <div class="pila pila--compacta">
+        <h1>Mensajes privados</h1>
+        <p class="t-cuerpo">
+          Conversaciones uno a uno con otros jugadores. Pasan por el mismo filtro que el chat y solo
+          las pueden leer las dos personas que conversan.
+        </p>
+        <div class="fila">
+          <span class="conexion conexion--reconectando" data-zona="conexion" role="status"
+            >Conectando</span
+          >
+        </div>
+        <p class="t-meta" data-zona="aviso-conexion" hidden>
+          Sin conexión en tiempo real: los mensajes nuevos pueden tardar unos segundos en llegar.
+        </p>
+      </div>
+
+      <div data-zona="aviso-general" hidden></div>
+
+      <div class="mensajes">
+        <section class="tarjeta pila mensajes__lista" aria-labelledby="titulo-conversaciones">
+          <h2 class="tarjeta__titulo" id="titulo-conversaciones">Conversaciones</h2>
+          <div data-zona="estado-conversaciones"></div>
+          <ul
+            class="pila pila--compacta mensajes__conversaciones"
+            data-zona="conversaciones"
+            aria-label="Tus conversaciones"
+          ></ul>
+        </section>
+
+        <section class="tarjeta pila mensajes__hilo" aria-labelledby="titulo-hilo">
+          <h2 class="tarjeta__titulo" id="titulo-hilo" data-zona="titulo-hilo" tabindex="-1">
+            Elige una conversación
+          </h2>
+          <div class="fila">
+            <button
+              class="boton boton--secundario boton--pequeno"
+              type="button"
+              data-accion="cargar-anteriores"
+              hidden
+            >
+              Cargar mensajes anteriores
+            </button>
+          </div>
+          <div data-zona="estado-hilo"></div>
+          <ol
+            class="mensajes__lineas"
+            data-zona="lineas"
+            aria-label="Mensajes de la conversación"
+          ></ol>
+          <!--
+            Los mensajes que llegan se anuncian aqui, y no en la lista: al
+            cargar mensajes anteriores la lista crece por arriba, y una region
+            viva los leeria todos en voz alta.
+          -->
+          <p class="solo-lectores" data-zona="anuncio" aria-live="polite"></p>
+
+          <form class="pila" data-zona="redactor" novalidate hidden>
+            <div data-zona="aviso-redactor" hidden></div>
+            <div class="campo campo--area">
+              <label class="campo__etiqueta" for="texto-mensaje">Tu mensaje</label>
+              <textarea
+                class="campo__control"
+                id="texto-mensaje"
+                name="texto"
+                rows="3"
+                maxlength="500"
+                aria-describedby="contador-mensaje"
+                required
+              ></textarea>
+              <p class="campo__pista" id="contador-mensaje" data-zona="contador">
+                0 de 500 caracteres
+              </p>
+            </div>
+            <div class="fila fila--acciones">
+              <button class="boton boton--primario" type="submit">Enviar</button>
+            </div>
+          </form>
+        </section>
+      </div>
+    </main>
+
+    <script type="module">
+      import { montarAsistente } from '../../comun/ui/asistente.js';
+      import { montarCabecera } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
+      import { usuarioIdDeSesion } from '../../comun/identidad.js';
+      import { pintarContadorDeMensajes } from '../../comun/shell.js';
+      import { canalReconectable } from '../../comun/canal-reconectable.js';
+      import { baseDeApi } from '../../comun/base-api.js';
+      import { conectarChat } from './cliente-chat.js';
+      import { urlDelCanal } from './canal-sala.js';
+      import { montarMensajes } from './mensajes.js';
+
+      // Vista privada: sin sesion (o caducada) se va al login con vuelta aqui.
+      if (!exigirAcceso('mensajes')) {
+        throw new Error('sin sesion: redirigiendo al login');
+      }
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
+        vista: 'mensajes',
+        seccionActiva: 'jugar',
+      });
+
+      const token = sessionStorage.getItem('nexus.token');
+
+      montarMensajes(document.getElementById('mensajes'), {
+        yo: usuarioIdDeSesion(),
+        // El mismo canal STOMP que las salas y el chat (JWT en el CONNECT),
+        // envuelto en el canal que se reconecta solo (riesgo #7).
+        abrirCanal: ({ alEstado, alReconectar }) =>
+          canalReconectable({
+            conectar: () => conectarChat({ url: urlDelCanal({ base: baseDeApi() }), token }),
+            alEstado,
+            alReconectar,
+          }),
+        alContador: (sinLeer) => pintarContadorDeMensajes(document, sinLeer),
+        // La conversacion abierta queda en la direccion: recargar vuelve a ella.
+        alSeleccionar: (uid) => {
+          const url = new URL(globalThis.location.href);
+          url.searchParams.set('con', uid);
+          history.replaceState(history.state, '', url);
+        },
+      });
+
+      montarAsistente(document);
+    </script>
+  </body>
+</html>

@@ -8,7 +8,14 @@
 
 import { jest } from '@jest/globals';
 
-import { montarChat, destinosDe, canalDesdeUrl, tonoPara, pintarMensaje } from './chat.js';
+import {
+  montarChat,
+  destinosDe,
+  canalDesdeUrl,
+  tonoPara,
+  pintarMensaje,
+  enlaceAMensajePrivado,
+} from './chat.js';
 
 const ID_SALA = '3f2b6f3e-3c2a-4a1e-9f0e-6f1a2b3c4d5e';
 
@@ -103,6 +110,58 @@ test('CA-02: un logro se pinta con su detalle', () => {
 
   expect(item.dataset.tipo).toBe('chat.logro');
   expect(item.querySelector('.logro').textContent).toContain('Cazador de dragones');
+});
+
+describe('B6 — «Mensaje privado» junto al apodo', () => {
+  const ANA = '11111111-1111-1111-1111-111111111111';
+  const YO = '99999999-9999-9999-9999-999999999999';
+
+  function tokenCon(uid) {
+    const cuerpo = btoa(JSON.stringify({ uid, sub: 'yo' }))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+    return `cabecera.${cuerpo}.firma`;
+  }
+
+  test('junto al apodo de otro jugador hay un enlace a su conversación privada', () => {
+    const item = pintarMensaje({ ...MENSAJE, autor: { id: ANA, apodo: 'Ana' } }, { yo: YO });
+    const enlace = item.querySelector('[data-accion="mensaje-privado"]');
+    expect(enlace).not.toBeNull();
+    expect(enlace.textContent).toBe('Mensaje privado');
+    expect(enlace.getAttribute('aria-label')).toBe('Enviar un mensaje privado a Ana');
+    expect(new URL(enlace.href).searchParams.get('con')).toBe(ANA);
+    expect(enlace.href).toMatch(/plataforma\/salas-partidas\/mensajes\.html\?con=/);
+  });
+
+  test('a uno mismo no se le ofrece, ni a un autor sin uid', () => {
+    expect(
+      pintarMensaje({ ...MENSAJE, autor: { id: YO, apodo: 'yo' } }, { yo: YO }).querySelector(
+        '[data-accion="mensaje-privado"]',
+      ),
+    ).toBeNull();
+    expect(
+      pintarMensaje({ ...MENSAJE, autor: { id: 'j1', apodo: 'x' } }).querySelector(
+        '[data-accion="mensaje-privado"]',
+      ),
+    ).toBeNull();
+    expect(enlaceAMensajePrivado(undefined, YO)).toBeNull();
+  });
+
+  test('en el chat montado, «yo» sale del uid del token', async () => {
+    const cliente = clienteFalso();
+    const contenedor = raiz();
+    await montarChat(contenedor, { canal: {}, token: tokenCon(YO), conectar: async () => cliente });
+
+    cliente.suscripciones['/app/chat/general/historial']([
+      { ...MENSAJE, id: 'a', autor: { id: YO, apodo: 'yo' } },
+      { ...MENSAJE, id: 'b', autor: { id: ANA, apodo: 'Ana' } },
+    ]);
+
+    const enlaces = contenedor.querySelectorAll('[data-accion="mensaje-privado"]');
+    expect(enlaces).toHaveLength(1);
+    expect(new URL(enlaces[0].href).searchParams.get('con')).toBe(ANA);
+  });
 });
 
 test('CA-03: el error de la cola privada se muestra a quien escribio con el tono del mapeo', async () => {

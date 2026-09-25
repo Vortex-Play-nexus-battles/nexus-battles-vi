@@ -19,6 +19,7 @@ import {
   salidaAlListado,
   invitacionDe,
   montarInvitacion,
+  pintarParticipantesDeEspera,
   CLAVE_AVISO_DEL_LISTADO,
 } from './sala-de-espera.js';
 
@@ -475,5 +476,70 @@ describe('FI-R4 - la invitacion de una sala privada', () => {
 
     expect(acuse()).not.toMatch(/copiado/i);
     expect(acuse()).toMatch(/no se pudo copiar/i);
+  });
+});
+
+describe('B6 — quien esta en la sala, con «Mensaje privado»', () => {
+  const TERCERO = 'cccccccc-0000-0000-0000-000000000003';
+
+  test('lista a los participantes y ofrece escribir a los demas, no a uno mismo', () => {
+    montarSalaDeEspera(document, {
+      sala: sala({ participantes: [ANFITRION, VISITANTE, TERCERO] }),
+      yo: VISITANTE,
+      abandonar: jest.fn(),
+      cancelar: jest.fn(),
+    });
+
+    const lista = document.querySelector('[data-zona="participantes-espera"]');
+    expect(lista.getAttribute('role')).toBe('list');
+    expect(lista.getAttribute('aria-label')).toBe('Quién está en la sala');
+    const filas = [...lista.querySelectorAll('[role="listitem"]')];
+    expect(filas.map((f) => f.querySelector('.t-meta').textContent)).toEqual([
+      'Anfitrión',
+      'Tú',
+      'Jugador 3',
+    ]);
+    const enlaces = [...lista.querySelectorAll('[data-accion="mensaje-privado"]')];
+    expect(enlaces).toHaveLength(2);
+    expect(new URL(enlaces[0].href).searchParams.get('con')).toBe(ANFITRION);
+    expect(enlaces[0].getAttribute('aria-label')).toBe('Enviar un mensaje privado a Anfitrión');
+    expect(new URL(enlaces[1].href).searchParams.get('con')).toBe(TERCERO);
+    expect(enlaces[1].href).toMatch(/mensajes\.html\?con=/);
+  });
+
+  test('quien entra o sale por el canal cambia la lista', () => {
+    const espera = montarSalaDeEspera(document, {
+      sala: sala({ participantes: [ANFITRION] }),
+      yo: ANFITRION,
+      abandonar: jest.fn(),
+      cancelar: jest.fn(),
+    });
+    const filas = () =>
+      document.querySelectorAll('[data-zona="participantes-espera"] [role="listitem"]');
+    expect(filas()).toHaveLength(1);
+
+    espera.actualizar({
+      ocupacion: { actual: 2, maximo: 4 },
+      participantes: [ANFITRION, VISITANTE],
+    });
+    expect(filas()).toHaveLength(2);
+    expect(filas()[1].textContent).toContain('Mensaje privado');
+
+    espera.actualizar({ ocupacion: { actual: 1, maximo: 4 } });
+    expect(filas()).toHaveLength(2);
+  });
+
+  test('sin participantes conocidos la lista no se ve', () => {
+    montarSalaDeEspera(document, {
+      sala: sala(),
+      yo: ANFITRION,
+      abandonar: jest.fn(),
+      cancelar: jest.fn(),
+    });
+    expect(document.querySelector('[data-zona="participantes-espera"]').hidden).toBe(true);
+  });
+
+  test('sin zona de espera no pinta nada', () => {
+    expect(pintarParticipantesDeEspera(null, { participantes: [ANFITRION] })).toBeNull();
   });
 });

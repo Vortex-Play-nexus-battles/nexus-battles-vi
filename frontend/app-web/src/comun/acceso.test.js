@@ -215,7 +215,8 @@ describe('vistaDeRuta y urlDeVista', () => {
     expect(vistaDeRuta('/jugarx')).toBeNull();
   });
 
-  test('R17.3 — nueve direcciones limpias, únicas, y cada una de una vista del jugador o del portal', () => {
+  test('R17.3 — diez direcciones limpias, únicas, y cada una de una vista del jugador o del portal', () => {
+    // B6 añade /mensajes (mensajes privados): se comparte con `?con=<uid>`.
     const limpias = Object.entries(MATRIZ).filter(([, v]) => v.limpia);
     expect(limpias.map(([, v]) => v.limpia).sort()).toEqual([
       '/cuenta',
@@ -223,6 +224,7 @@ describe('vistaDeRuta y urlDeVista', () => {
       '/inventario',
       '/jugar',
       '/login',
+      '/mensajes',
       '/preparando',
       '/registro',
       '/subastas',

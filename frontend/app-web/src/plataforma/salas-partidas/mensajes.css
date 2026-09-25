@@ -1,0 +1,138 @@
+/*
+ * Mensajes privados — B6 (feedback del profesor).
+ *
+ * Solo lo que el kit no tiene: la rejilla de dos columnas (conversaciones y
+ * hilo), la fila de conversacion y la burbuja de mensaje. Tarjeta, aviso,
+ * estado-vista, distintivo, campo y boton salen de shared/ui-kit, y todos los
+ * colores de tokens.css: aqui no se escribe ninguno.
+ */
+
+.mensajes {
+  display: grid;
+  grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+  gap: var(--e-4);
+  align-items: start;
+}
+
+/* Sin esto un texto largo sin espacios ensancharia la columna del hilo por
+   encima de la rejilla. */
+.mensajes__lista,
+.mensajes__hilo {
+  min-width: 0;
+}
+
+/* Por debajo del ancho de trabajo (RNF-USA-001, adaptable hacia abajo) la
+   lista va encima del hilo. */
+@media (max-width: 56rem) {
+  .mensajes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.mensajes__conversaciones,
+.mensajes__lineas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.conversacion {
+  display: grid;
+  gap: var(--e-1);
+  width: 100%;
+  min-height: var(--objetivo-tactil);
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid var(--borde-tenue);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--transicion);
+}
+
+.conversacion:hover {
+  background: var(--superficie-2);
+}
+
+.conversacion:focus-visible {
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
+  outline-offset: 2px;
+}
+
+/* La abierta se distingue por el borde y el fondo, y ademas lo dice
+   `aria-current`: el color no es el unico indicador. */
+.conversacion[aria-current='true'] {
+  border-color: var(--primaria);
+  background: var(--info-insignia);
+}
+
+.conversacion__cabeza {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-2);
+}
+
+.conversacion__nombre {
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.conversacion__ultimo {
+  overflow: hidden;
+  color: var(--texto-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mensajes__lineas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  max-height: 28rem;
+  overflow-y: auto;
+}
+
+.mensaje-directo {
+  align-self: flex-start;
+  max-width: 80%;
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid var(--borde-tenue);
+  border-radius: var(--radio);
+  background: var(--superficie-2);
+}
+
+.mensaje-directo--propio {
+  align-self: flex-end;
+  background: var(--info-insignia);
+}
+
+.mensaje-directo__autor,
+.mensaje-directo__texto,
+.mensaje-directo__meta {
+  margin: 0;
+}
+
+/* Lo que escribio una persona se respeta tal cual: saltos de linea y palabras
+   largas que no caben. */
+.mensaje-directo__texto {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.mensaje-directo__meta {
+  color: var(--texto-3);
+}
+
+.mensaje-directo[data-estado='enviando'] {
+  opacity: 0.7;
+}
+
+.mensaje-directo[data-estado='fallido'] {
+  border-color: var(--error);
+}
+
+.mensaje-directo[data-estado='fallido'] .mensaje-directo__estado {
+  color: var(--error);
+}
