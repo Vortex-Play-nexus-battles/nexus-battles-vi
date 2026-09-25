@@ -15,6 +15,12 @@
 # RAM ni swap libres (medido el 24-sep 03:50 UTC, CAPACIDAD.md). La credencial
 # de chatbot-db ya la genera desplegar.sh en el host (secretos-bases.env): el
 # unico bloqueo que queda es la memoria.
+#
+# B11: cd.yml ya copia este archivo al host (antes no, y un despliegue a
+# demanda de ms-chatbot fallaba por archivo inexistente), y el servicio lleva
+# el arranque escalonado. No usa credencial de servicio: todo lo que consulta
+# de un jugador lo pide con el token del propio jugador (ADR-001/ADR-005), y
+# torneos y la lista negra son publicos dentro de la red.
 
 services:
   # Base de datos propia (regla 7, aislamiento de datos): no comparte servidor
@@ -48,8 +54,35 @@ services:
       # si Postgres todavia no acepta conexiones, el servicio no arranca.
       chatbot-db:
         condition: service_healthy
+    # Arranque escalonado del host (R16.5b): mismo script que el ancla
+    # x-arranque-escalonado de docker-compose.deploy.yml, donde esta explicado.
+    # Una ancla no cruza archivos, asi que se repite; el guardian
+    # scripts/cd/comprobar-catalogo-servicios.sh exige que sea identico en
+    # cuanto el servicio sea desplegableDev. B11 lo deja puesto para que
+    # activarlo sea cambiar esa bandera, no reescribir este archivo.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        proc="$${ARRANQUE_PROC:-/proc}"
+        creado="$${ARRANQUE_CREADO_EN:-9999999999}"
+        arranque=$$(awk '/^btime/ {print $$2}' "$$proc/stat" 2>/dev/null)
+        encendido=$$(cut -d. -f1 "$$proc/uptime" 2>/dev/null)
+        if [ -n "$$arranque" ] && [ -n "$$encendido" ] \
+           && [ "$$creado" -lt "$$arranque" ] 2>/dev/null \
+           && [ "$$encendido" -lt "$${ARRANQUE_VENTANA_S:-600}" ] 2>/dev/null; then
+          espera=$$(( $${ARRANQUE_TURNO:-0} * $${ARRANQUE_PASO_S:-40} ))
+          echo "arranque escalonado: el host acaba de encender (hace $${encendido}s); turno $${ARRANQUE_TURNO:-0}, espero $${espera}s"
+          trap 'exit 143' TERM INT
+          sleep "$$espera" & wait $$!
+          trap - TERM INT
+        fi
+        exec java -jar app.jar
     environment:
       JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
+      # Turno 6: los turnos 0-5 ya tienen dos JVM cada uno (CAPACIDAD.md).
+      ARRANQUE_TURNO: "6"
+      ARRANQUE_CREADO_EN: ${ARRANQUE_CREADO_EN:-9999999999}
       # El lado IZQUIERDO es el nombre que Spring lee (application.properties
       # de ms-chatbot). El DERECHO lo deja desplegar.sh en el .env del
       # servidor, con prefijo MS_CHATBOT_ para no pisar las variables de
@@ -67,6 +100,15 @@ services:
       INVENTARIO_BASE_URL: ${INVENTARIO_BASE_URL:-http://34.193.90.11:8102}
       SUBASTAS_BASE_URL: ${SUBASTAS_BASE_URL:-http://srv-ms-subastas:8092/api/v1}
       NOTIFICACIONES_BASE_URL: ${NOTIFICACIONES_BASE_URL:-http://srv-notificaciones:8085/api/v1}
+      # B11 (ms-chatbot.yaml 2.0.0): movimientos de creditos del propio jugador
+      # (con su token), torneos como dato publico y la lista negra para filtrar
+      # lo que escribe el usuario (fail-closed por omision, D-14).
+      FINANZAS_BASE_URL: ${FINANZAS_BASE_URL:-http://srv-ms-finanzas:8093/api/v1}
+      TORNEOS_BASE_URL: ${TORNEOS_BASE_URL:-http://srv-torneos:8083/api/v1}
+      LISTA_NEGRA_VERIFICAR_URL: ${LISTA_NEGRA_VERIFICAR_URL:-http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar}
+      # Limites y tiempos de espera: los valores por omision de
+      # application.properties (provisionales, README de ms-chatbot) salvo que
+      # el .env del host fije CHATBOT_LIMITE_* o CHATBOT_HTTP_TIMEOUT_*.
 
 volumes:
   chatbot-db-datos:

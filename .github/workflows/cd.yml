@@ -551,13 +551,17 @@ jobs:
             chmod +x /opt/nexus/scripts/cd/apagar.sh
             SERVICIOS_APAGAR="$SERVICIOS_APAGAR" /opt/nexus/scripts/cd/apagar.sh
 
+      # B11: docker-compose.ms-chatbot.yml viaja como los demas overrides de
+      # Cuentas. Sin el, un despliegue a demanda de ms-chatbot (servicios.json lo
+      # nombra como su composeExtra) fallaba en el host por archivo inexistente.
+      # Copiarlo no lo despliega: desplegableDev sigue en false (CAPACIDAD.md).
       - name: Copiar docker-compose.yml, docker-compose.deploy.yml y el script de despliegue
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh,scripts/cd/comprobar-capacidad.sh,scripts/cd/revertir.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.ms-chatbot.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh,scripts/cd/comprobar-capacidad.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -991,7 +995,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_TEST }}
           username: ${{ secrets.SSH_USER_TEST }}
           key: ${{ secrets.SSH_KEY_TEST }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh,scripts/cd/comprobar-capacidad.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.ms-chatbot.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh,scripts/cd/comprobar-capacidad.sh"
           target: "/opt/nexus"
           strip_components: 0
 
@@ -1120,7 +1124,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST_PROD }}
           username: ${{ secrets.SSH_USER_PROD }}
           key: ${{ secrets.SSH_KEY_PROD }}
-          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh,scripts/cd/comprobar-capacidad.sh,scripts/cd/revertir.sh"
+          source: "docker-compose.yml,docker-compose.deploy.yml,docker-compose.cuentas.yml,docker-compose.ms-cumplimiento.yml,docker-compose.ms-ecommerce.yml,docker-compose.ms-finanzas.yml,docker-compose.ms-subastas.yml,docker-compose.ms-chatbot.yml,docker-compose.contenido.yml,infrastructure/despliegue/servicios.json,scripts/cd/desplegar.sh,scripts/cd/asegurar-swap.sh,scripts/cd/apagar.sh,scripts/cd/comprobar-capacidad.sh,scripts/cd/revertir.sh"
           target: "/opt/nexus"
           strip_components: 0
 
