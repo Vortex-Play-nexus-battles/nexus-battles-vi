@@ -64,8 +64,13 @@ public class PagoService {
         this.pasarela = pasarela;
         this.transacciones = transacciones;
         this.correo = correo;
-        // TODO: mover a application.properties cuando el PO confirme el umbral real.
-        this.umbralAltoValor = new BigDecimal("1000.00");
+        // Confirmado por el profesor (PO): USD 3000. El sistema hoy no
+        // distingue moneda al comparar (compara el numero tal cual venga en
+        // `monto`, sin convertir); si el monto llega en una moneda distinta
+        // a USD, esta comparacion no es exacta. Pendiente aclarar con el
+        // profesor si hace falta conversion, o si el proyecto asume que todo
+        // pago relevante para este umbral ya viene en USD/COP equivalente.
+        this.umbralAltoValor = new BigDecimal("3000.00");
     }
 
     public ProcesarPagoResponse procesar(ProcesarPagoRequest solicitud) {
