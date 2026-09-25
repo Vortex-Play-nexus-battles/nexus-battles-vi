@@ -117,10 +117,11 @@ export function rechazoDelLogin(estado, cuerpo) {
         caso: 'suspendida',
         tono,
         titulo: 'Tu cuenta está suspendida',
+        // Punto y coma, no punto: la hora ya acaba en «a. m.» o «p. m.».
         detalle:
           cuando === '—'
             ? 'No puedes entrar mientras dure la suspensión. Tu inventario y tu progreso se conservan.'
-            : `No puedes entrar hasta el ${cuando}. Tu inventario y tu progreso se conservan.`,
+            : `No puedes entrar hasta el ${cuando}; tu inventario y tu progreso se conservan.`,
         suspendidoHasta: cuando === '—' ? null : hasta,
       };
     }
