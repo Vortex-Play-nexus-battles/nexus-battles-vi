@@ -15,6 +15,7 @@ import java.util.regex.Pattern;
 
 import nexus.api.SolicitudCrearProducto;
 import nexus.dominio.EstadoProducto;
+import nexus.dominio.OrigenProducto;
 import nexus.dominio.ParteArmadura;
 import nexus.dominio.Producto;
 import nexus.dominio.TipoProducto;
@@ -129,15 +130,40 @@ public class MapeadorDelCatalogo {
         };
     }
 
-    /** El producto que se guarda: los datos de la solicitud, ACTIVO, version 1. */
-    public Producto aProducto(String id, SolicitudCrearProducto s, Instant ahora) {
+    /**
+     * El producto que se inserta: los datos de la solicitud, ACTIVO, version 1
+     * y las marcas de la semilla (B4): {@code origen=SEMILLA} y la version del
+     * contenido que lo sembro.
+     */
+    public Producto aProducto(String id, SolicitudCrearProducto s, Instant ahora, int semillaVersion) {
         return new Producto(
                 id, s.nombre(), s.imagen(), s.descripcion(), s.tipo(),
                 s.tiraje(), s.precioCreditos(), s.precioMonedaReal(), s.premium(),
                 s.prototipo(), s.heroe(), s.costoPoder(), s.multiplicadorNivel(),
                 s.turnosCarga(), s.turnosRecarga(), s.efectoGeneral(), s.efectoPotenciado(),
                 s.defensa(), s.parte(), s.efecto(), s.poderDeAtaque(), s.tasaDeCaida(),
-                EstadoProducto.ACTIVO, 1, ahora, ahora);
+                EstadoProducto.ACTIVO, 1, ahora, ahora,
+                null, OrigenProducto.SEMILLA, semillaVersion, null, null, List.of());
+    }
+
+    /**
+     * La puesta al dia de un producto sembrado con una version anterior (B4):
+     * el contenido nuevo de la semilla, y de lo que ya tenia el producto, lo
+     * que la semilla no decide — su estado (una suspension es del
+     * administrador), su fecha de alta, su promocion, el estado al que vuelve
+     * si esta suspendido y las claves de reserva. La version sube en uno, como
+     * haria un guardado versionado.
+     */
+    public Producto ponerAlDia(Producto existente, SolicitudCrearProducto s, Instant ahora, int semillaVersion) {
+        return new Producto(
+                existente.id(), s.nombre(), s.imagen(), s.descripcion(), s.tipo(),
+                s.tiraje(), s.precioCreditos(), s.precioMonedaReal(), s.premium(),
+                s.prototipo(), s.heroe(), s.costoPoder(), s.multiplicadorNivel(),
+                s.turnosCarga(), s.turnosRecarga(), s.efectoGeneral(), s.efectoPotenciado(),
+                s.defensa(), s.parte(), s.efecto(), s.poderDeAtaque(), s.tasaDeCaida(),
+                existente.estado(), existente.version() + 1, existente.creadoEn(), ahora,
+                existente.promocion(), OrigenProducto.SEMILLA, semillaVersion, null,
+                existente.estadoAnteriorSuspension(), existente.reservasRecientes());
     }
 
     // ------------------------------------------------------------ ayudantes

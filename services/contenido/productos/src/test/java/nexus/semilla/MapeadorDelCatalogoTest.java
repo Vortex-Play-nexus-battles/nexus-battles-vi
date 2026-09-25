@@ -251,16 +251,20 @@ class MapeadorDelCatalogoTest {
     }
 
     @Test
-    @DisplayName("el producto conserva el id dado, queda ACTIVO, version 1 y con fechas")
+    @DisplayName("el producto conserva el id dado, queda ACTIVO, version 1, con fechas y las marcas de la semilla")
     void aProducto() {
         Instant ahora = Instant.parse("2026-09-24T12:00:00Z");
         SolicitudCrearProducto s = mapearValido(ARMADURA);
 
-        Producto p = mapeador.aProducto("id-fijo", s, ahora);
+        Producto p = mapeador.aProducto("id-fijo", s, ahora, 3);
 
         assertEquals("id-fijo", p.id());
         assertEquals(EstadoProducto.ACTIVO, p.estado());
         assertEquals(1, p.version());
+        // B4: origen y version del contenido que lo sembro.
+        assertEquals(nexus.dominio.OrigenProducto.SEMILLA, p.origen());
+        assertEquals(3, p.semillaVersion());
+        assertNull(p.modificadoPor());
         assertEquals(ahora, p.creadoEn());
         assertEquals(ahora, p.modificadoEn());
         assertEquals(s.nombre(), p.nombre());

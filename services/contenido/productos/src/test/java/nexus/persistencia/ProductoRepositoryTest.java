@@ -11,6 +11,7 @@ import nexus.api.PaginaDeProductos;
 import nexus.api.ProductoCreado;
 import nexus.aplicacion.ListarProductosServicio;
 import nexus.aplicacion.ProductoMapper;
+import nexus.aplicacion.ProyeccionDeProductos;
 import nexus.dominio.EstadoProducto;
 import nexus.dominio.Producto;
 import nexus.dominio.TipoProducto;
@@ -75,7 +76,9 @@ class ProductoRepositoryTest {
                         ahora,
                         ahora);
 
-                repositorio.save(producto);
+                // insert y no save: con @Version (B4) un documento nuevo que ya
+                // trae version 1 se leeria como la edicion de uno que no existe.
+                repositorio.insert(producto);
 
                 Producto recuperado = repositorio
                         .findById(producto.id())
@@ -150,7 +153,7 @@ class ProductoRepositoryTest {
          */
         private void guardarCatalogoDePrueba() {
                 Instant base = Instant.parse("2026-09-20T12:00:00Z");
-                repositorio.saveAll(List.of(
+                repositorio.insert(List.of(
                         productoDelListado("p-1", TipoProducto.ARMA,
                                 EstadoProducto.ACTIVO, base),
                         productoDelListado("p-2", TipoProducto.HEROE,
@@ -166,7 +169,9 @@ class ProductoRepositoryTest {
         private ListarProductosServicio listadoReal() {
                 return new ListarProductosServicio(
                         repositorio,
-                        Mappers.getMapper(ProductoMapper.class));
+                        new ProyeccionDeProductos(
+                                Mappers.getMapper(ProductoMapper.class),
+                                java.time.Clock.systemUTC()));
         }
 
         private static List<String> ids(PaginaDeProductos pagina) {

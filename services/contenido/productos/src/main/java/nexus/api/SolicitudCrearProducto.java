@@ -3,6 +3,8 @@ package nexus.api;
 import java.math.BigDecimal;
 import java.util.Set;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
@@ -78,7 +80,45 @@ public record SolicitudCrearProducto(
 
         @DecimalMin("0.0")
         @DecimalMax("100.0")
-        BigDecimal tasaDeCaida) {
+        BigDecimal tasaDeCaida,
+
+        // B4 (contrato 1.4.0): opcional, para cualquier tipo de producto.
+        @Valid
+        SolicitudPromocion promocion) {
+
+        /** El constructor canonico es el que usa Jackson, aunque haya otros. */
+        @JsonCreator
+        public SolicitudCrearProducto {
+        }
+
+        /** La forma anterior a B4, sin promocion (semilla, fusion y pruebas previas). */
+        public SolicitudCrearProducto(
+                        String nombre,
+                        String imagen,
+                        String descripcion,
+                        TipoProducto tipo,
+                        Integer tiraje,
+                        Integer precioCreditos,
+                        BigDecimal precioMonedaReal,
+                        Boolean premium,
+                        String prototipo,
+                        String heroe,
+                        Integer costoPoder,
+                        BigDecimal multiplicadorNivel,
+                        Integer turnosCarga,
+                        Integer turnosRecarga,
+                        String efectoGeneral,
+                        String efectoPotenciado,
+                        Integer defensa,
+                        ParteArmadura parte,
+                        String efecto,
+                        Integer poderDeAtaque,
+                        BigDecimal tasaDeCaida) {
+                this(nombre, imagen, descripcion, tipo, tiraje, precioCreditos, precioMonedaReal,
+                        premium, prototipo, heroe, costoPoder, multiplicadorNivel, turnosCarga,
+                        turnosRecarga, efectoGeneral, efectoPotenciado, defensa, parte, efecto,
+                        poderDeAtaque, tasaDeCaida, null);
+        }
 
         private static final Set<String> PROTOTIPOS_VALIDOS = Set.of(
                 "Guerrero Tanque",
