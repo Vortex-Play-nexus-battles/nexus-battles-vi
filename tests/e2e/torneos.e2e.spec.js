@@ -552,17 +552,26 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     expect(actual.encuentros[4].ganador, 'lo jugado no se toca').toBe(gano5);
 
     // RF-TOR-007 (torneos.yaml 1.2.0, B10): cada integrante del campeon recibe
-    // los creditos del premio por el libro, con refId estable, en la misma
-    // peticion que registra la final. El monto es el PROVISIONAL de D-24; la
-    // epica depende de /inventario/entregas (inventario.yaml 1.4.0, B4) y aqui
-    // no se afirma: si inventario aun no la sirve, queda pendiente y se
-    // reintenta sin repetir los creditos.
+    // los creditos del premio por el libro, con refId estable, fuera de la
+    // transaccion de la final: la propia peticion lo intenta en el acto y, si
+    // un proveedor tarda mas que su presupuesto, lo termina la tarea
+    // programada (cada 3 s en este banco). Por eso se espera, no se exige en
+    // la respuesta. El monto es el PROVISIONAL de D-24; la epica depende de
+    // /inventario/entregas (inventario.yaml 1.4.0, B4) y aqui no se afirma: si
+    // inventario aun no la sirve, queda pendiente y se reintenta sin repetir
+    // los creditos.
     expect(actual.premio.estado).not.toBe('SIN_CAMPEON');
     expect(actual.premio.estado).not.toBe('NO_APLICA');
     expect(actual.premio.entregas.map((e) => e.uid).sort()).toEqual(
       [anfitriona.claims.uid, invitado.claims.uid].sort(),
     );
-    expect(actual.premio.entregas.every((e) => e.creditosEntregados)).toBe(true);
+    await expect
+      .poll(async () => (await detalle()).premio.entregas.every((e) => e.creditosEntregados), {
+        message: 'los creditos del premio llegan a los dos integrantes',
+        timeout: 30_000,
+      })
+      .toBe(true);
+    actual = await detalle();
     const saldoConPremio = await saldoDe(anfitriona);
     expect(saldoConPremio.bruto, 'el premio se acredita una sola vez').toBe(
       saldoAntesDelPremio.bruto + actual.premio.creditosPorIntegrante,
