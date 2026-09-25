@@ -255,6 +255,56 @@ describe('montarCuenta()', () => {
     expect(sessionStorage.getItem('nexus.apodoActual')).toBe('Valkiria');
   });
 
+  test('UXC-7 — el resumen dice el estado de la cuenta: en regla, o la suspensión con su cuenta atrás', async () => {
+    const hasta = new Date(Date.now() + 2 * 86_400_000).toISOString();
+    const raiz = montarVista();
+    const fetchImpl = fetchFalso({
+      '/perfiles/': () => respuesta(PERFIL),
+      '/sanciones/usuarios/u-1': () =>
+        respuesta([
+          {
+            id: 's-1',
+            tipo: 'SUSPENSION',
+            motivo: 'Lenguaje ofensivo',
+            vigenteHasta: hasta,
+            vigente: true,
+            emitidaEn: new Date().toISOString(),
+          },
+        ]),
+      '/saldo': () => respuesta({ saldoDisponible: 0, saldoReservado: 0 }),
+      '/movimientos': () => respuesta({ content: [] }),
+    });
+
+    const cuenta = montarCuenta(raiz, { sesion: SESION, fetchImpl });
+    await cuenta.recargar();
+    await new Promise((r) => setTimeout(r, 0));
+
+    const estado = raiz.querySelector('[data-estado-cuenta]');
+    expect(estado.dataset.estadoCuenta).toBe('suspendida');
+    expect(estado.textContent).toContain('Suspensión activa');
+    expect(estado.textContent).toContain('Motivo: Lenguaje ofensivo');
+    expect(estado.querySelector('time.cuenta-atras').getAttribute('datetime')).toBe(hasta);
+    expect(estado.querySelector('a').getAttribute('href')).toMatch(/mis-sanciones\.html$/);
+  });
+
+  test('UXC-7 — si no se puede consultar, no se dice «en regla»', async () => {
+    const raiz = montarVista();
+    const fetchImpl = fetchFalso({
+      '/perfiles/': () => respuesta(PERFIL),
+      '/sanciones/': () => respuesta({}, { ok: false, status: 503 }),
+      '/saldo': () => respuesta({ saldoDisponible: 0, saldoReservado: 0 }),
+      '/movimientos': () => respuesta({ content: [] }),
+    });
+
+    const cuenta = montarCuenta(raiz, { sesion: SESION, fetchImpl });
+    await cuenta.recargar();
+    await new Promise((r) => setTimeout(r, 0));
+
+    const zona = raiz.querySelector('[data-zona="resumen-estado"]');
+    expect(zona.textContent).toContain('No pudimos consultar el estado de tu cuenta');
+    expect(zona.textContent).not.toContain('en regla');
+  });
+
   test('si el perfil no carga, avisa sin dejar la vista en blanco (#567)', async () => {
     const raiz = montarVista();
     const fetchImpl = fetchFalso({

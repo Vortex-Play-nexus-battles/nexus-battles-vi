@@ -21,6 +21,9 @@ import { nodo } from '../../comun/ui/dom.js';
 import { pintarAviso } from '../../comun/ui/aviso.js';
 import { estadoDeError, pintarEstado } from '../../comun/ui/estado-vista.js';
 import { campo } from '../../comun/ui/campo.js';
+import { cuentaAtrasRotulada, vigilarCuentasAtras } from '../../comun/ui/cuenta-atras.js';
+import { lineaDeTiempo } from '../../comun/ui/linea-de-tiempo.js';
+import { estadoDeCuenta, hechosDeSanciones, NOMBRE_DE_SANCION } from '../../comun/ui/sancion.js';
 
 export const TIPO = Object.freeze({
   ADVERTENCIA: 'ADVERTENCIA',
@@ -142,16 +145,18 @@ export function tiempoRestante(vigenteHasta, ahora = Date.now()) {
  * @returns {string}
  */
 export function descripcionDe(sancion, ahora = Date.now()) {
-  const nombre =
-    { ADVERTENCIA: 'Advertencia', SUSPENSION: 'Suspension', BANEO: 'Baneo definitivo' }[
-      sancion.tipo
-    ] ?? sancion.tipo;
+  const nombre = NOMBRE_DE_SANCION[sancion.tipo] ?? sancion.tipo;
   if (sancion.revertidaEn) {
     return `${nombre} · revertida`;
   }
   if (sancion.tipo === TIPO.SUSPENSION) {
-    const resto = tiempoRestante(sancion.vigenteHasta, ahora);
-    return resto === 'vencida' ? `${nombre} · vencida` : `${nombre} · quedan ${resto}`;
+    // UXC-7 — si el servidor dice si sigue vigente, manda él; la fecha solo
+    // se mira cuando no lo dice. El tiempo que falta va en su cuenta atrás.
+    const vencida =
+      typeof sancion.vigente === 'boolean'
+        ? !sancion.vigente
+        : tiempoRestante(sancion.vigenteHasta, ahora) === 'vencida';
+    return vencida ? `${nombre} · vencida` : `${nombre} · activa`;
   }
   if (sancion.tipo === TIPO.BANEO) {
     return `${nombre} · sin fecha fin`;
@@ -315,6 +320,22 @@ export function tarjetaDeSancion(
   if (sancion.revertidaEn && sancion.motivoReversion) {
     tarjeta.appendChild(nodo('p', 't-meta', `Revertida: ${sancion.motivoReversion}`));
   }
+  // UXC-7 — SanctionCountdown: una suspensión activa dice cuánto le falta, y
+  // la cuenta atrás corre sola (`vigilarCuentasAtras` en la vista).
+  if (descripcionDe(sancion, ahora).endsWith('· activa') && sancion.vigenteHasta) {
+    const vence = nodo('p', 't-meta');
+    vence.append(
+      cuentaAtrasRotulada(sancion.vigenteHasta),
+      ` · hasta el ${new Date(sancion.vigenteHasta).toLocaleString('es-CO', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        hour: '2-digit',
+        minute: '2-digit',
+      })}`,
+    );
+    tarjeta.appendChild(vence);
+  }
   if (puedeApelar && typeof apelar === 'function') {
     const boton = nodo('button', 'boton boton--secundario boton--pequeno', 'Apelar');
     boton.type = 'button';
@@ -357,11 +378,11 @@ export function tarjetaDeApelacion(apelacion, { resolver } = {}) {
     // de formularios del producto.
     const decision = campo({
       nombre: 'decision',
-      etiqueta: 'Decision',
+      etiqueta: 'Decisión',
       requerido: true,
       opciones: [
         { valor: 'MANTENIDA', texto: 'Mantener' },
-        { valor: 'REDUCIDA', texto: 'Reducir (suspension)' },
+        { valor: 'REDUCIDA', texto: 'Reducir (suspensión)' },
         { valor: 'REVERTIDA', texto: 'Revertir' },
       ],
     });
@@ -373,7 +394,7 @@ export function tarjetaDeApelacion(apelacion, { resolver } = {}) {
     });
     const motivacion = campo({
       nombre: 'motivo',
-      etiqueta: 'Motivacion',
+      etiqueta: 'Motivación',
       requerido: true,
       multilinea: true,
     });
@@ -450,6 +471,30 @@ export function montarPanelDeModeracion(
    * etiqueta salen de `GET /api/v1/sanciones/limites`, que es la misma fuente
    * que usa la validación.
    */
+  /**
+   * UXC-7 — AdminTimeline: el estado de la cuenta (con la cuenta atrás de la
+   * sanción que la restringe) y su historial como línea de tiempo: emitida,
+   * revertida, termina o terminó. Antes eran tarjetas sueltas sin orden.
+   *
+   * @param {object[]} sanciones
+   */
+  function pintarHistorialDeLaCuenta(sanciones) {
+    pararCuentas();
+    zonaHistorial.replaceChildren(
+      estadoDeCuenta(sanciones, { persona: 'tercera', titulo: 'Estado de la cuenta consultada' }),
+    );
+    if (sanciones.length === 0) {
+      zonaHistorial.appendChild(nodo('p', 't-meta', 'Este usuario no tiene sanciones.'));
+      return;
+    }
+    zonaHistorial.appendChild(
+      lineaDeTiempo(hechosDeSanciones(sanciones, { ahora: ahora() }), {
+        etiqueta: 'Historial de sanciones de la cuenta',
+      }),
+    );
+    pararCuentas = vigilarCuentasAtras(zonaHistorial);
+  }
+
   async function aplicarLimites() {
     const duracion = formEmitir?.querySelector('[name="duracionHoras"]');
     const etiqueta = raiz.querySelector('[data-campo="rango-suspension"]');
@@ -485,15 +530,13 @@ export function montarPanelDeModeracion(
     return limites;
   }
 
+  let pararCuentas = () => {};
+
   async function cargarHistorial(uid) {
     zonaHistorial.replaceChildren(nodo('p', 't-meta', 'Cargando…'));
     try {
       const sanciones = await api.historial(uid, fetchImpl);
-      zonaHistorial.replaceChildren();
-      if (sanciones.length === 0) {
-        zonaHistorial.appendChild(nodo('p', 't-meta', 'Este usuario no tiene sanciones.'));
-      }
-      sanciones.forEach((s) => zonaHistorial.appendChild(tarjetaDeSancion(s, { ahora: ahora() })));
+      pintarHistorialDeLaCuenta(sanciones);
     } catch (error) {
       const deNegocio = error instanceof ErrorDeSanciones;
       pintarEstado(
@@ -613,6 +656,8 @@ export function montarMisSanciones(raiz, { uid, fetchImpl, ahora = () => Date.no
   const zonaApelaciones = raiz.querySelector('[data-zona="apelaciones"]');
   const zonaIntro = raiz.querySelector('[data-zona="intro"]');
   const formApelar = raiz.querySelector('[data-zona="apelar"]');
+  const zonaEstado = raiz.querySelector('[data-zona="estado-cuenta"]');
+  let pararCuentas = () => {};
 
   async function cargar() {
     try {
@@ -633,6 +678,10 @@ export function montarMisSanciones(raiz, { uid, fetchImpl, ahora = () => Date.no
           'el panel de revisión responde con una decisión motivada.';
       }
       zonaSanciones.replaceChildren();
+      // UXC-7 — lo primero, si la cuenta está restringida y hasta cuándo.
+      if (zonaEstado) {
+        zonaEstado.replaceChildren(estadoDeCuenta(sanciones, { titulo: 'Estado de tu cuenta' }));
+      }
       if (sanciones.length === 0) {
         zonaSanciones.appendChild(
           nodo('p', 't-meta', 'No tienes ninguna sanción. Tu cuenta está en regla.'),
@@ -658,6 +707,8 @@ export function montarMisSanciones(raiz, { uid, fetchImpl, ahora = () => Date.no
         );
       }
       apelaciones.forEach((a) => zonaApelaciones.appendChild(tarjetaDeApelacion(a)));
+      pararCuentas();
+      pararCuentas = vigilarCuentasAtras(raiz.querySelector('main') ?? zonaSanciones);
     } catch (error) {
       // UX-R3.8 — el fallo se pinta DONDE iban las sanciones, no solo en el
       // aviso de arriba. Antes quedaban dos tarjetas vacias —«Sanciones» y
