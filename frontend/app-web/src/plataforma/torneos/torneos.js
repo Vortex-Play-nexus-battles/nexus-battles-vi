@@ -1002,16 +1002,20 @@ export function montarTorneos(
       rondas.forEach(({ ronda, encuentros }, indice) => {
         const columna = nodo('div', 'arbol-torneo__ronda');
         columna.dataset.ronda = String(ronda);
-        columna.appendChild(
-          nodo(
-            'p',
-            't-meta',
-            nombreDeRonda(llave, ronda, {
-              cantidad: encuentros.length,
-              ultima: indice === rondas.length - 1,
-            }),
-          ),
-        );
+        // La gran final ya la nombra su llave: repetirlo encima del único
+        // encuentro no dice nada nuevo.
+        if (llave !== 'FINAL') {
+          columna.appendChild(
+            nodo(
+              'p',
+              't-meta',
+              nombreDeRonda(llave, ronda, {
+                cantidad: encuentros.length,
+                ultima: indice === rondas.length - 1,
+              }),
+            ),
+          );
+        }
         encuentros.forEach((e) => columna.appendChild(tarjetaDeEncuentro(torneo, e, uid)));
         cuadro.appendChild(columna);
       });

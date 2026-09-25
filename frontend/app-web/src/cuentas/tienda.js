@@ -270,8 +270,11 @@ export function pintarCatalogo(doc = document) {
       rejilla,
       estadoVacio({
         titulo: 'La tienda no tiene productos ahora mismo',
-        detalle: 'Vuelve más tarde: el catálogo lo publica la administración.',
+        detalle:
+          'El catálogo lo publica la administración y todavía no hay nada a la venta. Mientras tanto, puedes jugar y ganar créditos.',
         icono: '◇',
+        // UXC-9 — un vacío con salida.
+        accion: { texto: 'Jugar una batalla', href: '../plataforma/salas-partidas/batallas.html' },
       }),
     );
     pintarResultado(doc, '');

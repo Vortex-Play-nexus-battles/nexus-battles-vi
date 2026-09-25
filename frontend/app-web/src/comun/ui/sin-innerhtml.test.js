@@ -116,15 +116,15 @@ const REVISADOS = new Map([
       'nombre a la variable (fila -> nodo, porque «fila» pasó a ser el modelo ' +
       'que devuelve el adaptador) y la movio 78 lineas; la plantilla es la misma.',
   ],
-  ['cuentas/pujas.js:1879', 'plantilla fija del estado de carga'],
-  ['cuentas/pujas.js:1897', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
+  ['cuentas/pujas.js:1907', 'plantilla fija del estado de carga'],
+  ['cuentas/pujas.js:1925', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
   [
-    'cuentas/pujas.js:1920',
+    'cuentas/pujas.js:1948',
     'plantilla fija del estado vacío; UXC-8 le puso delante la alerta, cuyo ' +
       'mensaje ahora también pasa por esc()',
   ],
   [
-    'cuentas/pujas.js:1960',
+    'cuentas/pujas.js:1988',
     'DELIBERADO y SANEADO (UX-R2.8c): las 20 interpolaciones con datos del ' +
       'servidor pasan por esc(); pujas.test.js lo comprueba con cargas reales. ' +
       'La estructura (2.297 líneas de plantilla) se mueve en UX-R2.10.',

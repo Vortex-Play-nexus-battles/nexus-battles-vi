@@ -380,6 +380,62 @@ describe('sondeo sin canal (riesgo #7)', () => {
   });
 });
 
+describe('el historial del detalle', () => {
+  test('sobrevive a la relectura del listado (el sondeo no lo hace parpadear)', async () => {
+    const api = apiFalsa({
+      historial: jest.fn(async () => [
+        {
+          id: 'p1',
+          monto: '1350',
+          tipo: 'MANUAL',
+          estado: 'VIGENTE',
+          creadaEn: '2026-09-25T10:00:00Z',
+          esTuya: false,
+        },
+      ]),
+    });
+    const { contenedor, ctrl } = montar({ api });
+    await ctrl.iniciar();
+    ctrl.abrirDetalle('sub-1');
+    await esperar();
+    expect(contenedor.querySelectorAll('.item-historial')).toHaveLength(1);
+
+    api.historial.mockImplementation(() => new Promise(() => {}));
+    ctrl.recargar();
+    await esperar();
+
+    expect(contenedor.querySelectorAll('.item-historial')).toHaveLength(1);
+    ctrl.destruir();
+  });
+
+  test('vacío, dice si nadie pujó o si no se pudo traer; nunca un hueco', async () => {
+    const api = apiFalsa({
+      historial: jest.fn(async () => {
+        throw new Error('red');
+      }),
+    });
+    const { contenedor, ctrl } = montar({ api });
+    await ctrl.iniciar();
+    ctrl.abrirDetalle('sub-1');
+    await esperar();
+    expect(contenedor.querySelector('.historial-vacio').textContent).toContain(
+      'no pudimos traer el detalle',
+    );
+    ctrl.destruir();
+
+    const sinPujas = montar({
+      api: apiFalsa({ listado: [subasta({ rivales: 0 })], historial: jest.fn(async () => []) }),
+    });
+    await sinPujas.ctrl.iniciar();
+    sinPujas.ctrl.abrirDetalle('sub-1');
+    await esperar();
+    expect(sinPujas.contenedor.querySelector('.historial-vacio').textContent).toContain(
+      'Nadie ha pujado todavía',
+    );
+    sinPujas.ctrl.destruir();
+  });
+});
+
 describe('repintar no roba el foco', () => {
   test('quien escribe un monto sigue en el campo tras un repintado', async () => {
     const { contenedor, ctrl } = montar({ api: apiFalsa() });

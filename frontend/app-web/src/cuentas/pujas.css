@@ -1780,3 +1780,33 @@ body {
     flex-wrap: wrap;
   }
 }
+
+/* UXC-8 — lo que va directamente sobre la atmósfera lee la tinta, no la
+   paleta: el título de «Mis subastas» (`.titulo-grande` de tema-cuentas es
+   oscuro) y la barra de volver del detalle («← Volver…», lo retenido). El
+   laboratorio no cubría estas dos pantallas y los dos quedaban por debajo de
+   2:1 sobre el cromo. */
+.mis-subastas-cabecera .titulo-grande {
+  color: var(--tinta);
+  text-align: left;
+}
+
+.barra-volver .btn-texto {
+  color: var(--tinta-enlace);
+}
+
+.barra-volver .btn-texto:hover {
+  color: var(--tinta-enlace-hover);
+}
+
+.barra-volver .separador-pipe {
+  color: var(--tinta-3);
+}
+
+.barra-volver .saldo-contextual {
+  color: var(--tinta-2);
+}
+
+.barra-volver .saldo-contextual strong {
+  color: var(--tinta);
+}

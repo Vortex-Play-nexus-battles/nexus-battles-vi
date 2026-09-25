@@ -736,6 +736,21 @@ export function vistaDeParticipacion(conocida, ahora = Date.now()) {
   };
 }
 
+/**
+ * El historial guardado de una subasta, sobre la subasta que se pinta.
+ *
+ * @param {object} sub
+ * @param {{fallido: boolean, lista: object[]}|undefined} guardado
+ */
+function aplicarHistorial(sub, guardado) {
+  if (!sub || !guardado) {
+    return;
+  }
+  sub.historial = guardado.lista;
+  sub.historialCargado = !guardado.fallido;
+  sub.historialFallido = guardado.fallido;
+}
+
 // =========================================================================
 // Controlador y renderizador interactivo DOM
 // =========================================================================
@@ -779,6 +794,10 @@ export class ControladorSubastas {
     // listado se relee entero con cada cambio y sin esto «Mis subastas»
     // olvidaría dónde pujas a la primera recarga.
     this.participaciones = new Map();
+    // Y el historial de cada subasta abierta en detalle: sin guardarlo, cada
+    // relectura del listado (el sondeo, cada 5 s sin canal) lo borraba y lo
+    // volvía a pedir, y la lista parpadeaba.
+    this.historiales = new Map();
     this.participacionesRevisadas = false;
     this.consultandoParticipaciones = false;
     // UXC-8 — la subasta que acabas de comprar: sale del listado de abiertas
@@ -991,15 +1010,23 @@ export class ControladorSubastas {
     ]);
 
     if (historial) {
-      sub.historial = historial.map((p) => ({
-        apodo: p.esTuya ? 'Tú' : 'Otro jugador',
-        monto: Number(p.monto),
-        tipo: p.tipo === 'AUTOMATICA' ? 'Automática' : 'Manual',
-        cuando: p.creadaEn,
-        esTu: p.esTuya,
-      }));
-      sub.historialCargado = true;
+      this.historiales.set(id, {
+        fallido: false,
+        lista: historial.map((p) => ({
+          apodo: p.esTuya ? 'Tú' : 'Otro jugador',
+          monto: Number(p.monto),
+          tipo: p.tipo === 'AUTOMATICA' ? 'Automática' : 'Manual',
+          cuando: p.creadaEn,
+          esTu: p.esTuya,
+        })),
+      });
+    } else if (!this.historiales.get(id)?.lista.length) {
+      this.historiales.set(id, { fallido: true, lista: [] });
     }
+    // La subasta de ahora, no la de antes de esperar: una recarga pudo
+    // cambiar el objeto mientras llegaban las respuestas.
+    const actual = this.subastas.find((s) => s.id === id) ?? sub;
+    aplicarHistorial(actual, this.historiales.get(id));
 
     if (participacion) {
       this.aplicarParticipacion(id, participacion);
@@ -1050,13 +1077,14 @@ export class ControladorSubastas {
     return conocida;
   }
 
-  /** Vuelve a poner lo que se sabía de tu participación tras releer el listado. */
+  /** Vuelve a poner lo que se sabía (participación e historial) tras releer el listado. */
   reaplicarParticipaciones() {
     for (const sub of this.subastas) {
       const conocida = this.participaciones.get(sub.id);
       if (conocida) {
         Object.assign(sub, vistaDeParticipacion(conocida));
       }
+      aplicarHistorial(sub, this.historiales.get(sub.id));
     }
   }
 
@@ -2880,18 +2908,14 @@ export class ControladorSubastas {
                   </tbody>
                 </table>
               </div>`
-                  : `
-              <div class="alerta alerta-informativa aviso-sin-comparativa" role="note">
-                <strong>${iconoHtml('alerta', { clase: 'icono icono--menudo' })} Sin comparativa de héroe.</strong>
-                La subasta no dice qué nivel pide ni qué aporta este objeto a un héroe.
-                Revisa el objeto en tu inventario antes de pujar.
-              </div>`
+                  : this.avisoSinComparativa(sub)
               }
             </div>
 
             <!-- Historial de Pujas -->
             <div class="panel-historial">
               <h3 class="titulo-mediano">Historial de pujas (${sub.historial.length})</h3>
+              ${this.vacioDelHistorial(sub)}
               <ul class="lista-historial">
                 ${sub.historial
                   .map(
@@ -3049,6 +3073,42 @@ export class ControladorSubastas {
         }
       </div>
     `;
+  }
+
+  /**
+   * Sin nivel ni aporte en el contrato no hay comparativa con el héroe; se
+   * dice, salvo en tu propia subasta, donde no vas a pujar.
+   */
+  avisoSinComparativa(sub) {
+    if (sub.esPropia) {
+      return '';
+    }
+    return `
+              <div class="alerta alerta-informativa aviso-sin-comparativa" role="note">
+                <strong>${iconoHtml('alerta', { clase: 'icono icono--menudo' })} Sin comparativa de héroe.</strong>
+                La subasta no dice qué nivel pide ni qué aporta este objeto a un héroe.
+                Revisa el objeto en tu inventario antes de pujar.
+              </div>`;
+  }
+
+  /**
+   * UXC-9 — el historial vacío dice por qué: nadie ha pujado, o no se pudo
+   * traer (y entonces no se afirma que no haya pujas).
+   */
+  vacioDelHistorial(sub) {
+    if (sub.historial.length > 0) {
+      return '';
+    }
+    const pujas = Number(sub.rivales) || 0;
+    if (pujas === 0) {
+      return sub.esPropia
+        ? '<p class="texto-pista historial-vacio">Nadie ha pujado todavía.</p>'
+        : '<p class="texto-pista historial-vacio">Nadie ha pujado todavía: la primera oferta puede ser la tuya.</p>';
+    }
+    if (this.api && !sub.historialCargado && !sub.historialFallido) {
+      return '<p class="texto-pista historial-vacio" role="status">Cargando el historial…</p>';
+    }
+    return `<p class="texto-pista historial-vacio">Esta subasta lleva ${pujas} ${pujas === 1 ? 'puja' : 'pujas'}, pero no pudimos traer el detalle ahora. Vuelve a abrirla en un momento.</p>`;
   }
 
   /** De quién es la subasta: tuya, de un vendedor con nombre o nada. */

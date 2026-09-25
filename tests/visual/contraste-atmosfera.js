@@ -26,6 +26,19 @@
 export function textoSinContrasteSobreAtmosfera(pagina) {
   return pagina.evaluate(() => {
     const parsear = (c) => {
+      // UXC-8 — `color-mix()` se resuelve como `color(srgb r g b)`, con los
+      // canales entre 0 y 1: sin leerlo, una fila con fondo mezclado (la
+      // subasta superada) contaba como transparente y su texto como si
+      // estuviera sobre la atmósfera.
+      const srgb = c.match(/color\(srgb\s+([^)]+)\)/);
+      if (srgb) {
+        const [canales, alfa] = srgb[1].split('/');
+        const [r, g, b] = canales
+          .trim()
+          .split(/\s+/)
+          .map((v) => Number(v) * 255);
+        return { r, g, b, a: alfa === undefined ? 1 : Number(alfa) };
+      }
       const m = c.match(/rgba?\(([^)]+)\)/);
       if (!m) {
         return null;
