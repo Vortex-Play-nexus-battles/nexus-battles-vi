@@ -4,15 +4,33 @@
 <body>
   <table>
     <tbody>
+      <!--
+        Dos propositos con el mismo correo base (contrato 1.4.0):
+          VERIFICACION: un jugador se acaba de registrar y tiene que probar que
+                        el buzon es suyo; el enlace lleva a /verificar.
+          ACTIVACION:   un Super Administrador le creo la cuenta y le falta
+                        elegir su contrasena; el enlace lleva a /restablecer.
+        Sin proposito se pinta la activacion, que es lo que ms-identidad ya
+        enviaba antes de la 1.4.0.
+      -->
       <tr layout:fragment="contenido">
-        <td align="left" style="font-size:0px;padding:10px 25px;word-break:break-word;">
-          <div style="font-family:Arial, Helvetica, sans-serif;font-size:20px;font-weight:700;line-height:28px;color:#111726;padding-bottom:12px;">
+        <td align="left" style="font-size:0px;padding:10px 25px;word-break:break-word;"
+            th:with="verificacion=${proposito} == 'VERIFICACION'">
+          <div style="font-family:Arial, Helvetica, sans-serif;font-size:20px;font-weight:700;line-height:28px;color:#111726;padding-bottom:12px;"
+               th:text="${verificacion} ? 'Confirma tu cuenta' : 'Activa tu cuenta'">
             Confirma tu cuenta
           </div>
-          <div style="font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:24px;color:#111726;padding-bottom:16px;">
-            Hola, <span th:text="${apodo}">Jugador</span>. Falta un paso para activar tu
-            cuenta en The Nexus Battles VI: escribe este código en la pantalla de
-            verificación.
+          <div th:if="${verificacion}"
+               style="font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:24px;color:#111726;padding-bottom:16px;">
+            Hola, <span th:text="${apodo}">Jugador</span>. Gracias por registrarte en The Nexus
+            Battles VI. Para activar tu cuenta, confirma que este correo es tuyo: pulsa el botón
+            o escribe este código en la pantalla de verificación.
+          </div>
+          <div th:unless="${verificacion}"
+               style="font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:24px;color:#111726;padding-bottom:16px;">
+            Hola, <span th:text="${apodo}">Jugador</span>. Un Super Administrador creó tu cuenta en
+            The Nexus Battles VI. Para activarla, elige tu propia contraseña: pulsa el botón o
+            escribe este código en la pantalla para restablecer la contraseña.
           </div>
 
           <table border="0" cellpadding="0" cellspacing="0" role="presentation"
@@ -26,14 +44,43 @@
             </tbody>
           </table>
 
-          <div style="font-family:Arial, Helvetica, sans-serif;font-size:14px;line-height:22px;color:#8A4A00;padding-top:16px;">
-            El código vence en <strong th:text="${minutosVigencia}">15</strong> minutos. Si
-            caduca, pide uno nuevo desde la misma pantalla: el anterior deja de servir.
+          <table th:if="${enlace != null}" border="0" cellpadding="0" cellspacing="0" role="presentation"
+                 style="margin-top:20px;">
+            <tbody>
+              <tr>
+                <td align="center" bgcolor="#1E3F88" style="border-radius:6px;background:#1E3F88;">
+                  <a th:href="${enlace}" href="#" target="_blank"
+                     style="display:inline-block;padding:12px 24px;font-family:Arial, Helvetica, sans-serif;font-size:16px;font-weight:700;line-height:20px;color:#FFFFFF;text-decoration:none;border-radius:6px;"
+                     th:text="${verificacion} ? 'Confirmar mi correo' : 'Elegir mi contraseña'">Confirmar mi correo</a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div th:if="${enlace != null}"
+               style="font-family:Arial, Helvetica, sans-serif;font-size:13px;line-height:20px;color:#57627A;padding-top:12px;word-break:break-all;">
+            Si el botón no funciona, copia este enlace en tu navegador:<br />
+            <span th:text="${enlace}">https://</span>
           </div>
 
-          <div style="font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:24px;color:#111726;padding-top:16px;">
-            Si no creaste esta cuenta, ignora este mensaje: sin el código nadie puede
-            activarla.
+          <div th:if="${verificacion}"
+               style="font-family:Arial, Helvetica, sans-serif;font-size:14px;line-height:22px;color:#8A4A00;padding-top:16px;">
+            El código vence en <strong th:text="${minutosVigencia}">15</strong> minutos y solo sirve
+            una vez. Si caduca, pide uno nuevo desde la pantalla de verificación: el anterior deja
+            de servir.
+          </div>
+          <div th:unless="${verificacion}"
+               style="font-family:Arial, Helvetica, sans-serif;font-size:14px;line-height:22px;color:#8A4A00;padding-top:16px;">
+            El código vence en <strong th:text="${minutosVigencia}">15</strong> minutos y solo sirve
+            una vez. Si caduca, pide a quien creó tu cuenta que te envíe uno nuevo.
+          </div>
+
+          <div th:if="${verificacion}"
+               style="font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:24px;color:#111726;padding-top:16px;">
+            Si no creaste esta cuenta, ignora este mensaje: sin el código nadie puede activarla.
+          </div>
+          <div th:unless="${verificacion}"
+               style="font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:24px;color:#111726;padding-top:16px;">
+            Si no esperabas este mensaje, ignóralo: sin el código nadie puede activar la cuenta.
           </div>
         </td>
       </tr>

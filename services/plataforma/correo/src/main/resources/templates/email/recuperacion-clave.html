@@ -11,7 +11,8 @@
           </div>
           <div style="font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:24px;color:#111726;padding-bottom:16px;">
             Hola, <span th:text="${apodo}">Jugador</span>. Recibimos una solicitud para
-            restablecer la contraseña de tu cuenta. Usa este código para continuar:
+            restablecer la contraseña de tu cuenta. Pulsa el botón o escribe este código en la
+            pantalla de recuperación para elegir una contraseña nueva:
           </div>
 
           <table border="0" cellpadding="0" cellspacing="0" role="presentation"
@@ -25,14 +26,32 @@
             </tbody>
           </table>
 
+          <table th:if="${enlace != null}" border="0" cellpadding="0" cellspacing="0" role="presentation"
+                 style="margin-top:20px;">
+            <tbody>
+              <tr>
+                <td align="center" bgcolor="#1E3F88" style="border-radius:6px;background:#1E3F88;">
+                  <a th:href="${enlace}" href="#" target="_blank"
+                     style="display:inline-block;padding:12px 24px;font-family:Arial, Helvetica, sans-serif;font-size:16px;font-weight:700;line-height:20px;color:#FFFFFF;text-decoration:none;border-radius:6px;">Restablecer mi contraseña</a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div th:if="${enlace != null}"
+               style="font-family:Arial, Helvetica, sans-serif;font-size:13px;line-height:20px;color:#57627A;padding-top:12px;word-break:break-all;">
+            Si el botón no funciona, copia este enlace en tu navegador:<br />
+            <span th:text="${enlace}">https://</span>
+          </div>
+
           <div style="font-family:Arial, Helvetica, sans-serif;font-size:14px;line-height:22px;color:#8A4A00;padding-top:16px;">
             El código vence en <strong th:text="${minutosVigencia}">15</strong> minutos y
-            solo puede usarse una vez.
+            solo puede usarse una vez. Si configuraste preguntas de seguridad, también te
+            las pediremos.
           </div>
 
           <div style="font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:24px;color:#111726;padding-top:16px;">
-            Si no pediste este cambio, ignora este mensaje: tu contraseña actual sigue
-            siendo válida y nadie puede cambiarla sin este código.
+            Si no pediste este cambio, ignora este mensaje: tu contraseña actual sigue siendo
+            válida y nadie puede cambiarla sin este código.
           </div>
         </td>
       </tr>

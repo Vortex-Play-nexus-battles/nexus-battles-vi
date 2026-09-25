@@ -1,0 +1,73 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{email/layout-corporativo}">
+<body>
+  <table>
+    <tbody>
+      <!--
+        Aviso de sancion (7.3.2 y 7.3.7 del documento del curso). El 7.3.7 fija
+        lo que lleva cada aviso: la accion tomada, el motivo, el proceso de
+        apelacion si aplica y la fecha de vigencia si aplica. Los textos de
+        cada tipo repiten lo que el 7.3.2 dice de el, sin anadir politicas.
+      -->
+      <tr layout:fragment="contenido">
+        <td align="left" style="font-size:0px;padding:10px 25px;word-break:break-word;">
+          <div style="font-family:Arial, Helvetica, sans-serif;font-size:20px;font-weight:700;line-height:28px;color:#111726;padding-bottom:12px;"
+               th:switch="${tipo}">
+            <span th:case="'ADVERTENCIA'">Recibiste una advertencia</span>
+            <span th:case="'SUSPENSION'">Tu cuenta está suspendida</span>
+            <span th:case="'BANEO'">Tu cuenta fue baneada de forma definitiva</span>
+            <span th:case="'APELACION_RESUELTA'">Tu apelación fue resuelta</span>
+            <span th:case="*">Aviso sobre tu cuenta</span>
+          </div>
+          <div style="font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:24px;color:#111726;padding-bottom:8px;">
+            Hola, <span th:text="${apodo}">Jugador</span>.
+          </div>
+          <div style="font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:24px;color:#111726;padding-bottom:16px;"
+               th:switch="${tipo}">
+            <span th:case="'ADVERTENCIA'">Tu cuenta de The Nexus Battles VI recibió una advertencia por
+              incumplir las políticas de uso. La advertencia queda registrada, pero no restringe tu
+              acceso.</span>
+            <span th:case="'SUSPENSION'">Tu cuenta de The Nexus Battles VI fue suspendida
+              temporalmente. Mientras dure la suspensión no podrás acceder al sistema; tu inventario
+              y tu progreso se mantienen intactos.</span>
+            <span th:case="'BANEO'">Tu cuenta de The Nexus Battles VI quedó inhabilitada de forma
+              permanente: pierdes el acceso a todos los servicios y tu inventario queda congelado,
+              sin posibilidad de transferirlo.</span>
+            <span th:case="'APELACION_RESUELTA'">El panel de moderación revisó tu apelación y tomó
+              una decisión final.</span>
+            <span th:case="*">Hay una novedad sobre tu cuenta de The Nexus Battles VI.</span>
+          </div>
+
+          <table border="0" cellpadding="0" cellspacing="0" role="presentation"
+                 style="background:#FBEEDD;border-radius:6px;width:100%;">
+            <tbody>
+              <tr>
+                <td style="font-family:Arial, Helvetica, sans-serif;font-size:14px;line-height:22px;color:#8A4A00;padding:12px 16px;">
+                  Motivo: <strong th:text="${motivo}">—</strong>
+                  <th:block th:if="${hasta != null}"><br />Fin de la suspensión: <strong th:text="${hasta}">—</strong></th:block>
+                  <th:block th:if="${resultadoApelacion != null}"><br />Resultado:
+                    <th:block th:switch="${resultadoApelacion}">
+                      <strong th:case="'MANTENIDA'">la sanción se mantiene</strong>
+                      <strong th:case="'REDUCIDA'">la sanción se redujo</strong>
+                      <strong th:case="'REVERTIDA'">la sanción se revirtió</strong>
+                    </th:block>
+                  </th:block>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div th:if="${apelableHasta != null}"
+               style="font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:24px;color:#111726;padding-top:16px;">
+            Si no estás de acuerdo, puedes apelar esta decisión hasta el
+            <strong th:text="${apelableHasta}">—</strong>. Un panel de moderadores y
+            administradores revisará tu apelación, y te notificaremos la decisión final en un
+            plazo de 15 días hábiles.
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>

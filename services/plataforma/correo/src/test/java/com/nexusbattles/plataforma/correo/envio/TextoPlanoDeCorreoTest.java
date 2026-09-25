@@ -63,6 +63,52 @@ class TextoPlanoDeCorreoTest {
         assertThat(TextoPlanoDeCorreo.desdeHtml("   ")).isEmpty();
     }
 
+    /** El detalle de una compra no puede salir con las celdas pegadas. */
+    @Test
+    void separaLasCeldasDeUnaTabla() {
+        String html = "<table><tr><th>Producto</th><th>Cantidad</th></tr>"
+                + "<tr><td>Espada Legendaria</td><td>2</td><td>200.00 COP</td></tr></table>";
+
+        assertThat(TextoPlanoDeCorreo.desdeHtml(html).lines().toList())
+                .containsExactly("Producto | Cantidad", "Espada Legendaria | 2 | 200.00 COP");
+    }
+
+    /**
+     * Las plantillas parten las frases y ponen cada celda en su linea para
+     * leerse bien; en HTML esos saltos son espacios y en el texto tambien.
+     */
+    @Test
+    void elSangradoDelFuenteNoParteNiLasFrasesNiLasFilas() {
+        String html = """
+                <div>
+                  Hola, <span>Ana</span>. Recibimos una solicitud para
+                  restablecer la contraseña.
+                </div>
+                <table><tr>
+                  <td>Espada Legendaria</td>
+                  <td>2</td>
+                </tr></table>
+                """;
+
+        assertThat(TextoPlanoDeCorreo.desdeHtml(html).lines().toList())
+                .containsExactly(
+                        "Hola, Ana. Recibimos una solicitud para restablecer la contraseña.",
+                        "Espada Legendaria | 2");
+    }
+
+    /** Un enlace con varios parametros se lee tal cual, sin la entidad del HTML. */
+    @Test
+    void elEnlaceDeUnCorreoSaleConSuAmpersand() {
+        String html = "<span>https://x.co/verificar#codigo=1&amp;correo=a%40b.co</span>";
+
+        assertThat(TextoPlanoDeCorreo.desdeHtml(html)).isEqualTo("https://x.co/verificar#codigo=1&correo=a%40b.co");
+    }
+
+    @Test
+    void unaEntidadEscapadaNoSeDesescapaDosVeces() {
+        assertThat(TextoPlanoDeCorreo.desdeHtml("<p>&amp;lt;b&amp;gt;</p>")).isEqualTo("&lt;b&gt;");
+    }
+
     @Test
     void noDejaLineasEnBlancoDeMas() {
         String texto = TextoPlanoDeCorreo.desdeHtml("<p>A</p><br><br><br><p>B</p>");
