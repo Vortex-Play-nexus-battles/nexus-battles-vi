@@ -42,6 +42,11 @@ import org.springframework.security.web.SecurityFilterChain;
  *       ({@code ClienteMotorCombate}), que es quien conoce el estado de la
  *       partida. Un jugador nunca debe invocarlo directamente: el motor no
  *       guarda estado y creeria cualquier peticion que le llegue bien formada.</li>
+ *   <li>{@code POST /api/v1/combate/acciones} y {@code POST /api/v1/combate/turnos}
+ *       (B7) — <b>solo {@code ROLE_SERVICIO}</b>, por la misma razon: resuelven
+ *       el combate con el estado que les mandan y lo creerian aunque viniera de
+ *       un jugador. El jugador elige accion y objetivo en salas-partidas, y es
+ *       salas quien pregunta aqui.</li>
  *   <li>{@code GET /api/v1/combate/distribuciones} — autenticado. Es la tabla
  *       de probabilidades por prototipo: no es secreta (esta en el manual del
  *       juego) pero tampoco tiene por que servirse a un anonimo.</li>
@@ -76,12 +81,14 @@ public class SeguridadConfig {
                 .accessDeniedHandler((solicitud, respuesta, error) -> problema(
                         solicitud, respuesta, HttpStatus.FORBIDDEN,
                         "Acceso denegado",
-                        "Resolver un ataque es una operacion de servicio",
+                        "Resolver el combate es una operacion de servicio",
                         "urn:nexus:problema:acceso-denegado")));
 
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/combate/ataques").hasRole("SERVICIO")
+                .requestMatchers(HttpMethod.POST, "/api/v1/combate/acciones", "/api/v1/combate/turnos")
+                .hasRole("SERVICIO")
                 .requestMatchers(HttpMethod.GET, "/api/v1/combate/distribuciones").authenticated()
                 .anyRequest().authenticated());
 
