@@ -16,6 +16,9 @@
 
 import { construirCarga, construirError } from './estados-vista.js';
 import { consultarProducto as leerDelCatalogo } from './cliente-productos.js';
+import { construirDetalleDeHeroe } from './detalle-heroe.js';
+import { icono } from '../../comun/ui/icono.js';
+import { ICONO_DEL_TIPO } from './vitrina.js';
 
 /**
  * Atributos visibles de cada tipo, en el orden en que se muestran.
@@ -79,12 +82,27 @@ export function construirFicha(producto) {
   const idNombre = `ficha-nombre-${(secuencia += 1)}`;
   ficha.setAttribute('aria-labelledby', idNombre);
 
-  const imagen = document.createElement('img');
-  imagen.className = 'ficha__imagen';
-  imagen.src = producto.imagen ?? '';
-  // El texto alternativo es el nombre: quien no ve la imagen sigue sabiendo
-  // que producto esta mirando (RNF-ACC-002).
-  imagen.alt = producto.nombre ?? '';
+  let imagen;
+  if (producto.imagen) {
+    imagen = document.createElement('img');
+    imagen.className = 'ficha__imagen';
+    imagen.src = producto.imagen;
+    // El texto alternativo es el nombre: quien no ve la imagen sigue sabiendo
+    // que producto esta mirando (RNF-ACC-002).
+    imagen.alt = producto.nombre ?? '';
+  } else {
+    // UX-GAME-3 — sin imagen en el catalogo no se pinta un `<img src="">`,
+    // que el navegador ensena como icono roto con el nombre al lado. Va el
+    // icono del tipo sobre la misma superficie que ocuparia la imagen.
+    imagen = document.createElement('div');
+    imagen.className = 'ficha__imagen ficha__imagen--ausente';
+    imagen.append(
+      icono(ICONO_DEL_TIPO[producto.tipo] ?? 'estrella', {
+        clase: 'ficha__icono-tipo',
+        etiqueta: null,
+      }),
+    );
+  }
 
   const nombre = document.createElement('h2');
   nombre.className = 'ficha__nombre';
@@ -195,7 +213,20 @@ let abierta = null;
  * @param {HTMLElement} [opciones.origen] elemento al que vuelve el foco.
  * @returns {Promise<void>} resuelve con la ficha en su estado final.
  */
-export async function abrirFicha(productoId, { consultarProducto = leerDelCatalogo, origen } = {}) {
+export async function abrirFicha(
+  productoId,
+  {
+    consultarProducto = leerDelCatalogo,
+    origen,
+    // R5: con estos dos, y solo si el producto es un heroe, la ficha se
+    // completa con las estadisticas del heroe del jugador y las acciones de su
+    // prototipo. Opcionales a proposito: la ficha de un arma no los necesita, y
+    // sin ellos se comporta como antes.
+    elementoId = null,
+    identidad = null,
+    detalleDeHeroe = construirDetalleDeHeroe,
+  } = {},
+) {
   cerrarFicha();
 
   const devolverFocoA = origen ?? document.activeElement;
@@ -233,6 +264,28 @@ export async function abrirFicha(productoId, { consultarProducto = leerDelCatalo
     return; // Se cerro mientras se consultaba.
   }
   reemplazarContenido(capa, construirFicha(producto));
+
+  // Y despues, sin hacer esperar a la ficha: son dos servicios mas y el detalle
+  // del producto ya es util sin ellos. Mismo criterio que los retratos de la
+  // vitrina. Si fallan, no se pinta nada; no se rellena con ceros.
+  if (producto.tipo !== 'HEROE' || !elementoId || !identidad) {
+    return;
+  }
+  let bloques;
+  try {
+    bloques = await detalleDeHeroe({
+      identidad,
+      heroeId: elementoId,
+      prototipo: producto.prototipo ?? null,
+    });
+  } catch (fallo) {
+    console.error('No se pudo completar el detalle del héroe', fallo);
+    return;
+  }
+  if (abierta === null || abierta.capa !== capa || bloques.length === 0) {
+    return; // Se cerro mientras se consultaba, o no llego nada que pintar.
+  }
+  capa.querySelector('.ficha')?.append(...bloques);
 }
 
 /** Cierra la ficha abierta y devuelve el foco a donde estaba. */

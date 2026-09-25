@@ -9,8 +9,7 @@
     -apple-system,
     'Segoe UI',
     sans-serif;
-  color: var(--texto);
-  background: var(--fondo);
+  /* UX-GAME-1: color y fondo los pone el kit; la atmosfera es una sola. */
 }
 
 * {
@@ -21,13 +20,8 @@ body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
-  background:
-    radial-gradient(
-      circle at 90% 0%,
-      color-mix(in srgb, var(--acento-relleno) 12%, transparent),
-      transparent 30rem
-    ),
-    var(--fondo);
+  /* UX-GAME-1: el fondo y el color de la pagina los pone el kit (base.css):
+     la atmosfera del Nexo es una sola para las 35 vistas. */
 }
 
 button,
@@ -304,4 +298,20 @@ textarea:focus-visible {
   .producto-acciones {
     flex-direction: column-reverse;
   }
+}
+
+/* =======================================================================
+   Superficies claras de esta vista — UX-GAME-1
+   Devuelven la tinta a oscuro sobre la atmosfera del Nexo (ver «Tinta
+   contextual» en base.css). Son variables de contexto que apuntan a tokens,
+   no una copia de la paleta: componen con el alto contraste.
+   ======================================================================= */
+.producto-seccion,
+.producto-estado {
+  --tinta: var(--texto);
+  --tinta-2: var(--texto-2);
+  --tinta-3: var(--texto-3);
+  --tinta-enlace: var(--primaria);
+  --tinta-enlace-hover: var(--primaria-relleno);
+  color: var(--texto);
 }

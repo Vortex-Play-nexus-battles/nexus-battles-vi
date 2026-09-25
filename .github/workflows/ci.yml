@@ -198,7 +198,7 @@ jobs:
         working-directory: infrastructure/red-balanceo/pruebas
         run: docker compose up -d --wait
 
-      - name: Comprobar el reparto de las 38 rutas
+      - name: Comprobar el reparto de las 41 rutas
         working-directory: infrastructure/red-balanceo/pruebas
         run: ./comprobar-rutas.sh
 
@@ -343,6 +343,28 @@ jobs:
       - name: Comprobar la resolucion de etiquetas por servicio de contenido
         shell: bash
         run: bash scripts/cd/pruebas/desplegar-etiquetas-contenido.sh
+
+      # R16.5b: el entrypoint que reparte por turnos el arranque de las JVM
+      # cuando el host vuelve del apagado. Se prueba el script sacado tal cual
+      # del compose, con /proc y java falsos, en el sh del runner y en el de
+      # Alpine (el de las imagenes). Segundos, sin servicios.
+      - name: Comprobar el arranque escalonado del host de plataforma
+        shell: bash
+        run: bash scripts/cd/pruebas/arranque-escalonado.sh
+
+      # R17.0: la compuerta de capacidad solo frena y apaga lo que suma
+      # memoria. Con free/docker/curl falsos; segundos.
+      - name: Comprobar la compuerta de capacidad del CD
+        shell: bash
+        run: bash scripts/cd/pruebas/comprobar-capacidad.sh
+
+      # R18.5: la clave de firma de ms-identidad se genera una vez en el host
+      # y se reutiliza; sin ella cada despliegue suyo cerraba todas las
+      # sesiones y dejaba 15 min de 401 entre servicios. Con openssl y java
+      # del runner; segundos.
+      - name: Comprobar la clave de firma estable de ms-identidad
+        shell: bash
+        run: bash scripts/cd/pruebas/clave-de-firma.sh
 
       # Una clave repetida dentro de un mismo mapa hace que Docker Compose se
       # niegue a leer el archivo ENTERO, y al negarse no despliega nada de el.

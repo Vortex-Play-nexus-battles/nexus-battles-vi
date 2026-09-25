@@ -39,7 +39,10 @@ import { AxeBuilder } from '@axe-core/playwright';
 import { test, expect } from '@playwright/test';
 
 import { PREFIJO_WEB } from './vistas.js';
-import { inyectarSesion, sesionSintetica } from './identidad.js';
+import { textoSinContrasteSobreAtmosfera } from './contraste-atmosfera.js';
+import { simularCanal } from './canal-simulado.js';
+import { ESCENARIOS } from './escenarios-poblados.js';
+import { inyectarSesion } from './identidad.js';
 
 const NORMAS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 const GRAVES = new Set(['serious', 'critical']);
@@ -49,205 +52,6 @@ const ANCHURAS = Object.freeze([
   { nombre: 'desktop', ancho: 1440, alto: 900 },
   { nombre: 'movil', ancho: 375, alto: 812 },
 ]);
-
-const json = (cuerpo) => ({
-  status: 200,
-  contentType: 'application/json',
-  body: JSON.stringify(cuerpo),
-});
-
-/** Una subasta a punto de cerrar: contador urgente, rareza y credito en juego. */
-function subastaUrgente() {
-  return {
-    id: 'aaaaaaa1-1111-4111-8111-111111111111',
-    nombreProducto: 'Hacha de Obsidiana Fracturada',
-    tipoProducto: 'ARMA',
-    descripcionCorta: 'Filo negro, mella de guerra.',
-    rareza: 'epica',
-    vendedorId: 'thar_vex',
-    ofertaVigente: '1350',
-    precioCompraInmediata: '2100',
-    // Ocho segundos: por debajo del umbral de diez que enciende el latido, el
-    // color de urgencia y el boton «Ir ahora».
-    fechaFin: new Date(Date.now() + 8000).toISOString(),
-    cantidadPujas: 7,
-    miniaturaUrl: null,
-    esMaestroDeJuego: false,
-  };
-}
-
-function subastaTranquila() {
-  return {
-    ...subastaUrgente(),
-    id: 'aaaaaaa2-2222-4222-8222-222222222222',
-    nombreProducto: 'Grebas del Centinela Caido',
-    rareza: 'rara',
-    ofertaVigente: '880',
-    fechaFin: new Date(Date.now() + 3_600_000).toISOString(),
-  };
-}
-
-/** Una sin rareza, para que el camino neutro de FI-R1 tambien pase por axe. */
-function subastaSinRareza() {
-  return {
-    ...subastaTranquila(),
-    id: 'aaaaaaa3-3333-4333-8333-333333333333',
-    nombreProducto: 'Objeto sin catalogar',
-    rareza: undefined,
-  };
-}
-
-const ESCENARIOS = [
-  {
-    id: 'pujas-activas',
-    titulo: 'subastas con una puja urgente, rareza y credito comprometido',
-    ruta: 'cuentas/pujas.html',
-    sesion: () => sesionSintetica({ apodo: 'qa_pujas', rol: 'JUGADOR' }),
-    rutas: [
-      [
-        '**/api/v1/subastas?*',
-        json({
-          contenido: [subastaUrgente(), subastaTranquila(), subastaSinRareza()],
-          pagina: 0,
-          tamano: 16,
-          totalElementos: 3,
-          totalPaginas: 1,
-        }),
-      ],
-      [
-        '**/api/v1/mis-pujas/resumen',
-        json({ subastasConPuja: 2, creditosRetenidos: '2230', saldoTotal: null }),
-      ],
-    ],
-    // Lo que tiene que haberse pintado para que la prueba signifique algo.
-    exige: ['.tarjeta-subasta', '.badge-epica', '.animacion-latido'],
-  },
-  {
-    id: 'batallas-con-salas',
-    titulo: 'listado de batallas con salas abiertas, llenas y privadas',
-    ruta: 'plataforma/salas-partidas/batallas.html',
-    sesion: () => sesionSintetica({ apodo: 'qa_salas', rol: 'JUGADOR' }),
-    rutas: [
-      [
-        '**/api/v1/salas?*',
-        json({
-          contenido: [
-            sala({ id: 'bbbbbbb1-1111-4111-8111-111111111111', ocupacion: 4 }),
-            sala({
-              id: 'bbbbbbb2-2222-4222-8222-222222222222',
-              estado: 'LLENA',
-              ocupacion: 6,
-            }),
-            sala({
-              id: 'bbbbbbb3-3333-4333-8333-333333333333',
-              estado: 'PRIVADA',
-              privada: true,
-              ocupacion: 1,
-            }),
-          ],
-          pagina: 0,
-          tamano: 12,
-          totalElementos: 3,
-          totalPaginas: 1,
-        }),
-      ],
-    ],
-    exige: ['[data-sala]', '.distintivo--llena', '.distintivo--privada'],
-  },
-  {
-    id: 'tienda-con-catalogo',
-    titulo: 'tienda con precios, rebaja y carrito con importes',
-    ruta: 'cuentas/tienda.html',
-    sesion: () => sesionSintetica({ apodo: 'qa_tienda', rol: 'JUGADOR' }),
-    rutas: [
-      [
-        // R16 — la vitrina se mudó a /api/v1/vitrina (ecommerce-carrito.yaml
-        // 1.2.0) y sus ids son los UUID del catálogo maestro. Con la ruta vieja
-        // la vista no pintaba nada y el escenario se ponía rojo en `exige`, que
-        // es justo para lo que está. La rebaja y el precio ausente ya no los
-        // manda la vitrina 1.2.0, pero la tarjeta los sigue sabiendo pintar y
-        // su accesibilidad se sigue auditando.
-        '**/api/v1/vitrina*',
-        json({
-          content: [
-            producto({ id: 'aaaaaaa1-0000-4000-8000-000000000001', nombre: 'Yelmo del Alba' }),
-            producto({
-              id: 'aaaaaaa1-0000-4000-8000-000000000002',
-              nombre: 'Amuleto de Brasa',
-              precioOriginal: 20000,
-              precioFinal: 16000,
-              enPromocion: true,
-              porcentajeDescuento: 20,
-            }),
-            producto({
-              id: 'aaaaaaa1-0000-4000-8000-000000000003',
-              nombre: 'Pocion sin precio',
-              precioFinal: null,
-            }),
-          ],
-        }),
-      ],
-      [
-        '**/api/v1/carrito',
-        json({
-          id: 9,
-          usuarioId: 'qa',
-          total: 36000,
-          items: [
-            {
-              id: 1,
-              cantidad: 2,
-              precioUnitario: 18000,
-              subtotal: 36000,
-              producto: { nombre: 'Yelmo del Alba', moneda: 'COP' },
-            },
-          ],
-        }),
-      ],
-    ],
-    // El descuento y el precio ausente son los dos estados que FI-R2 anadio.
-    exige: ['.product-card', '.badge-descuento', '.precio-ausente', '.cart-item'],
-  },
-];
-
-function sala(cambios = {}) {
-  return {
-    id: 'bbbbbbb1-1111-4111-8111-111111111111',
-    estado: 'ABIERTA',
-    modalidad: 'HASTA_SEIS',
-    maximoParticipantes: 6,
-    ocupacion: 4,
-    recompensaCreditos: 320,
-    incluirHeroeIA: true,
-    heroesIA: 1,
-    privada: false,
-    tamanoEquipo: null,
-    idAnfitrion: 'ccccccc1-1111-4111-8111-111111111111',
-    participantes: [],
-    idPartida: null,
-    creadaEn: new Date().toISOString(),
-    ...cambios,
-  };
-}
-
-function producto(cambios = {}) {
-  return {
-    id: 'aaaaaaa1-0000-4000-8000-000000000001',
-    nombre: 'Yelmo del Alba',
-    imagenUrl: null,
-    descripcion: 'Acero claro, forjado al amanecer.',
-    habilidades: 'Defensa +4',
-    tipo: 'ARMADURA',
-    precioFinal: 18500,
-    precioOriginal: 18500,
-    moneda: 'COP',
-    enPromocion: false,
-    porcentajeDescuento: 0,
-    esPropio: false,
-    enListaDeseos: false,
-    ...cambios,
-  };
-}
 
 for (const escenario of ESCENARIOS) {
   for (const pantalla of ANCHURAS) {
@@ -264,15 +68,32 @@ for (const escenario of ESCENARIOS) {
         const pagina = await contexto.newPage();
 
         for (const [patron, respuesta] of escenario.rutas) {
-          await pagina.route(patron, (ruta) => ruta.fulfill(respuesta));
+          // Una respuesta puede depender de la peticion (p. ej. el id del
+          // producto): entonces es una funcion.
+          await pagina.route(patron, (ruta) =>
+            ruta.fulfill(typeof respuesta === 'function' ? respuesta(ruta) : respuesta),
+          );
         }
-        // El canal en vivo no se simula: la vista tiene que funcionar sin el, y
-        // su estado degradado tambien entra en la auditoria.
+        // El canal en vivo de las subastas no se simula: la vista tiene que
+        // funcionar sin el, y su estado degradado tambien entra en la
+        // auditoria. El del combate si (UX-GAME-4): sin canal no hay turno,
+        // ni botones de ataque, ni resultado que auditar.
         await pagina.route('**/ws-subastas/**', (ruta) => ruta.abort());
+        if (escenario.canal) {
+          await simularCanal(pagina, escenario.canal);
+        }
 
         await pagina.goto(`/${PREFIJO_WEB}/${escenario.ruta}`, {
           waitUntil: 'domcontentloaded',
         });
+
+        // Algunos estados solo existen tras un gesto: un dialogo que se abre,
+        // una pestana que se cambia. Se hace ANTES de exigir el marcado, para
+        // que la exigencia siga siendo la que decide si la prueba significa
+        // algo.
+        if (escenario.interaccion) {
+          await escenario.interaccion(pagina);
+        }
 
         // Primero: que el banco haya pintado de verdad. Un escenario que no
         // llega a pintar sus datos pasaria axe por no tener nada que revisar, y
@@ -291,8 +112,22 @@ for (const escenario of ESCENARIOS) {
         const graves = resultado.violations.filter((v) => GRAVES.has(v.impact));
 
         expect(
-          graves.map((v) => `${v.id} (${v.impact}) × ${v.nodes.length}: ${v.help}`),
+          graves.map(
+            (v) =>
+              `${v.id} (${v.impact}) × ${v.nodes.length}: ${v.help}\n` +
+              v.nodes
+                .slice(0, 3)
+                .map((n) => `        ${n.target.join(' ')}  ${n.html.slice(0, 160)}`)
+                .join('\n'),
+          ),
           `Accesibilidad grave en ${escenario.id} a ${pantalla.nombre}, con datos`,
+        ).toEqual([]);
+
+        // UX-GAME-1 — texto directamente sobre la atmósfera, que axe no mide.
+        const sobreAtmosfera = await textoSinContrasteSobreAtmosfera(pagina);
+        expect(
+          sobreAtmosfera.map((h) => `${h.selector} ${h.color} ${h.contraste}:1 — «${h.texto}»`),
+          `${escenario.id} a ${pantalla.nombre}: texto sin contraste sobre la atmósfera`,
         ).toEqual([]);
       } finally {
         await contexto.close();

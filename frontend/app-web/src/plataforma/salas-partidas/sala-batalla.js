@@ -47,6 +47,31 @@ export function suscripcionDePartida(cliente, idPartida) {
 }
 
 /**
+ * La direccion de esta misma vista con la partida anotada (`?partida=<id>`).
+ *
+ * R17.4 — la vista ya sabia recuperarse de una recarga en pleno combate si la
+ * URL traia `partida`, pero nadie la ponia: quien arrancaba el combate seguia
+ * en `?sala=<id>`, y un F5 le devolvia a la sala de espera con un «Iniciar
+ * combate» que el servidor ya rechaza (409). R18.6 intento lo mismo leyendo
+ * `idPartida` de la ficha de la sala, pero `GET /salas/{id}` lo devuelve
+ * siempre nulo (`SalaResponse.construir`): la prueba del profesor lo destapo.
+ * Se anota con `history.replaceState`, sin entrada nueva en el historial:
+ * «Atras» sigue llevando a donde estaba.
+ *
+ * Conserva el resto de la direccion (la sala, el hash) y no duplica la
+ * partida si ya estaba.
+ *
+ * @param {string} href direccion actual, absoluta
+ * @param {string} idPartida
+ * @returns {string} direccion absoluta con `partida`
+ */
+export function urlConPartida(href, idPartida) {
+  const url = new URL(href);
+  url.searchParams.set('partida', idPartida);
+  return url.href;
+}
+
+/**
  * Lee el estado que el servidor haya incrustado en la pagina.
  *
  * Este es el punto por el que entrara la partida cuando exista el endpoint:
@@ -118,7 +143,10 @@ function pintarConexion(zona, hayCanal) {
  * @param {string} texto
  */
 function explicarVacio(zona, texto) {
-  const detalle = zona?.querySelector('.t-meta');
+  // El detalle del estado vacio es `.estado-vista__detalle` desde UX-R3.5;
+  // `.t-meta` se conserva por las vistas y pruebas que aun lo usan. Con solo
+  // `.t-meta` el texto no se actualizaba nunca (UX-GAME-4).
+  const detalle = zona?.querySelector('.estado-vista__detalle, .t-meta');
   if (detalle) {
     detalle.textContent = texto;
   }
@@ -139,10 +167,23 @@ function explicarVacio(zona, texto) {
  * @param {(alRecibir: (evento: object) => void) => void} [opciones.suscribir]
  *   Transporte del canal de la partida. Se inyecta desde fuera para que el dia
  *   que exista STOMP no haya que rehacer nada de aqui.
+ * @param {boolean} [opciones.canalConectado] si el canal en tiempo real esta
+ *   abierto aunque todavia no haya partida a la que suscribirse (la sala de
+ *   espera sigue la SALA por el canal). Sin el, el indicador se deduce de
+ *   `suscribir`.
  */
 export function montarSalaBatalla(
   raiz,
-  { partida, idPartida, participantes, suscribir, yo, turnoActual = null, presentar = false } = {},
+  {
+    partida,
+    idPartida,
+    participantes,
+    suscribir,
+    yo,
+    turnoActual = null,
+    presentar = false,
+    canalConectado,
+  } = {},
 ) {
   const zonaConexion = raiz.querySelector('[data-zona="conexion"]');
   const zonaSinPartida = raiz.querySelector('[data-zona="sin-partida"]');
@@ -151,7 +192,11 @@ export function montarSalaBatalla(
   const campo = raiz.querySelector('[data-zona="campo"]');
   const zonaPresentacion = raiz.querySelector('[data-zona="presentacion"]');
 
-  pintarConexion(zonaConexion, typeof suscribir === 'function');
+  // R17.4 — en la sala de espera no hay partida a la que suscribirse, pero el
+  // canal SI esta abierto: por el llegan quien entra, quien sale y el arranque.
+  // Deducirlo de `suscribir` pintaba «no conectado» a quien esperaba con el
+  // canal funcionando, que es justo lo que hace creer que algo esta roto.
+  pintarConexion(zonaConexion, canalConectado ?? typeof suscribir === 'function');
 
   const id = partida?.id ?? idPartida;
   const enPantalla = partida ? participantesParaElPanel(partida) : participantes;
@@ -211,8 +256,9 @@ export function montarSalaBatalla(
 
   // HU-JUE-017 CA-04 · la presentacion de los heroes.
   //
-  // `presentar` solo es true cuando se llega AQUI desde el aviso
-  // `sala.partida.iniciada`, no al recargar una partida que ya estaba en
+  // `presentar` solo es true cuando la partida empieza de verdad: el aviso
+  // `sala.partida.iniciada` o, para quien la arranca, la respuesta de su
+  // «Iniciar combate» (R17.4); nunca al recargar una partida que ya estaba en
   // curso: entrar a mitad de combate y que te presenten a los heroes como si
   // empezara ahora seria mentir sobre el momento.
   //

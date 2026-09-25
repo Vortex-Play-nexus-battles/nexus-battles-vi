@@ -75,12 +75,23 @@
   margin-bottom: var(--e-4);
   /* El color de la caja se interpolaba dentro de un `innerHTML`
      (`background-color: ${colorCaja}`). Ahora viaja en `data-tipo` y lo
-     elige el CSS, con fichas en vez de dos hex sueltos (UX-R2.8a). */
-  background-color: var(--acento-relleno);
+     elige el CSS, con fichas en vez de dos hex sueltos (UX-R2.8a).
+     UX-GAME-5: sin imagen, la caja es una ranura oscura con un halo del
+     color del tipo (violeta armadura, azul arma), como la ficha del
+     inventario, y no un bloque de color plano. */
+  --tienda-halo: var(--acento-relleno);
+  background:
+    radial-gradient(
+      60% 80% at 50% 45%,
+      color-mix(in srgb, var(--tienda-halo) 55%, transparent),
+      transparent 72%
+    ),
+    var(--cromo);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tienda-halo) 35%, transparent);
 }
 
 .product-card[data-tipo='ARMA'] .product-image {
-  background-color: var(--info);
+  --tienda-halo: var(--primaria);
 }
 
 .product-card h4 {
@@ -269,7 +280,9 @@
 }
 
 .total-price {
-  color: var(--error);
+  /* El total a pagar no es un error: va en la primaria, como cualquier
+     cifra que manda (UX-GAME-5). */
+  color: var(--primaria);
   font-variant-numeric: var(--cifras-tabulares);
 }
 
@@ -339,4 +352,21 @@
   .cart-card {
     padding: var(--e-4);
   }
+}
+
+/* =======================================================================
+   Superficies claras de esta vista — UX-GAME-1
+   Devuelven la tinta a oscuro sobre la atmosfera del Nexo (ver «Tinta
+   contextual» en base.css). Son variables de contexto que apuntan a tokens,
+   no una copia de la paleta: componen con el alto contraste.
+   ======================================================================= */
+.product-card,
+.cart-card,
+.warning-box {
+  --tinta: var(--texto);
+  --tinta-2: var(--texto-2);
+  --tinta-3: var(--texto-3);
+  --tinta-enlace: var(--primaria);
+  --tinta-enlace-hover: var(--primaria-relleno);
+  color: var(--texto);
 }

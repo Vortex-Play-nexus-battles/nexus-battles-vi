@@ -18,6 +18,11 @@ import {
   textoDelTurno,
   montarControlesDeCombate,
   gano,
+  empate,
+  desenlaceDe,
+  netoDeCreditos,
+  mezclarPorJugador,
+  enlacesDeSalida,
   ACCION_RESUELTA,
   TURNO_CAMBIADO,
   PARTIDA_FINALIZADA,
@@ -674,7 +679,13 @@ describe('indicador de turno en la vista', () => {
 
     controles.recibir({ tipo: PARTIDA_FINALIZADA, idPartida: PARTIDA, ganadores: [ANA] });
 
-    expect(document.querySelector('[data-zona="turno"]').hidden).toBe(true);
+    // UX-GAME-4: el indicador no desaparece, pasa al tercer estado. Ya no
+    // es el turno de nadie: ni es «mio» ni hay barra marcada.
+    const turno = document.querySelector('[data-zona="turno"]');
+    expect(turno.hidden).toBe(false);
+    expect(turno.textContent).toBe('Combate finalizado');
+    expect(turno.dataset.mio).toBe('false');
+    expect(turno.dataset.fin).toBe('si');
     expect(document.querySelector(`[data-jugador="${ANA}"]`).dataset.turno).toBeUndefined();
   });
 
@@ -786,6 +797,75 @@ describe('HU-JUE-017 · presentacion del combate (UX-R2.3)', () => {
   });
 });
 
+/**
+ * R17.4 — la prueba del profesor destapó que el panel del desenlace, que ocupa
+ * toda la pantalla (barra del juego incluida), no tenía ninguna salida: quien
+ * acababa de jugar solo podía volver con «Atrás».
+ */
+describe('R17.4 · el desenlace tiene salidas', () => {
+  beforeEach(() => {
+    document.body.innerHTML = VISTA;
+  });
+
+  const SALIDAS = [
+    { id: 'volver-a-jugar', texto: 'Volver a Jugar online', href: 'http://nexus.test/jugar' },
+    { id: 'ver-mi-cuenta', texto: 'Ver mi cuenta', href: 'http://nexus.test/cuenta' },
+  ];
+
+  const terminar = (salidas) => {
+    const controles = montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      turnoDe: ANA,
+      alAtacar: () => {},
+      salidas,
+    });
+    controles.recibir({ tipo: PARTIDA_FINALIZADA, idPartida: PARTIDA, ganadores: [BRUNO] });
+    return document.querySelector('[data-zona="resultado"] .panel-resultado');
+  };
+
+  test('el panel lleva los enlaces que le da la vista, en su orden', () => {
+    const panel = terminar(SALIDAS);
+    const enlaces = [...panel.querySelectorAll('.panel-resultado__acciones a')];
+
+    expect(enlaces.map((a) => a.textContent)).toEqual(['Volver a Jugar online', 'Ver mi cuenta']);
+    expect(enlaces.map((a) => a.getAttribute('href'))).toEqual([
+      'http://nexus.test/jugar',
+      'http://nexus.test/cuenta',
+    ]);
+    expect(enlaces[0].dataset.accion).toBe('volver-a-jugar');
+  });
+
+  test('el primero es el principal y el resto, secundarios', () => {
+    const [primero, segundo] = terminar(SALIDAS).querySelectorAll('.panel-resultado__acciones a');
+
+    expect(primero.className).toBe('boton boton--primario');
+    expect(segundo.className).toBe('boton boton--secundario');
+  });
+
+  test('sin salidas el panel sigue como antes, sin una fila de botones vacía', () => {
+    expect(terminar(undefined).querySelector('.panel-resultado__acciones')).toBeNull();
+  });
+
+  test('una salida sin destino o sin texto no se pinta: un botón que no lleva a nada es peor', () => {
+    expect(
+      enlacesDeSalida([
+        { id: 'a', texto: '', href: '/jugar' },
+        { id: 'b', texto: 'Ver mi cuenta', href: '' },
+        { id: 'c', texto: 'Volver a Jugar online', href: '/jugar' },
+      ]).map((a) => a.textContent),
+    ).toEqual(['Volver a Jugar online']);
+  });
+
+  test('el texto va como texto: un nombre con marcado no se interpreta', () => {
+    const [enlace] = enlacesDeSalida([{ id: 'x', texto: '<img src=x>', href: '/jugar' }]);
+
+    expect(enlace.textContent).toBe('<img src=x>');
+    expect(enlace.querySelector('img')).toBeNull();
+  });
+});
+
 describe('gano · la regla del desenlace, en un solo sitio', () => {
   test('gana quien esta en la lista de ganadores', () => {
     expect(gano({ ganadores: [ANA] }, ANA)).toBe(true);
@@ -806,5 +886,107 @@ describe('gano · la regla del desenlace, en un solo sitio', () => {
     const aviso = { ganadores: [ANA] };
     expect(textoDelResultado(aviso, ANA)).toContain('Has ganado');
     expect(gano(aviso, ANA)).toBe(true);
+  });
+});
+
+/* R10: lo que el panel de desenlace muestra. Tres estados, y una cifra que es
+   la que de verdad le paso al saldo del jugador. */
+
+describe('desenlaceDe · empate no es derrota', () => {
+  test('sin ganadores es empate, no la derrota de todos', () => {
+    const fin = { ganadores: [] };
+
+    expect(empate(fin)).toBe(true);
+    expect(desenlaceDe(fin, ANA)).toBe('empate');
+    expect(desenlaceDe(fin, BRUNO)).toBe('empate');
+    // Y el texto ya lo decia: era el panel el que contradecia al texto.
+    expect(textoDelResultado(fin, ANA)).toMatch(/empate/i);
+  });
+
+  test('con ganador, cada uno ve el suyo', () => {
+    const fin = { ganadores: [ANA] };
+
+    expect(empate(fin)).toBe(false);
+    expect(desenlaceDe(fin, ANA)).toBe('victoria');
+    expect(desenlaceDe(fin, BRUNO)).toBe('derrota');
+  });
+
+  test('por equipos no hay empate: el aviso trae el equipo ganador', () => {
+    const fin = { ganadores: [], equipoGanador: 2 };
+
+    expect(empate(fin)).toBe(false);
+    expect(desenlaceDe(fin, ANA, 2)).toBe('victoria');
+    expect(desenlaceDe(fin, BRUNO, 1)).toBe('derrota');
+  });
+});
+
+describe('netoDeCreditos · la cifra grande es el movimiento real', () => {
+  /*
+   * El defecto que arregla R10: el numero grande salia de `recompensa`, que
+   * nunca resta (el contrato la declara `minimum: 0`). Quien perdia una apuesta
+   * de 350 veia un «+2» enorme y la perdida solo en la frase de abajo.
+   */
+  test('quien pierde la apuesta ve un neto negativo, no la recompensa sola', () => {
+    const fin = {
+      ganadores: [BRUNO],
+      reparto: [{ idJugador: ANA, creditos: -350 }],
+      recompensa: [{ idJugador: ANA, creditos: 1, ganador: false }],
+    };
+
+    expect(netoDeCreditos(fin, ANA)).toBe(-349);
+  });
+
+  test('quien gana ve la apuesta mas la recompensa', () => {
+    const fin = {
+      ganadores: [ANA],
+      reparto: [{ idJugador: ANA, creditos: 350 }],
+      recompensa: [{ idJugador: ANA, creditos: 2, ganador: true }],
+    };
+
+    expect(netoDeCreditos(fin, ANA)).toBe(352);
+  });
+
+  test('con una sola de las dos, vale esa', () => {
+    expect(netoDeCreditos({ recompensa: [{ idJugador: ANA, creditos: 2 }] }, ANA)).toBe(2);
+    expect(netoDeCreditos({ reparto: [{ idJugador: ANA, creditos: -10 }] }, ANA)).toBe(-10);
+  });
+
+  test('sin ninguna de las dos es null: no se inventa un cero', () => {
+    expect(netoDeCreditos({ ganadores: [ANA] }, ANA)).toBeNull();
+    // Y lo de otro jugador no se cuela como propio.
+    expect(netoDeCreditos({ reparto: [{ idJugador: BRUNO, creditos: 9 }] }, ANA)).toBeNull();
+  });
+});
+
+describe('mezclarPorJugador · el final se anuncia por partes', () => {
+  /*
+   * La liquidacion tardia de la apuesta (HU-JUE-014 CA-06) llega en un segundo
+   * aviso que trae `recompensa` VACIA. Quedarse con el ultimo aviso borraria la
+   * recompensa ya anunciada, y la cifra grande cambiaria de significado a
+   * mitad.
+   */
+  test('lo que traia el primer aviso no se pierde con el segundo', () => {
+    const primero = [{ idJugador: ANA, creditos: 2, ganador: true }];
+
+    expect(mezclarPorJugador(primero, [])).toEqual(primero);
+    expect(mezclarPorJugador(primero, undefined)).toEqual(primero);
+  });
+
+  test('si el segundo trae lo del mismo jugador, manda el segundo', () => {
+    const mezclado = mezclarPorJugador(
+      [{ idJugador: ANA, creditos: 0 }],
+      [{ idJugador: ANA, creditos: 2 }],
+    );
+
+    expect(mezclado).toEqual([{ idJugador: ANA, creditos: 2 }]);
+  });
+
+  test('cada jugador conserva su entrada', () => {
+    const mezclado = mezclarPorJugador(
+      [{ idJugador: ANA, creditos: 1 }],
+      [{ idJugador: BRUNO, creditos: 2 }],
+    );
+
+    expect(mezclado).toHaveLength(2);
   });
 });

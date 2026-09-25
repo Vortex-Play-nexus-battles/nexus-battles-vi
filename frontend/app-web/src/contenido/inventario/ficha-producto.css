@@ -58,6 +58,27 @@
   object-fit: cover;
 }
 
+/* Sin imagen: el hueco es una ranura oscura con el icono del tipo, del
+   mismo tono que el escenario del heroe en la home (UX-GAME-3). */
+.ficha__imagen--ausente {
+  display: grid;
+  place-items: center;
+  height: 140px;
+  background:
+    radial-gradient(
+      60% 80% at 50% 45%,
+      color-mix(in srgb, var(--primaria) 40%, transparent),
+      transparent 72%
+    ),
+    var(--cromo);
+}
+
+.ficha__icono-tipo {
+  width: 48px;
+  height: 48px;
+  color: var(--texto-sobre-color);
+}
+
 .ficha__nombre {
   margin: 0 0 4px;
   font-family: var(--fuente-titulo);
@@ -114,6 +135,41 @@
   color: var(--texto-2);
 }
 
+/* Las dos mitades del detalle de un heroe (R5): sus estadisticas y las acciones
+   de su prototipo. Las filas reusan `.ficha__atributo`, asi que aqui solo hace
+   falta separar las secciones y rotularlas. */
+.ficha__seccion {
+  margin: 0 0 16px;
+}
+
+.ficha__seccion-titulo {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* La aclaracion de a quien pertenece el dato: «con lo que llevas equipado» o
+   «iguales para este prototipo». Sin ella las dos listas se leerian como una. */
+.ficha__seccion-nota {
+  margin: 2px 0 8px;
+  font-size: 0.8rem;
+  color: var(--texto-2);
+}
+
+.ficha__acciones {
+  margin: 0;
+  padding: 0 0 0 18px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.ficha__accion-efecto {
+  margin: 2px 0 8px;
+  font-size: 0.85rem;
+  color: var(--texto-2);
+  overflow-wrap: anywhere;
+}
+
 /* En pantallas estrechas la ficha ocupa todo el alto disponible. */
 @media (max-width: 599px) {
   .ficha-capa {
@@ -141,4 +197,19 @@
   color: var(--advertencia);
   font-size: 0.85rem;
   line-height: 1.4;
+}
+
+/* =======================================================================
+   Superficies claras de esta vista — UX-GAME-1
+   Devuelven la tinta a oscuro sobre la atmosfera del Nexo (ver «Tinta
+   contextual» en base.css). Son variables de contexto que apuntan a tokens,
+   no una copia de la paleta: componen con el alto contraste.
+   ======================================================================= */
+.ficha {
+  --tinta: var(--texto);
+  --tinta-2: var(--texto-2);
+  --tinta-3: var(--texto-3);
+  --tinta-enlace: var(--primaria);
+  --tinta-enlace-hover: var(--primaria-relleno);
+  color: var(--texto);
 }

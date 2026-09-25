@@ -36,8 +36,34 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Autenticacion e identidad (ms-identidad)
-  version: 1.0.0
+  version: 1.1.0
   description: |
+    ### Cambios en 1.1.0 (R17 — alta del jugador), todos aditivos
+
+    - **Alta del jugador** (`/auth/onboarding`): al registrarse, ms-identidad
+      pide a sus duenos los creditos de bienvenida (ms-finanzas), el heroe
+      inicial y su equipo (inventario), como una operacion persistente,
+      reintentable e idempotente. `GET` dice como va; `POST .../reintentos`
+      la relanza. Ver `OnboardingResponse`.
+    - **Cierre de sesion** (`POST /auth/logout`): auditoria del cierre; el
+      token sigue siendo valido hasta que caduca (tokens sin estado).
+    - `LoginResponse` gana `uid` y `onboardingListo`. Los campos de 1.0.0 no
+      cambian.
+    - Registro y login **aceptan `Accept: application/problem+json`**: con esa
+      cabecera, los rechazos salen como problem details con `type` estable (y
+      `campo` en el registro). Sin ella, el mismo texto plano de 1.0.0, con el
+      mismo codigo de estado. Nadie que ya consumiera 1.0.0 nota el cambio.
+    - El registro guarda el correo sin espacios y en minusculas, y rechaza un
+      correo o un apodo que ya existen escritos con otras mayusculas. El login
+      encuentra la cuenta por el correo tal como se teclee (primero exacto,
+      despues en minusculas), asi que las cuentas anteriores entran igual.
+    - Un fallo inesperado del registro ya no sale como 400 con el mensaje
+      interno (se llegaba a ver el SQL): es un 500 sin detalles.
+
+    **Contrato redactado por el Equipo 6 (R17) sobre el modulo del equipo de
+    Cuentas: pendiente de validacion por su dueno**, igual que 1.0.0.
+
+
     Registro, inicio de sesion, recuperacion y cambio de contrasena de las
     personas, mas las dos rutas que sostienen la identidad de la plataforma:
     el juego de claves publicas (`/jwks`) y la emision de credenciales de
@@ -175,16 +201,34 @@ paths:
                 versionToken: 0
         '400':
           description: |
-            Alta rechazada. **El cuerpo es texto plano**, no problem details:
-            el controlador captura `RuntimeException` y devuelve
-            `e.getMessage()` tal cual. Cubre correo o apodo ya registrados,
-            apodo en la lista negra y contrasena fuera de politica, sin
-            distinguirlos por ningun campo estructurado.
+            Alta rechazada: correo o apodo ya registrados (tambien con otras
+            mayusculas, 1.1.0), apodo en la lista negra, contrasena fuera de
+            politica, avatar invalido o un campo mas largo que su columna.
+
+            **Por omision el cuerpo es texto plano**, el mensaje tal cual
+            (1.0.0). **Desde 1.1.0, con `Accept: application/problem+json`**
+            sale como problem details con `type` estable por motivo y
+            `campo` = el campo del formulario a marcar
+            (`email`, `apodo`, `password`, `avatar`, `nombres`, `apellidos`).
+            Mismo codigo de estado en los dos formatos.
+
+            Dos altas simultaneas con el mismo correo o apodo: la segunda
+            recibe este mismo rechazo (antes, el error de la base de datos).
           content:
             text/plain:
               schema:
                 type: string
               example: El apodo ya está en uso.
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemaDeRegistro'
+              example:
+                type: https://nexusbattles.upb.edu.co/errors/correo-en-uso
+                title: El correo ya está registrado
+                status: 400
+                detail: El correo electrónico ya está registrado.
+                instance: /api/v1/auth/registro
+                campo: email
 
   /api/v1/auth/login:
     post:
@@ -251,32 +295,142 @@ paths:
                 token: eyJraWQiOiJrMSIsImFsZyI6IlJTMjU2In0.eyJzdWIiOiJ2YWxraXJpYSJ9.firma
         '401':
           description: |
-            Credenciales invalidas. **Texto plano.** El mensaje es generico a
+            Credenciales invalidas. **Texto plano** por omision; con
+            `Accept: application/problem+json` (1.1.0), problem details con
+            `type` `.../errors/credenciales-invalidas`. El mensaje es generico a
             proposito: no dice si fallo el correo o la contrasena, para no
             servir de oraculo de correos registrados.
           content:
             text/plain:
               schema:
                 type: string
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
         '403':
           description: |
             La cuenta no puede iniciar sesion: baneada, suspendida o inactiva.
-            **Texto plano.** Los tres casos comparten codigo y solo se
-            distinguen por el mensaje.
+            **Texto plano** por omision. Con `Accept: application/problem+json`
+            (1.1.0) los tres casos se distinguen por `type`:
+            `.../errors/cuenta-baneada`, `.../errors/cuenta-suspendida` y
+            `.../errors/cuenta-inactiva`.
           content:
             text/plain:
               schema:
                 type: string
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
         '423':
           description: |
             Cuenta bloqueada temporalmente por intentos fallidos (RF-AUT-009;
-            `app.seguridad.minutos-bloqueo`, 15 por omision). **Texto plano.**
-            Se separa del 403 porque es transitorio: la misma peticion
-            funcionara sola pasado el bloqueo.
+            `app.seguridad.minutos-bloqueo`, 15 por omision). **Texto plano**
+            por omision; `type` `.../errors/cuenta-bloqueada` con
+            `Accept: application/problem+json`. Se separa del 403 porque es
+            transitorio: la misma peticion funcionara sola pasado el bloqueo.
           content:
             text/plain:
               schema:
                 type: string
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/v1/auth/logout:
+    post:
+      tags: [cuenta]
+      operationId: cerrarSesion
+      summary: Cierra la sesion de quien firma el token (R17)
+      description: |
+        Deja el cierre en la auditoria (ms-cumplimiento, motivo
+        `CIERRE_SESION`) y responde 204. **No revoca el token**: los tokens
+        son JWT sin estado y los demas servicios los aceptan hasta que caducan.
+        Cerrar la sesion es que el navegador olvide el suyo, cosa que la
+        interfaz hace aunque esta llamada falle. Revocar en todos los servicios
+        exigiria tokens de corta vida con renovacion: decision anotada (D-31).
+      security:
+        - tokenDeUsuario: []
+      responses:
+        '204':
+          description: Cierre registrado.
+        '403':
+          description: Sin token, o con un token invalido, caducado o revocado (interceptor fail-closed).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/v1/auth/onboarding:
+    get:
+      tags: [cuenta]
+      operationId: consultarAlta
+      summary: Como va el alta del jugador que ha iniciado sesion (R17)
+      description: |
+        **Solo lo propio**: el jugador sale del `uid` del token, nunca de la
+        ruta ni del cuerpo. Cualquier rol con sesion puede llamar; una cuenta
+        sin alta (de administracion, o anterior a R17) recibe `NO_APLICA` con
+        `listo=true`. La respuesta lleva `Cache-Control: no-store`: cambia en
+        segundos y la pantalla «Preparando tu cuenta» la consulta varias veces.
+      security:
+        - tokenDeUsuario: []
+      responses:
+        '200':
+          description: Estado del alta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnboardingResponse'
+              example:
+                estado: ERROR_REINTENTABLE
+                listo: false
+                version: 1
+                intentos: 1
+                siguienteIntento: '2026-09-24T12:00:15Z'
+                pasos:
+                  - { paso: PERFIL, titulo: Perfil de jugador, estado: HECHO, motivo: null }
+                  - paso: CREDITOS
+                    titulo: Créditos de bienvenida
+                    estado: ERROR
+                    motivo: El servicio no respondió a tiempo. Lo reintentamos automáticamente.
+                  - { paso: HEROE, titulo: Héroe inicial, estado: HECHO, motivo: null }
+                  - { paso: EQUIPO, titulo: Equipo del héroe, estado: HECHO, motivo: null }
+                creditosIniciales: null
+                heroeInicial: 6650f0c2a1b2c3d4e5f60718
+        '403':
+          description: Sin sesion valida (interceptor fail-closed).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/v1/auth/onboarding/reintentos:
+    post:
+      tags: [cuenta]
+      operationId: reintentarAlta
+      summary: Relanza el alta propia (boton «Reintentar») (R17)
+      description: |
+        Lanza un intento en segundo plano y responde **202** con el estado en
+        ese momento; el avance se sigue con el `GET`. Es seguro repetirlo:
+        cada paso es idempotente (los creditos por `refId`
+        `bono-registro-v{version}-{uid}` en ms-finanzas; el heroe y su equipo
+        se adoptan si ya existen) y un solo trabajador procesa un alta a la
+        vez. Dos pulsaciones seguidas (menos de 3 s) no lanzan dos intentos. Un
+        alta completa no se relanza.
+      security:
+        - tokenDeUsuario: []
+      responses:
+        '202':
+          description: Intento lanzado (o no hacia falta); estado actual.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnboardingResponse'
+        '403':
+          description: Sin sesion valida.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
 
   /api/v1/auth/restablecer/solicitar:
     post:
@@ -783,6 +937,87 @@ components:
             El JWT de la sesion. Su forma —firma, cabecera y claims— esta
             descrita en `info.description`, porque es lo que consumen los
             otros diecinueve servicios.
+        uid:
+          type: [string, 'null']
+          format: uuid
+          description: |
+            1.1.0 — el identificador estable (ADR-002), el mismo del claim
+            `uid`. Nulo solo en una cuenta que todavia no lo tenga.
+        onboardingListo:
+          type: boolean
+          description: |
+            1.1.0 — si el alta del jugador ya termino (creditos de bienvenida,
+            heroe inicial y su equipo). `false`: la interfaz lleva a «Preparando
+            tu cuenta» y sigue el avance con `GET /api/v1/auth/onboarding`.
+            `true` tambien en cuentas sin alta (administracion, anteriores a
+            R17). El login relanza un alta que quedo a medias.
+
+    OnboardingResponse:
+      type: object
+      description: |
+        1.1.0 (R17) — estado del alta del jugador. Los pasos traen un titulo y,
+        si fallaron, un **motivo legible**; el error tecnico se queda en la
+        bitacora y nunca sale por aqui.
+      required: [estado, listo, intentos, pasos]
+      properties:
+        estado:
+          type: string
+          enum: [PENDIENTE, EN_PROCESO, COMPLETO, ERROR_REINTENTABLE, NO_APLICA]
+        listo:
+          type: boolean
+          description: Si el jugador ya puede entrar al juego (COMPLETO o NO_APLICA).
+        version:
+          type: [integer, 'null']
+          description: Version del alta; entra en la clave de idempotencia de cada paso.
+        intentos:
+          type: integer
+        siguienteIntento:
+          type: [string, 'null']
+          format: date-time
+          description: Solo en ERROR_REINTENTABLE; en UTC. El reintento programado espera 15 s, 30 s, 1 min... hasta 10 min.
+        pasos:
+          type: array
+          items:
+            $ref: '#/components/schemas/PasoDelAlta'
+        creditosIniciales:
+          type: [integer, 'null']
+          description: Los que acredito ms-finanzas, cuando ya estan.
+        heroeInicial:
+          type: [string, 'null']
+          description: Id del elemento de inventario del heroe inicial, cuando ya existe.
+
+    PasoDelAlta:
+      type: object
+      required: [paso, titulo, estado]
+      properties:
+        paso:
+          type: string
+          enum: [PERFIL, CREDITOS, HEROE, EQUIPO]
+        titulo:
+          type: string
+          example: Créditos de bienvenida
+        estado:
+          type: string
+          enum: [PENDIENTE, HECHO, ERROR]
+        motivo:
+          type: [string, 'null']
+          description: Solo en ERROR; texto para la persona, no el error tecnico.
+
+    ProblemaDeRegistro:
+      description: |
+        1.1.0 — rechazo del registro cuando se pide `application/problem+json`.
+        `type` estable por motivo: `correo-en-uso`, `apodo-en-uso`,
+        `apodo-no-permitido`, `contrasena-no-cumple-politica` (el mismo de
+        `PUT /auth/password`), `avatar-invalido`, `datos-de-registro-invalidos`,
+        todos bajo `https://nexusbattles.upb.edu.co/errors/`.
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetail'
+        - type: object
+          properties:
+            campo:
+              type: [string, 'null']
+              description: Campo del formulario al que se refiere el rechazo.
+              enum: [email, apodo, password, avatar, nombres, apellidos, null]
 
     SolicitarRestablecimientoRequest:
       type: object

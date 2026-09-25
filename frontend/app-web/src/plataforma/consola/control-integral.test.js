@@ -379,6 +379,38 @@ describe('las consultas son las que el sistema atiende de verdad', () => {
   });
 });
 
+describe('maquetado del aviso', () => {
+  /**
+   * `.aviso` del kit es una fila: [cuerpo][accion]. Si el titulo, el motivo y
+   * el detalle cuelgan como hermanos sueltos salen como cuatro columnas
+   * estrujadas, que es como se vio en dev la primera vez.
+   */
+  test('el titulo, el motivo y el detalle van dentro de aviso__cuerpo', async () => {
+    const raiz = pagina();
+
+    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
+    await asentar();
+
+    const aviso = raiz.querySelector('[data-panel="subastas"] .aviso');
+    expect(aviso.children.length).toBe(2);
+    const cuerpo = aviso.querySelector('.aviso__cuerpo');
+    expect(cuerpo.querySelector('.aviso__titulo').textContent).toBe('SERVICIO DEGRADADO');
+    expect(cuerpo.querySelector('.aviso__detalle').textContent).toContain('GET /api/v1/subastas');
+    expect(aviso.lastElementChild.dataset.accion).toBe('reintentar');
+  });
+
+  test('sin permiso el aviso lleva solo el cuerpo', async () => {
+    const raiz = pagina();
+
+    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
+    await asentar();
+
+    const aviso = raiz.querySelector('[data-panel="auditoria"] .aviso');
+    expect(aviso.children.length).toBe(1);
+    expect(aviso.firstElementChild.className).toBe('aviso__cuerpo');
+  });
+});
+
 describe('formatearFecha', () => {
   test('nulo es un guion, no la fecha de hoy', () => {
     expect(formatearFecha(null)).toBe('--');

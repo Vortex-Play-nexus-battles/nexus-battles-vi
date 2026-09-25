@@ -37,9 +37,46 @@
 
   <properties>
     <java.version>21</java.version>
+    <!--
+      Misma version del BOM de Testcontainers que ms-ecommerce y los servicios
+      Gradle (heroes, inventario, salas-partidas).
+    -->
+    <testcontainers.version>1.21.4</testcontainers.version>
   </properties>
 
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.testcontainers</groupId>
+        <artifactId>testcontainers-bom</artifactId>
+        <version>${testcontainers.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
   <dependencies>
+
+    <!--
+      Regla 8 de plataforma: todo cambio de esquema por Flyway, versionado.
+      Hasta R17 este servicio vivia con ddl-auto=update. V1 es el esquema que
+      ya existe (el mismo que generaba Hibernate) y en una base existente se
+      toma como linea base sin ejecutarse; V2 en adelante son migraciones de
+      verdad. Mismo trio de dependencias que ms-ecommerce.
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-flyway</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-database-postgresql</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -85,6 +122,27 @@
       <scope>test</scope>
     </dependency>
 
+    <!--
+      Las pruebas con PostgreSQL de verdad: Flyway aplica V1..Vn contra el
+      motor que se despliega y Hibernate (ddl-auto=validate) comprueba que las
+      entidades casan. Con H2 la prueba diria "migra" sin haber probado nada.
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-testcontainers</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+
     <dependency>
       <groupId>io.github.resilience4j</groupId>
       <artifactId>resilience4j-spring-boot4</artifactId>
@@ -127,6 +185,24 @@
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+
+      <!--
+        Surefire solo recoge *Test/*Tests por omision. Las pruebas con
+        Testcontainers se llaman *IT (como en el resto del monorepo) y el CI
+        ejecuta "mvn test": sin esta inclusion no correrian nunca (mismo
+        hallazgo que ms-ecommerce, corrida 35414172038).
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <includes>
+            <include>**/*Test.java</include>
+            <include>**/*Tests.java</include>
+            <include>**/*IT.java</include>
+          </includes>
+        </configuration>
       </plugin>
 
       <plugin>
@@ -220,6 +296,44 @@
             <configuration>
               <includes>
                 <include>com/nexusbattles/ms_identidad/rbac/**</include>
+              </includes>
+
+              <rules>
+                <rule>
+                  <element>BUNDLE</element>
+                  <limits>
+                    <limit>
+                      <counter>LINE</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>0.80</minimum>
+                    </limit>
+                    <limit>
+                      <counter>INSTRUCTION</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>0.80</minimum>
+                    </limit>
+                  </limits>
+                </rule>
+              </rules>
+            </configuration>
+          </execution>
+
+          <!--
+            R17.1: la misma compuerta (>=80 %) para el alta del jugador nuevo,
+            que es codigo nuevo de principio a fin y no hereda la deuda de
+            cobertura del resto del servicio.
+          -->
+          <execution>
+            <id>check-cobertura-onboarding</id>
+            <phase>test</phase>
+
+            <goals>
+              <goal>check</goal>
+            </goals>
+
+            <configuration>
+              <includes>
+                <include>com/nexusbattles/ms_identidad/onboarding/**</include>
               </includes>
 
               <rules>

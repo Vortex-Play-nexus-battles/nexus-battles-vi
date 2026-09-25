@@ -72,7 +72,10 @@ class PublicacionRestriccionPostgresTest {
     }
 
     private Subasta subasta(String unidad, BigDecimal incremento) {
-        var s = new Subasta(null, UUID.randomUUID(), UUID.randomUUID(), BigDecimal.TEN, incremento,
+        // El id lo asigna la aplicacion desde R10: la entidad dejo de declarar
+        // @GeneratedValue, porque publicar necesita el identificador ANTES de
+        // guardar para reservar el elemento en inventario con el.
+        var s = new Subasta(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), BigDecimal.TEN, incremento,
                 null, null, EstadoSubasta.ACTIVA, Instant.now().plusSeconds(86400), 0L);
         s.setElementoInventarioId(unidad);
         return s;

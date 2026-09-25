@@ -13,6 +13,125 @@ gh workflow run medir-jvm-dev.yml            # RAM + swap de cada contenedor, so
 gh workflow run experimento-flags-jvm.yml    # A/B de flags en el banco E2E, con la suite como carga
 ```
 
+## 24-sep 04:00-04:30 UTC — el host colgado, la tormenta de arranque y el arranque escalonado (R16.5b)
+
+**Que paso.** A las 03:53 el push de #691 desplego `ms-subastas` como 13.ª JVM
+(#690 la habia marcado desplegable con la prevision equivocada de abajo). A
+los seis minutos el host dejo de responder: SSH aceptaba la conexion pero no
+ejecutaba nada ("Run Command Timeout"), el borde no contestaba, y el
+`retirar-servicio.yml` de `ms-subastas` se quedo colgado en el mismo paso. No
+murio ningun proceso: el nucleo no mata a nadie mientras pueda seguir
+sacando paginas a swap, y cada JVM que volvia a ejecutarse las necesitaba de
+vuelta.
+
+**Recuperacion** (todo por los flujos del repositorio, sin tocar el host a mano):
+
+| UTC | Accion | Resultado |
+|---|---|---|
+| 04:04 | #707 fusionado: `ms-subastas` y `ms-chatbot` a `desplegableDev: false` | ningun push futuro vuelve a desplegarlos en este host |
+| 04:05-04:08 | `infra-dev.yml` accion `stop` (plataforma) | apagada en 3 min |
+| 04:08-04:09 | `infra-dev.yml` accion `start` + `retirar-servicio.yml ms-subastas` en cuanto abrio el 22 | subastas retirada a los 30 s de arrancar (su volumen se conserva) |
+| 04:13 | `diagnostico-dev.yml` con **12 JVM arrancando a la vez** | carga 18,7 sobre 2 vCPU, RAM disponible 122 MiB, swap 1361 MiB, **ningun servicio respondia** |
+| 04:18 | retirar `ms-cumplimiento`, `metricas-plataforma`, `admin-parametros`, `correo` (sin su base) | swap **2040/2047** justo antes; 1317 despues. Las 8 restantes respondieron en ~1,5 min |
+| 04:20-04:35 | CD a demanda por olas de dos: finanzas+comentarios, torneos+identidad, admin-parametros+correo, metricas+cumplimiento | cada ola sana en su primer intento de despliegue; las 12 con los flags nuevos |
+
+**Lo que dice esto de la capacidad.** Hay dos numeros distintos y los dos
+importan:
+
+- **En regimen**, doce JVM caben en RAM + swap (la medicion de abajo: 240-300
+  MiB cada una). Lo que no cabe es una decimotercera.
+- **Arrancando a la vez**, doce no caben: una JVM de Spring Boot arrancando
+  toca toda su memoria de golpe (clases, Hibernate, Flyway), asi que su
+  conjunto de trabajo es su tamano entero. Doce a la vez piden mas RAM de la
+  que hay y el host intercambia en vez de trabajar. Eso es lo que pasa CADA
+  vez que el host vuelve del apagado nocturno, porque Docker levanta todos los
+  contenedores `unless-stopped` en el mismo segundo.
+
+**Arranque escalonado.** Cada JVM lleva un turno (`ARRANQUE_TURNO`, dos por
+turno) y su entrypoint espera `turno x 40 s` antes de arrancar java, solo si
+el contenedor es anterior al arranque actual del host y el host lleva menos de
+10 min encendido. Un despliegue no espera nunca (desplegar.sh y revertir.sh
+fijan `ARRANQUE_CREADO_EN`). Detalle en la cabecera de
+`docker-compose.deploy.yml`; guardian en la seccion 9 de
+`scripts/cd/comprobar-catalogo-servicios.sh`; prueba en
+`scripts/cd/pruebas/arranque-escalonado.sh`.
+
+| Turno | Espera | JVM |
+|--:|--:|---|
+| 0 | 0 s | ms-identidad, moderacion-sanciones |
+| 1 | 40 s | salas-partidas, notificaciones |
+| 2 | 80 s | ms-finanzas, ms-ecommerce |
+| 3 | 120 s | comentarios, torneos |
+| 4 | 160 s | admin-parametros, correo |
+| 5 | 200 s | metricas-plataforma, ms-cumplimiento |
+
+El entrypoint vive en la definicion del contenedor, asi que solo protege a
+los contenedores creados despues de fusionarlo: hay que redesplegar las doce
+JVM una vez (por olas) y comprobarlo con un stop/start real.
+
+**Comprobado el 24-sep a las 05:19 UTC** (tras redesplegar las 12 en
+`b4d942d`; stop 35959220647, start 35959357347): turno 0 sano a los 36 s,
+turno 2 a los 109 s, **las 12 a los 251 s**. Carga 2,6 y swap 1090 MiB a los
+dos minutos (sin escalonar: 18,7 y 1361 MiB, y ninguna respondia a los
+nueve). En regimen, 3052 MiB entre RAM y swap (35959726825), lo mismo que
+antes de apagar. Canarios 6/6 (35959724531). Detalle en #709.
+
+**Hallazgos de paso, para no perderlos:**
+
+- Los crones de `infra-dev.yml` llegan con ~4,5-5 h de retraso (el `stop` de
+  las 04:23 UTC se ejecuta hacia las 09:20; el `start` de las 12:17 hacia las
+  17:00). GitHub no garantiza la hora de un `schedule`. En la practica el host
+  esta encendido hasta las 04:20 de Colombia y no se enciende solo hasta el
+  mediodia, salvo que un despliegue lo encienda antes.
+- Un CD a demanda que queda **pendiente** se pierde si llega un push (la cola
+  de concurrencia solo guarda uno). #703 lo resolvio para los push; para los
+  despachos manuales sigue pasando (corrida 35955251726, cancelada por el push
+  de #705).
+- Creditos de CPU en modo `standard` (main.tf): una tormenta de arranque o un
+  host intercambiando los gasta, y sin creditos cada vCPU queda al 20 %. Es
+  otra razon para no arrancar doce JVM a la vez.
+
+## 24-sep 03:50 UTC — la prevision de abajo NO se cumplio: el host esta lleno
+
+`medir-jvm-dev.yml`, corrida 35952844520, con 12 JVM en el host (las 9 de
+plataforma + ms-finanzas, ms-cumplimiento y ms-ecommerce; 4 de ellas ya con los
+flags nuevos): **RAM disponible 20 MiB y swap 2047 de 2047 MiB**. La propia
+medicion se corto por tiempo a mitad de la lista.
+
+| Contenedor | RAM | swap | total | flags |
+|---|--:|--:|--:|---|
+| `srv-ms-finanzas` | 122 | 180 | 302 | viejos |
+| `srv-moderacion-sanciones` | 93 | 184 | 277 | nuevos |
+| `srv-comentarios` | 86 | 181 | 267 | viejos |
+| `srv-admin-parametros` | 78 | 187 | 265 | viejos |
+| `srv-ms-cumplimiento` | 72 | 170 | 242 | viejos |
+| `srv-ms-ecommerce` | 145 | 95 | 240 | nuevos |
+| `srv-correo` | 109 | 114 | 223 | viejos |
+| `srv-metricas-plataforma` | 75 | 109 | 184 | viejos |
+| (identidad, notificaciones, salas, torneos: la medicion no llego) | | | | |
+
+**Donde fallo la cuenta.** La prevision (≈2780 MiB con las 14 JVM) salio de
+la foto de las 01:58, tomada 7 minutos despues de un reinicio, con los montones
+recien nacidos. Con horas de uso, una JVM de este host ocupa **240-300 MiB**
+tambien con los flags nuevos: el monton comprometido es 70-85 MiB, y el resto
+es no-monton y la cache de archivos de una imagen JDK. Doce JVM ya llenan el
+host. Los flags nuevos siguen siendo mejores que los viejos (el experimento lo
+repite dos veces), pero **no crean sitio para dos servicios mas**.
+
+**Decision, con esta medicion:**
+
+- `ms-subastas` y `ms-chatbot` vuelven a `desplegableDev: false`. No
+  caben, y desplegarlos tumbaria a los que si estan. Su bloqueo es de
+  capacidad, medido, no de codigo.
+- Se termina de aplicar los flags nuevos a las JVM que aun tienen los viejos,
+  de dos en dos, para bajar la presion.
+- **Salidas que quedan, sin tercer EC2 ni cambiar de tamano:** (a) llevar
+  2-3 servicios al host de contenido, que tiene RAM libre, con acuerdo del
+  grupo 2 (su cuenta, su grupo de seguridad) y resolviendo que esos servicios
+  hablan con los de plataforma por IP publica; (b) consolidar los Postgres
+  (≈200 MiB, ver abajo) y bajar el monton a 96 MiB con medicion; (c) aceptar
+  perfiles para los servicios de administracion. Las tres son decision del
+  equipo o del PO, no de capacidad. Quedan abiertas.
 ## 24-sep — la memoria se va en el no-montón, y el montón crecía sin freno (R16.5)
 
 ### Lo que ocupa hoy el host de plataforma
@@ -100,10 +219,12 @@ montón acotado cada arranque pide menos memoria, pero el experimento no muestra
 un arranque más rápido, y la tormenta sigue existiendo: queda anotada como
 riesgo abierto.
 
-Por eso los perfiles dejan de ser el mecanismo normal. `ms-finanzas`,
-`ms-subastas`, `ms-ecommerce` y `ms-cumplimiento` pasan a `desplegableDev: true`.
-`ms-chatbot` no, pero ya no por memoria: no tiene credenciales de base de datos
-en el entorno `dev` (`MS_CHATBOT_DB_*`).
+*Corregido a las 03:50 UTC, ver la seccion de arriba: la prevision no se cumplio.*
+Con ella, `ms-finanzas`, `ms-subastas`, `ms-ecommerce` y `ms-cumplimiento` pasaron
+a `desplegableDev: true`; `ms-subastas` ha vuelto a `false`.
+`ms-chatbot` tambien (R16.22): no tenia credenciales de base de datos en el
+entorno `dev` (`MS_CHATBOT_DB_*`), y ahora `desplegar.sh` las genera en el propio
+host, como las credenciales de servicio.
 
 **Regla al desplegar, la misma que antes:** medir con `medir-jvm-dev.yml` antes
 y después. Si la RAM disponible baja de ~80 MiB y el swap crece deprisa, o un

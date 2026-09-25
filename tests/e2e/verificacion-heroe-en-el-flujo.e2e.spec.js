@@ -58,6 +58,47 @@ function conToken(token) {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 }
 
+/**
+ * R17: todo jugador nuevo recibe al registrarse un heroe con un arma equipada
+ * (el alta de ms-identidad, contra ms-finanzas e inventario). Los casos «sin
+ * heroe equipado» necesitan a alguien sin equipo, asi que esperan a que su alta
+ * termine y le quitan lo que se le equipo: el mismo estado en que queda quien
+ * desequipa a mano desde su inventario. Por la API del inventario y con su
+ * propio token, nunca tocando una base de datos.
+ */
+async function dejarSinEquipo(api, jugador) {
+  await expect
+    .poll(
+      async () => {
+        const r = await api.get('/api/v1/auth/onboarding', { headers: conToken(jugador.token) });
+        return r.ok() ? (await r.json()).estado : `HTTP ${r.status()}`;
+      },
+      { timeout: 30_000, message: 'el alta del jugador nuevo no termino' },
+    )
+    .toBe('COMPLETO');
+  const vitrina = await api.get('/api/v1/inventario/elementos?pagina=0', {
+    headers: conToken(jugador.token),
+  });
+  const heroes = ((await vitrina.json()).elementos ?? []).filter((e) => e.tipo === 'HEROE');
+  for (const heroe of heroes) {
+    const r = await api.get(`/api/v1/inventario/heroes/${heroe.id}/equipamiento`, {
+      headers: conToken(jugador.token),
+    });
+    const equipo = await r.json();
+    const puestos = [
+      ...(equipo.armas ?? []),
+      ...(equipo.items ?? []),
+      ...Object.values(equipo.armaduras ?? {}),
+    ];
+    for (const elemento of puestos) {
+      const quitar = await api.delete(
+        `/api/v1/inventario/heroes/${heroe.id}/equipamiento/${elemento}`,
+        { headers: conToken(jugador.token) },
+      );
+      expect(quitar.status(), `desequipar ${elemento}: ${await quitar.text()}`).toBe(200);
+    }
+  }
+}
 async function conSesion(page, jugador, apodo) {
   await page.addInitScript(
     ([token, nombre]) => {
@@ -144,6 +185,46 @@ test.describe('La verificacion de heroe esta en el flujo (RF-JUE-003)', () => {
     await expect(dialogo.locator('[data-accion="confirmar"]')).toHaveText(/Entrar a la sala/i);
   });
 
+  /**
+   * El retrato del heroe llega y se pinta — R8.
+   *
+   * Hasta R8 `HeroeDeCombate` se construia con `retratoUrl` en null porque el
+   * record con el que salas-partidas deserializaba la ficha del producto
+   * declaraba solo `prototipo` y descartaba la imagen. La vista lo notaba: sin
+   * retrato pinta la inicial del nombre, asi que todos los heroes se veian
+   * iguales. El campo estaba en el contrato desde que se escribio.
+   *
+   * Se afirma tambien que la imagen CARGA, no solo que el atributo esta: una
+   * referencia que el borde no sirve daria un `src` roto, que en la practica es
+   * lo mismo que no tener retrato.
+   */
+  test('el retrato del heroe se pinta, no la inicial de su nombre', async ({ page }) => {
+    const sala = salaCompartida;
+
+    await conSesion(page, invitado, INVITADO);
+    await page.goto(`${VERIFICACION}?sala=${sala.id}`);
+
+    const dialogo = page.locator('#validacion-heroe');
+    await expect(dialogo).toHaveAttribute('data-resultado', 'DISPONIBLE', { timeout: 20_000 });
+
+    const retrato = dialogo.locator('.marco-heroe__imagen');
+    await expect(retrato).toHaveCount(1);
+    await expect(dialogo.locator('.marco-heroe__inicial')).toHaveCount(0);
+
+    // Y que el navegador la haya cargado de verdad: naturalWidth es 0 en una
+    // imagen rota.
+    await expect
+      .poll(() => retrato.evaluate((img) => img.complete && img.naturalWidth > 0), {
+        timeout: 15_000,
+      })
+      .toBe(true);
+
+    // El nivel NO se pinta: no existe como estado persistido en ningun
+    // servicio, y la vista solo dibuja el distintivo cuando llega un numero.
+    // Si algun dia apareciera un 1 aqui, seria inventado.
+    await expect(dialogo.locator('.marco-heroe__nivel')).toHaveCount(0);
+  });
+
   test('Confirmar entra de verdad a la sala', async ({ page }) => {
     // Es lo que este boton no hacia: escribia en la consola. UX-R4.5 lo
     // conecto y #648 lo borro sin querer; FI-R0 lo devolvio. Aqui queda
@@ -171,10 +252,11 @@ test.describe('La verificacion de heroe esta en el flujo (RF-JUE-003)', () => {
   test('sin heroe equipado el listado lleva al dialogo, que dice como arreglarlo', async ({
     page,
   }) => {
-    // Jugador nuevo: `sembrar.sh` no le puso inventario, asi que
-    // `PuertaDeHeroe` va a cerrarse. Sala sin apuesta, para que el camino
-    // probado sea el del 422 y no el de la confirmacion.
+    // Jugador nuevo sin equipo: el alta (R17) le da un heroe equipado y aqui se
+    // le quita, asi que `PuertaDeHeroe` va a cerrarse. Sala sin apuesta, para
+    // que el camino probado sea el del 422 y no el de la confirmacion.
     const sinHeroe = await sesionDe(api, `sin_heroe_r6_${Date.now()}`);
+    await dejarSinEquipo(api, sinHeroe);
     const creada = await api.post('/api/v1/salas', {
       headers: conToken(anfitriona.token),
       data: {
@@ -217,7 +299,8 @@ test.describe('La verificacion de heroe esta en el flujo (RF-JUE-003)', () => {
 
     // Vuelve atras en el historial, no a un listado recien cargado: quien
     // tenia filtros puestos los conserva.
-    await page.waitForURL(/batallas\.html/, { timeout: 20_000 });
+    // R17.3 — el listado vive en /jugar detrás del borde (la ruta antigua redirige).
+    await page.waitForURL(/\/jugar(?:[?#]|$)|batallas\.html/, { timeout: 20_000 });
     await expect(page.locator(`[data-sala="${sala.id}"]`)).toBeVisible();
   });
 

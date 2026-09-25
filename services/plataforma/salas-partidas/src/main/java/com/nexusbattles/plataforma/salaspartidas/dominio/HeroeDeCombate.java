@@ -10,9 +10,22 @@ import java.util.Objects;
  * de batalla pintan. La ficha completa del heroe pertenece al modulo de
  * contenido y no se copia aqui — este servicio no es su dueno y no la guarda.
  *
- * <p>{@code retratoUrl} y {@code nivel} pueden faltar: el inventario no los
- * publica en su vitrina, y el contrato los declara anulables justamente porque
- * quien los tiene es el catalogo de prototipos, no el inventario del jugador.
+ * <p>{@code retratoUrl} y {@code nivel} pueden faltar, y por razones
+ * distintas — conviene no confundirlas.
+ *
+ * <p>El <b>retrato</b> si existe: es {@code imagen} del producto del catalogo,
+ * a dos saltos del inventario ({@code elemento.productoId -> producto.imagen}).
+ * Desde R8 se propaga, y lo hace el servidor en la llamada a productos que ya
+ * hacia para resolver el prototipo: el navegador no pide nada de mas. Sigue
+ * siendo anulable porque productos puede no contestar, o el producto puede no
+ * tener imagen.
+ *
+ * <p>El <b>nivel</b> no existe. Ningun servicio lo persiste: en el catalogo de
+ * heroes es un parametro de ruta ({@code /heroes/{nombre}/niveles/{nivel}}) y
+ * no un atributo guardado, y el documento del inventario
+ * ({@code ElementoDocumento}) no tiene columna de nivel. Asi que se deja en
+ * {@code null} a proposito. Rellenarlo con un 1, o con cualquier otra cifra,
+ * seria ensenarle al jugador un dato que el servidor no conoce.
  *
  * @param id          identificador del heroe en el inventario del jugador
  * @param nombre      nombre propio que le puso su dueno
@@ -24,8 +37,10 @@ import java.util.Objects;
  *                    es lo unico que el motor de combate sabe buscar. Anulable
  *                    porque las filas anteriores a V8 no lo guardaron y porque
  *                    productos puede no contestar.
- * @param retratoUrl  retrato para la vista de batalla, o {@code null}
- * @param nivel       nivel del heroe, o {@code null} si no se conoce
+ * @param retratoUrl  retrato para la vista de batalla, o {@code null} si
+ *                    productos no contesta o el producto no tiene imagen
+ * @param nivel       siempre {@code null}: no hay nivel persistido en ningun
+ *                    servicio. Ver la nota de arriba
  * @param vidaActual  vida con la que llega a la sala
  * @param vidaMaxima  vida maxima con su equipamiento aplicado
  * @param defensa     defensa del prototipo, o {@code null} si no se conoce.
@@ -117,6 +132,20 @@ public record HeroeDeCombate(
     /** Igual, con la defensa del prototipo tambien resuelta. */
     public static HeroeDeCombate aPleno(String id, String nombre, String prototipo,
                                         int vidaMaxima, Integer defensa) {
-        return new HeroeDeCombate(id, nombre, prototipo, null, null, vidaMaxima, vidaMaxima, defensa);
+        return aPleno(id, nombre, prototipo, vidaMaxima, defensa, null);
+    }
+
+    /**
+     * Igual, con el retrato del producto (R8).
+     *
+     * <p>El {@code nivel} se queda en {@code null} y no hay sobrecarga que lo
+     * acepte, a proposito: no existe como estado persistido en ningun
+     * servicio, y una firma que lo pidiera invitaria a rellenarlo con algo
+     * inventado.
+     */
+    public static HeroeDeCombate aPleno(String id, String nombre, String prototipo,
+                                        int vidaMaxima, Integer defensa, String retratoUrl) {
+        return new HeroeDeCombate(
+                id, nombre, prototipo, retratoUrl, null, vidaMaxima, vidaMaxima, defensa);
     }
 }

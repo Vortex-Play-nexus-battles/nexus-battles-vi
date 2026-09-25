@@ -41,9 +41,28 @@ async function escribir(ruta, metodo, identidad, cuerpo, fetchImpl) {
   if (!respuesta.ok) {
     const fallo = new Error(`El servicio de inventario respondio ${respuesta.status} al guardar`);
     fallo.status = respuesta.status;
+    const detalle = await detalleDelProblema(respuesta);
+    if (detalle) {
+      fallo.detalle = detalle;
+    }
     throw fallo;
   }
   return respuesta.json();
+}
+
+/**
+ * El `detail` legible del problem detail (RFC 9457) que manda el servicio,
+ * p. ej. "El producto no existe en el catalogo."; undefined si no hay.
+ */
+async function detalleDelProblema(respuesta) {
+  try {
+    const problema = await respuesta.json();
+    return typeof problema?.detail === 'string' && problema.detail.trim() !== ''
+      ? problema.detail
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -182,6 +201,37 @@ export function desequiparElemento(
   { fetchImpl = fetchWithHttpErrorInterceptor } = {},
 ) {
   return solicitarEquipamiento(identidad, heroeId, 'DELETE', elementoId, fetchImpl);
+}
+
+/**
+ * Estadisticas del heroe propio con su equipamiento aplicado — R5.
+ *
+ * Son las del jugador, no las del catalogo: el servicio parte de las del
+ * prototipo y les suma los efectos de lo que este equipado. Por eso la ruta va
+ * por el identificador del ELEMENTO del inventario y no por el nombre del
+ * prototipo.
+ *
+ * Responde tambien sin nada equipado: devuelve las del prototipo sin
+ * modificadores. Un 404 es que ese heroe no existe; un 403, que no es suyo.
+ */
+export async function consultarEstadisticasDelHeroe(
+  identidad,
+  heroeId,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  if (!textoObligatorio(heroeId)) {
+    throw new TypeError('El héroe es obligatorio');
+  }
+  const respuesta = await fetchImpl(
+    `${RUTA_HEROES}/${encodeURIComponent(heroeId.trim())}/estadisticas`,
+    { headers: { 'X-User-Name': identidadNormalizada(identidad) } },
+  );
+  if (!respuesta.ok) {
+    const fallo = new Error(`No se pudieron leer las estadísticas (${respuesta.status})`);
+    fallo.status = respuesta.status;
+    throw fallo;
+  }
+  return respuesta.json();
 }
 
 /** Modifica el nombre de un elemento propio. */

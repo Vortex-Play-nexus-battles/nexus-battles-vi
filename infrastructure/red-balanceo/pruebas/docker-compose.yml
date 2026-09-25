@@ -97,6 +97,12 @@ services:
     volumes: [./eco.conf:/etc/nginx/conf.d/default.conf:ro]
     networks: [borde]
 
+  srv-ms-chatbot:
+    image: nginx:1.27-alpine
+    hostname: CHATBOT
+    volumes: [./eco.conf:/etc/nginx/conf.d/default.conf:ro]
+    networks: [borde]
+
   srv-ms-ecommerce:
     image: nginx:1.27-alpine
     hostname: ECOMMERCE
@@ -156,6 +162,11 @@ services:
       # destino del catalogo cambiado por el eco. Si se edita el original, la
       # siguiente corrida lo vuelve a derivar y prueba lo editado.
       - conf-del-borde:/etc/nginx/conf.d:ro
+      # R17 — las vistas y el kit, donde los deja el despliegue (/srv/nexus).
+      # Sin ellos no se pueden probar con trafico las direcciones limpias, el
+      # <base>, el nonce ni la redireccion de las rutas antiguas.
+      - ../../../frontend:/srv/nexus/frontend:ro
+      - ../../../shared:/srv/nexus/shared:ro
     ports:
       - '8099:80'
     networks: [borde]
@@ -173,6 +184,7 @@ services:
       srv-ms-finanzas: { condition: service_started }
       srv-ms-subastas: { condition: service_started }
       srv-ms-ecommerce: { condition: service_started }
+      srv-ms-chatbot: { condition: service_started }
       srv-productos: { condition: service_started }
 
 networks:

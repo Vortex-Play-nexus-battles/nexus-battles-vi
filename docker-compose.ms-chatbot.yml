@@ -11,10 +11,10 @@
 #
 # Puerto 8094 en el host y en el contenedor (EXPOSE 8094 en su Dockerfile).
 #
-# CAPACIDAD: servicios.json lo marca desplegableDev:false, con la misma
-# medicion que ms-finanzas y ms-subastas (infrastructure/despliegue/CAPACIDAD.md):
-# la imagen se construye y se publica en cada push, pero el despliegue
-# automatico no la levanta hasta que haya RAM en el host de plataforma.
+# CAPACIDAD: desplegableDev:false. Con 12 JVM el host de plataforma ya no tiene
+# RAM ni swap libres (medido el 24-sep 03:50 UTC, CAPACIDAD.md). La credencial
+# de chatbot-db ya la genera desplegar.sh en el host (secretos-bases.env): el
+# unico bloqueo que queda es la memoria.
 
 services:
   # Base de datos propia (regla 7, aislamiento de datos): no comparte servidor

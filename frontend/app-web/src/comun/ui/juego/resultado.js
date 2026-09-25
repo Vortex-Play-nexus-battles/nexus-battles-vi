@@ -14,40 +14,56 @@
  * Se distinguen por la palabra, por el icono y por lo que se ofrece despues.
  * Quien no distingue verde de rojo lee «VICTORIA» igual de claro.
  *
+ * ## Y el empate tampoco es una derrota — R10
+ *
+ * Hasta R10 habia dos estados y nada mas, asi que una partida en la que nadie
+ * quedo en pie se pintaba con el icono del escudo y la palabra DERROTA mientras
+ * el texto de al lado decia «Combate terminado en empate». Se le decia al
+ * jugador que habia perdido algo que no perdio. Ahora hay tres.
+ *
  * ## Creditos
  *
- * El reparto lo calcula `ms-finanzas` (HU-JUE-012). Aqui se muestra lo que
- * llegue; si no llega nada, no se inventa un cero: se omite la linea.
+ * Las cifras las calcula `ms-finanzas` (la apuesta en HU-JUE-014, la
+ * recompensa por jugar en HU-JUE-012). Aqui se muestra lo que llegue; si no
+ * llega nada, no se inventa un cero: se omite la linea.
  */
 
 import { h, clases } from '../dom.js';
 import { icono } from '../icono.js';
 import { creditos as formatearCreditos } from '../formato.js';
 
+const DESENLACES = Object.freeze({
+  victoria: { palabra: 'VICTORIA', icono: 'trofeo' },
+  derrota: { palabra: 'DERROTA', icono: 'escudo' },
+  empate: { palabra: 'EMPATE', icono: 'escudo' },
+});
+
 /**
  * Panel de desenlace.
  *
  * @param {object} opciones
- * @param {boolean} opciones.victoria
+ * @param {boolean} [opciones.victoria] atajo de `desenlace`: `true` es
+ *        victoria, `false` derrota. Se mantiene porque lo usan las llamadas
+ *        anteriores a R10; `desenlace` manda si se pasan las dos.
+ * @param {'victoria'|'derrota'|'empate'} [opciones.desenlace]
  * @param {string} [opciones.detalle] una linea de contexto («Ganó Equipo 2»)
- * @param {number|null} [opciones.creditos] variacion de creditos, con signo
+ * @param {number|null} [opciones.creditos] variacion NETA de creditos, con
+ *        signo: la apuesta mas la recompensa. Ver la nota de `combate.js`.
  * @param {Array<HTMLElement>} [opciones.acciones] botones de «que hago ahora»
  * @returns {HTMLElement}
  */
-export function panelDeResultado({ victoria, detalle, creditos = null, acciones = [] }) {
-  const palabra = victoria ? 'VICTORIA' : 'DERROTA';
+export function panelDeResultado({ victoria, desenlace, detalle, creditos = null, acciones = [] }) {
+  const cual = desenlace ?? (victoria ? 'victoria' : 'derrota');
+  const { palabra, icono: nombreDelIcono } = DESENLACES[cual] ?? DESENLACES.derrota;
 
   return h('div', {
-    clase: clases(
-      'panel-resultado',
-      victoria ? 'panel-resultado--victoria' : 'panel-resultado--derrota',
-    ),
-    datos: { resultado: victoria ? 'victoria' : 'derrota' },
+    clase: clases('panel-resultado', `panel-resultado--${cual}`),
+    datos: { resultado: cual },
     // `alertdialog` no: no hay nada que confirmar y no se quiere secuestrar el
     // foco. `status` con `aria-live` lo anuncia sin atrapar a nadie.
     atributos: { role: 'status', 'aria-live': 'polite' },
     hijos: [
-      icono(victoria ? 'trofeo' : 'escudo', {
+      icono(nombreDelIcono, {
         clase: 'panel-resultado__icono',
         etiqueta: null,
       }),

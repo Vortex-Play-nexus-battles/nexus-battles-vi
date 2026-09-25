@@ -16,8 +16,29 @@
            debajo del formulario (`order` en el kit), porque nadie se registra
            para leer una presentación. -->
       <section class="entrada__identidad">
-        <p class="entrada__sobretitulo">Return of the Warriors</p>
-        <h1 class="entrada__marca">NEXUS <em>BATTLES</em> VI</h1>
+        <!-- El logotipo oficial ocupa el sitio del texto grande. Sigue siendo el
+             h1 de la pagina: el nombre va en el `alt`, asi que un lector de
+             pantalla oye lo mismo que antes. El lema «Return of the Warriors»
+             viene dentro del propio logotipo y por eso deja de repetirse
+             encima como sobretitulo. WebP primero; el PNG es el mismo logotipo
+             para quien no lo entienda. -->
+        <h1 class="entrada__marca">
+          <picture>
+            <source
+              srcset="../../../../shared/ui-kit/marca/nexus-battles-vi.webp"
+              type="image/webp"
+            />
+            <img
+              class="entrada__logo"
+              src="../../../../shared/ui-kit/marca/nexus-battles-vi.png"
+              alt="Nexus Battles VI — Return of the Warriors"
+              width="1200"
+              height="600"
+              decoding="async"
+              fetchpriority="high"
+            />
+          </picture>
+        </h1>
         <p class="entrada__lema">
           Equipa a tu héroe, entra a una sala y decide el combate turno a turno. Lo que apuestas es
           real dentro del Nexo.
@@ -50,6 +71,10 @@
           <h2 class="entrada__titulo">Entra al Nexo</h2>
           <p class="t-meta">Usa el correo con el que creaste tu cuenta.</p>
         </div>
+
+        <!-- Por qué se llega aquí (sesión terminada, cerrada, cuenta recién
+             creada). Lo rellena `login.js` a partir de `?motivo=`. -->
+        <p class="aviso" id="avisoMotivo" hidden role="status"></p>
 
         <!-- Estado global de la operación: cargando, rechazo del servicio. -->
         <p class="estado" id="estadoLogin" hidden role="status"></p>

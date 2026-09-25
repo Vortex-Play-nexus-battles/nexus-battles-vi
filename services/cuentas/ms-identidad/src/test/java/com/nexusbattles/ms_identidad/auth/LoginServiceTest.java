@@ -16,7 +16,10 @@ import com.nexusbattles.ms_identidad.auth.service.AuditoriaLoginClient;
 import com.nexusbattles.ms_identidad.auth.service.IntentosFallidosService;
 import com.nexusbattles.ms_identidad.auth.service.JwtService;
 import com.nexusbattles.ms_identidad.auth.service.LoginService;
+import com.nexusbattles.ms_identidad.onboarding.auditoria.AuditoriaDeCuenta;
+import com.nexusbattles.ms_identidad.onboarding.service.OnboardingService;
 import com.nexusbattles.ms_identidad.rbac.model.RolEntity;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -26,6 +29,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -52,15 +56,23 @@ class LoginServiceTest {
     @Mock
     private AuditoriaLoginClient auditoriaLoginClient;
 
+    @Mock
+    private AuditoriaDeCuenta auditoriaDeCuenta;
+
+    @Mock
+    private OnboardingService onboardingService;
+
     @InjectMocks
     private LoginService loginService;
 
     private static final String PASSWORD_PLANA = "MiClave123!";
+    private static final UUID UID = UUID.fromString("6f1c2a7e-3d6b-4b9a-8f0e-1c2d3e4f5a6b");
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
 
     private Usuario usuarioActivo() {
         Usuario usuario = new Usuario();
         usuario.setId(1L);
+        usuario.setPublicId(UID);
         usuario.setApodo("cristianc");
         usuario.setEmail("cristian@test.com");
         usuario.setPassword(encoder.encode(PASSWORD_PLANA));
@@ -80,10 +92,16 @@ class LoginServiceTest {
         return datos;
     }
 
+    private void dispositivoConocido(Usuario usuario) {
+        when(dispositivoConocidoRepository.findByUsuarioAndHuella(eq(usuario), anyString()))
+            .thenReturn(Optional.of(new DispositivoConocido()));
+        when(jwtService.generarToken(anyString(), anyString(), anyInt(), any())).thenReturn("token-de-prueba");
+    }
+
     @Test
     void debeRechazarSiCorreoNoExiste() {
 
-        when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.empty());
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.empty());
 
         CredencialesInvalidasException exception = assertThrows(
             CredencialesInvalidasException.class,
@@ -96,13 +114,14 @@ class LoginServiceTest {
             "cristian@test.com",
             "127.0.0.1"
         );
+        verifyNoInteractions(onboardingService, auditoriaDeCuenta);
     }
 
     @Test
     void debeRechazarYRegistrarIntentoSiContrasenaIncorrecta() {
 
         Usuario usuario = usuarioActivo();
-        when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.of(usuario));
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
 
         LoginRequest datos = datosValidos();
         datos.setPassword("ClaveIncorrecta1!");
@@ -118,6 +137,7 @@ class LoginServiceTest {
             "cristian@test.com",
             "127.0.0.1"
         );
+        verifyNoInteractions(onboardingService, auditoriaDeCuenta);
     }
 
     @Test
@@ -125,7 +145,7 @@ class LoginServiceTest {
 
         Usuario usuario = usuarioActivo();
         usuario.setEstado("BANEADA");
-        when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.of(usuario));
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
 
         CuentaBaneadaException exception = assertThrows(
             CuentaBaneadaException.class,
@@ -141,7 +161,7 @@ class LoginServiceTest {
 
         Usuario usuario = usuarioActivo();
         usuario.setEstado("INACTIVO");
-        when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.of(usuario));
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
 
         CuentaInactivaException exception = assertThrows(
             CuentaInactivaException.class,
@@ -157,7 +177,7 @@ class LoginServiceTest {
         Usuario usuario = usuarioActivo();
         usuario.setEstado("SUSPENDIDA");
         usuario.setSuspendidoHasta(LocalDateTime.now().plusHours(3));
-        when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.of(usuario));
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
 
         CuentaSuspendidaException exception = assertThrows(
             CuentaSuspendidaException.class,
@@ -176,10 +196,8 @@ class LoginServiceTest {
         Usuario usuario = usuarioActivo();
         usuario.setEstado("SUSPENDIDA");
         usuario.setSuspendidoHasta(LocalDateTime.now().minusMinutes(1));
-        when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.of(usuario));
-        when(dispositivoConocidoRepository.findByUsuarioAndHuella(eq(usuario), anyString()))
-            .thenReturn(Optional.of(new DispositivoConocido()));
-        when(jwtService.generarToken(anyString(), anyString(), anyInt(), any())).thenReturn("token-de-prueba");
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
+        dispositivoConocido(usuario);
 
         LoginResponse respuesta = loginService.iniciarSesion(datosValidos(), "127.0.0.1", "agente");
 
@@ -192,7 +210,7 @@ class LoginServiceTest {
 
         Usuario usuario = usuarioActivo();
         usuario.setBloqueadoHasta(LocalDateTime.now().plusMinutes(10));
-        when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.of(usuario));
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
 
         CuentaBloqueadaException exception = assertThrows(
             CuentaBloqueadaException.class,
@@ -207,7 +225,7 @@ class LoginServiceTest {
 
         Usuario usuario = usuarioActivo();
         usuario.setIntentosFallidos(3);
-        when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.of(usuario));
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
         when(dispositivoConocidoRepository.findByUsuarioAndHuella(eq(usuario), anyString()))
             .thenReturn(Optional.empty());
         when(jwtService.generarToken(anyString(), anyString(), anyInt(), any())).thenReturn("token-de-prueba");
@@ -232,15 +250,59 @@ class LoginServiceTest {
     void debeIniciarSesionSinMarcarDispositivoNuevoSiYaEsConocido() {
 
         Usuario usuario = usuarioActivo();
-        when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.of(usuario));
-        when(dispositivoConocidoRepository.findByUsuarioAndHuella(eq(usuario), anyString()))
-            .thenReturn(Optional.of(new DispositivoConocido()));
-        when(jwtService.generarToken(anyString(), anyString(), anyInt(), any())).thenReturn("token-de-prueba");
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
+        dispositivoConocido(usuario);
 
         LoginResponse respuesta = loginService.iniciarSesion(datosValidos(), "127.0.0.1", "agente");
 
         assertFalse(respuesta.isDispositivoNuevo());
         verify(dispositivoConocidoRepository, never()).save(any());
         verify(correoClient, never()).enviarAvisoAcceso(any());
+    }
+
+    @Test
+    @DisplayName("R17: el login devuelve el uid y si el alta ya termino, y relanza la que quedo a medias")
+    void devuelveUidYEstadoDelAltaYLaReanuda() {
+        Usuario usuario = usuarioActivo();
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
+        dispositivoConocido(usuario);
+        when(onboardingService.listo(UID)).thenReturn(false);
+
+        LoginResponse respuesta = loginService.iniciarSesion(datosValidos(), "127.0.0.1", "agente");
+
+        assertEquals(UID.toString(), respuesta.getUid());
+        assertFalse(respuesta.isOnboardingListo(), "con el alta a medias la interfaz va a «Preparando tu cuenta»");
+        verify(onboardingService).reanudarSiHaceFalta(UID);
+    }
+
+    @Test
+    @DisplayName("R17: el primer acceso de una cuenta queda en la auditoria; los siguientes no")
+    void auditaSoloElPrimerAcceso() {
+        Usuario nuevo = usuarioActivo();
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(nuevo));
+        dispositivoConocido(nuevo);
+
+        loginService.iniciarSesion(datosValidos(), "10.0.0.7", "agente");
+        verify(auditoriaDeCuenta).primerAcceso(UID, "10.0.0.7");
+        assertNotNull(nuevo.getUltimoAcceso(), "el sello de ultima entrada se escribe en el acceso correcto");
+
+        clearInvocations(auditoriaDeCuenta);
+        loginService.iniciarSesion(datosValidos(), "10.0.0.7", "agente");
+        verify(auditoriaDeCuenta, never()).primerAcceso(any(), any());
+    }
+
+    @Test
+    @DisplayName("R17: una cuenta anterior sin uid entra igual y no rompe nada")
+    void cuentaSinUidEntraIgual() {
+        Usuario antiguo = usuarioActivo();
+        antiguo.setPublicId(null);
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(antiguo));
+        dispositivoConocido(antiguo);
+        when(onboardingService.listo(null)).thenReturn(true);
+
+        LoginResponse respuesta = loginService.iniciarSesion(datosValidos(), "127.0.0.1", "agente");
+
+        assertNull(respuesta.getUid());
+        assertTrue(respuesta.isOnboardingListo());
     }
 }

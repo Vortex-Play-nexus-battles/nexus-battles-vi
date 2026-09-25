@@ -1,0 +1,124 @@
+# R17 · La prueba del profesor, contra el entorno desplegado.
+#
+# ## Qué comprueba
+#
+# Lo que va a hacer un profesor que nunca ha visto el juego: abrir la dirección
+# pública, crear su cuenta, recibir sus créditos y su héroe, jugar una partida
+# contra la IA, cerrar sesión, volver a entrar y encontrarlo todo donde lo
+# dejó. Los veinte pasos de la directiva de R17 en escritorio, y la vertical de
+# entrada en móvil (375) y tableta (768). Cada corrida crea sus propias cuentas
+# desechables de QA (`qa_prof_…@nexus.test`); nada se prepara a mano.
+#
+# ## Cuándo corre
+#
+# Después de cada despliegue a dev, igual que el smoke, y a demanda. No bloquea
+# los PR: apunta a un host que se apaga de noche. Lo que deja es la evidencia:
+# el informe de Playwright con una captura por paso y, en el resumen de la
+# corrida, la tabla de los veinte pasos con su resultado.
+#
+# ## Lo que no guarda
+#
+# Las contraseñas se generan en la corrida y no se imprimen; la configuración
+# apaga la traza y el vídeo, que las guardarían.
+name: Prueba del profesor
+
+on:
+  workflow_run:
+    workflows: ["CD - Distribucion continua"]
+    types: [completed]
+    branches: [develop]
+  workflow_dispatch:
+
+concurrency:
+  group: prueba-del-profesor
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  profesor:
+    name: Un profesor entra, se registra y juega
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/app-web/package-lock.json
+
+      - name: Instalar dependencias y el navegador
+        working-directory: frontend/app-web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Enlazar node_modules en la raiz para las pruebas de tests/
+        run: ln -sfn frontend/app-web/node_modules node_modules
+
+      # Tras un despliegue los servicios tardan unos minutos en estar todos
+      # arriba. El borde responde antes que ellos, asi que ademas se espera a
+      # que la identidad conteste: sin ella no hay registro que probar.
+      - name: Esperar a que el borde y la identidad respondan
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS --max-time 5 "http://${{ secrets.DEPLOY_HOST_DEV }}/salud-borde" | grep -q UP \
+               && curl -fsS --max-time 5 -o /dev/null "http://${{ secrets.DEPLOY_HOST_DEV }}/api/v1/auth/jwks"; then
+              echo "El borde y la identidad responden en el intento $i."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::El borde o la identidad no respondieron en 600 s."
+          exit 1
+
+      - name: La prueba del profesor
+        working-directory: frontend/app-web
+        env:
+          PROFESOR_URL: http://${{ secrets.DEPLOY_HOST_DEV }}
+        run: |
+          set -o pipefail
+          npx playwright test --config=playwright.profesor.config.js 2>&1 | tee profesor.log
+
+      # La tabla que pide el informe de R17: cada paso con su resultado. Sale
+      # siempre, verde o rojo, y sin datos personales (el apodo es de QA).
+      - name: Resumen de la prueba
+        if: always()
+        working-directory: frontend/app-web
+        run: |
+          {
+            echo "## Prueba del profesor en AWS DEV"
+            echo
+            echo "| Anchura | Paso | Qué | Resultado | Detalle | ms |"
+            echo "|---|--:|---|---|---|--:|"
+            grep -o 'PROFESOR|.*' profesor.log 2>/dev/null | \
+              awk -F'|' '{ marca = ($5 == "OK") ? "✅" : "❌"; printf "| %s | %s | %s | %s %s | %s | %s |\n", $2, $3, $4, marca, $5, $6, $7 }'
+            if grep -q 'PROFESOR-INCIDENCIA|' profesor.log 2>/dev/null; then
+              echo
+              echo "### Incidencias del navegador"
+              echo
+              echo "| Anchura | Paso | Tipo | Detalle |"
+              echo "|---|--:|---|---|"
+              grep -o 'PROFESOR-INCIDENCIA|.*' profesor.log | \
+                awk -F'|' '{ printf "| %s | %s | %s | `%s` |\n", $2, $3, $4, $5 }'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Guardar el informe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: informe-prueba-del-profesor
+          path: |
+            frontend/app-web/playwright-report-profesor/**
+            frontend/app-web/test-results-profesor/**
+          retention-days: 30
+          if-no-files-found: ignore

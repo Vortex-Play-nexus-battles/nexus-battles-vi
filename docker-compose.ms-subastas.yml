@@ -9,9 +9,9 @@
 # "build:"; se combina con docker-compose.yml + docker-compose.deploy.yml y
 # solo cuando ms-subastas viene en la corrida.
 #
-# CAPACIDAD: desplegableDev:true desde R16.5, con el monton acotado de todas
-# las JVM del host (medicion y presupuesto en infrastructure/despliegue/
-# CAPACIDAD.md).
+# CAPACIDAD: desplegableDev:false. Con 12 JVM el host de plataforma ya no tiene
+# RAM ni swap libres (medido el 24-sep 03:50 UTC). Opciones en
+# infrastructure/despliegue/CAPACIDAD.md.
 
 services:
   subastas-db:
@@ -96,10 +96,10 @@ services:
       # igual que docker-compose.deploy.yml para salas-partidas y
       # docker-compose.ms-chatbot.yml para el chatbot.
       #
-      # Y el modo va en "http", no en "fake" como finanzas: finanzas sigue fuera
-      # del host y dejarlo real volveria subastas inservible, mientras que
-      # inventario esta desplegado y sano ahi. Entre fallar al entregar y cobrar
-      # sin entregar, lo segundo es lo que no se puede permitir.
+      # Y el modo va en "http", igual que finanzas desde R16.19: los dos
+      # servicios estan desplegados y sanos, y logica falsa en un entorno real
+      # no se admite. Entre fallar al entregar y cobrar sin entregar, lo segundo
+      # es lo que no se puede permitir.
       INVENTARIO_BASE_URL: ${INVENTARIO_BASE_URL:-http://34.193.90.11:8102}
       INVENTARIO_MODO: ${INVENTARIO_MODO:-http}
       # Catalogo maestro (productos, host de contenido) para validar el producto
@@ -108,6 +108,19 @@ services:
       # el propio contenedor, y publicar fallaba con «No se pudo contactar al
       # catalogo». Mismo destino que el borde (borde-dev.conf) y que el banco E2E.
       CATALOGO_BASE_URL: ${CATALOGO_BASE_URL:-http://34.193.90.11:8103}
+      # El incremento minimo de las pujas (RF-SUB-004). Se declara sin valor por
+      # omision A PROPOSITO: el README de ms-subastas lo registra como la unica
+      # pregunta abierta del backlog, y ponerle una cifra aqui seria decidir una
+      # regla de producto desde un fichero de despliegue. Vacio, el servicio
+      # responde 503 con el motivo al publicar —se niega en voz alta, que es lo
+      # correcto— y las demas operaciones siguen funcionando. Cuando el PO
+      # responda, se pone aqui y deja de hacer falta el 503.
+      #
+      # Las lineas del catalogo y esta son la misma clase de defecto:
+      # publicar una subasta necesita tres ajustes y ninguno los tenia.
+      # R16.19 encontro los del catalogo y los creditos; la prueba de
+      # transferencia encontro este.
+      SUBASTAS_INCREMENTO_MINIMO: ${SUBASTAS_INCREMENTO_MINIMO:-}
       NOTIFICACIONES_BASE_URL: ${NOTIFICACIONES_BASE_URL:-http://srv-notificaciones:8085/api/v1}
       SANCIONES_BASE_URL: ${SANCIONES_BASE_URL:-http://srv-moderacion-sanciones:8086}
 

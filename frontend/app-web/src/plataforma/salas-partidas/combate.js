@@ -15,7 +15,7 @@ import {
   pintarSeccionDegradada,
   limpiarSeccionDegradada,
 } from '../../comun/degradacion/aviso-degradacion.js';
-import { vaciar } from '../../comun/ui/dom.js';
+import { h, vaciar } from '../../comun/ui/dom.js';
 import { accionDeCombate } from '../../comun/ui/juego/combate.js';
 import { panelDeResultado } from '../../comun/ui/juego/resultado.js';
 
@@ -159,6 +159,93 @@ export function textoDelResultado(aviso, yo, miEquipo = null) {
 }
 
 /**
+ * Si la partida acabo sin vencedor.
+ *
+ * El servidor deja `ganadores` vacio cuando nadie quedo en pie, y el contrato
+ * lo dice: «Vacio si nadie quedo en pie (empate; el desempate es del PO)».
+ *
+ * @param {{ganadores?: string[], equipoGanador?: number}} aviso
+ * @returns {boolean}
+ */
+/**
+ * Une dos listas de `{idJugador, ...}` quedandose con la entrada mas reciente
+ * de cada jugador.
+ *
+ * Hace falta porque el final de partida se anuncia por partes: el aviso que
+ * trae la liquidacion tardia de la apuesta lleva `recompensa` vacia, y quedarse
+ * solo con el ultimo aviso borraria la recompensa ya anunciada.
+ *
+ * @param {Array<{idJugador: string}>|undefined} previas
+ * @param {Array<{idJugador: string}>|undefined} nuevas
+ * @returns {Array<{idJugador: string}>}
+ */
+export function mezclarPorJugador(previas, nuevas) {
+  const porJugador = new Map();
+  for (const entrada of [...(previas ?? []), ...(nuevas ?? [])]) {
+    if (entrada?.idJugador) {
+      porJugador.set(entrada.idJugador, entrada);
+    }
+  }
+  return [...porJugador.values()];
+}
+
+export function empate(aviso) {
+  const equipo = aviso?.equipoGanador;
+  if (Number.isInteger(equipo) && equipo > 0) {
+    return false;
+  }
+  return (aviso?.ganadores ?? []).length === 0;
+}
+
+/**
+ * El desenlace desde el punto de vista de quien mira, para el panel.
+ *
+ * Tres estados y no dos: el servidor deja `ganadores` vacio cuando nadie quedo
+ * en pie, y hasta R10 eso se pintaba como DERROTA mientras el texto de al lado
+ * decia «empate». Decirle a alguien que perdio algo que no perdio es mentirle,
+ * aunque la cifra sea correcta.
+ *
+ * @param {{ganadores?: string[], equipoGanador?: number}} aviso
+ * @param {string} yo
+ * @param {number|null} [miEquipo]
+ * @returns {'victoria'|'derrota'|'empate'}
+ */
+export function desenlaceDe(aviso, yo, miEquipo = null) {
+  if (empate(aviso)) {
+    return 'empate';
+  }
+  return gano(aviso, yo, miEquipo) ? 'victoria' : 'derrota';
+}
+
+/**
+ * Cuantos creditos se movieron EN TOTAL para quien mira: la apuesta mas la
+ * recompensa por jugar. `null` si el aviso no trae ninguna de las dos.
+ *
+ * ## Por que la suma y no solo una
+ *
+ * Hasta R10 el numero grande del panel salia de `recompensa`, que es la
+ * recompensa por jugar y **nunca resta** (`CreditoPorPartida` rechaza
+ * negativos, y el contrato la declara `minimum: 0`). Asi que quien perdia una
+ * apuesta de 350 creditos veia un `+2` enorme y la perdida solo en la frase de
+ * abajo. La rama `data-signo="negativo"` del panel era inalcanzable.
+ *
+ * Las dos cifras son del servidor; sumarlas no inventa nada, y el resultado es
+ * lo que de verdad le paso al saldo del jugador en esta partida.
+ *
+ * @param {object} aviso
+ * @param {string} yo
+ * @returns {number|null}
+ */
+export function netoDeCreditos(aviso, yo) {
+  const apuesta = creditosDe(aviso, yo);
+  const recompensa = recompensaDe(aviso, yo);
+  if (apuesta === null && recompensa === null) {
+    return null;
+  }
+  return (apuesta ?? 0) + (recompensa?.creditos ?? 0);
+}
+
+/**
  * Si quien mira gano.
  *
  * Se extrajo de `textoDelResultado` para que el panel de desenlace (UX-R2.3)
@@ -279,6 +366,29 @@ export function textoDelTurno(idJugador, participantes, yo) {
 }
 
 /**
+ * Los enlaces con los que se sale del panel del desenlace (R17.4).
+ *
+ * Enlaces y no botones: llevan a otra pantalla, y así se pueden abrir en otra
+ * pestaña o copiar. El primero es el principal. Uno sin texto o sin destino se
+ * descarta: un botón que no lleva a ninguna parte es peor que no tenerlo.
+ *
+ * @param {Array<{texto: string, href: string, id: string}>} salidas
+ * @returns {HTMLAnchorElement[]}
+ */
+export function enlacesDeSalida(salidas) {
+  return (salidas ?? [])
+    .filter((salida) => salida?.texto && salida?.href)
+    .map((salida, i) =>
+      h('a', {
+        clase: i === 0 ? 'boton boton--primario' : 'boton boton--secundario',
+        texto: salida.texto,
+        atributos: { href: salida.href },
+        datos: salida.id ? { accion: salida.id } : {},
+      }),
+    );
+}
+
+/**
  * Monta los controles de combate sobre el marcado de la vista.
  *
  * @param {ParentNode} raiz
@@ -295,11 +405,17 @@ export function textoDelTurno(idJugador, participantes, yo) {
  *   y recargar a mitad de partida dejaba al jugador sin poder actuar hasta
  *   que lo hiciera el rival.
  * @param {(accion: object) => void} opciones.alAtacar
+ * @param {Array<{texto: string, href: string, id: string}>} [opciones.salidas]
+ *   Adónde ir cuando termina (R17.4). El panel del desenlace ocupa toda la
+ *   pantalla, barra del juego incluida: sin salidas propias, quien acababa de
+ *   jugar se quedaba mirando «VICTORIA» sin más camino que el botón «Atrás».
+ *   La primera es la principal. Las rutas las pone la vista, que sabe si el
+ *   borde sirve direcciones limpias; este módulo no conoce ninguna.
  * @returns {{recibir: (aviso: object) => void, rechazar: (problema: object) => boolean}}
  */
 export function montarControlesDeCombate(
   raiz,
-  { idPartida, yo, participantes, turnoDe, alAtacar },
+  { idPartida, yo, participantes, turnoDe, alAtacar, salidas = [] },
 ) {
   const zona = raiz.querySelector('[data-zona="acciones"]');
   const aviso = raiz.querySelector('[data-zona="resultado"]');
@@ -314,6 +430,14 @@ export function montarControlesDeCombate(
   const registro = registroDeAvisos();
   /** La ultima accion enviada, para poder reintentarla tal cual. */
   let ultimaAccion = null;
+  /**
+   * Lo que se sabe del final, acumulado entre los avisos que lo anuncian.
+   *
+   * El servidor manda «partida.finalizada» mas de una vez a proposito cuando la
+   * liquidacion de la apuesta llega tarde (HU-JUE-014 CA-06). Cada aviso trae
+   * una parte, asi que hay que quedarse con la union y no con el ultimo.
+   */
+  let desenlaceConocido = null;
 
   // Rivales: a uno mismo no se ataca, ni a un companero de equipo en el modo
   // cooperativo (HU-SAL-004): el servidor lo rechazaria, y ofrecer el boton
@@ -467,6 +591,15 @@ export function montarControlesDeCombate(
         // Se acabo: ya no es el turno de nadie. Dejar la marca puesta haria
         // creer que la partida sigue.
         marcarTurno(null);
+        // UX-GAME-4 — el indicador no se vacia: dice que el combate termino.
+        // Es el tercer estado del turno (tuyo / del rival / finalizado), y el
+        // panel de resultado puede quedar tapado o fuera de la pantalla.
+        if (zonaTurno) {
+          zonaTurno.textContent = 'Combate finalizado';
+          zonaTurno.hidden = false;
+          zonaTurno.dataset.mio = 'false';
+          zonaTurno.dataset.fin = 'si';
+        }
         if (zona) {
           zona.hidden = true;
         }
@@ -475,13 +608,26 @@ export function montarControlesDeCombate(
           // final»). Antes el final de la partida era un parrafo del mismo
           // tamano que el resto de la pantalla. `--t-display-tam` estaba en
           // `tokens.css` reservada para esto desde el principio.
-          const recompensa = recompensaDe(mensaje, yo);
+          // El servidor puede anunciar el final dos veces: primero sin
+          // `reparto` (el libro no respondio) y despues con el. Cada aviso trae
+          // una parte, asi que se acumulan antes de pintar. Sin esto el segundo
+          // render perdia la recompensa que ya se habia anunciado en el
+          // primero, y el numero grande cambiaba de significado a mitad.
+          desenlaceConocido = {
+            ...mensaje,
+            reparto: mezclarPorJugador(desenlaceConocido?.reparto, mensaje.reparto),
+            recompensa: mezclarPorJugador(desenlaceConocido?.recompensa, mensaje.recompensa),
+          };
           vaciar(aviso);
           aviso.append(
             panelDeResultado({
-              victoria: gano(mensaje, yo, miEquipo),
-              detalle: textoDelResultado(mensaje, yo, miEquipo),
-              creditos: recompensa?.creditos ?? null,
+              desenlace: desenlaceDe(desenlaceConocido, yo, miEquipo),
+              detalle: textoDelResultado(desenlaceConocido, yo, miEquipo),
+              // La suma de apuesta y recompensa, no solo la recompensa: ver
+              // `netoDeCreditos`. Antes quien perdia 350 creditos apostados
+              // veia un «+2».
+              creditos: netoDeCreditos(desenlaceConocido, yo),
+              acciones: enlacesDeSalida(salidas),
             }),
           );
           aviso.hidden = false;

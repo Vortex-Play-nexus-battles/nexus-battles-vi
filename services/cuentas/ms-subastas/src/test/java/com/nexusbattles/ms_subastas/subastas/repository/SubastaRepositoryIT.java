@@ -62,7 +62,10 @@ class SubastaRepositoryIT {
     }
 
     private Subasta nuevaSubasta(String nombre, EstadoSubasta estado, int cantidadPujas) {
-        Subasta subasta = new Subasta(null, UUID.randomUUID(), UUID.randomUUID(),
+        // El id lo asigna la aplicacion desde R10: la entidad dejo de declarar
+        // @GeneratedValue, porque publicar necesita el identificador ANTES de
+        // guardar para reservar el elemento en inventario con el.
+        Subasta subasta = new Subasta(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
             new BigDecimal("50.00"), new BigDecimal("5.00"), null, null,
             estado, Instant.now().plusSeconds(3600), 0L);
         // elementoInventarioId es NOT NULL desde V4 (Edwin) -- ver mismo

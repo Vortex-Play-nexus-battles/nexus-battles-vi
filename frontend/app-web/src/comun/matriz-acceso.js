@@ -101,11 +101,28 @@ const ROLES_POR_NIVEL = Object.freeze({
  *   - `publico`  — portal de entrada: marca y poco más
  *   - `jugador`  — la aplicación del jugador (RF-INV-008: seis destinos)
  *   - `admin`    — la consola de operación
+ *
+ * R17 — `limpia` es la dirección pública de las vistas que alguien escribe o
+ * comparte (/login, /jugar…). La sirve el borde (`borde-dev.conf`), que además
+ * redirige la ruta antigua a esta. Solo existe detrás del borde: en
+ * `npm run dev` o en el laboratorio visual no hay quien la sirva, y por eso la
+ * interfaz solo la usa cuando la página lo declara (`sesion.js`,
+ * `hayRutasLimpias`).
  */
 export const MATRIZ = Object.freeze({
   // --- Portal de entrada ---------------------------------------------------
-  login: { ruta: 'cuentas/login.html', acceso: ACCESO.PUBLICA, armazon: 'publico' },
-  registro: { ruta: 'cuentas/registro.html', acceso: ACCESO.PUBLICA, armazon: 'publico' },
+  login: {
+    ruta: 'cuentas/login.html',
+    limpia: '/login',
+    acceso: ACCESO.PUBLICA,
+    armazon: 'publico',
+  },
+  registro: {
+    ruta: 'cuentas/registro.html',
+    limpia: '/registro',
+    acceso: ACCESO.PUBLICA,
+    armazon: 'publico',
+  },
   'restablecer-solicitar': {
     ruta: 'cuentas/restablecer-solicitar.html',
     acceso: ACCESO.PUBLICA,
@@ -114,6 +131,15 @@ export const MATRIZ = Object.freeze({
   'restablecer-confirmar': {
     ruta: 'cuentas/restablecer-confirmar.html',
     acceso: ACCESO.PUBLICA,
+    armazon: 'publico',
+  },
+  // R17 — la pantalla que ve una cuenta recién creada mientras el servidor le
+  // prepara los créditos y el héroe. Pide sesión (es el alta de ESTA cuenta),
+  // pero todavía es portal: aún no hay juego al que navegar.
+  preparando: {
+    ruta: 'cuentas/preparando.html',
+    limpia: '/preparando',
+    acceso: ACCESO.SESION,
     armazon: 'publico',
   },
 
@@ -140,13 +166,33 @@ export const MATRIZ = Object.freeze({
     acceso: ACCESO.ADMINISTRACION,
     armazon: 'admin',
   },
-  subastas: { ruta: 'cuentas/subastas.html', acceso: ACCESO.PUBLICA, armazon: 'jugador' },
+  subastas: {
+    ruta: 'cuentas/subastas.html',
+    limpia: '/subastas',
+    acceso: ACCESO.PUBLICA,
+    armazon: 'jugador',
+  },
   pujas: { ruta: 'cuentas/pujas.html', acceso: ACCESO.PUBLICA, armazon: 'jugador' },
-  torneos: { ruta: 'plataforma/torneos/torneos.html', acceso: ACCESO.PUBLICA, armazon: 'jugador' },
+  torneos: {
+    ruta: 'plataforma/torneos/torneos.html',
+    limpia: '/torneos',
+    acceso: ACCESO.PUBLICA,
+    armazon: 'jugador',
+  },
 
   // --- Jugador -------------------------------------------------------------
-  home: { ruta: 'cuentas/index.html', acceso: ACCESO.SESION, armazon: 'jugador' },
-  perfil: { ruta: 'cuentas/perfil.html', acceso: ACCESO.SESION, armazon: 'jugador' },
+  home: {
+    ruta: 'cuentas/index.html',
+    limpia: '/inicio',
+    acceso: ACCESO.SESION,
+    armazon: 'jugador',
+  },
+  perfil: {
+    ruta: 'cuentas/perfil.html',
+    limpia: '/cuenta',
+    acceso: ACCESO.SESION,
+    armazon: 'jugador',
+  },
   'historial-transacciones': {
     ruta: 'cuentas/historial-transacciones.html',
     acceso: ACCESO.SESION,
@@ -155,6 +201,7 @@ export const MATRIZ = Object.freeze({
   'mis-cofres': { ruta: 'cuentas/mis-cofres.html', acceso: ACCESO.SESION, armazon: 'jugador' },
   inventario: {
     ruta: 'contenido/inventario/inventario.html',
+    limpia: '/inventario',
     acceso: ACCESO.SESION,
     armazon: 'jugador',
   },
@@ -166,6 +213,7 @@ export const MATRIZ = Object.freeze({
   },
   batallas: {
     ruta: 'plataforma/salas-partidas/batallas.html',
+    limpia: '/jugar',
     acceso: ACCESO.SESION,
     armazon: 'jugador',
   },
@@ -359,14 +407,33 @@ export function rutaDeVista(idVista) {
  * @returns {string|null} clave de `MATRIZ`, o `null` si no es una vista conocida
  */
 export function vistaDeRuta(ruta = globalThis.location?.pathname ?? '') {
-  const limpia = String(ruta).split('?')[0].split('#')[0];
+  const camino = String(ruta).split('?')[0].split('#')[0];
   for (const [id, entrada] of Object.entries(MATRIZ)) {
-    if (limpia.endsWith(`/${entrada.ruta}`) || limpia === entrada.ruta) {
+    // R17 — detrás del borde la vista también se sirve en su dirección
+    // limpia (`/jugar`), y ahí la URL ya no dice qué fichero es.
+    if (entrada.limpia && (camino === entrada.limpia || camino === `${entrada.limpia}/`)) {
+      return id;
+    }
+    if (camino.endsWith(`/${entrada.ruta}`) || camino === entrada.ruta) {
       return id;
     }
   }
   return null;
 }
+
+/**
+ * Las direcciones limpias, por la ruta de su fichero relativa a `src/comun/`
+ * (la misma forma que `RUTAS` en `sesion.js` y que `rutaDeVista`).
+ *
+ * @type {Readonly<Record<string, string>>}
+ */
+export const LIMPIAS_POR_RUTA = Object.freeze(
+  Object.fromEntries(
+    Object.values(MATRIZ)
+      .filter((entrada) => entrada.limpia)
+      .map((entrada) => [`../${entrada.ruta}`, entrada.limpia]),
+  ),
+);
 
 /**
  * Qué armazón le corresponde a una vista, según la matriz.

@@ -36,6 +36,10 @@
 # los diferencia. Entre ellos se hablan por nombre de servicio en la red de
 # Compose (srv-heroes:8080, etc.), nunca por el puerto del host.
 
+# Todos los servicios llevan `restart: unless-stopped`, como los de plataforma en
+# docker-compose.deploy.yml: si uno se cae (por ejemplo, el limite de memoria lo
+# mata) o la instancia se reinicia, vuelve solo. Antes tenian la politica "no" y
+# un contenedor caido se quedaba caido hasta el siguiente despliegue.
 services:
 
   # --- Base de datos documental (regla 7: un esquema por servicio) ---
@@ -44,6 +48,7 @@ services:
   contenido-mongo:
     image: mongo:8.0
     container_name: contenido-mongo
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -64,6 +69,7 @@ services:
       dockerfile: services/contenido/heroes/Dockerfile
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-heroes:${TAG_HEROES:-${TAG:-local}}
     container_name: srv-heroes
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -71,6 +77,13 @@ services:
     ports:
       - "8101:8080"
     environment:
+      # Monton acotado, igual que en el host de plataforma (#690). Los
+      # Dockerfiles fijan MaxRAMPercentage=75, y con eso una JVM ociosa se
+      # expande hasta llenar su limite sin motivo para recolectar: medido el
+      # 24-sep en este host, inventario 217/320, productos 225/384 y heroes
+      # 170/320 MiB en reposo. En plataforma el mismo cambio dejo a los
+      # servicios en 30-60 MiB. JAVA_TOOL_OPTIONS aqui gana al del Dockerfile.
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
       PUERTO_HEROES: 8080
       SPRING_PROFILES_ACTIVE: mongo
       MONGODB_URI: mongodb://contenido-mongo:27017/heroes
@@ -98,6 +111,7 @@ services:
       dockerfile: services/contenido/inventario/Dockerfile
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-inventario:${TAG_INVENTARIO:-${TAG:-local}}
     container_name: srv-inventario
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -105,6 +119,13 @@ services:
     ports:
       - "8102:8080"
     environment:
+      # Monton acotado, igual que en el host de plataforma (#690). Los
+      # Dockerfiles fijan MaxRAMPercentage=75, y con eso una JVM ociosa se
+      # expande hasta llenar su limite sin motivo para recolectar: medido el
+      # 24-sep en este host, inventario 217/320, productos 225/384 y heroes
+      # 170/320 MiB en reposo. En plataforma el mismo cambio dejo a los
+      # servicios en 30-60 MiB. JAVA_TOOL_OPTIONS aqui gana al del Dockerfile.
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
       # Boot 4 lee spring.mongodb.uri (SPRING_MONGODB_URI); el nombre de Boot 3
       # se conserva porque el README y el LEEME de inventario lo documentan.
       SPRING_MONGODB_URI: mongodb://contenido-mongo:27017/inventario
@@ -143,6 +164,7 @@ services:
       dockerfile: services/contenido/productos/Dockerfile
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-productos:${TAG_PRODUCTOS:-${TAG:-local}}
     container_name: srv-productos
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -150,6 +172,13 @@ services:
     ports:
       - "8103:8080"
     environment:
+      # Monton acotado, igual que en el host de plataforma (#690). Los
+      # Dockerfiles fijan MaxRAMPercentage=75, y con eso una JVM ociosa se
+      # expande hasta llenar su limite sin motivo para recolectar: medido el
+      # 24-sep en este host, inventario 217/320, productos 225/384 y heroes
+      # 170/320 MiB en reposo. En plataforma el mismo cambio dejo a los
+      # servicios en 30-60 MiB. JAVA_TOOL_OPTIONS aqui gana al del Dockerfile.
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
       MONGODB_URI: mongodb://contenido-mongo:27017/productos
       # R9.7 — el emisor es ms-identidad (ADR-002 / ADR-005). El JWKS se consulta
       # solo al validar el primer token, asi que el contenedor arranca y
@@ -160,6 +189,8 @@ services:
       # hasta que esa coleccion emita contra ms-identidad. El servicio prefiere
       # IDENTIDAD_JWKS_URL cuando existe.
       KEYCLOAK_JWK_SET_URI: ${KEYCLOAK_JWK_SET_URI:-http://jwks-dev/certs.json}
+      # Siembra al arrancar los productos de las reglas que falten (nunca pisa los existentes); false la apaga.
+      CATALOGO_SEMILLA: ${CATALOGO_SEMILLA:-true}
     depends_on:
       contenido-mongo:
         condition: service_healthy
@@ -172,6 +203,7 @@ services:
       dockerfile: services/contenido/motor-combate/Dockerfile
     image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-motor-combate:${TAG_MOTOR_COMBATE:-${TAG:-local}}
     container_name: srv-motor-combate
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -179,6 +211,13 @@ services:
     ports:
       - "8104:8080"
     environment:
+      # Monton acotado, igual que en el host de plataforma (#690). Los
+      # Dockerfiles fijan MaxRAMPercentage=75, y con eso una JVM ociosa se
+      # expande hasta llenar su limite sin motivo para recolectar: medido el
+      # 24-sep en este host, inventario 217/320, productos 225/384 y heroes
+      # 170/320 MiB en reposo. En plataforma el mismo cambio dejo a los
+      # servicios en 30-60 MiB. JAVA_TOOL_OPTIONS aqui gana al del Dockerfile.
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
       HEROES_URL: http://srv-heroes:8080
       # R8.1 — POST /api/v1/combate/ataques exige ROLE_SERVICIO. El token lo
       # firma ms-identidad en el host de plataforma y lo presenta
@@ -201,6 +240,7 @@ services:
   jwks-dev:
     image: nginx:1.27-alpine
     container_name: jwks-dev
+    restart: unless-stopped
     deploy:
       resources:
         limits:
