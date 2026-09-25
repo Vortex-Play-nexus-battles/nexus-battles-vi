@@ -490,7 +490,11 @@ paths:
           seguro; con otra `moneda`, 409
           `urn:nexus:problema:clave-de-idempotencia-reutilizada`. Dos
           peticiones simultaneas con la misma clave crean una sola orden: la
-          segunda recibe 409 `urn:nexus:problema:orden-en-proceso`.
+          segunda recibe 409 `urn:nexus:problema:compra-en-curso` (con
+          `Retry-After`) o, si la primera ya termino, 200 con su orden. Un
+          jugador con un pago en proceso recibe el mismo 409 si intenta otro
+          con otra clave: dos pagos simultaneos del mismo carrito cobrarian
+          dos veces lo mismo.
         - Orden de los pasos: validar y calcular precios, crear la orden
           PENDIENTE, cobrar (COBRADA; lo comprado sale del carrito en ese
           momento, para que no se pueda pagar dos veces mientras se entrega),
@@ -569,7 +573,7 @@ paths:
             `tiraje-insuficiente`; no se crea orden ni se cobra), o despues de
             cobrar y la orden se compenso (`urn:nexus:problema:compra-reembolsada`,
             con `ordenId`, `estado` REEMBOLSADA y `motivo`). Tambien
-            `orden-en-proceso` y `clave-de-idempotencia-reutilizada` (ver
+            `compra-en-curso` y `clave-de-idempotencia-reutilizada` (ver
             arriba).
           content:
             application/problem+json:
