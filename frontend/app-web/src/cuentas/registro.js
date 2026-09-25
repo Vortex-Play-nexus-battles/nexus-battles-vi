@@ -1,17 +1,27 @@
 // registro.js
 // Vista de registro — HU-AUT-001.
 //
-// R17 — crear la cuenta ya no termina en «ahora ve al login y escribe otra vez
-// lo mismo»: se entra solo y se pasa a «Preparando tu cuenta», que cuenta en
-// vivo cómo el servidor le da al jugador sus créditos y su héroe. Los
-// rechazos marcan el campo exacto (problem details con `campo`), y la
-// política de contraseñas se dice antes de enviar.
-import { registrarYEntrar } from '../comun/entrada.js';
+// R17 — los rechazos marcan el campo exacto (problem details con `campo`), y
+// la política de contraseñas se dice antes de enviar.
+//
+// B1 (identidad 2.0.0) — la cuenta nace pendiente de verificar el correo: al
+// crearla se pasa a «Confirma tu correo» (`/verificar`), donde se escribe el
+// código que acaba de salir. El correo viaja en `sessionStorage`, nunca en la
+// URL. Si el servicio todavía crea la cuenta ya activa, se entra solo como en
+// R17 (`registrarCuenta` lo decide por el `estado` que devuelve el registro).
+import { registrarCuenta } from '../comun/entrada.js';
 import { motivoDeContrasena } from '../comun/politica-contrasena.js';
 import { marcarErrorDe } from '../comun/ui/campo.js';
 import { h } from '../comun/ui/dom.js';
 
 const TAMANO_SALIDA_PX = 512; // Resolución del avatar final, cuadrado.
+
+/** Lo que se dice mientras la página se va, según adónde va (`registrarCuenta`). */
+const TRAS_CREAR = Object.freeze({
+  pendiente: '¡Cuenta creada! Ahora confirma tu correo con el código que te enviamos…',
+  dentro: '¡Cuenta creada! Preparando tu cuenta…',
+  creada: '¡Cuenta creada! Te llevamos a la entrada…',
+});
 
 /** @type {HTMLFormElement} */
 const form = document.getElementById('formRegistro');
@@ -304,7 +314,7 @@ form.addEventListener('submit', async (evento) => {
 
   let resultado;
   try {
-    resultado = await registrarYEntrar(formData, { email, password: form.password.value });
+    resultado = await registrarCuenta(formData, { email, password: form.password.value });
   } catch {
     // Solo llega aquí un fallo de red al CREAR la cuenta: no se sabe si se
     // creó, y se dice así en vez de prometer nada.
@@ -328,11 +338,6 @@ form.addEventListener('submit', async (evento) => {
   }
 
   // Cuenta creada. El botón se queda desactivado: la página ya se va.
-  setEstado(
-    resultado.resultado === 'dentro'
-      ? '¡Cuenta creada! Preparando tu cuenta…'
-      : '¡Cuenta creada! Te llevamos a la entrada…',
-    'exito',
-  );
+  setEstado(TRAS_CREAR[resultado.resultado] ?? TRAS_CREAR.creada, 'exito');
   window.location.href = resultado.destino;
 });

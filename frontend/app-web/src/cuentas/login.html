@@ -76,8 +76,12 @@
              creada). Lo rellena `login.js` a partir de `?motivo=`. -->
         <p class="aviso" id="avisoMotivo" hidden role="status"></p>
 
-        <!-- Estado global de la operación: cargando, rechazo del servicio. -->
+        <!-- Estado global de la operación: cargando, sin conexión. -->
         <p class="estado" id="estadoLogin" hidden role="status"></p>
+        <!-- B1 — el rechazo del servidor, explicado por su `type`: credenciales,
+             correo sin confirmar (con sus dos salidas), suspensión con el tiempo
+             restante, baneo. Enfocable para llevar ahí el foco. -->
+        <div data-zona="rechazo" tabindex="-1" hidden></div>
         <div id="avisoDispositivo" hidden></div>
 
         <form id="formLogin" class="pila" novalidate>
