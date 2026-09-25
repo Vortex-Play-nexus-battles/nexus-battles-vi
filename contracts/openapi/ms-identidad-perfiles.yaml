@@ -25,9 +25,14 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Perfil del jugador (ms-identidad)
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Consulta y edicion del perfil propio (HU-USR-001).
+
+    **1.1.0 (B0/B6):** `GET /api/v1/perfiles/publicos?apodo=` — busqueda de
+    jugadores por apodo para escribirles un mensaje privado (feedback del
+    profesor). Devuelve solo datos publicos (uid, apodo, avatar), nunca
+    correo ni nombres.
 
     El servicio escucha en el puerto 8089 y **no tiene context-path**: las
     rutas son absolutas e incluyen el `/api/v1` (regla 2), igual que en
@@ -142,6 +147,51 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
 
+  /api/v1/perfiles/publicos:
+    get:
+      tags: [perfil]
+      operationId: buscarPerfilesPublicos
+      summary: Busca jugadores por apodo (datos publicos) — 1.1.0
+      x-implementacion: pendiente
+      x-fase: B6
+      description: |
+        Para elegir destinatario de un mensaje privado. Exige sesion (no es un
+        directorio publico), minimo 3 caracteres, maximo 10 resultados, solo
+        cuentas `ACTIVO`. Coincidencia por prefijo del apodo sin distinguir
+        mayusculas.
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - name: apodo
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 3
+            maxLength: 50
+      responses:
+        '200':
+          description: Coincidencias.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 10
+                items:
+                  $ref: '#/components/schemas/PerfilPublico'
+        '400':
+          description: Apodo demasiado corto.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '403':
+          description: Sin sesion valida.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
 components:
   securitySchemes:
     tokenDeUsuario:
@@ -153,6 +203,18 @@ components:
         `sub` = apodo, `rol` y `uid` = UUID publico estable.
 
   schemas:
+    PerfilPublico:
+      type: object
+      required: [uid, apodo]
+      properties:
+        uid:
+          type: string
+          format: uuid
+        apodo:
+          type: string
+        avatar:
+          type: [string, 'null']
+
     PerfilUsuario:
       type: object
       required: [id, apodo]

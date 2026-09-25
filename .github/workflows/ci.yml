@@ -283,6 +283,19 @@ jobs:
         shell: bash
         run: python3 tests/contratos/validar-contratos.py
 
+      # B0 (BACKEND-01): contrato, codigo y clientes cuentan la misma historia.
+      # Falla si un contrato declara una ruta que ningun controlador sirve, si
+      # un controlador sirve una ruta que ningun contrato declara, si un
+      # cliente (Java, configuracion o frontend) llama a una ruta que no esta
+      # en ningun contrato, o si un destino STOMP /app/** del AsyncAPI y los
+      # @MessageMapping no coinciden. Lo que aun no esta implementado se
+      # declara con `x-implementacion: pendiente` y su fase, y sale listado.
+      # Es el guardian que habria parado la transferencia inventada de
+      # #660/#669. Sin Docker ni compilacion: ~10 s.
+      - name: Contrato, codigo y clientes coinciden
+        shell: bash
+        run: python3 tests/contratos/rutas-contrato-codigo.py
+
       # Corre siempre y sin Docker: la verificacion de proveedor de verdad
       # (VerificacionDelPactoDeSubastasTest) esta anotada
       # `disabledWithoutDocker = true` y se salta entera en una maquina sin
