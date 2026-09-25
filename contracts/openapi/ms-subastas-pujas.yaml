@@ -17,7 +17,31 @@ info:
     habría cruzado dominios, cosa que prohíbe backend-spring.md y verifica
     ArchUnit. La identidad del jugador se toma SIEMPRE del token, nunca de un
     encabezado ni del cuerpo, porque estos endpoints mueven créditos.
-  version: 0.3.0
+
+
+    0.4.0 (B8, 7.7 del documento del curso):
+
+    - La **primera** puja tiene que llegar al precio mínimo que fijó el
+      vendedor; desde la segunda, superar la oferta vigente en al menos el
+      incremento mínimo (7.7.2, 7.7.6). Antes la primera exigía precio mínimo
+      más incremento.
+
+    - El tope de **10 subastas activas** de 7.7.10 se aplica a las
+      publicaciones del vendedor (`ms-subastas-publicar.yaml`), no a las
+      pujas: con 10 subastas como máximo de participación, el tope de 50 pujas
+      activas no se podría alcanzar nunca. `LIMITE_SUBASTAS_ACTIVAS` sigue en
+      el enumerado por compatibilidad y ya no lo emite pujar.
+
+    - La compra inmediata deja de estar disponible cuando una puja alcanza o
+      supera su precio (`motivo: COMPRA_INMEDIATA_SUPERADA`, 409): comprar por
+      debajo de lo que otro ya ofreció le quitaría el producto al mejor postor.
+
+    - Nueva `GET /mis-pujas` («Mis pujas» de 7.7.9: las subastas en las que
+      participas, también las cerradas, con el estado de tu puja).
+
+    - `MiParticipacion` gana `siguiendo`; `PujaDelHistorial`, el postor
+      anonimizado parcialmente (7.7.9, 7.7.11).
+  version: 0.4.0
 servers:
   - url: http://localhost:8092/api/v1
     description: Spring Boot local (perfil dev)
@@ -57,10 +81,14 @@ paths:
     post:
       summary: Pujar en una subasta
       description: >-
-        Registra una puja que debe superar la oferta vigente más el incremento
-        mínimo. Reserva los créditos del ofertante en ms-finanzas y libera los
-        del postor superado, de forma atómica con la actualización de la
-        subasta.
+        Registra una puja. La primera tiene que llegar al precio mínimo que
+        fijó el vendedor; las siguientes, superar la oferta vigente en al menos
+        el incremento mínimo de la subasta (0.4.0). Reserva los créditos del
+        ofertante en ms-finanzas y libera los del postor superado, de forma
+        atómica con la actualización de la subasta. Avisa al vendedor (nueva
+        puja, con el monto y el postor anonimizado), al postor superado y a
+        quien sigue la subasta, y publica el cambio en
+        `/topic/subastas/{subastaId}`.
       operationId: pujar
       tags: [pujas]
       parameters:
@@ -117,6 +145,29 @@ paths:
         '404':
           $ref: '#/components/responses/SubastaNoEncontrada'
 
+  /mis-pujas:
+    get:
+      summary: Las subastas en las que participa el jugador, también las cerradas
+      description: >-
+        «Mis pujas» de 7.7.9: cada subasta en la que el jugador pujó (o tiene
+        una puja automática configurada), con su mejor oferta y el estado de su
+        participación. Incluye las subastas ya cerradas, para que el historial
+        de pujas no desaparezca cuando la subasta termina. De la más reciente a
+        la más antigua.
+      operationId: misParticipaciones
+      tags: [pujas]
+      responses:
+        '200':
+          description: Participaciones del jugador
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Participacion'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+
   /mis-pujas/resumen:
     get:
       summary: Lo que el jugador tiene en juego sumando todas las subastas
@@ -144,6 +195,14 @@ paths:
         libera los créditos del postor que quedaba vigente. Exige confirmación
         explícita del jugador: una petición con `confirmado` en false se
         rechaza, para que la interfaz no pueda cerrar una compra por accidente.
+        El producto pasa al inventario del comprador en el acto (7.7.6,
+        «transferencia automática»).
+
+
+        Desde 0.4.0 no se acepta si una puja ya alcanzó o superó el precio de
+        compra inmediata (`motivo: COMPRA_INMEDIATA_SUPERADA`, 409). Avisa al
+        vendedor, al comprador, a los demás postores (cierre anticipado) y a
+        quien sigue la subasta.
       operationId: comprarAhora
       tags: [pujas]
       parameters:
@@ -318,6 +377,40 @@ components:
         esTuya:
           type: boolean
           description: Falso siempre si se consulta sin sesion.
+        postor:
+          type: [string, "null"]
+          description: >-
+            0.4.0 — el apodo del postor en el momento de pujar, anonimizado
+            parcialmente (primera y ultima letra; «Usuario que realizó cada puja
+            (anonimizado parcialmente)», 7.7.9 y 7.7.11). Nulo en las pujas
+            anteriores a 0.4.0, que no lo guardaban.
+          example: "a***s"
+
+    Participacion:
+      type: object
+      description: 0.4.0 — una subasta en la que el jugador participa o participo.
+      required: [subastaId, nombreProducto, estadoSubasta, estado, ofertaVigente, fechaFin, cantidadPujas]
+      properties:
+        subastaId: { type: string, format: uuid }
+        nombreProducto: { type: string }
+        miniaturaUrl: { type: [string, "null"] }
+        estadoSubasta:
+          type: string
+          enum: [ACTIVA, ADJUDICADA, SIN_ADJUDICACION, CANCELADA]
+        estado:
+          type: string
+          description: >-
+            GANANDO (tu puja es la oferta vigente), SUPERADA (otro te supero y
+            la subasta sigue), GANADA (la adjudicaste), PERDIDA (se adjudico a
+            otro), CERRADA (termino sin tu puja ganadora por cancelacion), o
+            AUTOMATICA (solo configuraste una puja automatica y todavia no
+            emitio ninguna).
+          enum: [GANANDO, SUPERADA, GANADA, PERDIDA, CERRADA, AUTOMATICA]
+        tuMejorPuja: { type: [string, "null"], format: decimal }
+        ofertaVigente: { type: string, format: decimal }
+        cantidadPujas: { type: integer }
+        fechaFin: { type: string, format: date-time }
+        ultimaPujaEn: { type: [string, "null"], format: date-time }
 
     MiResumen:
       type: object
@@ -371,6 +464,9 @@ components:
         segundosParaVolverAPujar:
           type: integer
           description: Cero si ya puedes pujar. El intervalo es por subasta, no por cuenta.
+        siguiendo:
+          type: boolean
+          description: 0.4.0 — si la tienes en tu lista de seguimiento (`ms-subastas-panel.yaml`).
 
     PujaResponse:
       type: object
@@ -433,7 +529,10 @@ components:
           type: string
         motivo:
           type: string
-          description: Código estable para que la interfaz elija el mensaje.
+          description: >-
+            Código estable para que la interfaz elija el mensaje.
+            `LIMITE_SUBASTAS_ACTIVAS` ya no lo emite pujar (0.4.0: el tope de 10
+            es de publicaciones); se conserva por compatibilidad.
           enum:
             - SUBASTA_NO_ACTIVA
             - PUJA_PROPIA
@@ -445,6 +544,7 @@ components:
             - SALDO_INSUFICIENTE_PARA_LIMITE
             - CONFIRMACION_REQUERIDA
             - SIN_COMPRA_INMEDIATA
+            - COMPRA_INMEDIATA_SUPERADA
             - SALDO_INSUFICIENTE
             - CLAVE_REUTILIZADA
 
@@ -476,7 +576,8 @@ components:
       description: >-
         La operación viola una regla de participación. El campo `motivo`
         distingue el caso; 409 para conflictos de carrera (la oferta vigente ya
-        subió), 422 para violaciones de regla del propio jugador.
+        subió, la subasta se cerró, una puja alcanzó la compra inmediata), 422
+        para violaciones de regla del propio jugador.
       content:
         application/problem+json:
           schema:
