@@ -94,11 +94,26 @@ class MigracionesIT {
                             + " version_token, creado_en) VALUES (?, 'veterana', 'veterana@upb.edu.co', 'x', 'ACTIVO', ?,"
                             + " 0, 0, ?)",
                     uid, rol, Timestamp.valueOf(LocalDateTime.now()));
-            // Hibernate de HOY conoce las entidades del alta y las acaba de
-            // crear; la base de DEV no las tiene, porque el codigo que la creo
-            // no existia. Se quitan para que la base sea la de verdad.
+            // Hibernate de HOY conoce las entidades del alta y las de B1 y las
+            // acaba de crear; la base de DEV no las tiene, porque el codigo que
+            // la creo no existia. Se quitan para que la base sea la de verdad.
             jdbc.execute("DROP TABLE onboarding_paso");
             jdbc.execute("DROP TABLE onboarding_jugador");
+            jdbc.execute("DROP TABLE preguntas_seguridad");
+            jdbc.execute("ALTER TABLE tokens_credencial DROP COLUMN codigo_hash, DROP COLUMN intentos_fallidos,"
+                    + " DROP COLUMN anulado_en, DROP COLUMN creado_en, DROP COLUMN usado_en");
+            jdbc.execute("ALTER TABLE tokens_credencial ALTER COLUMN token SET NOT NULL");
+            jdbc.execute("ALTER TABLE usuarios DROP COLUMN sancion_id");
+            // Lo que B1 encuentra en DEV: un codigo de restablecimiento en
+            // claro todavia pendiente, y una cuenta baneada por el panel antiguo.
+            Long id = jdbc.queryForObject("SELECT id FROM usuarios WHERE public_id = ?", Long.class, uid);
+            jdbc.update("INSERT INTO tokens_credencial (usuario_id, token, tipo, fecha_expiracion, usado)"
+                    + " VALUES (?, 'ABCDEFGHJK', 'RESTABLECIMIENTO', ?, false)",
+                    id, Timestamp.valueOf(LocalDateTime.now().plusMinutes(20)));
+            jdbc.update("INSERT INTO usuarios (public_id, apodo, email, password, estado, rol_id, intentos_fallidos,"
+                            + " version_token, creado_en) VALUES (?, 'baneado', 'baneado@upb.edu.co', 'x', 'BANEADA', ?,"
+                            + " 0, 0, ?)",
+                    UUID.randomUUID(), rol, Timestamp.valueOf(LocalDateTime.now()));
         }
         return uid;
     }
@@ -108,7 +123,7 @@ class MigracionesIT {
     }
 
     @Test
-    @DisplayName("base vacia: V1 y V2 se aplican y las entidades validan contra ellas")
+    @DisplayName("base vacia: V1, V2 y V3 se aplican y las entidades validan contra ellas")
     void baseVacia() throws Exception {
         String url = crearBase("nueva");
         try (ConfigurableApplicationContext contexto = arrancarComoDespliegue(url)) {
@@ -117,7 +132,11 @@ class MigracionesIT {
             assertThat(historial(jdbc)).extracting(fila -> fila.get("version"), fila -> fila.get("type"))
                     .containsExactly(
                             org.assertj.core.groups.Tuple.tuple("1", "SQL"),
-                            org.assertj.core.groups.Tuple.tuple("2", "SQL"));
+                            org.assertj.core.groups.Tuple.tuple("2", "SQL"),
+                            org.assertj.core.groups.Tuple.tuple("3", "SQL"));
+            assertThat(jdbc.queryForObject(
+                    "SELECT count(*) FROM information_schema.tables WHERE table_name = 'preguntas_seguridad'",
+                    Integer.class)).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT count(*) FROM roles", Integer.class))
                     .as("el sembrador de roles funciona sobre el esquema de Flyway").isEqualTo(4);
             assertThat(jdbc.queryForObject(
@@ -127,7 +146,7 @@ class MigracionesIT {
     }
 
     @Test
-    @DisplayName("base heredada con datos: se marca como V1 sin tocarla, se aplica V2 y el jugador sigue ahi")
+    @DisplayName("base heredada con datos: se marca como V1 sin tocarla, se aplican V2 y V3 y el jugador sigue ahi")
     void baseHeredada() throws Exception {
         String url = crearBase("heredada");
         UUID veterana = baseHeredadaConUnJugador(url);
@@ -138,9 +157,22 @@ class MigracionesIT {
             assertThat(historial(jdbc)).extracting(fila -> fila.get("version"), fila -> fila.get("type"))
                     .containsExactly(
                             org.assertj.core.groups.Tuple.tuple("1", "BASELINE"),
-                            org.assertj.core.groups.Tuple.tuple("2", "SQL"));
+                            org.assertj.core.groups.Tuple.tuple("2", "SQL"),
+                            org.assertj.core.groups.Tuple.tuple("3", "SQL"));
             assertThat(jdbc.queryForObject("SELECT apodo FROM usuarios WHERE public_id = ?", String.class, veterana))
                     .isEqualTo("veterana");
+            // V3: la cuenta existente NO pasa a pendiente de verificar...
+            assertThat(jdbc.queryForObject("SELECT estado FROM usuarios WHERE public_id = ?", String.class, veterana))
+                    .isEqualTo("ACTIVO");
+            // ...el codigo en claro que seguia pendiente queda anulado y sin su valor...
+            Map<String, Object> codigo = jdbc.queryForMap("SELECT token, anulado_en, intentos_fallidos"
+                    + " FROM tokens_credencial");
+            assertThat(codigo.get("token")).isNull();
+            assertThat(codigo.get("anulado_en")).isNotNull();
+            assertThat(codigo.get("intentos_fallidos")).isEqualTo(0);
+            // ...y el baneo del panel antiguo se escribe como lo publica el contrato.
+            assertThat(jdbc.queryForObject("SELECT estado FROM usuarios WHERE apodo = 'baneado'", String.class))
+                    .isEqualTo("BANEADO");
 
             // La clave ajena del alta funciona sobre la columna heredada...
             jdbc.update("INSERT INTO onboarding_jugador (usuario_uid, version_bootstrap, estado, intentos, creado_en,"
@@ -182,7 +214,7 @@ class MigracionesIT {
             assertThat(jdbc.queryForObject(
                     "SELECT count(*) FROM pg_constraint WHERE conname = 'uk_usuarios_public_id'", Integer.class))
                     .isEqualTo(1);
-            assertThat(historial(jdbc)).hasSize(2);
+            assertThat(historial(jdbc)).hasSize(3);
         }
     }
 }
