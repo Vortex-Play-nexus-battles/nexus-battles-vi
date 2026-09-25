@@ -77,7 +77,8 @@ paths:
               schema: { $ref: '#/components/schemas/ProblemDetail' }
         '422':
           description: >
-            Saldo insuficiente para la comisión o regla de negocio inválida
+            Saldo insuficiente para la comisión (`motivo: SALDO_INSUFICIENTE`) o
+            regla de negocio inválida
             (`motivo: LIMITE_PUBLICACIONES_ACTIVAS` al llegar a 10 subastas
             activas; `motivo: COMPRA_INMEDIATA_NO_SUPERIOR` si la compra
             inmediata no supera el precio mínimo).
@@ -170,3 +171,4 @@ components:
             - LIMITE_PUBLICACIONES_ACTIVAS
             - COMPRA_INMEDIATA_NO_SUPERIOR
             - INCREMENTO_MINIMO_NO_CONFIGURADO
+            - SALDO_INSUFICIENTE
