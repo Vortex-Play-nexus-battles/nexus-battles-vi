@@ -30,6 +30,7 @@ import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Sanciones unificadas (7.3.2) de punta a punta dentro del servicio: la
@@ -216,6 +217,22 @@ class SalidasDeSancionIT {
         JsonNode correo = json.readTree(recibidas("POST", "/api/v1/correos/sancion").get(0).cuerpo());
         assertThat(correo.path("tipo").asString()).isEqualTo("ADVERTENCIA");
         assertThat(correo.has("hasta")).isFalse();
+    }
+
+    @Test
+    @DisplayName("idempotencia de la cola: la clave de una salida es unica, el mismo evento no se encola dos veces")
+    void claveUnica() {
+        UUID jugador = UUID.randomUUID();
+        Sancion advertencia = sanciones.emitir(admin, new SancionesService.SolicitudDeSancion(jugador,
+                Sancion.Tipo.ADVERTENCIA, "Primer aviso", null, null, null, false));
+        SalidaPendiente repetida = SalidaPendiente.de(CanalDeSalida.CORREO, EventoDeSancion.EMISION, jugador,
+                advertencia.id(), null, "sancion-" + advertencia.id() + "-emision",
+                java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC));
+
+        assertThatThrownBy(() -> salidas.saveAndFlush(repetida))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+        assertThat(salidas.findBySancionIdOrderByCreadoEnAsc(advertencia.id()))
+                .filteredOn(s -> s.canal() == CanalDeSalida.CORREO).hasSize(1);
     }
 
     // ------------------------------------------------------------------
