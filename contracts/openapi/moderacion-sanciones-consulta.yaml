@@ -165,6 +165,11 @@ components:
           nullable: true
           enum: [SUSPENSION, BANEO, null]
           description: (1.1.0) Que sancion restringe. Solo presente si sancionActiva es true.
+        sancionId:
+          type: string
+          format: uuid
+          nullable: true
+          description: (1.4.0) La sancion que restringe, para levantarla o apelarla. Solo presente si sancionActiva es true.
       examples:
         - sancionActiva: false
           motivo: null
