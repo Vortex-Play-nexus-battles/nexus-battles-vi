@@ -677,9 +677,10 @@ test.describe('R17 · la prueba del profesor', () => {
         const movimientos = await movimientosEnMiCuenta(page);
         expect(movimientos.some((fila) => /Créditos de bienvenida/.test(fila))).toBe(true);
         await irA(page, 'inventario');
-        const heroe = page.locator('li.vitrina__producto[data-tipo="HEROE"]');
+        // UXC-1 — el héroe vive en la pestaña «Héroes», como en el paso 9.
+        const heroe = page.locator('.inventario-heroes [data-heroe]');
         await expect(heroe).toHaveCount(1, { timeout: 30_000 });
-        await expect(heroe.locator('.vitrina__nombre')).toHaveText(nombreDelHeroe);
+        await expect(heroe.locator('.hero-card__nombre')).toHaveText(nombreDelHeroe);
         // Y una pestaña nueva usa la misma sesión, sin pedir la contraseña.
         const otra = await context.newPage();
         await otra.goto('/cuenta');
