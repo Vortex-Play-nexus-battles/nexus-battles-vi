@@ -486,9 +486,12 @@ function iniciarVista(formulario) {
 
       // HU-UX-001: si se llegó al login desde una vista privada, se vuelve a
       // ella; una cuenta recién creada pasa antes por «Preparando tu cuenta».
-      // B1: la primera entrada tras verificar el correo, siempre.
+      // UXC-4 — la vuelta se lee AHORA y no al cargar: «Entra para comprar»,
+      // en la tienda de la portada, la escribe en la dirección sin recargar.
+      // B1: la primera entrada tras verificar el correo pasa por «Preparando
+      // tu cuenta», siempre.
       globalThis.location.href = entrarCon(body, {
-        volver,
+        volver: rutaDeVuelta(globalThis.location?.search ?? '') ?? volver,
         cuentaNueva: motivo === MOTIVOS.VERIFICADA,
       });
     } catch {

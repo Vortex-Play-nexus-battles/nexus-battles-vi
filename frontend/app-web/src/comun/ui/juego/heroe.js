@@ -19,6 +19,10 @@
 
 import { h, clases } from '../dom.js';
 import { claseDeMarco, distintivoDeRareza } from '../distintivo.js';
+import { icono } from '../icono.js';
+import { identidadDePrototipo } from './prototipos.js';
+import { bloqueDeEstadisticas } from './estadisticas.js';
+import { selloDeEstado, RANURAS_TOTALES } from './estado-heroe.js';
 
 /**
  * Retrato circular con el marco que le toca a su rareza y la insignia de nivel.
@@ -32,10 +36,17 @@ import { claseDeMarco, distintivoDeRareza } from '../distintivo.js';
  * @returns {HTMLElement}
  */
 export function retratoDeHeroe(heroe, { conNombre = true } = {}) {
-  const { nombre, nivel, rareza, imagen } = heroe ?? {};
+  const { nombre, nivel, rareza, imagen, prototipo } = heroe ?? {};
   const etiquetaRareza = rareza ? String(rareza).toLowerCase() : null;
+  // UXC-1 — con el prototipo conocido, su simbolo sustituye a la inicial: los
+  // ocho prototipos de la Tabla 6 dejan de ser el mismo circulo. Sin prototipo
+  // se queda la inicial, que es lo que habia.
+  const identidad = prototipo ? identidadDePrototipo(prototipo) : null;
 
-  const retrato = h('div', { clase: 'marco-heroe__retrato' });
+  const retrato = h('div', {
+    clase: 'marco-heroe__retrato',
+    datos: identidad?.conocido ? { prototipo: identidad.clave.replace(/\s+/g, '-') } : {},
+  });
 
   if (imagen) {
     retrato.append(
@@ -50,6 +61,8 @@ export function retratoDeHeroe(heroe, { conNombre = true } = {}) {
         },
       }),
     );
+  } else if (identidad?.conocido) {
+    retrato.append(icono(identidad.icono, { clase: 'icono marco-heroe__simbolo', etiqueta: null }));
   } else {
     // Sin imagen no se deja el hueco: la inicial del heroe es mejor marcador
     // de posicion que un circulo vacio, y ademas distingue a unos de otros.
@@ -77,6 +90,7 @@ export function retratoDeHeroe(heroe, { conNombre = true } = {}) {
       // tenga que juntar tres nodos sueltos.
       'aria-label': [
         nombre ?? 'Heroe',
+        identidad?.conocido && identidad.nombre !== nombre ? identidad.nombre : null,
         Number.isFinite(nivel) ? `nivel ${nivel}` : null,
         etiquetaRareza,
       ]
@@ -147,4 +161,102 @@ export function tarjetaDeHeroe(heroe, { alPulsar, seleccionada = false } = {}) {
   });
   boton.addEventListener('click', () => alPulsar(heroe));
   return boton;
+}
+
+/**
+ * La carta de un héroe PROPIO — UXC-1 (HeroCard).
+ *
+ * Responde de un vistazo a lo que §14 de la auditoría pide de cada pantalla:
+ * qué es (nombre y prototipo con su símbolo), qué tiene (sus cifras con el
+ * equipo aplicado y cuántas ranuras lleva ocupadas), en qué estado está y qué
+ * se puede hacer con él. Todo sale de servicios: las cifras de
+ * `/inventario/heroes/{id}/estadisticas`, el prototipo del catálogo de
+ * productos, el estado de `estado-heroe.js`. Lo que no llegue se omite.
+ *
+ * No hay nivel, rareza ni experiencia: ningún servicio los persiste.
+ *
+ * @param {object} heroe
+ * @param {string} heroe.nombre nombre propio que le puso su dueño
+ * @param {string|null} [heroe.prototipo] nombre del catálogo
+ * @param {string|null} [heroe.imagen]
+ * @param {object|null} [heroe.estadisticas] con equipo aplicado
+ * @param {{estado: string, detalle?: string|null}|null} [heroe.estado]
+ * @param {number|null} [heroe.ranurasOcupadas]
+ * @param {Array<{texto: string, alPulsar: Function, principal?: boolean, datos?: object,
+ *   deshabilitada?: string|null}>} [acciones]
+ * @returns {HTMLElement}
+ */
+export function cartaDeHeroePropio(heroe, acciones = []) {
+  const { nombre, prototipo, imagen, estadisticas, estado, ranurasOcupadas } = heroe ?? {};
+  const identidad = identidadDePrototipo(prototipo);
+
+  const lineaPrototipo = prototipo
+    ? h('p', {
+        clase: 'hero-card__prototipo',
+        hijos: [
+          icono(identidad.icono, { clase: 'icono hero-card__icono-prototipo', etiqueta: null }),
+          h('span', {
+            texto: identidad.sanador ? `${identidad.nombre} · Sanador` : identidad.nombre,
+          }),
+        ],
+      })
+    : h('p', { clase: 'hero-card__prototipo t-meta', texto: 'Prototipo sin identificar' });
+
+  const botones = acciones
+    .filter((accion) => accion?.texto && typeof accion.alPulsar === 'function')
+    .map((accion) => {
+      const boton = h('button', {
+        clase: accion.principal
+          ? 'boton boton--primario boton--pequeno'
+          : 'boton boton--secundario boton--pequeno',
+        texto: accion.texto,
+        atributos: {
+          type: 'button',
+          disabled: Boolean(accion.deshabilitada),
+          title: accion.deshabilitada ?? null,
+          'aria-label': accion.etiqueta ?? null,
+        },
+        datos: accion.datos ?? {},
+      });
+      boton.addEventListener('click', () => {
+        if (!boton.disabled) {
+          accion.alPulsar();
+        }
+      });
+      return boton;
+    });
+
+  return h('article', {
+    clase: clases(
+      'tarjeta',
+      'hero-card',
+      identidad.familia && `hero-card--${identidad.familia.toLowerCase()}`,
+    ),
+    datos: {
+      heroe: '',
+      ...(identidad.conocido ? { prototipo: identidad.clave.replace(/\s+/g, '-') } : {}),
+      ...(estado?.estado ? { estado: estado.estado } : {}),
+    },
+    hijos: [
+      h('header', {
+        clase: 'hero-card__cabecera',
+        hijos: [
+          retratoDeHeroe({ nombre, imagen, prototipo }, { conNombre: false }),
+          h('div', {
+            clase: 'hero-card__identidad',
+            hijos: [h('h3', { clase: 'hero-card__nombre', texto: nombre }), lineaPrototipo],
+          }),
+        ],
+      }),
+      estado?.estado ? selloDeEstado(estado.estado, { detalle: estado.detalle ?? null }) : null,
+      bloqueDeEstadisticas(estadisticas, { compacto: true }),
+      Number.isFinite(ranurasOcupadas)
+        ? h('p', {
+            clase: 'hero-card__equipo t-meta',
+            texto: `Equipo: ${ranurasOcupadas} de ${RANURAS_TOTALES} ranuras`,
+          })
+        : null,
+      botones.length > 0 ? h('div', { clase: 'hero-card__acciones', hijos: botones }) : null,
+    ],
+  });
 }

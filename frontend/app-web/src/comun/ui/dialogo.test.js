@@ -84,6 +84,30 @@ describe('confirmar', () => {
     await expect(respuesta).resolves.toBe(false);
   });
 
+  test('cerrar sin decidir (Escape, la equis) resuelve false, no deja la promesa colgada', async () => {
+    const conEscape = confirmar({ titulo: 'Cancelar la misión', mensaje: 'x' });
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await expect(conEscape).resolves.toBe(false);
+
+    const conEquis = confirmar({ titulo: 'Cancelar la misión', mensaje: 'x' });
+    document.querySelector('[data-accion="cerrar"]').click();
+    await expect(conEquis).resolves.toBe(false);
+    expect(document.querySelector('.velo')).toBeNull();
+  });
+
+  test('admite un cuerpo con más que una frase', async () => {
+    const lista = document.createElement('ul');
+    lista.append(document.createElement('li'));
+    const respuesta = confirmar({ titulo: 'Iniciar', cuerpo: lista, peligro: false });
+
+    expect(document.querySelector('.dialogo ul')).toBe(lista);
+    expect(document.querySelector('[data-accion="confirmar"]').className).toContain(
+      'boton--primario',
+    );
+    document.querySelector('[data-accion="confirmar"]').click();
+    await expect(respuesta).resolves.toBe(true);
+  });
+
   test('una accion peligrosa se pinta como peligrosa', () => {
     confirmar({ titulo: 'Banear', mensaje: 'x' });
 

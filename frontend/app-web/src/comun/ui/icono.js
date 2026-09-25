@@ -59,6 +59,21 @@ export const ICONOS = Object.freeze([
   // UX-R4.4 — dibujado para este producto, no exportado de Figma: «Mis cofres»
   // era la unica vista cuyo objeto central no tenia simbolo.
   'cofre',
+  // UXC — los ocho prototipos se distinguen por simbolo (tres nuevos) y los
+  // modulos que no tenian icono ya lo tienen. Ver el comentario del sprite.
+  'daga',
+  'hoja',
+  'cruz',
+  'carrito',
+  'bandera',
+  'transmision',
+  'mapa',
+  'sobre',
+  'salir',
+  // UXC-3 — el adjunto de un comentario y la estrella rellena de una
+  // calificación (ver el comentario del sprite).
+  'imagen',
+  'estrella-llena',
 ]);
 
 const ESPACIO_SVG = 'http://www.w3.org/2000/svg';
