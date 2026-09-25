@@ -445,6 +445,19 @@ components:
             fijarlo aqui: asi el correo nunca promete un plazo distinto del
             real.
           examples: [15]
+        proposito:
+          type: string
+          enum: [ACTIVACION, VERIFICACION]
+          default: ACTIVACION
+          description: >
+            1.4.0 — `VERIFICACION`: autorregistro de un jugador; el enlace lleva
+            a `{PUBLIC_BASE_URL}/verificar`. `ACTIVACION` (por omision, lo que
+            ya enviaba ms-identidad): cuenta creada por un Super
+            Administrador; el enlace lleva a `{PUBLIC_BASE_URL}/restablecer`
+            para fijar su propia contrasena. En los dos casos el codigo y el
+            correo viajan en el fragmento (`#codigo=...&correo=...`), que el
+            navegador no envia a ningun servidor ni queda en la bitacora del
+            borde.
 
     CorreoRecuperacionClaveRequest:
       type: object
