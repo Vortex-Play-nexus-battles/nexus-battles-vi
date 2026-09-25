@@ -432,10 +432,12 @@ test.describe('R17 · la prueba del profesor', () => {
       await paso(9, 'Comprobar el héroe inicial (ficha con estadísticas)', async () => {
         await irA(page, 'inventario');
         await expect(page).toHaveURL(EN.inventario);
-        const heroe = page.locator('li.vitrina__producto[data-tipo="HEROE"]');
+        // UXC-1 — «Mi inventario» separa héroes y objetos: el héroe inicial es
+        // una carta de la pestaña «Héroes», con su prototipo y su estado.
+        const heroe = page.locator('.inventario-heroes [data-heroe]');
         await expect(heroe).toHaveCount(1, { timeout: 30_000 });
-        nombreDelHeroe = ((await heroe.locator('.vitrina__nombre').textContent()) ?? '').trim();
-        await heroe.getByRole('button', { name: /^Ver el detalle de / }).click();
+        nombreDelHeroe = ((await heroe.locator('.hero-card__nombre').textContent()) ?? '').trim();
+        await heroe.getByRole('button', { name: /^Ver la ficha de / }).click();
         const ficha = page.locator('[role="dialog"].ficha');
         await expect(ficha).toBeVisible();
         await expect(ficha.locator('.ficha__nombre')).not.toBeEmpty();
@@ -452,13 +454,19 @@ test.describe('R17 · la prueba del profesor', () => {
       });
 
       await paso(10, 'Comprobar el inventario', async () => {
-        const elementos = page.locator('li.vitrina__producto');
+        // UXC-1 — un héroe en «Héroes» y el kit en «Objetos», cada uno con su
+        // estado (equipado, libre o bloqueado).
+        const heroes = await page.locator('.inventario-heroes [data-heroe]').count();
+        await page.locator('#pestana-objetos').click();
+        const elementos = page.locator('.inventario__contenido li.vitrina__producto');
+        await expect(elementos.first()).toBeVisible({ timeout: 30_000 });
         const total = await elementos.count();
         const tipos = await elementos.evaluateAll((lis) => lis.map((li) => li.dataset.tipo));
+        expect(heroes).toBe(1);
         expect(total).toBeGreaterThan(0);
-        expect(tipos.filter((t) => t === 'HEROE')).toHaveLength(1);
+        expect(tipos.filter((t) => t === 'HEROE')).toHaveLength(0);
         await capturar(page, testInfo, '10-inventario');
-        return `${total} elementos (${tipos.join(', ')})`;
+        return `1 héroe y ${total} objetos (${tipos.join(', ')})`;
       });
 
       await paso(11, 'Entrar a «Jugar online»', async () => {
@@ -474,12 +482,14 @@ test.describe('R17 · la prueba del profesor', () => {
         // El héroe que juega es el equipado (RF-JUE-001, HU-SAL-003); se elige
         // y se equipa en «Mi inventario → Equipo». El alta lo deja listo.
         await irA(page, 'inventario');
-        const heroe = page.locator('li.vitrina__producto[data-tipo="HEROE"]');
-        await heroe.getByRole('button', { name: /^Gestionar equipo de / }).click();
+        const heroe = page.locator('.inventario-heroes [data-heroe]');
+        await heroe.getByRole('button', { name: /^Gestionar el equipamiento de / }).click();
         await expect(page.locator('.inventario-equipo__estadisticas')).toBeVisible({
           timeout: 30_000,
         });
-        const estadisticas = await page.locator('.inventario-equipo__estadistica').allInnerTexts();
+        const estadisticas = await page
+          .locator('.inventario-equipo__estadisticas .stat-block__cifra')
+          .allInnerTexts();
         await capturar(page, testInfo, '12-heroe-seleccionado');
         await irA(page, 'jugar');
         await expect(page).toHaveURL(EN.jugar);
@@ -667,9 +677,10 @@ test.describe('R17 · la prueba del profesor', () => {
         const movimientos = await movimientosEnMiCuenta(page);
         expect(movimientos.some((fila) => /Créditos de bienvenida/.test(fila))).toBe(true);
         await irA(page, 'inventario');
-        const heroe = page.locator('li.vitrina__producto[data-tipo="HEROE"]');
+        // UXC-1 — el héroe vive en la pestaña «Héroes», como en el paso 9.
+        const heroe = page.locator('.inventario-heroes [data-heroe]');
         await expect(heroe).toHaveCount(1, { timeout: 30_000 });
-        await expect(heroe.locator('.vitrina__nombre')).toHaveText(nombreDelHeroe);
+        await expect(heroe.locator('.hero-card__nombre')).toHaveText(nombreDelHeroe);
         // Y una pestaña nueva usa la misma sesión, sin pedir la contraseña.
         const otra = await context.newPage();
         await otra.goto('/cuenta');

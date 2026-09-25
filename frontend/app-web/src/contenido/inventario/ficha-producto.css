@@ -156,15 +156,68 @@
   color: var(--texto-2);
 }
 
+/* UXC-1 — las acciones del prototipo como cartas: nombre, coste, carga y
+   efecto, en vez de una lista de texto. */
 .ficha__acciones {
+  display: grid;
+  gap: 8px;
   margin: 0;
-  padding: 0 0 0 18px;
+  padding: 0;
+  list-style: none;
   font-size: 0.9rem;
   line-height: 1.5;
 }
 
+.ficha__accion {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--superficie-2);
+}
+
+.ficha__accion-cabeza {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.ficha__accion-icono {
+  width: 16px;
+  height: 16px;
+  color: var(--primaria);
+  flex: none;
+}
+
+.ficha__accion-datos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--texto-2);
+}
+
+.ficha__accion-coste {
+  font-weight: 600;
+  color: var(--texto);
+}
+
+.ficha__accion-carga {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ficha__accion-carga .icono {
+  width: 14px;
+  height: 14px;
+}
+
 .ficha__accion-efecto {
-  margin: 2px 0 8px;
+  margin: 0;
   font-size: 0.85rem;
   color: var(--texto-2);
   overflow-wrap: anywhere;

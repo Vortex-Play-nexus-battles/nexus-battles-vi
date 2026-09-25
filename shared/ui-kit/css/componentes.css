@@ -4950,8 +4950,9 @@ button.tarjeta-heroe[aria-pressed='true'] {
 }
 
 /* Los rivales miran hacia el jugador. Es el truco de siempre en un juego 2D y
-   cuesta una linea. */
-.campo__puesto--rival .marco-heroe__retrato {
+   cuesta una linea. UXC-2 — solo la IMAGEN: volteando el retrato entero, la
+   inicial salia en espejo («Ɔ» por «C») y el simbolo del prototipo tambien. */
+.campo__puesto--rival .marco-heroe__imagen {
   transform: scaleX(-1);
 }
 
@@ -6158,4 +6159,829 @@ button.tarjeta-heroe[aria-pressed='true'] {
   display: flex;
   gap: var(--e-2);
   margin-block-start: var(--e-2);
+}
+
+/* =======================================================================
+   UXC-1 — Núcleo del héroe: prototipo, StatBlock, HeroCard y su estado
+   -----------------------------------------------------------------------
+   §6.1.1 fija ocho prototipos (Tabla 6) y hasta aqui todos eran el mismo
+   circulo con una inicial. El simbolo del prototipo (sprite) sustituye a la
+   inicial cuando el prototipo se conoce, coloreado por familia; el nombre va
+   SIEMPRE escrito al lado, asi que el color solo refuerza.
+   ======================================================================= */
+
+.marco-heroe__simbolo {
+  width: 46%;
+  height: 46%;
+  color: var(--texto-2);
+}
+
+.marco-heroe__retrato[data-prototipo^='guerrero'] .marco-heroe__simbolo {
+  color: var(--primaria);
+}
+.marco-heroe__retrato[data-prototipo^='mago'] .marco-heroe__simbolo {
+  color: var(--acento-relleno);
+}
+.marco-heroe__retrato[data-prototipo^='picaro'] .marco-heroe__simbolo {
+  color: var(--advertencia);
+}
+.marco-heroe__retrato[data-prototipo='chaman'] .marco-heroe__simbolo,
+.marco-heroe__retrato[data-prototipo='medico'] .marco-heroe__simbolo {
+  color: var(--exito);
+}
+
+/* --- StatBlock: las seis cifras de la Tabla 6 --------------------------- */
+
+.stat-block {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: var(--e-2) var(--e-3);
+  margin: 0;
+}
+
+.stat-block--compacto {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--e-1) var(--e-3);
+}
+
+.stat-block__cifra {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.stat-block__etiqueta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--tinta-3);
+}
+
+.stat-block__icono {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.stat-block__valor {
+  margin: 0;
+  font-family: var(--fuente-titulo);
+  font-size: 1.125rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--tinta);
+}
+
+.stat-block--compacto .stat-block__valor {
+  font-size: 1rem;
+}
+
+.stat-block__seccion {
+  display: grid;
+  gap: var(--e-2);
+}
+
+.stat-block__titulo {
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--tinta);
+}
+
+.stat-block__nota {
+  margin: 0;
+}
+
+/* --- Estado del heroe o del objeto --------------------------------------- */
+
+.sello-estado-heroe {
+  justify-self: start;
+  width: fit-content;
+  font-weight: 600;
+}
+
+.sello-estado-heroe__icono {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+/* Equipado: tono informativo, no de exito — no es un logro, es donde esta. */
+.distintivo--equipado {
+  background: var(--info-insignia);
+  color: var(--primaria-relleno);
+}
+
+/* Bloqueado: neutro y legible. Las variantes `--bloqueada` y
+   `--no-disponible` del kit ponen `--texto-3` sobre `--pista`, que no llega a
+   4,5:1 (axe con datos, UXC-1); estas dos si. */
+.distintivo--bloqueado {
+  background: var(--superficie-2);
+  border-color: var(--borde);
+  color: var(--texto-2);
+}
+
+/* No puede combatir: aviso con solucion, tono de advertencia. */
+.distintivo--aviso {
+  background: var(--advertencia-insignia);
+  color: var(--advertencia);
+}
+
+/* --- HeroCard ------------------------------------------------------------ */
+
+.hero-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--e-4);
+}
+
+.hero-grid__celda {
+  min-width: 0;
+  display: grid;
+}
+
+.hero-card {
+  display: grid;
+  gap: var(--e-3);
+  align-content: start;
+  min-width: 0;
+}
+
+.hero-card__cabecera {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  min-width: 0;
+}
+
+.hero-card .marco-heroe {
+  flex: none;
+  width: auto;
+}
+
+.hero-card .marco-heroe__retrato {
+  width: 64px;
+  height: 64px;
+}
+
+.hero-card .marco-heroe__imagen {
+  width: 52px;
+  height: 52px;
+}
+
+.hero-card__identidad {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.hero-card__nombre {
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--tinta);
+  overflow-wrap: anywhere;
+}
+
+.hero-card__prototipo {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: 600;
+  color: var(--tinta-2);
+}
+
+.hero-card__icono-prototipo {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.hero-card__equipo {
+  margin: 0;
+}
+
+.hero-card__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+}
+
+/* Bloqueado (en subasta): el retrato se apaga; el texto no, para que siga
+   cumpliendo contraste. El sello dice por que. */
+.hero-card[data-estado='BLOQUEADO'] .marco-heroe__retrato {
+  filter: grayscale(1);
+  opacity: 0.7;
+}
+
+/* =======================================================================
+   UXC-2 — Combate a pantalla completa, barra de mando y lo que pasa
+   -----------------------------------------------------------------------
+   §7.6: «el area de juego debe ocupar mas del 80 % de la pantalla. Los
+   menus pueden estar en la parte inferior o lateral. La barra de
+   informacion debe estar en la parte superior, con la vida de los
+   participantes y el turno». Con la barra de la aplicacion (64 px), un HUD
+   de dos filas y los controles en tarjeta, el campo medía el 56 % en
+   1366x768. En modo combate (la vista pone `data-modo` en el body cuando hay
+   partida) la barra de la aplicacion se retira —la salida vive en el HUD—, el
+   HUD es una sola franja y los controles otra: el campo pasa del 80 %. Lo
+   mide `tests/visual/campo-de-combate.spec.js`.
+   ======================================================================= */
+
+.combate__salir {
+  display: none;
+}
+
+body[data-modo='combate'] [data-cabecera-app] {
+  display: none;
+}
+
+body[data-modo='combate'] .combate {
+  height: 100dvh;
+  min-height: 0;
+  padding: 0;
+  gap: 0;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+body[data-modo='combate'] .combate__hud {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-1) var(--e-4);
+  padding: 4px var(--e-4);
+  border-width: 0 0 1px;
+  border-radius: 0;
+  box-shadow: none;
+  max-height: 30vh;
+}
+
+body[data-modo='combate'] .combate__salir {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+  min-height: 36px;
+  padding: 0 var(--e-3);
+  border: 1px solid color-mix(in srgb, var(--pista) 40%, transparent);
+  border-radius: var(--radio-pildora);
+  color: var(--tinta);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+body[data-modo='combate'] .combate__salir:hover {
+  border-color: var(--enlace-sobre-cromo);
+  color: var(--tinta);
+}
+
+body[data-modo='combate'] .combate__hud-titulo {
+  flex-wrap: nowrap;
+  gap: var(--e-2);
+}
+
+/* El titulo se sigue leyendo (h1), pero no ocupa ancho del HUD: el turno y
+   las barras dicen donde se esta. Mismo patron que `.solo-lectores`. */
+body[data-modo='combate'] .combate__titulo,
+body[data-modo='combate'] .conexion__prefijo {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.combate__hud-estado {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  margin-left: auto;
+}
+
+/* En la sala de espera (sin partida) el HUD es una sola franja: titulo a un
+   lado, canal y chat al otro. Las barras aun no existen. */
+body:not([data-modo='combate']) .combate__hud {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2) var(--e-4);
+}
+
+.combate__vidas:empty {
+  display: none;
+}
+
+/* Las barras, compactas: nombre y valor arriba, la pista debajo. */
+body[data-modo='combate'] .combate__vidas {
+  display: flex;
+  flex: 1 1 360px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-1) var(--e-4);
+  min-width: 0;
+}
+
+body[data-modo='combate'] .combate__vidas .barra-vida {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  grid-template-areas:
+    'nombre efectos etiqueta valor'
+    'pista pista pista pista';
+  align-items: center;
+  gap: 2px var(--e-2);
+  flex: 1 1 110px;
+  max-width: 360px;
+  min-width: 0;
+}
+
+/* Con cuatro barras o mas (partidas de hasta seis), la etiqueta «IA · Equipo
+   2» se sigue leyendo pero deja de ocupar ancho: el campo ya separa los dos
+   bandos y los botones de ataque solo ofrecen rivales. */
+body[data-modo='combate'] .combate__vidas:has(> .barra-vida:nth-child(4)) .barra-vida__etiqueta {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+body[data-modo='combate'] .combate__vidas .barra-vida__nombre {
+  grid-area: nombre;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-etiqueta-tam);
+}
+
+body[data-modo='combate'] .combate__vidas .barra-vida__etiqueta {
+  grid-area: etiqueta;
+}
+
+body[data-modo='combate'] .combate__vidas .barra-vida .efectos {
+  grid-area: efectos;
+}
+
+body[data-modo='combate'] .combate__vidas .barra-vida__pista {
+  grid-area: pista;
+  height: 8px;
+}
+
+body[data-modo='combate'] .combate__vidas .barra-vida__valor {
+  grid-area: valor;
+  min-width: 0;
+}
+
+body[data-modo='combate'] .combate__campo {
+  border-width: 0;
+  border-radius: 0;
+}
+
+body[data-modo='combate'] .combate__controles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: var(--e-2) var(--e-4);
+  /* A la derecha queda el hueco del asistente flotante, que esta en todas
+     las vistas (RNF-DIS-002) y no debe tapar el registro. */
+  padding: 6px 88px 6px var(--e-4);
+  border-width: 1px 0 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* --- La barra de mando -------------------------------------------------- */
+
+.combate__mando {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--e-2) var(--e-4);
+}
+
+.combate__grupo {
+  display: grid;
+  gap: 2px;
+  align-content: end;
+}
+
+.combate__grupo-cabeza {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--e-2);
+}
+
+.combate__grupo-titulo {
+  margin: 0;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--tinta-2);
+}
+
+.combate__motivo {
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  line-height: 1.3;
+  color: var(--tinta-3);
+}
+
+body[data-modo='combate'] .combate__acciones {
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  gap: var(--e-2);
+}
+
+/* La carta de accion, compacta en la barra de mando: icono a la izquierda,
+   nombre y coste a la derecha. 56 px de alto. */
+body[data-modo='combate'] .accion-combate {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: var(--e-2);
+  row-gap: 2px;
+  min-width: 112px;
+  max-width: 176px;
+  min-height: 52px;
+  padding: var(--e-1) var(--e-3);
+  text-align: left;
+}
+
+body[data-modo='combate'] .accion-combate__insignias,
+body[data-modo='combate'] .accion-combate__detalle,
+body[data-modo='combate'] .accion-combate__coste {
+  grid-column: 2;
+}
+
+body[data-modo='combate'] .accion-combate__icono {
+  grid-row: 1 / span 2;
+}
+
+body[data-modo='combate'] .accion-combate__etiqueta {
+  text-align: left;
+}
+
+.accion-combate__detalle {
+  color: var(--texto-2);
+  line-height: 1.2;
+}
+
+/* Coste y carga con su icono: «⚡2 ⟳1», como en las cartas de un juego. */
+.accion-combate__insignias {
+  display: inline-flex;
+  gap: var(--e-2);
+}
+
+.accion-combate__insignia {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--texto-2);
+}
+
+.accion-combate__insignia-icono {
+  width: 12px;
+  height: 12px;
+}
+
+/* La especial deshabilitada sigue legible: se atenua el icono, no el texto
+   (contraste); el motivo esta escrito al lado del titulo del grupo. */
+.accion-combate--especial.accion-combate--fuera-de-turno {
+  border-style: dashed;
+}
+
+/* --- Poder (PowerMeter) ------------------------------------------------ */
+
+.combate__poder {
+  display: grid;
+  align-content: end;
+}
+
+.combate__poder[hidden] {
+  display: none;
+}
+
+.medidor-poder {
+  display: grid;
+  gap: 2px;
+  min-width: 112px;
+}
+
+.medidor-poder__cabeza {
+  display: flex;
+  align-items: center;
+  gap: var(--e-1);
+  margin: 0;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: 700;
+  color: var(--tinta);
+}
+
+.medidor-poder__icono {
+  width: 16px;
+  height: 16px;
+  color: var(--primaria);
+}
+
+.medidor-poder__valor {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.medidor-poder__pista {
+  display: flex;
+  gap: 2px;
+}
+
+.medidor-poder__segmento {
+  flex: 1 1 0;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--pista);
+  border: 1px solid var(--borde);
+}
+
+.medidor-poder__segmento--lleno {
+  background: var(--primaria);
+  border-color: var(--primaria);
+}
+
+/* Sin seguimiento: la capacidad, rayada, para que no se lea como «lleno». */
+.medidor-poder--sin-seguimiento .medidor-poder__segmento {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--pista),
+    var(--pista) 2px,
+    var(--superficie) 2px,
+    var(--superficie) 4px
+  );
+}
+
+.medidor-poder__nota {
+  margin: 0;
+}
+
+/* --- Registro del combate (CombatLog) ------------------------------------ */
+
+.combate__registro {
+  display: grid;
+  gap: 2px;
+  flex: 1 1 220px;
+  min-width: 200px;
+  align-content: end;
+}
+
+/* Con tres rivales o mas, las cartas de ataque se estrechan: el nombre del
+   rival cabe en dos lineas y la barra de mando sigue en una sola franja. */
+body[data-modo='combate'] .combate__acciones:has(> .accion-combate:nth-child(3)) .accion-combate {
+  min-width: 96px;
+  max-width: 132px;
+}
+
+body[data-modo='combate'] .combate__acciones--especiales .accion-combate {
+  max-width: 164px;
+}
+
+.registro-combate {
+  height: 50px;
+  overflow-y: auto;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-chico);
+  background: var(--superficie-2);
+  padding: 2px var(--e-2);
+}
+
+body:not([data-modo='combate']) .registro-combate {
+  height: 96px;
+}
+
+.registro-combate__lista {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.registro-combate__linea {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-1);
+  font-size: var(--t-meta-tam);
+  line-height: 1.25;
+  color: var(--texto);
+}
+
+.registro-combate__icono {
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  flex: none;
+  color: var(--texto-2);
+}
+
+.registro-combate__linea--critico .registro-combate__icono,
+.registro-combate__linea--dano .registro-combate__icono,
+.registro-combate__linea--caida .registro-combate__icono {
+  color: var(--error);
+}
+
+.registro-combate__linea--curacion .registro-combate__icono {
+  color: var(--exito);
+}
+
+.registro-combate__linea--mitigado .registro-combate__icono {
+  color: var(--info);
+}
+
+.registro-combate__linea--critico {
+  font-weight: 700;
+}
+
+/* --- Efectos activos (EffectChip) --------------------------------------- */
+
+.efectos {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.efecto {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px var(--e-1);
+  border-radius: var(--radio-pildora);
+  background: var(--info-insignia);
+  color: var(--info);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.efecto__icono {
+  width: 12px;
+  height: 12px;
+}
+
+.efecto--compacto {
+  padding: 1px 3px;
+}
+
+.campo__puesto .efectos {
+  justify-content: center;
+  max-width: 140px;
+}
+
+/* --- La cifra del golpe (DamageCallout) --------------------------------- */
+
+.campo__puesto {
+  /* El impacto se coloca respecto al heroe. */
+  isolation: isolate;
+}
+
+.impacto {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  display: grid;
+  justify-items: center;
+  transform: translate(-50%, -4px);
+  pointer-events: none;
+  font-family: var(--fuente-titulo);
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow: 0 2px 6px color-mix(in srgb, var(--cromo) 90%, transparent);
+  z-index: 2;
+}
+
+.impacto__cifra {
+  font-size: 2rem;
+  color: var(--texto-sobre-color);
+}
+
+.impacto__etiqueta {
+  margin-top: 2px;
+  padding: 2px var(--e-2);
+  border-radius: var(--radio-pildora);
+  font-family: var(--t-etiqueta-familia);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--cromo);
+  color: var(--texto-sobre-color);
+}
+
+.impacto--critico .impacto__cifra {
+  font-size: 2.5rem;
+}
+
+.impacto--critico .impacto__etiqueta {
+  background: var(--error);
+}
+
+.impacto--curacion .impacto__etiqueta {
+  background: var(--exito);
+}
+
+.impacto--mitigado .impacto__etiqueta {
+  background: var(--info);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .impacto {
+    animation: impacto-sube 1.6s var(--curva-salida) both;
+  }
+}
+
+@keyframes impacto-sube {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 8px) scale(0.9);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(-50%, -4px) scale(1.08);
+  }
+  80% {
+    opacity: 1;
+    transform: translate(-50%, -18px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -26px) scale(1);
+  }
+}
+
+/* --- Por debajo del minimo ------------------------------------------------ */
+
+@media (max-width: 767px), (max-height: 520px) {
+  body[data-modo='combate'] .combate {
+    height: auto;
+    min-height: 100dvh;
+    grid-template-rows: auto auto auto;
+  }
+
+  body[data-modo='combate'] .combate__controles {
+    padding-right: var(--e-4);
+    padding-bottom: 88px;
+  }
+
+  body[data-modo='combate'] .combate__acciones {
+    flex-wrap: wrap;
+  }
+
+  body[data-modo='combate'] .combate__vidas .barra-vida {
+    max-width: none;
+  }
+}
+
+/* La pildora del canal con su «Reintentar» al lado. */
+.conexion__reintentar {
+  flex: none;
+}
+
+/* El enlace al chat de la sala, en el HUD, no crece. */
+.combate__chat {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* Las especiales: su cabecera lleva el motivo de por que no se pueden usar. */
+.combate__grupo--especiales {
+  min-width: 0;
+}
+
+.combate__registro-cuerpo {
+  min-width: 0;
 }

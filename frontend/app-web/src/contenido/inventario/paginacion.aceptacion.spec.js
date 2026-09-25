@@ -16,7 +16,8 @@ const TOTAL_ELEMENTOS = 640;
 const TAMANIO_PAGINA = 16;
 
 function elemento(indice) {
-  const tipos = ['HEROE', 'ARMA', 'ARMADURA', 'ITEM', 'EPICA', 'HABILIDAD'];
+  // UXC-1 — la vitrina de «Objetos» no lleva héroes (tienen su pestaña).
+  const tipos = ['ARMA', 'ARMADURA', 'ITEM', 'EPICA', 'HABILIDAD'];
   return {
     id: `elemento-${indice}`,
     productoId: `producto-${indice}`,
@@ -52,7 +53,7 @@ async function conInventarioDe(page, totalElementos) {
 
 async function abrirVitrina(page) {
   await prepararPagina(page);
-  await page.goto(`/contenido/inventario/inventario.html?jugador=${JUGADOR}`);
+  await page.goto(`/contenido/inventario/inventario.html?jugador=${JUGADOR}#objetos`);
   await page.waitForFunction(() => !document.querySelector('.estado-carga'));
 }
 
@@ -197,11 +198,13 @@ test.describe('Paginacion del inventario', () => {
     await casillas(page).nth(4).click();
     await expect(page.locator('.paginacion__pagina[aria-current="page"]')).toHaveText('5');
 
-    expect(consultadas).toHaveLength(2);
+    // UXC-1 — al montar, la vista reúne el inventario para separar héroes y
+    // objetos; con cuarenta páginas alcanza su tope y la pestaña «Objetos»
+    // vuelve a paginar contra el servidor. Lo que CA-3 pide sigue igual: la
+    // página pedida es la última consulta y el jugador es el mismo en todas.
+    expect(consultadas.at(-1).pagina).toBe(4);
     expect(consultadas[0].pagina).toBe(0);
-    expect(consultadas[1].pagina).toBe(4);
-    // El contexto del jugador es el mismo en las dos consultas.
-    expect(consultadas[1].jugador).toBe(consultadas[0].jugador);
+    expect(new Set(consultadas.map((c) => c.jugador)).size).toBe(1);
   });
 
   // --- RNF: sin desplazamiento y operable por teclado ----------------------

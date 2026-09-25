@@ -16,8 +16,29 @@ import {
   limpiarSeccionDegradada,
 } from '../../comun/degradacion/aviso-degradacion.js';
 import { h, vaciar } from '../../comun/ui/dom.js';
-import { accionDeCombate } from '../../comun/ui/juego/combate.js';
+import {
+  accionDeCombate,
+  chipDeEfecto,
+  impactoEnCampo,
+  medidorDePoder,
+  registroDeCombate,
+} from '../../comun/ui/juego/combate.js';
 import { panelDeResultado } from '../../comun/ui/juego/resultado.js';
+import { puntosDePoder } from '../../comun/heroe-propio.js';
+import { narrarAccion, narrarTurno } from './narracion.js';
+
+/**
+ * Por que las acciones especiales estan deshabilitadas — UXC-2.
+ *
+ * §6.1.2 da a cada heroe tres acciones con coste en poder y un turno de carga.
+ * El motor de combate que usa salas-partidas resuelve hoy solo el ataque
+ * basico: `EjecutarAccion` manda al motor el ataque del heroe sea cual sea el
+ * `codigoAccion` y devuelve ese mismo codigo en el aviso. Mandar una accion
+ * especial la haria PARECER ejecutada sin serlo. Asi que se ensenan —el
+ * jugador sabe que existen, cuanto cuestan y que hacen— y se dice por que no
+ * se pueden usar todavia, en vez de ofrecer un boton que mienta.
+ */
+export const MOTIVO_ESPECIALES = 'Aún no: el motor solo resuelve el ataque básico.';
 
 /** Destino `accionDelJugador` del AsyncAPI. Prefijo de envío `/app`. */
 export function destinoDeAccion(idPartida) {
@@ -415,9 +436,16 @@ export function enlacesDeSalida(salidas) {
  */
 export function montarControlesDeCombate(
   raiz,
-  { idPartida, yo, participantes, turnoDe, alAtacar, salidas = [] },
+  { idPartida, yo, participantes, turnoDe, numeroTurno = null, alAtacar, salidas = [] },
 ) {
   const zona = raiz.querySelector('[data-zona="acciones"]');
+  // UXC-2 — las zonas nuevas de la barra de mando. Todas opcionales: una
+  // prueba o una vista que no las tenga sigue funcionando como antes.
+  const zonaEspeciales = raiz.querySelector('[data-zona="especiales"]');
+  const zonaMotivoEspeciales = raiz.querySelector('[data-zona="motivo-especiales"]');
+  const zonaPoder = raiz.querySelector('[data-zona="poder"]');
+  const zonaRegistro = raiz.querySelector('[data-zona="registro"]');
+  const zonaCampo = raiz.querySelector('[data-zona="campo"]');
   const aviso = raiz.querySelector('[data-zona="resultado"]');
   // Indicador de turno y panel de vidas: el turno se dice con palabras y se
   // marca sobre la barra de quien juega.
@@ -430,6 +458,22 @@ export function montarControlesDeCombate(
   const registro = registroDeAvisos();
   /** La ultima accion enviada, para poder reintentarla tal cual. */
   let ultimaAccion = null;
+  /** De quien es el turno ahora, y cual es: lo necesita `sincronizar`. */
+  let turnoActual = turnoDe ?? null;
+  let numeroActual = Number.isInteger(numeroTurno) ? numeroTurno : null;
+  /** Sin canal no se juega: lo marca `bloquear` y lo quita `sincronizar`. */
+  let sinCanal = false;
+  let terminado = false;
+
+  // UXC-2 · CombatLog: lo que ha pasado, con palabras.
+  const bitacora = zonaRegistro ? registroDeCombate() : null;
+  if (bitacora) {
+    vaciar(zonaRegistro);
+    zonaRegistro.append(bitacora.elemento);
+  }
+  function anotar(linea) {
+    bitacora?.anotar(linea);
+  }
   /**
    * Lo que se sabe del final, acumulado entre los avisos que lo anuncian.
    *
@@ -492,7 +536,8 @@ export function montarControlesDeCombate(
    * defecto clasico del juego por turnos — el jugador pulsa, no pasa nada, y
    * no sabe si le falta algo o si la pantalla esta rota.
    */
-  function habilitar(esMiTurno) {
+  function habilitar(esMiTurnoPedido) {
+    const esMiTurno = esMiTurnoPedido && !sinCanal && !terminado;
     for (const boton of zona?.querySelectorAll('[data-atacar]') ?? []) {
       boton.disabled = !esMiTurno;
       boton.classList.toggle('accion-combate--fuera-de-turno', !esMiTurno);
@@ -513,12 +558,28 @@ export function montarControlesDeCombate(
    *
    * @param {string|null} idJugador
    */
-  function marcarTurno(idJugador) {
+  function marcarTurno(idJugador, numero = null) {
     const turno = textoDelTurno(idJugador, participantes, yo);
     if (zonaTurno) {
-      zonaTurno.textContent = turno.texto;
+      // UXC-2 — con el numero de turno conocido se dice tambien cual es
+      // («Turno 7 · Es tu turno»); el punto medio lo pone el kit.
+      if (Number.isInteger(numero) && turno.texto) {
+        zonaTurno.replaceChildren(
+          h('span', { clase: 'turno-actual__ronda', texto: `Turno ${numero}` }),
+          h('span', { clase: 'turno-actual__texto', texto: turno.texto }),
+        );
+      } else {
+        zonaTurno.textContent = turno.texto;
+      }
       zonaTurno.hidden = turno.texto === '';
       zonaTurno.dataset.mio = String(turno.mio);
+    }
+    for (const puesto of zonaCampo?.querySelectorAll('[data-puesto]') ?? []) {
+      if (idJugador && puesto.dataset.puesto === idJugador) {
+        puesto.dataset.turno = 'si';
+      } else {
+        delete puesto.dataset.turno;
+      }
     }
     for (const barra of zonaVidas?.querySelectorAll('[data-jugador]') ?? []) {
       // `delete` y no `= 'no'`: el selector del kit mira si el atributo está.
@@ -533,7 +594,123 @@ export function montarControlesDeCombate(
   // Con `turnoDe` conocido se decide ya; sin él, cerrados, que es lo prudente:
   // abrir un botón que el servidor va a rechazar es peor que hacer esperar.
   habilitar(Boolean(turnoDe) && turnoDe === yo);
-  marcarTurno(turnoDe ?? null);
+  marcarTurno(turnoDe ?? null, numeroActual);
+
+  // UXC-2 · efectos activos que ya trae la partida (Participante.heroe.efectosActivos).
+  for (const participante of participantes ?? []) {
+    pintarEfectos(participante.jugador?.id, participante.heroe?.efectosActivos);
+  }
+  if (turnoDe) {
+    const quien =
+      turnoDe === yo ? 'te toca a ti.' : `${textoDelTurno(turnoDe, participantes, yo).texto}.`;
+    anotar({
+      texto: numeroActual
+        ? `Combate en curso · Turno ${numeroActual}: ${quien}`
+        : 'Combate en curso.',
+      tono: 'sistema',
+      icono: 'espada',
+    });
+  }
+
+  /**
+   * Efectos activos de un participante, sobre su barra (compactos) y bajo su
+   * heroe en el campo. Sin efectos, se quitan los que hubiera.
+   */
+  function pintarEfectos(idJugador, efectos) {
+    if (!idJugador) {
+      return;
+    }
+    const lista = Array.isArray(efectos) ? efectos.filter((e) => e?.codigo || e?.nombre) : [];
+    const barra = zonaVidas?.querySelector(`[data-jugador="${idJugador}"]`);
+    const puesto = zonaCampo?.querySelector(`[data-puesto="${idJugador}"]`);
+    for (const [anfitrion, compacto] of [
+      [barra, true],
+      [puesto, false],
+    ]) {
+      if (!anfitrion) {
+        continue;
+      }
+      anfitrion.querySelector('.efectos')?.remove();
+      if (lista.length > 0) {
+        anfitrion.append(
+          h('span', {
+            clase: 'efectos',
+            datos: { efectos: '' },
+            hijos: lista.map((efecto) => chipDeEfecto(efecto, { compacto })),
+          }),
+        );
+      }
+    }
+  }
+
+  /** La cifra del golpe sobre el heroe en el campo; se va sola. */
+  function mostrarImpacto({ idJugador, cifra, etiqueta, tono }) {
+    const puesto = zonaCampo?.querySelector(`[data-puesto="${idJugador}"]`);
+    if (!puesto) {
+      return;
+    }
+    puesto.querySelector('.impacto')?.remove();
+    const impacto = impactoEnCampo({ cifra, etiqueta, tono });
+    puesto.append(impacto);
+    setTimeout(() => impacto.remove(), 2400);
+  }
+
+  /**
+   * UXC-2 · las acciones del heroe propio (§6.1.2) y su poder (§6.1.1).
+   * Llegan despues de montar: salen de tres servicios (ver
+   * `comun/heroe-propio.js`) y el ataque basico no las espera.
+   *
+   * @param {{acciones?: Array<{nombre: string, costo?: string, efecto?: string}>,
+   *   poderMaximo?: number|null, motivo?: string|null}} heroe
+   */
+  function mostrarHeroe({ acciones = [], poderMaximo = null, motivo = null } = {}) {
+    if (zonaPoder) {
+      vaciar(zonaPoder);
+      const medidor = medidorDePoder({ maximo: poderMaximo });
+      if (medidor) {
+        zonaPoder.append(medidor);
+      }
+      zonaPoder.hidden = !medidor;
+    }
+    if (!zonaEspeciales) {
+      return;
+    }
+    vaciar(zonaEspeciales);
+    const idMotivo = zonaMotivoEspeciales?.id || null;
+    for (const accion of acciones) {
+      const coste = puntosDePoder(accion.costo);
+      zonaEspeciales.append(
+        accionDeCombate({
+          nombre: accion.nombre,
+          icono: 'rayo',
+          coste: coste ?? undefined,
+          // El coste con su numero si el catalogo lo trae («2 puntos de
+          // poder»); si no («Todos los puntos de poder»), el texto tal cual.
+          insignias:
+            coste !== null
+              ? [
+                  { icono: 'rayo', texto: String(coste), etiqueta: `${coste} de poder` },
+                  { icono: 'reloj', texto: '1', etiqueta: 'Un turno de carga' },
+                ]
+              : [],
+          detalle: coste !== null ? null : (accion.costo ?? null),
+          efecto: [accion.efecto ? `Efecto: ${accion.efecto}` : null, 'Un turno de carga']
+            .filter(Boolean)
+            .join('. '),
+          impedimento: MOTIVO_ESPECIALES,
+          causa: 'turno',
+          especial: true,
+          describidaPor: idMotivo,
+        }),
+      );
+    }
+    if (zonaMotivoEspeciales) {
+      zonaMotivoEspeciales.textContent =
+        acciones.length > 0
+          ? MOTIVO_ESPECIALES
+          : (motivo ?? 'No se conocen las acciones de tu héroe.');
+    }
+  }
 
   return {
     /**
@@ -572,6 +749,73 @@ export function montarControlesDeCombate(
       return true;
     },
 
+    mostrarHeroe,
+    anotar,
+
+    /**
+     * Sin canal no se juega el turno (riesgo #7: nunca fallar en silencio).
+     * `sincronizar` los vuelve a abrir cuando el canal vuelve.
+     *
+     * @param {string} [motivo]
+     */
+    bloquear(motivo = 'Sin conexión en tiempo real: se reintentará solo.') {
+      if (!sinCanal && !terminado) {
+        anotar({
+          texto: 'Se perdió la conexión: reintentando. Los controles vuelven al recuperarla.',
+          tono: 'sistema',
+          icono: 'alerta',
+        });
+      }
+      sinCanal = true;
+      habilitar(false);
+      for (const boton of zona?.querySelectorAll('[data-atacar]') ?? []) {
+        boton.title = motivo;
+        boton.setAttribute('aria-label', `${boton.dataset.accion ?? 'Atacar'}. ${motivo}`);
+      }
+    },
+
+    /**
+     * Reconciliacion al volver el canal (riesgo #7): la partida releida manda.
+     *
+     * @param {{turnoActual?: {idJugador: string, numeroTurno?: number}, estado?: string}} partida
+     */
+    sincronizar(partida) {
+      sinCanal = false;
+      if (partida?.estado === 'FINALIZADA') {
+        // Termino mientras no habia canal: el aviso de fin se perdio. Se dice,
+        // se cierran los controles y se deja la salida del HUD.
+        if (!terminado) {
+          terminado = true;
+          habilitar(false);
+          if (zonaTurno) {
+            zonaTurno.textContent = 'Combate finalizado';
+            zonaTurno.hidden = false;
+            zonaTurno.dataset.mio = 'false';
+            zonaTurno.dataset.fin = 'si';
+          }
+          if (zona) {
+            zona.hidden = true;
+          }
+          anotar({
+            texto:
+              'La partida terminó mientras se recuperaba la conexión. El resultado y los créditos quedan en el historial de Mi cuenta.',
+            tono: 'fin',
+            icono: 'alerta',
+          });
+        }
+        return;
+      }
+      turnoActual = partida?.turnoActual?.idJugador ?? turnoActual;
+      numeroActual = partida?.turnoActual?.numeroTurno ?? numeroActual;
+      habilitar(turnoActual === yo);
+      marcarTurno(turnoActual, numeroActual);
+      anotar({
+        texto: 'Conexión recuperada: la partida está al día.',
+        tono: 'sistema',
+        icono: 'check',
+      });
+    },
+
     recibir(mensaje) {
       if (registro.yaVisto(mensaje)) {
         return;
@@ -579,14 +823,36 @@ export function montarControlesDeCombate(
       if (mensaje?.tipo === ACCION_RESUELTA && mensaje.idPartida === idPartida) {
         // El motor volvio a contestar: la degradacion, si la habia, ya paso.
         limpiarSeccionDegradada(zonaDegradacion);
+        // UXC-2 — que paso, con palabras (registro) y sobre el campo (cifra).
+        const { lineas, impactos } = narrarAccion(mensaje, participantes, yo);
+        for (const linea of lineas) {
+          anotar(linea);
+        }
+        for (const impacto of impactos) {
+          mostrarImpacto(impacto);
+        }
+        for (const afectado of mensaje.afectados ?? []) {
+          if (Array.isArray(afectado.efectosActivos)) {
+            pintarEfectos(afectado.idJugador, afectado.efectosActivos);
+          }
+          if (afectado.vidaActual === 0) {
+            zonaCampo
+              ?.querySelector(`[data-puesto="${afectado.idJugador}"]`)
+              ?.classList.add('campo__puesto--caido');
+          }
+        }
         return;
       }
       if (mensaje?.tipo === TURNO_CAMBIADO && mensaje.idPartida === idPartida) {
+        turnoActual = mensaje.idJugador;
+        numeroActual = Number.isInteger(mensaje.numeroTurno) ? mensaje.numeroTurno : numeroActual;
         habilitar(mensaje.idJugador === yo);
-        marcarTurno(mensaje.idJugador);
+        marcarTurno(mensaje.idJugador, numeroActual);
+        anotar(narrarTurno(mensaje, participantes, yo));
         return;
       }
       if (mensaje?.tipo === PARTIDA_FINALIZADA && mensaje.idPartida === idPartida) {
+        terminado = true;
         habilitar(false);
         // Se acabo: ya no es el turno de nadie. Dejar la marca puesta haria
         // creer que la partida sigue.
@@ -613,11 +879,21 @@ export function montarControlesDeCombate(
           // una parte, asi que se acumulan antes de pintar. Sin esto el segundo
           // render perdia la recompensa que ya se habia anunciado en el
           // primero, y el numero grande cambiaba de significado a mitad.
+          const primerAviso = desenlaceConocido === null;
           desenlaceConocido = {
             ...mensaje,
             reparto: mezclarPorJugador(desenlaceConocido?.reparto, mensaje.reparto),
             recompensa: mezclarPorJugador(desenlaceConocido?.recompensa, mensaje.recompensa),
           };
+          const desenlace = desenlaceDe(desenlaceConocido, yo, miEquipo);
+          // El final puede anunciarse dos veces (reparto tardio): se anota una.
+          if (primerAviso) {
+            anotar({
+              texto: `Combate finalizado: ${desenlace}.`,
+              tono: 'fin',
+              icono: desenlace === 'victoria' ? 'trofeo' : 'alerta',
+            });
+          }
           vaciar(aviso);
           aviso.append(
             panelDeResultado({
