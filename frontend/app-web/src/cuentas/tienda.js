@@ -447,6 +447,18 @@ function limpiarFiltros(doc) {
 }
 
 /**
+ * ¿Dicen lo mismo dos juegos de criterios? Salen los dos de `leerCriterios`,
+ * con las mismas claves en el mismo orden.
+ *
+ * @param {object} a
+ * @param {object} b
+ * @returns {boolean}
+ */
+export function mismosCriterios(a, b) {
+  return JSON.stringify(a ?? {}) === JSON.stringify(b ?? {});
+}
+
+/**
  * Engancha búsqueda, filtros y orden. El texto espera a que se deje de
  * escribir un momento; los desplegables y la casilla, no.
  *
@@ -470,7 +482,17 @@ function montarFiltros(doc) {
     mas.open = false;
   }
   const aplicar = () => {
-    vista.criterios = leerCriterios(formulario);
+    const criterios = leerCriterios(formulario);
+    // La búsqueda y el precio se aplican al escribir, y además disparan
+    // `change` al perder el foco: por ejemplo, al pulsar «Añadir» en una
+    // tarjeta. Repintar ahí cambiaba la tarjeta de debajo del puntero entre el
+    // `mousedown` y el `mouseup`, y el clic no llegaba a ningún botón: el
+    // producto no se añadía (lo destapó el E2E de la tienda). Si nada cambió,
+    // no se repinta.
+    if (mismosCriterios(criterios, vista.criterios)) {
+      return;
+    }
+    vista.criterios = criterios;
     vista.pagina = 0;
     pintarResumenDeFiltros(formulario, vista.criterios);
     pintarCatalogo(doc);
