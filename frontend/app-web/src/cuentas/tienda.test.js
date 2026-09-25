@@ -915,6 +915,36 @@ describe('UXC-4 - la tienda que pide §7.5', () => {
     expect(JSON.parse(alta[1].body)).toEqual({ productoId: 'p-3', cantidad: 1 });
   });
 
+  test('buscar y pulsar «Añadir» enseguida: con el puntero pulsado la vitrina no se repinta', async () => {
+    // El caso del E2E: el `change` del blur llega con la búsqueda aún sin
+    // aplicar (la espera de 250 ms no ha vencido), así que los criterios SÍ
+    // cambiaron. Repintar ahí se comía el clic; ahora espera a que se suelte.
+    globalThis.fetch = servicios({ vitrina: [producto(1), producto(2), producto(3)] });
+    await montarTienda(document);
+    const boton = document.querySelector('.product-card [data-producto="p-3"]');
+    filtros().elements.namedItem('busqueda').value = 'Producto 3';
+
+    boton.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    filtros()
+      .elements.namedItem('busqueda')
+      .dispatchEvent(new Event('change', { bubbles: true }));
+    expect(document.contains(boton)).toBe(true);
+    expect(nombres()).toHaveLength(3);
+
+    boton.dispatchEvent(new Event('pointerup', { bubbles: true }));
+    boton.click();
+    await new Promise((r) => setTimeout(r, 0));
+
+    const alta = globalThis.fetch.mock.calls.find(
+      ([url, opciones]) =>
+        String(url).includes('/api/v1/carrito/items') && opciones?.method === 'POST',
+    );
+    expect(JSON.parse(alta[1].body)).toEqual({ productoId: 'p-3', cantidad: 1 });
+    // Y la búsqueda se aplica al soltar: no se pierde.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(nombres()).toEqual(['Producto 3']);
+  });
+
   test('mismosCriterios compara lo que dicen, no la identidad del objeto', () => {
     expect(mismosCriterios({ busqueda: 'x', tipo: '' }, { busqueda: 'x', tipo: '' })).toBe(true);
     expect(mismosCriterios({ busqueda: 'x' }, { busqueda: 'y' })).toBe(false);

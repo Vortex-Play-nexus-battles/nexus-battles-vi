@@ -481,14 +481,21 @@ function montarFiltros(doc) {
   if (mas && (globalThis.innerWidth ?? 1440) < 600) {
     mas.open = false;
   }
+  // La búsqueda y el precio se aplican al escribir (con espera) y además
+  // disparan `change` al perder el foco: por ejemplo, al pulsar «Añadir» en
+  // una tarjeta. Repintar la vitrina entre el `pointerdown` y el `pointerup`
+  // cambia lo que hay debajo del puntero y el clic no llega a ningún botón: el
+  // producto no se añadía (lo destapó el E2E de la tienda, que busca y pulsa
+  // enseguida). Mientras haya un botón del puntero pulsado, el repintado
+  // espera a que se suelte; el clic, que llega justo después, va primero.
+  const puntero = { pulsado: false, pendiente: false };
   const aplicar = () => {
+    if (puntero.pulsado) {
+      puntero.pendiente = true;
+      return;
+    }
     const criterios = leerCriterios(formulario);
-    // La búsqueda y el precio se aplican al escribir, y además disparan
-    // `change` al perder el foco: por ejemplo, al pulsar «Añadir» en una
-    // tarjeta. Repintar ahí cambiaba la tarjeta de debajo del puntero entre el
-    // `mousedown` y el `mouseup`, y el clic no llegaba a ningún botón: el
-    // producto no se añadía (lo destapó el E2E de la tienda). Si nada cambió,
-    // no se repinta.
+    // Si nada cambió (el `change` del blur tras la espera), no se repinta.
     if (mismosCriterios(criterios, vista.criterios)) {
       return;
     }
@@ -497,6 +504,24 @@ function montarFiltros(doc) {
     pintarResumenDeFiltros(formulario, vista.criterios);
     pintarCatalogo(doc);
   };
+  const soltar = () => {
+    if (!puntero.pulsado) {
+      return;
+    }
+    puntero.pulsado = false;
+    // Una vuelta después: el `click` se despacha tras el `pointerup`.
+    setTimeout(() => {
+      if (puntero.pendiente) {
+        puntero.pendiente = false;
+        aplicar();
+      }
+    }, 0);
+  };
+  doc.addEventListener('pointerdown', () => {
+    puntero.pulsado = true;
+  });
+  doc.addEventListener('pointerup', soltar);
+  doc.addEventListener('pointercancel', soltar);
   let espera = null;
   formulario.addEventListener('input', (evento) => {
     if (evento.target?.type === 'search' || evento.target?.type === 'number') {
