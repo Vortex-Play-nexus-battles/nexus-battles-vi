@@ -147,6 +147,12 @@ echo "Plataforma — los ocho servicios del bloque"
 comprobar GET  /api/v1/salas               "salas GET /api/v1/salas"
 comprobar GET  /api/v1/salas/s-1           "salas GET /api/v1/salas/s-1"
 comprobar GET  /api/v1/partidas/p-1        "salas GET /api/v1/partidas/p-1"
+# B6 — mensajes privados: mismo servicio, prefijo propio. Sin su location caia
+# en el 404 generico y la vista de mensajes no cargaba nada.
+comprobar GET  /api/v1/mensajes-directos/conversaciones \
+                                           "salas GET /api/v1/mensajes-directos/conversaciones"
+comprobar POST /api/v1/mensajes-directos/conversaciones/u-1/mensajes \
+                                           "salas POST /api/v1/mensajes-directos/conversaciones/u-1/mensajes"
 comprobar GET  /api/v1/torneos             "torneos GET /api/v1/torneos"
 comprobar GET  /api/v1/parametros          "parametros GET /api/v1/parametros"
 comprobar GET  /api/v1/lista-negra         "moderacion GET /api/v1/lista-negra"
@@ -239,7 +245,8 @@ for par in \
     cuenta:cuentas/perfil.html subastas:cuentas/subastas.html \
     inventario:contenido/inventario/inventario.html \
     jugar:plataforma/salas-partidas/batallas.html \
-    torneos:plataforma/torneos/torneos.html; do
+    torneos:plataforma/torneos/torneos.html \
+    mensajes:plataforma/salas-partidas/mensajes.html; do
     limpia="/${par%%:*}"
     fichero="${par#*:}"
     carpeta="/frontend/app-web/src/${fichero%/*}/"
@@ -251,6 +258,9 @@ done
 redirige "/frontend/app-web/src/cuentas/login.html?volver=%2Fjugar&motivo=caducada" \
                                                       "/login?volver=%2Fjugar&motivo=caducada"
 redirige /jugar/                                      "/jugar"
+# B6 — el enlace «Mensaje privado» lleva ?con=<uid>: la consulta llega a la vista.
+redirige "/frontend/app-web/src/plataforma/salas-partidas/mensajes.html?con=u-1" \
+                                                      "/mensajes?con=u-1"
 # Una vista SIN direccion limpia se sigue sirviendo donde estaba, con la marca.
 sirve /frontend/app-web/src/plataforma/salas-partidas/crear-sala.html \
     "marca de rutas limpias" '<meta name="nexus-rutas" content="limpias">'

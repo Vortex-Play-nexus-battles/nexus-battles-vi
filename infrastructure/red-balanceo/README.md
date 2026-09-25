@@ -9,7 +9,7 @@ de entrada público del host de plataforma en AWS: `http://<ip-del-host>/`.
 |---|---|
 | `/` | redirige a `/frontend/app-web/src/cuentas/login.html` |
 | `/frontend/app-web/src/…`, `/shared/ui-kit/…` | archivos estáticos del repo, misma jerarquía (las vistas usan `../../../../../shared/ui-kit`) |
-| `/api/v1/salas`, `/api/v1/partidas` | `srv-salas-partidas:8084` |
+| `/api/v1/salas`, `/api/v1/partidas`, `/api/v1/mensajes-directos` (B6) | `srv-salas-partidas:8084` |
 | `/api/v1/users` | `srv-notificaciones:8085` |
 | `/api/v1/products` | `srv-comentarios:8081` |
 | `/api/v1/correos` | **no se expone**: correo es entre servicios (ADR-005); desde fuera, 404 |
