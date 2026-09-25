@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Misiones · Nexus Battles VI</title>
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
+    <link rel="stylesheet" href="./misiones.css" />
+  </head>
+  <body>
+    <div id="contenedor-barra"></div>
+
+    <!--
+      UXC-5 — el módulo de misiones (§7.8). Tablón, detalle con configurador,
+      misiones en curso, reporte e historial, y la estrategia del héroe.
+      Mientras no haya servicio de misiones la vista lo dice y deja preparar
+      la estrategia, que sí valida el servicio de héroes (ver fuente-misiones.js).
+    -->
+    <main class="pagina pila" data-vista="misiones"></main>
+
+    <script type="module">
+      import { montarMisiones } from './misiones.js';
+      import { montarCabecera } from '../../comun/cabecera-app.js';
+      import { exigirAcceso } from '../../comun/acceso.js';
+
+      // Vista privada: sin sesión se va al login con vuelta aquí.
+      if (!exigirAcceso('misiones')) {
+        throw new Error('sin sesion: redirigiendo al login');
+      }
+      montarCabecera(document.getElementById('contenedor-barra'), {
+        vista: 'misiones',
+        seccionActiva: 'misiones',
+      });
+      montarMisiones(document);
+    </script>
+  </body>
+</html>

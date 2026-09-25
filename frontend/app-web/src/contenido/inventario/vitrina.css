@@ -854,3 +854,10 @@
   --tinta-enlace-hover: var(--primaria-relleno);
   color: var(--texto);
 }
+
+/* UXC-5 (RF-INV-003) — el banner de misiones disponibles, entre la cabecera y
+   las pestañas. El banner es del kit; aquí solo su sitio. Oculto (`hidden`)
+   mientras no haya módulo de misiones. */
+.inventario__banner-misiones {
+  margin-bottom: var(--e-5);
+}

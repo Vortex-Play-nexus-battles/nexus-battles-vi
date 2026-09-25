@@ -29,6 +29,8 @@ import { consultarProducto as consultarProductoDelCatalogo } from './cliente-pro
 import { estadoDeHeroe, estadoDeObjeto, selloDeEstado } from '../../comun/ui/juego/estado-heroe.js';
 import { reunirInventario, esHeroe, paginaLocal, mapaDeEquipados } from './coleccion-inventario.js';
 import { pintarHeroes } from './heroes-inventario.js';
+import { fuenteDeMisiones } from '../misiones/fuente-misiones.js';
+import { montarBannerDeMisiones } from '../misiones/banner-misiones.js';
 import { complementoDeOpiniones } from '../../plataforma/comentarios/hilo-comentarios.js';
 
 /**
@@ -306,8 +308,25 @@ function construirGestion() {
   const sinHeroeElegido = elementoHtml('div', 'inventario-equipo__sin-heroe');
   panelEquipo.append(selectorHeroe, sinHeroeElegido, equipo);
 
+  // UXC-5 (RF-INV-003) — el banner de misiones disponibles. Nace oculto: si el
+  // módulo de misiones no responde, el requisito pide ocultarlo «sin afectar
+  // el resto de la vista», y hoy no hay módulo de misiones.
+  const bannerMisiones = elementoHtml('div', 'inventario__banner-misiones');
+  bannerMisiones.dataset.zona = 'banner-misiones';
+  bannerMisiones.hidden = true;
+
   return {
-    elementos: [cabecera, editor, mensaje, zonaPestanas, panelHeroes, panelObjetos, panelEquipo],
+    elementos: [
+      cabecera,
+      bannerMisiones,
+      editor,
+      mensaje,
+      zonaPestanas,
+      panelHeroes,
+      panelObjetos,
+      panelEquipo,
+    ],
+    bannerMisiones,
     zonaPestanas,
     panelHeroes,
     heroes,
@@ -360,12 +379,22 @@ export async function montarInventario(
     equipar = equiparElemento,
     desequipar = desequiparElemento,
     consultarProducto = consultarProductoDelCatalogo,
+    fuenteMisiones = fuenteDeMisiones(),
     pestanaInicial = 'heroes',
     maxPaginas,
   } = {},
 ) {
   const vista = construirGestion();
   raiz.replaceChildren(...vista.elementos);
+
+  // RF-INV-003: sin módulo de misiones se queda oculto y no hace ninguna
+  // petición; con él, las destacadas o, si no hay, la estrategia.
+  montarBannerDeMisiones(vista.bannerMisiones, {
+    fuente: fuenteMisiones,
+    hrefDe: (mision) => `../misiones/misiones.html?mision=${encodeURIComponent(mision.id)}`,
+    hrefTablon: '../misiones/misiones.html',
+    hrefEstrategia: '../misiones/misiones.html#estrategia',
+  });
 
   /**
    * UXC-1 — la coleccion entera, partida en heroes y objetos (ver
