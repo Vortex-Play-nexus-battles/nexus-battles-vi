@@ -40,6 +40,17 @@ silencio; solo deja de exigirse que sea MAYOR.
     parametro obligatorio nuevo**. Las peticiones que ya se enviaban empiezan
     a fallar con 400.
 
+  * **(B0) el cuerpo de la peticion gana una propiedad obligatoria** o una
+    propiedad cambia de tipo: los clientes que ya enviaban el cuerpo anterior
+    reciben 400.
+  * **(B0) la respuesta 2xx pierde una propiedad** o una cambia de tipo: el
+    consumidor que la leia se queda sin el dato.
+  * **(B0) un documento AsyncAPI pierde un canal** (por su `address`).
+
+Las comparaciones de esquema resuelven `$ref` locales y `allOf`, un nivel de
+propiedades (las del objeto raiz del cuerpo), que es donde vive el 100 % de
+los casos de este repositorio.
+
 Añadir operaciones, respuestas o parametros opcionales NO es incompatible y no
 se marca: es exactamente lo que hace crecer un contrato sin romper a nadie.
 
@@ -64,6 +75,7 @@ import sys
 import yaml
 
 CARPETA = "contracts/openapi/"
+CARPETA_WS = "contracts/websocket/"
 
 NO_SON_METODOS = {"parameters", "servers", "summary", "description", "$ref"}
 
@@ -121,6 +133,102 @@ def opcionales(operacion: dict) -> set[str]:
     }
 
 
+def resolver(documento: dict, esquema: object, profundidad: int = 0) -> dict:
+    """Esquema con `$ref` locales resueltos y `allOf` fusionado (un nivel)."""
+    if not isinstance(esquema, dict) or profundidad > 8:
+        return {}
+    ref = esquema.get("$ref")
+    if isinstance(ref, str) and ref.startswith("#/"):
+        destino: object = documento
+        for parte in ref[2:].split("/"):
+            destino = destino.get(parte, {}) if isinstance(destino, dict) else {}
+        return resolver(documento, destino, profundidad + 1)
+    if "allOf" in esquema:
+        fusion: dict = {"properties": {}, "required": []}
+        for parte in esquema.get("allOf") or []:
+            resuelto = resolver(documento, parte, profundidad + 1)
+            fusion["properties"].update(resuelto.get("properties") or {})
+            fusion["required"] += list(resuelto.get("required") or [])
+        for clave in ("properties", "required"):
+            if clave in esquema:
+                if clave == "properties":
+                    fusion["properties"].update(esquema["properties"])
+                else:
+                    fusion["required"] += list(esquema["required"])
+        return fusion
+    return esquema
+
+
+def tipo_de(documento: dict, esquema: object) -> str:
+    resuelto = resolver(documento, esquema)
+    tipo = resuelto.get("type")
+    if isinstance(tipo, list):
+        return "|".join(sorted(str(t) for t in tipo if t != "null"))
+    return str(tipo) if tipo else ""
+
+
+def cuerpo(documento: dict, contenido: object) -> dict[str, dict]:
+    """{tipo-de-medio: esquema resuelto} de un requestBody o una respuesta."""
+    resultado: dict[str, dict] = {}
+    for medio, detalle in ((contenido or {}).get("content") or {}).items():
+        if isinstance(detalle, dict) and "schema" in detalle:
+            resultado[medio] = resolver(documento, detalle["schema"])
+    return resultado
+
+
+def comparar_peticion(clave: str, antes: dict, ahora: dict, op_antes: dict, op_ahora: dict) -> list[str]:
+    rotos = []
+    cuerpos_antes = cuerpo(antes, op_antes.get("requestBody"))
+    cuerpos_ahora = cuerpo(ahora, op_ahora.get("requestBody"))
+    for medio in sorted(set(cuerpos_antes) & set(cuerpos_ahora)):
+        viejo, nuevo = cuerpos_antes[medio], cuerpos_ahora[medio]
+        raiz_antes, raiz_ahora = tipo_de(antes, viejo), tipo_de(ahora, nuevo)
+        if raiz_antes and raiz_ahora and raiz_antes != raiz_ahora:
+            rotos.append(f"«{clave}»: el cuerpo paso de {raiz_antes} a {raiz_ahora}")
+            continue
+        requeridos_antes = set(viejo.get("required") or [])
+        for nombre in sorted(set(nuevo.get("required") or []) - requeridos_antes):
+            rotos.append(f"«{clave}»: el cuerpo exige ahora la propiedad «{nombre}»")
+        props_antes = viejo.get("properties") or {}
+        props_ahora = nuevo.get("properties") or {}
+        for nombre in sorted(set(props_antes) & set(props_ahora)):
+            t_antes, t_ahora = tipo_de(antes, props_antes[nombre]), tipo_de(ahora, props_ahora[nombre])
+            if t_antes and t_ahora and t_antes != t_ahora:
+                rotos.append(f"«{clave}»: la propiedad «{nombre}» del cuerpo paso de {t_antes} a {t_ahora}")
+    return rotos
+
+
+def comparar_respuestas(clave: str, antes: dict, ahora: dict, op_antes: dict, op_ahora: dict) -> list[str]:
+    rotos = []
+    resp_antes = op_antes.get("responses") or {}
+    resp_ahora = op_ahora.get("responses") or {}
+    for codigo in sorted(set(resp_antes) & set(resp_ahora), key=str):
+        if not str(codigo).startswith("2"):
+            continue
+        cuerpos_antes = cuerpo(antes, resolver(antes, resp_antes[codigo]) or resp_antes[codigo])
+        cuerpos_ahora = cuerpo(ahora, resolver(ahora, resp_ahora[codigo]) or resp_ahora[codigo])
+        for medio in sorted(set(cuerpos_antes) & set(cuerpos_ahora)):
+            raiz_antes = tipo_de(antes, cuerpos_antes[medio])
+            raiz_ahora = tipo_de(ahora, cuerpos_ahora[medio])
+            if raiz_antes and raiz_ahora and raiz_antes != raiz_ahora:
+                rotos.append(f"«{clave}» {codigo}: la respuesta paso de {raiz_antes} a {raiz_ahora}")
+                continue
+            props_antes = cuerpos_antes[medio].get("properties") or {}
+            props_ahora = cuerpos_ahora[medio].get("properties") or {}
+            for nombre in sorted(set(props_antes) - set(props_ahora)):
+                rotos.append(f"«{clave}» {codigo}: la respuesta ya no trae «{nombre}»")
+            for nombre in sorted(set(props_antes) & set(props_ahora)):
+                t_antes, t_ahora = tipo_de(antes, props_antes[nombre]), tipo_de(ahora, props_ahora[nombre])
+                if t_antes and t_ahora and t_antes != t_ahora:
+                    rotos.append(f"«{clave}» {codigo}: «{nombre}» paso de {t_antes} a {t_ahora}")
+    return rotos
+
+
+def incompatibilidades_asyncapi(antes: dict, ahora: dict) -> list[str]:
+    direcciones = lambda d: {str(c.get("address")) for c in (d.get("channels") or {}).values() if isinstance(c, dict)}
+    return [f"desaparecio el canal «{c}»" for c in sorted(direcciones(antes) - direcciones(ahora))]
+
+
 def incompatibilidades(antes: dict, ahora: dict) -> tuple[list[str], list[str]]:
     """(incompatibles, compatibles-dignos-de-mencion)."""
     rotos: list[str] = []
@@ -150,6 +258,9 @@ def incompatibilidades(antes: dict, ahora: dict) -> tuple[list[str], list[str]]:
                 # con una rama muerta, no con una peticion rota.
                 notas.append(f"«{clave}» ya no declara la respuesta {codigo} (error: compatible)")
 
+        rotos += comparar_peticion(clave, antes, ahora, antigua, nueva)
+        rotos += comparar_respuestas(clave, antes, ahora, antigua, nueva)
+
         nuevos_obligatorios = obligatorios(nueva) - obligatorios(antigua)
         for nombre in sorted(nuevos_obligatorios):
             if nombre in opcionales(antigua):
@@ -174,7 +285,7 @@ def main() -> int:
     base = sys.argv[1]
 
     diferencia = subprocess.run(
-        ["git", "diff", "--name-only", base, "--", CARPETA],
+        ["git", "diff", "--name-only", base, "--", CARPETA, CARPETA_WS],
         capture_output=True,
         text=True,
         check=False,
@@ -205,7 +316,10 @@ def main() -> int:
         ahora = leer(ruta)
         version_antes = (antes.get("info") or {}).get("version")
         version_ahora = (ahora.get("info") or {}).get("version")
-        rotos, notas = incompatibilidades(antes, ahora)
+        if ruta.startswith(CARPETA_WS):
+            rotos, notas = incompatibilidades_asyncapi(antes, ahora), []
+        else:
+            rotos, notas = incompatibilidades(antes, ahora)
 
         if rotos:
             subio_mayor = (

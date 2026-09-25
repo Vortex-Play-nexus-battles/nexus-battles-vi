@@ -36,8 +36,48 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Autenticacion e identidad (ms-identidad)
-  version: 1.1.0
+  version: 2.0.0
   description: |
+    ### Cambios en 2.0.0 (B0/B1 — correo verificado y recuperacion endurecida)
+
+    Version mayor por **un** cambio incompatible: `POST
+    /auth/restablecer/confirmar` exige ahora `email` + `codigo` (antes solo
+    `token`). El codigo deja de guardarse en claro: se guarda su resumen
+    BCrypt, y sin el correo no hay forma de encontrar la fila sin volver a
+    guardar el secreto. El resto es aditivo:
+
+    - **Cuenta sin verificar** (7.4.12 «confirmar la creacion de una cuenta de
+      usuario»; feedback del profesor: «se registra un correo que no existe y
+      se sigue usando la cuenta»). El autorregistro deja la cuenta en
+      `PENDIENTE_VERIFICACION` y envia un codigo de un solo uso al correo. La
+      propiedad del buzon se prueba con ese codigo, **nunca** consultando si
+      el buzon existe (sin SMTP VRFY ni heuristicas). Hasta confirmarlo, el
+      login responde 403 `cuenta-no-verificada` (solo con la contrasena
+      correcta: con una incorrecta sigue siendo el 401 generico) y el alta del
+      jugador —creditos de bienvenida, heroe inicial y equipo— **no empieza**.
+    - `POST /auth/verificacion/confirmacion` y `POST /auth/verificacion/reenvio`.
+    - **Preguntas de seguridad** (7.1.1: «recuperar su cuenta contestando
+      preguntas con respuestas previamente configuradas y el codigo enviado a
+      su correo»): `GET`/`PUT /auth/preguntas-seguridad` y
+      `POST /auth/restablecer/preguntas`. Las preguntas las escribe la persona
+      (el sistema no inventa un catalogo); las respuestas se guardan con
+      BCrypt. Si la cuenta las configuro, la recuperacion exige codigo **y**
+      respuestas; si no, solo el codigo (desviacion documentada del 7.1.1
+      mientras el PO no decida hacerlas obligatorias:
+      `identidad.recuperacion.preguntas-obligatorias`).
+    - Codigos (verificacion y recuperacion): aleatorios de `SecureRandom`,
+      guardados con BCrypt, de un solo uso, con vigencia, invalidan a los
+      anteriores del mismo tipo, 5 intentos fallidos los anulan, y el reenvio
+      tiene limite de frecuencia. Canjear una recuperacion sube la version de
+      token (cierra las sesiones abiertas) y queda en la auditoria.
+    - Respuestas publicas neutras: pedir un codigo responde lo mismo exista o
+      no la cuenta («Si existe una cuenta asociada, recibiras instrucciones.»).
+    - `POST /auth/registro` puede responder **503 `moderacion-no-disponible`**:
+      si la lista negra no responde, el apodo no se da por bueno (B2, antes se
+      aceptaba cualquier apodo).
+    - El login comprueba la contrasena **antes** de mirar el estado de la
+      cuenta: el estado ya no se revela a quien no conoce la contrasena.
+
     ### Cambios en 1.1.0 (R17 — alta del jugador), todos aditivos
 
     - **Alta del jugador** (`/auth/onboarding`): al registrarse, ms-identidad
@@ -178,10 +218,29 @@ paths:
               avatar:
                 contentType: image/jpeg, image/png, image/webp
       responses:
+        '503':
+          description: |
+            2.0.0 — la lista negra de apodos no respondio. El alta NO se
+            completa (fail-closed): un apodo sin verificar no se da por bueno.
+            `type` `.../errors/moderacion-no-disponible`, con `Retry-After`.
+          headers:
+            Retry-After:
+              description: Segundos sugeridos antes de reintentar.
+              schema:
+                type: integer
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
         '201':
           description: |
             Cuenta creada. Devuelve la entidad `Usuario` serializada, no un
             DTO (ver la nota del esquema).
+
+            **2.0.0:** una cuenta de autorregistro nace con `estado`
+            `PENDIENTE_VERIFICACION` y se envia el codigo de verificacion al
+            correo. No puede iniciar sesion hasta confirmarlo con
+            `POST /api/v1/auth/verificacion/confirmacion`.
           content:
             application/json:
               schema:
@@ -314,6 +373,11 @@ paths:
             (1.1.0) los tres casos se distinguen por `type`:
             `.../errors/cuenta-baneada`, `.../errors/cuenta-suspendida` y
             `.../errors/cuenta-inactiva`.
+
+            **2.0.0:** un cuarto caso, `.../errors/cuenta-no-verificada`: el
+            correo aun no se confirmo. `cuenta-suspendida` trae ademas
+            `suspendidoHasta` (fin de la suspension) para el contador visible
+            del 7.3.2. Estos 403 solo salen si la contrasena es correcta.
           content:
             text/plain:
               schema:
@@ -469,22 +533,58 @@ paths:
             text/plain:
               schema:
                 type: string
-              example: Si el correo está registrado, recibirás un mensaje con instrucciones para restablecer tu contraseña.
+              example: Si existe una cuenta asociada, recibirás instrucciones.
+
+  /api/v1/auth/restablecer/preguntas:
+    post:
+      tags: [cuenta]
+      operationId: consultarPreguntasDeRecuperacion
+      summary: Devuelve las preguntas de seguridad de la cuenta, a cambio del codigo (2.0.0)
+      x-implementacion: pendiente
+      x-fase: B1
+      description: |
+        Paso intermedio de la recuperacion (7.1.1). Solo quien tiene el codigo
+        que llego al correo ve las preguntas: sin el codigo no hay forma de
+        saber si una cuenta existe ni que preguntas configuro. Un codigo
+        incorrecto **cuenta como intento fallido** del mismo codigo (5 y se
+        anula). Lista vacia = la cuenta no configuro preguntas; entonces basta
+        el codigo.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CodigoDeCorreoRequest'
+      responses:
+        '200':
+          description: Preguntas configuradas (sin las respuestas).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreguntasDeRecuperacion'
+        '400':
+          $ref: '#/components/responses/CodigoInvalido'
+        '429':
+          $ref: '#/components/responses/DemasiadosIntentos'
 
   /api/v1/auth/restablecer/confirmar:
     post:
       tags: [cuenta]
       operationId: canjearTokenDeRestablecimiento
-      summary: Canjea el codigo recibido y fija la contrasena nueva
+      summary: Canjea el codigo recibido (y las respuestas) y fija la contrasena nueva
       description: |
-        Segundo paso de HU-COR-003: se entrega el codigo de un solo uso que
-        llego por correo junto con la contrasena nueva. **Ruta publica**: quien
-        la usa no puede iniciar sesion todavia, esa es la situacion.
+        Segundo paso de HU-COR-003 y de la activacion de cuentas creadas por un
+        Super Administrador. **Ruta publica**: quien la usa no puede iniciar
+        sesion todavia, esa es la situacion.
 
-        La contrasena nueva se valida dos veces: el formulario exige un minimo
-        de 9 caracteres, y ademas el servicio aplica la politica completa
-        (RF-AUT-002). Las dos clases de rechazo, y tambien el codigo invalido
-        o ya usado, salen por el mismo 400 de texto plano.
+        **2.0.0 (incompatible):** el cuerpo lleva `email` y `codigo`; si la
+        cuenta configuro preguntas de seguridad, tambien `respuestas`. Un
+        codigo invalido, caducado, ya usado o de otra cuenta responde el mismo
+        400 `codigo-invalido` (sin distinguir, para no servir de oraculo). Cinco
+        fallos anulan el codigo (429). Canjearlo sube la version de token —se
+        cierran las sesiones abiertas—, envia el aviso `cambio-clave` y queda
+        en la auditoria. Los errores salen como problem details.
       security: []
       requestBody:
         required: true
@@ -493,7 +593,8 @@ paths:
             schema:
               $ref: '#/components/schemas/CanjearTokenRequest'
             example:
-              token: 3f2a1b0c9d8e4f7a
+              email: valkiria@ejemplo.upb.edu.co
+              codigo: K7QX2M9P
               nuevaPassword: 'Contrasena.Nueva.9'
       responses:
         '200':
@@ -505,13 +606,157 @@ paths:
               example: Contraseña actualizada correctamente. Ya puedes iniciar sesión.
         '400':
           description: |
-            Codigo invalido, caducado o ya usado, o contrasena nueva que no
-            cumple la politica. **Texto plano**: el mensaje dice que regla
-            falla, pero no hay campo estructurado que lo distinga.
+            `codigo-invalido` (ver arriba) o datos mal formados. Problem
+            details desde 2.0.0.
           content:
-            text/plain:
+            application/problem+json:
               schema:
-                type: string
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: |
+            `respuestas-incorrectas` (las preguntas no se contestaron bien;
+            cuenta como intento fallido del codigo) o
+            `contrasena-no-cumple-politica`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '429':
+          $ref: '#/components/responses/DemasiadosIntentos'
+
+  /api/v1/auth/verificacion/confirmacion:
+    post:
+      tags: [cuenta]
+      operationId: confirmarCorreo
+      summary: Confirma el correo con el codigo recibido y activa la cuenta (2.0.0)
+      x-implementacion: pendiente
+      x-fase: B1
+      description: |
+        Canjea el codigo de verificacion. La cuenta pasa de
+        `PENDIENTE_VERIFICACION` a `ACTIVO` y **entonces** empieza el alta del
+        jugador (creditos de bienvenida, heroe inicial, equipo) y se envia el
+        correo de bienvenida. Confirmar una cuenta ya activa con un codigo que
+        ya se uso responde el 400 generico; el alta nunca se lanza dos veces.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CodigoDeCorreoRequest'
+            example:
+              email: valkiria@ejemplo.upb.edu.co
+              codigo: K7QX2M9P
+      responses:
+        '200':
+          description: Cuenta verificada y activa.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificacionResponse'
+        '400':
+          $ref: '#/components/responses/CodigoInvalido'
+        '429':
+          $ref: '#/components/responses/DemasiadosIntentos'
+
+  /api/v1/auth/verificacion/reenvio:
+    post:
+      tags: [cuenta]
+      operationId: reenviarCodigoDeVerificacion
+      summary: Emite un codigo de verificacion nuevo (2.0.0)
+      x-implementacion: pendiente
+      x-fase: B1
+      description: |
+        **Respuesta neutra**: 202 con el mismo texto exista o no una cuenta
+        pendiente con ese correo. Si existe, se anula el codigo anterior y se
+        envia uno nuevo, con un limite de frecuencia por cuenta
+        (`identidad.verificacion.segundos-entre-reenvios`, 60 por omision, y
+        `identidad.verificacion.reenvios-por-hora`, 5): pasado el limite no se
+        envia nada, sin cambiar la respuesta. El limite por direccion IP lo
+        pone el borde (429).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitarRestablecimientoRequest'
+      responses:
+        '202':
+          description: Acuse neutro.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeNeutro'
+              example:
+                mensaje: Si existe una cuenta pendiente asociada, recibirás un código nuevo.
+
+  /api/v1/auth/preguntas-seguridad:
+    get:
+      tags: [cuenta]
+      operationId: consultarMisPreguntasDeSeguridad
+      summary: Preguntas de seguridad configuradas por la propia cuenta (2.0.0)
+      x-implementacion: pendiente
+      x-fase: B1
+      security:
+        - tokenDeUsuario: []
+      responses:
+        '200':
+          description: Preguntas (nunca las respuestas).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreguntasDeRecuperacion'
+        '403':
+          description: Sin sesion valida.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+    put:
+      tags: [cuenta]
+      operationId: configurarMisPreguntasDeSeguridad
+      summary: Configura o reemplaza las preguntas de seguridad (2.0.0)
+      x-implementacion: pendiente
+      x-fase: B1
+      description: |
+        Reemplaza todas las preguntas de la cuenta. Exige la contrasena
+        actual (un token robado no basta para cambiar el segundo factor de la
+        recuperacion). Las preguntas las escribe la persona; las respuestas se
+        normalizan (sin espacios extremos, minusculas, sin tildes) y se
+        guardan con BCrypt. Cantidad entre
+        `identidad.recuperacion.preguntas-minimas` y `-maximas` (2 y 3 por
+        omision; decision del PO pendiente).
+      security:
+        - tokenDeUsuario: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigurarPreguntasRequest'
+      responses:
+        '200':
+          description: Preguntas guardadas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreguntasDeRecuperacion'
+        '403':
+          description: Sin sesion valida.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: |
+            `contrasena-actual-incorrecta` (cuenta como intento fallido) o
+            `preguntas-invalidas` (cantidad fuera de rango, pregunta o
+            respuesta vacia o demasiado larga, preguntas repetidas).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
 
   /api/v1/auth/password:
     put:
@@ -792,6 +1037,26 @@ components:
         ms-identidad, no Keycloak: Keycloak no esta aprovisionado en ningun
         entorno (ADR-005). Su forma esta descrita en `info.description`.
 
+  responses:
+    CodigoInvalido:
+      description: |
+        2.0.0 — `type` `.../errors/codigo-invalido`: no hay cuenta con ese
+        correo, no tiene un codigo vigente de ese tipo, el codigo no coincide,
+        caduco o ya se uso. Un solo mensaje para todos los casos: distinguirlos
+        diria que correos estan registrados.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    DemasiadosIntentos:
+      description: |
+        2.0.0 — `type` `.../errors/demasiados-intentos`: el codigo se anulo
+        tras 5 intentos fallidos. Hay que pedir uno nuevo.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+
   schemas:
     RegistroRequest:
       type: object
@@ -1032,11 +1297,24 @@ components:
 
     CanjearTokenRequest:
       type: object
-      required: [token, nuevaPassword]
+      required: [email, codigo, nuevaPassword]
       properties:
-        token:
+        email:
           type: string
-          description: Codigo de un solo uso recibido por correo.
+          format: email
+          description: 2.0.0 — correo de la cuenta; sin el no se puede verificar el codigo (se guarda con BCrypt).
+        codigo:
+          type: string
+          minLength: 6
+          maxLength: 16
+          description: 2.0.0 — codigo de un solo uso recibido por correo (antes `token`).
+        respuestas:
+          type: array
+          description: |
+            2.0.0 — obligatorio si la cuenta configuro preguntas de seguridad:
+            una respuesta por cada `preguntaId` de `POST /auth/restablecer/preguntas`.
+          items:
+            $ref: '#/components/schemas/RespuestaDeSeguridad'
         nuevaPassword:
           type: string
           format: password
@@ -1044,6 +1322,88 @@ components:
           description: |
             Minimo 9 caracteres por el formulario, y ademas sujeta a la
             politica completa del servicio (RF-AUT-002), que se valida aparte.
+
+    CodigoDeCorreoRequest:
+      type: object
+      required: [email, codigo]
+      properties:
+        email:
+          type: string
+          format: email
+        codigo:
+          type: string
+          minLength: 6
+          maxLength: 16
+
+    VerificacionResponse:
+      type: object
+      required: [estado, mensaje]
+      properties:
+        estado:
+          type: string
+          enum: [ACTIVO]
+        mensaje:
+          type: string
+          example: Tu correo quedó verificado. Ya puedes iniciar sesión.
+
+    MensajeNeutro:
+      type: object
+      required: [mensaje]
+      properties:
+        mensaje:
+          type: string
+
+    PreguntasDeRecuperacion:
+      type: object
+      required: [configuradas, preguntas]
+      properties:
+        configuradas:
+          type: boolean
+        preguntas:
+          type: array
+          items:
+            type: object
+            required: [id, texto]
+            properties:
+              id:
+                type: string
+                format: uuid
+              texto:
+                type: string
+
+    ConfigurarPreguntasRequest:
+      type: object
+      required: [passwordActual, preguntas]
+      properties:
+        passwordActual:
+          type: string
+          format: password
+        preguntas:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [texto, respuesta]
+            properties:
+              texto:
+                type: string
+                minLength: 5
+                maxLength: 200
+              respuesta:
+                type: string
+                minLength: 2
+                maxLength: 100
+
+    RespuestaDeSeguridad:
+      type: object
+      required: [preguntaId, respuesta]
+      properties:
+        preguntaId:
+          type: string
+          format: uuid
+        respuesta:
+          type: string
+          maxLength: 100
 
     CambiarPasswordRequest:
       type: object

@@ -1,0 +1,44 @@
+# Mapa contrato -> servicio que lo implementa (B0, BACKEND-01).
+#
+# Lo lee `rutas-contrato-codigo.py`. Es la unica fuente de verdad de «que
+# servicio es dueno de que contrato»: un contrato que no aparece aqui hace
+# fallar el guardian, porque una ruta sin dueno es exactamente como nacio la
+# transferencia de subasta inventada (#660/#669).
+#
+# Los de `contracts/websocket/` son AsyncAPI: el guardian compara sus destinos
+# `/app/**` con los @MessageMapping/@SubscribeMapping del servicio.
+
+openapi:
+  admin-parametros.yaml: services/plataforma/admin-parametros
+  cofres.yaml: services/cuentas/ms-finanzas
+  comentarios.yaml: services/plataforma/comentarios
+  correo.yaml: services/plataforma/correo
+  creditos.yaml: services/cuentas/ms-finanzas
+  ecommerce-carrito.yaml: services/cuentas/ms-ecommerce
+  heroes.yaml: services/contenido/heroes
+  inventario.yaml: services/contenido/inventario
+  metricas-plataforma.yaml: services/plataforma/metricas-plataforma
+  moderacion-lista-negra.yaml: services/plataforma/moderacion-sanciones
+  moderacion-sanciones-admin.yaml: services/plataforma/moderacion-sanciones
+  moderacion-sanciones-consulta.yaml: services/plataforma/moderacion-sanciones
+  motor-combate.yaml: services/contenido/motor-combate
+  ms-chatbot.yaml: services/cuentas/ms-chatbot
+  ms-cumplimiento-auditoria.yaml: services/cuentas/ms-cumplimiento
+  ms-identidad-admin.yaml: services/cuentas/ms-identidad
+  ms-identidad-auth.yaml: services/cuentas/ms-identidad
+  ms-identidad-perfiles.yaml: services/cuentas/ms-identidad
+  rbac.yaml: services/cuentas/ms-identidad
+  ms-subastas-listado.yaml: services/cuentas/ms-subastas
+  ms-subastas-publicar.yaml: services/cuentas/ms-subastas
+  ms-subastas-pujas.yaml: services/cuentas/ms-subastas
+  notificaciones.yaml: services/plataforma/notificaciones
+  productos.yaml: services/contenido/productos
+  salas-partidas.yaml: services/plataforma/salas-partidas
+  torneos.yaml: services/plataforma/torneos
+  transacciones.yaml: services/cuentas/ms-finanzas
+
+asyncapi:
+  salas-partidas.yaml: services/plataforma/salas-partidas
+  mensajes-directos.yaml: services/plataforma/salas-partidas
+  notificaciones.yaml: services/plataforma/notificaciones
+  subastas.yaml: services/cuentas/ms-subastas

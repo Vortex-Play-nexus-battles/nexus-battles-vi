@@ -10,6 +10,19 @@ info:
     lleguen los datos que esa plantilla necesita. Anadir tipos nuevos es anadir
     rutas, que es un cambio compatible y no rompe a quien ya consume.
 
+    **1.4.0 (B0/B1 — correo durable).** Un `202` significa desde ahora
+    «**guardado** en la cola persistente del servicio», no «entregado al
+    SMTP»: cada peticion aceptada queda en la tabla de envios (PostgreSQL,
+    esquema `correo`) antes de responder, y un trabajador la entrega con
+    reintentos y espera exponencial (estados `PENDIENTE`, `ENVIANDO`,
+    `ENVIADO`, `ERROR_REINTENTABLE`, `FALLIDO`, `DESVIADO` y `OMITIDO`). Un
+    reinicio o una caida del proveedor ya no pierden correos. Cabecera
+    opcional `Idempotency-Key`: la misma clave dos veces no encola dos
+    correos. Nuevo: `POST /correos/sancion` (7.3.2: la suspension y el baneo
+    se notifican al correo) y `GET /correos/envios` (existia sin contrato).
+    El remitente sale de `MAIL_FROM` (variable del entorno), nunca de un
+    valor versionado.
+
     Consumidores: ms-identidad (registro, confirmacion de cuenta, aviso de
     acceso y recuperacion de contrasena), misiones y subastas (correos de
     evento segun preferencia del jugador), y desde la 1.3.0 ms-finanzas
@@ -21,7 +34,7 @@ info:
     correo es un servicio entre servicios y nunca lo llama un navegador. Por
     eso el borde tampoco expone `/api/v1/correos`. Es version menor porque
     rutas y cuerpos no cambian.
-  version: 1.3.0
+  version: 1.4.0
 servers:
   - url: http://localhost:8082/api/v1
     description: Entorno local de desarrollo
@@ -35,6 +48,7 @@ paths:
       operationId: enviarCorreoBienvenida
       parameters:
         - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -44,7 +58,7 @@ paths:
       responses:
         '202':
           description: >
-            Correo aceptado y entregado al servidor SMTP. No garantiza que haya
+            Correo guardado en la cola persistente (1.4.0); lo entrega el trabajador con reintentos. No garantiza que haya
             llegado a la bandeja del destinatario.
         '400':
           $ref: '#/components/responses/SolicitudInvalida'
@@ -56,6 +70,7 @@ paths:
       operationId: enviarCorreoAvisoAcceso
       parameters:
         - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -64,7 +79,7 @@ paths:
               $ref: '#/components/schemas/CorreoAvisoAccesoRequest'
       responses:
         '202':
-          description: Correo aceptado y entregado al servidor SMTP.
+          description: Correo guardado en la cola persistente (1.4.0); lo entrega el trabajador con reintentos.
         '400':
           $ref: '#/components/responses/SolicitudInvalida'
 
@@ -81,6 +96,7 @@ paths:
       operationId: enviarCorreoCambioClave
       parameters:
         - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -89,7 +105,7 @@ paths:
               $ref: '#/components/schemas/CorreoCambioClaveRequest'
       responses:
         '202':
-          description: Correo aceptado y entregado al servidor SMTP.
+          description: Correo guardado en la cola persistente (1.4.0); lo entrega el trabajador con reintentos.
         '400':
           $ref: '#/components/responses/SolicitudInvalida'
 
@@ -107,6 +123,7 @@ paths:
       operationId: enviarCorreoConfirmacionCuenta
       parameters:
         - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -115,7 +132,7 @@ paths:
               $ref: '#/components/schemas/CorreoConfirmacionCuentaRequest'
       responses:
         '202':
-          description: Correo aceptado y entregado al servidor SMTP.
+          description: Correo guardado en la cola persistente (1.4.0); lo entrega el trabajador con reintentos.
         '400':
           $ref: '#/components/responses/SolicitudInvalida'
 
@@ -130,6 +147,7 @@ paths:
       operationId: enviarCorreoRecuperacionClave
       parameters:
         - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -138,7 +156,7 @@ paths:
               $ref: '#/components/schemas/CorreoRecuperacionClaveRequest'
       responses:
         '202':
-          description: Correo aceptado y entregado al servidor SMTP.
+          description: Correo guardado en la cola persistente (1.4.0); lo entrega el trabajador con reintentos.
         '400':
           $ref: '#/components/responses/SolicitudInvalida'
 
@@ -155,6 +173,7 @@ paths:
       operationId: enviarCorreoMision
       parameters:
         - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -178,6 +197,7 @@ paths:
       operationId: enviarCorreoSubasta
       parameters:
         - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -203,6 +223,7 @@ paths:
       operationId: enviarCorreoConfirmacionCompra
       parameters:
         - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -211,9 +232,69 @@ paths:
               $ref: '#/components/schemas/CorreoConfirmacionCompraRequest'
       responses:
         '202':
-          description: Correo aceptado y entregado al servidor SMTP.
+          description: Correo guardado en la cola persistente (1.4.0); lo entrega el trabajador con reintentos.
         '400':
           $ref: '#/components/responses/SolicitudInvalida'
+
+  /correos/sancion:
+    post:
+      summary: Notificar una sancion al correo del jugador (7.3.2)
+      description: >
+        Lo dispara moderacion-sanciones al emitir una advertencia, una
+        suspension temporal o un baneo definitivo, y al resolver una apelacion.
+        El documento del curso exige «notificacion automatica al correo» de la
+        suspension y «notificacion formal» del baneo.
+      operationId: enviarCorreoSancion
+      x-implementacion: pendiente
+      x-fase: B2
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CorreoSancionRequest'
+      responses:
+        '202':
+          description: Correo guardado en la cola persistente.
+        '400':
+          $ref: '#/components/responses/SolicitudInvalida'
+
+  /correos/envios:
+    get:
+      summary: Estado de la entrega y ultimos envios (diagnostico)
+      description: >
+        Existia sin contrato (auditoria contractual, B0). Desde 1.4.0 lee la
+        tabla persistente: los contadores y la lista ya no se pierden al
+        reiniciar. Los destinatarios salen enmascarados (`v***a@dominio`).
+        Token de servicio, o de persona con rol ADMINISTRADOR o
+        SUPER_ADMINISTRADOR.
+      operationId: consultarEnviosDeCorreo
+      parameters:
+        - name: ultimos
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - name: estado
+          in: query
+          required: false
+          description: Filtra por estado del envio (1.4.0).
+          schema:
+            type: string
+            enum: [PENDIENTE, ENVIANDO, ENVIADO, ERROR_REINTENTABLE, FALLIDO, DESVIADO, OMITIDO]
+      responses:
+        '200':
+          description: Estado de la entrega.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadoDeEntrega'
 
 components:
   securitySchemes:
@@ -236,6 +317,17 @@ components:
         (regla 5 de plataforma). Si no se envia, el servicio genera uno propio.
       schema:
         type: string
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: >
+        1.4.0 — clave del productor para no encolar dos veces el mismo correo
+        al reintentar una llamada que agoto su tiempo. Misma clave, mismo
+        envio (se responde 202 sin encolar otro).
+      schema:
+        type: string
+        maxLength: 120
 
   responses:
     SolicitudInvalida:
@@ -481,6 +573,117 @@ components:
           format: date-time
           description: Momento en que la pasarela aprobo el pago, en ISO-8601 con zona horaria
           examples: ['2026-09-23T10:15:00-05:00']
+        lineas:
+          type: array
+          description: >
+            1.4.0 — detalle de los productos comprados (7.5: «correo electronico
+            de confirmacion de compra con el detalle de los productos adquiridos y
+            el total pagado»). Opcional por compatibilidad.
+          items:
+            type: object
+            required: [nombre, cantidad, subtotal]
+            properties:
+              nombre:
+                type: string
+              cantidad:
+                type: integer
+              precioUnitario:
+                type: number
+              subtotal:
+                type: number
+        orden:
+          type: string
+          description: 1.4.0 — identificador de la orden, para la referencia del correo.
+
+
+    CorreoSancionRequest:
+      type: object
+      required: [email, apodo, tipo, motivo]
+      properties:
+        email:
+          type: string
+          format: email
+        apodo:
+          type: string
+        tipo:
+          type: string
+          enum: [ADVERTENCIA, SUSPENSION, BANEO, APELACION_RESUELTA]
+        motivo:
+          type: string
+          description: Causal documentada (7.3.2 «Causales de sancion»).
+        hasta:
+          type: [string, 'null']
+          format: date-time
+          description: Fin de la suspension (solo SUSPENSION).
+        apelableHasta:
+          type: [string, 'null']
+          format: date-time
+          description: Ultimo dia para apelar (30 dias, 7.3.2).
+        resultadoApelacion:
+          type: [string, 'null']
+          enum: [MANTENIDA, REDUCIDA, REVERTIDA, null]
+
+    EstadoDeEntrega:
+      type: object
+      properties:
+        servidor:
+          type: string
+        puerto:
+          type: integer
+        autentica:
+          type: boolean
+        tls:
+          type: boolean
+        buzonDePruebas:
+          type: boolean
+        desvioDePruebas:
+          type: string
+        remitente:
+          type: string
+        aceptados:
+          type: integer
+          format: int64
+        desviados:
+          type: integer
+          format: int64
+        rechazados:
+          type: integer
+          format: int64
+        omitidos:
+          type: integer
+          format: int64
+        pendientes:
+          type: integer
+          format: int64
+          description: 1.4.0 — en cola o esperando reintento.
+        recientes:
+          type: array
+          items:
+            $ref: '#/components/schemas/EnvioRegistrado'
+
+    EnvioRegistrado:
+      type: object
+      properties:
+        instante:
+          type: string
+          format: date-time
+        destinatario:
+          type: string
+          description: Enmascarado desde 1.4.0.
+        plantilla:
+          type: string
+        estado:
+          type: string
+        destino:
+          type: string
+          description: PROVEEDOR o BUZON_DE_PRUEBAS.
+        identificador:
+          type: [string, 'null']
+        motivo:
+          type: [string, 'null']
+        intentos:
+          type: integer
+          description: 1.4.0
 
     ProblemDetail:
       type: object
