@@ -112,6 +112,22 @@ echo "Carrito — ms-ecommerce vive bajo /ecommerce, el navegador no se entera"
 comprobar GET  /api/v1/carrito             "ecommerce GET /ecommerce/api/v1/carrito"
 comprobar POST /api/v1/carrito/items       "ecommerce POST /ecommerce/api/v1/carrito/items"
 comprobar DELETE /api/v1/carrito/items/x   "ecommerce DELETE /ecommerce/api/v1/carrito/items/x"
+# B5 (ecommerce-carrito 1.4.0): la cantidad de una linea y la moneda en la consulta.
+comprobar PUT  /api/v1/carrito/items/x/cantidad \
+                                           "ecommerce PUT /ecommerce/api/v1/carrito/items/x/cantidad"
+comprobar GET  "/api/v1/carrito?moneda=USD" "ecommerce GET /ecommerce/api/v1/carrito?moneda=USD"
+
+echo
+echo "Compra — lista de deseos, pago y ordenes de ms-ecommerce (B5)"
+# Las tres comparten una regex del borde. Si otra regex anterior se las
+# quitara (el defecto de /admin/auditoria), el pago caeria en el 404 generico
+# y la tienda diria «no se pudo pagar» sin que nada llegara a ms-ecommerce.
+comprobar GET    /api/v1/lista-deseos      "ecommerce GET /ecommerce/api/v1/lista-deseos"
+comprobar PUT    /api/v1/lista-deseos/p-1  "ecommerce PUT /ecommerce/api/v1/lista-deseos/p-1"
+comprobar DELETE /api/v1/lista-deseos/p-1  "ecommerce DELETE /ecommerce/api/v1/lista-deseos/p-1"
+comprobar POST   /api/v1/checkout          "ecommerce POST /ecommerce/api/v1/checkout"
+comprobar GET    /api/v1/ordenes           "ecommerce GET /ecommerce/api/v1/ordenes"
+comprobar GET    /api/v1/ordenes/o-1       "ecommerce GET /ecommerce/api/v1/ordenes/o-1"
 
 echo
 echo "Productos — un prefijo, un dueno: el catalogo, para todos los metodos (#421)"
@@ -141,6 +157,9 @@ echo "Vitrina — ms-ecommerce con prefijo propio; la consulta llega entera (R16
 comprobar GET  "/api/v1/vitrina?page=0"    "ecommerce GET /ecommerce/api/v1/vitrina?page=0"
 comprobar GET  "/api/v1/vitrina?page=1&size=16&tipo=ARMA" \
                                            "ecommerce GET /ecommerce/api/v1/vitrina?page=1&size=16&tipo=ARMA"
+# B5: moneda, filtros y busqueda viajan igual; perderlos ensenaria pesos y todo el catalogo.
+comprobar GET  "/api/v1/vitrina?moneda=USD&enPromocion=true&busqueda=espada" \
+                                           "ecommerce GET /ecommerce/api/v1/vitrina?moneda=USD&enPromocion=true&busqueda=espada"
 
 echo
 echo "Plataforma — los ocho servicios del bloque"
