@@ -31,6 +31,14 @@ import { reunirInventario, esHeroe, paginaLocal, mapaDeEquipados } from './colec
 import { pintarHeroes } from './heroes-inventario.js';
 import { fuenteDeMisiones } from '../misiones/fuente-misiones.js';
 import { montarBannerDeMisiones } from '../misiones/banner-misiones.js';
+import { complementoDeOpiniones } from '../../plataforma/comentarios/hilo-comentarios.js';
+
+/**
+ * UXC-3 — §7.1: el detalle de un producto lleva su calificación promedio y el
+ * hilo de comentarios. Va en todas las fichas que abre el inventario, al
+ * final, después de lo que dice el catálogo.
+ */
+const COMPLEMENTOS_DE_LA_FICHA = [complementoDeOpiniones()];
 
 const TIPOS = [
   ['HEROE', 'Héroe'],
@@ -137,6 +145,7 @@ export async function montarVitrina(
       alAbrirDetalle: (elemento) =>
         abrirFicha(elemento.productoId, {
           origen: document.activeElement,
+          complementos: COMPLEMENTOS_DE_LA_FICHA,
           // R5: para un heroe, la ficha completa con lo que el jugador tiene de
           // verdad. Para lo demas sobran y se ignoran.
           elementoId: elemento.id,
@@ -464,6 +473,7 @@ export async function montarInventario(
       alVerFicha: (heroe) =>
         abrirFicha(heroe.productoId, {
           origen: document.activeElement,
+          complementos: COMPLEMENTOS_DE_LA_FICHA,
           elementoId: heroe.id,
           identidad,
           nombrePropio: heroe.nombrePropio,
@@ -947,6 +957,7 @@ export async function montarInventario(
       alVerFicha: (heroe) =>
         abrirFicha(heroe.productoId, {
           origen: document.activeElement,
+          complementos: COMPLEMENTOS_DE_LA_FICHA,
           elementoId: heroe.id,
           identidad,
           nombrePropio: heroe.nombrePropio,

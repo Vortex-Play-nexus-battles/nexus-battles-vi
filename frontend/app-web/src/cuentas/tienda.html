@@ -8,6 +8,10 @@
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
     <link rel="stylesheet" href="./tema-cuentas.css" />
+    <!-- UXC-4 — «Ver producto» abre la ficha del catalogo (la misma del
+         inventario) con la compra y las opiniones: sus estilos van aqui. -->
+    <link rel="stylesheet" href="../contenido/inventario/ficha-producto.css" />
+    <link rel="stylesheet" href="./tienda-producto.css" />
     <link rel="stylesheet" href="tienda.css" />
   </head>
   <body>
@@ -33,24 +37,166 @@
       });
     </script>
 
-    <main class="main-container">
+    <main class="main-container" data-carrito="desplegado">
       <!-- Columna de Productos -->
-      <section class="store-section">
+      <section class="store-section" aria-labelledby="titulo-tienda">
         <div class="store-header">
-          <h1>Tienda</h1>
-          <p>Paga con moneda local (COP) usando tus métodos registrados.</p>
+          <div class="store-header__textos">
+            <h1 id="titulo-tienda">Tienda</h1>
+            <!-- UXC-4 — decia «Paga con moneda local (COP) usando tus metodos
+                 registrados»: el pago no esta disponible y no hay metodos
+                 registrados. Lo cierto es que se vende en dinero real y cada
+                 producto dice su moneda. -->
+            <p>
+              Héroes, armas y objetos del Nexo que se pagan con dinero real. Cada precio dice su
+              moneda.
+            </p>
+          </div>
+          <!-- UXC-4 — el carrito minimizado: icono y unidades (§7.5). Despliega
+               o recoge el panel sin mover la vitrina. -->
+          <div class="store-header__carrito">
+            <button
+              id="insignia-carrito"
+              class="insignia-carrito"
+              type="button"
+              aria-controls="panel-carrito"
+              aria-expanded="true"
+              aria-label="Carrito"
+            >
+              <svg class="icono" aria-hidden="true">
+                <use href="../../../../shared/ui-kit/iconos/sprite.svg#carrito" />
+              </svg>
+              <span class="insignia-carrito__texto" aria-hidden="true">Carrito</span>
+              <span class="insignia-carrito__cuenta" data-zona="unidades" aria-hidden="true"
+                >—</span
+              >
+            </button>
+            <p
+              id="aviso-insignia"
+              class="insignia-carrito__aviso"
+              role="status"
+              aria-live="polite"
+            ></p>
+          </div>
         </div>
 
+        <!-- UXC-4 — buscar (tambien por precio) y filtrar por tipo, precio y
+             promocion (§7.5). Se aplica al escribir; «Limpiar» lo deshace. -->
+        <form
+          id="filtros-tienda"
+          class="filtros-tienda"
+          role="search"
+          aria-label="Buscar y filtrar la tienda"
+        >
+          <div class="campo filtros-tienda__busqueda">
+            <label class="campo__etiqueta" for="busqueda-tienda">Buscar</label>
+            <input
+              class="campo__control"
+              type="search"
+              id="busqueda-tienda"
+              name="busqueda"
+              placeholder="Nombre, tipo, habilidad o precio"
+              autocomplete="off"
+            />
+          </div>
+          <!-- En pantalla estrecha se recoge (tienda.js lo cierra al montar):
+               la busqueda queda a mano y los filtros no tapan la vitrina. -->
+          <details class="filtros-tienda__mas" open>
+            <summary class="filtros-tienda__resumen" data-zona="resumen-filtros">
+              Filtros y orden
+            </summary>
+            <div class="filtros-tienda__campos">
+              <div class="campo filtros-tienda__tipo">
+                <label class="campo__etiqueta" for="tipo-tienda">Tipo</label>
+                <select class="campo__control" id="tipo-tienda" name="tipo">
+                  <option value="">Todos</option>
+                  <option value="HEROE">Héroe</option>
+                  <option value="HABILIDAD">Habilidad</option>
+                  <option value="ARMA">Arma</option>
+                  <option value="ARMADURA">Armadura</option>
+                  <option value="ITEM">Ítem</option>
+                  <option value="EPICA">Épica</option>
+                </select>
+              </div>
+              <div class="campo filtros-tienda__orden">
+                <label class="campo__etiqueta" for="orden-tienda">Ordenar</label>
+                <select class="campo__control" id="orden-tienda" name="orden">
+                  <option value="catalogo">Orden del catálogo</option>
+                  <option value="precio-asc">Precio: de menor a mayor</option>
+                  <option value="precio-desc">Precio: de mayor a menor</option>
+                  <option value="nombre">Nombre: de la A a la Z</option>
+                </select>
+              </div>
+              <fieldset class="filtros-tienda__precio">
+                <legend class="campo__etiqueta">Precio</legend>
+                <label class="solo-lectores" for="precio-minimo">Precio mínimo</label>
+                <input
+                  class="campo__control"
+                  type="number"
+                  id="precio-minimo"
+                  name="precioMinimo"
+                  min="0"
+                  step="1"
+                  inputmode="numeric"
+                  placeholder="Desde"
+                />
+                <span class="filtros-tienda__guion" aria-hidden="true">–</span>
+                <label class="solo-lectores" for="precio-maximo">Precio máximo</label>
+                <input
+                  class="campo__control"
+                  type="number"
+                  id="precio-maximo"
+                  name="precioMaximo"
+                  min="0"
+                  step="1"
+                  inputmode="numeric"
+                  placeholder="Hasta"
+                />
+              </fieldset>
+              <label class="casilla filtros-tienda__promocion">
+                <input
+                  class="casilla__entrada"
+                  type="checkbox"
+                  id="solo-promocion"
+                  name="soloPromocion"
+                />
+                <span class="casilla__etiqueta">Solo en promoción</span>
+              </label>
+              <button
+                type="reset"
+                class="boton boton--secundario boton--pequeno filtros-tienda__limpiar"
+              >
+                Limpiar filtros
+              </button>
+            </div>
+          </details>
+        </form>
+
+        <p id="resultado-tienda" class="resultado-tienda" role="status" aria-live="polite"></p>
+
+        <h2 class="solo-lectores">Productos a la venta</h2>
         <!-- El contenedor donde JS inyectará las tarjetas -->
         <div id="productos-grid" class="products-grid">
           <!-- Cargando productos... -->
         </div>
+        <!-- UXC-4 — dieciseis por pagina, con el control 1…10 de siempre. -->
+        <div id="paginacion-tienda" class="paginacion-tienda"></div>
       </section>
 
-      <!-- Columna del Carrito -->
-      <aside class="cart-section">
+      <!-- Columna del Carrito (UXC-4: desplegable y minimizable) -->
+      <aside id="panel-carrito" class="cart-section" aria-labelledby="titulo-carrito">
         <div class="cart-card">
-          <h3>Tu carro</h3>
+          <div class="cart-card__cabecera">
+            <h2 id="titulo-carrito" data-zona="titulo-carrito" tabindex="-1">Tu carrito</h2>
+            <button
+              id="minimizar-carrito"
+              class="boton boton--secundario boton--pequeno"
+              type="button"
+              aria-controls="panel-carrito"
+            >
+              Minimizar
+            </button>
+          </div>
 
           <!-- R16 — el aviso de «Añadir» cuando el servicio rechaza el producto
                (agotado, suspendido, sin precio en dinero real, catálogo caído).
@@ -63,7 +209,13 @@
             <p class="t-meta">Tu carrito está vacío</p>
           </div>
 
+          <!-- UXC-4 — resumen de compra (CheckoutSummary): cuantos productos,
+               subtotal y total, con la moneda que dice el carrito. -->
           <div class="cart-summary">
+            <div class="summary-row">
+              <span>Productos</span>
+              <span id="cart-unidades">—</span>
+            </div>
             <div class="summary-row">
               <span>Subtotal</span>
               <!-- Sin carrito cargado todavia no se sabe el importe: «—» y no
