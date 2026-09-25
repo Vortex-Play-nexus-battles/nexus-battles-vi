@@ -25,6 +25,7 @@
  *      partida. Si gana la maquina (que no tiene cuenta) el vinculo lo anota y
  *      el administrador lo resuelve con motivo.
  *   8. el administrador resuelve el resto con motivo -> FINALIZADO con campeon
+ *      y premio (B10: los creditos del premio llegan al libro una sola vez)
  *   9. la vista muestra el torneo, el campeon y el arbol
  */
 
@@ -275,6 +276,10 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     const saldo = await saldoDe(anfitriona);
     expect(saldo.bruto, 'la reserva se cobro al iniciar').toBe(saldoAntes.bruto - COSTO);
     expect(saldo.reservado).toBe(saldoAntes.reservado);
+    // torneos.yaml 1.2.0 (B10): el cobro es una operacion persistida por
+    // participante; con el libro arriba se completa dentro de la misma peticion.
+    expect(enCurso.equipos.find((e) => e.id === equipo.id).estadoPago).toBe('COBRADO');
+    expect(enCurso.equipos.filter((e) => e.ia).every((e) => e.estadoPago === null)).toBe(true);
 
     const tarde = await api.post(`/api/v1/torneos/${torneo.id}/equipos`, {
       headers: conToken(curioso.token),
@@ -508,6 +513,8 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
   test('el administrador resuelve el resto con motivo y el arbol avanza hasta el campeon', async () => {
     let actual = await detalle();
     expect(actual.encuentros[4].estado).toBe('JUGADO');
+    expect(actual.premio.estado, 'sin final no hay premio').toBe('SIN_CAMPEON');
+    const saldoAntesDelPremio = await saldoDe(anfitriona);
     const gano5 = actual.encuentros[4].ganador;
     for (let numero = 3; numero <= 14; numero++) {
       const encuentro = actual.encuentros[numero - 1];
@@ -543,6 +550,23 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     const campeon = actual.equipos.find((e) => e.id === equipo.id);
     expect(campeon.eliminado, 'el campeon nunca queda eliminado').toBe(false);
     expect(actual.encuentros[4].ganador, 'lo jugado no se toca').toBe(gano5);
+
+    // RF-TOR-007 (torneos.yaml 1.2.0, B10): cada integrante del campeon recibe
+    // los creditos del premio por el libro, con refId estable, en la misma
+    // peticion que registra la final. El monto es el PROVISIONAL de D-24; la
+    // epica depende de /inventario/entregas (inventario.yaml 1.4.0, B4) y aqui
+    // no se afirma: si inventario aun no la sirve, queda pendiente y se
+    // reintenta sin repetir los creditos.
+    expect(actual.premio.estado).not.toBe('SIN_CAMPEON');
+    expect(actual.premio.estado).not.toBe('NO_APLICA');
+    expect(actual.premio.entregas.map((e) => e.uid).sort()).toEqual(
+      [anfitriona.claims.uid, invitado.claims.uid].sort(),
+    );
+    expect(actual.premio.entregas.every((e) => e.creditosEntregados)).toBe(true);
+    const saldoConPremio = await saldoDe(anfitriona);
+    expect(saldoConPremio.bruto, 'el premio se acredita una sola vez').toBe(
+      saldoAntesDelPremio.bruto + actual.premio.creditosPorIntegrante,
+    );
   });
 
   test('la vista «Torneo» muestra el torneo, el campeon y el arbol (HU-TOR-008)', async ({
