@@ -91,6 +91,10 @@ export function hechosDeSanciones(sanciones = [], { ahora = Date.now() } = {}) {
     const nombre = NOMBRE_DE_SANCION[s.tipo] ?? s.tipo;
     hechos.push({
       cuando: s.emitidaEn,
+      // El hecho de la emisión lleva el id de la sanción: la consola (y sus
+      // pruebas de extremo a extremo) la encuentran por `data-sancion-id`,
+      // como cuando el historial eran tarjetas.
+      datos: s.id ? { sancionId: String(s.id) } : null,
       titulo: `${nombre} emitida`,
       detalle: s.politica ? `Motivo: ${s.motivo} · Política: ${s.politica}` : `Motivo: ${s.motivo}`,
       actor: s.rolEmisor ? `Por ${QUIEN_EMITE[s.rolEmisor] ?? s.rolEmisor.toLowerCase()}` : null,

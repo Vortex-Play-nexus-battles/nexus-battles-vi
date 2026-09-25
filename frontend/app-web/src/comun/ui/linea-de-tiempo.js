@@ -67,7 +67,9 @@ export function lineaDeTiempo(hechos, { etiqueta = 'Línea de tiempo' } = {}) {
       const tono = TONOS.includes(hecho.tono) ? hecho.tono : 'neutro';
       return h('li', {
         clase: `linea-tiempo__hecho linea-tiempo__hecho--${tono}${hecho.futuro ? ' linea-tiempo__hecho--futuro' : ''}`,
-        datos: { tono },
+        // `datos` del hecho (por ejemplo, el id de la sanción que lo originó)
+        // viajan al elemento: quien la pinta puede seguir encontrándolo.
+        datos: { ...(hecho.datos ?? {}), tono },
         hijos: [
           h('span', { clase: 'linea-tiempo__marca', atributos: { 'aria-hidden': 'true' } }),
           h('div', {

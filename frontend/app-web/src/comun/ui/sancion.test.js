@@ -108,6 +108,13 @@ describe('línea de tiempo (AdminTimeline)', () => {
     expect(emitida.dataset.tono).toBe('advertencia');
     expect(emitida.textContent).toContain('Por moderación');
     expect(emitida.querySelector('time').getAttribute('datetime')).toBe('2026-09-21T12:00:00Z');
+    // La emisión se sigue encontrando por el id de la sanción (la consola y
+    // la prueba de extremo a extremo del historial la buscan así).
+    expect(emitida.dataset.sancionId).toBe('s-1');
+    expect(lista.querySelector('[data-sancion-id="s-2"]').textContent).toContain(
+      'Advertencia emitida',
+    );
+    expect(termina.dataset.sancionId).toBeUndefined();
   });
 
   test('una suspensión ya cumplida dice que terminó, sin cuenta atrás', () => {
