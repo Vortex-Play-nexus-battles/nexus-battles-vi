@@ -19,6 +19,7 @@ import { consultarProducto as leerDelCatalogo } from './cliente-productos.js';
 import { construirDetalleDeHeroe } from './detalle-heroe.js';
 import { icono } from '../../comun/ui/icono.js';
 import { ICONO_DEL_TIPO } from './vitrina.js';
+import { identidadDePrototipo } from '../../comun/ui/juego/prototipos.js';
 
 /**
  * Atributos visibles de cada tipo, en el orden en que se muestran.
@@ -69,15 +70,24 @@ let secuencia = 0;
  * @param {object} producto tal como lo devuelve el servicio de productos.
  * @returns {HTMLElement} dialogo listo para insertar en el documento.
  */
-export function construirFicha(producto) {
+export function construirFicha(producto, { nombrePropio = null } = {}) {
   if (!producto || typeof producto !== 'object') {
     throw new TypeError('La ficha necesita un producto del catálogo');
   }
+  // UXC-1 — la ficha de un heroe PROPIO se titula con su nombre («Aquiles») y
+  // dice debajo de que prototipo sale; el simbolo del prototipo ocupa el hueco
+  // de la imagen si el catalogo no la tiene.
+  const esHeroePropio = producto.tipo === 'HEROE' && Boolean(nombrePropio);
+  const identidad = producto.tipo === 'HEROE' ? identidadDePrototipo(producto.prototipo) : null;
 
   const ficha = document.createElement('article');
   ficha.className = 'ficha';
   ficha.setAttribute('role', 'dialog');
   ficha.setAttribute('aria-modal', 'true');
+  // UXC-1 — con las cifras y las acciones en cartas la ficha se desplaza, y
+  // una region que se desplaza tiene que alcanzarse con el teclado (axe:
+  // scrollable-region-focusable).
+  ficha.setAttribute('tabindex', '0');
 
   const idNombre = `ficha-nombre-${(secuencia += 1)}`;
   ficha.setAttribute('aria-labelledby', idNombre);
@@ -96,22 +106,24 @@ export function construirFicha(producto) {
     // icono del tipo sobre la misma superficie que ocuparia la imagen.
     imagen = document.createElement('div');
     imagen.className = 'ficha__imagen ficha__imagen--ausente';
-    imagen.append(
-      icono(ICONO_DEL_TIPO[producto.tipo] ?? 'estrella', {
-        clase: 'ficha__icono-tipo',
-        etiqueta: null,
-      }),
-    );
+    const simbolo = identidad?.conocido
+      ? identidad.icono
+      : (ICONO_DEL_TIPO[producto.tipo] ?? 'estrella');
+    imagen.append(icono(simbolo, { clase: 'ficha__icono-tipo', etiqueta: null }));
   }
 
   const nombre = document.createElement('h2');
   nombre.className = 'ficha__nombre';
   nombre.id = idNombre;
-  nombre.textContent = producto.nombre ?? '';
+  nombre.textContent = esHeroePropio ? nombrePropio : (producto.nombre ?? '');
 
   const tipo = document.createElement('p');
   tipo.className = 'ficha__tipo';
-  tipo.textContent = NOMBRE_DEL_TIPO[producto.tipo] ?? producto.tipo ?? '';
+  const nombreDelTipo = NOMBRE_DEL_TIPO[producto.tipo] ?? producto.tipo ?? '';
+  tipo.textContent =
+    identidad?.conocido && producto.tipo === 'HEROE'
+      ? `${nombreDelTipo} · ${identidad.nombre}${identidad.sanador ? ' · Sanador' : ''}`
+      : nombreDelTipo;
 
   // Texto que escribe el administrador: entra por textContent, nunca por
   // innerHTML.
@@ -224,6 +236,7 @@ export async function abrirFicha(
     // sin ellos se comporta como antes.
     elementoId = null,
     identidad = null,
+    nombrePropio = null,
     detalleDeHeroe = construirDetalleDeHeroe,
   } = {},
 ) {
@@ -263,7 +276,7 @@ export async function abrirFicha(
   if (abierta === null || abierta.capa !== capa) {
     return; // Se cerro mientras se consultaba.
   }
-  reemplazarContenido(capa, construirFicha(producto));
+  reemplazarContenido(capa, construirFicha(producto, { nombrePropio }));
 
   // Y despues, sin hacer esperar a la ficha: son dos servicios mas y el detalle
   // del producto ya es util sin ellos. Mismo criterio que los retratos de la
